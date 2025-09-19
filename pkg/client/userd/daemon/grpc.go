@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net/netip"
 	"os/exec"
@@ -25,7 +24,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/bwcompat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -38,7 +36,7 @@ func (s *service) FuseFTPError() error {
 	return s.fuseFTPError
 }
 
-func (s *service) WithSession(c context.Context, f func(context.Context, userd.Session) error) (err error) {
+func (s *service) WithSession(f func(userd.Session) error) (err error) {
 	if atomic.LoadInt32(&s.sessionQuitting) != 0 {
 		return status.Error(codes.Canceled, "session cancelled")
 	}
@@ -47,11 +45,12 @@ func (s *service) WithSession(c context.Context, f func(context.Context, userd.S
 	if s.session == nil {
 		return status.Error(codes.Unavailable, "no active session")
 	}
-	if s.sessionContext.Err() != nil {
-		// Session context has been cancelled
+	select {
+	case <-s.session.Done():
 		return status.Error(codes.Canceled, "session cancelled")
+	default:
 	}
-	return f(s.sessionContext, s.session)
+	return f(s.session)
 }
 
 func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
@@ -83,7 +82,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 }
 
 func (s *service) Disconnect(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
-	s.cancelSession()
+	s.cancelSession(ctx)
 	_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
 		_, err := rd.Disconnect(ctx, ex)
 		return err
@@ -101,141 +100,39 @@ func (s *service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.Conn
 			return nil
 		})
 	} else {
-		result = s.session.Status(s.sessionContext)
+		result = s.session.Status()
 	}
 	return
 }
 
-// isMultiPortIntercept checks if the intercept is one of several active intercepts on the same workload.
-// If it is, then the first returned value will be true and the second will indicate if those intercepts are
-// on different services. Otherwise, this function returns false, false.
-func (s *service) isMultiPortIntercept(spec *manager.InterceptSpec) (multiPort, multiService bool) {
-	wis := s.session.InterceptsForWorkload(spec.Agent, spec.Namespace)
-
-	// The InterceptsForWorkload will not include failing or removed intercepts so the
-	// subject must be added unless it's already there.
-	active := false
-	for _, is := range wis {
-		if is.Name == spec.Name {
-			active = true
-			break
-		}
-	}
-	if !active {
-		wis = append(wis, spec)
-	}
-	if len(wis) < 2 {
-		return false, false
-	}
-	var suid string
-	for _, is := range wis {
-		if suid == "" {
-			suid = is.ServiceUid
-		} else if suid != is.ServiceUid {
-			return true, true
-		}
-	}
-	return true, false
-}
-
-func (s *service) scoutInterceptEntries(ctx context.Context, spec *manager.InterceptSpec, result *rpc.InterceptResult) ([]scout.Entry, bool) {
-	// The scout belongs to the session and can only contain session specific meta-data,
-	// so we don't want to use scout.SetMetadatum() here.
-	entries := make([]scout.Entry, 0, 7)
-	if spec != nil {
-		entries = append(entries,
-			scout.Entry{Key: "service_name", Value: spec.ServiceName},
-			scout.Entry{Key: "service_namespace", Value: spec.Namespace},
-			scout.Entry{Key: "intercept_mechanism", Value: spec.Mechanism},
-			scout.Entry{Key: "intercept_mechanism_numargs", Value: len(spec.Mechanism)},
-		)
-		multiPort, multiService := s.isMultiPortIntercept(spec)
-		if multiPort {
-			entries = append(entries, scout.Entry{Key: "multi_port", Value: multiPort})
-			if multiService {
-				entries = append(entries, scout.Entry{Key: "multi_service", Value: multiService})
-			}
-		}
-	}
-	if result != nil {
-		entries = append(entries, scout.Entry{Key: "workload_kind", Value: result.WorkloadKind})
-		if result.Error != common.InterceptError_UNSPECIFIED {
-			es := result.Error.String()
-			if result.ErrorText != "" {
-				es = fmt.Sprintf("%s: %s", es, result.ErrorText)
-			}
-			dlog.Debugf(ctx, "reporting error: %s", es)
-			entries = append(entries, scout.Entry{Key: "error", Value: es})
-			return entries, false
-		}
-	}
-	return entries, true
-}
-
-func (s *service) CanIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	var entries []scout.Entry
-	ok := false
-	defer func() {
-		var action string
-		if ok {
-			action = "connector_can_intercept_success"
-		} else {
-			action = "connector_can_intercept_fail"
-		}
-		scout.Report(c, action, entries...)
-	}()
-	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
-		_, result = session.CanIntercept(c, ir)
+func (s *service) CanIntercept(_ context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	err = s.WithSession(func(session userd.Session) error {
+		_, result = session.CanIntercept(ir)
 		if result == nil {
 			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
 		}
-		entries, ok = s.scoutInterceptEntries(c, ir.GetSpec(), result)
 		return nil
 	})
 	return
 }
 
-func (s *service) CreateIntercept(c context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	var entries []scout.Entry
-	ok := false
-	defer func() {
-		var action string
-		if ok {
-			action = "connector_create_intercept_success"
-		} else {
-			action = "connector_create_intercept_fail"
-		}
-		scout.Report(c, action, entries...)
-	}()
-	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
-		result = session.AddIntercept(c, ir)
-		entries, ok = s.scoutInterceptEntries(c, ir.GetSpec(), result)
+func (s *service) CreateIntercept(_ context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
+	err = s.WithSession(func(session userd.Session) error {
+		result = session.AddIntercept(ir)
 		return nil
 	})
 	return
 }
 
-func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
-	var spec *manager.InterceptSpec
-	var entries []scout.Entry
-	ok := false
-	defer func() {
-		var action string
-		if ok {
-			action = "connector_remove_intercept_success"
-		} else {
-			action = "connector_remove_intercept_fail"
-		}
-		scout.Report(c, action, entries...)
-	}()
-	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
+func (s *service) RemoveIntercept(_ context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
+	err = s.WithSession(func(session userd.Session) error {
 		result = &rpc.InterceptResult{}
-		spec = session.GetInterceptSpec(rr.Name)
+		spec := session.GetInterceptSpec(rr.Name)
 		if spec != nil {
 			result.ServiceUid = spec.ServiceUid
 			result.WorkloadKind = spec.WorkloadKind
 		}
-		if err := session.RemoveIntercept(c, rr.Name); err != nil {
+		if err := session.RemoveIntercept(rr.Name); err != nil {
 			if status.Code(err) == codes.NotFound {
 				result.Error = common.InterceptError_NOT_FOUND
 				result.ErrorText = rr.Name
@@ -246,42 +143,33 @@ func (s *service) RemoveIntercept(c context.Context, rr *manager.RemoveIntercept
 				result.ErrorCategory = int32(errcat.Unknown)
 			}
 		}
-		entries, ok = s.scoutInterceptEntries(c, spec, result)
 		return nil
 	})
 	return result, err
 }
 
-func (s *service) UpdateIntercept(c context.Context, rr *manager.UpdateInterceptRequest) (result *manager.InterceptInfo, err error) {
-	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
-		result, err = session.ManagerClient().UpdateIntercept(c, rr)
-		return err
-	})
-	return
-}
-
-func (s *service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
-	return &empty.Empty{}, s.WithSession(ctx, func(c context.Context, session userd.Session) error {
-		return session.AddInterceptor(c, interceptor.InterceptId, interceptor)
+func (s *service) AddInterceptor(_ context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
+	return &empty.Empty{}, s.WithSession(func(session userd.Session) error {
+		return session.AddInterceptor(interceptor.InterceptId, interceptor)
 	})
 }
 
-func (s *service) RemoveInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
-	return &empty.Empty{}, s.WithSession(ctx, func(_ context.Context, session userd.Session) error {
+func (s *service) RemoveInterceptor(_ context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
+	return &empty.Empty{}, s.WithSession(func(session userd.Session) error {
 		return session.RemoveInterceptor(interceptor.InterceptId)
 	})
 }
 
-func (s *service) List(c context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
-	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
-		result, err = session.WorkloadInfoSnapshot(c, []string{lr.Namespace}, lr.Filter)
+func (s *service) List(_ context.Context, lr *rpc.ListRequest) (result *rpc.WorkloadInfoSnapshot, err error) {
+	err = s.WithSession(func(session userd.Session) error {
+		result, err = session.WorkloadInfoSnapshot([]string{lr.Namespace}, lr.Filter)
 		return err
 	})
 	return
 }
 
 func (s *service) GetKnownWorkloadKinds(ctx context.Context, _ *empty.Empty) (result *manager.KnownWorkloadKinds, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(func(session userd.Session) error {
 		result, err = session.ManagerClient().GetKnownWorkloadKinds(ctx, session.SessionInfo())
 		if err != nil {
 			if status.Code(err) != codes.Unimplemented {
@@ -300,31 +188,29 @@ func (s *service) GetKnownWorkloadKinds(ctx context.Context, _ *empty.Empty) (re
 }
 
 func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream rpc.Connector_WatchWorkloadsServer) error {
-	var sessionCtx context.Context
 	var session userd.Session
-
-	err := s.WithSession(stream.Context(), func(c context.Context, s userd.Session) error {
-		session, sessionCtx = s, c
+	err := s.WithSession(func(s userd.Session) error {
+		session = s
 		return nil
 	})
 	if err != nil {
 		return nil
 	}
 
-	return session.WatchWorkloads(sessionCtx, wr, stream)
+	return session.WatchWorkloads(wr, stream)
 }
 
-func (s *service) Uninstall(c context.Context, ur *rpc.UninstallRequest) (result *common.Result, err error) {
-	err = s.WithSession(c, func(c context.Context, session userd.Session) error {
-		result, err = session.Uninstall(c, ur)
+func (s *service) Uninstall(_ context.Context, ur *rpc.UninstallRequest) (result *common.Result, err error) {
+	err = s.WithSession(func(session userd.Session) error {
+		result, err = session.Uninstall(ur)
 		return err
 	})
 	return
 }
 
-func (s *service) GetConfig(ctx context.Context, _ *empty.Empty) (cfg *rpc.ClientConfig, err error) {
-	err = s.WithSession(ctx, func(c context.Context, session userd.Session) error {
-		sc, err := session.GetConfig(ctx)
+func (s *service) GetConfig(context.Context, *empty.Empty) (cfg *rpc.ClientConfig, err error) {
+	err = s.WithSession(func(session userd.Session) error {
+		sc, err := session.GetConfig()
 		if err != nil {
 			return err
 		}
@@ -338,9 +224,9 @@ func (s *service) GetConfig(ctx context.Context, _ *empty.Empty) (cfg *rpc.Clien
 	return
 }
 
-func (s *service) GatherLogs(ctx context.Context, request *rpc.LogsRequest) (result *rpc.LogsResponse, err error) {
-	err = s.WithSession(ctx, func(c context.Context, session userd.Session) error {
-		result, err = session.GatherLogs(c, request)
+func (s *service) GatherLogs(_ context.Context, request *rpc.LogsRequest) (result *rpc.LogsResponse, err error) {
+	err = s.WithSession(func(session userd.Session) error {
+		result, err = session.GatherLogs(request)
 		return err
 	})
 	return
@@ -366,7 +252,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 		}
 	}
 	setRemote := func() {
-		err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+		err = s.WithSession(func(session userd.Session) error {
 			_, err := session.ManagerClient().SetLogLevel(ctx, mrq)
 			return err
 		})
@@ -386,7 +272,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 }
 
 func (s *service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
-	s.cancelSession()
+	s.cancelSession(ctx)
 	s.quit()
 	_ = s.withRootDaemon(context.WithoutCancel(ctx), func(ctx context.Context, rd daemon.DaemonClient) error {
 		dlog.Debug(ctx, "Telling root daemon to Quit")
@@ -430,9 +316,9 @@ func (s *service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (
 	return errcat.ToResult(nil), nil
 }
 
-func (s *service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesRequest) (*rpc.GetNamespacesResponse, error) {
+func (s *service) GetNamespaces(_ context.Context, req *rpc.GetNamespacesRequest) (*rpc.GetNamespacesResponse, error) {
 	var resp rpc.GetNamespacesResponse
-	err := s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err := s.WithSession(func(session userd.Session) error {
 		resp.Namespaces = session.GetCurrentNamespaces(req.ForClientAccess)
 		return nil
 	})
@@ -453,8 +339,8 @@ func (s *service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesReque
 	return &resp, nil
 }
 
-func (s *service) TrafficManagerVersion(ctx context.Context, _ *empty.Empty) (vi *common.VersionInfo, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+func (s *service) TrafficManagerVersion(context.Context, *empty.Empty) (vi *common.VersionInfo, err error) {
+	err = s.WithSession(func(session userd.Session) error {
 		vi = &common.VersionInfo{Name: session.ManagerName(), Version: "v" + session.ManagerVersion().String()}
 		return nil
 	})
@@ -470,7 +356,7 @@ func (s *service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi
 }
 
 func (s *service) AgentImageFQN(ctx context.Context, empty *empty.Empty) (fqn *manager.AgentImageFQN, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(func(session userd.Session) error {
 		fqn, err = session.ManagerClient().GetAgentImageFQN(ctx, empty)
 		return err
 	})
@@ -478,7 +364,7 @@ func (s *service) AgentImageFQN(ctx context.Context, empty *empty.Empty) (fqn *m
 }
 
 func (s *service) GetAgentConfig(ctx context.Context, request *manager.AgentConfigRequest) (rsp *manager.AgentConfigResponse, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(func(session userd.Session) error {
 		request.Session = session.SessionInfo()
 		rsp, err = session.ManagerClient().GetAgentConfig(ctx, request)
 		return err
@@ -489,7 +375,7 @@ func (s *service) GetAgentConfig(ctx context.Context, request *manager.AgentConf
 func (s *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (cs *rpc.ClusterSubnets, err error) {
 	podSubnets := []*manager.IPNet{}
 	svcSubnets := []*manager.IPNet{}
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(func(session userd.Session) error {
 		// The manager can sometimes send the different subnets in different Sends,
 		// but after 5 seconds of listening to it, we should expect to have everything
 		tCtx, tCancel := context.WithTimeout(ctx, 5*time.Second)
@@ -524,8 +410,8 @@ func (s *service) GetClusterSubnets(ctx context.Context, _ *empty.Empty) (cs *rp
 	return &rpc.ClusterSubnets{PodSubnets: podSubnets, SvcSubnets: svcSubnets}, nil
 }
 
-func (s *service) GetIntercept(ctx context.Context, request *manager.GetInterceptRequest) (ii *manager.InterceptInfo, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+func (s *service) GetIntercept(_ context.Context, request *manager.GetInterceptRequest) (ii *manager.InterceptInfo, err error) {
+	err = s.WithSession(func(session userd.Session) error {
 		ii = session.GetInterceptInfo(request.Name)
 		if ii == nil {
 			return status.Errorf(codes.NotFound, "found no intercept named %s", request.Name)
@@ -536,7 +422,7 @@ func (s *service) GetIntercept(ctx context.Context, request *manager.GetIntercep
 }
 
 func (s *service) SetDNSExcludes(ctx context.Context, req *daemon.SetDNSExcludesRequest) (*empty.Empty, error) {
-	err := s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err := s.WithSession(func(session userd.Session) error {
 		_, err := session.RootDaemon().SetDNSExcludes(ctx, req)
 		return err
 	})
@@ -544,39 +430,39 @@ func (s *service) SetDNSExcludes(ctx context.Context, req *daemon.SetDNSExcludes
 }
 
 func (s *service) SetDNSMappings(ctx context.Context, req *daemon.SetDNSMappingsRequest) (*empty.Empty, error) {
-	err := s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err := s.WithSession(func(session userd.Session) error {
 		_, err := session.RootDaemon().SetDNSMappings(ctx, req)
 		return err
 	})
 	return &empty.Empty{}, err
 }
 
-func (s *service) Ingest(ctx context.Context, request *rpc.IngestRequest) (response *rpc.IngestInfo, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
-		response, err = session.Ingest(ctx, request)
+func (s *service) Ingest(_ context.Context, request *rpc.IngestRequest) (response *rpc.IngestInfo, err error) {
+	err = s.WithSession(func(session userd.Session) error {
+		response, err = session.Ingest(request)
 		return err
 	})
 	return response, err
 }
 
-func (s *service) GetIngest(ctx context.Context, request *rpc.IngestIdentifier) (response *rpc.IngestInfo, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+func (s *service) GetIngest(_ context.Context, request *rpc.IngestIdentifier) (response *rpc.IngestInfo, err error) {
+	err = s.WithSession(func(session userd.Session) error {
 		response, err = session.GetIngest(request)
 		return err
 	})
 	return response, err
 }
 
-func (s *service) LeaveIngest(ctx context.Context, request *rpc.IngestIdentifier) (response *rpc.IngestInfo, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
-		response, err = session.LeaveIngest(ctx, request)
+func (s *service) LeaveIngest(_ context.Context, request *rpc.IngestIdentifier) (response *rpc.IngestInfo, err error) {
+	err = s.WithSession(func(session userd.Session) error {
+		response, err = session.LeaveIngest(request)
 		return err
 	})
 	return response, err
 }
 
-func (s *service) ResolveSyntheticIP(ctx context.Context, request *rpc.ResolveSyntheticRequest) (response *rpc.ResolveSyntheticResponse, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+func (s *service) ResolveSyntheticIP(_ context.Context, request *rpc.ResolveSyntheticRequest) (response *rpc.ResolveSyntheticResponse, err error) {
+	err = s.WithSession(func(session userd.Session) error {
 		ip, ok := netip.AddrFromSlice(request.Ip)
 		if !ok {
 			return status.Errorf(codes.InvalidArgument, "invalid IP")
@@ -600,7 +486,7 @@ func (s *service) ResolveSyntheticIP(ctx context.Context, request *rpc.ResolveSy
 }
 
 func (s *service) LookupIP(ctx context.Context, request *daemon.LookupIPRequest) (rsp *daemon.LookupIPResponse, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(func(session userd.Session) error {
 		rsp, err = session.RootDaemon().LookupIP(ctx, request)
 		return err
 	})
@@ -608,27 +494,27 @@ func (s *service) LookupIP(ctx context.Context, request *daemon.LookupIPRequest)
 }
 
 func (s *service) ResolvePort(ctx context.Context, request *daemon.ResolvePortRequest) (rsp *daemon.ResolvePortResponse, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(func(session userd.Session) error {
 		rsp, err = session.RootDaemon().ResolvePort(ctx, request)
 		return err
 	})
 	return rsp, err
 }
 
-func (s *service) RerouteLocalPort(ctx context.Context, request *daemon.ReroutePortRequest) (*empty.Empty, error) {
-	err := s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+func (s *service) RerouteLocalPort(_ context.Context, request *daemon.ReroutePortRequest) (*empty.Empty, error) {
+	err := s.WithSession(func(session userd.Session) error {
 		var ap types.AddrPortProto
 		if err := ap.UnmarshalBinary(request.DstHostPort); err != nil {
 			return err
 		}
-		session.RerouteLocalPort(ctx, ap, uint16(request.SrcPort))
+		session.RerouteLocalPort(ap, uint16(request.SrcPort))
 		return nil
 	})
 	return &empty.Empty{}, err
 }
 
 func (s *service) RerouteRemotePort(ctx context.Context, request *daemon.ReroutePortRequest) (rsp *empty.Empty, err error) {
-	err = s.WithSession(ctx, func(ctx context.Context, session userd.Session) error {
+	err = s.WithSession(func(session userd.Session) error {
 		rsp, err = session.RootDaemon().RerouteRemotePort(ctx, request)
 		return err
 	})

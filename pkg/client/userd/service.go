@@ -5,10 +5,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/datawire/dlib/dgroup"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 )
 
@@ -26,36 +23,17 @@ type Service interface {
 
 	Server() *grpc.Server
 
-	// SetManagerClient will assign the manager client that this Service will use when acting as
-	// a ManagerServer proxy
-	SetManagerClient(manager.ManagerClient, ...grpc.CallOption)
-
 	// FuseFTPMgr returns the manager responsible for creating a client that can connect to the FuseFTP service.
 	FuseFTPMgr() remotefs.FuseFTPManager
 
 	RootSessionInProcess() bool
 	TeleroutePort() uint16
-	WithSession(context.Context, func(context.Context, Session) error) error
+	WithSession(func(Session) error) error
 
 	PostConnectRequest(context.Context, ConnectRequest) error
 	ReadConnectResponse(context.Context) (*rpc.ConnectInfo, error)
 	InitFTPServer(context.Context) error
 	ManageSessions(context.Context) error
-}
-
-type NewServiceFunc func(context.Context, context.CancelFunc, *dgroup.Group, client.Config, *grpc.Server) (Service, error)
-
-type newServiceKey struct{}
-
-func WithNewServiceFunc(ctx context.Context, f NewServiceFunc) context.Context {
-	return context.WithValue(ctx, newServiceKey{}, f)
-}
-
-func GetNewServiceFunc(ctx context.Context) NewServiceFunc {
-	if f, ok := ctx.Value(newServiceKey{}).(NewServiceFunc); ok {
-		return f
-	}
-	panic("No User daemon Service creator has been registered")
 }
 
 type serviceKey struct{}

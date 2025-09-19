@@ -139,8 +139,8 @@ func Test_ConfigUnmarshalYAMLEmpty(t *testing.T) {
 
 func Test_ConfigUnmarshalYAMLBooleanTrueDefault(t *testing.T) {
 	cfg, err := ParseConfigYAML(dlog.NewTestContext(t, true), "", []byte(`
-cluster:
-  connectFromRootDaemon: true
+docker:
+  enableIPv4: true
 `))
 	require.NoError(t, err)
 	require.Equal(t, GetDefaultConfig(), cfg)
@@ -148,8 +148,8 @@ cluster:
 
 func Test_ConfigUnmarshalYAMLBooleanTrueDefaultFalse(t *testing.T) {
 	cfg, err := ParseConfigYAML(dlog.NewTestContext(t, true), "", []byte(`
-cluster:
-  connectFromRootDaemon: false
+docker:
+  enableIPv4: false
 `))
 	require.NoError(t, err)
 	require.NotEqual(t, GetDefaultConfig(), cfg)
@@ -157,7 +157,7 @@ cluster:
 
 func Test_ConfigUnmarshalYAMLEmptyParent(t *testing.T) {
 	cfg, err := ParseConfigYAML(dlog.NewTestContext(t, true), "", []byte(`
-cluster:
+docker:
 `))
 	require.NoError(t, err)
 	require.Equal(t, GetDefaultConfig(), cfg)

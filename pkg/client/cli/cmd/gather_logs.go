@@ -23,7 +23,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -102,9 +101,6 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 	defer progress.Stop(ctx)
 
 	ctx = dos.WithStdio(ctx, cmd)
-	ctx = scout.NewReporter(ctx, "cli")
-	scout.Start(ctx)
-	defer scout.Close(ctx)
 
 	// If the user did not provide an outputFile, we'll use their current working directory
 	if gl.outputFile == "" {
@@ -149,17 +145,6 @@ func (gl *gatherLogsCommand) gatherLogs(cmd *cobra.Command, _ []string) error {
 			return errcat.User.New("Options for --daemons are: all, root, user, or None")
 		}
 	}
-
-	// Add metadata about the request, so we can track usage + see which
-	// types of logs people are requesting more frequently.
-	// This also gives us an idea about how much usage this command is
-	// getting.
-	scout.SetMetadatum(ctx, "daemon_logs", daemonLogs)
-	scout.SetMetadatum(ctx, "traffic_manager_logs", gl.trafficManager)
-	scout.SetMetadatum(ctx, "traffic_agent_logs", gl.trafficAgents)
-	scout.SetMetadatum(ctx, "get_pod_yaml", gl.podYaml)
-	scout.SetMetadatum(ctx, "anonymized_logs", gl.anon)
-	scout.Report(ctx, "used_gather_logs")
 
 	var az *anonymizer
 	if gl.anon {

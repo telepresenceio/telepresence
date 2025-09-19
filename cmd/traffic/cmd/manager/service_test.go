@@ -296,7 +296,7 @@ matchExpressions:
 	}
 	agentmap.GeneratorConfigFunc = env.GeneratorConfig
 	s := grpc.NewServer()
-	mgr, g, err := NewServiceFunc(ctx, configWatcher)
+	mgr, g, err := NewService(ctx, configWatcher)
 	if err != nil {
 		t.Fatalf("failed to build manager: %v", err)
 	}

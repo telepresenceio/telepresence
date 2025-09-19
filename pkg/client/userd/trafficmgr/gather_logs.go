@@ -78,7 +78,7 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 	}
 }
 
-func (s *session) ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error {
+func (s *session) foreachAgentPod(fn func(typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error {
 	hasContainer := func(pod *core.Pod) bool {
 		if filter == nil || filter(pod) {
 			cns := pod.Spec.Containers
@@ -91,10 +91,10 @@ func (s *session) ForeachAgentPod(ctx context.Context, fn func(context.Context, 
 		return false
 	}
 
-	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
+	coreAPI := k8sapi.GetK8sInterface(s.context).CoreV1()
 	for _, ns := range s.GetCurrentNamespaces(true) {
 		podsAPI := coreAPI.Pods(ns)
-		podList, err := podsAPI.List(ctx, meta.ListOptions{})
+		podList, err := podsAPI.List(s.context, meta.ListOptions{})
 		if err != nil {
 			return err
 		}
@@ -111,7 +111,7 @@ func (s *session) ForeachAgentPod(ctx context.Context, fn func(context.Context, 
 		for _, pod := range podsWithContainer {
 			go func(pod *core.Pod) {
 				defer wg.Done()
-				fn(ctx, podsAPI, pod)
+				fn(podsAPI, pod)
 			}(pod)
 		}
 		wg.Wait()
@@ -122,14 +122,15 @@ func (s *session) ForeachAgentPod(ctx context.Context, fn func(context.Context, 
 
 // GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // connector.LogsRequest and returns them to the caller.
-func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
+func (s *session) GatherLogs(request *connector.LogsRequest) (*connector.LogsResponse, error) {
+	ctx := s.context
 	exportDir := filepath.Join(filelocation.AppUserCacheDir(ctx), request.ExportDir)
 	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
 	resp := &connector.LogsResponse{}
 	result := sync.Map{}
 
 	if !strings.EqualFold(request.Agents, "none") {
-		err := s.ForeachAgentPod(ctx, func(ctx context.Context, podsAPI typed.PodInterface, pod *core.Pod) {
+		err := s.foreachAgentPod(func(podsAPI typed.PodInterface, pod *core.Pod) {
 			podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
 			dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
 			getPodLog(ctx, exportDir, &result, podsAPI, pod, agentconfig.ContainerName, request.GetPodYaml, true)

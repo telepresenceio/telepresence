@@ -166,9 +166,9 @@ func (s *singleServiceSuite) Test_HelmUpgradeMountedWebhookSecret() {
 		s.TelepresenceConnect(ctx)
 	}()
 
-	// Using accessMethod=mount will restart the traffic-manager, so the intercept must be dead at this point
+	// Using accessMethod=mount will restart the traffic-manager, but the intercept should still be active.
 	st := itest.TelepresenceStatusOk(ctx)
-	rq.Len(st.UserDaemon.Intercepts, 0)
+	rq.Len(st.UserDaemon.Intercepts, 1)
 
 	// Uninstall the agent again. We want to be sure that the webhook kicks in to inject it once
 	// we intercept.

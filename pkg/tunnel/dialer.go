@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -414,7 +415,7 @@ func DialWaitLoop(
 	ctx context.Context,
 	tag Tag,
 	tunnelProvider Provider,
-	dialStream rpc.Manager_WatchDialClient,
+	dialStream agent.Agent_WatchDialClient,
 	sessionID SessionID,
 ) error {
 	// create ctx to clean up leftover dialRespond if waitloop dies

@@ -408,7 +408,7 @@ func addAgentContainer(
 		pcn := &pod.Spec.Containers[i]
 		if pcn.Name == agentconfig.ContainerName {
 			if containerEqual(ctx, pcn, acn) {
-				dlog.Infof(ctx, "Pod %s already has container %s and it isn't modified", refPodName, agentconfig.ContainerName)
+				dlog.Debugf(ctx, "Pod %s already has container %s and it isn't modified", refPodName, agentconfig.ContainerName)
 				return patches, replaceAnnotations
 			}
 			dlog.Debugf(ctx, "Pod %s already has container %s but it is modified", refPodName, agentconfig.ContainerName)

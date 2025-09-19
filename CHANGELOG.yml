@@ -28,6 +28,12 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Enhance Resilience of Engagements During Traffic-Manager Redeploys
+        body: >-
+          The telepresence client and traffic-agent now automatically reconnect to the traffic-manager after a restart.
+          Upon reconnection, they share their current state, ensuring ongoing engagements remain uninterrupted. This
+          improvement minimizes user impact during traffic-manager upgrades.
+      - type: feature
         title: Add support for IPv6 and dual-stack when using `telepresence connect --docker`
         body: |-
           Telepresence now supports using `telepresence connect --docker` together with Kubernetes single-stack IPv4
@@ -51,6 +57,18 @@ items:
           that traffic-agents with special DNS configurations might stop working. If this is a problem, the old behavior
           can be restored by setting the `client.dns.useComplexLookup` parameter in the Helm chart or the
           `dns.useComplexLookup` parameter in the client configuration file.
+      - type: change
+        title: Telepresence client now requires a traffic manager version of at least 2.21.0.
+        body: >-
+          The traffic manager is now required to be at least version 2.21.0. Versions earlier than 2.21.0 will no
+          longer work. The reason for this is that implementing the new reconnect behavior would require too much
+          conditional code with older traffic-managers, and a lot of functionality wouldn't work anyway.
+      - type: change
+        title: Build binaries and docker images that are stripped from dwarf and debug info.
+        body: >-
+          The Telepresence binaries and docker images are now built with the `-w -s` flags, which strip the debug
+          symbols and the DWARF information. This reduces the size of the binaries and docker images by about 50MB.
+          Debug binaries can be built using `DEBUG=1 make build`.
   - version: 2.24.1
     date: 2025-09-05
     notes:

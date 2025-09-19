@@ -6,7 +6,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -30,18 +29,6 @@ func (m mgrProvider) Tunnel(ctx context.Context, opts ...grpc.CallOption) (Clien
 
 func ManagerProvider(m rpc.ManagerClient) Provider {
 	return mgrProvider{m}
-}
-
-type mgrProxyProvider struct {
-	connector.ManagerProxyClient
-}
-
-func (m mgrProxyProvider) Tunnel(ctx context.Context, opts ...grpc.CallOption) (Client, error) {
-	return m.ManagerProxyClient.Tunnel(ctx, opts...)
-}
-
-func ManagerProxyProvider(m connector.ManagerProxyClient) Provider {
-	return mgrProxyProvider{m}
 }
 
 type agentProvider struct {

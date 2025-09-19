@@ -229,27 +229,6 @@ enum InterceptDispositionType {
   BAD_ARGS = 8;
 }
 
-message IngressInfo {
-  // The layer-3 host
-  string host = 1;
-
-  // The layer-4 port
-  int32 port = 2;
-
-  // Whether or not to use TLS on the port
-  bool use_tls = 3;
-
-  // The layer-5 host
-  string l5host = 4;
-}
-
-message PreviewSpec {
-  IngressInfo ingress = 1;
-  bool display_banner = 2;
-  string pull_request_url = 3;
-  map<string,string> add_request_headers = 4;
-}
-
 // InterceptInfo contains information about a live intercept in an agent
 message InterceptInfo {
   InterceptSpec spec = 1;
@@ -267,7 +246,6 @@ message InterceptInfo {
   // proxied to.  They both get set by the manager when the client
   // makes a call to UpdateIntercept with add_preview_domain set.
   string preview_domain = 7;
-  PreviewSpec preview_spec = 9;
 
   // The current intercept state; a status code and a human-friendly
   // message to go along with the status code.  These may be set
@@ -310,6 +288,20 @@ message InterceptInfo {
 
   // Timestamp for last modification made by traffic-manager
   google.protobuf.Timestamp modified_at = 21;
+
+  reserved 9; // was PreviewSpec preview_spec
+}
+
+message ReconnectAgentRequest {
+  SessionInfo session = 1;
+  AgentInfo agent = 2;
+}
+
+message ReconnectClientRequest {
+  SessionInfo session = 1;
+  ClientInfo client = 2;
+  repeated InterceptInfo intercepts = 3;
+  repeated AgentInfo agents = 4;
 }
 
 message SessionInfo {
@@ -357,16 +349,6 @@ message PreparedIntercept {
   string container_name = 11;
   int32 container_port = 12;
   repeated string pod_ports = 13;
-}
-
-message UpdateInterceptRequest {
-  SessionInfo session = 1;
-  string name = 2;
-
-  oneof preview_domain_action {
-    PreviewSpec add_preview_domain = 5;
-    bool remove_preview_domain = 4;
-  }
 }
 
 message RemoveInterceptRequest2 {
@@ -462,31 +444,6 @@ message TelepresenceAPIInfo {
 message VersionInfo2 {
   string name = 1;
   string version = 2;
-}
-
-// All of a license's fields come from the license secret
-message License {
-  string license = 1;
-  string host = 2;
-
-  // cluster_id is really the id of the namespace where the traffic-manager is installed.
-  string cluster_id = 3;
-  string err_msg = 4;
-  bool valid = 5;
-}
-
-// The host and port used to connect to Ambassador Cloud.
-// Used by the agents to communicate over gRPC to have
-// Ambassador Cloud review intercepts
-message AmbassadorCloudConfig {
-  string host = 1;
-  string port = 2;
-  optional bytes proxy_ca = 3;
-}
-
-//
-message AmbassadorCloudConnection {
-  bool can_connect = 1;
 }
 
 // TunnelMessage is a message sent over a Tunnel. First byte indicates type of message
@@ -760,18 +717,6 @@ service Manager {
   // GetAgentConfig returns the agent configuration for a specific workload.
   rpc GetAgentConfig(AgentConfigRequest) returns (AgentConfigResponse);
 
-  // GetLicense returns the License information (the license itself and
-  // domain that granted it) known to the manager.
-  rpc GetLicense(google.protobuf.Empty) returns (License);
-
-  // CanConnectAmbassadorCloud returns whether or not the cluster is able to talk to
-  // Ambassador Cloud
-  rpc CanConnectAmbassadorCloud(google.protobuf.Empty) returns (AmbassadorCloudConnection);
-
-  // GetCloudConfig returns the config (host + port) for Ambassador Cloud for use
-  // by the agents.
-  rpc GetCloudConfig(google.protobuf.Empty) returns (AmbassadorCloudConfig);
-
   // GetClientConfig returns the config that connected clients should use for this manager.
   rpc GetClientConfig(google.protobuf.Empty) returns (CLIConfig);
 
@@ -780,6 +725,12 @@ service Manager {
 
   // ArriveAsClient establishes a session between a client and the Manager.
   rpc ArriveAsClient(ClientInfo) returns (SessionInfo);
+
+  // ReconnectAgent re-establishes a session between an agent and the Manager.
+  rpc ReconnectAgent(ReconnectAgentRequest) returns (google.protobuf.Empty);
+
+  // ReconnectClient re-establishes a session between a client and the Manager.
+  rpc ReconnectClient(ReconnectClientRequest) returns (google.protobuf.Empty);
 
   // ArriveAsAgent establishes a session between an agent and the Manager.
   rpc ArriveAsAgent(AgentInfo) returns (SessionInfo);
@@ -810,9 +761,6 @@ service Manager {
   // A session ID is required; if no session ID is given then the call
   // returns immediately, having not delivered any snapshots.
   rpc WatchAgents(SessionInfo) returns (stream AgentInfoSnapshot);
-
-  // WatchAgentsNS is like WatchAgents but limited to a set of namespaces
-  rpc WatchAgentsNS(AgentsRequest) returns (stream AgentInfoSnapshot);
 
   // WatchIntercepts notifies a client or agent of the set of intercepts
   // relevant to that client or agent.
@@ -848,8 +796,6 @@ service Manager {
   // RemoveIntercept lets a client remove an intercept.
   rpc RemoveIntercept(RemoveInterceptRequest2) returns (google.protobuf.Empty);
 
-  rpc UpdateIntercept(UpdateInterceptRequest) returns (InterceptInfo);
-
   // GetIntercept gets info from intercept name
   rpc GetIntercept(GetInterceptRequest) returns (InterceptInfo);
 
@@ -870,12 +816,6 @@ service Manager {
   // active, the lookup will be performed from the intercepted pods.
   rpc LookupDNS(DNSRequest) returns (DNSResponse);
 
-  // AgentLookupHostResponse lets an agent respond for lookup requests
-  rpc AgentLookupDNSResponse(DNSAgentResponse) returns (google.protobuf.Empty);
-
-  // WatchLookupHost lets an agent receive lookup requests
-  rpc WatchLookupDNS(SessionInfo) returns (stream DNSRequest);
-
   // WatchLogLevel lets an agent receive log-level updates
   rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);
 
@@ -890,16 +830,6 @@ service Manager {
   // ReportMetrics is used by a traffic-agent to report metrics for streams
   // established when clients connect directly to traffic-agents using port-forward.
   rpc ReportMetrics(TunnelMetrics) returns (google.protobuf.Empty);
-
-  // WatchDial makes it possible for the client side to receive
-  // DialRequests from the traffic-manager. Requests are sent when an
-  // intercepted traffic-agent creates a Tunnel that needs to be extended
-  // to the Telepresence client on the workstation, or the other way around,
-  // when that client creates a tunnel that needs to be extended to an
-  // intercepted traffic agent. The receiver of the request dials a
-  // connection and responds with a Tunnel. The manager then connects the
-  // two tunnels.
-  rpc WatchDial(SessionInfo) returns (stream DialRequest);
 
   // UninstallAgents will uninstall the traffic-agent from the given workloads (or all
   // workloads if the list is empty).

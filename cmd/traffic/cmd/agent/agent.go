@@ -165,7 +165,8 @@ func Main(ctx context.Context, _ ...string) error {
 
 	go func() {
 		select {
-		case <-sigs:
+		case sig := <-sigs:
+			dlog.Infof(ctx, "Received %s, shutting down", sig)
 			cancel()
 		case <-ctx.Done():
 		}

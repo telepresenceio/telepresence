@@ -20,7 +20,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -260,7 +259,6 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 	if userD == nil {
 		return wt, nil
 	}
-	ctx = scout.NewReporter(ctx, "cli")
 	us := &wt.UserDaemon
 	installID, err := client.InstallID(ctx)
 	if err != nil {

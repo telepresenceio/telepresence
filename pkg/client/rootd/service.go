@@ -24,7 +24,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -52,10 +51,9 @@ func GetNewServiceFunc(ctx context.Context) NewServiceFunc {
 }
 
 const (
-	ProcessName         = "daemon"
-	titleName           = "Daemon"
-	pprofFlag           = "pprof"
-	metritonDisableFlag = "disable-metriton"
+	ProcessName = "daemon"
+	titleName   = "Daemon"
+	pprofFlag   = "pprof"
 )
 
 func help() string {
@@ -118,7 +116,6 @@ func Command() *cobra.Command {
 	}
 	flags := cmd.Flags()
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
-	flags.Bool(metritonDisableFlag, false, "disable metriton reporting")
 	return cmd
 }
 
@@ -459,10 +456,6 @@ func run(cmd *cobra.Command, args []string) error {
 			}
 		}()
 	}
-	if disableMetriton, _ := flags.GetBool(metritonDisableFlag); disableMetriton {
-		_ = os.Setenv("SCOUT_DISABLE", "1")
-	}
-
 	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
 	c, err = logging.InitContext(c, ProcessName, logging.RotateDaily, true, false)
 	if err != nil {
@@ -486,7 +479,6 @@ func run(cmd *cobra.Command, args []string) error {
 	}()
 	dlog.Debug(c, "Listener opened")
 
-	c = scout.NewReporter(c, ProcessName)
 	d := GetNewServiceFunc(c)(cfg)
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
 		return err
@@ -503,7 +495,6 @@ func run(cmd *cobra.Command, args []string) error {
 	g.Go("config-reload", d.configReload)
 	g.Go("session", d.manageSessions)
 	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener) })
-	g.Go("metriton", scout.Run)
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)

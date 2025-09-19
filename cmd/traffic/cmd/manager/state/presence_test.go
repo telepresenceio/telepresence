@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -14,7 +15,8 @@ import (
 func TestPresence(t *testing.T) {
 	ctx := dlog.NewTestContext(t, false)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{})
-	p := NewState(ctx)
+	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+	p := NewState(ctx, g)
 
 	now := time.Now()
 
@@ -62,7 +64,7 @@ func TestPresence(t *testing.T) {
 	a.Contains(collected, fmt.Sprintf("%s/item-b", sb))
 	a.Contains(collected, fmt.Sprintf("%s/item-c", sc))
 
-	p.ExpireSessions(ctx, now, now)
+	p.expireSessions(ctx, now, now)
 
 	// B@1 C@1
 
@@ -81,5 +83,5 @@ func TestPresence(t *testing.T) {
 	a.False(isPresent(sc))
 	a.False(isPresent("d"))
 
-	a.Panics(func() { p.(*state).addClient(sb, &rpc.ClientInfo{Name: "duplicate-item-b"}, now) })
+	a.Panics(func() { p.addClient(sb, &rpc.ClientInfo{Name: "duplicate-item-b"}, now) })
 }

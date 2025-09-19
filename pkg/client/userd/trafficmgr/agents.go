@@ -2,37 +2,29 @@ package trafficmgr
 
 import (
 	"context"
-	"errors"
-	"fmt"
-	"io"
 	"slices"
 
-	grpcCodes "google.golang.org/grpc/codes"
-	grpcStatus "google.golang.org/grpc/status"
+	"google.golang.org/grpc"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 )
 
 func (s *session) watchAgentsLoop(ctx context.Context) error {
-	stream, err := s.managerClient.WatchAgents(ctx, s.SessionInfo())
-	if err != nil {
-		return fmt.Errorf("manager.WatchAgents: %w", err)
-	}
-	for ctx.Err() == nil {
-		snapshot, err := stream.Recv()
-		if err != nil {
-			// Handle as if we had an empty snapshot. This will ensure that port forwards and volume mounts are canceled correctly.
-			s.handleAgentSnapshot(ctx, nil)
-			if ctx.Err() != nil || errors.Is(err, io.EOF) || grpcStatus.Code(err) == grpcCodes.NotFound {
-				// Normal termination
-				return nil
-			}
-			return fmt.Errorf("manager.WatchAgents recv: %w", err)
-		}
-		s.handleAgentSnapshot(ctx, snapshot.Agents)
-	}
-	return nil
+	err := watcher.WatchWithRetry(ctx, "WatchAgents", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentInfoSnapshot], error) {
+			return s.managerClient.WatchAgents(ctx, s.SessionInfo())
+		},
+		func(snapshot *manager.AgentInfoSnapshot) error {
+			s.handleAgentSnapshot(ctx, snapshot.Agents)
+			return nil
+		}, nil)
+
+	// Handle as if we had an empty snapshot. This will ensure that port forwards and volume mounts are canceled correctly.
+	s.handleAgentSnapshot(ctx, nil)
+	return err
 }
 
 func (s *session) handleAgentSnapshot(ctx context.Context, infos []*manager.AgentInfo) {
@@ -59,7 +51,7 @@ func (s *session) handleAgentSnapshot(ctx context.Context, infos []*manager.Agen
 			if slices.IndexFunc(ais, func(cai *manager.AgentInfo) bool { return cai.PodName == ig.PodName }) < 0 {
 				// The pod selected for the ingest is no longer active, so replace it.
 				ai := ais[0]
-				err := s.translateContainerEnv(ctx, ai, ig.container)
+				err := s.translateContainerEnv(ai, ig.container)
 				if err != nil {
 					dlog.Errorf(ctx, "failed to translate container env: %v", err)
 				}

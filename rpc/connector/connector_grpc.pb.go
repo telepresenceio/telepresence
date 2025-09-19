@@ -38,7 +38,6 @@ const (
 	Connector_LeaveIngest_FullMethodName             = "/telepresence.connector.Connector/LeaveIngest"
 	Connector_CreateIntercept_FullMethodName         = "/telepresence.connector.Connector/CreateIntercept"
 	Connector_RemoveIntercept_FullMethodName         = "/telepresence.connector.Connector/RemoveIntercept"
-	Connector_UpdateIntercept_FullMethodName         = "/telepresence.connector.Connector/UpdateIntercept"
 	Connector_Uninstall_FullMethodName               = "/telepresence.connector.Connector/Uninstall"
 	Connector_List_FullMethodName                    = "/telepresence.connector.Connector/List"
 	Connector_WatchWorkloads_FullMethodName          = "/telepresence.connector.Connector/WatchWorkloads"
@@ -106,7 +105,6 @@ type ConnectorClient interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
-	UpdateIntercept(ctx context.Context, in *manager.UpdateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
 	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*common.Result, error)
@@ -307,16 +305,6 @@ func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.Remov
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(InterceptResult)
 	err := c.cc.Invoke(ctx, Connector_RemoveIntercept_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *connectorClient) UpdateIntercept(ctx context.Context, in *manager.UpdateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(manager.InterceptInfo)
-	err := c.cc.Invoke(ctx, Connector_UpdateIntercept_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -577,7 +565,6 @@ type ConnectorServer interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
-	UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
 	Uninstall(context.Context, *UninstallRequest) (*common.Result, error)
@@ -678,9 +665,6 @@ func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInte
 }
 func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
-}
-func (UnimplementedConnectorServer) UpdateIntercept(context.Context, *manager.UpdateInterceptRequest) (*manager.InterceptInfo, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateIntercept not implemented")
 }
 func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*common.Result, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Uninstall not implemented")
@@ -1029,24 +1013,6 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).RemoveIntercept(ctx, req.(*manager.RemoveInterceptRequest2))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _Connector_UpdateIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(manager.UpdateInterceptRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ConnectorServer).UpdateIntercept(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Connector_UpdateIntercept_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ConnectorServer).UpdateIntercept(ctx, req.(*manager.UpdateInterceptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1472,10 +1438,6 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Connector_RemoveIntercept_Handler,
 		},
 		{
-			MethodName: "UpdateIntercept",
-			Handler:    _Connector_UpdateIntercept_Handler,
-		},
-		{
 			MethodName: "Uninstall",
 			Handler:    _Connector_Uninstall_Handler,
 		},
@@ -1557,374 +1519,6 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "WatchWorkloads",
 			Handler:       _Connector_WatchWorkloads_Handler,
 			ServerStreams: true,
-		},
-	},
-	Metadata: "connector/connector.proto",
-}
-
-const (
-	ManagerProxy_Version_FullMethodName          = "/telepresence.connector.ManagerProxy/Version"
-	ManagerProxy_GetClientConfig_FullMethodName  = "/telepresence.connector.ManagerProxy/GetClientConfig"
-	ManagerProxy_EnsureAgent_FullMethodName      = "/telepresence.connector.ManagerProxy/EnsureAgent"
-	ManagerProxy_WatchClusterInfo_FullMethodName = "/telepresence.connector.ManagerProxy/WatchClusterInfo"
-	ManagerProxy_Lookup_FullMethodName           = "/telepresence.connector.ManagerProxy/Lookup"
-	ManagerProxy_LookupDNS_FullMethodName        = "/telepresence.connector.ManagerProxy/LookupDNS"
-	ManagerProxy_Tunnel_FullMethodName           = "/telepresence.connector.ManagerProxy/Tunnel"
-)
-
-// ManagerProxyClient is the client API for ManagerProxy service.
-//
-// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-//
-// ManagerProxy is a small subset of the traffic-manager API that the
-// user daemon makes available to the root daemon. This API is intended
-// for the root daemon only and should not be used by other external
-// processes.
-type ManagerProxyClient interface {
-	// Version returns the version information of the Manager.
-	Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.VersionInfo2, error)
-	// GetClientConfig returns the config that connected clients should use for this manager.
-	GetClientConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.CLIConfig, error)
-	// EnsureAgent ensures that an agent is injected to the pods of a workload
-	EnsureAgent(ctx context.Context, in *manager.EnsureAgentRequest, opts ...grpc.CallOption) (*manager.AgentInfoSnapshot, error)
-	// WatchClusterInfo returns information needed when establishing
-	// connectivity to the cluster.
-	WatchClusterInfo(ctx context.Context, in *manager.SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[manager.ClusterInfo], error)
-	// Lookup performs a LookupIP in the cluster. The connected namespace will be
-	// appended if the name is a single label.
-	Lookup(ctx context.Context, in *manager.LookupRequest, opts ...grpc.CallOption) (*manager.LookupResponse, error)
-	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
-	// active, the lookup will be performed from the intercepted pods.
-	LookupDNS(ctx context.Context, in *manager.DNSRequest, opts ...grpc.CallOption) (*manager.DNSResponse, error)
-	// A Tunnel represents one single connection where the client or
-	// traffic-agent represents one end (the client-side) and the
-	// traffic-manager represents the other (the server side). The first
-	// message that a client sends when the tunnel is established is will
-	// always contain the session ID, connection ID, and timeouts used by
-	// the dialer endpoints.
-	Tunnel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[manager.TunnelMessage, manager.TunnelMessage], error)
-}
-
-type managerProxyClient struct {
-	cc grpc.ClientConnInterface
-}
-
-func NewManagerProxyClient(cc grpc.ClientConnInterface) ManagerProxyClient {
-	return &managerProxyClient{cc}
-}
-
-func (c *managerProxyClient) Version(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.VersionInfo2, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(manager.VersionInfo2)
-	err := c.cc.Invoke(ctx, ManagerProxy_Version_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerProxyClient) GetClientConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.CLIConfig, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(manager.CLIConfig)
-	err := c.cc.Invoke(ctx, ManagerProxy_GetClientConfig_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerProxyClient) EnsureAgent(ctx context.Context, in *manager.EnsureAgentRequest, opts ...grpc.CallOption) (*manager.AgentInfoSnapshot, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(manager.AgentInfoSnapshot)
-	err := c.cc.Invoke(ctx, ManagerProxy_EnsureAgent_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerProxyClient) WatchClusterInfo(ctx context.Context, in *manager.SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[manager.ClusterInfo], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ManagerProxy_ServiceDesc.Streams[0], ManagerProxy_WatchClusterInfo_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[manager.SessionInfo, manager.ClusterInfo]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ManagerProxy_WatchClusterInfoClient = grpc.ServerStreamingClient[manager.ClusterInfo]
-
-func (c *managerProxyClient) Lookup(ctx context.Context, in *manager.LookupRequest, opts ...grpc.CallOption) (*manager.LookupResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(manager.LookupResponse)
-	err := c.cc.Invoke(ctx, ManagerProxy_Lookup_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerProxyClient) LookupDNS(ctx context.Context, in *manager.DNSRequest, opts ...grpc.CallOption) (*manager.DNSResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(manager.DNSResponse)
-	err := c.cc.Invoke(ctx, ManagerProxy_LookupDNS_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *managerProxyClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[manager.TunnelMessage, manager.TunnelMessage], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &ManagerProxy_ServiceDesc.Streams[1], ManagerProxy_Tunnel_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[manager.TunnelMessage, manager.TunnelMessage]{ClientStream: stream}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ManagerProxy_TunnelClient = grpc.BidiStreamingClient[manager.TunnelMessage, manager.TunnelMessage]
-
-// ManagerProxyServer is the server API for ManagerProxy service.
-// All implementations must embed UnimplementedManagerProxyServer
-// for forward compatibility.
-//
-// ManagerProxy is a small subset of the traffic-manager API that the
-// user daemon makes available to the root daemon. This API is intended
-// for the root daemon only and should not be used by other external
-// processes.
-type ManagerProxyServer interface {
-	// Version returns the version information of the Manager.
-	Version(context.Context, *emptypb.Empty) (*manager.VersionInfo2, error)
-	// GetClientConfig returns the config that connected clients should use for this manager.
-	GetClientConfig(context.Context, *emptypb.Empty) (*manager.CLIConfig, error)
-	// EnsureAgent ensures that an agent is injected to the pods of a workload
-	EnsureAgent(context.Context, *manager.EnsureAgentRequest) (*manager.AgentInfoSnapshot, error)
-	// WatchClusterInfo returns information needed when establishing
-	// connectivity to the cluster.
-	WatchClusterInfo(*manager.SessionInfo, grpc.ServerStreamingServer[manager.ClusterInfo]) error
-	// Lookup performs a LookupIP in the cluster. The connected namespace will be
-	// appended if the name is a single label.
-	Lookup(context.Context, *manager.LookupRequest) (*manager.LookupResponse, error)
-	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
-	// active, the lookup will be performed from the intercepted pods.
-	LookupDNS(context.Context, *manager.DNSRequest) (*manager.DNSResponse, error)
-	// A Tunnel represents one single connection where the client or
-	// traffic-agent represents one end (the client-side) and the
-	// traffic-manager represents the other (the server side). The first
-	// message that a client sends when the tunnel is established is will
-	// always contain the session ID, connection ID, and timeouts used by
-	// the dialer endpoints.
-	Tunnel(grpc.BidiStreamingServer[manager.TunnelMessage, manager.TunnelMessage]) error
-	mustEmbedUnimplementedManagerProxyServer()
-}
-
-// UnimplementedManagerProxyServer must be embedded to have
-// forward compatible implementations.
-//
-// NOTE: this should be embedded by value instead of pointer to avoid a nil
-// pointer dereference when methods are called.
-type UnimplementedManagerProxyServer struct{}
-
-func (UnimplementedManagerProxyServer) Version(context.Context, *emptypb.Empty) (*manager.VersionInfo2, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
-}
-func (UnimplementedManagerProxyServer) GetClientConfig(context.Context, *emptypb.Empty) (*manager.CLIConfig, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetClientConfig not implemented")
-}
-func (UnimplementedManagerProxyServer) EnsureAgent(context.Context, *manager.EnsureAgentRequest) (*manager.AgentInfoSnapshot, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method EnsureAgent not implemented")
-}
-func (UnimplementedManagerProxyServer) WatchClusterInfo(*manager.SessionInfo, grpc.ServerStreamingServer[manager.ClusterInfo]) error {
-	return status.Errorf(codes.Unimplemented, "method WatchClusterInfo not implemented")
-}
-func (UnimplementedManagerProxyServer) Lookup(context.Context, *manager.LookupRequest) (*manager.LookupResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Lookup not implemented")
-}
-func (UnimplementedManagerProxyServer) LookupDNS(context.Context, *manager.DNSRequest) (*manager.DNSResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method LookupDNS not implemented")
-}
-func (UnimplementedManagerProxyServer) Tunnel(grpc.BidiStreamingServer[manager.TunnelMessage, manager.TunnelMessage]) error {
-	return status.Errorf(codes.Unimplemented, "method Tunnel not implemented")
-}
-func (UnimplementedManagerProxyServer) mustEmbedUnimplementedManagerProxyServer() {}
-func (UnimplementedManagerProxyServer) testEmbeddedByValue()                      {}
-
-// UnsafeManagerProxyServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ManagerProxyServer will
-// result in compilation errors.
-type UnsafeManagerProxyServer interface {
-	mustEmbedUnimplementedManagerProxyServer()
-}
-
-func RegisterManagerProxyServer(s grpc.ServiceRegistrar, srv ManagerProxyServer) {
-	// If the following call pancis, it indicates UnimplementedManagerProxyServer was
-	// embedded by pointer and is nil.  This will cause panics if an
-	// unimplemented method is ever invoked, so we test this at initialization
-	// time to prevent it from happening at runtime later due to I/O.
-	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
-		t.testEmbeddedByValue()
-	}
-	s.RegisterService(&ManagerProxy_ServiceDesc, srv)
-}
-
-func _ManagerProxy_Version_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerProxyServer).Version(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ManagerProxy_Version_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerProxyServer).Version(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ManagerProxy_GetClientConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(emptypb.Empty)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerProxyServer).GetClientConfig(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ManagerProxy_GetClientConfig_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerProxyServer).GetClientConfig(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ManagerProxy_EnsureAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(manager.EnsureAgentRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerProxyServer).EnsureAgent(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ManagerProxy_EnsureAgent_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerProxyServer).EnsureAgent(ctx, req.(*manager.EnsureAgentRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ManagerProxy_WatchClusterInfo_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(manager.SessionInfo)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(ManagerProxyServer).WatchClusterInfo(m, &grpc.GenericServerStream[manager.SessionInfo, manager.ClusterInfo]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ManagerProxy_WatchClusterInfoServer = grpc.ServerStreamingServer[manager.ClusterInfo]
-
-func _ManagerProxy_Lookup_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(manager.LookupRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerProxyServer).Lookup(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ManagerProxy_Lookup_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerProxyServer).Lookup(ctx, req.(*manager.LookupRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ManagerProxy_LookupDNS_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(manager.DNSRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ManagerProxyServer).LookupDNS(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ManagerProxy_LookupDNS_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ManagerProxyServer).LookupDNS(ctx, req.(*manager.DNSRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _ManagerProxy_Tunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ManagerProxyServer).Tunnel(&grpc.GenericServerStream[manager.TunnelMessage, manager.TunnelMessage]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type ManagerProxy_TunnelServer = grpc.BidiStreamingServer[manager.TunnelMessage, manager.TunnelMessage]
-
-// ManagerProxy_ServiceDesc is the grpc.ServiceDesc for ManagerProxy service.
-// It's only intended for direct use with grpc.RegisterService,
-// and not to be introspected or modified (even as a copy)
-var ManagerProxy_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "telepresence.connector.ManagerProxy",
-	HandlerType: (*ManagerProxyServer)(nil),
-	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "Version",
-			Handler:    _ManagerProxy_Version_Handler,
-		},
-		{
-			MethodName: "GetClientConfig",
-			Handler:    _ManagerProxy_GetClientConfig_Handler,
-		},
-		{
-			MethodName: "EnsureAgent",
-			Handler:    _ManagerProxy_EnsureAgent_Handler,
-		},
-		{
-			MethodName: "Lookup",
-			Handler:    _ManagerProxy_Lookup_Handler,
-		},
-		{
-			MethodName: "LookupDNS",
-			Handler:    _ManagerProxy_LookupDNS_Handler,
-		},
-	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "WatchClusterInfo",
-			Handler:       _ManagerProxy_WatchClusterInfo_Handler,
-			ServerStreams: true,
-		},
-		{
-			StreamName:    "Tunnel",
-			Handler:       _ManagerProxy_Tunnel_Handler,
-			ServerStreams: true,
-			ClientStreams: true,
 		},
 	},
 	Metadata: "connector/connector.proto",

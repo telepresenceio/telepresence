@@ -2,16 +2,11 @@ package userd
 
 import (
 	"context"
-	"sync"
 
 	"github.com/blang/semver/v4"
-	"google.golang.org/grpc"
-	core "k8s.io/api/core/v1"
-	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/datawire/dlib/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -49,72 +44,86 @@ type Session interface {
 	restapi.AgentState
 	KubeConfig
 	tunnel.SyntheticIPResolver
-
-	AddIntercept(context.Context, *rpc.CreateInterceptRequest) *rpc.InterceptResult
-	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (InterceptInfo, *rpc.InterceptResult)
-	InterceptProlog(context.Context, *manager.CreateInterceptRequest) *rpc.InterceptResult
-	InterceptEpilog(context.Context, *rpc.CreateInterceptRequest, *rpc.InterceptResult) *rpc.InterceptResult
-	RemoveIntercept(context.Context, string) error
-	NewCreateInterceptRequest(*manager.InterceptSpec) *manager.CreateInterceptRequest
-
-	AddInterceptor(context.Context, string, *rpc.Interceptor) error
-	RemoveInterceptor(string) error
-	ClearIngestsAndIntercepts(context.Context) error
-
+	AddIntercept(*rpc.CreateInterceptRequest) *rpc.InterceptResult
+	AddInterceptor(string, *rpc.Interceptor) error
+	ApplyConfig() error
+	Cancel()
+	CanIntercept(*rpc.CreateInterceptRequest) (InterceptInfo, *rpc.InterceptResult)
+	ClearIngestsAndIntercepts() error
+	Done() <-chan struct{}
+	GatherLogs(*rpc.LogsRequest) (*rpc.LogsResponse, error)
+	GetConfig() (*client.SessionConfig, error)
+	GetCurrentNamespaces(forClientAccess bool) []string
+	GetIngest(*rpc.IngestIdentifier) (*rpc.IngestInfo, error)
 	GetInterceptInfo(string) *manager.InterceptInfo
 	GetInterceptSpec(string) *manager.InterceptSpec
+	Ingest(*rpc.IngestRequest) (*rpc.IngestInfo, error)
 	InterceptsForWorkload(string, string) []*manager.InterceptSpec
-
+	LeaveIngest(*rpc.IngestIdentifier) (*rpc.IngestInfo, error)
 	ManagerClient() manager.ManagerClient
-	ManagerConn() *grpc.ClientConn
 	ManagerName() string
 	ManagerVersion() semver.Version
-	NewRemainRequest() *manager.RemainRequest
-
-	Status(context.Context) *rpc.ConnectInfo
-	UpdateStatus(context.Context, ConnectRequest) *rpc.ConnectInfo
-
-	Uninstall(context.Context, *rpc.UninstallRequest) (*common.Result, error)
-
-	WatchWorkloads(context.Context, *rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
-	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter) (*rpc.WorkloadInfoSnapshot, error)
-
-	GetCurrentNamespaces(forClientAccess bool) []string
-	ActualNamespace(string) string
-	AddNamespaceListener(context.Context, NamespaceListener)
-
-	WithJoinedClientSetInterface(context.Context) context.Context
-	ForeachAgentPod(ctx context.Context, fn func(context.Context, typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
-
-	GatherLogs(context.Context, *rpc.LogsRequest) (*rpc.LogsResponse, error)
-
-	SessionInfo() *manager.SessionInfo
+	RemoveIntercept(string) error
+	RemoveInterceptor(string) error
+	RerouteLocalPort(ap types.AddrPortProto, srcPort uint16)
 	RootDaemon() rootdRpc.DaemonClient
+	Run() error
+	SessionInfo() *manager.SessionInfo
+	Status() *rpc.ConnectInfo
+	Uninstall(*rpc.UninstallRequest) (*common.Result, error)
+	UpdateStatus(ConnectRequest) *rpc.ConnectInfo
+	WatchWorkloads(*rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
+	WorkloadInfoSnapshot([]string, rpc.ListRequest_Filter) (*rpc.WorkloadInfoSnapshot, error)
 
-	ApplyConfig(context.Context) error
-	GetConfig(context.Context) (*client.SessionConfig, error)
-	RunSession(c context.Context) error
-	StartServices(g *dgroup.Group)
-	Remain(ctx context.Context) error
-	Epilog(ctx context.Context)
-	Done() <-chan struct{}
-	Ingest(context.Context, *rpc.IngestRequest) (*rpc.IngestInfo, error)
-	GetIngest(*rpc.IngestIdentifier) (*rpc.IngestInfo, error)
-	LeaveIngest(context.Context, *rpc.IngestIdentifier) (*rpc.IngestInfo, error)
-	RerouteLocalPort(ctx context.Context, ap types.AddrPortProto, srcPort uint16)
-}
+	/*
+		AddIntercept(*rpc.CreateInterceptRequest) *rpc.InterceptResult
+		CanIntercept(*rpc.CreateInterceptRequest) (InterceptInfo, *rpc.InterceptResult)
+		RemoveIntercept(string) error
+		NewCreateInterceptRequest(*manager.InterceptSpec) *manager.CreateInterceptRequest
 
-type NewSessionFunc func(context.Context, ConnectRequest, *client.Kubeconfig, *sync.WaitGroup) (context.Context, Session, *rpc.ConnectInfo)
+		AddInterceptor(string, *rpc.Interceptor) error
+		RemoveInterceptor(string) error
+		ClearIngestsAndIntercepts() error
 
-type newSessionKey struct{}
+		GetInterceptInfo(string) *manager.InterceptInfo
+		InterceptsForWorkload(string, string) []*manager.InterceptSpec
 
-func WithNewSessionFunc(ctx context.Context, f NewSessionFunc) context.Context {
-	return context.WithValue(ctx, newSessionKey{}, f)
-}
+		ManagerClient() manager.ManagerClient
+		ManagerConn() *grpc.ClientConn
+		ManagerName() string
+		ManagerVersion() semver.Version
+		NewRemainRequest() *manager.RemainRequest
 
-func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
-	if f, ok := ctx.Value(newSessionKey{}).(NewSessionFunc); ok {
-		return f
-	}
-	panic("No User daemon Session creator has been registered")
+		Status() *rpc.ConnectInfo
+		UpdateStatus(ConnectRequest) *rpc.ConnectInfo
+
+		Uninstall(*rpc.UninstallRequest) (*common.Result, error)
+
+		WatchWorkloads(*rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
+
+		GetCurrentNamespaces(forClientAccess bool) []string
+		ActualNamespace(string) string
+		AddNamespaceListener(context.Context, NamespaceListener)
+
+		WithJoinedClientSetInterface(context.Context) context.Context
+		ForeachAgentPod(fn func(typed.PodInterface, *core.Pod), filter func(*core.Pod) bool) error
+
+		GatherLogs(*rpc.LogsRequest) (*rpc.LogsResponse, error)
+
+		SessionInfo() *manager.SessionInfo
+		RootDaemon() rootdRpc.DaemonClient
+
+		ApplyConfig() error
+		GetConfig() (*client.SessionConfig, error)
+		Run() error
+		StartServices(g *dgroup.Group)
+		Cancel()
+		Remain() error
+		Epilogue()
+		Done() <-chan struct{}
+		Ingest(*rpc.IngestRequest) (*rpc.IngestInfo, error)
+		GetIngest(*rpc.IngestIdentifier) (*rpc.IngestInfo, error)
+		LeaveIngest(*rpc.IngestIdentifier) (*rpc.IngestInfo, error)
+		RerouteLocalPort(ap types.AddrPortProto, srcPort uint16)
+	*/
 }

@@ -22,13 +22,11 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/scout"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
@@ -58,7 +56,6 @@ to troubleshoot problems.
 type service struct {
 	rpc.UnsafeConnectorServer
 	srv           *grpc.Server
-	managerProxy  *mgrProxy
 	timedLogLevel log.TimedLevel
 	fuseFTPError  error
 
@@ -67,8 +64,6 @@ type service struct {
 
 	clientConfig    clientcmd.ClientConfig
 	session         userd.Session
-	sessionCancel   context.CancelFunc
-	sessionContext  context.Context
 	sessionQuitting int32 // atomic boolean. True if non-zero.
 	sessionLock     sync.RWMutex
 
@@ -86,9 +81,6 @@ type service struct {
 
 	// Port where root daemon (or rather the embedded root daemon) starts the teleroute service.
 	teleroutePort uint16
-
-	// Possibly extended version of the service. Use when calling interface methods.
-	self userd.Service
 }
 
 func (s *service) ClientConfig() (clientcmd.ClientConfig, error) {
@@ -98,22 +90,19 @@ func (s *service) ClientConfig() (clientcmd.ClientConfig, error) {
 	return s.clientConfig, nil
 }
 
-func NewService(ctx context.Context, cancel context.CancelFunc, _ *dgroup.Group, cfg client.Config, srv *grpc.Server) (userd.Service, error) {
+func NewService(cancel context.CancelFunc, _ *dgroup.Group, cfg client.Config, srv *grpc.Server) (userd.Service, error) {
 	s := &service{
 		srv:             srv,
 		connectRequest:  make(chan userd.ConnectRequest),
 		connectResponse: make(chan *rpc.ConnectInfo),
-		managerProxy:    &mgrProxy{},
 		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels().UserDaemon.String(), log.SetLevel),
 		fuseFtpMgr:      remotefs.NewFuseFTPManager(),
 		quit:            cancel,
 	}
-	s.self = s
 	if srv != nil {
 		// The podd daemon never registers the gRPC servers
 		rpc.RegisterConnectorServer(srv, s)
 		authGrpc.RegisterAuthenticatorServer(srv, s)
-		rpc.RegisterManagerProxyServer(srv, s.managerProxy)
 	} else {
 		s.rootSessionInProc = true
 	}
@@ -136,10 +125,6 @@ func (s *service) ListenerAddress(ctx context.Context) string {
 		return s.daemonAddress.String()
 	}
 	return "unix:" + socket.UserDaemonPath(ctx)
-}
-
-func (s *service) SetSelf(self userd.Service) {
-	s.self = self
 }
 
 func (s *service) FuseFTPMgr() remotefs.FuseFTPManager {
@@ -174,10 +159,6 @@ func (s *service) ReadConnectResponse(ctx context.Context) (result *rpc.ConnectI
 	case result = <-s.connectResponse:
 	}
 	return
-}
-
-func (s *service) SetManagerClient(managerClient manager.ManagerClient, callOptions ...grpc.CallOption) {
-	s.managerProxy.setClient(managerClient, callOptions...)
 }
 
 const (
@@ -218,7 +199,7 @@ func (s *service) configReload(c context.Context) error {
 		if s.session == nil {
 			return client.ReloadDaemonLogLevel(ctx, false)
 		}
-		return s.session.ApplyConfig(c)
+		return s.session.ApplyConfig()
 	})
 }
 
@@ -241,7 +222,7 @@ func (s *service) ManageSessions(c context.Context) error {
 			default:
 				// Nobody left to read the response? That's fine really. Just means that
 				// whoever wanted to start the session terminated early.
-				s.cancelSession()
+				s.cancelSession(c)
 			}
 		}
 	}
@@ -253,7 +234,7 @@ func (s *service) startSession(parentCtx context.Context, cr userd.ConnectReques
 
 	if s.session != nil {
 		// UpdateStatus sets rpc.ConnectInfo_ALREADY_CONNECTED if successful
-		return s.session.UpdateStatus(s.sessionContext, cr)
+		return s.session.UpdateStatus(cr)
 	}
 
 	// Obtain the kubeconfig from the request parameters so that we can determine
@@ -273,12 +254,12 @@ func (s *service) startSession(parentCtx context.Context, cr userd.ConnectReques
 	s.clientConfig = config.ClientConfig
 
 	ctx, cancel := context.WithCancel(ctx)
-	ctx = userd.WithService(ctx, s.self)
+	ctx = userd.WithService(ctx, s)
 
 	daemonID := daemon.NewIdentifier(cr.Request().Name, config.Context, config.Namespace, proc.RunningInContainer())
 	go runAliveAndCancellation(ctx, cancel, daemonID, wg)
 
-	ctx, session, rsp := userd.GetNewSessionFunc(ctx)(ctx, cr, config, wg)
+	session, rsp := trafficmgr.NewSession(ctx, cr, config, wg)
 	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
 		cancel()
 		if s.rootSessionInProc {
@@ -288,45 +269,27 @@ func (s *service) startSession(parentCtx context.Context, cr userd.ConnectReques
 		return rsp
 	}
 	s.session = session
-	s.sessionContext = userd.WithSession(ctx, session)
-	s.sessionCancel = func() {
-		cancel()
-		<-session.Done()
-	}
 
 	// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
 	// the session is running. The s.sessionCancel is called from Disconnect
 	wg.Add(1)
-	go func(cr userd.ConnectRequest) {
+	go func() {
 		defer func() {
 			s.sessionLock.Lock()
-			s.self.SetManagerClient(nil)
 			s.clientConfig = nil
 			s.session = nil
-			s.sessionCancel = nil
 			s.sessionLock.Unlock()
 			_ = client.ReloadDaemonLogLevel(parentCtx, false)
 			wg.Done()
 		}()
-		if err := session.RunSession(s.sessionContext); err != nil {
-			if errors.Is(err, trafficmgr.ErrSessionExpired) {
-				// Session has expired. We need to cancel the owner session and reconnect
-				dlog.Info(ctx, "refreshing session")
-				s.cancelSession()
-				select {
-				case <-ctx.Done():
-				case s.connectRequest <- cr:
-				}
-				return
-			}
-
+		if err := session.Run(); err != nil {
 			dlog.Error(ctx, err)
 		}
 		if s.rootSessionInProc {
 			// Simplified session management. The daemon handles one session, then exits.
 			s.quit()
 		}
-	}(cr)
+	}()
 	return rsp
 }
 
@@ -355,23 +318,22 @@ func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, dae
 	}
 }
 
-func (s *service) cancelSession() {
+func (s *service) cancelSession(ctx context.Context) {
 	if atomic.CompareAndSwapInt32(&s.sessionQuitting, 0, 1) {
-		if s.sessionCancel != nil {
+		if s.session != nil {
 			// We use a TryRLock here because the session-lock will be held during
 			// session initialization, and we might well receive a quit-call during
 			// that time (the initialization may take a long time if there are
 			// problems connecting to the cluster).
 			if s.sessionLock.TryRLock() {
-				if err := s.session.ClearIngestsAndIntercepts(s.sessionContext); err != nil {
-					dlog.Errorf(s.sessionContext, "failed to clear intercepts: %v", err)
+				if err := s.session.ClearIngestsAndIntercepts(); err != nil {
+					dlog.Errorf(ctx, "failed to clear intercepts: %v", err)
 				}
 				s.sessionLock.RUnlock()
 			}
-			s.sessionCancel()
+			s.session.Cancel()
 		}
 		s.session = nil
-		s.sessionCancel = nil
 		atomic.StoreInt32(&s.sessionQuitting, 0)
 	}
 }
@@ -436,7 +398,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
-	c = scout.NewReporter(c, "connector")
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
@@ -456,7 +417,7 @@ func run(cmd *cobra.Command, _ []string) error {
 			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 		}
 		svc := server.New(c, opts...)
-		si, err := userd.GetNewServiceFunc(c)(c, svcCancel, g, cfg, svc)
+		si, err := NewService(svcCancel, g, cfg, svc)
 		if err != nil {
 			close(siCh)
 			return err
@@ -499,10 +460,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	g.Go(sessionName, func(c context.Context) error {
 		return s.ManageSessions(c)
 	})
-
-	// background-metriton is the goroutine that handles all telemetry reports, so that calls to
-	// metriton don't block the functional goroutines.
-	g.Go("background-metriton", scout.Run)
 
 	err = g.Wait()
 	if err != nil {

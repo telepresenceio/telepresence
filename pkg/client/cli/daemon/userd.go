@@ -175,10 +175,12 @@ func (u *userClient) AddHandler(ctx context.Context, id string, cmd *exec.Cmd, c
 	// Send info about the pid and intercept id to the traffic-manager so that it kills
 	// the process if it receives a leave of quit call.
 	if _, err := u.AddInterceptor(ctx, &ior); err != nil {
-		if grpcStatus.Code(err) == grpcCodes.Canceled {
-			// Deactivation was caused by a disconnect
+		switch grpcStatus.Code(err) {
+		case grpcCodes.NotFound, grpcCodes.Canceled:
+			// The intercept was already deleted or deactivation was caused by a disconnect
+			dlog.Infof(ctx, "intercept no longer present when adding container %s as interceptor", containerName)
 			err = nil
-		} else {
+		default:
 			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
 		}
 		_ = cmd.Process.Kill()

@@ -16,8 +16,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
-	userDaemon "github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -42,8 +40,6 @@ func InitContext(ctx context.Context) context.Context {
 				proc.SetRunningInContainer(false)
 			}
 		}
-		ctx = userd.WithNewServiceFunc(ctx, userDaemon.NewService)
-		ctx = userd.WithNewSessionFunc(ctx, trafficmgr.NewSession)
 	case rootd.ProcessName:
 		client.DisplayName = "OSS Root Daemon"
 		proc.SetRunningInContainer(false) // We never start the root daemon as a container.

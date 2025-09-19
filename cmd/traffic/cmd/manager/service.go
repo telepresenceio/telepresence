@@ -41,31 +41,24 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
-// Clock is the mechanism used by the Manager state to get the current time.
-type Clock interface {
-	Now() time.Time
-}
-
 type Service interface {
 	rpc.ManagerServer
 	ID() string
 	InstallID() string
 	MakeInterceptID(context.Context, string, string) (string, error)
 	RegisterServers(*grpc.Server)
-	State() state.State
+	State() *state.State
 	ClusterInfo() cluster.Info
 
 	// unexported methods.
-	runSessionGCLoop(context.Context) error
 	runUpdateTrafficManagerConfigMapLoop(context.Context) error
 	serveHTTP(context.Context) error
 	servePrometheus(context.Context) error
 }
 
 type service struct {
-	clock              Clock
 	id                 string
-	state              state.State
+	state              *state.State
 	clusterInfo        cluster.Info
 	configWatcher      config.Watcher
 	activeHttpRequests int32
@@ -75,19 +68,10 @@ type service struct {
 	dotClusterDomain   string
 	tmConfigMapUpdated atomic.Bool
 
-	// Possibly extended version of the service. Use when calling interface methods.
-	self Service
-
 	rpc.UnsafeManagerServer
 }
 
 var _ rpc.ManagerServer = &service{}
-
-type wall struct{}
-
-func (wall) Now() time.Time {
-	return time.Now()
-}
 
 // checkCompat checks if a CompatibilityVersion has been set for this traffic-manager, and if so, errors with
 // an Unimplemented error mentioning the given name if it is less than the required version.
@@ -100,41 +84,34 @@ func checkCompat(ctx context.Context, name, requiredVersion string) error {
 
 func NewService(ctx context.Context, configWatcher config.Watcher) (Service, *dgroup.Group, error) {
 	ret := &service{
-		clock:         wall{},
 		id:            uuid.New().String(),
 		configWatcher: configWatcher,
 	}
 
 	var err error
 	if managerutil.AgentInjectorEnabled(ctx) {
-		ctx, err = WithAgentImageRetrieverFunc(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
+		ctx, err = managerutil.WithAgentImageRetriever(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
 		if err != nil {
 			dlog.Errorf(ctx, "unable to initialize agent injector: %v", err)
 		}
 	}
-	// These are context dependent so build them once the pool is up
+	// These are context-dependent, so build them once the pool is up
 	ret.clusterInfo, err = cluster.NewInfo(ctx)
 	if err != nil {
 		dlog.Errorf(ctx, "unable to initialize cluster info: %v", err)
 		return nil, nil, err
 	}
-	ret.state = state.NewStateFunc(ctx)
-
 	ns := managerutil.GetEnv(ctx).ManagerNamespace
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
 
-	ret.self = ret
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
 		SoftShutdownTimeout:  5 * time.Second,
 	})
+	ret.state = state.NewState(ctx, g)
 	return ret, g, nil
-}
-
-func (s *service) SetSelf(self Service) {
-	s.self = self
 }
 
 func (s *service) ClusterInfo() cluster.Info {
@@ -145,7 +122,7 @@ func (s *service) ID() string {
 	return s.id
 }
 
-func (s *service) State() state.State {
+func (s *service) State() *state.State {
 	return s.state
 }
 
@@ -186,18 +163,6 @@ func (s *service) GetAgentConfig(ctx context.Context, request *rpc.AgentConfigRe
 	return &r, nil
 }
 
-func (s *service) GetLicense(context.Context, *empty.Empty) (*rpc.License, error) {
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
-func (s *service) CanConnectAmbassadorCloud(context.Context, *empty.Empty) (*rpc.AmbassadorCloudConnection, error) {
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
-func (s *service) GetCloudConfig(context.Context, *empty.Empty) (*rpc.AmbassadorCloudConfig, error) {
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
 // GetTelepresenceAPI returns information about the TelepresenceAPI server.
 func (s *service) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.TelepresenceAPIInfo, error) {
 	env := managerutil.GetEnv(ctx)
@@ -222,10 +187,33 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	SetGauge(ctx, s.state.GetConnectActiveStatus(), client.Name, client.InstallId, nil, 1)
 
 	return &rpc.SessionInfo{
-		SessionId:        string(s.state.AddClient(client, s.clock.Now())),
+		SessionId:        string(s.state.AddClient(client, time.Now())),
 		ManagerInstallId: s.clusterInfo.ID(),
 		InstallId:        &installId,
 	}, nil
+}
+
+func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClientRequest) (*empty.Empty, error) {
+	ctx = managerutil.WithSessionInfo(ctx, info.Session)
+	sessionID := tunnel.SessionID(info.GetSession().GetSessionId())
+	if s.state.GetClient(sessionID) != nil {
+		// We already know this client, so we don't need to do anything.
+		return &empty.Empty{}, nil
+	}
+	client := info.Client
+	state := s.state
+	if !state.ManagesNamespace(ctx, client.Namespace) {
+		// Sorry, we no longer manage this namespace.
+		return nil, status.Error(codes.FailedPrecondition, fmt.Sprintf("namespace %s is not managed", client.Namespace))
+	}
+	if val := validateClient(client); val != "" {
+		return nil, status.Error(codes.InvalidArgument, val)
+	}
+	now := time.Now()
+	state.RestoreClient(sessionID, client, now)
+	state.RestoreAgents(info.Agents, now)
+	state.RestoreIntercepts(ctx, info.Intercepts, now)
+	return &empty.Empty{}, nil
 }
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
@@ -239,7 +227,7 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		s.removeExcludedEnvVars(cn.Environment)
 	}
 
-	sessionID, err := s.state.AddAgent(ctx, agent, s.clock.Now())
+	sessionID, err := s.state.AddAgent(ctx, agent, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -248,6 +236,12 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		SessionId:        string(sessionID),
 		ManagerInstallId: s.clusterInfo.ID(),
 	}, nil
+}
+
+func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequest) (*empty.Empty, error) {
+	ctx = managerutil.WithSessionInfo(ctx, rq.Session)
+	_, err := s.state.RestoreAgent(ctx, tunnel.SessionID(rq.GetSession().SessionId), rq.Agent, time.Now())
+	return &empty.Empty{}, err
 }
 
 func (s *service) ReportMetrics(ctx context.Context, metrics *rpc.TunnelMetrics) (*empty.Empty, error) {
@@ -264,7 +258,7 @@ func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 // Remain indicates that the session is still valid.
 func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	sessionID := tunnel.SessionID(req.GetSession().GetSessionId())
-	if ok := s.state.MarkSession(req, s.clock.Now()); !ok {
+	if ok := s.state.MarkSession(req, time.Now()); !ok {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
 
@@ -516,14 +510,6 @@ func (s *service) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_Watch
 	}
 	ns := clientInfo.Namespace
 	return s.watchAgents(ctx, func(_ tunnel.SessionID, a *state.AgentSession) bool { return a.Namespace == ns }, stream)
-}
-
-// WatchAgentsNS notifies a client of the set of known Agents in the namespaces given in the request.
-func (s *service) WatchAgentsNS(request *rpc.AgentsRequest, stream rpc.Manager_WatchAgentsNSServer) error {
-	ctx := managerutil.WithSessionInfo(stream.Context(), request.Session)
-	return s.watchAgents(ctx, func(_ tunnel.SessionID, a *state.AgentSession) bool {
-		return slices.Contains(request.Namespaces, a.Namespace)
-	}, stream)
 }
 
 func infosEqual(a, b *rpc.AgentInfo) bool {
@@ -778,10 +764,6 @@ func (s *service) MakeInterceptID(_ context.Context, sessionID string, name stri
 	}
 }
 
-func (s *service) UpdateIntercept(context.Context, *rpc.UpdateInterceptRequest) (*rpc.InterceptInfo, error) { //nolint:gocognit
-	return nil, status.Error(codes.Unimplemented, "")
-}
-
 // RemoveIntercept lets a client remove an intercept.
 func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, riReq.GetSession())
@@ -880,33 +862,7 @@ func (s *service) Tunnel(server rpc.Manager_TunnelServer) error {
 	if err != nil {
 		return status.Errorf(codes.FailedPrecondition, "failed to connect stream: %v", err)
 	}
-	if a := s.state.GetAgent(stream.SessionID()); a != nil {
-		// This is actually an AgentToManager tunnel.
-		stream.SetTag(tunnel.AgentToManager)
-	}
 	return s.state.Tunnel(ctx, stream)
-}
-
-func (s *service) WatchDial(session *rpc.SessionInfo, stream rpc.Manager_WatchDialServer) error {
-	ctx := managerutil.WithSessionInfo(stream.Context(), session)
-	lrCh := s.state.WatchDial(tunnel.SessionID(session.SessionId))
-	for {
-		select {
-		// connection broken
-		case <-ctx.Done():
-			return nil
-		case lr := <-lrCh:
-			if lr == nil {
-				return nil
-			}
-			if err := stream.Send(lr); err != nil {
-				dlog.Errorf(ctx, "failed to send dial request: %v", err)
-				// We couldn't stream the dial request. This likely means
-				// that we lost connection.
-				return nil
-			}
-		}
-	}
 }
 
 // hasDomainSuffix checks if the given name is suffixed with the given suffix. The following
@@ -1068,36 +1024,8 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (respo
 	}
 
 	sessionID := tunnel.SessionID(request.GetSession().GetSessionId())
-	tmNamespace := managerutil.GetEnv(ctx).ManagerNamespace
 	noSearchDomain := s.dotClusterDomain
-	var rCode int
-	switch {
-	case request.Name == "tel2-recursion-check.kube-system.":
-		rCode = state.RcodeNoAgents
-		noSearchDomain = ".kube-system."
-	case hasDomainSuffix(request.Name, tmNamespace):
-		// It's enough to propagate this one to the traffic-manager
-		noSearchDomain = tmNamespace + "."
-		rCode = state.RcodeNoAgents
-	case strings.HasSuffix(request.Name, s.dotClusterDomain):
-		// It's enough to propagate this one to the traffic-manager
-		rCode = state.RcodeNoAgents
-	default:
-		rrs, rCode, err = s.state.AgentsLookupDNS(ctx, sessionID, request)
-		if err != nil {
-			dlog.Errorf(ctx, "AgentsLookupDNS %s %s: %v", request.Name, qtn, err)
-		} else if rCode != state.RcodeNoAgents {
-			if len(rrs) == 0 {
-				dlog.Tracef(ctx, "agents: %s %s -> %s", request.Name, qtn, dns2.RcodeToString[rCode])
-			} else {
-				dlog.Tracef(ctx, "agents: %s %s -> %s", request.Name, qtn, rrs)
-			}
-		}
-	}
-
-	if rCode == state.RcodeNoAgents {
-		rrs, rCode = s.lookupFromManager(ctx, sessionID, qType, request.Name, noSearchDomain)
-	}
+	rrs, rCode := s.lookupFromManager(ctx, sessionID, qType, request.Name, noSearchDomain)
 	return dnsproxy.ToRPC(rrs, rCode)
 }
 
@@ -1146,32 +1074,6 @@ func (s *service) lookupFromManager(ctx context.Context, sessionID tunnel.Sessio
 		dlog.Tracef(ctx, "traffic-manager: %s %s -> %s", qName, qtn, rrs)
 	}
 	return rrs, rCode
-}
-
-func (s *service) AgentLookupDNSResponse(ctx context.Context, response *rpc.DNSAgentResponse) (*empty.Empty, error) {
-	ctx = managerutil.WithSessionInfo(ctx, response.GetSession())
-	dlog.Debugf(ctx, "name: %s", response.Request.Name)
-	s.state.PostLookupDNSResponse(ctx, response)
-	return &empty.Empty{}, nil
-}
-
-func (s *service) WatchLookupDNS(session *rpc.SessionInfo, stream rpc.Manager_WatchLookupDNSServer) error {
-	ctx := managerutil.WithSessionInfo(stream.Context(), session)
-	rqCh := s.state.WatchLookupDNS(tunnel.SessionID(session.SessionId))
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case rq := <-rqCh:
-			if rq == nil {
-				return nil
-			}
-			if err := stream.Send(rq); err != nil {
-				dlog.Errorf(ctx, "WatchLookupDNS.Send() failed: %v", err)
-				return nil
-			}
-		}
-	}
 }
 
 // GetLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
@@ -1237,14 +1139,6 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 	}
 	ww := s.state.NewWorkloadInfoWatcher(clientSession, namespace)
 	return ww.Watch(ctx, stream)
-}
-
-const agentSessionTTL = 70 * time.Second
-
-// expire removes stale sessions.
-func (s *service) expire(ctx context.Context) {
-	now := s.clock.Now()
-	s.state.ExpireSessions(ctx, now.Add(-managerutil.GetEnv(ctx).ClientConnectionTTL), now.Add(-agentSessionTTL))
 }
 
 func (s *service) updateTrafficManagerConfigMap(ctx context.Context) error {

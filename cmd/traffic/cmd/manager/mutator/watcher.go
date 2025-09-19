@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
@@ -45,9 +46,18 @@ type Map interface {
 
 	Delete(name, namespace string)
 	Update(name, namespace string, updater func(cm agentconfig.SidecarExt) (agentconfig.SidecarExt, error)) (agentconfig.SidecarExt, error)
+	SetConfigured()
 }
 
-var NewWatcherFunc = NewWatcher //nolint:gochecknoglobals // extension point
+type configWatcher struct {
+	cancel       context.CancelFunc
+	agentConfigs *xsync.Map[string, map[string]agentconfig.SidecarExt]
+	informers    *xsync.Map[string, *informersWithCancel]
+	inactivePods *xsync.Map[types.UID, inactivation]
+	startedAt    time.Time
+	configured   atomic.Bool
+	running      atomic.Bool
+}
 
 type mapKey struct{}
 
@@ -63,9 +73,13 @@ func GetMap(ctx context.Context) Map {
 }
 
 func Load(ctx context.Context) Map {
-	cw := NewWatcherFunc()
+	cw := NewWatcher()
 	cw.Start(ctx)
 	return cw
+}
+
+func (c *configWatcher) SetConfigured() {
+	c.configured.Store(true)
 }
 
 // RegenerateAgentMaps regenerates all agent configurations and triggers pod evictions for all pods with
@@ -95,6 +109,7 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 		return a.AsDuration() == b.AsDuration()
 	})
 
+	configured := c.configured.Load()
 	for _, wp := range evictMap {
 		wl := wp.wl
 		wls := make(map[WorkloadKey]agentconfig.SidecarExt, len(wp.pods))
@@ -109,24 +124,28 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 				dlog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
 				continue
 			}
-			ac := sce.AgentConfig()
-			key := WorkloadKey{
-				Name:      ac.WorkloadName,
-				Namespace: ac.Namespace,
-				Kind:      ac.WorkloadKind,
-			}
-			newSce, ok := wls[key]
-			if !ok && managerutil.GetEnv(ctx).EnabledWorkloadKinds.Contains(ac.WorkloadKind) {
-				newSce, err = gc.Generate(ctx, wl, sce)
-				if err != nil {
-					dlog.Errorf(ctx, "unable to update config for %s", wl)
-					continue
+			if configured {
+				ac := sce.AgentConfig()
+				key := WorkloadKey{
+					Name:      ac.WorkloadName,
+					Namespace: ac.Namespace,
+					Kind:      ac.WorkloadKind,
 				}
-				wls[key] = newSce
-				c.Store(newSce)
-			}
-			if newSce == nil || !cmp.Equal(newSce, sce, dbpCmp) {
-				podsOfInterest = append(podsOfInterest, pod)
+				newSce, ok := wls[key]
+				if !ok && managerutil.GetEnv(ctx).EnabledWorkloadKinds.Contains(ac.WorkloadKind) {
+					newSce, err = gc.Generate(ctx, wl, sce)
+					if err != nil {
+						dlog.Errorf(ctx, "unable to update config for %s", wl)
+						continue
+					}
+					wls[key] = newSce
+					c.Store(newSce)
+				}
+				if newSce == nil || !cmp.Equal(newSce, sce, dbpCmp) {
+					podsOfInterest = append(podsOfInterest, pod)
+				}
+			} else {
+				c.Store(sce)
 			}
 		}
 		if len(podsOfInterest) > 0 {
@@ -166,17 +185,6 @@ type informersWithCancel struct {
 type inactivation struct {
 	time.Time
 	deleted bool
-}
-
-type configWatcher struct {
-	cancel       context.CancelFunc
-	agentConfigs *xsync.Map[string, map[string]agentconfig.SidecarExt]
-	informers    *xsync.Map[string, *informersWithCancel]
-	inactivePods *xsync.Map[types.UID, inactivation]
-	startedAt    time.Time
-	running      atomic.Bool
-
-	self Map // For extension
 }
 
 func (c *configWatcher) Delete(name, namespace string) {
@@ -241,12 +249,7 @@ func NewWatcher() Map {
 		inactivePods: xsync.NewMap[types.UID, inactivation](),
 		agentConfigs: xsync.NewMap[string, map[string]agentconfig.SidecarExt](),
 	}
-	w.self = w
 	return w
-}
-
-func (c *configWatcher) SetSelf(self Map) {
-	c.self = self
 }
 
 func (c *configWatcher) startInformers(ctx context.Context, ns string) (iwc *informersWithCancel, err error) {
@@ -395,28 +398,10 @@ func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIn
 	return ix
 }
 
-func (c *configWatcher) gcInactivated(now time.Time) {
-	c.inactivePods.Range(func(key types.UID, value inactivation) bool {
-		if now.Sub(value.Time) > time.Minute {
-			c.inactivePods.Delete(key)
-		}
-		return true
-	})
-}
-
 func (c *configWatcher) Start(ctx context.Context) {
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		for {
-			select {
-			case <-ctx.Done():
-				ticker.Stop()
-				return
-			case now := <-ticker.C:
-				c.gcInactivated(now)
-			}
-		}
-	}()
+	go maps.GC(c.inactivePods, 10*time.Second, ctx.Done(), func(_ types.UID, value inactivation) bool {
+		return time.Since(value.Time) > time.Minute
+	})
 
 	for _, ns := range namespaces.GetOrGlobal(ctx) {
 		dlog.Debugf(ctx, "Adding watchers for namespace %s", ns)
