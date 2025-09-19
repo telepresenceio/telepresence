@@ -14,9 +14,8 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
       - name: "Generate dependency information"
         shell: bash
         run: make generate
