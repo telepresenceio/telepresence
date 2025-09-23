@@ -92,6 +92,15 @@ func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager
 	return f.forwardConn(ctx, conn)
 }
 
+// DispatchByMechanism implements the Interceptor hook for UDP. Currently, HTTP-aware
+// mechanisms are not supported on UDP; we log and proceed with normal UDP forwarding.
+func (f *udp) DispatchByMechanism(ctx context.Context, _ net.Conn, intercept *manager.InterceptInfo) (bool, error) {
+	if intercept != nil && intercept.Spec != nil && intercept.Spec.HttpMechanism {
+		dlog.Warn(ctx, "HTTP mechanism requested on UDP listener; not supported. Proceeding with plain UDP forwarding.")
+	}
+	return false, nil
+}
+
 // forwardConn reads packets from the given connection and writes the packages to the
 // target host:port of this forwarder using a connection that will use the reply address
 // from the read as the destination for packages going in the other direction.

@@ -477,7 +477,7 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 }
 
 func (s *State) isExtended(spec *rpc.InterceptSpec) bool {
-	return spec.Mechanism != "tcp"
+	return spec.Mechanism != "tcp" && spec.Mechanism != "http"
 }
 
 func (s *State) ValidateAgentImage(agentImage string, extended bool) (err error) {

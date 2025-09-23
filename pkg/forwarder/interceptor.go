@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/netip"
 	"slices"
 	"sync"
@@ -31,6 +32,12 @@ type Interceptor interface {
 	RemoveWiretap(id string)
 	ListenPort() uint16
 	PruneTo(ctx context.Context, ids []string)
+
+	// DispatchByMechanism gives the interceptor a chance to handle a connection
+	// using any mechanism-specific behavior (e.g., HTTP-aware handling). It
+	// returns true if the connection was fully handled and no further processing
+	// should occur.
+	DispatchByMechanism(ctx context.Context, conn net.Conn, intercept *manager.InterceptInfo) (bool, error)
 }
 
 type interceptor struct {

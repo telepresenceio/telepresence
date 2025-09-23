@@ -21,6 +21,12 @@ The new dual-stack support requires the teleroute network plugin 0.4.0 or later.
 version automatically unless you work in an air-gapped environment.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[HTTP Intercepts with HTTP header and path filtering](https://github.com/telepresenceio/telepresence/issues/3852)</div></div>
+<div style="margin-left: 15px">
+
+Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts. Users can intercept only specific HTTP requests based on headers and URL paths using the new `--http` flag along with `--header` and `--path` filters. This allows multiple developers to work on the same service simultaneously by intercepting only their specific traffic patterns, rather than intercepting all traffic to a service. The feature maintains full backward compatibility with existing TCP intercepts.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">More efficient DNS handling in the traffic-manager</div></div>
 <div style="margin-left: 15px">
 

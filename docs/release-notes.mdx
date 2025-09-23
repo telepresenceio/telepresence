@@ -28,6 +28,12 @@ version automatically unless you work in an air-gapped environment.
   </Body>
 </Note>
 <Note>
+	<Title type="feature" docs="https://github.com/telepresenceio/telepresence/issues/3852">HTTP Intercepts with HTTP header and path filtering</Title>
+	<Body>
+Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts. Users can intercept only specific HTTP requests based on headers and URL paths using the new `--http` flag along with `--header` and `--path` filters. This allows multiple developers to work on the same service simultaneously by intercepting only their specific traffic patterns, rather than intercepting all traffic to a service. The feature maintains full backward compatibility with existing TCP intercepts.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">More efficient DNS handling in the traffic-manager</Title>
 	<Body>
 Telepresence will no longer send DNS queries for A and AAAA records to the traffic-manager. Instead, it will

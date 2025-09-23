@@ -54,6 +54,11 @@ type Command struct {
 	FormattedOutput bool
 	DetailedOutput  bool
 	NoDefaultPort   bool
+
+	// HTTP Intercepts fields
+	HeaderFilters []string // --header key=value pairs for HTTP header filtering
+	PathFilters   []string // --path patterns for HTTP path filtering
+	HTTPMechanism bool     // --http flag to enable HTTP-aware interception
 }
 
 func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
@@ -105,6 +110,20 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 		flagSet.Lookup("replace").Deprecated = "Use the replace command."
 	}
 
+	// HTTP Intercepts flags
+	flagSet.StringSliceVar(&c.HeaderFilters, "header", nil,
+		`HTTP header filters for HTTP Intercepts. Only requests with matching headers will be intercepted. `+
+			`Format: --header "X-User-ID=dev123" --header "X-Environment=staging". Multiple headers use AND logic. `+
+			`Requires --http flag.`)
+
+	flagSet.StringSliceVar(&c.PathFilters, "path", nil,
+		`HTTP path filter patterns for HTTP Intercepts. Only requests matching these paths will be intercepted. `+
+			`Supports glob patterns like "/api/v1/*". Requires --http flag.`)
+
+	flagSet.BoolVar(&c.HTTPMechanism, "http", false,
+		`Enable HTTP-aware interception for HTTP Intercepts. When enabled, allows filtering by headers and paths. `+
+			`Without this flag, all traffic to the service will be intercepted (standard behavior).`)
+
 	_ = cmd.RegisterFlagCompletionFunc("container", ingest.AutocompleteContainer)
 	_ = cmd.RegisterFlagCompletionFunc("service", autocompleteService)
 }
@@ -148,6 +167,30 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	c.Cmdline = positional[1:]
 	c.FormattedOutput = output.WantsFormatted(cmd)
 
+	// HTTP Intercepts validation
+	if len(c.HeaderFilters) > 0 && !c.HTTPMechanism {
+		return errors.New("--header filters require --http flag to enable HTTP-aware interception")
+	}
+	if len(c.PathFilters) > 0 && !c.HTTPMechanism {
+		return errors.New("--path filters require --http flag to enable HTTP-aware interception")
+	}
+
+	// Validate header format (key=value)
+	for _, header := range c.HeaderFilters {
+		if !strings.Contains(header, "=") {
+			return fmt.Errorf("invalid header format '%s': must be key=value", header)
+		}
+		parts := strings.SplitN(header, "=", 2)
+		if parts[0] == "" {
+			return fmt.Errorf("invalid header format '%s': key cannot be empty", header)
+		}
+	}
+
+	// Set mechanism to "http" when HTTP-aware interception is enabled
+	if c.HTTPMechanism {
+		c.Mechanism = "http"
+	}
+
 	// Actually intercepting something
 	if c.AgentName == "" {
 		c.AgentName = c.Name
@@ -175,6 +218,7 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	if err != nil {
 		return err
 	}
+
 	dlog.Debugf(cmd.Context(), "Docker flags = %v", c.DockerFlags)
 	return nil
 }
