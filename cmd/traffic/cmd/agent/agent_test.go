@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"net/netip"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -21,10 +22,11 @@ import (
 const (
 	serviceName = "test-echo"
 	namespace   = "teltest"
-	podIP       = "192.168.50.34"
 	podName     = "test-echo-f4784865-9wgqz"
 	podUID      = "dc6100d6-2316-4eb6-9e99-9bf349877fb8"
 )
+
+var podIP = netip.MustParseAddr("192.168.50.34")
 
 var testConfig = agentconfig.Sidecar{
 	Create:              false,
@@ -79,7 +81,7 @@ func testContext(t *testing.T, env dos.MapEnv) context.Context {
 	require.NoError(t, err)
 
 	env[agentconfig.EnvPrefixAgent+"NAME"] = serviceName
-	env[agentconfig.EnvPrefixAgent+"POD_IP"] = podIP
+	env[agentconfig.EnvPrefixAgent+"POD_IP"] = podIP.String()
 	env[agentconfig.EnvPrefixAgent+"POD_NAME"] = podName
 	env[agentconfig.EnvPrefixAgent+"POD_UID"] = podUID
 	env[agentconfig.EnvAgentConfig] = cfgJSON

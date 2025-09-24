@@ -1003,7 +1003,7 @@ func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
 	fw := forwarder.NewInterceptor(types.PortAndProto{
 		Port:  srcPort,
 		Proto: ap.Proto,
-	}, tunnel.ClientToAgent, ap.Addr().String(), ap.Port())
+	}, tunnel.ClientToAgent, ap.AddrPort)
 
 	go func() {
 		ctx := dgroup.WithGoroutineName(s.context, fmt.Sprintf("/%d=>%s", srcPort, ap))

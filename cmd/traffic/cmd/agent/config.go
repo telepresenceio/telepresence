@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"time"
@@ -23,14 +24,14 @@ type Config interface {
 	AgentConfig() *agentconfig.Sidecar
 	HasRemoteMounts() bool
 	PodName() string
-	PodIP() string
+	PodIP() netip.Addr
 	PodUID() k8sTypes.UID
 }
 
 type config struct {
 	sidecarExt agentconfig.SidecarExt
 	podName    string
-	podIP      string
+	podIP      netip.Addr
 	podUID     k8sTypes.UID
 }
 
@@ -61,9 +62,12 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	if !ok {
 		return nil, errors.New("missing NAME")
 	}
-	c.podIP, ok = dos.LookupEnv(ctx, "_TEL_AGENT_POD_IP")
-	if !ok {
+	if podIPStr, ok := dos.LookupEnv(ctx, "_TEL_AGENT_POD_IP"); !ok {
 		return nil, errors.New("missing POD_IP")
+	} else if podIP, err := netip.ParseAddr(podIPStr); err != nil {
+		return nil, fmt.Errorf("invalid POD_IP: %w", err)
+	} else {
+		c.podIP = podIP
 	}
 	podUID, ok := dos.LookupEnv(ctx, "_TEL_AGENT_POD_UID")
 	if !ok {
@@ -106,7 +110,7 @@ func (c *config) PodName() string {
 	return c.podName
 }
 
-func (c *config) PodIP() string {
+func (c *config) PodIP() netip.Addr {
 	return c.podIP
 }
 

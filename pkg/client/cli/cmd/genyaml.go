@@ -451,6 +451,6 @@ func genVolumeSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 }
 
 func (g *genVolumeInfo) run() error {
-	volumes := agentconfig.AgentVolumes()
+	volumes := agentconfig.AgentVolumes(g.workloadName, nil)
 	return g.writeObjToOutput(&volumes)
 }

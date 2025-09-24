@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -287,6 +288,7 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 	buf := make([]byte, 0x80000)
 	dlog.Tracef(ctx, "-> %s %s conn-to-stream loop started", tag, id)
 	for {
+		_ = h.conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		n, err := h.conn.Read(buf)
 		if n > 0 {
 			dlog.Tracef(ctx, "-> %s %s, read len %d from conn", tag, id, n)
@@ -299,7 +301,14 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 		}
 
 		if err != nil {
+			var netErr *net.OpError
 			switch {
+			case errors.Is(err, os.ErrDeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
+				if ctx.Err() != nil {
+					endReason = ctx.Err().Error()
+					return
+				}
+				continue
 			case errors.Is(err, io.EOF):
 				endReason = "EOF was encountered"
 			case errors.Is(err, net.ErrClosed):

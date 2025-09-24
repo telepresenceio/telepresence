@@ -17,13 +17,12 @@ type udp struct {
 	interceptor
 }
 
-func newUDP(listenPort uint16, tag tunnel.Tag, targetHost string, targetPort uint16) Interceptor {
+func newUDP(listenPort uint16, tag tunnel.Tag, target netip.AddrPort) Interceptor {
 	return &udp{
 		interceptor: interceptor{
 			tag:        tag,
 			listenPort: listenPort,
-			targetHost: targetHost,
-			targetPort: targetPort,
+			target:     target,
 			lCancel:    func() {},
 		},
 	}
@@ -86,7 +85,7 @@ func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager
 		return f.interceptConn(ctx, conn, intercept)
 	}
 
-	if f.targetPort == 0 {
+	if f.target.Port() == 0 {
 		dlog.Debug(ctx, "Forwarding to /dev/null")
 		return nil
 	}
@@ -97,11 +96,7 @@ func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager
 // target host:port of this forwarder using a connection that will use the reply address
 // from the read as the destination for packages going in the other direction.
 func (f *udp) forwardConn(ctx context.Context, conn *net.UDPConn) error {
-	targetAddr, err := net.ResolveUDPAddr("udp", iputil.JoinHostPort(f.targetHost, f.targetPort))
-	if err != nil {
-		return fmt.Errorf("error on resolve(%s): %w", iputil.JoinHostPort(f.targetHost, f.targetPort), err)
-	}
-	return ForwardUDP(ctx, f.tag, conn, targetAddr.AddrPort())
+	return ForwardUDP(ctx, f.tag, conn, f.target)
 }
 
 func ForwardUDP(ctx context.Context, tag tunnel.Tag, conn *net.UDPConn, targetAddr netip.AddrPort) error {
