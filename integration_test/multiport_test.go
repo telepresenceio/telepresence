@@ -110,6 +110,7 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 		localPort, cancel := itest.StartLocalHttpEchoServer(ctx, "echo-tcp")
 		defer cancel()
 		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--service", "echo-tcp", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
+		s.CapturePodLogs(ctx, dep, "traffic-agent", s.AppNamespace())
 		defer itest.TelepresenceOk(ctx, "leave", dep)
 		itest.PingInterceptedEchoServer(ctx, "echo-tcp", svcPort)
 	})

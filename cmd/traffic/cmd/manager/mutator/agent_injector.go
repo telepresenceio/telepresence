@@ -165,7 +165,7 @@ func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod
 	patches = addInitContainer(ctx, pod, config, patches)
 	patches, anns = addAgentContainer(ctx, pod, config, patches)
 	patches = addPullSecrets(pod, config, patches)
-	patches = addAgentVolumes(pod, patches)
+	patches = addAgentVolumes(config.AgentName, pod, patches)
 	patches = hidePorts(pod, config, patches)
 	anns[annotation.InjectTrafficAgent] = "enabled"
 	patches = addPodAnnotations(pod, anns, patches)
@@ -284,13 +284,13 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 	})
 }
 
-func addAgentVolumes(pod *core.Pod, patches PatchOps) PatchOps {
+func addAgentVolumes(agentName string, pod *core.Pod, patches PatchOps) PatchOps {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == agentconfig.ExportsVolumeName {
 			return patches
 		}
 	}
-	avs := agentconfig.AgentVolumes()
+	avs := agentconfig.AgentVolumes(agentName, pod)
 	if len(avs) == 0 {
 		return patches
 	}

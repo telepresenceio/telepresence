@@ -117,7 +117,7 @@ func (s *nsPair) setup(ctx context.Context) bool {
 func AppAndMgrNSName(suffix string) (appNS, mgrNS string) {
 	mgrNS = fmt.Sprintf("ambassador-%s", suffix)
 	appNS = fmt.Sprintf("telepresence-%s", suffix)
-	return
+	return appNS, mgrNS
 }
 
 func (s *nsPair) tearDown(ctx context.Context) {

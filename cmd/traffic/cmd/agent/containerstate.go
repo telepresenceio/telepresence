@@ -3,13 +3,13 @@ package agent
 import (
 	"context"
 	"fmt"
+	"net/netip"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -21,42 +21,25 @@ type containerState struct {
 	env        map[string]string
 }
 
-func (c *containerState) AddPortHandler(ctx context.Context, pp types.PortAndProto, ics []*agentconfig.Intercept) forwarder.Interceptor {
-	fwd, cp := c.newPortHandler(pp, ics)
-	dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s", iputil.JoinHostPort(c.container.Name, cp)), func(ctx context.Context) error {
+func (c *containerState) AddPortHandler(ctx context.Context, pp types.PortAndProto, it agentconfig.InterceptTarget) {
+	fwd := c.newPortHandler(pp, it)
+	dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s-%s:%d", c.container.Name, it.Protocol(), it.ContainerPort()), func(ctx context.Context) error {
 		return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
 	})
-	c.AddInterceptState(c.NewInterceptState(fwd, NewInterceptTarget(ics), c.container.Name))
-	return fwd
+	c.AddInterceptState(c.NewInterceptState(fwd, it, c.container.Name))
 }
 
-func (c *containerState) newPortHandler(pp types.PortAndProto, ics []*agentconfig.Intercept) (forwarder.Interceptor, uint16) {
+func (c *containerState) newPortHandler(pp types.PortAndProto, ics []*agentconfig.Intercept) forwarder.Interceptor {
 	ic := ics[0] // They all have the same protocol container port, so the first one will do.
-	var fwd forwarder.Interceptor
-	var cp uint16
 	if c.container.Replace == agentconfig.ReplacePolicyIntercept {
-		var tag tunnel.Tag
-		if ic.TargetPortNumeric {
-			// We must differentiate between connections originating from the agent's forwarder to the container
-			// port and those from other sources. The former should not be routed back, while the latter should
-			// always be routed to the agent. We do this by using a proxy port that will be recognized by the
-			// iptables filtering in our init-container.
-			tag = tunnel.AgentToProxied
-			cp = c.AgentConfig().ProxyPort(ic)
-		} else {
-			tag = tunnel.AgentToClient
-			cp = ic.ContainerPort
-		}
+		cp := c.AgentConfig().InterceptorInactivePort(ic.ContainerPort, pp.Proto)
 		// Redirect non-intercepted traffic to the pod so that injected sidecars that hijack the ports for
 		// incoming connections will continue to work.
 		targetHost := c.PodIP()
-		fwd = forwarder.NewInterceptor(pp, tag, targetHost, cp)
-	} else {
-		// The agent will intercept all traffic intended for this container.
-		fwd = forwarder.NewInterceptor(pp, tunnel.AgentToClient, "", 0)
-		cp = ic.ContainerPort
+		return forwarder.NewInterceptor(pp, tunnel.AgentToClient, netip.AddrPortFrom(targetHost, cp))
 	}
-	return fwd, cp
+	// The agent will intercept all traffic intended for this container.
+	return forwarder.NewInterceptor(pp, tunnel.AgentToClient, netip.AddrPort{})
 }
 
 func (c *containerState) GlobalState() State {
@@ -87,9 +70,9 @@ func (c *containerState) ReplaceContainer() bool {
 	return c.container.Replace == agentconfig.ReplacePolicyContainer
 }
 
-// HandleIntercepts on the containerState takes care of intercepts that just replaces a container and do not declare
+// HandleContainer on the containerState takes care of intercepts that just replaces a container and do not declare
 // any ports. Without port declarations, there will be no Intercept entries for an fwdState to handle.
-func (c *containerState) HandleIntercepts(ctx context.Context, iis []*manager.InterceptInfo) (rs []*manager.ReviewInterceptRequest) {
+func (c *containerState) HandleContainer(ctx context.Context, iis []*manager.InterceptInfo) (rs []*manager.ReviewInterceptRequest) {
 	for _, ii := range iis {
 		if ii.Disposition == manager.InterceptDispositionType_WAITING {
 			spec := ii.Spec
@@ -98,7 +81,7 @@ func (c *containerState) HandleIntercepts(ctx context.Context, iis []*manager.In
 				rs = append(rs, &manager.ReviewInterceptRequest{
 					Id:          ii.Id,
 					Disposition: manager.InterceptDispositionType_ACTIVE,
-					PodIp:       c.PodIP(),
+					PodIp:       c.PodIP().String(),
 					SftpPort:    int32(c.SftpPort()),
 					FtpPort:     int32(c.FtpPort()),
 					MountPoint:  c.MountPoint(),

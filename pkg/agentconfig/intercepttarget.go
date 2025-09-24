@@ -1,4 +1,4 @@
-package agent
+package agentconfig
 
 import (
 	"bytes"
@@ -10,7 +10,6 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -19,9 +18,9 @@ import (
 // is used, just the container port.
 // All entries must be guaranteed to all have the same Protocol, ContainerPort, and AgentPort.
 // The slice must be considered immutable once created using NewInterceptTarget.
-type InterceptTarget []*agentconfig.Intercept
+type InterceptTarget []*Intercept
 
-func NewInterceptTarget(ics []*agentconfig.Intercept) InterceptTarget {
+func NewInterceptTarget(ics []*Intercept) InterceptTarget {
 	// This is a parameter assertion. If it is triggered, then something is dead wrong in the caller code.
 	ni := len(ics)
 	if ni == 0 {
@@ -40,14 +39,9 @@ func NewInterceptTarget(ics []*agentconfig.Intercept) InterceptTarget {
 }
 
 func (cp InterceptTarget) MatchForSpec(spec *manager.InterceptSpec) bool {
-	if cnPort := uint16(spec.ContainerPort); cnPort > 0 {
-		for _, ic := range cp {
-			if cnPort == ic.ContainerPort && ic.Protocol == types.FromK8sProtocol(core.Protocol(spec.Protocol)) {
-				return true
-			}
-		}
-	}
-	return false
+	ic := cp[0]
+	cnPort := uint16(spec.ContainerPort)
+	return cnPort == ic.ContainerPort && ic.Protocol == types.FromK8sProtocol(core.Protocol(spec.Protocol))
 }
 
 func (cp InterceptTarget) AgentPort() uint16 {
@@ -55,7 +49,12 @@ func (cp InterceptTarget) AgentPort() uint16 {
 }
 
 func (cp InterceptTarget) TargetPortNumeric() bool {
-	return cp[0].TargetPortNumeric
+	for _, ic := range cp {
+		if ic.TargetPortNumeric {
+			return true
+		}
+	}
+	return false
 }
 
 func (cp InterceptTarget) ContainerPort() uint16 {
@@ -70,7 +69,7 @@ func (cp InterceptTarget) Protocol() types.Proto {
 	return cp[0].Protocol
 }
 
-func portString(ic *agentconfig.Intercept) (s string) {
+func portString(ic *Intercept) (s string) {
 	if ic.ServiceUID != "" {
 		p := ic.ServicePortName
 		if p == "" {
@@ -86,7 +85,7 @@ func portString(ic *agentconfig.Intercept) (s string) {
 }
 
 func (cp InterceptTarget) AppProtocol(ctx context.Context) (proto string) {
-	var foundIc *agentconfig.Intercept
+	var foundIc *Intercept
 	for _, ic := range cp {
 		if ic.AppProtocol == "" {
 			continue

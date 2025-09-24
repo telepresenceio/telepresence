@@ -358,7 +358,7 @@ func (s *clients) GetWorkloadClient(workload string) (pvd tunnel.Provider) {
 		}
 		return true
 	})
-	return
+	return pvd
 }
 
 func (s *clients) SetProxyVia(workload string) {

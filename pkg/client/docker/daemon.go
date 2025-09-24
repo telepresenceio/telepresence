@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/containerd/errdefs"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
@@ -204,12 +205,12 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 		if network != "" {
 			ns := ci.NetworkSettings
 			if ns == nil {
-				return os.ErrNotExist
+				return errdefs.ErrNotFound
 			}
 			tn, ok := ns.Networks[network]
 			if !ok || tn.IPAddress == "" && tn.GlobalIPv6Address == "" {
 				// retry the operation if this happens
-				return fmt.Errorf("container %q has no IP address in network %q", ci.Name, network)
+				return fmt.Errorf("container %q has no IP address in network %q: %w", ci.Name, network, errdefs.ErrNotFound)
 			}
 			what := "GlobalIPv6Address"
 			if tn.GlobalIPv6Address != "" {

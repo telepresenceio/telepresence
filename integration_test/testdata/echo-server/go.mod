@@ -1,18 +1,16 @@
 module local
 
-go 1.23.0
-
-toolchain go1.24.0
+go 1.24.0
 
 require (
 	github.com/datawire/dlib v1.3.1
 	github.com/gorilla/websocket v1.5.3
-	golang.org/x/net v0.43.0
+	golang.org/x/net v0.44.0
 )
 
 require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
-	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
+	golang.org/x/text v0.29.0 // indirect
 )

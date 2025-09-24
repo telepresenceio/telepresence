@@ -9,6 +9,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
@@ -17,7 +18,7 @@ import (
 
 type fwdState struct {
 	*state
-	intercept         InterceptTarget
+	intercept         agentconfig.InterceptTarget
 	container         string
 	forwarder         forwarder.Interceptor
 	chosenInterceptId string
@@ -25,7 +26,7 @@ type fwdState struct {
 
 // NewInterceptState creates an InterceptState that performs intercepts by using an Interceptor which indiscriminately
 // intercepts all traffic to the port that it forwards.
-func (s *state) NewInterceptState(forwarder forwarder.Interceptor, intercept InterceptTarget, container string) InterceptState {
+func (s *state) NewInterceptState(forwarder forwarder.Interceptor, intercept agentconfig.InterceptTarget, container string) InterceptState {
 	return &fwdState{
 		state:     s,
 		intercept: intercept,
@@ -34,7 +35,7 @@ func (s *state) NewInterceptState(forwarder forwarder.Interceptor, intercept Int
 	}
 }
 
-func (fs *fwdState) Target() InterceptTarget {
+func (fs *fwdState) Target() agentconfig.InterceptTarget {
 	return fs.intercept
 }
 
@@ -44,15 +45,11 @@ func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, co
 	if containerPort == 0 {
 		return fw.InterceptInfo(), nil
 	}
-	_, port := fw.Target()
+	port := fw.Target().Port()
 	if containerPort == port {
 		return fw.InterceptInfo(), nil
 	}
-	portInfo := ""
-	if containerPort != 0 {
-		portInfo = fmt.Sprintf(", port %d", containerPort)
-	}
-	dlog.Debugf(ctx, "no match found for path %q%s, %s", path, portInfo, headers)
+	dlog.Debugf(ctx, "no match found for path %q, port %d, %s", path, containerPort, headers)
 	return &restapi.InterceptInfo{Intercepted: false}, nil
 }
 
@@ -70,7 +67,9 @@ func (pm *ProviderMux) CreateClientStream(ctx context.Context, tag tunnel.Tag, s
 	return pm.AgentProvider.CreateClientStream(ctx, tag, sessionID, id, roundTripLatency, dialTimeout)
 }
 
-func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
+func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
+	dlog.Debugf(ctx, "fwdState.HandlePort called with %d intercepts", len(cepts))
+
 	var active []*manager.InterceptInfo
 	var waiting []*manager.InterceptInfo
 	for _, is := range cepts {
@@ -110,11 +109,7 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 	fwd := fs.forwarder
 	if fs.sessionInfo != nil {
 		// Update forwarding.
-		fwd.SetStreamProvider(
-			&ProviderMux{
-				AgentProvider:   fs,
-				ManagerProvider: &tunnel.TrafficManagerStreamProvider{Manager: fs.ManagerClient(), AgentSessionID: tunnel.SessionID(fs.sessionInfo.SessionId)},
-			})
+		fwd.SetStreamProvider(fs)
 	}
 	fwd.SetIntercepting(ctx, activeIntercept)
 
@@ -163,7 +158,7 @@ func (fs *fwdState) HandleIntercepts(ctx context.Context, cepts []*manager.Inter
 			reviews = append(reviews, &manager.ReviewInterceptRequest{
 				Id:                ii.Id,
 				Disposition:       manager.InterceptDispositionType_ACTIVE,
-				PodIp:             fs.PodIP(),
+				PodIp:             fs.PodIP().String(),
 				FtpPort:           int32(fs.FtpPort()),
 				SftpPort:          int32(fs.SftpPort()),
 				MountPoint:        cs.MountPoint(),

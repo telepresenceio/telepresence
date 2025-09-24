@@ -251,7 +251,7 @@ func (s *Service) GetNetworkConfig(ctx context.Context, e *emptypb.Empty) (nc *r
 		return nil
 	})
 	dlog.Debugf(ctx, "Returning session %v", nc.Session)
-	return
+	return nc, err
 }
 
 func (s *Service) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest) (rsp *rpc.WaitForAgentIPResponse, err error) {

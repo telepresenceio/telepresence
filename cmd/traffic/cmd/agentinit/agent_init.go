@@ -113,9 +113,9 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 						// Why? Because if it wrote directly to the container port, we wouldn't be able to
 						// prevent an endless loop that would otherwise occur here when the previous rule would
 						// loop it back into the agent.
-						dlog.Debugf(ctx, "output DNAT %s:%d -> %s:%d", podIP, ac.ProxyPort(ic), podIP, ic.ContainerPort)
+						dlog.Debugf(ctx, "output DNAT %s:%d -> %s:%d", podIP, ac.ProxyPort(ic.AgentPort), podIP, ic.ContainerPort)
 						err = iptables.AppendUnique(nat, outputChain,
-							"-p", lcProto, "-d", podIP.String(), "--dport", strconv.Itoa(int(ac.ProxyPort(ic))),
+							"-p", lcProto, "-d", podIP.String(), "--dport", strconv.Itoa(int(ac.ProxyPort(ic.AgentPort))),
 							"-j", "DNAT", "--to-destination", netip.AddrPortFrom(podIP, ic.ContainerPort).String())
 						if err != nil {
 							return fmt.Errorf("failed to append rule to %s: %w", outputChain, err)

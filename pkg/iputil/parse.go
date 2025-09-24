@@ -11,7 +11,7 @@ func ParseAddr(ipStr string) (ip netip.Addr, err error) {
 	if ip, err = netip.ParseAddr(ipStr); err == nil {
 		ip = ip.Unmap()
 	}
-	return
+	return ip, err
 }
 
 // SplitToIPPort splits the given address into an IP and a port number. It's

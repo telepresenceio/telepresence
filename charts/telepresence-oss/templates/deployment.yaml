@@ -258,9 +258,6 @@ spec:
             value: {{ .version }}
           {{- end }}
           {{- end }}
-        {{- if and .trafficManager .trafficManager.envTemplate }}
-          {{- template "traffic-manager-env" . }}
-        {{- end }}
           ports:
           - name: api
             containerPort: {{ .apiPort }}
@@ -289,14 +286,6 @@ spec:
               mountPath: /var/run/secrets/tls
               readOnly: true
           {{- end }}
-        {{- if and .trafficManager .trafficManager.mountsTemplate }}
-          {{- template "traffic-manager-mounts" . }}
-        {{- end }}
-      {{- else }}
-        {{- if and .trafficManager .trafficManager.mountsTemplate }}
-          volumeMounts:
-          {{- template "traffic-manager-mounts" . }}
-        {{- end }}
       {{- end }}
       {{- with .schedulerName }}
       schedulerName: {{ . }}
@@ -324,14 +313,6 @@ spec:
             defaultMode: 420
             secretName: {{ .agentInjector.secret.name }}
         {{- end }}
-    {{- if and .trafficManager .trafficManager.volsTemplate }}
-      {{- template "traffic-manager-vols" . }}
-    {{- end }}
-  {{- else }}
-    {{- if and .trafficManager .trafficManager.volsTemplate }}
-      volumes:
-      {{- template "traffic-manager-vols" . }}
-    {{- end }}
   {{- end }}
       serviceAccount: traffic-manager
       serviceAccountName: traffic-manager

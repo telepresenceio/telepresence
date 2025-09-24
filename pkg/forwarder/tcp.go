@@ -20,13 +20,12 @@ type tcp struct {
 	interceptor
 }
 
-func newTCP(listenPort uint16, tag tunnel.Tag, targetHost string, targetPort uint16) Interceptor {
+func newTCP(listenPort uint16, tag tunnel.Tag, target netip.AddrPort) Interceptor {
 	return &tcp{
 		interceptor: interceptor{
 			tag:        tag,
 			listenPort: listenPort,
-			targetHost: targetHost,
-			targetPort: targetPort,
+			target:     target,
 			lCancel:    func() {},
 		},
 	}
@@ -105,8 +104,7 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 	var wtIntercepts []*manager.InterceptInfo
 	f.mu.Lock()
 	ctx := f.tCtx
-	targetHost := f.targetHost
-	targetPort := f.targetPort
+	targetAddr := f.target
 	intercept := f.intercept
 	tapCount := len(f.wiretaps)
 	if tapCount > 0 {
@@ -121,17 +119,10 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 
 	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
 
-	var targetAddr *net.TCPAddr
-	if targetPort > 0 {
-		var err error
-		hp := iputil.JoinHostPort(targetHost, targetPort)
-		targetAddr, err = net.ResolveTCPAddr("tcp", hp)
-		if err != nil {
-			return fmt.Errorf("error on resolve(%s): %w", hp, err)
-		}
-
-		if len(wtIntercepts) > 0 && targetPort > 0 {
+	if targetAddr.Port() > 0 {
+		if len(wtIntercepts) > 0 {
 			var taps []net.Conn
+			dlog.Debugf(ctx, "forwarding to %d wiretaps", tapCount)
 			clientConn, taps = AddWiretaps(ctx, clientConn, tapCount, wiretapCacheSize)
 			wg := sync.WaitGroup{}
 			wg.Add(tapCount)
@@ -139,6 +130,7 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 			for i, ii := range wtIntercepts {
 				go func(conn net.Conn, intercept *manager.InterceptInfo) {
 					defer wg.Done()
+					dlog.Debugf(ctx, "wiretap to %d", ii.Spec.TargetPort)
 					err := f.interceptConn(ctx, conn, intercept)
 					if err != nil {
 						dlog.Errorf(ctx, "wiretap ended with error: %v", err)
@@ -154,7 +146,7 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 	defer dlog.Debug(ctx, "Done forwarding")
 	defer clientConn.Close()
 
-	if targetPort == 0 {
+	if targetAddr.Port() == 0 {
 		dlog.Debug(ctx, "Forwarding to /dev/null")
 		_, _ = io.Copy(io.Discard, clientConn)
 		return nil
@@ -164,7 +156,7 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 
 	dlog.Debug(ctx, "Forwarding...")
 
-	targetConn, err := net.DialTCP("tcp", nil, targetAddr)
+	targetConn, err := net.DialTCP("tcp", nil, net.TCPAddrFromAddrPort(targetAddr))
 	if err != nil {
 		return fmt.Errorf("error on dial: %w", err)
 	}

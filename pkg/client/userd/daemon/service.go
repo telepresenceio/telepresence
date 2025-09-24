@@ -158,7 +158,7 @@ func (s *service) ReadConnectResponse(ctx context.Context) (result *rpc.ConnectI
 		err = status.Error(codes.Unavailable, ctx.Err().Error())
 	case result = <-s.connectResponse:
 	}
-	return
+	return result, err
 }
 
 const (

@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"fmt"
 	"io"
@@ -210,13 +209,13 @@ func Sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
 	return nil
 }
 
-func MakeInterceptStates(cn *agentconfig.Container) map[types.PortAndProto][]*agentconfig.Intercept {
+func MakeInterceptStates(cn *agentconfig.Container) map[types.PortAndProto]agentconfig.InterceptTarget {
 	// Group the container's intercepts by agent port
-	icStates := make(map[types.PortAndProto][]*agentconfig.Intercept, len(cn.Intercepts))
+	icStates := make(map[types.PortAndProto]agentconfig.InterceptTarget, len(cn.Intercepts))
 	for _, ic := range cn.Intercepts {
 		ap := ic.AgentPort
 		if cn.Replace == agentconfig.ReplacePolicyContainer {
-			// Listen to replaced container's original port.
+			// Listen to the replaced container's original port.
 			ap = ic.ContainerPort
 		}
 		k := types.PortAndProto{Port: ap, Proto: ic.Protocol}
@@ -234,13 +233,14 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 	defer ticker.Stop()
 
 	for {
-		if err := TalkToManager(ctx, gRPCAddress, info, s); err != nil {
+		err := TalkToManager(ctx, gRPCAddress, info, s)
+		if err != nil {
 			switch status.Code(err) {
-			case codes.AlreadyExists, codes.Aborted:
+			case codes.AlreadyExists, codes.Aborted, codes.Canceled:
 				// This won't change, so abort here.
 				return
 			}
-			dlog.Error(ctx, err)
+			dlog.Errorf(ctx, "error talking to traffic-manager: %v", err)
 		}
 
 		select {
@@ -282,8 +282,8 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 		})
 		g.Go("ftp-server", func(ctx context.Context) error {
 			publicHost := ""
-			if !iputil.IsIpV6Addr(config.PodIP()) {
-				publicHost = config.PodIP()
+			if !config.PodIP().Is6() {
+				publicHost = config.PodIP().String()
 			}
 			return ftp.Start(ctx, publicHost, agentconfig.ExportsMountPoint, ftpPortCh)
 		})
@@ -331,7 +331,7 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 		Namespace: ac.Namespace,
 		Kind:      string(ac.WorkloadKind),
 		PodName:   config.PodName(),
-		PodIp:     config.PodIP(),
+		PodIp:     config.PodIP().String(),
 		PodUid:    string(config.PodUID()),
 		ApiPort:   int32(grpcPort),
 		FtpPort:   int32(ftpPort),

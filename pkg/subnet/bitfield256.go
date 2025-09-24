@@ -38,7 +38,7 @@ func (b *Bitfield256) OnesCount() (l int) {
 			l += bits.OnesCount64(g)
 		}
 	}
-	return
+	return l
 }
 
 // String prints the hexadecimal representation of the bits.

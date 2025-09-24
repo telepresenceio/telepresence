@@ -8,7 +8,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-func AgentVolumes() []core.Volume {
+func AgentVolumes(string, *core.Pod) []core.Volume {
 	volumes := []core.Volume{
 		{
 			Name: ExportsVolumeName,

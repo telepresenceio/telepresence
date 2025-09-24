@@ -102,7 +102,7 @@ func (p PortMapping) FromAndTo() (from PortIdentifier, to PortIdentifier, err er
 			err = from.Validate()
 		}
 	}
-	return
+	return from, to, err
 }
 
 // FromNumberAndTo returns source port number and the PortAndProto of the destination port.
@@ -122,5 +122,5 @@ func (p PortMapping) FromNumberAndTo() (from uint16, to PortAndProto, err error)
 			from = to.Port
 		}
 	}
-	return
+	return from, to, err
 }

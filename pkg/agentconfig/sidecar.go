@@ -200,6 +200,45 @@ func (s *Sidecar) AgentConfig() *Sidecar {
 	return s
 }
 
+// InterceptTarget returns the container and intercepts that are parents of the given container port and protocol.
+func (s *Sidecar) InterceptTarget(containerPort uint16, proto types.Proto) (*Container, InterceptTarget) {
+	for _, c := range s.Containers {
+		for i, ic := range c.Intercepts {
+			if ic.ContainerPort == containerPort && ic.Protocol == proto {
+				it := InterceptTarget{ic}
+				i++
+				if i < len(c.Intercepts) {
+					for _, ic := range c.Intercepts[i:] {
+						if ic.ContainerPort == containerPort && ic.Protocol == proto {
+							it = append(it, ic)
+						}
+					}
+				}
+				return c, it
+			}
+		}
+	}
+	return nil, nil
+}
+
+// InterceptorInactivePort returns the port that the interceptor should write to when it isn't serving
+// an intercept. The port will be the container port unless some service uses a numeric target port
+// that targets the container port.
+//
+// When a numeric target port is specified, the init-container sets up an iptables NAT PREROUTING rule
+// to redirect all traffic destined for the container port to the corresponding port where the agent's
+// forwarder is listening. When no intercept is active, the forwarder routes traffic to the container
+// port using the pod's IP address. However, directly routing to the container port would trigger the
+// NAT PREROUTING rule again, causing an infinite loop. To avoid this, the forwarder uses a proxy port,
+// which is redirected to the container port via an iptables NAT OUTPUT rule.
+func (s *Sidecar) InterceptorInactivePort(containerPort uint16, proto types.Proto) uint16 {
+	_, it := s.InterceptTarget(containerPort, proto)
+	if it != nil && it.TargetPortNumeric() {
+		return s.ProxyPort(it.AgentPort())
+	}
+	return containerPort
+}
+
 // Clone returns a deep copy of the SidecarExt.
 func (s *Sidecar) Clone() SidecarExt {
 	cs := *s

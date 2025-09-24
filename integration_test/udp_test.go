@@ -70,7 +70,7 @@ func (s *connectedSuite) TestUDPEcho() {
 
 	// A UDP Dial will succeed immediately because it doesn't really connect, and even though the deployment is ready, the service
 	// might not be listening just yet (there's no readiness probe). So we sleep a bit to give the service time to start.
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(2 * time.Second)
 	echoTest("Hello")
 	echoTest(mb.String())
 }

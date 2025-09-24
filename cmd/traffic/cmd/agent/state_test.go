@@ -2,9 +2,9 @@ package agent_test
 
 import (
 	"context"
+	"net/netip"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,22 +20,18 @@ import (
 )
 
 const (
-	appHost        = "appHost"
 	appPort uint16 = 5000
 )
 
+var appTarget = netip.AddrPortFrom(netip.MustParseAddr("192.168.1.100"), appPort)
+
 func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.State) {
-	f := forwarder.NewInterceptor(types.PortAndProto{Proto: types.ProtoTCP, Port: 1111}, tunnel.AgentToProxied, appHost, appPort)
+	f := forwarder.NewInterceptor(types.PortAndProto{Proto: types.ProtoTCP, Port: 1111}, tunnel.AgentToProxied, appTarget)
 	go func() {
 		if err := f.Serve(context.Background(), nil); err != nil {
 			dlog.Error(ctx, err)
 		}
 	}()
-
-	assert.Eventually(t, func() bool {
-		_, port := f.Target()
-		return port == appPort
-	}, 1*time.Second, 10*time.Millisecond)
 
 	c, err := agent.LoadConfig(ctx)
 	require.NoError(t, err)
@@ -43,7 +39,7 @@ func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.Sta
 	cn := c.AgentConfig().Containers[0]
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
 	s.AddContainerState(cn.Name, s.NewContainerState(s, cn, cnMountPoint, map[string]string{}))
-	s.AddInterceptState(s.NewInterceptState(f, agent.NewInterceptTarget(cn.Intercepts), cn.Name))
+	s.AddInterceptState(s.NewInterceptState(f, agentconfig.NewInterceptTarget(cn.Intercepts), cn.Name))
 	return f, s
 }
 
@@ -53,17 +49,9 @@ func TestState_HandleIntercepts(t *testing.T) {
 	f, s := makeFS(t, ctx)
 
 	var (
-		host    string
-		port    uint16
 		cepts   []*rpc.InterceptInfo
 		reviews []*rpc.ReviewInterceptRequest
 	)
-
-	// Setup worked
-
-	host, port = f.Target()
-	a.Equal(appHost, host)
-	a.Equal(appPort, port)
 
 	// Handle resets state on an empty intercept list
 

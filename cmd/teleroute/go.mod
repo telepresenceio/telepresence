@@ -5,11 +5,11 @@ go 1.24.0
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/docker/go-plugins-helpers v0.0.0-20240701071450-45e2431495c8
-	github.com/puzpuzpuz/xsync/v4 v4.1.0
+	github.com/puzpuzpuz/xsync/v4 v4.2.0
 	github.com/sirupsen/logrus v1.9.3
-	github.com/telepresenceio/telepresence/rpc/v2 v2.24.0
-	google.golang.org/grpc v1.75.0
-	google.golang.org/protobuf v1.36.8
+	github.com/telepresenceio/telepresence/rpc/v2 v2.24.1
+	google.golang.org/grpc v1.75.1
+	google.golang.org/protobuf v1.36.9
 )
 
 require (
@@ -18,10 +18,10 @@ require (
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/stretchr/testify v1.8.2 // indirect
-	golang.org/x/net v0.43.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250826171959-ef028d996bc1 // indirect
+	golang.org/x/net v0.44.0 // indirect
+	golang.org/x/sys v0.36.0 // indirect
+	golang.org/x/text v0.29.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250922171735-9219d122eba9 // indirect
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc

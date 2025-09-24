@@ -34,7 +34,7 @@ type State interface {
 	SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
-	NewInterceptState(forwarder forwarder.Interceptor, target InterceptTarget, container string) InterceptState
+	NewInterceptState(forwarder forwarder.Interceptor, target agentconfig.InterceptTarget, container string) InterceptState
 	NewContainerState(s State, cn *agentconfig.Container, mountPoint string, env map[string]string) ContainerState
 	AddContainerState(containerName string, containerState ContainerState)
 }
@@ -43,18 +43,20 @@ type ContainerState interface {
 	State
 	Container() *agentconfig.Container
 	GlobalState() State
+	HandleContainer(ctx context.Context, cepts []*rpc.InterceptInfo) []*rpc.ReviewInterceptRequest
 	Name() string
 	ReplaceContainer() bool
 	MountPoint() string
 	Mounts() types.MountPolicies
 	Env() map[string]string
-	AddPortHandler(ctx context.Context, pp types.PortAndProto, ics []*agentconfig.Intercept) forwarder.Interceptor
+	AddPortHandler(ctx context.Context, pp types.PortAndProto, it agentconfig.InterceptTarget)
 }
 
 // An InterceptState implements what's needed to intercept one target port.
 type InterceptState interface {
 	State
-	Target() InterceptTarget
+	Target() agentconfig.InterceptTarget
+	HandlePort(ctx context.Context, cepts []*rpc.InterceptInfo) []*rpc.ReviewInterceptRequest
 	InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error)
 }
 
@@ -141,7 +143,7 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*rpc.InterceptInfo) 
 				}
 			}
 		}
-		rs = append(rs, ist.HandleIntercepts(ctx, ms)...)
+		rs = append(rs, ist.HandlePort(ctx, ms)...)
 	}
 
 	// Collect InterceptInfos weren't handled by interceptStates
@@ -154,7 +156,7 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*rpc.InterceptInfo) 
 	if len(unhandled) > 0 {
 		// Let containerStates handle the rest.
 		for _, cn := range s.containerStates {
-			rs = append(rs, cn.HandleIntercepts(ctx, unhandled)...)
+			rs = append(rs, cn.HandleContainer(ctx, unhandled)...)
 		}
 	}
 	return rs

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/netip"
+	"slices"
 	"sync"
 
 	"github.com/datawire/dlib/dlog"
@@ -23,11 +24,13 @@ type Interceptor interface {
 	Serve(context.Context, chan<- netip.AddrPort) error
 	SetIntercepting(context.Context, *manager.InterceptInfo)
 	SetStreamProvider(tunnel.ClientStreamProvider)
-	Target() (string, uint16)
+	Target() netip.AddrPort
 	AddWiretap(*manager.InterceptInfo)
 	WiretapIDs() []string
 	HasWiretap(id string) bool
 	RemoveWiretap(id string)
+	ListenPort() uint16
+	PruneTo(ctx context.Context, ids []string)
 }
 
 type interceptor struct {
@@ -40,22 +43,35 @@ type interceptor struct {
 	tCtx           context.Context
 	tCancel        context.CancelFunc
 	tag            tunnel.Tag
-	targetHost     string
-	targetPort     uint16
+	target         netip.AddrPort
 	streamProvider tunnel.ClientStreamProvider
 	wiretaps       map[string]*manager.InterceptInfo
 
 	intercept *manager.InterceptInfo
 }
 
-func NewInterceptor(from types.PortAndProto, tag tunnel.Tag, targetHost string, targetPort uint16) Interceptor {
+func NewInterceptor(from types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) Interceptor {
 	switch from.Proto {
 	case types.ProtoTCP:
-		return newTCP(from.Port, tag, targetHost, targetPort)
+		return newTCP(from.Port, tag, target)
 	case types.ProtoUDP:
-		return newUDP(from.Port, tag, targetHost, targetPort)
+		return newUDP(from.Port, tag, target)
 	default:
 		panic(fmt.Errorf("unsupported protocol %s", from.Proto))
+	}
+}
+
+func (f *interceptor) PruneTo(ctx context.Context, ids []string) {
+	// Drop wiretaps that are no longer wanted
+	for _, wid := range f.WiretapIDs() {
+		if !slices.Contains(ids, wid) {
+			f.RemoveWiretap(wid)
+		}
+	}
+	// Remove the intercept if it's no longer wanted
+	iid := f.InterceptId()
+	if iid != "" && !slices.Contains(ids, iid) {
+		f.SetIntercepting(ctx, nil)
 	}
 }
 
@@ -70,11 +86,11 @@ func (f *interceptor) Close() error {
 	return nil
 }
 
-func (f *interceptor) Target() (string, uint16) {
+func (f *interceptor) Target() netip.AddrPort {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return f.targetHost, f.targetPort
+	return f.target
 }
 
 func (f *interceptor) InterceptInfo() *restapi.InterceptInfo {
@@ -95,6 +111,10 @@ func (f *interceptor) InterceptId() (id string) {
 	}
 	f.mu.Unlock()
 	return id
+}
+
+func (f *interceptor) ListenPort() uint16 {
+	return f.listenPort
 }
 
 func (f *interceptor) AddWiretap(intercept *manager.InterceptInfo) {
@@ -142,11 +162,11 @@ func (f *interceptor) SetIntercepting(ctx context.Context, intercept *manager.In
 			return
 		}
 		dlog.Debugf(ctx, "Forward target changed from intercept %s to %s",
-			iceptInfo(f.intercept), iputil.JoinHostPort(f.targetHost, f.targetPort))
+			iceptInfo(f.intercept), f.target)
 	} else {
 		if f.intercept == nil {
 			dlog.Debugf(ctx, "Forward target changed from %s to intercept %s",
-				iputil.JoinHostPort(f.targetHost, f.targetPort), iceptInfo(intercept))
+				f.target, iceptInfo(intercept))
 		} else {
 			if f.intercept.Id == intercept.Id {
 				return

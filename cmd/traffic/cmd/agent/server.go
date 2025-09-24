@@ -38,6 +38,8 @@ func (s *state) Lookup(ctx context.Context, request *rpc.LookupRequest) (*rpc.Lo
 	}
 	var ips []netip.Addr
 	response := &rpc.LookupResponse{}
+	ctx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	defer cancel()
 	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", name[:nl-1])
 	if err != nil {
 		_, err = dnsproxy.MakeDNSError(err)

@@ -658,7 +658,7 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 				dlog.Debugf(ctx, "Request cancelled")
 				return nil
 			}
-			dlog.Tracef(ctx, "Sending update")
+			dlog.Debugf(ctx, "Sending update")
 			intercepts := make([]*rpc.InterceptInfo, 0, len(snapshot))
 			for _, intercept := range snapshot {
 				intercepts = append(intercepts, intercept.InterceptInfo)
