@@ -112,7 +112,7 @@ func Partition[T any](subnets []T, filter func(int, T) bool) (matched, notMatche
 			notMatched = append(notMatched, sn)
 		}
 	}
-	return
+	return matched, notMatched
 }
 
 // Covers answers the question if network range a contains the full network range b.

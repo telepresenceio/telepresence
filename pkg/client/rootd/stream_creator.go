@@ -144,12 +144,12 @@ func (s *Session) getAgentVIP(dest netip.Addr) (a agentVIP, ok bool) {
 	if s.virtualIPs != nil {
 		a, ok = s.virtualIPs.Load(dest)
 	}
-	return
+	return a, ok
 }
 
 func (s *Session) getAgentClient(ip netip.Addr) (pvd tunnel.Provider) {
 	if s.agentClients != nil {
 		pvd = s.agentClients.GetClient(ip)
 	}
-	return
+	return pvd
 }

@@ -225,7 +225,7 @@ func (c *config) GetClientConfigYaml(ctx context.Context) (ret []byte) {
 		cfg, err = client.ParseConfigYAML(ctx, clientConfigFileName, c.clientYAML)
 		if err != nil {
 			dlog.Errorf(ctx, "failed to unmarshal YAML from %s: %v", clientConfigFileName, err)
-			return
+			return ret
 		}
 	}
 	if AmendClientConfigFunc(ctx, cfg) {

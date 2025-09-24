@@ -56,5 +56,5 @@ func (s *Sidecar) numberOfPossibleIntercepts() (count int) {
 	for _, c := range s.Containers {
 		count += len(c.Intercepts)
 	}
-	return
+	return count
 }

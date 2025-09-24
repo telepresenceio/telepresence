@@ -330,7 +330,7 @@ func flagOverrides(f *genericclioptions.ConfigFlags) *clientcmd.ConfigOverrides 
 		if vp != nil && *vp != "" {
 			v, ok = *vp, true
 		}
-		return
+		return v, ok
 	}
 
 	// bind auth info flag values to overrides

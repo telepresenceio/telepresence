@@ -195,7 +195,7 @@ func LookupEnv(ctx context.Context, key string) (value string, ok bool) {
 	if value, ok = getEnv(ctx)[key]; !ok {
 		value, ok = GetGlobalHarness(ctx).GlobalEnv(ctx)[key]
 	}
-	return
+	return value, ok
 }
 
 func getEnv(ctx context.Context) dos.MapEnv {

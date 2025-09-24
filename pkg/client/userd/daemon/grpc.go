@@ -102,7 +102,7 @@ func (s *service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.Conn
 	} else {
 		result = s.session.Status()
 	}
-	return
+	return result, err
 }
 
 func (s *service) CanIntercept(_ context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
@@ -113,7 +113,7 @@ func (s *service) CanIntercept(_ context.Context, ir *rpc.CreateInterceptRequest
 		}
 		return nil
 	})
-	return
+	return result, err
 }
 
 func (s *service) CreateIntercept(_ context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
@@ -121,7 +121,7 @@ func (s *service) CreateIntercept(_ context.Context, ir *rpc.CreateInterceptRequ
 		result = session.AddIntercept(ir)
 		return nil
 	})
-	return
+	return result, err
 }
 
 func (s *service) RemoveIntercept(_ context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
@@ -165,7 +165,7 @@ func (s *service) List(_ context.Context, lr *rpc.ListRequest) (result *rpc.Work
 		result, err = session.WorkloadInfoSnapshot([]string{lr.Namespace}, lr.Filter)
 		return err
 	})
-	return
+	return result, err
 }
 
 func (s *service) GetKnownWorkloadKinds(ctx context.Context, _ *empty.Empty) (result *manager.KnownWorkloadKinds, err error) {
@@ -205,7 +205,7 @@ func (s *service) Uninstall(_ context.Context, ur *rpc.UninstallRequest) (result
 		result, err = session.Uninstall(ur)
 		return err
 	})
-	return
+	return result, err
 }
 
 func (s *service) GetConfig(context.Context, *empty.Empty) (cfg *rpc.ClientConfig, err error) {
@@ -221,7 +221,7 @@ func (s *service) GetConfig(context.Context, *empty.Empty) (cfg *rpc.ClientConfi
 		cfg = &rpc.ClientConfig{Json: data}
 		return nil
 	})
-	return
+	return cfg, err
 }
 
 func (s *service) GatherLogs(_ context.Context, request *rpc.LogsRequest) (result *rpc.LogsResponse, err error) {
@@ -229,7 +229,7 @@ func (s *service) GatherLogs(_ context.Context, request *rpc.LogsRequest) (resul
 		result, err = session.GatherLogs(request)
 		return err
 	})
-	return
+	return result, err
 }
 
 func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (result *empty.Empty, err error) {
@@ -344,7 +344,7 @@ func (s *service) TrafficManagerVersion(context.Context, *empty.Empty) (vi *comm
 		vi = &common.VersionInfo{Name: session.ManagerName(), Version: "v" + session.ManagerVersion().String()}
 		return nil
 	})
-	return
+	return vi, err
 }
 
 func (s *service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi *common.VersionInfo, err error) {
