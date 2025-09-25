@@ -89,10 +89,11 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	if len(s.HTTPHeaderFilters) > 0 {
 		spec.HeaderFilters = make(map[string]string, len(s.HTTPHeaderFilters))
 		for _, header := range s.HTTPHeaderFilters {
-			parts := strings.SplitN(header, "=", 2)
-			if len(parts) == 2 {
-				spec.HeaderFilters[parts[0]] = parts[1]
+			if key, value, err := parseHTTPHeader(header); err == nil {
+				spec.HeaderFilters[key] = value
 			}
+			// Note: parseHTTPHeader errors are already caught in validation,
+			// so we can safely ignore them here
 		}
 	}
 	spec.PathFilters = s.HTTPPathFilters

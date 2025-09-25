@@ -66,6 +66,43 @@ func (c *Command) UsesHTTPMechanism() bool {
 	return len(c.HTTPHeaderFilters) > 0 || len(c.HTTPPathFilters) > 0
 }
 
+// parseHTTPHeader parses an HTTP header string that can use either "=" or ":" as separator.
+// Supports both formats:
+//   - "X-User-ID=dev123" (equals format)
+//   - "X-User-ID: dev123" (colon format, compatible with curl -H)
+//
+// Returns the key and value, or an error if the format is invalid.
+// When both separators are present, colon takes precedence (standard HTTP format).
+func parseHTTPHeader(header string) (string, string, error) {
+	// Try colon separator first (standard HTTP format, curl -H compatible)
+	if strings.Contains(header, ":") {
+		parts := strings.SplitN(header, ":", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			if key == "" {
+				return "", "", fmt.Errorf("invalid header format '%s': key cannot be empty", header)
+			}
+			return key, value, nil
+		}
+	}
+
+	if strings.Contains(header, "=") {
+		parts := strings.SplitN(header, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			value := strings.TrimSpace(parts[1])
+			if key == "" {
+				return "", "", fmt.Errorf("invalid header format '%s': key cannot be empty", header)
+			}
+			return key, value, nil
+		}
+	}
+
+	// Neither separator found
+	return "", "", fmt.Errorf("invalid header format '%s': must be key=value or key: value", header)
+}
+
 func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 	what := "intercept"
 	how := "intercepted"
@@ -118,7 +155,8 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 	// HTTP Intercepts flags
 	flagSet.StringSliceVar(&c.HTTPHeaderFilters, "http-header", nil,
 		`HTTP header filters for HTTP Intercepts. Only requests with matching headers will be intercepted. `+
-			`Format: --http-header "X-User-ID=dev123" --http-header "X-Environment=staging". Multiple headers use AND logic.`)
+			`Supports both formats: --http-header "X-User-ID=dev123" or --http-header "X-User-ID: dev123" (curl -H compatible). `+
+			`Multiple headers use AND logic.`)
 
 	flagSet.StringSliceVar(&c.HTTPPathFilters, "http-path", nil,
 		`HTTP path filter patterns for HTTP Intercepts. Only requests matching these paths will be intercepted. `+
@@ -167,16 +205,11 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	c.Cmdline = positional[1:]
 	c.FormattedOutput = output.WantsFormatted(cmd)
 
-	// HTTP Intercepts: validate header format and auto-detect HTTP mechanism
+	// HTTP Intercepts: validate header format
 	if c.UsesHTTPMechanism() {
-		// Validate header format (key=value)
 		for _, header := range c.HTTPHeaderFilters {
-			if !strings.Contains(header, "=") {
-				return fmt.Errorf("invalid header format '%s': must be key=value", header)
-			}
-			parts := strings.SplitN(header, "=", 2)
-			if parts[0] == "" {
-				return fmt.Errorf("invalid header format '%s': key cannot be empty", header)
+			if _, _, err := parseHTTPHeader(header); err != nil {
+				return err
 			}
 		}
 

@@ -25,7 +25,7 @@ Wiretap a Service
   -j, --env-json string                Also emit the remote environment to a file as a JSON blob.
       --env-syntax string              Syntax used for env-file. One of "docker", "compose", "sh", "csh", "cmd", "json", and "ps"; where "sh", "csh", and "ps" can be suffixed with ":export" (default "docker")
   -h, --help                           help for wiretap
-      --http-header strings            HTTP header filters for HTTP Intercepts. Only requests with matching headers will be intercepted. Format: --http-header "X-User-ID=dev123" --http-header "X-Environment=staging". Multiple headers use AND logic. Automatically enables HTTP-aware interception.
+      --http-header strings            HTTP header filters for HTTP Intercepts. Only requests with matching headers will be intercepted. Supports both formats: --http-header "X-User-ID=dev123" or --http-header "X-User-ID: dev123" (curl -H compatible). Multiple headers use AND logic.
       --http-path strings              HTTP path filter patterns for HTTP Intercepts. Only requests matching these paths will be intercepted. Supports glob patterns like "/api/v1/*". Automatically enables HTTP-aware interception.
       --local-mount-port uint16        Do not mount remote directories. Instead, expose this port on localhost to an external mounter
       --mechanism mechanism            Which extension mechanism to use (default "tcp")
