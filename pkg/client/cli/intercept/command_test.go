@@ -29,17 +29,17 @@ func TestCommand_Validate_HTTPIntercepts(t *testing.T) {
 		{
 			name: "valid HTTP intercept with paths",
 			cmd: &Command{
-				HTTPPathFilters: []string{"/api/v1/*", "/admin/*"},
-				Mechanism:       "tcp", // Will be overridden to "http"
+				HTTPPathPrefixFilters: []string{"/api/v1/", "/admin/"},
+				Mechanism:             "tcp", // Will be overridden to "http"
 			},
 			expectError: false,
 		},
 		{
 			name: "valid HTTP intercept with both headers and paths",
 			cmd: &Command{
-				HTTPHeaderFilters: []string{"X-User-ID=dev123"},
-				HTTPPathFilters:   []string{"/api/*"},
-				Mechanism:         "tcp", // Will be overridden to "http"
+				HTTPHeaderFilters:     []string{"X-User-ID=dev123"},
+				HTTPPathPrefixFilters: []string{"/api/"},
+				Mechanism:             "tcp", // Will be overridden to "http"
 			},
 			expectError: false,
 		},
@@ -143,15 +143,15 @@ func TestCommand_UsesHTTPMechanism(t *testing.T) {
 		{
 			name: "with HTTP path filters",
 			cmd: &Command{
-				HTTPPathFilters: []string{"/api/*"},
+				HTTPPathPrefixFilters: []string{"/api/"},
 			},
 			expected: true,
 		},
 		{
 			name: "with both HTTP filters",
 			cmd: &Command{
-				HTTPHeaderFilters: []string{"X-User-ID=dev123"},
-				HTTPPathFilters:   []string{"/api/*"},
+				HTTPHeaderFilters:     []string{"X-User-ID=dev123"},
+				HTTPPathPrefixFilters: []string{"/api/"},
 			},
 			expected: true,
 		},
@@ -165,7 +165,7 @@ func TestCommand_UsesHTTPMechanism(t *testing.T) {
 		{
 			name: "empty HTTP path filters",
 			cmd: &Command{
-				HTTPPathFilters: []string{},
+				HTTPPathEqualFilters: []string{},
 			},
 			expected: false,
 		},

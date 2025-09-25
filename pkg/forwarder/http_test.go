@@ -13,7 +13,7 @@ func TestHTTPInterceptor_shouldInterceptRequest(t *testing.T) {
 			"X-User-ID":     "dev123",
 			"X-Environment": "staging",
 		},
-		pathFilters: []string{"/api/v1/*", "/admin/*"},
+		pathFilters: []string{":path-prefix:/api/v1/", ":path-prefix:/admin/"},
 	}
 
 	tests := []struct {

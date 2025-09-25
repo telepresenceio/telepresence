@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/netip"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -153,8 +154,28 @@ func (h *httpInterceptor) shouldInterceptRequest(ctx context.Context, req *http.
 	// Check path filters (OR logic - any must match)
 	if len(pathFilters) > 0 {
 		pathMatched := false
-		for _, pattern := range pathFilters {
-			if matched, _ := filepath.Match(pattern, req.URL.Path); matched {
+		for _, filter := range pathFilters {
+			matched := false
+			switch {
+			case strings.HasPrefix(filter, ":path-equal:"):
+				// Exact match
+				path := strings.TrimPrefix(filter, ":path-equal:")
+				matched = req.URL.Path == path
+			case strings.HasPrefix(filter, ":path-prefix:"):
+				// Prefix match
+				prefix := strings.TrimPrefix(filter, ":path-prefix:")
+				matched = strings.HasPrefix(req.URL.Path, prefix)
+			case strings.HasPrefix(filter, ":path-regex:"):
+				// Regex match
+				pattern := strings.TrimPrefix(filter, ":path-regex:")
+				if re, err := regexp.Compile(pattern); err == nil {
+					matched = re.MatchString(req.URL.Path)
+				} else {
+					dlog.Debugf(ctx, "Invalid regex pattern %s: %v", pattern, err)
+				}
+			}
+
+			if matched {
 				pathMatched = true
 				break
 			}

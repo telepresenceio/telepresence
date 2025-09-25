@@ -56,14 +56,19 @@ type Command struct {
 	NoDefaultPort   bool
 
 	// HTTP Intercepts fields
-	HTTPHeaderFilters []string // --http-header key=value pairs for HTTP header filtering
-	HTTPPathFilters   []string // --http-path patterns for HTTP path filtering
+	HTTPHeaderFilters     []string // --http-header key=value pairs for HTTP header filtering
+	HTTPPathEqualFilters  []string // --http-path-equal paths for HTTP path filtering (exact match)
+	HTTPPathPrefixFilters []string // --http-path-prefix paths for HTTP path filtering (prefix match)
+	HTTPPathRegexFilters  []string // --http-path-regex paths for HTTP path filtering (regex match)
 }
 
 // UsesHTTPMechanism returns true if any HTTP-specific flags were provided,
 // indicating that HTTP-aware interception should be used.
 func (c *Command) UsesHTTPMechanism() bool {
-	return len(c.HTTPHeaderFilters) > 0 || len(c.HTTPPathFilters) > 0
+	return len(c.HTTPHeaderFilters) > 0 ||
+		len(c.HTTPPathEqualFilters) > 0 ||
+		len(c.HTTPPathPrefixFilters) > 0 ||
+		len(c.HTTPPathRegexFilters) > 0
 }
 
 // parseHTTPHeader parses an HTTP header string that can use either "=" or ":" as separator.
@@ -158,9 +163,15 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 			`Supports both formats: --http-header "X-User-ID=dev123" or --http-header "X-User-ID: dev123" (curl -H compatible). `+
 			`Multiple headers use AND logic.`)
 
-	flagSet.StringSliceVar(&c.HTTPPathFilters, "http-path", nil,
-		`HTTP path filter patterns for HTTP Intercepts. Only requests matching these paths will be intercepted. `+
-			`Supports glob patterns like "/api/v1/*".`)
+	flagSet.StringSliceVar(&c.HTTPPathEqualFilters, "http-path-equal", nil,
+		`HTTP path filters for HTTP Intercepts. Only requests with matching paths will be intercepted. `+
+			`Exact path matching.`)
+
+	flagSet.StringSliceVar(&c.HTTPPathPrefixFilters, "http-path-prefix", nil,
+		`HTTP path prefix filters for HTTP Intercepts. Only requests with matching path prefixes will be intercepted.`)
+
+	flagSet.StringSliceVar(&c.HTTPPathRegexFilters, "http-path-regex", nil,
+		`HTTP path regex filters for HTTP Intercepts. Only requests with paths matching the regex will be intercepted.`)
 
 	_ = cmd.RegisterFlagCompletionFunc("container", ingest.AutocompleteContainer)
 	_ = cmd.RegisterFlagCompletionFunc("service", autocompleteService)

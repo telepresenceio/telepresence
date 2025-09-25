@@ -46,7 +46,7 @@ func (s *httpInterceptsSuite) Test_HTTPPathFiltering() {
 	ctx := s.Context()
 
 	// Test HTTP intercept with path filters
-	stdout, stderr, err := itest.Telepresence(ctx, "intercept", s.ServiceName(), "--http-path", "/api/*", "--port", "8080")
+	stdout, stderr, err := itest.Telepresence(ctx, "intercept", s.ServiceName(), "--http-path-prefix", "/api/", "--port", "8080")
 	require.NoError(err, "stderr: %s", stderr)
 	require.Contains(stdout, "Using Deployment")
 
@@ -63,7 +63,7 @@ func (s *httpInterceptsSuite) Test_HTTPCombinedFiltering() {
 	stdout, stderr, err := itest.Telepresence(ctx, "intercept", s.ServiceName(),
 		"--http-header", "X-User-ID=dev123",
 		"--http-header", "Authorization: Bearer token123",
-		"--http-path", "/api/*",
+		"--http-path-prefix", "/api/",
 		"--port", "8080")
 	require.NoError(err, "stderr: %s", stderr)
 	require.Contains(stdout, "Using Deployment")

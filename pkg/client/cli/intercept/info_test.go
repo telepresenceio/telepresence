@@ -48,7 +48,7 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 				Disposition: manager.InterceptDispositionType_ACTIVE,
 				PodIp:       "10.0.0.1",
 			},
-			expectedPattern: "HTTP filters: header X-User-ID=dev123, header X-Environment=staging",
+			expectedPattern: "HTTP filters:",
 			description:     "HTTP intercepts should show header filters",
 		},
 		{
@@ -139,6 +139,12 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 
 			// Check if the expected pattern is in the output
 			assert.Contains(t, output, tt.expectedPattern, tt.description)
+
+			// Special handling for header filter test - check individual headers due to map iteration order
+			if tt.name == "HTTP intercept with header filters" {
+				assert.Contains(t, output, "header X-User-ID=dev123", "Should contain X-User-ID header")
+				assert.Contains(t, output, "header X-Environment=staging", "Should contain X-Environment header")
+			}
 
 			// Verify that TCP intercepts don't show filter info (Global should be true)
 			if tt.spec.Mechanism == "tcp" {

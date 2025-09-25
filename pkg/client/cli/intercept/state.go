@@ -96,7 +96,25 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 			// so we can safely ignore them here
 		}
 	}
-	spec.PathFilters = s.HTTPPathFilters
+	// Combine all path filters with their type prefixes
+	var allPathFilters []string
+
+	// Add exact match filters
+	for _, path := range s.HTTPPathEqualFilters {
+		allPathFilters = append(allPathFilters, ":path-equal:"+path)
+	}
+
+	// Add prefix match filters
+	for _, path := range s.HTTPPathPrefixFilters {
+		allPathFilters = append(allPathFilters, ":path-prefix:"+path)
+	}
+
+	// Add regex match filters
+	for _, path := range s.HTTPPathRegexFilters {
+		allPathFilters = append(allPathFilters, ":path-regex:"+path)
+	}
+
+	spec.PathFilters = allPathFilters
 
 	for _, toPod := range s.ToPod {
 		pp, err := types.ParsePortAndProto(toPod)
