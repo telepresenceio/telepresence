@@ -25,7 +25,7 @@ type fwdState struct {
 	chosenInterceptId string
 }
 
-// generateMechanismDescription creates a human-readable description for the intercept mechanism
+// generateMechanismDescription creates a human-readable description for the intercept mechanism.
 func generateMechanismDescription(spec *manager.InterceptSpec) string {
 	if spec.Mechanism != "http" {
 		return "all TCP connections"
