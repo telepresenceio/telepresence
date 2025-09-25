@@ -21,44 +21,32 @@ func TestCommand_Validate_HTTPIntercepts(t *testing.T) {
 		{
 			name: "valid HTTP intercept with headers",
 			cmd: &Command{
-				HTTPMechanism: true,
-				HeaderFilters: []string{"X-User-ID=dev123", "X-Environment=staging"},
-				Mechanism:     "tcp", // Will be overridden to "http"
+				HTTPHeaderFilters: []string{"X-User-ID=dev123", "X-Environment=staging"},
+				Mechanism:         "tcp", // Will be overridden to "http"
 			},
 			expectError: false,
 		},
 		{
 			name: "valid HTTP intercept with paths",
 			cmd: &Command{
-				HTTPMechanism: true,
-				PathFilters:   []string{"/api/v1/*", "/admin/*"},
-				Mechanism:     "tcp", // Will be overridden to "http"
+				HTTPPathFilters: []string{"/api/v1/*", "/admin/*"},
+				Mechanism:       "tcp", // Will be overridden to "http"
 			},
 			expectError: false,
 		},
 		{
-			name: "headers without HTTP flag",
+			name: "valid HTTP intercept with both headers and paths",
 			cmd: &Command{
-				HTTPMechanism: false,
-				HeaderFilters: []string{"X-User-ID=dev123"},
+				HTTPHeaderFilters: []string{"X-User-ID=dev123"},
+				HTTPPathFilters:   []string{"/api/*"},
+				Mechanism:         "tcp", // Will be overridden to "http"
 			},
-			expectError: true,
-			errorMsg:    "--header filters require --http flag",
-		},
-		{
-			name: "paths without HTTP flag",
-			cmd: &Command{
-				HTTPMechanism: false,
-				PathFilters:   []string{"/api/*"},
-			},
-			expectError: true,
-			errorMsg:    "--path filters require --http flag",
+			expectError: false,
 		},
 		{
 			name: "invalid header format",
 			cmd: &Command{
-				HTTPMechanism: true,
-				HeaderFilters: []string{"InvalidHeader"},
+				HTTPHeaderFilters: []string{"InvalidHeader"},
 			},
 			expectError: true,
 			errorMsg:    "invalid header format 'InvalidHeader': must be key=value",
@@ -66,8 +54,7 @@ func TestCommand_Validate_HTTPIntercepts(t *testing.T) {
 		{
 			name: "empty header key",
 			cmd: &Command{
-				HTTPMechanism: true,
-				HeaderFilters: []string{"=value"},
+				HTTPHeaderFilters: []string{"=value"},
 			},
 			expectError: true,
 			errorMsg:    "invalid header format '=value': key cannot be empty",
@@ -75,8 +62,7 @@ func TestCommand_Validate_HTTPIntercepts(t *testing.T) {
 		{
 			name: "standard TCP intercept unchanged",
 			cmd: &Command{
-				HTTPMechanism: false,
-				Mechanism:     "tcp",
+				Mechanism: "tcp",
 			},
 			expectError: false,
 		},
@@ -105,11 +91,68 @@ func TestCommand_Validate_HTTPIntercepts(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 
-				// Verify mechanism is set to "http" when HTTPMechanism is true
-				if tt.cmd.HTTPMechanism {
+				// Verify mechanism is set to "http" when HTTP flags are used
+				if tt.cmd.UsesHTTPMechanism() {
 					assert.Equal(t, "http", tt.cmd.Mechanism)
 				}
 			}
+		})
+	}
+}
+
+func TestCommand_UsesHTTPMechanism(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      *Command
+		expected bool
+	}{
+		{
+			name:     "no HTTP flags",
+			cmd:      &Command{},
+			expected: false,
+		},
+		{
+			name: "with HTTP header filters",
+			cmd: &Command{
+				HTTPHeaderFilters: []string{"X-User-ID=dev123"},
+			},
+			expected: true,
+		},
+		{
+			name: "with HTTP path filters",
+			cmd: &Command{
+				HTTPPathFilters: []string{"/api/*"},
+			},
+			expected: true,
+		},
+		{
+			name: "with both HTTP filters",
+			cmd: &Command{
+				HTTPHeaderFilters: []string{"X-User-ID=dev123"},
+				HTTPPathFilters:   []string{"/api/*"},
+			},
+			expected: true,
+		},
+		{
+			name: "empty HTTP header filters",
+			cmd: &Command{
+				HTTPHeaderFilters: []string{},
+			},
+			expected: false,
+		},
+		{
+			name: "empty HTTP path filters",
+			cmd: &Command{
+				HTTPPathFilters: []string{},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.cmd.UsesHTTPMechanism()
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

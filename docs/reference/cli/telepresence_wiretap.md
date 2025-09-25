@@ -24,13 +24,12 @@ Wiretap a Service
   -e, --env-file string                Also emit the remote environment to an file. The syntax used in the file can be determined using flag --env-syntax
   -j, --env-json string                Also emit the remote environment to a file as a JSON blob.
       --env-syntax string              Syntax used for env-file. One of "docker", "compose", "sh", "csh", "cmd", "json", and "ps"; where "sh", "csh", and "ps" can be suffixed with ":export" (default "docker")
-      --header strings                 HTTP header filters for HTTP Intercepts. Only requests with matching headers will be intercepted. Format: --header "X-User-ID=dev123" --header "X-Environment=staging". Multiple headers use AND logic. Requires --http flag.
   -h, --help                           help for wiretap
-      --http                           Enable HTTP-aware interception for HTTP Intercepts. When enabled, allows filtering by headers and paths. Without this flag, all traffic to the service will be intercepted (standard behavior).
+      --http-header strings            HTTP header filters for HTTP Intercepts. Only requests with matching headers will be intercepted. Format: --http-header "X-User-ID=dev123" --http-header "X-Environment=staging". Multiple headers use AND logic. Automatically enables HTTP-aware interception.
+      --http-path strings              HTTP path filter patterns for HTTP Intercepts. Only requests matching these paths will be intercepted. Supports glob patterns like "/api/v1/*". Automatically enables HTTP-aware interception.
       --local-mount-port uint16        Do not mount remote directories. Instead, expose this port on localhost to an external mounter
       --mechanism mechanism            Which extension mechanism to use (default "tcp")
       --mount string                   The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely. Append ":ro" to mount everything read-only. (default "true")
-      --path strings                   HTTP path filter patterns for HTTP Intercepts. Only requests matching these paths will be intercepted. Supports glob patterns like "/api/v1/*". Requires --http flag.
   -p, --port strings                   Local ports to forward to. Use <local port>:<identifier> to uniquely identify service ports, where the <identifier> is the port name or number. With --docker-run and a daemon that doesn't run in docker', use <local port>:<container port> or <local port>:<container port>:<identifier>.
       --service string                 Optional name of service to wiretap. Sometimes needed to uniquely identify the intercepted port.
       --wait-message string            Message to print when wiretap handler has started
