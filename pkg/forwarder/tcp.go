@@ -281,7 +281,7 @@ func (f *tcp) forwardHTTPConn(ctx context.Context, clientConn net.Conn, intercep
 }
 
 // DispatchByMechanism implements mechanism-specific per-connection dispatch for TCP.
-// It currently routes HTTP-aware intercepts when requested.
+// It currently only routes HTTP-aware intercepts when requested.
 func (f *tcp) DispatchByMechanism(ctx context.Context, clientConn net.Conn, intercept *manager.InterceptInfo) (bool, error) {
 	var spec *manager.InterceptSpec
 	if intercept != nil {
