@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type Command struct {
@@ -80,32 +81,34 @@ func (c *Command) UsesHTTPMechanism() bool {
 // When both separators are present, colon takes precedence (standard HTTP format).
 func parseHTTPHeader(header string) (string, string, error) {
 	// Try colon separator first (standard HTTP format, curl -H compatible)
-	if strings.Contains(header, ":") {
-		parts := strings.SplitN(header, ":", 2)
-		if len(parts) == 2 {
-			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-			if key == "" {
-				return "", "", fmt.Errorf("invalid header format '%s': key cannot be empty", header)
-			}
-			return key, value, nil
-		}
+	if key, value, ok := tryParseHeaderWithSeparator(header, ":"); ok {
+		return key, value, nil
 	}
 
-	if strings.Contains(header, "=") {
-		parts := strings.SplitN(header, "=", 2)
-		if len(parts) == 2 {
-			key := strings.TrimSpace(parts[0])
-			value := strings.TrimSpace(parts[1])
-			if key == "" {
-				return "", "", fmt.Errorf("invalid header format '%s': key cannot be empty", header)
-			}
-			return key, value, nil
-		}
+	// Try equals separator
+	if key, value, ok := tryParseHeaderWithSeparator(header, "="); ok {
+		return key, value, nil
 	}
 
 	// Neither separator found
 	return "", "", fmt.Errorf("invalid header format '%s': must be key=value or key: value", header)
+}
+
+// tryParseHeaderWithSeparator attempts to parse a header with the given separator.
+// Returns the key, value, and true if successful; empty strings and false otherwise.
+func tryParseHeaderWithSeparator(header, separator string) (string, string, bool) {
+	parts := strings.SplitN(header, separator, 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+
+	key := strings.TrimSpace(parts[0])
+	if key == "" {
+		return "", "", false
+	}
+
+	value := strings.TrimSpace(parts[1])
+	return key, value, true
 }
 
 func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
@@ -221,6 +224,13 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 		for _, header := range c.HTTPHeaderFilters {
 			if _, _, err := parseHTTPHeader(header); err != nil {
 				return err
+			}
+		}
+
+		// Validate HTTP mechanisms aren't used with UDP ports
+		for _, portSpec := range c.Ports {
+			if pp, err := types.ParsePortAndProto(portSpec); err == nil && pp.Proto == types.ProtoUDP {
+				return errcat.User.Newf("HTTP filters cannot be used with UDP port %s", portSpec)
 			}
 		}
 

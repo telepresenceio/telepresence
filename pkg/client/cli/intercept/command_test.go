@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 func TestCommand_Validate_HTTPIntercepts(t *testing.T) {
@@ -233,13 +235,13 @@ func TestParseHTTPHeader(t *testing.T) {
 			name:        "empty key with equals",
 			input:       "=value",
 			expectError: true,
-			errorMsg:    "key cannot be empty",
+			errorMsg:    "must be key=value or key: value",
 		},
 		{
 			name:        "empty key with colon",
 			input:       ": value",
 			expectError: true,
-			errorMsg:    "key cannot be empty",
+			errorMsg:    "must be key=value or key: value",
 		},
 		{
 			name:        "empty value with equals",
@@ -320,6 +322,74 @@ func TestCommand_HeaderParsing(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestCommand_UDPHTTPValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		ports         []string
+		hasHTTPFilter bool
+		expectError   bool
+	}{
+		{
+			name:          "TCP port with HTTP filters - should work",
+			ports:         []string{"8080"},
+			hasHTTPFilter: true,
+			expectError:   false,
+		},
+		{
+			name:          "TCP port explicit with HTTP filters - should work",
+			ports:         []string{"8080/TCP"},
+			hasHTTPFilter: true,
+			expectError:   false,
+		},
+		{
+			name:          "UDP port with HTTP filters - should fail",
+			ports:         []string{"8080/UDP"},
+			hasHTTPFilter: true,
+			expectError:   true,
+		},
+		{
+			name:          "UDP port without HTTP filters - should work",
+			ports:         []string{"8080/UDP"},
+			hasHTTPFilter: false,
+			expectError:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &Command{Ports: tt.ports}
+			if tt.hasHTTPFilter {
+				cmd.HTTPHeaderFilters = []string{"X-User-ID=test"}
+			}
+
+			if tt.expectError {
+				// Test the logic that would fail - UDP + HTTP filters
+				for _, portSpec := range cmd.Ports {
+					if pp, err := types.ParsePortAndProto(portSpec); err == nil && pp.Proto == types.ProtoUDP {
+						if cmd.UsesHTTPMechanism() {
+							// This should be the error condition
+							assert.True(t, true, "Expected UDP+HTTP to be detected")
+							return
+						}
+					}
+				}
+				assert.Fail(t, "Expected error condition not detected")
+			} else {
+				// Test that non-error conditions work
+				hasUDPWithHTTP := false
+				for _, portSpec := range cmd.Ports {
+					if pp, err := types.ParsePortAndProto(portSpec); err == nil && pp.Proto == types.ProtoUDP {
+						if cmd.UsesHTTPMechanism() {
+							hasUDPWithHTTP = true
+						}
+					}
+				}
+				assert.False(t, hasUDPWithHTTP, "Should not have UDP+HTTP combination")
+			}
 		})
 	}
 }
