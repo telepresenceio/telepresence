@@ -194,10 +194,6 @@ message InterceptSpec {
   // Path filter patterns for HTTP Intercepts. Supports glob patterns like "/api/v1/*".
   // If specified, only requests matching these paths will be intercepted.
   repeated string path_filters = 28;
-
-  // Enable HTTP-aware interception mechanism for HTTP Intercepts.
-  // When true, the mechanism will parse HTTP requests to apply header/path filters.
-  bool http_mechanism = 29;
 }
 
 enum InterceptDispositionType {

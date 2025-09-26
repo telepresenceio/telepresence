@@ -288,8 +288,10 @@ func (f *tcp) DispatchByMechanism(ctx context.Context, clientConn net.Conn, inte
 		spec = intercept.Spec
 	}
 
+	httpMechanism := spec != nil && (len(spec.HeaderFilters) > 0 || len(spec.PathFilters) > 0)
+
 	switch {
-	case spec != nil && spec.HttpMechanism:
+	case httpMechanism:
 		// Collect wiretaps under lock to maintain existing behavior
 		f.mu.Lock()
 		target := f.target

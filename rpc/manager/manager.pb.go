@@ -701,10 +701,7 @@ type InterceptSpec struct {
 	HeaderFilters map[string]string `protobuf:"bytes,27,rep,name=header_filters,json=headerFilters,proto3" json:"header_filters,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Path filter patterns for HTTP Intercepts. Supports glob patterns like "/api/v1/*".
 	// If specified, only requests matching these paths will be intercepted.
-	PathFilters []string `protobuf:"bytes,28,rep,name=path_filters,json=pathFilters,proto3" json:"path_filters,omitempty"`
-	// Enable HTTP-aware interception mechanism for HTTP Intercepts.
-	// When true, the mechanism will parse HTTP requests to apply header/path filters.
-	HttpMechanism bool `protobuf:"varint,29,opt,name=http_mechanism,json=httpMechanism,proto3" json:"http_mechanism,omitempty"`
+	PathFilters   []string `protobuf:"bytes,28,rep,name=path_filters,json=pathFilters,proto3" json:"path_filters,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -926,13 +923,6 @@ func (x *InterceptSpec) GetPathFilters() []string {
 		return x.PathFilters
 	}
 	return nil
-}
-
-func (x *InterceptSpec) GetHttpMechanism() bool {
-	if x != nil {
-		return x.HttpMechanism
-	}
-	return false
 }
 
 // InterceptInfo contains information about a live intercept in an agent
@@ -3995,7 +3985,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2-.telepresence.manager.AgentInfo.ContainerInfoR\x05value:\x028\x01J\x04\b\x06\x10\a\"1\n" +
 	"\vPortMapping\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\x05R\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\x05R\x02to\"\xbd\b\n" +
+	"\x02to\x18\x02 \x01(\x05R\x02to\"\x96\b\n" +
 	"\rInterceptSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06client\x18\x02 \x01(\tR\x06client\x12\x14\n" +
@@ -4029,8 +4019,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\awiretap\x18\x1a \x01(\bR\awiretap\x12&\n" +
 	"\x0fno_default_port\x18\x19 \x01(\bR\rnoDefaultPort\x12]\n" +
 	"\x0eheader_filters\x18\x1b \x03(\v26.telepresence.manager.InterceptSpec.HeaderFiltersEntryR\rheaderFilters\x12!\n" +
-	"\fpath_filters\x18\x1c \x03(\tR\vpathFilters\x12%\n" +
-	"\x0ehttp_mechanism\x18\x1d \x01(\bR\rhttpMechanism\x1a@\n" +
+	"\fpath_filters\x18\x1c \x03(\tR\vpathFilters\x1a@\n" +
 	"\x12HeaderFiltersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\v\x10\f\"\xc5\t\n" +

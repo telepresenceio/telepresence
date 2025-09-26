@@ -84,8 +84,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	spec.Agent = s.AgentName
 	spec.NoDefaultPort = s.NoDefaultPort
 
-	// HTTP Intercepts: populate header filters and HTTP mechanism
-	spec.HttpMechanism = s.UsesHTTPMechanism()
+	// HTTP Intercepts: populate header filters
 	if len(s.HTTPHeaderFilters) > 0 {
 		spec.HeaderFilters = make(map[string]string, len(s.HTTPHeaderFilters))
 		for _, header := range s.HTTPHeaderFilters {

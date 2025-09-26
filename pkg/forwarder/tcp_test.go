@@ -22,8 +22,10 @@ func TestTCPDispatch_HTTPMechanism_Handled(t *testing.T) {
 	// Close the server side immediately to cause EOF on read
 	serverConn.Close()
 
-	// Minimal intercept info enabling HTTP mechanism
-	intercept := &manager.InterceptInfo{Spec: &manager.InterceptSpec{HttpMechanism: true}}
+	// Minimal intercept info with HTTP filters (enables HTTP mechanism)
+	intercept := &manager.InterceptInfo{Spec: &manager.InterceptSpec{
+		HeaderFilters: map[string]string{"X-Test": "value"},
+	}}
 
 	// Call dispatch. Since the connection is closed, the HTTP handler
 	// will get EOF when trying to read and return an error.
@@ -40,8 +42,8 @@ func TestTCPDispatch_NoMechanism_NotHandled(t *testing.T) {
 	require.False(t, handled)
 	require.NoError(t, err)
 
-	// Intercept without HTTP mechanism
-	intercept := &manager.InterceptInfo{Spec: &manager.InterceptSpec{HttpMechanism: false}}
+	// Intercept without HTTP mechanism (no filters)
+	intercept := &manager.InterceptInfo{Spec: &manager.InterceptSpec{}}
 	handled, err = f.DispatchByMechanism(context.Background(), nil, intercept)
 	require.False(t, handled)
 	require.NoError(t, err)
