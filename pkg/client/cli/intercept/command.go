@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type Command struct {
@@ -54,6 +55,60 @@ type Command struct {
 	FormattedOutput bool
 	DetailedOutput  bool
 	NoDefaultPort   bool
+
+	// HTTP Intercepts fields
+	HTTPHeaderFilters     []string // --http-header key=value pairs for HTTP header filtering
+	HTTPPathEqualFilters  []string // --http-path-equal paths for HTTP path filtering (exact match)
+	HTTPPathPrefixFilters []string // --http-path-prefix paths for HTTP path filtering (prefix match)
+	HTTPPathRegexFilters  []string // --http-path-regex paths for HTTP path filtering (regex match)
+}
+
+// UsesHTTPMechanism returns true if any HTTP-specific flags were provided,
+// indicating that HTTP-aware interception should be used.
+func (c *Command) UsesHTTPMechanism() bool {
+	return len(c.HTTPHeaderFilters) > 0 ||
+		len(c.HTTPPathEqualFilters) > 0 ||
+		len(c.HTTPPathPrefixFilters) > 0 ||
+		len(c.HTTPPathRegexFilters) > 0
+}
+
+// parseHTTPHeader parses an HTTP header string that can use either "=" or ":" as separator.
+// Supports both formats:
+//   - "X-User-ID=dev123" (equals format)
+//   - "X-User-ID: dev123" (colon format, compatible with curl -H)
+//
+// Returns the key and value, or an error if the format is invalid.
+// When both separators are present, colon takes precedence (standard HTTP format).
+func parseHTTPHeader(header string) (string, string, error) {
+	// Try colon separator first (standard HTTP format, curl -H compatible)
+	if key, value, ok := tryParseHeaderWithSeparator(header, ":"); ok {
+		return key, value, nil
+	}
+
+	// Try equals separator
+	if key, value, ok := tryParseHeaderWithSeparator(header, "="); ok {
+		return key, value, nil
+	}
+
+	// Neither separator found
+	return "", "", fmt.Errorf("invalid header format '%s': must be key=value or key: value", header)
+}
+
+// tryParseHeaderWithSeparator attempts to parse a header with the given separator.
+// Returns the key, value, and true if successful; empty strings and false otherwise.
+func tryParseHeaderWithSeparator(header, separator string) (string, string, bool) {
+	parts := strings.SplitN(header, separator, 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+
+	key := strings.TrimSpace(parts[0])
+	if key == "" {
+		return "", "", false
+	}
+
+	value := strings.TrimSpace(parts[1])
+	return key, value, true
 }
 
 func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
@@ -105,6 +160,22 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 		flagSet.Lookup("replace").Deprecated = "Use the replace command."
 	}
 
+	// HTTP Intercepts flags
+	flagSet.StringSliceVar(&c.HTTPHeaderFilters, "http-header", nil,
+		`HTTP header filters for HTTP Intercepts. Only requests with matching headers will be intercepted. `+
+			`Supports both formats: --http-header "X-User-ID=dev123" or --http-header "X-User-ID: dev123" (curl -H compatible). `+
+			`Multiple headers use AND logic.`)
+
+	flagSet.StringSliceVar(&c.HTTPPathEqualFilters, "http-path-equal", nil,
+		`HTTP path filters for HTTP Intercepts. Only requests with matching paths will be intercepted. `+
+			`Exact path matching.`)
+
+	flagSet.StringSliceVar(&c.HTTPPathPrefixFilters, "http-path-prefix", nil,
+		`HTTP path prefix filters for HTTP Intercepts. Only requests with matching path prefixes will be intercepted.`)
+
+	flagSet.StringSliceVar(&c.HTTPPathRegexFilters, "http-path-regex", nil,
+		`HTTP path regex filters for HTTP Intercepts. Only requests with paths matching the regex will be intercepted.`)
+
 	_ = cmd.RegisterFlagCompletionFunc("container", ingest.AutocompleteContainer)
 	_ = cmd.RegisterFlagCompletionFunc("service", autocompleteService)
 }
@@ -148,6 +219,25 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	c.Cmdline = positional[1:]
 	c.FormattedOutput = output.WantsFormatted(cmd)
 
+	// HTTP Intercepts: validate header format
+	if c.UsesHTTPMechanism() {
+		for _, header := range c.HTTPHeaderFilters {
+			if _, _, err := parseHTTPHeader(header); err != nil {
+				return err
+			}
+		}
+
+		// Validate HTTP mechanisms aren't used with UDP ports
+		for _, portSpec := range c.Ports {
+			if pp, err := types.ParsePortAndProto(portSpec); err == nil && pp.Proto == types.ProtoUDP {
+				return errcat.User.Newf("HTTP filters cannot be used with UDP port %s", portSpec)
+			}
+		}
+
+		// Auto-detect and set mechanism to "http"
+		c.Mechanism = "http"
+	}
+
 	// Actually intercepting something
 	if c.AgentName == "" {
 		c.AgentName = c.Name
@@ -175,6 +265,7 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	if err != nil {
 		return err
 	}
+
 	dlog.Debugf(cmd.Context(), "Docker flags = %v", c.DockerFlags)
 	return nil
 }

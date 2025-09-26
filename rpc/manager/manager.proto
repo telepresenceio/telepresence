@@ -186,6 +186,14 @@ message InterceptSpec {
 
   // Intercept desire no default port.
   bool no_default_port = 25;
+
+  // HTTP header filters for HTTP Intercepts. Only requests containing
+  // these headers (key=value) will be intercepted. Multiple headers use AND logic.
+  map<string,string> header_filters = 27;
+
+  // Path filter patterns for HTTP Intercepts. Supports glob patterns like "/api/v1/*".
+  // If specified, only requests matching these paths will be intercepted.
+  repeated string path_filters = 28;
 }
 
 enum InterceptDispositionType {

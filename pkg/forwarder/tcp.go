@@ -117,6 +117,11 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 	}
 	f.mu.Unlock()
 
+	// Give mechanism-specific handling a chance first (e.g., HTTP-aware routing)
+	if handled, err := f.DispatchByMechanism(ctx, clientConn, intercept); handled || err != nil {
+		return err
+	}
+
 	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
 
 	if targetAddr.Port() > 0 {
@@ -248,4 +253,63 @@ func (f *tcp) rerouteConn(ctx context.Context, conn net.Conn, clientSession tunn
 		EgressBytes:     egressBytes.GetValue(),
 	})
 	return nil
+}
+
+// forwardHTTPConn handles HTTP-aware connection forwarding with header/path filtering.
+func (f *tcp) forwardHTTPConn(ctx context.Context, clientConn net.Conn, intercept *manager.InterceptInfo, target netip.AddrPort, wtIntercepts []*manager.InterceptInfo) error {
+	// Create a temporary HTTP interceptor to handle this connection
+	httpInterceptor := &httpInterceptor{
+		interceptor: interceptor{
+			tag:    f.tag,
+			target: target,
+			tCtx:   ctx,
+		},
+		originalTarget: target,
+	}
+
+	// Configure the HTTP interceptor with stream provider and intercept info
+	httpInterceptor.SetStreamProvider(f.streamProvider)
+	httpInterceptor.SetIntercepting(ctx, intercept)
+
+	// Add wiretaps if any
+	for _, wt := range wtIntercepts {
+		httpInterceptor.AddWiretap(wt)
+	}
+
+	// Handle the connection using HTTP logic
+	return httpInterceptor.handleHTTPConn(clientConn)
+}
+
+// DispatchByMechanism implements mechanism-specific per-connection dispatch for TCP.
+// It currently only routes HTTP-aware intercepts when requested.
+func (f *tcp) DispatchByMechanism(ctx context.Context, clientConn net.Conn, intercept *manager.InterceptInfo) (bool, error) {
+	var spec *manager.InterceptSpec
+	if intercept != nil {
+		spec = intercept.Spec
+	}
+
+	httpMechanism := spec != nil && (len(spec.HeaderFilters) > 0 || len(spec.PathFilters) > 0)
+
+	switch {
+	case httpMechanism:
+		// Collect wiretaps under lock to maintain existing behavior
+		f.mu.Lock()
+		target := f.target
+		tapCount := len(f.wiretaps)
+		var wtIntercepts []*manager.InterceptInfo
+		if tapCount > 0 {
+			wtIntercepts = make([]*manager.InterceptInfo, tapCount)
+			i := 0
+			for _, wt := range f.wiretaps {
+				wtIntercepts[i] = wt
+				i++
+			}
+		}
+		f.mu.Unlock()
+
+		err := f.forwardHTTPConn(ctx, clientConn, intercept, target, wtIntercepts)
+		return true, err
+	default:
+		return false, nil
+	}
 }

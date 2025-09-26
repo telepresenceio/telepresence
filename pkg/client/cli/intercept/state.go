@@ -84,6 +84,37 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 	spec.Agent = s.AgentName
 	spec.NoDefaultPort = s.NoDefaultPort
 
+	// HTTP Intercepts: populate header filters
+	if len(s.HTTPHeaderFilters) > 0 {
+		spec.HeaderFilters = make(map[string]string, len(s.HTTPHeaderFilters))
+		for _, header := range s.HTTPHeaderFilters {
+			if key, value, err := parseHTTPHeader(header); err == nil {
+				spec.HeaderFilters[key] = value
+			}
+			// Note: parseHTTPHeader errors are already caught in validation,
+			// so we can safely ignore them here
+		}
+	}
+	// Combine all path filters with their type prefixes
+	var allPathFilters []string
+
+	// Add exact match filters
+	for _, path := range s.HTTPPathEqualFilters {
+		allPathFilters = append(allPathFilters, ":path-equal:"+path)
+	}
+
+	// Add prefix match filters
+	for _, path := range s.HTTPPathPrefixFilters {
+		allPathFilters = append(allPathFilters, ":path-prefix:"+path)
+	}
+
+	// Add regex match filters
+	for _, path := range s.HTTPPathRegexFilters {
+		allPathFilters = append(allPathFilters, ":path-regex:"+path)
+	}
+
+	spec.PathFilters = allPathFilters
+
 	for _, toPod := range s.ToPod {
 		pp, err := types.ParsePortAndProto(toPod)
 		if err != nil {

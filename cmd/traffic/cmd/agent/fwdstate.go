@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -22,6 +23,32 @@ type fwdState struct {
 	container         string
 	forwarder         forwarder.Interceptor
 	chosenInterceptId string
+}
+
+// generateMechanismDescription creates a human-readable description for the intercept mechanism.
+func generateMechanismDescription(spec *manager.InterceptSpec) string {
+	if spec.Mechanism != "http" {
+		return "all TCP connections"
+	}
+
+	// Build HTTP filter description
+	var filters []string
+
+	// Add header filters
+	for key, value := range spec.HeaderFilters {
+		filters = append(filters, fmt.Sprintf("header %s=%s", key, value))
+	}
+
+	// Add path filters
+	for _, path := range spec.PathFilters {
+		filters = append(filters, fmt.Sprintf("path %s", path))
+	}
+
+	if len(filters) > 0 {
+		return fmt.Sprintf("HTTP filters: %s", strings.Join(filters, ", "))
+	}
+
+	return "all HTTP connections"
 }
 
 // NewInterceptState creates an InterceptState that performs intercepts by using an Interceptor which indiscriminately
@@ -147,7 +174,7 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 					Id:                ii.Id,
 					Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
 					Message:           fmt.Sprintf("No match for container %q", container),
-					MechanismArgsDesc: "all TCP connections",
+					MechanismArgsDesc: generateMechanismDescription(ii.Spec),
 				})
 				continue
 			}
@@ -163,7 +190,7 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 				SftpPort:          int32(fs.SftpPort()),
 				MountPoint:        cs.MountPoint(),
 				Mounts:            cs.Mounts().ToRPC(),
-				MechanismArgsDesc: "all TCP connections",
+				MechanismArgsDesc: generateMechanismDescription(ii.Spec),
 				Environment:       cs.Env(),
 			})
 		default:
@@ -180,7 +207,7 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 				Id:                ii.Id,
 				Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
 				Message:           msg,
-				MechanismArgsDesc: "all TCP connections",
+				MechanismArgsDesc: generateMechanismDescription(ii.Spec),
 			})
 		}
 	}

@@ -45,6 +45,8 @@ type Info struct {
 	FilterDesc    string            `json:"filter_desc,omitempty"     yaml:"filter_desc,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"        yaml:"metadata,omitempty"`
 	HttpFilter    []string          `json:"http_filter,omitempty"     yaml:"http_filter,omitempty"`
+	HeaderFilters map[string]string `json:"header_filters,omitempty"  yaml:"header_filters,omitempty"`
+	PathFilters   []string          `json:"path_filters,omitempty"    yaml:"path_filters,omitempty"`
 	Global        bool              `json:"global,omitempty"          yaml:"global,omitempty"`
 	Replace       bool              `json:"replace,omitempty"         yaml:"replace,omitempty"`
 	Wiretap       bool              `json:"wiretap,omitempty"         yaml:"wiretap,omitempty"`
@@ -81,6 +83,8 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, ro bool, mountError
 		FilterDesc:    ii.MechanismArgsDesc,
 		Metadata:      ii.Metadata,
 		HttpFilter:    spec.MechanismArgs,
+		HeaderFilters: spec.HeaderFilters,
+		PathFilters:   spec.PathFilters,
 		Global:        spec.Mechanism == "tcp",
 		Replace:       spec.NoDefaultPort, // spec.Replace can't be used because it's set by deprecated --replace flag
 		Wiretap:       spec.Wiretap,
@@ -163,7 +167,30 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 			if ii.FilterDesc != "" {
 				return ii.FilterDesc
 			}
-			return fmt.Sprintf("using mechanism=%q with args=%q", "http", ii.HttpFilter)
+
+			// Build HTTP filter description from headers and paths
+			var filters []string
+
+			// Add header filters
+			for key, value := range ii.HeaderFilters {
+				filters = append(filters, fmt.Sprintf("header %s=%s", key, value))
+			}
+
+			// Add path filters
+			for _, path := range ii.PathFilters {
+				filters = append(filters, fmt.Sprintf("path %s", path))
+			}
+
+			if len(filters) > 0 {
+				return fmt.Sprintf("HTTP filters: %s", strings.Join(filters, ", "))
+			}
+
+			// Fallback to mechanism args if no structured filters
+			if len(ii.HttpFilter) > 0 {
+				return fmt.Sprintf("using mechanism=%q with args=%q", "http", ii.HttpFilter)
+			}
+
+			return "all HTTP connections"
 		}())
 	}
 
