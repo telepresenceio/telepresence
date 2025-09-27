@@ -29,9 +29,11 @@ Telepresence offers three powerful ways to develop your services locally:
   - Intercepts requests destined for a specific service port (or ports) and reroutes them to the local workstation.
   - Makes the remote environment of the targeted container available to the local workstation.
   - Provides read-write access to the volumes mounted by the targeted container.
+  - Makes it possible to filter traffic using HTTP headers and paths.
 * **Impact:**
   - A Traffic Agent is injected into the pods of the targeted workload.
   - Intercepted traffic is rerouted to the local workstation and will no longer reach the remote service.
+  - Only traffic that matches the intercept filters will be rerouted.
   - All containers keep on running.
 * **Use-cases:**
   - Your main focus is the service API rather than the cluster's pods and containers.
@@ -43,6 +45,7 @@ Telepresence offers three powerful ways to develop your services locally:
   - Adds a wiretap on a specific service port (or ports) and sends the data to the local workstation.
   - Makes the remote environment of the targeted container available to the local workstation.
   - Provides read-only access to the volumes mounted by the targeted container.
+  - Makes it possible to filter traffic using HTTP headers and paths.
 * **Impact:**
   - A Traffic Agent is injected into the pods of the targeted workload.
   - All containers keep on running.
@@ -183,23 +186,27 @@ You can now:
 
 ## Intercept your application
 
-You can use the `telepresence intercept` command when you want to intercept the traffic for a specific service and route that
-traffic to your workstation. The `intercept` is less intrusive than the `replace`, because it allows the original receiver of the
-intercepted traffic to continue to run and deal with tasks that aren't directly related to that traffic.
+The `telepresence intercept` command allows you to redirect traffic for a specific service to your local workstation.
+Compared to the replace command, intercept is less invasive because it: a) enables precise filtering of intercepted
+traffic using HTTP headers or paths, and b) allows the original service to continue running, handling all other traffic
+and tasks not directly related to the intercepted traffic.
 
 1. Connect to your cluster with `telepresence connect`.
 
 2. Intercept all traffic going to the application's http port in your cluster and redirect to port 8080 on your workstation.
     ```console
-    $ telepresence intercept example-app --port 8080:http --env-file ~/example-app-intercept.env --mount /tmp/example-app-mounts
+    $ telepresence intercept example-app --http-header 'x-user=margret' --port 8080:http --env-file ~/example-app-intercept.env --mount /tmp/example-app-mounts
     Using Deployment example-app
     intercepted
       Intercept name: example-app
       State         : ACTIVE
       Workload kind : Deployment
       Destination   : 127.0.0.1:8080
-      Intercepting  : all TCP connections
+      Intercepting  : HTTP filters: header x-user=margret
     ```
+
+   * For `--http-header`: specify the HTTP header you want to filter on. You can specify multiple headers by repeating
+     the flag.
 
    * For `--port`: specify the port the local instance of your application is running on, and optionally the remote port
      that you want to intercept. Telepresence will select the remote port automatically when there's only one service
@@ -213,8 +220,8 @@ intercepted traffic to continue to run and deal with tasks that aren't directly 
 3. Start your local application using the environment variables retrieved and the volumes that were mounted in the previous step.
 
 You can now:
-- Make changes on the fly and see them reflected when interacting with your Kubernetes environment.
-- Query services only exposed in your cluster's network.
+- Make changes on the fly and see them reflected when interacting with your Kubernetes environment without affecting other users of the same service.
+- Query services that are only exposed in your cluster's network.
 - Set breakpoints in your IDE to investigate bugs.
 
 ## Wiretap your application
