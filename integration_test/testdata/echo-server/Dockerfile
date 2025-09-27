@@ -8,8 +8,6 @@ COPY go.mod .
 COPY go.sum .
 # Get dependencies - will also be cached if we won't change mod/sum
 RUN go mod download
-
-COPY frontend.go .
 COPY main.go .
 
 FROM base AS builder
@@ -22,4 +20,5 @@ CMD ["/go/bin/dlv", "--listen=:40000", "--headless=true", "--api-version=2", "--
 
 FROM alpine AS production
 COPY --from=builder /echo-server/echo-server /
+COPY certs certs
 CMD ["/echo-server"]
