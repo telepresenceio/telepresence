@@ -148,6 +148,10 @@ func (e *extension) connection() *connection {
 	return e.conn
 }
 
+func (e *extension) engaged() (*engagement, error) {
+	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
+}
+
 func (e *extension) needsVolumes() bool {
 	return false
 }
@@ -178,10 +182,6 @@ func (e *proxyExtension) init(c *config, et types.EngagementType, composeService
 }
 
 func (e *proxyExtension) activate(*transformer) (*engagement, error) {
-	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
-}
-
-func (e *extension) engaged() (*engagement, error) {
 	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
@@ -252,11 +252,37 @@ func (e *engageExtension) desiredRemoteMounts(remoteMounts types.MountPolicies) 
 	return desiredMounts, volumes
 }
 
-type interceptExtension struct {
+type httpFilterExtension struct {
 	engageExtension
+	HttpFilters  map[string]string   `json:"httpFilters,omitempty"`
+	Ports        []types.PortMapping `json:"ports,omitempty"`
+	Paths        []string            `json:"httpPaths,omitempty"`
+	PathPrefixes []string            `json:"httpPathPrefixes,omitempty"`
+	PathRegexps  []string            `json:"httpPathRegexps,omitempty"`
+}
+
+func (e *httpFilterExtension) amendInterceptSpec(spec *manager.InterceptSpec) error {
+	ports := e.servicePorts()
+	if len(ports) == 0 {
+		return fmt.Errorf("a %s requires at least one port", e.engagementType())
+	}
+	err := addPortsSpec(spec, ports)
+	if err != nil {
+		return err
+	}
+	spec.HeaderFilters = e.HttpFilters
+	spec.PathFilters = intercept.BuildPathFilters(e.Paths, e.PathPrefixes, e.PathRegexps)
+	return nil
+}
+
+func (e *httpFilterExtension) servicePorts() []types.PortMapping {
+	return e.Ports
+}
+
+type interceptExtension struct {
+	httpFilterExtension
 	Workload string               `json:"workload,omitempty"`
 	Service  string               `json:"service,omitempty"`
-	Ports    []types.PortMapping  `json:"ports,omitempty"`
 	ToPod    []types.PortAndProto `json:"toPod,omitempty"`
 }
 
@@ -288,10 +314,6 @@ func (e *interceptExtension) service() string {
 	return e.Service
 }
 
-func (e *interceptExtension) servicePorts() []types.PortMapping {
-	return e.Ports
-}
-
 func (e *interceptExtension) toPod() []types.PortAndProto {
 	return e.ToPod
 }
@@ -303,11 +325,7 @@ func (e *interceptExtension) createInterceptRequest(localMountPort uint16) (*con
 	for _, toPod := range e.toPod() {
 		spec.LocalPorts = append(spec.LocalPorts, toPod.String())
 	}
-	ports := e.servicePorts()
-	if len(ports) == 0 {
-		return nil, fmt.Errorf("a %s requires at least one port", e.engagementType())
-	}
-	err := addPortsSpec(spec, ports)
+	err := e.amendInterceptSpec(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -434,13 +452,10 @@ func (e *replaceExtension) toPod() []types.PortAndProto {
 }
 
 type wiretapExtension struct {
-	engageExtension
+	httpFilterExtension
 
 	// Service is the Kubernetes service that Telepresence will engage with.
 	Service string `json:"service,omitempty"`
-
-	// Ports maps service ports to local ports.
-	Ports []types.PortMapping `json:"ports,omitempty"`
 }
 
 func (e *wiretapExtension) activate(t *transformer) (*engagement, error) {
@@ -459,23 +474,13 @@ func (e *wiretapExtension) service() string {
 	return e.Service
 }
 
-// ServicePorts to intercept mapped to local ports.
-func (e *wiretapExtension) servicePorts() []types.PortMapping {
-	return e.Ports
-}
-
 func (e *wiretapExtension) createInterceptRequest(localMountPort uint16) (*connector.CreateInterceptRequest, error) {
 	ir := createInterceptRequest(e, localMountPort)
 	spec := ir.Spec
 	spec.ServiceName = e.service()
 	spec.Wiretap = true
 	ir.MountReadOnly = true
-
-	ports := e.servicePorts()
-	if len(ports) == 0 {
-		return nil, fmt.Errorf("a %s requires at least one port", e.engagementType())
-	}
-	err := addPortsSpec(spec, ports)
+	err := e.amendInterceptSpec(spec)
 	if err != nil {
 		return nil, err
 	}

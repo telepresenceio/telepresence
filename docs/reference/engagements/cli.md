@@ -25,57 +25,56 @@ laptop. This includes traffic coming through your ingress controller, so use thi
 carefully as to not disrupt production environments.
 
 ```shell
-telepresence intercept <deployment name> --port=<TCP port>
+telepresence intercept <deployment name> --http-header x-user=susan --port=<TCP port>
 ```
 
-Run `telepresence status` to see the list of active intercepts.
+Run `telepresence list` to see the list of active intercepts.
+
+```console
+$ telepresence list
+deployment dataprocessingnodeservice: intercepted
+   Intercept name: echo-one
+   State         : ACTIVE
+   Workload kind : Deployment
+   Intercepting  : 10.244.0.13 -> 127.0.0.1
+       8080 -> 8080 TCP
+   Intercepting  : HTTP filters: header x-user=susan
+```
+
+When intercepting a service that has [multiple ports](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services), the name of the
+service port that has been intercepted is also listed.
 
 ```console
 $ telepresence status
 OSS User Daemon: Running
-  Version           : v2.18.0
+  Version           : $version$
   Executable        : /usr/local/bin/telepresence
-  Install ID        : 4b1658f3-7ff8-4af3-66693-f521bc1da32f
+  Install ID        : 0e711768-a69b-4c36-9eea-fe2d3d964e3c
   Status            : Connected
-  Kubernetes server : https://cluster public IP>
-  Kubernetes context: default
+  Kubernetes server : https://<cluster public IP>
+  Kubernetes context: kind-dev
   Namespace         : default
   Manager namespace : ambassador
+  Mapped namespaces : [ambassador default kube-public]
   Intercepts        : 1 total
-    dataprocessingnodeservice: <laptop username>@<laptop name>
+    echo-one: <laptop username>@<laptop name>
 OSS Root Daemon: Running
-  Version: v2.18.0
+  Version: $version$
   DNS    : 
-    Remote IP       : 127.0.0.1
+    Local addresses : [127.0.0.1:51943]
+    VIF Address     : 10.244.0.10:53
     Exclude suffixes: [.com .io .net .org .ru]
     Include suffixes: []
-    Timeout         : 8s
+    Timeout         : 4s
   Subnets: (2 subnets)
     - 10.96.0.0/16
     - 10.244.0.0/24
 OSS Traffic Manager: Connected
-  Version      : v2.19.0
-  Traffic Agent: docker.io/datawire/tel2:2.18.0
+  Version      : v$version$
+  Traffic Agent: ghcr.io/telepresenceio/tel2:$version$
 ```
 
 Finally, run `telepresence leave <name of intercept>` to stop the intercept.
-
-[kube-multi-port-services]: https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services
-
-```console
-$ telepresence intercept <base name of intercept> --port=<local TCP port>:<servicePortIdentifier>
-Using Deployment <name of deployment>
-intercepted
-    Intercept name         : <full name of intercept>
-    State                  : ACTIVE
-    Workload kind          : Deployment
-    Destination            : 127.0.0.1:<local TCP port>
-    Service Port Identifier: <servicePortIdentifier>
-    Intercepting           : all TCP connections
-```
-
-When intercepting a service that has multiple ports, the name of the
-service port that has been intercepted is also listed.
 
 If you want to change which port has been intercepted, you can create
 a new intercept the same way you did above, and it will change which

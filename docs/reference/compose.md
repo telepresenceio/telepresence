@@ -123,14 +123,18 @@ The `container` field is required when more than one container is declared in th
 
 The `intercept` ensures that the docker compose service receives traffic from, and shares the environment and volumes of, a remote container in the cluster. The extension can have the following fields set:
 
-| Name       | Description                                                                   | Type    | Default Value               |
-|------------|-------------------------------------------------------------------------------|---------|-----------------------------|
-| connection | The name of a connection declared in the top-level `x-tele` extension         | string  | empty                       |
-| name       | Name of the intercept engagement                                              | string  | name of the compose service |
-| workload   | Name of the remote workload (typically the deployment)                        | string  | name of the engagement      |
-| ports      | Service &lt;local port&gt;:&lt;service port&gt; to intercept                  | strings | empty                       |
-| service    | Name of the remote service                                                    | string  | empty                       |
-| to-pod     | Ports to forward from the local compose service to the remote pod's localhost | strings | empty                       |
+| Name             | Description                                                                                    | Type    | Default Value               |
+|------------------|------------------------------------------------------------------------------------------------|---------|-----------------------------|
+| connection       | The name of a connection declared in the top-level `x-tele` extension                          | string  | empty                       |
+| name             | Name of the intercept engagement                                                               | string  | name of the compose service |
+| httpFilters      | HTTP header filters. Only requests with matching headers will be intercepted                   | object  | empty                       |
+| httpPaths        | HTTP path filters. Only requests with matching paths will be intercepted. Exact path matching. | strings | empty                       |
+| httpPathPrefixes | HTTP path prefix filters. Only requests with matching path prefixes will be intercepted.       | strings | empty                       |
+| httpPathRegexps  | HTTP path regexp filters. Only requests with paths matching the regexp will be intercepted.    | strings | empty                       |
+| workload         | Name of the remote workload (typically the deployment)                                         | string  | name of the engagement      |
+| ports            | Service &lt;local port&gt;:&lt;service port&gt; to intercept                                   | strings | empty                       |
+| service          | Name of the remote service                                                                     | string  | empty                       |
+| to-pod           | Ports to forward from the local compose service to the remote pod's localhost                  | strings | empty                       |
 
 
 The `service` field is optional as long as the given `ports` are unique.
@@ -153,12 +157,16 @@ The `replace` ensures that the docker compose service receives traffic from, and
 
 The `wiretap` ensures that the docker compose service receives wiretapped traffic from a remote service, and shares the environment and volumes (read-only) of, a remote container. The extension can have the following fields set:
 
-| Name       | Description                                                                   | Type    | Default Value               |
-|------------|-------------------------------------------------------------------------------|---------|-----------------------------|
-| connection | The name of a connection declared in the top-level `x-tele` extension         | string  | empty                       |
-| name       | Name of the wiretapped workload  (typically the deployment)                   | string  | name of the compose service |
-| ports      | Service &lt;local port&gt;:&lt;service port&gt; to wiretap                    | strings | empty                       |
-| service    | Name of the remote service                                                    | string  | empty                       |
-| to-pod     | Ports to forward from the local compose service to the remote pod's localhost | strings | empty                       |
+| Name             | Description                                                                                   | Type    | Default Value               |
+|------------------|-----------------------------------------------------------------------------------------------|---------|-----------------------------|
+| connection       | The name of a connection declared in the top-level `x-tele` extension                         | string  | empty                       |
+| name             | Name of the wiretapped workload  (typically the deployment)                                   | string  | name of the compose service |
+| httpFilters      | HTTP header filters. Only requests with matching headers will be wiretapped                   | object  | empty                       |
+| httpPaths        | HTTP path filters. Only requests with matching paths will be wiretapped. Exact path matching. | strings | empty                       |
+| httpPathPrefixes | HTTP path prefix filters. Only requests with matching path prefixes will be wiretapped.       | strings | empty                       |
+| httpPathRegexps  | HTTP path regexp filters. Only requests with paths matching the regexp will be wiretapped.    | strings | empty                       |
+| ports            | Service &lt;local port&gt;:&lt;service port&gt; to wiretap                                    | strings | empty                       |
+| service          | Name of the remote service                                                                    | string  | empty                       |
+| to-pod           | Ports to forward from the local compose service to the remote pod's localhost                 | strings | empty                       |
 
 The `service` field is optional as long as the given `service ports` are unique.

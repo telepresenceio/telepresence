@@ -162,19 +162,19 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 
 	// HTTP Intercepts flags
 	flagSet.StringSliceVar(&c.HTTPHeaderFilters, "http-header", nil,
-		`HTTP header filters for HTTP Intercepts. Only requests with matching headers will be intercepted. `+
+		fmt.Sprintf(`HTTP header filters. Only requests with matching headers will be %s. `+
 			`Supports both formats: --http-header "X-User-ID=dev123" or --http-header "X-User-ID: dev123" (curl -H compatible). `+
-			`Multiple headers use AND logic.`)
+			`Multiple headers use AND logic.`, how))
 
 	flagSet.StringSliceVar(&c.HTTPPathEqualFilters, "http-path-equal", nil,
-		`HTTP path filters for HTTP Intercepts. Only requests with matching paths will be intercepted. `+
-			`Exact path matching.`)
+		fmt.Sprintf(`HTTP path filters. Only requests with matching paths will be %s. `+
+			`Exact path matching.`, how))
 
 	flagSet.StringSliceVar(&c.HTTPPathPrefixFilters, "http-path-prefix", nil,
-		`HTTP path prefix filters for HTTP Intercepts. Only requests with matching path prefixes will be intercepted.`)
+		fmt.Sprintf(`HTTP path prefix filters. Only requests with matching path prefixes will be %s.`, how))
 
 	flagSet.StringSliceVar(&c.HTTPPathRegexFilters, "http-path-regex", nil,
-		`HTTP path regex filters for HTTP Intercepts. Only requests with paths matching the regex will be intercepted.`)
+		fmt.Sprintf(`HTTP path regex filters. Only requests with paths matching the regex will be %s.`, how))
 
 	_ = cmd.RegisterFlagCompletionFunc("container", ingest.AutocompleteContainer)
 	_ = cmd.RegisterFlagCompletionFunc("service", autocompleteService)
@@ -412,4 +412,34 @@ func ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, 
 	// There probably exists a number that would be a good cutoff limit.
 
 	return list, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+}
+
+// BuildPathFilters builds a list of path filters from the given arguments.
+// The filters are of the form:
+//   - :path-equal:<path>
+//   - :path-prefix:<path>
+//   - :path-regex:<path>
+func BuildPathFilters(equals, prefixes, regexps []string) []string {
+	// Combine all path filters with their type prefixes
+	allFilters := make([]string, len(equals)+len(prefixes)+len(regexps))
+
+	// Add exact match filters
+	i := 0
+	for _, path := range equals {
+		allFilters[i] = ":path-equal:" + path
+		i++
+	}
+
+	// Add prefix match filters
+	for _, path := range prefixes {
+		allFilters[i] = ":path-prefix:" + path
+		i++
+	}
+
+	// Add regex match filters
+	for _, path := range regexps {
+		allFilters[i] = ":path-regex:" + path
+		i++
+	}
+	return allFilters
 }
