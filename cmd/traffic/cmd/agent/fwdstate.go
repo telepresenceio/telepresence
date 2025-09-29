@@ -139,6 +139,107 @@ func interceptSpecsConflict(spec1, spec2 *manager.InterceptSpec) bool {
 	return false
 }
 
+// processWiretapIntercept handles wiretap intercepts which can always be active alongside others
+func (fs *fwdState) processWiretapIntercept(ii *manager.InterceptInfo) *manager.ReviewInterceptRequest {
+	container := ii.Spec.ContainerName
+	if container == "" {
+		container = fs.container
+	}
+	cs := fs.containerStates[container]
+	if cs == nil {
+		return &manager.ReviewInterceptRequest{
+			Id:                ii.Id,
+			Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
+			Message:           fmt.Sprintf("No match for container %q", container),
+			MechanismArgsDesc: generateMechanismDescription(ii.Spec),
+		}
+	}
+	return &manager.ReviewInterceptRequest{
+		Id:                ii.Id,
+		Disposition:       manager.InterceptDispositionType_ACTIVE,
+		PodIp:             fs.PodIP().String(),
+		FtpPort:           int32(fs.FtpPort()),
+		SftpPort:          int32(fs.SftpPort()),
+		MountPoint:        cs.MountPoint(),
+		Mounts:            cs.Mounts().ToRPC(),
+		MechanismArgsDesc: generateMechanismDescription(ii.Spec),
+		Environment:       cs.Env(),
+	}
+}
+
+// findConflictingIntercept checks if an intercept conflicts with any active or waiting intercepts
+func (fs *fwdState) findConflictingIntercept(ii *manager.InterceptInfo, index int, active []*manager.InterceptInfo, candidates []*manager.InterceptInfo) *manager.InterceptInfo {
+	// Check for conflicts with active intercepts
+	for _, activeII := range active {
+		if !activeII.Spec.Wiretap && interceptSpecsConflict(ii.Spec, activeII.Spec) {
+			return activeII
+		}
+	}
+
+	// Check for conflicts with other waiting intercepts that would become active
+	// Only check intercepts that come before this one (first wins policy)
+	for j, otherII := range candidates {
+		if j < index && !otherII.Spec.Wiretap && interceptSpecsConflict(ii.Spec, otherII.Spec) {
+			return otherII
+		}
+	}
+	return nil
+}
+
+// processRegularIntercept handles non-wiretap intercepts with conflict detection
+func (fs *fwdState) processRegularIntercept(ctx context.Context, ii *manager.InterceptInfo, index int, active []*manager.InterceptInfo, candidates []*manager.InterceptInfo, activeIntercept **manager.InterceptInfo) *manager.ReviewInterceptRequest {
+	conflictingIntercept := fs.findConflictingIntercept(ii, index, active, candidates)
+
+	if conflictingIntercept != nil {
+		// Reject due to actual conflict
+		chosenID := conflictingIntercept.Id
+		dlog.Infof(ctx, "Setting intercept %q as AGENT_ERROR; as it conflicts with %q", ii.Id, chosenID)
+		var msg string
+		if conflictingIntercept.Disposition == manager.InterceptDispositionType_ACTIVE {
+			msg = fmt.Sprintf("Conflicts with the currently-served intercept %q", chosenID)
+		} else {
+			msg = fmt.Sprintf("Conflicts with the currently-waiting-to-be-served intercept %q", chosenID)
+		}
+		return &manager.ReviewInterceptRequest{
+			Id:                ii.Id,
+			Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
+			Message:           msg,
+			MechanismArgsDesc: generateMechanismDescription(ii.Spec),
+		}
+	}
+
+	// No conflict detected, allow this intercept to become active
+	container := ii.Spec.ContainerName
+	if container == "" {
+		container = fs.container
+	}
+	cs := fs.containerStates[container]
+	if cs == nil {
+		return &manager.ReviewInterceptRequest{
+			Id:                ii.Id,
+			Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
+			Message:           fmt.Sprintf("No match for container %q", container),
+			MechanismArgsDesc: generateMechanismDescription(ii.Spec),
+		}
+	}
+	if !ii.Spec.Wiretap && *activeIntercept == nil {
+		// Set the first non-wiretap intercept as the active one for the forwarder
+		*activeIntercept = ii
+	}
+	dlog.Infof(ctx, "Allowing non-conflicting intercept %q to become active", ii.Id)
+	return &manager.ReviewInterceptRequest{
+		Id:                ii.Id,
+		Disposition:       manager.InterceptDispositionType_ACTIVE,
+		PodIp:             fs.PodIP().String(),
+		FtpPort:           int32(fs.FtpPort()),
+		SftpPort:          int32(fs.SftpPort()),
+		MountPoint:        cs.MountPoint(),
+		Mounts:            cs.Mounts().ToRPC(),
+		MechanismArgsDesc: generateMechanismDescription(ii.Spec),
+		Environment:       cs.Env(),
+	}
+}
+
 func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
 	dlog.Debugf(ctx, "fwdState.HandlePort called with %d intercepts", len(cepts))
 
@@ -206,112 +307,18 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 	// Review waiting intercepts
 	reviews := make([]*manager.ReviewInterceptRequest, 0, len(waiting))
 
-	// Collect all intercepts that could potentially become active (excluding wiretaps and already processed)
-	var candidateIntercepts []*manager.InterceptInfo
-	for _, ii := range waiting {
-		candidateIntercepts = append(candidateIntercepts, ii)
-	}
+	// Collect all intercepts that could potentially become active
+	candidateIntercepts := slices.Clone(waiting)
 
 	for i, ii := range candidateIntercepts {
 		if ii.Spec.Wiretap {
-			// Wiretaps can always be active alongside other intercepts
-			container := ii.Spec.ContainerName
-			if container == "" {
-				container = fs.container
-			}
-			cs := fs.containerStates[container]
-			if cs == nil {
-				reviews = append(reviews, &manager.ReviewInterceptRequest{
-					Id:                ii.Id,
-					Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
-					Message:           fmt.Sprintf("No match for container %q", container),
-					MechanismArgsDesc: generateMechanismDescription(ii.Spec),
-				})
-				continue
-			}
-			reviews = append(reviews, &manager.ReviewInterceptRequest{
-				Id:                ii.Id,
-				Disposition:       manager.InterceptDispositionType_ACTIVE,
-				PodIp:             fs.PodIP().String(),
-				FtpPort:           int32(fs.FtpPort()),
-				SftpPort:          int32(fs.SftpPort()),
-				MountPoint:        cs.MountPoint(),
-				Mounts:            cs.Mounts().ToRPC(),
-				MechanismArgsDesc: generateMechanismDescription(ii.Spec),
-				Environment:       cs.Env(),
-			})
+			reviews = append(reviews, fs.processWiretapIntercept(ii))
 			continue
 		}
 
-		// Check for conflicts with active intercepts
-		var conflictingIntercept *manager.InterceptInfo
-		for _, activeII := range active {
-			if !activeII.Spec.Wiretap && interceptSpecsConflict(ii.Spec, activeII.Spec) {
-				conflictingIntercept = activeII
-				break
-			}
-		}
-
-		// Check for conflicts with other waiting intercepts that would become active
-		// Only check intercepts that come before this one (first wins policy)
-		if conflictingIntercept == nil {
-			for j, otherII := range candidateIntercepts {
-				if j < i && !otherII.Spec.Wiretap && interceptSpecsConflict(ii.Spec, otherII.Spec) {
-					conflictingIntercept = otherII
-					break
-				}
-			}
-		}
-
-		if conflictingIntercept != nil {
-			// Reject due to actual conflict
-			chosenID := conflictingIntercept.Id
-			dlog.Infof(ctx, "Setting intercept %q as AGENT_ERROR; as it conflicts with %q", ii.Id, chosenID)
-			var msg string
-			if conflictingIntercept.Disposition == manager.InterceptDispositionType_ACTIVE {
-				msg = fmt.Sprintf("Conflicts with the currently-served intercept %q", chosenID)
-			} else {
-				msg = fmt.Sprintf("Conflicts with the currently-waiting-to-be-served intercept %q", chosenID)
-			}
-			reviews = append(reviews, &manager.ReviewInterceptRequest{
-				Id:                ii.Id,
-				Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
-				Message:           msg,
-				MechanismArgsDesc: generateMechanismDescription(ii.Spec),
-			})
-		} else {
-			// No conflict detected, allow this intercept to become active
-			container := ii.Spec.ContainerName
-			if container == "" {
-				container = fs.container
-			}
-			cs := fs.containerStates[container]
-			if cs == nil {
-				reviews = append(reviews, &manager.ReviewInterceptRequest{
-					Id:                ii.Id,
-					Disposition:       manager.InterceptDispositionType_AGENT_ERROR,
-					Message:           fmt.Sprintf("No match for container %q", container),
-					MechanismArgsDesc: generateMechanismDescription(ii.Spec),
-				})
-				continue
-			}
-			if !ii.Spec.Wiretap && activeIntercept == nil {
-				// Set the first non-wiretap intercept as the active one for the forwarder
-				activeIntercept = ii
-			}
-			dlog.Infof(ctx, "Allowing non-conflicting intercept %q to become active", ii.Id)
-			reviews = append(reviews, &manager.ReviewInterceptRequest{
-				Id:                ii.Id,
-				Disposition:       manager.InterceptDispositionType_ACTIVE,
-				PodIp:             fs.PodIP().String(),
-				FtpPort:           int32(fs.FtpPort()),
-				SftpPort:          int32(fs.SftpPort()),
-				MountPoint:        cs.MountPoint(),
-				Mounts:            cs.Mounts().ToRPC(),
-				MechanismArgsDesc: generateMechanismDescription(ii.Spec),
-				Environment:       cs.Env(),
-			})
-		}
+		// Check for conflicts and process regular intercept
+		review := fs.processRegularIntercept(ctx, ii, i, active, candidateIntercepts, &activeIntercept)
+		reviews = append(reviews, review)
 	}
 	return reviews
 }
