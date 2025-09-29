@@ -104,3 +104,134 @@ func TestGenerateMechanismDescription(t *testing.T) {
 		})
 	}
 }
+
+func TestInterceptSpecsConflict(t *testing.T) {
+	tests := []struct {
+		name      string
+		spec1     *manager.InterceptSpec
+		spec2     *manager.InterceptSpec
+		conflicts bool
+	}{
+		{
+			name: "Issue #3969: Different header values for same key - should NOT conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "bertil",
+				},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Same header key and value - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Different header keys - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-session": "abc123",
+				},
+			},
+			conflicts: false,
+		},
+		{
+			name: "TCP intercepts (no filters) - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "tcp",
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "tcp",
+			},
+			conflicts: true,
+		},
+		{
+			name: "Different path filters - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{"/api/v1/*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{"/api/v2/*"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Same path filters - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{"/api/*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{"/api/*"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Mixed filters: headers vs paths - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{"/admin/*"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Multiple headers with one overlap - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user":        "adam",
+					"x-environment": "dev",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user":    "adam", // This overlaps!
+					"x-session": "xyz789",
+				},
+			},
+			conflicts: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := interceptSpecsConflict(tt.spec1, tt.spec2)
+			assert.Equal(t, tt.conflicts, result)
+		})
+	}
+}
