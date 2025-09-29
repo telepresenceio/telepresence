@@ -1,10 +1,12 @@
 package matcher
 
 import (
-	"fmt"
 	"net/http"
 	"net/textproto"
 	"strings"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 type HeaderMap map[string]Value
@@ -24,16 +26,12 @@ type Headers interface {
 }
 
 // NewHeaders creates a new Headers.
-func NewHeaders(hs map[string]string) (Headers, error) {
+func NewHeaders(hs map[string]string) Headers {
 	hm := make(HeaderMap, len(hs))
 	for k, v := range hs {
-		vm, err := NewValue(v)
-		if err != nil {
-			return nil, fmt.Errorf("the value of match %s=%s is invalid: %w", k, v, err)
-		}
-		hm[textproto.CanonicalMIMEHeaderKey(k)] = vm
+		hm[textproto.CanonicalMIMEHeaderKey(k)] = NewValue(v)
 	}
-	return hm, nil
+	return hm
 }
 
 // Map returns the map correspondence of this instance. The returned value can be
@@ -46,7 +44,8 @@ func (m HeaderMap) Map() map[string]string {
 	return r
 }
 
-// HeaderMap returns HeaderMap correspondence of this instance.
+// HeaderMap returns the internal HeaderMap. Any modifications made to this map must
+// ensure that keys are canonicalized using textproto.CanonicalMIMEHeaderKey.
 func (m HeaderMap) HeaderMap() HeaderMap {
 	return m
 }
@@ -69,12 +68,30 @@ func (m HeaderMap) String() string {
 }
 
 func (m HeaderMap) appendString(sb *strings.Builder, indent string) {
-	for k, v := range m {
+	if len(m) == 0 {
+		return
+	}
+	sb.WriteString(indent)
+	sb.WriteString("header")
+	if len(m) > 1 {
+		sb.WriteString("s\n")
+		indent += " "
+	} else {
+		sb.WriteByte(' ')
+		indent = ""
+	}
+	first := true
+	for _, k := range maps.SortedKeys(m) {
+		if !first {
+			sb.WriteByte('\n')
+		}
+		first = false
+		v := m[k]
 		op := v.Op()
 		if op == "==" {
-			fmt.Fprintf(sb, "\n%s'%s: %s'", indent, k, v)
+			ioutil.Printf(sb, "%s'%s: %s'", indent, k, v)
 		} else {
-			fmt.Fprintf(sb, "\n%s'%s %s %s'", indent, k, v.Op(), v)
+			ioutil.Printf(sb, "%s'%s %s %s'", indent, k, v.Op(), v)
 		}
 	}
 }
