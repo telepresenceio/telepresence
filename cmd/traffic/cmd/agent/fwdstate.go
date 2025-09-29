@@ -139,7 +139,7 @@ func interceptSpecsConflict(spec1, spec2 *manager.InterceptSpec) bool {
 	return false
 }
 
-// processWiretapIntercept handles wiretap intercepts which can always be active alongside others
+// processWiretapIntercept handles wiretap intercepts which can always be active alongside others.
 func (fs *fwdState) processWiretapIntercept(ii *manager.InterceptInfo) *manager.ReviewInterceptRequest {
 	container := ii.Spec.ContainerName
 	if container == "" {
@@ -167,7 +167,7 @@ func (fs *fwdState) processWiretapIntercept(ii *manager.InterceptInfo) *manager.
 	}
 }
 
-// findConflictingIntercept checks if an intercept conflicts with any active or waiting intercepts
+// findConflictingIntercept checks if an intercept conflicts with any active or waiting intercepts.
 func (fs *fwdState) findConflictingIntercept(ii *manager.InterceptInfo, index int, active []*manager.InterceptInfo, candidates []*manager.InterceptInfo) *manager.InterceptInfo {
 	// Check for conflicts with active intercepts
 	for _, activeII := range active {
@@ -186,8 +186,15 @@ func (fs *fwdState) findConflictingIntercept(ii *manager.InterceptInfo, index in
 	return nil
 }
 
-// processRegularIntercept handles non-wiretap intercepts with conflict detection
-func (fs *fwdState) processRegularIntercept(ctx context.Context, ii *manager.InterceptInfo, index int, active []*manager.InterceptInfo, candidates []*manager.InterceptInfo, activeIntercept **manager.InterceptInfo) *manager.ReviewInterceptRequest {
+// processRegularIntercept handles non-wiretap intercepts with conflict detection.
+func (fs *fwdState) processRegularIntercept(
+	ctx context.Context,
+	ii *manager.InterceptInfo,
+	index int,
+	active []*manager.InterceptInfo,
+	candidates []*manager.InterceptInfo,
+	activeIntercept **manager.InterceptInfo,
+) *manager.ReviewInterceptRequest {
 	conflictingIntercept := fs.findConflictingIntercept(ii, index, active, candidates)
 
 	if conflictingIntercept != nil {
