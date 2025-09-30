@@ -206,7 +206,10 @@ and tasks not directly related to the intercepted traffic.
     ```
 
    * For `--http-header`: specify the HTTP header you want to filter on. You can specify multiple headers by repeating
-     the flag.
+     the flag. Header-based intercepts take priority over path-only intercepts. When multiple intercepts are active on
+     the same workload, requests are evaluated against header-based filters first, then path-only filters. This allows
+     different developers to use header-based personal intercepts (e.g., `x-user=alice`) while others use path-based
+     intercepts (e.g., `--http-path-prefix /admin/`) without conflicts.
 
    * For `--port`: specify the port the local instance of your application is running on, and optionally the remote port
      that you want to intercept. Telepresence will select the remote port automatically when there's only one service

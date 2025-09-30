@@ -96,46 +96,94 @@ func (pm *ProviderMux) CreateClientStream(ctx context.Context, tag tunnel.Tag, s
 
 // interceptSpecsConflict determines if two intercept specs would conflict with each other.
 // Two specs conflict if they would route the same traffic to different destinations.
+//
+// Precedence Model:
+// Headers take precedence over paths. This means intercepts with headers operate at a higher
+// priority tier than intercepts with only paths.
+//
+// Conflict Rules:
+// 1. Global intercepts (no headers, no paths) conflict with everything
+// 2. Headers vs Paths: One spec with headers, another with only paths → NO CONFLICT
+//    (different priority tiers - headers are checked first, then paths)
+// 3. Both have headers: Conflict if headers form a subset AND paths overlap
+//    - Within each intercept, filters use AND logic (must match ALL headers AND ALL paths)
+//    - Example: {x-user:adam} vs {x-user:adam, x-session:xyz} → CONFLICT (first is subset)
+//    - Example: {x-user:adam}+/api/* vs {x-user:adam}+/admin/* → NO CONFLICT (different paths)
+// 4. Both have only paths (no headers): Conflict if paths overlap
 func interceptSpecsConflict(spec1, spec2 *manager.InterceptSpec) bool {
-	// Fast path: For TCP intercepts (no filters), they always conflict on the same port
-	if len(spec1.HeaderFilters) == 0 && len(spec1.PathFilters) == 0 &&
-		len(spec2.HeaderFilters) == 0 && len(spec2.PathFilters) == 0 {
+	hasHeaders1 := len(spec1.HeaderFilters) > 0
+	hasHeaders2 := len(spec2.HeaderFilters) > 0
+	hasPaths1 := len(spec1.PathFilters) > 0
+	hasPaths2 := len(spec2.PathFilters) > 0
+
+	// Global intercept: no headers and no paths means it intercepts everything
+	isGlobal1 := !hasHeaders1 && !hasPaths1
+	isGlobal2 := !hasHeaders2 && !hasPaths2
+
+	// Rule 1: Global intercepts conflict with anything
+	if isGlobal1 || isGlobal2 {
 		return true
 	}
 
-	// For HTTP intercepts, check header filter conflicts
-	if len(spec1.HeaderFilters) > 0 && len(spec2.HeaderFilters) > 0 {
-		// Check if any header key has the same value in both specs
-		for key1, value1 := range spec1.HeaderFilters {
-			if value2, exists := spec2.HeaderFilters[key1]; exists && value1 == value2 {
-				// Same header key with same value = traffic would match both intercepts
-				return true
-			}
-		}
-		// All header keys either don't overlap or have different values = no conflict
+	// Rule 2: Headers take precedence - different priority tiers don't conflict
+	// If one spec has headers and the other has only paths, they operate at different tiers
+	if hasHeaders1 && !hasHeaders2 && !isGlobal2 {
+		// spec1 has headers (high priority), spec2 has only paths (low priority)
+		return false
+	}
+	if hasHeaders2 && !hasHeaders1 && !isGlobal1 {
+		// spec2 has headers (high priority), spec1 has only paths (low priority)
 		return false
 	}
 
-	// For HTTP intercepts, check path filter conflicts
-	if len(spec1.PathFilters) > 0 && len(spec2.PathFilters) > 0 {
-		// Check for overlapping path patterns
+	// Helper function to check if all headers in subset exist in superset with same values
+	isHeaderSubset := func(subset, superset map[string]string) bool {
+		for key, value := range subset {
+			if superValue, exists := superset[key]; !exists || superValue != value {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Rule 3: Both have headers - check for subset relationship AND path overlap
+	if hasHeaders1 && hasHeaders2 {
+		// Check if headers form a subset relationship
+		hasHeaderSubset := isHeaderSubset(spec1.HeaderFilters, spec2.HeaderFilters) ||
+			isHeaderSubset(spec2.HeaderFilters, spec1.HeaderFilters)
+
+		if !hasHeaderSubset {
+			// Headers don't form subset, no conflict
+			return false
+		}
+
+		// Headers form subset, now check paths
+		if !hasPaths1 || !hasPaths2 {
+			// At least one has no path restriction, so paths overlap
+			return true
+		}
+
+		// Both have paths: check for overlap
 		for _, path1 := range spec1.PathFilters {
 			if slices.Contains(spec2.PathFilters, path1) {
 				return true
 			}
 		}
-		// Disjoint path filters = no conflict
+		// Different paths, no conflict
 		return false
 	}
 
-	// If one has header filters and the other has path filters, they can coexist
-	// Each will only match traffic meeting their specific criteria
-	if (len(spec1.HeaderFilters) > 0 && len(spec2.PathFilters) > 0) ||
-		(len(spec1.PathFilters) > 0 && len(spec2.HeaderFilters) > 0) {
+	// Rule 4: Both have only paths (no headers) - check for path overlap
+	if hasPaths1 && hasPaths2 {
+		for _, path1 := range spec1.PathFilters {
+			if slices.Contains(spec2.PathFilters, path1) {
+				return true
+			}
+		}
 		return false
 	}
 
-	// Default: no conflict
+	// Should not reach here, but default to no conflict
 	return false
 }
 
@@ -229,8 +277,11 @@ func (fs *fwdState) processRegularIntercept(
 			MechanismArgsDesc: generateMechanismDescription(ii.Spec),
 		}
 	}
-	if !ii.Spec.Wiretap && *activeIntercept == nil {
-		// Set the first non-wiretap intercept as the active one for the forwarder
+	// Only set activeIntercept for global/TCP intercepts (no filters)
+	// HTTP intercepts with filters use the multiple-intercept mode instead
+	isGlobalIntercept := len(ii.Spec.HeaderFilters) == 0 && len(ii.Spec.PathFilters) == 0
+	if !ii.Spec.Wiretap && isGlobalIntercept && *activeIntercept == nil {
+		// Set the first global non-wiretap intercept as the active one for the forwarder
 		*activeIntercept = ii
 	}
 	dlog.Infof(ctx, "Allowing non-conflicting intercept %q to become active", ii.Id)
@@ -265,7 +316,9 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 	if fs.chosenInterceptId != "" {
 		for _, is := range active {
 			if fs.chosenInterceptId == is.Id {
-				if !is.Spec.Wiretap {
+				// Only track global/TCP intercepts as activeIntercept
+				isGlobalIntercept := len(is.Spec.HeaderFilters) == 0 && len(is.Spec.PathFilters) == 0
+				if !is.Spec.Wiretap && isGlobalIntercept {
 					activeIntercept = is
 				}
 				break
@@ -276,9 +329,10 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 	if activeIntercept == nil {
 		fs.chosenInterceptId = ""
 
-		// Attach to already ACTIVE intercept if there is one.
+		// Attach to already ACTIVE global/TCP intercept if there is one.
 		for _, is := range active {
-			if !is.Spec.Wiretap {
+			isGlobalIntercept := len(is.Spec.HeaderFilters) == 0 && len(is.Spec.PathFilters) == 0
+			if !is.Spec.Wiretap && isGlobalIntercept {
 				fs.chosenInterceptId = is.Id
 				activeIntercept = is
 				break
@@ -291,7 +345,26 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 		// Update forwarding.
 		fwd.SetStreamProvider(fs)
 	}
-	fwd.SetIntercepting(ctx, activeIntercept)
+
+	// Check if we have HTTP intercepts (any with HeaderFilters or PathFilters)
+	var httpIntercepts []*manager.InterceptInfo
+	for _, is := range active {
+		if !is.Spec.Wiretap {
+			spec := is.Spec
+			if len(spec.HeaderFilters) > 0 || len(spec.PathFilters) > 0 {
+				httpIntercepts = append(httpIntercepts, is)
+			}
+		}
+	}
+
+	if len(httpIntercepts) > 0 {
+		// We have HTTP intercepts - use multiple intercept mode
+		dlog.Debugf(ctx, "Setting %d HTTP intercepts on forwarder", len(httpIntercepts))
+		fwd.SetInterceptingMultiple(ctx, httpIntercepts)
+	} else {
+		// No HTTP filters - use single intercept mode for TCP
+		fwd.SetIntercepting(ctx, activeIntercept)
+	}
 
 	// Remove inactive wiretaps.
 	for _, id := range fwd.WiretapIDs() {

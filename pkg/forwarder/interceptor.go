@@ -24,6 +24,7 @@ type Interceptor interface {
 	InterceptInfo() *restapi.InterceptInfo
 	Serve(context.Context, chan<- netip.AddrPort) error
 	SetIntercepting(context.Context, *manager.InterceptInfo)
+	SetInterceptingMultiple(context.Context, []*manager.InterceptInfo)
 	SetStreamProvider(tunnel.ClientStreamProvider)
 	Target() netip.AddrPort
 	AddWiretap(*manager.InterceptInfo)
@@ -189,6 +190,19 @@ func (f *interceptor) SetIntercepting(ctx context.Context, intercept *manager.In
 		// Set up a new target and lifetime
 		f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
 	}
+}
+
+func (f *interceptor) SetInterceptingMultiple(ctx context.Context, intercepts []*manager.InterceptInfo) {
+	// For TCP interceptors, multiple intercepts with different routing isn't supported.
+	// Use the first non-wiretap intercept, or nil if none exist.
+	var activeIntercept *manager.InterceptInfo
+	for _, intercept := range intercepts {
+		if !intercept.Spec.Wiretap {
+			activeIntercept = intercept
+			break
+		}
+	}
+	f.SetIntercepting(ctx, activeIntercept)
 }
 
 func (f *interceptor) Tag() tunnel.Tag {

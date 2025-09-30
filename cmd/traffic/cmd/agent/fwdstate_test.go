@@ -209,7 +209,7 @@ func TestInterceptSpecsConflict(t *testing.T) {
 			conflicts: false,
 		},
 		{
-			name: "Multiple headers with one overlap - should conflict",
+			name: "Multiple headers with one overlap - should NOT conflict (not a subset)",
 			spec1: &manager.InterceptSpec{
 				Mechanism: "http",
 				HeaderFilters: map[string]string{
@@ -220,7 +220,139 @@ func TestInterceptSpecsConflict(t *testing.T) {
 			spec2: &manager.InterceptSpec{
 				Mechanism: "http",
 				HeaderFilters: map[string]string{
-					"x-user":    "adam", // This overlaps!
+					"x-user":    "adam",
+					"x-session": "xyz789",
+				},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Header subset - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user":    "adam",
+					"x-session": "xyz789",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Global intercept vs HTTP with filters - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "tcp",
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Same headers, different paths - should NOT conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+				PathFilters: []string{"/api/*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+				PathFilters: []string{"/admin/*"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Same headers, overlapping paths - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+				PathFilters: []string{"/api/*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+				PathFilters: []string{"/api/*"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Subset headers with disjoint paths - should NOT conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+				PathFilters: []string{"/api/*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user":    "adam",
+					"x-session": "xyz789",
+				},
+				PathFilters: []string{"/admin/*"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Subset headers with overlapping paths - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+				PathFilters: []string{"/api/*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user":    "adam",
+					"x-session": "xyz789",
+				},
+				PathFilters: []string{"/api/*"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "HTTP with only paths vs global - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{"/api/*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "tcp",
+			},
+			conflicts: true,
+		},
+		{
+			name: "HTTP with only headers, no paths - should conflict if headers are subset",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user":    "adam",
 					"x-session": "xyz789",
 				},
 			},
