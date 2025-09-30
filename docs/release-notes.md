@@ -24,7 +24,17 @@ version automatically unless you work in an air-gapped environment.
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[HTTP Intercepts with HTTP header and path filtering](https://github.com/telepresenceio/telepresence/issues/3852)</div></div>
 <div style="margin-left: 15px">
 
-Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts. Users can intercept only specific HTTP requests based on headers and URL paths using the new `--http` flag along with `--header` and `--path` filters. This allows multiple developers to work on the same service simultaneously by intercepting only their specific traffic patterns, rather than intercepting all traffic to a service. The feature maintains full backward compatibility with existing TCP intercepts.
+Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts. Users can intercept only specific HTTP requests based on headers and URL paths using the new `--http-header`, `--http-path-prefix`, `--http-path-equal`, and `--http-path-regex` flags. This allows multiple developers to work on the same service simultaneously by intercepting only their specific traffic patterns, rather than intercepting all traffic to a service.
+
+**Routing Precedence Model**: Header-based intercepts take priority over path-only intercepts. When multiple intercepts are active on the same workload, requests are evaluated against header-based filters first, then path-only filters. This enables different developers to use header-based personal intercepts (e.g., `x-user=alice`) while others use path-based intercepts (e.g., `/admin/*`) without conflicts.
+
+**Conflict Detection**: Intercepts conflict only when their filters would route the same traffic to different destinations. Key rules:
+- Different header values (e.g., `x-user=adam` vs `x-user=bertil`) do NOT conflict
+- Header filters use subset logic: `x-user=adam` conflicts with `x-user=adam, x-session=123` (first is subset)
+- Same headers with different paths do NOT conflict: `x-user=adam + /api/*` vs `x-user=adam + /admin/*`
+- Path-only intercepts operate at a lower priority tier than header-based intercepts
+
+The feature maintains full backward compatibility with existing TCP intercepts.
 </div>
 
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">More efficient DNS handling in the traffic-manager</div></div>
