@@ -56,10 +56,10 @@ func (f *tcp) SetInterceptingMultiple(ctx context.Context, intercepts []*manager
 	f.httpIntercepts = httpIntercepts
 
 	// Set global/TCP intercept using base implementation
-	f.interceptor.intercept = globalIntercept
-	if f.interceptor.lCtx != nil {
-		f.interceptor.tCancel()
-		f.interceptor.tCtx, f.interceptor.tCancel = context.WithCancel(f.interceptor.lCtx)
+	f.intercept = globalIntercept
+	if f.lCtx != nil {
+		f.tCancel()
+		f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
 	}
 }
 
@@ -296,7 +296,13 @@ func (f *tcp) rerouteConn(ctx context.Context, conn net.Conn, clientSession tunn
 }
 
 // forwardHTTPConn handles HTTP-aware connection forwarding with header/path filtering.
-func (f *tcp) forwardHTTPConn(ctx context.Context, clientConn net.Conn, httpIntercepts []*manager.InterceptInfo, target netip.AddrPort, wtIntercepts []*manager.InterceptInfo) error {
+func (f *tcp) forwardHTTPConn(
+	ctx context.Context,
+	clientConn net.Conn,
+	httpIntercepts []*manager.InterceptInfo,
+	target netip.AddrPort,
+	wtIntercepts []*manager.InterceptInfo,
+) error {
 	// Create a temporary HTTP interceptor to handle this connection
 	httpInterceptor := &httpInterceptor{
 		interceptor: interceptor{

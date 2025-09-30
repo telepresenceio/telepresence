@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/textproto"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -111,15 +112,16 @@ func (pm *ProviderMux) CreateClientStream(ctx context.Context, tag tunnel.Tag, s
 	return pm.AgentProvider.CreateClientStream(ctx, tag, sessionID, id, roundTripLatency, dialTimeout)
 }
 
-// normalizeHeaderFilters returns a new map with all header keys normalized to lowercase.
-// HTTP headers are case-insensitive per RFC 7230.
+// normalizeHeaderFilters returns a new map with all header keys normalized to canonical MIME format.
+// HTTP headers are case-insensitive per RFC 7230, so we use the same canonicalization as net/http.
+// Examples: "x-user" -> "X-User", "content-type" -> "Content-Type"
 func normalizeHeaderFilters(headers map[string]string) map[string]string {
 	if len(headers) == 0 {
 		return headers
 	}
 	normalized := make(map[string]string, len(headers))
 	for key, value := range headers {
-		normalized[strings.ToLower(key)] = value
+		normalized[textproto.CanonicalMIMEHeaderKey(key)] = value
 	}
 	return normalized
 }
@@ -257,14 +259,14 @@ func isHeaderSubset(subset, superset map[string]string) bool {
 // priority tier than intercepts with only paths.
 //
 // Conflict Rules:
-// 1. Global intercepts (no headers, no paths) conflict with everything
-// 2. Headers vs Paths: One spec with headers, another with only paths → NO CONFLICT
-//    (different priority tiers - headers are checked first, then paths)
-// 3. Both have headers: Conflict if headers form a subset AND paths overlap
-//    - Within each intercept, filters use AND logic (must match ALL headers AND ALL paths)
-//    - Example: {x-user:adam} vs {x-user:adam, x-session:xyz} → CONFLICT (first is subset)
-//    - Example: {x-user:adam}+/api/* vs {x-user:adam}+/admin/* → NO CONFLICT (different paths)
-// 4. Both have only paths (no headers): Conflict if paths overlap
+//  1. Global intercepts (no headers, no paths) conflict with everything
+//  2. Headers vs Paths: One spec with headers, another with only paths → NO CONFLICT
+//     (different priority tiers - headers are checked first, then paths)
+//  3. Both have headers: Conflict if headers form a subset AND paths overlap
+//     - Within each intercept, filters use AND logic (must match ALL headers AND ALL paths)
+//     - Example: {x-user:adam} vs {x-user:adam, x-session:xyz} → CONFLICT (first is subset)
+//     - Example: {x-user:adam}+/api/* vs {x-user:adam}+/admin/* → NO CONFLICT (different paths)
+//  4. Both have only paths (no headers): Conflict if paths overlap
 func interceptSpecsConflict(spec1, spec2 *manager.InterceptSpec) bool {
 	hasHeaders1 := len(spec1.HeaderFilters) > 0
 	hasHeaders2 := len(spec2.HeaderFilters) > 0
@@ -282,11 +284,11 @@ func interceptSpecsConflict(spec1, spec2 *manager.InterceptSpec) bool {
 
 	// Rule 2: Headers take precedence - different priority tiers don't conflict
 	// If one spec has headers and the other has only paths, they operate at different tiers
-	if hasHeaders1 && !hasHeaders2 && !isGlobal2 {
+	if hasHeaders1 && !hasHeaders2 {
 		// spec1 has headers (high priority), spec2 has only paths (low priority)
 		return false
 	}
-	if hasHeaders2 && !hasHeaders1 && !isGlobal1 {
+	if hasHeaders2 && !hasHeaders1 {
 		// spec2 has headers (high priority), spec1 has only paths (low priority)
 		return false
 	}
