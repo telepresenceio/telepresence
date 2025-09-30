@@ -115,8 +115,8 @@ func (s *httpInterceptsSuite) Test_HTTPInterceptCoexistence() {
 	// Verify both intercepts are active and listed
 	listOutput, listStderr, listErr := itest.Telepresence(ctx, "list", "--intercepts")
 	require.NoError(listErr, "Failed to list intercepts - stderr: %s", listStderr)
-	require.Contains(listOutput, "echo-one: intercepted")
-	require.Contains(listOutput, "echo-two: intercepted")
+	require.Contains(listOutput, "Intercept name: echo-one")
+	require.Contains(listOutput, "Intercept name: echo-two")
 
 	// Clean up both intercepts
 	_, _, err3 := itest.Telepresence(ctx, "leave", "echo-one")
