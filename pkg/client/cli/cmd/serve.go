@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 type serveCommand struct {
@@ -93,7 +94,7 @@ const (
 func (sc *serveCommand) serveFromContainer(ctx context.Context, addr netip.Addr) error {
 	// We can't reliably just map a service port (typically port 80) to localhost, so instead of doing
 	// that, we create a random port and use that.
-	ps, err := client.FreePortsTCP(ctx, 1)
+	ps, err := ioutil.FreePortsTCP(1, client.GetConfig(ctx).Docker().EnableIPv6)
 	if err != nil {
 		return err
 	}

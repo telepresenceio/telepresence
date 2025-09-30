@@ -400,7 +400,7 @@ func (c *config) getMountPort(e mountsExtension) (uint16, error) {
 			}
 		}
 	}
-	lma, err := client.FreePortsTCP(e.connection(), 1)
+	lma, err := ioutil.FreePortsTCP(1, client.GetConfig(e.connection()).Docker().EnableIPv6)
 	if err != nil {
 		return 0, err
 	}

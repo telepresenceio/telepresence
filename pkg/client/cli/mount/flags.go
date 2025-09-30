@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 type Flags struct {
@@ -82,7 +83,7 @@ func (f *Flags) ValidateConnected(ctx context.Context) (err error) {
 		// Mounts will be facilitated by the Telemount plug-in connecting to our LocalMountPort
 		if f.LocalMountPort == 0 {
 			var lma []netip.AddrPort
-			lma, err = client.FreePortsTCP(ctx, 1)
+			lma, err = ioutil.FreePortsTCP(1, client.GetConfig(ctx).Docker().EnableIPv6)
 			if err != nil {
 				return err
 			}
