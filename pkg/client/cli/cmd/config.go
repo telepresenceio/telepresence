@@ -11,6 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
 
 func configCmd() *cobra.Command {
@@ -86,7 +87,7 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	err = client.UnmarshalJSON(cc.Json, &cfg, false)
+	err = json.Unmarshal(cc.Json, &cfg, false)
 	if err != nil {
 		return err
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -214,7 +215,7 @@ func (s *service) GetConfig(context.Context, *empty.Empty) (cfg *rpc.ClientConfi
 		if err != nil {
 			return err
 		}
-		data, err := client.MarshalJSON(sc)
+		data, err := json.Marshal(sc)
 		if err != nil {
 			return status.Error(codes.Internal, err.Error())
 		}

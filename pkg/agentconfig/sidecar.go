@@ -4,13 +4,12 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -295,7 +294,7 @@ func UnmarshalYAML(data []byte) (SidecarExt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := client.UnmarshalJSON(data, into, true); err != nil {
+	if err := json.Unmarshal(data, into, true); err != nil {
 		return nil, err
 	}
 	return into.(SidecarExt), nil
@@ -338,7 +337,7 @@ func MarshalTight(s SidecarExt) (string, error) {
 // UnmarshalJSON creates a new instance of the SidecarType from the given JSON data.
 func UnmarshalJSON(data string) (SidecarExt, error) {
 	into := reflect.New(SidecarType).Interface()
-	if err := json.Unmarshal([]byte(data), into); err != nil {
+	if err := json.Unmarshal([]byte(data), into, true); err != nil {
 		return nil, err
 	}
 	return into.(SidecarExt), nil

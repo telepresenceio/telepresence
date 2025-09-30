@@ -12,10 +12,10 @@ import (
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -85,7 +85,7 @@ func (c *config) parseServiceExtension(composeService *compose.ServiceConfig, v 
 		return nil, errcat.User.Newf("%s extension has invalid type: %v", extensionKey, err)
 	}
 
-	data, err := client.MarshalJSON(v)
+	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (c *config) parseServiceExtension(composeService *compose.ServiceConfig, v 
 		return nil, errcat.User.Newf("%s has unsupported extension type %s", extensionKey, et)
 	}
 
-	err = client.UnmarshalJSON(data, se, true)
+	err = json.Unmarshal(data, se, true)
 	if err != nil {
 		return nil, errcat.User.New(err)
 	}

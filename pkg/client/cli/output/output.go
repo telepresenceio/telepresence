@@ -12,10 +12,10 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
 
 // Out returns an io.Writer that writes to the OutOrStdout of the current *cobra.Command, or
@@ -71,7 +71,7 @@ func Object(ctx context.Context, obj any, override bool) {
 			}
 
 			if o.format == formatJSONStream {
-				data, err := client.MarshalJSON(obj)
+				data, err := json.Marshal(obj)
 				if err == nil {
 					_, err = o.originalStdout.Write(data)
 				}
@@ -147,7 +147,7 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 	}
 	switch o.format {
 	case formatJSON:
-		data, encErr := client.MarshalJSON(obj)
+		data, encErr := json.Marshal(obj)
 		if encErr == nil {
 			_, encErr = o.originalStdout.Write(data)
 		}
@@ -155,7 +155,7 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 			panic(encErr)
 		}
 	case formatYAML:
-		ym, encErr := client.MarshalJSON(obj)
+		ym, encErr := json.Marshal(obj)
 		if encErr == nil {
 			ym, encErr = yaml.JSONToYAML(ym)
 			if encErr == nil {

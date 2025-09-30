@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
@@ -438,7 +439,7 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 			// Check that config view -c includes the includeSuffixes
 			var cfg client.SessionConfig
 			stdout := itest.TelepresenceOk(ctx, "config", "view", "--client-only", "--output", "json")
-			require.NoError(client.UnmarshalJSON([]byte(stdout), &cfg, false))
+			require.NoError(json.Unmarshal([]byte(stdout), &cfg, false))
 			require.Equal(tt.expectedExcludeSuffixes, cfg.DNS().ExcludeSuffixes)
 			require.Equal(tt.expectedIncludeSuffixes, cfg.DNS().IncludeSuffixes)
 

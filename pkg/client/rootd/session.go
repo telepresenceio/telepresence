@@ -45,6 +45,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -287,7 +288,7 @@ func NewSession(c context.Context, mi *rpc.NetworkConfig) (context.Context, *Ses
 	dlog.Info(c, "-- Starting new session")
 
 	cfg := client.GetDefaultConfig()
-	err := client.UnmarshalJSON(mi.ClientConfig, cfg, false)
+	err := json.Unmarshal(mi.ClientConfig, cfg, false)
 	if err != nil {
 		return c, nil, err
 	}
@@ -675,7 +676,7 @@ func (s *Session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
 			return true
 		})
 	}
-	js, _ := client.MarshalJSON(mc)
+	js, _ := json.Marshal(mc)
 	return &rpc.NetworkConfig{
 		Session:      s.session,
 		PortMappings: portMappings,

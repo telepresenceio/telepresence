@@ -12,11 +12,11 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -76,7 +76,7 @@ func (a *engagement) maybeAddConnection(s *compose.ServiceConfig) bool {
 				return false
 			}
 			var subnets []netip.Prefix
-			_ = client.UnmarshalJSON([]byte(sn), &subnets, true)
+			_ = json.Unmarshal([]byte(sn), &subnets, true)
 			for _, osn := range subnets {
 				for _, msn := range conn.subnets {
 					if osn.Overlaps(msn) {
@@ -91,7 +91,7 @@ func (a *engagement) maybeAddConnection(s *compose.ServiceConfig) bool {
 	if s.Annotations == nil {
 		s.Annotations = make(map[string]string)
 	}
-	myAnn, _ := client.MarshalJSON(conn.subnets)
+	myAnn, _ := json.Marshal(conn.subnets)
 	s.Annotations[myKey] = string(myAnn)
 	if s.Networks == nil {
 		s.Networks = make(map[string]*compose.ServiceNetworkConfig)
