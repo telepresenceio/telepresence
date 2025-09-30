@@ -8,13 +8,13 @@ import (
 )
 
 func TestHTTPInterceptor_shouldInterceptRequest(t *testing.T) {
-	h := &httpInterceptor{
-		headerFilters: map[string]string{
-			"X-User-ID":     "dev123",
-			"X-Environment": "staging",
-		},
-		pathFilters: []string{":path-prefix:/api/v1/", ":path-prefix:/admin/"},
+	h := &httpInterceptor{}
+
+	headerFilters := map[string]string{
+		"X-User-ID":     "dev123",
+		"X-Environment": "staging",
 	}
+	pathFilters := []string{":path-prefix:/api/v1/", ":path-prefix:/admin/"}
 
 	tests := []struct {
 		name            string
@@ -76,7 +76,7 @@ func TestHTTPInterceptor_shouldInterceptRequest(t *testing.T) {
 				req.Header.Set(k, v)
 			}
 
-			result := h.shouldInterceptRequest(req.Context(), req, h.headerFilters, h.pathFilters)
+			result := h.shouldInterceptRequest(req.Context(), req, headerFilters, pathFilters)
 			assert.Equal(t, tt.shouldIntercept, result)
 		})
 	}
@@ -109,14 +109,14 @@ func TestHTTPInterceptor_matchesPattern(t *testing.T) {
 }
 
 func TestHTTPInterceptor_noFilters(t *testing.T) {
-	h := &httpInterceptor{
-		headerFilters: map[string]string{},
-		pathFilters:   []string{},
-	}
+	h := &httpInterceptor{}
+
+	headerFilters := map[string]string{}
+	pathFilters := []string{}
 
 	req, _ := http.NewRequest(http.MethodGet, "http://example.com/any/path", nil)
 
 	// No filters means intercept everything
-	result := h.shouldInterceptRequest(req.Context(), req, h.headerFilters, h.pathFilters)
+	result := h.shouldInterceptRequest(req.Context(), req, headerFilters, pathFilters)
 	assert.True(t, result)
 }

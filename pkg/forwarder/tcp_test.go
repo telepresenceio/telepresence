@@ -27,6 +27,9 @@ func TestTCPDispatch_HTTPMechanism_Handled(t *testing.T) {
 		HeaderFilters: map[string]string{"X-Test": "value"},
 	}}
 
+	// Set the HTTP intercepts (simulates what fwdstate.HandlePort does)
+	f.SetInterceptingMultiple(context.Background(), []*manager.InterceptInfo{intercept})
+
 	// Call dispatch. Since the connection is closed, the HTTP handler
 	// will get EOF when trying to read and return an error.
 	handled, err := f.DispatchByMechanism(context.Background(), clientConn, intercept)
