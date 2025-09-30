@@ -21,25 +21,52 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
+type interceptWithFilters struct {
+	intercept     *manager.InterceptInfo
+	headerFilters map[string]string
+	pathFilters   []string
+}
+
 type httpInterceptor struct {
 	interceptor
-	headerFilters  map[string]string
-	pathFilters    []string
+	intercepts     []*interceptWithFilters
 	originalTarget netip.AddrPort
 }
 
 func (h *httpInterceptor) SetIntercepting(ctx context.Context, info *manager.InterceptInfo) {
+	if info == nil {
+		h.SetInterceptingMultiple(ctx, nil)
+		return
+	}
+	h.SetInterceptingMultiple(ctx, []*manager.InterceptInfo{info})
+}
+
+func (h *httpInterceptor) SetInterceptingMultiple(ctx context.Context, infos []*manager.InterceptInfo) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.intercept = info
 
-	// Extract header filters from the intercept spec
-	if spec := info.Spec; spec != nil {
-		h.headerFilters = spec.HeaderFilters
-		h.pathFilters = spec.PathFilters
-		dlog.Debugf(ctx, "HTTP interceptor configured with %d header filters and %d path filters",
-			len(h.headerFilters), len(h.pathFilters))
+	// Clear existing intercepts
+	h.intercepts = nil
+	h.intercept = nil
+
+	if len(infos) == 0 {
+		dlog.Debugf(ctx, "HTTP interceptor cleared")
+		return
 	}
+
+	// Set up multiple intercepts
+	h.intercepts = make([]*interceptWithFilters, 0, len(infos))
+	for _, info := range infos {
+		if spec := info.Spec; spec != nil {
+			h.intercepts = append(h.intercepts, &interceptWithFilters{
+				intercept:     info,
+				headerFilters: spec.HeaderFilters,
+				pathFilters:   spec.PathFilters,
+			})
+		}
+	}
+
+	dlog.Debugf(ctx, "HTTP interceptor configured with %d intercepts", len(h.intercepts))
 }
 
 func (h *httpInterceptor) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
@@ -112,9 +139,9 @@ func (h *httpInterceptor) handleHTTPConn(clientConn net.Conn) error {
 	h.mu.Lock()
 	ctx := h.tCtx
 	originalTarget := h.originalTarget
-	intercept := h.intercept
-	headerFilters := h.headerFilters
-	pathFilters := h.pathFilters
+	// Copy intercepts to avoid holding lock during request processing
+	intercepts := make([]*interceptWithFilters, len(h.intercepts))
+	copy(intercepts, h.intercepts)
 	h.mu.Unlock()
 
 	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
@@ -127,16 +154,33 @@ func (h *httpInterceptor) handleHTTPConn(clientConn net.Conn) error {
 		return fmt.Errorf("failed to read HTTP request: %w", err)
 	}
 
-	// Check if this request should be intercepted
-	shouldIntercept := h.shouldInterceptRequest(ctx, req, headerFilters, pathFilters)
+	// Check each intercept to see if it matches this request
+	// Use precedence model: headers take priority over path-only intercepts
 
-	if shouldIntercept && intercept != nil {
-		dlog.Debugf(ctx, "Intercepting HTTP request %s %s", req.Method, req.URL.Path)
-		return h.interceptHTTPConn(ctx, clientConn, req, intercept)
+	// Pass 1: Check intercepts with headers (high priority tier)
+	for _, interceptInfo := range intercepts {
+		if len(interceptInfo.headerFilters) > 0 {
+			if h.shouldInterceptRequest(ctx, req, interceptInfo.headerFilters, interceptInfo.pathFilters) {
+				dlog.Debugf(ctx, "Intercepting HTTP request %s %s with header-based intercept %s",
+					req.Method, req.URL.Path, interceptInfo.intercept.Id)
+				return h.interceptHTTPConn(ctx, clientConn, req, interceptInfo.intercept)
+			}
+		}
 	}
 
-	// Forward to original service
-	dlog.Debugf(ctx, "Forwarding HTTP request %s %s to original service", req.Method, req.URL.Path)
+	// Pass 2: Check intercepts with only paths (low priority tier)
+	for _, interceptInfo := range intercepts {
+		if len(interceptInfo.headerFilters) == 0 && len(interceptInfo.pathFilters) > 0 {
+			if h.shouldInterceptRequest(ctx, req, interceptInfo.headerFilters, interceptInfo.pathFilters) {
+				dlog.Debugf(ctx, "Intercepting HTTP request %s %s with path-based intercept %s",
+					req.Method, req.URL.Path, interceptInfo.intercept.Id)
+				return h.interceptHTTPConn(ctx, clientConn, req, interceptInfo.intercept)
+			}
+		}
+	}
+
+	// No intercepts matched, forward to original service
+	dlog.Debugf(ctx, "Forwarding HTTP request %s %s to original service (no intercepts matched)", req.Method, req.URL.Path)
 	return h.forwardToOriginalService(ctx, clientConn, req, originalTarget)
 }
 
