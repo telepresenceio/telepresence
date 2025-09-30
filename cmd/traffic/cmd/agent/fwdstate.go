@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -34,14 +35,30 @@ func generateMechanismDescription(spec *manager.InterceptSpec) string {
 	// Build HTTP filter description
 	var filters []string
 
-	// Add header filters
-	for key, value := range spec.HeaderFilters {
-		filters = append(filters, fmt.Sprintf("header %s=%s", key, value))
+	// Add header filters (sorted for deterministic output)
+	headerKeys := make([]string, 0, len(spec.HeaderFilters))
+	for key := range spec.HeaderFilters {
+		headerKeys = append(headerKeys, key)
+	}
+	slices.Sort(headerKeys)
+	for _, key := range headerKeys {
+		filters = append(filters, fmt.Sprintf("header %s=%s", key, spec.HeaderFilters[key]))
 	}
 
-	// Add path filters
+	// Add path filters with type information (already in order from slice)
 	for _, path := range spec.PathFilters {
-		filters = append(filters, fmt.Sprintf("path %s", path))
+		filterType, pattern := parsePathFilter(path)
+		switch filterType {
+		case "equal":
+			filters = append(filters, fmt.Sprintf("path (equal) %s", pattern))
+		case "prefix":
+			filters = append(filters, fmt.Sprintf("path (prefix) %s", pattern))
+		case "regex":
+			filters = append(filters, fmt.Sprintf("path (regex) %s", pattern))
+		default:
+			// Fallback for unknown format
+			filters = append(filters, fmt.Sprintf("path %s", path))
+		}
 	}
 
 	if len(filters) > 0 {
@@ -94,6 +111,144 @@ func (pm *ProviderMux) CreateClientStream(ctx context.Context, tag tunnel.Tag, s
 	return pm.AgentProvider.CreateClientStream(ctx, tag, sessionID, id, roundTripLatency, dialTimeout)
 }
 
+// normalizeHeaderFilters returns a new map with all header keys normalized to lowercase.
+// HTTP headers are case-insensitive per RFC 7230.
+func normalizeHeaderFilters(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return headers
+	}
+	normalized := make(map[string]string, len(headers))
+	for key, value := range headers {
+		normalized[strings.ToLower(key)] = value
+	}
+	return normalized
+}
+
+// headerValueMatches checks if a header value matches a pattern, supporting wildcard matching.
+// This matches the runtime behavior in pkg/forwarder/http.go.
+func headerValueMatches(value, pattern string) bool {
+	// Support wildcard matching with *
+	if strings.Contains(pattern, "*") {
+		matched, _ := filepath.Match(pattern, value)
+		return matched
+	}
+	// Exact match
+	return value == pattern
+}
+
+// pathFiltersOverlap checks if two sets of path filters can match the same request path.
+// This properly handles the three path filter types: :path-equal:, :path-prefix:, and :path-regex:.
+func pathFiltersOverlap(paths1, paths2 []string) bool {
+	for _, path1 := range paths1 {
+		for _, path2 := range paths2 {
+			if pathsCanMatch(path1, path2) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pathsCanMatch determines if two path filters can match the same request path.
+func pathsCanMatch(filter1, filter2 string) bool {
+	type1, pattern1 := parsePathFilter(filter1)
+	type2, pattern2 := parsePathFilter(filter2)
+
+	switch {
+	case type1 == "equal" && type2 == "equal":
+		// Both exact matches - conflict only if same path
+		return pattern1 == pattern2
+
+	case type1 == "prefix" && type2 == "prefix":
+		// Both prefixes - conflict if one is prefix of the other
+		return strings.HasPrefix(pattern1, pattern2) || strings.HasPrefix(pattern2, pattern1)
+
+	case type1 == "prefix" && type2 == "equal":
+		// Prefix can match an exact path if the path starts with the prefix
+		return strings.HasPrefix(pattern2, pattern1)
+
+	case type1 == "equal" && type2 == "prefix":
+		// Exact path matches prefix if it starts with the prefix
+		return strings.HasPrefix(pattern1, pattern2)
+
+	case type1 == "regex" || type2 == "regex":
+		// Conservative: assume regexes can overlap
+		// Proper regex intersection is computationally expensive
+		return true
+
+	default:
+		// Unknown types - assume no conflict
+		return false
+	}
+}
+
+// parsePathFilter extracts the filter type and pattern from a path filter string.
+func parsePathFilter(filter string) (filterType, pattern string) {
+	switch {
+	case strings.HasPrefix(filter, ":path-equal:"):
+		return "equal", strings.TrimPrefix(filter, ":path-equal:")
+	case strings.HasPrefix(filter, ":path-prefix:"):
+		return "prefix", strings.TrimPrefix(filter, ":path-prefix:")
+	case strings.HasPrefix(filter, ":path-regex:"):
+		return "regex", strings.TrimPrefix(filter, ":path-regex:")
+	default:
+		// Unknown format - treat as exact match
+		return "equal", filter
+	}
+}
+
+// explainConflict generates a human-readable explanation of why two intercept specs conflict.
+func explainConflict(spec1, spec2 *manager.InterceptSpec) string {
+	hasHeaders1 := len(spec1.HeaderFilters) > 0
+	hasHeaders2 := len(spec2.HeaderFilters) > 0
+	hasPaths1 := len(spec1.PathFilters) > 0
+	hasPaths2 := len(spec2.PathFilters) > 0
+
+	isGlobal1 := !hasHeaders1 && !hasPaths1
+	isGlobal2 := !hasHeaders2 && !hasPaths2
+
+	if isGlobal1 || isGlobal2 {
+		return "one intercept has no filters (intercepts all traffic)"
+	}
+
+	// Normalize headers for comparison
+	headers1 := normalizeHeaderFilters(spec1.HeaderFilters)
+	headers2 := normalizeHeaderFilters(spec2.HeaderFilters)
+
+	if hasHeaders1 && hasHeaders2 {
+		// Check if headers form subset relationship
+		isSubset1of2 := isHeaderSubset(headers1, headers2)
+		isSubset2of1 := isHeaderSubset(headers2, headers1)
+
+		if isSubset1of2 || isSubset2of1 {
+			if !hasPaths1 || !hasPaths2 || pathFiltersOverlap(spec1.PathFilters, spec2.PathFilters) {
+				subsetDesc := "header filters form a subset"
+				if hasPaths1 && hasPaths2 {
+					subsetDesc += " and paths overlap"
+				}
+				return subsetDesc
+			}
+		}
+	}
+
+	if hasPaths1 && hasPaths2 && !hasHeaders1 && !hasHeaders2 {
+		return "path filters overlap"
+	}
+
+	return "filters would route the same traffic to different destinations"
+}
+
+// isHeaderSubset checks if all headers in subset exist in superset with matching values.
+// Uses wildcard matching for header values.
+func isHeaderSubset(subset, superset map[string]string) bool {
+	for key, value := range subset {
+		if superValue, exists := superset[key]; !exists || !headerValueMatches(value, superValue) {
+			return false
+		}
+	}
+	return true
+}
+
 // interceptSpecsConflict determines if two intercept specs would conflict with each other.
 // Two specs conflict if they would route the same traffic to different destinations.
 //
@@ -136,21 +291,15 @@ func interceptSpecsConflict(spec1, spec2 *manager.InterceptSpec) bool {
 		return false
 	}
 
-	// Helper function to check if all headers in subset exist in superset with same values
-	isHeaderSubset := func(subset, superset map[string]string) bool {
-		for key, value := range subset {
-			if superValue, exists := superset[key]; !exists || superValue != value {
-				return false
-			}
-		}
-		return true
-	}
+	// Normalize headers for case-insensitive comparison (HTTP headers per RFC 7230)
+	headers1 := normalizeHeaderFilters(spec1.HeaderFilters)
+	headers2 := normalizeHeaderFilters(spec2.HeaderFilters)
 
 	// Rule 3: Both have headers - check for subset relationship AND path overlap
 	if hasHeaders1 && hasHeaders2 {
 		// Check if headers form a subset relationship
-		hasHeaderSubset := isHeaderSubset(spec1.HeaderFilters, spec2.HeaderFilters) ||
-			isHeaderSubset(spec2.HeaderFilters, spec1.HeaderFilters)
+		hasHeaderSubset := isHeaderSubset(headers1, headers2) ||
+			isHeaderSubset(headers2, headers1)
 
 		if !hasHeaderSubset {
 			// Headers don't form subset, no conflict
@@ -163,24 +312,13 @@ func interceptSpecsConflict(spec1, spec2 *manager.InterceptSpec) bool {
 			return true
 		}
 
-		// Both have paths: check for overlap
-		for _, path1 := range spec1.PathFilters {
-			if slices.Contains(spec2.PathFilters, path1) {
-				return true
-			}
-		}
-		// Different paths, no conflict
-		return false
+		// Both have paths: check for overlap using proper path matching
+		return pathFiltersOverlap(spec1.PathFilters, spec2.PathFilters)
 	}
 
 	// Rule 4: Both have only paths (no headers) - check for path overlap
 	if hasPaths1 && hasPaths2 {
-		for _, path1 := range spec1.PathFilters {
-			if slices.Contains(spec2.PathFilters, path1) {
-				return true
-			}
-		}
-		return false
+		return pathFiltersOverlap(spec1.PathFilters, spec2.PathFilters)
 	}
 
 	// Should not reach here, but default to no conflict
@@ -248,12 +386,13 @@ func (fs *fwdState) processRegularIntercept(
 	if conflictingIntercept != nil {
 		// Reject due to actual conflict
 		chosenID := conflictingIntercept.Id
-		dlog.Infof(ctx, "Setting intercept %q as AGENT_ERROR; as it conflicts with %q", ii.Id, chosenID)
+		reason := explainConflict(ii.Spec, conflictingIntercept.Spec)
+		dlog.Infof(ctx, "Setting intercept %q as AGENT_ERROR; as it conflicts with %q: %s", ii.Id, chosenID, reason)
 		var msg string
 		if conflictingIntercept.Disposition == manager.InterceptDispositionType_ACTIVE {
-			msg = fmt.Sprintf("Conflicts with the currently-served intercept %q", chosenID)
+			msg = fmt.Sprintf("Conflicts with the currently-served intercept %q: %s", chosenID, reason)
 		} else {
-			msg = fmt.Sprintf("Conflicts with the currently-waiting-to-be-served intercept %q", chosenID)
+			msg = fmt.Sprintf("Conflicts with the currently-waiting-to-be-served intercept %q: %s", chosenID, reason)
 		}
 		return &manager.ReviewInterceptRequest{
 			Id:                ii.Id,

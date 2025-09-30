@@ -121,7 +121,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	a.Equal(rpc.InterceptDispositionType_ACTIVE, reviews[0].Disposition)
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[1].Disposition)
-	a.Equal("Conflicts with the currently-waiting-to-be-served intercept \"intercept-01\"", reviews[1].Message)
+	a.Equal("Conflicts with the currently-waiting-to-be-served intercept \"intercept-01\": one intercept has no filters (intercepts all traffic)", reviews[1].Message)
 
 	// Handle conflicts
 
@@ -133,7 +133,7 @@ func TestState_HandleIntercepts(t *testing.T) {
 	a.Equal(cepts[1].Id, reviews[0].Id)
 
 	a.Equal(rpc.InterceptDispositionType_AGENT_ERROR, reviews[0].Disposition)
-	a.Equal("Conflicts with the currently-served intercept \"intercept-01\"", reviews[0].Message)
+	a.Equal("Conflicts with the currently-served intercept \"intercept-01\": one intercept has no filters (intercepts all traffic)", reviews[0].Message)
 
 	// Handle resets state on an empty intercept list again
 

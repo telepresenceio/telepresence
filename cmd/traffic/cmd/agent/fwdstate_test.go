@@ -37,18 +37,18 @@ func TestGenerateMechanismDescription(t *testing.T) {
 					"X-Environment": "staging",
 				},
 			},
-			expected: "HTTP filters: header X-User-ID=dev123, header X-Environment=staging",
+			expected: "HTTP filters: header X-Environment=staging, header X-User-ID=dev123",
 		},
 		{
 			name: "HTTP mechanism with path filters only",
 			spec: &manager.InterceptSpec{
 				Mechanism: "http",
 				PathFilters: []string{
-					"/api/v1/*",
-					"/admin/*",
+					":path-prefix:/api/v1/",
+					":path-prefix:/admin/",
 				},
 			},
-			expected: "HTTP filters: path /api/v1/*, path /admin/*",
+			expected: "HTTP filters: path (prefix) /api/v1/, path (prefix) /admin/",
 		},
 		{
 			name: "HTTP mechanism with both header and path filters",
@@ -58,10 +58,10 @@ func TestGenerateMechanismDescription(t *testing.T) {
 					"X-User-ID": "dev123",
 				},
 				PathFilters: []string{
-					"/api/*",
+					":path-prefix:/api/",
 				},
 			},
-			expected: "HTTP filters: header X-User-ID=dev123, path /api/*",
+			expected: "HTTP filters: header X-User-ID=dev123, path (prefix) /api/",
 		},
 		{
 			name: "HTTP mechanism with single header filter",
@@ -77,9 +77,29 @@ func TestGenerateMechanismDescription(t *testing.T) {
 			name: "HTTP mechanism with single path filter",
 			spec: &manager.InterceptSpec{
 				Mechanism:   "http",
-				PathFilters: []string{"/health"},
+				PathFilters: []string{":path-equal:/health"},
 			},
-			expected: "HTTP filters: path /health",
+			expected: "HTTP filters: path (equal) /health",
+		},
+		{
+			name: "HTTP mechanism with regex path filter",
+			spec: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/v[0-9]+/.*$"},
+			},
+			expected: "HTTP filters: path (regex) ^/api/v[0-9]+/.*$",
+		},
+		{
+			name: "HTTP mechanism with mixed path filter types",
+			spec: &manager.InterceptSpec{
+				Mechanism: "http",
+				PathFilters: []string{
+					":path-equal:/health",
+					":path-prefix:/api/",
+					":path-regex:^/admin/.*$",
+				},
+			},
+			expected: "HTTP filters: path (equal) /health, path (prefix) /api/, path (regex) ^/admin/.*$",
 		},
 		{
 			name: "unknown mechanism defaults to TCP",
@@ -355,6 +375,114 @@ func TestInterceptSpecsConflict(t *testing.T) {
 					"x-user":    "adam",
 					"x-session": "xyz789",
 				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Case-insensitive header matching - X-User vs x-user should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"X-User": "adam",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Case-insensitive header matching with different values - should NOT conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"X-User": "adam",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "bertil",
+				},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Wildcard header matching - x-user:dev-* should work properly",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "dev-*",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "dev-*",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Path prefix overlap - :path-prefix:/api/ vs :path-prefix:/api/v1/ should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/api/"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/api/v1/"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Path prefix no overlap - :path-prefix:/api/ vs :path-prefix:/admin/ should NOT conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/api/"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/admin/"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Path equal vs prefix overlap - :path-equal:/api/users vs :path-prefix:/api/ should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-equal:/api/users"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/api/"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Path equal vs prefix no overlap - :path-equal:/admin/users vs :path-prefix:/api/ should NOT conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-equal:/admin/users"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/api/"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Path regex - :path-regex: always conflicts conservatively",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/.*$"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/admin/"},
 			},
 			conflicts: true,
 		},
