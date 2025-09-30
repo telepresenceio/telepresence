@@ -20,7 +20,6 @@ import (
 )
 
 type Config interface {
-	Ext() agentconfig.SidecarExt
 	AgentConfig() *agentconfig.Sidecar
 	HasRemoteMounts() bool
 	PodName() string
@@ -29,10 +28,10 @@ type Config interface {
 }
 
 type config struct {
-	sidecarExt agentconfig.SidecarExt
-	podName    string
-	podIP      netip.Addr
-	podUID     k8sTypes.UID
+	sidecar *agentconfig.Sidecar
+	podName string
+	podIP   netip.Addr
+	podUID  k8sTypes.UID
 }
 
 func LoadConfig(ctx context.Context) (Config, error) {
@@ -43,7 +42,7 @@ func LoadConfig(ctx context.Context) (Config, error) {
 
 	var err error
 	c := config{}
-	c.sidecarExt, err = agentconfig.UnmarshalJSON(cfgTight)
+	c.sidecar, err = agentconfig.UnmarshalJSON(cfgTight)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
@@ -98,12 +97,8 @@ func (c *config) HasRemoteMounts() bool {
 	return false
 }
 
-func (c *config) Ext() agentconfig.SidecarExt {
-	return c.sidecarExt
-}
-
 func (c *config) AgentConfig() *agentconfig.Sidecar {
-	return c.sidecarExt.AgentConfig()
+	return c.sidecar
 }
 
 func (c *config) PodName() string {

@@ -1,7 +1,6 @@
 package agentconfig
 
 import (
-	"reflect"
 	"time"
 
 	core "k8s.io/api/core/v1"
@@ -15,9 +14,6 @@ import (
 )
 
 const (
-	// ConfigMap is the name of the ConfigMap that contains the agent configs.
-	ConfigMap = "telepresence-agents"
-
 	ContainerName     = "traffic-agent"
 	ManagerAppName    = "traffic-manager"
 	InitContainerName = "tel-agent-init"
@@ -198,10 +194,6 @@ type Sidecar struct {
 	ClientConnectionTTL time.Duration `json:"clientConnectionTTL,omitempty,format:units"`
 }
 
-func (s *Sidecar) AgentConfig() *Sidecar {
-	return s
-}
-
 // InterceptTarget returns the container and intercepts that are parents of the given container port and protocol.
 func (s *Sidecar) InterceptTarget(containerPort uint16, proto types.Proto) (*Container, InterceptTarget) {
 	for _, c := range s.Containers {
@@ -241,8 +233,8 @@ func (s *Sidecar) InterceptorInactivePort(containerPort uint16, proto types.Prot
 	return containerPort
 }
 
-// Clone returns a deep copy of the SidecarExt.
-func (s *Sidecar) Clone() SidecarExt {
+// Clone returns a deep copy of the Sidecar.
+func (s *Sidecar) Clone() *Sidecar {
 	cs := *s
 	for ci, cn := range cs.Containers {
 		ccn := *cn
@@ -274,22 +266,9 @@ func (s *Sidecar) Marshal() ([]byte, error) {
 	return yaml.Marshal(s)
 }
 
-// SidecarExt must be implemented by a struct that can represent itself
-// as YAML.
-type SidecarExt interface {
-	AgentConfig() *Sidecar
-
-	Marshal() ([]byte, error)
-
-	Clone() SidecarExt
-}
-
-// SidecarType is Sidecar by default but can be any type implementing SidecarExt.
-var SidecarType = reflect.TypeOf(Sidecar{}) //nolint:gochecknoglobals // extension point
-
 // UnmarshalYAML creates a new instance of the SidecarType from the given YAML data.
-func UnmarshalYAML(data []byte) (SidecarExt, error) {
-	into := reflect.New(SidecarType).Interface()
+func UnmarshalYAML(data []byte) (*Sidecar, error) {
+	into := new(Sidecar)
 	data, err := yaml.YAMLToJSON(data)
 	if err != nil {
 		return nil, err
@@ -297,14 +276,12 @@ func UnmarshalYAML(data []byte) (SidecarExt, error) {
 	if err := json.Unmarshal(data, into, true); err != nil {
 		return nil, err
 	}
-	return into.(SidecarExt), nil
+	return into, nil
 }
 
 // MarshalTight marshals the given instance into JSON data, with data relating to the creation of the
 // container manifest stripped off.
-func MarshalTight(s SidecarExt) (string, error) {
-	ac := s.AgentConfig()
-
+func MarshalTight(ac *Sidecar) (string, error) {
 	// Strip things that are not needed once the container has been created.
 	ai := ac.AgentImage
 	pp := ac.PullPolicy
@@ -320,7 +297,7 @@ func MarshalTight(s SidecarExt) (string, error) {
 	ac.SecurityContext = nil
 	ac.InitSecurityContext = nil
 
-	data, err := json.Marshal(s)
+	data, err := json.Marshal(ac)
 	ac.AgentImage = ai
 	ac.PullPolicy = pp
 	ac.PullSecrets = ps
@@ -335,10 +312,10 @@ func MarshalTight(s SidecarExt) (string, error) {
 }
 
 // UnmarshalJSON creates a new instance of the SidecarType from the given JSON data.
-func UnmarshalJSON(data string) (SidecarExt, error) {
-	into := reflect.New(SidecarType).Interface()
+func UnmarshalJSON(data string) (*Sidecar, error) {
+	into := new(Sidecar)
 	if err := json.Unmarshal([]byte(data), into, true); err != nil {
 		return nil, err
 	}
-	return into.(SidecarExt), nil
+	return into, nil
 }

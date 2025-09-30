@@ -195,11 +195,7 @@ func (s *Session) GetAgentConfig(ctx context.Context, workload string) (*agentco
 	if err != nil {
 		return nil, err
 	}
-	scx, err := agentconfig.UnmarshalYAML(agc.Data)
-	if err != nil {
-		return nil, err
-	}
-	return scx.AgentConfig(), nil
+	return agentconfig.UnmarshalYAML(agc.Data)
 }
 
 func (s *Session) GetRootClientConfig() (client.Config, error) {

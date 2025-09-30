@@ -21,7 +21,7 @@ import (
 type affectedConfig struct {
 	err error
 	wl  k8sapi.Workload // If a workload is retrieved, it will be cached here.
-	scx agentconfig.SidecarExt
+	sc  *agentconfig.Sidecar
 }
 
 func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Service, trustUID bool) []affectedConfig {
@@ -47,11 +47,11 @@ func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Serv
 	}
 
 	var affected []affectedConfig
-	c.agentConfigs.Compute(svc.Namespace, func(sceMap map[string]agentconfig.SidecarExt, loaded bool) (map[string]agentconfig.SidecarExt, xsync.ComputeOp) {
+	c.agentConfigs.Compute(svc.Namespace, func(scMap map[string]*agentconfig.Sidecar, loaded bool) (map[string]*agentconfig.Sidecar, xsync.ComputeOp) {
 		if loaded {
-			for _, scx := range sceMap {
-				if wl, err, ok := references(scx.AgentConfig()); ok {
-					affected = append(affected, affectedConfig{scx: scx, wl: wl, err: err})
+			for _, sc := range scMap {
+				if wl, err, ok := references(sc); ok {
+					affected = append(affected, affectedConfig{sc: sc, wl: wl, err: err})
 				}
 			}
 		}
@@ -115,13 +115,13 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustU
 	if img == "" {
 		return
 	}
-	cfg, err := agentmap.GeneratorConfigFunc(img)
+	cfg, err := managerutil.GetEnv(ctx).GeneratorConfig(img)
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
 	}
 	for _, ax := range c.affectedConfigs(ctx, svc, trustUID) {
-		ac := ax.scx.AgentConfig()
+		ac := ax.sc
 		wl := ax.wl
 		if wl == nil {
 			err = ax.err

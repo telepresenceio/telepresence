@@ -31,7 +31,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
@@ -294,7 +293,6 @@ matchExpressions:
 	if err != nil {
 		t.Fatalf("Failed to dial bufnet: %v", err)
 	}
-	agentmap.GeneratorConfigFunc = env.GeneratorConfig
 	s := grpc.NewServer()
 	mgr, g, err := NewService(ctx, configWatcher)
 	if err != nil {

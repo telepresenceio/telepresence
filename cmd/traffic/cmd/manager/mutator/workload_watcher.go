@@ -12,7 +12,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
@@ -66,29 +65,30 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 
 	switch ia {
 	case "enabled":
-		if !managerutil.GetEnv(ctx).EnabledWorkloadKinds.Contains(wl.GetKind()) {
+		env := managerutil.GetEnv(ctx)
+		if !env.EnabledWorkloadKinds.Contains(wl.GetKind()) {
 			return
 		}
 		img := managerutil.GetAgentImage(ctx)
 		if img == "" {
 			return
 		}
-		cfg, err := agentmap.GeneratorConfigFunc(img)
+		cfg, err := env.GeneratorConfig(img)
 		if err != nil {
 			dlog.Error(ctx, err)
 			return
 		}
-		var scx agentconfig.SidecarExt
+		var sc *agentconfig.Sidecar
 		if oldWl != nil {
-			scx = c.Get(wl.GetName(), wl.GetNamespace())
+			sc = c.Get(wl.GetName(), wl.GetNamespace())
 		}
 		action := "Generating"
-		if scx == nil {
+		if sc == nil {
 			action = "Regenerating"
 		}
 		dlog.Debugf(ctx, "%s config entry for %s", action, wl)
 
-		scx, err = cfg.Generate(ctx, wl, scx)
+		sc, err = cfg.Generate(ctx, wl, sc)
 		if err != nil {
 			if strings.Contains(err.Error(), "unable to find") {
 				c.Delete(wl.GetName(), wl.GetNamespace())
@@ -98,9 +98,9 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 			return
 		}
 
-		c.Store(scx)
+		c.Store(sc)
 		dlog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
-		err = c.EvictPodsWithAgentConfigMismatch(ctx, wl, scx)
+		err = c.EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
 		if err != nil {
 			dlog.Error(ctx, err)
 		}
