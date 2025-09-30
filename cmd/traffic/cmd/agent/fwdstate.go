@@ -114,7 +114,7 @@ func (pm *ProviderMux) CreateClientStream(ctx context.Context, tag tunnel.Tag, s
 
 // normalizeHeaderFilters returns a new map with all header keys normalized to canonical MIME format.
 // HTTP headers are case-insensitive per RFC 7230, so we use the same canonicalization as net/http.
-// Examples: "x-user" -> "X-User", "content-type" -> "Content-Type"
+// Examples: "x-user" -> "X-User", "content-type" -> "Content-Type".
 func normalizeHeaderFilters(headers map[string]string) map[string]string {
 	if len(headers) == 0 {
 		return headers

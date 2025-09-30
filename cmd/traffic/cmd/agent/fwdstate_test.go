@@ -411,6 +411,22 @@ func TestInterceptSpecsConflict(t *testing.T) {
 			conflicts: false,
 		},
 		{
+			name: "Mixed case header variants - X-USER, x-User, X-user should all normalize to X-User",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"X-USER": "adam",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-User": "adam",
+				},
+			},
+			conflicts: true,
+		},
+		{
 			name: "Wildcard header matching - x-user:dev-* should work properly",
 			spec1: &manager.InterceptSpec{
 				Mechanism: "http",

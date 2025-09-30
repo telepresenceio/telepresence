@@ -147,7 +147,7 @@ func (s *httpInterceptsSuite) Test_TCPPortConflictDetection() {
 	_, stderr2, err2 := itest.Telepresence(ctx, "intercept", "tcp-conflict-two",
 		"--workload", s.ServiceName(),
 		"--http-header", "x-user=bertil",
-		"--port", "8080:80",  // Same local port as first intercept
+		"--port", "8080:80", // Same local port as first intercept
 		"--mount", "false")
 
 	// Should fail due to real TCP port conflict
