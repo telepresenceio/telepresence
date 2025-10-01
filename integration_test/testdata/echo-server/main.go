@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -20,6 +21,13 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )
+
+type request struct {
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
+	Method  string            `json:"method,omitempty"`
+	Body    string            `json:"body,omitempty"`
+}
 
 func main() {
 	errLog := log.New(os.Stderr, "", log.LstdFlags)
@@ -48,21 +56,24 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		outLog.Print("healthz")
+		outLog.Print(r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		outLog.Print("readyz")
+		outLog.Print(r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("/quit", func(w http.ResponseWriter, r *http.Request) {
-		outLog.Print("quit")
+		outLog.Print(r.URL.Path)
 		w.WriteHeader(http.StatusOK)
 		quit()
 	})
+	mux.HandleFunc("/forward", func(w http.ResponseWriter, r *http.Request) {
+		outLog.Print(r.URL.Path)
+		forwardHandler(w, r, outLog, errLog)
+	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		outLog.Print("quit")
-		w.WriteHeader(http.StatusOK)
+		outLog.Print(r.URL.Path)
 		echoHandler(w, r, outLog, errLog)
 	})
 
@@ -153,6 +164,59 @@ func echoHandler(wr http.ResponseWriter, req *http.Request, outLog, errLog *log.
 	_, err = bf.WriteTo(wr)
 	if err != nil {
 		errLog.Printf("Error serving HTTP: %v", err)
+	}
+}
+
+func forwardHandler(wr http.ResponseWriter, req *http.Request, outLog, errLog *log.Logger) {
+	if req.Method != http.MethodPost {
+		wr.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	fwReq := &request{}
+	d := json.NewDecoder(req.Body)
+	d.DisallowUnknownFields()
+	err := d.Decode(fwReq)
+	if err != nil {
+		errLog.Printf("Error parsing request: %v", err)
+		wr.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var fwReqBody io.Reader
+	if fwReq.Body != "" {
+		fwReqBody = strings.NewReader(fwReq.Body)
+	}
+	if fwReq.Method == "" {
+		fwReq.Method = http.MethodGet
+	}
+	fwr, err := http.NewRequest(fwReq.Method, fwReq.URL, fwReqBody)
+	if err != nil {
+		errLog.Printf("Error creating forward request: %v", err)
+		wr.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	for k, v := range fwReq.Headers {
+		fwr.Header.Set(k, os.ExpandEnv(v))
+	}
+	fwRsp, err := http.DefaultClient.Do(fwr)
+	if err != nil {
+		errLog.Printf("Error forwarding request: %v", err)
+		wr.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	defer fwRsp.Body.Close()
+
+	wrh := wr.Header()
+	for key, values := range fwRsp.Header {
+		for _, value := range values {
+			wrh.Add(key, value)
+		}
+	}
+	if fwRsp.StatusCode != http.StatusOK {
+		wr.WriteHeader(fwRsp.StatusCode)
+	}
+	_, err = io.Copy(wr, fwRsp.Body)
+	if err != nil {
+		errLog.Printf("Error forwarding response: %v", err)
 	}
 }
 

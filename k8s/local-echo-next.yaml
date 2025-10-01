@@ -1,0 +1,41 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "echo-next"
+spec:
+  type: ClusterIP
+  selector:
+    app: echo-next
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "echo-next"
+  labels:
+    app: echo-next
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-next
+  template:
+    metadata:
+      labels:
+        app: echo-next
+    spec:
+      containers:
+        - name: echo-next
+          image: localhost:5000/echo-server:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi
