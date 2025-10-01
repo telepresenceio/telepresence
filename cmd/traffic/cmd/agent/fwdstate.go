@@ -47,17 +47,26 @@ func (fs *fwdState) Target() agentconfig.InterceptTarget {
 }
 
 func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
-	// TODO: This must check against current intercepts now that HTTP-filters are supported.
 	fw := fs.forwarder
-	if containerPort == 0 {
-		return fw.InterceptInfo(), nil
+	r := &restapi.InterceptInfo{}
+	if containerPort != 0 && containerPort != fw.Target().Port() {
+		dlog.Debugf(ctx, "no match found for path %q, port %d, %s", path, containerPort, headers)
+		return r, nil
 	}
-	port := fw.Target().Port()
-	if containerPort == port {
-		return fw.InterceptInfo(), nil
+	for _, ii := range fw.InterceptInfos() {
+		if callerID != "" && callerID != ii.Id {
+			continue
+		}
+		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
+			m := matcher.NewRequest(ii.Spec.PathFilters, ii.Spec.HeaderFilters)
+			if m.MatchesPathAndHeader(path, headers) {
+				r.Intercepted = true
+				r.Metadata = ii.Metadata
+				break
+			}
+		}
 	}
-	dlog.Debugf(ctx, "no match found for path %q, port %d, %s", path, containerPort, headers)
-	return &restapi.InterceptInfo{Intercepted: false}, nil
+	return r, nil
 }
 
 type ProviderMux struct {

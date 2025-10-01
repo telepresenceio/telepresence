@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -30,6 +31,17 @@ func newTCP(listenPort uint16, tag tunnel.Tag, target netip.AddrPort) Intercepto
 			lCancel:    func() {},
 		},
 	}
+}
+
+func (f *tcp) InterceptInfos() (infos []*manager.InterceptInfo) {
+	f.mu.Lock()
+	if len(f.httpIntercepts) > 0 {
+		infos = slices.Clone(f.httpIntercepts)
+	} else if f.intercept != nil {
+		infos = []*manager.InterceptInfo{f.intercept}
+	}
+	f.mu.Unlock()
+	return infos
 }
 
 // SetInterceptingMultiple overrides the base implementation to handle HTTP intercepts.
