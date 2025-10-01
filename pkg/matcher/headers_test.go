@@ -2,7 +2,6 @@ package matcher
 
 import (
 	"net/http"
-	"regexp/syntax"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -75,18 +74,16 @@ func Test_headers_Matches(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hm, err := NewHeaders(tt.match)
-			assert.NoError(t, err)
+			hm := NewHeaders(tt.match)
 			assert.Equal(t, tt.want, hm.Matches(tt.header))
 		})
 	}
 }
 
 func Test_NewHeaders_error(t *testing.T) {
-	m, err := NewHeaders(map[string]string{"a": "un(balanced"})
-	sErr := &syntax.Error{}
-	require.ErrorAs(t, err, &sErr)
-	assert.Contains(t, err.Error(), "value of match a=")
-	assert.Equal(t, syntax.ErrMissingParen, sErr.Code)
-	assert.Nil(t, m)
+	m := NewHeaders(map[string]string{"a": "un(balanced"})
+	v, ok := m.HeaderMap()["A"]
+	require.True(t, ok)
+	assert.Equal(t, v.Op(), ValueOpEqual)
+	assert.Equal(t, v.String(), "un(balanced")
 }

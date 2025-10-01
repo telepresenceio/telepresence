@@ -16,79 +16,76 @@ type Request interface {
 	// Headers returns Headers of this instance.
 	Headers() Headers
 
+	// IsGlobal returns true if this instance matches all requests.
+	IsGlobal() bool
+
 	// Map returns the map correspondence of this instance. The returned value can be
 	// used as an argument to NewRequest to create an identical Request.
 	Map() map[string]string
 
-	// Matches returns true if both the path Value matcher and the Headers matcher in this instance are
-	// matched by the given http.Request.
-	Matches(path string, headers http.Header) bool
+	// Matches returns true if given http.Request is matched.
+	Matches(req *http.Request) bool
 
-	// Path returns the path
-	Path() Value
+	// MatchesPathAndHeader returns true if both the path Headers match.
+	MatchesPathAndHeader(path string, req http.Header) bool
+
+	// Paths return the path matchers.
+	Paths() Paths
 }
 
 type request struct {
-	path    Value
+	paths   Paths
 	headers HeaderMap
 }
 
 // NewRequestFromMap creates a new Request based on the values of the given map. Aside from http headers,
-// the map may contain one of three special keys.
+// the map may contain a :path: entry with a semicolon delimited list of paths. Each path should be prefixed
+// with one of three special keys.
 //
 //	:path-equal: path will match if equal to the value
 //	:path-prefix: path will match prefixed by the value
 //	:path-regex: path will match it matches the regexp value
-func NewRequestFromMap(m map[string]string) (Request, error) {
-	var pm Value
-	hm := make(HeaderMap, len(m))
-
-	var err error
+func NewRequestFromMap(m map[string]string) Request {
+	if len(m) == 0 {
+		return &request{}
+	}
+	var ps Paths
+	var hm HeaderMap
 	for k, v := range m {
 		switch k {
-		case ":path-equal:":
-			pm = NewEqual(v)
-		case ":path-prefix:":
-			pm = NewPrefix(v)
-		case ":path-regex:":
-			if pm, err = NewRegex(v); err != nil {
-				return nil, err
-			}
+		case ":paths:":
+			ps = NewPaths(strings.Split(v, ";"))
 		default:
-			vm, err := NewValue(v)
-			if err != nil {
-				return nil, fmt.Errorf("the value of match %s=%s is invalid: %w", k, v, err)
+			vm := NewValue(v)
+			if hm == nil {
+				hm = make(HeaderMap)
 			}
 			hm[textproto.CanonicalMIMEHeaderKey(k)] = vm
 		}
 	}
-	return NewRequest(pm, hm), nil
+	return &request{paths: ps, headers: hm}
 }
 
-func NewRequest(path Value, hm HeaderMap) Request {
-	if len(hm) == 0 {
-		hm = nil
+func NewRequest(paths []string, hdrs map[string]string) Request {
+	rv := new(request)
+	if len(paths) > 0 {
+		rv.paths = NewPaths(paths)
 	}
-	return &request{path: path, headers: hm}
+	if len(hdrs) > 0 {
+		rv.headers = NewHeaders(hdrs).HeaderMap()
+	}
+	return rv
 }
 
 // Map returns the map correspondence of this instance. The returned value can be
 // used as an argument to NewRequest to create an identical Request.
 func (r *request) Map() map[string]string {
 	var m map[string]string
-	if r.headers != nil {
+	if len(r.headers) > 0 {
 		m = r.headers.Map()
 	}
-	if p := r.path; p != nil {
-		pm := make(map[string]string, len(m)+1)
-		switch p.(type) {
-		case textValue:
-			pm[":path-equal:"] = p.String()
-		case prefixValue:
-			pm[":path-prefix:"] = p.String()
-		case rxValue:
-			pm[":path-regex:"] = p.String()
-		}
+	if len(r.paths) > 0 {
+		pm := map[string]string{":paths:": strings.Join(r.paths.Slice(), ";")}
 		maps.Merge(pm, m)
 		m = pm
 	}
@@ -100,37 +97,56 @@ func (r *request) Headers() Headers {
 	return r.headers
 }
 
-// Matches returns true if both the path Value matcher and the Headers matcher in this instance are
-// matched by the given http.Request.
-func (r *request) Matches(path string, headers http.Header) bool {
-	return r == nil || (r.path == nil || r.path.Matches(path)) && (r.headers == nil || r.headers.Matches(headers))
+func (r *request) IsGlobal() bool {
+	return len(r.paths) == 0 && len(r.headers) == 0
 }
 
-// Path returns the path.
-func (r *request) Path() Value {
-	return r.path
+// Matches returns true if both the path Value matcher and the Headers matcher in this instance are
+// matched by the given http.Request.
+func (r *request) Matches(req *http.Request) bool {
+	return r.MatchesPathAndHeader(req.URL.Path, req.Header)
+}
+
+func (r *request) MatchesPathAndHeader(path string, header http.Header) bool {
+	return r.paths.Matches(path) && (len(r.headers) == 0 || r.headers.Matches(header))
+}
+
+// Paths return the path matchers.
+func (r *request) Paths() Paths {
+	return r.paths
 }
 
 func (r *request) String() string {
+	if r.IsGlobal() {
+		return "all TCP connections"
+	}
 	sb := strings.Builder{}
-	if r == nil || r.path == nil && len(r.headers) == 0 {
-		return "all requests"
-	}
-	sb.WriteString("requests with")
-	if r.path != nil {
-		if r.headers != nil {
-			sb.WriteString("\n ")
+	sb.WriteString("HTTP requests with")
+	switch len(r.paths) {
+	case 0:
+		sb.WriteByte(' ')
+		r.headers.appendString(&sb, "")
+	case 1:
+		if len(r.headers) < 2 {
+			sb.WriteByte(' ')
+			r.paths.appendString(&sb, "")
+			if len(r.headers) > 0 {
+				sb.WriteString(" and ")
+				r.headers.appendString(&sb, "")
+			}
+			break
 		}
-		fmt.Fprintf(&sb, " path %s %s", r.path.Op(), r.path.String())
-	}
-	if r.headers != nil {
-		indent := "  "
-		if r.path != nil {
-			indent += "  "
-			sb.WriteString("\n ")
+		fallthrough
+	default:
+		if len(r.headers) > 0 {
+			sb.WriteByte('\n')
+			r.paths.appendString(&sb, " ")
+			sb.WriteByte('\n')
+			r.headers.appendString(&sb, " ")
+		} else {
+			sb.WriteByte(' ')
+			r.paths.appendString(&sb, "")
 		}
-		sb.WriteString(" headers")
-		r.headers.appendString(&sb, indent)
 	}
 	return sb.String()
 }

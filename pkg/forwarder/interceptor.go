@@ -12,7 +12,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
-	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -21,7 +20,6 @@ type Interceptor interface {
 	io.Closer
 	Tag() tunnel.Tag
 	InterceptId() string
-	InterceptInfo() *restapi.InterceptInfo
 	Serve(context.Context, chan<- netip.AddrPort) error
 	SetIntercepting(context.Context, *manager.InterceptInfo)
 	SetInterceptingMultiple(context.Context, []*manager.InterceptInfo)
@@ -39,6 +37,10 @@ type Interceptor interface {
 	// returns true if the connection was fully handled and no further processing
 	// should occur.
 	DispatchByMechanism(ctx context.Context, conn net.Conn, intercept *manager.InterceptInfo) (bool, error)
+
+	// InterceptInfos returns the intercepts that are currently being handled by this interceptor. The
+	// wiretaps are not included.
+	InterceptInfos() []*manager.InterceptInfo
 }
 
 type interceptor struct {
@@ -67,6 +69,15 @@ func NewInterceptor(from types.PortAndProto, tag tunnel.Tag, target netip.AddrPo
 	default:
 		panic(fmt.Errorf("unsupported protocol %s", from.Proto))
 	}
+}
+
+func (f *interceptor) InterceptInfos() (infos []*manager.InterceptInfo) {
+	f.mu.Lock()
+	if f.intercept != nil {
+		infos = []*manager.InterceptInfo{f.intercept}
+	}
+	f.mu.Unlock()
+	return infos
 }
 
 func (f *interceptor) PruneTo(ctx context.Context, ids []string) {
@@ -99,17 +110,6 @@ func (f *interceptor) Target() netip.AddrPort {
 	defer f.mu.Unlock()
 
 	return f.target
-}
-
-func (f *interceptor) InterceptInfo() *restapi.InterceptInfo {
-	ii := &restapi.InterceptInfo{}
-	f.mu.Lock()
-	if f.intercept != nil {
-		ii.Intercepted = true
-		ii.Metadata = f.intercept.Metadata
-	}
-	f.mu.Unlock()
-	return ii
 }
 
 func (f *interceptor) InterceptId() (id string) {

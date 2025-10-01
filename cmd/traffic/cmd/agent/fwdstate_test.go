@@ -26,7 +26,7 @@ func TestGenerateMechanismDescription(t *testing.T) {
 			spec: &manager.InterceptSpec{
 				Mechanism: "http",
 			},
-			expected: "all HTTP connections",
+			expected: "all TCP connections",
 		},
 		{
 			name: "HTTP mechanism with header filters only",
@@ -37,7 +37,7 @@ func TestGenerateMechanismDescription(t *testing.T) {
 					"X-Environment": "staging",
 				},
 			},
-			expected: "HTTP filters: header X-Environment=staging, header X-User-ID=dev123",
+			expected: "HTTP requests with headers\n 'X-Environment: staging'\n 'X-User-Id: dev123'",
 		},
 		{
 			name: "HTTP mechanism with path filters only",
@@ -48,7 +48,7 @@ func TestGenerateMechanismDescription(t *testing.T) {
 					":path-prefix:/admin/",
 				},
 			},
-			expected: "HTTP filters: path (prefix) /api/v1/, path (prefix) /admin/",
+			expected: "HTTP requests with paths\n prefix /api/v1/\n prefix /admin/",
 		},
 		{
 			name: "HTTP mechanism with both header and path filters",
@@ -61,7 +61,7 @@ func TestGenerateMechanismDescription(t *testing.T) {
 					":path-prefix:/api/",
 				},
 			},
-			expected: "HTTP filters: header X-User-ID=dev123, path (prefix) /api/",
+			expected: "HTTP requests with path prefix /api/ and header 'X-User-Id: dev123'",
 		},
 		{
 			name: "HTTP mechanism with single header filter",
@@ -71,7 +71,7 @@ func TestGenerateMechanismDescription(t *testing.T) {
 					"Authorization": "Bearer token123",
 				},
 			},
-			expected: "HTTP filters: header Authorization=Bearer token123",
+			expected: "HTTP requests with header 'Authorization: Bearer token123'",
 		},
 		{
 			name: "HTTP mechanism with single path filter",
@@ -79,7 +79,7 @@ func TestGenerateMechanismDescription(t *testing.T) {
 				Mechanism:   "http",
 				PathFilters: []string{":path-equal:/health"},
 			},
-			expected: "HTTP filters: path (equal) /health",
+			expected: "HTTP requests with path == /health",
 		},
 		{
 			name: "HTTP mechanism with regex path filter",
@@ -87,7 +87,7 @@ func TestGenerateMechanismDescription(t *testing.T) {
 				Mechanism:   "http",
 				PathFilters: []string{":path-regex:^/api/v[0-9]+/.*$"},
 			},
-			expected: "HTTP filters: path (regex) ^/api/v[0-9]+/.*$",
+			expected: "HTTP requests with path =~ ^/api/v[0-9]+/.*$",
 		},
 		{
 			name: "HTTP mechanism with mixed path filter types",
@@ -99,7 +99,7 @@ func TestGenerateMechanismDescription(t *testing.T) {
 					":path-regex:^/admin/.*$",
 				},
 			},
-			expected: "HTTP filters: path (equal) /health, path (prefix) /api/, path (regex) ^/admin/.*$",
+			expected: "HTTP requests with paths\n == /health\n prefix /api/\n =~ ^/admin/.*$",
 		},
 		{
 			name: "unknown mechanism defaults to TCP",

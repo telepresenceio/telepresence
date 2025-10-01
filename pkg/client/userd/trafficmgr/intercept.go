@@ -984,11 +984,7 @@ func (s *session) newAPIServerForPort(port int) {
 }
 
 func (s *session) newMatcher(ic *manager.InterceptInfo) {
-	m, err := matcher.NewRequestFromMap(ic.Headers)
-	if err != nil {
-		dlog.Error(s.context, err)
-		return
-	}
+	m := matcher.NewRequestFromMap(ic.Headers)
 	if s.currentMatchers == nil {
 		s.currentMatchers = make(map[string]*apiMatcher)
 	}
@@ -1007,7 +1003,7 @@ func (s *session) InterceptInfo(_ context.Context, callerID, path string, _ uint
 	switch {
 	case am == nil:
 		dlog.Debugf(s.context, "no matcher found for callerID %s", callerID)
-	case am.requestMatcher.Matches(path, headers):
+	case am.requestMatcher.MatchesPathAndHeader(path, headers):
 		dlog.Debugf(s.context, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
 		r.Intercepted = true
 		r.Metadata = am.metadata

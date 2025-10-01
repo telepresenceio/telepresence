@@ -63,11 +63,11 @@ items:
           **Conflict Detection**: Intercepts conflict only when their filters would route the same traffic to different
           destinations. Key rules:
 
-          - Different header values (e.g., `x-user=adam` vs `x-user=bertil`) do NOT conflict
+          - Different header values (e.g., `X-User=adam` vs `X-User=bertil`) do NOT conflict
 
-          - Header filters use subset logic: `x-user=adam` conflicts with `x-user=adam, x-session=123` (first is subset)
+          - Header filters use subset logic: `X-User=adam` conflicts with `X-User=adam, X-Session=123` (first is subset)
 
-          - Same headers with different paths do NOT conflict: `x-user=adam + /api/*` vs `x-user=adam + /admin/*`
+          - Same headers with different paths do NOT conflict: `X-User=adam + /api/*` vs `X-User=adam + /admin/*`
 
           - Path-only intercepts operate at a lower priority tier than header-based intercepts
 

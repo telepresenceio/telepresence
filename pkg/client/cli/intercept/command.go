@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -426,19 +427,19 @@ func BuildPathFilters(equals, prefixes, regexps []string) []string {
 	// Add exact match filters
 	i := 0
 	for _, path := range equals {
-		allFilters[i] = ":path-equal:" + path
+		allFilters[i] = matcher.PathEqual + path
 		i++
 	}
 
 	// Add prefix match filters
 	for _, path := range prefixes {
-		allFilters[i] = ":path-prefix:" + path
+		allFilters[i] = matcher.PathPrefix + path
 		i++
 	}
 
 	// Add regex match filters
 	for _, path := range regexps {
-		allFilters[i] = ":path-regex:" + path
+		allFilters[i] = matcher.PathRegex + path
 		i++
 	}
 	return allFilters
