@@ -8,8 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +15,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -160,7 +159,7 @@ func (h *httpInterceptor) handleHTTPConn(clientConn net.Conn) error {
 	// Pass 1: Check intercepts with headers (high priority tier)
 	for _, interceptInfo := range intercepts {
 		if len(interceptInfo.headerFilters) > 0 {
-			if h.shouldInterceptRequest(ctx, req, interceptInfo.headerFilters, interceptInfo.pathFilters) {
+			if shouldInterceptRequest(req, interceptInfo.headerFilters, interceptInfo.pathFilters) {
 				dlog.Debugf(ctx, "Intercepting HTTP request %s %s with header-based intercept %s",
 					req.Method, req.URL.Path, interceptInfo.intercept.Id)
 				return h.interceptHTTPConn(ctx, clientConn, req, interceptInfo.intercept)
@@ -171,7 +170,7 @@ func (h *httpInterceptor) handleHTTPConn(clientConn net.Conn) error {
 	// Pass 2: Check intercepts with only paths (low priority tier)
 	for _, interceptInfo := range intercepts {
 		if len(interceptInfo.headerFilters) == 0 && len(interceptInfo.pathFilters) > 0 {
-			if h.shouldInterceptRequest(ctx, req, interceptInfo.headerFilters, interceptInfo.pathFilters) {
+			if shouldInterceptRequest(req, interceptInfo.headerFilters, interceptInfo.pathFilters) {
 				dlog.Debugf(ctx, "Intercepting HTTP request %s %s with path-based intercept %s",
 					req.Method, req.URL.Path, interceptInfo.intercept.Id)
 				return h.interceptHTTPConn(ctx, clientConn, req, interceptInfo.intercept)
@@ -184,63 +183,8 @@ func (h *httpInterceptor) handleHTTPConn(clientConn net.Conn) error {
 	return h.forwardToOriginalService(ctx, clientConn, req, originalTarget)
 }
 
-func (h *httpInterceptor) shouldInterceptRequest(ctx context.Context, req *http.Request, headerFilters map[string]string, pathFilters []string) bool {
-	// Check header filters (AND logic - all must match)
-	for key, expectedValue := range headerFilters {
-		actualValue := req.Header.Get(key)
-		if !h.matchesPattern(actualValue, expectedValue) {
-			dlog.Debugf(ctx, "Request header %s=%s does not match filter %s=%s",
-				key, actualValue, key, expectedValue)
-			return false
-		}
-	}
-
-	// Check path filters (OR logic - any must match)
-	if len(pathFilters) > 0 {
-		pathMatched := false
-		for _, filter := range pathFilters {
-			matched := false
-			switch {
-			case strings.HasPrefix(filter, ":path-equal:"):
-				// Exact match
-				path := strings.TrimPrefix(filter, ":path-equal:")
-				matched = req.URL.Path == path
-			case strings.HasPrefix(filter, ":path-prefix:"):
-				// Prefix match
-				prefix := strings.TrimPrefix(filter, ":path-prefix:")
-				matched = strings.HasPrefix(req.URL.Path, prefix)
-			case strings.HasPrefix(filter, ":path-regex:"):
-				// Regex match
-				pattern := strings.TrimPrefix(filter, ":path-regex:")
-				if re, err := regexp.Compile(pattern); err == nil {
-					matched = re.MatchString(req.URL.Path)
-				} else {
-					dlog.Debugf(ctx, "Invalid regex pattern %s: %v", pattern, err)
-				}
-			}
-
-			if matched {
-				pathMatched = true
-				break
-			}
-		}
-		if !pathMatched {
-			dlog.Debugf(ctx, "Request path %s does not match any path filters", req.URL.Path)
-			return false
-		}
-	}
-
-	return true
-}
-
-func (h *httpInterceptor) matchesPattern(value, pattern string) bool {
-	// Support wildcard matching with *
-	if strings.Contains(pattern, "*") {
-		matched, _ := filepath.Match(pattern, value)
-		return matched
-	}
-	// Exact match
-	return value == pattern
+func shouldInterceptRequest(req *http.Request, headerFilters map[string]string, pathFilters []string) bool {
+	return matcher.NewRequest(pathFilters, headerFilters).Matches(req)
 }
 
 func (h *httpInterceptor) interceptHTTPConn(ctx context.Context, clientConn net.Conn, req *http.Request, iCept *manager.InterceptInfo) error {

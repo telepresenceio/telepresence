@@ -25,7 +25,10 @@ type Headers interface {
 	Matches(header http.Header) bool
 }
 
-// NewHeaders creates a new Headers.
+// NewHeaders creates a new Headers with all header keys normalized to canonical MIME format.
+// HTTP headers are case-insensitive per RFC 7230, so we use the same canonicalization as net/http.
+//
+// Examples: "x-user" -> "X-User", "content-type" -> "Content-Type".
 func NewHeaders(hs map[string]string) Headers {
 	hm := make(HeaderMap, len(hs))
 	for k, v := range hs {

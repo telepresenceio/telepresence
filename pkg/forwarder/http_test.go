@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 )
 
 func TestHTTPInterceptor_shouldInterceptRequest(t *testing.T) {
-	h := &httpInterceptor{}
-
 	headerFilters := map[string]string{
 		"X-User-ID":     "dev123",
 		"X-Environment": "staging",
@@ -76,15 +76,13 @@ func TestHTTPInterceptor_shouldInterceptRequest(t *testing.T) {
 				req.Header.Set(k, v)
 			}
 
-			result := h.shouldInterceptRequest(req.Context(), req, headerFilters, pathFilters)
+			result := shouldInterceptRequest(req, headerFilters, pathFilters)
 			assert.Equal(t, tt.shouldIntercept, result)
 		})
 	}
 }
 
 func TestHTTPInterceptor_matchesPattern(t *testing.T) {
-	h := &httpInterceptor{}
-
 	tests := []struct {
 		name    string
 		value   string
@@ -93,30 +91,28 @@ func TestHTTPInterceptor_matchesPattern(t *testing.T) {
 	}{
 		{"exact match", "dev123", "dev123", true},
 		{"no match", "dev123", "prod456", false},
-		{"wildcard match", "dev123", "dev*", true},
-		{"wildcard no match", "prod123", "dev*", false},
-		{"complex wildcard", "dev-user-123", "dev-*-123", true},
+		{"wildcard match", "dev123", "dev.*", true},
+		{"wildcard no match", "prod123", "dev.*", false},
+		{"complex wildcard", "dev-user-123", "dev-.*-123", true},
 		{"empty value", "", "dev*", false},
 		{"empty pattern", "dev123", "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := h.matchesPattern(tt.value, tt.pattern)
+			result := matcher.NewValue(tt.pattern).Matches(tt.value)
 			assert.Equal(t, tt.matches, result)
 		})
 	}
 }
 
 func TestHTTPInterceptor_noFilters(t *testing.T) {
-	h := &httpInterceptor{}
-
 	headerFilters := map[string]string{}
 	pathFilters := []string{}
 
 	req, _ := http.NewRequest(http.MethodGet, "http://example.com/any/path", nil)
 
 	// No filters means intercept everything
-	result := h.shouldInterceptRequest(req.Context(), req, headerFilters, pathFilters)
+	result := shouldInterceptRequest(req, headerFilters, pathFilters)
 	assert.True(t, result)
 }
