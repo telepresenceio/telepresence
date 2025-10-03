@@ -1337,6 +1337,11 @@ matchExpressions:
 - op: add
   path: /spec/containers/0/env/-
   value:
+    name: TELEPRESENCE_API_HOST
+    value: localhost
+- op: add
+  path: /spec/containers/0/env/-
+  value:
     name: TELEPRESENCE_API_PORT
     value: "9981"
 `,
