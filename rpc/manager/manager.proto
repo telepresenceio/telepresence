@@ -20,7 +20,8 @@ message ClientInfo {
   string install_id = 2;
   string product = 3;  // "telepresence"
   string version = 4;
-  string api_key = 5;
+
+  reserved 5; // was api_key
 }
 
 // AgentInfo is the self-reported metadata that an Agent (app-sidecar)
@@ -106,13 +107,6 @@ message InterceptSpec {
   // How to decide which subset of requests to that agent to intercept.
   string mechanism = 4;
 
-  // Additional mechanism-specific arguments.  This is passed as list
-  // of CLI-style --flags.  See the documentation for
-  // github.com/telepresenceio/telepresence/v2/pkg/client/cli/extensions
-  // for more information about writing an extension descriptor file
-  // to control what these values are.
-  repeated string mechanism_args = 9;
-
   // The host that the target_ports are routed to.
   string target_host = 6;
 
@@ -174,10 +168,6 @@ message InterceptSpec {
   // Deprecated: use local_ports instead
   repeated int32 extra_ports = 15;
 
-  // Used to be mount_point and only utilized when passing the spec between
-  // the user daemon and the CLI. It's now moved to InterceptInfo
-  reserved 11;
-
   // Whether to replace the running container.
   bool replace = 22;
 
@@ -194,6 +184,15 @@ message InterceptSpec {
   // Path filter patterns for HTTP Intercepts. Supports glob patterns like "/api/v1/*".
   // If specified, only requests matching these paths will be intercepted.
   repeated string path_filters = 28;
+
+  // Metadata to associate with the intercept. Retrievable using the API server.
+  map<string,string> metadata = 29;
+
+  reserved 9; // used to be former mechanism_args
+
+  // Used to be mount_point and only utilized when passing the spec between
+  // the user daemon and the CLI. It's now moved to InterceptInfo
+  reserved 11;
 }
 
 enum InterceptDispositionType {
@@ -244,17 +243,6 @@ message InterceptInfo {
   string id = 5;
   SessionInfo client_session = 6;
 
-  // api_key is the api_key provided by the user's machine
-  // if they are logged in.  This is used by extensions to
-  // authenticate with external APIs, such as SystemA.
-  string api_key = 13;
-
-  // preview_domain is the SystemA domain that will proxy in traffic
-  // to this intercept, and preview_ingress is where it will get
-  // proxied to.  They both get set by the manager when the client
-  // makes a call to UpdateIntercept with add_preview_domain set.
-  string preview_domain = 7;
-
   // The current intercept state; a status code and a human-friendly
   // message to go along with the status code.  These may be set
   // manager itself, or may be set by the agent's call to
@@ -282,12 +270,6 @@ message InterceptInfo {
   // This is set by the agent's call to ReviewIntercept.
   string mechanism_args_desc = 12;
 
-  // Headers used by the workstation API-server
-  map<string,string> headers = 14;
-
-  // Metadata used by the workstation API-server
-  map<string,string> metadata = 15;
-
   // The environment of the intercepted app
   map<string, string> environment = 17;
 
@@ -297,7 +279,15 @@ message InterceptInfo {
   // Timestamp for last modification made by traffic-manager
   google.protobuf.Timestamp modified_at = 21;
 
+  reserved 7; // was preview_domain
+
   reserved 9; // was PreviewSpec preview_spec
+
+  reserved 13; // was api-key
+
+  reserved 14; // was headers used by the API-server
+
+  reserved 15; // was metadata used by the API-server
 }
 
 message ReconnectAgentRequest {
@@ -334,7 +324,7 @@ message InterceptInfoSnapshot {
 message CreateInterceptRequest {
   SessionInfo session = 1;
   InterceptSpec intercept_spec = 2;
-  string api_key = 3;
+  reserved 3; // was api_key;
 }
 
 message EnsureAgentRequest {
@@ -387,22 +377,20 @@ message ReviewInterceptRequest {
   // InterceptSpec.mechanism_args say.
   string mechanism_args_desc = 7;
 
-  // Headers used by the workstation API-server
-  map<string,string> headers = 8;
-
-  // Metadata used by the workstation API-server
-  map<string,string> metadata = 9;
-
   // The environment of the intercepted container
   map<string, string> environment = 11;
 
   // Map of mount path -> MountPolicy of the engaged container
   map<string, int32> mounts = 13;
+
+  reserved 8; // was headers used by the workstation API-server
+
+  reserved 9; // was metadata used by the workstation API-server
 }
 
 message RemainRequest {
   SessionInfo session = 1;
-  string api_key = 2;
+  reserved 2; // was api_key
 }
 
 message LogLevelRequest {

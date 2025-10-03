@@ -155,7 +155,6 @@ func (s *suiteState) TestAddClient() {
 		InstallId: "1234",
 		Product:   "5668",
 		Version:   "2.14.2",
-		ApiKey:    "xxxx",
 	}, now)
 
 	// then
@@ -170,14 +169,12 @@ func (s *suiteState) TestRemoveSession() {
 		InstallId: "1234",
 		Product:   "5668",
 		Version:   "2.14.2",
-		ApiKey:    "xxxx",
 	}, now)
 	s2 := s.state.AddClient(&manager.ClientInfo{
 		Name:      "your-client",
 		InstallId: "5678",
 		Product:   "5668",
 		Version:   "2.14.2",
-		ApiKey:    "xxxx",
 	}, now)
 
 	assert.Equal(s.T(), s.state.CountSessions(), 2)

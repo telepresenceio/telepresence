@@ -163,12 +163,10 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*rpc.InterceptInfo) 
 }
 
 func (s *state) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
-	if containerPort == 0 && len(s.interceptStates) == 1 {
-		containerPort = s.interceptStates[0].Target().ContainerPort()
-	}
+	dlog.Debugf(ctx, "State with %d interceptStates. InterceptInfo for callerID %q, path %q, port %d, headers %s", len(s.interceptStates), callerID, path, containerPort, headers)
 	for _, is := range s.interceptStates {
 		ic := is.Target()
-		if containerPort == ic.ContainerPort() && ic.Protocol() == types.ProtoTCP {
+		if (containerPort == 0 || containerPort == ic.ContainerPort()) && ic.Protocol() == types.ProtoTCP {
 			return is.InterceptInfo(ctx, callerID, path, containerPort, headers)
 		}
 	}

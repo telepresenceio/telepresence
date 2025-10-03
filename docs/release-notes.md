@@ -21,14 +21,29 @@ The new dual-stack support requires the teleroute network plugin 0.4.0 or later.
 version automatically unless you work in an air-gapped environment.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[HTTP Intercepts with HTTP header and path filtering](https://github.com/telepresenceio/telepresence/issues/3852)</div></div>
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[RESTful API Service Reintroduced with HTTP Filtering Support](reference/restapi)</div></div>
 <div style="margin-left: 15px">
 
-Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts. Users can intercept only specific HTTP requests based on headers and URL paths using the new `--http-header`, `--http-path-prefix`, `--http-path-equal`, and `--http-path-regex` flags. This allows multiple developers to work on the same service simultaneously by intercepting only their specific traffic patterns, rather than intercepting all traffic to a service.
+The Telepresence RESTful API service has been restored with enhanced support for HTTP header and path filtering. This service enables workloads to programmatically query whether they should handle requests based on active intercepts. Added `--meta` flag allows attaching custom metadata to intercepts that can be retrieved through the API endpoints. The API server is now accessible via `TELEPRESENCE_API_HOST` and `TELEPRESENCE_API_PORT` environment variables in both cluster pods and local intercept handlers.
+</div>
 
-**Routing Precedence Model**: Header-based intercepts take priority over path-only intercepts. When multiple intercepts are active on the same workload, requests are evaluated against header-based filters first, then path-only filters. This enables different developers to use header-based personal intercepts (e.g., `x-user=alice`) while others use path-based intercepts (e.g., `/admin/*`) without conflicts.
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[HTTP Intercepts with HTTP header and path filtering](howtos/engage#intercept-your-application)</div></div>
+<div style="margin-left: 15px">
 
-**Conflict Detection**: Intercepts conflict only when their filters would route the same traffic to different destinations. Key rules:
+Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts.
+Users can intercept only specific HTTP requests based on headers and URL paths using the new `--http-header`,
+`--http-path-prefix`, `--http-path-equal`, and `--http-path-regex` flags. This allows multiple developers
+to work on the same service simultaneously by intercepting only their specific traffic patterns, rather than
+intercepting all traffic to a service.
+
+**Routing Precedence Model**: Header-based intercepts take priority over path-only intercepts. When multiple
+intercepts are active on the same workload, requests are evaluated against header-based filters first, then
+path-only filters. This enables different developers to use header-based personal intercepts (e.g.,
+`x-user=alice`) while others use path-based intercepts (e.g., `/admin/*`) without conflicts.
+
+**Conflict Detection**: Intercepts conflict only when their filters would route the same traffic to different
+destinations. Key rules:
+
 - Different header values (e.g., `X-User=adam` vs `X-User=bertil`) do NOT conflict
 - Header filters use subset logic: `X-User=adam` conflicts with `X-User=adam, X-Session=123` (first is subset)
 - Same headers with different paths do NOT conflict: `X-User=adam + /api/*` vs `X-User=adam + /admin/*`

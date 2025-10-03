@@ -12,6 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	cliDocker "github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
@@ -197,6 +198,7 @@ func (s *state) runCommand(ctx context.Context) error {
 	progress.Start(ctx, "Starting")
 	defer progress.Stop(ctx)
 
+	ud := daemon.MustGetUserClient(ctx)
 	if !s.DockerFlags.Run {
 		env := s.info.Environment
 		cmd, err := proc.Start(ctx, env, s.Cmdline[0], s.Cmdline[1:]...)
@@ -204,7 +206,7 @@ func (s *state) runCommand(ctx context.Context) error {
 			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
 			return errcat.NoDaemonLogs.New(err)
 		}
-		if err = daemon.MustGetUserClient(ctx).AddHandler(ctx, fmt.Sprintf("%s/%s", s.WorkloadName, s.handlerContainer), cmd, ""); err != nil {
+		if err = ud.AddHandler(ctx, fmt.Sprintf("%s/%s", s.WorkloadName, s.handlerContainer), cmd, ""); err != nil {
 			return err
 		}
 		// The external command will not output anything to the logs. An error here
@@ -214,6 +216,7 @@ func (s *state) runCommand(ctx context.Context) error {
 
 	ii := NewInfo(ctx, s.info, s.mountError)
 	ii.Environment["TELEPRESENCE_INTERCEPT_ID"] = s.WorkloadName + "/" + s.ContainerName
+	ii.Environment[agentconfig.EnvAPIHost] = ud.DaemonID().ContainerName()
 	dr := cliDocker.Runner{
 		Flags:         s.DockerFlags,
 		ContainerName: s.handlerContainer,

@@ -11,11 +11,12 @@ import (
 
 	"github.com/datawire/dlib/dhttp"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 )
 
 const (
-	HeaderCallerInterceptID = "x-telepresence-caller-intercept-id"
-	HeaderInterceptID       = "x-telepresence-intercept-id"
+	HeaderCallerInterceptID = "X-Telepresence-Caller-Intercept-Id"
+	HeaderInterceptID       = "X-Telepresence-Intercept-Id"
 	EndPointConsumeHere     = "/consume-here"
 	EndPointInterceptInfo   = "/intercept-info"
 )
@@ -66,7 +67,12 @@ func (s *server) ListenAndServe(c context.Context, apiPort int) error {
 }
 
 func (s *server) interceptInfo(c context.Context, p string, cp uint16, h http.Header) (*InterceptInfo, error) {
-	return s.agent.InterceptInfo(c, h.Get(HeaderCallerInterceptID), p, cp, h)
+	ii, err := s.agent.InterceptInfo(c, h.Get(HeaderCallerInterceptID), p, cp, h)
+	if err != nil {
+		return nil, err
+	}
+	dlog.Debugf(c, "InterceptInfo(path: %s, port %d, header %s => %v", p, cp, matcher.HeaderStringer(h), ii)
+	return ii, nil
 }
 
 // Serve starts the API server. It terminates when the given context is done.
@@ -129,7 +135,7 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 	})
 
 	server := &dhttp.ServerConfig{Handler: mux}
-	info := fmt.Sprintf("Telepresnece API server on %v", ln.Addr())
+	info := fmt.Sprintf("Telepresence API server on %v", ln.Addr())
 	dlog.Infof(c, "%s started", info)
 	defer dlog.Infof(c, "%s ended", info)
 	if err := server.Serve(c, ln); err != nil && err != c.Err() {

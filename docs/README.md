@@ -104,6 +104,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
     - [Target a specific container](reference/engagements/container.md)
   - [Telepresence Docker Plugins](reference/plugins.md)
   - [Volume mounts](reference/volume.md)
+  - [RESTful API service](reference/restapi.md)
   - [DNS resolution](reference/dns.md)
   - [RBAC](reference/rbac.md)
   - [Telepresence and VPNs](reference/vpn.md)

@@ -15,6 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -44,7 +45,6 @@ type Info struct {
 	Mount         *mount.Info       `json:"mount,omitempty"           yaml:"mount,omitempty"`
 	FilterDesc    string            `json:"filter_desc,omitempty"     yaml:"filter_desc,omitempty"`
 	Metadata      map[string]string `json:"metadata,omitempty"        yaml:"metadata,omitempty"`
-	HttpFilter    []string          `json:"http_filter,omitempty"     yaml:"http_filter,omitempty"`
 	HeaderFilters map[string]string `json:"header_filters,omitempty"  yaml:"header_filters,omitempty"`
 	PathFilters   []string          `json:"path_filters,omitempty"    yaml:"path_filters,omitempty"`
 	Global        bool              `json:"global,omitempty"          yaml:"global,omitempty"`
@@ -81,8 +81,7 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, ro bool, mountError
 		PodIP:         ii.PodIp,
 		Environment:   ii.Environment,
 		FilterDesc:    ii.MechanismArgsDesc,
-		Metadata:      ii.Metadata,
-		HttpFilter:    spec.MechanismArgs,
+		Metadata:      spec.Metadata,
 		HeaderFilters: spec.HeaderFilters,
 		PathFilters:   spec.PathFilters,
 		Global:        spec.Mechanism == "tcp",
@@ -167,30 +166,7 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 			if ii.FilterDesc != "" {
 				return ii.FilterDesc
 			}
-
-			// Build HTTP filter description from headers and paths
-			var filters []string
-
-			// Add header filters
-			for key, value := range ii.HeaderFilters {
-				filters = append(filters, fmt.Sprintf("header %s=%s", key, value))
-			}
-
-			// Add path filters
-			for _, path := range ii.PathFilters {
-				filters = append(filters, fmt.Sprintf("path %s", path))
-			}
-
-			if len(filters) > 0 {
-				return fmt.Sprintf("HTTP filters: %s", strings.Join(filters, ", "))
-			}
-
-			// Fallback to mechanism args if no structured filters
-			if len(ii.HttpFilter) > 0 {
-				return fmt.Sprintf("using mechanism=%q with args=%q", "http", ii.HttpFilter)
-			}
-
-			return "all HTTP connections"
+			return matcher.NewRequest(ii.PathFilters, ii.HeaderFilters).String()
 		}())
 	}
 

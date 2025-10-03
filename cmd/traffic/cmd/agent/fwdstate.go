@@ -49,7 +49,7 @@ func (fs *fwdState) Target() agentconfig.InterceptTarget {
 func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
 	fw := fs.forwarder
 	r := &restapi.InterceptInfo{}
-	if containerPort != 0 && containerPort != fw.Target().Port() {
+	if containerPort != 0 && containerPort != fs.intercept.ContainerPort() {
 		dlog.Debugf(ctx, "no match found for path %q, port %d, %s", path, containerPort, headers)
 		return r, nil
 	}
@@ -61,7 +61,7 @@ func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, co
 			m := matcher.NewRequest(ii.Spec.PathFilters, ii.Spec.HeaderFilters)
 			if m.MatchesPathAndHeader(path, headers) {
 				r.Intercepted = true
-				r.Metadata = ii.Metadata
+				r.Metadata = ii.Spec.Metadata
 				break
 			}
 		}
@@ -373,7 +373,7 @@ func (fs *fwdState) processRegularIntercept(
 }
 
 func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
-	dlog.Debugf(ctx, "fwdState.HandlePort called with %d intercepts", len(cepts))
+	dlog.Debugf(ctx, "fwdState.HandlePort %d called with %d intercepts", fs.intercept.ContainerPort(), len(cepts))
 
 	var active []*manager.InterceptInfo
 	var waiting []*manager.InterceptInfo

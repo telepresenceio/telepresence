@@ -28,17 +28,17 @@ func TestStringer_String(t *testing.T) {
 		{
 			"one header, single value",
 			newStringer("hdr-one", "val"),
-			"Hdr-One: val",
+			"Hdr-One:val",
 		},
 		{
 			"one header, multiple values",
 			newStringer("hdr-one", "val1;val2;val3"),
-			"Hdr-One: val1,val2,val3",
+			"Hdr-One:val1;val2;val3",
 		},
 		{
 			"multiple headers, single value",
 			newStringer("hdr-one", "val1;val2", "hdr-two", "the value"),
-			"Hdr-One: val1,val2\nHdr-Two: the value",
+			"Hdr-One:val1;val2,Hdr-Two:the value",
 		},
 	}
 	for _, tt := range tests {

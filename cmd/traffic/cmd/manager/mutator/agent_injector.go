@@ -174,6 +174,7 @@ func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod
 
 	if config.APIPort != 0 {
 		tpEnv := make(map[string]string)
+		tpEnv[agentconfig.EnvAPIHost] = "localhost"
 		tpEnv[agentconfig.EnvAPIPort] = strconv.Itoa(int(config.APIPort))
 		patches = addTPEnv(pod, config, tpEnv, patches)
 	}

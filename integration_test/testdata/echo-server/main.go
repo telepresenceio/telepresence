@@ -188,7 +188,7 @@ func forwardHandler(wr http.ResponseWriter, req *http.Request, outLog, errLog *l
 	if fwReq.Method == "" {
 		fwReq.Method = http.MethodGet
 	}
-	fwr, err := http.NewRequest(fwReq.Method, fwReq.URL, fwReqBody)
+	fwr, err := http.NewRequest(fwReq.Method, os.ExpandEnv(fwReq.URL), fwReqBody)
 	if err != nil {
 		errLog.Printf("Error creating forward request: %v", err)
 		wr.WriteHeader(http.StatusInternalServerError)

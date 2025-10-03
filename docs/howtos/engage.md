@@ -195,30 +195,23 @@ and tasks not directly related to the intercepted traffic.
 
 2. Intercept all traffic going to the application's http port in your cluster and redirect to port 8080 on your workstation.
     ```console
-    $ telepresence intercept example-app --http-header 'x-user=margret' --port 8080:http --env-file ~/example-app-intercept.env --mount /tmp/example-app-mounts
+    $ telepresence intercept example-app --http-header 'x-user=margret' --http-path-prefix '/api' --port 8080:http --env-file ~/example-app-intercept.env --mount /tmp/example-app-mounts
     Using Deployment example-app
     intercepted
       Intercept name: example-app
       State         : ACTIVE
       Workload kind : Deployment
       Destination   : 127.0.0.1:8080
-      Intercepting  : HTTP filters: header x-user=margret
+      Intercepting  : HTTP requests with path-prefix /api and header 'X-User: margret'
     ```
 
-   * For `--http-header`: specify the HTTP header you want to filter on. You can specify multiple headers by repeating
-     the flag. Header-based intercepts take priority over path-only intercepts. When multiple intercepts are active on
-     the same workload, requests are evaluated against header-based filters first, then path-only filters. This allows
-     different developers to use header-based personal intercepts (e.g., `x-user=alice`) while others use path-based
-     intercepts (e.g., `--http-path-prefix /admin/`) without conflicts.
+   * For `--http-header`: specify the HTTP header you want to filter on. You can specify multiple headers by repeating the flag. Header-based intercepts take priority over path-only intercepts, so that when multiple intercepts are active on the same workload, requests are evaluated against header-based filters first, then path-only filters. This allows different developers to use header-based personal intercepts (e.g., `x-user=alice`) while others use path-based intercepts (e.g., `--http-path-prefix /admin/`) without conflicts.
 
-   * For `--port`: specify the port the local instance of your application is running on, and optionally the remote port
-     that you want to intercept. Telepresence will select the remote port automatically when there's only one service
-     port available to access the workload. You must specify the port to intercept when the workload exposes multiple
-     ports. You can do this by specifying the port you want to intercept after a colon in the `--port` argument (like in
-     the example), and/or by specifying the service you want to intercept using the `--service` flag.
+   * For '--http-path-prefix': specify the path prefix you want to filter on. You can specify multiple path prefixes by repeating the flag. Path-based intercepts have lower priority than header-based intercepts.
 
-   * For `--env-file`: specify a file path for Telepresence to write the environment variables that are set for the targeted
-     container.
+   * For `--port`: specify the port the local instance of your application is running on, and optionally the remote port that you want to intercept. Telepresence will select the remote port automatically when there's only one service port available to access the workload. You must specify the port to intercept when the workload exposes multiple ports. You can do this by specifying the port you want to intercept after a colon in the `--port` argument (like in the example), and/or by specifying the service you want to intercept using the `--service` flag.
+
+   * For `--env-file`: specify a file path for Telepresence to write the environment variables that are set for the targeted container.
 
 3. Start your local application using the environment variables retrieved and the volumes that were mounted in the previous step.
 
