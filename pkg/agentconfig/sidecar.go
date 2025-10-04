@@ -43,7 +43,10 @@ const (
 	// EnvLocalMounts mount points that the client should mount locally (e.g. /tmp).
 	EnvLocalMounts = "TELEPRESENCE_LOCAL_MOUNTS"
 
-	// EnvAPIPort is the port number of the Telepresence API server, when it is enabled.
+	// EnvAPIHost is the host name of the Telepresence API server when it is enabled.
+	EnvAPIHost = "TELEPRESENCE_API_HOST"
+
+	// EnvAPIPort is the port number of the Telepresence API server when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
 	WorkloadNameLabel    = annotation.DomainPrefix + "workloadName"

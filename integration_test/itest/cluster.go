@@ -658,8 +658,12 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
+	logName := pod
+	if container != "" {
+		logName = fmt.Sprintf("%s-%s", pod, container)
+	}
 	logFile, err := os.Create(
-		filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), pod)))
+		filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), logName)))
 	if err != nil {
 		s.logCapturingPods.Delete(pod)
 		dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
@@ -867,6 +871,12 @@ func AssertDisconnectOutput(ctx context.Context, stdout string) {
 // TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output.
 func TelepresenceQuitOk(ctx context.Context) {
 	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-s"))
+}
+
+// TelepresenceQuit tells telepresence to quit but disregards any errors. Suitable for use in a defer statement
+// or when tearing down a suite.
+func TelepresenceQuit(ctx context.Context) {
+	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:nolintlint,dogsled
 }
 
 // AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command.

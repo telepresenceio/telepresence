@@ -14,7 +14,7 @@ import (
 // would not perform the actual formatting unless the loglevel is DEBUG or higher.
 type HeaderStringer http.Header
 
-// String formats the Header to a readable multi-line string.
+// String formats the Header to a comma-separated list of ordered key:value pairs.
 func (s HeaderStringer) String() string {
 	h := http.Header(s)
 	sb := strings.Builder{}
@@ -27,13 +27,13 @@ func (s HeaderStringer) String() string {
 	sort.Strings(ks)
 	for i, k := range ks {
 		if i > 0 {
-			sb.WriteByte('\n')
+			sb.WriteByte(',')
 		}
 		sb.WriteString(k)
-		sb.WriteString(": ")
+		sb.WriteByte(':')
 		for p, v := range h[k] {
 			if p > 0 {
-				sb.WriteByte(',')
+				sb.WriteByte(';')
 			}
 			sb.WriteString(v)
 		}

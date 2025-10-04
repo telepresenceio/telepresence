@@ -984,13 +984,13 @@ func (s *session) newAPIServerForPort(port int) {
 }
 
 func (s *session) newMatcher(ic *manager.InterceptInfo) {
-	m := matcher.NewRequestFromMap(ic.Headers)
+	m := matcher.NewRequest(ic.Spec.PathFilters, ic.Spec.HeaderFilters)
 	if s.currentMatchers == nil {
 		s.currentMatchers = make(map[string]*apiMatcher)
 	}
 	s.currentMatchers[ic.Id] = &apiMatcher{
 		requestMatcher: m,
-		metadata:       ic.Metadata,
+		metadata:       ic.Spec.Metadata,
 	}
 }
 
@@ -1004,11 +1004,11 @@ func (s *session) InterceptInfo(_ context.Context, callerID, path string, _ uint
 	case am == nil:
 		dlog.Debugf(s.context, "no matcher found for callerID %s", callerID)
 	case am.requestMatcher.MatchesPathAndHeader(path, headers):
-		dlog.Debugf(s.context, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
+		dlog.Debugf(s.context, "%s: matcher %s matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
 		r.Intercepted = true
 		r.Metadata = am.metadata
 	default:
-		dlog.Debugf(s.context, "%s: matcher %s\nmatches path %q and headers\n%s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
+		dlog.Debugf(s.context, "%s: matcher %s does not matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
 	}
 	return r, nil
 }

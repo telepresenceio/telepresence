@@ -60,7 +60,7 @@ spec:
 {{- else }}
           image: {{ .Image }}
 {{- end}}
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           ports:
 {{- range .ContainerPorts }}
             - containerPort: {{ .Number }}

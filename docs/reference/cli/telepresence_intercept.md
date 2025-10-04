@@ -31,6 +31,7 @@ Intercept a service
       --http-path-regex strings        HTTP path regex filters. Only requests with paths matching the regex will be intercepted.
       --local-mount-port uint16        Do not mount remote directories. Instead, expose this port on localhost to an external mounter
       --mechanism mechanism            Which extension mechanism to use (default "tcp")
+      --meta strings                   Metadata to attach to the intercept. Use --meta key=value to set a single key/value pair, or --meta key1=value1 --meta key2=value2 to set multiple key/value pairs. The metadata can be retrieved using the Telepresence API server.
       --mount string                   The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely. Append ":ro" to mount everything read-only. (default "true")
   -p, --port strings                   Local ports to forward to. Use <local port>:<identifier> to uniquely identify service ports, where the <identifier> is the port name or number. With --docker-run and a daemon that doesn't run in docker', use <local port>:<container port> or <local port>:<container port>:<identifier>.
       --replace                        Indicates if the traffic-agent should replace application containers in workload pods. The default behavior is for the agent sidecar to be installed alongside existing containers. (DEPRECATED: Use the replace command.)

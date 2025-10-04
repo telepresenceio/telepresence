@@ -15,6 +15,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	cliDocker "github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
@@ -63,10 +64,31 @@ func (s *state) SetSelf(self State) {
 	s.self = self
 }
 
+func keyValueMap(keyValueStrings []string) (m map[string]string) {
+	if l := len(keyValueStrings); l > 0 {
+		m = make(map[string]string, l)
+		for _, kv := range keyValueStrings {
+			if key, value, err := parseKeyValue(kv); err == nil {
+				m[key] = value
+			}
+		}
+	}
+	return m
+}
+
 func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRequest, error) {
 	spec := &manager.InterceptSpec{
-		Name:    s.Name(),
-		Replace: s.Replace,
+		Name:          s.Name(),
+		Replace:       s.Replace,
+		ServiceName:   s.ServiceName,
+		ContainerName: s.ContainerName,
+		Mechanism:     s.Mechanism,
+		Metadata:      keyValueMap(s.Meta),
+		HeaderFilters: keyValueMap(s.HTTPHeaderFilters),
+		Wiretap:       s.Wiretap,
+		Agent:         s.AgentName,
+		NoDefaultPort: s.NoDefaultPort,
+		PathFilters:   BuildPathFilters(s.HTTPPathEqualFilters, s.HTTPPathPrefixFilters, s.HTTPPathRegexFilters),
 	}
 	ir := &connector.CreateInterceptRequest{
 		Spec:           spec,
@@ -75,27 +97,6 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		MountPoint:     s.MountFlags.Mount,
 		MountReadOnly:  s.MountFlags.ReadOnly,
 	}
-
-	spec.ServiceName = s.ServiceName
-	spec.ContainerName = s.ContainerName
-	spec.Mechanism = s.Mechanism
-	spec.MechanismArgs = s.MechanismArgs
-	spec.Wiretap = s.Wiretap
-	spec.Agent = s.AgentName
-	spec.NoDefaultPort = s.NoDefaultPort
-
-	// HTTP Intercepts: populate header filters
-	if len(s.HTTPHeaderFilters) > 0 {
-		spec.HeaderFilters = make(map[string]string, len(s.HTTPHeaderFilters))
-		for _, header := range s.HTTPHeaderFilters {
-			if key, value, err := parseHTTPHeader(header); err == nil {
-				spec.HeaderFilters[key] = value
-			}
-			// Note: parseHTTPHeader errors are already caught in validation,
-			// so we can safely ignore them here
-		}
-	}
-	spec.PathFilters = BuildPathFilters(s.HTTPPathEqualFilters, s.HTTPPathPrefixFilters, s.HTTPPathRegexFilters)
 
 	for _, toPod := range s.ToPod {
 		pp, err := types.ParsePortAndProto(toPod)
@@ -118,7 +119,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		for i := 1; i < len(s.Ports); i++ {
 			pm := s.Ports[i]
 			if colIdx := strings.IndexByte(pm, ':'); colIdx > 0 {
-				// The "--port" arg puts local port first, but it's the destination in the pod-port mapping.
+				// The "--port" arg puts the local port first, but it's the destination in the pod-port mapping.
 				to := pm[:colIdx]
 				from := pm[colIdx+1:]
 				if slashIdx := strings.IndexByte(from, '/'); slashIdx > 0 {
@@ -246,6 +247,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 		s.env = make(map[string]string)
 	}
 	s.env["TELEPRESENCE_INTERCEPT_ID"] = intercept.Id
+	s.env[agentconfig.EnvAPIHost] = ud.DaemonID().ContainerName()
 	s.env["TELEPRESENCE_ROOT"] = intercept.ClientMountPoint
 	if err = s.EnvFlags.MaybeWrite(s.env); err != nil {
 		return true, err

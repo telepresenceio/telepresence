@@ -48,7 +48,7 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 				Disposition: manager.InterceptDispositionType_ACTIVE,
 				PodIp:       "10.0.0.1",
 			},
-			expectedPattern: "HTTP filters:",
+			expectedPattern: "HTTP requests with headers",
 			description:     "HTTP intercepts should show header filters",
 		},
 		{
@@ -57,8 +57,8 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 				Name:      "test-http",
 				Mechanism: "http",
 				PathFilters: []string{
-					"/api/v1/*",
-					"/admin/*",
+					":path-regex:/api/v1/.*",
+					":path-regex:/admin/.*",
 				},
 			},
 			interceptInfo: &manager.InterceptInfo{
@@ -66,7 +66,7 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 				Disposition: manager.InterceptDispositionType_ACTIVE,
 				PodIp:       "10.0.0.1",
 			},
-			expectedPattern: "HTTP filters: path /api/v1/*, path /admin/*",
+			expectedPattern: `(?m:HTTP requests with paths\n\s+=~ /api/v1/\.\*\n\s+=~ /admin/\.\*)`,
 			description:     "HTTP intercepts should show path filters",
 		},
 		{
@@ -78,7 +78,7 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 					"X-User-ID": "dev123",
 				},
 				PathFilters: []string{
-					"/api/*",
+					":path-regex:/api/.*",
 				},
 			},
 			interceptInfo: &manager.InterceptInfo{
@@ -86,7 +86,7 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 				Disposition: manager.InterceptDispositionType_ACTIVE,
 				PodIp:       "10.0.0.1",
 			},
-			expectedPattern: "HTTP filters: header X-User-ID=dev123, path /api/*",
+			expectedPattern: `HTTP requests with path =~ /api/\.\* and header 'X-User-Id: dev123'`,
 			description:     "HTTP intercepts should show both header and path filters",
 		},
 		{
@@ -100,7 +100,7 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 				Disposition: manager.InterceptDispositionType_ACTIVE,
 				PodIp:       "10.0.0.1",
 			},
-			expectedPattern: "all HTTP connections",
+			expectedPattern: "all TCP connections",
 			description:     "HTTP intercepts with no filters should show 'all HTTP connections'",
 		},
 		{
@@ -138,19 +138,19 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 			output := info.String()
 
 			// Check if the expected pattern is in the output
-			assert.Contains(t, output, tt.expectedPattern, tt.description)
+			assert.Regexp(t, tt.expectedPattern, output, tt.description)
 
 			// Special handling for header filter test - check individual headers due to map iteration order
 			if tt.name == "HTTP intercept with header filters" {
-				assert.Contains(t, output, "header X-User-ID=dev123", "Should contain X-User-ID header")
-				assert.Contains(t, output, "header X-Environment=staging", "Should contain X-Environment header")
+				assert.Contains(t, output, "'X-User-Id: dev123'", "Should contain X-User-ID header")
+				assert.Contains(t, output, "'X-Environment: staging'", "Should contain X-Environment header")
 			}
 
 			// Verify that TCP intercepts don't show filter info (Global should be true)
 			if tt.spec.Mechanism == "tcp" {
 				assert.True(t, info.Global, "TCP intercepts should have Global=true")
 				// Should NOT contain "HTTP filters:" for TCP intercepts
-				assert.NotContains(t, output, "HTTP filters:", "TCP intercepts should not show HTTP filter info")
+				assert.NotContains(t, output, "HTTP requests", "TCP intercepts should not show HTTP filter info")
 			} else {
 				assert.False(t, info.Global, "HTTP intercepts should have Global=false")
 			}
@@ -256,8 +256,8 @@ func TestInfo_WriteTo_HTTPFilterFormatting(t *testing.T) {
 			"Authorization": "Bearer token=abc123",
 		},
 		PathFilters: []string{
-			"/api/v1/*",
-			"/health",
+			":path-regex:/api/v1/.*",
+			":path-equal:/health",
 		},
 	}
 
@@ -272,15 +272,15 @@ func TestInfo_WriteTo_HTTPFilterFormatting(t *testing.T) {
 	output := info.String()
 
 	// Should contain HTTP filters section
-	assert.Contains(t, output, "HTTP filters:", "Output should contain HTTP filters label")
+	assert.Contains(t, output, "HTTP requests", "Output should contain HTTP requests label")
 
 	// Should contain all header filters (order may vary due to map iteration)
-	assert.Contains(t, output, "header X-User-ID=dev123", "Output should contain X-User-ID header filter")
-	assert.Contains(t, output, "header Authorization=Bearer token=abc123", "Output should contain Authorization header filter with equals in value")
+	assert.Contains(t, output, "'X-User-Id: dev123'", "Output should contain X-User-ID header filter")
+	assert.Contains(t, output, "'Authorization: Bearer token=abc123'", "Output should contain Authorization header filter with equals in value")
 
 	// Should contain all path filters
-	assert.Contains(t, output, "path /api/v1/*", "Output should contain API path filter")
-	assert.Contains(t, output, "path /health", "Output should contain health path filter")
+	assert.Contains(t, output, "=~ /api/v1/.*", "Output should contain API path filter")
+	assert.Contains(t, output, "== /health", "Output should contain health path filter")
 
 	// Should not show "all TCP connections" for HTTP intercepts
 	assert.NotContains(t, output, "all TCP connections", "HTTP intercepts should not show TCP connection message")

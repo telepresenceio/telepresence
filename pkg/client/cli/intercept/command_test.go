@@ -261,7 +261,7 @@ func TestParseHTTPHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			key, value, err := parseHTTPHeader(tt.input)
+			key, value, err := parseKeyValue(tt.input)
 
 			if tt.expectError {
 				require.Error(t, err)

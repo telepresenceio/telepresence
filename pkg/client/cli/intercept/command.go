@@ -57,6 +57,9 @@ type Command struct {
 	DetailedOutput  bool
 	NoDefaultPort   bool
 
+	// Telepresence API server fields
+	Meta []string // --meta key=value pairs for metadata
+
 	// HTTP Intercepts fields
 	HTTPHeaderFilters     []string // --http-header key=value pairs for HTTP header filtering
 	HTTPPathEqualFilters  []string // --http-path-equal paths for HTTP path filtering (exact match)
@@ -73,26 +76,26 @@ func (c *Command) UsesHTTPMechanism() bool {
 		len(c.HTTPPathRegexFilters) > 0
 }
 
-// parseHTTPHeader parses an HTTP header string that can use either "=" or ":" as separator.
+// parseKeyValue parses a string representation of a key and value that can use either "=" or ":" as separator.
 // Supports both formats:
 //   - "X-User-ID=dev123" (equals format)
 //   - "X-User-ID: dev123" (colon format, compatible with curl -H)
 //
 // Returns the key and value, or an error if the format is invalid.
 // When both separators are present, colon takes precedence (standard HTTP format).
-func parseHTTPHeader(header string) (string, string, error) {
+func parseKeyValue(kv string) (string, string, error) {
 	// Try colon separator first (standard HTTP format, curl -H compatible)
-	if key, value, ok := tryParseHeaderWithSeparator(header, ":"); ok {
+	if key, value, ok := tryParseHeaderWithSeparator(kv, ":"); ok {
 		return key, value, nil
 	}
 
 	// Try equals separator
-	if key, value, ok := tryParseHeaderWithSeparator(header, "="); ok {
+	if key, value, ok := tryParseHeaderWithSeparator(kv, "="); ok {
 		return key, value, nil
 	}
 
 	// Neither separator found
-	return "", "", fmt.Errorf("invalid header format '%s': must be key=value or key: value", header)
+	return "", "", fmt.Errorf("invalid format '%s': must be key=value or key: value", kv)
 }
 
 // tryParseHeaderWithSeparator attempts to parse a header with the given separator.
@@ -137,10 +140,13 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 		fmt.Sprintf("Name of container that provides the environment and mounts for the %s. Defaults to the container matching the first %s port.", what, how))
 
 	if !c.Wiretap {
-		flagSet.StringSliceVar(&c.ToPod, "to-pod", []string{}, fmt.Sprintf(
+		flagSet.StringSliceVar(&c.Meta, "meta", nil, fmt.Sprintf(``+
+			`Metadata to attach to the %s. Use --meta key=value to set a single key/value pair, or --meta key1=value1 --meta key2=value2 to set `+
+			`multiple key/value pairs. The metadata can be retrieved using the Telepresence API server.`, what))
+		flagSet.StringSliceVar(&c.ToPod, "to-pod", []string{}, fmt.Sprintf(``+
 			`Additional ports to forward to the %s pod, will available for connections to localhost:PORT. `+
-				`Use this to, for example, access proxy/helper sidecars in the %s pod. The default protocol is TCP. `+
-				`Use <port>/UDP for UDP ports`, how, how))
+			`Use this to, for example, access proxy/helper sidecars in the %s pod. The default protocol is TCP. `+
+			`Use <port>/UDP for UDP ports`, how, how))
 	}
 
 	c.EnvFlags.AddFlags(flagSet)
@@ -220,10 +226,16 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	c.Cmdline = positional[1:]
 	c.FormattedOutput = output.WantsFormatted(cmd)
 
+	for _, meta := range c.Meta {
+		if _, _, err := parseKeyValue(meta); err != nil {
+			return err
+		}
+	}
+
 	// HTTP Intercepts: validate header format
 	if c.UsesHTTPMechanism() {
 		for _, header := range c.HTTPHeaderFilters {
-			if _, _, err := parseHTTPHeader(header); err != nil {
+			if _, _, err := parseKeyValue(header); err != nil {
 				return err
 			}
 		}

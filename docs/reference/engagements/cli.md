@@ -20,9 +20,7 @@ being engaged, see [this doc](../environment.md) for more details.
 
 ## Creating an intercept
 
-The following command will intercept all traffic bound to the service and proxy it to your
-laptop. This includes traffic coming through your ingress controller, so use this option
-carefully as to not disrupt production environments.
+The following command will intercept HTTP requests using the header 'X-User: susan' bound to the service and proxy it to your laptop. This includes traffic coming through your ingress controller, so use this option carefully as to not disrupt production environments.
 
 ```shell
 telepresence intercept <deployment name> --http-header x-user=susan --port=<TCP port>
@@ -33,45 +31,29 @@ Run `telepresence list` to see the list of active intercepts.
 ```console
 $ telepresence list
 deployment dataprocessingnodeservice: intercepted
-   Intercept name: echo-one
+   Intercept name: <deployment name>
    State         : ACTIVE
    Workload kind : Deployment
    Intercepting  : 10.244.0.13 -> 127.0.0.1
        8080 -> 8080 TCP
-   Intercepting  : HTTP filters: header x-user=susan
+   Intercepting  : Intercepting  : HTTP requests with header 'X-User: susan'
 ```
 
-When intercepting a service that has [multiple ports](https://kubernetes.io/docs/concepts/services-networking/service/#multi-port-services), the name of the
-service port that has been intercepted is also listed.
-
+Start a service on your laptop that will receive the intercepted traffic on port 8080, for instance:
 ```console
-$ telepresence status
-OSS User Daemon: Running
-  Version           : $version$
-  Executable        : /usr/local/bin/telepresence
-  Install ID        : 0e711768-a69b-4c36-9eea-fe2d3d964e3c
-  Status            : Connected
-  Kubernetes server : https://<cluster public IP>
-  Kubernetes context: kind-dev
-  Namespace         : default
-  Manager namespace : ambassador
-  Mapped namespaces : [ambassador default kube-public]
-  Intercepts        : 1 total
-    echo-one: <laptop username>@<laptop name>
-OSS Root Daemon: Running
-  Version: $version$
-  DNS    : 
-    Local addresses : [127.0.0.1:51943]
-    VIF Address     : 10.244.0.10:53
-    Exclude suffixes: [.com .io .net .org .ru]
-    Include suffixes: []
-    Timeout         : 4s
-  Subnets: (2 subnets)
-    - 10.96.0.0/16
-    - 10.244.0.0/24
-OSS Traffic Manager: Connected
-  Version      : v$version$
-  Traffic Agent: ghcr.io/telepresenceio/tel2:$version$
+$ python3 -m http.server 8080
+```
+
+Use curl to send requests to the intercepted service using the header 'X-User: susan'. The service running locally should be the one to respond to the request.
+```console
+$ curl -H "X-User: susan" http://<deployment name>/
+Reply from service running on your local host
+```
+
+Run the same curl command again, but this time without the header 'X-User: susan'. Now the server running in the cluster should respond to the request.
+```console
+$ curl http://<deployment name>/
+Reply from service running in your cluster
 ```
 
 Finally, run `telepresence leave <name of intercept>` to stop the intercept.
