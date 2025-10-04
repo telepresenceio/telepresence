@@ -27,7 +27,7 @@ const (
 )
 
 type config struct {
-	agentconfig.SidecarExt
+	*agentconfig.Sidecar
 }
 
 func loadConfig() (*config, error) {
@@ -38,7 +38,7 @@ func loadConfig() (*config, error) {
 
 	c := config{}
 	var err error
-	c.SidecarExt, err = agentconfig.UnmarshalJSON(cfgTight)
+	c.Sidecar, err = agentconfig.UnmarshalJSON(cfgTight)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
@@ -58,7 +58,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 	for _, proto := range []types.Proto{types.ProtoTCP, types.ProtoUDP} {
 		hasRule := false
 	nextCn:
-		for _, cn := range c.AgentConfig().Containers {
+		for _, cn := range c.Containers {
 			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
 				if proto == ic.Protocol {
 					hasRule = true
@@ -71,7 +71,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 			continue
 		}
 
-		// Clearing the chains will create them if they don't exist, or clear them out if they do.
+		// Clearing the chains will create them if they don't exist or clear them out if they do.
 		protoStr := proto.String()
 		preRoutingChain := "TEL_PREROUTING_" + protoStr
 		err := iptables.ClearChain(nat, preRoutingChain)
@@ -86,8 +86,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 
 		// Use our inbound chain to direct traffic coming into the app port to the agent port.
 		lcProto := strings.ToLower(protoStr)
-		ac := c.AgentConfig()
-		for _, cn := range ac.Containers {
+		for _, cn := range c.Containers {
 			for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
 				if proto == ic.Protocol {
 					// Add REDIRECT to both PREROUTING and OUTPUT, because we want connections that
@@ -113,9 +112,9 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 						// Why? Because if it wrote directly to the container port, we wouldn't be able to
 						// prevent an endless loop that would otherwise occur here when the previous rule would
 						// loop it back into the agent.
-						dlog.Debugf(ctx, "output DNAT %s:%d -> %s:%d", podIP, ac.ProxyPort(ic.AgentPort), podIP, ic.ContainerPort)
+						dlog.Debugf(ctx, "output DNAT %s:%d -> %s:%d", podIP, c.ProxyPort(ic.AgentPort), podIP, ic.ContainerPort)
 						err = iptables.AppendUnique(nat, outputChain,
-							"-p", lcProto, "-d", podIP.String(), "--dport", strconv.Itoa(int(ac.ProxyPort(ic.AgentPort))),
+							"-p", lcProto, "-d", podIP.String(), "--dport", strconv.Itoa(int(c.ProxyPort(ic.AgentPort))),
 							"-j", "DNAT", "--to-destination", netip.AddrPortFrom(podIP, ic.ContainerPort).String())
 						if err != nil {
 							return fmt.Errorf("failed to append rule to %s: %w", outputChain, err)

@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
 
 type UserClient interface {
@@ -194,11 +195,7 @@ func (s *Session) GetAgentConfig(ctx context.Context, workload string) (*agentco
 	if err != nil {
 		return nil, err
 	}
-	scx, err := agentconfig.UnmarshalYAML(agc.Data)
-	if err != nil {
-		return nil, err
-	}
-	return scx.AgentConfig(), nil
+	return agentconfig.UnmarshalYAML(agc.Data)
 }
 
 func (s *Session) GetRootClientConfig() (client.Config, error) {
@@ -211,7 +208,7 @@ func GetRootClientConfig(ds *daemon.DaemonStatus) (client.Config, error) {
 		return nil, errors.New("no outbound config")
 	}
 	cfg := client.GetDefaultConfig()
-	if err := client.UnmarshalJSON(data, cfg, true); err != nil {
+	if err := json.Unmarshal(data, cfg, true); err != nil {
 		return nil, err
 	}
 	return cfg, nil

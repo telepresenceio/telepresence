@@ -396,7 +396,7 @@ func (s *State) EnsureAgent(ctx context.Context, n, ns string) (as []*AgentSessi
 	return as, err
 }
 
-func (s *State) ValidateCreateAgent(context.Context, k8sapi.Workload, agentconfig.SidecarExt) error {
+func (s *State) ValidateCreateAgent(context.Context, k8sapi.Workload, *agentconfig.Sidecar) error {
 	return nil
 }
 
@@ -408,7 +408,7 @@ func sortAgents(as []*AgentSession) {
 }
 
 func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, extended, dryRun bool, spec *rpc.InterceptSpec, rp agentconfig.ReplacePolicy) (
-	ac *agentconfig.Sidecar, as []*AgentSession, err error,
+	*agentconfig.Sidecar, []*AgentSession, error,
 ) {
 	if agentmap.TrafficManagerSelector.Matches(labels.Set(wl.GetLabels())) {
 		msg := fmt.Sprintf("%s is the Telepresence Traffic Manager. It can not have a traffic-agent", wl)
@@ -422,30 +422,29 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 			msg := fmt.Sprintf("agent-injector is disabled and no agent has been added manually for %s", wl)
 			return nil, nil, status.Error(codes.FailedPrecondition, msg)
 		}
-		sce, err := agentconfig.UnmarshalJSON(cfgJSON)
+		sc, err := agentconfig.UnmarshalJSON(cfgJSON)
 		if err != nil {
 			return nil, nil, err
 		}
-		ac = sce.AgentConfig()
 		am := s.LoadMatchingAgents(func(_ tunnel.SessionID, ai *AgentSession) bool {
-			return ai.Name == ac.AgentName && ai.Namespace == ac.Namespace
+			return ai.Name == sc.AgentName && ai.Namespace == sc.Namespace
 		})
-		as = make([]*AgentSession, len(am))
+		as := make([]*AgentSession, len(am))
 		i := 0
 		for _, found := range am {
 			as[i] = found
 			i++
 		}
 		sortAgents(as)
-		return ac, as, nil
+		return sc, as, nil
 	}
 
 	if dryRun {
-		sce, err := s.getOrCreateAgentConfig(parentCtx, wl, extended, dryRun, spec, rp)
+		sc, err := s.getOrCreateAgentConfig(parentCtx, wl, extended, dryRun, spec, rp)
 		if err != nil {
 			return nil, nil, err
 		}
-		return sce.AgentConfig(), nil, nil
+		return sc, nil, nil
 	}
 
 	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
@@ -456,24 +455,24 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 		return nil, nil, err
 	}
 
-	sce, err := s.getOrCreateAgentConfig(ctx, wl, extended, dryRun, spec, rp)
+	sc, err := s.getOrCreateAgentConfig(ctx, wl, extended, dryRun, spec, rp)
 	if err != nil {
 		return nil, nil, err
 	}
-	err = mutator.GetMap(ctx).EvictPodsWithAgentConfigMismatch(ctx, wl, sce)
+	err = mutator.GetMap(ctx).EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
 	if err != nil {
 		dlog.Errorf(ctx, "failed to inactivate pods: %v", err)
 		return nil, nil, err
 	}
-	ac = sce.AgentConfig()
-	if as, err = s.waitForAgents(ctx, ac, failedCreateCh); err != nil {
+	as, err := s.waitForAgents(ctx, sc, failedCreateCh)
+	if err != nil {
 		// If no agent arrives, then drop its entry from the configmap. This ensures that there
 		// are no false positives the next time an intercept is attempted.
 		s.dropAgentConfig(parentCtx, wl)
 		return nil, nil, err
 	}
 	sortAgents(as)
-	return ac, as, nil
+	return sc, as, nil
 }
 
 func (s *State) isExtended(spec *rpc.InterceptSpec) bool {
@@ -503,19 +502,20 @@ func (s *State) restoreAppContainer(ctx context.Context, ii *rpc.InterceptInfo, 
 	n := spec.Agent
 	ns := spec.Namespace
 	mm := mutator.GetMap(ctx)
-	_, err := mm.Update(n, ns, func(sce agentconfig.SidecarExt) (ext agentconfig.SidecarExt, err error) {
-		if sce == nil {
+	_, err := mm.Update(n, ns, func(sc *agentconfig.Sidecar) (*agentconfig.Sidecar, error) {
+		if sc == nil {
 			return nil, nil
 		}
 		var cn *agentconfig.Container
+		var err error
 		var desiredPolicy agentconfig.ReplacePolicy
 		if spec.NoDefaultPort {
 			desiredPolicy = agentconfig.ReplacePolicyInactive
-			cn, err = findContainer(sce.AgentConfig(), spec)
+			cn, err = findContainer(sc, spec)
 		} else {
 			// Let's keep the intercepting agent in place. There might be other intercepts or wiretaps active.
 			desiredPolicy = agentconfig.ReplacePolicyIntercept
-			cn, _, err = findIntercept(sce.AgentConfig(), spec)
+			cn, _, err = findIntercept(sc, spec)
 		}
 		if err != nil || cn.Replace == desiredPolicy {
 			return nil, nil
@@ -525,13 +525,13 @@ func (s *State) restoreAppContainer(ctx context.Context, ii *rpc.InterceptInfo, 
 		// The pods for this workload will be killed once the new updated sidecar
 		// reaches the configmap. We inactivate them now, so that they don't continue to
 		// review intercepts.
-		err = mm.EvictPodsWithAgentConfigMismatch(ctx, wl, sce)
-		return sce, err
+		err = mm.EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
+		return sc, err
 	})
 	return err
 }
 
-func (s *State) GetOrGenerateAgentConfig(ctx context.Context, name, namespace string) (agentconfig.SidecarExt, error) {
+func (s *State) GetOrGenerateAgentConfig(ctx context.Context, name, namespace string) (*agentconfig.Sidecar, error) {
 	wl, err := agentmap.GetWorkload(ctx, name, namespace, "")
 	if err != nil {
 		code := codes.Internal
@@ -543,19 +543,20 @@ func (s *State) GetOrGenerateAgentConfig(ctx context.Context, name, namespace st
 	return s.getOrCreateAgentConfig(ctx, wl, false, true, nil, agentconfig.ReplacePolicyInactive)
 }
 
-func (s *State) createAgentConfig(ctx context.Context, wl k8sapi.Workload, agentImage string) (sce agentconfig.SidecarExt, err error) {
-	var gc agentmap.GeneratorConfig
-	if gc, err = agentmap.GeneratorConfigFunc(agentImage); err != nil {
+func (s *State) createAgentConfig(ctx context.Context, wl k8sapi.Workload, agentImage string) (*agentconfig.Sidecar, error) {
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(agentImage)
+	if err != nil {
 		return nil, err
 	}
 	dlog.Debugf(ctx, "generating new agent config for %s", wl)
-	if sce, err = gc.Generate(ctx, wl, nil); err != nil {
+	sc, err := gc.Generate(ctx, wl, nil)
+	if err != nil {
 		return nil, err
 	}
-	if err = s.ValidateCreateAgent(ctx, wl, sce); err != nil {
+	if err = s.ValidateCreateAgent(ctx, wl, sc); err != nil {
 		return nil, err
 	}
-	return sce, nil
+	return sc, nil
 }
 
 func (s *State) getOrCreateAgentConfig(
@@ -565,7 +566,7 @@ func (s *State) getOrCreateAgentConfig(
 	dryRun bool,
 	spec *rpc.InterceptSpec,
 	rp agentconfig.ReplacePolicy,
-) (sce agentconfig.SidecarExt, err error) {
+) (*agentconfig.Sidecar, error) {
 	enabled, err := checkInterceptAnnotations(ctx, wl)
 	if err != nil {
 		return nil, err
@@ -580,48 +581,40 @@ func (s *State) getOrCreateAgentConfig(
 	}
 	mm := mutator.GetMap(ctx)
 	if dryRun {
-		sce = mm.Get(wl.GetName(), wl.GetNamespace())
-		if sce == nil {
-			sce, err = s.createAgentConfig(ctx, wl, agentImage)
+		sc := mm.Get(wl.GetName(), wl.GetNamespace())
+		if sc == nil {
+			sc, err = s.createAgentConfig(ctx, wl, agentImage)
 		}
-		return sce, err
+		return sc, err
 	}
 
-	return mm.Update(wl.GetName(), wl.GetNamespace(), func(sce agentconfig.SidecarExt) (agentconfig.SidecarExt, error) {
-		var ac *agentconfig.Sidecar
-		if sce != nil {
-			ac = sce.AgentConfig()
+	return mm.Update(wl.GetName(), wl.GetNamespace(), func(sc *agentconfig.Sidecar) (*agentconfig.Sidecar, error) {
+		if sc != nil {
 			// If the agentImage has changed, and the extended image is requested, then update
-			if ac.AgentImage != agentImage {
-				ac.AgentImage = agentImage
+			if sc.AgentImage != agentImage {
+				sc.AgentImage = agentImage
 			}
 			dlog.Debugf(ctx, "found existing agent config for %s", wl)
 		} else {
-			sce, err = s.createAgentConfig(ctx, wl, agentImage)
+			sc, err = s.createAgentConfig(ctx, wl, agentImage)
 			if err != nil {
 				return nil, err
 			}
-			ac = sce.AgentConfig()
 		}
 
 		if spec != nil {
 			var cn *agentconfig.Container
 			if spec.NoDefaultPort {
-				cn, err = findContainer(ac, spec)
+				cn, err = findContainer(sc, spec)
 			} else {
-				cn, _, err = findIntercept(ac, spec)
+				cn, _, err = findIntercept(sc, spec)
 			}
 			if err != nil {
 				return nil, err
 			}
 			cn.Replace = rp
 		}
-
-		if dryRun {
-			dlog.Debugf(ctx, "dry run for getOrCreateAgentConfig %s returns", wl)
-			return sce, nil
-		}
-		return sce, nil
+		return sc, nil
 	})
 }
 

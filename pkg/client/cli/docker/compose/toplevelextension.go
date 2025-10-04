@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -24,11 +24,11 @@ type topLevelExtension struct {
 }
 
 func (tl *topLevelExtension) parse(v any) error {
-	data, err := client.MarshalJSON(v)
+	data, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
-	err = client.UnmarshalJSON(data, tl, true)
+	err = json.Unmarshal(data, tl, true)
 	if err != nil {
 		return err
 	}

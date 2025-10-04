@@ -867,7 +867,7 @@ matchExpressions:
 		ctx = managerutil.WithEnv(ctx, env)
 		ctx = setupAgentInjector(t, ctx, clientset)
 
-		gc, err := agentmap.GeneratorConfigFunc("ghcr.io/telepresenceio/tel2:2.13.3")
+		gc, err := env.GeneratorConfig("ghcr.io/telepresenceio/tel2:2.13.3")
 		require.NoError(t, err)
 		actualConfig, actualErr := generateForPod(t, ctx, test.request, gc)
 		requireContains(t, actualErr, strings.ReplaceAll(test.expectedError, "<PODNAME>", test.request.Name))
@@ -2015,7 +2015,6 @@ matchExpressions:
 					}
 				}
 				ctx = managerutil.WithEnv(ctx, &newEnv)
-				agentmap.GeneratorConfigFunc = newEnv.GeneratorConfig
 			}
 			ctx = setupAgentInjector(t, ctx, createClientSet())
 			cw := GetMap(ctx)
@@ -2023,12 +2022,12 @@ matchExpressions:
 			var actualErr error
 			var cfgJSON string
 			if test.generateConfig {
-				gc, err := agentmap.GeneratorConfigFunc("ghcr.io/telepresenceio/tel2:2.13.3")
+				gc, err := managerutil.GetEnv(ctx).GeneratorConfig("ghcr.io/telepresenceio/tel2:2.13.3")
 				require.NoError(t, err)
-				var scx agentconfig.SidecarExt
-				if scx, actualErr = generateForPod(t, ctx, test.pod, gc); actualErr == nil {
-					cw.Store(scx)
-					cfgJSON = marshalConfig(t, scx)
+				var sc *agentconfig.Sidecar
+				if sc, actualErr = generateForPod(t, ctx, test.pod, gc); actualErr == nil {
+					cw.Store(sc)
+					cfgJSON = marshalConfig(t, sc)
 				}
 			}
 			if actualErr == nil {
@@ -2053,8 +2052,8 @@ matchExpressions:
 	}
 }
 
-func marshalConfig(t *testing.T, sce agentconfig.SidecarExt) string {
-	cfgJSON, err := agentconfig.MarshalTight(sce)
+func marshalConfig(t *testing.T, sc *agentconfig.Sidecar) string {
+	cfgJSON, err := agentconfig.MarshalTight(sc)
 	require.NoError(t, err)
 	return cfgJSON
 }
@@ -2077,7 +2076,7 @@ func toAdmissionRequest(resource meta.GroupVersionResource, object any) *admissi
 	}
 }
 
-func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc agentmap.GeneratorConfig) (agentconfig.SidecarExt, error) {
+func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc *agentmap.GeneratorConfig) (*agentconfig.Sidecar, error) {
 	wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod), managerutil.GetEnv(ctx).EnabledWorkloadKinds)
 	if err != nil {
 		return nil, err
@@ -2103,9 +2102,6 @@ func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc agentma
 }
 
 func setupAgentInjector(t *testing.T, ctx context.Context, ci kubernetes.Interface) context.Context {
-	env := managerutil.GetEnv(ctx)
-	agentmap.GeneratorConfigFunc = env.GeneratorConfig
-
 	ctx = k8sapi.WithJoinedClientSetInterface(ctx, ci, argorolloutsfake.NewSimpleClientset())
 	ctx = informer.WithFactory(ctx, "")
 	ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })

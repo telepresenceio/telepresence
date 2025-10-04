@@ -50,6 +50,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -221,7 +222,7 @@ func NewSession(ctx context.Context, cri userd.ConnectRequest, config *client.Ku
 	}
 	if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
 		dlog.Debug(ctx, "Applying client configuration")
-		buf, _ := client.MarshalJSON(cfg)
+		buf, _ := json.Marshal(cfg)
 		buf, _ = yaml.JSONToYAML(buf)
 		sc := bufio.NewScanner(bytes.NewReader(buf))
 		for sc.Scan() {
@@ -892,7 +893,7 @@ func (s *session) Uninstall(ur *rpc.UninstallRequest) (*common.Result, error) {
 
 func (s *session) getNetworkInfo(ctx context.Context, cr *rpc.ConnectRequest) *rootdRpc.NetworkConfig {
 	cfg := client.GetConfig(ctx)
-	jsonCfg, _ := client.MarshalJSON(cfg)
+	jsonCfg, _ := json.Marshal(cfg)
 	return &rootdRpc.NetworkConfig{
 		Session:            s.sessionInfo,
 		ClientConfig:       jsonCfg,

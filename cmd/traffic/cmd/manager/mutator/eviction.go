@@ -41,8 +41,8 @@ func (em wlPodMap) add(wl k8sapi.Workload, pod *core.Pod) {
 	}
 }
 
-func (c *configWatcher) EvictPodsWithAgentConfigMismatch(ctx context.Context, wl k8sapi.Workload, scx agentconfig.SidecarExt) error {
-	cfgJSON, err := agentconfig.MarshalTight(scx)
+func (c *configWatcher) EvictPodsWithAgentConfigMismatch(ctx context.Context, wl k8sapi.Workload, sc *agentconfig.Sidecar) error {
+	cfgJSON, err := agentconfig.MarshalTight(sc)
 	if err != nil {
 		return err
 	}

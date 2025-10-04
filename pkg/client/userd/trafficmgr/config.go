@@ -7,6 +7,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
 
 func (s *session) GetConfig() (*client.SessionConfig, error) {
@@ -16,7 +17,7 @@ func (s *session) GetConfig() (*client.SessionConfig, error) {
 		return nil, err
 	}
 	rc := client.GetDefaultConfig()
-	err = client.UnmarshalJSON(nc.ClientConfig, rc, true)
+	err = json.Unmarshal(nc.ClientConfig, rc, true)
 	if err != nil {
 		return nil, err
 	}

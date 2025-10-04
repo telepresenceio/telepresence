@@ -13,13 +13,13 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
@@ -309,12 +309,12 @@ func (t *transformer) ensureTopLevelExtension(p *compose.Project) error {
 	}
 	// Marshal the extension to JSON and then unmarshal it back to a map. This is necessary because the
 	// extension is a map[string]any and the marshaler used by Docker Compose doesn't support our json-tags.
-	js, err := client.MarshalJSON(t.config.topLevelExtension)
+	js, err := json.Marshal(t.config.topLevelExtension)
 	if err != nil {
 		return err
 	}
 	var ms map[string]any
-	err = client.UnmarshalJSON(js, &ms, true)
+	err = json.Unmarshal(js, &ms, true)
 	if err != nil {
 		return err
 	}

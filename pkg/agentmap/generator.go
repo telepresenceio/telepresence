@@ -25,14 +25,7 @@ var TrafficManagerSelector = labels.SelectorFromSet(map[string]string{ //nolint:
 	"telepresence": "manager",
 })
 
-type GeneratorConfig interface {
-	// Generate generates a configuration for the given workload.
-	Generate(ctx context.Context, wl k8sapi.Workload, existingConfig agentconfig.SidecarExt) (sc agentconfig.SidecarExt, err error)
-}
-
-var GeneratorConfigFunc func(qualifiedAgentImage string) (GeneratorConfig, error) //nolint:gochecknoglobals // extension point
-
-type BasicGeneratorConfig struct {
+type GeneratorConfig struct {
 	ManagerPort         uint16
 	AgentPort           uint16
 	APIPort             uint16
@@ -89,11 +82,11 @@ func portsFromAnnotationValue(wl k8sapi.Workload, annotation, value string) (por
 	return ports, nil
 }
 
-func (cfg *BasicGeneratorConfig) Generate(
+func (cfg *GeneratorConfig) Generate(
 	ctx context.Context,
 	wl k8sapi.Workload,
-	existingConfig agentconfig.SidecarExt,
-) (sc agentconfig.SidecarExt, err error) {
+	existingConfig *agentconfig.Sidecar,
+) (*agentconfig.Sidecar, error) {
 	if TrafficManagerSelector.Matches(labels.Set(wl.GetLabels())) {
 		return nil, fmt.Errorf("%s is the Telepresence Traffic Manager. It can not have a traffic-agent", wl)
 	}
@@ -195,14 +188,14 @@ func (cfg *BasicGeneratorConfig) Generate(
 	}, nil
 }
 
-func (cfg *BasicGeneratorConfig) appendAgentContainerConfigs(
+func (cfg *GeneratorConfig) appendAgentContainerConfigs(
 	ctx context.Context,
 	svc *core.Service,
 	pod *core.PodTemplateSpec,
 	portAnnotations []types.PortIdentifier,
 	agentPortNumberFunc func(int32) uint16,
 	ccs []*agentconfig.Container,
-	existingConfig agentconfig.SidecarExt,
+	existingConfig *agentconfig.Sidecar,
 ) []*agentconfig.Container {
 	ports := filterServicePorts(svc, portAnnotations)
 nextSvcPort:
@@ -247,7 +240,7 @@ nextSvcPort:
 	return ccs
 }
 
-func (cfg *BasicGeneratorConfig) newContainerConfig(cn *core.Container, index int, ics []*agentconfig.Intercept, rp agentconfig.ReplacePolicy) *agentconfig.Container {
+func (cfg *GeneratorConfig) newContainerConfig(cn *core.Container, index int, ics []*agentconfig.Intercept, rp agentconfig.ReplacePolicy) *agentconfig.Container {
 	// Create the concrete MountPolicies that map mount path to policy
 	var mps types.MountPolicies
 	for i := range cn.VolumeMounts {
@@ -300,13 +293,13 @@ func findContainerPort(cns []core.Container, p types.PortIdentifier) (*core.Cont
 	return nil, nil
 }
 
-func (cfg *BasicGeneratorConfig) appendServiceLessAgentContainerConfigs(
+func (cfg *GeneratorConfig) appendServiceLessAgentContainerConfigs(
 	ctx context.Context,
 	pod *core.PodTemplateSpec,
 	portAnnotations []types.PortIdentifier,
 	agentPortNumberFunc func(int32) uint16,
 	ccs []*agentconfig.Container,
-	existingConfig agentconfig.SidecarExt,
+	existingConfig *agentconfig.Sidecar,
 ) ([]*agentconfig.Container, error) {
 	cns := pod.Spec.Containers
 	anonNameIndex := uint64(0)
@@ -358,10 +351,10 @@ nextContainerPort:
 	return ccs, nil
 }
 
-func containerReplacePolicy(existingConfig agentconfig.SidecarExt, cn *core.Container) agentconfig.ReplacePolicy {
+func containerReplacePolicy(existingConfig *agentconfig.Sidecar, cn *core.Container) agentconfig.ReplacePolicy {
 	var replaceContainer agentconfig.ReplacePolicy
 	if existingConfig != nil {
-		for _, cc := range existingConfig.AgentConfig().Containers {
+		for _, cc := range existingConfig.Containers {
 			if cc.Name == cn.Name {
 				replaceContainer = cc.Replace
 				break

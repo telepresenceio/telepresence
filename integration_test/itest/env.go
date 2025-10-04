@@ -15,6 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
@@ -39,7 +40,7 @@ func LoadEnvAndConfig(ctx context.Context) context.Context {
 			ic.Config = icConfig
 			ic.Config.LogLevels().UserDaemon = logrus.DebugLevel
 			ic.Config.LogLevels().RootDaemon = logrus.DebugLevel
-			err = client.UnmarshalJSON(data, &ic, true)
+			err = json.Unmarshal(data, &ic, true)
 		}
 		if err != nil {
 			getT(ctx).Fatal(cf, err)

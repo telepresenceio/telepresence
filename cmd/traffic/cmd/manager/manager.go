@@ -30,7 +30,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -62,8 +61,6 @@ func Main(ctx context.Context, _ ...string) error {
 	if err != nil {
 		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
-	env := managerutil.GetEnv(ctx)
-	agentmap.GeneratorConfigFunc = env.GeneratorConfig
 	return MainWithEnv(ctx)
 }
 

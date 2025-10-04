@@ -188,6 +188,9 @@ message InterceptSpec {
   // Metadata to associate with the intercept. Retrievable using the API server.
   map<string,string> metadata = 29;
 
+  // Plaintext instructs the traffic-agent to use plain text when communicating with the client.
+  bool plaintext = 30;
+
   reserved 9; // used to be former mechanism_args
 
   // Used to be mount_point and only utilized when passing the spec between

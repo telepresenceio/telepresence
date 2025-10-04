@@ -82,8 +82,8 @@ type Env struct {
 	CompatibilityVersion *semver.Version `env:"COMPATIBILITY_VERSION, parser=version, default="`
 }
 
-func (e *Env) GeneratorConfig(qualifiedAgentImage string) (agentmap.GeneratorConfig, error) {
-	return &agentmap.BasicGeneratorConfig{
+func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorConfig, error) {
+	return &agentmap.GeneratorConfig{
 		AgentPort:           e.AgentPort,
 		APIPort:             e.APIPort,
 		ClientConnectionTTL: e.ClientConnectionTTL,

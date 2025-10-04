@@ -214,7 +214,7 @@ func (i *genYAMLCommand) WithJoinedClientSetInterface(ctx context.Context, flagM
 }
 
 type genConfigMap struct {
-	agentmap.BasicGeneratorConfig
+	agentmap.GeneratorConfig
 	*genYAMLCommand
 }
 
@@ -262,7 +262,7 @@ func (g *genConfigMap) generateConfigMap(ctx context.Context, wl k8sapi.Workload
 	if err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
-	return ac.AgentConfig(), nil
+	return ac, nil
 }
 
 func (g *genConfigMap) run(cmd *cobra.Command, kubeFlags map[string]string) error {

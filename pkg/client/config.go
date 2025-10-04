@@ -30,6 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	json2 "github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -189,42 +190,16 @@ func (c *BaseConfig) Helm() *Helm {
 }
 
 func (c *BaseConfig) MarshalYAML() ([]byte, error) {
-	data, err := MarshalJSON(c)
+	data, err := json2.Marshal(c)
 	if err == nil {
 		data, err = yaml.JSONToYAML(data)
 	}
 	return data, err
 }
 
-func UnmarshalJSON(data []byte, into any, rejectUnknown bool) error {
-	opts := []json.Options{json.WithUnmarshalers(json.UnmarshalFunc(func(b []byte, v *time.Duration) error {
-		var s string
-		err := json.Unmarshal(b, &s)
-		if err != nil {
-			return err
-		}
-		d, err := time.ParseDuration(s)
-		if err == nil {
-			*v = d
-		}
-		return err
-	}))}
-	if rejectUnknown {
-		opts = append(opts, json.RejectUnknownMembers(true))
-	}
-	return json.Unmarshal(data, into, opts...)
-}
-
-func MarshalJSON(value any) ([]byte, error) {
-	opts := json.WithMarshalers(json.MarshalFunc(func(d time.Duration) ([]byte, error) {
-		return json.Marshal(d.String())
-	}))
-	return json.Marshal(value, opts, json.Deterministic(true))
-}
-
 func UnmarshalJSONConfig(data []byte, rejectUnknown bool) (Config, error) {
 	cfg := GetDefaultConfig()
-	if err := UnmarshalJSON(data, cfg, rejectUnknown); err != nil {
+	if err := json2.Unmarshal(data, cfg, rejectUnknown); err != nil {
 		return nil, err
 	}
 	return cfg, nil
@@ -1418,7 +1393,7 @@ func (sc *SessionConfig) UnmarshalJSON(data []byte) error {
 	type tmpType SessionConfig
 	var tmpJSON tmpType
 	tmpJSON.Config = GetDefaultConfig()
-	if err := UnmarshalJSON(data, &tmpJSON, false); err != nil {
+	if err := json2.Unmarshal(data, &tmpJSON, false); err != nil {
 		return err
 	}
 	*sc = SessionConfig(tmpJSON)

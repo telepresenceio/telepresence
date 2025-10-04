@@ -38,9 +38,8 @@ func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
 		"--namespace", nsp.AppNamespace(),
 		"--input", inputFile,
 		"--loglevel", "debug")
-	sce, err := agentconfig.UnmarshalYAML([]byte(cfgEntry))
+	sc, err := agentconfig.UnmarshalYAML([]byte(cfgEntry))
 	require.NoError(err)
-	ac := sce.AgentConfig()
 
 	tmpDir := s.T().TempDir()
 	writeYaml := func(name string, data any) string {
@@ -51,7 +50,7 @@ func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
 		return yf
 	}
 
-	configFile := filepath.Join(tmpDir, ac.WorkloadName)
+	configFile := filepath.Join(tmpDir, sc.WorkloadName)
 	require.NoError(os.WriteFile(configFile, []byte(cfgEntry), 0o666))
 
 	stdout := itest.TelepresenceOk(ctx, "genyaml", "container",
@@ -106,26 +105,26 @@ func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
 		require.NoError(nsp.Kubectl(ctx, "delete", "-f", dplYaml))
 	}()
 
-	err = nsp.RolloutStatusWait(ctx, "deploy/"+ac.WorkloadName)
-	nsp.CapturePodLogs(ctx, ac.WorkloadName, "traffic-agent", nsp.AppNamespace())
+	err = nsp.RolloutStatusWait(ctx, "deploy/"+sc.WorkloadName)
+	nsp.CapturePodLogs(ctx, sc.WorkloadName, "traffic-agent", nsp.AppNamespace())
 	require.NoError(err)
 
 	nsp.TelepresenceConnect(ctx)
 	defer itest.TelepresenceQuitOk(ctx)
 
 	stdout = itest.TelepresenceOk(ctx, "list")
-	require.Regexp(regexp.MustCompile(`.*`+ac.WorkloadName+`\s*:\s*ready to (engage|intercept) \(traffic-agent already installed\).*`), stdout)
+	require.Regexp(regexp.MustCompile(`.*`+sc.WorkloadName+`\s*:\s*ready to (engage|intercept) \(traffic-agent already installed\).*`), stdout)
 
-	svcPort, svcCancel := itest.StartLocalHttpEchoServer(ctx, ac.WorkloadName)
+	svcPort, svcCancel := itest.StartLocalHttpEchoServer(ctx, sc.WorkloadName)
 	defer svcCancel()
 
-	itest.TelepresenceOk(ctx, "intercept", ac.WorkloadName, "--port", strconv.Itoa(svcPort))
-	defer itest.TelepresenceOk(ctx, "leave", ac.WorkloadName)
+	itest.TelepresenceOk(ctx, "intercept", sc.WorkloadName, "--port", strconv.Itoa(svcPort))
+	defer itest.TelepresenceOk(ctx, "leave", sc.WorkloadName)
 
 	s.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
-		return err == nil && strings.Contains(stdout, ac.WorkloadName+": intercepted")
+		return err == nil && strings.Contains(stdout, sc.WorkloadName+": intercepted")
 	}, 30*time.Second, 3*time.Second)
 
-	itest.PingInterceptedEchoServer(ctx, ac.WorkloadName, "80")
+	itest.PingInterceptedEchoServer(ctx, sc.WorkloadName, "80")
 }

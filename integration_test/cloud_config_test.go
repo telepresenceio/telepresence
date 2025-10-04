@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
 
 func (s *notConnectedSuite) Test_CloudNeverProxy() {
@@ -113,7 +114,7 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 		var view client.SessionConfig
-		require.NoError(client.UnmarshalJSON([]byte(jsonStdout), &view, false))
+		require.NoError(json.Unmarshal([]byte(jsonStdout), &view, false))
 		npc := len(view.Config.Routing().NeverProxy)
 		npcOk = npc > 0 && npc <= neverProxiedCount
 		if !npcOk {
@@ -250,7 +251,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	var view client.SessionConfig
 	s.TelepresenceConnect(ctx)
 	jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
-	require.NoError(client.UnmarshalJSON([]byte(jsonStdout), &view, false))
+	require.NoError(json.Unmarshal([]byte(jsonStdout), &view, false))
 	require.Equal(view.LogLevels().RootDaemon, logrus.DebugLevel)
 }
 

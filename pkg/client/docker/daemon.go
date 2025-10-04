@@ -37,6 +37,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
@@ -419,7 +420,7 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 	if err = PullImage(progress.WithEventId(ctx, daemonID.Name), image); err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
-	fp, err := client.FreePortsTCP(ctx, 1)
+	fp, err := ioutil.FreePortsTCP(1, client.GetConfig(ctx).Docker().EnableIPv6)
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}

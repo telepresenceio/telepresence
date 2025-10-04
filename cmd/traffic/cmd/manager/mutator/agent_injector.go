@@ -111,7 +111,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 
 	ia := annotation.GetAnnotation(ctx, pod.Annotations, annotation.InjectTrafficAgent, annotation.LegacyInjectTrafficAgent)
 
-	var scx agentconfig.SidecarExt
+	var sc *agentconfig.Sidecar
 	switch ia {
 	case "false", "disabled":
 		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, annotation.InjectTrafficAgent)
@@ -144,19 +144,19 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			// Not an error. It just means that the pod is not eligible for intercepts.
 			return nil, nil
 		}
-		scx = a.agentConfigs.Get(wl.GetName(), wl.GetNamespace())
+		sc = a.agentConfigs.Get(wl.GetName(), wl.GetNamespace())
 		switch {
-		case scx == nil:
+		case sc == nil:
 			dlog.Tracef(ctx, "Skipping %s (no agent config)", wl)
 			return nil, nil
-		case scx.AgentConfig().Manual:
+		case sc.Manual:
 			dlog.Tracef(ctx, "Skipping webhook where agent is manually injected %s", wl.GetNamespace())
 			return nil, nil
 		}
 	default:
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, annotation.InjectTrafficAgent)
 	}
-	return createPatch(ctx, scx.AgentConfig(), pod)
+	return createPatch(ctx, sc, pod)
 }
 
 func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod) (PatchOps, error) {
@@ -613,7 +613,7 @@ func addPodAnnotations(pod *core.Pod, anns map[string]string, patches PatchOps) 
 	return patches
 }
 
-func addPodLabels(_ context.Context, pod *core.Pod, config agentconfig.SidecarExt, patches PatchOps) PatchOps {
+func addPodLabels(_ context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
 	op := "replace"
 	changed := false
 	lm := pod.Labels
@@ -625,11 +625,11 @@ func addPodLabels(_ context.Context, pod *core.Pod, config agentconfig.SidecarEx
 	}
 	if _, ok := pod.Labels[agentconfig.WorkloadNameLabel]; !ok {
 		changed = true
-		lm[agentconfig.WorkloadNameLabel] = config.AgentConfig().WorkloadName
+		lm[agentconfig.WorkloadNameLabel] = config.WorkloadName
 	}
 	if _, ok := pod.Labels[agentconfig.WorkloadKindLabel]; !ok {
 		changed = true
-		lm[agentconfig.WorkloadKindLabel] = string(config.AgentConfig().WorkloadKind)
+		lm[agentconfig.WorkloadKindLabel] = string(config.WorkloadKind)
 	}
 	if _, ok := pod.Labels[agentconfig.WorkloadEnabledLabel]; !ok {
 		changed = true
