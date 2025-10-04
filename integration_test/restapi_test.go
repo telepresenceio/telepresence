@@ -149,7 +149,7 @@ func (s *restAPISuite) startIntercept(ctx context.Context, meta, header string, 
 	args := make([]string, 0, 15)
 	args = append(args, "intercept", s.svc)
 	if meta != "" {
-		args = append(args, "--meta", meta)
+		args = append(args, "--metadata", meta)
 	}
 	if header != "" {
 		args = append(args, "--http-header", header)
@@ -369,7 +369,7 @@ func (s *restAPISuite) Test_RestAPI_FilteredInfo() {
 		args          []string
 		intercepted   bool
 		clientSide    bool
-		myMeta        string
+		myMetadata    string
 	}{
 		// Query the remote API server without any headers. It must respond with client-side=false and intercepted=false because this doesn't match any intercept.'
 		{
@@ -377,7 +377,7 @@ func (s *restAPISuite) Test_RestAPI_FilteredInfo() {
 			containerPort: 8080,
 			intercepted:   false,
 			clientSide:    false,
-			myMeta:        "",
+			myMetadata:    "",
 		},
 		// Query the remote API server with the intercepted header. It must respond with client-side=false and intercepted=true because the remote app is intercepted.
 		{
@@ -386,7 +386,7 @@ func (s *restAPISuite) Test_RestAPI_FilteredInfo() {
 			apiHeaders:    map[string]string{"x": "y"},
 			intercepted:   true,
 			clientSide:    false,
-			myMeta:        "data",
+			myMetadata:    "data",
 		},
 		// Query the local API server without the intercepted header. The local API server must respond with client-side=true and intercepted=false.
 		{
@@ -396,7 +396,7 @@ func (s *restAPISuite) Test_RestAPI_FilteredInfo() {
 			intercepted:   false,
 			clientSide:    true,
 			args:          []string{"-H", "x:y"},
-			myMeta:        "",
+			myMetadata:    "",
 		},
 		// Query the local API server with the intercepted header. The local API server must respond with client-side=true and intercepted=true
 		{
@@ -406,7 +406,7 @@ func (s *restAPISuite) Test_RestAPI_FilteredInfo() {
 			intercepted:   true,
 			clientSide:    true,
 			args:          []string{"-H", "x:y"},
-			myMeta:        "data",
+			myMetadata:    "data",
 		},
 	}
 	for _, tt := range tts {
@@ -428,9 +428,9 @@ func (s *restAPISuite) Test_RestAPI_FilteredInfo() {
 
 			// All intercepts have the same metadata.
 			data, ok := info["metadata"].(map[string]any)
-			if tt.myMeta != "" {
+			if tt.myMetadata != "" {
 				rq.True(ok)
-				s.Equal(tt.myMeta, data["my"])
+				s.Equal(tt.myMetadata, data["my"])
 			} else {
 				s.False(ok)
 			}
