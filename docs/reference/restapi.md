@@ -76,10 +76,10 @@ true
 If you can run curl from the pod, you can try the exact same URL. The result should be "false" when there's an ongoing intercept. The `x-telepresence-caller-intercept-id` is not needed when the call is made from the pod.
 
 ### intercept-info
-`http://<TELEPRESENCE_API_HOST>:<TELEPRESENCE_API_PORT>/intercept-info` is intended to be queried with an optional path query and a set of headers, typically obtained from a Kafka message or similar, and will respond with a JSON structure containing the two booleans `clientSide` and `intercepted`, and a `metadata` map which corresponds to the `--http-meta` key pairs used when the intercept was created. This field is always omitted in case `intercepted` is `false`.
+`http://<TELEPRESENCE_API_HOST>:<TELEPRESENCE_API_PORT>/intercept-info` is intended to be queried with an optional path query and a set of headers, typically obtained from a Kafka message or similar, and will respond with a JSON structure containing the two booleans `clientSide` and `intercepted`, and a `metadata` map which corresponds to the `--metadata` key pairs used when the intercept was created. This field is always omitted in case `intercepted` is `false`.
 
 #### test endpoint using curl
-Assuming that the API-server runs on port 9980, that the intercept was started with `--http-header x=y --meta a=b --meta b=c`, we can now check that the "/intercept-info" returns information for the given path and headers.
+Assuming that the API-server runs on port 9980, that the intercept was started with `--http-header x=y --metadata a=b --metadata b=c`, we can now check that the "/intercept-info" returns information for the given path and headers.
 ```console
 $ curl -v localhost:9980/intercept-info -H 'x-telepresence-caller-intercept-id:9dbb0afa-38ec-48e2-a975-e664e579e197:apitest' -H 'x:y'
 * Host localhost:9980 was resolved.

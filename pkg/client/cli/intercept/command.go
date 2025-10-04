@@ -58,7 +58,7 @@ type Command struct {
 	NoDefaultPort   bool
 
 	// Telepresence API server fields
-	Meta []string // --meta key=value pairs for metadata
+	Metadata []string // --metadata key=value pairs for metadata
 
 	// HTTP Intercepts fields
 	HTTPHeaderFilters     []string // --http-header key=value pairs for HTTP header filtering
@@ -140,8 +140,8 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 		fmt.Sprintf("Name of container that provides the environment and mounts for the %s. Defaults to the container matching the first %s port.", what, how))
 
 	if !c.Wiretap {
-		flagSet.StringSliceVar(&c.Meta, "meta", nil, fmt.Sprintf(``+
-			`Metadata to attach to the %s. Use --meta key=value to set a single key/value pair, or --meta key1=value1 --meta key2=value2 to set `+
+		flagSet.StringSliceVar(&c.Metadata, "metadata", nil, fmt.Sprintf(``+
+			`Metadata to attach to the %s. Use --metadata key=value to set a single key/value pair, or --metadata key1=value1 --metadata key2=value2 to set `+
 			`multiple key/value pairs. The metadata can be retrieved using the Telepresence API server.`, what))
 		flagSet.StringSliceVar(&c.ToPod, "to-pod", []string{}, fmt.Sprintf(``+
 			`Additional ports to forward to the %s pod, will available for connections to localhost:PORT. `+
@@ -226,7 +226,7 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	c.Cmdline = positional[1:]
 	c.FormattedOutput = output.WantsFormatted(cmd)
 
-	for _, meta := range c.Meta {
+	for _, meta := range c.Metadata {
 		if _, _, err := parseKeyValue(meta); err != nil {
 			return err
 		}

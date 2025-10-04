@@ -255,6 +255,7 @@ func (e *engageExtension) desiredRemoteMounts(remoteMounts types.MountPolicies) 
 type httpFilterExtension struct {
 	engageExtension
 	HttpFilters  map[string]string   `json:"httpFilters,omitempty"`
+	Metadata     map[string]string   `json:"metadata,omitempty"`
 	Ports        []types.PortMapping `json:"ports,omitempty"`
 	Paths        []string            `json:"httpPaths,omitempty"`
 	PathPrefixes []string            `json:"httpPathPrefixes,omitempty"`
@@ -272,6 +273,7 @@ func (e *httpFilterExtension) amendInterceptSpec(spec *manager.InterceptSpec) er
 	}
 	spec.HeaderFilters = e.HttpFilters
 	spec.PathFilters = intercept.BuildPathFilters(e.Paths, e.PathPrefixes, e.PathRegexps)
+	spec.Metadata = e.Metadata
 	return nil
 }
 

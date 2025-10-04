@@ -49,7 +49,7 @@ version automatically unless you work in an air-gapped environment.
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[RESTful API Service Reintroduced with HTTP Filtering Support](reference/restapi)</div></div>
 <div style="margin-left: 15px">
 
-The Telepresence RESTful API service has been restored with enhanced support for HTTP header and path filtering. This service enables workloads to programmatically query whether they should handle requests based on active intercepts. Added `--meta` flag allows attaching custom metadata to intercepts that can be retrieved through the API endpoints. The API server is now accessible via `TELEPRESENCE_API_HOST` and `TELEPRESENCE_API_PORT` environment variables in both cluster pods and local intercept handlers.
+The Telepresence RESTful API service has been restored with enhanced support for HTTP header and path filtering. This service enables workloads to programmatically query whether they should handle requests based on active intercepts. Added `--metadata` flag allows attaching custom metadata to intercepts that can be retrieved through the API endpoints. The API server is now accessible via `TELEPRESENCE_API_HOST` and `TELEPRESENCE_API_PORT` environment variables in both cluster pods and local intercept handlers.
 </div>
 
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">More efficient DNS handling in the traffic-manager</div></div>
