@@ -689,7 +689,9 @@ type InterceptSpec struct {
 	// If specified, only requests matching these paths will be intercepted.
 	PathFilters []string `protobuf:"bytes,28,rep,name=path_filters,json=pathFilters,proto3" json:"path_filters,omitempty"`
 	// Metadata to associate with the intercept. Retrievable using the API server.
-	Metadata      map[string]string `protobuf:"bytes,29,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Metadata map[string]string `protobuf:"bytes,29,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Plaintext instructs the traffic-agent to use plain text when communicating with the client.
+	Plaintext     bool `protobuf:"varint,30,opt,name=plaintext,proto3" json:"plaintext,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -911,6 +913,13 @@ func (x *InterceptSpec) GetMetadata() map[string]string {
 		return x.Metadata
 	}
 	return nil
+}
+
+func (x *InterceptSpec) GetPlaintext() bool {
+	if x != nil {
+		return x.Plaintext
+	}
+	return false
 }
 
 // InterceptInfo contains information about a live intercept in an agent
@@ -3897,7 +3906,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2-.telepresence.manager.AgentInfo.ContainerInfoR\x05value:\x028\x01J\x04\b\x06\x10\a\"1\n" +
 	"\vPortMapping\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\x05R\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\x05R\x02to\"\x81\t\n" +
+	"\x02to\x18\x02 \x01(\x05R\x02to\"\x9f\t\n" +
 	"\rInterceptSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06client\x18\x02 \x01(\tR\x06client\x12\x14\n" +
@@ -3931,7 +3940,8 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x0fno_default_port\x18\x19 \x01(\bR\rnoDefaultPort\x12]\n" +
 	"\x0eheader_filters\x18\x1b \x03(\v26.telepresence.manager.InterceptSpec.HeaderFiltersEntryR\rheaderFilters\x12!\n" +
 	"\fpath_filters\x18\x1c \x03(\tR\vpathFilters\x12M\n" +
-	"\bmetadata\x18\x1d \x03(\v21.telepresence.manager.InterceptSpec.MetadataEntryR\bmetadata\x1a@\n" +
+	"\bmetadata\x18\x1d \x03(\v21.telepresence.manager.InterceptSpec.MetadataEntryR\bmetadata\x12\x1c\n" +
+	"\tplaintext\x18\x1e \x01(\bR\tplaintext\x1a@\n" +
 	"\x12HeaderFiltersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a;\n" +
