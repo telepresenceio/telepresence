@@ -8,12 +8,15 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/go-json-experiment/json"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -21,6 +24,7 @@ import (
 
 type Config interface {
 	AgentConfig() *agentconfig.Sidecar
+	Annotations() map[string]string
 	HasRemoteMounts() bool
 	PodName() string
 	PodIP() netip.Addr
@@ -28,20 +32,37 @@ type Config interface {
 }
 
 type config struct {
-	sidecar *agentconfig.Sidecar
-	podName string
-	podIP   netip.Addr
-	podUID  k8sTypes.UID
+	sidecar     *agentconfig.Sidecar
+	annotations map[string]string
+	podName     string
+	podIP       netip.Addr
+	podUID      k8sTypes.UID
 }
 
 func LoadConfig(ctx context.Context) (Config, error) {
-	cfgTight, ok := dos.LookupEnv(ctx, agentconfig.EnvAgentConfig)
+	var cfgTight string
+	var ok bool
+	c := config{}
+
+	annFile := filepath.Join(agentconfig.PodInfoMountPath, "annotations")
+	annData, err := dos.ReadFile(ctx, annFile)
+	if err != nil {
+		// Was an older traffic-manager in charge of injecting this agent so that the config can be found from the environment?
+		dlog.Warnf(ctx, "Unable to read annotations from %s: %v", annFile, err)
+		dlog.Warnf(ctx, "Loading agent config from env %s", agentconfig.EnvAgentConfig)
+		cfgTight, ok = dos.LookupEnv(ctx, agentconfig.EnvAgentConfig)
+	} else {
+		dlog.Infof(ctx, "Loading agent config from %s", annFile)
+		c.annotations, err = readMap(string(annData))
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse annotations from %s: %v", annFile, err)
+		}
+		cfgTight, ok = c.annotations[annotation.Config]
+	}
 	if !ok {
-		return nil, errors.New("unable to retrieve agent ConfigMap entry")
+		return nil, errors.New("unable to retrieve agent config")
 	}
 
-	var err error
-	c := config{}
 	c.sidecar, err = agentconfig.UnmarshalJSON(cfgTight)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
@@ -95,6 +116,10 @@ func (c *config) HasRemoteMounts() bool {
 		}
 	}
 	return false
+}
+
+func (c *config) Annotations() map[string]string {
+	return c.annotations
 }
 
 func (c *config) AgentConfig() *agentconfig.Sidecar {
@@ -222,4 +247,21 @@ func mountVRS(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Cont
 		}
 	}
 	return nil
+}
+
+// readMap parses a multi-line string into a map[string]string. Each line is assumed to be in the form "key=value",
+// where the value is a JSON-encoded string.
+func readMap(annData string) (map[string]string, error) {
+	lines := strings.Split(annData, "\n")
+	anns := make(map[string]string, len(lines))
+	for _, line := range lines {
+		if i := strings.IndexByte(line, '='); i > 0 {
+			var st string
+			if err := json.Unmarshal([]byte(line[i+1:]), &st); err != nil {
+				return nil, err
+			}
+			anns[strings.TrimSpace(line[:i])] = st
+		}
+	}
+	return anns, nil
 }

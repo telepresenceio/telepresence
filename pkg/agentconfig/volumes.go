@@ -11,6 +11,22 @@ import (
 func AgentVolumes(string, *core.Pod) []core.Volume {
 	volumes := []core.Volume{
 		{
+			Name: PodInfoVolumeName,
+			VolumeSource: core.VolumeSource{
+				DownwardAPI: &core.DownwardAPIVolumeSource{
+					Items: []core.DownwardAPIVolumeFile{
+						{
+							Path: "annotations",
+							FieldRef: &core.ObjectFieldSelector{
+								FieldPath: "metadata.annotations",
+							},
+						},
+					},
+					DefaultMode: nil,
+				},
+			},
+		},
+		{
 			Name: ExportsVolumeName,
 			VolumeSource: core.VolumeSource{
 				EmptyDir: &core.EmptyDirVolumeSource{},
