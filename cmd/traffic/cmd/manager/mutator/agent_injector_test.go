@@ -1182,11 +1182,6 @@ matchExpressions:
     env:
     - name: _TEL_APP_A_SOME_NAME
       value: some value
-    - name: AGENT_CONFIG
-      valueFrom:
-        fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations['telepresence.io/agent-config']
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:
@@ -1215,6 +1210,8 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
+    - mountPath: /etc/podinfo
+      name: pod-info
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1222,6 +1219,12 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
+  - downwardAPI:
+      items:
+      - fieldRef:
+          fieldPath: metadata.annotations
+        path: annotations
+    name: pod-info
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1272,11 +1275,6 @@ matchExpressions:
     env:
     - name: TELEPRESENCE_API_PORT
       value: "9981"
-    - name: AGENT_CONFIG
-      valueFrom:
-        fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations['telepresence.io/agent-config']
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:
@@ -1305,6 +1303,8 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
+    - mountPath: /etc/podinfo
+      name: pod-info
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1312,6 +1312,12 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
+  - downwardAPI:
+      items:
+      - fieldRef:
+          fieldPath: metadata.annotations
+        path: annotations
+    name: pod-info
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1417,11 +1423,6 @@ matchExpressions:
     args:
     - agent
     env:
-    - name: AGENT_CONFIG
-      valueFrom:
-        fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations['telepresence.io/agent-config']
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:
@@ -1450,6 +1451,8 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
+    - mountPath: /etc/podinfo
+      name: pod-info
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1457,6 +1460,12 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
+  - downwardAPI:
+      items:
+      - fieldRef:
+          fieldPath: metadata.annotations
+        path: annotations
+    name: pod-info
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1526,11 +1535,6 @@ matchExpressions:
     args:
     - agent
     env:
-    - name: AGENT_CONFIG
-      valueFrom:
-        fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations['telepresence.io/agent-config']
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:
@@ -1558,6 +1562,8 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
+    - mountPath: /etc/podinfo
+      name: pod-info
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1565,6 +1571,12 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
+  - downwardAPI:
+      items:
+      - fieldRef:
+          fieldPath: metadata.annotations
+        path: annotations
+    name: pod-info
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1634,11 +1646,6 @@ matchExpressions:
     args:
     - agent
     env:
-    - name: AGENT_CONFIG
-      valueFrom:
-        fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations['telepresence.io/agent-config']
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:
@@ -1666,6 +1673,8 @@ matchExpressions:
         - /tmp/agent/ready
     resources: {}
     volumeMounts:
+    - mountPath: /etc/podinfo
+      name: pod-info
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
@@ -1673,6 +1682,12 @@ matchExpressions:
 - op: replace
   path: /spec/volumes
   value:
+  - downwardAPI:
+      items:
+      - fieldRef:
+          fieldPath: metadata.annotations
+        path: annotations
+    name: pod-info
   - emptyDir: {}
     name: export-volume
   - emptyDir: {}
@@ -1736,15 +1751,6 @@ matchExpressions:
 								Name: "LOG_LEVEL",
 							},
 							{
-								Name: "AGENT_CONFIG",
-								ValueFrom: &core.EnvVarSource{
-									FieldRef: &core.ObjectFieldSelector{
-										APIVersion: "v1",
-										FieldPath:  "metadata.annotations['telepresence.io/agent-config']",
-									},
-								},
-							},
-							{
 								Name: "POD_IP",
 								ValueFrom: &core.EnvVarSource{
 									FieldRef: &core.ObjectFieldSelector{
@@ -1778,15 +1784,6 @@ matchExpressions:
 							EnvFrom: nil,
 							Env: []core.EnvVar{
 								{
-									Name: "AGENT_CONFIG",
-									ValueFrom: &core.EnvVarSource{
-										FieldRef: &core.ObjectFieldSelector{
-											APIVersion: "v1",
-											FieldPath:  "metadata.annotations['telepresence.io/agent-config']",
-										},
-									},
-								},
-								{
 									Name: "_TEL_AGENT_POD_IP",
 									ValueFrom: &core.EnvVarSource{
 										FieldRef: &core.ObjectFieldSelector{
@@ -1819,12 +1816,16 @@ matchExpressions:
 							TerminationMessagePolicy: "File",
 							VolumeMounts: []core.VolumeMount{
 								{
+									Name:      agentconfig.PodInfoVolumeName,
+									MountPath: agentconfig.PodInfoMountPath,
+								},
+								{
 									Name:      agentconfig.ExportsVolumeName,
-									MountPath: "/tel_app_exports",
+									MountPath: agentconfig.ExportsMountPoint,
 								},
 								{
 									Name:      agentconfig.TempVolumeName,
-									MountPath: "/tmp",
+									MountPath: agentconfig.TempMountPoint,
 								},
 							},
 							ReadinessProbe: &core.Probe{
@@ -1914,11 +1915,6 @@ matchExpressions:
       value: default-secret-name
     - name: _TEL_APP_A_BOTH_NAMES
       value: $(_TEL_APP_A_TOKEN_VOLUME) and $(_TEL_APP_A_SECRET_NAME)
-    - name: AGENT_CONFIG
-      valueFrom:
-        fieldRef:
-          apiVersion: v1
-          fieldPath: metadata.annotations['telepresence.io/agent-config']
     - name: _TEL_AGENT_POD_IP
       valueFrom:
         fieldRef:
@@ -1950,10 +1946,21 @@ matchExpressions:
     - mountPath: /tel_app_mounts/some-container/var/run/secrets/kubernetes.io/serviceaccount
       name: $(_TEL_APP_A_TOKEN_VOLUME)
       readOnly: true
+    - mountPath: /etc/podinfo
+      name: pod-info
     - mountPath: /tel_app_exports
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
+- op: add
+  path: /spec/volumes/-
+  value:
+    downwardAPI:
+      items:
+      - fieldRef:
+          fieldPath: metadata.annotations
+        path: annotations
+    name: pod-info
 - op: add
   path: /spec/volumes/-
   value:

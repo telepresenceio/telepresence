@@ -25,6 +25,8 @@ const (
 	EnvPrefix         = "_TEL_"
 	EnvPrefixAgent    = EnvPrefix + "AGENT_"
 	EnvPrefixApp      = EnvPrefix + "APP_"
+	PodInfoVolumeName = "pod-info"
+	PodInfoMountPath  = "/etc/podinfo"
 
 	// EnvAgentConfig is the environment variable where the traffic-agent finds its own config.
 	EnvAgentConfig = "AGENT_CONFIG"

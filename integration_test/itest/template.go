@@ -101,23 +101,23 @@ type DisruptionBudget struct {
 	MaxUnavailable int
 }
 
-func OpenTemplate(ctx context.Context, name string, data any) (io.Reader, error) {
-	b, err := ReadTemplate(ctx, name, data)
+func OpenTemplate(ctx context.Context, path string, data any) (io.Reader, error) {
+	b, err := ReadTemplate(ctx, path, data)
 	if err != nil {
 		return nil, err
 	}
 	return bytes.NewReader(b), nil
 }
 
-func ReadTemplate(ctx context.Context, name string, data any) ([]byte, error) {
+func ReadTemplate(ctx context.Context, path string, data any) ([]byte, error) {
 	fnMap := sprig.FuncMap()
 	fnMap["toYaml"] = toYAML
-	tpl, err := template.New("").Funcs(fnMap).ParseFiles(filepath.Join(GetWorkingDir(ctx), name))
+	tpl, err := template.New("").Funcs(fnMap).ParseFiles(path)
 	if err != nil {
 		return nil, err
 	}
 	wr := bytes.Buffer{}
-	if err = tpl.ExecuteTemplate(&wr, filepath.Base(name), data); err != nil {
+	if err = tpl.ExecuteTemplate(&wr, filepath.Base(path), data); err != nil {
 		return nil, err
 	}
 	return wr.Bytes(), nil

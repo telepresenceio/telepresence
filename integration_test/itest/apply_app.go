@@ -76,7 +76,7 @@ type AppData struct {
 func ApplyAppTemplate(ctx context.Context, namespace string, app *AppData) {
 	t := getT(ctx)
 	t.Helper()
-	r, err := OpenTemplate(WithWorkingDir(ctx, filepath.Join(GetOSSRoot(ctx), "testdata", "k8s")), "svc-deploy.goyaml", app)
+	r, err := OpenTemplate(ctx, filepath.Join(GetOSSRoot(ctx), "testdata", "k8s", "svc-deploy.goyaml"), app)
 	require.NoError(t, err)
 	require.NoError(t, Kubectl(dos.WithStdin(ctx, r), namespace, "apply", "-f", "-"), "failed to apply template")
 	wl := app.DeploymentName

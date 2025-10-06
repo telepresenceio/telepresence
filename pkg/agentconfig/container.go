@@ -2,7 +2,6 @@ package agentconfig
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -83,15 +82,6 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 	}
 	evs = append(evs,
 		core.EnvVar{
-			Name: "AGENT_CONFIG",
-			ValueFrom: &core.EnvVarSource{
-				FieldRef: &core.ObjectFieldSelector{
-					APIVersion: "v1",
-					FieldPath:  fmt.Sprintf("metadata.annotations['%s']", annotation.Config),
-				},
-			},
-		},
-		core.EnvVar{
 			Name: EnvPrefixAgent + "POD_IP",
 			ValueFrom: &core.EnvVarSource{
 				FieldRef: &core.ObjectFieldSelector{
@@ -124,6 +114,10 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 		mounts = a.appendVolumeMounts(app, cc, mounts)
 	})
 	mounts = append(mounts,
+		core.VolumeMount{
+			Name:      PodInfoVolumeName,
+			MountPath: PodInfoMountPath,
+		},
 		core.VolumeMount{
 			Name:      ExportsVolumeName,
 			MountPath: ExportsMountPoint,
