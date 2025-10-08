@@ -74,6 +74,12 @@ can be restored by setting the `client.dns.useComplexLookup` parameter in the He
   </Body>
 </Note>
 <Note>
+	<Title type="feature">Add MCP server to Telepresence CLI</Title>
+	<Body>
+The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept.  The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
+  </Body>
+</Note>
+<Note>
 	<Title type="change">Telepresence client now requires a traffic manager version of at least 2.21.0.</Title>
 	<Body>
 The traffic manager is now required to be at least version 2.21.0. Versions earlier than 2.21.0 will no longer work. The reason for this is that implementing the new reconnect behavior would require too much conditional code with older traffic-managers, and a lot of functionality wouldn't work anyway.
