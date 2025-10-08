@@ -299,8 +299,8 @@ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq
 github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
 github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f h1:y5//uYreIhSUg3J1GEMiLbxo1LJaP8RfCpH6pymGZus=
 github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f/go.mod h1:ZdcZmHo+o7JKHSa8/e818NopupXU1YMK5fe1lsApnBw=
-github.com/njayp/ophis v1.0.3 h1:EAWVI9CH+io9tWGlUsTocdOq1lNnY46uULXQYQYieOA=
-github.com/njayp/ophis v1.0.3/go.mod h1:Y0tc4QzX61BS6movOYi65mOpDh30cj7NA8HIbHzGugM=
+github.com/njayp/ophis v1.0.4 h1:4HML6da+5R2yy3+8RxMp403zYvgd60q3cxb/mTPtUvs=
+github.com/njayp/ophis v1.0.4/go.mod h1:Y0tc4QzX61BS6movOYi65mOpDh30cj7NA8HIbHzGugM=
 github.com/onsi/ginkgo/v2 v2.21.0 h1:7rg/4f3rB88pb5obDgNZrNHrQ4e6WpjonchcpuBRnZM=
 github.com/onsi/ginkgo/v2 v2.21.0/go.mod h1:7Du3c42kxCUegi0IImZ1wUQzMBVecgIHjR1C+NkhLQo=
 github.com/onsi/gomega v1.35.1 h1:Cwbd75ZBPxFSuZ6T+rN/WCb/gOc6YgFBXLlZLhC7Ds4=
