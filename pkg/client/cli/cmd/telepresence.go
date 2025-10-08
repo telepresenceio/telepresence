@@ -162,6 +162,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 		listNamespaces(),
 		loglevel(),
 		manPages(),
+		mcp(),
 		quit(),
 		replaceCmd(),
 		serveCmd(),
