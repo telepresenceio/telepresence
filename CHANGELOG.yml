@@ -90,6 +90,12 @@ items:
           that traffic-agents with special DNS configurations might stop working. If this is a problem, the old behavior
           can be restored by setting the `client.dns.useComplexLookup` parameter in the Helm chart or the
           `dns.useComplexLookup` parameter in the client configuration file.
+      - type: feature
+        title: Add MCP server to Telepresence CLI
+        body: >-
+          The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute
+          some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept. 
+          The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
       - type: change
         title: Telepresence client now requires a traffic manager version of at least 2.21.0.
         body: >-
@@ -431,7 +437,8 @@ items:
           The port number can be configured using `grpc.daemonPort` and defaults to `4038`.
       - type: bugfix
         title: Telepresence fails to start the root daemon on Windows unless current user is the administrator
-        body: The telepresence CLI starts a user daemon and a root daemon. The latter is started using administrator
+        body:
+          The telepresence CLI starts a user daemon and a root daemon. The latter is started using administrator
           privileges. On a Windows box, this means that the root daemon runs using a different user account (typically
           "Administrator") unless the current user can run processes with elevated privileges. The socket used for
           communication with the root daemon was assumed to reside in `%USERPROFILE%\AppData\Local\telepresence`
