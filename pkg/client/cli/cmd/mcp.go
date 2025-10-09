@@ -52,8 +52,9 @@ func mcp() *cobra.Command {
 					"telepresence replace",
 				),
 
-				// allow local flags but not global flags
-				InheritedFlagSelector: ophis.NoFlags,
+				// allow local flags
+				// allow global output flag for `--detailed-output` and `--output json` combo
+				InheritedFlagSelector: ophis.AllowFlags("output"),
 			},
 		},
 	})
