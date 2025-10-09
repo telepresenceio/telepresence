@@ -20,7 +20,6 @@ func mcp() *cobra.Command {
 					"client-certificate",
 					"client-key",
 					"cluster",
-					// TODO maybe allow context?
 					"context",
 					"disable-compression",
 					"insecure-skip-tls-verify",
@@ -45,11 +44,12 @@ func mcp() *cobra.Command {
 			},
 			{
 				CmdSelector: ophis.AllowCmds(
-
 					"telepresence intercept",
 					"telepresence ingest",
 					"telepresence leave",
 					"telepresence list",
+					"telepresence wiretap",
+					"telepresence replace",
 				),
 
 				// allow local flags but not global flags
