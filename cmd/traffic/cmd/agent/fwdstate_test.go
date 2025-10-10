@@ -491,7 +491,7 @@ func TestInterceptSpecsConflict(t *testing.T) {
 			conflicts: false,
 		},
 		{
-			name: "Path regex - :path-regex: always conflicts conservatively",
+			name: "Path regex - :path-regex: should not conflict (distinct paths)",
 			spec1: &manager.InterceptSpec{
 				Mechanism:   "http",
 				PathFilters: []string{":path-regex:^/api/.*$"},
@@ -499,6 +499,446 @@ func TestInterceptSpecsConflict(t *testing.T) {
 			spec2: &manager.InterceptSpec{
 				Mechanism:   "http",
 				PathFilters: []string{":path-prefix:/admin/"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Regex vs Regex with same prefix - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/v1/.*"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex vs Regex with same prefix - non-anchor- should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/api/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/api/v2/.*"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex vs Regex with different prefix - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/admin/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/.*"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Regex vs Exact with same value - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/health$"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-equal:/health"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex vs Exact with different value - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/health$"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-equal:/ready"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Regex vs Prefix with overlapping prefix - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/v1/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/api/"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex vs Prefix with non-overlapping prefix - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/admin/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/api/"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Regex vs Regex with exact equality pattern - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/status$"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/status$"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex vs Regex with different exact patterns - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/status$"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/health$"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Header regex - identical wildcard patterns should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam::.*",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam::.*",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Header regex - identical wildcard patterns should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "^adam::.*",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam::.*",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Header regex - patterns with common suffix should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "^adam::.*",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "bertil::adam::.*",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Header regex - different prefixes in wildcard should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "^adam::.*",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "^bertil::.*",
+				},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Header regex - different prefixes in wildcard should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "adam::.*",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "bertil::.*",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Header regex - overlapping wildcard patterns should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-env": "stage::[a-z]+",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-env": "stage::.*",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Header regex - one wildcard, one static exact value should conflict if regex includes it",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "prod::[a-z]+",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "prod::admin",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Header regex - non-overlapping static and wildcard should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "dev::[0-9]+",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "prod::[a-z]+",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Header regex - different header keys should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "dev::.*",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-env": "stage::.*",
+				},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Header regex - one regex fully includes another (subset overlap)",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "dev::(admin|test)",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "dev::admin",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Header regex - disjoint sets in alternation should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "dev::(qa|test)",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"x-user": "dev::prod",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex literal prefix with escaped dot - should detect same literal prefix",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/v1\\.users/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/v1\\.users/details.*"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex literal prefix with escaped plus - should conflict due to same base literal",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/foo\\+bar/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/foo\\+bar/v1.*"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex with group starts early - should NOT conflict if literal diverges before '('",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/(v1|v2)/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/admin/(v1|v2)/.*"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Regex with nested group but same prefix - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/(v1|v2)/users.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/(v1|v2)/orders.*"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex with character class in middle - should conflict if literal prefix matches",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/user_[a-z]+/details"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/user_[0-9]+/settings"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex with non-overlapping prefixes - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/serviceA/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/serviceB/.*"},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Regex with trailing literal only - should conflict if same literal",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/api/v1/resource$"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/api/v1/resource$"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex without ^ or .* but same base literal - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/foo/bar"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/foo/bar/v1"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex with escaped parentheses - same literal should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/file\\(test\\)/.*"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/file\\(test\\)/v1"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex with trailing $ anchor and identical literal - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:^/health$"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/health$"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex vs different Regex - non-anchored - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/api"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/foo"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex vs different Prefix - non-anchored - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/api/"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-prefix:/foo/api/"},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Regex vs overlapping Regex - non-anchored - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/api/"},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism:   "http",
+				PathFilters: []string{":path-regex:/foo/api/"},
 			},
 			conflicts: true,
 		},
