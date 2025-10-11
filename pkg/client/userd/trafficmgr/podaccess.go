@@ -13,9 +13,9 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -144,7 +144,7 @@ func (pa *podAccess) workerPortForward(ctx context.Context, port string, wg *syn
 		dlog.Errorf(ctx, "error parsing pod IP address %q: %v", pa.podIP, err)
 		return
 	}
-	f := forwarder.NewInterceptor(pp, tunnel.ClientToAgent, netip.AddrPortFrom(addr, pp.Port))
+	f := fwd.NewInterceptor(pp, tunnel.ClientToAgent, netip.AddrPortFrom(addr, pp.Port))
 	err = f.Serve(ctx, nil)
 	if err != nil && ctx.Err() == nil {
 		dlog.Errorf(ctx, "port-forwarder failed with %v", err)

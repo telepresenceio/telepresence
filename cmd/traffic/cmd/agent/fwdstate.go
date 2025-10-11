@@ -11,8 +11,8 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
@@ -23,7 +23,7 @@ type fwdState struct {
 	*state
 	intercept         agentconfig.InterceptTarget
 	container         string
-	forwarder         forwarder.Interceptor
+	forwarder         fwd.Interceptor
 	chosenInterceptId string
 }
 
@@ -34,7 +34,7 @@ func generateMechanismDescription(spec *manager.InterceptSpec) string {
 
 // NewInterceptState creates an InterceptState that performs intercepts by using an Interceptor which indiscriminately
 // intercepts all traffic to the port that it forwards.
-func (s *state) NewInterceptState(forwarder forwarder.Interceptor, intercept agentconfig.InterceptTarget, container string) InterceptState {
+func (s *state) NewInterceptState(forwarder fwd.Interceptor, intercept agentconfig.InterceptTarget, container string) InterceptState {
 	return &fwdState{
 		state:     s,
 		intercept: intercept,

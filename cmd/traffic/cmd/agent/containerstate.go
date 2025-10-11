@@ -8,8 +8,8 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -29,17 +29,17 @@ func (c *containerState) AddPortHandler(ctx context.Context, pp types.PortAndPro
 	c.AddInterceptState(c.NewInterceptState(fwd, it, c.container.Name))
 }
 
-func (c *containerState) newPortHandler(pp types.PortAndProto, ics []*agentconfig.Intercept) forwarder.Interceptor {
+func (c *containerState) newPortHandler(pp types.PortAndProto, ics []*agentconfig.Intercept) fwd.Interceptor {
 	ic := ics[0] // They all have the same protocol container port, so the first one will do.
 	if c.container.Replace == agentconfig.ReplacePolicyIntercept {
 		cp := c.AgentConfig().InterceptorInactivePort(ic.ContainerPort, pp.Proto)
 		// Redirect non-intercepted traffic to the pod so that injected sidecars that hijack the ports for
 		// incoming connections will continue to work.
 		targetHost := c.PodIP()
-		return forwarder.NewInterceptor(pp, tunnel.AgentToClient, netip.AddrPortFrom(targetHost, cp))
+		return fwd.NewInterceptor(pp, tunnel.AgentToClient, netip.AddrPortFrom(targetHost, cp))
 	}
 	// The agent will intercept all traffic intended for this container.
-	return forwarder.NewInterceptor(pp, tunnel.AgentToClient, netip.AddrPort{})
+	return fwd.NewInterceptor(pp, tunnel.AgentToClient, netip.AddrPort{})
 }
 
 func (c *containerState) GlobalState() State {

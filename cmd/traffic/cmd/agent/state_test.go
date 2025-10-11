@@ -13,8 +13,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -25,8 +25,8 @@ const (
 
 var appTarget = netip.AddrPortFrom(netip.MustParseAddr("192.168.1.100"), appPort)
 
-func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.State) {
-	f := forwarder.NewInterceptor(types.PortAndProto{Proto: types.ProtoTCP, Port: 1111}, tunnel.AgentToProxied, appTarget)
+func makeFS(t *testing.T, ctx context.Context) (fwd.Interceptor, agent.State) {
+	f := fwd.NewInterceptor(types.PortAndProto{Proto: types.ProtoTCP, Port: 1111}, tunnel.AgentToProxied, appTarget)
 	go func() {
 		if err := f.Serve(context.Background(), nil); err != nil {
 			dlog.Error(ctx, err)

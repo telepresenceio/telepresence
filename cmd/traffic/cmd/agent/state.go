@@ -10,8 +10,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -34,7 +34,7 @@ type State interface {
 	SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
-	NewInterceptState(forwarder forwarder.Interceptor, target agentconfig.InterceptTarget, container string) InterceptState
+	NewInterceptState(forwarder fwd.Interceptor, target agentconfig.InterceptTarget, container string) InterceptState
 	NewContainerState(s State, cn *agentconfig.Container, mountPoint string, env map[string]string) ContainerState
 	AddContainerState(containerName string, containerState ContainerState)
 }

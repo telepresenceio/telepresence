@@ -37,6 +37,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -48,7 +49,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -1001,7 +1001,7 @@ func (s *session) eachWorkload(namespaces []string, do func(kind manager.Workloa
 }
 
 func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
-	fw := forwarder.NewInterceptor(types.PortAndProto{
+	fw := fwd.NewInterceptor(types.PortAndProto{
 		Port:  srcPort,
 		Proto: ap.Proto,
 	}, tunnel.ClientToAgent, ap.AddrPort)
