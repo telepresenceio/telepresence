@@ -7,7 +7,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -26,7 +26,7 @@ func (m bridgeMounter) Start(ctx context.Context, _, _, _, _ string, podAddrPort
 	}
 	dlog.Debugf(ctx, "Remote mount bridge listening at :%d, will forward to %s", m, podAddrPort)
 	go func() {
-		f := fwd.NewInterceptor(pp, tunnel.ClientToAgent, podAddrPort)
+		f := forwarder.New(pp, tunnel.ClientToAgent, podAddrPort)
 		err := f.Serve(ctx, nil)
 		if err != nil && ctx.Err() == nil {
 			dlog.Errorf(ctx, "port-forwarder failed with %v", err)

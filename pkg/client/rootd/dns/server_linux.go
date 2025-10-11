@@ -13,8 +13,8 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	"github.com/datawire/dlib/dtime"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -133,7 +133,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 					return nil
 				}
 				go func() {
-					if err = fwd.ForwardUDP(c, tunnel.ClientToDNS, pc.(*net.UDPConn), dnsResolverAddr); err != nil {
+					if err = forwarder.ForwardUDP(c, tunnel.ClientToDNS, pc.(*net.UDPConn), dnsResolverAddr); err != nil {
 						dlog.Error(c, err)
 					}
 				}()

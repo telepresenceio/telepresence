@@ -3,7 +3,6 @@ package fwd
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"slices"
@@ -12,24 +11,20 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type tcp struct {
-	interceptor
+	*interceptor
 	httpIntercepts []*manager.InterceptInfo // Store multiple HTTP intercepts with filters
 }
 
-func newTCP(listenPort uint16, tag tunnel.Tag, target netip.AddrPort) Interceptor {
+func newTCP(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) Interceptor {
 	return &tcp{
-		interceptor: interceptor{
-			tag:        tag,
-			listenPort: listenPort,
-			target:     target,
-			lCancel:    func() {},
-		},
+		interceptor: newInterceptor(ctx, listenPort, tag, target),
 	}
 }
 
@@ -69,10 +64,10 @@ func (f *tcp) SetInterceptingMultiple(ctx context.Context, intercepts []*manager
 
 	// Set global/TCP intercept using base implementation
 	f.intercept = globalIntercept
-	if f.lCtx != nil {
+	if f.tCancel != nil {
 		f.tCancel()
-		f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
 	}
+	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
 }
 
 // SetIntercepting overrides the base implementation to clear HTTP intercepts.
@@ -83,12 +78,17 @@ func (f *tcp) SetIntercepting(ctx context.Context, intercept *manager.InterceptI
 	f.interceptor.SetIntercepting(ctx, intercept)
 }
 
-func (f *tcp) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
-	listener, err := f.listen(ctx)
+func (f *tcp) Serve(_ context.Context, initCh chan<- netip.AddrPort) error {
+	ctx := f.lCtx
+	listener, err := f.Listen(ctx)
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	go func() {
+		<-ctx.Done()
+		dlog.Debugf(ctx, "Listener closed")
+		listener.Close()
+	}()
 
 	la := listener.Addr().(*net.TCPAddr)
 	if initCh != nil {
@@ -99,63 +99,17 @@ func (f *tcp) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
 	dlog.Debugf(ctx, "Forwarding from %s", la)
 	defer dlog.Debugf(ctx, "Done forwarding from %s", la)
 
-	go f.acceptLoop(listener)
+	go forwarder.AcceptLoop(ctx, listener, f.forwardConn)
 	<-ctx.Done()
 	return nil
-}
-
-func (f *tcp) listen(ctx context.Context) (*net.TCPListener, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Set up listener lifetime (same as the overall forwarder lifetime)
-	f.lCtx, f.lCancel = context.WithCancel(ctx)
-
-	// Set up a target lifetime
-	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
-	listenPort := f.listenPort
-
-	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(listenPort)})
-	if err != nil {
-		return nil, err
-	}
-	addr := listener.Addr().(*net.TCPAddr).AddrPort()
-	f.lCtx = dlog.WithField(f.lCtx, "listen", addr.String())
-	f.listenPort = addr.Port()
-	return listener, nil
-}
-
-func (f *tcp) acceptLoop(listener *net.TCPListener) {
-	for {
-		select {
-		case <-f.lCtx.Done():
-			return
-		default:
-		}
-
-		conn, err := listener.AcceptTCP()
-		if err != nil {
-			if f.lCtx.Err() != nil {
-				return
-			}
-			dlog.Infof(f.lCtx, "Error on accept: %+v", err)
-			continue
-		}
-		go func() {
-			if err := f.forwardConn(conn); err != nil {
-				dlog.Error(f.lCtx, err)
-			}
-		}()
-	}
 }
 
 // Number of []byte chunks that can be cached by a wiretap connection before it discards data.
 const wiretapCacheSize = 0x100
 
-func (f *tcp) forwardConn(clientConn net.Conn) error {
+func (f *tcp) forwardConn(ctx context.Context, clientConn net.Conn) error {
 	var wtIntercepts []*manager.InterceptInfo
 	f.mu.Lock()
-	ctx := f.tCtx
 	targetAddr := f.target
 	intercept := f.intercept
 	tapCount := len(f.wiretaps)
@@ -199,55 +153,7 @@ func (f *tcp) forwardConn(clientConn net.Conn) error {
 	if intercept != nil {
 		return f.interceptConn(ctx, clientConn, intercept)
 	}
-
-	defer dlog.Debug(ctx, "Done forwarding")
-	defer clientConn.Close()
-
-	if targetAddr.Port() == 0 {
-		dlog.Debug(ctx, "Forwarding to /dev/null")
-		_, _ = io.Copy(io.Discard, clientConn)
-		return nil
-	}
-
-	ctx = dlog.WithField(ctx, "target", targetAddr.String())
-
-	dlog.Debug(ctx, "Forwarding...")
-
-	targetConn, err := net.DialTCP("tcp", nil, net.TCPAddrFromAddrPort(targetAddr))
-	if err != nil {
-		return fmt.Errorf("error on dial: %w", err)
-	}
-	defer targetConn.Close()
-
-	done := make(chan struct{})
-
-	go func() {
-		if _, err := io.Copy(targetConn, clientConn); err != nil && ctx.Err() == nil {
-			dlog.Debugf(ctx, "Error clientConn->targetConn: %+v", err)
-		}
-		_ = targetConn.CloseWrite()
-		done <- struct{}{}
-	}()
-	go func() {
-		if _, err := io.Copy(clientConn, targetConn); err != nil && ctx.Err() == nil {
-			dlog.Debugf(ctx, "Error targetConn->clientConn: %+v", err)
-		}
-		if hwCloser, ok := clientConn.(interface{ CloseWrite() error }); ok {
-			_ = hwCloser.CloseWrite()
-		}
-		done <- struct{}{}
-	}()
-
-	// Wait for both sides to close the connection
-	for numClosed := 0; numClosed < 2; {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-done:
-			numClosed++
-		}
-	}
-	return nil
+	return f.Forwarder.Forward(ctx, clientConn)
 }
 
 func (f *tcp) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {

@@ -12,7 +12,10 @@ import (
 
 func TestTCPDispatch_HTTPMechanism_Handled(t *testing.T) {
 	// Create a minimal tcp interceptor instance
-	f := &tcp{interceptor: interceptor{}}
+	f := &tcp{interceptor: &interceptor{
+		lCtx:    context.Background(),
+		lCancel: func() {},
+	}}
 
 	// net.Pipe gives us a pair of in-memory connections
 	clientConn, serverConn := net.Pipe()
@@ -38,7 +41,10 @@ func TestTCPDispatch_HTTPMechanism_Handled(t *testing.T) {
 }
 
 func TestTCPDispatch_NoMechanism_NotHandled(t *testing.T) {
-	f := &tcp{interceptor: interceptor{}}
+	f := &tcp{interceptor: &interceptor{
+		lCtx:    context.Background(),
+		lCancel: func() {},
+	}}
 
 	// No intercept
 	handled, err := f.DispatchByMechanism(context.Background(), nil, nil)

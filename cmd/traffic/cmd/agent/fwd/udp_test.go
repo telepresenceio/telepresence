@@ -10,7 +10,10 @@ import (
 )
 
 func TestUDPDispatch_HTTPFilters_NotHandled(t *testing.T) {
-	f := &udp{interceptor: interceptor{}}
+	f := &udp{interceptor: &interceptor{
+		lCtx:    context.Background(),
+		lCancel: func() {},
+	}}
 	intercept := &manager.InterceptInfo{Spec: &manager.InterceptSpec{
 		HeaderFilters: map[string]string{"X-Test": "value"},
 	}}
@@ -21,7 +24,10 @@ func TestUDPDispatch_HTTPFilters_NotHandled(t *testing.T) {
 }
 
 func TestUDPDispatch_NoMechanism_NotHandled(t *testing.T) {
-	f := &udp{interceptor: interceptor{}}
+	f := &udp{interceptor: &interceptor{
+		lCtx:    context.Background(),
+		lCancel: func() {},
+	}}
 	handled, err := f.DispatchByMechanism(context.Background(), nil, nil)
 	require.False(t, handled)
 	require.NoError(t, err)

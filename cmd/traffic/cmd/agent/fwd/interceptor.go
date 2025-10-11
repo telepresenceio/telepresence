@@ -3,7 +3,6 @@ package fwd
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"slices"
@@ -11,25 +10,23 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type Interceptor interface {
-	io.Closer
-	Tag() tunnel.Tag
+	forwarder.Forwarder
+
 	InterceptId() string
-	Serve(context.Context, chan<- netip.AddrPort) error
 	SetIntercepting(context.Context, *manager.InterceptInfo)
 	SetInterceptingMultiple(context.Context, []*manager.InterceptInfo)
 	SetStreamProvider(tunnel.ClientStreamProvider)
-	Target() netip.AddrPort
 	AddWiretap(*manager.InterceptInfo)
 	WiretapIDs() []string
 	HasWiretap(id string) bool
 	RemoveWiretap(id string)
-	ListenPort() uint16
 	PruneTo(ctx context.Context, ids []string)
 
 	// DispatchByMechanism gives the interceptor a chance to handle a connection
@@ -44,8 +41,8 @@ type Interceptor interface {
 }
 
 type interceptor struct {
-	mu sync.Mutex
-
+	forwarder.Forwarder
+	mu         sync.Mutex
 	lCtx       context.Context
 	lCancel    context.CancelFunc
 	listenPort uint16
@@ -60,15 +57,25 @@ type interceptor struct {
 	intercept *manager.InterceptInfo
 }
 
-func NewInterceptor(from types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) Interceptor {
+func NewInterceptor(ctx context.Context, from types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) Interceptor {
 	switch from.Proto {
 	case types.ProtoTCP:
-		return newTCP(from.Port, tag, target)
+		return newTCP(ctx, from, tag, target)
 	case types.ProtoUDP:
-		return newUDP(from.Port, tag, target)
+		return newUDP(ctx, from, tag, target)
 	default:
 		panic(fmt.Errorf("unsupported protocol %s", from.Proto))
 	}
+}
+
+func newInterceptor(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) *interceptor {
+	ctx, cancel := context.WithCancel(ctx)
+	fx := &interceptor{
+		Forwarder: forwarder.New(listenPort, tag, target),
+		lCtx:      ctx,
+		lCancel:   cancel,
+	}
+	return fx
 }
 
 func (f *interceptor) InterceptInfos() (infos []*manager.InterceptInfo) {
@@ -105,13 +112,6 @@ func (f *interceptor) Close() error {
 	return nil
 }
 
-func (f *interceptor) Target() netip.AddrPort {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return f.target
-}
-
 func (f *interceptor) InterceptId() (id string) {
 	f.mu.Lock()
 	if f.intercept != nil {
@@ -119,10 +119,6 @@ func (f *interceptor) InterceptId() (id string) {
 	}
 	f.mu.Unlock()
 	return id
-}
-
-func (f *interceptor) ListenPort() uint16 {
-	return f.listenPort
 }
 
 func (f *interceptor) AddWiretap(intercept *manager.InterceptInfo) {
