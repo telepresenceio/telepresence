@@ -74,6 +74,7 @@ following Free and Open Source software:
     github.com/google/btree                                        v1.1.3                                Apache License 2.0
     github.com/google/gnostic-models                               v0.7.0                                Apache License 2.0
     github.com/google/go-cmp                                       v0.7.0                                3-clause BSD license
+    github.com/google/jsonschema-go                                v0.3.0                                MIT license
     github.com/google/uuid                                         v1.6.0                                3-clause BSD license
     github.com/gorilla/websocket                                   v1.5.4-0.20250319132907-e064f32e3674  2-clause BSD license
     github.com/gosuri/uitable                                      v0.0.4                                MIT license
@@ -104,12 +105,14 @@ following Free and Open Source software:
     github.com/moby/docker-image-spec                              v1.3.1                                Apache License 2.0
     github.com/moby/spdystream                                     v0.5.0                                Apache License 2.0
     github.com/moby/term                                           v0.5.2                                Apache License 2.0
+    github.com/modelcontextprotocol/go-sdk                         v1.0.0                                MIT license
     github.com/modern-go/concurrent                                v0.0.0-20180306012644-bacd9c7ef1dd    Apache License 2.0
     github.com/modern-go/reflect2                                  v1.0.3-0.20250322232337-35a7c28c31ee  Apache License 2.0
     github.com/monochromegane/go-gitignore                         v0.0.0-20200626010858-205db1a8cc00    MIT license
     github.com/morikuni/aec                                        v1.0.0                                MIT license
     github.com/munnerz/goautoneg                                   v0.0.0-20191010083416-a7dc8b61c822    3-clause BSD license
     github.com/mxk/go-flowrate                                     v0.0.0-20140419014527-cca7078d478f    3-clause BSD license
+    github.com/njayp/ophis                                         v1.0.4                                Apache License 2.0
     github.com/opencontainers/go-digest                            v1.0.0                                Apache License 2.0
     github.com/opencontainers/image-spec                           v1.1.1                                Apache License 2.0
     github.com/peterbourgon/diskv                                  v2.0.1+incompatible                   MIT license
@@ -144,6 +147,7 @@ following Free and Open Source software:
     github.com/x448/float16                                        v0.8.4                                MIT license
     github.com/xhit/go-str2duration/v2                             v2.1.0                                3-clause BSD license
     github.com/xlab/treeprint                                      v1.2.0                                MIT license
+    github.com/yosida95/uritemplate/v3                             v3.0.2                                3-clause BSD license
     go.opentelemetry.io/auto/sdk                                   v1.2.1                                Apache License 2.0
     go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp  v0.63.0                               3-clause BSD license, Apache License 2.0
     go.opentelemetry.io/otel                                       v1.38.0                               3-clause BSD license, Apache License 2.0

@@ -165,6 +165,31 @@
           link: reference/cli/telepresence_list-namespaces
         - title: telepresence loglevel
           link: reference/cli/telepresence_loglevel
+        - title: telepresence mcp
+          link: reference/cli/telepresence_mcp
+          items:
+            - title: start
+              link: reference/cli/telepresence_mcp_start
+            - title: tools
+              link: reference/cli/telepresence_mcp_tools
+            - title: claude
+              link: reference/cli/telepresence_mcp_claude
+              items:
+                - title: enable
+                  link: reference/cli/telepresence_mcp_claude_enable
+                - title: disable
+                  link: reference/cli/telepresence_mcp_claude_disable
+                - title: list
+                  link: reference/cli/telepresence_mcp_claude_list
+            - title: vscode
+              link: reference/cli/telepresence_mcp_vscode
+              items:
+                - title: enable
+                  link: reference/cli/telepresence_mcp_vscode_enable
+                - title: disable
+                  link: reference/cli/telepresence_mcp_vscode_disable
+                - title: list
+                  link: reference/cli/telepresence_mcp_vscode_list
         - title: telepresence quit
           link: reference/cli/telepresence_quit
         - title: telepresence replace

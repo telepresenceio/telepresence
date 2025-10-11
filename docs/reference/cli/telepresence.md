@@ -53,6 +53,7 @@ recommended) which in turn may result in a password prompt.
 | [list-contexts](telepresence_list-contexts) | Show all contexts |
 | [list-namespaces](telepresence_list-namespaces) | Show all namespaces |
 | [loglevel](telepresence_loglevel) | Temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons |
+| [mcp](telepresence_mcp) | MCP server management |
 | [quit](telepresence_quit) | Tell telepresence daemons to quit |
 | [replace](telepresence_replace) | Replace a container |
 | [serve](telepresence_serve) | Start the browser on a remote service |

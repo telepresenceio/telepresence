@@ -30,6 +30,7 @@ telepresence
 traffic
 tst-manager
 !/cmd/*/
+mcp-tools.json
 
 # Include Chart directory
 !/charts/telepresence-oss
