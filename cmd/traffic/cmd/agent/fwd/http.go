@@ -27,123 +27,16 @@ type interceptWithFilters struct {
 }
 
 type httpInterceptor struct {
-	interceptor
-	intercepts     []*interceptWithFilters
-	originalTarget netip.AddrPort
-}
-
-func (h *httpInterceptor) SetIntercepting(ctx context.Context, info *manager.InterceptInfo) {
-	if info == nil {
-		h.SetInterceptingMultiple(ctx, nil)
-		return
-	}
-	h.SetInterceptingMultiple(ctx, []*manager.InterceptInfo{info})
-}
-
-func (h *httpInterceptor) SetInterceptingMultiple(ctx context.Context, infos []*manager.InterceptInfo) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	// Clear existing intercepts
-	h.intercepts = nil
-	h.intercept = nil
-
-	if len(infos) == 0 {
-		dlog.Debugf(ctx, "HTTP interceptor cleared")
-		return
-	}
-
-	// Set up multiple intercepts
-	h.intercepts = make([]*interceptWithFilters, 0, len(infos))
-	for _, info := range infos {
-		if spec := info.Spec; spec != nil {
-			h.intercepts = append(h.intercepts, &interceptWithFilters{
-				intercept:     info,
-				headerFilters: spec.HeaderFilters,
-				pathFilters:   spec.PathFilters,
-			})
-		}
-	}
-
-	dlog.Debugf(ctx, "HTTP interceptor configured with %d intercepts", len(h.intercepts))
-}
-
-func (h *httpInterceptor) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
-	listener, err := h.listen(ctx)
-	if err != nil {
-		return err
-	}
-	defer listener.Close()
-
-	la := listener.Addr().(*net.TCPAddr)
-	if initCh != nil {
-		initCh <- la.AddrPort()
-		close(initCh)
-	}
-
-	dlog.Debugf(ctx, "HTTP interceptor forwarding from %s", la)
-	defer dlog.Debugf(ctx, "Done HTTP interceptor forwarding from %s", la)
-
-	go h.acceptLoop(listener)
-	<-ctx.Done()
-	return nil
-}
-
-func (h *httpInterceptor) listen(ctx context.Context) (*net.TCPListener, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	// Set up listener lifetime (same as the overall forwarder lifetime)
-	h.lCtx, h.lCancel = context.WithCancel(ctx)
-
-	// Set up a target lifetime
-	h.tCtx, h.tCancel = context.WithCancel(h.lCtx)
-	listenPort := h.listenPort
-
-	listener, err := net.ListenTCP("tcp", &net.TCPAddr{Port: int(listenPort)})
-	if err != nil {
-		return nil, err
-	}
-	addr := listener.Addr().(*net.TCPAddr).AddrPort()
-	h.lCtx = dlog.WithField(h.lCtx, "listen", addr.String())
-	h.listenPort = addr.Port()
-	return listener, nil
-}
-
-func (h *httpInterceptor) acceptLoop(listener *net.TCPListener) {
-	for {
-		select {
-		case <-h.lCtx.Done():
-			return
-		default:
-		}
-
-		conn, err := listener.AcceptTCP()
-		if err != nil {
-			if h.lCtx.Err() != nil {
-				return
-			}
-			dlog.Infof(h.lCtx, "Error on accept: %+v", err)
-			continue
-		}
-		go func() {
-			if err := h.handleHTTPConn(conn); err != nil {
-				dlog.Error(h.lCtx, err)
-			}
-		}()
-	}
+	*interceptor
 }
 
 func (h *httpInterceptor) handleHTTPConn(clientConn net.Conn) error {
 	h.mu.Lock()
-	ctx := h.tCtx
-	originalTarget := h.originalTarget
 	// Copy intercepts to avoid holding lock during request processing
-	intercepts := make([]*interceptWithFilters, len(h.intercepts))
-	copy(intercepts, h.intercepts)
+	intercepts := h.intercepts.sorted()
 	h.mu.Unlock()
 
-	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
+	ctx := dlog.WithField(h.lCtx, "client", clientConn.RemoteAddr().String())
 	defer clientConn.Close()
 
 	// Read the HTTP request
@@ -157,30 +50,32 @@ func (h *httpInterceptor) handleHTTPConn(clientConn net.Conn) error {
 	// Use precedence model: headers take priority over path-only intercepts
 
 	// Pass 1: Check intercepts with headers (high priority tier)
-	for _, interceptInfo := range intercepts {
-		if len(interceptInfo.headerFilters) > 0 {
-			if shouldInterceptRequest(req, interceptInfo.headerFilters, interceptInfo.pathFilters) {
+	for _, ic := range intercepts {
+		spec := ic.Spec
+		if len(spec.HeaderFilters) > 0 {
+			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
 				dlog.Debugf(ctx, "Intercepting HTTP request %s %s with header-based intercept %s",
-					req.Method, req.URL.Path, interceptInfo.intercept.Id)
-				return h.interceptHTTPConn(ctx, clientConn, req, interceptInfo.intercept)
+					req.Method, req.URL.Path, ic.Id)
+				return h.interceptHTTPConn(ic.ctx, clientConn, req, ic.InterceptInfo)
 			}
 		}
 	}
 
 	// Pass 2: Check intercepts with only paths (low priority tier)
-	for _, interceptInfo := range intercepts {
-		if len(interceptInfo.headerFilters) == 0 && len(interceptInfo.pathFilters) > 0 {
-			if shouldInterceptRequest(req, interceptInfo.headerFilters, interceptInfo.pathFilters) {
+	for _, ic := range intercepts {
+		spec := ic.Spec
+		if len(spec.HeaderFilters) == 0 && len(spec.PathFilters) > 0 {
+			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
 				dlog.Debugf(ctx, "Intercepting HTTP request %s %s with path-based intercept %s",
-					req.Method, req.URL.Path, interceptInfo.intercept.Id)
-				return h.interceptHTTPConn(ctx, clientConn, req, interceptInfo.intercept)
+					req.Method, req.URL.Path, ic.Id)
+				return h.interceptHTTPConn(ic.ctx, clientConn, req, ic.InterceptInfo)
 			}
 		}
 	}
 
 	// No intercepts matched, forward to original service
 	dlog.Debugf(ctx, "Forwarding HTTP request %s %s to original service (no intercepts matched)", req.Method, req.URL.Path)
-	return h.forwardToOriginalService(ctx, clientConn, req, originalTarget)
+	return h.forwardToOriginalService(ctx, clientConn, req, h.Target())
 }
 
 func shouldInterceptRequest(req *http.Request, headerFilters map[string]string, pathFilters []string) bool {

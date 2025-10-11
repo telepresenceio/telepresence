@@ -11,24 +11,25 @@ import (
 
 func TestUDPDispatch_HTTPFilters_NotHandled(t *testing.T) {
 	f := &udp{interceptor: &interceptor{
-		lCtx:    context.Background(),
-		lCancel: func() {},
+		lCtx:       context.Background(),
+		intercepts: make(interceptControllerMap),
+		wiretaps:   make(interceptControllerMap),
 	}}
 	intercept := &manager.InterceptInfo{Spec: &manager.InterceptSpec{
 		HeaderFilters: map[string]string{"X-Test": "value"},
 	}}
-
-	handled, err := f.DispatchByMechanism(context.Background(), nil, intercept)
+	f.SetIntercepting([]*manager.InterceptInfo{intercept})
+	handled := f.IsHTTP()
 	require.False(t, handled, "UDP dispatch should not handle HTTP filters")
-	require.NoError(t, err)
 }
 
 func TestUDPDispatch_NoMechanism_NotHandled(t *testing.T) {
 	f := &udp{interceptor: &interceptor{
-		lCtx:    context.Background(),
-		lCancel: func() {},
+		lCtx:       context.Background(),
+		intercepts: make(interceptControllerMap),
+		wiretaps:   make(interceptControllerMap),
 	}}
-	handled, err := f.DispatchByMechanism(context.Background(), nil, nil)
+	f.SetIntercepting(nil)
+	handled := f.IsHTTP()
 	require.False(t, handled)
-	require.NoError(t, err)
 }

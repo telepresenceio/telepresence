@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"slices"
 	"sync"
 	"time"
 
@@ -28,54 +27,8 @@ func newTCP(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, 
 	}
 }
 
-func (f *tcp) InterceptInfos() (infos []*manager.InterceptInfo) {
-	f.mu.Lock()
-	if len(f.httpIntercepts) > 0 {
-		infos = slices.Clone(f.httpIntercepts)
-	} else if f.intercept != nil {
-		infos = []*manager.InterceptInfo{f.intercept}
-	}
-	f.mu.Unlock()
-	return infos
-}
-
-// SetInterceptingMultiple overrides the base implementation to handle HTTP intercepts.
-func (f *tcp) SetInterceptingMultiple(ctx context.Context, intercepts []*manager.InterceptInfo) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	// Separate HTTP intercepts (with filters) from global/TCP intercepts
-	var httpIntercepts []*manager.InterceptInfo
-	var globalIntercept *manager.InterceptInfo
-
-	for _, intercept := range intercepts {
-		if intercept.Spec.Wiretap {
-			continue
-		}
-		if len(intercept.Spec.HeaderFilters) > 0 || len(intercept.Spec.PathFilters) > 0 {
-			httpIntercepts = append(httpIntercepts, intercept)
-		} else if globalIntercept == nil {
-			globalIntercept = intercept
-		}
-	}
-
-	// Store HTTP intercepts for DispatchByMechanism
-	f.httpIntercepts = httpIntercepts
-
-	// Set global/TCP intercept using base implementation
-	f.intercept = globalIntercept
-	if f.tCancel != nil {
-		f.tCancel()
-	}
-	f.tCtx, f.tCancel = context.WithCancel(f.lCtx)
-}
-
-// SetIntercepting overrides the base implementation to clear HTTP intercepts.
-func (f *tcp) SetIntercepting(ctx context.Context, intercept *manager.InterceptInfo) {
-	f.mu.Lock()
-	f.httpIntercepts = nil // Clear HTTP intercepts when setting single intercept
-	f.mu.Unlock()
-	f.interceptor.SetIntercepting(ctx, intercept)
+func (f *tcp) IsHTTP() bool {
+	return f.intercepts.isHTTP() || f.wiretaps.isHTTP()
 }
 
 func (f *tcp) Serve(_ context.Context, initCh chan<- netip.AddrPort) error {
@@ -108,30 +61,23 @@ func (f *tcp) Serve(_ context.Context, initCh chan<- netip.AddrPort) error {
 const wiretapCacheSize = 0x100
 
 func (f *tcp) forwardConn(ctx context.Context, clientConn net.Conn) error {
-	var wtIntercepts []*manager.InterceptInfo
-	f.mu.Lock()
-	targetAddr := f.target
-	intercept := f.intercept
-	tapCount := len(f.wiretaps)
-	if tapCount > 0 {
-		wtIntercepts = make([]*manager.InterceptInfo, tapCount)
-		i := 0
-		for _, wt := range f.wiretaps {
-			wtIntercepts[i] = wt
-			i++
-		}
-	}
-	f.mu.Unlock()
-
 	// Give mechanism-specific handling a chance first (e.g., HTTP-aware routing)
-	if handled, err := f.DispatchByMechanism(ctx, clientConn, intercept); handled || err != nil {
+	if f.IsHTTP() {
+		return f.forwardHTTPConn(ctx, clientConn)
+	}
+
+	f.mu.Lock()
+	intercept, err := f.intercepts.global()
+	wtIntercepts := f.wiretaps.sorted()
+	f.mu.Unlock()
+	if err != nil {
 		return err
 	}
 
 	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
 
-	if targetAddr.Port() > 0 {
-		if len(wtIntercepts) > 0 {
+	if f.Target().Port() > 0 {
+		if tapCount := len(wtIntercepts); tapCount > 0 {
 			var taps []net.Conn
 			dlog.Debugf(ctx, "forwarding to %d wiretaps", tapCount)
 			clientConn, taps = AddWiretaps(ctx, clientConn, tapCount, wiretapCacheSize)
@@ -139,7 +85,7 @@ func (f *tcp) forwardConn(ctx context.Context, clientConn net.Conn) error {
 			wg.Add(tapCount)
 			defer wg.Wait()
 			for i, ii := range wtIntercepts {
-				go func(conn net.Conn, intercept *manager.InterceptInfo) {
+				go func(conn net.Conn, intercept *interceptController) {
 					defer wg.Done()
 					dlog.Debugf(ctx, "wiretap to %d", ii.Spec.TargetPort)
 					err := f.interceptConn(ctx, conn, intercept)
@@ -156,7 +102,7 @@ func (f *tcp) forwardConn(ctx context.Context, clientConn net.Conn) error {
 	return f.Forwarder.Forward(ctx, clientConn)
 }
 
-func (f *tcp) interceptConn(ctx context.Context, conn net.Conn, iCept *manager.InterceptInfo) error {
+func (f *tcp) interceptConn(ctx context.Context, conn net.Conn, iCept *interceptController) error {
 	spec := iCept.Spec
 	ip, err := iputil.ParseAddr(spec.TargetHost)
 	if err != nil {
@@ -217,58 +163,19 @@ func (f *tcp) rerouteConn(ctx context.Context, conn net.Conn, clientSession tunn
 func (f *tcp) forwardHTTPConn(
 	ctx context.Context,
 	clientConn net.Conn,
-	httpIntercepts []*manager.InterceptInfo,
-	target netip.AddrPort,
-	wtIntercepts []*manager.InterceptInfo,
 ) error {
 	// Create a temporary HTTP interceptor to handle this connection
 	httpInterceptor := &httpInterceptor{
-		interceptor: interceptor{
-			tag:    f.tag,
-			target: target,
-			tCtx:   ctx,
-		},
-		originalTarget: target,
+		interceptor: newInterceptor(ctx, f.ListenPort(), f.Tag(), f.Target()),
 	}
+	f.mu.Lock()
+	httpInterceptor.wiretaps = f.wiretaps
+	httpInterceptor.intercepts = f.intercepts
+	f.mu.Unlock()
 
 	// Configure the HTTP interceptor with stream provider and all HTTP intercepts
 	httpInterceptor.SetStreamProvider(f.streamProvider)
-	httpInterceptor.SetInterceptingMultiple(ctx, httpIntercepts)
-
-	// Add wiretaps if any
-	for _, wt := range wtIntercepts {
-		httpInterceptor.AddWiretap(wt)
-	}
 
 	// Handle the connection using HTTP logic
 	return httpInterceptor.handleHTTPConn(clientConn)
-}
-
-// DispatchByMechanism implements mechanism-specific per-connection dispatch for TCP.
-// It routes HTTP intercepts (with filters) to the HTTP interceptor.
-func (f *tcp) DispatchByMechanism(ctx context.Context, clientConn net.Conn, intercept *manager.InterceptInfo) (bool, error) {
-	f.mu.Lock()
-	httpIntercepts := f.httpIntercepts
-	target := f.target
-	tapCount := len(f.wiretaps)
-	var wtIntercepts []*manager.InterceptInfo
-	if tapCount > 0 {
-		wtIntercepts = make([]*manager.InterceptInfo, tapCount)
-		i := 0
-		for _, wt := range f.wiretaps {
-			wtIntercepts[i] = wt
-			i++
-		}
-	}
-	f.mu.Unlock()
-
-	httpMechanism := len(httpIntercepts) > 0
-
-	switch {
-	case httpMechanism:
-		err := f.forwardHTTPConn(ctx, clientConn, httpIntercepts, target, wtIntercepts)
-		return true, err
-	default:
-		return false, nil
-	}
 }
