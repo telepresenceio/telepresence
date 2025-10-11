@@ -35,7 +35,8 @@ func makeFS(t *testing.T, ctx context.Context) (fwd.Interceptor, agent.State) {
 
 	c, err := agent.LoadConfig(ctx)
 	require.NoError(t, err)
-	s := agent.NewState(c)
+	s, err := agent.NewState(ctx, c)
+	require.NoError(t, err)
 	cn := c.AgentConfig().Containers[0]
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
 	s.AddContainerState(cn.Name, s.NewContainerState(s, cn, cnMountPoint, map[string]string{}))
@@ -46,7 +47,7 @@ func makeFS(t *testing.T, ctx context.Context) (fwd.Interceptor, agent.State) {
 func TestState_HandleIntercepts(t *testing.T) {
 	ctx := testContext(t, nil)
 	a := assert.New(t)
-	f, s := makeFS(t, ctx)
+	_, s := makeFS(t, ctx)
 
 	var (
 		cepts   []*rpc.InterceptInfo
@@ -57,7 +58,6 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	a.Equal("", f.InterceptId())
 
 	// Prepare some intercepts..
 
@@ -101,7 +101,6 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	a.Equal("", f.InterceptId())
 
 	// Handle reviews waiting intercepts
 
@@ -110,7 +109,6 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	require.Len(t, reviews, 2)
-	a.Equal("", f.InterceptId())
 
 	// Reviews are in the correct order
 
@@ -139,5 +137,4 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, nil)
 	a.Len(reviews, 0)
-	a.Equal("", f.InterceptId())
 }

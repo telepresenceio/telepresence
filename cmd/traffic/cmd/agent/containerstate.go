@@ -22,21 +22,21 @@ type containerState struct {
 }
 
 func (c *containerState) AddPortHandler(ctx context.Context, pp types.PortAndProto, it agentconfig.InterceptTarget) {
-	fwd := c.newPortHandler(ctx, pp, it)
+	ph := c.newPortHandler(ctx, pp, it)
 	dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s-%s:%d", c.container.Name, it.Protocol(), it.ContainerPort()), func(ctx context.Context) error {
-		return fwd.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
+		return ph.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
 	})
-	c.AddInterceptState(c.NewInterceptState(fwd, it, c.container.Name))
+	c.AddInterceptState(c.NewInterceptState(ph, it, c.container.Name))
 }
 
 func (c *containerState) newPortHandler(ctx context.Context, pp types.PortAndProto, ics []*agentconfig.Intercept) fwd.Interceptor {
 	ic := ics[0] // They all have the same protocol container port, so the first one will do.
-	if c.container.Replace == agentconfig.ReplacePolicyIntercept {
-		cp := c.AgentConfig().InterceptorInactivePort(ic.ContainerPort, pp.Proto)
+	if pp.Proto == types.ProtoTCP && c.container.Replace == agentconfig.ReplacePolicyIntercept {
 		// Redirect non-intercepted traffic to the pod so that injected sidecars that hijack the ports for
 		// incoming connections will continue to work.
-		targetHost := c.PodIP()
-		return fwd.NewInterceptor(ctx, pp, tunnel.AgentToClient, netip.AddrPortFrom(targetHost, cp))
+		cp := c.AgentConfig().InterceptorInactivePort(ic.ContainerPort, pp.Proto)
+		defaultTarget := netip.AddrPortFrom(c.PodIP(), cp)
+		return fwd.NewInterceptor(ctx, pp, tunnel.AgentToClient, defaultTarget)
 	}
 	// The agent will intercept all traffic intended for this container.
 	return fwd.NewInterceptor(ctx, pp, tunnel.AgentToClient, netip.AddrPort{})

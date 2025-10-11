@@ -89,6 +89,6 @@ func (f *interceptor) SetIntercepting(infos []*manager.InterceptInfo) {
 func (f *interceptor) SetWiretapping(infos []*manager.InterceptInfo) {
 	f.mu.Lock()
 	f.wiretaps.reconcile(f.lCtx, infos)
-	dlog.Debugf(f.lCtx, "SetWiretapping %d wiretaps", len(f.wiretaps))
+	dlog.Debugf(f.lCtx, "SetIntercepting %d intercepts", len(f.wiretaps))
 	f.mu.Unlock()
 }

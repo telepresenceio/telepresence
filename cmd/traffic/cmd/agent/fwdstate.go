@@ -13,7 +13,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -21,10 +20,9 @@ import (
 
 type fwdState struct {
 	*state
-	intercept         agentconfig.InterceptTarget
-	container         string
-	forwarder         fwd.Interceptor
-	chosenInterceptId string
+	intercept agentconfig.InterceptTarget
+	container string
+	forwarder fwd.Interceptor
 }
 
 // generateMechanismDescription creates a human-readable description for the intercept mechanism.
@@ -407,7 +405,6 @@ func (fs *fwdState) processRegularIntercept(
 	index int,
 	active []*manager.InterceptInfo,
 	candidates []*manager.InterceptInfo,
-	activeIntercept **manager.InterceptInfo,
 ) *manager.ReviewInterceptRequest {
 	conflictingIntercept := fs.findConflictingIntercept(ii, index, active, candidates)
 
@@ -444,13 +441,6 @@ func (fs *fwdState) processRegularIntercept(
 			MechanismArgsDesc: generateMechanismDescription(ii.Spec),
 		}
 	}
-	// Only set activeIntercept for global/TCP intercepts (no filters)
-	// HTTP intercepts with filters use the multiple-intercept mode instead
-	isGlobalIntercept := len(ii.Spec.HeaderFilters) == 0 && len(ii.Spec.PathFilters) == 0
-	if !ii.Spec.Wiretap && isGlobalIntercept && *activeIntercept == nil {
-		// Set the first global non-wiretap intercept as the active one for the forwarder
-		*activeIntercept = ii
-	}
 	dlog.Infof(ctx, "Allowing non-conflicting intercept %q to become active", ii.Id)
 	return &manager.ReviewInterceptRequest{
 		Id:                ii.Id,
@@ -479,34 +469,6 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 		}
 	}
 
-	var activeIntercept *manager.InterceptInfo
-	if fs.chosenInterceptId != "" {
-		for _, is := range active {
-			if fs.chosenInterceptId == is.Id {
-				// Only track global/TCP intercepts as activeIntercept
-				isGlobalIntercept := len(is.Spec.HeaderFilters) == 0 && len(is.Spec.PathFilters) == 0
-				if !is.Spec.Wiretap && isGlobalIntercept {
-					activeIntercept = is
-				}
-				break
-			}
-		}
-	}
-
-	if activeIntercept == nil {
-		fs.chosenInterceptId = ""
-
-		// Attach to already ACTIVE global/TCP intercept if there is one.
-		for _, is := range active {
-			isGlobalIntercept := len(is.Spec.HeaderFilters) == 0 && len(is.Spec.PathFilters) == 0
-			if !is.Spec.Wiretap && isGlobalIntercept {
-				fs.chosenInterceptId = is.Id
-				activeIntercept = is
-				break
-			}
-		}
-	}
-
 	fwd := fs.forwarder
 	if fs.sessionInfo != nil {
 		// Update forwarding.
@@ -514,42 +476,16 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 	}
 
 	// Check if we have HTTP intercepts (any with HeaderFilters or PathFilters)
-	var httpIntercepts []*manager.InterceptInfo
+	var intercepts, wiretaps []*manager.InterceptInfo
 	for _, is := range active {
-		if !is.Spec.Wiretap {
-			spec := is.Spec
-			if len(spec.HeaderFilters) > 0 || len(spec.PathFilters) > 0 {
-				httpIntercepts = append(httpIntercepts, is)
-			}
+		if is.Spec.Wiretap {
+			wiretaps = append(wiretaps, is)
+		} else {
+			intercepts = append(intercepts, is)
 		}
 	}
-
-	if len(httpIntercepts) > 0 {
-		// We have HTTP intercepts - use multiple intercept mode
-		dlog.Debugf(ctx, "Setting %d HTTP intercepts on forwarder", len(httpIntercepts))
-		fwd.SetInterceptingMultiple(ctx, httpIntercepts)
-	} else {
-		// No HTTP filters - use single intercept mode for TCP
-		fwd.SetIntercepting(ctx, activeIntercept)
-	}
-
-	// Remove inactive wiretaps.
-	for _, id := range fwd.WiretapIDs() {
-		if !slices.ContainsFunc(active, func(ii *manager.InterceptInfo) bool { return ii.Id == id && ii.Spec.Wiretap }) {
-			dlog.Debugf(ctx, "removing wiretap id %s", id)
-			fwd.RemoveWiretap(id)
-		}
-	}
-
-	// Add active wiretaps.
-	for _, ii := range active {
-		if ii.Spec.Wiretap {
-			if !fwd.HasWiretap(ii.Id) {
-				dlog.Debugf(ctx, "adding wiretap id %s to %s", ii.Id, iputil.JoinHostPort(ii.Spec.TargetHost, uint16(ii.Spec.TargetPort)))
-				fwd.AddWiretap(ii)
-			}
-		}
-	}
+	fwd.SetWiretapping(wiretaps)
+	fwd.SetIntercepting(intercepts)
 
 	// Review waiting intercepts
 	reviews := make([]*manager.ReviewInterceptRequest, 0, len(waiting))
@@ -564,7 +500,7 @@ func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptIn
 		}
 
 		// Check for conflicts and process regular intercept
-		review := fs.processRegularIntercept(ctx, ii, i, active, candidateIntercepts, &activeIntercept)
+		review := fs.processRegularIntercept(ctx, ii, i, active, candidateIntercepts)
 		reviews = append(reviews, review)
 	}
 	return reviews

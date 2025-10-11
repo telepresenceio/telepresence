@@ -53,6 +53,13 @@ type GRPCStream interface {
 	Send(*rpc.TunnelMessage) error
 }
 
+// GRPCContextStream is similar to GRPCStream but also allows the caller to pass a context.Context
+// to Recv and Send so that the stream can be canceled.
+type GRPCContextStream interface {
+	RecvContext(context.Context) (*rpc.TunnelMessage, error)
+	SendContext(context.Context, *rpc.TunnelMessage) error
+}
+
 // The Stream interface represents a bidirectional, synchronized connection Tunnel
 // that sends TCP or UDP traffic over gRPC using manager.TunnelMessage messages.
 //
@@ -245,7 +252,13 @@ func (s *stream) SessionID() SessionID {
 }
 
 func (s *stream) Receive(ctx context.Context) (Message, error) {
-	cm, err := s.grpcStream.Recv()
+	var cm *rpc.TunnelMessage
+	var err error
+	if streamCtx, ok := s.grpcStream.(GRPCContextStream); ok {
+		cm, err = streamCtx.RecvContext(ctx)
+	} else {
+		cm, err = s.grpcStream.Recv()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +276,13 @@ func (s *stream) Receive(ctx context.Context) (Message, error) {
 }
 
 func (s *stream) Send(ctx context.Context, m Message) error {
-	if err := s.grpcStream.Send(m.TunnelMessage()); err != nil {
+	var err error
+	if streamCtx, ok := s.grpcStream.(GRPCContextStream); ok {
+		err = streamCtx.SendContext(ctx, m.TunnelMessage())
+	} else {
+		err = s.grpcStream.Send(m.TunnelMessage())
+	}
+	if err != nil {
 		if ctx.Err() == nil && !errors.Is(err, net.ErrClosed) {
 			dlog.Errorf(ctx, "!! %s %s, Send failed: %v", s.tag, s.id, err)
 		}

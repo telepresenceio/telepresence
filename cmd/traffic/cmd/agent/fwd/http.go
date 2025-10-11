@@ -1,62 +1,91 @@
 package fwd
 
 import (
-	"bufio"
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/netip"
-	"strings"
-	"sync"
-	"time"
+	"net/url"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
-	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-type interceptWithFilters struct {
-	intercept     *manager.InterceptInfo
-	headerFilters map[string]string
-	pathFilters   []string
-}
+func (f *tcp) acceptHTTPLoop(ctx context.Context, listener net.Listener) {
+	la := listener.Addr().(*net.TCPAddr)
+	defaultHandler := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: "http", Host: f.Target().String()})
 
-type httpInterceptor struct {
-	*interceptor
-}
+	server := &http.Server{
+		BaseContext: func(_ net.Listener) context.Context {
+			return ctx
+		},
+		Handler: http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			f.handleHTTPRequest(writer, request, defaultHandler)
+		}),
+	}
 
-func (h *httpInterceptor) handleHTTPConn(clientConn net.Conn) error {
-	h.mu.Lock()
-	// Copy intercepts to avoid holding lock during request processing
-	intercepts := h.intercepts.sorted()
-	h.mu.Unlock()
-
-	ctx := dlog.WithField(h.lCtx, "client", clientConn.RemoteAddr().String())
-	defer clientConn.Close()
-
-	// Read the HTTP request
-	reader := bufio.NewReader(clientConn)
-	req, err := http.ReadRequest(reader)
+	go func() {
+		<-ctx.Done()
+		if err := server.Shutdown(context.WithoutCancel(ctx)); err != nil {
+			dlog.Errorf(ctx, "Error shutting down HTTP forwarder: %v", err)
+		}
+	}()
+	dlog.Debugf(ctx, "Starting HTTP intercept forwarder on %s", la)
+	defer dlog.Debugf(ctx, "Done HTTP interceptor forwarding from %s", la)
+	err := server.Serve(listener)
 	if err != nil {
-		return fmt.Errorf("failed to read HTTP request: %w", err)
+		dlog.Errorf(ctx, "Error serving HTTP intercept: %v", err)
+	}
+}
+
+func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, defaultHandler http.Handler) {
+	// Copy wiretaps and intercepts to avoid holding a lock during request processing
+	f.mu.Lock()
+	wtIntercepts := f.wiretaps.sorted()
+	intercepts := f.intercepts.sorted()
+	f.mu.Unlock()
+
+	dlog.Debugf(f.lCtx, "Handling %s %s %s", req.Proto, req.Method, req.URL.Path)
+	src, err := netip.ParseAddrPort(req.RemoteAddr)
+	if err != nil {
+		src = netip.AddrPortFrom(netip.IPv4Unspecified(), 0)
 	}
 
 	// Check each intercept to see if it matches this request
-	// Use precedence model: headers take priority over path-only intercepts
+	// No precedence here because taps are not conflicting.
+	if len(wtIntercepts) > 0 {
+		wts := make([]*interceptController, 0, len(wtIntercepts))
+		for _, ic := range wtIntercepts {
+			spec := ic.Spec
+			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
+				wts = append(wts, ic)
+			}
+		}
+		if tapCount := len(wts); tapCount > 0 {
+			taps, err := addRequestTaps(f.lCtx, req, tapCount, 1024)
+			if err != nil {
+				dlog.Errorf(f.lCtx, "Failed to add request taps: %v", err)
+			} else {
+				for i, ii := range wts {
+					f.serveTap(ii.ctx, src, taps[i], ii.InterceptInfo)
+				}
+			}
+		}
+	}
 
 	// Pass 1: Check intercepts with headers (high priority tier)
 	for _, ic := range intercepts {
 		spec := ic.Spec
 		if len(spec.HeaderFilters) > 0 {
 			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
-				dlog.Debugf(ctx, "Intercepting HTTP request %s %s with header-based intercept %s",
+				dlog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with header-based intercept %s",
 					req.Method, req.URL.Path, ic.Id)
-				return h.interceptHTTPConn(ic.ctx, clientConn, req, ic.InterceptInfo)
+				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
+				return
 			}
 		}
 	}
@@ -66,184 +95,56 @@ func (h *httpInterceptor) handleHTTPConn(clientConn net.Conn) error {
 		spec := ic.Spec
 		if len(spec.HeaderFilters) == 0 && len(spec.PathFilters) > 0 {
 			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
-				dlog.Debugf(ctx, "Intercepting HTTP request %s %s with path-based intercept %s",
+				dlog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with path-based intercept %s",
 					req.Method, req.URL.Path, ic.Id)
-				return h.interceptHTTPConn(ic.ctx, clientConn, req, ic.InterceptInfo)
+				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
+				return
 			}
 		}
 	}
-
-	// No intercepts matched, forward to original service
-	dlog.Debugf(ctx, "Forwarding HTTP request %s %s to original service (no intercepts matched)", req.Method, req.URL.Path)
-	return h.forwardToOriginalService(ctx, clientConn, req, h.Target())
+	defaultHandler.ServeHTTP(writer, req)
 }
 
 func shouldInterceptRequest(req *http.Request, headerFilters map[string]string, pathFilters []string) bool {
 	return matcher.NewRequest(pathFilters, headerFilters).Matches(req)
 }
 
-func (h *httpInterceptor) interceptHTTPConn(ctx context.Context, clientConn net.Conn, req *http.Request, iCept *manager.InterceptInfo) error {
-	spec := iCept.Spec
-	ip, err := iputil.ParseAddr(spec.TargetHost)
-	if err != nil {
-		return err
+func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer http.ResponseWriter, request *http.Request, ii *manager.InterceptInfo) {
+	spec := ii.Spec
+	trn := http.DefaultTransport.(*http.Transport).Clone()
+	trn.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
+		s, err := f.createStream(ctx, src, ii)
+		if err != nil {
+			return nil, err
+		}
+		ingressBytes := tunnel.NewCounterProbe("FromClientBytes")
+		egressBytes := tunnel.NewCounterProbe("ToClientBytes")
+		return tunnel.NewStreamConn(ctx, s, ingressBytes, egressBytes), nil
 	}
 
-	// Convert the connection to intercept through tunnel
-	return h.rerouteHTTPConn(
-		ctx,
-		clientConn,
-		req,
-		tunnel.SessionID(iCept.ClientSession.SessionId),
-		netip.AddrPortFrom(ip, uint16(spec.TargetPort)),
-		time.Duration(spec.RoundtripLatency),
-		time.Duration(spec.DialTimeout))
+	targetProxy := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: "http", Host: spec.TargetHost})
+	targetProxy.Transport = trn
+	targetProxy.ServeHTTP(writer, request)
 }
 
-func (h *httpInterceptor) rerouteHTTPConn(
-	ctx context.Context, conn net.Conn, req *http.Request, clientSession tunnel.SessionID,
-	dst netip.AddrPort, latency, timeout time.Duration,
-) error {
-	srcAddr := conn.RemoteAddr()
-	dlog.Debugf(ctx, "Intercepting HTTP connection from %s", srcAddr)
-	defer dlog.Debugf(ctx, "Done intercepting HTTP connection from %s", srcAddr)
-
-	src, err := iputil.SplitToIPPort(conn.RemoteAddr())
+func (f *tcp) serveTap(ctx context.Context, src netip.AddrPort, tap io.Reader, ii *manager.InterceptInfo) {
+	s, err := f.createStream(ctx, src, ii)
 	if err != nil {
-		return fmt.Errorf("failed to parse intercept source address %s: %w", srcAddr, err)
+		return
 	}
-
-	proto, err := types.ParseProto(srcAddr.Network())
-	if err != nil {
-		return fmt.Errorf("failed to parse intercept protocol %s: %w", srcAddr, err)
-	}
-	id := tunnel.NewConnID(proto, src, dst)
-	ctx, cancel := context.WithCancel(ctx)
-	h.mu.Lock()
-	sp := h.streamProvider
-	h.mu.Unlock()
-	s, err := sp.CreateClientStream(ctx, tunnel.AgentToClient, clientSession, id, latency, timeout)
-	if err != nil {
-		cancel()
-		return err
-	}
-
-	// Re-serialize the HTTP request and send it through the tunnel
-	var requestBuf strings.Builder
-	if err := req.Write(&requestBuf); err != nil {
-		cancel()
-		return fmt.Errorf("failed to serialize HTTP request: %w", err)
-	}
-
-	// Create a connection that starts with the HTTP request
-	wrappedConn := &httpPrefixConn{
-		Conn:   conn,
-		prefix: []byte(requestBuf.String()),
-	}
-
-	ingressBytes := tunnel.NewCounterProbe("FromClientBytes")
-	egressBytes := tunnel.NewCounterProbe("ToClientBytes")
-
-	// Ingress and egress swap places here, because this endpoint reflects a connection
-	// where the stream is attached to a connection *to* the client, not *from* the client.
-	d := tunnel.NewConnEndpoint(s, wrappedConn, cancel, egressBytes, ingressBytes)
-	d.Start(ctx)
-	<-d.Done()
-
-	sp.ReportMetrics(ctx, &manager.TunnelMetrics{
-		ClientSessionId: string(clientSession),
-		IngressBytes:    ingressBytes.GetValue(),
-		EgressBytes:     egressBytes.GetValue(),
-	})
-	return nil
-}
-
-func (h *httpInterceptor) forwardToOriginalService(ctx context.Context, clientConn net.Conn, req *http.Request, target netip.AddrPort) error {
-	defer clientConn.Close()
-
-	if target.Port() == 0 {
-		dlog.Debug(ctx, "Forwarding to /dev/null")
-		_, _ = io.Copy(io.Discard, clientConn)
-		return nil
-	}
-
-	// Connect to original service
-	targetAddr := net.TCPAddrFromAddrPort(target)
-
-	targetConn, err := net.DialTCP("tcp", nil, targetAddr)
-	if err != nil {
-		return fmt.Errorf("error dialing original service: %w", err)
-	}
-	defer targetConn.Close()
-
-	ctx = dlog.WithField(ctx, "target", targetAddr.String())
-	dlog.Debug(ctx, "Forwarding to original service...")
-
-	// Send the HTTP request to the original service
-	if err := req.Write(targetConn); err != nil {
-		return fmt.Errorf("error writing request to original service: %w", err)
-	}
-
-	// Relay data bidirectionally
-	done := make(chan struct{})
-
-	go func() {
-		if _, err := io.Copy(targetConn, clientConn); err != nil && ctx.Err() == nil {
-			dlog.Debugf(ctx, "Error clientConn->targetConn: %+v", err)
+	buf := make([]byte, 4096)
+	for {
+		n, err := tap.Read(buf)
+		if err != nil {
+			if err != io.EOF {
+				dlog.Errorf(ctx, "Failed to read from tap: %v", err)
+			}
+			break
 		}
-		_ = targetConn.CloseWrite()
-		done <- struct{}{}
-	}()
-	go func() {
-		if _, err := io.Copy(clientConn, targetConn); err != nil && ctx.Err() == nil {
-			dlog.Debugf(ctx, "Error targetConn->clientConn: %+v", err)
-		}
-		if hwCloser, ok := clientConn.(interface{ CloseWrite() error }); ok {
-			_ = hwCloser.CloseWrite()
-		}
-		done <- struct{}{}
-	}()
-
-	// Wait for both sides to close the connection
-	for numClosed := 0; numClosed < 2; {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-done:
-			numClosed++
+		err = s.Send(ctx, tunnel.NewMessage(tunnel.Normal, buf[:n]))
+		if err != nil {
+			dlog.Errorf(ctx, "Failed to send to stream: %v", err)
+			break
 		}
 	}
-	return nil
-}
-
-// httpPrefixConn wraps a connection and prefixes reads with HTTP request data.
-type httpPrefixConn struct {
-	net.Conn
-	prefix     []byte
-	prefixRead bool
-	mu         sync.Mutex
-}
-
-func (c *httpPrefixConn) Read(b []byte) (n int, err error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if !c.prefixRead && len(c.prefix) > 0 {
-		n = copy(b, c.prefix)
-		if n < len(c.prefix) {
-			c.prefix = c.prefix[n:]
-		} else {
-			c.prefixRead = true
-		}
-		return n, nil
-	}
-
-	return c.Conn.Read(b)
-}
-
-// DispatchByMechanism is a no-op for the HTTP interceptor since it already represents
-// the mechanism-specific interceptor. It returns false to indicate the caller should
-// continue with its normal handling.
-func (h *httpInterceptor) DispatchByMechanism(_ context.Context, _ net.Conn, _ *manager.InterceptInfo) (bool, error) {
-	return false, nil
 }

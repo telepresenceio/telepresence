@@ -18,7 +18,7 @@ import (
 
 type tcp struct {
 	*interceptor
-	httpIntercepts []*manager.InterceptInfo // Store multiple HTTP intercepts with filters
+	listenerSwitch ListenerSwitch
 }
 
 func newTCP(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) Interceptor {
@@ -29,6 +29,28 @@ func newTCP(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, 
 
 func (f *tcp) IsHTTP() bool {
 	return f.intercepts.isHTTP() || f.wiretaps.isHTTP()
+}
+
+// SetIntercepting overrides the base implementation to handle HTTP intercepts.
+func (f *tcp) SetIntercepting(intercepts []*manager.InterceptInfo) {
+	f.interceptor.SetIntercepting(intercepts)
+	f.setListenerSwitch()
+}
+
+// SetWiretapping overrides the base implementation to handle HTTP intercepts.
+func (f *tcp) SetWiretapping(intercepts []*manager.InterceptInfo) {
+	f.interceptor.SetWiretapping(intercepts)
+	f.setListenerSwitch()
+}
+
+// Configure the listener switch based on the intercepts. The switch will be on (HTTP) if there is at least
+// one intercept with a header or path filter.
+func (f *tcp) setListenerSwitch() {
+	f.mu.Lock()
+	if f.listenerSwitch != nil {
+		f.listenerSwitch.Switch(f.IsHTTP())
+	}
+	f.mu.Unlock()
 }
 
 func (f *tcp) Serve(_ context.Context, initCh chan<- netip.AddrPort) error {
@@ -52,20 +74,23 @@ func (f *tcp) Serve(_ context.Context, initCh chan<- netip.AddrPort) error {
 	dlog.Debugf(ctx, "Forwarding from %s", la)
 	defer dlog.Debugf(ctx, "Done forwarding from %s", la)
 
-	go forwarder.AcceptLoop(ctx, listener, f.forwardConn)
-	<-ctx.Done()
-	return nil
+	// The listener switch is used to switch between the primary listener (for TCP) and the secondary listener (for HTTP).
+	// The switch is initially on the primary listener and will be switched to the secondary listener when there is at least
+	// one intercept with a header or path filter.
+	f.listenerSwitch = NewListenerSwitch(listener)
+	f.setListenerSwitch()
+
+	// Dispatch to the primary and secondary listeners in separate go routines.
+	go forwarder.AcceptLoop(ctx, f.listenerSwitch.Primary(), f.Forward)
+	go f.acceptHTTPLoop(ctx, f.listenerSwitch.Secondary())
+
+	return f.listenerSwitch.Serve()
 }
 
 // Number of []byte chunks that can be cached by a wiretap connection before it discards data.
 const wiretapCacheSize = 0x100
 
-func (f *tcp) forwardConn(ctx context.Context, clientConn net.Conn) error {
-	// Give mechanism-specific handling a chance first (e.g., HTTP-aware routing)
-	if f.IsHTTP() {
-		return f.forwardHTTPConn(ctx, clientConn)
-	}
-
+func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 	f.mu.Lock()
 	intercept, err := f.intercepts.global()
 	wtIntercepts := f.wiretaps.sorted()
@@ -75,12 +100,11 @@ func (f *tcp) forwardConn(ctx context.Context, clientConn net.Conn) error {
 	}
 
 	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
-
 	if f.Target().Port() > 0 {
 		if tapCount := len(wtIntercepts); tapCount > 0 {
 			var taps []net.Conn
 			dlog.Debugf(ctx, "forwarding to %d wiretaps", tapCount)
-			clientConn, taps = AddWiretaps(ctx, clientConn, tapCount, wiretapCacheSize)
+			clientConn, taps = addConnectionTaps(ctx, clientConn, tapCount, wiretapCacheSize)
 			wg := sync.WaitGroup{}
 			wg.Add(tapCount)
 			defer wg.Wait()
@@ -88,7 +112,7 @@ func (f *tcp) forwardConn(ctx context.Context, clientConn net.Conn) error {
 				go func(conn net.Conn, intercept *interceptController) {
 					defer wg.Done()
 					dlog.Debugf(ctx, "wiretap to %d", ii.Spec.TargetPort)
-					err := f.interceptConn(ctx, conn, intercept)
+					err := f.interceptConn(conn, intercept)
 					if err != nil {
 						dlog.Errorf(ctx, "wiretap ended with error: %v", err)
 					}
@@ -97,27 +121,14 @@ func (f *tcp) forwardConn(ctx context.Context, clientConn net.Conn) error {
 		}
 	}
 	if intercept != nil {
-		return f.interceptConn(ctx, clientConn, intercept)
+		defer clientConn.Close()
+		return f.interceptConn(clientConn, intercept)
 	}
 	return f.Forwarder.Forward(ctx, clientConn)
 }
 
-func (f *tcp) interceptConn(ctx context.Context, conn net.Conn, iCept *interceptController) error {
-	spec := iCept.Spec
-	ip, err := iputil.ParseAddr(spec.TargetHost)
-	if err != nil {
-		return err
-	}
-	return f.rerouteConn(
-		ctx,
-		conn,
-		tunnel.SessionID(iCept.ClientSession.SessionId),
-		netip.AddrPortFrom(ip, uint16(spec.TargetPort)),
-		time.Duration(spec.RoundtripLatency),
-		time.Duration(spec.DialTimeout))
-}
-
-func (f *tcp) rerouteConn(ctx context.Context, conn net.Conn, clientSession tunnel.SessionID, dst netip.AddrPort, latency, timeout time.Duration) error {
+func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
+	ctx := ic.ctx
 	srcAddr := conn.RemoteAddr()
 	dlog.Debugf(ctx, "Accept got connection from %s", srcAddr)
 	defer dlog.Debugf(ctx, "Done serving connection from %s", srcAddr)
@@ -127,18 +138,12 @@ func (f *tcp) rerouteConn(ctx context.Context, conn net.Conn, clientSession tunn
 		return fmt.Errorf("failed to parse intercept source address %s: %w", srcAddr, err)
 	}
 
-	proto, err := types.ParseProto(srcAddr.Network())
-	if err != nil {
-		return fmt.Errorf("failed to parse intercept protocol %s: %w", srcAddr, err)
-	}
-	id := tunnel.NewConnID(proto, src, dst)
-	ctx, cancel := context.WithCancel(ctx)
 	f.mu.Lock()
 	sp := f.streamProvider
 	f.mu.Unlock()
-	s, err := sp.CreateClientStream(ctx, tunnel.AgentToClient, clientSession, id, latency, timeout)
+	s, err := f.createStream(ctx, src, ic.InterceptInfo)
 	if err != nil {
-		cancel()
+		ic.cancel()
 		return err
 	}
 
@@ -147,35 +152,35 @@ func (f *tcp) rerouteConn(ctx context.Context, conn net.Conn, clientSession tunn
 
 	// Ingress and egress swap places here, because this endpoint reflects a connection
 	// where the stream is attached to a connection *to* the client, not *from* the client.
-	d := tunnel.NewConnEndpoint(s, conn, cancel, egressBytes, ingressBytes)
+	d := tunnel.NewConnEndpoint(s, conn, func() {}, egressBytes, ingressBytes)
 	d.Start(ctx)
 	<-d.Done()
 
 	sp.ReportMetrics(ctx, &manager.TunnelMetrics{
-		ClientSessionId: string(clientSession),
+		ClientSessionId: ic.ClientSession.SessionId,
 		IngressBytes:    ingressBytes.GetValue(),
 		EgressBytes:     egressBytes.GetValue(),
 	})
 	return nil
 }
 
-// forwardHTTPConn handles HTTP-aware connection forwarding with header/path filtering.
-func (f *tcp) forwardHTTPConn(
-	ctx context.Context,
-	clientConn net.Conn,
-) error {
-	// Create a temporary HTTP interceptor to handle this connection
-	httpInterceptor := &httpInterceptor{
-		interceptor: newInterceptor(ctx, f.ListenPort(), f.Tag(), f.Target()),
+func (f *tcp) createStream(ctx context.Context, src netip.AddrPort, ii *manager.InterceptInfo) (tunnel.Stream, error) {
+	spec := ii.Spec
+	ip, err := iputil.ParseAddr(spec.TargetHost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse intercept target address %s: %w", spec.TargetHost, err)
 	}
+	dst := netip.AddrPortFrom(ip, uint16(spec.TargetPort))
+	id := tunnel.NewConnID(types.ProtoTCP, src, dst)
+	clientSession := tunnel.SessionID(ii.ClientSession.SessionId)
+	latency := time.Duration(spec.RoundtripLatency)
+	timeout := time.Duration(spec.DialTimeout)
 	f.mu.Lock()
-	httpInterceptor.wiretaps = f.wiretaps
-	httpInterceptor.intercepts = f.intercepts
+	sp := f.streamProvider
 	f.mu.Unlock()
-
-	// Configure the HTTP interceptor with stream provider and all HTTP intercepts
-	httpInterceptor.SetStreamProvider(f.streamProvider)
-
-	// Handle the connection using HTTP logic
-	return httpInterceptor.handleHTTPConn(clientConn)
+	s, err := sp.CreateClientStream(ctx, tunnel.AgentToClient, clientSession, id, latency, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create client stream: %w", err)
+	}
+	return s, nil
 }
