@@ -159,13 +159,18 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	return createPatch(ctx, sc, pod)
 }
 
-func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod) (PatchOps, error) {
-	var patches PatchOps
+func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod) (patches PatchOps, err error) {
 	var anns map[string]string
 	patches = addInitContainer(ctx, pod, config, patches)
-	patches, anns = addAgentContainer(ctx, pod, config, patches)
+	patches, anns, err = addAgentContainer(ctx, pod, config, patches)
+	if err != nil {
+		return nil, err
+	}
 	patches = addPullSecrets(pod, config, patches)
-	patches = addAgentVolumes(config.AgentName, pod, patches)
+	patches, err = addAgentVolumes(config.AgentName, pod, patches)
+	if err != nil {
+		return nil, err
+	}
 	patches = hidePorts(pod, config, patches)
 	anns[annotation.InjectTrafficAgent] = "enabled"
 	patches = addPodAnnotations(pod, anns, patches)
@@ -285,15 +290,18 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 	})
 }
 
-func addAgentVolumes(agentName string, pod *core.Pod, patches PatchOps) PatchOps {
+func addAgentVolumes(agentName string, pod *core.Pod, patches PatchOps) (PatchOps, error) {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == agentconfig.ExportsVolumeName {
-			return patches
+			return patches, nil
 		}
 	}
-	avs := agentconfig.AgentVolumes(agentName, pod)
+	avs, err := agentconfig.AgentVolumes(agentName, pod)
+	if err != nil {
+		return nil, fmt.Errorf("unable to creati agent volumes: %w", err)
+	}
 	if len(avs) == 0 {
-		return patches
+		return patches, nil
 	}
 
 	// Ensure that /spec/volumes exists in the pod. It won't be present when the pod doesn't have
@@ -315,7 +323,7 @@ func addAgentVolumes(agentName string, pod *core.Pod, patches PatchOps) PatchOps
 				})
 		}
 	}
-	return patches
+	return patches, nil
 }
 
 // compareProbes compares two Probes but will only consider their Handler.Exec.Command in the comparison.
@@ -393,15 +401,18 @@ func addAgentContainer(
 	pod *core.Pod,
 	config *agentconfig.Sidecar,
 	patches PatchOps,
-) (PatchOps, map[string]string) {
+) (PatchOps, map[string]string, error) {
 	ab := agentconfig.ContainerBuilder{
 		MountPolicies: managerutil.GetEnv(ctx).AgentMountPolicies,
 		Pod:           pod,
 		Config:        config,
 	}
-	acn, replaceAnnotations := ab.AgentContainer(ctx)
+	acn, replaceAnnotations, err := ab.AgentContainer(ctx)
+	if err != nil {
+		return patches, nil, err
+	}
 	if acn == nil {
-		return patches, replaceAnnotations
+		return patches, replaceAnnotations, nil
 	}
 
 	refPodName := pod.Name + "(" + pod.Status.PodIP + ")"
@@ -410,14 +421,14 @@ func addAgentContainer(
 		if pcn.Name == agentconfig.ContainerName {
 			if containerEqual(ctx, pcn, acn) {
 				dlog.Debugf(ctx, "Pod %s already has container %s and it isn't modified", refPodName, agentconfig.ContainerName)
-				return patches, replaceAnnotations
+				return patches, replaceAnnotations, nil
 			}
 			dlog.Debugf(ctx, "Pod %s already has container %s but it is modified", refPodName, agentconfig.ContainerName)
 			return append(patches, PatchOperation{
 				Op:    "replace",
 				Path:  "/spec/containers/" + strconv.Itoa(i),
 				Value: acn,
-			}), replaceAnnotations
+			}), replaceAnnotations, nil
 		}
 	}
 
@@ -425,7 +436,7 @@ func addAgentContainer(
 		Op:    "add",
 		Path:  "/spec/containers/-",
 		Value: acn,
-	}), replaceAnnotations
+	}), replaceAnnotations, nil
 }
 
 // addAgentContainer creates a patch operation to add the traffic-agent container.

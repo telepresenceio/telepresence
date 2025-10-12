@@ -16,8 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )
@@ -98,11 +96,15 @@ func main() {
 			},
 			Handler: mux,
 		}
+		prs := new(http.Protocols)
+		prs.SetHTTP1(true)
+		server.Protocols = prs
 		switch proto {
 		case "http":
-			server.Handler = h2c.NewHandler(server.Handler, &http2.Server{})
+			prs.SetUnencryptedHTTP2(true)
 			g.Go(server.ListenAndServe)
 		case "https":
+			prs.SetHTTP2(true)
 			g.Go(func() error {
 				return server.ListenAndServeTLS(certFile, keyFile)
 			})
@@ -138,6 +140,16 @@ func main() {
 
 func echoHandler(wr http.ResponseWriter, req *http.Request, outLog, errLog *log.Logger) {
 	defer req.Body.Close()
+	switch req.Method {
+	case http.MethodHead:
+		return
+	case http.MethodGet:
+	// Accepted
+	default:
+		wr.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
 	bf := &bytes.Buffer{}
 	if tpID, ok := os.LookupEnv("TELEPRESENCE_INTERCEPT_ID"); ok {
 		writeAndLogf(bf, outLog, "Intercept id %s\n", tpID)

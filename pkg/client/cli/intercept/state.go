@@ -85,6 +85,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		Mechanism:     s.Mechanism,
 		Metadata:      keyValueMap(s.Metadata),
 		HeaderFilters: keyValueMap(s.HTTPHeaderFilters),
+		Plaintext:     s.Plaintext,
 		Wiretap:       s.Wiretap,
 		Agent:         s.AgentName,
 		NoDefaultPort: s.NoDefaultPort,

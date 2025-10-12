@@ -347,7 +347,10 @@ func (g *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) 
 		},
 		Config: cm,
 	}
-	agentContainer, _ := ab.AgentContainer(ctx)
+	agentContainer, _, err := ab.AgentContainer(ctx)
+	if err != nil {
+		return errcat.User.New(err)
+	}
 	return g.writeObjToOutput(agentContainer)
 }
 
@@ -451,6 +454,9 @@ func genVolumeSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 }
 
 func (g *genVolumeInfo) run() error {
-	volumes := agentconfig.AgentVolumes(g.workloadName, nil)
+	volumes, err := agentconfig.AgentVolumes(g.workloadName, nil)
+	if err != nil {
+		return err
+	}
 	return g.writeObjToOutput(&volumes)
 }

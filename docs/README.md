@@ -20,6 +20,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Extend Docker Compose with Telepresence](howtos/docker-compose.md)
   - [Work with large clusters](howtos/large-clusters.md)
   - [Host a cluster in Docker or a VM](howtos/cluster-in-vm.md)
+  - [Intercept TLS/mTLS Applications](howtos/mtls.md)
   - [Use Telepresence with Azure (Microsoft Learn)](https://learn.microsoft.com/en-us/azure/aks/use-telepresence-aks.md)
 - Technical reference
   - [Architecture](reference/architecture.md)

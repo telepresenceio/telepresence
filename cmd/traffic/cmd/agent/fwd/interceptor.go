@@ -41,7 +41,7 @@ type interceptor struct {
 func NewInterceptor(ctx context.Context, from types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) Interceptor {
 	switch from.Proto {
 	case types.ProtoTCP:
-		return newTCP(ctx, from, tag, target)
+		return NewTCPInterceptor(ctx, from, tag, nil, target)
 	case types.ProtoUDP:
 		return newUDP(ctx, from, tag, target)
 	default:

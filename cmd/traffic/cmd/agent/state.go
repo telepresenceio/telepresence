@@ -11,6 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/tls"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -34,6 +35,7 @@ type State interface {
 	SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClient, version semver.Version)
 	FtpPort() uint16
 	SftpPort() uint16
+	TLSManager() tls.Manager
 	NewInterceptState(forwarder fwd.Interceptor, target agentconfig.InterceptTarget, container string) InterceptState
 	NewContainerState(s State, cn *agentconfig.Container, mountPoint string, env map[string]string) ContainerState
 	AddContainerState(containerName string, containerState ContainerState)
@@ -67,6 +69,7 @@ type state struct {
 	sftpPort         uint16
 	dialWatchers     *xsync.Map[tunnel.SessionID, chan *rpc.DialRequest]
 	awaitingForwards *xsync.Map[tunnel.SessionID, *xsync.Map[tunnel.ConnID, *awaitingForward]]
+	tlsManager       tls.Manager
 
 	// The sessionInfo and manager client are needed when forwarders establish their
 	// tunnel to the traffic-manager.
@@ -96,13 +99,18 @@ func (s *state) SessionInfo() *rpc.SessionInfo {
 	return s.sessionInfo
 }
 
-func NewState(config Config) State {
+func NewState(ctx context.Context, config Config) (State, error) {
+	tlsManager, err := tls.NewManager(ctx, config.AgentConfig(), config.PodIP(), config.Annotations())
+	if err != nil {
+		return nil, err
+	}
 	return &state{
 		Config:           config,
+		tlsManager:       tlsManager,
 		containerStates:  make(map[string]ContainerState),
 		dialWatchers:     xsync.NewMap[tunnel.SessionID, chan *rpc.DialRequest](),
 		awaitingForwards: xsync.NewMap[tunnel.SessionID, *xsync.Map[tunnel.ConnID, *awaitingForward]](),
-	}
+	}, nil
 }
 
 func (s *state) AddInterceptState(is InterceptState) {
@@ -123,6 +131,10 @@ func (s *state) ContainerStates() map[string]ContainerState {
 
 func (s *state) InterceptStates() []InterceptState {
 	return s.interceptStates
+}
+
+func (s *state) TLSManager() tls.Manager {
+	return s.tlsManager
 }
 
 func (s *state) HandleIntercepts(ctx context.Context, iis []*rpc.InterceptInfo) []*rpc.ReviewInterceptRequest {

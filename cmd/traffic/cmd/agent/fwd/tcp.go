@@ -10,6 +10,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/tls"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -18,12 +19,14 @@ import (
 
 type tcp struct {
 	*interceptor
+	tlsManager     tls.Manager
 	listenerSwitch ListenerSwitch
 }
 
-func newTCP(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) Interceptor {
+func NewTCPInterceptor(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, tlsManager tls.Manager, target netip.AddrPort) Interceptor {
 	return &tcp{
 		interceptor: newInterceptor(ctx, listenPort, tag, target),
+		tlsManager:  tlsManager,
 	}
 }
 

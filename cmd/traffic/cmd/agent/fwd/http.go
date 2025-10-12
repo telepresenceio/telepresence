@@ -2,6 +2,8 @@ package fwd
 
 import (
 	"context"
+	"crypto/tls"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -9,23 +11,88 @@ import (
 	"net/netip"
 	"net/url"
 
+	"github.com/go-json-experiment/json"
+	"golang.org/x/net/http2"
+
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
+func (f *tcp) protocols(ctx context.Context, plainText bool) *http.Protocols {
+	pr := new(http.Protocols)
+	pr.SetHTTP1(true)
+	if tm := f.tlsManager; tm != nil {
+		tp := f.Target().Port()
+		if tm.UseHTTP2(ctx, tp) {
+			if !plainText && tm.UseTLS(ctx, tp) {
+				pr.SetHTTP2(true)
+			} else {
+				pr.SetUnencryptedHTTP2(true)
+			}
+		}
+	}
+	return pr
+}
+
+func (f *tcp) configureTransport(ctx context.Context, plainText bool) *http.Transport {
+	trn := http.DefaultTransport.(*http.Transport).Clone()
+	trn.Protocols = f.protocols(ctx, plainText)
+	return trn
+}
+
+func (f *tcp) targetUsesTLS(ctx context.Context) bool {
+	if tm := f.tlsManager; tm != nil && tm.UseTLS(ctx, f.Target().Port()) {
+		return true
+	}
+	return false
+}
+
+func (f *tcp) configureDownstreamTLS(ctx context.Context, server *http.Server, listener net.Listener) (net.Listener, error) {
+	tm := f.tlsManager
+	tp := f.Target().Port()
+	if tm == nil || !tm.UseTLS(ctx, tp) {
+		return listener, nil
+	}
+	cert := tm.GetDownstreamCertificate(tp)
+	if cert == nil {
+		return listener, nil
+	}
+	server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*cert}}
+	listener = tls.NewListener(listener, server.TLSConfig)
+	err := http2.ConfigureServer(server, nil)
+	if err != nil {
+		return nil, fmt.Errorf("faile to configuring HTTP2 server: %v", err)
+	}
+	return listener, nil
+}
+
 func (f *tcp) acceptHTTPLoop(ctx context.Context, listener net.Listener) {
 	la := listener.Addr().(*net.TCPAddr)
-	defaultHandler := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: "http", Host: f.Target().String()})
+	scheme := "http"
+	if f.targetUsesTLS(ctx) {
+		scheme = "https"
+	}
+	defaultHandler := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: scheme, Host: f.Target().String()})
+	defaultHandler.ErrorHandler = proxyErrorHandler
+	defaultHandler.Transport = f.configureTransport(ctx, false)
 
 	server := &http.Server{
 		BaseContext: func(_ net.Listener) context.Context {
-			return ctx
+			return f.lCtx
 		},
 		Handler: http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			f.handleHTTPRequest(writer, request, defaultHandler)
 		}),
+		Protocols: f.protocols(ctx, false),
+	}
+
+	var err error
+	listener, err = f.configureDownstreamTLS(ctx, server, listener)
+	if err != nil {
+		return
 	}
 
 	go func() {
@@ -36,8 +103,8 @@ func (f *tcp) acceptHTTPLoop(ctx context.Context, listener net.Listener) {
 	}()
 	dlog.Debugf(ctx, "Starting HTTP intercept forwarder on %s", la)
 	defer dlog.Debugf(ctx, "Done HTTP interceptor forwarding from %s", la)
-	err := server.Serve(listener)
-	if err != nil {
+
+	if err := server.Serve(listener); err != nil {
 		dlog.Errorf(ctx, "Error serving HTTP intercept: %v", err)
 	}
 }
@@ -77,7 +144,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 		}
 	}
 
-	// Pass 1: Check intercepts with headers (high priority tier)
+	// Pass 1: Check intercepts with headers (high-priority tier)
 	for _, ic := range intercepts {
 		spec := ic.Spec
 		if len(spec.HeaderFilters) > 0 {
@@ -90,7 +157,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 		}
 	}
 
-	// Pass 2: Check intercepts with only paths (low priority tier)
+	// Pass 2: Check intercepts with only paths (low-priority tier)
 	for _, ic := range intercepts {
 		spec := ic.Spec
 		if len(spec.HeaderFilters) == 0 && len(spec.PathFilters) > 0 {
@@ -109,22 +176,86 @@ func shouldInterceptRequest(req *http.Request, headerFilters map[string]string, 
 	return matcher.NewRequest(pathFilters, headerFilters).Matches(req)
 }
 
+func (f *tcp) configureUpstreamTransport(ctx context.Context, requestProto int, plaintext bool) *http.Transport {
+	tm := f.tlsManager
+	tp := f.Target().Port()
+	trn := f.configureTransport(ctx, plaintext)
+	if plaintext {
+		if requestProto == 2 && trn.Protocols.UnencryptedHTTP2() {
+			// Force upstream use of clear-text HTTP/2
+			trn.Protocols.SetHTTP1(false)
+		}
+		return trn
+	}
+	if tm == nil || !tm.UseTLS(ctx, tp) {
+		return trn
+	}
+	cert, useISV := tm.GetUpstreamCertificate(tp)
+	if !useISV && cert == nil {
+		return trn
+	}
+	var certs []tls.Certificate
+	if cert != nil {
+		certs = []tls.Certificate{*cert}
+	}
+	trn.TLSClientConfig = &tls.Config{Certificates: certs, InsecureSkipVerify: useISV}
+	return trn
+}
+
 func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer http.ResponseWriter, request *http.Request, ii *manager.InterceptInfo) {
 	spec := ii.Spec
-	trn := http.DefaultTransport.(*http.Transport).Clone()
-	trn.DialContext = func(_ context.Context, network, addr string) (net.Conn, error) {
+	ingressBytes := tunnel.NewCounterProbe("FromClientBytes")
+	egressBytes := tunnel.NewCounterProbe("ToClientBytes")
+	trn := f.configureUpstreamTransport(ctx, request.ProtoMajor, spec.Plaintext)
+	trn.DialContext = func(context.Context, string, string) (net.Conn, error) {
 		s, err := f.createStream(ctx, src, ii)
 		if err != nil {
 			return nil, err
 		}
-		ingressBytes := tunnel.NewCounterProbe("FromClientBytes")
-		egressBytes := tunnel.NewCounterProbe("ToClientBytes")
 		return tunnel.NewStreamConn(ctx, s, ingressBytes, egressBytes), nil
 	}
 
-	targetProxy := httputil.NewSingleHostReverseProxy(&url.URL{Scheme: "http", Host: spec.TargetHost})
+	scheme := "http"
+	if trn.Protocols.HTTP2() {
+		scheme = "https"
+	}
+	trg := &url.URL{Scheme: scheme, Host: iputil.JoinHostPort(spec.TargetHost, uint16(spec.TargetPort))}
+
+	if tlsConfig := trn.TLSClientConfig; tlsConfig != nil {
+		if len(tlsConfig.Certificates) > 0 {
+			dlog.Debugf(ctx, "Using a client certificate when connecting to %s", trg)
+		} else {
+			dlog.Debugf(ctx, "Not using a client certificate when connecting to %s", trg)
+		}
+		if tlsConfig.InsecureSkipVerify {
+			dlog.Warnf(ctx, "Skipping verification of server's certificate chain and host name when connecting to %s", trg)
+		}
+	} else {
+		dlog.Debugf(ctx, "No TLS config used when connecting to %s", trg)
+	}
+	targetProxy := httputil.NewSingleHostReverseProxy(trg)
+	targetProxy.ErrorHandler = proxyErrorHandler
 	targetProxy.Transport = trn
 	targetProxy.ServeHTTP(writer, request)
+
+	dlog.Debugf(ctx, "Connection to %s ended. IngressBytes: %d, egressBytes: %d", trg, ingressBytes.GetValue(), egressBytes.GetValue())
+	f.streamProvider.ReportMetrics(f.lCtx, &manager.TunnelMetrics{
+		ClientSessionId: ii.ClientSession.SessionId,
+		IngressBytes:    ingressBytes.GetValue(),
+		EgressBytes:     egressBytes.GetValue(),
+	})
+}
+
+func proxyErrorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
+	type httpError struct {
+		Error string `json:"error"`
+	}
+	h := httpError{Error: err.Error()}
+	b, _ := json.Marshal(h)
+	rw.Header().Set("Content-Type", "application/json")
+	rw.Header().Set("Content-Length", fmt.Sprintf("%d", len(b)))
+	rw.WriteHeader(http.StatusBadGateway)
+	_, _ = rw.Write(b)
 }
 
 func (f *tcp) serveTap(ctx context.Context, src netip.AddrPort, tap io.Reader, ii *manager.InterceptInfo) {

@@ -180,13 +180,20 @@ func Main(ctx context.Context, _ ...string) error {
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		SoftShutdownTimeout: 10 * time.Second, // Agent must be able to depart.
 	})
-	s := NewState(config)
+	s, err := NewState(ctx, config)
+	if err != nil {
+		return err
+	}
 	info, err := StartServices(ctx, g, config, s)
 	if err != nil {
 		return err
 	}
 
+	certsReadyCh := make(chan struct{})
+	s.TLSManager().StartWatchers(g, certsReadyCh)
+
 	g.Go("sidecar", func(ctx context.Context) error {
+		<-certsReadyCh
 		return Sidecar(ctx, s, info)
 	})
 

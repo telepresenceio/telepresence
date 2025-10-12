@@ -36,7 +36,7 @@ func (c *containerState) newPortHandler(ctx context.Context, pp types.PortAndPro
 		// incoming connections will continue to work.
 		cp := c.AgentConfig().InterceptorInactivePort(ic.ContainerPort, pp.Proto)
 		defaultTarget := netip.AddrPortFrom(c.PodIP(), cp)
-		return fwd.NewInterceptor(ctx, pp, tunnel.AgentToClient, defaultTarget)
+		return fwd.NewTCPInterceptor(ctx, pp, tunnel.AgentToClient, c.TLSManager(), defaultTarget)
 	}
 	// The agent will intercept all traffic intended for this container.
 	return fwd.NewInterceptor(ctx, pp, tunnel.AgentToClient, netip.AddrPort{})

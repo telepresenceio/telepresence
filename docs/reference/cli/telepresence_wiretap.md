@@ -32,6 +32,7 @@ Wiretap a Service
       --local-mount-port uint16        Do not mount remote directories. Instead, expose this port on localhost to an external mounter
       --mechanism mechanism            Which extension mechanism to use (default "tcp")
       --mount string                   The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely. Append ":ro" to mount everything read-only. (default "true")
+      --plaintext                      Use plaintext instead of TLS when communicating with the intercept handler
   -p, --port strings                   Local ports to forward to. Use <local port>:<identifier> to uniquely identify service ports, where the <identifier> is the port name or number. With --docker-run and a daemon that doesn't run in docker', use <local port>:<container port> or <local port>:<container port>:<identifier>.
       --service string                 Optional name of service to wiretap. Sometimes needed to uniquely identify the intercepted port.
       --wait-message string            Message to print when wiretap handler has started

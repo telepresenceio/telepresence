@@ -2,6 +2,7 @@ package agentconfig
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -21,7 +23,7 @@ type ContainerBuilder struct {
 }
 
 // AgentContainer will return a configured traffic-agent.
-func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container, map[string]string) {
+func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container, map[string]string, error) {
 	ports := make([]core.ContainerPort, 0, 5)
 	confCns := a.configuredContainers(ctx)
 
@@ -128,11 +130,21 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 		},
 	)
 
+	anns := make(map[string]string)
+	var err error
+	mounts, err = a.mountSecrets(annotation.DownstreamTLSSecret, annotation.DownstreamCertificatePath, anns, mounts)
+	if err != nil {
+		return nil, nil, err
+	}
+	mounts, err = a.mountSecrets(annotation.UpstreamTLSSecret, annotation.UpstreamCertificatePath, anns, mounts)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	if len(efs) == 0 {
 		efs = nil
 	}
 
-	anns := make(map[string]string)
 	a.eachConfiguredContainer(confCns, func(app *core.Container, cc *Container) {
 		if cc.Replace == ReplacePolicyContainer {
 			cnJson, err := json.Marshal(app)
@@ -172,16 +184,60 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 
 	appSc := a.Config.SecurityContext
 	if appSc == nil {
-		var err error
 		// Assign the security context of the first container to the traffic agent.
 		appSc, err = a.firstAppSecurityContext()
 		if err != nil {
-			return nil, nil
+			return nil, nil, err
 		}
 	}
 	ac.SecurityContext = appSc
 
-	return ac, anns
+	return ac, anns, nil
+}
+
+func (a *ContainerBuilder) mountSecrets(annotation, certPath string, anns map[string]string, mounts []core.VolumeMount) ([]core.VolumeMount, error) {
+	secretsAndPorts, err := annotationPrefixedPorts(a.Pod.Annotations, annotation)
+	if err != nil || len(secretsAndPorts) == 0 {
+		return mounts, err
+	}
+	for _, secret := range maps.SortedKeys(secretsAndPorts) {
+		volName := fmt.Sprintf("%s-vol", secret)
+		volPath := fmt.Sprintf("%s/%s", DownstreamTLSVolumePath, secret)
+		mounts = append(mounts, core.VolumeMount{
+			Name:      volName,
+			MountPath: volPath,
+		})
+		for _, p := range secretsAndPorts[secret] {
+			anns[fmt.Sprintf("%s.%d", certPath, p)] = volPath
+		}
+	}
+	return mounts, nil
+}
+
+// annotationPrefixedPorts will return a map of secret names to a slice of ports extracted from annotations that match the given prefix.
+func annotationPrefixedPorts(anns map[string]string, prefix string) (m map[string][]uint16, err error) {
+	if _, ok := anns[prefix]; ok {
+		return nil, fmt.Errorf(`annotation %q must have a ".<port>" suffix`, prefix)
+	}
+	prefix += "."
+	for k, v := range anns {
+		if !strings.HasPrefix(k, prefix) {
+			continue
+		}
+		ps := k[len(prefix):]
+		if len(ps) == 0 {
+			return nil, fmt.Errorf("empty port suffix for annoation %s", k)
+		}
+		pn, err := strconv.ParseUint(ps, 10, 16)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port number %s for annotation %s", ps, k)
+		}
+		if m == nil {
+			m = make(map[string][]uint16)
+		}
+		m[v] = append(m[v], uint16(pn))
+	}
+	return m, nil
 }
 
 // Find the security context of the first container (with both intercepts and a set security context) and ensure

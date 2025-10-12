@@ -27,6 +27,23 @@ destinations. Key rules:
 The feature maintains full backward compatibility with existing TCP intercepts.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[TLS/mTLS Intercept Support](howtos/mtls)</div></div>
+<div style="margin-left: 15px">
+
+Support was added for HTTP-filtered intercepts on applications using TLS/mTLS encryption. The new functionality enables
+Telepresence to decrypt and inspect encrypted traffic by accessing TLS certificates, facilitating debugging and testing of secure
+applications.
+
+Certificates can be accessed via mounted volumes or Kubernetes secrets in the same namespace. New annotations
+(`telepresence.io/downstream-cert-path` and `telepresence.io/downstream-cert-secret`) allow configuration of certificate paths or
+secrets for decrypting traffic on specified ports. For mTLS, the `telepresence.io/upstream-cert-` annotation prefix supports
+re-encryption of upstream traffic using client-side certificates.
+
+For self-signed certificates, the `telepresence.io/upstream-insecure-skip-verify` annotation bypasses verification, enabling
+HTTP-filtered intercepts in development environments. The `--plaintext` option allows unencrypted traffic during intercepts or
+wiretaps.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Enhance Resilience of Engagements During Traffic-Manager Redeploys</div></div>
 <div style="margin-left: 15px">
 
