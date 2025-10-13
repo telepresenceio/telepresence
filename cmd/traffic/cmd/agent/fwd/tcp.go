@@ -80,12 +80,13 @@ func (f *tcp) Serve(_ context.Context, initCh chan<- netip.AddrPort) error {
 	// The listener switch is used to switch between the primary listener (for TCP) and the secondary listener (for HTTP).
 	// The switch is initially on the primary listener and will be switched to the secondary listener when there is at least
 	// one intercept with a header or path filter.
-	f.listenerSwitch = NewListenerSwitch(listener)
+	f.listenerSwitch = NewListenerSwitch(listener, func(l net.Listener) {
+		f.acceptHTTPLoop(ctx, l)
+	})
 	f.setListenerSwitch()
 
 	// Dispatch to the primary and secondary listeners in separate go routines.
 	go forwarder.AcceptLoop(ctx, f.listenerSwitch.Primary(), f.Forward)
-	go f.acceptHTTPLoop(ctx, f.listenerSwitch.Secondary())
 
 	return f.listenerSwitch.Serve()
 }

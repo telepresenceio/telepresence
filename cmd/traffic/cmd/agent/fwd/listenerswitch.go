@@ -12,9 +12,6 @@ type ListenerSwitch interface {
 	// Primary returns the listener that accepts connections after Switch(true) has been called.
 	Primary() net.Listener
 
-	// Secondary returns the listener that accepts connections after Switch(false) has been called.
-	Secondary() net.Listener
-
 	Switch(primary bool)
 }
 
@@ -29,10 +26,11 @@ type chanListener struct {
 }
 
 type listenerSwitch struct {
-	listener    net.Listener
-	offListener chanListener
-	onListener  chanListener
-	on          atomic.Bool
+	listener            net.Listener
+	primaryListener     chanListener
+	secondaryListener   chanListener
+	secondaryAcceptLoop func(listener net.Listener)
+	secondary           atomic.Bool
 }
 
 func (c chanListener) Accept() (net.Conn, error) {
@@ -50,42 +48,44 @@ func (c chanListener) Addr() net.Addr {
 }
 
 func (l *listenerSwitch) Primary() net.Listener {
-	return l.offListener
+	return l.primaryListener
 }
 
-func (l *listenerSwitch) Secondary() net.Listener {
-	return l.onListener
+func (l *listenerSwitch) Switch(secondary bool) {
+	l.secondary.Store(secondary)
 }
 
-func (l *listenerSwitch) Switch(onOrOff bool) {
-	l.on.Store(onOrOff)
-}
-
-func NewListenerSwitch(listener net.Listener) ListenerSwitch {
+func NewListenerSwitch(listener net.Listener, secondaryAcceptLoop func(net.Listener)) ListenerSwitch {
 	addr := listener.Addr()
 	return &listenerSwitch{
-		listener:    listener,
-		offListener: chanListener{ch: make(chan connOrErr), addr: addr},
-		onListener:  chanListener{ch: make(chan connOrErr), addr: addr},
+		listener:            listener,
+		secondaryAcceptLoop: secondaryAcceptLoop,
+		primaryListener:     chanListener{ch: make(chan connOrErr), addr: addr},
+		secondaryListener:   chanListener{ch: make(chan connOrErr), addr: addr},
 	}
 }
 
 func (l *listenerSwitch) Serve() error {
-	offCh := l.offListener.ch
-	onCh := l.onListener.ch
+	primaryCh := l.primaryListener.ch
+	secondaryCh := l.secondaryListener.ch
 	for {
 		conn, err := l.listener.Accept()
 		ce := connOrErr{conn: conn, err: err}
 		if err != nil {
 			// Both the on and off listeners will get the same error.
-			onCh <- ce
-			offCh <- ce
+			primaryCh <- ce
+			secondaryCh <- ce
 			return err
 		}
-		if l.on.Load() {
-			onCh <- ce
+		if l.secondary.Load() {
+			// Start the secondary accept-loop if it wasn't already running.
+			if sal := l.secondaryAcceptLoop; sal != nil {
+				l.secondaryAcceptLoop = nil
+				go sal(l.secondaryListener)
+			}
+			secondaryCh <- ce
 		} else {
-			offCh <- ce
+			primaryCh <- ce
 		}
 	}
 }
