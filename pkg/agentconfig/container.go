@@ -226,7 +226,7 @@ func annotationPrefixedPorts(anns map[string]string, prefix string) (m map[strin
 		}
 		ps := k[len(prefix):]
 		if len(ps) == 0 {
-			return nil, fmt.Errorf("empty port suffix for annoation %s", k)
+			return nil, fmt.Errorf("empty port suffix for annotation %s", k)
 		}
 		pn, err := strconv.ParseUint(ps, 10, 16)
 		if err != nil {

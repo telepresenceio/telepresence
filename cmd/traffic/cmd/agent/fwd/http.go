@@ -64,7 +64,7 @@ func (f *tcp) configureDownstreamTLS(ctx context.Context, server *http.Server, l
 	listener = tls.NewListener(listener, server.TLSConfig)
 	err := http2.ConfigureServer(server, nil)
 	if err != nil {
-		return nil, fmt.Errorf("faile to configuring HTTP2 server: %v", err)
+		return nil, fmt.Errorf("failed to configure HTTP2 server: %v", err)
 	}
 	return listener, nil
 }

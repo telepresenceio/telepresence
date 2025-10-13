@@ -298,7 +298,7 @@ func addAgentVolumes(agentName string, pod *core.Pod, patches PatchOps) (PatchOp
 	}
 	avs, err := agentconfig.AgentVolumes(agentName, pod)
 	if err != nil {
-		return nil, fmt.Errorf("unable to creati agent volumes: %w", err)
+		return nil, fmt.Errorf("unable to create agent volumes: %w", err)
 	}
 	if len(avs) == 0 {
 		return patches, nil
