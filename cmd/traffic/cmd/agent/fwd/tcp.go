@@ -154,7 +154,7 @@ func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
 	ingressBytes := tunnel.NewCounterProbe("FromClientBytes")
 	egressBytes := tunnel.NewCounterProbe("ToClientBytes")
 
-	// Ingress and egress swap places here, because this endpoint reflects a connection
+	// Ingress and egress swap places here because this endpoint reflects a connection
 	// where the stream is attached to a connection *to* the client, not *from* the client.
 	d := tunnel.NewConnEndpoint(s, conn, func() {}, egressBytes, ingressBytes)
 	d.Start(ctx)

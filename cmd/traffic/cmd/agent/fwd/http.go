@@ -212,7 +212,8 @@ func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer
 		if err != nil {
 			return nil, err
 		}
-		return tunnel.NewStreamConn(ctx, s, ingressBytes, egressBytes), nil
+		// Ingress and egress swap places here because this is a connection where the stream is attached to a connection *to* the client, not *from* the client.
+		return tunnel.NewStreamConn(ctx, s, egressBytes, ingressBytes), nil
 	}
 
 	scheme := "http"
