@@ -1,24 +1,41 @@
 package tls
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/fsnotify/fsnotify"
+	"golang.org/x/net/http2"
 	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 )
 
+type ValueState int32
+
+const (
+	ValueUnknown ValueState = iota
+	ValueNotSupported
+	ValueSupported
+)
+
 type portConfig struct {
+	// The port number that this configuration applies to.
+	port uint16
+
 	// The path to the secret containing the downstream TLS certificate, as it is mounted into the app-container. The
 	// path is subjected to environment variable expansion, using the same rules as the app-container.
 	// The agent adds the environment variable WORKLOAD_NAME.
@@ -35,6 +52,20 @@ type portConfig struct {
 	downstreamCertificate      *tls.Certificate
 	upstreamCertificate        *tls.Certificate
 	upstreamInsecureSkipVerify bool
+	upstreamProbeTimeout       time.Duration
+
+	TLS   ValueState
+	HTTP2 ValueState
+}
+
+func newPortConfig(port uint16, containerName string) *portConfig {
+	return &portConfig{
+		port:                 port,
+		containerName:        containerName,
+		upstreamProbeTimeout: defaultProbeTimeout,
+		TLS:                  ValueUnknown,
+		HTTP2:                ValueUnknown,
+	}
 }
 
 func pathExists(path string) bool {
@@ -56,6 +87,171 @@ func makeContainerPath(containerName, path string) (string, error) {
 		return "", fmt.Errorf("path %q contains '..'", path)
 	}
 	return filepath.Join("/tel_app_mounts", containerName, clean), nil
+}
+
+func (p *portConfig) setTLS(ctx context.Context, tls ValueState) {
+	s := "supports"
+	if tls != ValueSupported {
+		s = "does not support"
+	}
+	dlog.Debugf(ctx, "Port %d %s TLS", p.port, s)
+	p.TLS = tls
+}
+
+func (p *portConfig) setHTTP2(ctx context.Context, http2 ValueState) {
+	s := "supports"
+	if http2 != ValueSupported {
+		s = "does not support"
+	}
+	dlog.Debugf(ctx, "Port %d %s HTTP/2", p.port, s)
+	p.HTTP2 = http2
+}
+
+func (p *portConfig) probeWarning(ctx context.Context, what string, err error) {
+	dlog.Warnf(ctx, "Failed to probe port %d for %s support: %v. "+
+		"To avoid probing and improve startup time, add 'appProtocol: https' "+
+		"(or 'appProtocol: h2c' for HTTP/2 cleartext) to your Service definition. "+
+		"See: https://kubernetes.io/docs/concepts/services-networking/service/#application-protocol",
+		p.port, what, err)
+}
+
+func (p *portConfig) probeTLS(ctx context.Context, podIP netip.Addr) bool {
+	if p.TLS != ValueUnknown && p.HTTP2 != ValueUnknown {
+		return p.TLS == ValueSupported
+	}
+	port := p.port
+	dlog.Debugf(ctx, "Probing port %d for TLS and HTTP/2 support", port)
+	addr := netip.AddrPortFrom(podIP, port).String()
+	bc := backoff.NewExponentialBackOff()
+	bc.MaxElapsedTime = p.upstreamProbeTimeout
+	bc.MaxInterval = 300 * time.Millisecond
+	bc.InitialInterval = 100 * time.Millisecond
+	err := backoff.Retry(func() error {
+		ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+		defer cancel()
+		dialer := &net.Dialer{}
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			dlog.Debugf(ctx, "Unable to dial %s: %v", addr, err)
+			return err
+		}
+		defer conn.Close()
+
+		tlsConn := tls.Client(conn, &tls.Config{
+			NextProtos:         []string{"h2", "http/1.1"},
+			InsecureSkipVerify: true,
+		})
+
+		if err = tlsConn.HandshakeContext(ctx); err != nil {
+			dlog.Debugf(ctx, "Port %d does not support TLS: %v", port, err)
+			p.TLS = ValueNotSupported
+		} else {
+			p.setTLS(ctx, ValueSupported)
+			state := ValueNotSupported
+			if tlsConn.ConnectionState().NegotiatedProtocol == "h2" {
+				state = ValueSupported
+			}
+			p.setHTTP2(ctx, state)
+		}
+		return nil
+	}, backoff.WithContext(bc, ctx))
+	if err != nil {
+		p.probeWarning(ctx, "TLS and HTTP/2", err)
+	}
+	return p.TLS == ValueSupported
+}
+
+func (p *portConfig) probeHTTP2(ctx context.Context, podIP netip.Addr) bool {
+	if p.HTTP2 != ValueUnknown {
+		return p.HTTP2 == ValueSupported
+	}
+
+	port := p.port
+	if p.TLS == ValueNotSupported {
+		dlog.Debugf(ctx, "Probing port %d for HTTP/2 clear-text support", port)
+		state := ValueNotSupported
+		if p.probeHTTP2ClearText(ctx) {
+			state = ValueSupported
+		}
+		p.setHTTP2(ctx, state)
+	} else {
+		// TLS has been determined from annotation or appProtocol because otherwise the HTTP/2 status would already be known.
+		// Let's probe TLS to also get HTTP/2 status.
+		p.probeTLS(ctx, podIP)
+	}
+	return p.HTTP2 == ValueSupported
+}
+
+func (p *portConfig) probeHTTP2ClearText(ctx context.Context) bool {
+	bc := backoff.NewExponentialBackOff()
+	bc.MaxElapsedTime = p.upstreamProbeTimeout
+	bc.MaxInterval = 300 * time.Millisecond
+	bc.InitialInterval = 100 * time.Millisecond
+	var conn net.Conn
+	err := backoff.Retry(func() error {
+		dialer := &net.Dialer{Timeout: 200 * time.Millisecond}
+		var err error
+		conn, err = dialer.Dial("tcp", fmt.Sprintf(":%d", p.port))
+		return err
+	}, backoff.WithContext(bc, ctx))
+	if err != nil {
+		p.probeWarning(ctx, "HTTP/2 cleartext", err)
+		return false
+	}
+	defer conn.Close()
+
+	// HTTP/2 connection preface for prior knowledge (direct h2c).
+	// Send the preface.
+	port := p.port
+	_, err = conn.Write([]byte("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"))
+	if err != nil {
+		dlog.Debugf(ctx, "failed to send connection preface on port %d: %v", port, err)
+		return false
+	}
+	// Send the required settings frame (empty).
+	_, err = conn.Write([]byte{0, 0, 0, byte(http2.FrameSettings), 0, 0, 0, 0, 0})
+	if err != nil {
+		dlog.Debugf(ctx, "failed to send empty settings frame on port %d: %v", port, err)
+		return false
+	}
+
+	// Read the initial response (expect SETTINGS frame).
+	buf := make([]byte, 9) // Frame header is 9 bytes.
+	n, err := conn.Read(buf)
+	if err != nil || n != 9 {
+		dlog.Debugf(ctx, "failed to read settings frame on port %d: %v", port, err)
+		return false
+	}
+
+	// Parse as HTTP/2 frame header.
+	fr, err := http2.ReadFrameHeader(bytes.NewReader(buf))
+	if err != nil {
+		dlog.Debugf(ctx, "invalid frame header: %v", err)
+		return false
+	}
+
+	// Check if it's a valid, but empty SETTINGS frame with no flags.
+	if fr.Type != http2.FrameSettings || fr.Flags != 0 {
+		dlog.Debugf(ctx, "expected SETTINGS frame and empty flags, got %v, %b", fr.Type, fr.Flags)
+		return false
+	}
+
+	// The frame payload should be empty for initial SETTINGS.
+	if fr.Length > 0 {
+		buf = make([]byte, fr.Length)
+		n, err = conn.Read(buf)
+		if err != nil || n != int(fr.Length) {
+			dlog.Debugf(ctx, "failed to read settings payload on port %d: %v", port, err)
+			return false
+		} else {
+			dlog.Debugf(ctx, "SETTINGS payload %s", hex.Dump(buf))
+		}
+	}
+	_, err = conn.Write([]byte{0, 0, 0, byte(http2.FrameSettings), byte(http2.FlagSettingsAck), 0, 0, 0, 0})
+	if err != nil {
+		dlog.Debugf(ctx, "failed to write ack settings frame on port %d: %v", port, err)
+	}
+	return err == nil
 }
 
 func (p *portConfig) certPaths(containerName string) (dsPath, usPath string, err error) {
@@ -113,7 +309,7 @@ func (p *portConfig) loadCerts(dsPath, usPath string) error {
 	return nil
 }
 
-func (p *portConfig) watchPaths(ctx context.Context, certsReady *sync.WaitGroup, setUseTLS func()) (err error) {
+func (p *portConfig) watchPaths(ctx context.Context, certsReady *sync.WaitGroup) (err error) {
 	dsPath, usPath, err := p.certPaths(p.containerName)
 	if err != nil {
 		return err
@@ -148,7 +344,7 @@ func (p *portConfig) watchPaths(ctx context.Context, certsReady *sync.WaitGroup,
 		return fmt.Errorf("failed to load certificates: %w", err)
 	}
 
-	setUseTLS()
+	p.setTLS(ctx, ValueSupported)
 	certsReady.Done()
 
 	w, err := fsnotify.NewWatcher()

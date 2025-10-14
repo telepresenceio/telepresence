@@ -24,6 +24,7 @@ const (
 	UpstreamTLSSecret          = DomainPrefix + "upstream-tls-secret"
 	UpstreamCertificatePath    = DomainPrefix + "upstream-tls-path"
 	UpstreamInsecureSkipVerify = DomainPrefix + "upstream-insecure-skip-verify"
+	UpstreamProbeTimeout       = DomainPrefix + "upstream-probe-timeout"
 
 	LegacyDomainPrefix             = "telepresence.getambassador.io/"
 	LegacyInjectContainerPorts     = LegacyDomainPrefix + "inject-container-ports"
