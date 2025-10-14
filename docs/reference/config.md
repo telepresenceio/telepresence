@@ -13,8 +13,7 @@ One important exception is the configuration of the of the traffic manager names
 Global configuration is set at the Traffic Manager level and applies to any user connecting to that Traffic Manager.
 To set it, simply pass in a `client` dictionary to the `telepresence helm install` command, with any config values you wish to set.
 
-The `client` config supports values for [cluster](#cluster), [dns](#dns), [grpc](#grpc), [images](#images), [logLevels](#log-levels), [routing](#routing),
-and [timeouts](#timeouts).
+The `client` config supports values for [cluster](#cluster), [dns](#dns), [docker](#docker), [grpc](#grpc), [helm](#helm), [intercept](#intercept), [images](#images), [logLevels](#log-levels), [routing](#routing), and [timeouts](#timeouts).
 
 Here is an example configuration to show you the conventions of how Telepresence is configured:
 **note: This config shouldn't be used verbatim, since the registry `privateRepo` used doesn't exist**

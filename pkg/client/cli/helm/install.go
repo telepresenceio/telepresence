@@ -27,7 +27,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -187,16 +186,6 @@ func GetValues(ctx context.Context, req *Request) map[string]any {
 		}
 		vs["agent"] = map[string]any{"image": image}
 	}
-
-	if apc := clientConfig.Intercept().AppProtocolStrategy; apc != k8sapi.Http2Probe {
-		vs["agentInjector"] = map[string]any{"appProtocolStrategy": apc.String()}
-	}
-	if clientConfig.TelepresenceAPI().Port != 0 {
-		vs["telepresenceAPI"] = map[string]any{
-			"port": clientConfig.TelepresenceAPI().Port,
-		}
-	}
-
 	return vs
 }
 

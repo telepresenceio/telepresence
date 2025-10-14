@@ -56,7 +56,6 @@ type Env struct {
 	AgentImagePullPolicy      string                      `env:"AGENT_IMAGE_PULL_POLICY,       parser=string,         default="`
 	AgentImagePullSecrets     []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS,      parser=json-local-refs,default="`
 	AgentInjectPolicy         agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,           parser=enable-policy,  default=Never"`
-	AgentAppProtocolStrategy  k8sapi.AppProtocolStrategy  `env:"AGENT_APP_PROTO_STRATEGY,      parser=app-proto-strategy, default=http2Probe"`
 	AgentLogLevel             string                      `env:"AGENT_LOG_LEVEL,               parser=logLevel,       defaultFrom=LogLevel"`
 	AgentPort                 uint16                      `env:"AGENT_PORT,                    parser=port-number,    default=0"`
 	AgentResources            *core.ResourceRequirements  `env:"AGENT_RESOURCES,               parser=json-resources, default="`
@@ -95,7 +94,6 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		Resources:           e.AgentResources,
 		PullPolicy:          e.AgentImagePullPolicy,
 		PullSecrets:         e.AgentImagePullSecrets,
-		AppProtocolStrategy: e.AgentAppProtocolStrategy,
 		SecurityContext:     e.AgentSecurityContext,
 		InitSecurityContext: e.AgentInitSecurityContext,
 		MountPolicies:       e.AgentMountPolicies,
@@ -131,14 +129,6 @@ func fieldTypeHandlers() map[reflect.Type]envconfig.FieldTypeHandler {
 			},
 		},
 		Setter: func(dst reflect.Value, src any) { dst.SetUint(uint64(src.(uint16))) },
-	}
-	fhs[reflect.TypeOf(k8sapi.AppProtocolStrategy(0))] = envconfig.FieldTypeHandler{
-		Parsers: map[string]func(string) (any, error){
-			"app-proto-strategy": func(str string) (any, error) {
-				return k8sapi.NewAppProtocolStrategy(str)
-			},
-		},
-		Setter: func(dst reflect.Value, src any) { dst.SetInt(int64(src.(k8sapi.AppProtocolStrategy))) },
 	}
 	fhs[reflect.TypeOf(agentconfig.InjectPolicy(0))] = envconfig.FieldTypeHandler{
 		Parsers: map[string]func(string) (any, error){

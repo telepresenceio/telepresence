@@ -13,7 +13,6 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -36,7 +35,6 @@ type GeneratorConfig struct {
 	Resources           *core.ResourceRequirements
 	PullPolicy          string
 	PullSecrets         []core.LocalObjectReference
-	AppProtocolStrategy k8sapi.AppProtocolStrategy
 	SecurityContext     *core.SecurityContext
 	InitSecurityContext *core.SecurityContext
 	MountPolicies       types.MountPolicies
@@ -141,7 +139,7 @@ func (cfg *GeneratorConfig) Generate(
 	var ccs []*agentconfig.Container
 	for _, svc := range svcs {
 		svcImpl, _ := k8sapi.ServiceImpl(svc)
-		ccs = cfg.appendAgentContainerConfigs(ctx, svcImpl, pod, ports, agentPortNumberFunc, ccs, existingConfig)
+		ccs = cfg.appendAgentContainerConfigs(svcImpl, pod, ports, agentPortNumberFunc, ccs, existingConfig)
 	}
 
 	ports, err = portsFromContainerPortsAnnotation(ctx, wl)
@@ -149,7 +147,7 @@ func (cfg *GeneratorConfig) Generate(
 		return nil, err
 	}
 	if len(ports) > 0 {
-		if ccs, err = cfg.appendServiceLessAgentContainerConfigs(ctx, pod, ports, agentPortNumberFunc, ccs, existingConfig); err != nil {
+		if ccs, err = cfg.appendServiceLessAgentContainerConfigs(pod, ports, agentPortNumberFunc, ccs, existingConfig); err != nil {
 			return nil, err
 		}
 	}
@@ -189,7 +187,6 @@ func (cfg *GeneratorConfig) Generate(
 }
 
 func (cfg *GeneratorConfig) appendAgentContainerConfigs(
-	ctx context.Context,
 	svc *core.Service,
 	pod *core.PodTemplateSpec,
 	portAnnotations []types.PortIdentifier,
@@ -222,10 +219,12 @@ nextSvcPort:
 			ServicePort:       uint16(port.Port),
 			TargetPortNumeric: port.TargetPort.Type == intstr.Int,
 			Protocol:          types.FromK8sProtocol(port.Protocol),
-			AppProtocol:       k8sapi.GetAppProto(ctx, cfg.AppProtocolStrategy, &port),
 			AgentPort:         agentPortNumberFunc(appPort.ContainerPort),
 			ContainerPortName: appPort.Name,
 			ContainerPort:     uint16(appPort.ContainerPort),
+		}
+		if port.AppProtocol != nil {
+			ic.AppProtocol = *port.AppProtocol
 		}
 
 		// The container might already have intercepts declared
@@ -294,7 +293,6 @@ func findContainerPort(cns []core.Container, p types.PortIdentifier) (*core.Cont
 }
 
 func (cfg *GeneratorConfig) appendServiceLessAgentContainerConfigs(
-	ctx context.Context,
 	pod *core.PodTemplateSpec,
 	portAnnotations []types.PortIdentifier,
 	agentPortNumberFunc func(int32) uint16,
@@ -324,7 +322,6 @@ nextContainerPort:
 			TargetPortNumeric: true,
 			Protocol:          types.FromK8sProtocol(appPort.Protocol),
 			AgentPort:         agentPortNumberFunc(appPort.ContainerPort),
-			AppProtocol:       getContainerPortAppProtocol(ctx, cfg.AppProtocolStrategy, appPort.Name),
 			ContainerPortName: appPort.Name,
 			ContainerPort:     uint16(appPort.ContainerPort),
 		}
@@ -362,39 +359,6 @@ func containerReplacePolicy(existingConfig *agentconfig.Sidecar, cn *core.Contai
 		}
 	}
 	return replaceContainer
-}
-
-func getContainerPortAppProtocol(ctx context.Context, aps k8sapi.AppProtocolStrategy, portName string) string {
-	switch aps {
-	case k8sapi.Http:
-		return "http"
-	case k8sapi.Http2:
-		return "http2"
-	case k8sapi.PortName:
-		if portName == "" {
-			dlog.Debug(ctx, "Unable to derive application protocol from unnamed container port")
-			break
-		}
-		pn := portName
-		if dashPos := strings.IndexByte(pn, '-'); dashPos > 0 {
-			pn = pn[:dashPos]
-		}
-		var appProto string
-		switch strings.ToLower(pn) {
-		case "http", "https", "grpc", "http2":
-			appProto = pn
-		case "h2c": // h2c is cleartext HTTP/2
-			appProto = "http2"
-		case "tls", "h2": // same as https in this context and h2 is HTTP/2 with TLS
-			appProto = "https"
-		}
-		if appProto != "" {
-			dlog.Debugf(ctx, "Using application protocol %q derived from port name %q", appProto, portName)
-			return appProto
-		}
-		dlog.Debugf(ctx, "Unable to derive application protocol from port name %q", portName)
-	}
-	return ""
 }
 
 // filterServicePorts iterates through a list of ports in a service and

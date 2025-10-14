@@ -132,10 +132,6 @@ spec:
           - name: AGENT_PORT
             value: {{ .port | quote }}
           {{- end }}
-          {{- if .appProtocolStrategy }}
-          - name: AGENT_APP_PROTO_STRATEGY
-            value: {{ .appProtocolStrategy }}
-          {{- end }}
           {{- if .resources }}
           - name: AGENT_RESOURCES
             value: '{{ toJson .resources }}'

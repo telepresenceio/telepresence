@@ -90,7 +90,7 @@ fervent_goodall
 
 You can now redirect intercepted traffic to your "echo" container using the address flag, e.g.:
 ```console
-telepresence intercept --port 8080:80 --address echo fervent_goodall
+$ telepresence intercept --port 8080:80 --address echo fervent_goodall
 ```
 
 > [!TIP]

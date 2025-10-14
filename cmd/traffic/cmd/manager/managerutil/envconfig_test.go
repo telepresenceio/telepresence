@@ -19,7 +19,6 @@ func TestEnvconfig(t *testing.T) {
 	// Default environment, providing what's necessary for the traffic-manager
 	env := map[string]string{
 		"REGISTRY":                        "ghcr.io/telepresenceio",
-		"AGENT_APP_PROTO_STRATEGY":        k8sapi.Http2Probe.String(),
 		"AGENT_ENVOY_ADMIN_PORT":          "19000",
 		"AGENT_ENVOY_SERVER_PORT":         "18000",
 		"AGENT_ENVOY_HTTP_IDLE_TIMEOUT":   "70s",
@@ -41,7 +40,6 @@ func TestEnvconfig(t *testing.T) {
 
 	defaults := managerutil.Env{
 		Registry:                     "ghcr.io/telepresenceio",
-		AgentAppProtocolStrategy:     k8sapi.Http2Probe,
 		AgentLogLevel:                "info",
 		AgentPort:                    9900,
 		AgentInjectorName:            "agent-injector",
