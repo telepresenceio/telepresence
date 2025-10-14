@@ -3,14 +3,19 @@ package tls
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 	core "k8s.io/api/core/v1"
+
+	"github.com/datawire/dlib/dlog"
 )
 
 type portConfig struct {
@@ -45,17 +50,25 @@ const (
 	istioPrivateKey = "key.pem"
 )
 
-func (p *portConfig) certPaths(cn string) (dsPath, usPath string) {
+func makeContainerPath(containerName, path string) (string, error) {
+	clean := filepath.Clean(path)
+	if strings.Contains(clean, "..") {
+		return "", fmt.Errorf("path %q contains '..'", path)
+	}
+	return filepath.Join("/tel_app_mounts", containerName, clean), nil
+}
+
+func (p *portConfig) certPaths(containerName string) (dsPath, usPath string, err error) {
 	if p == nil {
-		return "", ""
+		return "", "", nil
 	}
 	if p.downstreamSecretPath != "" {
-		dsPath = filepath.Join("/tel_app_mounts", cn, p.downstreamSecretPath)
+		dsPath, err = makeContainerPath(containerName, p.downstreamSecretPath)
 	}
-	if p.upstreamSecretPath != "" {
-		usPath = filepath.Join("/tel_app_mounts", cn, p.upstreamSecretPath)
+	if err == nil && p.upstreamSecretPath != "" {
+		usPath, err = makeContainerPath(containerName, p.upstreamSecretPath)
 	}
-	return dsPath, usPath
+	return dsPath, usPath, err
 }
 
 func (p *portConfig) getDownstreamCert() *tls.Certificate {
@@ -80,7 +93,7 @@ func (p *portConfig) getUpstreamCert() (*tls.Certificate, bool) {
 }
 
 func (p *portConfig) loadCerts(dsPath, usPath string) error {
-	dsCert, err := loadCertFromPath(dsPath)
+	dsCert, err := loadCertFromPath("downstream", dsPath)
 	if err != nil {
 		return err
 	}
@@ -88,7 +101,7 @@ func (p *portConfig) loadCerts(dsPath, usPath string) error {
 	if dsPath == usPath {
 		usCert = dsCert
 	} else {
-		usCert, err = loadCertFromPath(usPath)
+		usCert, err = loadCertFromPath("upstream", usPath)
 		if err != nil {
 			return err
 		}
@@ -100,8 +113,11 @@ func (p *portConfig) loadCerts(dsPath, usPath string) error {
 	return nil
 }
 
-func (p *portConfig) watchPaths(ctx context.Context, certsReady *sync.WaitGroup) (err error) {
-	dsPath, usPath := p.certPaths(p.containerName)
+func (p *portConfig) watchPaths(ctx context.Context, certsReady *sync.WaitGroup, setUseTLS func()) (err error) {
+	dsPath, usPath, err := p.certPaths(p.containerName)
+	if err != nil {
+		return err
+	}
 	eq := dsPath == usPath
 
 	dsExists := pathExists(dsPath)
@@ -127,10 +143,13 @@ func (p *portConfig) watchPaths(ctx context.Context, certsReady *sync.WaitGroup)
 	}
 
 	err = p.loadCerts(dsPath, usPath)
-	certsReady.Done()
 	if err != nil {
+		certsReady.Done()
 		return fmt.Errorf("failed to load certificates: %w", err)
 	}
+
+	setUseTLS()
+	certsReady.Done()
 
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -171,34 +190,66 @@ func (p *portConfig) watchPaths(ctx context.Context, certsReady *sync.WaitGroup)
 	}
 }
 
-func loadCertFromPath(path string) (*tls.Certificate, error) {
-	certData, keyData, err := tryCertificate(path, core.TLSCertKey, core.TLSPrivateKeyKey)
+func loadCertFromPath(direction, path string) (*tls.Certificate, error) {
+	certData, keyData, err := tryCertificate(direction, path, core.TLSCertKey, core.TLSPrivateKeyKey)
 	if errors.Is(err, os.ErrNotExist) {
-		certData, keyData, err = tryCertificate(path, istioCertKey, istioPrivateKey)
+		certData, keyData, err = tryCertificate(direction, path, istioCertKey, istioPrivateKey)
 	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			err = nil
+		} else {
+			err = fmt.Errorf("reading %s certificate from %s failed: %w ", direction, path, err)
 		}
 		return nil, err
 	}
 	tc, err := tls.X509KeyPair(certData, keyData)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creation of %s certificate failed: %w ", direction, err)
+	}
+
+	// Reparse the certificate to check expiration. No need to check for errors here because the tls.X509KeyPair function already did that.
+	x509Cert, _ := x509.ParseCertificate(tc.Certificate[0])
+
+	now := time.Now()
+	// Check if the certificate is expired
+	if now.After(x509Cert.NotAfter) {
+		return nil, fmt.Errorf("%s certificate expired on %s (current time: %s)", direction, x509Cert.NotAfter.Format(time.RFC3339), now.Format(time.RFC3339))
+	}
+
+	// Check if the certificate is not yet valid
+	if now.Before(x509Cert.NotBefore) {
+		return nil, fmt.Errorf("%s certificate not valid until %s (current time: %s)", direction, x509Cert.NotBefore.Format(time.RFC3339), now.Format(time.RFC3339))
+	}
+
+	// Warn if the certificate expires soon (within 7 days)
+	if now.Add(7 * 24 * time.Hour).After(x509Cert.NotAfter) {
+		dlog.Warnf(context.Background(), "%s certificate will expire on %s", direction, x509Cert.NotAfter.Format(time.RFC3339))
 	}
 	return &tc, nil
 }
 
-func tryCertificate(path, certKey, privateKey string) (certData, keyData []byte, err error) {
-	certPath := filepath.Join(path, certKey)
-	certData, err = os.ReadFile(certPath)
+func loadData(direction, path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("secret %q failed to load: %w", certPath, err)
+		return nil, fmt.Errorf("unable to read %s certificate file %q: %w", direction, path, err)
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("%s certificate file %q is empty", direction, path)
+	}
+	return data, nil
+}
+
+func tryCertificate(direction, path, certKey, privateKey string) (certData, keyData []byte, err error) {
+	certPath := filepath.Join(path, certKey)
+	certData, err = loadData(direction, certPath)
+	if err != nil {
+		return nil, nil, err
 	}
 	privatePath := filepath.Join(path, privateKey)
-	keyData, err = os.ReadFile(privatePath)
+	keyData, err = loadData(direction, privatePath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("secret %q loaded successfully but %q failed with: %w", certPath, privatePath, err)
+		return nil, nil, err
 	}
 	return certData, keyData, nil
 }

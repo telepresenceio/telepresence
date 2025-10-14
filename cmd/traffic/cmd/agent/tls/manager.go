@@ -113,10 +113,24 @@ func (m *manager) createPortConfigs(ctx context.Context, am map[string]string) e
 			if ic.Protocol != types.ProtoTCP {
 				continue
 			}
+			switch strings.ToLower(ic.AppProtocol) {
+			case "tcp", "udp":
+				// No app-layer sniffing
+				continue
+			}
 			cp := ic.ContainerPort
-			dsPath := dsPaths[cp]
-			usPath := usPaths[cp]
-			usISV := usISVs[cp]
+
+			var dsPath, usPath, usISV string
+			var ok bool
+			if dsPath, ok = dsPaths[cp]; ok {
+				delete(dsPaths, cp)
+			}
+			if usPath, ok = usPaths[cp]; ok {
+				delete(usPaths, cp)
+			}
+			if usISV, ok = usISVs[cp]; ok {
+				delete(usISVs, cp)
+			}
 			if dsPath == "" && usPath == "" && usISV == "" {
 				continue
 			}
@@ -141,6 +155,16 @@ func (m *manager) createPortConfigs(ctx context.Context, am map[string]string) e
 			}
 		}
 	}
+
+	// Warn about ports that weren't dealt with when iterating over the containers
+	warnNotHTTPPort := func(ports map[uint16]string, ann string) {
+		for port := range ports {
+			dlog.Warnf(ctx, "Annotation %s.%d does not match a port where HTTP-filters can be applied.", ann, port)
+		}
+	}
+	warnNotHTTPPort(dsPaths, annotation.DownstreamCertificatePath)
+	warnNotHTTPPort(usPaths, annotation.UpstreamCertificatePath)
+	warnNotHTTPPort(usISVs, annotation.UpstreamInsecureSkipVerify)
 	return nil
 }
 
@@ -163,11 +187,22 @@ func (m *manager) StartWatchers(g *dgroup.Group, certsReady chan<- struct{}) {
 	allReady.Add(len(m.portConfigs))
 	for p, cn := range m.portConfigs {
 		g.Go(fmt.Sprintf("watch-tls/%d", p), func(ctx context.Context) error {
-			return cn.watchPaths(ctx, &allReady)
+			return cn.watchPaths(ctx, &allReady, func() {
+				m.setUseTLS(ctx, p)
+			})
 		})
 	}
 	allReady.Wait()
 	close(certsReady)
+}
+
+func (m *manager) setUseTLS(ctx context.Context, port uint16) {
+	m.Lock()
+	connInfo := m.connInfos[port]
+	dlog.Debugf(ctx, "Port %d supports TLS", port)
+	connInfo.TLS = ValueSupported
+	m.connInfos[port] = connInfo
+	m.Unlock()
 }
 
 func (m *manager) UseTLS(ctx context.Context, port uint16) bool {
@@ -205,7 +240,9 @@ func (m *manager) useTLS(ctx context.Context, port uint16) bool {
 func (m *manager) configuredTLS(port uint16) ValueState {
 	_, it := m.sidecarConfig.InterceptTarget(port, types.ProtoTCP)
 	for _, ic := range it {
-		switch ic.AppProtocol {
+		switch strings.ToLower(ic.AppProtocol) {
+		case "tcp", "udp": // No app-layer sniffing
+			return ValueNotSupported
 		case "kubernetes.io/ws": // WebSocket over cleartext
 			return ValueNotSupported
 		case "h2c", "kubernetes.io/h2c": // HTTP/2 over cleartext
@@ -295,17 +332,12 @@ func (m *manager) useHTTP2(ctx context.Context, port uint16) bool {
 func (m *manager) configuredHTTP2(port uint16) ValueState {
 	_, it := m.sidecarConfig.InterceptTarget(port, types.ProtoTCP)
 	for _, ic := range it {
-		switch ic.AppProtocol {
-		case "tcp": // No app-layer sniffing
+		switch strings.ToLower(ic.AppProtocol) {
+		case "tcp", "udp": // No app-layer sniffing
 			return ValueNotSupported
 		case "h2c", "kubernetes.io/h2c": // HTTP/2 over cleartext
 			return ValueSupported
-		case "h2", "http2", "grpc": // HTTP/2 over TLS
-			return ValueSupported
-		}
-	}
-	for _, ic := range it {
-		if ic.ServicePort == 443 || ic.ServicePortName == "https" {
+		case "http2", "grpc": // HTTP/2 over TLS
 			return ValueSupported
 		}
 	}
