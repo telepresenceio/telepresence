@@ -250,6 +250,15 @@ ifneq ($(DEBUG),1)
 endif
 $(info LDFLAGS=$(LDFLAGS))
 
+ifeq ($(GOOS),linux)
+ifeq ($(GOARCH),arm64)
+ifeq ($(CGO_ENABLED),1)
+	BUILD_ENV := CC=aarch64-linux-gnu-gcc
+endif
+endif
+endif
+$(info BUILD_ENV=$(BUILD_ENV))
+
 $(TELEPRESENCE): build-deps FORCE
 ifeq ($(GOHOSTOS),windows)
 $(TELEPRESENCE): build-deps $(BINDIR)/wintun.dll FORCE
@@ -259,7 +268,7 @@ ifeq ($(DOCKER_BUILD),1)
 	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -trimpath -ldflags="$(LDFLAGS)" -o $@ ./cmd/telepresence
 else
 # -buildmode=pie enables PIE compilation for binary harderning. Default on darwin and windows (since 1.23) but not in linux.
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -buildmode=pie -trimpath -ldflags="$(LDFLAGS)" -o $@ ./cmd/telepresence
+	$(BUILD_ENV) CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -buildmode=pie -trimpath -ldflags="$(LDFLAGS)" -o $@ ./cmd/telepresence
 endif
 
 ifeq ($(GOOS),windows)
