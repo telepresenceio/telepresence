@@ -65,6 +65,7 @@ type Command struct {
 	HTTPPathEqualFilters  []string // --http-path-equal paths for HTTP path filtering (exact match)
 	HTTPPathPrefixFilters []string // --http-path-prefix paths for HTTP path filtering (prefix match)
 	HTTPPathRegexFilters  []string // --http-path-regex paths for HTTP path filtering (regex match)
+	Plaintext             bool     // --plaintext use plaintext instead of TLS when communicating with the intercept handler
 }
 
 // UsesHTTPMechanism returns true if any HTTP-specific flags were provided,
@@ -182,6 +183,8 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 
 	flagSet.StringSliceVar(&c.HTTPPathRegexFilters, "http-path-regex", nil,
 		fmt.Sprintf(`HTTP path regex filters. Only requests with paths matching the regex will be %s.`, how))
+
+	flagSet.BoolVar(&c.Plaintext, "plaintext", false, "Use plaintext instead of TLS when communicating with the intercept handler")
 
 	_ = cmd.RegisterFlagCompletionFunc("container", ingest.AutocompleteContainer)
 	_ = cmd.RegisterFlagCompletionFunc("service", autocompleteService)

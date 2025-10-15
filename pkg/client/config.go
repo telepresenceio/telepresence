@@ -31,7 +31,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	json2 "github.com/telepresenceio/telepresence/v2/pkg/json"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 type DefaultsAware interface {
@@ -99,20 +98,20 @@ const ConfigFile = "config.yml"
 
 type Config interface {
 	fmt.Stringer
+	Base() *BaseConfig
+	Cluster() *Cluster
+	DNS() *DNS
+	Docker() *Docker
+	Grpc() *Grpc
+	Helm() *Helm
+	Intercept() *Intercept
+	Images() *Images
+	LogLevels() *LogLevels
+	Routing() *Routing
+	Timeouts() *Timeouts
+
 	MarshalYAML() ([]byte, error)
 	OSSpecific() *OSSpecificConfig
-	Base() *BaseConfig
-	Timeouts() *Timeouts
-	LogLevels() *LogLevels
-	Images() *Images
-	Grpc() *Grpc
-	TelepresenceAPI() *TelepresenceAPI
-	Intercept() *Intercept
-	Cluster() *Cluster
-	Docker() *Docker
-	DNS() *DNS
-	Routing() *Routing
-	Helm() *Helm
 	DestructiveMerge(Config)
 	Merge(priority Config) Config
 }
@@ -120,21 +119,16 @@ type Config interface {
 // BaseConfig contains all configuration values for the telepresence CLI.
 type BaseConfig struct {
 	OSSpecificConfig ``
-	TimeoutsV        Timeouts        `json:"timeouts,omitzero"`
-	LogLevelsV       LogLevels       `json:"logLevels,omitzero"`
-	ImagesV          Images          `json:"images,omitzero"`
-	GrpcV            Grpc            `json:"grpc,omitzero"`
-	TelepresenceAPIV TelepresenceAPI `json:"telepresenceAPI,omitzero"`
-	InterceptV       Intercept       `json:"intercept,omitzero"`
-	ClusterV         Cluster         `json:"cluster,omitzero"`
-	DockerV          Docker          `json:"docker,omitzero"`
-	DNSV             DNS             `json:"dns,omitzero"`
-	RoutingV         Routing         `json:"routing,omitzero"`
-	HelmV            Helm            `json:"helm,omitzero"`
-
-	// This is actually a traffic-manager setting, and controls
-	// the agent's connection to the client.
-	DummyConnectionTTL time.Duration `json:"connectionTTL,omitzero,format:units"`
+	ClusterV         Cluster   `json:"cluster,omitzero"`
+	DNSV             DNS       `json:"dns,omitzero"`
+	DockerV          Docker    `json:"docker,omitzero"`
+	GrpcV            Grpc      `json:"grpc,omitzero"`
+	HelmV            Helm      `json:"helm,omitzero"`
+	ImagesV          Images    `json:"images,omitzero"`
+	InterceptV       Intercept `json:"intercept,omitzero"`
+	LogLevelsV       LogLevels `json:"logLevels,omitzero"`
+	RoutingV         Routing   `json:"routing,omitzero"`
+	TimeoutsV        Timeouts  `json:"timeouts,omitzero"`
 }
 
 func (c *BaseConfig) OSSpecific() *OSSpecificConfig {
@@ -159,10 +153,6 @@ func (c *BaseConfig) Images() *Images {
 
 func (c *BaseConfig) Grpc() *Grpc {
 	return &c.GrpcV
-}
-
-func (c *BaseConfig) TelepresenceAPI() *TelepresenceAPI {
-	return &c.TelepresenceAPIV
 }
 
 func (c *BaseConfig) Intercept() *Intercept {
@@ -248,7 +238,6 @@ func (c *BaseConfig) DestructiveMerge(lc Config) {
 	c.LogLevelsV.merge(lc.LogLevels())
 	c.ImagesV.merge(lc.Images())
 	c.GrpcV.merge(lc.Grpc())
-	c.TelepresenceAPIV.merge(lc.TelepresenceAPI())
 	c.InterceptV.merge(lc.Intercept())
 	c.ClusterV.merge(lc.Cluster())
 	c.DockerV.merge(lc.Docker())
@@ -744,18 +733,7 @@ func (g *Grpc) MaxReceiveSize() int64 {
 	return 0
 }
 
-type TelepresenceAPI struct {
-	Port int `json:"port"`
-}
-
-func (g *TelepresenceAPI) merge(o *TelepresenceAPI) {
-	if o.Port != 0 {
-		g.Port = o.Port
-	}
-}
-
 var defaultIntercept = Intercept{ //nolint:gochecknoglobals // constant
-	AppProtocolStrategy:  k8sapi.Http2Probe,
 	MountCompletionDelay: 300 * time.Millisecond,
 }
 
@@ -768,11 +746,10 @@ type DockerImage struct {
 }
 
 type Intercept struct {
-	AppProtocolStrategy  k8sapi.AppProtocolStrategy `json:"appProtocolStrategy"`
-	DefaultPort          int                        `json:"defaultPort"`
-	UseFtp               bool                       `json:"useFtp"`
-	MountsRoot           string                     `json:"mountsRoot"`
-	MountCompletionDelay time.Duration              `json:"mountCompletionDelay,format:units"`
+	DefaultPort          int           `json:"defaultPort"`
+	UseFtp               bool          `json:"useFtp"`
+	MountsRoot           string        `json:"mountsRoot"`
+	MountCompletionDelay time.Duration `json:"mountCompletionDelay,format:units"`
 }
 
 func (ic *Intercept) defaults() DefaultsAware {
@@ -1198,7 +1175,6 @@ var defaultConfig = BaseConfig{ //nolint:gochecknoglobals // constant
 	LogLevelsV:       defaultLogLevels,
 	ImagesV:          defaultImages,
 	GrpcV:            defaultGrpc,
-	TelepresenceAPIV: TelepresenceAPI{},
 	InterceptV:       defaultIntercept,
 	ClusterV:         defaultCluster,
 	DockerV:          defaultDocker,

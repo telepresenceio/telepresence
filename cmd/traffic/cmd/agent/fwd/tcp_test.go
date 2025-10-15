@@ -1,4 +1,4 @@
-package forwarder
+package fwd
 
 import (
 	"context"
@@ -12,7 +12,11 @@ import (
 
 func TestTCPDispatch_HTTPMechanism_Handled(t *testing.T) {
 	// Create a minimal tcp interceptor instance
-	f := &tcp{interceptor: interceptor{}}
+	f := &tcp{interceptor: &interceptor{
+		lCtx:       context.Background(),
+		intercepts: make(interceptControllerMap),
+		wiretaps:   make(interceptControllerMap),
+	}}
 
 	// net.Pipe gives us a pair of in-memory connections
 	clientConn, serverConn := net.Pipe()
@@ -28,26 +32,28 @@ func TestTCPDispatch_HTTPMechanism_Handled(t *testing.T) {
 	}}
 
 	// Set the HTTP intercepts (simulates what fwdstate.HandlePort does)
-	f.SetInterceptingMultiple(context.Background(), []*manager.InterceptInfo{intercept})
+	f.SetIntercepting([]*manager.InterceptInfo{intercept})
 
 	// Call dispatch. Since the connection is closed, the HTTP handler
 	// will get EOF when trying to read and return an error.
-	handled, err := f.DispatchByMechanism(context.Background(), clientConn, intercept)
+	handled := f.IsHTTP()
 	require.True(t, handled, "expected HTTP mechanism to be handled by TCP dispatch")
-	require.Error(t, err, "expected an error due to EOF on closed connection")
 }
 
 func TestTCPDispatch_NoMechanism_NotHandled(t *testing.T) {
-	f := &tcp{interceptor: interceptor{}}
+	f := &tcp{interceptor: &interceptor{
+		lCtx:       context.Background(),
+		intercepts: make(interceptControllerMap),
+		wiretaps:   make(interceptControllerMap),
+	}}
 
 	// No intercept
-	handled, err := f.DispatchByMechanism(context.Background(), nil, nil)
+	handled := f.IsHTTP()
 	require.False(t, handled)
-	require.NoError(t, err)
 
 	// Intercept without HTTP mechanism (no filters)
 	intercept := &manager.InterceptInfo{Spec: &manager.InterceptSpec{}}
-	handled, err = f.DispatchByMechanism(context.Background(), nil, intercept)
+	f.SetIntercepting([]*manager.InterceptInfo{intercept})
+	handled = f.IsHTTP()
 	require.False(t, handled)
-	require.NoError(t, err)
 }

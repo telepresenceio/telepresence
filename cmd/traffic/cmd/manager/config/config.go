@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -136,16 +137,22 @@ func (c *config) configMapEventHandler(ctx context.Context, evCh <-chan watch.Ev
 	}
 }
 
-var AmendClientConfigFunc = AmendClientConfig //nolint:gochecknoglobals // extension point
-
 func AmendClientConfig(ctx context.Context, cfg client.Config) bool {
 	nss := namespaces.Get(ctx)
+	changed := false
 	if !slices.Equal(nss, cfg.Cluster().MappedNamespaces) {
 		dlog.Debugf(ctx, "AmendClientConfig: cluster.mappedNamespaces: %v", nss)
 		cfg.Cluster().MappedNamespaces = nss
-		return true
+		changed = true
 	}
-	return false
+	// The intercept timeout must be equal to or greater than the agent arrival timeout.
+	env := managerutil.GetEnv(ctx)
+	if env.AgentArrivalTimeout > cfg.Timeouts().PrivateIntercept {
+		dlog.Debugf(ctx, "AmendClientConfig: timeouts.privateIntercept: %v", env.AgentArrivalTimeout)
+		cfg.Timeouts().PrivateIntercept = env.AgentArrivalTimeout
+		changed = true
+	}
+	return changed
 }
 
 func (c *config) refreshFile(ctx context.Context, mapData map[string]string) {
@@ -155,7 +162,6 @@ func (c *config) refreshFile(ctx context.Context, mapData map[string]string) {
 		data := []byte(yml)
 		if !bytes.Equal(data, c.clientYAML) {
 			c.clientYAML = data
-			dlog.Debugf(ctx, "Refreshed client config:\n%s", yml)
 		}
 	} else if len(c.clientYAML) > 0 {
 		c.clientYAML = nil
@@ -228,11 +234,12 @@ func (c *config) GetClientConfigYaml(ctx context.Context) (ret []byte) {
 			return ret
 		}
 	}
-	if AmendClientConfigFunc(ctx, cfg) {
+	if AmendClientConfig(ctx, cfg) {
 		ret, _ = cfg.MarshalYAML()
 	} else {
 		ret = c.clientYAML
 	}
+	dlog.Debugf(ctx, "Client config:\n%s", string(ret))
 	return ret
 }
 

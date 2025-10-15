@@ -5,55 +5,60 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"time"
+	"sync/atomic"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-type udp struct {
-	interceptor
+type udp struct{ basic }
+
+// NewUDP creates a new UDP forwarder that will forward connections from the given port to the given target.
+func NewUDP(from uint16, tag tunnel.Tag, target netip.AddrPort) Forwarder {
+	return &udp{basic{
+		tag:        tag,
+		target:     target,
+		listenPort: int32(from),
+	}}
 }
 
-func newUDP(listenPort uint16, tag tunnel.Tag, target netip.AddrPort) Interceptor {
-	return &udp{
-		interceptor: interceptor{
-			tag:        tag,
-			listenPort: listenPort,
-			target:     target,
-			lCancel:    func() {},
-		},
-	}
+func (f *udp) Listen(ctx context.Context) (net.Listener, error) {
+	return nil, fmt.Errorf("listen is not implemented for UDP")
+}
+
+// ListenPort returns the port that this forwarder will listen to. This port will be updated
+// by a call to Serve if the port was initially zero.
+func (f *udp) ListenPort() types.PortAndProto {
+	return types.PortAndProto{Proto: types.ProtoUDP, Port: uint16(atomic.LoadInt32(&f.listenPort))}
 }
 
 func (f *udp) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
+	return f.ServeTo(ctx, initCh, f.Forward)
+}
+
+func (f *udp) Forward(ctx context.Context, conn net.Conn) error {
+	if udpConn, ok := conn.(*net.UDPConn); ok {
+		return ForwardUDP(ctx, f.tag, udpConn, f.target)
+	}
+	return fmt.Errorf("not a UDP connection")
+}
+
+func (f *udp) ServeTo(ctx context.Context, initCh chan<- netip.AddrPort, fw func(context.Context, net.Conn) error) error {
 	// Set up listener lifetime (same as the overall forwarder lifetime)
-	f.mu.Lock()
-	lp := f.listenPort
-	ctx, f.lCancel = context.WithCancel(ctx)
-	f.lCtx = ctx
-
-	// Set up target lifetime
-	f.tCtx, f.tCancel = context.WithCancel(ctx)
-	f.mu.Unlock()
-
+	lp := uint16(atomic.LoadInt32(&f.listenPort))
 	defer func() {
 		if initCh != nil {
 			close(initCh)
 		}
-		f.lCancel()
 		dlog.Infof(ctx, "Done forwarding udp from :%d", lp)
 	}()
 
 	for first := true; ; first = false {
-		f.mu.Lock()
-		ctx = f.tCtx
-		intercept := f.intercept
-		f.mu.Unlock()
-		if ctx.Err() != nil {
+		select {
+		case <-ctx.Done():
 			return nil
+		default:
 		}
 		lc := net.ListenConfig{}
 		pc, err := lc.ListenPacket(ctx, "udp", fmt.Sprintf(":%d", lp))
@@ -64,8 +69,7 @@ func (f *udp) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
 			// The address to listen to is likely to change the first time around, because it may
 			// be ":0", so let's ensure that the same address is used next time
 			la := pc.LocalAddr().(*net.UDPAddr)
-			lp = uint16(la.Port)
-			f.listenPort = lp
+			atomic.StoreInt32(&f.listenPort, int32(la.Port))
 			dlog.Infof(ctx, "Forwarding udp from %s", la)
 			if initCh != nil {
 				initCh <- la.AddrPort()
@@ -73,46 +77,29 @@ func (f *udp) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
 				initCh = nil
 			}
 		}
-		if err := f.forward(ctx, pc.(*net.UDPConn), intercept); err != nil {
+		err = fw(ctx, pc.(*net.UDPConn))
+		if err != nil {
 			return err
 		}
 	}
 }
 
-func (f *udp) forward(ctx context.Context, conn *net.UDPConn, intercept *manager.InterceptInfo) error {
-	defer conn.Close()
-	if intercept != nil {
-		return f.interceptConn(ctx, conn, intercept)
-	}
-
-	if f.target.Port() == 0 {
-		dlog.Debug(ctx, "Forwarding to /dev/null")
-		return nil
-	}
-	return f.forwardConn(ctx, conn)
-}
-
-// DispatchByMechanism implements the Interceptor hook for UDP. Currently, HTTP-aware
-// mechanisms are not supported on UDP; all UDP traffic is forwarded unconditionally.
-func (f *udp) DispatchByMechanism(ctx context.Context, _ net.Conn, intercept *manager.InterceptInfo) (bool, error) {
-	return false, nil
-}
-
-// forwardConn reads packets from the given connection and writes the packages to the
+// ForwardUDP reads packets from the given connection and writes the packages to the
 // target host:port of this forwarder using a connection that will use the reply address
 // from the read as the destination for packages going in the other direction.
-func (f *udp) forwardConn(ctx context.Context, conn *net.UDPConn) error {
-	return ForwardUDP(ctx, f.tag, conn, f.target)
-}
-
 func ForwardUDP(ctx context.Context, tag tunnel.Tag, conn *net.UDPConn, targetAddr netip.AddrPort) error {
 	targets := tunnel.NewPool()
 	la := conn.LocalAddr()
 	dlog.Infof(ctx, "Forwarding udp from %s to %s", la, targetAddr)
 	defer func() {
 		targets.CloseAll(ctx)
+		_ = conn.Close()
 		dlog.Infof(ctx, "Done forwarding udp from %s to %s", la, targetAddr)
 	}()
+	if targetAddr.Port() == 0 {
+		dlog.Debug(ctx, "Forwarding to /dev/null")
+		return nil
+	}
 
 	ch := make(chan tunnel.UdpReadResult)
 	go tunnel.UdpReader(ctx, tag, conn, ch)
@@ -201,25 +188,4 @@ func (u *udpHandler) forward(ctx context.Context, tag tunnel.Tag) {
 			}
 		}
 	}
-}
-
-func (f *udp) interceptConn(ctx context.Context, conn *net.UDPConn, iCept *manager.InterceptInfo) error {
-	spec := iCept.Spec
-	ip, err := iputil.ParseAddr(spec.TargetHost)
-	if err != nil {
-		return err
-	}
-	dest := netip.AddrPortFrom(ip, uint16(spec.TargetPort))
-	dlog.Infof(ctx, "Forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
-	defer dlog.Infof(ctx, "Done forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
-	d := tunnel.NewUDPListener(conn, tunnel.AgentToClient, dest, func(ctx context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
-		f.mu.Lock()
-		sp := f.streamProvider
-		f.mu.Unlock()
-		return sp.CreateClientStream(
-			ctx, tunnel.AgentToClient, tunnel.SessionID(iCept.ClientSession.SessionId), id, time.Duration(spec.RoundtripLatency), time.Duration(spec.DialTimeout))
-	})
-	d.Start(ctx)
-	<-d.Done()
-	return nil
 }

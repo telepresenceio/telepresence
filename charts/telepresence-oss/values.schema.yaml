@@ -14,14 +14,6 @@ properties:
     type: object
     additionalProperties: false
     properties:
-      appProtocolStrategy:
-        description: The strategy to use when determining the application protocol to use for intercepts
-        type: string
-        enum:
-          - http2Probe
-          - portName
-          - http
-          - http2
       mountPolicies:
         description: 'List of volume mount policies. Defaults to {"/tmp" : "Ignore"}'
         type: object

@@ -144,7 +144,7 @@ func (pa *podAccess) workerPortForward(ctx context.Context, port string, wg *syn
 		dlog.Errorf(ctx, "error parsing pod IP address %q: %v", pa.podIP, err)
 		return
 	}
-	f := forwarder.NewInterceptor(pp, tunnel.ClientToAgent, netip.AddrPortFrom(addr, pp.Port))
+	f := forwarder.New(pp, tunnel.ClientToAgent, netip.AddrPortFrom(addr, pp.Port))
 	err = f.Serve(ctx, nil)
 	if err != nil && ctx.Err() == nil {
 		dlog.Errorf(ctx, "port-forwarder failed with %v", err)

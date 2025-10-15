@@ -78,7 +78,7 @@ in several examples. OpenShift users can substitute oc [commands instead](https:
 This guide assumes you have an application represented by a Kubernetes deployment and service accessible publicly by an ingress controller,
 and that you can run a copy of that application on your laptop.
 
-## Replace your Container
+## Replace Your Container
 
 This approach offers the benefit of direct cluster connectivity from your workstation, simplifying debugging and
 modification of your application within its familiar environment. However, it requires root access to configure
@@ -155,7 +155,7 @@ You can now:
 
 6. You end the replace operation with the command `telepresence leave example-app --container echo-server`
 
-## Ingest your Container
+## Ingest Your Container
 
 In some situations, you want to work and debug the code locally, and you want it to be able to access other services in the cluster,
 but you don't wish to interfere with the targeted workload. This is where the `telepresence ingest` command comes into play. Just
@@ -184,7 +184,7 @@ You can now:
 - Query services only exposed in your cluster's network.
 - Set breakpoints in your IDE to investigate bugs.
 
-## Intercept your application
+## Intercept Your Application
 
 The `telepresence intercept` command allows you to redirect traffic for a specific service to your local workstation.
 Compared to the replace command, intercept is less invasive because it: a) enables precise filtering of intercepted
@@ -220,7 +220,7 @@ You can now:
 - Query services that are only exposed in your cluster's network.
 - Set breakpoints in your IDE to investigate bugs.
 
-## Wiretap your application
+## Wiretap Your Application
 
 You can use the `telepresence wiretap` command when you want to wiretap the traffic for a specific service and send a
 copy of it to your workstation. The `wiretap` is less intrusive than the `intercept`, because it does not interfere
@@ -255,7 +255,7 @@ You can now:
 - Query services only exposed in your cluster's network.
 - Set breakpoints in your IDE to investigate bugs.
 
-### Running everything using Docker
+### Running Everything Using Docker
 
 This approach eliminates the need for root access and confines the Telepresence network interface and remote mounts
 to a container.  Additionally, it allows for precise replication of the target container's volume mounts, using identical 

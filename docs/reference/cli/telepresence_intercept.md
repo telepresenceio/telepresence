@@ -33,6 +33,7 @@ Intercept a service
       --mechanism mechanism            Which extension mechanism to use (default "tcp")
       --metadata strings               Metadata to attach to the intercept. Use --metadata key=value to set a single key/value pair, or --metadata key1=value1 --metadata key2=value2 to set multiple key/value pairs. The metadata can be retrieved using the Telepresence API server.
       --mount string                   The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use "true" to have Telepresence pick a random mount point (default). Use "false" to disable filesystem mounting entirely. Append ":ro" to mount everything read-only. (default "true")
+      --plaintext                      Use plaintext instead of TLS when communicating with the intercept handler
   -p, --port strings                   Local ports to forward to. Use <local port>:<identifier> to uniquely identify service ports, where the <identifier> is the port name or number. With --docker-run and a daemon that doesn't run in docker', use <local port>:<container port> or <local port>:<container port>:<identifier>.
       --replace                        Indicates if the traffic-agent should replace application containers in workload pods. The default behavior is for the agent sidecar to be installed alongside existing containers. (DEPRECATED: Use the replace command.)
       --service string                 Optional name of service to intercept. Sometimes needed to uniquely identify the intercepted port.

@@ -848,18 +848,17 @@ matchExpressions:
 		},
 	}
 
-	runFunc := func(t *testing.T, test *testInput, appProtoStrategy k8sapi.AppProtocolStrategy) {
+	runFunc := func(t *testing.T, test *testInput) {
 		ctx := dlog.NewTestContext(t, false)
 		env := &managerutil.Env{
 			ServerHost: "tel-example",
 			ServerPort: 8081,
 
-			ManagerNamespace:         "default",
-			AgentRegistry:            "ghcr.io/telepresenceio",
-			AgentImageName:           "tel2",
-			AgentImageTag:            "2.14.0",
-			AgentPort:                9900,
-			AgentAppProtocolStrategy: appProtoStrategy,
+			ManagerNamespace: "default",
+			AgentRegistry:    "ghcr.io/telepresenceio",
+			AgentImageName:   "tel2",
+			AgentImageTag:    "2.14.0",
+			AgentPort:        9900,
 
 			EnabledWorkloadKinds:      k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
 			AgentInitContainerEnabled: true,
@@ -883,47 +882,9 @@ matchExpressions:
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			runFunc(t, &test, k8sapi.Http2Probe)
+			runFunc(t, &test)
 		})
 	}
-
-	test := testInput{
-		"AppProtocolStrategy named and named grpc port without appProtocol",
-		&podGRPCPort,
-		&agentconfig.Sidecar{
-			AgentName:    "grpc-port",
-			AgentImage:   "ghcr.io/telepresenceio/tel2:2.13.3",
-			Namespace:    "some-ns",
-			WorkloadName: "grpc-port",
-			WorkloadKind: "Deployment",
-			ManagerHost:  "traffic-manager.default",
-			ManagerPort:  8081,
-			Containers: []*agentconfig.Container{
-				{
-					Name: "some-container",
-					Intercepts: []*agentconfig.Intercept{
-						{
-							ServiceName:       "grpc-port",
-							ServiceUID:        grpcPortUID,
-							ServicePortName:   "grpc",
-							ServicePort:       8443,
-							Protocol:          types.ProtoTCP,
-							AgentPort:         9900,
-							ContainerPort:     8443,
-							AppProtocol:       "grpc",
-							TargetPortNumeric: true,
-						},
-					},
-					EnvPrefix:  "A_",
-					MountPoint: "/tel_app_mounts/some-container",
-				},
-			},
-		},
-		"",
-	}
-	t.Run(test.name, func(t *testing.T) {
-		runFunc(t, &test, k8sapi.PortName)
-	})
 }
 
 func TestTrafficAgentInjector(t *testing.T) {

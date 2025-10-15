@@ -5,8 +5,6 @@ github.com/blang/semver/v4 v4.0.0/go.mod h1:IbckMUScFkM3pff0VJDNKRiT6TG/YpiHIM2y
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/creack/pty v1.1.24 h1:bJrF4RRfyJnbTJqzRLHzcGaZK1NeM5kTC9jGgovnR1s=
 github.com/creack/pty v1.1.24/go.mod h1:08sCNb52WyoAwi2QDyzUCTgcvVFhUzewun7wtTfvcwE=
-github.com/datawire/argo-rollouts-go-client v0.0.0-20241216133646-cb1073556c99 h1:a+yPIx3r59bp9OnMM/CMgCleWGreM9bfIHPUatvlMJk=
-github.com/datawire/argo-rollouts-go-client v0.0.0-20241216133646-cb1073556c99/go.mod h1:2O7ijdMXY8T19xQXtgMYQYJwWgudnB9n358O00YqSms=
 github.com/datawire/dlib v1.3.1 h1:igD//7PiHYOdGEk4z6f1X4iDBHucnV9byssykTnpYQc=
 github.com/datawire/dlib v1.3.1/go.mod h1:TqC6RI+yPsW3Am6RmfSz+eUUDyJCB4RuK3q9QajswiM=
 github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b h1:QXkFwAQPkOoX4jXItBbUdYCQC9I5OwhI50gZl/Dn5jc=

@@ -22,8 +22,8 @@ import (
 )
 
 type uni struct {
-	done <-chan struct{}
-	ch   chan *manager.TunnelMessage
+	ctx context.Context
+	ch  chan *manager.TunnelMessage
 }
 
 type bidi struct {
@@ -31,32 +31,35 @@ type bidi struct {
 	sToC *uni
 }
 
-func newUni(bufSize int, done <-chan struct{}) *uni {
-	return &uni{ch: make(chan *manager.TunnelMessage, bufSize), done: done}
+func newUni(bufSize int, ctx context.Context) *uni {
+	return &uni{ch: make(chan *manager.TunnelMessage, bufSize), ctx: ctx}
 }
 
-func newBidi(bufSize int, done <-chan struct{}) *bidi {
-	return &bidi{cToS: newUni(bufSize, done), sToC: newUni(bufSize, done)}
+func newBidi(bufSize int, ctx context.Context) *bidi {
+	return &bidi{cToS: newUni(bufSize, ctx), sToC: newUni(bufSize, ctx)}
 }
 
-func (t *uni) recv() (*manager.TunnelMessage, error) {
+func (t *uni) recv(ctx context.Context) (m *manager.TunnelMessage, err error) {
 	select {
-	case <-t.done:
-		return nil, context.Canceled
-	case m := <-t.ch:
+	case <-ctx.Done():
+		err = ctx.Err()
+	case m = <-t.ch:
 		if m == nil {
-			return nil, net.ErrClosed
+			err = net.ErrClosed
 		}
-		// Simulate a network latency of one microsecond per byte
-		time.Sleep(time.Duration(len(m.Payload)) * time.Microsecond)
-		return m, nil
 	}
+	return m, err
 }
 
-func (t *uni) send(msg *manager.TunnelMessage) error {
+func (t *uni) send(ctx context.Context, msg *manager.TunnelMessage) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = net.ErrClosed
+		}
+	}()
 	select {
-	case <-t.done:
-		return context.Canceled
+	case <-ctx.Done():
+		return ctx.Err()
 	case t.ch <- msg:
 		return nil
 	}
@@ -80,11 +83,19 @@ type clientSide struct {
 }
 
 func (c *clientSide) Recv() (*manager.TunnelMessage, error) {
-	return c.sToC.recv()
+	return c.RecvContext(c.sToC.ctx)
 }
 
 func (c *clientSide) Send(msg *manager.TunnelMessage) error {
-	return c.cToS.send(msg)
+	return c.SendContext(c.cToS.ctx, msg)
+}
+
+func (c *clientSide) RecvContext(ctx context.Context) (*manager.TunnelMessage, error) {
+	return c.sToC.recv(ctx)
+}
+
+func (c *clientSide) SendContext(ctx context.Context, msg *manager.TunnelMessage) error {
+	return c.cToS.send(ctx, msg)
 }
 
 func (c *clientSide) CloseSend() error {
@@ -96,11 +107,19 @@ type serverSide struct {
 }
 
 func (c *serverSide) Recv() (*manager.TunnelMessage, error) {
-	return c.cToS.recv()
+	return c.RecvContext(c.cToS.ctx)
 }
 
 func (c *serverSide) Send(msg *manager.TunnelMessage) error {
-	return c.sToC.send(msg)
+	return c.SendContext(c.sToC.ctx, msg)
+}
+
+func (c *serverSide) RecvContext(ctx context.Context) (*manager.TunnelMessage, error) {
+	return c.cToS.recv(ctx)
+}
+
+func (c *serverSide) SendContext(ctx context.Context, msg *manager.TunnelMessage) error {
+	return c.sToC.send(ctx, msg)
 }
 
 func testContext(t *testing.T, timeout time.Duration) (context.Context, context.CancelFunc) {
@@ -111,7 +130,7 @@ func TestStream_Connect(t *testing.T) {
 	ctx, cancel := testContext(t, time.Second)
 	defer cancel()
 
-	tunnel := newBidi(10, ctx.Done())
+	tunnel := newBidi(10, ctx)
 	id := NewConnID(types.ProtoTCP, netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001), netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
 	si := SessionID(uuid.New().String())
 
@@ -224,7 +243,7 @@ func TestStream_Xfer(t *testing.T) {
 
 	// Send data from client to server
 	t.Run("client to server", func(t *testing.T) {
-		tunnel := newBidi(10, ctx.Done())
+		tunnel := newBidi(10, ctx)
 		wg := sync.WaitGroup{}
 		wg.Add(2)
 		go func() {
@@ -248,7 +267,7 @@ func TestStream_Xfer(t *testing.T) {
 	})
 
 	t.Run("server to client", func(t *testing.T) {
-		tunnel := newBidi(10, ctx.Done())
+		tunnel := newBidi(10, ctx)
 		wg := sync.WaitGroup{}
 		wg.Add(2)
 		go func() {

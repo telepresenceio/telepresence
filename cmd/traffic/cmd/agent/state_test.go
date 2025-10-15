@@ -13,8 +13,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -25,8 +25,8 @@ const (
 
 var appTarget = netip.AddrPortFrom(netip.MustParseAddr("192.168.1.100"), appPort)
 
-func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.State) {
-	f := forwarder.NewInterceptor(types.PortAndProto{Proto: types.ProtoTCP, Port: 1111}, tunnel.AgentToProxied, appTarget)
+func makeFS(t *testing.T, ctx context.Context) (fwd.Interceptor, agent.State) {
+	f := fwd.NewInterceptor(ctx, types.PortAndProto{Proto: types.ProtoTCP, Port: 1111}, tunnel.AgentToProxied, appTarget)
 	go func() {
 		if err := f.Serve(context.Background(), nil); err != nil {
 			dlog.Error(ctx, err)
@@ -35,7 +35,8 @@ func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.Sta
 
 	c, err := agent.LoadConfig(ctx)
 	require.NoError(t, err)
-	s := agent.NewState(c)
+	s, err := agent.NewState(ctx, c)
+	require.NoError(t, err)
 	cn := c.AgentConfig().Containers[0]
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(cn.MountPoint))
 	s.AddContainerState(cn.Name, s.NewContainerState(s, cn, cnMountPoint, map[string]string{}))
@@ -46,7 +47,7 @@ func makeFS(t *testing.T, ctx context.Context) (forwarder.Interceptor, agent.Sta
 func TestState_HandleIntercepts(t *testing.T) {
 	ctx := testContext(t, nil)
 	a := assert.New(t)
-	f, s := makeFS(t, ctx)
+	_, s := makeFS(t, ctx)
 
 	var (
 		cepts   []*rpc.InterceptInfo
@@ -57,7 +58,6 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	a.Equal("", f.InterceptId())
 
 	// Prepare some intercepts..
 
@@ -101,7 +101,6 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	a.Len(reviews, 0)
-	a.Equal("", f.InterceptId())
 
 	// Handle reviews waiting intercepts
 
@@ -110,7 +109,6 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, cepts)
 	require.Len(t, reviews, 2)
-	a.Equal("", f.InterceptId())
 
 	// Reviews are in the correct order
 
@@ -139,5 +137,4 @@ func TestState_HandleIntercepts(t *testing.T) {
 
 	reviews = s.HandleIntercepts(ctx, nil)
 	a.Len(reviews, 0)
-	a.Equal("", f.InterceptId())
 }

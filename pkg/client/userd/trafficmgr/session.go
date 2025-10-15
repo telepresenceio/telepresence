@@ -1001,7 +1001,7 @@ func (s *session) eachWorkload(namespaces []string, do func(kind manager.Workloa
 }
 
 func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
-	fw := forwarder.NewInterceptor(types.PortAndProto{
+	fw := forwarder.New(types.PortAndProto{
 		Port:  srcPort,
 		Proto: ap.Proto,
 	}, tunnel.ClientToAgent, ap.AddrPort)
