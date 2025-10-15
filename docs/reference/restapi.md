@@ -3,14 +3,14 @@
 Telepresence can run a RESTful API server on the local host, both on the local workstation and in a pod that contains a `traffic-agent`. The server currently has three endpoints. The standard `healthz` endpoint, the `consume-here` endpoint, and the `intercept-info` endpoint.
 
 ## Enabling the server
-The server is enabled by setting the `telepresenceAPI.port` to a valid port number in the [Telepresence Helm Chart](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence). The values may be passed  explicitly to Helm during install, or configured using the [Telepresence Config](../config#restful-api-server) to impact an auto-install.
+The server is enabled by setting the `telepresenceAPI.port` to a valid port number in the [Telepresence Helm Chart](https://github.com/telepresenceio/telepresence/tree/release/v2/charts/telepresence). The value may be passed explicitly to Helm during the installation.
 
 ## Querying the server
 On the cluster's side, it's the `traffic-agent` of potentially intercepted pods that runs the server. The server can be accessed using `http://<TELEPRESENCE_API_HOST>:<TELEPRESENCE_API_PORT>/<some endpoint>` from the application container. Telepresence ensures that the container has the `TELEPRESENCE_API_HOST` and `TELEPRESENCE_API_PORT` environment variable set when the `traffic-agent` is installed. On the workstation, it is the `user-daemon` that runs the server. It uses the `TELEPRESENCE_API_PORT` that is conveyed in the environment of the intercept. This means that the server can be accessed the exact same way locally if the environment is propagated correctly to the interceptor process.
 
 ## Endpoints
 
-The `consume-here` and `intercept-info` endpoints are both intended to be queried with an optional path query and a set of headers, typically obtained from a Kafka message or similar. Telepresence provides the ID of the intercept in the environment variable [TELEPRESENCE_INTERCEPT_ID](../environment/#telepresence_intercept_id) during an intercept. This ID must be provided in a `x-telepresence-caller-intercept-id: = <ID>` header. Telepresence needs this to identify the caller correctly. The `<TELEPRESENCE_INTERCEPT_ID>` will be empty when running in the cluster, but it's harmless to provide it there too, so there's no need for conditional code.
+The `consume-here` and `intercept-info` endpoints are both intended to be queried with an optional path query and a set of headers, typically obtained from a Kafka message or similar. Telepresence provides the ID of the intercept in the environment variable `TELEPRESENCE_INTERCEPT_ID` during an intercept. This ID must be provided in a `x-telepresence-caller-intercept-id: = <ID>` header. Telepresence needs this to identify the caller correctly. The `<TELEPRESENCE_INTERCEPT_ID>` will be empty when running in the cluster, but it's harmless to provide it there too, so there's no need for conditional code.
 
 There are three prerequisites to fulfill before testing The `consume-here` and `intercept-info` endpoints using `curl -v` on the workstation:
 1. An intercept must be active
