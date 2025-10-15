@@ -14,7 +14,7 @@ require (
 	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b
 	github.com/datawire/go-ftpserver v0.1.3
-	github.com/docker/docker v28.5.0+incompatible
+	github.com/docker/docker v28.5.1+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-json-experiment/json v0.0.0-20250910080747-cc2cfa0554c3
@@ -42,18 +42,18 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/telepresenceio/go-fuseftp v0.6.7
 	github.com/telepresenceio/go-fuseftp/rpc v0.6.7
-	github.com/telepresenceio/telepresence/cmd/cobraparser v0.0.0-20251001211413-35d44ca2cb40
+	github.com/telepresenceio/telepresence/cmd/cobraparser v0.0.0-20251015113303-4ed5aa691053
 	github.com/telepresenceio/telepresence/rpc/v2 v2.24.1
 	github.com/vishvananda/netlink v1.3.1
-	golang.org/x/net v0.44.0
+	golang.org/x/net v0.46.0
 	golang.org/x/sync v0.17.0
-	golang.org/x/sys v0.36.0
-	golang.org/x/term v0.35.0
+	golang.org/x/sys v0.37.0
+	golang.org/x/term v0.36.0
 	golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
 	golang.zx2c4.com/wireguard/windows v0.5.3
-	google.golang.org/grpc v1.75.1
+	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
-	gvisor.dev/gvisor v0.0.0-20251002201415-06b1d3931702
+	gvisor.dev/gvisor v0.0.0-20251014200450-b28536ec8df6
 	helm.sh/helm/v3 v3.19.0
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
@@ -157,7 +157,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.66.1 // indirect
+	github.com/prometheus/common v0.67.1 // indirect
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/rubenv/sql-migrate v1.8.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
@@ -177,14 +177,14 @@ require (
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.42.0 // indirect
-	golang.org/x/mod v0.28.0 // indirect
-	golang.org/x/oauth2 v0.31.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
-	golang.org/x/time v0.13.0 // indirect
-	golang.org/x/tools v0.37.0 // indirect
+	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
+	golang.org/x/oauth2 v0.32.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
+	golang.org/x/time v0.14.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251002232023-7c0ddcbb5797 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251014184007-4626949a642f // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

@@ -8,7 +8,7 @@ require (
 	github.com/puzpuzpuz/xsync/v4 v4.2.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/telepresenceio/telepresence/rpc/v2 v2.24.1
-	google.golang.org/grpc v1.75.1
+	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.10
 )
 
@@ -18,10 +18,10 @@ require (
 	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/stretchr/testify v1.8.2 // indirect
-	golang.org/x/net v0.44.0 // indirect
-	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/text v0.29.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251002232023-7c0ddcbb5797 // indirect
+	golang.org/x/net v0.46.0 // indirect
+	golang.org/x/sys v0.37.0 // indirect
+	golang.org/x/text v0.30.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251014184007-4626949a642f // indirect
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
