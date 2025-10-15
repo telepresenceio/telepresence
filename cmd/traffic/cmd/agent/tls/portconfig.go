@@ -200,6 +200,15 @@ func (p *portConfig) probeHTTP2ClearText(ctx context.Context) bool {
 	}
 	defer conn.Close()
 
+	// Set a read and write deadline for the initial SETTINGS frame. Shouldn't take long given that
+	// the connection is already established. If it does, then something is wrong, and we'll just give
+	// up and return false.
+	deadline := time.Now().Add(200 * time.Millisecond)
+	if err := conn.SetDeadline(deadline); err != nil {
+		dlog.Debugf(ctx, "failed to set connection deadline on port %d: %v", p.port, err)
+		return false
+	}
+
 	// HTTP/2 connection preface for prior knowledge (direct h2c).
 	// Send the preface.
 	port := p.port
