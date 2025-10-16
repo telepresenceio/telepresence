@@ -57,12 +57,12 @@ items:
           Support was added for HTTP-filtered intercepts on applications using TLS/mTLS encryption. The new functionality enables
           Telepresence to decrypt and inspect encrypted traffic by accessing TLS certificates, facilitating debugging and testing of secure
           applications.
-  
+
           Certificates can be accessed via mounted volumes or Kubernetes secrets in the same namespace. New annotations
           (`telepresence.io/downstream-cert-path` and `telepresence.io/downstream-cert-secret`) allow configuration of certificate paths or
           secrets for decrypting traffic on specified ports. For mTLS, the `telepresence.io/upstream-cert-` annotation prefix supports
           re-encryption of upstream traffic using client-side certificates.
-  
+
           For self-signed certificates, the `telepresence.io/upstream-insecure-skip-verify` annotation bypasses verification, enabling
           HTTP-filtered intercepts in development environments. The `--plaintext` option allows unencrypted traffic during intercepts or
           wiretaps.
@@ -110,7 +110,7 @@ items:
         title: Add MCP server to Telepresence CLI
         body: >-
           The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute
-          some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept. 
+          some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept.
           The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
       - type: change
         title: Telepresence client now requires a traffic manager version of at least 2.21.0.

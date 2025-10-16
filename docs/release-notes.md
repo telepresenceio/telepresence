@@ -87,7 +87,7 @@ can be restored by setting the `client.dns.useComplexLookup` parameter in the He
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add MCP server to Telepresence CLI</div></div>
 <div style="margin-left: 15px">
 
-The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept.  The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
+The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept. The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
 </div>
 
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Telepresence client now requires a traffic manager version of at least 2.21.0.</div></div>
