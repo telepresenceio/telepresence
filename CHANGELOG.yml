@@ -28,13 +28,6 @@ items:
     date: (TBD)
     notes:
       - type: feature
-        title: Helm chart metadata
-        body: |-
-          Updated `Chart.yaml` to include keywords and the source repository URL.
-
-          Improves the Helm chart's discoverability on platforms like Artifact Hub and
-          automatically adds a direct link to the source code for users, providing better context
-      - type: feature
         title: HTTP Intercepts with HTTP header and path filtering
         body: |-
           Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts.
@@ -75,6 +68,12 @@ items:
           wiretaps.
         docs: howtos/mtls
       - type: feature
+        title: Add MCP server to Telepresence CLI
+        body: >-
+          The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute
+          some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept.
+          The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
+      - type: feature
         title: Enhance Resilience of Engagements During Traffic-Manager Redeploys
         body: >-
           The telepresence client and traffic-agent now automatically reconnect to the traffic-manager after a restart.
@@ -114,11 +113,10 @@ items:
           can be restored by setting the `client.dns.useComplexLookup` parameter in the Helm chart or the
           `dns.useComplexLookup` parameter in the client configuration file.
       - type: feature
-        title: Add MCP server to Telepresence CLI
+        title: Updated Helm chart to include keywords and the source repository URL.
         body: >-
-          The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute
-          some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept.
-          The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
+          Improves the Helm chart's discoverability on platforms like Artifact Hub and
+          automatically adds a direct link to the source code for users, providing better context.
       - type: change
         title: Telepresence client now requires a traffic manager version of at least 2.21.0.
         body: >-

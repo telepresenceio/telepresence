@@ -9,15 +9,6 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.25.0
 <Note>
-	<Title type="feature">Helm chart metadata</Title>
-	<Body>
-Updated `Chart.yaml` to include keywords and the source repository URL.
-
-Improves the Helm chart's discoverability on platforms like Artifact Hub and
-automatically adds a direct link to the source code for users, providing better context
-  </Body>
-</Note>
-<Note>
 	<Title type="feature" docs="howtos/engage#intercept-your-application">HTTP Intercepts with HTTP header and path filtering</Title>
 	<Body>
 Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts.
@@ -57,6 +48,12 @@ re-encryption of upstream traffic using client-side certificates.
 For self-signed certificates, the `telepresence.io/upstream-insecure-skip-verify` annotation bypasses verification, enabling
 HTTP-filtered intercepts in development environments. The `--plaintext` option allows unencrypted traffic during intercepts or
 wiretaps.
+  </Body>
+</Note>
+<Note>
+	<Title type="feature">Add MCP server to Telepresence CLI</Title>
+	<Body>
+The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept. The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
   </Body>
 </Note>
 <Note>
@@ -100,9 +97,9 @@ can be restored by setting the `client.dns.useComplexLookup` parameter in the He
   </Body>
 </Note>
 <Note>
-	<Title type="feature">Add MCP server to Telepresence CLI</Title>
+	<Title type="feature">Updated Helm chart to include keywords and the source repository URL.</Title>
 	<Body>
-The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept. The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
+Improves the Helm chart's discoverability on platforms like Artifact Hub and automatically adds a direct link to the source code for users, providing better context.
   </Body>
 </Note>
 <Note>
