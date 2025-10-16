@@ -9,6 +9,15 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.25.0
 <Note>
+	<Title type="feature">Helm chart metadata</Title>
+	<Body>
+Updated `Chart.yaml` to include keywords and the source repository URL.
+
+Improves the Helm chart's discoverability on platforms like Artifact Hub and
+automatically adds a direct link to the source code for users, providing better context
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="howtos/engage#intercept-your-application">HTTP Intercepts with HTTP header and path filtering</Title>
 	<Body>
 Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts.
@@ -93,7 +102,7 @@ can be restored by setting the `client.dns.useComplexLookup` parameter in the He
 <Note>
 	<Title type="feature">Add MCP server to Telepresence CLI</Title>
 	<Body>
-The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept.  The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
+The Telepresence CLI now includes a lightweight MCP server that can be used to allow local AI agents to execute some CLI commands, such as connecting to a traffic manager, listing interceptable apps, and creating an intercept. The server can be enabled using the new `telepresence mcp claude enable` or `telepresence mcp vscode enable` commands.
   </Body>
 </Note>
 <Note>
