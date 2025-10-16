@@ -28,6 +28,13 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Helm chart metadata
+        body: |-
+          Updated `Chart.yaml` to include keywords and the source repository URL.
+
+          Improves the Helm chart's discoverability on platforms like Artifact Hub and
+          automatically adds a direct link to the source code for users, providing better context
+      - type: feature
         title: HTTP Intercepts with HTTP header and path filtering
         body: |-
           Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts.
