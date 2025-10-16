@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.25.0
-    date: (TBD)
+    date: 2025-10-16
     notes:
       - type: feature
         title: HTTP Intercepts with HTTP header and path filtering
