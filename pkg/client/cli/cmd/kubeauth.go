@@ -16,7 +16,7 @@ func kubeauthCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "kubeauth",
 		Args:              cobra.ExactArgs(2),
-		Short:             "Resolve kubeconfig context using gRPC to kubeauth server",
+		Short:             "Resolve kubeconfig context using gRPC to the kubeauth daemon",
 		RunE:              authenticateContext,
 		Hidden:            true,
 		ValidArgsFunction: cobra.NoFileCompletions,

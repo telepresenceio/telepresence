@@ -14,7 +14,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -147,7 +146,7 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_cacheFiles() {
 	_ = rf.Close()
 	rq.NoError(err)
 
-	lv := filepath.Join(cache, userd.ProcessName+".loglevel")
+	lv := filepath.Join(cache, client.UserDaemonName+".loglevel")
 	ctx = dos.WithLockedFs(ctx)
 	_ = dos.Remove(ctx, lv)
 	s.TelepresenceConnect(ctx, "--docker")

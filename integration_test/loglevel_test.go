@@ -22,7 +22,7 @@ func (s *notConnectedSuite) Test_RootDaemonLogLevel() {
 
 	hasDebug := false
 	scn := bufio.NewScanner(rootLog)
-	match := regexp.MustCompile(` debug +daemon/server`)
+	match := regexp.MustCompile(` debug +rootd/server`)
 	for scn.Scan() && !hasDebug {
 		hasDebug = match.MatchString(scn.Text())
 	}

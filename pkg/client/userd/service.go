@@ -9,8 +9,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 )
 
-const ProcessName = "connector"
-
 // A Service is one that runs during the entire lifecycle of the daemon.
 // This should be used to augment the daemon with GRPC services.
 type Service interface {

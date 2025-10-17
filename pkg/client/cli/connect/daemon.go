@@ -40,7 +40,7 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) (err error) {
 		_ = fh.Close()
 	}
 
-	args := []string{client.GetExe(ctx), "daemon-foreground"}
+	args := []string{client.GetExe(ctx), client.RootDaemonName}
 	if cr != nil && cr.RootDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))
 	}

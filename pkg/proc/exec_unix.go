@@ -46,12 +46,13 @@ func startInBackgroundAsRoot(_ context.Context, args ...string) error {
 		return startInBackground(false, args...)
 	}
 	// Run sudo with a prompt explaining why root credentials are needed.
-	return exec.Command("sudo", append([]string{
+	cmd := exec.Command("sudo", append([]string{
 		"-b", "-p",
 		fmt.Sprintf(
 			"Need root privileges to run: %s\nPassword:",
 			shellquote.ShellString(args[0], args[1:])),
-	}, args...)...).Run()
+	}, args...)...)
+	return cmd.Run()
 }
 
 func terminate(p *os.Process) error {

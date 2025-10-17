@@ -46,6 +46,19 @@ items:
           that denotes a custom log file location or redirect of the log output to stdout/stderr. Two new log-level
           configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level
           controls beyond just `userDaemon` and `rootDaemon`.
+      - type: change
+        title: Better names for the Telepresence Daemons
+        body: |-
+          Using the name xxx-foreground isn't very intuitive when talking about daemon processes. Yes, the command, when issued in a
+          terminal, will start the daemon in foreground so the names of the commands does have some logic to them, but then again, starting
+          in the foreground is the default behavior of any command. And when the same command is started from the CLI, it will be started in
+          the background, despite its name.
+        
+          The daemons are therefore now renamed:
+        
+          - connector-foreground => userd
+          - daemon-foreground => rootd
+          - kubeauth-foreground => kubeauthd
   - version: 2.25.1
     date: (TBD)
     notes:

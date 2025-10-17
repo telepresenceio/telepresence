@@ -108,7 +108,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 func DaemonArgs(ctx context.Context, daemonID *daemon.Identifier) []string {
 	grpcCfg := client.GetConfig(ctx).Grpc()
 	return []string{
-		"connector-foreground",
+		client.UserDaemonName,
 		"--name", "docker-" + daemonID.String(),
 		"--address", fmt.Sprintf(":%d", grpcCfg.DaemonPort),
 		"--embed-network",
@@ -139,7 +139,7 @@ func ConnectDaemon(ctx context.Context, address netip.AddrPort) (conn *grpc.Clie
 }
 
 const (
-	kubeAuthPortFile = kubeauth.CommandName + ".port"
+	kubeAuthPortFile = client.KubeAuthDaemonName + ".port"
 )
 
 type ContainerInfo struct {
@@ -256,7 +256,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	_ = os.Remove(portFile)
 
 	args := make([]string, 0, 4+len(kubeFlags)*2)
-	args = append(args, client.GetExe(ctx), kubeauth.CommandName, "--portfile", portFile)
+	args = append(args, client.GetExe(ctx), client.KubeAuthDaemonName, "--portfile", portFile)
 	var err error
 	if args, err = client.AppendKubeFlags(kubeFlags, args); err != nil {
 		return 0, err
@@ -280,7 +280,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 		dlog.Debugf(ctx, "Authenticator service started on port %d", port)
 		return port, nil
 	}
-	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), kubeauth.CommandName)
+	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), client.KubeAuthDaemonName)
 }
 
 func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string) (uint16, error) {

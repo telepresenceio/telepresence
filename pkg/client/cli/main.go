@@ -14,8 +14,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -30,7 +28,7 @@ func InitContext(ctx context.Context) context.Context {
 	}
 	ctx = client.WithEnv(ctx, env)
 	switch client.ProcessName() {
-	case userd.ProcessName:
+	case client.UserDaemonName:
 		client.DisplayName = "OSS User Daemon"
 		if proc.RunningInContainer() {
 			if slices.Contains(os.Args, "--embed-network") {
@@ -40,11 +38,9 @@ func InitContext(ctx context.Context) context.Context {
 				proc.SetRunningInContainer(false)
 			}
 		}
-	case rootd.ProcessName:
+	case client.RootDaemonName:
 		client.DisplayName = "OSS Root Daemon"
 		proc.SetRunningInContainer(false) // We never start the root daemon as a container.
-		ctx = rootd.WithNewServiceFunc(ctx, rootd.NewService)
-		ctx = rootd.WithNewSessionFunc(ctx, rootd.NewSession)
 	default:
 		client.DisplayName = "OSS Client"
 		ctx = connect.WithCommandInitializer(ctx, connect.CommandInitializer)
@@ -66,7 +62,7 @@ func Main(ctx context.Context, args []string) {
 	}
 
 	if client.IsDaemon() {
-		// Avoid the initialization of all subcommands except for [connector|daemon]-foreground and
+		// Avoid the initialization of all subcommands except for [userd|rootd|kubeauthd] and
 		// avoids checks for legacy commands.
 		if command, _, err := output.Execute(cmd.TelepresenceDaemon(ctx, args)); err != nil {
 			if command != nil {
@@ -110,7 +106,7 @@ func Main(ctx context.Context, args []string) {
 func summarizeLogs(ctx context.Context, cmd *cobra.Command) bool {
 	w := cmd.ErrOrStderr()
 	first := true
-	for _, processName := range []string{rootd.ProcessName, userd.ProcessName} {
+	for _, processName := range []string{client.RootDaemonName, client.UserDaemonName} {
 		if summary, err := logging.SummarizeLog(ctx, processName); err != nil {
 			ioutil.Printf(w, "failed to scan %s logs: %v\n", processName, err)
 		} else if summary != "" {

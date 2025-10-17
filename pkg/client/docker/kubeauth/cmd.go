@@ -28,8 +28,6 @@ import (
 )
 
 const (
-	CommandName       = "kubeauth-foreground"
-	PortFileDir       = "kubeauth"
 	PortFileStaleTime = 3 * time.Second
 	logfileFlag       = "logfile"
 )
@@ -49,8 +47,8 @@ type PortFile struct {
 func Command(ctx context.Context) *cobra.Command {
 	as := authService{kubeFlags: genericclioptions.NewConfigFlags(false)}
 	c := &cobra.Command{
-		Use:    CommandName,
-		Short:  "Launch Telepresence Kubernetes authenticator",
+		Use:    client.KubeAuthDaemonName,
+		Short:  "Launch Telepresence Kubernetes Authenticator Daemon",
 		Args:   cobra.NoArgs,
 		Hidden: true,
 		RunE:   as.run,
@@ -86,7 +84,7 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	addr := grpcListener.Addr().(*net.TCPAddr)
-	dlog.Infof(ctx, "kubeauth listening on address %s", addr)
+	dlog.Infof(ctx, "kubeauth daemon listening on address %s", addr)
 
 	as.clientConfig = as.kubeFlags.ToRawKubeConfigLoader()
 	as.configFiles = as.clientConfig.ConfigAccess().GetLoadingPrecedence()
@@ -115,9 +113,9 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return server.Serve(ctx, svc, grpcListener)
 	})
 	if err = g.Wait(); err != nil {
-		dlog.Errorf(ctx, "kubeauth exiting with error: %v", err)
+		dlog.Errorf(ctx, "kubeauth daemon exiting with error: %v", err)
 	} else {
-		dlog.Info(ctx, "kubeauth exiting")
+		dlog.Info(ctx, "kubeauth daemon exiting")
 	}
 	return err
 }
@@ -131,7 +129,7 @@ func (as *authService) keepPortFileAlive(ctx context.Context) error {
 	defer func() {
 		ticker.Stop()
 		_ = os.Remove(as.portFile)
-		dlog.Debugf(ctx, "kubeauth removed %s", as.portFile)
+		dlog.Debugf(ctx, "kubeauth daemon removed %s", as.portFile)
 	}()
 	now := time.Now()
 	for {

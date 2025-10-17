@@ -206,21 +206,6 @@ type Session struct {
 	lookupSequencer *xsync.Map[string, clusterLookupResult]
 }
 
-type NewSessionFunc func(context.Context, *rpc.NetworkConfig) (context.Context, *Session, error)
-
-type newSessionKey struct{}
-
-func WithNewSessionFunc(ctx context.Context, f NewSessionFunc) context.Context {
-	return context.WithValue(ctx, newSessionKey{}, f)
-}
-
-func GetNewSessionFunc(ctx context.Context) NewSessionFunc {
-	if f, ok := ctx.Value(newSessionKey{}).(NewSessionFunc); ok {
-		return f
-	}
-	panic("No User daemon Session creator has been registered")
-}
-
 func createK8sConfig(ctx context.Context, kubeFlags map[string]string, kubeData []byte) (*rest.Config, error) {
 	configFlags, err := client.ConfigFlags(kubeFlags)
 	if err != nil {

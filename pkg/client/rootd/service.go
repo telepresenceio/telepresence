@@ -35,23 +35,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-type NewServiceFunc func(client.Config) *Service
-
-type newServiceKey struct{}
-
-func WithNewServiceFunc(ctx context.Context, f NewServiceFunc) context.Context {
-	return context.WithValue(ctx, newServiceKey{}, f)
-}
-
-func GetNewServiceFunc(ctx context.Context) NewServiceFunc {
-	if f, ok := ctx.Value(newServiceKey{}).(NewServiceFunc); ok {
-		return f
-	}
-	panic("No User daemon Service creator has been registered")
-}
-
 const (
-	ProcessName = "daemon"
 	titleName   = "Daemon"
 	pprofFlag   = "pprof"
 	logfileFlag = "logfile"
@@ -65,7 +49,7 @@ Launch the Telepresence ` + titleName + `:
     sudo telepresence Service
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), ProcessName+".log") + `
+    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), "daemon.log") + `
 to troubleshoot problems.
 `
 }
@@ -105,19 +89,19 @@ func (s *Service) As(ptr any) {
 	}
 }
 
-// Command returns the telepresence sub-command "daemon-foreground".
+// Command returns the telepresence sub-command "rootd".
 func Command(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    ProcessName + "-foreground <logging dir> <config dir> <path to gRPC socket>",
+		Use:    client.RootDaemonName + " <config dir> <path to gRPC socket>",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
-		Args:   cobra.ExactArgs(3),
+		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		Long:   help(),
 		RunE:   run,
 	}
 	flags := cmd.Flags()
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
-	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), ProcessName+".log"),
+	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log"),
 		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
 	return cmd
 }
@@ -270,7 +254,7 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 	if request.Duration != nil {
 		duration = request.Duration.AsDuration()
 	}
-	return &emptypb.Empty{}, logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, ProcessName)
+	return &emptypb.Empty{}, logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, client.RootDaemonName)
 }
 
 func (s *Service) LookupIP(ctx context.Context, request *rpc.LookupIPRequest) (rsp *rpc.LookupIPResponse, err error) {
@@ -362,7 +346,7 @@ func (s *Service) startSession(parentCtx context.Context, oi *rpc.NetworkConfig,
 	}
 
 	ctx, cancel := context.WithCancel(parentCtx)
-	ctx, session, err := GetNewSessionFunc(ctx)(ctx, oi)
+	ctx, session, err := NewSession(ctx, oi)
 	if session == nil || ctx.Err() != nil || err != nil {
 		cancel()
 		if err == nil {
@@ -433,7 +417,7 @@ func (s *Service) serveGrpc(c context.Context, l net.Listener) error {
 // run is the main function when executing as the daemon.
 func run(cmd *cobra.Command, args []string) error {
 	if !proc.IsAdmin() {
-		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)
+		return fmt.Errorf("telepresence %s must run with elevated privileges", client.RootDaemonName)
 	}
 
 	configDir := args[0]
@@ -457,7 +441,7 @@ func run(cmd *cobra.Command, args []string) error {
 			}
 		}()
 	}
-	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
+	c = dgroup.WithGoroutineName(c, "/"+client.RootDaemonName)
 	logFile := flags.Lookup(logfileFlag).Value.String()
 	c, err = logging.InitContext(c, logFile, cfg.LogLevels().RootDaemon, logging.RotateDaily, true)
 	if err != nil {
@@ -465,14 +449,14 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 
 	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence %s %s starting...", ProcessName, client.DisplayVersion())
+	dlog.Infof(c, "Telepresence Root Daemon %s starting...", client.DisplayVersion())
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
 	// Listen on domain unix domain socket. The listener must be opened before other tasks because
 	// the CLI client will only wait for a short period of time for the socket to appear before it
 	// gives up.
-	grpcListener, err := socket.Listen(c, ProcessName, rootDaemonPath)
+	grpcListener, err := socket.Listen(c, client.RootDaemonName, rootDaemonPath)
 	if err != nil {
 		return err
 	}
@@ -481,8 +465,8 @@ func run(cmd *cobra.Command, args []string) error {
 	}()
 	dlog.Debug(c, "Listener opened")
 
-	d := GetNewServiceFunc(c)(cfg)
-	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
+	d := NewService(cfg)
+	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, client.RootDaemonName); err != nil {
 		return err
 	}
 	vif.InitLogger(c)

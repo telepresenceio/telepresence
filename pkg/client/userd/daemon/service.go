@@ -38,16 +38,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-const titleName = "Connector"
-
 func help() string {
-	return `The Telepresence ` + titleName + ` is a background component that manages a connection.
+	return `The Telepresence User Daemon is a background component that manages a connection.
 
-Launch the Telepresence ` + titleName + `:
+Launch the daemon with:
     telepresence connect
 
-Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), userd.ProcessName+".log") + `
+Examine the daemon's log output in
+    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), "connector.log") + `
 to troubleshoot problems.
 `
 }
@@ -170,19 +168,19 @@ const (
 	logfileFlag       = "logfile"
 )
 
-// Command returns the CLI sub-command for "connector-foreground".
+// Command returns the CLI sub-command for "userd".
 func Command(ctx context.Context) *cobra.Command {
 	c := &cobra.Command{
-		Use:    userd.ProcessName + "-foreground",
-		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
+		Use:    client.UserDaemonName,
+		Short:  "Launch Telepresence User Daemon",
 		Args:   cobra.ExactArgs(0),
 		Hidden: true,
 		Long:   help(),
 		RunE:   run,
 	}
 	flags := c.Flags()
-	flags.String(nameFlag, userd.ProcessName, "Daemon name")
-	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), userd.ProcessName+".log"),
+	flags.String(nameFlag, client.UserDaemonName, "Daemon name")
+	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log"),
 		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
 	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.UserDaemonPath(ctx))
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
@@ -387,7 +385,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	} else {
 		socketPath := socket.UserDaemonPath(c)
 		dlog.Infof(c, "Starting socket listener for %s", socketPath)
-		if grpcListener, err = socket.Listen(c, userd.ProcessName, socketPath); err != nil {
+		if grpcListener, err = socket.Listen(c, client.UserDaemonName, socketPath); err != nil {
 			dlog.Errorf(c, "socket listener for %s failed: %v", socketPath, err)
 			return err
 		}
@@ -398,7 +396,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 
 	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
+	dlog.Infof(c, "Telepresence User Daemon %s starting...", client.DisplayVersion())
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
@@ -446,7 +444,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		s.teleroutePort = tp
 	}
 
-	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, userd.ProcessName); err != nil {
+	if err := logging.LoadTimedLevelFromCache(c, s.timedLogLevel, client.UserDaemonName); err != nil {
 		return err
 	}
 

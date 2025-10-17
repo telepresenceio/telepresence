@@ -25,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -164,7 +163,7 @@ func (th *trafficManager) NewConnectRequest(ctx context.Context) *rpc.ConnectReq
 // call to quit is guaranteed after the function ends.
 func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequest, f func(context.Context, rpc.ConnectorServer)) error {
 	client.ProcessName = func() string {
-		return userd.ProcessName
+		return client.UserDaemonName
 	}
 	ctx = cli.InitContext(ctx)
 	cfg := client.GetConfig(ctx)

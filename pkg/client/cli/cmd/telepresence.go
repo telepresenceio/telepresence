@@ -62,7 +62,7 @@ func Telepresence(ctx context.Context, args []string) *cobra.Command {
 	return rootCmd
 }
 
-// TelepresenceDaemon returns the top level "telepresence" CLI limited to the subcommands [kubeauth|connector|daemon]-foreground.
+// TelepresenceDaemon returns the top level "telepresence" CLI limited to the subcommands kubeauthd, userd, and rootd.
 func TelepresenceDaemon(ctx context.Context, args []string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:  "telepresence",

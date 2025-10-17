@@ -439,7 +439,7 @@ func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *da
 }
 
 func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, cr *daemon.Request) (context.Context, *daemon.Info, *grpc.ClientConn, error) {
-	args := []string{connectorDaemon, "connector-foreground"}
+	args := []string{connectorDaemon, client.UserDaemonName}
 	if cr.UserDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
 	}

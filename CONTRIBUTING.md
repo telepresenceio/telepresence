@@ -173,18 +173,18 @@ If there's an error from the connector or daemon during early
 initialization, it might quit before the logfiles are set up.  Perhaps
 the problem is even with setting up the logfile itself.
 
-You can run the `connector-foreground` or `daemon-foreground` commands
+You can run the `userd` or `rootd` commands
 directly, to see what they spit out on stderr before dying:
 
 ```console
-$ telepresence connector-foreground  --logfile -    # or daemon-foreground
+$ telepresence userd  --logfile -    # or rootd
 ```
 
-Use `--logfile -` to instead log to stderr.  In order to debug the logfile setup,
-simply pipe the command to `cat` to trigger the usual logfile setup:
+Use `--logfile -` to instead log to stderr.  In order to debug the logfile setup, simply pipe the
+command to `cat` to trigger the usual logfile setup:
 
 ```console
-$ telepresence connector-foreground  --logfile - | cat
+$ telepresence userd  --logfile - | cat
 ```
 
 ### Profiling the daemons
