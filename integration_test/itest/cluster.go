@@ -429,9 +429,12 @@ func PodCreateTimeout(c context.Context) time.Duration {
 }
 
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
-	config := client.GetDefaultConfigFunc()
-	config.LogLevels().UserDaemon = logrus.DebugLevel
-	config.LogLevels().RootDaemon = logrus.DebugLevel
+	config := client.GetDefaultConfig()
+	logLevels := config.LogLevels()
+	logLevels.CLI = logrus.DebugLevel
+	logLevels.UserDaemon = logrus.DebugLevel
+	logLevels.RootDaemon = logrus.DebugLevel
+	logLevels.KubeAuthDaemon = logrus.DebugLevel
 
 	to := config.Timeouts()
 	to.PrivateClusterConnect = 60 * time.Second

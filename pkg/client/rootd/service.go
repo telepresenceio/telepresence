@@ -54,6 +54,7 @@ const (
 	ProcessName = "daemon"
 	titleName   = "Daemon"
 	pprofFlag   = "pprof"
+	logfileFlag = "logfile"
 )
 
 func help() string {
@@ -105,7 +106,7 @@ func (s *Service) As(ptr any) {
 }
 
 // Command returns the telepresence sub-command "daemon-foreground".
-func Command() *cobra.Command {
+func Command(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:    ProcessName + "-foreground <logging dir> <config dir> <path to gRPC socket>",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
@@ -116,6 +117,8 @@ func Command() *cobra.Command {
 	}
 	flags := cmd.Flags()
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
+	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), ProcessName+".log"),
+		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
 	return cmd
 }
 
@@ -433,14 +436,12 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)
 	}
 
-	loggingDir := args[0]
-	configDir := args[1]
-	rootDaemonPath := args[2]
+	configDir := args[0]
+	rootDaemonPath := args[1]
 	c := cmd.Context()
 
 	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's
 	// directories rather than directories for the root user.
-	c = filelocation.WithAppUserLogDir(c, loggingDir)
 	c = filelocation.WithAppUserConfigDir(c, configDir)
 
 	cfg, err := client.LoadConfig(c)
@@ -457,7 +458,8 @@ func run(cmd *cobra.Command, args []string) error {
 		}()
 	}
 	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
-	c, err = logging.InitContext(c, ProcessName, logging.RotateDaily, true, false)
+	logFile := flags.Lookup(logfileFlag).Value.String()
+	c, err = logging.InitContext(c, logFile, cfg.LogLevels().RootDaemon, logging.RotateDaily, true)
 	if err != nil {
 		return err
 	}

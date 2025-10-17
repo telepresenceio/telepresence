@@ -167,10 +167,11 @@ const (
 	embedNetworkFlag  = "embed-network"
 	pprofFlag         = "pprof"
 	teleroutePortFlag = "teleroute-port"
+	logfileFlag       = "logfile"
 )
 
 // Command returns the CLI sub-command for "connector-foreground".
-func Command() *cobra.Command {
+func Command(ctx context.Context) *cobra.Command {
 	c := &cobra.Command{
 		Use:    userd.ProcessName + "-foreground",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
@@ -181,7 +182,9 @@ func Command() *cobra.Command {
 	}
 	flags := c.Flags()
 	flags.String(nameFlag, userd.ProcessName, "Daemon name")
-	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.UserDaemonPath(context.Background()))
+	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), userd.ProcessName+".log"),
+		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
+	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.UserDaemonPath(ctx))
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
 	flags.Uint16(teleroutePortFlag, 0, "start teleroute server on the given port")
@@ -367,7 +370,8 @@ func run(cmd *cobra.Command, _ []string) error {
 		name = name[:di]
 	}
 	c = dgroup.WithGoroutineName(c, "/"+name)
-	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true, false)
+	logFile := flags.Lookup(logfileFlag).Value.String()
+	c, err = logging.InitContext(c, logFile, cfg.LogLevels().UserDaemon, logging.RotateDaily, true)
 	if err != nil {
 		return err
 	}

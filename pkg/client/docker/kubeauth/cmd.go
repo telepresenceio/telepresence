@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 )
 
@@ -30,6 +31,7 @@ const (
 	CommandName       = "kubeauth-foreground"
 	PortFileDir       = "kubeauth"
 	PortFileStaleTime = 3 * time.Second
+	logfileFlag       = "logfile"
 )
 
 type authService struct {
@@ -44,7 +46,7 @@ type PortFile struct {
 	Kubeconfig string `json:"kubeconfig"`
 }
 
-func Command() *cobra.Command {
+func Command(ctx context.Context) *cobra.Command {
 	as := authService{kubeFlags: genericclioptions.NewConfigFlags(false)}
 	c := &cobra.Command{
 		Use:    CommandName,
@@ -55,6 +57,8 @@ func Command() *cobra.Command {
 	}
 	flags := c.Flags()
 	flags.StringVar(&as.portFile, "portfile", "", "File where server existence is announced.")
+	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "kubeauth.log"),
+		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
 	as.kubeFlags.AddFlags(flags)
 	return c
 }
@@ -75,7 +79,9 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return errcat.NoDaemonLogs.Newf("unable to open a port on localhost: %w", err)
 	}
 
-	ctx, err = logging.InitContext(ctx, "kubeauth", logging.RotateNever, false, false)
+	flags := cmd.Flags()
+	logFile := flags.Lookup(logfileFlag).Value.String()
+	ctx, err = logging.InitContext(ctx, logFile, cfg.LogLevels().KubeAuthDaemon, logging.RotateNever, false)
 	if err != nil {
 		return err
 	}

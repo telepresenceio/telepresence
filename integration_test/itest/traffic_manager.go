@@ -3,6 +3,7 @@ package itest
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -165,7 +167,9 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 		return userd.ProcessName
 	}
 	ctx = cli.InitContext(ctx)
-	ctx, err := logging.InitContext(ctx, "connector", logging.RotateNever, true, true)
+	cfg := client.GetConfig(ctx)
+	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log")
+	ctx, err := logging.InitContext(ctx, logFile, cfg.LogLevels().UserDaemon, logging.RotateNever, false)
 	if err != nil {
 		return err
 	}
@@ -193,7 +197,6 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 	var sv rpc.ConnectorServer
 	srv.As(&sv)
 
-	cfg := client.GetConfig(ctx)
 	if cfg.Intercept().UseFtp {
 		g.Go("fuseftp-server", func(ctx context.Context) error {
 			if err := srv.InitFTPServer(ctx); err != nil {

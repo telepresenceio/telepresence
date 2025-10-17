@@ -177,15 +177,14 @@ You can run the `connector-foreground` or `daemon-foreground` commands
 directly, to see what they spit out on stderr before dying:
 
 ```console
-$ telepresence connector-foreground    # or daemon-foreground
+$ telepresence connector-foreground  --logfile -    # or daemon-foreground
 ```
 
-If stdout is a TTY device, they don't set up logfiles and instead log
-to stderr.  In order to debug the logfile setup, simply pipe the
-command to `cat` to trigger the usual logfile setup:
+Use `--logfile -` to instead log to stderr.  In order to debug the logfile setup,
+simply pipe the command to `cat` to trigger the usual logfile setup:
 
 ```console
-$ telepresence connector-foreground | cat
+$ telepresence connector-foreground  --logfile - | cat
 ```
 
 ### Profiling the daemons

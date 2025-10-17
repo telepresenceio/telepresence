@@ -8,7 +8,14 @@
 A new Helm chart configuration option `intercept.allowGlobalIntercepts` has been added to control whether global TCP/UDP intercepts are permitted. When set to `false`, only HTTP intercepts with header or path filters are allowed, preventing users from creating global intercepts that block other developers from intercepting the same port. This is particularly useful in shared development environments where multiple developers need to work on the same service simultaneously. The setting defaults to `true` to maintain full backward compatibility with existing deployments. When a user attempts to create a global intercept while the setting is disabled, they receive a helpful error message suggesting the use of `--http-header` or `--http-path-*` flags for HTTP-filtered intercepts.
 </div>
 
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remove unnecessary setcap from traffic binary</div></div>
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Support customizable daemon log file paths</div></div>
+<div style="margin-left: 15px">
+
+Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile` that denotes a custom log file location or redirect of the log output to stdout/stderr. Two new log-level configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level controls beyond just `userDaemon` and `rootDaemon`.
+</div>
+
+## Version 2.25.1
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remove unnecessary setcap from traffic binary</div></div>
 <div style="margin-left: 15px">
 
 The setcap capability (cap_net_bind_service) was removed from the traffic binary build process. This capability was originally added to allow the binary to bind to privileged ports, specifically port 443 for the mutating webhook. Since version 2.24.0, the default mutating webhook port was changed to 8443 (a non-privileged port), making this capability unnecessary. Removing it simplifies the build process and reduces the security surface area.

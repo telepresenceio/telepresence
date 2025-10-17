@@ -559,18 +559,24 @@ func (t *Timeouts) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 }
 
 const (
-	defaultLogLevelsUserDaemon = logrus.InfoLevel
-	defaultLogLevelsRootDaemon = logrus.InfoLevel
+	defaultLogLevelsCLI            = logrus.InfoLevel
+	defaultLogLevelsKubeAuthDaemon = logrus.InfoLevel
+	defaultLogLevelsUserDaemon     = logrus.InfoLevel
+	defaultLogLevelsRootDaemon     = logrus.InfoLevel
 )
 
 var defaultLogLevels = LogLevels{ //nolint:gochecknoglobals // constant
-	UserDaemon: defaultLogLevelsUserDaemon,
-	RootDaemon: defaultLogLevelsRootDaemon,
+	CLI:            defaultLogLevelsCLI,
+	KubeAuthDaemon: defaultLogLevelsKubeAuthDaemon,
+	UserDaemon:     defaultLogLevelsUserDaemon,
+	RootDaemon:     defaultLogLevelsRootDaemon,
 }
 
 type LogLevels struct {
-	UserDaemon logrus.Level `json:"userDaemon"`
-	RootDaemon logrus.Level `json:"rootDaemon"`
+	CLI            logrus.Level `json:"cli"`
+	KubeAuthDaemon logrus.Level `json:"kubeAuthDaemon"`
+	UserDaemon     logrus.Level `json:"userDaemon"`
+	RootDaemon     logrus.Level `json:"rootDaemon"`
 }
 
 func (ll *LogLevels) defaults() DefaultsAware {

@@ -6,7 +6,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func dupToStdOut(file *os.File) error {
+func dupStdOut(file *os.File) error {
 	if err := windows.SetStdHandle(windows.STD_OUTPUT_HANDLE, windows.Handle(file.Fd())); err != nil {
 		return err
 	}
@@ -14,7 +14,7 @@ func dupToStdOut(file *os.File) error {
 	return nil
 }
 
-func dupToStdErr(file *os.File) error {
+func dupStdErr(file *os.File) error {
 	// https://stackoverflow.com/questions/34772012/capturing-panic-in-golang/34772516
 	if err := windows.SetStdHandle(windows.STD_ERROR_HANDLE, windows.Handle(file.Fd())); err != nil {
 		return err

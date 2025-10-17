@@ -39,7 +39,17 @@ items:
           attempts to create a global intercept while the setting is disabled, they receive a helpful error
           message suggesting the use of `--http-header` or `--http-path-*` flags for HTTP-filtered intercepts.
         docs: reference/cluster_config#restricting_global_intercepts
-      - type: change
+      - type: feature
+        title: Support customizable daemon log file paths
+        body: >-
+          Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile`
+          that denotes a custom log file location or redirect of the log output to stdout/stderr. Two new log-level
+          configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level
+          controls beyond just `userDaemon` and `rootDaemon`.
+  - version: 2.25.1
+    date: (TBD)
+    notes:
+      - type: bugfix
         title: Remove unnecessary setcap from traffic binary
         body: >-
           The setcap capability (cap_net_bind_service) was removed from the traffic binary build process.

@@ -87,7 +87,7 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, NewRotateOnce(), true, false)
+		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -115,7 +115,7 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, NewRotateOnce(), true, false)
+		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -134,7 +134,7 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, NewRotateOnce(), true, false)
+		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), true)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -154,7 +154,7 @@ func TestInitContext(t *testing.T) {
 		ctx, logDir, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, NewRotateOnce(), true, false)
+		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -163,7 +163,7 @@ func TestInitContext(t *testing.T) {
 		closeLog(t)
 		ft.Step(time.Second)
 
-		c, err = InitContext(ctx, logName, NewRotateOnce(), true, false)
+		c, err = InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -181,10 +181,10 @@ func TestInitContext(t *testing.T) {
 	})
 
 	t.Run("birthtime updates after rotate", func(t *testing.T) {
-		ctx, _, _ := testSetup(t)
+		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, NewRotateOnce(), true, false)
+		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -192,7 +192,7 @@ func TestInitContext(t *testing.T) {
 		bt1 := loggerForTest.Out.(*RotatingFile).birthTime
 		closeLog(t)
 
-		c, err = InitContext(ctx, logName, NewRotateOnce(), true, false)
+		c, err = InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -206,7 +206,7 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logName, RotateNever, true, false)
+		c, err := InitContext(ctx, logFile, logrus.InfoLevel, RotateNever, false)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -214,7 +214,7 @@ func TestInitContext(t *testing.T) {
 		dlog.Info(c, infoMsg1)
 		closeLog(t)
 
-		c, err = InitContext(ctx, logName, RotateNever, true, false)
+		c, err = InitContext(ctx, logFile, logrus.InfoLevel, RotateNever, false)
 		loggerForTest.AddHook(&dtimeHook{})
 		check.NoError(err)
 		check.NotNil(c)
@@ -230,7 +230,7 @@ func TestInitContext(t *testing.T) {
 	})
 
 	t.Run("old files are removed", func(t *testing.T) {
-		ctx, logDir, _ := testSetup(t)
+		ctx, logDir, logFile := testSetup(t)
 		check := require.New(t)
 
 		maxFiles := 5
@@ -241,7 +241,7 @@ func TestInitContext(t *testing.T) {
 		}
 		for i := 0; i < maxFiles+2; i++ {
 			ft.Step(24 * time.Hour)
-			c, err := InitContext(ctx, logName, NewRotateOnce(), true, false)
+			c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
 			loggerForTest.AddHook(&dtimeHook{})
 			check.NoError(err)
 			check.NotNil(c)

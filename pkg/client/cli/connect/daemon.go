@@ -44,7 +44,7 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) (err error) {
 	if cr != nil && cr.RootDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))
 	}
-	args = append(args, logDir, filelocation.AppUserConfigDir(ctx), socket.RootDaemonPath(ctx))
+	args = append(args, "--logfile", logFile, filelocation.AppUserConfigDir(ctx), socket.RootDaemonPath(ctx))
 	return proc.StartInBackgroundAsRoot(ctx, args...)
 }
 

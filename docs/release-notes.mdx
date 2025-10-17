@@ -15,7 +15,14 @@ A new Helm chart configuration option `intercept.allowGlobalIntercepts` has been
   </Body>
 </Note>
 <Note>
-	<Title type="change">Remove unnecessary setcap from traffic binary</Title>
+	<Title type="feature">Support customizable daemon log file paths</Title>
+	<Body>
+Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile` that denotes a custom log file location or redirect of the log output to stdout/stderr. Two new log-level configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level controls beyond just `userDaemon` and `rootDaemon`.
+  </Body>
+</Note>
+## Version 2.25.1
+<Note>
+	<Title type="bugfix">Remove unnecessary setcap from traffic binary</Title>
 	<Body>
 The setcap capability (cap_net_bind_service) was removed from the traffic binary build process. This capability was originally added to allow the binary to bind to privileged ports, specifically port 443 for the mutating webhook. Since version 2.24.0, the default mutating webhook port was changed to 8443 (a non-privileged port), making this capability unnecessary. Removing it simplifies the build process and reduces the security surface area.
   </Body>

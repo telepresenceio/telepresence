@@ -198,10 +198,12 @@ For whichever log-level you select, you will get logs labeled with that level an
 
 These are the valid fields for the `client.logLevels` key:
 
-| Field        | Description                                                         | Type                                        | Default |
-|--------------|---------------------------------------------------------------------|---------------------------------------------|---------|
-| `userDaemon` | Logging level to be used by the User Daemon (logs to connector.log) | [loglevel][logrus-level] [string][yaml-str] | debug   |
-| `rootDaemon` | Logging level to be used for the Root Daemon (logs to daemon.log)   | [loglevel][logrus-level] [string][yaml-str] | info    |
+| Field            | Description                                                                             | Type                                        | Default |
+|------------------|-----------------------------------------------------------------------------------------|---------------------------------------------|---------|
+| `userDaemon`     | Logging level to be used by the User Daemon (logs to connector.log)                     | [loglevel][logrus-level] [string][yaml-str] | info    |
+| `rootDaemon`     | Logging level to be used for the Root Daemon (logs to daemon.log)                       | [loglevel][logrus-level] [string][yaml-str] | info    |
+| `kubeAuthDaemon` | Logging level to be used by the Kubernetes Authentication Daemon (logs to kubeauth.log) | [loglevel][logrus-level] [string][yaml-str] | info    |
+| `cli`            | Logging level to be used by the CLI frontend (logs to cli.log)                          | [loglevel][logrus-level] [string][yaml-str] | info    |
 
 ### Routing
 
