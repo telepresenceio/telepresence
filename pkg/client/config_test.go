@@ -18,21 +18,7 @@ import (
 )
 
 func TestGetConfig(t *testing.T) {
-	configs := []string{
-		/* sys1 */ `
-logLevels:
-  userDaemon: info
-  rootDaemon: debug
-cluster:
-  defaultManagerNamespace: hello
-`,
-		/* sys2 */ `
-timeouts:
-  connectivityCheck: 0ms
-logLevels:
-  userDaemon: debug
-`,
-		/* user */ `
+	config := `
 timeouts:
   clusterConnect: 25s
   proxyDial: 17s
@@ -49,20 +35,14 @@ intercept:
   useFtp: true
 routing:
   virtualSubnet: 192.169.0.0/16
-`,
-	}
+`
 
 	tmp := t.TempDir()
-	sys1 := filepath.Join(tmp, "sys1")
-	sys2 := filepath.Join(tmp, "sys2")
 	user := filepath.Join(tmp, "user")
-	for i, dir := range []string{sys1, sys2, user} {
-		require.NoError(t, os.MkdirAll(dir, 0o700))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, ConfigFile), []byte(configs[i]), 0o600))
-	}
+	require.NoError(t, os.MkdirAll(user, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(user, ConfigFile), []byte(config), 0o600))
 
 	c := dlog.NewTestContext(t, false)
-	c = filelocation.WithAppSystemConfigDirs(c, []string{sys1, sys2})
 	c = filelocation.WithAppUserConfigDir(c, user)
 	env, err := LoadEnv()
 	require.NoError(t, err)
@@ -76,9 +56,6 @@ routing:
 	to := cfg.Timeouts()
 	assert.Equal(t, 25*time.Second, to.PrivateClusterConnect)      // from user
 	assert.Equal(t, 17*time.Second, to.PrivateProxyDial)           // from user
-	assert.Equal(t, time.Duration(0), to.PrivateConnectivityCheck) // from sys2
-
-	assert.Equal(t, logrus.DebugLevel, cfg.LogLevels().UserDaemon) // from sys2
 	assert.Equal(t, logrus.TraceLevel, cfg.LogLevels().RootDaemon) // from user
 
 	assert.Equal(t, "testregistry.io", cfg.Images().PrivateRegistry)                             // from user
@@ -87,7 +64,6 @@ routing:
 	assert.Equal(t, 9080, cfg.Intercept().DefaultPort)                                           // from user
 	assert.True(t, cfg.Intercept().UseFtp)                                                       // from user
 	assert.True(t, cfg.DNS().RecursionCheck)                                                     // from user
-	assert.Equal(t, cfg.Cluster().DefaultManagerNamespace, "hello")                              // from sys1
 	assert.Equal(t, cfg.Routing().VirtualSubnet, netip.MustParsePrefix("192.169.0.0/16"))        // from user
 }
 

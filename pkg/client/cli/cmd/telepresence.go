@@ -101,7 +101,7 @@ func AddSubCommands(cmd *cobra.Command, markdown bool) {
 		setContext(command, ctx)
 	}
 	cmd.AddCommand(commands...)
-	cmd.PersistentFlags().AddFlagSet(global.Flags(false))
+	cmd.PersistentFlags().AddFlagSet(global.Flags(ctx, false, markdown))
 	addCompletion(cmd, markdown)
 	addUsageTemplate(cmd, markdown)
 	_ = cmd.RegisterFlagCompletionFunc("context", autocompleteContext)

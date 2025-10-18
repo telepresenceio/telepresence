@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"math"
 	"net/netip"
 	"os"
@@ -1149,30 +1148,34 @@ func GetConfig(ctx context.Context) Config {
 }
 
 // ReplaceConfig replaces the config last stored using WithConfig with the given Config.
-func ReplaceConfig(ctx context.Context, config Config) {
+// The function returns true if an existing config was replaced, false if no such config
+// existed.
+func ReplaceConfig(ctx context.Context, config Config) bool {
 	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
 		atomic.StorePointer(configPtr, unsafe.Pointer(&config))
+		return true
 	}
+	return false
 }
 
-// GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir.
+type configFileKey struct{}
+
+// WithConfigFile sets the config file to use and overrides the default which is using "config.yml" from the AppUserConfigDir.
+func WithConfigFile(ctx context.Context, configFile string) context.Context {
+	return context.WithValue(ctx, configFileKey{}, configFile)
+}
+
+// GetConfigFile gets the path to the configFile.
 func GetConfigFile(c context.Context) string {
+	if configFile, ok := c.Value(configFileKey{}).(string); ok {
+		return configFile
+	}
 	return filepath.Join(filelocation.AppUserConfigDir(c), ConfigFile)
-}
-
-//nolint:gochecknoglobals // extension point
-var GetDefaultConfigFunc = func() Config {
-	return GetDefaultBaseConfig()
-}
-
-//nolint:gochecknoglobals // extension point
-var ValidateConfigFunc = func(context.Context, Config) error {
-	return nil
 }
 
 // GetDefaultConfig returns the default configuration settings.
 func GetDefaultConfig() Config {
-	return GetDefaultConfigFunc()
+	return GetDefaultBaseConfig()
 }
 
 var defaultConfig = BaseConfig{ //nolint:gochecknoglobals // constant
@@ -1199,46 +1202,21 @@ func GetDefaultBaseConfig() *BaseConfig {
 // LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
 // or filelocation.AppSystemConfigDirs.
 func LoadConfig(c context.Context) (cfg Config, err error) {
-	defer func() {
-		if err != nil {
-			err = errcat.Config.New(err)
+	fileName := GetConfigFile(c)
+	cfg = GetDefaultConfig()
+	bs, err := os.ReadFile(fileName)
+	if err != nil {
+		if os.IsNotExist(err) {
+			dlog.Infof(c, "No config file found at %q. Using default config", fileName)
+			return cfg, nil
 		}
-	}()
-
-	dirs := filelocation.AppSystemConfigDirs(c)
-	cfg = GetDefaultConfigFunc()
-	readMerge := func(dir string) error {
-		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
-			return nil
-		}
-		fileName := filepath.Join(dir, ConfigFile)
-		bs, err := os.ReadFile(fileName)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				err = nil
-			}
-			return err
-		}
-		fileConfig, err := ParseConfigYAML(c, fileName, bs)
-		if err != nil {
-			return err
-		}
-		cfg.DestructiveMerge(fileConfig)
-		return nil
+		return nil, errcat.Config.New(err)
 	}
-
-	for _, dir := range dirs {
-		if err = readMerge(dir); err != nil {
-			return nil, err
-		}
+	fileConfig, err := ParseConfigYAML(c, fileName, bs)
+	if err != nil {
+		return nil, errcat.Config.New(err)
 	}
-	appDir := filelocation.AppUserConfigDir(c)
-	if err = readMerge(appDir); err != nil {
-		return nil, err
-	}
-	if err = ValidateConfigFunc(c, cfg); err != nil {
-		return nil, err
-	}
+	cfg.DestructiveMerge(fileConfig)
 	return cfg, nil
 }
 

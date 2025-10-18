@@ -564,10 +564,7 @@ func (s *session) SessionInfo() *manager.SessionInfo {
 
 func (s *session) ApplyConfig() error {
 	ctx := s.context
-	err := client.ReloadDaemonLogLevel(ctx, false)
-	if err != nil {
-		return err
-	}
+	client.ReloadDaemonLogLevel(ctx)
 	if len(s.MappedNamespaces) == 0 {
 		mns := client.GetConfig(ctx).Cluster().MappedNamespaces
 		if len(mns) > 0 {

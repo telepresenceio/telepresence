@@ -25,6 +25,7 @@ import (
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
@@ -198,7 +199,8 @@ func (s *service) configReload(c context.Context) error {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
-			return client.ReloadDaemonLogLevel(ctx, false)
+			client.ReloadDaemonLogLevel(ctx)
+			return nil
 		}
 		return s.session.ApplyConfig()
 	})
@@ -280,7 +282,7 @@ func (s *service) startSession(parentCtx context.Context, cr userd.ConnectReques
 			s.clientConfig = nil
 			s.session = nil
 			s.sessionLock.Unlock()
-			_ = client.ReloadDaemonLogLevel(parentCtx, false)
+			client.ReloadDaemonLogLevel(parentCtx)
 			wg.Done()
 		}()
 		if err := session.Run(); err != nil {
@@ -341,6 +343,10 @@ func (s *service) cancelSession(ctx context.Context) {
 
 // run is the main function when executing as the connector.
 func run(cmd *cobra.Command, _ []string) error {
+	err := global.InitConfig(cmd)
+	if err != nil {
+		return err
+	}
 	c := cmd.Context()
 	cfg, err := client.LoadConfig(c)
 	if err != nil {

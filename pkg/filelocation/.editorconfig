@@ -1,3 +1,0 @@
-[{borrowed_os_file.go,app.go}]
-; mimic Go stdlib os/file.go
-max_line_length = 80

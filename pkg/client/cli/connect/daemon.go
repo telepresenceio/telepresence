@@ -15,6 +15,7 @@ import (
 	rootDaemon "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -40,7 +41,7 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) (err error) {
 		_ = fh.Close()
 	}
 
-	args := []string{client.GetExe(ctx), client.RootDaemonName}
+	args := []string{client.GetExe(ctx), client.RootDaemonName, "--" + global.FlagConfig, client.GetConfigFile(ctx)}
 	if cr != nil && cr.RootDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))
 	}

@@ -54,7 +54,7 @@ func (m *managerGRPCSuite) SetupSuite() {
 
 func (m *managerGRPCSuite) TearDownSuite() {
 	if m.conn != nil {
-		m.conn.Close()
+		go m.conn.Close()
 		m.conn = nil
 		m.client = nil
 	}

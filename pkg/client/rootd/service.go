@@ -23,6 +23,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -295,7 +296,8 @@ func (s *Service) RerouteRemotePort(ctx context.Context, request *rpc.ReroutePor
 
 func (s *Service) configReload(c context.Context) error {
 	return client.WatchConfig(c, func(c context.Context) error {
-		return client.ReloadDaemonLogLevel(c, true)
+		client.ReloadDaemonLogLevel(c)
+		return nil
 	})
 }
 
@@ -372,7 +374,7 @@ func (s *Service) startSession(parentCtx context.Context, oi *rpc.NetworkConfig,
 			}
 		}
 	}
-	_ = client.ReloadDaemonLogLevel(ctx, true)
+	client.ReloadDaemonLogLevel(ctx)
 	reply.status.OutboundConfig = s.session.getNetworkConfig(ctx)
 	dlog.Debugf(ctx, "Returning session from new session %v", reply.status.OutboundConfig.Session)
 
@@ -384,7 +386,7 @@ func (s *Service) startSession(parentCtx context.Context, oi *rpc.NetworkConfig,
 	go func() {
 		defer func() {
 			s.cancelSession()
-			_ = client.ReloadDaemonLogLevel(parentCtx, true)
+			client.ReloadDaemonLogLevel(parentCtx)
 			wg.Done()
 		}()
 		if err := s.session.run(s.sessionContext, initErrCh); err != nil {
@@ -422,6 +424,11 @@ func run(cmd *cobra.Command, args []string) error {
 
 	configDir := args[0]
 	rootDaemonPath := args[1]
+	err := global.InitConfig(cmd)
+	if err != nil {
+		return err
+	}
+
 	c := cmd.Context()
 
 	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's

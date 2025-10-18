@@ -11,7 +11,6 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cmd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -43,7 +42,6 @@ func InitContext(ctx context.Context) context.Context {
 		proc.SetRunningInContainer(false) // We never start the root daemon as a container.
 	default:
 		client.DisplayName = "OSS Client"
-		ctx = connect.WithCommandInitializer(ctx, connect.CommandInitializer)
 	}
 	if client.IsDaemon() {
 		ctx = cmd.WithDaemonSubCommands(ctx)

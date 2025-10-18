@@ -33,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -255,8 +256,8 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	// remove any stale port file
 	_ = os.Remove(portFile)
 
-	args := make([]string, 0, 4+len(kubeFlags)*2)
-	args = append(args, client.GetExe(ctx), client.KubeAuthDaemonName, "--portfile", portFile)
+	args := make([]string, 0, 6+len(kubeFlags)*2)
+	args = append(args, client.GetExe(ctx), client.KubeAuthDaemonName, "--"+global.FlagConfig, client.GetConfigFile(ctx), "--portfile", portFile)
 	var err error
 	if args, err = client.AppendKubeFlags(kubeFlags, args); err != nil {
 		return 0, err

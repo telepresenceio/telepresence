@@ -30,6 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
@@ -439,7 +440,7 @@ func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *da
 }
 
 func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, cr *daemon.Request) (context.Context, *daemon.Info, *grpc.ClientConn, error) {
-	args := []string{connectorDaemon, client.UserDaemonName}
+	args := []string{connectorDaemon, client.UserDaemonName, "--" + global.FlagConfig, client.GetConfigFile(ctx)}
 	if cr.UserDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
 	}
