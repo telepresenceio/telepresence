@@ -178,11 +178,11 @@ func (n *networkState) createEndpoint(r *network.CreateEndpointRequest) (_ *netw
 	request := &teleroute.CreateEndpointRequest{
 		Id: r.EndpointID,
 	}
-	request.AddrIPv4, err = rawAddrFromPrefixString(r.Interface.Address)
+	request.AddrIpv4, err = rawAddrFromPrefixString(r.Interface.Address)
 	if err != nil {
 		return nil, err
 	}
-	request.AddrIPv6, err = rawAddrFromPrefixString(r.Interface.AddressIPv6)
+	request.AddrIpv6, err = rawAddrFromPrefixString(r.Interface.AddressIPv6)
 	if err != nil {
 		return nil, err
 	}
