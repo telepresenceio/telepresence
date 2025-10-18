@@ -606,6 +606,24 @@ message KnownWorkloadKinds {
   repeated WorkloadInfo.Kind kinds = 1;
 }
 
+// WorkloadPortInfo describes a port exposed by a workload's container
+message WorkloadPortInfo {
+  // Symbolic name of the container port (e.g., "http", "grpc")
+  string container_port_name = 1;
+
+  // Numeric container port number (mandatory, always present)
+  int32 container_port = 2;
+
+  // Protocol used by the port (TCP or UDP)
+  string protocol = 3;
+
+  // Symbolic name of the service port (may be empty for headless services or replacements)
+  string service_port_name = 4;
+
+  // Numeric service port number (may be 0 for headless services or replacements)
+  int32 service_port = 5;
+}
+
 // WorkloadInfo contains information about a workload (typically a
 // Deployment).
 message WorkloadInfo {
@@ -660,6 +678,9 @@ message WorkloadInfo {
   repeated Intercept intercept_clients = 5;
 
   State state = 6;
+
+  // Ports exposed by containers in this workload
+  repeated WorkloadPortInfo ports = 8;
 }
 
 message WorkloadEvent {

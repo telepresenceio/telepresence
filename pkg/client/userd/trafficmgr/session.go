@@ -75,6 +75,7 @@ type workloadInfo struct {
 	state            workload.State
 	agentState       manager.WorkloadInfo_AgentState
 	interceptClients []string
+	ports            []*manager.WorkloadPortInfo
 }
 
 type session struct {
@@ -473,6 +474,7 @@ func (s *session) getInfosForWorkloads(
 			Namespace:            namespace,
 			WorkloadResourceType: kind,
 			Uid:                  string(info.uid),
+			Ports:                info.ports,
 		}
 		if info.state != workload.StateAvailable {
 			wlInfo.NotInterceptableReason = info.state.String()
@@ -992,6 +994,7 @@ func (s *session) workloadsWatcher(namespace string, synced *sync.WaitGroup) err
 						state:            state,
 						agentState:       w.AgentState,
 						interceptClients: clients,
+						ports:            w.Ports,
 					}
 				}
 			}

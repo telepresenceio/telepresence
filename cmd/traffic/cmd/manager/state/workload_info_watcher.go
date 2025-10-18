@@ -8,14 +8,17 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
@@ -171,7 +174,84 @@ func rpcWorkloadState(s workload.State) (state rpc.WorkloadInfo_State) {
 	return state
 }
 
-func rpcWorkload(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []*rpc.WorkloadInfo_Intercept) *rpc.WorkloadInfo {
+func extractPortsFromSidecar(_ context.Context, sc *agentconfig.Sidecar) []*rpc.WorkloadPortInfo {
+	if sc == nil {
+		return nil
+	}
+
+	var ports []*rpc.WorkloadPortInfo
+	seenPorts := make(map[types.PortAndProto]bool) // Track seen port+protocol combinations to avoid duplicates
+
+	// Extract ports from all containers in the sidecar
+	for _, container := range sc.Containers {
+		for _, intercept := range container.Intercepts {
+			// Create a unique key using container port number and protocol
+			// This allows the same port with different protocols (TCP/UDP)
+			// We use container port because service port may not be present for headless workloads
+			portKey := types.PortAndProto{
+				Port:  intercept.ContainerPort,
+				Proto: intercept.Protocol,
+			}
+
+			if !seenPorts[portKey] {
+				seenPorts[portKey] = true
+				protocol := intercept.Protocol.String()
+				ports = append(ports, &rpc.WorkloadPortInfo{
+					ContainerPortName: intercept.ContainerPortName,
+					ContainerPort:     int32(intercept.ContainerPort),
+					Protocol:          protocol,
+					ServicePortName:   intercept.ServicePortName,
+					ServicePort:       int32(intercept.ServicePort),
+				})
+			}
+		}
+	}
+
+	return ports
+}
+
+func extractPortsForWorkload(ctx context.Context, wl k8sapi.Workload) []*rpc.WorkloadPortInfo {
+	// Check if we already have a sidecar config from an installed traffic-agent
+	m := mutator.GetMap(ctx)
+	if m == nil {
+		dlog.Debugf(ctx, "mutator map not available, cannot discover ports for %s", wl)
+		return nil
+	}
+
+	sc := m.Get(wl.GetName(), wl.GetNamespace())
+	if sc == nil {
+		// No existing sidecar, generate a new one to discover ports
+		// Only attempt generation if an agent image has been configured (i.e., agent injector is enabled)
+		if ir := managerutil.GetAgentImageRetriever(ctx); ir != nil {
+			agentImage := ir.GetImage()
+
+			// Generate the sidecar config which properly maps service ports to container ports
+			gc, err := managerutil.GetEnv(ctx).GeneratorConfig(agentImage)
+			if err != nil {
+				dlog.Warnf(ctx, "failed to get generator config for %s: %v", wl, err)
+				return nil
+			}
+
+			sc, err = gc.Generate(ctx, wl, nil)
+			if err != nil {
+				dlog.Debugf(ctx, "failed to generate sidecar config for %s: %v", wl, err)
+				return nil
+			}
+		} else {
+			// Agent injector is not enabled, unable to discover ports
+			dlog.Debugf(ctx, "agent injector not enabled, unable to discover ports for %s", wl)
+			return nil
+		}
+	}
+
+	return extractPortsFromSidecar(ctx, sc)
+}
+
+func (wf *workloadInfoWatcher) rpcWorkload(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []*rpc.WorkloadInfo_Intercept) *rpc.WorkloadInfo {
+	var ports []*rpc.WorkloadPortInfo
+	if wf.State != nil && wf.backgroundCtx != nil {
+		ports = extractPortsForWorkload(wf.backgroundCtx, wl)
+	}
 	return &rpc.WorkloadInfo{
 		Kind:             workload.RpcKind(wl.GetKind()),
 		Name:             wl.GetName(),
@@ -180,6 +260,7 @@ func rpcWorkload(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []
 		State:            rpcWorkloadState(workload.GetWorkloadState(wl)),
 		AgentState:       as,
 		InterceptClients: iClients,
+		Ports:            ports,
 	}
 }
 
@@ -191,7 +272,7 @@ func (wf *workloadInfoWatcher) addEvent(
 ) {
 	wf.workloadEvents[wl.GetName()] = &rpc.WorkloadEvent{
 		Type:     rpc.WorkloadEvent_Type(eventType),
-		Workload: rpcWorkload(wl, as, iClients),
+		Workload: wf.rpcWorkload(wl, as, iClients),
 	}
 	wf.resetTicker()
 }
@@ -232,7 +313,7 @@ func (wf *workloadInfoWatcher) handleWorkloadsSnapshot(ctx context.Context, wes 
 			if we.Type == EventTypeUpdate {
 				lew, ok := wf.lastEvents[wl.GetName()]
 				if ok && (lew.Type == rpc.WorkloadEvent_ADDED_UNSPECIFIED || lew.Type == rpc.WorkloadEvent_MODIFIED) &&
-					proto.Equal(lew.Workload, rpcWorkload(we.Workload, as, iClients)) {
+					proto.Equal(lew.Workload, wf.rpcWorkload(we.Workload, as, iClients)) {
 					break
 				}
 			}
@@ -248,7 +329,7 @@ func (wf *workloadInfoWatcher) handleAgentSnapshot(ctx context.Context, ais map[
 	m := mutator.GetMap(ctx)
 	for k, a := range oldAgentInfos {
 		ai, ok := ais[k]
-		if !ok || m.IsInactive(types.UID(ai.PodUid)) {
+		if !ok || m.IsInactive(k8stypes.UID(ai.PodUid)) {
 			name := a.Name
 			as := rpc.WorkloadInfo_NO_AGENT_UNSPECIFIED
 			if w, ok := wf.workloadEvents[name]; ok && w.Type != rpc.WorkloadEvent_DELETED {
@@ -278,7 +359,7 @@ func (wf *workloadInfoWatcher) handleAgentSnapshot(ctx context.Context, ais map[
 		}
 	}
 	for _, a := range ais {
-		if m.IsInactive(types.UID(a.PodUid)) {
+		if m.IsInactive(k8stypes.UID(a.PodUid)) {
 			continue
 		}
 		name := a.Name

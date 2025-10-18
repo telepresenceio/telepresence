@@ -24,6 +24,18 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.27.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Port Information in List Output
+        body: >-
+          The `telepresence list` command now includes comprehensive port information for each workload in multiple output formats.
+          This enhancement allows developers to see which ports are available on interceptable workloads without needing to use `kubectl`.
+          The port information includes both container ports (always present) and service ports (when available), along with protocol (TCP/UDP)
+          and optional port names. This correctly handles headless services (container ports only) and replacement intercepts (which target
+          container ports). This is particularly useful for VS Code extensions and other tools that need to display port information to users.
+        docs: reference/client/list
   - version: 2.26.0
     date: (TBD)
     notes:

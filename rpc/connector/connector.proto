@@ -335,6 +335,9 @@ message WorkloadInfo {
   string uid = 7;
 
   string agent_version = 8;
+
+  // Ports exposed by containers in this workload
+  repeated manager.WorkloadPortInfo ports = 9;
 }
 
 message WorkloadInfoSnapshot {
