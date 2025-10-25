@@ -34,9 +34,6 @@ RUN \
     --mount=type=cache,target=/go/pkg/mod \
     GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o /usr/local/bin/ -trimpath -ldflags="-s -w -X=$(go list ./pkg/version).Version=$(cat version.txt)" ./cmd/traffic/...
 
-# setcap is necessary because the process will listen to privileged ports
-RUN setcap 'cap_net_bind_service+ep' /usr/local/bin/traffic
-
 # The tel2 target is the one that gets published. It aims to be a small as possible.
 FROM alpine as tel2
 
