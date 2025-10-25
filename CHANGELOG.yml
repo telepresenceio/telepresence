@@ -24,6 +24,17 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.25.1
+    date: (TBD)
+    notes:
+      - type: change
+        title: Remove unnecessary setcap from traffic binary
+        body: >-
+          The setcap capability (cap_net_bind_service) was removed from the traffic binary build process.
+          This capability was originally added to allow the binary to bind to privileged ports, specifically
+          port 443 for the mutating webhook. Since version 2.24.0, the default mutating webhook port was
+          changed to 8443 (a non-privileged port), making this capability unnecessary. Removing it simplifies
+          the build process and reduces the security surface area.
   - version: 2.25.0
     date: 2025-10-16
     notes:
