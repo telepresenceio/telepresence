@@ -23,7 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -87,8 +87,8 @@ func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) (err e
 		return err
 	}
 
-	var config *client.Kubeconfig
-	ctx, config, err = client.DaemonKubeconfig(ctx, cr)
+	var config *k8s.Kubeconfig
+	ctx, config, err = k8s.DaemonKubeconfig(ctx, cr)
 	if err != nil {
 		return err
 	}

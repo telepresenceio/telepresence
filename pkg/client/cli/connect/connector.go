@@ -34,6 +34,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -426,7 +427,7 @@ func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *da
 
 	// An initialized kubernetes interface is required by LaunchDaemon, because it is necessary
 	// when checking if the containerized daemon is connecting to a k3s control plane node.
-	ctx, kc, err := client.NewKubeconfig(ctx, cr.KubeFlags, cr.ManagerNamespace)
+	ctx, kc, err := k8s.NewKubeconfig(ctx, cr.KubeFlags, cr.ManagerNamespace)
 	if err != nil {
 		return ctx, nil, nil, err
 	}

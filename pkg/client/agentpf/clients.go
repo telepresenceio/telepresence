@@ -19,7 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	tpClient "github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -93,7 +93,7 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		defer dialCancel()
 
 		ai := ac.info
-		conn, cli, _, err := k8sclient.ConnectToAgent(ctx, dialCtx, ai.PodName, ai.Namespace, uint16(ai.ApiPort), types.UID(ai.PodId))
+		conn, cli, _, err := k8s.ConnectToAgent(ctx, dialCtx, ai.PodName, ai.Namespace, uint16(ai.ApiPort), types.UID(ai.PodId))
 		if err != nil {
 			ac.connectErr = err
 

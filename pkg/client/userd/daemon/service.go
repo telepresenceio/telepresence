@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
@@ -242,7 +243,7 @@ func (s *service) startSession(parentCtx context.Context, cr userd.ConnectReques
 
 	// Obtain the kubeconfig from the request parameters so that we can determine
 	// what kubernetes context that will be used.
-	ctx, config, err := client.DaemonKubeconfig(parentCtx, cr.Request())
+	ctx, config, err := k8s.DaemonKubeconfig(parentCtx, cr.Request())
 	if err != nil {
 		if s.rootSessionInProc {
 			s.quit()

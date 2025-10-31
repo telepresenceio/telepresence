@@ -19,7 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )

@@ -41,8 +41,8 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -728,7 +728,7 @@ func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace s
 	if context != "" {
 		flags["context"] = context
 	}
-	ctx, cfgAndFlags, err := client.NewKubeconfig(ctx, flags, managerNamespace)
+	ctx, cfgAndFlags, err := k8s.NewKubeconfig(ctx, flags, managerNamespace)
 	if err != nil {
 		return ctx, nil, err
 	}

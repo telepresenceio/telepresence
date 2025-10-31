@@ -13,7 +13,7 @@ import (
 	"k8s.io/client-go/pkg/apis/clientauthentication/install"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
@@ -35,7 +35,7 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("usage %s <name of kubecontext>", args)
 	}
-	flags, err := client.ConfigFlags(fm)
+	flags, err := k8s.ConfigFlags(fm)
 	if err != nil {
 		return err
 	}

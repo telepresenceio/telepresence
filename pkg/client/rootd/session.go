@@ -37,7 +37,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/agentpf"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/bwcompat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/vip"
@@ -207,11 +207,11 @@ type Session struct {
 }
 
 func createK8sConfig(ctx context.Context, kubeFlags map[string]string, kubeData []byte) (*rest.Config, error) {
-	configFlags, err := client.ConfigFlags(kubeFlags)
+	configFlags, err := k8s.ConfigFlags(kubeFlags)
 	if err != nil {
 		return nil, err
 	}
-	config, err := client.NewClientConfig(ctx, configFlags, kubeData)
+	config, err := k8s.NewClientConfig(ctx, configFlags, kubeData)
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +253,7 @@ func connectToManager(
 	tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	conn, mc, ver, err := k8sclient.ConnectToManager(ctx, tc, namespace)
+	conn, mc, ver, err := k8s.ConnectToManager(ctx, tc, namespace)
 	if err != nil {
 		return ctx, nil, nil, mgrVer, err
 	}
@@ -1192,7 +1192,7 @@ func (s *Session) run(c context.Context, initErrs chan error) error {
 func (s *Session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16) error {
 	clusterCfg := client.GetConfig(c).Cluster()
 	if clusterCfg.AgentPortForward {
-		if k8sclient.CanPortForward(c, s.namespace) {
+		if k8s.CanPortForward(c, s.namespace) {
 			s.agentClients = agentpf.NewClients(s.session)
 			g.Go("agentPods", func(ctx context.Context) error {
 				return s.agentClients.WatchAgentPods(tunnel.WithDialer(ctx, s), s.managerClient)

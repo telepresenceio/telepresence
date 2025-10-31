@@ -1,4 +1,4 @@
-package client
+package k8s
 
 import (
 	"bytes"
@@ -26,41 +26,11 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
-
-// DNSMapping contains a hostname and its associated alias. When requesting the name, the intended behavior is
-// to resolve the alias instead.
-type DNSMapping struct {
-	Name     string `json:"name,omitempty" yaml:"name,omitempty"`
-	AliasFor string `json:"aliasFor,omitempty" yaml:"aliasFor,omitempty"`
-}
-
-type DNSMappings []*DNSMapping
-
-func (d *DNSMappings) FromRPC(rpcMappings []*rpc.DNSMapping) {
-	*d = make(DNSMappings, 0, len(rpcMappings))
-	for i := range rpcMappings {
-		*d = append(*d, &DNSMapping{
-			Name:     rpcMappings[i].Name,
-			AliasFor: rpcMappings[i].AliasFor,
-		})
-	}
-}
-
-func (d DNSMappings) ToRPC() []*rpc.DNSMapping {
-	rpcMappings := make([]*rpc.DNSMapping, 0, len(d))
-	for i := range d {
-		rpcMappings = append(rpcMappings, &rpc.DNSMapping{
-			Name:     d[i].Name,
-			AliasFor: d[i].AliasFor,
-		})
-	}
-	return rpcMappings
-}
 
 // The dnsConfig is part of the kubeconfigExtension struct.
 //
@@ -89,7 +59,7 @@ type dnsConfig struct {
 
 	// Mappings contains a list of DNS Mappings. Each item references a hostname, and an associated alias. If a
 	// request is made for the name, the alias will be resolved instead.
-	Mappings DNSMappings `json:"mappings,omitempty"`
+	Mappings client.DNSMappings `json:"mappings,omitempty"`
 
 	// The maximum time to wait for a cluster side host lookup.
 	LookupTimeout v1.Duration `json:"lookup-timeout,omitempty"`
@@ -114,8 +84,8 @@ type kubeconfigExtension struct {
 	Manager                 *managerConfig `json:"manager,omitempty"`
 }
 
-func (ke *kubeconfigExtension) asConfig() Config {
-	cfg := GetDefaultConfig()
+func (ke *kubeconfigExtension) asConfig() client.Config {
+	cfg := client.GetDefaultConfig()
 	if keDns := ke.DNS; keDns != nil {
 		dns := cfg.DNS()
 		if len(keDns.Excludes) > 0 {
@@ -525,7 +495,7 @@ func newKubeconfig(
 
 	managerNamespace := managerNamespaceOverride
 	if managerNamespace == "" {
-		managerNamespace = GetEnv(ctx).ManagerNamespace
+		managerNamespace = client.GetEnv(ctx).ManagerNamespace
 	}
 	ctx, err = WithKubeExtension(ctx, cluster, managerNamespace)
 	if err != nil {
@@ -543,14 +513,14 @@ func newKubeconfig(
 }
 
 func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespace string) (context.Context, error) {
-	cfg := GetConfig(ctx)
-	var keCfg Config
+	cfg := client.GetConfig(ctx)
+	var keCfg client.Config
 	var data []byte
 	if ext, ok := cluster.Extensions[configExtension].(*runtime.Unknown); ok {
 		data = bytes.TrimSpace(ext.Raw)
 	}
 	if len(data) > 0 {
-		if kc, err := UnmarshalJSONConfig(data, true); err != nil {
+		if kc, err := client.UnmarshalJSONConfig(data, true); err != nil {
 			// Try with legacy kubeconfigExtension
 			dlog.Debug(ctx, "unable to unmarshal extension as client config, trying legacy format")
 			ke := kubeconfigExtension{}
@@ -568,13 +538,13 @@ func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespa
 		}
 	} else if managerNamespace != "" && managerNamespace != cfg.Cluster().DefaultManagerNamespace {
 		// No kubeconfig exists but we still need a config when the managerNamespace is set.
-		keCfg = GetDefaultConfig()
+		keCfg = client.GetDefaultConfig()
 		keCfg.Cluster().DefaultManagerNamespace = managerNamespace
 	}
 	snps := getServerNeverProxy(ctx, cluster)
 	if len(snps) > 0 {
 		if keCfg == nil {
-			keCfg = GetDefaultConfig()
+			keCfg = client.GetDefaultConfig()
 		}
 		kr := keCfg.Routing()
 		kr.NeverProxy = append(kr.NeverProxy, snps...)
@@ -584,7 +554,7 @@ func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespa
 		kr := keCfg.Routing()
 		kr.NeverProxy = append(kr.NeverProxy, cfg.Routing().NeverProxy...)
 		cfg = keCfg
-		ctx = WithConfig(ctx, cfg)
+		ctx = client.WithConfig(ctx, cfg)
 	}
 	return ctx, nil
 }

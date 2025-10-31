@@ -1233,6 +1233,36 @@ type RoutingSnake struct {
 	UseTAP                 bool           `json:"use_tap"`
 }
 
+// DNSMapping contains a hostname and its associated alias. When requesting the name, the intended behavior is
+// to resolve the alias instead.
+type DNSMapping struct {
+	Name     string `json:"name,omitempty" yaml:"name,omitempty"`
+	AliasFor string `json:"aliasFor,omitempty" yaml:"aliasFor,omitempty"`
+}
+
+type DNSMappings []*DNSMapping
+
+func (d *DNSMappings) FromRPC(rpcMappings []*daemon.DNSMapping) {
+	*d = make(DNSMappings, 0, len(rpcMappings))
+	for i := range rpcMappings {
+		*d = append(*d, &DNSMapping{
+			Name:     rpcMappings[i].Name,
+			AliasFor: rpcMappings[i].AliasFor,
+		})
+	}
+}
+
+func (d DNSMappings) ToRPC() []*daemon.DNSMapping {
+	rpcMappings := make([]*daemon.DNSMapping, 0, len(d))
+	for i := range d {
+		rpcMappings = append(rpcMappings, &daemon.DNSMapping{
+			Name:     d[i].Name,
+			AliasFor: d[i].AliasFor,
+		})
+	}
+	return rpcMappings
+}
+
 type DNS struct {
 	Error string `json:"error"`
 

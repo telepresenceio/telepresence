@@ -41,12 +41,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
@@ -156,7 +155,7 @@ type session struct {
 	syntheticIPs map[netip.Addr]string
 }
 
-func NewSession(ctx context.Context, cri userd.ConnectRequest, config *client.Kubeconfig, wg *sync.WaitGroup) (session userd.Session, info *rpc.ConnectInfo) {
+func NewSession(ctx context.Context, cri userd.ConnectRequest, config *k8s.Kubeconfig, wg *sync.WaitGroup) (session userd.Session, info *rpc.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 
 	cr := cri.Request()
@@ -322,7 +321,7 @@ func connectMgr(
 		return nil, err
 	}
 
-	conn, mClient, vi, err := k8sclient.ConnectToManager(longLivedCtx, ctx, mgrNs)
+	conn, mClient, vi, err := k8s.ConnectToManager(longLivedCtx, ctx, mgrNs)
 	if err != nil {
 		return nil, err
 	}
@@ -426,7 +425,7 @@ func (s *session) reconnectManager() (returnedErr error) {
 	tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	conn, mc, vi, err := k8sclient.ConnectToManager(ctx, tc, k8s.GetManagerNamespace(ctx))
+	conn, mc, vi, err := k8s.ConnectToManager(ctx, tc, k8s.GetManagerNamespace(ctx))
 	if err != nil {
 		return err
 	}
@@ -786,7 +785,7 @@ func (s *session) remainLoop(c context.Context) error {
 
 func (s *session) UpdateStatus(cri userd.ConnectRequest) *rpc.ConnectInfo {
 	cr := cri.Request()
-	c, config, err := client.DaemonKubeconfig(s.context, cr)
+	c, config, err := k8s.DaemonKubeconfig(s.context, cr)
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
@@ -215,17 +216,17 @@ func GetRootClientConfig(ds *daemon.DaemonStatus) (client.Config, error) {
 }
 
 // GetCommandKubeConfig will return the fully resolved client.Kubeconfig for the given command.
-func GetCommandKubeConfig(cmd *cobra.Command) (context.Context, *client.Kubeconfig, error) {
+func GetCommandKubeConfig(cmd *cobra.Command) (context.Context, *k8s.Kubeconfig, error) {
 	ctx := cmd.Context()
 	uc := GetUserClient(ctx)
-	var kc *client.Kubeconfig
+	var kc *k8s.Kubeconfig
 	var err error
 	if uc != nil && !cmd.Flag("context").Changed {
 		// Get the context that we're currently connected to.
 		var ci *connector.ConnectInfo
 		ci, err = uc.Status(ctx, &emptypb.Empty{})
 		if err == nil {
-			ctx, kc, err = client.NewKubeconfig(ctx, map[string]string{"context": ci.ClusterContext}, "")
+			ctx, kc, err = k8s.NewKubeconfig(ctx, map[string]string{"context": ci.ClusterContext}, "")
 		}
 	} else {
 		if GetRequest(ctx) == nil {
@@ -234,7 +235,7 @@ func GetCommandKubeConfig(cmd *cobra.Command) (context.Context, *client.Kubeconf
 			}
 		}
 		rq := GetRequest(ctx)
-		ctx, kc, err = client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
+		ctx, kc, err = k8s.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
 	}
 	return ctx, kc, err
 }

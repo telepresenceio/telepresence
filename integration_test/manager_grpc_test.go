@@ -9,7 +9,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
@@ -41,7 +41,7 @@ func (m *managerGRPCSuite) SetupSuite() {
 
 	ctx = portforward.WithRestConfig(ctx, k8sCluster.RestConfig)
 	m.Require().NoError(err)
-	m.conn, m.client, _, err = k8sclient.ConnectToManager(ctx, ctx, m.ManagerNamespace())
+	m.conn, m.client, _, err = k8s.ConnectToManager(ctx, ctx, m.ManagerNamespace())
 	m.Require().NoError(err)
 
 	_, err = m.client.Version(ctx, &empty.Empty{})

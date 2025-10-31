@@ -36,6 +36,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -259,7 +260,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	args := make([]string, 0, 6+len(kubeFlags)*2)
 	args = append(args, client.GetExe(ctx), client.KubeAuthDaemonName, "--"+global.FlagConfig, client.GetConfigFile(ctx), "--portfile", portFile)
 	var err error
-	if args, err = client.AppendKubeFlags(kubeFlags, args); err != nil {
+	if args, err = k8s.AppendKubeFlags(kubeFlags, args); err != nil {
 		return 0, err
 	}
 	if err := proc.StartInBackground(true, args...); err != nil {
@@ -313,7 +314,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 		// Been there, done that
 		return nil
 	}
-	loader, err := client.ConfigLoader(ctx, cr.KubeFlags, cr.KubeconfigData)
+	loader, err := k8s.ConfigLoader(ctx, cr.KubeFlags, cr.KubeconfigData)
 	if err != nil {
 		return err
 	}
