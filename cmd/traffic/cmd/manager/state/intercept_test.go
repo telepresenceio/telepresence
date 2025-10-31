@@ -25,12 +25,12 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name              string
-		allowGlobal       bool
-		mechanism         string
-		wiretap           bool
-		expectError       bool
-		expectedErrorMsg  string
+		name             string
+		allowGlobal      bool
+		mechanism        string
+		wiretap          bool
+		expectError      bool
+		expectedErrorMsg string
 	}{
 		{
 			name:        "global_intercept_allowed_when_enabled",
