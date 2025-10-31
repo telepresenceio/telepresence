@@ -34,7 +34,6 @@ func TestEnvconfig(t *testing.T) {
 		"POD_IP":                          "203.0.113.18",
 		"POD_CIDR_STRATEGY":               "auto",
 		"SERVER_PORT":                     "8081",
-		"INTERCEPT_DISABLE_GLOBAL":        "false",
 		"MAX_NAMESPACE_SPECIFIC_WATCHERS": "10",
 	}
 
@@ -55,6 +54,7 @@ func TestEnvconfig(t *testing.T) {
 		EnabledWorkloadKinds:         []k8sapi.Kind{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
 		MaxNamespaceSpecificWatchers: 10,
 		AgentInitContainerEnabled:    true,
+		AllowGlobalIntercepts:        true,
 	}
 
 	testcases := map[string]struct {
@@ -81,6 +81,22 @@ func TestEnvconfig(t *testing.T) {
 				a := netip.MustParsePrefix("10.20.30.0/24")
 				b := netip.MustParsePrefix("10.20.40.0/24")
 				e.ClientRoutingNeverProxySubnets = []netip.Prefix{a, b}
+			},
+		},
+		"allow-global-intercepts-true": {
+			Input: map[string]string{
+				"INTERCEPT_ALLOW_GLOBAL": "true",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AllowGlobalIntercepts = true
+			},
+		},
+		"allow-global-intercepts-false": {
+			Input: map[string]string{
+				"INTERCEPT_ALLOW_GLOBAL": "false",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AllowGlobalIntercepts = false
 			},
 		},
 	}

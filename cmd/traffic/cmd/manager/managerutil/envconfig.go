@@ -77,6 +77,8 @@ type Env struct {
 
 	EnabledWorkloadKinds k8sapi.Kinds `env:"ENABLED_WORKLOAD_KINDS, parser=split-trim, default=Deployment StatefulSet ReplicaSet"`
 
+	AllowGlobalIntercepts bool `env:"INTERCEPT_ALLOW_GLOBAL, parser=bool, default=true"`
+
 	// For testing only
 	CompatibilityVersion *semver.Version `env:"COMPATIBILITY_VERSION, parser=version, default="`
 }

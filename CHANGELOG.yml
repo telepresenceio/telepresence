@@ -27,6 +27,18 @@ items:
   - version: 2.25.1
     date: (TBD)
     notes:
+      - type: feature
+        title: Add configuration to disable global TCP/UDP intercepts
+        body: >-
+          A new Helm chart configuration option `intercept.allowGlobalIntercepts` has been added to control
+          whether global TCP/UDP intercepts are permitted. When set to `false`, only HTTP intercepts with
+          header or path filters are allowed, preventing users from creating global intercepts that block
+          other developers from intercepting the same port. This is particularly useful in shared development
+          environments where multiple developers need to work on the same service simultaneously. The setting
+          defaults to `true` to maintain full backward compatibility with existing deployments. When a user
+          attempts to create a global intercept while the setting is disabled, they receive a helpful error
+          message suggesting the use of `--http-header` or `--http-path-*` flags for HTTP-filtered intercepts.
+        docs: reference/config#intercept
       - type: change
         title: Remove unnecessary setcap from traffic binary
         body: >-

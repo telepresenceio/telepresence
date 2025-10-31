@@ -204,7 +204,38 @@ spec:
             - containerPort: 8080
 ```
 
-## Excluding Envrionment Variables
+## Intercept Configuration
+
+### Restricting Global Intercepts
+
+In shared development environments, you may want to prevent developers from creating global TCP/UDP intercepts that would
+block others from intercepting the same service. Telepresence allows you to restrict intercepts to only HTTP-based
+intercepts with header or path filters.
+
+When installing your traffic-manager through helm, use the `--set` flag:
+
+`telepresence helm install --set intercept.allowGlobalIntercepts=false`
+
+This also applies when upgrading:
+
+`telepresence helm upgrade --set intercept.allowGlobalIntercepts=false`
+
+Alternatively, add it to your custom `values.yaml`:
+
+```yaml
+intercept:
+  allowGlobalIntercepts: false
+```
+
+When this setting is `false`:
+- Standard intercepts without HTTP filters (e.g., `telepresence intercept myservice --port 8080`) will be rejected
+- HTTP intercepts with filters (e.g., `telepresence intercept myservice --http-header X-User-ID=dev123 --port 8080`) will work normally
+- Multiple developers can create personal HTTP intercepts on the same service simultaneously
+- The error message will guide users to use `--http-header`, `--http-path-prefix`, `--http-path-equal`, or `--http-path-regex` flags
+
+The setting defaults to `true` to maintain backward compatibility with existing deployments.
+
+### Excluding Envrionment Variables
 
 If your pod contains sensitive variables like a database password, or third party API Key, you may want to exclude those from being propagated through an intercept.
 Telepresence allows you to configure this through a ConfigMap that is then read and removes the sensitive variables.

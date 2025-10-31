@@ -108,6 +108,12 @@ spec:
           - name: ENABLED_WORKLOAD_KINDS
             value: Deployment StatefulSet ReplicaSet
           {{- end }}
+          {{- with .intercept }}
+          {{- if not (eq .allowGlobalIntercepts nil) }}
+          - name: INTERCEPT_ALLOW_GLOBAL
+            value: {{ .allowGlobalIntercepts | quote }}
+          {{- end }}
+          {{- end }}
       {{- if .agentInjector.enabled }}
         {{- /*
         Traffic agent injector configuration
