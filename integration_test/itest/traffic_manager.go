@@ -83,11 +83,15 @@ func dialTrafficManager(ctx context.Context, cfg *rest.Config, managerNamespace 
 	if err != nil {
 		return nil, err
 	}
-
 	ctx = k8sapi.WithJoinedClientSetInterface(ctx, k8sApi, argoRollouApi)
 	ctx = portforward.WithRestConfig(ctx, cfg)
+	pap, err := portforward.ResolveSvcToPod(ctx, "traffic-manager", managerNamespace, "8081")
+	if err != nil {
+		dlog.Errorf(ctx, "cannot resolve svc/traffic-manager.%s:8081: %v", managerNamespace, err)
+		return nil, err
+	}
 	return grpc.NewClient(fmt.Sprintf(portforward.K8sPFScheme+":///svc/traffic-manager.%s:8081", managerNamespace),
-		grpc.WithResolvers(portforward.NewResolver(ctx)),
+		grpc.WithResolvers(portforward.NewResolver(ctx, pap)),
 		grpc.WithContextDialer(portforward.Dialer(ctx)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)

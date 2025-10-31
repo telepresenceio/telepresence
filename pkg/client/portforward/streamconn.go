@@ -63,20 +63,20 @@ func dialContext(grpcCtx, logCtx context.Context, addr string, cfg *config) (net
 		dlog.Error(logCtx, err)
 		return nil, err
 	}
-	key := pa.podID
+	key := pa.PodID
 	if key == "" {
 		err = errors.New("pod ID is empty")
 		dlog.Error(logCtx, err)
 		return nil, err
 	}
 	pc, _ := cfg.podDialers.LoadOrCompute(key, func() (pc *podDialer, cancel bool) {
-		pc, err = newPodDialer(logCtx, key, cfg, pa.name, pa.namespace)
+		pc, err = newPodDialer(logCtx, key, cfg, pa.Name, pa.Namespace)
 		return pc, err != nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return pc.dial(grpcCtx, pa.port)
+	return pc.dial(grpcCtx, pa.Port)
 }
 
 func newPodDialer(ctx context.Context, key types.UID, cfg *config, name, namespace string) (*podDialer, error) {

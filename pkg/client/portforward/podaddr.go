@@ -8,24 +8,27 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/resolver"
-	"k8s.io/apimachinery/pkg/types"
+	k8sTypes "k8s.io/apimachinery/pkg/types"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-type podAddress struct {
-	fromSvc   bool
-	name      string
-	namespace string
-	port      uint16
-	podID     types.UID
+type PodAddress struct {
+	FromSvc   bool
+	Name      string
+	Namespace string
+	Port      uint16
+	Proto     types.Proto
+	PodID     k8sTypes.UID
 }
 
-func parseAddr(fullAddr string) (kind, name, namespace, port string, podID types.UID, err error) {
+func parseAddr(fullAddr string) (kind, name, namespace, port string, podID k8sTypes.UID, err error) {
 	addr := fullAddr
 	if hash := strings.LastIndex(fullAddr, "#"); hash > 0 {
 		id := addr[hash+1:]
 		addr = addr[:hash]
 		if _, err := uuid.Parse(id); err == nil {
-			podID = types.UID(id)
+			podID = k8sTypes.UID(id)
 		}
 	}
 	if slash := strings.Index(addr, "/"); slash < 0 {
@@ -45,28 +48,28 @@ func parseAddr(fullAddr string) (kind, name, namespace, port string, podID types
 	return "", "", "", "", "", fmt.Errorf("%q is not a valid [<kind>/]<name[.namespace]>:<port-number>[#<uid>]", fullAddr)
 }
 
-func parsePodAddr(addr string) (podAddress, error) {
+func parsePodAddr(addr string) (PodAddress, error) {
 	kind, name, namespace, port, podId, err := parseAddr(addr)
 	if err != nil {
-		return podAddress{}, err
+		return PodAddress{}, err
 	}
 	if kind == "pod" {
 		if pn, err := strconv.ParseUint(port, 10, 16); err == nil {
-			return podAddress{
-				name:      name,
-				namespace: namespace,
-				port:      uint16(pn),
-				podID:     podId,
+			return PodAddress{
+				Name:      name,
+				Namespace: namespace,
+				Port:      uint16(pn),
+				PodID:     podId,
 			}, nil
 		}
 	}
-	return podAddress{}, fmt.Errorf("%q is not a valid pod port address", addr)
+	return PodAddress{}, fmt.Errorf("%q is not a valid pod port address", addr)
 }
 
-func (pa *podAddress) String() string {
-	return fmt.Sprintf("%s.%s:%d#%s", pa.name, pa.namespace, pa.port, pa.podID)
+func (pa *PodAddress) String() string {
+	return fmt.Sprintf("%s.%s:%d#%s", pa.Name, pa.Namespace, pa.Port, pa.PodID)
 }
 
-func (pa *podAddress) state() resolver.State {
+func (pa *PodAddress) state() resolver.State {
 	return resolver.State{Addresses: []resolver.Address{{Addr: pa.String()}}}
 }

@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/netip"
 	"os"
 	"os/user"
@@ -23,8 +22,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/yaml"
@@ -37,7 +34,6 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -316,11 +312,6 @@ func connectMgr(
 	defer cancel()
 
 	mgrNs := k8s.GetManagerNamespace(ctx)
-	err := checkTrafficManagerService(ctx, mgrNs)
-	if err != nil {
-		return nil, err
-	}
-
 	conn, mClient, vi, err := k8s.ConnectToManager(longLivedCtx, ctx, mgrNs)
 	if err != nil {
 		return nil, err
@@ -468,23 +459,6 @@ func (s *session) remain(ctx context.Context) error {
 	_, err := s.ManagerClient().Remain(ctx, &manager.RemainRequest{Session: s.SessionInfo()})
 	if err != nil {
 		dlog.Errorf(ctx, "error calling Remain: %v", client.CheckTimeout(ctx, err))
-	}
-	return nil
-}
-
-func checkTrafficManagerService(ctx context.Context, namespace string) error {
-	dlog.Debug(ctx, "checking that traffic-manager exists")
-	coreV1 := k8sapi.GetK8sInterface(ctx).CoreV1()
-	if _, err := coreV1.Services(namespace).Get(ctx, agentconfig.ManagerAppName, meta.GetOptions{}); err != nil {
-		msg := fmt.Sprintf("unable to get service %s in %s: %v", agentconfig.ManagerAppName, namespace, err)
-		se := &k8serrors.StatusError{}
-		if errors.As(err, &se) {
-			if se.Status().Code == http.StatusNotFound {
-				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
-					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in."
-			}
-		}
-		return errcat.User.New(msg)
 	}
 	return nil
 }

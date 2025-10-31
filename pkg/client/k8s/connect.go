@@ -2,8 +2,10 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -11,6 +13,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/datawire/dlib/dlog"
@@ -18,16 +21,33 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-func ConnectToManager(longLivedCtx, ctx context.Context, namespace string) (*grpc.ClientConn, manager.ManagerClient, *manager.VersionInfo2, error) {
+func ConnectToManager(longLivedCtx, ctx context.Context, namespace string) (conn *grpc.ClientConn, mc manager.ManagerClient, vi *manager.VersionInfo2, err error) {
 	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "api")
-	conn, err := dialClusterGRPC(longLivedCtx, grpcAddr)
+
+	dialCtx, cancel := client.GetConfig(longLivedCtx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	defer cancel()
+
+	pap, err := portforward.ResolveSvcToPod(ctx, "traffic-manager", namespace, "8081")
+	if err != nil {
+		se := &k8serrors.StatusError{}
+		if errors.As(err, &se) {
+			if se.Status().Code == http.StatusNotFound {
+				return nil, nil, nil, errcat.User.New("traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
+					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in.")
+			}
+		}
+		return nil, nil, nil, err
+	}
+
+	conn, err = dialClusterGRPC(dialCtx, grpcAddr, pap)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	mClient := manager.NewManagerClient(conn)
-	vi, err := getVersion(ctx, mClient)
+	vi, err = getVersion(ctx, mClient)
 	if err != nil {
 		err = client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
 		conn.Close()
@@ -52,7 +72,7 @@ func ConnectToAgent(
 	} else {
 		grpcAddr = fmt.Sprintf("pod/%s.%s:%d#%s", podName, namespace, port, podID)
 	}
-	conn, err := dialClusterGRPC(longLivedCtx, grpcAddr)
+	conn, err := dialClusterGRPC(longLivedCtx, grpcAddr, nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -65,9 +85,9 @@ func ConnectToAgent(
 	return conn, mClient, vi, err
 }
 
-func dialClusterGRPC(ctx context.Context, address string) (*grpc.ClientConn, error) {
+func dialClusterGRPC(ctx context.Context, address string, knownPod *portforward.PodAddress) (*grpc.ClientConn, error) {
 	return grpc.NewClient(portforward.K8sPFScheme+":///"+address, grpc.WithContextDialer(portforward.Dialer(ctx)),
-		grpc.WithResolvers(portforward.NewResolver(ctx)),
+		grpc.WithResolvers(portforward.NewResolver(ctx, knownPod)),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
 		grpc.WithIdleTimeout(0),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
