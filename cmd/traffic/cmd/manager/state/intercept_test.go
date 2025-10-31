@@ -119,13 +119,11 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			if tt.expectError {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.expectedErrorMsg)
-			} else {
+			} else if err != nil {
 				// preparePorts will fail for other reasons (no actual ports configured),
 				// but we should NOT get the "global intercepts disabled" error
-				if err != nil {
-					assert.NotContains(t, err.Error(), "global TCP/UDP intercepts are disabled",
-						"Should not fail due to AllowGlobalIntercepts check")
-				}
+				assert.NotContains(t, err.Error(), "global TCP/UDP intercepts are disabled",
+					"Should not fail due to AllowGlobalIntercepts check")
 			}
 		})
 	}

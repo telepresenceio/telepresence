@@ -22,7 +22,7 @@ func (s *allowGlobalInterceptsEnabledSuite) SetupSuite() {
 	s.TelepresenceHelmInstallOK(s.Context(), true, "--set", "intercept.allowGlobalIntercepts=true")
 }
 
-// Test_GlobalInterceptWorks verifies that global TCP intercepts work when enabled
+// Test_GlobalInterceptWorks verifies that global TCP intercepts work when enabled.
 func (s *allowGlobalInterceptsEnabledSuite) Test_GlobalInterceptWorks() {
 	require := s.Require()
 	ctx := s.Context()
@@ -37,7 +37,7 @@ func (s *allowGlobalInterceptsEnabledSuite) Test_GlobalInterceptWorks() {
 	require.NoError(err)
 }
 
-// Test_HTTPInterceptWorks verifies that HTTP intercepts work when global intercepts are enabled
+// Test_HTTPInterceptWorks verifies that HTTP intercepts work when global intercepts are enabled.
 func (s *allowGlobalInterceptsEnabledSuite) Test_HTTPInterceptWorks() {
 	require := s.Require()
 	ctx := s.Context()

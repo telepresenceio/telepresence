@@ -22,7 +22,7 @@ func (s *allowGlobalInterceptsDisabledSuite) SetupSuite() {
 	s.TelepresenceHelmInstallOK(s.Context(), true, "--set", "intercept.allowGlobalIntercepts=false")
 }
 
-// Test_GlobalInterceptBlocked verifies that global TCP intercepts are blocked when disabled
+// Test_GlobalInterceptBlocked verifies that global TCP intercepts are blocked when disabled.
 func (s *allowGlobalInterceptsDisabledSuite) Test_GlobalInterceptBlocked() {
 	require := s.Require()
 	ctx := s.Context()
@@ -38,7 +38,7 @@ func (s *allowGlobalInterceptsDisabledSuite) Test_GlobalInterceptBlocked() {
 		"Error should suggest using --http-header flag")
 }
 
-// Test_HTTPInterceptWithHeaderWorks verifies that HTTP intercepts work when global intercepts are disabled
+// Test_HTTPInterceptWithHeaderWorks verifies that HTTP intercepts work when global intercepts are disabled.
 func (s *allowGlobalInterceptsDisabledSuite) Test_HTTPInterceptWithHeaderWorks() {
 	require := s.Require()
 	ctx := s.Context()
@@ -55,7 +55,7 @@ func (s *allowGlobalInterceptsDisabledSuite) Test_HTTPInterceptWithHeaderWorks()
 	require.NoError(err)
 }
 
-// Test_HTTPInterceptWithPathWorks verifies that HTTP intercepts with paths work when global intercepts are disabled
+// Test_HTTPInterceptWithPathWorks verifies that HTTP intercepts with paths work when global intercepts are disabled.
 func (s *allowGlobalInterceptsDisabledSuite) Test_HTTPInterceptWithPathWorks() {
 	require := s.Require()
 	ctx := s.Context()
@@ -72,7 +72,7 @@ func (s *allowGlobalInterceptsDisabledSuite) Test_HTTPInterceptWithPathWorks() {
 	require.NoError(err)
 }
 
-// Test_HTTPInterceptWithCombinedFiltersWorks verifies that HTTP intercepts with both headers and paths work
+// Test_HTTPInterceptWithCombinedFiltersWorks verifies that HTTP intercepts with both headers and paths work.
 func (s *allowGlobalInterceptsDisabledSuite) Test_HTTPInterceptWithCombinedFiltersWorks() {
 	require := s.Require()
 	ctx := s.Context()
@@ -90,7 +90,7 @@ func (s *allowGlobalInterceptsDisabledSuite) Test_HTTPInterceptWithCombinedFilte
 	require.NoError(err)
 }
 
-// Test_MultipleHTTPInterceptsCoexist verifies that multiple HTTP intercepts can coexist
+// Test_MultipleHTTPInterceptsCoexist verifies that multiple HTTP intercepts can coexist.
 func (s *allowGlobalInterceptsDisabledSuite) Test_MultipleHTTPInterceptsCoexist() {
 	require := s.Require()
 	ctx := s.Context()
