@@ -14,6 +14,34 @@ A new Helm chart configuration option `intercept.allowGlobalIntercepts` has been
 Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile` that denotes a custom log file location or redirect of the log output to stdout/stderr. Two new log-level configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level controls beyond just `userDaemon` and `rootDaemon`.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Don't allow connect with --docker when client is configured with intercept.useFtp=true</div></div>
+<div style="margin-left: 15px">
+
+The `--docker` flag is not allowed when the client is configured with `intercept.useFtp=true` and an error is now generated
+instantly by the `telepresence connect --docker` command.
+
+The docker volume plugin cannot use FTP because it requires two ports: a fixed control port that Telepresence can proxy, and a
+dynamic data port (randomly chosen during connection) that Telepresence cannot proxy on-demand. The port-forwarder only forwards
+pre-configured ports and doesn't understand FTP's protocol. Consequently, FTP isn't allowed in this scenario. If it was, then when
+an FTP server tells the client to use an unpredictable second port for file transfers, Telepresence would block it—causing the
+connection to fail every time.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Better names for the Telepresence Daemons</div></div>
+<div style="margin-left: 15px">
+
+Using the name xxx-foreground isn't very intuitive when talking about daemon processes. Yes, the command, when issued in a
+terminal, will start the daemon in foreground so the names of the commands does have some logic to them, but then again, starting
+in the foreground is the default behavior of any command. And when the same command is started from the CLI, it will be started in
+the background, despite its name.
+
+The daemons are therefore now renamed:
+
+- connector-foreground => userd
+- daemon-foreground => rootd
+- kubeauth-foreground => kubeauthd
+</div>
+
 ## Version 2.25.1
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remove unnecessary setcap from traffic binary</div></div>
 <div style="margin-left: 15px">

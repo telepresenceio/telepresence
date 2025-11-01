@@ -47,6 +47,17 @@ items:
           configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level
           controls beyond just `userDaemon` and `rootDaemon`.
       - type: change
+        title: Don't allow connect with --docker when client is configured with intercept.useFtp=true
+        body: |-
+          The `--docker` flag is not allowed when the client is configured with `intercept.useFtp=true` and an error is now generated
+          instantly by the `telepresence connect --docker` command.
+          
+          The docker volume plugin cannot use FTP because it requires two ports: a fixed control port that Telepresence can proxy, and a
+          dynamic data port (randomly chosen during connection) that Telepresence cannot proxy on-demand. The port-forwarder only forwards
+          pre-configured ports and doesn't understand FTP's protocol. Consequently, FTP isn't allowed in this scenario. If it was, then when
+          an FTP server tells the client to use an unpredictable second port for file transfers, Telepresence would block it—causing the
+          connection to fail every time.
+      - type: change
         title: Better names for the Telepresence Daemons
         body: |-
           Using the name xxx-foreground isn't very intuitive when talking about daemon processes. Yes, the command, when issued in a

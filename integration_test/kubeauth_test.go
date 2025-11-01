@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
@@ -78,7 +80,7 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 	cfg.Contexts[extContext] = extCc
 	cfg.CurrentContext = extContext
 
-	connectWithExec := func(useDocker bool) {
+	connectWithExec := func(ctx context.Context, useDocker bool) {
 		if useDocker && s.IsCI() {
 			if !(runtime.GOOS == "linux" && runtime.GOARCH == "amd64") {
 				s.T().Skip("CI can't run linux docker containers inside non-linux runners")
@@ -86,7 +88,6 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 		}
 
 		// Retrieve the current size of the connector.log so that we can scan the messages that appear after connect
-		ctx := s.Context()
 		rq := s.Require()
 		logSize := int64(0)
 		logName := "connector.log"
@@ -135,6 +136,11 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 		}()
 		rq.Equal(modCfg.CurrentContext, extContext)
 	}
-	s.Run("root-daemon", func() { connectWithExec(false) })
-	s.Run("containerized-daemon", func() { connectWithExec(true) })
+	s.Run("root-daemon", func() { connectWithExec(s.Context(), false) })
+	s.Run("containerized-daemon", func() {
+		ctx := itest.WithConfig(s.Context(), func(config client.Config) {
+			config.Intercept().UseFtp = false
+		})
+		connectWithExec(ctx, true)
+	})
 }

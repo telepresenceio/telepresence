@@ -16,6 +16,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -99,6 +100,12 @@ func (s *multiConnectSuite) SetupSuite() {
 	if s.T().Failed() {
 		s.T().FailNow()
 	}
+}
+
+func (s *multiConnectSuite) AmendSuiteContext(ctx context.Context) context.Context {
+	return itest.WithConfig(ctx, func(cfg client.Config) {
+		cfg.Intercept().UseFtp = false
+	})
 }
 
 func (s *multiConnectSuite) TearDownSuite() {

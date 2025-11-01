@@ -17,13 +17,12 @@ func NewFTPMounter(rpc.FuseFTPClient, *sync.WaitGroup) Mounter {
 
 type fuseFtpMgr struct{}
 
-type FuseFTPManager interface {
-	DeferInit(context.Context) error
-	GetFuseFTPClient(context.Context) rpc.FuseFTPClient
-}
-
 func NewFuseFTPManager() FuseFTPManager {
 	return &fuseFtpMgr{}
+}
+
+func (s *fuseFtpMgr) LinkedFTP() bool {
+	return false
 }
 
 func (s *fuseFtpMgr) DeferInit(context.Context) error {

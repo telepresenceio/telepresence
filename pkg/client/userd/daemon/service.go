@@ -455,10 +455,10 @@ func run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	if cfg.Intercept().UseFtp {
+	if cfg.Intercept().UseFtp && !s.fuseFtpMgr.LinkedFTP() {
 		g.Go("fuseftp-server", func(c context.Context) error {
 			if err := s.InitFTPServer(c); err != nil {
-				dlog.Error(c, err)
+				return err
 			}
 			<-c.Done()
 			return nil
@@ -475,6 +475,10 @@ func run(cmd *cobra.Command, _ []string) error {
 		dlog.Error(c, err)
 	}
 	return err
+}
+
+func (s *service) LinkedFTP() bool {
+	return s.fuseFtpMgr.LinkedFTP()
 }
 
 func (s *service) InitFTPServer(ctx context.Context) error {

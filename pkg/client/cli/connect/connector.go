@@ -501,7 +501,6 @@ func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, con
 	if !required {
 		return ctx, false, ErrNoUserDaemon
 	}
-
 	ctx = progress.WithEventId(ctx, daemonID.Name)
 	progress.Working(ctx, "Launching Daemon")
 
@@ -515,6 +514,11 @@ func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, con
 	var conn *grpc.ClientConn
 	var info *daemon.Info
 	if cr.Docker {
+		if client.GetConfig(ctx).Intercept().UseFtp {
+			err = errcat.Silent.New("FTP is not supported when using Docker. Please set intercept.useFtp=false in your config.yml and try again.")
+			progress.Error(ctx, err)
+			return ctx, false, err
+		}
 		ctx, info, conn, err = launchDockerDaemon(ctx, daemonID, cr)
 	} else {
 		ctx, info, conn, err = launchHostDaemon(ctx, daemonID, connectorDaemon, cr)

@@ -250,6 +250,9 @@ func (s *notConnectedSuite) Test_AlsoNeverProxyDocker() {
 		}
 		return ss
 	}
+	ctx = itest.WithConfig(ctx, func(config client.Config) {
+		config.Intercept().UseFtp = false
+	})
 	s.TelepresenceConnect(ctx, "--context", "extra", "--docker")
 	defer itest.TelepresenceQuitOk(ctx)
 	st := itest.TelepresenceStatusOk(ctx)
