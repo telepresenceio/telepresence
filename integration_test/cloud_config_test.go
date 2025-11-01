@@ -171,18 +171,18 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	require := s.Require()
 	ctx := s.Context()
 
-	// The log file may have junk from other tests in it, so we'll do a very simple method
-	// of rushing to the end of the file and remembering where we left off when we start looking
-	// for new lines.
-	var lines int64
 	rootLogName := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
-	rootLog, err := os.Open(rootLogName)
-	require.NoError(err)
-	scn := bufio.NewScanner(rootLog)
-	for scn.Scan() {
-		lines++
+	// Figure out where the current end of the logfile is.
+	pos := int64(0)
+	st, err := os.Stat(rootLogName)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.T().Fatalf("Unexpected error stat'ing %s: %v", rootLogName, err)
+		}
+	} else {
+		pos = st.Size()
 	}
-	rootLog.Close()
+
 	s.TelepresenceHelmInstallOK(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.rootDaemon=trace")
 	defer s.RollbackTM(ctx)
 
@@ -190,7 +190,6 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 		cfg.LogLevels().RootDaemon = logrus.InfoLevel
 	})
 
-	var currentLine int64
 	s.Eventually(func() bool {
 		_, _, err = itest.Telepresence(ctx, "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
 		if err != nil {
@@ -201,37 +200,33 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 		rootLog, err := os.Open(rootLogName)
 		require.NoError(err)
 		defer rootLog.Close()
-		scn := bufio.NewScanner(rootLog)
-
-		currentLine = 0
-		for scn.Scan() && currentLine <= lines {
-			currentLine++
-		}
+		_, err = rootLog.Seek(pos, 0)
+		require.NoError(err)
 
 		levelSet := false
+		scn := bufio.NewScanner(rootLog)
 		for scn.Scan() && !levelSet {
-			levelSet = strings.Contains(scn.Text(), `Logging at this level "trace"`)
-			currentLine++
+			line := scn.Text()
+			levelSet = strings.Contains(line, `Logging at this level "trace"`)
+			pos += int64(len(line)) + 1
 		}
 		return levelSet
 	}, 60*time.Second, 5*time.Second, "Root log level not updated in 20 seconds")
 
 	// Make sure the log level was set back after disconnect
 	s.Eventually(func() bool {
-		rootLog, err = os.Open(rootLogName)
+		rootLog, err := os.Open(rootLogName)
 		require.NoError(err)
 		defer rootLog.Close()
-		scn = bufio.NewScanner(rootLog)
-
-		lines = currentLine
-		currentLine = 0
-		for scn.Scan() && currentLine <= lines {
-			currentLine++
-		}
+		_, err = rootLog.Seek(pos, 0)
+		require.NoError(err)
 
 		levelSet := false
+		scn := bufio.NewScanner(rootLog)
 		for scn.Scan() && !levelSet {
-			levelSet = strings.Contains(scn.Text(), `Logging at this level "info"`)
+			line := scn.Text()
+			levelSet = strings.Contains(line, `Logging at this level "info"`)
+			pos += int64(len(line)) + 1
 		}
 		return levelSet
 	}, 5*time.Second, time.Second, "Root log level not reset after disconnect")
@@ -240,12 +235,20 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	ctx = itest.WithConfig(ctx, func(config client.Config) {
 		config.LogLevels().RootDaemon = logrus.DebugLevel
 	})
+
 	s.TelepresenceConnect(ctx)
-	itest.TelepresenceDisconnectOk(ctx)
+	rootLog, err := os.Open(rootLogName)
+	require.NoError(err)
+	defer rootLog.Close()
+	_, err = rootLog.Seek(pos, 0)
+	require.NoError(err)
+
 	levelSet := false
+	scn := bufio.NewScanner(rootLog)
 	for scn.Scan() && !levelSet {
 		levelSet = strings.Contains(scn.Text(), `Logging at this level "trace"`)
 	}
+	itest.TelepresenceDisconnectOk(ctx)
 	require.False(levelSet, "Root log level not respected when set in config file")
 
 	var view client.SessionConfig
@@ -259,18 +262,17 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	require := s.Require()
 	ctx := s.Context()
 
-	// The log file may have junk from other tests in it, so we'll do a very simple method
-	// of rushing to the end of the file and remembering where we left off when we start looking
-	// for new lines.
-	var lines int64
-	logName := filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log")
-	logF, err := os.Open(logName)
-	require.NoError(err)
-	scn := bufio.NewScanner(logF)
-	for scn.Scan() {
-		lines++
+	userLogName := filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log")
+	// Figure out where the current end of the logfile is.
+	pos := int64(0)
+	st, err := os.Stat(userLogName)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			s.T().Fatalf("Unexpected error stat'ing %s: %v", userLogName, err)
+		}
+	} else {
+		pos = st.Size()
 	}
-	logF.Close()
 
 	s.TelepresenceHelmInstallOK(ctx, true, "--set", "logLevel=debug,agent.logLevel=debug,client.logLevels.userDaemon=trace")
 	defer s.RollbackTM(ctx)
@@ -278,7 +280,6 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 		cfg.LogLevels().UserDaemon = logrus.InfoLevel
 	})
 
-	var currentLine int64
 	s.Eventually(func() bool {
 		so, se, err := itest.Telepresence(ctx, "connect", "--manager-namespace", s.ManagerNamespace(), "--namespace", s.AppNamespace())
 		dlog.Infof(ctx, "stdout %s", so)
@@ -288,40 +289,37 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 		}
 		itest.TelepresenceDisconnectOk(ctx)
 
-		logF, err := os.Open(logName)
+		logF, err := os.Open(userLogName)
 		require.NoError(err)
 		defer logF.Close()
+		_, err = logF.Seek(pos, 0)
+		require.NoError(err)
+
 		scn := bufio.NewScanner(logF)
-
-		currentLine = 0
-		for scn.Scan() && currentLine <= lines {
-			currentLine++
-		}
-
 		levelSet := false
 		for scn.Scan() && !levelSet {
-			levelSet = strings.Contains(scn.Text(), `Logging at this level "trace"`)
-			currentLine++
+			line := scn.Text()
+			levelSet = strings.Contains(line, `Logging at this level "trace"`)
+			pos += int64(len(line)) + 1
 		}
 		return levelSet
 	}, 60*time.Second, 5*time.Second, "Connector log level not updated in 20 seconds")
 
 	// Make sure the log level was set back after disconnect
-	logF, err = os.Open(logName)
+	logF, err := os.Open(userLogName)
 	require.NoError(err)
-	defer logF.Close()
-	scn = bufio.NewScanner(logF)
-
-	lines = currentLine
-	currentLine = 0
-	for scn.Scan() && currentLine <= lines {
-		currentLine++
+	_, err = logF.Seek(pos, 0)
+	if !s.NoError(err) {
+		logF.Close()
+		return
 	}
 
+	scn := bufio.NewScanner(logF)
 	levelSet := false
 	for scn.Scan() && !levelSet {
 		levelSet = strings.Contains(scn.Text(), `Logging at this level "info"`)
 	}
+	logF.Close()
 	require.True(levelSet, "Connector log level not reset after disconnect")
 
 	// Set it to a "real" value to see that the client-side wins
@@ -332,9 +330,18 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	s.TelepresenceConnect(ctx)
 	itest.TelepresenceDisconnectOk(ctx)
 
+	logF, err = os.Open(userLogName)
+	require.NoError(err)
+	_, err = logF.Seek(pos, 0)
+	if !s.NoError(err) {
+		logF.Close()
+		return
+	}
+
 	levelSet = false
 	for scn.Scan() && !levelSet {
 		levelSet = strings.Contains(scn.Text(), `Logging at this level "trace"`)
 	}
+	logF.Close()
 	require.False(levelSet, "Connector log level not respected when set in config file")
 }
