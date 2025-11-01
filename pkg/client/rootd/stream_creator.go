@@ -16,7 +16,7 @@ import (
 
 const dnsConnTTL = 5 * time.Second
 
-func (s *Session) isForDNS(ip netip.Addr, port uint16) bool {
+func (s *session) isForDNS(ip netip.Addr, port uint16) bool {
 	return s.vifDNS.Addr() == ip && s.vifDNS.Port() == port
 }
 
@@ -36,7 +36,7 @@ type recursiveBlock struct {
 	timer *time.Timer
 }
 
-func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
+func (s *session) streamCreator(ctx context.Context) tunnel.StreamCreator {
 	var recursionBlockMap *xsync.Map[netip.AddrPort, recursiveBlock]
 	routing := client.GetConfig(ctx).Routing()
 	recursionBlockDuration := routing.RecursionBlockDuration
@@ -140,14 +140,14 @@ func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
 	}
 }
 
-func (s *Session) getAgentVIP(dest netip.Addr) (a agentVIP, ok bool) {
+func (s *session) getAgentVIP(dest netip.Addr) (a agentVIP, ok bool) {
 	if s.virtualIPs != nil {
 		a, ok = s.virtualIPs.Load(dest)
 	}
 	return a, ok
 }
 
-func (s *Session) getAgentClient(ip netip.Addr) (pvd tunnel.Provider) {
+func (s *session) getAgentClient(ip netip.Addr) (pvd tunnel.Provider) {
 	if s.agentClients != nil {
 		pvd = s.agentClients.GetClient(ip)
 	}

@@ -70,7 +70,7 @@ type Service struct {
 	sessionCancel   context.CancelFunc
 	sessionContext  context.Context
 	sessionQuitting int32 // atomic boolean. True if non-zero.
-	session         *Session
+	session         *session
 	timedLogLevel   log.TimedLevel
 }
 
@@ -139,7 +139,7 @@ func (s *Service) Quit(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, e
 }
 
 func (s *Service) SetDNSTopLevelDomains(ctx context.Context, domains *rpc.Domains) (*emptypb.Empty, error) {
-	err := s.WithSession(func(ctx context.Context, session *Session) error {
+	err := s.WithSession(func(ctx context.Context, session *session) error {
 		session.SetTopLevelDomains(ctx, domains.Domains)
 		return nil
 	})
@@ -147,7 +147,7 @@ func (s *Service) SetDNSTopLevelDomains(ctx context.Context, domains *rpc.Domain
 }
 
 func (s *Service) SetDNSExcludes(ctx context.Context, req *rpc.SetDNSExcludesRequest) (*emptypb.Empty, error) {
-	err := s.WithSession(func(c context.Context, session *Session) error {
+	err := s.WithSession(func(c context.Context, session *session) error {
 		session.SetExcludes(c, req.Excludes)
 		return nil
 	})
@@ -155,7 +155,7 @@ func (s *Service) SetDNSExcludes(ctx context.Context, req *rpc.SetDNSExcludesReq
 }
 
 func (s *Service) SetDNSMappings(ctx context.Context, req *rpc.SetDNSMappingsRequest) (*emptypb.Empty, error) {
-	err := s.WithSession(func(c context.Context, session *Session) error {
+	err := s.WithSession(func(c context.Context, session *session) error {
 		session.SetMappings(c, req.Mappings)
 		return nil
 	})
@@ -193,7 +193,7 @@ func (s *Service) Disconnect(ctx context.Context, _ *emptypb.Empty) (*emptypb.Em
 }
 
 func (s *Service) TranslateEnvIPs(ctx context.Context, environment *rpc.Environment) (result *rpc.Environment, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
+	err = s.WithSession(func(ctx context.Context, session *session) error {
 		result = session.translateEnvIPs(ctx, environment)
 		return nil
 	})
@@ -201,7 +201,7 @@ func (s *Service) TranslateEnvIPs(ctx context.Context, environment *rpc.Environm
 }
 
 func (s *Service) WaitForNetwork(ctx context.Context, e *emptypb.Empty) (*emptypb.Empty, error) {
-	err := s.WithSession(func(ctx context.Context, session *Session) error {
+	err := s.WithSession(func(ctx context.Context, session *session) error {
 		if err, ok := <-session.networkReady(ctx); ok {
 			return status.Error(codes.Unavailable, err.Error())
 		}
@@ -221,7 +221,7 @@ func (s *Service) cancelSession() {
 	}
 }
 
-func (s *Service) WithSession(f func(context.Context, *Session) error) error {
+func (s *Service) WithSession(f func(context.Context, *session) error) error {
 	if atomic.LoadInt32(&s.sessionQuitting) != 0 {
 		return status.Error(codes.Canceled, "session cancelled")
 	}
@@ -234,7 +234,7 @@ func (s *Service) WithSession(f func(context.Context, *Session) error) error {
 }
 
 func (s *Service) GetNetworkConfig(ctx context.Context, e *emptypb.Empty) (nc *rpc.NetworkConfig, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
+	err = s.WithSession(func(ctx context.Context, session *session) error {
 		nc = session.getNetworkConfig(s.sessionContext)
 		return nil
 	})
@@ -243,7 +243,7 @@ func (s *Service) GetNetworkConfig(ctx context.Context, e *emptypb.Empty) (nc *r
 }
 
 func (s *Service) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest) (rsp *rpc.WaitForAgentIPResponse, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
+	err = s.WithSession(func(ctx context.Context, session *session) error {
 		rsp, err = session.waitForAgentIP(ctx, request)
 		return err
 	})
@@ -259,7 +259,7 @@ func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequ
 }
 
 func (s *Service) LookupIP(ctx context.Context, request *rpc.LookupIPRequest) (rsp *rpc.LookupIPResponse, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
+	err = s.WithSession(func(ctx context.Context, session *session) error {
 		rsp, err = session.lookupIP(ctx, request)
 		return err
 	})
@@ -267,7 +267,7 @@ func (s *Service) LookupIP(ctx context.Context, request *rpc.LookupIPRequest) (r
 }
 
 func (s *Service) ResolvePort(ctx context.Context, request *rpc.ResolvePortRequest) (rsp *rpc.ResolvePortResponse, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
+	err = s.WithSession(func(ctx context.Context, session *session) error {
 		ap, err := session.resolvePort(ctx, request.Host, request.Port)
 		if err != nil {
 			return err
@@ -283,7 +283,7 @@ func (s *Service) ResolvePort(ctx context.Context, request *rpc.ResolvePortReque
 }
 
 func (s *Service) RerouteRemotePort(ctx context.Context, request *rpc.ReroutePortRequest) (rsp *emptypb.Empty, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
+	err = s.WithSession(func(ctx context.Context, session *session) error {
 		var ap types.AddrPortProto
 		err = ap.UnmarshalBinary(request.DstHostPort)
 		if err == nil {

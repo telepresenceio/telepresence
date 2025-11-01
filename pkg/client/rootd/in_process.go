@@ -19,7 +19,7 @@ import (
 // InProcSession is like Session, but also implements the daemon.DaemonClient interface. This makes it possible to use the session
 // in-process from the user daemon, without starting the root daemon gRPC service.
 type InProcSession struct {
-	*Session
+	*session
 	cancel context.CancelFunc
 }
 
@@ -136,5 +136,5 @@ func NewInProcSession(
 		cancel()
 		return ctx, nil, err
 	}
-	return ctx, &InProcSession{Session: session, cancel: cancel}, nil
+	return ctx, &InProcSession{session: session, cancel: cancel}, nil
 }
