@@ -1076,6 +1076,7 @@ func (s *service) lookupFromManager(ctx context.Context, sessionID tunnel.Sessio
 
 // GetLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // GetLogsRequest and returns them to the caller
+//
 // Deprecated: Clients should use the user daemon's GatherLogs method.
 func (s *service) GetLogs(_ context.Context, _ *rpc.GetLogsRequest) (*rpc.LogsResponse, error) {
 	return &rpc.LogsResponse{

@@ -63,6 +63,7 @@ func (d DNSMappings) ToRPC() []*rpc.DNSMapping {
 }
 
 // The dnsConfig is part of the kubeconfigExtension struct.
+//
 // Deprecated: Use Config as the Kubeconfig extension.
 type dnsConfig struct {
 	// LocalIP is the address of the local DNS server. This entry is only
@@ -95,6 +96,7 @@ type dnsConfig struct {
 }
 
 // The managerConfig is part of the kubeconfigExtension struct. It configures discovery of the traffic manager.
+//
 // Deprecated: Use Config as the Kubeconfig extension.
 type managerConfig struct {
 	// Namespace is the name of the namespace where the traffic manager is to be found
@@ -102,6 +104,7 @@ type managerConfig struct {
 }
 
 // kubeconfigExtension is an extension read from the selected kubeconfig Cluster.
+//
 // Deprecated: Use Config as the Kubeconfig extension.
 type kubeconfigExtension struct {
 	DNS                     *dnsConfig     `json:"dns,omitempty"`

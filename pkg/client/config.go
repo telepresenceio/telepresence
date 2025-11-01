@@ -1253,10 +1253,12 @@ type DNS struct {
 	Error string `json:"error"`
 
 	// LocalIP
+	//
 	// Deprecated: Use LocalAddresses.
 	LocalIP netip.Addr `json:"localIP"`
 
 	// RemoteIP
+	//
 	// Deprecated: Use VIFAddress.
 	RemoteIP netip.Addr `json:"remoteIP"`
 
