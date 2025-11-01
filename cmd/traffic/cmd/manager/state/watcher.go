@@ -1,4 +1,4 @@
-package workload
+package state
 
 import (
 	"context"
@@ -21,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
 type EventType int
@@ -117,7 +118,7 @@ func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
 	if w.enabledWorkloadKinds.Contains(k8sapi.DeploymentKind) {
 		if dps, err := ai.Deployments().Lister().Deployments(w.namespace).List(labels.Everything()); err == nil {
 			for _, obj := range dps {
-				if wl, ok := FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) && !agentmap.TrafficManagerSelector.Matches(labels.Set(obj.Labels)) {
+				if wl, ok := workload.FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) && !agentmap.TrafficManagerSelector.Matches(labels.Set(obj.Labels)) {
 					initialEvents = append(initialEvents, Event{
 						Type:     EventTypeAdd,
 						Workload: wl,
@@ -129,7 +130,7 @@ func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
 	if w.enabledWorkloadKinds.Contains(k8sapi.ReplicaSetKind) {
 		if rps, err := ai.ReplicaSets().Lister().ReplicaSets(w.namespace).List(labels.Everything()); err == nil {
 			for _, obj := range rps {
-				if wl, ok := FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) {
+				if wl, ok := workload.FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) {
 					initialEvents = append(initialEvents, Event{
 						Type:     EventTypeAdd,
 						Workload: wl,
@@ -141,7 +142,7 @@ func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
 	if w.enabledWorkloadKinds.Contains(k8sapi.StatefulSetKind) {
 		if sps, err := ai.StatefulSets().Lister().StatefulSets(w.namespace).List(labels.Everything()); err == nil {
 			for _, obj := range sps {
-				if wl, ok := FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) {
+				if wl, ok := workload.FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) {
 					initialEvents = append(initialEvents, Event{
 						Type:     EventTypeAdd,
 						Workload: wl,
@@ -154,7 +155,7 @@ func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
 		ri := kf.GetArgoRolloutsInformerFactory().Argoproj().V1alpha1()
 		if sps, err := ri.Rollouts().Lister().Rollouts(w.namespace).List(labels.Everything()); err == nil {
 			for _, obj := range sps {
-				if wl, ok := FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) {
+				if wl, ok := workload.FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) {
 					initialEvents = append(initialEvents, Event{
 						Type:     EventTypeAdd,
 						Workload: wl,
@@ -205,24 +206,24 @@ func (w *watcher) watch(ix cache.SharedIndexInformer, ns string, hasValidControl
 	_, err := ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
-				if wl, ok := FromAny(obj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
+				if wl, ok := workload.FromAny(obj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
 					w.handleEvent(Event{Type: EventTypeAdd, Workload: wl})
 				}
 			},
 			DeleteFunc: func(obj any) {
-				if wl, ok := FromAny(obj); ok {
+				if wl, ok := workload.FromAny(obj); ok {
 					if ns == wl.GetNamespace() && !hasValidController(wl) {
 						w.handleEvent(Event{Type: EventTypeDelete, Workload: wl})
 					}
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
-					if wl, ok = FromAny(dfsu.Obj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
+					if wl, ok = workload.FromAny(dfsu.Obj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
 						w.handleEvent(Event{Type: EventTypeDelete, Workload: wl})
 					}
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
-				if wl, ok := FromAny(newObj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
-					if oldWl, ok := FromAny(oldObj); ok {
+				if wl, ok := workload.FromAny(newObj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
+					if oldWl, ok := workload.FromAny(oldObj); ok {
 						if cmp.Equal(wl, oldWl, compareOptions()...) {
 							return
 						}

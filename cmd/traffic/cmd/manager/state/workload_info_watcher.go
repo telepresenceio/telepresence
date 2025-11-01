@@ -184,7 +184,7 @@ func rpcWorkload(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []
 }
 
 func (wf *workloadInfoWatcher) addEvent(
-	eventType workload.EventType,
+	eventType EventType,
 	wl k8sapi.Workload,
 	as rpc.WorkloadInfo_AgentState,
 	iClients []*rpc.WorkloadInfo_Intercept,
@@ -196,7 +196,7 @@ func (wf *workloadInfoWatcher) addEvent(
 	wf.resetTicker()
 }
 
-func (wf *workloadInfoWatcher) handleWorkloadsSnapshot(ctx context.Context, wes []workload.Event, initial bool) {
+func (wf *workloadInfoWatcher) handleWorkloadsSnapshot(ctx context.Context, wes []Event, initial bool) {
 	if len(wes) == 0 {
 		if initial {
 			// The initial snapshot may be empty, but must be sent anyway.
@@ -210,7 +210,7 @@ func (wf *workloadInfoWatcher) handleWorkloadsSnapshot(ctx context.Context, wes 
 			continue
 		}
 		if w, ok := wf.workloadEvents[wl.GetName()]; ok {
-			if we.Type == workload.EventTypeDelete && w.Type != rpc.WorkloadEvent_DELETED {
+			if we.Type == EventTypeDelete && w.Type != rpc.WorkloadEvent_DELETED {
 				w.Type = rpc.WorkloadEvent_DELETED
 				dlog.Debugf(ctx, "WorkloadInfoEvent: Workload %s %s %s", we.Type, wl, workload.GetWorkloadState(wl))
 				wf.resetTicker()
@@ -229,7 +229,7 @@ func (wf *workloadInfoWatcher) handleWorkloadsSnapshot(ctx context.Context, wes 
 
 			// If we've sent an ADDED event for this workload, and this is a MODIFIED event without any changes that
 			// we care about, then just skip it.
-			if we.Type == workload.EventTypeUpdate {
+			if we.Type == EventTypeUpdate {
 				lew, ok := wf.lastEvents[wl.GetName()]
 				if ok && (lew.Type == rpc.WorkloadEvent_ADDED_UNSPECIFIED || lew.Type == rpc.WorkloadEvent_MODIFIED) &&
 					proto.Equal(lew.Workload, rpcWorkload(we.Workload, as, iClients)) {
@@ -260,7 +260,7 @@ func (wf *workloadInfoWatcher) handleAgentSnapshot(ctx context.Context, ais map[
 				}
 			} else if wl, err := agentmap.GetWorkload(ctx, name, a.Namespace, ""); err == nil {
 				dlog.Debugf(ctx, "WorkloadInfoEvent: AgentInfo %s(%s).%s %s %s", a.PodName, a.PodIp, a.Namespace, as, workload.GetWorkloadState(wl))
-				wf.addEvent(workload.EventTypeUpdate, wl, as, nil)
+				wf.addEvent(EventTypeUpdate, wl, as, nil)
 			} else {
 				dlog.Debugf(ctx, "Unable to get workload %s.%s: %v", name, a.Namespace, err)
 				if errors.IsNotFound(err) {
@@ -298,7 +298,7 @@ func (wf *workloadInfoWatcher) handleAgentSnapshot(ctx context.Context, ais map[
 			}
 		} else if wl, err := agentmap.GetWorkload(ctx, name, a.Namespace, ""); err == nil {
 			dlog.Debugf(ctx, "WorkloadInfoEvent: AgentInfo %s(%s).%s %s %s", a.PodName, a.PodIp, a.Namespace, as, workload.GetWorkloadState(wl))
-			wf.addEvent(workload.EventTypeUpdate, wl, as, iClients)
+			wf.addEvent(EventTypeUpdate, wl, as, iClients)
 		} else {
 			dlog.Debugf(ctx, "Unable to get workload %s.%s: %v", name, a.Namespace, err)
 		}
@@ -321,7 +321,7 @@ func (wf *workloadInfoWatcher) handleInterceptSnapshot(ctx context.Context, iis 
 				}
 			} else if wl, err := agentmap.GetWorkload(ctx, name, wf.namespace, ""); err == nil {
 				dlog.Debugf(ctx, "WorkloadInfoEvent: InterceptInfo %s %s %s", wl, as, workload.GetWorkloadState(wl))
-				wf.addEvent(workload.EventTypeUpdate, wl, as, nil)
+				wf.addEvent(EventTypeUpdate, wl, as, nil)
 			}
 		}
 	}
@@ -347,7 +347,7 @@ func (wf *workloadInfoWatcher) handleInterceptSnapshot(ctx context.Context, iis 
 			}
 		} else if wl, err := agentmap.GetWorkload(ctx, name, wf.namespace, ""); err == nil {
 			dlog.Debugf(ctx, "WorkloadInfoEvent: InterceptInfo %s %s %s", wl, as, workload.GetWorkloadState(wl))
-			wf.addEvent(workload.EventTypeUpdate, wl, as, iClients)
+			wf.addEvent(EventTypeUpdate, wl, as, iClients)
 		}
 	}
 }
