@@ -146,7 +146,7 @@ func (s *session) watchInterceptsLoop(ctx context.Context) error {
 	pat := newPodAccessTracker()
 	err := watcher.WatchWithRetry(ctx, "WatchIntercepts", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.InterceptInfoSnapshot], error) {
-			return s.managerClient.WatchIntercepts(s.context, s.SessionInfo())
+			return s.ManagerClient().WatchIntercepts(s.context, s.SessionInfo())
 		},
 		func(snapshot *manager.InterceptInfoSnapshot) error {
 			s.handleInterceptSnapshot(pat, snapshot.Intercepts)
@@ -530,7 +530,7 @@ func (s *session) CanIntercept(ir *rpc.CreateInterceptRequest) (userd.InterceptI
 	}
 
 	mgrIr := s.newCreateInterceptRequest(spec)
-	pi, err := s.managerClient.PrepareIntercept(s.context, mgrIr)
+	pi, err := s.ManagerClient().PrepareIntercept(s.context, mgrIr)
 	if err != nil {
 		if st, ok := grpcStatus.FromError(err); ok {
 			if st.Code() == grpcCodes.FailedPrecondition {
@@ -733,7 +733,7 @@ func (s *session) removeIntercept(ic *intercept) error {
 	tos := client.GetConfig(c).Timeouts()
 	cc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
-	_, err := s.managerClient.RemoveIntercept(cc, &manager.RemoveInterceptRequest2{
+	_, err := s.ManagerClient().RemoveIntercept(cc, &manager.RemoveInterceptRequest2{
 		Session: s.SessionInfo(),
 		Name:    name,
 	})

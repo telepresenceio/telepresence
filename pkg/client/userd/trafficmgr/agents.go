@@ -15,7 +15,7 @@ import (
 func (s *session) watchAgentsLoop(ctx context.Context) error {
 	err := watcher.WatchWithRetry(ctx, "WatchAgents", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentInfoSnapshot], error) {
-			return s.managerClient.WatchAgents(ctx, s.SessionInfo())
+			return s.ManagerClient().WatchAgents(ctx, s.SessionInfo())
 		},
 		func(snapshot *manager.AgentInfoSnapshot) error {
 			s.handleAgentSnapshot(ctx, snapshot.Agents)

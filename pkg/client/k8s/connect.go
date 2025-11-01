@@ -24,7 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-func ConnectToManager(longLivedCtx, ctx context.Context, namespace string) (conn *grpc.ClientConn, mc manager.ManagerClient, vi *manager.VersionInfo2, err error) {
+func ConnectToManager(longLivedCtx, ctx context.Context, namespace string) (conn *grpc.ClientConn, vi *manager.VersionInfo2, err error) {
 	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "api")
 
 	dialCtx, cancel := client.GetConfig(longLivedCtx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
@@ -35,16 +35,16 @@ func ConnectToManager(longLivedCtx, ctx context.Context, namespace string) (conn
 		se := &k8serrors.StatusError{}
 		if errors.As(err, &se) {
 			if se.Status().Code == http.StatusNotFound {
-				return nil, nil, nil, errcat.User.New("traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
+				return nil, nil, errcat.User.New("traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
 					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in.")
 			}
 		}
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	conn, err = dialClusterGRPC(dialCtx, grpcAddr, pap)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	mClient := manager.NewManagerClient(conn)
 	vi, err = getVersion(ctx, mClient)
@@ -52,7 +52,7 @@ func ConnectToManager(longLivedCtx, ctx context.Context, namespace string) (conn
 		err = client.CheckTimeout(ctx, fmt.Errorf("dial manager: %w", err))
 		conn.Close()
 	}
-	return conn, mClient, vi, err
+	return conn, vi, err
 }
 
 type versionAPI interface {

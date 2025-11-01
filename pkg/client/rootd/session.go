@@ -90,14 +90,11 @@ type Session struct {
 
 	teleroute teleroute.Server
 
-	// clientConn is the connection that uses the connector's socket
-	clientConn *grpc.ClientConn
+	// managerConn is the connection to the traffic-manager.
+	managerConn *grpc.ClientConn
 
 	// agentClients provides the gRPC tunnel to traffic-agents in the connected namespace
 	agentClients agentpf.Clients
-
-	// managerClient provides the gRPC tunnel to the traffic-manager
-	managerClient manager.ManagerClient
 
 	// managerVersion is the version of the connected traffic-manager
 	managerVersion semver.Version
@@ -227,24 +224,23 @@ func connectToManager(
 ) (
 	context.Context,
 	*grpc.ClientConn,
-	manager.ManagerClient,
 	semver.Version,
 	error,
 ) {
 	var mgrVer semver.Version
 	rc, err := createK8sConfig(ctx, kubeFlags, kubeData)
 	if err != nil {
-		return ctx, nil, nil, mgrVer, err
+		return ctx, nil, mgrVer, err
 	}
 	ctx = portforward.WithRestConfig(ctx, rc)
 
 	cs, err := kubernetes.NewForConfig(rc)
 	if err != nil {
-		return ctx, nil, nil, mgrVer, err
+		return ctx, nil, mgrVer, err
 	}
 	acs, err := argorollouts.NewForConfig(rc)
 	if err != nil {
-		return ctx, nil, nil, mgrVer, err
+		return ctx, nil, mgrVer, err
 	}
 	ctx = k8sapi.WithJoinedClientSetInterface(ctx, cs, acs)
 
@@ -253,9 +249,9 @@ func connectToManager(
 	tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	conn, mc, ver, err := k8s.ConnectToManager(ctx, tc, namespace)
+	conn, ver, err := k8s.ConnectToManager(ctx, tc, namespace)
 	if err != nil {
-		return ctx, nil, nil, mgrVer, err
+		return ctx, nil, mgrVer, err
 	}
 
 	verStr := strings.TrimPrefix(ver.Version, "v")
@@ -263,9 +259,9 @@ func connectToManager(
 	mgrVer, err = semver.Parse(verStr)
 	if err != nil {
 		conn.Close()
-		return ctx, nil, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
+		return ctx, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
 	}
-	return ctx, conn, mc, mgrVer, nil
+	return ctx, conn, mgrVer, nil
 }
 
 // NewSession returns a new properly initialized session object.
@@ -278,28 +274,28 @@ func NewSession(c context.Context, mi *rpc.NetworkConfig) (context.Context, *Ses
 		return c, nil, err
 	}
 	c = client.WithConfig(c, cfg)
-	c, conn, mc, ver, err := connectToManager(c, cfg.Cluster().DefaultManagerNamespace, mi.KubeFlags, mi.KubeconfigData)
-	if mc == nil || err != nil {
-		return c, nil, err
-	}
-	c, s, err := newSession(c, mi, mc, ver, false)
+	c, conn, ver, err := connectToManager(c, cfg.Cluster().DefaultManagerNamespace, mi.KubeFlags, mi.KubeconfigData)
 	if err != nil {
 		return c, nil, err
 	}
-	s.clientConn = conn
+	c, s, err := newSession(c, mi, conn, ver, false)
+	if err != nil {
+		return c, nil, err
+	}
+	s.managerConn = conn
 	return c, s, nil
 }
 
 func nope() bool { return false }
 
-func newSession(c context.Context, mi *rpc.NetworkConfig, mc manager.ManagerClient, ver semver.Version, isPodDaemon bool) (context.Context, *Session, error) {
+func newSession(c context.Context, mi *rpc.NetworkConfig, managerConn *grpc.ClientConn, ver semver.Version, isPodDaemon bool) (context.Context, *Session, error) {
 	dlog.Debugf(c, "Creating session with id %v", mi.Session)
 	s := &Session{
 		handlers:              tunnel.NewPool(),
 		rndSource:             rand.NewSource(time.Now().UnixNano()),
 		session:               mi.Session,
 		namespace:             mi.Namespace,
-		managerClient:         mc,
+		managerConn:           managerConn,
 		managerVersion:        ver,
 		subnetViaWorkloads:    mi.SubnetViaWorkloads,
 		proxyClusterPods:      true,
@@ -355,6 +351,10 @@ func newSession(c context.Context, mi *rpc.NetworkConfig, mc manager.ManagerClie
 // lookupSequencerTTL is the maximum time to keep a lookup result cached with the purpose of avoiding
 // both A and AAAA lookups for the same name.
 const lookupSequencerTTL = 500 * time.Millisecond
+
+func (s *Session) managerClient() manager.ManagerClient {
+	return manager.NewManagerClient(s.managerConn)
+}
 
 func (s *Session) lookupSequencerGC(ctx context.Context) {
 	// Cleans the lookupSequencer from time to time to avoid that it grows too big if many different
@@ -448,7 +448,7 @@ func (s *Session) simpleLookup(ctx context.Context, question *dns2.Question) (dn
 	}
 	if lookupClient == nil {
 		dlog.Debugf(ctx, "Using traffic-manager for lookup %q", question.Name)
-		lookupClient = s.managerClient
+		lookupClient = s.managerClient()
 	} else {
 		dlog.Debugf(ctx, "Using traffic-agent for lookup %q", question.Name)
 	}
@@ -530,7 +530,7 @@ func ensureBothFamilies(name string, ips4, ips6 dnsproxy.RRs) dnsproxy.RRs {
 
 // clusterLookup sends a LookupDNS request to the traffic-manager and returns the result.
 func (s *Session) complexClusterLookup(ctx context.Context, q *dns2.Question) (dnsproxy.RRs, int, error) {
-	dnsResponse, err := s.managerClient.LookupDNS(ctx, &manager.DNSRequest{
+	dnsResponse, err := s.managerClient().LookupDNS(ctx, &manager.DNSRequest{
 		Session: s.session,
 		Name:    q.Name,
 		Type:    uint32(q.Qtype),
@@ -732,7 +732,7 @@ func (s *Session) networkReady(ctx context.Context) <-chan error {
 func (s *Session) watchClusterInfo(ctx context.Context, teleroutePort uint16) error {
 	return watcher.WatchWithRetry(ctx, "WatchClusterInfo", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.ClusterInfo], error) {
-			return s.managerClient.WatchClusterInfo(ctx, s.session)
+			return s.managerClient().WatchClusterInfo(ctx, s.session)
 		},
 		func(mgrInfo *manager.ClusterInfo) error {
 			if err := s.readAdditionalRouting(ctx, mgrInfo); err != nil {
@@ -1195,7 +1195,7 @@ func (s *Session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16
 		if k8s.CanPortForward(c, s.namespace) {
 			s.agentClients = agentpf.NewClients(s.session)
 			g.Go("agentPods", func(ctx context.Context) error {
-				return s.agentClients.WatchAgentPods(tunnel.WithDialer(ctx, s), s.managerClient)
+				return s.agentClients.WatchAgentPods(tunnel.WithDialer(ctx, s), s.managerClient())
 			})
 		} else {
 			dlog.Infof(c, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.namespace)
@@ -1290,12 +1290,12 @@ func (s *Session) stop(c context.Context) {
 	<-cc.Done()
 	atomic.StoreInt32(&s.closing, 2)
 
-	if s.clientConn != nil {
+	if s.managerConn != nil {
 		dlog.Debug(c, "Closing port-forward to traffic-manager")
 		// Avoid sporadic hang when the client connection is torn down.
 		cc, cancel = context.WithTimeout(context.WithoutCancel(c), time.Second)
 		go func() {
-			_ = s.clientConn.Close()
+			_ = s.managerConn.Close()
 			cancel()
 		}()
 		<-cc.Done()
@@ -1325,7 +1325,7 @@ func (s *Session) activateProxyViaWorkloads(ctx context.Context) error {
 			return errcat.User.Newf("Agent port-forwards are disabled. Client is not permitted to do proxy-via %s", wlName)
 		}
 		dlog.Debugf(ctx, "Ensuring proxy-via agent in %s", wlName)
-		_, err := s.managerClient.EnsureAgent(ctx, &manager.EnsureAgentRequest{
+		_, err := s.managerClient().EnsureAgent(ctx, &manager.EnsureAgentRequest{
 			Session: s.session,
 			Name:    wlName,
 		})

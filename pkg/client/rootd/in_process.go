@@ -126,7 +126,7 @@ func (rd *InProcSession) WaitForAgentIP(ctx context.Context, request *rpc.WaitFo
 func NewInProcSession(
 	ctx context.Context,
 	mi *rpc.NetworkConfig,
-	mc manager.ManagerClient,
+	mc *grpc.ClientConn,
 	ver semver.Version,
 	isPodDaemon bool,
 ) (context.Context, *InProcSession, error) {

@@ -86,9 +86,6 @@ type session struct {
 	installID string // telepresence's install ID
 	clientID  string // "laptop-username@laptop-hostname"
 
-	// manager client
-	managerClient manager.ManagerClient
-
 	// manager client connection
 	managerConn *grpc.ClientConn
 
@@ -190,7 +187,7 @@ func NewSession(ctx context.Context, cri userd.ConnectRequest, config *k8s.Kubec
 
 	ctx = withSession(ctx, tmgr)
 	var tmCfg client.Config
-	cliCfg, err := tmgr.managerClient.GetClientConfig(ctx, &empty.Empty{})
+	cliCfg, err := tmgr.ManagerClient().GetClientConfig(ctx, &empty.Empty{})
 	if err != nil {
 		if status.Code(err) != codes.Unimplemented {
 			dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
@@ -286,7 +283,7 @@ func (s *session) RootDaemon() rootdRpc.DaemonClient {
 }
 
 func (s *session) ManagerClient() manager.ManagerClient {
-	return s.managerClient
+	return manager.NewManagerClient(s.managerConn)
 }
 
 func (s *session) ManagerName() string {
@@ -312,7 +309,7 @@ func connectMgr(
 	defer cancel()
 
 	mgrNs := k8s.GetManagerNamespace(ctx)
-	conn, mClient, vi, err := k8s.ConnectToManager(longLivedCtx, ctx, mgrNs)
+	conn, vi, err := k8s.ConnectToManager(longLivedCtx, ctx, mgrNs)
 	if err != nil {
 		return nil, err
 	}
@@ -347,6 +344,7 @@ func connectMgr(
 		return nil, err
 	}
 
+	mClient := manager.NewManagerClient(conn)
 	if si != nil {
 		// Check if the session is still valid in the traffic-manager by calling Remain
 		_, err = mClient.Remain(ctx, &manager.RemainRequest{Session: si})
@@ -392,7 +390,6 @@ func connectMgr(
 		installID:          installID,
 		daemonID:           daemonID,
 		clientID:           clientID,
-		managerClient:      mClient,
 		managerConn:        conn,
 		managerName:        managerName,
 		managerVersion:     managerVersion,
@@ -416,7 +413,7 @@ func (s *session) reconnectManager() (returnedErr error) {
 	tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	conn, mc, vi, err := k8s.ConnectToManager(ctx, tc, k8s.GetManagerNamespace(ctx))
+	conn, vi, err := k8s.ConnectToManager(ctx, tc, k8s.GetManagerNamespace(ctx))
 	if err != nil {
 		return err
 	}
@@ -430,7 +427,7 @@ func (s *session) reconnectManager() (returnedErr error) {
 		return fmt.Errorf("unable to parse manager.Version: %w", err)
 	}
 
-	_, err = mc.ReconnectClient(tc, &manager.ReconnectClientRequest{
+	_, err = manager.NewManagerClient(conn).ReconnectClient(tc, &manager.ReconnectClientRequest{
 		Session: s.sessionInfo,
 		Client: &manager.ClientInfo{
 			Name:      s.clientID,
@@ -446,7 +443,6 @@ func (s *session) reconnectManager() (returnedErr error) {
 		return fmt.Errorf("unable to reconnect client: %w", err)
 	}
 
-	s.managerClient = mc
 	s.managerConn = conn
 	s.managerName = vi.Name
 	s.managerVersion = managerVersion
@@ -733,7 +729,7 @@ func (s *session) remainLoop(c context.Context) error {
 		c = dcontext.WithoutCancel(c)
 		c, cancel := context.WithTimeout(c, 3*time.Second)
 		defer cancel()
-		if _, err := s.managerClient.Depart(c, s.SessionInfo()); err != nil {
+		if _, err := s.ManagerClient().Depart(c, s.SessionInfo()); err != nil {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
 		} else {
 			// Depart succeeded, so the traffic-manager has dropped the session. We should too
@@ -854,7 +850,7 @@ func (s *session) status(initial bool) *rpc.ConnectInfo {
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
 func (s *session) Uninstall(ur *rpc.UninstallRequest) (*common.Result, error) {
-	_, err := s.managerClient.UninstallAgents(s.context, &manager.UninstallAgentsRequest{
+	_, err := s.ManagerClient().UninstallAgents(s.context, &manager.UninstallAgentsRequest{
 		SessionInfo: s.sessionInfo,
 		Agents:      ur.Agents,
 	})
@@ -881,7 +877,7 @@ func (s *session) connectRootDaemon(ctx context.Context, nc *rootdRpc.NetworkCon
 	svc := userd.GetService(ctx)
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
-		_, rootSession, err := rootd.NewInProcSession(ctx, nc, s.managerClient, s.managerVersion, isPodDaemon)
+		_, rootSession, err := rootd.NewInProcSession(ctx, nc, s.managerConn, s.managerVersion, isPodDaemon)
 		if err != nil {
 			return nil, err
 		}
@@ -993,7 +989,7 @@ func (s *session) workloadsWatcher(ctx context.Context, namespace string, synced
 	}()
 	return watcher.WatchWithRetry(ctx, "WatchAgentPods", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.WorkloadEventsDelta], error) {
-			return s.managerClient.WatchWorkloads(ctx, &manager.WorkloadEventsRequest{SessionInfo: s.sessionInfo, Namespace: namespace})
+			return s.ManagerClient().WatchWorkloads(ctx, &manager.WorkloadEventsRequest{SessionInfo: s.sessionInfo, Namespace: namespace})
 		},
 		func(wls *manager.WorkloadEventsDelta) error {
 			s.workloadsLock.Lock()

@@ -17,9 +17,8 @@ import (
 type managerGRPCSuite struct {
 	itest.Suite
 	itest.TrafficManager
-	conn   *grpc.ClientConn
-	client manager.ManagerClient
-	si     *manager.SessionInfo
+	conn *grpc.ClientConn
+	si   *manager.SessionInfo
 }
 
 func (m *managerGRPCSuite) SuiteName() string {
@@ -41,10 +40,10 @@ func (m *managerGRPCSuite) SetupSuite() {
 
 	ctx = portforward.WithRestConfig(ctx, k8sCluster.RestConfig)
 	m.Require().NoError(err)
-	m.conn, m.client, _, err = k8s.ConnectToManager(ctx, ctx, m.ManagerNamespace())
+	m.conn, _, err = k8s.ConnectToManager(ctx, ctx, m.ManagerNamespace())
 	m.Require().NoError(err)
 
-	_, err = m.client.Version(ctx, &empty.Empty{})
+	_, err = manager.NewManagerClient(m.conn).Version(m.Context(), &empty.Empty{})
 	m.Require().NoError(err)
 
 	daemonID := daemon.NewIdentifier("", k8sCluster.Context, m.AppNamespace(), false)
@@ -56,12 +55,11 @@ func (m *managerGRPCSuite) TearDownSuite() {
 	if m.conn != nil {
 		go m.conn.Close()
 		m.conn = nil
-		m.client = nil
 	}
 }
 
 func (m *managerGRPCSuite) Test_ClusterInfo() {
-	istream, err := m.client.WatchClusterInfo(m.Context(), m.si)
+	istream, err := manager.NewManagerClient(m.conn).WatchClusterInfo(m.Context(), m.si)
 	m.Require().NoError(err)
 	info, err := istream.Recv()
 	m.Require().NoError(err)

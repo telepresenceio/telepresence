@@ -139,7 +139,7 @@ func (s *session) Ingest(rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) 
 
 	if ai == nil {
 		var as *manager.AgentInfoSnapshot
-		as, err = s.managerClient.EnsureAgent(s.context, &manager.EnsureAgentRequest{Session: s.sessionInfo, Name: ik.workload})
+		as, err = s.ManagerClient().EnsureAgent(s.context, &manager.EnsureAgentRequest{Session: s.sessionInfo, Name: ik.workload})
 		if err != nil {
 			return nil, err
 		}

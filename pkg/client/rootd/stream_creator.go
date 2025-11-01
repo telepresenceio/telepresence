@@ -125,7 +125,7 @@ func (s *Session) streamCreator(ctx context.Context) tunnel.StreamCreator {
 			if tp != nil {
 				dlog.Debugf(c, "Opening traffic-agent tunnel for id %s using agent %s", id, tp)
 			} else {
-				tp = tunnel.ManagerProvider(s.managerClient)
+				tp = tunnel.ManagerProvider(s.managerClient())
 				dlog.Debugf(c, "Opening traffic-manager tunnel for id %s", id)
 			}
 		}
