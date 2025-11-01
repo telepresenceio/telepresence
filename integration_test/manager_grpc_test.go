@@ -9,8 +9,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
@@ -34,20 +32,17 @@ func init() {
 func (m *managerGRPCSuite) SetupSuite() {
 	m.Suite.SetupSuite()
 
-	ctx := m.Context()
-	ctx, k8sCluster, err := m.GetK8SCluster(ctx, "", m.ManagerNamespace())
+	k8sCluster, err := m.GetK8SCluster(m.Context(), "", m.ManagerNamespace())
 	m.Require().NoError(err)
 
-	ctx = portforward.WithRestConfig(ctx, k8sCluster.RestConfig)
-	m.Require().NoError(err)
-	m.conn, _, err = k8s.ConnectToManager(ctx, ctx, m.ManagerNamespace())
+	m.conn, _, _, err = k8sCluster.ConnectToManager(m.Context(), m.ManagerNamespace())
 	m.Require().NoError(err)
 
 	_, err = manager.NewManagerClient(m.conn).Version(m.Context(), &empty.Empty{})
 	m.Require().NoError(err)
 
-	daemonID := daemon.NewIdentifier("", k8sCluster.Context, m.AppNamespace(), false)
-	m.si, err = trafficmgr.LoadSessionInfoFromUserCache(ctx, daemonID)
+	daemonID := daemon.NewIdentifier("", k8sCluster.KubeContext, m.AppNamespace(), false)
+	m.si, err = trafficmgr.LoadSessionInfoFromUserCache(m.Context(), daemonID)
 	m.Require().NoError(err)
 }
 

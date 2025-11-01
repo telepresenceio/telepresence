@@ -88,18 +88,18 @@ func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) (err e
 	}
 
 	var config *k8s.Kubeconfig
-	ctx, config, err = k8s.DaemonKubeconfig(ctx, cr)
+	config, err = k8s.DaemonKubeconfig(ctx, cr)
 	if err != nil {
 		return err
 	}
 
 	var cluster *k8s.Cluster
-	ctx, cluster, err = k8s.ConnectCluster(ctx, cr, config)
+	cluster, err = k8s.ConnectCluster(cr, config)
 	if err != nil {
 		return err
 	}
 
-	mgrNs := k8s.GetManagerNamespace(ctx)
+	mgrNs := k8s.GetManagerNamespace(cluster)
 	switch hr.Type {
 	case Uninstall:
 		err = DeleteTrafficManager(ctx, cluster.Kubeconfig, mgrNs, false, hr)
@@ -107,7 +107,7 @@ func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) (err e
 		err = lint(ctx, cluster.Kubeconfig, mgrNs, hr)
 	default:
 		dlog.Debug(ctx, "ensuring that traffic-manager exists")
-		err = EnsureTrafficManager(cluster.WithJoinedClientSetInterface(ctx), cluster.Kubeconfig, mgrNs, hr)
+		err = EnsureTrafficManager(cluster.Context, cluster.Kubeconfig, mgrNs, hr)
 	}
 	if err != nil {
 		return err

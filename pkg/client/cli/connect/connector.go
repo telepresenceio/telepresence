@@ -427,7 +427,7 @@ func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *da
 
 	// An initialized kubernetes interface is required by LaunchDaemon, because it is necessary
 	// when checking if the containerized daemon is connecting to a k3s control plane node.
-	ctx, kc, err := k8s.NewKubeconfig(ctx, cr.KubeFlags, cr.ManagerNamespace)
+	kc, err := k8s.NewKubeconfig(ctx, false, cr.KubeFlags, cr.ManagerNamespace, cr.KubeconfigData)
 	if err != nil {
 		return ctx, nil, nil, err
 	}
@@ -436,6 +436,7 @@ func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *da
 	if err != nil {
 		return ctx, nil, nil, err
 	}
+	ctx = kc.Context
 	info, conn, err := docker.LaunchDaemon(k8sapi.WithK8sInterface(ctx, ki), daemonID)
 	return ctx, info, conn, err
 }

@@ -349,7 +349,7 @@ func autocompleteService(cmd *cobra.Command, args []string, toComplete string) (
 		return nil, cobra.ShellCompDirectiveError
 	}
 	if len(args) == 0 {
-		ctx, kc, err := daemon.GetCommandKubeConfig(cmd)
+		kc, err := daemon.GetCommandKubeConfig(cmd)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
@@ -357,7 +357,7 @@ func autocompleteService(cmd *cobra.Command, args []string, toComplete string) (
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
-		svcs, err := k8sapi.Services(k8sapi.WithK8sInterface(ctx, ki), kc.Namespace, nil)
+		svcs, err := k8sapi.Services(k8sapi.WithK8sInterface(kc, ki), kc.Namespace, nil)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}

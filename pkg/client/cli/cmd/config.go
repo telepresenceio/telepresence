@@ -65,13 +65,13 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 
-		ctx, _, err := daemon.GetCommandKubeConfig(cmd)
+		kc, err := daemon.GetCommandKubeConfig(cmd)
 		if err != nil {
 			return err
 		}
-		cfg.Config = client.GetConfig(ctx)
-		cfg.ClientFile = client.GetConfigFile(ctx)
-		cfg.LogDirectory = filelocation.AppUserLogDir(ctx)
+		cfg.Config = client.GetConfig(kc)
+		cfg.ClientFile = client.GetConfigFile(kc)
+		cfg.LogDirectory = filelocation.AppUserLogDir(kc)
 		output.Object(cmd.Context(), &cfg, true)
 		return nil
 	}

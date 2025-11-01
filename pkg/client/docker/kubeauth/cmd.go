@@ -21,6 +21,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -62,6 +63,10 @@ func Command(ctx context.Context) *cobra.Command {
 }
 
 func (as *authService) run(cmd *cobra.Command, _ []string) error {
+	err := global.InitConfig(cmd)
+	if err != nil {
+		return err
+	}
 	ctx := cmd.Context()
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
@@ -176,7 +181,7 @@ func (as *authService) watchFiles(ctx context.Context) error {
 		return false
 	}
 	for dir := range dirs {
-		// Can't watch things that don't exist. We want to know if files in there change though.
+		// Can't watch things that don't exist. We want to know if files in there change, though.
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}

@@ -15,7 +15,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -80,11 +79,7 @@ func dialTrafficManager(ctx context.Context, cfg *rest.Config, managerNamespace 
 		return nil, err
 	}
 
-	argoRollouApi, err := argorollouts.NewForConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-	ctx = k8sapi.WithJoinedClientSetInterface(ctx, k8sApi, argoRollouApi)
+	ctx = k8sapi.WithK8sInterface(ctx, k8sApi)
 	ctx = portforward.WithRestConfig(ctx, cfg)
 	pap, err := portforward.ResolveSvcToPod(ctx, "traffic-manager", managerNamespace, "8081")
 	if err != nil {
@@ -192,16 +187,10 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 		ShutdownOnNonError:   true,
 	})
 
-	srv, err := daemon.NewService(cancel, g, client.GetConfig(ctx), grpc.NewServer())
-	if err != nil {
-		return err
-	}
-	g.Go("connector", srv.ManageSessions)
+	srv := daemon.NewService(ctx, cancel, client.GetConfig(ctx), grpc.NewServer())
+	sv := srv.ConnectorServer()
 
-	var sv rpc.ConnectorServer
-	srv.As(&sv)
-
-	if cfg.Intercept().UseFtp {
+	if cfg.Intercept().UseFtp && !srv.LinkedFTP() {
 		g.Go("fuseftp-server", func(ctx context.Context) error {
 			if err := srv.InitFTPServer(ctx); err != nil {
 				dlog.Error(ctx, err)

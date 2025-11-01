@@ -75,7 +75,7 @@ type Cluster interface {
 	PackageHelmChart(ctx context.Context) (string, error)
 	GetValuesForHelm(ctx context.Context, values map[string]any, release bool) []string
 	GetSetArgsForHelm(ctx context.Context, values map[string]any, release bool) []string
-	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
+	GetK8SCluster(ctx context.Context, context, managerNamespace string) (*k8s.Cluster, error)
 	TelepresenceHelmInstallOK(ctx context.Context, upgrade bool, args ...string) string
 	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) (string, error)
 	UserdPProf() uint16
@@ -720,7 +720,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}
 }
 
-func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error) {
+func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace string) (*k8s.Cluster, error) {
 	_ = os.Setenv("KUBECONFIG", KubeConfig(ctx))
 	flags := map[string]string{
 		"namespace": managerNamespace,
@@ -728,16 +728,12 @@ func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace s
 	if context != "" {
 		flags["context"] = context
 	}
-	ctx, cfgAndFlags, err := k8s.NewKubeconfig(ctx, flags, managerNamespace)
+	cfgAndFlags, err := k8s.NewKubeconfig(ctx, false, flags, managerNamespace, nil)
 	if err != nil {
-		return ctx, nil, err
+		return nil, err
 	}
 
-	ctx, kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
-	if err != nil {
-		return ctx, nil, err
-	}
-	return kc.WithJoinedClientSetInterface(ctx), kc, nil
+	return k8s.NewCluster(cfgAndFlags, nil)
 }
 
 func KubeConfig(ctx context.Context) string {

@@ -8,15 +8,11 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/datawire/dlib/dgroup"
@@ -26,18 +22,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
-	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 func help() string {
@@ -54,6 +46,7 @@ to troubleshoot problems.
 
 // service represents the long-running state of the Telepresence User Daemon.
 type service struct {
+	context.Context
 	rpc.UnsafeConnectorServer
 	srv           *grpc.Server
 	timedLogLevel log.TimedLevel
@@ -62,14 +55,13 @@ type service struct {
 	// The quit function that quits the server.
 	quit func()
 
-	clientConfig    clientcmd.ClientConfig
-	session         userd.Session
-	sessionQuitting int32 // atomic boolean. True if non-zero.
-	sessionLock     sync.RWMutex
+	clientConfigLock sync.Mutex
+	clientConfig     clientcmd.ClientConfig
 
-	// These are used to communicate between the various goroutines.
-	connectRequest  chan userd.ConnectRequest // server-grpc.connect() -> connectWorker
-	connectResponse chan *rpc.ConnectInfo     // connectWorker -> server-grpc.connect()
+	sessionLock    sync.RWMutex
+	session        userd.Session
+	sessionCancel  context.CancelFunc
+	sessionRunning chan struct{}
 
 	fuseFtpMgr remotefs.FuseFTPManager
 
@@ -84,20 +76,34 @@ type service struct {
 }
 
 func (s *service) ClientConfig() (clientcmd.ClientConfig, error) {
-	if s.clientConfig == nil {
+	s.clientConfigLock.Lock()
+	cc := s.clientConfig
+	s.clientConfigLock.Unlock()
+	if cc == nil {
 		return nil, errors.New("user daemon has no client config")
 	}
-	return s.clientConfig, nil
+	return cc, nil
 }
 
-func NewService(cancel context.CancelFunc, _ *dgroup.Group, cfg client.Config, srv *grpc.Server) (userd.Service, error) {
+func NewService(ctx context.Context, cancel context.CancelFunc, cfg client.Config, srv *grpc.Server) userd.Service {
+	return newService(ctx, cancel, cfg, srv)
+}
+
+func newService(ctx context.Context, cancel context.CancelFunc, cfg client.Config, srv *grpc.Server) *service {
 	s := &service{
-		srv:             srv,
-		connectRequest:  make(chan userd.ConnectRequest),
-		connectResponse: make(chan *rpc.ConnectInfo),
-		timedLogLevel:   log.NewTimedLevel(cfg.LogLevels().UserDaemon.String(), log.SetLevel),
-		fuseFtpMgr:      remotefs.NewFuseFTPManager(),
-		quit:            cancel,
+		Context:        ctx,
+		srv:            srv,
+		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().UserDaemon.String(), log.SetLevel),
+		fuseFtpMgr:     remotefs.NewFuseFTPManager(),
+		sessionRunning: make(chan struct{}),
+	}
+	close(s.sessionRunning)
+	s.quit = func() {
+		cancel()
+		s.sessionLock.RLock()
+		sessionRunning := s.sessionRunning
+		s.sessionLock.RUnlock()
+		<-sessionRunning
 	}
 	if srv != nil {
 		// The podd daemon never registers the gRPC servers
@@ -106,18 +112,11 @@ func NewService(cancel context.CancelFunc, _ *dgroup.Group, cfg client.Config, s
 	} else {
 		s.rootSessionInProc = true
 	}
-	return s, nil
+	return s
 }
 
-func (s *service) As(ptr any) {
-	switch ptr := ptr.(type) {
-	case **service:
-		*ptr = s
-	case *rpc.ConnectorServer:
-		*ptr = s
-	default:
-		panic(fmt.Sprintf("%T does not implement %T", s, ptr))
-	}
+func (s *service) ConnectorServer() rpc.ConnectorServer {
+	return s
 }
 
 func (s *service) ListenerAddress(ctx context.Context) string {
@@ -141,24 +140,6 @@ func (s *service) TeleroutePort() uint16 {
 
 func (s *service) Server() *grpc.Server {
 	return s.srv
-}
-
-func (s *service) PostConnectRequest(ctx context.Context, cr userd.ConnectRequest) error {
-	select {
-	case <-ctx.Done():
-		return status.Error(codes.Unavailable, ctx.Err().Error())
-	case s.connectRequest <- cr:
-		return nil
-	}
-}
-
-func (s *service) ReadConnectResponse(ctx context.Context) (result *rpc.ConnectInfo, err error) {
-	select {
-	case <-ctx.Done():
-		err = status.Error(codes.Unavailable, ctx.Err().Error())
-	case result = <-s.connectResponse:
-	}
-	return result, err
 }
 
 const (
@@ -201,99 +182,9 @@ func (s *service) configReload(c context.Context) error {
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
 			client.ReloadDaemonLogLevel(ctx)
-			return nil
 		}
-		return s.session.ApplyConfig()
+		return nil
 	})
-}
-
-// ManageSessions is the counterpart to the Connect method. It reads the connectCh, creates
-// a session and writes a reply to the connectErrCh. The session is then started if it was
-// successfully created.
-func (s *service) ManageSessions(c context.Context) error {
-	wg := sync.WaitGroup{}
-	defer wg.Wait()
-
-	for {
-		// Wait for a connection request
-		select {
-		case <-c.Done():
-			return nil
-		case cr := <-s.connectRequest:
-			rsp := s.startSession(c, cr, &wg)
-			select {
-			case s.connectResponse <- rsp:
-			default:
-				// Nobody left to read the response? That's fine really. Just means that
-				// whoever wanted to start the session terminated early.
-				s.cancelSession(c)
-			}
-		}
-	}
-}
-
-func (s *service) startSession(parentCtx context.Context, cr userd.ConnectRequest, wg *sync.WaitGroup) *rpc.ConnectInfo {
-	s.sessionLock.Lock() // Locked during creation
-	defer s.sessionLock.Unlock()
-
-	if s.session != nil {
-		// UpdateStatus sets rpc.ConnectInfo_ALREADY_CONNECTED if successful
-		return s.session.UpdateStatus(cr)
-	}
-
-	// Obtain the kubeconfig from the request parameters so that we can determine
-	// what kubernetes context that will be used.
-	ctx, config, err := k8s.DaemonKubeconfig(parentCtx, cr.Request())
-	if err != nil {
-		if s.rootSessionInProc {
-			s.quit()
-		}
-		dlog.Errorf(ctx, "Failed to obtain kubeconfig: %v", err)
-		return &rpc.ConnectInfo{
-			Error:         rpc.ConnectInfo_CLUSTER_FAILED,
-			ErrorText:     err.Error(),
-			ErrorCategory: int32(errcat.GetCategory(err)),
-		}
-	}
-	s.clientConfig = config.ClientConfig
-
-	ctx, cancel := context.WithCancel(ctx)
-
-	daemonID := daemon.NewIdentifier(cr.Request().Name, config.Context, config.Namespace, proc.RunningInContainer())
-	go runAliveAndCancellation(ctx, cancel, daemonID, wg)
-
-	session, rsp := trafficmgr.NewSession(s, ctx, cr, config, wg)
-	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
-		cancel()
-		if s.rootSessionInProc {
-			// Simplified session management. The daemon handles one session, then exits.
-			s.quit()
-		}
-		return rsp
-	}
-	s.session = session
-
-	// Run the session asynchronously. We must be able to respond to connect (with UpdateStatus) while
-	// the session is running. The s.sessionCancel is called from Disconnect
-	wg.Add(1)
-	go func() {
-		defer func() {
-			s.sessionLock.Lock()
-			s.clientConfig = nil
-			s.session = nil
-			s.sessionLock.Unlock()
-			client.ReloadDaemonLogLevel(parentCtx)
-			wg.Done()
-		}()
-		if err := session.Run(); err != nil {
-			dlog.Error(ctx, err)
-		}
-		if s.rootSessionInProc {
-			// Simplified session management. The daemon handles one session, then exits.
-			s.quit()
-		}
-	}()
-	return rsp
 }
 
 func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, daemonID *daemon.Identifier, wg *sync.WaitGroup) {
@@ -318,26 +209,6 @@ func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, dae
 	})
 	if err := g.Wait(); err != nil {
 		dlog.Error(ctx, err)
-	}
-}
-
-func (s *service) cancelSession(ctx context.Context) {
-	if atomic.CompareAndSwapInt32(&s.sessionQuitting, 0, 1) {
-		if s.session != nil {
-			// We use a TryRLock here because the session-lock will be held during
-			// session initialization, and we might well receive a quit-call during
-			// that time (the initialization may take a long time if there are
-			// problems connecting to the cluster).
-			if s.sessionLock.TryRLock() {
-				if err := s.session.ClearIngestsAndIntercepts(); err != nil {
-					dlog.Errorf(ctx, "failed to clear intercepts: %v", err)
-				}
-				s.sessionLock.RUnlock()
-			}
-			s.session.Cancel()
-		}
-		s.session = nil
-		atomic.StoreInt32(&s.sessionQuitting, 0)
 	}
 }
 
@@ -368,11 +239,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	name, _ := flags.GetString(nameFlag)
-	sessionName := "session"
-	if di := strings.IndexByte(name, '-'); di > 0 {
-		sessionName = name[di+1:]
-		name = name[:di]
-	}
 	c = dgroup.WithGoroutineName(c, "/"+name)
 	logFile := flags.Lookup(logfileFlag).Value.String()
 	c, err = logging.InitContext(c, logFile, cfg.LogLevels().UserDaemon, logging.RotateDaily, true)
@@ -414,7 +280,7 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	// Start services from within a group routine so that it gets proper cancellation
 	// when the group is cancelled.
-	siCh := make(chan userd.Service)
+	siCh := make(chan *service)
 	g.Go("serve-grpc", func(c context.Context) error {
 		// svcCancel is what a `quit -s` call will cancel. The Group provides soft cancellation to it.
 		// which will result in a graceful termination of the grpc server.
@@ -425,24 +291,17 @@ func run(cmd *cobra.Command, _ []string) error {
 			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 		}
 		svc := server.New(c, opts...)
-		si, err := NewService(svcCancel, g, cfg, svc)
-		if err != nil {
-			close(siCh)
-			return err
-		}
-		siCh <- si
+		siCh <- newService(c, svcCancel, cfg, svc)
 		close(siCh)
 		return server.Serve(c, svc, grpcListener)
 	})
 
-	si, ok := <-siCh
+	s, ok := <-siCh
 	if !ok {
 		// Return error from the "service" go routine
 		return g.Wait()
 	}
 
-	var s *service
-	si.As(&s)
 	s.rootSessionInProc = rootSessionInProc
 	s.daemonAddress = daemonAddress
 	if tp, err := flags.GetUint16(teleroutePortFlag); err == nil && tp > 0 {
@@ -465,10 +324,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	g.Go("config-reload", s.configReload)
-	g.Go(sessionName, func(c context.Context) error {
-		return s.ManageSessions(c)
-	})
-
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)

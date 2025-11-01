@@ -36,9 +36,9 @@ type recursiveBlock struct {
 	timer *time.Timer
 }
 
-func (s *session) streamCreator(ctx context.Context) tunnel.StreamCreator {
+func (s *session) streamCreator() tunnel.StreamCreator {
 	var recursionBlockMap *xsync.Map[netip.AddrPort, recursiveBlock]
-	routing := client.GetConfig(ctx).Routing()
+	routing := client.GetConfig(s).Routing()
 	recursionBlockDuration := routing.RecursionBlockDuration
 	recursionBlockThreads := routing.RecursionBlockTreads
 	if recursionBlockDuration != 0 {

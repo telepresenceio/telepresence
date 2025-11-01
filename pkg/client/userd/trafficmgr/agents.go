@@ -51,7 +51,7 @@ func (s *session) handleAgentSnapshot(ctx context.Context, infos []*manager.Agen
 			if slices.IndexFunc(ais, func(cai *manager.AgentInfo) bool { return cai.PodName == ig.PodName }) < 0 {
 				// The pod selected for the ingest is no longer active, so replace it.
 				ai := ais[0]
-				err := s.translateContainerEnv(ai, ig.container)
+				err := s.translateContainerEnv(ctx, ai, ig.container)
 				if err != nil {
 					dlog.Errorf(ctx, "failed to translate container env: %v", err)
 				}

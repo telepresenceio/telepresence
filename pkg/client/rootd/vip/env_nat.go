@@ -16,13 +16,13 @@ var (
 type LocalIPProvider interface {
 	MapsIPv4() bool
 	MapsIPv6() bool
-	GetLocalIP(ctx context.Context, remoteIP netip.Addr) (netip.Addr, error)
+	GetLocalIP(remoteIP netip.Addr) (netip.Addr, error)
 }
 
-func replaceIP(ctx context.Context, provider LocalIPProvider, rx *regexp.Regexp, s string) string {
+func replaceIP(provider LocalIPProvider, rx *regexp.Regexp, s string) string {
 	return rx.ReplaceAllStringFunc(s, func(s string) string {
 		if ip, err := netip.ParseAddr(s); err == nil {
-			if rip, err := provider.GetLocalIP(ctx, ip); err == nil {
+			if rip, err := provider.GetLocalIP(ip); err == nil {
 				return rip.String()
 			}
 		}
@@ -33,7 +33,7 @@ func replaceIP(ctx context.Context, provider LocalIPProvider, rx *regexp.Regexp,
 func TranslateEnvironmentIPs(ctx context.Context, env map[string]string, provider LocalIPProvider) {
 	if provider.MapsIPv4() {
 		for k, ev := range env {
-			rv := replaceIP(ctx, provider, ipV4Rx, ev)
+			rv := replaceIP(provider, ipV4Rx, ev)
 			if ev != rv {
 				dlog.Debugf(ctx, "%s: %s -> %s", k, ev, rv)
 				env[k] = rv
@@ -42,7 +42,7 @@ func TranslateEnvironmentIPs(ctx context.Context, env map[string]string, provide
 	}
 	if provider.MapsIPv6() {
 		for k, ev := range env {
-			rv := replaceIP(ctx, provider, ipV6Rx, ev)
+			rv := replaceIP(provider, ipV6Rx, ev)
 			if ev != rv {
 				dlog.Debugf(ctx, "%s: %s -> %s", k, ev, rv)
 				env[k] = rv

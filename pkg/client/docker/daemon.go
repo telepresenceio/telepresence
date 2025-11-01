@@ -78,7 +78,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
 		"-p", fmt.Sprintf("%s:%d/tcp", hostAddr, client.GetConfig(ctx).Grpc().DaemonPort),
-		"-v", fmt.Sprintf("%s:%s:ro", filelocation.AppUserConfigDir(ctx), DockerTpConfig),
+		"-v", fmt.Sprintf("%s:%s:ro", filepath.Dir(client.GetConfigFile(ctx)), DockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), TpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), DockerTpLog),
 	}
@@ -111,6 +111,7 @@ func DaemonArgs(ctx context.Context, daemonID *daemon.Identifier) []string {
 	grpcCfg := client.GetConfig(ctx).Grpc()
 	return []string{
 		client.UserDaemonName,
+		"--config", filepath.Join(DockerTpConfig, filepath.Base(client.GetConfigFile(ctx))),
 		"--name", "docker-" + daemonID.String(),
 		"--address", fmt.Sprintf(":%d", grpcCfg.DaemonPort),
 		"--embed-network",

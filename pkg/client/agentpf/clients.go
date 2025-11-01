@@ -31,6 +31,7 @@ type client struct {
 	//   cancelClient
 	//   cancelDialWatch
 	// cli and cancelClient are both safe to use without a mutex once the ready channel is closed.
+	*k8s.Cluster
 	sync.RWMutex
 	cli             agent.AgentClient
 	session         *manager.SessionInfo
@@ -93,7 +94,7 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		defer dialCancel()
 
 		ai := ac.info
-		conn, cli, _, err := k8s.ConnectToAgent(ctx, dialCtx, ai.PodName, ai.Namespace, uint16(ai.ApiPort), types.UID(ai.PodId))
+		conn, cli, _, err := ac.ConnectToAgent(dialCtx, ai.PodName, uint16(ai.ApiPort), types.UID(ai.PodId))
 		if err != nil {
 			ac.connectErr = err
 
@@ -121,7 +122,7 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 	}
 
 	if ac.info.Intercepted {
-		err := ac.startDialWatcherLocked(ctx)
+		err := ac.startDialWatcherLocked()
 		if err != nil {
 			return nil, err
 		}
@@ -175,7 +176,7 @@ func (ac *client) cancel() bool {
 	return didCancel
 }
 
-func (ac *client) refresh(ctx context.Context, ai *manager.AgentPodInfo) {
+func (ac *client) refresh(ai *manager.AgentPodInfo) {
 	var cdw context.CancelFunc
 	defer func() {
 		if cdw != nil {
@@ -192,23 +193,23 @@ func (ac *client) refresh(ctx context.Context, ai *manager.AgentPodInfo) {
 		return
 	}
 	if ai.Intercepted {
-		dlog.Debugf(ctx, "Agent %s(%s) changed to intercepted", ai.PodName, net.IP(ai.PodIp))
-		if _, err := ac.ensureConnectLocked(ctx); err != nil {
-			dlog.Errorf(ctx, "failed to start client watcher for %s(%s): %v", ai.PodName, net.IP(ai.PodIp), err)
+		dlog.Debugf(ac, "Agent %s(%s) changed to intercepted", ai.PodName, net.IP(ai.PodIp))
+		if _, err := ac.ensureConnectLocked(ac); err != nil {
+			dlog.Errorf(ac, "failed to start client watcher for %s(%s): %v", ai.PodName, net.IP(ai.PodIp), err)
 		}
 	} else {
 		// This agent is no longer intercepting. Stop the dial watcher
-		dlog.Debugf(ctx, "Agent %s(%s) changed to not intercepted", ai.PodName, net.IP(ai.PodIp))
+		dlog.Debugf(ac, "Agent %s(%s) changed to not intercepted", ai.PodName, net.IP(ai.PodIp))
 		cdw = ac.cancelDialWatch
 	}
 }
 
-func (ac *client) startDialWatcherLocked(ctx context.Context) (err error) {
+func (ac *client) startDialWatcherLocked() (err error) {
 	if ac.cancelDialWatch != nil {
 		// Already started
 		return nil
 	}
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(ac)
 
 	// Create the dial watcher
 	dlog.Debugf(ctx, "watching dials from agent pod %s", ac)
@@ -245,16 +246,17 @@ func (ac *client) startDialWatcherLocked(ctx context.Context) (err error) {
 }
 
 type Clients interface {
-	GetRandomAgent(ctx context.Context) agent.AgentClient
+	GetRandomAgent(context.Context) agent.AgentClient
 	GetClient(netip.Addr) tunnel.Provider
-	WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error
+	WatchAgentPods(rmc manager.ManagerClient) error
 	WaitForIP(ctx context.Context, timeout time.Duration, ip netip.Addr) error
-	WaitForWorkload(ctx context.Context, timeout time.Duration, name string) error
+	WaitForWorkload(timeout time.Duration, name string) error
 	GetWorkloadClient(workload string) (ag tunnel.Provider)
 	SetProxyVia(workload string)
 }
 
 type clients struct {
+	*k8s.Cluster
 	session   *manager.SessionInfo
 	clients   *xsync.Map[string, *client]
 	ipWaiters *xsync.Map[netip.Addr, chan struct{}]
@@ -263,8 +265,9 @@ type clients struct {
 	disabled  atomic.Bool
 }
 
-func NewClients(session *manager.SessionInfo) Clients {
+func NewClients(cl *k8s.Cluster, session *manager.SessionInfo) Clients {
 	return &clients{
+		Cluster:   cl,
 		session:   session,
 		clients:   xsync.NewMap[string, *client](),
 		ipWaiters: xsync.NewMap[netip.Addr, chan struct{}](),
@@ -341,7 +344,7 @@ func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
 		aa, err = other.ensureConnect(ctx)
 	}
 	if err != nil {
-		dlog.Warn(ctx, err)
+		dlog.Warn(s, err)
 	}
 	return aa
 }
@@ -382,8 +385,8 @@ func (s *clients) hasWaiterFor(info *manager.AgentPodInfo) bool {
 	return false
 }
 
-func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error {
-	dlog.Debug(ctx, "WatchAgentPods starting")
+func (s *clients) WatchAgentPods(rmc manager.ManagerClient) error {
+	dlog.Debug(s, "WatchAgentPods starting")
 	defer func() {
 		activeCount := 0
 		s.clients.Range(func(_ string, ac *client) bool {
@@ -392,15 +395,15 @@ func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient)
 			}
 			return true
 		})
-		dlog.Debugf(ctx, "WatchAgentPods ending with %d clients still active", activeCount)
+		dlog.Debugf(s, "WatchAgentPods ending with %d clients still active", activeCount)
 		s.disabled.Store(true)
 	}()
-	return watcher.WatchWithRetry(ctx, "WatchAgentPods", tpClient.GetConfig(ctx).Grpc().WatchRetryInterval,
+	return watcher.WatchWithRetry(s, "WatchAgentPods", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoSnapshot], error) {
 			return rmc.WatchAgentPods(ctx, s.session)
 		},
 		func(snapshot *manager.AgentPodInfoSnapshot) error {
-			return s.updateClients(ctx, snapshot.Agents)
+			return s.updateClients(snapshot.Agents)
 		}, nil)
 }
 
@@ -422,9 +425,9 @@ func (s *clients) notifyWaiters() {
 	})
 }
 
-func (s *clients) waitWithTimeout(ctx context.Context, timeout time.Duration, waitOn <-chan struct{}) error {
+func (s *clients) waitWithTimeout(timeout time.Duration, waitOn <-chan struct{}) error {
 	s.notifyWaiters()
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(s, timeout)
 	defer cancel()
 	select {
 	case <-waitOn:
@@ -456,7 +459,7 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip netip
 		_, err := cl.ensureConnect(ctx)
 		return err
 	}
-	if err := s.waitWithTimeout(ctx, timeout, waitOn); err != nil {
+	if err := s.waitWithTimeout(timeout, waitOn); err != nil {
 		return err
 	}
 
@@ -475,7 +478,7 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip netip
 	return err
 }
 
-func (s *clients) WaitForWorkload(ctx context.Context, timeout time.Duration, name string) error {
+func (s *clients) WaitForWorkload(timeout time.Duration, name string) error {
 	if s.disabled.Load() {
 		return nil
 	}
@@ -496,21 +499,21 @@ func (s *clients) WaitForWorkload(ctx context.Context, timeout time.Duration, na
 		return make(chan struct{}), false
 	})
 	if ok {
-		return s.waitWithTimeout(ctx, timeout, waitOn)
+		return s.waitWithTimeout(timeout, waitOn)
 	}
 	// No chan created because the agent already exists
 	return nil
 }
 
-func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo) error {
+func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 	defer s.notifyWaiters()
 
-	if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
+	if dlog.MaxLogLevel(s) >= dlog.LogLevelDebug {
 		ns := make([]string, len(ais))
 		for i, ac := range ais {
 			ns[i] = fmt.Sprintf("%s(%s)", ac.PodName, net.IP(ac.PodIp))
 		}
-		dlog.Debugf(ctx, "updateClients %s", ns)
+		dlog.Debugf(s, "updateClients %s", ns)
 	}
 	var aim map[string]*manager.AgentPodInfo
 	if len(ais) > 0 {
@@ -522,7 +525,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 		}
 		if len(aim) == 0 {
 			// The current traffic-manager injects old style clients that doesn't report a pod name.
-			dlog.Debugf(ctx, "disabling, because traffic-agent doesn't report pod name")
+			dlog.Debugf(s, "disabling, because traffic-agent doesn't report pod name")
 			s.disabled.Store(true)
 			return nil
 		}
@@ -531,7 +534,7 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 	deleteClient := func(k string) {
 		s.clients.Compute(k, func(oldValue *client, loaded bool) (*client, xsync.ComputeOp) {
 			if loaded {
-				dlog.Debugf(ctx, "Deleting agent %s", k)
+				dlog.Debugf(s, "Deleting agent %s", k)
 				oldValue.cancel()
 				return nil, xsync.DeleteOp
 			}
@@ -550,20 +553,21 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 	// Refresh current clients
 	for k, ai := range aim {
 		if ac, ok := s.clients.Load(k); ok {
-			ac.refresh(ctx, ai)
+			ac.refresh(ai)
 		}
 	}
 
 	addClient := func(k string, ai *manager.AgentPodInfo) {
 		_, _ = s.clients.LoadOrCompute(k, func() (*client, bool) {
 			ac := &client{
+				Cluster: s.Cluster,
 				session: s.session,
 				remove: func() {
 					s.clients.Delete(k)
 				},
 				info: ai,
 			}
-			dlog.Debugf(ctx, "Adding agent pod %s (%s)", k, net.IP(ai.PodIp))
+			dlog.Debugf(s, "Adding agent pod %s (%s)", k, net.IP(ai.PodIp))
 			return ac, false
 		})
 	}
@@ -579,14 +583,14 @@ func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo
 		if ac.dormant() && !s.isProxyVIA(ac.info) && !s.hasWaiterFor(ac.info) {
 			dormantCount++
 			if dormantCount > 1 {
-				dlog.Debugf(ctx, "Deleting dormant agent %s", k)
+				dlog.Debugf(s, "Deleting dormant agent %s", k)
 				ac.cancel()
 			}
 		}
 		return true
 	})
 	if dormantCount > 1 {
-		dlog.Debugf(ctx, "Cancelled %d dormant clients", dormantCount-1)
+		dlog.Debugf(s, "Cancelled %d dormant clients", dormantCount-1)
 	}
 	return nil
 }

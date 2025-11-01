@@ -91,10 +91,10 @@ func (s *session) foreachAgentPod(fn func(typed.PodInterface, *core.Pod), filter
 		return false
 	}
 
-	coreAPI := k8sapi.GetK8sInterface(s.context).CoreV1()
+	coreAPI := k8sapi.GetK8sInterface(s).CoreV1()
 	for _, ns := range s.GetCurrentNamespaces(true) {
 		podsAPI := coreAPI.Pods(ns)
-		podList, err := podsAPI.List(s.context, meta.ListOptions{})
+		podList, err := podsAPI.List(s, meta.ListOptions{})
 		if err != nil {
 			return err
 		}
@@ -122,8 +122,7 @@ func (s *session) foreachAgentPod(fn func(typed.PodInterface, *core.Pod), filter
 
 // GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
 // connector.LogsRequest and returns them to the caller.
-func (s *session) GatherLogs(request *connector.LogsRequest) (*connector.LogsResponse, error) {
-	ctx := s.context
+func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
 	exportDir := filepath.Join(filelocation.AppUserCacheDir(ctx), request.ExportDir)
 	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
 	resp := &connector.LogsResponse{}

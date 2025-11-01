@@ -24,7 +24,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
 
 type UserClient interface {
@@ -208,15 +207,11 @@ func GetRootClientConfig(ds *daemon.DaemonStatus) (client.Config, error) {
 	if data == nil {
 		return nil, errors.New("no outbound config")
 	}
-	cfg := client.GetDefaultConfig()
-	if err := json.Unmarshal(data, cfg, true); err != nil {
-		return nil, err
-	}
-	return cfg, nil
+	return client.UnmarshalJSONConfig(data, false)
 }
 
 // GetCommandKubeConfig will return the fully resolved client.Kubeconfig for the given command.
-func GetCommandKubeConfig(cmd *cobra.Command) (context.Context, *k8s.Kubeconfig, error) {
+func GetCommandKubeConfig(cmd *cobra.Command) (*k8s.Kubeconfig, error) {
 	ctx := cmd.Context()
 	uc := GetUserClient(ctx)
 	var kc *k8s.Kubeconfig
@@ -226,16 +221,16 @@ func GetCommandKubeConfig(cmd *cobra.Command) (context.Context, *k8s.Kubeconfig,
 		var ci *connector.ConnectInfo
 		ci, err = uc.Status(ctx, &emptypb.Empty{})
 		if err == nil {
-			ctx, kc, err = k8s.NewKubeconfig(ctx, map[string]string{"context": ci.ClusterContext}, "")
+			kc, err = k8s.NewKubeconfig(ctx, false, map[string]string{"context": ci.ClusterContext}, "", nil)
 		}
 	} else {
 		if GetRequest(ctx) == nil {
 			if ctx, err = WithDefaultRequest(cmd); err != nil {
-				return ctx, nil, err
+				return nil, err
 			}
 		}
 		rq := GetRequest(ctx)
-		ctx, kc, err = k8s.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
+		kc, err = k8s.NewKubeconfig(ctx, false, rq.KubeFlags, rq.ManagerNamespace, rq.KubeconfigData)
 	}
-	return ctx, kc, err
+	return kc, err
 }

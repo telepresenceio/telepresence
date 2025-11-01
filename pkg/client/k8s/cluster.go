@@ -2,31 +2,33 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"net/netip"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/blang/semver/v4"
+	"github.com/cenkalti/backoff/v4"
 	auth "k8s.io/api/authorization/v1"
 	core "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/kubernetes"
 
-	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 const (
@@ -34,18 +36,14 @@ const (
 	defaultManagerNamespace = "ambassador"
 )
 
+type NamespaceListener func()
+
 // Cluster is a Kubernetes cluster reference.
 type Cluster struct {
 	*Kubeconfig
 	MappedNamespaces []string
 
-	// Main
-	ki kubernetes.Interface
-
-	// Argo Rollouts
-	ari argorollouts.Interface
-
-	// nsLock protects namespaceWatcherSnapshot, currentMappedNamespaces and namespaceListeners
+	// nsLock protects namespaceWatcherSnapshot, currentMappedNamespaces and namespaceEventHandlers
 	nsLock sync.Mutex
 
 	// snapshot maintained by the namespaces watcher.
@@ -55,7 +53,7 @@ type Cluster struct {
 	currentMappedNamespaces map[string]bool
 
 	// Namespace listener. Notified when the currentNamespaces changes
-	namespaceListeners []userd.NamespaceListener
+	namespaceEventHandlers []NamespaceListener
 }
 
 func (kc *Cluster) ActualNamespace(namespace string) string {
@@ -72,53 +70,51 @@ func (kc *Cluster) ActualNamespace(namespace string) string {
 func (kc *Cluster) check(c context.Context) error {
 	// The discover client is using context.TODO() so the timeout specified in our
 	// context has no effect.
-	errCh := make(chan error)
-	go func() {
-		defer close(errCh)
-		var info *version.Info
-		var err error
-		for attempts := 0; attempts < 4; attempts++ {
-			if info, err = k8sapi.GetK8sInterface(c).Discovery().ServerVersion(); err != nil {
-				if strings.Contains(err.Error(), "connection refused") {
-					dlog.Warnf(c, "Attempt to connect failed, retry %d", attempts+1)
-					dtime.SleepWithContext(c, 400*time.Millisecond)
-					continue
-				}
+	var info *version.Info
+	dsc := k8sapi.GetK8sInterface(kc).Discovery()
+	err := backoff.Retry(func() (err error) {
+		if info, err = dsc.ServerVersion(); err != nil {
+			if !strings.Contains(err.Error(), "connection refused") {
+				err = backoff.Permanent(err)
 			}
-			break
 		}
-		if err != nil {
-			errCh <- err
-			return
-		}
-		// Validate that the kubernetes server version is supported
-		dlog.Infof(c, "Server version %s", info.GitVersion)
-		gitVer, err := semver.Parse(strings.TrimPrefix(info.GitVersion, "v"))
-		if err != nil {
-			dlog.Errorf(c, "error converting version %s to semver: %s", info.GitVersion, err)
-		}
-		supGitVer, err := semver.Parse(supportedKubeAPIVersion)
-		if err != nil {
-			dlog.Errorf(c, "error converting known version %s to semver: %s", supportedKubeAPIVersion, err)
-		}
-		if gitVer.LT(supGitVer) {
-			dlog.Errorf(c,
-				"kubernetes server versions older than %s are not supported, using %s .",
-				supportedKubeAPIVersion, info.GitVersion)
-		}
-	}()
-
-	select {
-	case <-c.Done():
-	case err := <-errCh:
-		if err == nil {
-			return nil
-		}
-		if c.Err() == nil {
-			return fmt.Errorf("initial cluster check failed: %w", client.RunError(err))
-		}
+		return err
+	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(400*time.Millisecond), 4), c))
+	if err != nil {
+		return fmt.Errorf("initial cluster check failed: %w", client.RunError(err))
 	}
-	return c.Err()
+	// Validate that the kubernetes server version is supported
+	dlog.Infof(c, "Server version %s", info.GitVersion)
+	gitVer, err := semver.Parse(strings.TrimPrefix(info.GitVersion, "v"))
+	if err != nil {
+		return fmt.Errorf("error converting version %s to semver: %s", info.GitVersion, err)
+	}
+	supGitVer, err := semver.Parse(supportedKubeAPIVersion)
+	if err != nil {
+		return fmt.Errorf("error converting known version %s to semver: %s", supportedKubeAPIVersion, err)
+	}
+	if gitVer.LT(supGitVer) {
+		return fmt.Errorf("kubernetes server versions older than %s are not supported, using %s", supportedKubeAPIVersion, info.GitVersion)
+	}
+	return nil
+}
+
+func (kc *Cluster) CheckTrafficManagerService(ctx context.Context, namespace string) error {
+	dlog.Debug(ctx, "checking that traffic-manager exists")
+	coreV1 := k8sapi.GetK8sInterface(kc).CoreV1()
+	if _, err := coreV1.Services(namespace).Get(ctx, agentconfig.ManagerAppName, meta.GetOptions{}); err != nil {
+		msg := fmt.Sprintf("unable to get service %s in %s: %v", agentconfig.ManagerAppName, namespace, err)
+		se := &k8serrors.StatusError{}
+		if errors.As(err, &se) {
+			if se.Status().Code == http.StatusNotFound {
+				dlog.Error(ctx, msg)
+				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
+					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in."
+			}
+		}
+		return errcat.User.New(msg)
+	}
+	return nil
 }
 
 // namespaceAccessible answers the question if the namespace is present and accessible
@@ -130,33 +126,18 @@ func (kc *Cluster) namespaceAccessible(namespace string) (exists bool) {
 	return ok
 }
 
-func NewCluster(c context.Context, kubeFlags *Kubeconfig, namespaces []string) (context.Context, *Cluster, error) {
-	rs := kubeFlags.RestConfig
-	cs, err := kubernetes.NewForConfig(rs)
-	if err != nil {
-		return c, nil, err
-	}
-	acs, err := argorollouts.NewForConfig(rs)
-	if err != nil {
-		return c, nil, err
-	}
-	c = k8sapi.WithJoinedClientSetInterface(c, cs, acs)
+func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
+	ret := &Cluster{Kubeconfig: kubeFlags}
 
-	ret := &Cluster{
-		Kubeconfig: kubeFlags,
-		ki:         cs,
-		ari:        acs,
-	}
-
-	cfg := client.GetConfig(c)
-	timedC, cancel := cfg.Timeouts().TimeoutContext(c, client.TimeoutClusterConnect)
+	cfg := client.GetConfig(ret)
+	timedC, cancel := cfg.Timeouts().TimeoutContext(kubeFlags, client.TimeoutClusterConnect)
 	defer cancel()
-	if err = ret.check(timedC); err != nil {
-		return c, nil, err
+	if err := ret.check(timedC); err != nil {
+		return nil, err
 	}
 
-	dlog.Infof(c, "Context: %s", ret.Context)
-	dlog.Infof(c, "Server: %s", ret.Server)
+	dlog.Infof(ret, "Context: %s", ret.KubeContext)
+	dlog.Infof(ret, "Server: %s", ret.Server)
 
 	if len(namespaces) == 1 && namespaces[0] == "all" {
 		namespaces = nil
@@ -165,25 +146,25 @@ func NewCluster(c context.Context, kubeFlags *Kubeconfig, namespaces []string) (
 		namespaces = cfg.Cluster().MappedNamespaces
 	}
 	if len(namespaces) == 0 {
-		if k8sapi.CanWatchNamespaces(c) {
-			dlog.Infof(c, "Will watch all namespaces")
-			ret.StartNamespaceWatcher(c)
+		if k8sapi.CanWatchNamespaces(ret) {
+			dlog.Infof(ret, "Will watch all namespaces")
+			ret.StartNamespaceWatcher()
+		} else {
+			dlog.Warnf(ret, "Unable to watch all namespaces")
 		}
 	} else {
-		dlog.Infof(c, "Will use mapped namespaces %s", namespaces)
-		ret.SetMappedNamespaces(c, namespaces)
+		dlog.Infof(ret, "Will use mapped namespaces %s", namespaces)
+		ret.SetMappedNamespaces(namespaces)
 	}
-	if GetManagerNamespace(c) == "" {
-		tns, err := ret.determineTrafficManagerNamespace(c)
+	if GetManagerNamespace(ret) == "" {
+		tns, err := ret.determineTrafficManagerNamespace()
 		if err != nil {
-			return c, nil, err
+			return nil, err
 		}
-		nc := client.GetDefaultConfig()
-		nc.Cluster().DefaultManagerNamespace = tns
-		c = client.WithConfig(c, cfg.Merge(nc))
+		cfg.Cluster().DefaultManagerNamespace = tns
 	}
-	dlog.Infof(c, "Will look for traffic manager in namespace %s", GetManagerNamespace(c))
-	return c, ret, nil
+	dlog.Infof(ret, "Will look for traffic manager in namespace %s", GetManagerNamespace(ret))
+	return ret, nil
 }
 
 func parseCIDR(cidr []string) ([]netip.Prefix, error) {
@@ -201,7 +182,7 @@ func parseCIDR(cidr []string) ([]netip.Prefix, error) {
 	return result, nil
 }
 
-func ConnectCluster(c context.Context, cr *rpc.ConnectRequest, config *Kubeconfig) (context.Context, *Cluster, error) {
+func ConnectCluster(cr *rpc.ConnectRequest, config *Kubeconfig) (*Cluster, error) {
 	mappedNamespaces := cr.MappedNamespaces
 	if len(mappedNamespaces) == 1 && mappedNamespaces[0] == "all" {
 		mappedNamespaces = nil
@@ -209,60 +190,60 @@ func ConnectCluster(c context.Context, cr *rpc.ConnectRequest, config *Kubeconfi
 		sort.Strings(mappedNamespaces)
 	}
 
-	c, cluster, err := NewCluster(c, config, mappedNamespaces)
+	cluster, err := NewCluster(config, mappedNamespaces)
 	if err != nil {
-		return c, nil, err
+		return nil, err
 	}
 
 	extraAlsoProxy, err := parseCIDR(cr.GetAlsoProxy())
 	if err != nil {
-		return c, nil, fmt.Errorf("failed to parse extra also proxy: %w", err)
+		return nil, fmt.Errorf("failed to parse extra also proxy: %w", err)
 	}
 
 	extraNeverProxy, err := parseCIDR(cr.GetNeverProxy())
 	if err != nil {
-		return c, nil, fmt.Errorf("failed to parse extra never proxy: %w", err)
+		return nil, fmt.Errorf("failed to parse extra never proxy: %w", err)
 	}
 
 	extraAllow, err := parseCIDR(cr.GetAllowConflictingSubnets())
 	if err != nil {
-		return c, nil, fmt.Errorf("failed to parse extra allow conflicting subnets: %w", err)
+		return nil, fmt.Errorf("failed to parse extra allow conflicting subnets: %w", err)
 	}
 	if len(extraAlsoProxy)+len(extraNeverProxy)+len(extraAllow) > 0 {
-		cfg := client.GetConfig(c).Merge(client.GetDefaultConfig())
+		cfg := client.GetConfig(cluster)
 		rt := cfg.Routing()
 		rt.AllowConflicting = append(rt.AllowConflicting, extraAllow...)
 		rt.AlsoProxy = append(rt.AlsoProxy, extraAlsoProxy...)
 		rt.NeverProxy = append(rt.NeverProxy, extraNeverProxy...)
-		c = client.WithConfig(c, cfg)
+		client.ReplaceConfig(cluster, cfg)
 	}
 
-	return c, cluster, nil
+	return cluster, nil
 }
 
 // determineTrafficManagerNamespace finds the namespace for the traffic-manager. It is determined by the following steps:
 //
-//  1. If a treffic-manager service is found in one of the currently accessible namespaces, return it.
+//  1. If a traffic-manager service is found in one of the currently accessible namespaces, return it.
 //  2. If the client has access to the default manager namespace, then return it.
 //  3. If the client has access to the default namespace, then return it.
 //  4. Return an error stating that it isn't possible to determine the namespace.
-func (kc *Cluster) determineTrafficManagerNamespace(c context.Context) (string, error) {
+func (kc *Cluster) determineTrafficManagerNamespace() (string, error) {
 	// Search for the traffic-manager in mapped namespaces
 	nss := kc.GetCurrentNamespaces(true)
 	for _, ns := range nss {
-		if _, err := k8sapi.GetService(c, agentconfig.ManagerAppName, ns); err == nil {
+		if _, err := k8sapi.GetService(kc, agentconfig.ManagerAppName, ns); err == nil {
 			return ns, nil
 		}
 	}
 
 	// No existing manager was found.
-	if canGetDefaultTrafficManagerService(c) {
+	if canGetDefaultTrafficManagerService(kc) {
 		return defaultManagerNamespace, nil
 	}
 
 	// No existing traffic-manager found. Assume that it should be installed
 	// in the default namespace if it is accessible
-	if canAccessNS(c, kc.Namespace) {
+	if canAccessNS(kc, kc.Namespace) {
 		return kc.Namespace, nil
 	}
 	return "", errcat.User.New("unable to determine the traffic-manager namespace")
@@ -271,7 +252,7 @@ func (kc *Cluster) determineTrafficManagerNamespace(c context.Context) (string, 
 // GetCurrentNamespaces returns the names of the namespaces that this client
 // is mapping. If the forClientAccess is true, then the namespaces are restricted
 // to those where an intercept can take place, i.e. the namespaces where this
-// client can WatchConfig and get services and deployments.
+// client can get pods.
 func (kc *Cluster) GetCurrentNamespaces(forClientAccess bool) []string {
 	kc.nsLock.Lock()
 	nss := make([]string, 0, len(kc.currentMappedNamespaces))
@@ -291,80 +272,13 @@ func (kc *Cluster) GetCurrentNamespaces(forClientAccess bool) []string {
 	return nss
 }
 
-func (kc *Cluster) GetManagerInstallId(ctx context.Context) string {
-	managerID, _ := k8sapi.GetNamespaceID(ctx, GetManagerNamespace(ctx))
+func (kc *Cluster) GetManagerInstallId() string {
+	managerID, _ := k8sapi.GetNamespaceID(kc, GetManagerNamespace(kc))
 	return managerID
 }
 
 func GetManagerNamespace(ctx context.Context) string {
 	return client.GetConfig(ctx).Cluster().DefaultManagerNamespace
-}
-
-func (kc *Cluster) WithJoinedClientSetInterface(c context.Context) context.Context {
-	return k8sapi.WithJoinedClientSetInterface(c, kc.ki, kc.ari)
-}
-
-// StartNamespaceWatcher runs a Kubernetes Watcher that provide information about the cluster's namespaces'.
-// The function waits for the first snapshot to arrive before returning.
-func (kc *Cluster) StartNamespaceWatcher(ctx context.Context) {
-	kc.namespaceWatcherSnapshot = make(map[string]struct{})
-	nsSynced := make(chan struct{})
-	go func() {
-		api := kc.ki.CoreV1()
-		for ctx.Err() == nil {
-			w, err := api.Namespaces().Watch(ctx, meta.ListOptions{})
-			if err != nil {
-				dlog.Errorf(ctx, "unable to create service watcher: %v", err)
-				return
-			}
-			kc.namespacesEventHandler(ctx, w.ResultChan(), nsSynced)
-		}
-	}()
-	select {
-	case <-ctx.Done():
-	case <-nsSynced:
-	}
-}
-
-func (kc *Cluster) namespacesEventHandler(ctx context.Context, evCh <-chan watch.Event, nsSynced chan struct{}) {
-	// The delay timer will initially sleep forever. It's reset to a very short
-	// delay when the file is modified.
-	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
-		kc.refreshNamespaces(ctx)
-		select {
-		case <-nsSynced:
-		default:
-			close(nsSynced)
-		}
-	})
-	defer delay.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case event, ok := <-evCh:
-			if !ok {
-				return // restart watcher
-			}
-			ns, ok := event.Object.(*core.Namespace)
-			if !ok {
-				continue
-			}
-			kc.nsLock.Lock()
-			switch event.Type {
-			case watch.Deleted:
-				delete(kc.namespaceWatcherSnapshot, ns.Name)
-			case watch.Added, watch.Modified:
-				kc.namespaceWatcherSnapshot[ns.Name] = struct{}{}
-			}
-			kc.nsLock.Unlock()
-
-			// We consider the watcher synced after 10 ms of inactivity. It's not a big deal
-			// if more namespaces arrive after that.
-			delay.Reset(10 * time.Millisecond)
-		}
-	}
 }
 
 // canGetDefaultTrafficManagerService answers the question if this client has the RBAC permissions
@@ -391,38 +305,88 @@ func canAccessNS(ctx context.Context, namespace string) bool {
 	return err == nil && ok
 }
 
-func sortedStringSlicesEqual(as, bs []string) bool {
-	if len(as) != len(bs) {
-		return false
-	}
-	for i, a := range as {
-		if a != bs[i] {
-			return false
+// StartNamespaceWatcher runs a Kubernetes Watcher that provide information about the cluster's namespaces'.
+// The function waits for the first snapshot to arrive before returning.
+func (kc *Cluster) StartNamespaceWatcher() {
+	kc.namespaceWatcherSnapshot = make(map[string]struct{})
+	nsSynced := make(chan struct{})
+	go func() {
+		api := k8sapi.GetK8sInterface(kc).CoreV1()
+		for kc.Err() == nil {
+			w, err := api.Namespaces().Watch(kc, meta.ListOptions{})
+			if err != nil {
+				dlog.Errorf(kc, "unable to create service watcher: %v", err)
+				return
+			}
+			kc.namespacesEventHandler(w.ResultChan(), nsSynced)
 		}
+	}()
+	select {
+	case <-kc.Done():
+	case <-nsSynced:
 	}
-	return true
 }
 
-func (kc *Cluster) SetMappedNamespaces(c context.Context, namespaces []string) bool {
+func (kc *Cluster) namespacesEventHandler(evCh <-chan watch.Event, nsSynced chan struct{}) {
+	// The delay timer will initially sleep forever. It's reset to a very short
+	// delay when the file is modified.
+	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
+		kc.refreshNamespaces()
+		select {
+		case <-nsSynced:
+		default:
+			close(nsSynced)
+		}
+	})
+	defer delay.Stop()
+
+	for {
+		select {
+		case <-kc.Done():
+			return
+		case event, ok := <-evCh:
+			if !ok {
+				return // restart watcher
+			}
+			ns, ok := event.Object.(*core.Namespace)
+			if !ok {
+				continue
+			}
+			kc.nsLock.Lock()
+			switch event.Type {
+			case watch.Deleted:
+				delete(kc.namespaceWatcherSnapshot, ns.Name)
+			case watch.Added, watch.Modified:
+				kc.namespaceWatcherSnapshot[ns.Name] = struct{}{}
+			}
+			kc.nsLock.Unlock()
+
+			// We consider the watcher synced after 10 ms of inactivity. It's not a big deal
+			// if more namespaces arrive after that.
+			delay.Reset(10 * time.Millisecond)
+		}
+	}
+}
+
+func (kc *Cluster) SetMappedNamespaces(namespaces []string) bool {
 	sort.Strings(namespaces)
-	if !sortedStringSlicesEqual(namespaces, kc.MappedNamespaces) {
+	if !slices.Equal(namespaces, kc.MappedNamespaces) {
 		kc.MappedNamespaces = namespaces
-		kc.refreshNamespaces(c)
+		kc.refreshNamespaces()
 		return true
 	}
 	return false
 }
 
-func (kc *Cluster) AddNamespaceListener(c context.Context, nsListener userd.NamespaceListener) {
+func (kc *Cluster) AddNamespaceEventHandler(nsEventHandler NamespaceListener) {
 	kc.nsLock.Lock()
-	kc.namespaceListeners = append(kc.namespaceListeners, nsListener)
+	kc.namespaceEventHandlers = append(kc.namespaceEventHandlers, nsEventHandler)
 	kc.nsLock.Unlock()
-	nsListener(c)
+	nsEventHandler()
 }
 
-func (kc *Cluster) refreshNamespaces(c context.Context) {
+func (kc *Cluster) refreshNamespaces() {
 	kc.nsLock.Lock()
-	defer kc.nsLock.Unlock()
 	var nss []string
 	if kc.namespaceWatcherSnapshot == nil {
 		// No permission to watch namespaces. Use the mapped-namespaces instead.
@@ -444,30 +408,21 @@ func (kc *Cluster) refreshNamespaces(c context.Context) {
 		if kc.shouldBeWatched(ns) {
 			accessOk, ok := kc.currentMappedNamespaces[ns]
 			if !ok {
-				accessOk = canAccessNS(c, ns)
+				accessOk = canAccessNS(kc, ns)
 			}
 			namespaces[ns] = accessOk
 		}
 	}
-	equal := len(namespaces) == len(kc.currentMappedNamespaces)
-	if equal {
-		for k, ov := range kc.currentMappedNamespaces {
-			if nv, ok := namespaces[k]; !ok || nv != ov {
-				equal = false
-				break
-			}
+	if maps.Equal(namespaces, kc.currentMappedNamespaces) {
+		kc.nsLock.Unlock()
+	} else {
+		dlog.Debugf(kc, "Namespaces changed: %v", namespaces)
+		kc.currentMappedNamespaces = namespaces
+		nsListeners := slices.Clone(kc.namespaceEventHandlers)
+		kc.nsLock.Unlock()
+		for _, nsListener := range nsListeners {
+			nsListener()
 		}
-	}
-	if equal {
-		return
-	}
-	kc.currentMappedNamespaces = namespaces
-	for _, nsListener := range kc.namespaceListeners {
-		func() {
-			kc.nsLock.Unlock()
-			defer kc.nsLock.Lock()
-			nsListener(c)
-		}()
 	}
 }
 

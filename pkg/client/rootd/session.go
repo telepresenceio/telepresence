@@ -22,13 +22,11 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 
-	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -46,7 +44,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
-	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
@@ -84,8 +81,10 @@ type agentVIP struct {
 // using the gRPC ClientTunnel. At the receiving en din the traffic-manager, a similar tunnel.Pool obtains
 // a corresponding handler which manages a net.Conn matching the ConnID in the cluster.
 //
-// A zero Session is invalid; you must use newSession.
+// A zero session is invalid; you must use the createSession or the newSession function.
 type session struct {
+	*k8s.Cluster
+
 	tunVif *vif.TunnelingDevice
 
 	teleroute teleroute.Server
@@ -98,9 +97,6 @@ type session struct {
 
 	// managerVersion is the version of the connected traffic-manager
 	managerVersion semver.Version
-
-	// namespace that the client is connected to
-	namespace string
 
 	// connPool contains handlers that represent active connections. Those handlers
 	// are obtained using a connpool.ConnID.
@@ -189,8 +185,6 @@ type session struct {
 	// vifReady is closed when the virtual network interface has been configured.
 	vifReady chan error
 
-	// done is closed when the session ends
-	done               chan struct{}
 	subnetViaWorkloads []*rpc.SubnetViaWorkload
 
 	// daemon runs as part of a pod-daemon setup.
@@ -203,149 +197,87 @@ type session struct {
 	lookupSequencer *xsync.Map[string, clusterLookupResult]
 }
 
-func createK8sConfig(ctx context.Context, kubeFlags map[string]string, kubeData []byte) (*rest.Config, error) {
-	configFlags, err := k8s.ConfigFlags(kubeFlags)
+// createSession will establish a connection to the traffic-manager and return a new properly initialized session object.
+func createSession(sessionCtx, dialCtx context.Context, mi *rpc.NetworkConfig) (s *session, err error) {
+	dlog.Info(sessionCtx, "-- Starting new session")
+	kc, err := k8s.NewKubeconfig(sessionCtx, true, mi.KubeFlags, mi.ManagerNamespace, mi.KubeconfigData)
 	if err != nil {
 		return nil, err
 	}
-	config, err := k8s.NewClientConfig(ctx, configFlags, kubeData)
+	cl, err := k8s.NewCluster(kc, mi.MappedNamespaces)
 	if err != nil {
 		return nil, err
 	}
-	return config.ClientConfig()
-}
-
-// connectToManager connects to the traffic-manager and asserts that its version is compatible.
-func connectToManager(
-	ctx context.Context,
-	namespace string,
-	kubeFlags map[string]string,
-	kubeData []byte,
-) (
-	context.Context,
-	*grpc.ClientConn,
-	semver.Version,
-	error,
-) {
-	var mgrVer semver.Version
-	rc, err := createK8sConfig(ctx, kubeFlags, kubeData)
+	conn, _, ver, err := cl.ConnectToManager(dialCtx, mi.ManagerNamespace)
 	if err != nil {
-		return ctx, nil, mgrVer, err
+		return nil, err
 	}
-	ctx = portforward.WithRestConfig(ctx, rc)
-
-	cs, err := kubernetes.NewForConfig(rc)
-	if err != nil {
-		return ctx, nil, mgrVer, err
-	}
-	acs, err := argorollouts.NewForConfig(rc)
-	if err != nil {
-		return ctx, nil, mgrVer, err
-	}
-	ctx = k8sapi.WithJoinedClientSetInterface(ctx, cs, acs)
-
-	clientConfig := client.GetConfig(ctx)
-	tos := clientConfig.Timeouts()
-	tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
-	defer cancel()
-
-	conn, ver, err := k8s.ConnectToManager(ctx, tc, namespace)
-	if err != nil {
-		return ctx, nil, mgrVer, err
-	}
-
-	verStr := strings.TrimPrefix(ver.Version, "v")
-	dlog.Infof(tc, "Connected to Manager %s", verStr)
-	mgrVer, err = semver.Parse(verStr)
-	if err != nil {
-		conn.Close()
-		return ctx, nil, mgrVer, fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
-	}
-	return ctx, conn, mgrVer, nil
-}
-
-// NewSession returns a new properly initialized session object.
-func NewSession(c context.Context, mi *rpc.NetworkConfig) (context.Context, *session, error) {
-	dlog.Info(c, "-- Starting new session")
-
-	cfg := client.GetDefaultConfig()
-	err := json.Unmarshal(mi.ClientConfig, cfg, false)
-	if err != nil {
-		return c, nil, err
-	}
-	c = client.WithConfig(c, cfg)
-	c, conn, ver, err := connectToManager(c, cfg.Cluster().DefaultManagerNamespace, mi.KubeFlags, mi.KubeconfigData)
-	if err != nil {
-		return c, nil, err
-	}
-	c, s, err := newSession(c, mi, conn, ver, false)
-	if err != nil {
-		return c, nil, err
-	}
-	s.managerConn = conn
-	return c, s, nil
+	return newSession(cl, mi, conn, ver, false)
 }
 
 func nope() bool { return false }
 
-func newSession(c context.Context, mi *rpc.NetworkConfig, managerConn *grpc.ClientConn, ver semver.Version, isPodDaemon bool) (context.Context, *session, error) {
-	dlog.Debugf(c, "Creating session with id %v", mi.Session)
+func newSession(cluster *k8s.Cluster, mi *rpc.NetworkConfig, managerConn *grpc.ClientConn, ver semver.Version, isPodDaemon bool) (*session, error) {
+	dlog.Debugf(cluster, "Creating session with id %v", mi.Session)
+
 	s := &session{
+		Cluster:               cluster,
 		handlers:              tunnel.NewPool(),
 		rndSource:             rand.NewSource(time.Now().UnixNano()),
 		session:               mi.Session,
-		namespace:             mi.Namespace,
 		managerConn:           managerConn,
 		managerVersion:        ver,
 		subnetViaWorkloads:    mi.SubnetViaWorkloads,
 		proxyClusterPods:      true,
 		proxyClusterSvcs:      true,
 		vifReady:              make(chan error, 2),
-		done:                  make(chan struct{}),
 		routesCh:              make(chan []netip.Prefix, 2),
 		podDaemon:             isPodDaemon,
 		localTranslationTable: xsync.NewMap[netip.Addr, netip.Addr](),
 		virtualIPs:            xsync.NewMap[netip.Addr, agentVIP](),
 		l4PortMap:             xsync.NewMap[types.AddrPortProto, uint16](),
 	}
-	cfg := client.GetConfig(c)
+	cfg := client.GetConfig(s)
 
 	// Use simple lookups unless the traffic-manager version is less than 2.25.0 (not supported), or if the user has explicitly
 	// requested complex lookups. The presence of the s.lookupSequencer will trigger simple lookups.
 	if !(cfg.DNS().UseComplexLookup || semver.MustParse(ver.FinalizeVersion()).LT(semver.MustParse("2.25.0"))) {
 		s.lookupSequencer = xsync.NewMap[string, clusterLookupResult]()
-		go s.lookupSequencerGC(c)
+		go s.lookupSequencerGC()
 	}
 
 	rt := cfg.Routing()
 	var err error
 	s.alsoProxySubnets, err = validateSubnets("also-proxy", rt.AlsoProxy, s.alsoProxyVia)
 	if err != nil {
-		return c, nil, err
+		return nil, err
 	}
-	dlog.Infof(c, "also-proxy subnets %v", s.alsoProxySubnets)
+	dlog.Infof(s, "also-proxy subnets %v", s.alsoProxySubnets)
 
 	s.neverProxySubnets, err = validateSubnets("never-proxy", rt.NeverProxy, nope)
 	if err != nil {
-		return c, nil, err
+		return nil, err
 	}
-	dlog.Infof(c, "never-proxy subnets %v", s.neverProxySubnets)
+	dlog.Infof(s, "never-proxy subnets %v", s.neverProxySubnets)
 
 	s.allowConflictingSubnets, err = validateSubnets("allow-conflicting", rt.AllowConflicting, nope)
 	if err != nil {
-		return c, nil, err
+		return nil, err
 	}
-	dlog.Infof(c, "allow-conflicting subnets %v", s.allowConflictingSubnets)
+	dlog.Infof(s, "allow-conflicting subnets %v", s.allowConflictingSubnets)
 
-	s.dnsServer = dns.NewServer(cfg.DNS(), s.namespace, s.clusterLookup)
-	s.SetTopLevelDomains(c, nil)
+	s.dnsServer = dns.NewServer(cfg.DNS(), s.Namespace, s.clusterLookup)
+	s.SetTopLevelDomains(nil)
+
+	// Set ourselves as the default dialer for the session.
+	s.Context = tunnel.WithDialer(s.Context, s)
 
 	// Terminate the routes watcher
 	go func() {
-		<-c.Done()
+		<-s.Done()
 		close(s.routesCh)
 	}()
-	return c, s, nil
+	return s, nil
 }
 
 // lookupSequencerTTL is the maximum time to keep a lookup result cached with the purpose of avoiding
@@ -356,10 +288,10 @@ func (s *session) managerClient() manager.ManagerClient {
 	return manager.NewManagerClient(s.managerConn)
 }
 
-func (s *session) lookupSequencerGC(ctx context.Context) {
+func (s *session) lookupSequencerGC() {
 	// Cleans the lookupSequencer from time to time to avoid that it grows too big if many different
 	// names are looked up.
-	maps.GC(s.lookupSequencer, lookupSequencerTTL, ctx.Done(), func(key string, value clusterLookupResult) bool {
+	maps.GC(s.lookupSequencer, lookupSequencerTTL, s.Done(), func(key string, value clusterLookupResult) bool {
 		return time.Since(value.created) > lookupSequencerTTL
 	})
 }
@@ -391,12 +323,12 @@ func (s *session) resolvePort(ctx context.Context, host, portStr string) (ap typ
 	if err == nil {
 		return ap, errors.New("a symbolic port must be used with a service name, not an IP address")
 	}
-	return portforward.ResolveServiceAndPort(ctx, host, s.namespace, portStr, proto)
+	return portforward.ResolveServiceAndPort(ctx, host, s.Namespace, portStr, proto)
 }
 
-func (s *session) rerouteRemotePort(ctx context.Context, ap types.AddrPortProto, newPort uint16) {
+func (s *session) rerouteRemotePort(ap types.AddrPortProto, newPort uint16) {
 	if newPort != ap.Port() {
-		dlog.Debugf(ctx, "Rerouting %s via %d", ap, newPort)
+		dlog.Debugf(s, "Rerouting %s via %d", ap, newPort)
 
 		// Swap ports so that the port map reroutes requests for the new port to the original port.
 		toPort := ap.Port()
@@ -471,7 +403,7 @@ func (s *session) simpleLookup(ctx context.Context, question *dns2.Question) (dn
 	}
 	if len(s.localTranslationSubnets) > 0 {
 		for i, ip := range ips {
-			ips[i], err = s.GetLocalIP(ctx, ip)
+			ips[i], err = s.GetLocalIP(ip)
 			if err != nil {
 				return nil, dns2.RcodeServerFailure, err
 			}
@@ -551,13 +483,13 @@ func (s *session) complexClusterLookup(ctx context.Context, q *dns2.Question) (d
 			switch rr := rr.(type) {
 			case *dns2.A:
 				var addr netip.Addr
-				addr, err = s.GetLocalIP(ctx, netip.AddrFrom4([4]byte(rr.A)))
+				addr, err = s.GetLocalIP(netip.AddrFrom4([4]byte(rr.A)))
 				if err == nil {
 					rr.A = addr.AsSlice()
 				}
 			case *dns2.AAAA:
 				var addr netip.Addr
-				addr, err = s.GetLocalIP(ctx, netip.AddrFrom16([16]byte(rr.AAAA)))
+				addr, err = s.GetLocalIP(netip.AddrFrom16([16]byte(rr.AAAA)))
 				if err == nil {
 					rr.AAAA = addr.AsSlice()
 				}
@@ -584,7 +516,7 @@ func rcodeFromError(err error) int {
 	}
 }
 
-func (s *session) GetLocalIP(_ context.Context, destinationIP netip.Addr) (netip.Addr, error) {
+func (s *session) GetLocalIP(destinationIP netip.Addr) (netip.Addr, error) {
 	var err error
 	va, _ := s.localTranslationTable.LoadOrCompute(destinationIP, func() (netip.Addr, bool) {
 		for _, sn := range s.localTranslationSubnets {
@@ -611,8 +543,8 @@ func (s *session) nextVirtualIP(workload string, destinationIP netip.Addr) (neti
 	return va, nil
 }
 
-func (s *session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
-	mc := client.GetConfig(ctx)
+func (s *session) getNetworkConfig() *rpc.NetworkConfig {
+	mc := client.GetConfig(s)
 	r := mc.Routing()
 	if s.tunVif != nil {
 		r.Subnets = s.tunVif.Router.GetRoutedSubnets()
@@ -663,9 +595,11 @@ func (s *session) getNetworkConfig(ctx context.Context) *rpc.NetworkConfig {
 	}
 	js, _ := json.Marshal(mc)
 	return &rpc.NetworkConfig{
-		Session:      s.session,
-		PortMappings: portMappings,
-		ClientConfig: js,
+		Session:          s.session,
+		PortMappings:     portMappings,
+		ClientConfig:     js,
+		MappedNamespaces: s.MappedNamespaces,
+		ManagerNamespace: k8s.GetManagerNamespace(s),
 	}
 }
 
@@ -675,14 +609,14 @@ func (s *session) configureDNS(vifDNS netip.AddrPort, localDNS netip.AddrPort) {
 }
 
 // shouldProxySubnet returns true unless the given subnet is covered by a subnet in the neverProxySubnets list.
-func (s *session) shouldProxySubnet(ctx context.Context, name string, sn netip.Prefix) bool {
+func (s *session) shouldProxySubnet(name string, sn netip.Prefix) bool {
 	if sn.Addr().IsLoopback() {
-		dlog.Infof(ctx, "Will not proxy %s subnet %s, because it is loopback", name, sn)
+		dlog.Infof(s, "Will not proxy %s subnet %s, because it is loopback", name, sn)
 		return false
 	}
 	for _, lt := range s.localTranslationSubnets {
 		if subnet.Covers(lt.Prefix, sn) {
-			dlog.Infof(ctx, "Will not proxy %s subnet %s, because it covered by --proxy-via %s=%s", name, sn, lt.Prefix, lt.workload)
+			dlog.Infof(s, "Will not proxy %s subnet %s, because it covered by --proxy-via %s=%s", name, sn, lt.Prefix, lt.workload)
 			return false
 		}
 	}
@@ -691,17 +625,17 @@ func (s *session) shouldProxySubnet(ctx context.Context, name string, sn netip.P
 			// Allow if there's an also-proxy that is smaller, contradicting the never-proxy
 			for _, aps := range s.alsoProxySubnets {
 				if subnet.Covers(nps, aps) && subnet.Covers(aps, sn) {
-					dlog.Infof(ctx, "Will proxy %s subnet %s, because it is covered by also-proxy %s overriding never-proxy %s", name, sn, nps, aps)
+					dlog.Infof(s, "Will proxy %s subnet %s, because it is covered by also-proxy %s overriding never-proxy %s", name, sn, nps, aps)
 					return true
 				}
 			}
-			dlog.Infof(ctx, "Will not proxy %s subnet %s, because it is covered by never-proxy %s", name, sn, nps)
+			dlog.Infof(s, "Will not proxy %s subnet %s, because it is covered by never-proxy %s", name, sn, nps)
 			return false
 		}
 	}
 	for _, npx := range s.subnetViaWorkloads {
 		if name == "service" && npx.Subnet == "service" || name == "pod" && npx.Subnet == "pods" {
-			dlog.Infof(ctx, "Will not proxy %s subnet %s, because it is covered by --proxy-via %s=%s", name, sn, npx.Subnet, npx.Workload)
+			dlog.Infof(s, "Will not proxy %s subnet %s, because it is covered by --proxy-via %s=%s", name, sn, npx.Subnet, npx.Workload)
 			return false
 		}
 	}
@@ -715,6 +649,7 @@ func (s *session) networkReady(ctx context.Context) <-chan error {
 		defer close(rdy)
 		select {
 		case <-ctx.Done():
+			rdy <- ctx.Err()
 		case err, ok := <-s.vifReady:
 			if ok {
 				rdy <- err
@@ -729,27 +664,27 @@ func (s *session) networkReady(ctx context.Context) <-chan error {
 	return rdy
 }
 
-func (s *session) watchClusterInfo(ctx context.Context, teleroutePort uint16) error {
-	return watcher.WatchWithRetry(ctx, "WatchClusterInfo", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+func (s *session) watchClusterInfo(teleroutePort uint16) error {
+	return watcher.WatchWithRetry(s, "WatchClusterInfo", client.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.ClusterInfo], error) {
 			return s.managerClient().WatchClusterInfo(ctx, s.session)
 		},
 		func(mgrInfo *manager.ClusterInfo) error {
-			if err := s.readAdditionalRouting(ctx, mgrInfo); err != nil {
+			if err := s.readAdditionalRouting(mgrInfo); err != nil {
 				return err
 			}
 			select {
 			case <-s.vifReady:
-				if err := s.onClusterInfo(ctx, mgrInfo); err != nil {
+				if err := s.onClusterInfo(mgrInfo); err != nil {
 					if !errors.Is(err, context.Canceled) {
-						dlog.Error(ctx, err)
+						dlog.Error(s, err)
 					}
 					return err
 				}
 			default:
-				if err := s.onFirstClusterInfo(ctx, teleroutePort, mgrInfo); err != nil {
+				if err := s.onFirstClusterInfo(teleroutePort, mgrInfo); err != nil {
 					if !errors.Is(err, context.Canceled) {
-						dlog.Error(ctx, err)
+						dlog.Error(s, err)
 					}
 					return err
 				}
@@ -760,7 +695,7 @@ func (s *session) watchClusterInfo(ctx context.Context, teleroutePort uint16) er
 
 // createSubnetForDNSOnly will find a random IPv4 subnet that isn't currently routed and
 // attach the DNS server to that subnet.
-func (s *session) createSubnetForDNSOnly(ctx context.Context, mgrInfo *manager.ClusterInfo) {
+func (s *session) createSubnetForDNSOnly(mgrInfo *manager.ClusterInfo) {
 	// Avoid alsoProxied and neverProxied
 	avoid := make([]netip.Prefix, 0, len(s.alsoProxySubnets)+len(s.neverProxySubnets))
 	avoid = append(avoid, s.alsoProxySubnets...)
@@ -777,11 +712,11 @@ func (s *session) createSubnetForDNSOnly(ctx context.Context, mgrInfo *manager.C
 	}
 	var err error
 	if s.dnsServerSubnet, err = subnet.RandomIPv4Prefix(30, avoid); err != nil {
-		dlog.Error(ctx, err)
+		dlog.Error(s, err)
 	}
 }
 
-func (s *session) onFirstClusterInfo(ctx context.Context, teleroutePort uint16, mgrInfo *manager.ClusterInfo) (err error) {
+func (s *session) onFirstClusterInfo(teleroutePort uint16, mgrInfo *manager.ClusterInfo) (err error) {
 	defer func() {
 		if err != nil {
 			s.vifReady <- err
@@ -797,24 +732,21 @@ func (s *session) onFirstClusterInfo(ctx context.Context, teleroutePort uint16, 
 		s.proxyClusterPods = true
 		s.proxyClusterSvcs = true
 	} else {
-		s.proxyClusterPods = s.checkPodConnectivity(ctx, mgrInfo)
-		s.proxyClusterSvcs = s.checkSvcConnectivity(ctx, mgrInfo)
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
+		s.proxyClusterPods = !s.hasPodConnectivity(mgrInfo)
+		s.proxyClusterSvcs = !s.hasSvcConnectivity(mgrInfo)
 	}
-	return s.onClusterInfo(ctx, mgrInfo)
+	return s.onClusterInfo(mgrInfo)
 }
 
-func (s *session) defaultRouteDNS(ctx context.Context, mgrInfo *manager.ClusterInfo, dnsAddr netip.Addr, subnets []netip.Prefix) (netip.Addr, []netip.Prefix, error) {
+func (s *session) defaultRouteDNS(mgrInfo *manager.ClusterInfo, dnsAddr netip.Addr, subnets []netip.Prefix) (netip.Addr, []netip.Prefix, error) {
 	// We'll need to synthesize a subnet where we can attach the DNS service when the VIF isn't configured
 	// from cluster subnets. But not on darwin systems, because there the DNS is controlled by /etc/resolver
 	// entries appointing the DNS service directly via localhost:<port>.
 	if s.vipGenerator != nil {
 		if !s.dnsServerSubnet.IsValid() {
-			s.createSubnetForDNSOnly(ctx, mgrInfo)
+			s.createSubnetForDNSOnly(mgrInfo)
 		}
-		dlog.Infof(ctx, "Adding Service subnet %s (for DNS only)", s.dnsServerSubnet)
+		dlog.Infof(s, "Adding service subnet %s (for DNS only)", s.dnsServerSubnet)
 		var wl string
 		for _, snw := range s.subnetViaWorkloads {
 			if sn, err := netip.ParsePrefix(snw.Subnet); err == nil && sn.Contains(dnsAddr) {
@@ -829,15 +761,15 @@ func (s *session) defaultRouteDNS(ctx context.Context, mgrInfo *manager.ClusterI
 			workload: wl,
 		})
 		var err error
-		dnsAddr, err = s.GetLocalIP(ctx, dnsAddr)
+		dnsAddr, err = s.GetLocalIP(dnsAddr)
 		if err != nil {
 			return dnsAddr, subnets, err
 		}
 	} else {
 		if !s.dnsServerSubnet.IsValid() {
-			s.createSubnetForDNSOnly(ctx, mgrInfo)
+			s.createSubnetForDNSOnly(mgrInfo)
 		}
-		dlog.Infof(ctx, "Adding Service subnet %s (for DNS only)", s.dnsServerSubnet)
+		dlog.Infof(s, "Adding service subnet %s (for DNS only)", s.dnsServerSubnet)
 		subnets = append(subnets, s.dnsServerSubnet)
 		dnsIP := s.dnsServerSubnet.Addr().AsSlice()
 		dnsIP[len(dnsIP)-1] = 2
@@ -846,11 +778,11 @@ func (s *session) defaultRouteDNS(ctx context.Context, mgrInfo *manager.ClusterI
 	return dnsAddr, subnets, nil
 }
 
-func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInfo) (err error) {
+func (s *session) onClusterInfo(mgrInfo *manager.ClusterInfo) (err error) {
 	if s.podDaemon {
 		return nil
 	}
-	dlog.Debugf(ctx, "WatchClusterInfo update")
+	dlog.Debugf(s, "WatchClusterInfo update")
 	bwcompat.FixLegacyClusterInfo(mgrInfo)
 
 	if mgrInfo.Routing == nil {
@@ -869,8 +801,8 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 			if err != nil {
 				return err
 			}
-			if s.shouldProxySubnet(ctx, "service", cidr) {
-				dlog.Infof(ctx, "Adding service subnet %s", cidr)
+			if s.shouldProxySubnet("service", cidr) {
+				dlog.Infof(s, "Adding service subnet %s", cidr)
 				subnets = append(subnets, cidr)
 			}
 			s.serviceSubnets = append(s.serviceSubnets, cidr)
@@ -880,8 +812,8 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	if s.proxyClusterPods {
 		for _, sn := range mgrInfo.PodSubnets {
 			cidr := iputil.RPCToPrefix(sn)
-			if s.shouldProxySubnet(ctx, "pod", cidr) {
-				dlog.Infof(ctx, "Adding pod subnet %s", cidr)
+			if s.shouldProxySubnet("pod", cidr) {
+				dlog.Infof(s, "Adding pod subnet %s", cidr)
 				subnets = append(subnets, cidr)
 			}
 			s.podSubnets = append(s.podSubnets, cidr)
@@ -890,8 +822,8 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 
 	if s.vipGenerator != nil {
 		subnets = append(subnets, s.vipGenerator.Subnet())
-		dlog.Debugf(ctx, "Adding VIP subnet %q to TUN-device", s.vipGenerator.Subnet().String())
-		s.consolidateProxyViaWorkloads(ctx)
+		dlog.Debugf(s, "Adding VIP subnet %q to TUN-device", s.vipGenerator.Subnet().String())
+		s.consolidateProxyViaWorkloads()
 	}
 
 	if !s.alsoProxyVia() {
@@ -907,7 +839,7 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		return fmt.Errorf("invalid traffic-manager pod ip address")
 	}
 	if s.vipGenerator != nil {
-		vifDNS, err = s.GetLocalIP(ctx, vifDNS)
+		vifDNS, err = s.GetLocalIP(vifDNS)
 		if err != nil {
 			return err
 		}
@@ -924,7 +856,7 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 		}
 	}
 	if runtime.GOOS != "darwin" && !dnsRouted {
-		vifDNS, subnets, err = s.defaultRouteDNS(ctx, mgrInfo, vifDNS, subnets)
+		vifDNS, subnets, err = s.defaultRouteDNS(mgrInfo, vifDNS, subnets)
 		if err != nil {
 			return err
 		}
@@ -934,59 +866,65 @@ func (s *session) onClusterInfo(ctx context.Context, mgrInfo *manager.ClusterInf
 	if dnsRouted {
 		d := mgrInfo.Dns
 		dnsAddress := netip.AddrPortFrom(vifDNS, 53)
-		dlog.Infof(ctx, "Setting client DNS to %s", vifDNS)
-		dlog.Infof(ctx, "Setting cluster domain to %q", d.ClusterDomain)
+		dlog.Infof(s, "Setting client DNS to %s", vifDNS)
+		dlog.Infof(s, "Setting cluster domain to %q", d.ClusterDomain)
 		s.dnsServer.SetClusterDNS(d, dnsAddress)
 	}
-	return s.reconcileSubnets(ctx, mgrInfo, subnets)
+	return s.reconcileSubnets(mgrInfo, subnets)
 }
 
-func (s *session) reconcileSubnets(ctx context.Context, mgrInfo *manager.ClusterInfo, subnets []netip.Prefix) error {
+func (s *session) reconcileSubnets(mgrInfo *manager.ClusterInfo, subnets []netip.Prefix) error {
 	if len(subnets) > 0 && s.tunVif == nil {
 		var err error
-		if s.tunVif, err = vif.NewTunnelingDevice(ctx, s.streamCreator(ctx)); err != nil {
+		if s.tunVif, err = vif.NewTunnelingDevice(s, s.streamCreator()); err != nil {
 			return fmt.Errorf("NewTunnelVIF: %w", err)
 		}
 	}
 
-	proxy, neverProxy, neverProxyOverrides := computeNeverProxyOverrides(ctx, subnets, s.neverProxySubnets)
+	proxy, neverProxy, neverProxyOverrides := computeNeverProxyOverrides(s, subnets, s.neverProxySubnets)
 	s.effectiveNeverProxy = neverProxy
 	if s.tunVif == nil {
 		return nil
 	}
 	rt := s.tunVif.Router
+	dlog.Debugf(s, "allowConflicting is set to %v", s.allowConflictingSubnets)
 	rt.UpdateWhitelist(s.allowConflictingSubnets)
 
-	err := rt.ValidateRoutes(ctx, proxy)
+	err := rt.ValidateRoutes(s, proxy)
 	if err != nil {
-		if s.vipGenerator != nil || !client.GetConfig(ctx).Routing().AutoResolveConflicts {
+		if s.vipGenerator != nil {
+			dlog.Debugf(s, "vipGenerator is defined so error %s does not result in any translations", err)
+			return err
+		}
+		if !client.GetConfig(s).Routing().AutoResolveConflicts {
+			dlog.Debugf(s, "autoResolveConflicts is false so %s isn't resolving itself", err)
 			return err
 		}
 		// Check each subnet and add a translation for those that conflict.
 		for _, pp := range proxy {
-			if routeConflict := rt.ValidateRoutes(ctx, []netip.Prefix{pp}); routeConflict != nil {
-				dlog.Infof(ctx, "Translating IPs in conflicting subnet %s to the virtual subnet", pp)
+			if routeConflict := rt.ValidateRoutes(s, []netip.Prefix{pp}); routeConflict != nil {
+				dlog.Infof(s, "Translating IPs in conflicting subnet %s to the virtual subnet", pp)
 				s.subnetViaWorkloads = append(s.subnetViaWorkloads, &rpc.SubnetViaWorkload{
 					Subnet:   pp.String(),
 					Workload: "local",
 				})
 			}
 		}
-		if aErr := s.activateProxyViaWorkloads(ctx); aErr != nil {
-			dlog.Errorf(ctx, "activateProxyViaWorkloads: %v", aErr)
+		if aErr := s.activateProxyViaWorkloads(); aErr != nil {
+			dlog.Errorf(s, "activateProxyViaWorkloads: %v", aErr)
 			return err
 		}
-		return s.onClusterInfo(ctx, mgrInfo)
+		return s.onClusterInfo(mgrInfo)
 	}
 
-	dlog.Debugf(ctx, "UpdatingRoutes %s, %s, %s", proxy, s.effectiveNeverProxy, neverProxyOverrides)
-	err = rt.UpdateRoutes(ctx, proxy, s.effectiveNeverProxy, neverProxyOverrides)
+	dlog.Debugf(s, "UpdatingRoutes %s, %s, %s", proxy, s.effectiveNeverProxy, neverProxyOverrides)
+	err = rt.UpdateRoutes(s, proxy, s.effectiveNeverProxy, neverProxyOverrides)
 	if err != nil {
 		return err
 	}
 	sns := rt.GetRoutedSubnets()
 	select {
-	case <-ctx.Done():
+	case <-s.Done():
 	case s.routesCh <- sns:
 	default:
 	}
@@ -1045,46 +983,47 @@ func (s *session) alsoProxyVia() bool {
 	return false
 }
 
-func (s *session) readAdditionalRouting(ctx context.Context, mgrInfo *manager.ClusterInfo) error {
+func (s *session) readAdditionalRouting(mgrInfo *manager.ClusterInfo) error {
 	if r := mgrInfo.Routing; r != nil {
 		sns, err := validateSubnets("also-proxy", iputil.RPCsToPrefixes(r.AlsoProxySubnets), s.alsoProxyVia)
 		if err != nil {
 			return err
 		}
 		s.alsoProxySubnets = subnet.Unique(append(s.alsoProxySubnets, sns...))
-		dlog.Infof(ctx, "also-proxy subnets %v", s.alsoProxySubnets)
+		dlog.Infof(s, "also-proxy subnets %v", s.alsoProxySubnets)
 
 		sns, err = validateSubnets("never-proxy", iputil.RPCsToPrefixes(r.NeverProxySubnets), nope)
 		if err != nil {
 			return err
 		}
 		s.neverProxySubnets = subnet.Unique(append(s.neverProxySubnets, sns...))
-		dlog.Infof(ctx, "never-proxy subnets %v", s.neverProxySubnets)
+		dlog.Infof(s, "never-proxy subnets %v", s.neverProxySubnets)
 
 		sns, err = validateSubnets("allow-conflicting", iputil.RPCsToPrefixes(r.AllowConflictingSubnets), nope)
 		if err != nil {
 			return err
 		}
 		s.allowConflictingSubnets = subnet.Unique(append(s.allowConflictingSubnets, sns...))
-		dlog.Infof(ctx, "allow-conflicting subnets %v", s.allowConflictingSubnets)
+		dlog.Infof(s, "allow-conflicting subnets %v", s.allowConflictingSubnets)
 	}
 	return nil
 }
 
-func (s *session) checkSvcConnectivity(ctx context.Context, info *manager.ClusterInfo) bool {
+// hasSvcConnectivity checks the connectivity of the agent-injector server. It returns true if it can be connected, false otherwise.
+func (s *session) hasSvcConnectivity(info *manager.ClusterInfo) bool {
 	// The traffic-manager service is headless, which means we can't try a GRPC connection to its ClusterIP.
 	// Instead, we try an HTTP health check on the agent-injector server, since that one does expose a ClusterIP.
 	// This is less precise than if we could check for our own GRPC, since /healthz is a common enough health check path,
 	// but hopefully, the server on the other end isn't configured to respond to the hostname "agent-injector" if it isn't the agent-injector.
 	if info.InjectorSvcIp == nil {
-		dlog.Debugf(ctx, "No injector service IP given; usually this is because the traffic-manager is older than the telepresence binary."+
+		dlog.Debugf(s, "No injector service IP given; usually this is because the traffic-manager is older than the telepresence binary."+
 			"Connectivity check for services set to pass.")
-		return true
+		return false
 	}
-	ct := client.GetConfig(ctx).Timeouts().Get(client.TimeoutConnectivityCheck)
+	ct := client.GetConfig(s).Timeouts().Get(client.TimeoutConnectivityCheck)
 	if ct == 0 {
-		dlog.Info(ctx, "Connectivity check for services disabled")
-		return true
+		dlog.Info(s, "Connectivity check for services disabled")
+		return false
 	}
 	ip := net.IP(info.InjectorSvcIp).String()
 	port := info.InjectorSvcPort
@@ -1096,112 +1035,125 @@ func (s *session) checkSvcConnectivity(ctx context.Context, info *manager.Cluste
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
 	hcl := &http.Client{Transport: tr}
-	tCtx, tCancel := context.WithTimeout(ctx, ct)
+	tCtx, tCancel := context.WithTimeout(s, ct)
 	defer tCancel()
 	url := iputil.JoinHostPort(ip, uint16(port))
 	url = fmt.Sprintf("https://%s/healthz", url)
-	request, err := http.NewRequestWithContext(tCtx, http.MethodGet, url, nil)
+	request, err := http.NewRequestWithContext(tCtx, http.MethodHead, url, nil)
 	if err != nil {
-		if ctx.Err() != nil {
-			return false // parent context cancelled
-		}
 		// As far as I can tell, this error means a) that the context was cancelled before the request could be allocated, or b) that the request is misconstructed, e.g. bad method.
 		// Neither of those two should really happen here (unless you set the timeout to a few microseconds, maybe), but we can't really continue. May as well route the cluster.
-		dlog.Errorf(ctx, "Unexpected: service conn check could not build request: %v. Will route services anyway.", err)
-		return true
+		dlog.Errorf(s, "Unexpected: service conn check could not build request: %v. Will route services anyway.", err)
+		return false
 	}
 	request.Header.Set("Host", info.InjectorSvcHost)
-	dlog.Debugf(ctx, "Performing service connectivity check on %s with Host %s and timeout %s", url, info.InjectorSvcHost, ct)
+	dlog.Debugf(s, "Performing service connectivity check on %s with Host %s and timeout %s", url, info.InjectorSvcHost, ct)
 	resp, err := hcl.Do(request)
 	if err != nil {
-		if ctx.Err() != nil {
-			return false // parent context cancelled
-		}
 		// This means either network errors (timeouts, failed to connect), or that the server doesn't speak HTTP.
-		dlog.Debugf(ctx, "Will proxy services (%v)", err)
-		return true
+		dlog.Debugf(s, "Will proxy services (%v)", err)
+		return false
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		dlog.Warnf(ctx, "Service IP %s is connectable, but did not respond as expected (status code %d)."+
+		dlog.Warnf(s, "service IP %s is connectable, but did not respond as expected (status code %d)."+
 			" Will proxy services, but this may interfere with your VPN routes.", info.InjectorSvcIp, resp.StatusCode)
-		return true
+		return false
 	}
-	dlog.Info(ctx, "Already connected to cluster, will not map service subnets.")
-	return false
+	dlog.Info(s, "Already connected to cluster, will not map service subnets.")
+	return true
 }
 
-func (s *session) checkPodConnectivity(ctx context.Context, info *manager.ClusterInfo) bool {
+// hasPodConnectivity verifies connectivity to the traffic-manager in the cluster and returns true if connectivity is successful; false otherwise.
+func (s *session) hasPodConnectivity(info *manager.ClusterInfo) bool {
 	if info.ManagerPodIp == nil {
-		return true
+		return false
 	}
-	ct := client.GetConfig(ctx).Timeouts().Get(client.TimeoutConnectivityCheck)
+	ct := client.GetConfig(s).Timeouts().Get(client.TimeoutConnectivityCheck)
 	if ct == 0 {
-		dlog.Info(ctx, "Connectivity check for pods disabled")
-		return true
+		dlog.Info(s, "Connectivity check for pods disabled")
+		return false
 	}
 	ip := net.IP(info.ManagerPodIp).String()
 	port := info.ManagerPodPort
 	if port == 0 {
 		port = 8081 // Traffic managers before 2.8.0 didn't include the port because it was hardcoded at 8081
 	}
-	tCtx, tCancel := context.WithTimeout(ctx, ct)
+	tCtx, tCancel := context.WithTimeout(s, ct)
 	defer tCancel()
-	dlog.Debugf(ctx, "Performing pod connectivity check on IP %s with timeout %s", ip, ct)
-	conn, err := grpc.NewClient(net.JoinHostPort(ip, strconv.Itoa(int(port))), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	dlog.Debugf(s, "Performing pod connectivity check on IP %s with timeout %s", ip, ct)
+	conn, err := grpc.NewClient(
+		net.JoinHostPort(ip, strconv.Itoa(int(port))),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
-		if ctx.Err() != nil {
-			return false // parent context cancelled
-		}
-		dlog.Debugf(ctx, "Will proxy pods (%v)", err)
-		return true
+		dlog.Debugf(s, "Will proxy pods. NewClient: %v", err)
+		return false
 	}
+	state := conn.GetState()
+	conn.Connect() // Initiate the connection
 	defer conn.Close()
-	mClient := manager.NewManagerClient(conn)
-	if _, err := mClient.Version(tCtx, &empty.Empty{}); err != nil {
-		if ctx.Err() != nil {
-			return false // parent context cancelled
+
+	// Wait for the connection to reach READY state or fail
+	for {
+		switch state {
+		case connectivity.Ready:
+			// Connection is established
+			_, err = manager.NewManagerClient(conn).Version(tCtx, &empty.Empty{})
+			if err != nil {
+				if s.Err() != nil {
+					return false // session cancelled
+				}
+				dlog.Warnf(s, "Manager IP %s is connectable but not a traffic-manager instance (%v)."+
+					" Will proxy pods, but this may interfere with your VPN routes.", ip, err)
+				return false
+			}
+			dlog.Info(s, "Will not proxy pods. Already connected to cluster.")
+			return true
+		case connectivity.TransientFailure, connectivity.Shutdown:
+			dlog.Debugf(s, "Will proxy pods, connection failed: state=%v", state)
+			return false
+		default:
+			if !conn.WaitForStateChange(tCtx, state) {
+				// Normal. The context timed out before the connection reached READY state.
+				dlog.Debug(s, "Will proxy pods")
+				return false
+			}
+			state = conn.GetState()
 		}
-		dlog.Warnf(ctx, "Manager IP %s is connectable but not a traffic-manager instance (%v)."+
-			" Will proxy pods, but this may interfere with your VPN routes.", ip, err)
-		return true
 	}
-	dlog.Info(ctx, "Already connected to cluster, will not map pod subnets.")
-	return false
 }
 
-func (s *session) run(c context.Context, initErrs chan error) error {
+func (s *session) run(initErrs chan<- error) {
 	defer func() {
-		dlog.Info(c, "-- Session ended")
-		close(s.done)
+		dlog.Info(s, "-- session ended")
 	}()
-
-	c, cancelGroup := context.WithCancel(c)
-	defer cancelGroup()
-
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
-	if err := s.Start(c, g, 0); err != nil {
+	g := dgroup.NewGroup(s, dgroup.GroupConfig{})
+	if err := s.Start(g, 0); err != nil {
 		defer close(initErrs)
 		initErrs <- err
-		return err
+		return
 	}
 	close(initErrs)
-	return g.Wait()
+	err := g.Wait()
+	if err != nil {
+		dlog.Errorf(s, "session ended with error: %v", err)
+	}
 }
 
-func (s *session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16) error {
-	clusterCfg := client.GetConfig(c).Cluster()
+func (s *session) Start(g *dgroup.Group, teleroutePort uint16) error {
+	clusterCfg := client.GetConfig(s).Cluster()
 	if clusterCfg.AgentPortForward {
-		if k8s.CanPortForward(c, s.namespace) {
-			s.agentClients = agentpf.NewClients(s.session)
+		if k8s.CanPortForward(s, s.Namespace) {
+			s.agentClients = agentpf.NewClients(s.Cluster, s.session)
 			g.Go("agentPods", func(ctx context.Context) error {
-				return s.agentClients.WatchAgentPods(tunnel.WithDialer(ctx, s), s.managerClient())
+				return s.agentClients.WatchAgentPods(s.managerClient())
 			})
 		} else {
-			dlog.Infof(c, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.namespace)
+			dlog.Infof(s, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.Namespace)
 		}
 	}
-	if err := s.activateProxyViaWorkloads(c); err != nil {
+	if err := s.activateProxyViaWorkloads(); err != nil {
 		return err
 	}
 	if s.podDaemon {
@@ -1217,7 +1169,7 @@ func (s *session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16
 			cancelDNS()
 			cancelDNSLock.Unlock()
 		}()
-		return s.watchClusterInfo(ctx, teleroutePort)
+		return s.watchClusterInfo(teleroutePort)
 	})
 
 	if s.agentClients == nil && len(s.subnetViaWorkloads) > 0 {
@@ -1228,7 +1180,7 @@ func (s *session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16
 	// the first ClusterInfo is received from the traffic-manager. A timeout
 	// is needed so that we don't wait forever on a traffic-manager that has
 	// been terminated for some reason.
-	wc, cancel := client.GetConfig(c).Timeouts().TimeoutContext(c, client.TimeoutTrafficManagerConnect)
+	wc, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 	select {
 	case <-wc.Done():
@@ -1243,13 +1195,13 @@ func (s *session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16
 		}
 	}
 
-	// Start the router and the DNS Service and wait for the context
+	// Start the router and the DNS service and wait for the context
 	// to be done. Then shut things down in order. The following happens:
 	// 1. The DNS worker terminates (it needs the TUN device to be alive while doing that)
 	// 2. The TUN device is closed (by the stop method). This unblocks the routerWorker's pending read on the device.
 	// 3. The routerWorker terminates.
 	g.Go("dns", func(ctx context.Context) error {
-		defer s.stop(c) // using group parent context
+		defer s.stop()
 		cancelDNSLock.Lock()
 		ctx, cancelDNS = context.WithCancel(ctx)
 		cancelDNSLock.Unlock()
@@ -1262,7 +1214,7 @@ func (s *session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16
 
 	if s.tunVif != nil {
 		g.Go("vif", s.tunVif.Run)
-		err := s.waitForProxyViaWorkloads(c)
+		err := s.waitForProxyViaWorkloads()
 		if err != nil {
 			return err
 		}
@@ -1276,13 +1228,13 @@ func (s *session) Start(c context.Context, g *dgroup.Group, teleroutePort uint16
 	return nil
 }
 
-func (s *session) stop(c context.Context) {
+func (s *session) stop() {
 	if !atomic.CompareAndSwapInt32(&s.closing, 0, 1) {
-		// Session already stopped (or is stopping)
+		// session already stopped (or is stopping)
 		return
 	}
-	dlog.Debug(c, "Bringing down TUN-device")
-	cc, cancel := context.WithTimeout(context.WithoutCancel(c), time.Second)
+	dlog.Debug(s, "Bringing down TUN-device")
+	cc, cancel := context.WithTimeout(context.WithoutCancel(s), time.Second)
 	go func() {
 		s.handlers.CloseAll(cc)
 		cancel()
@@ -1291,9 +1243,9 @@ func (s *session) stop(c context.Context) {
 	atomic.StoreInt32(&s.closing, 2)
 
 	if s.managerConn != nil {
-		dlog.Debug(c, "Closing port-forward to traffic-manager")
+		dlog.Debug(s, "Closing port-forward to traffic-manager")
 		// Avoid sporadic hang when the client connection is torn down.
-		cc, cancel = context.WithTimeout(context.WithoutCancel(c), time.Second)
+		cc, cancel = context.WithTimeout(context.WithoutCancel(s), time.Second)
 		go func() {
 			_ = s.managerConn.Close()
 			cancel()
@@ -1302,30 +1254,30 @@ func (s *session) stop(c context.Context) {
 	}
 
 	if s.tunVif != nil {
-		cc, cancel = context.WithTimeout(context.WithoutCancel(c), time.Second)
+		cc, cancel = context.WithTimeout(context.WithoutCancel(s), time.Second)
 		defer cancel()
 		if err := s.tunVif.Close(cc); err != nil {
-			dlog.Errorf(c, "unable to close %s: %v", s.tunVif.Device.Name(), err)
+			dlog.Errorf(s, "unable to close %s: %v", s.tunVif.Device.Name(), err)
 		}
 	}
 }
 
-func (s *session) activateProxyViaWorkloads(ctx context.Context) error {
+func (s *session) activateProxyViaWorkloads() error {
 	sl := len(s.subnetViaWorkloads)
 	if sl == 0 {
 		return nil
 	}
-	vipSubnet := client.GetConfig(ctx).Routing().VirtualSubnet
-	dlog.Debugf(ctx, "ProxyVIA using subnet %s", vipSubnet)
+	vipSubnet := client.GetConfig(s).Routing().VirtualSubnet
+	dlog.Debugf(s, "ProxyVIA using subnet %s", vipSubnet)
 
 	s.vipGenerator = vip.NewGenerator(vipSubnet)
 	s.localTranslationSubnets = make([]agentSubnet, sl)
-	for _, wlName := range s.consolidateProxyViaWorkloads(ctx) {
+	for _, wlName := range s.consolidateProxyViaWorkloads() {
 		if s.agentClients == nil {
 			return errcat.User.Newf("Agent port-forwards are disabled. Client is not permitted to do proxy-via %s", wlName)
 		}
-		dlog.Debugf(ctx, "Ensuring proxy-via agent in %s", wlName)
-		_, err := s.managerClient().EnsureAgent(ctx, &manager.EnsureAgentRequest{
+		dlog.Debugf(s, "Ensuring proxy-via agent in %s", wlName)
+		_, err := s.managerClient().EnsureAgent(s, &manager.EnsureAgentRequest{
 			Session: s.session,
 			Name:    wlName,
 		})
@@ -1341,7 +1293,7 @@ func (s *session) activateProxyViaWorkloads(ctx context.Context) error {
 	return nil
 }
 
-func (s *session) consolidateProxyViaWorkloads(ctx context.Context) []string {
+func (s *session) consolidateProxyViaWorkloads() []string {
 	desiredVips := make(map[string][]netip.Prefix)
 	snCount := 0
 	for _, pvx := range s.subnetViaWorkloads {
@@ -1358,7 +1310,7 @@ func (s *session) consolidateProxyViaWorkloads(ctx context.Context) []string {
 		default:
 			sn, err := netip.ParsePrefix(pvx.Subnet)
 			if err != nil {
-				dlog.Warnf(ctx, "unable to parse proxy-via subnet %s", pvx.Subnet)
+				dlog.Warnf(s, "unable to parse proxy-via subnet %s", pvx.Subnet)
 			} else {
 				desiredVips[pvx.Workload] = append(desiredVips[pvx.Workload], sn)
 				snCount++
@@ -1379,16 +1331,16 @@ func (s *session) consolidateProxyViaWorkloads(ctx context.Context) []string {
 		}
 	}
 	s.localTranslationSubnets = lcs
-	dlog.Debugf(ctx, "Local translation subnets: %v", s.localTranslationSubnets)
+	dlog.Debugf(s, "Local translation subnets: %v", s.localTranslationSubnets)
 	return wlNames
 }
 
-func (s *session) waitForProxyViaWorkloads(ctx context.Context) error {
+func (s *session) waitForProxyViaWorkloads() error {
 	wc := len(s.subnetViaWorkloads)
 	if wc == 0 {
 		return nil
 	}
-	to := client.GetConfig(ctx).Timeouts().Get(client.TimeoutIntercept)
+	to := client.GetConfig(s).Timeouts().Get(client.TimeoutIntercept)
 	waitCh := make(chan error)
 
 	// Need unique workload names
@@ -1400,44 +1352,44 @@ func (s *session) waitForProxyViaWorkloads(ctx context.Context) error {
 	}
 	for _, wl := range ws {
 		s.agentClients.SetProxyVia(wl)
-		dlog.Debugf(ctx, "Waiting for proxy-via agent in %s", wl)
+		dlog.Debugf(s, "Waiting for proxy-via agent in %s", wl)
 		go func(wl string) {
-			waitCh <- s.agentClients.WaitForWorkload(ctx, to, wl)
+			waitCh <- s.agentClients.WaitForWorkload(to, wl)
 		}(wl)
 	}
 	for _, wl := range ws {
 		select {
-		case <-ctx.Done():
+		case <-s.Done():
 			return nil
 		case err := <-waitCh:
 			if err != nil {
 				return fmt.Errorf("proxy-via agent in %s failed: %w", wl, err)
 			}
-			dlog.Debugf(ctx, "Wait succeeded for proxy-via agent in %s", wl)
+			dlog.Debugf(s, "Wait succeeded for proxy-via agent in %s", wl)
 		}
 	}
 	return nil
 }
 
-func (s *session) SetTopLevelDomains(ctx context.Context, topLevelDomains []string) {
-	s.dnsServer.SetTopLevelDomainsAndSearchPath(ctx, topLevelDomains, s.namespace)
+func (s *session) SetTopLevelDomains(topLevelDomains []string) {
+	s.dnsServer.SetTopLevelDomainsAndSearchPath(s, topLevelDomains, s.Namespace)
 }
 
-func (s *session) SetExcludes(ctx context.Context, excludes []string) {
+func (s *session) SetExcludes(excludes []string) {
 	s.dnsServer.SetExcludes(excludes)
 }
 
-func (s *session) SetMappings(ctx context.Context, mappings []*rpc.DNSMapping) {
+func (s *session) SetMappings(mappings []*rpc.DNSMapping) {
 	s.dnsServer.SetMappings(mappings)
 }
 
-func (s *session) translateEnvIPs(ctx context.Context, environment *rpc.Environment) *rpc.Environment {
-	vip.TranslateEnvironmentIPs(ctx, environment.Env, s)
+func (s *session) translateEnvIPs(environment *rpc.Environment) *rpc.Environment {
+	vip.TranslateEnvironmentIPs(s, environment.Env, s)
 	return environment
 }
 
-func (s *session) lookupIP(ctx context.Context, rq *rpc.LookupIPRequest) (*rpc.LookupIPResponse, error) {
-	ip, err := dns.LookupIP(ctx, s.localDNS, rq.Name)
+func (s *session) lookupIP(rq *rpc.LookupIPRequest) (*rpc.LookupIPResponse, error) {
+	ip, err := dns.LookupIP(s, s.localDNS, rq.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -1483,16 +1435,12 @@ func (s *session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentI
 		err = status.Error(codes.Internal, err.Error())
 	}
 	if err == nil {
-		ip, err = s.GetLocalIP(ctx, ip)
+		ip, err = s.GetLocalIP(ip)
 	}
 	if err != nil {
 		return nil, err
 	}
 	return &rpc.WaitForAgentIPResponse{LocalIp: ip.AsSlice()}, nil
-}
-
-func (s *session) Done() <-chan struct{} {
-	return s.done
 }
 
 func (s *session) ManagerVersion() semver.Version {

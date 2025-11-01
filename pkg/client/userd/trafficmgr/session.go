@@ -11,7 +11,6 @@ import (
 	"os/user"
 	"slices"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/homedir"
@@ -38,7 +38,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
@@ -50,6 +49,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
@@ -139,94 +139,48 @@ type session struct {
 
 	isPodDaemon bool
 
-	cancel context.CancelFunc
-
-	// context with a done channel that is closed when the session ends
-	context context.Context
-
 	// Synthetic IPs are generated when the targetIP is a hostname, so that we can defer the
 	// lookup of that host until the time when it is dialed.
 	syntheticIPs map[netip.Addr]string
 }
 
-func NewSession(service userd.Service, ctx context.Context, cri userd.ConnectRequest, config *k8s.Kubeconfig, wg *sync.WaitGroup) (session userd.Session, info *rpc.ConnectInfo) {
-	dlog.Info(ctx, "-- Starting new session")
+func NewSession(service userd.Service, ctx context.Context, cr *rpc.ConnectRequest, config *k8s.Kubeconfig, wg *sync.WaitGroup) (session userd.Session, info *rpc.ConnectInfo) {
+	dlog.Info(config, "-- Starting new session")
 
-	cr := cri.Request()
-	dlog.Infof(ctx, "Connecting to k8s context %s (%s) ...", config.Context, config.Server)
-	ctx, cancel := context.WithCancel(ctx)
-	defer func() {
-		if session == nil {
-			cancel()
-		}
-	}()
+	dlog.Infof(config, "Connecting to k8s context %s (%s) ...", config.KubeContext, config.Server)
 
-	ctx, cluster, err := k8s.ConnectCluster(ctx, cr, config)
+	cluster, err := k8s.ConnectCluster(cr, config)
 	if err != nil {
-		dlog.Errorf(ctx, "unable to track k8s cluster: %+v", err)
+		dlog.Errorf(cluster, "unable to track k8s cluster: %+v", err)
 		return nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
-	dlog.Infof(ctx, "Connected to context %s, namespace %s (%s)", cluster.Context, cluster.Namespace, cluster.Server)
-	ctx = portforward.WithRestConfig(ctx, cluster.RestConfig)
+	dlog.Infof(cluster, "Connected to context %s, namespace %s (%s)", cluster.KubeContext, cluster.Namespace, cluster.Server)
 
-	ctx = cluster.WithJoinedClientSetInterface(ctx)
-
-	dlog.Info(ctx, "Connecting to traffic manager...")
-	installID, err := client.InstallID(ctx)
+	dlog.Info(cluster, "Connecting to traffic manager...")
+	installID, err := client.InstallID(cluster)
 	if err != nil {
 		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
-	tmgr, err := connectMgr(ctx, service, cancel, cluster, installID, cr)
+	cfg := client.GetConfig(cluster)
+	tos := cfg.Timeouts()
+	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	defer cancel()
+
+	tmgr, err := connectMgr(ctx, service, cluster, installID, cr)
 	if err != nil {
-		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
+		dlog.Errorf(config, "Unable to connect to session: %s", err)
 		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
 	if tmgr.compareFinalizedManagerVersion(2, 21, 0) < 0 {
 		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED,
 			fmt.Errorf("traffic manager version %s is too old. Minimum supported version is 2.21.0, please upgrade", tmgr.managerVersion))
 	}
+	tmgr.updateClientConfig(ctx, cr.MappedNamespaces)
 
-	ctx = withSession(ctx, tmgr)
-	var tmCfg client.Config
-	cliCfg, err := tmgr.ManagerClient().GetClientConfig(ctx, &empty.Empty{})
-	if err != nil {
-		if status.Code(err) != codes.Unimplemented {
-			dlog.Warnf(ctx, "Failed to get remote config from traffic manager: %v", err)
-		}
-		tmCfg = client.GetDefaultConfig()
-	} else {
-		tmCfg, err = client.ParseConfigYAML(ctx, "client configuration from cluster", cliCfg.ConfigYaml)
-		if err != nil {
-			dlog.Warn(ctx, err.Error())
-		}
-	}
-
-	// Merge traffic-manager's reported config, but get priority to the local config.
-	cfg := client.GetConfig(ctx)
-	if tmCfg != nil {
-		cfg = tmCfg.Merge(cfg)
-		rt := cfg.Routing()
-		rt.NeverProxy = append(rt.NeverProxy, tmCfg.Routing().NeverProxy...)
-		ctx = client.WithConfig(ctx, cfg)
-		tmgr.context = ctx
-	}
-	if err = tmgr.ApplyConfig(); err != nil {
-		dlog.Warn(ctx, err.Error())
-	}
-	if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
-		dlog.Debug(ctx, "Applying client configuration")
-		buf, _ := json.Marshal(cfg)
-		buf, _ = yaml.JSONToYAML(buf)
-		sc := bufio.NewScanner(bytes.NewReader(buf))
-		for sc.Scan() {
-			dlog.Debug(ctx, sc.Text())
-		}
-	}
-
-	oi := tmgr.getNetworkInfo(ctx, cr)
+	oi := tmgr.getNetworkInfo(cr)
 	if !service.RootSessionInProcess() {
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
-		rootRunning, err := socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
+		rootRunning, err := socket.IsRunning(tmgr, socket.RootDaemonPath(tmgr))
 		if err != nil {
 			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
@@ -236,17 +190,16 @@ func NewSession(service userd.Service, ctx context.Context, cri userd.ConnectReq
 
 		// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
 		// must be executed by the user, not by root.
-		konfig, err := patcher.CreateExternalKubeConfig(ctx, config.ClientConfig, cluster.Context, func([]string) (string, string, error) {
-			return client.GetExe(ctx), service.ListenerAddress(ctx), nil
+		konfig, err := patcher.CreateExternalKubeConfig(tmgr.Context, config.ClientConfig, tmgr.KubeContext, func([]string) (string, string, error) {
+			return client.GetExe(tmgr), service.ListenerAddress(tmgr), nil
 		}, nil)
 		if err != nil {
 			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 		}
-		patcher.AnnotateNetworkConfig(ctx, oi, konfig.CurrentContext)
+		patcher.AnnotateNetworkConfig(tmgr, oi, konfig.CurrentContext)
 	}
 
-	ctx = tunnel.WithSyntheticIPResolver(ctx, tmgr)
-	tmgr.context = ctx
+	tmgr.Context = tunnel.WithSyntheticIPResolver(tmgr.Context, tmgr)
 
 	tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi, wg, cr.IsPodDaemon)
 	if err != nil {
@@ -255,10 +208,10 @@ func NewSession(service userd.Service, ctx context.Context, cri userd.ConnectReq
 	}
 
 	// Collect data on how long connection time took
-	dlog.Debug(ctx, "Finished connecting to traffic manager")
+	dlog.Debug(tmgr, "Finished connecting to traffic manager")
 
-	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
-	return tmgr, tmgr.status(true)
+	tmgr.AddNamespaceEventHandler(tmgr.updateDaemonNamespaces)
+	return tmgr, tmgr.status(ctx, true)
 }
 
 func (s *session) GetService() userd.Service {
@@ -272,19 +225,24 @@ func (s *session) GetService() userd.Service {
 //   - (3) listen on the appropriate local ports and forward them to the intercepted
 //     Services, and
 //   - (4) mount the appropriate remote volumes.
-func (s *session) Run() error {
-	g := dgroup.NewGroup(s.context, dgroup.GroupConfig{})
-	defer s.epilogue()
+func (s *session) Run() {
+	g := dgroup.NewGroup(s, dgroup.GroupConfig{})
+	defer func() {
+		_ = s.WithRootClient(context.WithoutCancel(s), func(ctx context.Context, rd rootdRpc.DaemonClient) error {
+			_, _ = rd.Disconnect(ctx, &empty.Empty{})
+			return nil
+		})
+		dlog.Info(s, "-- session ended")
+	}()
 	s.startServices(g)
-	return g.Wait()
+	err := g.Wait()
+	if err != nil {
+		dlog.Errorf(s, "session ended with error: %v", err)
+	}
 }
 
-func (s *session) Cancel() {
-	s.cancel()
-}
-
-func (s *session) RootDaemon() rootdRpc.DaemonClient {
-	return s.rootDaemon
+func (s *session) WithRootClient(ctx context.Context, f func(context.Context, rootdRpc.DaemonClient) error) error {
+	return f(ctx, s.rootDaemon)
 }
 
 func (s *session) ManagerClient() manager.ManagerClient {
@@ -301,33 +259,23 @@ func (s *session) ManagerVersion() semver.Version {
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
 func connectMgr(
-	longLivedCtx context.Context,
+	timeoutCtx context.Context,
 	service userd.Service,
-	sessionCancel context.CancelFunc,
 	cluster *k8s.Cluster,
 	installID string,
 	cr *rpc.ConnectRequest,
 ) (*session, error) {
-	cfg := client.GetConfig(longLivedCtx)
-	tos := cfg.Timeouts()
-
-	ctx, cancel := tos.TimeoutContext(longLivedCtx, client.TimeoutTrafficManagerConnect)
-	defer cancel()
-
-	mgrNs := k8s.GetManagerNamespace(ctx)
-	conn, vi, err := k8s.ConnectToManager(longLivedCtx, ctx, mgrNs)
+	cfg := client.GetConfig(cluster)
+	mgrNs := k8s.GetManagerNamespace(cluster)
+	conn, managerName, managerVersion, err := cluster.ConnectToManager(timeoutCtx, mgrNs)
 	if err != nil {
 		return nil, err
 	}
 	if sdc := cfg.Grpc().SimulateDisconnect; sdc > 0 {
 		time.AfterFunc(sdc, func() {
-			dlog.Info(ctx, "Simulated disconnect from manager")
+			dlog.Info(cluster, "Simulated disconnect from manager")
 			conn.Close()
 		})
-	}
-	managerVersion, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse manager.Version: %w", err)
 	}
 
 	clientID := cr.ClientId
@@ -344,8 +292,8 @@ func connectMgr(
 		clientID = fmt.Sprintf("%s@%s", userinfo.Username, host)
 	}
 
-	daemonID := daemon.NewIdentifier(cr.Name, cluster.Context, cluster.Namespace, proc.RunningInContainer())
-	si, err := LoadSessionInfoFromUserCache(ctx, daemonID)
+	daemonID := daemon.NewIdentifier(cr.Name, cluster.KubeContext, cluster.Namespace, proc.RunningInContainer())
+	si, err := LoadSessionInfoFromUserCache(cluster, daemonID)
 	if err != nil {
 		return nil, err
 	}
@@ -353,21 +301,21 @@ func connectMgr(
 	mClient := manager.NewManagerClient(conn)
 	if si != nil {
 		// Check if the session is still valid in the traffic-manager by calling Remain
-		_, err = mClient.Remain(ctx, &manager.RemainRequest{Session: si})
+		_, err = mClient.Remain(timeoutCtx, &manager.RemainRequest{Session: si})
 		if err == nil {
-			if ctx.Err() != nil {
+			if timeoutCtx.Err() != nil {
 				// Call timed out, so the traffic-manager isn't responding at all
-				return nil, ctx.Err()
+				return nil, timeoutCtx.Err()
 			}
-			dlog.Debugf(ctx, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", clientID)
+			dlog.Debugf(cluster, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", clientID)
 		} else {
 			si = nil
 		}
 	}
 
 	if si == nil {
-		dlog.Debugf(ctx, "traffic-manager port-forward established, making client known to the traffic-manager as %q", clientID)
-		si, err = mClient.ArriveAsClient(ctx, &manager.ClientInfo{
+		dlog.Debugf(cluster, "traffic-manager port-forward established, making client known to the traffic-manager as %q", clientID)
+		si, err = mClient.ArriveAsClient(timeoutCtx, &manager.ClientInfo{
 			Name:      clientID,
 			Namespace: cluster.Namespace,
 			InstallId: installID,
@@ -378,17 +326,11 @@ func connectMgr(
 			if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
 				return nil, errcat.User.New(st.Message())
 			}
-			return nil, client.CheckTimeout(ctx, fmt.Errorf("manager.ArriveAsClient: %w", err))
-		}
-		if err = saveSessionInfoToUserCache(ctx, daemonID, si); err != nil {
 			return nil, err
 		}
-	}
-
-	managerName := vi.Name
-	if managerName == "" {
-		// Older traffic-managers don't distinguish between OSS and pro-versions
-		managerName = "Traffic Manager"
+		if err = saveSessionInfoToUserCache(timeoutCtx, daemonID, si); err != nil {
+			return nil, err
+		}
 	}
 
 	sess := &session{
@@ -407,20 +349,18 @@ func connectMgr(
 		interceptWaiters:   make(map[string]*awaitIntercept),
 		isPodDaemon:        cr.IsPodDaemon,
 		subnetViaWorkloads: cr.SubnetViaWorkloads,
-		context:            longLivedCtx,
-		cancel:             sessionCancel,
 	}
+	sess.Context = withSession(sess.Context, sess)
 	return sess, nil
 }
 
 func (s *session) reconnectManager() (returnedErr error) {
-	cfg := client.GetConfig(s.context)
+	cfg := client.GetConfig(s)
 	tos := cfg.Timeouts()
-	ctx := s.context
-	tc, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	tc, cancel := tos.TimeoutContext(s, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	conn, vi, err := k8s.ConnectToManager(ctx, tc, k8s.GetManagerNamespace(ctx))
+	conn, managerName, managerVersion, err := s.ConnectToManager(tc, k8s.GetManagerNamespace(s))
 	if err != nil {
 		return err
 	}
@@ -429,10 +369,6 @@ func (s *session) reconnectManager() (returnedErr error) {
 			conn.Close()
 		}
 	}()
-	managerVersion, err := semver.Parse(strings.TrimPrefix(vi.Version, "v"))
-	if err != nil {
-		return fmt.Errorf("unable to parse manager.Version: %w", err)
-	}
 
 	_, err = manager.NewManagerClient(conn).ReconnectClient(tc, &manager.ReconnectClientRequest{
 		Session: s.sessionInfo,
@@ -451,13 +387,13 @@ func (s *session) reconnectManager() (returnedErr error) {
 	}
 
 	s.managerConn = conn
-	s.managerName = vi.Name
+	s.managerName = managerName
 	s.managerVersion = managerVersion
 	return nil
 }
 
-func (s *session) remain(ctx context.Context) error {
-	ctx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
+func (s *session) remain() error {
+	ctx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 	_, err := s.ManagerClient().Remain(ctx, &manager.RemainRequest{Session: s.SessionInfo()})
 	if err != nil {
@@ -486,25 +422,23 @@ func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
 
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
 // send it to the DNS-resolver in the daemon.
-func (s *session) updateDaemonNamespaces(c context.Context) {
+func (s *session) updateDaemonNamespaces() {
 	const svcDomain = "svc"
 
 	domains := s.GetCurrentNamespaces(false)
 	if !slices.Contains(domains, svcDomain) {
 		domains = append(domains, svcDomain)
 	}
-	dlog.Debugf(c, "posting top-level domains %v to root daemon", domains)
+	dlog.Debugf(s, "posting top-level domains %v to root daemon", domains)
 
-	if _, err := s.rootDaemon.SetDNSTopLevelDomains(c, &rootdRpc.Domains{Domains: domains}); err != nil {
-		dlog.Errorf(c, "error posting domains %v to root daemon: %v", domains, err)
+	err := s.WithRootClient(s, func(ctx context.Context, rd rootdRpc.DaemonClient) (err error) {
+		_, err = rd.SetDNSTopLevelDomains(ctx, &rootdRpc.Domains{Domains: domains})
+		return err
+	})
+	if err != nil {
+		dlog.Errorf(s, "error posting domains %v to root daemon: %v", domains, err)
 	}
-	dlog.Debug(c, "domains posted successfully")
-}
-
-func (s *session) epilogue() {
-	_, _ = s.rootDaemon.Disconnect(s.context, &empty.Empty{})
-	dlog.Info(s.context, "-- Session ended")
-	s.cancel()
+	dlog.Debug(s, "domains posted successfully")
 }
 
 func (s *session) startServices(g *dgroup.Group) {
@@ -530,24 +464,8 @@ func runWithRetry(ctx context.Context, f func(context.Context) error) error {
 	return nil
 }
 
-func (s *session) Done() <-chan struct{} {
-	return s.context.Done()
-}
-
 func (s *session) SessionInfo() *manager.SessionInfo {
 	return s.sessionInfo
-}
-
-func (s *session) ApplyConfig() error {
-	ctx := s.context
-	client.ReloadDaemonLogLevel(ctx)
-	if len(s.MappedNamespaces) == 0 {
-		mns := client.GetConfig(ctx).Cluster().MappedNamespaces
-		if len(mns) > 0 {
-			s.SetMappedNamespaces(ctx, mns)
-		}
-	}
-	return nil
 }
 
 // getInfosForWorkloads returns a list of workloads found in the given namespace that fulfils the given filter criteria.
@@ -601,7 +519,7 @@ func (s *session) getInfosForWorkloads(
 		if wlInfo.AgentVersion, ok = sMap[name]; !ok {
 			filterMatch &= ^rpc.ListRequest_INSTALLED_AGENTS
 		}
-		dlog.Debugf(s.context, "filter %d, filterMatch %d", filter, filterMatch)
+		dlog.Debugf(s, "filter %d, filterMatch %d", filter, filterMatch)
 		if filter != 0 && filter&filterMatch == 0 {
 			return
 		}
@@ -660,7 +578,6 @@ func (s *session) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream userd.Wat
 func (s *session) ensureWatchers(namespaces []string) {
 	wg := sync.WaitGroup{}
 	wg.Add(len(namespaces))
-	ctx := s.context
 	for _, ns := range namespaces {
 		s.workloadsLock.Lock()
 		_, ok := s.workloads[ns]
@@ -669,13 +586,13 @@ func (s *session) ensureWatchers(namespaces []string) {
 			wg.Done()
 		} else {
 			go func() {
-				err := s.workloadsWatcher(ctx, ns, &wg)
+				err := s.workloadsWatcher(ns, &wg)
 				if err != nil {
-					dlog.Errorf(ctx, "error ensuring watcher for namespace %s: %v", ns, err)
+					dlog.Errorf(s, "error ensuring watcher for namespace %s: %v", ns, err)
 					return
 				}
 			}()
-			dlog.Debugf(ctx, "watcher for namespace %s started", ns)
+			dlog.Debugf(s, "watcher for namespace %s started", ns)
 		}
 	}
 	wg.Wait()
@@ -698,7 +615,7 @@ func (s *session) WorkloadInfoSnapshot(
 	}
 	if len(nss) == 0 {
 		// none of the namespaces are currently mapped
-		dlog.Debug(s.context, "No namespaces are mapped")
+		dlog.Debug(s, "No namespaces are mapped")
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
 	if len(nss) == 1 && nss[0] == s.Namespace {
@@ -729,12 +646,11 @@ nextIs:
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
 
-func (s *session) remainLoop(c context.Context) error {
+func (s *session) remainLoop(context.Context) error {
 	ticker := time.NewTicker(60 * time.Second)
 	defer func() {
 		ticker.Stop()
-		c = dcontext.WithoutCancel(c)
-		c, cancel := context.WithTimeout(c, 3*time.Second)
+		c, cancel := context.WithTimeout(dcontext.WithoutCancel(s), 3*time.Second)
 		defer cancel()
 		if _, err := s.ManagerClient().Depart(c, s.SessionInfo()); err != nil {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
@@ -750,24 +666,30 @@ func (s *session) remainLoop(c context.Context) error {
 
 	for {
 		select {
-		case <-c.Done():
+		case <-s.Done():
 			return nil
 		case <-ticker.C:
-			if err := s.remain(c); err != nil {
+			if err := s.remain(); err != nil {
 				return err
 			}
 		}
 	}
 }
 
-func (s *session) UpdateStatus(cri userd.ConnectRequest) *rpc.ConnectInfo {
-	cr := cri.Request()
-	c, config, err := k8s.DaemonKubeconfig(s.context, cr)
+// CheckStatus checks that the given ConnectRequest is aligned with the current status of the session.
+// If the request is not aligned, it returns a ConnectInfo with the error code set to MUST_RESTART.
+// If the request is aligned, it returns nil.
+func (s *session) CheckStatus(cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+	config, err := k8s.DaemonKubeconfig(s, cr)
 	if err != nil {
 		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
 	}
-
-	if !cr.IsPodDaemon {
+	if len(cr.MappedNamespaces) == 1 && cr.MappedNamespaces[0] == "all" {
+		cr.MappedNamespaces = nil
+	}
+	// If namespaces are specified in the request, then we must ensure that they are the same as the current ones
+	// because the request takes precedence over namespaces configured in the client configuration or by the traffic-manager.
+	if len(cr.MappedNamespaces) == 0 || slices.Equal(cr.MappedNamespaces, s.MappedNamespaces) {
 		envEQ := true
 		for k, v := range cr.Environment {
 			if k[0] == '-' {
@@ -782,44 +704,107 @@ func (s *session) UpdateStatus(cri userd.ConnectRequest) *rpc.ConnectInfo {
 				}
 			}
 		}
-		if !(envEQ && s.ContextServiceAndFlagsEqual(config)) {
-			return &rpc.ConnectInfo{
-				Error:            rpc.ConnectInfo_MUST_RESTART,
-				ClusterContext:   s.Context,
-				ClusterServer:    s.Server,
-				ManagerInstallId: s.GetManagerInstallId(c),
+		if envEQ && s.ContextServiceAndFlagsEqual(config) && s.subnetViaWorkloadsEqual(cr.SubnetViaWorkloads) {
+			return nil
+		}
+	}
+	return &rpc.ConnectInfo{
+		Error:            rpc.ConnectInfo_MUST_RESTART,
+		ClusterContext:   s.GetKubeContext(),
+		ClusterServer:    s.Server,
+		ManagerInstallId: s.GetManagerInstallId(),
+	}
+}
+
+func (s *session) subnetViaWorkloadsEqual(workloads []*rootdRpc.SubnetViaWorkload) bool {
+	return slices.EqualFunc(s.subnetViaWorkloads, workloads, func(a, b *rootdRpc.SubnetViaWorkload) bool {
+		return proto.Equal(a, b)
+	})
+}
+
+// UpdateStatus checks if the given ConnectRequest matches the current status of the session. If it does, then the status of the session is updated
+// to match the current client configuration and the traffic-manager.
+// If the request is not aligned with the current status of the session, it returns a ConnectInfo with the error code set to MUST_RESTART.
+// If the request is aligned, it returns the current status.
+func (s *session) UpdateStatus(ctx context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+	ret := s.CheckStatus(cr)
+	if ret != nil {
+		return ret
+	}
+	s.updateClientConfig(ctx, cr.MappedNamespaces)
+	return s.Status(ctx)
+}
+
+func (s *session) Status(ctx context.Context) *rpc.ConnectInfo {
+	return s.status(ctx, false)
+}
+
+func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
+	var tmCfg client.Config
+	cliCfg, err := s.ManagerClient().GetClientConfig(ctx, &empty.Empty{})
+	if err != nil {
+		if status.Code(err) != codes.Unimplemented {
+			dlog.Warnf(s, "Failed to get remote config from traffic manager: %v", err)
+		}
+	} else {
+		tmCfg, err = client.ParseConfigYAML(ctx, "client configuration from cluster", cliCfg.ConfigYaml)
+		if err != nil {
+			dlog.Warn(s, err.Error())
+		}
+	}
+
+	// Merge traffic-manager's reported config, but get priority to the local config.
+	cfg := client.GetConfig(s)
+	if tmCfg != nil {
+		tmMappedNamespaces := tmCfg.Cluster().MappedNamespaces
+		clientMappedNamespaces := cfg.Cluster().MappedNamespaces
+		cfg = tmCfg.Merge(cfg)
+
+		// We do not want to override the local config with the traffic-manager's config even if the local config is empty.
+		cfg.Cluster().MappedNamespaces = clientMappedNamespaces
+		switch {
+		case len(namespaces) > 0:
+			// Use the namespaces specified by the user.
+		case len(clientMappedNamespaces) > 0:
+			// Use the namespaces specified by the client configuration.
+			namespaces = clientMappedNamespaces
+		case len(tmMappedNamespaces) > 0:
+			// Use the namespaces specified by the traffic-manager.
+			namespaces = tmMappedNamespaces
+		}
+		if s.SetMappedNamespaces(namespaces) {
+			if len(namespaces) == 0 {
+				if k8sapi.CanWatchNamespaces(s) {
+					dlog.Infof(s, "Will watch all namespaces")
+					s.StartNamespaceWatcher()
+				} else {
+					dlog.Warnf(s, "Unable to watch all namespaces")
+				}
+			} else {
+				dlog.Infof(s, "Will use mapped namespaces %s", namespaces)
 			}
 		}
+		rt := cfg.Routing()
+		rt.NeverProxy = subnet.Unique(append(rt.NeverProxy, tmCfg.Routing().NeverProxy...))
+		client.ReplaceConfig(s, cfg)
 	}
-
-	namespaces := cr.MappedNamespaces
-	if len(namespaces) == 1 && namespaces[0] == "all" {
-		namespaces = nil
-	}
-	if len(namespaces) == 0 {
-		namespaces = client.GetConfig(c).Cluster().MappedNamespaces
-	}
-
-	if s.SetMappedNamespaces(c, namespaces) {
-		if len(namespaces) == 0 && k8sapi.CanWatchNamespaces(c) {
-			s.StartNamespaceWatcher(c)
+	if dlog.MaxLogLevel(s) >= dlog.LogLevelDebug {
+		dlog.Debug(s, "Client configuration")
+		buf, _ := json.Marshal(cfg)
+		buf, _ = yaml.JSONToYAML(buf)
+		sc := bufio.NewScanner(bytes.NewReader(buf))
+		for sc.Scan() {
+			dlog.Debug(s, sc.Text())
 		}
 	}
-	s.subnetViaWorkloads = cr.SubnetViaWorkloads
-	return s.Status()
 }
 
-func (s *session) Status() *rpc.ConnectInfo {
-	return s.status(false)
-}
-
-func (s *session) status(initial bool) *rpc.ConnectInfo {
+func (s *session) status(ctx context.Context, initial bool) *rpc.ConnectInfo {
 	cfg := s.Kubeconfig
-	c := s.context
 	ret := &rpc.ConnectInfo{
-		ClusterContext:   cfg.Context,
+		ClusterContext:   cfg.KubeContext,
 		ClusterServer:    cfg.Server,
-		ManagerInstallId: s.GetManagerInstallId(c),
+		ManagerInstallId: s.GetManagerInstallId(),
 		SessionInfo:      s.SessionInfo(),
 		ConnectionName:   s.daemonID.Name,
 		KubeFlags:        s.OriginalFlagMap,
@@ -830,23 +815,25 @@ func (s *session) status(initial bool) *rpc.ConnectInfo {
 			Name:    s.managerName,
 			Version: "v" + s.managerVersion.String(),
 		},
-		ManagerNamespace:   k8s.GetManagerNamespace(c),
+		ManagerNamespace:   k8s.GetManagerNamespace(s),
 		SubnetViaWorkloads: s.subnetViaWorkloads,
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
 			Version:    client.Version(),
-			Executable: client.GetExe(c),
+			Executable: client.GetExe(s),
 			Name:       client.DisplayName,
 		},
 	}
 	if !initial {
 		ret.Error = rpc.ConnectInfo_ALREADY_CONNECTED
 	}
-	if len(s.MappedNamespaces) > 0 || len(client.GetConfig(c).Cluster().MappedNamespaces) > 0 {
+	if len(s.MappedNamespaces) > 0 || len(client.GetConfig(s).Cluster().MappedNamespaces) > 0 {
 		ret.MappedNamespaces = s.GetCurrentNamespaces(true)
 	}
-	var err error
-	ret.DaemonStatus, err = s.rootDaemon.Status(c, &empty.Empty{})
+	err := s.WithRootClient(ctx, func(ctx context.Context, rd rootdRpc.DaemonClient) (err error) {
+		ret.DaemonStatus, err = rd.Status(s, &empty.Empty{})
+		return err
+	})
 	if err != nil {
 		return connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
 	}
@@ -856,40 +843,42 @@ func (s *session) status(initial bool) *rpc.ConnectInfo {
 // Uninstall one or all traffic-agents from the cluster if the client has sufficient credentials to do so.
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
-func (s *session) Uninstall(ur *rpc.UninstallRequest) (*common.Result, error) {
-	_, err := s.ManagerClient().UninstallAgents(s.context, &manager.UninstallAgentsRequest{
+func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
+	_, err := s.ManagerClient().UninstallAgents(ctx, &manager.UninstallAgentsRequest{
 		SessionInfo: s.sessionInfo,
 		Agents:      ur.Agents,
 	})
 	return errcat.ToResult(err), nil
 }
 
-func (s *session) getNetworkInfo(ctx context.Context, cr *rpc.ConnectRequest) *rootdRpc.NetworkConfig {
-	cfg := client.GetConfig(ctx)
+func (s *session) getNetworkInfo(cr *rpc.ConnectRequest) *rootdRpc.NetworkConfig {
+	cfg := client.GetConfig(s)
 	jsonCfg, _ := json.Marshal(cfg)
 	return &rootdRpc.NetworkConfig{
-		Session:            s.sessionInfo,
-		ClientConfig:       jsonCfg,
-		HomeDir:            homedir.HomeDir(),
-		Namespace:          s.Namespace,
-		SubnetViaWorkloads: s.subnetViaWorkloads,
 		KubeFlags:          cr.KubeFlags,
 		KubeconfigData:     cr.KubeconfigData,
+		Namespace:          s.Namespace,
+		ManagerNamespace:   k8s.GetManagerNamespace(s),
+		MappedNamespaces:   s.GetCurrentNamespaces(true),
+		Session:            s.sessionInfo,
+		SubnetViaWorkloads: s.subnetViaWorkloads,
+		HomeDir:            homedir.HomeDir(),
+		ClientConfig:       jsonCfg,
 	}
 }
 
-func (s *session) connectRootDaemon(ctx context.Context, nc *rootdRpc.NetworkConfig, wg *sync.WaitGroup, isPodDaemon bool) (rd rootdRpc.DaemonClient, err error) {
+func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.NetworkConfig, wg *sync.WaitGroup, isPodDaemon bool) (rd rootdRpc.DaemonClient, err error) {
 	// establish a connection to the root daemon gRPC grpcService
-	dlog.Info(ctx, "Connecting to root daemon...")
+	dlog.Info(s, "Connecting to root daemon...")
 	svc := s.GetService()
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
-		_, rootSession, err := rootd.NewInProcSession(ctx, nc, s.managerConn, s.managerVersion, isPodDaemon)
+		rootSession, err := rootd.NewInProcSession(s.Cluster, nc, s.managerConn, s.managerVersion, isPodDaemon)
 		if err != nil {
 			return nil, err
 		}
-		g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
-		if err = rootSession.Start(ctx, g, svc.TeleroutePort()); err != nil {
+		g := dgroup.NewGroup(rootSession, dgroup.GroupConfig{})
+		if err = rootSession.Start(g, svc.TeleroutePort()); err != nil {
 			return nil, err
 		}
 		rd = rootSession
@@ -900,12 +889,12 @@ func (s *session) connectRootDaemon(ctx context.Context, nc *rootdRpc.NetworkCon
 			defer wg.Done()
 			err := g.Wait()
 			if err != nil && !errors.Is(err, context.Canceled) {
-				dlog.Errorf(ctx, "root session exited with error: %v", err)
+				dlog.Errorf(s, "root session exited with error: %v", err)
 			}
 		}()
 	} else {
 		var conn *grpc.ClientConn
-		conn, err = socket.Dial(ctx, socket.RootDaemonPath(ctx), true)
+		conn, err = socket.Dial(timeoutCtx, socket.RootDaemonPath(s), true)
 		if err != nil {
 			return nil, fmt.Errorf("unable open root daemon socket: %w", err)
 		}
@@ -916,19 +905,16 @@ func (s *session) connectRootDaemon(ctx context.Context, nc *rootdRpc.NetworkCon
 		}()
 		rd = rootdRpc.NewDaemonClient(conn)
 
-		tmTimeout := client.GetConfig(ctx).Timeouts().Get(client.TimeoutTrafficManagerConnect)
 		for attempt := 1; ; attempt++ {
 			var rootStatus *rootdRpc.DaemonStatus
-			tCtx, tCancel := context.WithTimeout(ctx, tmTimeout/2)
-			rootStatus, err = rd.Connect(tCtx, nc)
-			tCancel()
+			rootStatus, err = rd.Connect(timeoutCtx, nc)
 			if err != nil {
 				return nil, fmt.Errorf("failed to connect to root daemon: %w", err)
 			}
 			oc := rootStatus.OutboundConfig
 			if oc == nil || oc.Session == nil {
 				// This is an internal error. Something is wrong with the root daemon.
-				return nil, errors.New("root daemon's OutboundConfig has no Session")
+				return nil, errors.New("root daemon's OutboundConfig has no session")
 			}
 			if oc.Session.SessionId == nc.Session.SessionId {
 				break
@@ -940,24 +926,21 @@ func (s *session) connectRootDaemon(ctx context.Context, nc *rootdRpc.NetworkCon
 				// ...or not, since we've already done it.
 				return nil, errors.New("unable to reconnect to root daemon")
 			}
-			if _, err = rd.Disconnect(ctx, &empty.Empty{}); err != nil {
+			if _, err = rd.Disconnect(s, &empty.Empty{}); err != nil {
 				return nil, fmt.Errorf("failed to disconnect from the root daemon: %w", err)
 			}
 		}
 	}
 
 	// The root daemon needs time to set up the TUN-device and DNS, which involves interacting
-	// with the cluster-side traffic-manager. We know that the traffic-manager is up and
-	// responding at this point, so it shouldn't take too long.
-	ctx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerAPI)
-	defer cancel()
-	if _, err = rd.WaitForNetwork(ctx, &empty.Empty{}); err != nil {
+	// with the cluster-side traffic-manager.
+	if _, err = rd.WaitForNetwork(timeoutCtx, &empty.Empty{}); err != nil {
 		if se, ok := status.FromError(err); ok {
 			err = se.Err()
 		}
 		return nil, fmt.Errorf("failed to connect to root daemon: %v", err)
 	}
-	dlog.Debug(ctx, "Connected to root daemon")
+	dlog.Debug(s, "Connected to root daemon")
 	return rd, nil
 }
 
@@ -980,7 +963,7 @@ func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
 	}, tunnel.ClientToAgent, ap.AddrPort)
 
 	go func() {
-		ctx := dgroup.WithGoroutineName(s.context, fmt.Sprintf("/%d=>%s", srcPort, ap))
+		ctx := dgroup.WithGoroutineName(s, fmt.Sprintf("/%d=>%s", srcPort, ap))
 		err := fw.Serve(ctx, nil)
 		if err != nil && ctx.Err() == nil {
 			dlog.Errorf(ctx, "port-forwarder failed with %v", err)
@@ -988,13 +971,13 @@ func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
 	}()
 }
 
-func (s *session) workloadsWatcher(ctx context.Context, namespace string, synced *sync.WaitGroup) error {
+func (s *session) workloadsWatcher(namespace string, synced *sync.WaitGroup) error {
 	defer func() {
 		if synced != nil {
 			synced.Done()
 		}
 	}()
-	return watcher.WatchWithRetry(ctx, "WatchAgentPods", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+	return watcher.WatchWithRetry(s, "WatchAgentPods", client.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.WorkloadEventsDelta], error) {
 			return s.ManagerClient().WatchWorkloads(ctx, &manager.WorkloadEventsRequest{SessionInfo: s.sessionInfo, Namespace: namespace})
 		},
@@ -1010,7 +993,7 @@ func (s *session) workloadsWatcher(ctx context.Context, namespace string, synced
 				w := we.Workload
 				key := workloadInfoKey{kind: w.Kind, name: w.Name}
 				if we.Type == manager.WorkloadEvent_DELETED {
-					dlog.Debugf(ctx, "Deleting workload %s/%s.%s", key.kind, key.name, namespace)
+					dlog.Debugf(s, "Deleting workload %s/%s.%s", key.kind, key.name, namespace)
 					delete(workloads, key)
 				} else {
 					var clients []string
@@ -1021,7 +1004,7 @@ func (s *session) workloadsWatcher(ctx context.Context, namespace string, synced
 						}
 					}
 					state := workload.StateFromRPC(w.State)
-					dlog.Debugf(ctx, "Adding workload %s/%s.%s %s %s %s", key.kind, key.name, namespace, state, w.AgentState, clients)
+					dlog.Debugf(s, "Adding workload %s/%s.%s %s %s %s", key.kind, key.name, namespace, state, w.AgentState, clients)
 					workloads[key] = workloadInfo{
 						uid:              k8sTypes.UID(w.Uid),
 						state:            state,

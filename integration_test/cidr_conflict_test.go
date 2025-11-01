@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 )
 
 type cidrConflictSuite struct {
@@ -128,7 +129,7 @@ func (s *cidrConflictSuite) Test_AutoConflictAvoidance() {
 	st := itest.TelepresenceStatusOk(ctx)
 	defer itest.TelepresenceQuitOk(ctx)
 	sns := st.RootDaemon.Subnets
-	s.Require().Equal(s.subnets, sns, "subnet conflict should not be resolved using VNAT")
+	s.Require().Equal(slice.AsStrings(s.subnets), slice.AsStrings(sns), "subnet conflict should not be resolved using VNAT")
 }
 
 func (s *cidrConflictSuite) Test_AutoConflictResolution_CloudDisable() {
