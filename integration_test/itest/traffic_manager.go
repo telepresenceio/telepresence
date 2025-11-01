@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -90,7 +91,7 @@ func dialTrafficManager(ctx context.Context, cfg *rest.Config, managerNamespace 
 		dlog.Errorf(ctx, "cannot resolve svc/traffic-manager.%s:8081: %v", managerNamespace, err)
 		return nil, err
 	}
-	return grpc.NewClient(fmt.Sprintf(portforward.K8sPFScheme+":///svc/traffic-manager.%s:8081", managerNamespace),
+	return grpcClient.DialGRPC(ctx, fmt.Sprintf(portforward.K8sPFScheme+":///svc/traffic-manager.%s:8081", managerNamespace),
 		grpc.WithResolvers(portforward.NewResolver(ctx, pap)),
 		grpc.WithContextDialer(portforward.Dialer(ctx)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

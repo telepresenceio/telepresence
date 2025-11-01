@@ -22,12 +22,13 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
 )
 
 func ConnectToManager(longLivedCtx, ctx context.Context, namespace string) (conn *grpc.ClientConn, vi *manager.VersionInfo2, err error) {
 	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "api")
 
-	dialCtx, cancel := client.GetConfig(longLivedCtx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	dialCtx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
 	pap, err := portforward.ResolveSvcToPod(ctx, "traffic-manager", namespace, "8081")
@@ -42,7 +43,7 @@ func ConnectToManager(longLivedCtx, ctx context.Context, namespace string) (conn
 		return nil, nil, err
 	}
 
-	conn, err = dialClusterGRPC(dialCtx, grpcAddr, pap)
+	conn, err = dialClusterGRPC(longLivedCtx, dialCtx, grpcAddr, pap)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -72,7 +73,7 @@ func ConnectToAgent(
 	} else {
 		grpcAddr = fmt.Sprintf("pod/%s.%s:%d#%s", podName, namespace, port, podID)
 	}
-	conn, err := dialClusterGRPC(longLivedCtx, grpcAddr, nil)
+	conn, err := dialClusterGRPC(longLivedCtx, ctx, grpcAddr, nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -85,9 +86,9 @@ func ConnectToAgent(
 	return conn, mClient, vi, err
 }
 
-func dialClusterGRPC(ctx context.Context, address string, knownPod *portforward.PodAddress) (*grpc.ClientConn, error) {
-	return grpc.NewClient(portforward.K8sPFScheme+":///"+address, grpc.WithContextDialer(portforward.Dialer(ctx)),
-		grpc.WithResolvers(portforward.NewResolver(ctx, knownPod)),
+func dialClusterGRPC(longLivedCtx, dialCtx context.Context, address string, knownPod *portforward.PodAddress) (*grpc.ClientConn, error) {
+	return grpcClient.DialGRPC(dialCtx, portforward.K8sPFScheme+":///"+address, grpc.WithContextDialer(portforward.Dialer(longLivedCtx)),
+		grpc.WithResolvers(portforward.NewResolver(longLivedCtx, knownPod)),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
 		grpc.WithIdleTimeout(0),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
