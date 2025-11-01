@@ -258,12 +258,11 @@ func (s *service) startSession(parentCtx context.Context, cr userd.ConnectReques
 	s.clientConfig = config.ClientConfig
 
 	ctx, cancel := context.WithCancel(ctx)
-	ctx = userd.WithService(ctx, s)
 
 	daemonID := daemon.NewIdentifier(cr.Request().Name, config.Context, config.Namespace, proc.RunningInContainer())
 	go runAliveAndCancellation(ctx, cancel, daemonID, wg)
 
-	session, rsp := trafficmgr.NewSession(ctx, cr, config, wg)
+	session, rsp := trafficmgr.NewSession(s, ctx, cr, config, wg)
 	if ctx.Err() != nil || rsp.Error != rpc.ConnectInfo_UNSPECIFIED {
 		cancel()
 		if s.rootSessionInProc {

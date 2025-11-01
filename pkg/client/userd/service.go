@@ -33,16 +33,3 @@ type Service interface {
 	InitFTPServer(context.Context) error
 	ManageSessions(context.Context) error
 }
-
-type serviceKey struct{}
-
-func WithService(ctx context.Context, s Service) context.Context {
-	return context.WithValue(ctx, serviceKey{}, s)
-}
-
-func GetService(ctx context.Context) Service {
-	if f, ok := ctx.Value(serviceKey{}).(Service); ok {
-		return f
-	}
-	panic("No User daemon Service has been registered")
-}

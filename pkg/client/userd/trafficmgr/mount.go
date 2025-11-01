@@ -13,7 +13,6 @@ import (
 	"github.com/telepresenceio/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -44,7 +43,7 @@ func (pa *podAccess) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGr
 		}
 		// The FTP mounter survives multiple starts for the same intercept. It just resets the address
 		mountCtx = pa.ctx
-		fuseftp = userd.GetService(ctx).FuseFTPMgr().GetFuseFTPClient(ctx)
+		fuseftp = getSession(ctx).GetService().FuseFTPMgr().GetFuseFTPClient(ctx)
 		if fuseftp == nil {
 			dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
 			return

@@ -79,6 +79,7 @@ type workloadInfo struct {
 
 type session struct {
 	*k8s.Cluster
+	service            userd.Service
 	rootDaemon         rootdRpc.DaemonClient
 	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
 
@@ -148,7 +149,7 @@ type session struct {
 	syntheticIPs map[netip.Addr]string
 }
 
-func NewSession(ctx context.Context, cri userd.ConnectRequest, config *k8s.Kubeconfig, wg *sync.WaitGroup) (session userd.Session, info *rpc.ConnectInfo) {
+func NewSession(service userd.Service, ctx context.Context, cri userd.ConnectRequest, config *k8s.Kubeconfig, wg *sync.WaitGroup) (session userd.Session, info *rpc.ConnectInfo) {
 	dlog.Info(ctx, "-- Starting new session")
 
 	cr := cri.Request()
@@ -175,7 +176,7 @@ func NewSession(ctx context.Context, cri userd.ConnectRequest, config *k8s.Kubec
 	if err != nil {
 		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
 	}
-	tmgr, err := connectMgr(ctx, cancel, cluster, installID, cr)
+	tmgr, err := connectMgr(ctx, service, cancel, cluster, installID, cr)
 	if err != nil {
 		dlog.Errorf(ctx, "Unable to connect to session: %s", err)
 		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
@@ -223,7 +224,7 @@ func NewSession(ctx context.Context, cri userd.ConnectRequest, config *k8s.Kubec
 	}
 
 	oi := tmgr.getNetworkInfo(ctx, cr)
-	if !userd.GetService(ctx).RootSessionInProcess() {
+	if !service.RootSessionInProcess() {
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
 		rootRunning, err := socket.IsRunning(ctx, socket.RootDaemonPath(ctx))
 		if err != nil {
@@ -236,7 +237,7 @@ func NewSession(ctx context.Context, cri userd.ConnectRequest, config *k8s.Kubec
 		// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
 		// must be executed by the user, not by root.
 		konfig, err := patcher.CreateExternalKubeConfig(ctx, config.ClientConfig, cluster.Context, func([]string) (string, string, error) {
-			return client.GetExe(ctx), userd.GetService(ctx).ListenerAddress(ctx), nil
+			return client.GetExe(ctx), service.ListenerAddress(ctx), nil
 		}, nil)
 		if err != nil {
 			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
@@ -258,6 +259,10 @@ func NewSession(ctx context.Context, cri userd.ConnectRequest, config *k8s.Kubec
 
 	tmgr.AddNamespaceListener(ctx, tmgr.updateDaemonNamespaces)
 	return tmgr, tmgr.status(true)
+}
+
+func (s *session) GetService() userd.Service {
+	return s.service
 }
 
 // Run (1) starts up with ensuring that the manager is installed and running,
@@ -297,6 +302,7 @@ func (s *session) ManagerVersion() semver.Version {
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
 func connectMgr(
 	longLivedCtx context.Context,
+	service userd.Service,
 	sessionCancel context.CancelFunc,
 	cluster *k8s.Cluster,
 	installID string,
@@ -387,6 +393,7 @@ func connectMgr(
 
 	sess := &session{
 		Cluster:            cluster,
+		service:            service,
 		installID:          installID,
 		daemonID:           daemonID,
 		clientID:           clientID,
@@ -874,7 +881,7 @@ func (s *session) getNetworkInfo(ctx context.Context, cr *rpc.ConnectRequest) *r
 func (s *session) connectRootDaemon(ctx context.Context, nc *rootdRpc.NetworkConfig, wg *sync.WaitGroup, isPodDaemon bool) (rd rootdRpc.DaemonClient, err error) {
 	// establish a connection to the root daemon gRPC grpcService
 	dlog.Info(ctx, "Connecting to root daemon...")
-	svc := userd.GetService(ctx)
+	svc := s.GetService()
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
 		_, rootSession, err := rootd.NewInProcSession(ctx, nc, s.managerConn, s.managerVersion, isPodDaemon)

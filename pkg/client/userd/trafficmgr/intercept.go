@@ -755,7 +755,7 @@ func (s *session) stopHandler(name, handlerContainer string, pid int) {
 	// Some users run a standard telepresence client together with ingests/intercepts
 	// in one single container.
 	c := s.context
-	if !(proc.RunningInContainer() && userd.GetService(c).RootSessionInProcess()) {
+	if !(proc.RunningInContainer() && s.GetService().RootSessionInProcess()) {
 		if handlerContainer != "" {
 			if err := docker.StopContainer(docker.EnableClient(c), handlerContainer); err != nil {
 				// It's possible that the container is stopped externally before we get here. If so,
