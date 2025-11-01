@@ -157,10 +157,10 @@ func (s *State) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container,
 	spec := cr.InterceptSpec
 
 	// Check if global intercepts are allowed before proceeding
-	if !(spec.Wiretap || spec.Mechanism == "http") {
-		// Intercept is global, check if global intercepts are allowed
-		if !managerutil.GetEnv(s.backgroundCtx).AllowGlobalIntercepts {
-			return fmt.Errorf("global TCP/UDP intercepts are disabled. Use --http-header or --http-path-* flags for HTTP intercepts")
+	// Block replaces and global TCP/UDP intercepts, but allow HTTP intercepts and wiretaps
+	if !managerutil.GetEnv(s.backgroundCtx).AllowGlobalIntercepts {
+		if spec.Replace || !(spec.Wiretap || spec.Mechanism == "http") {
+			return fmt.Errorf("global TCP/UDP intercepts and replaces are disabled. Use --http-header or --http-path-* flags for HTTP intercepts")
 		}
 	}
 

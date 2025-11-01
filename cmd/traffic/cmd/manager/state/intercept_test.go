@@ -29,6 +29,7 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 		allowGlobal      bool
 		mechanism        string
 		wiretap          bool
+		replace          bool
 		expectError      bool
 		expectedErrorMsg string
 	}{
@@ -37,6 +38,7 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			allowGlobal: true,
 			mechanism:   "tcp",
 			wiretap:     false,
+			replace:     false,
 			expectError: false,
 		},
 		{
@@ -44,14 +46,33 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			allowGlobal:      false,
 			mechanism:        "tcp",
 			wiretap:          false,
+			replace:          false,
 			expectError:      true,
-			expectedErrorMsg: "global TCP/UDP intercepts are disabled",
+			expectedErrorMsg: "global TCP/UDP intercepts and replaces are disabled",
+		},
+		{
+			name:             "replace_blocked_when_disabled",
+			allowGlobal:      false,
+			mechanism:        "tcp",
+			wiretap:          false,
+			replace:          true,
+			expectError:      true,
+			expectedErrorMsg: "global TCP/UDP intercepts and replaces are disabled",
+		},
+		{
+			name:        "replace_allowed_when_enabled",
+			allowGlobal: true,
+			mechanism:   "tcp",
+			wiretap:     false,
+			replace:     true,
+			expectError: false,
 		},
 		{
 			name:        "http_intercept_allowed_when_global_disabled",
 			allowGlobal: false,
 			mechanism:   "http",
 			wiretap:     false,
+			replace:     false,
 			expectError: false,
 		},
 		{
@@ -59,6 +80,7 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			allowGlobal: false,
 			mechanism:   "tcp",
 			wiretap:     true,
+			replace:     false,
 			expectError: false,
 		},
 		{
@@ -66,6 +88,7 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			allowGlobal: true,
 			mechanism:   "http",
 			wiretap:     false,
+			replace:     false,
 			expectError: false,
 		},
 	}
@@ -102,6 +125,7 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			spec := &rpc.InterceptSpec{
 				Mechanism: tt.mechanism,
 				Wiretap:   tt.wiretap,
+				Replace:   tt.replace,
 			}
 
 			// Create minimal CreateInterceptRequest
@@ -122,7 +146,7 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			} else if err != nil {
 				// preparePorts will fail for other reasons (no actual ports configured),
 				// but we should NOT get the "global intercepts disabled" error
-				assert.NotContains(t, err.Error(), "global TCP/UDP intercepts are disabled",
+				assert.NotContains(t, err.Error(), "global TCP/UDP intercepts and replaces are disabled",
 					"Should not fail due to AllowGlobalIntercepts check")
 			}
 		})
@@ -173,8 +197,8 @@ func TestAllowGlobalIntercepts_ErrorMessage(t *testing.T) {
 	errorMsg := err.Error()
 
 	// Verify error message contains key information
-	assert.Contains(t, errorMsg, "global TCP/UDP intercepts are disabled",
-		"Error should clearly state that global intercepts are disabled")
+	assert.Contains(t, errorMsg, "global TCP/UDP intercepts and replaces are disabled",
+		"Error should clearly state that global intercepts and replaces are disabled")
 
 	// Verify error message suggests HTTP header flag
 	assert.Contains(t, errorMsg, "--http-header",
@@ -261,7 +285,7 @@ func TestAllowGlobalIntercepts_DefaultBehavior(t *testing.T) {
 	// Should not fail due to AllowGlobalIntercepts check
 	// (may fail for other reasons like missing port config)
 	if prepErr != nil {
-		assert.NotContains(t, prepErr.Error(), "global TCP/UDP intercepts are disabled",
-			"Default behavior should allow global intercepts")
+		assert.NotContains(t, prepErr.Error(), "global TCP/UDP intercepts and replaces are disabled",
+			"Default behavior should allow global intercepts and replaces")
 	}
 }

@@ -32,8 +32,8 @@ func (s *allowGlobalInterceptsDisabledSuite) Test_GlobalInterceptBlocked() {
 
 	// Should fail with appropriate error
 	require.Error(err, "Global intercept should be blocked when allowGlobalIntercepts=false")
-	require.Contains(stderr, "global TCP/UDP intercepts are disabled",
-		"Error should explain that global intercepts are disabled")
+	require.Contains(stderr, "global TCP/UDP intercepts and replaces are disabled",
+		"Error should explain that global intercepts and replaces are disabled")
 	require.Contains(stderr, "--http-header",
 		"Error should suggest using --http-header flag")
 }
