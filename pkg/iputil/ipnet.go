@@ -1,6 +1,7 @@
 package iputil
 
 import (
+	"net"
 	"net/netip"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -42,4 +43,18 @@ func RPCsToPrefixes(n []*manager.IPNet) []netip.Prefix {
 		ss[i] = RPCToPrefix(m)
 	}
 	return ss
+}
+
+func PrefixFromIPNet(ipNet *net.IPNet) (pfx netip.Prefix) {
+	if ipNet == nil {
+		return pfx
+	}
+	if addr, ok := netip.AddrFromSlice(ipNet.IP); ok {
+		if addr.Is4In6() {
+			addr = netip.AddrFrom4(addr.As4())
+		}
+		ones, _ := ipNet.Mask.Size()
+		pfx = netip.PrefixFrom(addr, ones)
+	}
+	return pfx
 }

@@ -34,12 +34,6 @@ func rowAsRoute(row *winipcfg.MibIPforwardRow2, localIP netip.Addr) (*Route, err
 	if err != nil {
 		return nil, errInconsistentRT
 	}
-	if !localIP.IsValid() {
-		localIP, err = interfaceLocalIP(iface, dst.Addr().Is4())
-		if err != nil {
-			return nil, err
-		}
-	}
 	return &Route{
 		LocalIP:        localIP,
 		Gateway:        gw,

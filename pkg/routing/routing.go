@@ -3,8 +3,6 @@ package routing
 import (
 	"context"
 	"errors"
-	"fmt"
-	"net"
 	"net/netip"
 	"strings"
 	"time"
@@ -129,31 +127,4 @@ func (r *Route) AddStatic(ctx context.Context) (err error) {
 func (r *Route) RemoveStatic(ctx context.Context) (err error) {
 	dlog.Debugf(ctx, "Dropping static route %s", r)
 	return r.removeStatic(ctx)
-}
-
-func interfaceLocalIP(iface *net.Interface, ipv4 bool) (netip.Addr, error) {
-	ias, err := iface.Addrs()
-	if err != nil {
-		return netip.Addr{}, fmt.Errorf("unable to get interface addresses for interface %s: %w", iface.Name, err)
-	}
-	for _, ia := range ias {
-		pfx, err := netip.ParsePrefix(ia.String())
-		if err != nil {
-			return netip.Addr{}, fmt.Errorf("unable to parse address %s: %v", ia.String(), err)
-		}
-		ip := pfx.Addr()
-		if ip.Is4() {
-			if !ipv4 {
-				continue
-			}
-			return ip, nil
-		} else if ipv4 {
-			continue
-		}
-		return ip, nil
-	}
-	if ipv4 {
-		return netip.IPv4Unspecified(), nil
-	}
-	return netip.IPv6Unspecified(), nil
 }

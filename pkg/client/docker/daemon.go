@@ -89,7 +89,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 	if cr.Hostname != "" {
 		opts = append(opts, "--hostname", cr.Hostname)
 	}
-	opts, err = proc.AppendOSSpecificContainerOpts(ctx, opts)
+	opts, err = appendOSSpecificContainerOpts(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -703,4 +703,18 @@ func WaitForExit(ctx context.Context, cli *dockerClient.Client, id string, maxTi
 		}
 		return err
 	}, backoff.WithContext(backoff.NewExponentialBackOff(backoff.WithInitialInterval(exitPollInterval), backoff.WithMaxElapsedTime(maxTime)), ctx))
+}
+
+func appendOSSpecificContainerOpts(ctx context.Context, opts []string) ([]string, error) {
+	if proc.RunningInWSL() {
+		// Using host.docker.internal:host-gateway won't work for the kubeauth process, because Windows Docker Desktop
+		// will assign the IP of the Windows host, not the host from where this process was started (the Linux host).
+		// We'll reach that using the gateway of the default host.
+		r, err := routing.DefaultRoute(ctx)
+		if err != nil {
+			return opts, err
+		}
+		opts = append(opts, "-e", fmt.Sprintf("TELEPRESENCE_KUBEAUTH_HOST=%s", r.LocalIP))
+	}
+	return opts, nil
 }

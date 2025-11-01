@@ -25,7 +25,7 @@ func main() {
 	bCtx = dlog.WithLogger(bCtx, dlog.WrapLogrus(logger))
 	vif.InitLogger(bCtx)
 
-	ctx, cancel := context.WithCancel(client.WithConfig(bCtx, cfg))
+	ctx, cancel := context.WithCancel(bCtx)
 
 	var err error
 	defer func() {

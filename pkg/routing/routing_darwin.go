@@ -308,3 +308,30 @@ func (t *table) Remove(ctx context.Context, r *Route) error {
 func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
 	return false, nil
 }
+
+func interfaceLocalIP(iface *net.Interface, ipv4 bool) (netip.Addr, error) {
+	ias, err := iface.Addrs()
+	if err != nil {
+		return netip.Addr{}, fmt.Errorf("unable to get interface addresses for interface %s: %w", iface.Name, err)
+	}
+	for _, ia := range ias {
+		pfx, err := netip.ParsePrefix(ia.String())
+		if err != nil {
+			return netip.Addr{}, fmt.Errorf("unable to parse address %s: %v", ia.String(), err)
+		}
+		ip := pfx.Addr()
+		if ip.Is4() {
+			if !ipv4 {
+				continue
+			}
+			return ip, nil
+		} else if ipv4 {
+			continue
+		}
+		return ip, nil
+	}
+	if ipv4 {
+		return netip.IPv4Unspecified(), nil
+	}
+	return netip.IPv6Unspecified(), nil
+}
