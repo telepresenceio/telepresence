@@ -24,7 +24,7 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
-  - version: 2.25.1
+  - version: 2.26.0
     date: (TBD)
     notes:
       - type: feature

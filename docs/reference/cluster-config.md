@@ -229,7 +229,9 @@ intercept:
 
 When this setting is `false`:
 - Standard intercepts without HTTP filters (e.g., `telepresence intercept myservice --port 8080`) will be rejected
+- Replace operations (e.g., `telepresence replace myservice`) will be rejected
 - HTTP intercepts with filters (e.g., `telepresence intercept myservice --http-header X-User-ID=dev123 --port 8080`) will work normally
+- Wiretap operations continue to work (they don't block other users)
 - Multiple developers can create personal HTTP intercepts on the same service simultaneously
 - The error message will guide users to use `--http-header`, `--http-path-prefix`, `--http-path-equal`, or `--http-path-regex` flags
 
