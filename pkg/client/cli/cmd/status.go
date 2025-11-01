@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -20,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -288,54 +288,38 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 
 	status, err := userD.Status(ctx, &empty.Empty{})
 	if err != nil {
+		err = grpc.FromGRPC(err)
+		us.Status = "Not connected"
+		us.Error = err.Error()
 		return nil, err
 	}
-	switch status.Error {
-	case connector.ConnectInfo_UNSPECIFIED, connector.ConnectInfo_ALREADY_CONNECTED:
-		us.Status = "Connected"
-		us.KubernetesServer = status.ClusterServer
-		us.KubernetesContext = status.ClusterContext
-		for _, ig := range status.GetIngests() {
-			us.Ingests = append(us.Ingests, ConnectStatusIngest{
-				Workload:  ig.Workload,
-				Container: ig.Container,
-				Mount:     ig.ClientMountPoint,
-			})
-		}
-		for _, icept := range status.GetIntercepts().GetIntercepts() {
-			cis := ConnectStatusIntercept{
-				Name:   icept.Spec.Name,
-				Client: icept.Spec.Client,
-			}
-			switch {
-			case icept.Spec.NoDefaultPort:
-				us.Replacements = append(us.Replacements, cis)
-			case icept.Spec.Wiretap:
-				us.Wiretaps = append(us.Wiretaps, cis)
-			default:
-				us.Intercepts = append(us.Intercepts, cis)
-			}
-		}
-		us.Namespace = status.Namespace
-		us.ManagerNamespace = status.ManagerNamespace
-		us.MappedNamespaces = status.MappedNamespaces
-	case connector.ConnectInfo_UNAUTHORIZED:
-		us.Status = "Not authorized to connect"
-		us.Error = status.ErrorText
-	case connector.ConnectInfo_UNAUTHENTICATED:
-		us.Status = "Not logged in"
-		us.Error = status.ErrorText
-	case connector.ConnectInfo_MUST_RESTART:
-		us.Status = "Connected, but must restart"
-	case connector.ConnectInfo_DISCONNECTED:
-		us.Status = "Not connected"
-	case connector.ConnectInfo_CLUSTER_FAILED:
-		us.Status = "Not connected, error talking to cluster"
-		us.Error = status.ErrorText
-	case connector.ConnectInfo_TRAFFIC_MANAGER_FAILED:
-		us.Status = "Not connected, error talking to in-cluster Telepresence traffic-manager"
-		us.Error = status.ErrorText
+	us.Status = "Connected"
+	us.KubernetesServer = status.ClusterServer
+	us.KubernetesContext = status.ClusterContext
+	for _, ig := range status.GetIngests() {
+		us.Ingests = append(us.Ingests, ConnectStatusIngest{
+			Workload:  ig.Workload,
+			Container: ig.Container,
+			Mount:     ig.ClientMountPoint,
+		})
 	}
+	for _, icept := range status.GetIntercepts().GetIntercepts() {
+		cis := ConnectStatusIntercept{
+			Name:   icept.Spec.Name,
+			Client: icept.Spec.Client,
+		}
+		switch {
+		case icept.Spec.NoDefaultPort:
+			us.Replacements = append(us.Replacements, cis)
+		case icept.Spec.Wiretap:
+			us.Wiretaps = append(us.Wiretaps, cis)
+		default:
+			us.Intercepts = append(us.Intercepts, cis)
+		}
+	}
+	us.Namespace = status.Namespace
+	us.ManagerNamespace = status.ManagerNamespace
+	us.MappedNamespaces = status.MappedNamespaces
 
 	rStatus := status.DaemonStatus
 	if rStatus != nil {

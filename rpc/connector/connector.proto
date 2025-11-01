@@ -1,7 +1,6 @@
 syntax = "proto3";
 package telepresence.connector;
 
-import "common/errors.proto";
 import "common/version.proto";
 import "daemon/daemon.proto";
 import "google/protobuf/duration.proto";
@@ -46,8 +45,9 @@ service Connector {
   // if no connection has been established.
   rpc Status(google.protobuf.Empty) returns (ConnectInfo);
 
-  // Queries the connector whether it is possible to create the given intercept.
-  rpc CanIntercept(CreateInterceptRequest) returns (InterceptResult);
+  // Queries the connector whether it is possible to create the given intercept
+  // and returns an error if it's not.
+  rpc CanIntercept(CreateInterceptRequest) returns (google.protobuf.Empty);
 
   // Starts an Ingest session.
   rpc Ingest(IngestRequest) returns (IngestInfo);
@@ -60,15 +60,15 @@ service Connector {
 
   // Adds an intercept to a workload.  Requires having already called
   // Connect.
-  rpc CreateIntercept(CreateInterceptRequest) returns (InterceptResult);
+  rpc CreateIntercept(CreateInterceptRequest) returns (manager.InterceptInfo);
 
   // Deactivates and removes an existent workload intercept.
   // Requires having already called Connect.
-  rpc RemoveIntercept(manager.RemoveInterceptRequest2) returns (InterceptResult);
+  rpc RemoveIntercept(manager.RemoveInterceptRequest2) returns (google.protobuf.Empty);
 
   // Uninstalls traffic-agents from the cluster.
   // Requires having already called Connect.
-  rpc Uninstall(UninstallRequest) returns (telepresence.common.Result);
+  rpc Uninstall(UninstallRequest) returns (google.protobuf.Empty);
 
   // Returns a list of workloads and their current intercept status.
   // Requires having already called Connect.
@@ -102,7 +102,7 @@ service Connector {
 
   // RemoteMountAvailability checks if remote mounts are possible using the given
   // mount type and returns an error if its not.
-  rpc RemoteMountAvailability(google.protobuf.Empty) returns (telepresence.common.Result);
+  rpc RemoteMountAvailability(google.protobuf.Empty) returns (google.protobuf.Empty);
 
   // GetConfig returns the current configuration
   rpc GetConfig(google.protobuf.Empty) returns (ClientConfig);
@@ -167,34 +167,6 @@ message ConnectRequest {
 }
 
 message ConnectInfo {
-  enum ErrType {
-    UNSPECIFIED       = 0; // success
-    UNAUTHORIZED      = 1; // not authorized to connect
-    UNAUTHENTICATED   = 5; // not logged in
-    ALREADY_CONNECTED = 2; // success
-    MUST_RESTART      = 7; // would-be-success, but kubeconfig has changed
-
-    // failure: Connect has not yet been called (only returned from Status)
-    DISCONNECTED = 3;
-
-    // failure: error parsing kubeconfig or talking to the cluster; error_text and error_category are set
-    CLUSTER_FAILED = 4;
-
-    // failure: error talking to the in-cluster traffic-manager; error_text and error_category are set
-    TRAFFIC_MANAGER_FAILED = 6;
-
-    // failure: error talking to the on-laptop root daemon; error_text and error_category are set
-    DAEMON_FAILED = 8;
-  }
-  ErrType error = 1;
-
-  // only set for some error codes, see above
-  string error_text = 2;
-  int32 error_category = 12;
-
-  // everything else is only set for error=UNSPECIFIED,
-  // error=ALREADY_CONNECTED, or error=MUST_RESTART.
-
   string cluster_server = 3;
   string cluster_context = 4;
   common.VersionInfo version = 5;
@@ -224,7 +196,10 @@ message ConnectInfo {
   repeated string mapped_namespaces = 15;
   repeated daemon.SubnetViaWorkload subnet_via_workloads = 18;
 
-  reserved 11;
+  // Connection was established by the caller's connect call.
+  bool initial = 20;
+
+  reserved 1, 2, 11, 12;
 }
 
 message UninstallRequest {
@@ -364,21 +339,6 @@ message WorkloadInfo {
 
 message WorkloadInfoSnapshot {
   repeated WorkloadInfo workloads = 1;
-}
-
-message InterceptResult {
-  telepresence.manager.InterceptInfo intercept_info = 1;
-  telepresence.common.InterceptError error = 2;
-  string error_text = 3;
-  int32 error_category = 7;
-
-  reserved 4;
-
-  // The service uid associated with the workload intercepted
-  string service_uid = 5;
-
-  // The kind of workload in this intercept
-  string workload_kind = 6;
 }
 
 message LogLevelRequest {

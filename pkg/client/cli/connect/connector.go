@@ -39,6 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -48,19 +49,6 @@ var (
 	ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
 	ErrNoRootDaemon = errors.New("telepresence root daemon is not running")
 )
-
-type ConnectError struct {
-	error
-	code connector.ConnectInfo_ErrType
-}
-
-func (ce *ConnectError) Code() connector.ConnectInfo_ErrType {
-	return ce.code
-}
-
-func (ce *ConnectError) Unwrap() error {
-	return ce.error
-}
 
 //nolint:gochecknoglobals // extension point
 var QuitDaemonFuncs = []func(context.Context){
@@ -232,7 +220,7 @@ func ResolveLocalReroute(ctx context.Context, ds *daemon.Session, pm string) (er
 		DstHostPort: hpb,
 		SrcPort:     uint32(localPort.Port),
 	})
-	return err
+	return tpGrpc.FromGRPC(err)
 }
 
 func ResolveRemoteReroute(ctx context.Context, ds *daemon.Session, pm string) (err error) {
@@ -256,7 +244,7 @@ func ResolveRemoteReroute(ctx context.Context, ds *daemon.Session, pm string) (e
 		DstHostPort: hpb,
 		SrcPort:     uint32(newPort.Port),
 	})
-	return err
+	return tpGrpc.FromGRPC(err)
 }
 
 func resolveHostPort(ctx context.Context, ds *daemon.Session, proto types.Proto, hostPortStr string) (hostPort types.AddrPortProto, err error) {
@@ -279,7 +267,7 @@ func resolveHostPort(ctx context.Context, ds *daemon.Session, proto types.Proto,
 		Port: portStr,
 	})
 	if err != nil {
-		return hostPort, err
+		return hostPort, tpGrpc.FromGRPC(err)
 	}
 	err = hostPort.UnmarshalBinary(rsp.HostPort)
 	return hostPort, err
@@ -353,7 +341,7 @@ func Disconnect(ctx context.Context) {
 		case status.Code(err) == codes.Unavailable:
 			progress.PrintDone(ctx, "Not connected")
 		default:
-			_ = progress.MaybeWriteError(ctx, fmt.Errorf("failed to disconnect: %v", err))
+			_ = progress.MaybeWriteError(ctx, fmt.Errorf("failed to disconnect: %w", tpGrpc.FromGRPC(err)))
 		}
 	}
 }
@@ -472,7 +460,7 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 	}()
 
 	if err = proc.StartInBackground(false, args...); err != nil {
-		return ctx, nil, nil, errcat.NoDaemonLogs.Newf("failed to launch the connector service: %w", err)
+		return ctx, nil, nil, errcat.NoDaemonLogs.Errorf(err, "failed to launch the connector service")
 	}
 	conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx), true)
 	return ctx, info, conn, err
@@ -548,7 +536,7 @@ func getConnectorVersion(ctx context.Context, cc connector.ConnectorClient) (*co
 	var vi *common.VersionInfo
 	err := backoff.Retry(func() (err error) {
 		vi, err = cc.Version(ctx, &emptypb.Empty{})
-		return err
+		return tpGrpc.FromGRPC(err)
 	}, backoff.WithContext(&b, ctx))
 	return vi, err
 }
@@ -611,37 +599,15 @@ func warnMngrVersion(ctx context.Context, ci *connector.ConnectInfo) error {
 	return nil
 }
 
-func connectResult(ctx context.Context, ci *connector.ConnectInfo, withProgress bool) (*daemon.Session, error) {
-	var msg string
-	cat := errcat.Unknown
-	started := false
-	switch ci.Error {
-	case connector.ConnectInfo_UNSPECIFIED:
-		err := warnMngrVersion(ctx, ci)
-		if err != nil {
-			dlog.Error(ctx, err)
-		}
-		started = true
-		fallthrough
-	case connector.ConnectInfo_ALREADY_CONNECTED:
-		if withProgress {
-			msg := fmt.Sprintf("Connected to context %s, namespace %s (%s)", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
-			if ci.Error == connector.ConnectInfo_UNSPECIFIED {
-				progress.PrintDone(ctx, msg)
-			} else {
-				progress.Done(ctx, msg)
-			}
-		}
-		return &daemon.Session{Info: ci, Started: started}, nil
-	case connector.ConnectInfo_MUST_RESTART:
-		msg = "Cluster configuration changed, please quit telepresence and reconnect"
-	default:
-		msg = ci.ErrorText
-		if ci.ErrorCategory != 0 {
-			cat = errcat.Category(ci.ErrorCategory)
-		}
+func connectResult(ctx context.Context, ci *connector.ConnectInfo, withProgress bool) *daemon.Session {
+	err := warnMngrVersion(ctx, ci)
+	if err != nil {
+		dlog.Error(ctx, err)
 	}
-	return nil, &ConnectError{error: cat.Newf("connector.Connect: %s", msg), code: ci.Error}
+	if withProgress {
+		progress.PrintDonef(ctx, "Connected to context %s, namespace %s (%s)", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
+	}
+	return &daemon.Session{Info: ci, Started: ci.Initial}
 }
 
 func connectSession(ctx context.Context, useLine string, request *daemon.Request, required bool) (session *daemon.Session, err error) {
@@ -667,12 +633,14 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 	implicitConnect := false
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
-		if ci, err = userD.Status(ctx, &emptypb.Empty{}); err != nil {
-			return nil, err
+		ci, err = userD.Status(ctx, &emptypb.Empty{})
+		if err == nil {
+			return connectResult(ctx, ci, false), nil
 		}
-		if ci.Error != connector.ConnectInfo_DISCONNECTED {
-			return connectResult(ctx, ci, false)
+		if status.Code(err) != codes.Unavailable {
+			return nil, tpGrpc.FromGRPC(err)
 		}
+		err = nil
 		if required {
 			implicitConnect = true
 		}
@@ -696,9 +664,9 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 			dlog.Debugf(ctx, "Deleting daemon info %s due to connect error: %v", file, err)
 			_ = daemon.DeleteInfo(ctx, file)
 		}
-		return nil, err
+		return nil, tpGrpc.FromGRPC(err)
 	}
-	return connectResult(ctx, ci, true)
+	return connectResult(ctx, ci, true), nil
 }
 
 func createTelerouteNetwork(ctx context.Context, info *daemon.Info) error {

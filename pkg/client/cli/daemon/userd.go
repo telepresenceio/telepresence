@@ -24,6 +24,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 )
 
 type UserClient interface {
@@ -132,7 +133,7 @@ func (u *userClient) Executable() string {
 func (u *userClient) Lookup(ctx context.Context, name string) (addr netip.Addr, err error) {
 	ipb, err := u.LookupIP(ctx, &daemon.LookupIPRequest{Name: name})
 	if err != nil {
-		return addr, errcat.User.Newf("unable to resolve name %q: %v", name, err)
+		return addr, errcat.User.Errorf(tpGrpc.FromGRPC(err), "unable to resolve name %q", name)
 	}
 	err = addr.UnmarshalBinary(ipb.Ip)
 	if err != nil {
@@ -182,6 +183,7 @@ func (u *userClient) AddHandler(ctx context.Context, id string, cmd *exec.Cmd, c
 			dlog.Infof(ctx, "intercept no longer present when adding container %s as interceptor", containerName)
 			err = nil
 		default:
+			err = tpGrpc.FromGRPC(err)
 			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
 		}
 		_ = cmd.Process.Kill()
@@ -193,7 +195,7 @@ func (u *userClient) AddHandler(ctx context.Context, id string, cmd *exec.Cmd, c
 func (s *Session) GetAgentConfig(ctx context.Context, workload string) (*agentconfig.Sidecar, error) {
 	agc, err := s.UserClient.GetAgentConfig(ctx, &manager.AgentConfigRequest{Name: workload})
 	if err != nil {
-		return nil, err
+		return nil, tpGrpc.FromGRPC(err)
 	}
 	return agentconfig.UnmarshalYAML(agc.Data)
 }
@@ -222,6 +224,8 @@ func GetCommandKubeConfig(cmd *cobra.Command) (*k8s.Kubeconfig, error) {
 		ci, err = uc.Status(ctx, &emptypb.Empty{})
 		if err == nil {
 			kc, err = k8s.NewKubeconfig(ctx, false, map[string]string{"context": ci.ClusterContext}, "", nil)
+		} else {
+			err = tpGrpc.FromGRPC(err)
 		}
 	} else {
 		if GetRequest(ctx) == nil {
@@ -229,7 +233,7 @@ func GetCommandKubeConfig(cmd *cobra.Command) (*k8s.Kubeconfig, error) {
 				return nil, err
 			}
 		}
-		rq := GetRequest(ctx)
+		rq := MustGetRequest(ctx)
 		kc, err = k8s.NewKubeconfig(ctx, false, rq.KubeFlags, rq.ManagerNamespace, rq.KubeconfigData)
 	}
 	return kc, err

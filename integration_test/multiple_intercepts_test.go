@@ -149,5 +149,5 @@ func (s *multipleInterceptsSuite) Test_ReportsPortConflict() {
 	defer itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--port", strconv.Itoa(s.servicePort[0]), svc)
 	_, stderr, err := itest.Telepresence(s.Context(), "intercept", "--mount", "false", "--port", strconv.Itoa(s.servicePort[1]), svc)
 	s.Error(err)
-	s.Contains(stderr, fmt.Sprintf("Port 127.0.0.1:%d is already in use by intercept %s-1", s.servicePort[1], s.Name()))
+	s.Contains(stderr, fmt.Sprintf("port 127.0.0.1:%d is already in use by intercept %s-1", s.servicePort[1], s.Name()))
 }

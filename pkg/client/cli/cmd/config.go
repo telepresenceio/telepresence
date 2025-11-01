@@ -11,6 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
 
@@ -85,7 +86,7 @@ func runConfigView(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 	cc, err := daemon.MustGetUserClient(ctx).GetConfig(ctx, &empty.Empty{})
 	if err != nil {
-		return err
+		return grpc.FromGRPC(err)
 	}
 	err = json.Unmarshal(cc.Json, &cfg, false)
 	if err != nil {

@@ -71,23 +71,23 @@ func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInf
 func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
 	result = &rpc.ConnectInfo{}
 
-	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
-		result = session.UpdateStatus(ctx, cr)
-		return nil
+	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) (err error) {
+		result, err = session.UpdateStatus(ctx, cr)
+		return err
 	})
-	if err == nil {
-		return result, nil
+	if status.Code(err) != codes.Unavailable {
+		return result, err
 	}
 
 	s.sessionLock.Lock()
 	defer s.sessionLock.Unlock()
 	if s.session != nil {
 		// Someone beat us to taking the lock.
-		result = s.session.CheckStatus(cr)
-		if result != nil {
-			return result, nil
+		err = s.session.CheckStatus(cr)
+		if err != nil {
+			return nil, err
 		}
-		return s.session.Status(server.NewCombinedContext(s.session, ctx)), nil
+		return s.session.Status(server.NewCombinedContext(s.session, ctx))
 	}
 
 	cfg, err := client.LoadConfig(s)
@@ -105,10 +105,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 			s.quit()
 		}
 		dlog.Errorf(ctx, "Failed to obtain kubeconfig: %v", err)
-		result.Error = rpc.ConnectInfo_CLUSTER_FAILED
-		result.ErrorText = err.Error()
-		result.ErrorCategory = int32(errcat.GetCategory(err))
-		return result, nil
+		return result, err
 	}
 
 	// The service must know about the clientConfig when the session is created because the session creation
@@ -118,7 +115,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	s.clientConfig = config.ClientConfig
 	s.clientConfigLock.Unlock()
 	defer func() {
-		if result.Error == rpc.ConnectInfo_UNSPECIFIED {
+		if err != nil {
 			s.clientConfigLock.Lock()
 			s.clientConfig = nil
 			s.clientConfigLock.Unlock()
@@ -129,14 +126,14 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	wg := &sync.WaitGroup{}
 
 	var session userd.Session
-	session, result = trafficmgr.NewSession(s, server.NewCombinedContext(s, ctx), cr, config, wg)
-	if ctx.Err() != nil || result.Error != rpc.ConnectInfo_UNSPECIFIED {
+	session, result, err = trafficmgr.NewSession(s, server.NewCombinedContext(s, ctx), cr, config, wg)
+	if err != nil {
 		sessionCancel()
 		if s.rootSessionInProc {
 			// Simplified session management. The daemon handles one session, then exits.
 			s.quit()
 		}
-		return result, nil
+		return nil, err
 	}
 	client.ReloadDaemonLogLevel(session)
 	s.sessionCancel = func() {
@@ -201,62 +198,39 @@ func (s *service) clearSession(oldSession userd.Session) bool {
 }
 
 func (s *service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.ConnectInfo, err error) {
-	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
-		result = session.Status(ctx)
-		return nil
+	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) (err error) {
+		result, err = session.Status(ctx)
+		return err
 	})
-	if err == nil {
-		return result, nil
+	if status.Code(err) != codes.Unavailable {
+		return result, err
 	}
-	result = &rpc.ConnectInfo{Error: rpc.ConnectInfo_DISCONNECTED}
-	_ = s.withRootDaemon(ctx, func(c context.Context, dc daemon.DaemonClient) error {
+	err = s.withRootDaemon(ctx, func(c context.Context, dc daemon.DaemonClient) (err error) {
 		result.DaemonStatus, err = dc.Status(c, ex)
-		return nil
+		return err
 	})
 	return result, err
 }
 
-func (s *service) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
-		_, result = session.CanIntercept(ctx, ir)
-		if result == nil {
-			result = &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
-		}
-		return nil
+func (s *service) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (empty2 *empty.Empty, err error) {
+	return &empty.Empty{}, s.withSession(ctx, func(ctx context.Context, session userd.Session) (err error) {
+		_, err = session.CanIntercept(ctx, ir)
+		return err
+	})
+}
+
+func (s *service) CreateIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (result *manager.InterceptInfo, err error) {
+	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) (err error) {
+		result, err = session.AddIntercept(ctx, ir)
+		return err
 	})
 	return result, err
 }
 
-func (s *service) CreateIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (result *rpc.InterceptResult, err error) {
-	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
-		result = session.AddIntercept(ctx, ir)
-		return nil
+func (s *service) RemoveIntercept(ctx context.Context, rr *manager.RemoveInterceptRequest2) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, func(_ context.Context, session userd.Session) error {
+		return session.RemoveIntercept(rr.Name)
 	})
-	return result, err
-}
-
-func (s *service) RemoveIntercept(ctx context.Context, rr *manager.RemoveInterceptRequest2) (result *rpc.InterceptResult, err error) {
-	err = s.withSession(ctx, func(_ context.Context, session userd.Session) error {
-		result = &rpc.InterceptResult{}
-		spec := session.GetInterceptSpec(rr.Name)
-		if spec != nil {
-			result.ServiceUid = spec.ServiceUid
-			result.WorkloadKind = spec.WorkloadKind
-		}
-		if err := session.RemoveIntercept(rr.Name); err != nil {
-			if status.Code(err) == codes.NotFound {
-				result.Error = common.InterceptError_NOT_FOUND
-				result.ErrorText = rr.Name
-				result.ErrorCategory = int32(errcat.User)
-			} else {
-				result.Error = common.InterceptError_TRAFFIC_MANAGER_ERROR
-				result.ErrorText = err.Error()
-				result.ErrorCategory = int32(errcat.Unknown)
-			}
-		}
-		return nil
-	})
-	return result, err
 }
 
 func (s *service) AddInterceptor(ctx context.Context, interceptor *rpc.Interceptor) (*empty.Empty, error) {
@@ -311,12 +285,10 @@ func (s *service) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream rpc.Conne
 	return session.WatchWorkloads(wr, stream)
 }
 
-func (s *service) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (result *common.Result, err error) {
-	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
-		result, err = session.Uninstall(ctx, ur)
-		return err
+func (s *service) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
+		return session.Uninstall(ctx, ur)
 	})
-	return result, err
 }
 
 func (s *service) GetConfig(ctx context.Context, _ *empty.Empty) (cfg *rpc.ClientConfig, err error) {
@@ -393,13 +365,13 @@ func (s *service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, erro
 	return ex, nil
 }
 
-func (s *service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (*common.Result, error) {
+func (s *service) RemoteMountAvailability(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
 	if proc.RunningInContainer() {
 		// We mount using docker volumes and the telemount driver plugin.
-		return errcat.ToResult(nil), nil
+		return ex, nil
 	}
 	if client.GetConfig(ctx).Intercept().UseFtp {
-		return errcat.ToResult(s.FuseFTPError()), nil
+		return ex, s.FuseFTPError()
 	}
 
 	// Use CombinedOutput to include stderr which has information about whether they
@@ -413,7 +385,7 @@ func (s *service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		dlog.Errorf(ctx, "sshfs not installed: %v", err)
-		return errcat.ToResult(errors.New("sshfs is not installed on your local machine")), nil
+		return ex, errcat.User.New("sshfs is not installed on your local machine")
 	}
 
 	// OSXFUSE changed to macFUSE, and we've noticed that older versions of OSXFUSE
@@ -422,9 +394,9 @@ func (s *service) RemoteMountAvailability(ctx context.Context, _ *empty.Empty) (
 	// OSXFUSE isn't included in the output of sshfs -V in versions of 4.0.0 so
 	// we check for that as a proxy for if they have the right version or not.
 	if bytes.Contains(out, []byte("OSXFUSE")) {
-		return errcat.ToResult(errors.New(`macFUSE 4.0.5 or higher is required on your local machine`)), nil
+		return ex, errcat.User.New(`macFUSE 4.0.5 or higher is required on your local machine`)
 	}
-	return errcat.ToResult(nil), nil
+	return ex, nil
 }
 
 func (s *service) GetNamespaces(ctx context.Context, req *rpc.GetNamespacesRequest) (*rpc.GetNamespacesResponse, error) {

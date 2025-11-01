@@ -83,7 +83,7 @@ func quitRootDaemon(ctx context.Context) {
 
 func mkdir(dirType, path string) error {
 	if err := os.MkdirAll(path, 0o700); err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to ensure that %s directory %q exists: %w", dirType, path, err)
+		return errcat.NoDaemonLogs.Errorf(err, "unable to ensure that %s directory %q exists", dirType, path)
 	}
 	return nil
 }

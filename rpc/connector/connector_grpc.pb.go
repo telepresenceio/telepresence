@@ -91,8 +91,9 @@ type ConnectorClient interface {
 	// Status returns the status of the current connection or DISCONNECTED
 	// if no connection has been established.
 	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ConnectInfo, error)
-	// Queries the connector whether it is possible to create the given intercept.
-	CanIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
+	// Queries the connector whether it is possible to create the given intercept
+	// and returns an error if it's not.
+	CanIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Starts an Ingest session.
 	Ingest(ctx context.Context, in *IngestRequest, opts ...grpc.CallOption) (*IngestInfo, error)
 	// Get info about an ongoing Ingest.
@@ -101,13 +102,13 @@ type ConnectorClient interface {
 	LeaveIngest(ctx context.Context, in *IngestIdentifier, opts ...grpc.CallOption) (*IngestInfo, error)
 	// Adds an intercept to a workload.  Requires having already called
 	// Connect.
-	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error)
+	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error)
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
-	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error)
+	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
-	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*common.Result, error)
+	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(ctx context.Context, in *ListRequest, opts ...grpc.CallOption) (*WorkloadInfoSnapshot, error)
@@ -131,7 +132,7 @@ type ConnectorClient interface {
 	GetKnownWorkloadKinds(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*manager.KnownWorkloadKinds, error)
 	// RemoteMountAvailability checks if remote mounts are possible using the given
 	// mount type and returns an error if its not.
-	RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.Result, error)
+	RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetConfig returns the current configuration
 	GetConfig(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ClientConfig, error)
 	// SetDNSExcludes sets the excludes field of DNSConfig.
@@ -251,9 +252,9 @@ func (c *connectorClient) Status(ctx context.Context, in *emptypb.Empty, opts ..
 	return out, nil
 }
 
-func (c *connectorClient) CanIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error) {
+func (c *connectorClient) CanIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(InterceptResult)
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Connector_CanIntercept_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -291,9 +292,9 @@ func (c *connectorClient) LeaveIngest(ctx context.Context, in *IngestIdentifier,
 	return out, nil
 }
 
-func (c *connectorClient) CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptResult, error) {
+func (c *connectorClient) CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*manager.InterceptInfo, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(InterceptResult)
+	out := new(manager.InterceptInfo)
 	err := c.cc.Invoke(ctx, Connector_CreateIntercept_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -301,9 +302,9 @@ func (c *connectorClient) CreateIntercept(ctx context.Context, in *CreateInterce
 	return out, nil
 }
 
-func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*InterceptResult, error) {
+func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(InterceptResult)
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Connector_RemoveIntercept_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -311,9 +312,9 @@ func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.Remov
 	return out, nil
 }
 
-func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*common.Result, error) {
+func (c *connectorClient) Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(common.Result)
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Connector_Uninstall_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -420,9 +421,9 @@ func (c *connectorClient) GetKnownWorkloadKinds(ctx context.Context, in *emptypb
 	return out, nil
 }
 
-func (c *connectorClient) RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*common.Result, error) {
+func (c *connectorClient) RemoteMountAvailability(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(common.Result)
+	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Connector_RemoteMountAvailability_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -551,8 +552,9 @@ type ConnectorServer interface {
 	// Status returns the status of the current connection or DISCONNECTED
 	// if no connection has been established.
 	Status(context.Context, *emptypb.Empty) (*ConnectInfo, error)
-	// Queries the connector whether it is possible to create the given intercept.
-	CanIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
+	// Queries the connector whether it is possible to create the given intercept
+	// and returns an error if it's not.
+	CanIntercept(context.Context, *CreateInterceptRequest) (*emptypb.Empty, error)
 	// Starts an Ingest session.
 	Ingest(context.Context, *IngestRequest) (*IngestInfo, error)
 	// Get info about an ongoing Ingest.
@@ -561,13 +563,13 @@ type ConnectorServer interface {
 	LeaveIngest(context.Context, *IngestIdentifier) (*IngestInfo, error)
 	// Adds an intercept to a workload.  Requires having already called
 	// Connect.
-	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error)
+	CreateIntercept(context.Context, *CreateInterceptRequest) (*manager.InterceptInfo, error)
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
-	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error)
+	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*emptypb.Empty, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
-	Uninstall(context.Context, *UninstallRequest) (*common.Result, error)
+	Uninstall(context.Context, *UninstallRequest) (*emptypb.Empty, error)
 	// Returns a list of workloads and their current intercept status.
 	// Requires having already called Connect.
 	List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error)
@@ -591,7 +593,7 @@ type ConnectorServer interface {
 	GetKnownWorkloadKinds(context.Context, *emptypb.Empty) (*manager.KnownWorkloadKinds, error)
 	// RemoteMountAvailability checks if remote mounts are possible using the given
 	// mount type and returns an error if its not.
-	RemoteMountAvailability(context.Context, *emptypb.Empty) (*common.Result, error)
+	RemoteMountAvailability(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// GetConfig returns the current configuration
 	GetConfig(context.Context, *emptypb.Empty) (*ClientConfig, error)
 	// SetDNSExcludes sets the excludes field of DNSConfig.
@@ -648,7 +650,7 @@ func (UnimplementedConnectorServer) GetClusterSubnets(context.Context, *emptypb.
 func (UnimplementedConnectorServer) Status(context.Context, *emptypb.Empty) (*ConnectInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
 }
-func (UnimplementedConnectorServer) CanIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error) {
+func (UnimplementedConnectorServer) CanIntercept(context.Context, *CreateInterceptRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CanIntercept not implemented")
 }
 func (UnimplementedConnectorServer) Ingest(context.Context, *IngestRequest) (*IngestInfo, error) {
@@ -660,13 +662,13 @@ func (UnimplementedConnectorServer) GetIngest(context.Context, *IngestIdentifier
 func (UnimplementedConnectorServer) LeaveIngest(context.Context, *IngestIdentifier) (*IngestInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LeaveIngest not implemented")
 }
-func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptResult, error) {
+func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInterceptRequest) (*manager.InterceptInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateIntercept not implemented")
 }
-func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*InterceptResult, error) {
+func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveIntercept not implemented")
 }
-func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*common.Result, error) {
+func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Uninstall not implemented")
 }
 func (UnimplementedConnectorServer) List(context.Context, *ListRequest) (*WorkloadInfoSnapshot, error) {
@@ -696,7 +698,7 @@ func (UnimplementedConnectorServer) GetNamespaces(context.Context, *GetNamespace
 func (UnimplementedConnectorServer) GetKnownWorkloadKinds(context.Context, *emptypb.Empty) (*manager.KnownWorkloadKinds, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetKnownWorkloadKinds not implemented")
 }
-func (UnimplementedConnectorServer) RemoteMountAvailability(context.Context, *emptypb.Empty) (*common.Result, error) {
+func (UnimplementedConnectorServer) RemoteMountAvailability(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoteMountAvailability not implemented")
 }
 func (UnimplementedConnectorServer) GetConfig(context.Context, *emptypb.Empty) (*ClientConfig, error) {

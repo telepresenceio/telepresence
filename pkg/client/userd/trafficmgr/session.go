@@ -144,7 +144,13 @@ type session struct {
 	syntheticIPs map[netip.Addr]string
 }
 
-func NewSession(service userd.Service, ctx context.Context, cr *rpc.ConnectRequest, config *k8s.Kubeconfig, wg *sync.WaitGroup) (session userd.Session, info *rpc.ConnectInfo) {
+func NewSession(
+	service userd.Service,
+	ctx context.Context,
+	cr *rpc.ConnectRequest,
+	config *k8s.Kubeconfig,
+	wg *sync.WaitGroup,
+) (session userd.Session, info *rpc.ConnectInfo, err error) {
 	dlog.Info(config, "-- Starting new session")
 
 	dlog.Infof(config, "Connecting to k8s context %s (%s) ...", config.KubeContext, config.Server)
@@ -152,14 +158,14 @@ func NewSession(service userd.Service, ctx context.Context, cr *rpc.ConnectReque
 	cluster, err := k8s.ConnectCluster(cr, config)
 	if err != nil {
 		dlog.Errorf(cluster, "unable to track k8s cluster: %+v", err)
-		return nil, connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+		return nil, nil, err
 	}
 	dlog.Infof(cluster, "Connected to context %s, namespace %s (%s)", cluster.KubeContext, cluster.Namespace, cluster.Server)
 
 	dlog.Info(cluster, "Connecting to traffic manager...")
 	installID, err := client.InstallID(cluster)
 	if err != nil {
-		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
+		return nil, nil, err
 	}
 	cfg := client.GetConfig(cluster)
 	tos := cfg.Timeouts()
@@ -169,11 +175,11 @@ func NewSession(service userd.Service, ctx context.Context, cr *rpc.ConnectReque
 	tmgr, err := connectMgr(ctx, service, cluster, installID, cr)
 	if err != nil {
 		dlog.Errorf(config, "Unable to connect to session: %s", err)
-		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED, err)
+		return nil, nil, err
 	}
 	if tmgr.compareFinalizedManagerVersion(2, 21, 0) < 0 {
-		return nil, connectError(rpc.ConnectInfo_TRAFFIC_MANAGER_FAILED,
-			fmt.Errorf("traffic manager version %s is too old. Minimum supported version is 2.21.0, please upgrade", tmgr.managerVersion))
+		return nil, nil,
+			fmt.Errorf("traffic manager version %s is too old. Minimum supported version is 2.21.0, please upgrade", tmgr.managerVersion)
 	}
 	tmgr.updateClientConfig(ctx, cr.MappedNamespaces)
 
@@ -182,10 +188,10 @@ func NewSession(service userd.Service, ctx context.Context, cr *rpc.ConnectReque
 		// Connect to the root daemon if it is running. It's the CLI that starts it initially
 		rootRunning, err := socket.IsRunning(tmgr, socket.RootDaemonPath(tmgr))
 		if err != nil {
-			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+			return nil, nil, err
 		}
 		if !rootRunning {
-			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, errors.New("root daemon is not running"))
+			return nil, nil, errors.New("root daemon is not running")
 		}
 
 		// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
@@ -194,7 +200,7 @@ func NewSession(service userd.Service, ctx context.Context, cr *rpc.ConnectReque
 			return client.GetExe(tmgr), service.ListenerAddress(tmgr), nil
 		}, nil)
 		if err != nil {
-			return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+			return nil, nil, err
 		}
 		patcher.AnnotateNetworkConfig(tmgr, oi, konfig.CurrentContext)
 	}
@@ -204,14 +210,15 @@ func NewSession(service userd.Service, ctx context.Context, cr *rpc.ConnectReque
 	tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi, wg, cr.IsPodDaemon)
 	if err != nil {
 		tmgr.managerConn.Close()
-		return nil, connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		return nil, nil, err
 	}
 
 	// Collect data on how long connection time took
 	dlog.Debug(tmgr, "Finished connecting to traffic manager")
 
 	tmgr.AddNamespaceEventHandler(tmgr.updateDaemonNamespaces)
-	return tmgr, tmgr.status(ctx, true)
+	ci, err := tmgr.status(ctx, true)
+	return tmgr, ci, err
 }
 
 func (s *session) GetService() userd.Service {
@@ -400,24 +407,6 @@ func (s *session) remain() error {
 		dlog.Errorf(ctx, "error calling Remain: %v", client.CheckTimeout(ctx, err))
 	}
 	return nil
-}
-
-func connectError(t rpc.ConnectInfo_ErrType, err error) *rpc.ConnectInfo {
-	st := status.Convert(err)
-	for _, detail := range st.Details() {
-		if detail, ok := detail.(*common.Result); ok {
-			return &rpc.ConnectInfo{
-				Error:         t,
-				ErrorText:     string(detail.Data),
-				ErrorCategory: int32(detail.ErrorCategory),
-			}
-		}
-	}
-	return &rpc.ConnectInfo{
-		Error:         t,
-		ErrorText:     err.Error(),
-		ErrorCategory: int32(errcat.GetCategory(err)),
-	}
 }
 
 // updateDaemonNamespacesLocked will create a new DNS search path from the given namespaces and
@@ -679,10 +668,10 @@ func (s *session) remainLoop(context.Context) error {
 // CheckStatus checks that the given ConnectRequest is aligned with the current status of the session.
 // If the request is not aligned, it returns a ConnectInfo with the error code set to MUST_RESTART.
 // If the request is aligned, it returns nil.
-func (s *session) CheckStatus(cr *rpc.ConnectRequest) *rpc.ConnectInfo {
+func (s *session) CheckStatus(cr *rpc.ConnectRequest) error {
 	config, err := k8s.DaemonKubeconfig(s, cr)
 	if err != nil {
-		return connectError(rpc.ConnectInfo_CLUSTER_FAILED, err)
+		return err
 	}
 	if len(cr.MappedNamespaces) == 1 && cr.MappedNamespaces[0] == "all" {
 		cr.MappedNamespaces = nil
@@ -708,12 +697,7 @@ func (s *session) CheckStatus(cr *rpc.ConnectRequest) *rpc.ConnectInfo {
 			return nil
 		}
 	}
-	return &rpc.ConnectInfo{
-		Error:            rpc.ConnectInfo_MUST_RESTART,
-		ClusterContext:   s.GetKubeContext(),
-		ClusterServer:    s.Server,
-		ManagerInstallId: s.GetManagerInstallId(),
-	}
+	return errcat.User.New("Cluster configuration changed, please quit telepresence and reconnect")
 }
 
 func (s *session) subnetViaWorkloadsEqual(workloads []*rootdRpc.SubnetViaWorkload) bool {
@@ -726,16 +710,16 @@ func (s *session) subnetViaWorkloadsEqual(workloads []*rootdRpc.SubnetViaWorkloa
 // to match the current client configuration and the traffic-manager.
 // If the request is not aligned with the current status of the session, it returns a ConnectInfo with the error code set to MUST_RESTART.
 // If the request is aligned, it returns the current status.
-func (s *session) UpdateStatus(ctx context.Context, cr *rpc.ConnectRequest) *rpc.ConnectInfo {
-	ret := s.CheckStatus(cr)
-	if ret != nil {
-		return ret
+func (s *session) UpdateStatus(ctx context.Context, cr *rpc.ConnectRequest) (*rpc.ConnectInfo, error) {
+	err := s.CheckStatus(cr)
+	if err != nil {
+		return nil, err
 	}
 	s.updateClientConfig(ctx, cr.MappedNamespaces)
 	return s.Status(ctx)
 }
 
-func (s *session) Status(ctx context.Context) *rpc.ConnectInfo {
+func (s *session) Status(ctx context.Context) (*rpc.ConnectInfo, error) {
 	return s.status(ctx, false)
 }
 
@@ -799,9 +783,10 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 	}
 }
 
-func (s *session) status(ctx context.Context, initial bool) *rpc.ConnectInfo {
+func (s *session) status(ctx context.Context, initial bool) (*rpc.ConnectInfo, error) {
 	cfg := s.Kubeconfig
 	ret := &rpc.ConnectInfo{
+		Initial:          initial,
 		ClusterContext:   cfg.KubeContext,
 		ClusterServer:    cfg.Server,
 		ManagerInstallId: s.GetManagerInstallId(),
@@ -824,9 +809,6 @@ func (s *session) status(ctx context.Context, initial bool) *rpc.ConnectInfo {
 			Name:       client.DisplayName,
 		},
 	}
-	if !initial {
-		ret.Error = rpc.ConnectInfo_ALREADY_CONNECTED
-	}
 	if len(s.MappedNamespaces) > 0 || len(client.GetConfig(s).Cluster().MappedNamespaces) > 0 {
 		ret.MappedNamespaces = s.GetCurrentNamespaces(true)
 	}
@@ -835,20 +817,20 @@ func (s *session) status(ctx context.Context, initial bool) *rpc.ConnectInfo {
 		return err
 	})
 	if err != nil {
-		return connectError(rpc.ConnectInfo_DAEMON_FAILED, err)
+		return nil, err
 	}
-	return ret
+	return ret, nil
 }
 
 // Uninstall one or all traffic-agents from the cluster if the client has sufficient credentials to do so.
 //
 // Uninstalling all or specific agents require that the client can get and update the agents ConfigMap.
-func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) (*common.Result, error) {
+func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) error {
 	_, err := s.ManagerClient().UninstallAgents(ctx, &manager.UninstallAgentsRequest{
 		SessionInfo: s.sessionInfo,
 		Agents:      ur.Agents,
 	})
-	return errcat.ToResult(err), nil
+	return err
 }
 
 func (s *session) getNetworkInfo(cr *rpc.ConnectRequest) *rootdRpc.NetworkConfig {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -16,6 +15,13 @@ type Category int
 type categorized struct {
 	error
 	category Category
+}
+
+type Categorized interface {
+	error
+
+	// GetCategory returns the error category for a categorized error.
+	GetCategory() Category
 }
 
 const (
@@ -53,6 +59,13 @@ func (c Category) Newf(format string, a ...any) error {
 	return &categorized{error: fmt.Errorf(format, a...), category: c}
 }
 
+// Errorf creates a new categorized error based on a format string with arguments. The
+// format string will get ": %w" appended to it, and the given error will be appended
+// to the args before the returned error is created using fmt.Errorf().
+func (c Category) Errorf(err error, format string, a ...any) error {
+	return &categorized{error: fmt.Errorf(format+": %w", append(a, err)...), category: c}
+}
+
 // Print prints error on dos.Stderr(ctx) unless it is nil or Silent.
 func Print(err error) {
 	switch GetCategory(err) {
@@ -60,6 +73,11 @@ func Print(err error) {
 	default:
 		ioutil.Println(os.Stderr, err.Error())
 	}
+}
+
+// GetCategory returns the error category for a categorized error.
+func (ce *categorized) GetCategory() Category {
+	return ce.category
 }
 
 // Unwrap this categorized error.
@@ -75,31 +93,12 @@ func GetCategory(err error) Category {
 	}
 	// Keep unwrapping until a category is found (or not)
 	for {
-		if ce, ok := err.(*categorized); ok {
-			return ce.category
+		var ce Categorized
+		if errors.As(err, &ce) {
+			return ce.GetCategory()
 		}
 		if err = errors.Unwrap(err); err == nil {
 			return Unknown
 		}
 	}
-}
-
-func FromResult(r *common.Result) error {
-	if r == nil {
-		return nil
-	}
-	c := Category(r.ErrorCategory)
-	if c == OK {
-		return nil
-	}
-	return &categorized{error: errors.New(string(r.Data)), category: c}
-}
-
-func ToResult(err error) *common.Result {
-	r := &common.Result{}
-	if err != nil {
-		r.Data = []byte(err.Error())
-		r.ErrorCategory = common.Result_ErrorCategory(GetCategory(err))
-	}
-	return r
 }

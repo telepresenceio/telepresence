@@ -23,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -216,7 +217,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	ud := daemon.MustGetUserClient(ctx)
 	s.status, err = ud.Status(ctx, &empty.Empty{})
 	if err != nil {
-		return false, err
+		return false, grpc.FromGRPC(err)
 	}
 
 	progress.Start(ctx, "Creating")
@@ -230,18 +231,12 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	// Submit the request
 	egType := types.EngagementTypeFromSpec(ir.Spec)
 	progress.Working(ctx, egType.Working())
-	r, err := ud.CreateIntercept(ctx, ir)
-	if err = Result(r, err); err != nil {
+	intercept, err := ud.CreateIntercept(ctx, ir)
+	if err = grpc.FromGRPC(err); err != nil {
 		return false, progress.MaybeWriteError(ctx, fmt.Errorf("connector.CreateIntercept: %w", err))
 	}
 	progress.Done(ctx, egType.WorkDone())
-	progress.Infof(ctx, "Using %s %s", r.WorkloadKind, s.AgentName)
-
-	// Since a user can create an intercept without specifying a namespace
-	// (thus using the default in their kubeconfig), we should be getting
-	// the namespace from the InterceptResult because that adds the namespace
-	// if it wasn't given on the cli by the user
-	intercept := r.InterceptInfo
+	progress.Infof(ctx, "Using %s %s", intercept.Spec.WorkloadKind, s.AgentName)
 
 	s.env = intercept.Environment
 	if s.env == nil {
@@ -289,17 +284,18 @@ func (s *state) leave(ctx context.Context) error {
 	n := strings.TrimSpace(s.Name())
 	ud := daemon.MustGetUserClient(ctx)
 	progress.Workingf(ctx, "Ending %s", s.what())
-	r, err := ud.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: n})
+	_, err := ud.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: n})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
 		// Deactivation was caused by a disconnect
 		err = nil
 	}
 	if err != nil {
+		err = grpc.FromGRPC(err)
 		err = progress.MaybeWriteError(ctx, err)
 	} else {
 		progress.Donef(ctx, "Ended %s", s.what())
 	}
-	return Result(r, err)
+	return err
 }
 
 func (s *state) runCommand(ctx context.Context) error {

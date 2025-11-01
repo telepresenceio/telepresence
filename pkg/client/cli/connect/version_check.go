@@ -10,6 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -49,7 +50,10 @@ func versionCheck(ctx context.Context, daemonBinary string) error {
 			userD.Executable(), daemonBinary)
 	}
 	vr, err := userD.RootDaemonVersion(ctx, &empty.Empty{})
-	if err == nil && version.Version != vr.Version {
+	if err != nil {
+		return tpGrpc.FromGRPC(err)
+	}
+	if version.Version != vr.Version {
 		return errcat.User.Newf("version mismatch. Client %s != Root Daemon %s, please run 'telepresence quit -s' and reconnect",
 			version.Version, vr.Version)
 	}

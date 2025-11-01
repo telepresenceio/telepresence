@@ -26,77 +26,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type ConnectInfo_ErrType int32
-
-const (
-	ConnectInfo_UNSPECIFIED       ConnectInfo_ErrType = 0 // success
-	ConnectInfo_UNAUTHORIZED      ConnectInfo_ErrType = 1 // not authorized to connect
-	ConnectInfo_UNAUTHENTICATED   ConnectInfo_ErrType = 5 // not logged in
-	ConnectInfo_ALREADY_CONNECTED ConnectInfo_ErrType = 2 // success
-	ConnectInfo_MUST_RESTART      ConnectInfo_ErrType = 7 // would-be-success, but kubeconfig has changed
-	// failure: Connect has not yet been called (only returned from Status)
-	ConnectInfo_DISCONNECTED ConnectInfo_ErrType = 3
-	// failure: error parsing kubeconfig or talking to the cluster; error_text and error_category are set
-	ConnectInfo_CLUSTER_FAILED ConnectInfo_ErrType = 4
-	// failure: error talking to the in-cluster traffic-manager; error_text and error_category are set
-	ConnectInfo_TRAFFIC_MANAGER_FAILED ConnectInfo_ErrType = 6
-	// failure: error talking to the on-laptop root daemon; error_text and error_category are set
-	ConnectInfo_DAEMON_FAILED ConnectInfo_ErrType = 8
-)
-
-// Enum value maps for ConnectInfo_ErrType.
-var (
-	ConnectInfo_ErrType_name = map[int32]string{
-		0: "UNSPECIFIED",
-		1: "UNAUTHORIZED",
-		5: "UNAUTHENTICATED",
-		2: "ALREADY_CONNECTED",
-		7: "MUST_RESTART",
-		3: "DISCONNECTED",
-		4: "CLUSTER_FAILED",
-		6: "TRAFFIC_MANAGER_FAILED",
-		8: "DAEMON_FAILED",
-	}
-	ConnectInfo_ErrType_value = map[string]int32{
-		"UNSPECIFIED":            0,
-		"UNAUTHORIZED":           1,
-		"UNAUTHENTICATED":        5,
-		"ALREADY_CONNECTED":      2,
-		"MUST_RESTART":           7,
-		"DISCONNECTED":           3,
-		"CLUSTER_FAILED":         4,
-		"TRAFFIC_MANAGER_FAILED": 6,
-		"DAEMON_FAILED":          8,
-	}
-)
-
-func (x ConnectInfo_ErrType) Enum() *ConnectInfo_ErrType {
-	p := new(ConnectInfo_ErrType)
-	*p = x
-	return p
-}
-
-func (x ConnectInfo_ErrType) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ConnectInfo_ErrType) Descriptor() protoreflect.EnumDescriptor {
-	return file_connector_connector_proto_enumTypes[0].Descriptor()
-}
-
-func (ConnectInfo_ErrType) Type() protoreflect.EnumType {
-	return &file_connector_connector_proto_enumTypes[0]
-}
-
-func (x ConnectInfo_ErrType) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ConnectInfo_ErrType.Descriptor instead.
-func (ConnectInfo_ErrType) EnumDescriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{2, 0}
-}
-
 type UninstallRequest_UninstallType int32
 
 const (
@@ -132,11 +61,11 @@ func (x UninstallRequest_UninstallType) String() string {
 }
 
 func (UninstallRequest_UninstallType) Descriptor() protoreflect.EnumDescriptor {
-	return file_connector_connector_proto_enumTypes[1].Descriptor()
+	return file_connector_connector_proto_enumTypes[0].Descriptor()
 }
 
 func (UninstallRequest_UninstallType) Type() protoreflect.EnumType {
-	return &file_connector_connector_proto_enumTypes[1]
+	return &file_connector_connector_proto_enumTypes[0]
 }
 
 func (x UninstallRequest_UninstallType) Number() protoreflect.EnumNumber {
@@ -194,11 +123,11 @@ func (x ListRequest_Filter) String() string {
 }
 
 func (ListRequest_Filter) Descriptor() protoreflect.EnumDescriptor {
-	return file_connector_connector_proto_enumTypes[2].Descriptor()
+	return file_connector_connector_proto_enumTypes[1].Descriptor()
 }
 
 func (ListRequest_Filter) Type() protoreflect.EnumType {
-	return &file_connector_connector_proto_enumTypes[2]
+	return &file_connector_connector_proto_enumTypes[1]
 }
 
 func (x ListRequest_Filter) Number() protoreflect.EnumNumber {
@@ -243,11 +172,11 @@ func (x LogLevelRequest_Scope) String() string {
 }
 
 func (LogLevelRequest_Scope) Descriptor() protoreflect.EnumDescriptor {
-	return file_connector_connector_proto_enumTypes[3].Descriptor()
+	return file_connector_connector_proto_enumTypes[2].Descriptor()
 }
 
 func (LogLevelRequest_Scope) Type() protoreflect.EnumType {
-	return &file_connector_connector_proto_enumTypes[3]
+	return &file_connector_connector_proto_enumTypes[2]
 }
 
 func (x LogLevelRequest_Scope) Number() protoreflect.EnumNumber {
@@ -256,7 +185,7 @@ func (x LogLevelRequest_Scope) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use LogLevelRequest_Scope.Descriptor instead.
 func (LogLevelRequest_Scope) EnumDescriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{13, 0}
+	return file_connector_connector_proto_rawDescGZIP(), []int{12, 0}
 }
 
 type Interceptor struct {
@@ -467,14 +396,10 @@ func (x *ConnectRequest) GetClientId() string {
 }
 
 type ConnectInfo struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Error ConnectInfo_ErrType    `protobuf:"varint,1,opt,name=error,proto3,enum=telepresence.connector.ConnectInfo_ErrType" json:"error,omitempty"`
-	// only set for some error codes, see above
-	ErrorText      string              `protobuf:"bytes,2,opt,name=error_text,json=errorText,proto3" json:"error_text,omitempty"`
-	ErrorCategory  int32               `protobuf:"varint,12,opt,name=error_category,json=errorCategory,proto3" json:"error_category,omitempty"`
-	ClusterServer  string              `protobuf:"bytes,3,opt,name=cluster_server,json=clusterServer,proto3" json:"cluster_server,omitempty"`
-	ClusterContext string              `protobuf:"bytes,4,opt,name=cluster_context,json=clusterContext,proto3" json:"cluster_context,omitempty"`
-	Version        *common.VersionInfo `protobuf:"bytes,5,opt,name=version,proto3" json:"version,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ClusterServer  string                 `protobuf:"bytes,3,opt,name=cluster_server,json=clusterServer,proto3" json:"cluster_server,omitempty"`
+	ClusterContext string                 `protobuf:"bytes,4,opt,name=cluster_context,json=clusterContext,proto3" json:"cluster_context,omitempty"`
+	Version        *common.VersionInfo    `protobuf:"bytes,5,opt,name=version,proto3" json:"version,omitempty"`
 	// The name of the connection
 	ConnectionName string `protobuf:"bytes,16,opt,name=connection_name,json=connectionName,proto3" json:"connection_name,omitempty"`
 	// The kubernetes flags from the telepresence connect command when the connection was established
@@ -490,8 +415,10 @@ type ConnectInfo struct {
 	ManagerNamespace   string                         `protobuf:"bytes,14,opt,name=manager_namespace,json=managerNamespace,proto3" json:"manager_namespace,omitempty"`
 	MappedNamespaces   []string                       `protobuf:"bytes,15,rep,name=mapped_namespaces,json=mappedNamespaces,proto3" json:"mapped_namespaces,omitempty"`
 	SubnetViaWorkloads []*daemon.SubnetViaWorkload    `protobuf:"bytes,18,rep,name=subnet_via_workloads,json=subnetViaWorkloads,proto3" json:"subnet_via_workloads,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Connection was established by the caller's connect call.
+	Initial       bool `protobuf:"varint,20,opt,name=initial,proto3" json:"initial,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConnectInfo) Reset() {
@@ -522,27 +449,6 @@ func (x *ConnectInfo) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ConnectInfo.ProtoReflect.Descriptor instead.
 func (*ConnectInfo) Descriptor() ([]byte, []int) {
 	return file_connector_connector_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ConnectInfo) GetError() ConnectInfo_ErrType {
-	if x != nil {
-		return x.Error
-	}
-	return ConnectInfo_UNSPECIFIED
-}
-
-func (x *ConnectInfo) GetErrorText() string {
-	if x != nil {
-		return x.ErrorText
-	}
-	return ""
-}
-
-func (x *ConnectInfo) GetErrorCategory() int32 {
-	if x != nil {
-		return x.ErrorCategory
-	}
-	return 0
 }
 
 func (x *ConnectInfo) GetClusterServer() string {
@@ -648,6 +554,13 @@ func (x *ConnectInfo) GetSubnetViaWorkloads() []*daemon.SubnetViaWorkload {
 		return x.SubnetViaWorkloads
 	}
 	return nil
+}
+
+func (x *ConnectInfo) GetInitial() bool {
+	if x != nil {
+		return x.Initial
+	}
+	return false
 }
 
 type UninstallRequest struct {
@@ -1310,92 +1223,6 @@ func (x *WorkloadInfoSnapshot) GetWorkloads() []*WorkloadInfo {
 	return nil
 }
 
-type InterceptResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InterceptInfo *manager.InterceptInfo `protobuf:"bytes,1,opt,name=intercept_info,json=interceptInfo,proto3" json:"intercept_info,omitempty"`
-	Error         common.InterceptError  `protobuf:"varint,2,opt,name=error,proto3,enum=telepresence.common.InterceptError" json:"error,omitempty"`
-	ErrorText     string                 `protobuf:"bytes,3,opt,name=error_text,json=errorText,proto3" json:"error_text,omitempty"`
-	ErrorCategory int32                  `protobuf:"varint,7,opt,name=error_category,json=errorCategory,proto3" json:"error_category,omitempty"`
-	// The service uid associated with the workload intercepted
-	ServiceUid string `protobuf:"bytes,5,opt,name=service_uid,json=serviceUid,proto3" json:"service_uid,omitempty"`
-	// The kind of workload in this intercept
-	WorkloadKind  string `protobuf:"bytes,6,opt,name=workload_kind,json=workloadKind,proto3" json:"workload_kind,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InterceptResult) Reset() {
-	*x = InterceptResult{}
-	mi := &file_connector_connector_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InterceptResult) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InterceptResult) ProtoMessage() {}
-
-func (x *InterceptResult) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InterceptResult.ProtoReflect.Descriptor instead.
-func (*InterceptResult) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *InterceptResult) GetInterceptInfo() *manager.InterceptInfo {
-	if x != nil {
-		return x.InterceptInfo
-	}
-	return nil
-}
-
-func (x *InterceptResult) GetError() common.InterceptError {
-	if x != nil {
-		return x.Error
-	}
-	return common.InterceptError(0)
-}
-
-func (x *InterceptResult) GetErrorText() string {
-	if x != nil {
-		return x.ErrorText
-	}
-	return ""
-}
-
-func (x *InterceptResult) GetErrorCategory() int32 {
-	if x != nil {
-		return x.ErrorCategory
-	}
-	return 0
-}
-
-func (x *InterceptResult) GetServiceUid() string {
-	if x != nil {
-		return x.ServiceUid
-	}
-	return ""
-}
-
-func (x *InterceptResult) GetWorkloadKind() string {
-	if x != nil {
-		return x.WorkloadKind
-	}
-	return ""
-}
-
 type LogLevelRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	LogLevel string                 `protobuf:"bytes,1,opt,name=log_level,json=logLevel,proto3" json:"log_level,omitempty"`
@@ -1409,7 +1236,7 @@ type LogLevelRequest struct {
 
 func (x *LogLevelRequest) Reset() {
 	*x = LogLevelRequest{}
-	mi := &file_connector_connector_proto_msgTypes[13]
+	mi := &file_connector_connector_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1421,7 +1248,7 @@ func (x *LogLevelRequest) String() string {
 func (*LogLevelRequest) ProtoMessage() {}
 
 func (x *LogLevelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[13]
+	mi := &file_connector_connector_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1434,7 +1261,7 @@ func (x *LogLevelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogLevelRequest.ProtoReflect.Descriptor instead.
 func (*LogLevelRequest) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{13}
+	return file_connector_connector_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *LogLevelRequest) GetLogLevel() string {
@@ -1475,7 +1302,7 @@ type LogsRequest struct {
 
 func (x *LogsRequest) Reset() {
 	*x = LogsRequest{}
-	mi := &file_connector_connector_proto_msgTypes[14]
+	mi := &file_connector_connector_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1487,7 +1314,7 @@ func (x *LogsRequest) String() string {
 func (*LogsRequest) ProtoMessage() {}
 
 func (x *LogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[14]
+	mi := &file_connector_connector_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1500,7 +1327,7 @@ func (x *LogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogsRequest.ProtoReflect.Descriptor instead.
 func (*LogsRequest) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{14}
+	return file_connector_connector_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *LogsRequest) GetTrafficManager() bool {
@@ -1545,7 +1372,7 @@ type LogsResponse struct {
 
 func (x *LogsResponse) Reset() {
 	*x = LogsResponse{}
-	mi := &file_connector_connector_proto_msgTypes[15]
+	mi := &file_connector_connector_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1557,7 +1384,7 @@ func (x *LogsResponse) String() string {
 func (*LogsResponse) ProtoMessage() {}
 
 func (x *LogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[15]
+	mi := &file_connector_connector_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1570,7 +1397,7 @@ func (x *LogsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogsResponse.ProtoReflect.Descriptor instead.
 func (*LogsResponse) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{15}
+	return file_connector_connector_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *LogsResponse) GetError() string {
@@ -1597,7 +1424,7 @@ type GetNamespacesRequest struct {
 
 func (x *GetNamespacesRequest) Reset() {
 	*x = GetNamespacesRequest{}
-	mi := &file_connector_connector_proto_msgTypes[16]
+	mi := &file_connector_connector_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1609,7 +1436,7 @@ func (x *GetNamespacesRequest) String() string {
 func (*GetNamespacesRequest) ProtoMessage() {}
 
 func (x *GetNamespacesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[16]
+	mi := &file_connector_connector_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1622,7 +1449,7 @@ func (x *GetNamespacesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNamespacesRequest.ProtoReflect.Descriptor instead.
 func (*GetNamespacesRequest) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{16}
+	return file_connector_connector_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetNamespacesRequest) GetForClientAccess() bool {
@@ -1648,7 +1475,7 @@ type GetNamespacesResponse struct {
 
 func (x *GetNamespacesResponse) Reset() {
 	*x = GetNamespacesResponse{}
-	mi := &file_connector_connector_proto_msgTypes[17]
+	mi := &file_connector_connector_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1660,7 +1487,7 @@ func (x *GetNamespacesResponse) String() string {
 func (*GetNamespacesResponse) ProtoMessage() {}
 
 func (x *GetNamespacesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[17]
+	mi := &file_connector_connector_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1673,7 +1500,7 @@ func (x *GetNamespacesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNamespacesResponse.ProtoReflect.Descriptor instead.
 func (*GetNamespacesResponse) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{17}
+	return file_connector_connector_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetNamespacesResponse) GetNamespaces() []string {
@@ -1692,7 +1519,7 @@ type ClientConfig struct {
 
 func (x *ClientConfig) Reset() {
 	*x = ClientConfig{}
-	mi := &file_connector_connector_proto_msgTypes[18]
+	mi := &file_connector_connector_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1704,7 +1531,7 @@ func (x *ClientConfig) String() string {
 func (*ClientConfig) ProtoMessage() {}
 
 func (x *ClientConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[18]
+	mi := &file_connector_connector_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1717,7 +1544,7 @@ func (x *ClientConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClientConfig.ProtoReflect.Descriptor instead.
 func (*ClientConfig) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{18}
+	return file_connector_connector_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ClientConfig) GetJson() []byte {
@@ -1741,7 +1568,7 @@ type ClusterSubnets struct {
 
 func (x *ClusterSubnets) Reset() {
 	*x = ClusterSubnets{}
-	mi := &file_connector_connector_proto_msgTypes[19]
+	mi := &file_connector_connector_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1753,7 +1580,7 @@ func (x *ClusterSubnets) String() string {
 func (*ClusterSubnets) ProtoMessage() {}
 
 func (x *ClusterSubnets) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[19]
+	mi := &file_connector_connector_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1766,7 +1593,7 @@ func (x *ClusterSubnets) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClusterSubnets.ProtoReflect.Descriptor instead.
 func (*ClusterSubnets) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{19}
+	return file_connector_connector_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ClusterSubnets) GetPodSubnets() []*manager.IPNet {
@@ -1795,7 +1622,7 @@ type ResolveSyntheticRequest struct {
 
 func (x *ResolveSyntheticRequest) Reset() {
 	*x = ResolveSyntheticRequest{}
-	mi := &file_connector_connector_proto_msgTypes[20]
+	mi := &file_connector_connector_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1807,7 +1634,7 @@ func (x *ResolveSyntheticRequest) String() string {
 func (*ResolveSyntheticRequest) ProtoMessage() {}
 
 func (x *ResolveSyntheticRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[20]
+	mi := &file_connector_connector_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1820,7 +1647,7 @@ func (x *ResolveSyntheticRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveSyntheticRequest.ProtoReflect.Descriptor instead.
 func (*ResolveSyntheticRequest) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{20}
+	return file_connector_connector_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ResolveSyntheticRequest) GetIp() []byte {
@@ -1849,7 +1676,7 @@ type ResolveSyntheticResponse struct {
 
 func (x *ResolveSyntheticResponse) Reset() {
 	*x = ResolveSyntheticResponse{}
-	mi := &file_connector_connector_proto_msgTypes[21]
+	mi := &file_connector_connector_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1861,7 +1688,7 @@ func (x *ResolveSyntheticResponse) String() string {
 func (*ResolveSyntheticResponse) ProtoMessage() {}
 
 func (x *ResolveSyntheticResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_connector_connector_proto_msgTypes[21]
+	mi := &file_connector_connector_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1874,7 +1701,7 @@ func (x *ResolveSyntheticResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveSyntheticResponse.ProtoReflect.Descriptor instead.
 func (*ResolveSyntheticResponse) Descriptor() ([]byte, []int) {
-	return file_connector_connector_proto_rawDescGZIP(), []int{21}
+	return file_connector_connector_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ResolveSyntheticResponse) GetName() string {
@@ -1895,7 +1722,7 @@ var File_connector_connector_proto protoreflect.FileDescriptor
 
 const file_connector_connector_proto_rawDesc = "" +
 	"\n" +
-	"\x19connector/connector.proto\x12\x16telepresence.connector\x1a\x13common/errors.proto\x1a\x14common/version.proto\x1a\x13daemon/daemon.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x15manager/manager.proto\"i\n" +
+	"\x19connector/connector.proto\x12\x16telepresence.connector\x1a\x14common/version.proto\x1a\x13daemon/daemon.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x15manager/manager.proto\"i\n" +
 	"\vInterceptor\x12!\n" +
 	"\fintercept_id\x18\x01 \x01(\tR\vinterceptId\x12\x10\n" +
 	"\x03pid\x18\x02 \x01(\x05R\x03pid\x12%\n" +
@@ -1927,13 +1754,8 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\x10EnvironmentEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x12\n" +
-	"\x10_kubeconfig_data\"\x8a\n" +
-	"\n" +
-	"\vConnectInfo\x12A\n" +
-	"\x05error\x18\x01 \x01(\x0e2+.telepresence.connector.ConnectInfo.ErrTypeR\x05error\x12\x1d\n" +
-	"\n" +
-	"error_text\x18\x02 \x01(\tR\terrorText\x12%\n" +
-	"\x0eerror_category\x18\f \x01(\x05R\rerrorCategory\x12%\n" +
+	"\x10_kubeconfig_data\"\xeb\a\n" +
+	"\vConnectInfo\x12%\n" +
 	"\x0ecluster_server\x18\x03 \x01(\tR\rclusterServer\x12'\n" +
 	"\x0fcluster_context\x18\x04 \x01(\tR\x0eclusterContext\x12:\n" +
 	"\aversion\x18\x05 \x01(\v2 .telepresence.common.VersionInfoR\aversion\x12'\n" +
@@ -1952,20 +1774,11 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\rdaemon_status\x18\r \x01(\v2!.telepresence.daemon.DaemonStatusR\fdaemonStatus\x12+\n" +
 	"\x11manager_namespace\x18\x0e \x01(\tR\x10managerNamespace\x12+\n" +
 	"\x11mapped_namespaces\x18\x0f \x03(\tR\x10mappedNamespaces\x12X\n" +
-	"\x14subnet_via_workloads\x18\x12 \x03(\v2&.telepresence.daemon.SubnetViaWorkloadR\x12subnetViaWorkloads\x1a<\n" +
+	"\x14subnet_via_workloads\x18\x12 \x03(\v2&.telepresence.daemon.SubnetViaWorkloadR\x12subnetViaWorkloads\x12\x18\n" +
+	"\ainitial\x18\x14 \x01(\bR\ainitial\x1a<\n" +
 	"\x0eKubeFlagsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbf\x01\n" +
-	"\aErrType\x12\x0f\n" +
-	"\vUNSPECIFIED\x10\x00\x12\x10\n" +
-	"\fUNAUTHORIZED\x10\x01\x12\x13\n" +
-	"\x0fUNAUTHENTICATED\x10\x05\x12\x15\n" +
-	"\x11ALREADY_CONNECTED\x10\x02\x12\x10\n" +
-	"\fMUST_RESTART\x10\a\x12\x10\n" +
-	"\fDISCONNECTED\x10\x03\x12\x12\n" +
-	"\x0eCLUSTER_FAILED\x10\x04\x12\x1a\n" +
-	"\x16TRAFFIC_MANAGER_FAILED\x10\x06\x12\x11\n" +
-	"\rDAEMON_FAILED\x10\bJ\x04\b\v\x10\f\"\xeb\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\v\x10\fJ\x04\b\f\x10\r\"\xeb\x01\n" +
 	"\x10UninstallRequest\x12]\n" +
 	"\x0euninstall_type\x18\x01 \x01(\x0e26.telepresence.connector.UninstallRequest.UninstallTypeR\runinstallType\x12\x16\n" +
 	"\x06agents\x18\x02 \x03(\tR\x06agents\x12\x1c\n" +
@@ -2045,16 +1858,7 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\x03uid\x18\a \x01(\tR\x03uid\x12#\n" +
 	"\ragent_version\x18\b \x01(\tR\fagentVersion\"Z\n" +
 	"\x14WorkloadInfoSnapshot\x12B\n" +
-	"\tworkloads\x18\x01 \x03(\v2$.telepresence.connector.WorkloadInfoR\tworkloads\"\xaa\x02\n" +
-	"\x0fInterceptResult\x12J\n" +
-	"\x0eintercept_info\x18\x01 \x01(\v2#.telepresence.manager.InterceptInfoR\rinterceptInfo\x129\n" +
-	"\x05error\x18\x02 \x01(\x0e2#.telepresence.common.InterceptErrorR\x05error\x12\x1d\n" +
-	"\n" +
-	"error_text\x18\x03 \x01(\tR\terrorText\x12%\n" +
-	"\x0eerror_category\x18\a \x01(\x05R\rerrorCategory\x12\x1f\n" +
-	"\vservice_uid\x18\x05 \x01(\tR\n" +
-	"serviceUid\x12#\n" +
-	"\rworkload_kind\x18\x06 \x01(\tR\fworkloadKindJ\x04\b\x04\x10\x05\"\xe5\x01\n" +
+	"\tworkloads\x18\x01 \x03(\v2$.telepresence.connector.WorkloadInfoR\tworkloads\"\xe5\x01\n" +
 	"\x0fLogLevelRequest\x12\x1b\n" +
 	"\tlog_level\x18\x01 \x01(\tR\blogLevel\x125\n" +
 	"\bduration\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\bduration\x12C\n" +
@@ -2097,7 +1901,7 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\x18ResolveSyntheticResponse\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vresolved_ip\x18\x02 \x01(\fR\n" +
-	"resolvedIp2\x97\x18\n" +
+	"resolvedIp2\xe7\x17\n" +
 	"\tConnector\x12C\n" +
 	"\aVersion\x12\x16.google.protobuf.Empty\x1a .telepresence.common.VersionInfo\x12M\n" +
 	"\x11RootDaemonVersion\x12\x16.google.protobuf.Empty\x1a .telepresence.common.VersionInfo\x12Q\n" +
@@ -2108,14 +1912,14 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\n" +
 	"Disconnect\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12S\n" +
 	"\x11GetClusterSubnets\x12\x16.google.protobuf.Empty\x1a&.telepresence.connector.ClusterSubnets\x12E\n" +
-	"\x06Status\x12\x16.google.protobuf.Empty\x1a#.telepresence.connector.ConnectInfo\x12g\n" +
-	"\fCanIntercept\x12..telepresence.connector.CreateInterceptRequest\x1a'.telepresence.connector.InterceptResult\x12S\n" +
+	"\x06Status\x12\x16.google.protobuf.Empty\x1a#.telepresence.connector.ConnectInfo\x12V\n" +
+	"\fCanIntercept\x12..telepresence.connector.CreateInterceptRequest\x1a\x16.google.protobuf.Empty\x12S\n" +
 	"\x06Ingest\x12%.telepresence.connector.IngestRequest\x1a\".telepresence.connector.IngestInfo\x12Y\n" +
 	"\tGetIngest\x12(.telepresence.connector.IngestIdentifier\x1a\".telepresence.connector.IngestInfo\x12[\n" +
-	"\vLeaveIngest\x12(.telepresence.connector.IngestIdentifier\x1a\".telepresence.connector.IngestInfo\x12j\n" +
-	"\x0fCreateIntercept\x12..telepresence.connector.CreateInterceptRequest\x1a'.telepresence.connector.InterceptResult\x12i\n" +
-	"\x0fRemoveIntercept\x12-.telepresence.manager.RemoveInterceptRequest2\x1a'.telepresence.connector.InterceptResult\x12R\n" +
-	"\tUninstall\x12(.telepresence.connector.UninstallRequest\x1a\x1b.telepresence.common.Result\x12Y\n" +
+	"\vLeaveIngest\x12(.telepresence.connector.IngestIdentifier\x1a\".telepresence.connector.IngestInfo\x12f\n" +
+	"\x0fCreateIntercept\x12..telepresence.connector.CreateInterceptRequest\x1a#.telepresence.manager.InterceptInfo\x12X\n" +
+	"\x0fRemoveIntercept\x12-.telepresence.manager.RemoveInterceptRequest2\x1a\x16.google.protobuf.Empty\x12M\n" +
+	"\tUninstall\x12(.telepresence.connector.UninstallRequest\x1a\x16.google.protobuf.Empty\x12Y\n" +
 	"\x04List\x12#.telepresence.connector.ListRequest\x1a,.telepresence.connector.WorkloadInfoSnapshot\x12o\n" +
 	"\x0eWatchWorkloads\x12-.telepresence.connector.WatchWorkloadsRequest\x1a,.telepresence.connector.WorkloadInfoSnapshot0\x01\x12N\n" +
 	"\vSetLogLevel\x12'.telepresence.connector.LogLevelRequest\x1a\x16.google.protobuf.Empty\x126\n" +
@@ -2125,8 +1929,8 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\x0eAddInterceptor\x12#.telepresence.connector.Interceptor\x1a\x16.google.protobuf.Empty\x12P\n" +
 	"\x11RemoveInterceptor\x12#.telepresence.connector.Interceptor\x1a\x16.google.protobuf.Empty\x12l\n" +
 	"\rGetNamespaces\x12,.telepresence.connector.GetNamespacesRequest\x1a-.telepresence.connector.GetNamespacesResponse\x12Y\n" +
-	"\x15GetKnownWorkloadKinds\x12\x16.google.protobuf.Empty\x1a(.telepresence.manager.KnownWorkloadKinds\x12N\n" +
-	"\x17RemoteMountAvailability\x12\x16.google.protobuf.Empty\x1a\x1b.telepresence.common.Result\x12I\n" +
+	"\x15GetKnownWorkloadKinds\x12\x16.google.protobuf.Empty\x1a(.telepresence.manager.KnownWorkloadKinds\x12I\n" +
+	"\x17RemoteMountAvailability\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12I\n" +
 	"\tGetConfig\x12\x16.google.protobuf.Empty\x1a$.telepresence.connector.ClientConfig\x12T\n" +
 	"\x0eSetDNSExcludes\x12*.telepresence.daemon.SetDNSExcludesRequest\x1a\x16.google.protobuf.Empty\x12T\n" +
 	"\x0eSetDNSMappings\x12*.telepresence.daemon.SetDNSMappingsRequest\x1a\x16.google.protobuf.Empty\x12e\n" +
@@ -2149,174 +1953,167 @@ func file_connector_connector_proto_rawDescGZIP() []byte {
 	return file_connector_connector_proto_rawDescData
 }
 
-var file_connector_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_connector_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
+var file_connector_connector_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_connector_connector_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_connector_connector_proto_goTypes = []any{
-	(ConnectInfo_ErrType)(0),                // 0: telepresence.connector.ConnectInfo.ErrType
-	(UninstallRequest_UninstallType)(0),     // 1: telepresence.connector.UninstallRequest.UninstallType
-	(ListRequest_Filter)(0),                 // 2: telepresence.connector.ListRequest.Filter
-	(LogLevelRequest_Scope)(0),              // 3: telepresence.connector.LogLevelRequest.Scope
-	(*Interceptor)(nil),                     // 4: telepresence.connector.Interceptor
-	(*ConnectRequest)(nil),                  // 5: telepresence.connector.ConnectRequest
-	(*ConnectInfo)(nil),                     // 6: telepresence.connector.ConnectInfo
-	(*UninstallRequest)(nil),                // 7: telepresence.connector.UninstallRequest
-	(*CreateInterceptRequest)(nil),          // 8: telepresence.connector.CreateInterceptRequest
-	(*ListRequest)(nil),                     // 9: telepresence.connector.ListRequest
-	(*IngestIdentifier)(nil),                // 10: telepresence.connector.IngestIdentifier
-	(*IngestRequest)(nil),                   // 11: telepresence.connector.IngestRequest
-	(*IngestInfo)(nil),                      // 12: telepresence.connector.IngestInfo
-	(*WatchWorkloadsRequest)(nil),           // 13: telepresence.connector.WatchWorkloadsRequest
-	(*WorkloadInfo)(nil),                    // 14: telepresence.connector.WorkloadInfo
-	(*WorkloadInfoSnapshot)(nil),            // 15: telepresence.connector.WorkloadInfoSnapshot
-	(*InterceptResult)(nil),                 // 16: telepresence.connector.InterceptResult
-	(*LogLevelRequest)(nil),                 // 17: telepresence.connector.LogLevelRequest
-	(*LogsRequest)(nil),                     // 18: telepresence.connector.LogsRequest
-	(*LogsResponse)(nil),                    // 19: telepresence.connector.LogsResponse
-	(*GetNamespacesRequest)(nil),            // 20: telepresence.connector.GetNamespacesRequest
-	(*GetNamespacesResponse)(nil),           // 21: telepresence.connector.GetNamespacesResponse
-	(*ClientConfig)(nil),                    // 22: telepresence.connector.ClientConfig
-	(*ClusterSubnets)(nil),                  // 23: telepresence.connector.ClusterSubnets
-	(*ResolveSyntheticRequest)(nil),         // 24: telepresence.connector.ResolveSyntheticRequest
-	(*ResolveSyntheticResponse)(nil),        // 25: telepresence.connector.ResolveSyntheticResponse
-	nil,                                     // 26: telepresence.connector.ConnectRequest.KubeFlagsEntry
-	nil,                                     // 27: telepresence.connector.ConnectRequest.ContainerKubeFlagOverridesEntry
-	nil,                                     // 28: telepresence.connector.ConnectRequest.EnvironmentEntry
-	nil,                                     // 29: telepresence.connector.ConnectInfo.KubeFlagsEntry
-	nil,                                     // 30: telepresence.connector.IngestInfo.EnvironmentEntry
-	nil,                                     // 31: telepresence.connector.IngestInfo.MountsEntry
-	nil,                                     // 32: telepresence.connector.LogsResponse.PodInfoEntry
-	(*daemon.SubnetViaWorkload)(nil),        // 33: telepresence.daemon.SubnetViaWorkload
-	(*common.VersionInfo)(nil),              // 34: telepresence.common.VersionInfo
-	(*manager.InterceptInfoSnapshot)(nil),   // 35: telepresence.manager.InterceptInfoSnapshot
-	(*manager.SessionInfo)(nil),             // 36: telepresence.manager.SessionInfo
-	(*manager.VersionInfo2)(nil),            // 37: telepresence.manager.VersionInfo2
-	(*daemon.DaemonStatus)(nil),             // 38: telepresence.daemon.DaemonStatus
-	(*manager.InterceptSpec)(nil),           // 39: telepresence.manager.InterceptSpec
-	(*manager.InterceptInfo)(nil),           // 40: telepresence.manager.InterceptInfo
-	(common.InterceptError)(0),              // 41: telepresence.common.InterceptError
-	(*durationpb.Duration)(nil),             // 42: google.protobuf.Duration
-	(*manager.IPNet)(nil),                   // 43: telepresence.manager.IPNet
-	(*emptypb.Empty)(nil),                   // 44: google.protobuf.Empty
-	(*manager.GetInterceptRequest)(nil),     // 45: telepresence.manager.GetInterceptRequest
-	(*manager.RemoveInterceptRequest2)(nil), // 46: telepresence.manager.RemoveInterceptRequest2
-	(*daemon.SetDNSExcludesRequest)(nil),    // 47: telepresence.daemon.SetDNSExcludesRequest
-	(*daemon.SetDNSMappingsRequest)(nil),    // 48: telepresence.daemon.SetDNSMappingsRequest
-	(*manager.AgentConfigRequest)(nil),      // 49: telepresence.manager.AgentConfigRequest
-	(*daemon.LookupIPRequest)(nil),          // 50: telepresence.daemon.LookupIPRequest
-	(*daemon.ResolvePortRequest)(nil),       // 51: telepresence.daemon.ResolvePortRequest
-	(*daemon.ReroutePortRequest)(nil),       // 52: telepresence.daemon.ReroutePortRequest
-	(*manager.AgentImageFQN)(nil),           // 53: telepresence.manager.AgentImageFQN
-	(*common.Result)(nil),                   // 54: telepresence.common.Result
-	(*manager.KnownWorkloadKinds)(nil),      // 55: telepresence.manager.KnownWorkloadKinds
-	(*manager.AgentConfigResponse)(nil),     // 56: telepresence.manager.AgentConfigResponse
-	(*daemon.LookupIPResponse)(nil),         // 57: telepresence.daemon.LookupIPResponse
-	(*daemon.ResolvePortResponse)(nil),      // 58: telepresence.daemon.ResolvePortResponse
+	(UninstallRequest_UninstallType)(0),     // 0: telepresence.connector.UninstallRequest.UninstallType
+	(ListRequest_Filter)(0),                 // 1: telepresence.connector.ListRequest.Filter
+	(LogLevelRequest_Scope)(0),              // 2: telepresence.connector.LogLevelRequest.Scope
+	(*Interceptor)(nil),                     // 3: telepresence.connector.Interceptor
+	(*ConnectRequest)(nil),                  // 4: telepresence.connector.ConnectRequest
+	(*ConnectInfo)(nil),                     // 5: telepresence.connector.ConnectInfo
+	(*UninstallRequest)(nil),                // 6: telepresence.connector.UninstallRequest
+	(*CreateInterceptRequest)(nil),          // 7: telepresence.connector.CreateInterceptRequest
+	(*ListRequest)(nil),                     // 8: telepresence.connector.ListRequest
+	(*IngestIdentifier)(nil),                // 9: telepresence.connector.IngestIdentifier
+	(*IngestRequest)(nil),                   // 10: telepresence.connector.IngestRequest
+	(*IngestInfo)(nil),                      // 11: telepresence.connector.IngestInfo
+	(*WatchWorkloadsRequest)(nil),           // 12: telepresence.connector.WatchWorkloadsRequest
+	(*WorkloadInfo)(nil),                    // 13: telepresence.connector.WorkloadInfo
+	(*WorkloadInfoSnapshot)(nil),            // 14: telepresence.connector.WorkloadInfoSnapshot
+	(*LogLevelRequest)(nil),                 // 15: telepresence.connector.LogLevelRequest
+	(*LogsRequest)(nil),                     // 16: telepresence.connector.LogsRequest
+	(*LogsResponse)(nil),                    // 17: telepresence.connector.LogsResponse
+	(*GetNamespacesRequest)(nil),            // 18: telepresence.connector.GetNamespacesRequest
+	(*GetNamespacesResponse)(nil),           // 19: telepresence.connector.GetNamespacesResponse
+	(*ClientConfig)(nil),                    // 20: telepresence.connector.ClientConfig
+	(*ClusterSubnets)(nil),                  // 21: telepresence.connector.ClusterSubnets
+	(*ResolveSyntheticRequest)(nil),         // 22: telepresence.connector.ResolveSyntheticRequest
+	(*ResolveSyntheticResponse)(nil),        // 23: telepresence.connector.ResolveSyntheticResponse
+	nil,                                     // 24: telepresence.connector.ConnectRequest.KubeFlagsEntry
+	nil,                                     // 25: telepresence.connector.ConnectRequest.ContainerKubeFlagOverridesEntry
+	nil,                                     // 26: telepresence.connector.ConnectRequest.EnvironmentEntry
+	nil,                                     // 27: telepresence.connector.ConnectInfo.KubeFlagsEntry
+	nil,                                     // 28: telepresence.connector.IngestInfo.EnvironmentEntry
+	nil,                                     // 29: telepresence.connector.IngestInfo.MountsEntry
+	nil,                                     // 30: telepresence.connector.LogsResponse.PodInfoEntry
+	(*daemon.SubnetViaWorkload)(nil),        // 31: telepresence.daemon.SubnetViaWorkload
+	(*common.VersionInfo)(nil),              // 32: telepresence.common.VersionInfo
+	(*manager.InterceptInfoSnapshot)(nil),   // 33: telepresence.manager.InterceptInfoSnapshot
+	(*manager.SessionInfo)(nil),             // 34: telepresence.manager.SessionInfo
+	(*manager.VersionInfo2)(nil),            // 35: telepresence.manager.VersionInfo2
+	(*daemon.DaemonStatus)(nil),             // 36: telepresence.daemon.DaemonStatus
+	(*manager.InterceptSpec)(nil),           // 37: telepresence.manager.InterceptSpec
+	(*manager.InterceptInfo)(nil),           // 38: telepresence.manager.InterceptInfo
+	(*durationpb.Duration)(nil),             // 39: google.protobuf.Duration
+	(*manager.IPNet)(nil),                   // 40: telepresence.manager.IPNet
+	(*emptypb.Empty)(nil),                   // 41: google.protobuf.Empty
+	(*manager.GetInterceptRequest)(nil),     // 42: telepresence.manager.GetInterceptRequest
+	(*manager.RemoveInterceptRequest2)(nil), // 43: telepresence.manager.RemoveInterceptRequest2
+	(*daemon.SetDNSExcludesRequest)(nil),    // 44: telepresence.daemon.SetDNSExcludesRequest
+	(*daemon.SetDNSMappingsRequest)(nil),    // 45: telepresence.daemon.SetDNSMappingsRequest
+	(*manager.AgentConfigRequest)(nil),      // 46: telepresence.manager.AgentConfigRequest
+	(*daemon.LookupIPRequest)(nil),          // 47: telepresence.daemon.LookupIPRequest
+	(*daemon.ResolvePortRequest)(nil),       // 48: telepresence.daemon.ResolvePortRequest
+	(*daemon.ReroutePortRequest)(nil),       // 49: telepresence.daemon.ReroutePortRequest
+	(*manager.AgentImageFQN)(nil),           // 50: telepresence.manager.AgentImageFQN
+	(*manager.KnownWorkloadKinds)(nil),      // 51: telepresence.manager.KnownWorkloadKinds
+	(*manager.AgentConfigResponse)(nil),     // 52: telepresence.manager.AgentConfigResponse
+	(*daemon.LookupIPResponse)(nil),         // 53: telepresence.daemon.LookupIPResponse
+	(*daemon.ResolvePortResponse)(nil),      // 54: telepresence.daemon.ResolvePortResponse
 }
 var file_connector_connector_proto_depIdxs = []int32{
-	26, // 0: telepresence.connector.ConnectRequest.kube_flags:type_name -> telepresence.connector.ConnectRequest.KubeFlagsEntry
-	27, // 1: telepresence.connector.ConnectRequest.container_kube_flag_overrides:type_name -> telepresence.connector.ConnectRequest.ContainerKubeFlagOverridesEntry
-	33, // 2: telepresence.connector.ConnectRequest.subnet_via_workloads:type_name -> telepresence.daemon.SubnetViaWorkload
-	28, // 3: telepresence.connector.ConnectRequest.environment:type_name -> telepresence.connector.ConnectRequest.EnvironmentEntry
-	0,  // 4: telepresence.connector.ConnectInfo.error:type_name -> telepresence.connector.ConnectInfo.ErrType
-	34, // 5: telepresence.connector.ConnectInfo.version:type_name -> telepresence.common.VersionInfo
-	29, // 6: telepresence.connector.ConnectInfo.kube_flags:type_name -> telepresence.connector.ConnectInfo.KubeFlagsEntry
-	35, // 7: telepresence.connector.ConnectInfo.intercepts:type_name -> telepresence.manager.InterceptInfoSnapshot
-	12, // 8: telepresence.connector.ConnectInfo.ingests:type_name -> telepresence.connector.IngestInfo
-	36, // 9: telepresence.connector.ConnectInfo.session_info:type_name -> telepresence.manager.SessionInfo
-	37, // 10: telepresence.connector.ConnectInfo.manager_version:type_name -> telepresence.manager.VersionInfo2
-	38, // 11: telepresence.connector.ConnectInfo.daemon_status:type_name -> telepresence.daemon.DaemonStatus
-	33, // 12: telepresence.connector.ConnectInfo.subnet_via_workloads:type_name -> telepresence.daemon.SubnetViaWorkload
-	1,  // 13: telepresence.connector.UninstallRequest.uninstall_type:type_name -> telepresence.connector.UninstallRequest.UninstallType
-	39, // 14: telepresence.connector.CreateInterceptRequest.spec:type_name -> telepresence.manager.InterceptSpec
-	2,  // 15: telepresence.connector.ListRequest.filter:type_name -> telepresence.connector.ListRequest.Filter
-	10, // 16: telepresence.connector.IngestRequest.identifier:type_name -> telepresence.connector.IngestIdentifier
-	30, // 17: telepresence.connector.IngestInfo.environment:type_name -> telepresence.connector.IngestInfo.EnvironmentEntry
-	31, // 18: telepresence.connector.IngestInfo.mounts:type_name -> telepresence.connector.IngestInfo.MountsEntry
-	40, // 19: telepresence.connector.WorkloadInfo.intercept_info:type_name -> telepresence.manager.InterceptInfo
-	12, // 20: telepresence.connector.WorkloadInfo.ingest_info:type_name -> telepresence.connector.IngestInfo
-	14, // 21: telepresence.connector.WorkloadInfoSnapshot.workloads:type_name -> telepresence.connector.WorkloadInfo
-	40, // 22: telepresence.connector.InterceptResult.intercept_info:type_name -> telepresence.manager.InterceptInfo
-	41, // 23: telepresence.connector.InterceptResult.error:type_name -> telepresence.common.InterceptError
-	42, // 24: telepresence.connector.LogLevelRequest.duration:type_name -> google.protobuf.Duration
-	3,  // 25: telepresence.connector.LogLevelRequest.scope:type_name -> telepresence.connector.LogLevelRequest.Scope
-	32, // 26: telepresence.connector.LogsResponse.pod_info:type_name -> telepresence.connector.LogsResponse.PodInfoEntry
-	43, // 27: telepresence.connector.ClusterSubnets.pod_subnets:type_name -> telepresence.manager.IPNet
-	43, // 28: telepresence.connector.ClusterSubnets.svc_subnets:type_name -> telepresence.manager.IPNet
-	44, // 29: telepresence.connector.Connector.Version:input_type -> google.protobuf.Empty
-	44, // 30: telepresence.connector.Connector.RootDaemonVersion:input_type -> google.protobuf.Empty
-	44, // 31: telepresence.connector.Connector.TrafficManagerVersion:input_type -> google.protobuf.Empty
-	44, // 32: telepresence.connector.Connector.AgentImageFQN:input_type -> google.protobuf.Empty
-	45, // 33: telepresence.connector.Connector.GetIntercept:input_type -> telepresence.manager.GetInterceptRequest
-	5,  // 34: telepresence.connector.Connector.Connect:input_type -> telepresence.connector.ConnectRequest
-	44, // 35: telepresence.connector.Connector.Disconnect:input_type -> google.protobuf.Empty
-	44, // 36: telepresence.connector.Connector.GetClusterSubnets:input_type -> google.protobuf.Empty
-	44, // 37: telepresence.connector.Connector.Status:input_type -> google.protobuf.Empty
-	8,  // 38: telepresence.connector.Connector.CanIntercept:input_type -> telepresence.connector.CreateInterceptRequest
-	11, // 39: telepresence.connector.Connector.Ingest:input_type -> telepresence.connector.IngestRequest
-	10, // 40: telepresence.connector.Connector.GetIngest:input_type -> telepresence.connector.IngestIdentifier
-	10, // 41: telepresence.connector.Connector.LeaveIngest:input_type -> telepresence.connector.IngestIdentifier
-	8,  // 42: telepresence.connector.Connector.CreateIntercept:input_type -> telepresence.connector.CreateInterceptRequest
-	46, // 43: telepresence.connector.Connector.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
-	7,  // 44: telepresence.connector.Connector.Uninstall:input_type -> telepresence.connector.UninstallRequest
-	9,  // 45: telepresence.connector.Connector.List:input_type -> telepresence.connector.ListRequest
-	13, // 46: telepresence.connector.Connector.WatchWorkloads:input_type -> telepresence.connector.WatchWorkloadsRequest
-	17, // 47: telepresence.connector.Connector.SetLogLevel:input_type -> telepresence.connector.LogLevelRequest
-	44, // 48: telepresence.connector.Connector.Quit:input_type -> google.protobuf.Empty
-	18, // 49: telepresence.connector.Connector.GatherLogs:input_type -> telepresence.connector.LogsRequest
-	4,  // 50: telepresence.connector.Connector.AddInterceptor:input_type -> telepresence.connector.Interceptor
-	4,  // 51: telepresence.connector.Connector.RemoveInterceptor:input_type -> telepresence.connector.Interceptor
-	20, // 52: telepresence.connector.Connector.GetNamespaces:input_type -> telepresence.connector.GetNamespacesRequest
-	44, // 53: telepresence.connector.Connector.GetKnownWorkloadKinds:input_type -> google.protobuf.Empty
-	44, // 54: telepresence.connector.Connector.RemoteMountAvailability:input_type -> google.protobuf.Empty
-	44, // 55: telepresence.connector.Connector.GetConfig:input_type -> google.protobuf.Empty
-	47, // 56: telepresence.connector.Connector.SetDNSExcludes:input_type -> telepresence.daemon.SetDNSExcludesRequest
-	48, // 57: telepresence.connector.Connector.SetDNSMappings:input_type -> telepresence.daemon.SetDNSMappingsRequest
-	49, // 58: telepresence.connector.Connector.GetAgentConfig:input_type -> telepresence.manager.AgentConfigRequest
-	24, // 59: telepresence.connector.Connector.ResolveSyntheticIP:input_type -> telepresence.connector.ResolveSyntheticRequest
-	50, // 60: telepresence.connector.Connector.LookupIP:input_type -> telepresence.daemon.LookupIPRequest
-	51, // 61: telepresence.connector.Connector.ResolvePort:input_type -> telepresence.daemon.ResolvePortRequest
-	52, // 62: telepresence.connector.Connector.RerouteLocalPort:input_type -> telepresence.daemon.ReroutePortRequest
-	52, // 63: telepresence.connector.Connector.RerouteRemotePort:input_type -> telepresence.daemon.ReroutePortRequest
-	34, // 64: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
-	34, // 65: telepresence.connector.Connector.RootDaemonVersion:output_type -> telepresence.common.VersionInfo
-	34, // 66: telepresence.connector.Connector.TrafficManagerVersion:output_type -> telepresence.common.VersionInfo
-	53, // 67: telepresence.connector.Connector.AgentImageFQN:output_type -> telepresence.manager.AgentImageFQN
-	40, // 68: telepresence.connector.Connector.GetIntercept:output_type -> telepresence.manager.InterceptInfo
-	6,  // 69: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
-	44, // 70: telepresence.connector.Connector.Disconnect:output_type -> google.protobuf.Empty
-	23, // 71: telepresence.connector.Connector.GetClusterSubnets:output_type -> telepresence.connector.ClusterSubnets
-	6,  // 72: telepresence.connector.Connector.Status:output_type -> telepresence.connector.ConnectInfo
-	16, // 73: telepresence.connector.Connector.CanIntercept:output_type -> telepresence.connector.InterceptResult
-	12, // 74: telepresence.connector.Connector.Ingest:output_type -> telepresence.connector.IngestInfo
-	12, // 75: telepresence.connector.Connector.GetIngest:output_type -> telepresence.connector.IngestInfo
-	12, // 76: telepresence.connector.Connector.LeaveIngest:output_type -> telepresence.connector.IngestInfo
-	16, // 77: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.connector.InterceptResult
-	16, // 78: telepresence.connector.Connector.RemoveIntercept:output_type -> telepresence.connector.InterceptResult
-	54, // 79: telepresence.connector.Connector.Uninstall:output_type -> telepresence.common.Result
-	15, // 80: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
-	15, // 81: telepresence.connector.Connector.WatchWorkloads:output_type -> telepresence.connector.WorkloadInfoSnapshot
-	44, // 82: telepresence.connector.Connector.SetLogLevel:output_type -> google.protobuf.Empty
-	44, // 83: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
-	19, // 84: telepresence.connector.Connector.GatherLogs:output_type -> telepresence.connector.LogsResponse
-	44, // 85: telepresence.connector.Connector.AddInterceptor:output_type -> google.protobuf.Empty
-	44, // 86: telepresence.connector.Connector.RemoveInterceptor:output_type -> google.protobuf.Empty
-	21, // 87: telepresence.connector.Connector.GetNamespaces:output_type -> telepresence.connector.GetNamespacesResponse
-	55, // 88: telepresence.connector.Connector.GetKnownWorkloadKinds:output_type -> telepresence.manager.KnownWorkloadKinds
-	54, // 89: telepresence.connector.Connector.RemoteMountAvailability:output_type -> telepresence.common.Result
-	22, // 90: telepresence.connector.Connector.GetConfig:output_type -> telepresence.connector.ClientConfig
-	44, // 91: telepresence.connector.Connector.SetDNSExcludes:output_type -> google.protobuf.Empty
-	44, // 92: telepresence.connector.Connector.SetDNSMappings:output_type -> google.protobuf.Empty
-	56, // 93: telepresence.connector.Connector.GetAgentConfig:output_type -> telepresence.manager.AgentConfigResponse
-	25, // 94: telepresence.connector.Connector.ResolveSyntheticIP:output_type -> telepresence.connector.ResolveSyntheticResponse
-	57, // 95: telepresence.connector.Connector.LookupIP:output_type -> telepresence.daemon.LookupIPResponse
-	58, // 96: telepresence.connector.Connector.ResolvePort:output_type -> telepresence.daemon.ResolvePortResponse
-	44, // 97: telepresence.connector.Connector.RerouteLocalPort:output_type -> google.protobuf.Empty
-	44, // 98: telepresence.connector.Connector.RerouteRemotePort:output_type -> google.protobuf.Empty
-	64, // [64:99] is the sub-list for method output_type
-	29, // [29:64] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	24, // 0: telepresence.connector.ConnectRequest.kube_flags:type_name -> telepresence.connector.ConnectRequest.KubeFlagsEntry
+	25, // 1: telepresence.connector.ConnectRequest.container_kube_flag_overrides:type_name -> telepresence.connector.ConnectRequest.ContainerKubeFlagOverridesEntry
+	31, // 2: telepresence.connector.ConnectRequest.subnet_via_workloads:type_name -> telepresence.daemon.SubnetViaWorkload
+	26, // 3: telepresence.connector.ConnectRequest.environment:type_name -> telepresence.connector.ConnectRequest.EnvironmentEntry
+	32, // 4: telepresence.connector.ConnectInfo.version:type_name -> telepresence.common.VersionInfo
+	27, // 5: telepresence.connector.ConnectInfo.kube_flags:type_name -> telepresence.connector.ConnectInfo.KubeFlagsEntry
+	33, // 6: telepresence.connector.ConnectInfo.intercepts:type_name -> telepresence.manager.InterceptInfoSnapshot
+	11, // 7: telepresence.connector.ConnectInfo.ingests:type_name -> telepresence.connector.IngestInfo
+	34, // 8: telepresence.connector.ConnectInfo.session_info:type_name -> telepresence.manager.SessionInfo
+	35, // 9: telepresence.connector.ConnectInfo.manager_version:type_name -> telepresence.manager.VersionInfo2
+	36, // 10: telepresence.connector.ConnectInfo.daemon_status:type_name -> telepresence.daemon.DaemonStatus
+	31, // 11: telepresence.connector.ConnectInfo.subnet_via_workloads:type_name -> telepresence.daemon.SubnetViaWorkload
+	0,  // 12: telepresence.connector.UninstallRequest.uninstall_type:type_name -> telepresence.connector.UninstallRequest.UninstallType
+	37, // 13: telepresence.connector.CreateInterceptRequest.spec:type_name -> telepresence.manager.InterceptSpec
+	1,  // 14: telepresence.connector.ListRequest.filter:type_name -> telepresence.connector.ListRequest.Filter
+	9,  // 15: telepresence.connector.IngestRequest.identifier:type_name -> telepresence.connector.IngestIdentifier
+	28, // 16: telepresence.connector.IngestInfo.environment:type_name -> telepresence.connector.IngestInfo.EnvironmentEntry
+	29, // 17: telepresence.connector.IngestInfo.mounts:type_name -> telepresence.connector.IngestInfo.MountsEntry
+	38, // 18: telepresence.connector.WorkloadInfo.intercept_info:type_name -> telepresence.manager.InterceptInfo
+	11, // 19: telepresence.connector.WorkloadInfo.ingest_info:type_name -> telepresence.connector.IngestInfo
+	13, // 20: telepresence.connector.WorkloadInfoSnapshot.workloads:type_name -> telepresence.connector.WorkloadInfo
+	39, // 21: telepresence.connector.LogLevelRequest.duration:type_name -> google.protobuf.Duration
+	2,  // 22: telepresence.connector.LogLevelRequest.scope:type_name -> telepresence.connector.LogLevelRequest.Scope
+	30, // 23: telepresence.connector.LogsResponse.pod_info:type_name -> telepresence.connector.LogsResponse.PodInfoEntry
+	40, // 24: telepresence.connector.ClusterSubnets.pod_subnets:type_name -> telepresence.manager.IPNet
+	40, // 25: telepresence.connector.ClusterSubnets.svc_subnets:type_name -> telepresence.manager.IPNet
+	41, // 26: telepresence.connector.Connector.Version:input_type -> google.protobuf.Empty
+	41, // 27: telepresence.connector.Connector.RootDaemonVersion:input_type -> google.protobuf.Empty
+	41, // 28: telepresence.connector.Connector.TrafficManagerVersion:input_type -> google.protobuf.Empty
+	41, // 29: telepresence.connector.Connector.AgentImageFQN:input_type -> google.protobuf.Empty
+	42, // 30: telepresence.connector.Connector.GetIntercept:input_type -> telepresence.manager.GetInterceptRequest
+	4,  // 31: telepresence.connector.Connector.Connect:input_type -> telepresence.connector.ConnectRequest
+	41, // 32: telepresence.connector.Connector.Disconnect:input_type -> google.protobuf.Empty
+	41, // 33: telepresence.connector.Connector.GetClusterSubnets:input_type -> google.protobuf.Empty
+	41, // 34: telepresence.connector.Connector.Status:input_type -> google.protobuf.Empty
+	7,  // 35: telepresence.connector.Connector.CanIntercept:input_type -> telepresence.connector.CreateInterceptRequest
+	10, // 36: telepresence.connector.Connector.Ingest:input_type -> telepresence.connector.IngestRequest
+	9,  // 37: telepresence.connector.Connector.GetIngest:input_type -> telepresence.connector.IngestIdentifier
+	9,  // 38: telepresence.connector.Connector.LeaveIngest:input_type -> telepresence.connector.IngestIdentifier
+	7,  // 39: telepresence.connector.Connector.CreateIntercept:input_type -> telepresence.connector.CreateInterceptRequest
+	43, // 40: telepresence.connector.Connector.RemoveIntercept:input_type -> telepresence.manager.RemoveInterceptRequest2
+	6,  // 41: telepresence.connector.Connector.Uninstall:input_type -> telepresence.connector.UninstallRequest
+	8,  // 42: telepresence.connector.Connector.List:input_type -> telepresence.connector.ListRequest
+	12, // 43: telepresence.connector.Connector.WatchWorkloads:input_type -> telepresence.connector.WatchWorkloadsRequest
+	15, // 44: telepresence.connector.Connector.SetLogLevel:input_type -> telepresence.connector.LogLevelRequest
+	41, // 45: telepresence.connector.Connector.Quit:input_type -> google.protobuf.Empty
+	16, // 46: telepresence.connector.Connector.GatherLogs:input_type -> telepresence.connector.LogsRequest
+	3,  // 47: telepresence.connector.Connector.AddInterceptor:input_type -> telepresence.connector.Interceptor
+	3,  // 48: telepresence.connector.Connector.RemoveInterceptor:input_type -> telepresence.connector.Interceptor
+	18, // 49: telepresence.connector.Connector.GetNamespaces:input_type -> telepresence.connector.GetNamespacesRequest
+	41, // 50: telepresence.connector.Connector.GetKnownWorkloadKinds:input_type -> google.protobuf.Empty
+	41, // 51: telepresence.connector.Connector.RemoteMountAvailability:input_type -> google.protobuf.Empty
+	41, // 52: telepresence.connector.Connector.GetConfig:input_type -> google.protobuf.Empty
+	44, // 53: telepresence.connector.Connector.SetDNSExcludes:input_type -> telepresence.daemon.SetDNSExcludesRequest
+	45, // 54: telepresence.connector.Connector.SetDNSMappings:input_type -> telepresence.daemon.SetDNSMappingsRequest
+	46, // 55: telepresence.connector.Connector.GetAgentConfig:input_type -> telepresence.manager.AgentConfigRequest
+	22, // 56: telepresence.connector.Connector.ResolveSyntheticIP:input_type -> telepresence.connector.ResolveSyntheticRequest
+	47, // 57: telepresence.connector.Connector.LookupIP:input_type -> telepresence.daemon.LookupIPRequest
+	48, // 58: telepresence.connector.Connector.ResolvePort:input_type -> telepresence.daemon.ResolvePortRequest
+	49, // 59: telepresence.connector.Connector.RerouteLocalPort:input_type -> telepresence.daemon.ReroutePortRequest
+	49, // 60: telepresence.connector.Connector.RerouteRemotePort:input_type -> telepresence.daemon.ReroutePortRequest
+	32, // 61: telepresence.connector.Connector.Version:output_type -> telepresence.common.VersionInfo
+	32, // 62: telepresence.connector.Connector.RootDaemonVersion:output_type -> telepresence.common.VersionInfo
+	32, // 63: telepresence.connector.Connector.TrafficManagerVersion:output_type -> telepresence.common.VersionInfo
+	50, // 64: telepresence.connector.Connector.AgentImageFQN:output_type -> telepresence.manager.AgentImageFQN
+	38, // 65: telepresence.connector.Connector.GetIntercept:output_type -> telepresence.manager.InterceptInfo
+	5,  // 66: telepresence.connector.Connector.Connect:output_type -> telepresence.connector.ConnectInfo
+	41, // 67: telepresence.connector.Connector.Disconnect:output_type -> google.protobuf.Empty
+	21, // 68: telepresence.connector.Connector.GetClusterSubnets:output_type -> telepresence.connector.ClusterSubnets
+	5,  // 69: telepresence.connector.Connector.Status:output_type -> telepresence.connector.ConnectInfo
+	41, // 70: telepresence.connector.Connector.CanIntercept:output_type -> google.protobuf.Empty
+	11, // 71: telepresence.connector.Connector.Ingest:output_type -> telepresence.connector.IngestInfo
+	11, // 72: telepresence.connector.Connector.GetIngest:output_type -> telepresence.connector.IngestInfo
+	11, // 73: telepresence.connector.Connector.LeaveIngest:output_type -> telepresence.connector.IngestInfo
+	38, // 74: telepresence.connector.Connector.CreateIntercept:output_type -> telepresence.manager.InterceptInfo
+	41, // 75: telepresence.connector.Connector.RemoveIntercept:output_type -> google.protobuf.Empty
+	41, // 76: telepresence.connector.Connector.Uninstall:output_type -> google.protobuf.Empty
+	14, // 77: telepresence.connector.Connector.List:output_type -> telepresence.connector.WorkloadInfoSnapshot
+	14, // 78: telepresence.connector.Connector.WatchWorkloads:output_type -> telepresence.connector.WorkloadInfoSnapshot
+	41, // 79: telepresence.connector.Connector.SetLogLevel:output_type -> google.protobuf.Empty
+	41, // 80: telepresence.connector.Connector.Quit:output_type -> google.protobuf.Empty
+	17, // 81: telepresence.connector.Connector.GatherLogs:output_type -> telepresence.connector.LogsResponse
+	41, // 82: telepresence.connector.Connector.AddInterceptor:output_type -> google.protobuf.Empty
+	41, // 83: telepresence.connector.Connector.RemoveInterceptor:output_type -> google.protobuf.Empty
+	19, // 84: telepresence.connector.Connector.GetNamespaces:output_type -> telepresence.connector.GetNamespacesResponse
+	51, // 85: telepresence.connector.Connector.GetKnownWorkloadKinds:output_type -> telepresence.manager.KnownWorkloadKinds
+	41, // 86: telepresence.connector.Connector.RemoteMountAvailability:output_type -> google.protobuf.Empty
+	20, // 87: telepresence.connector.Connector.GetConfig:output_type -> telepresence.connector.ClientConfig
+	41, // 88: telepresence.connector.Connector.SetDNSExcludes:output_type -> google.protobuf.Empty
+	41, // 89: telepresence.connector.Connector.SetDNSMappings:output_type -> google.protobuf.Empty
+	52, // 90: telepresence.connector.Connector.GetAgentConfig:output_type -> telepresence.manager.AgentConfigResponse
+	23, // 91: telepresence.connector.Connector.ResolveSyntheticIP:output_type -> telepresence.connector.ResolveSyntheticResponse
+	53, // 92: telepresence.connector.Connector.LookupIP:output_type -> telepresence.daemon.LookupIPResponse
+	54, // 93: telepresence.connector.Connector.ResolvePort:output_type -> telepresence.daemon.ResolvePortResponse
+	41, // 94: telepresence.connector.Connector.RerouteLocalPort:output_type -> google.protobuf.Empty
+	41, // 95: telepresence.connector.Connector.RerouteRemotePort:output_type -> google.protobuf.Empty
+	61, // [61:96] is the sub-list for method output_type
+	26, // [26:61] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_connector_connector_proto_init() }
@@ -2330,8 +2127,8 @@ func file_connector_connector_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_connector_connector_proto_rawDesc), len(file_connector_connector_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   29,
+			NumEnums:      3,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

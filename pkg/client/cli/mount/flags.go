@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -112,9 +113,9 @@ func (f *Flags) ValidateConnected(ctx context.Context) (err error) {
 }
 
 func checkCapability(ctx context.Context) error {
-	r, err := daemon.MustGetUserClient(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
+	_, err := daemon.MustGetUserClient(ctx).RemoteMountAvailability(ctx, &empty.Empty{})
 	if err != nil {
-		return err
+		err = grpc.FromGRPC(err)
 	}
-	return errcat.FromResult(r)
+	return err
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -267,7 +268,7 @@ func (gl *gatherLogsCommand) gatherClusterLogs(ctx context.Context, exportDir st
 		}
 		lr, err := userD.GatherLogs(ctx, rq, opts...)
 		if err != nil {
-			return err
+			return tpGrpc.FromGRPC(err)
 		}
 		if az != nil {
 			if err := az.anonymizeFileNames(lr, exportDir); err != nil {

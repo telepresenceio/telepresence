@@ -15,10 +15,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 )
 
 func leaveCmd() *cobra.Command {
@@ -93,7 +93,7 @@ func disengage(ctx context.Context, name, container string) error {
 	}
 	ic, err = userD.GetIntercept(ctx, &manager.GetInterceptRequest{Name: icName})
 	if err != nil && status.Code(err) != codes.NotFound {
-		return err
+		return grpc.FromGRPC(err)
 	}
 
 	if ic == nil {
@@ -103,7 +103,7 @@ func disengage(ctx context.Context, name, container string) error {
 		})
 		if err != nil {
 			if status.Code(err) != codes.NotFound {
-				return err
+				return grpc.FromGRPC(err)
 			}
 
 			// User probably misspelled the name of the replace/intercept/ingest
@@ -131,12 +131,12 @@ func disengage(ctx context.Context, name, container string) error {
 	}
 
 	if ic != nil {
-		err = intercept.Result(userD.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: ic.Spec.Name}))
+		_, err = userD.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: ic.Spec.Name})
 	} else {
 		_, err = userD.LeaveIngest(ctx, &connector.IngestIdentifier{
 			WorkloadName:  ig.Workload,
 			ContainerName: ig.Container,
 		})
 	}
-	return err
+	return grpc.FromGRPC(err)
 }

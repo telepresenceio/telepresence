@@ -26,8 +26,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -200,13 +200,9 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 		})
 	}
 
-	var rsp *rpc.ConnectInfo
-	rsp, err = sv.Connect(ctx, cr)
+	_, err = sv.Connect(ctx, cr)
 	if err != nil {
-		return err
-	}
-	if rsp.Error != rpc.ConnectInfo_UNSPECIFIED && rsp.Error != rpc.ConnectInfo_ALREADY_CONNECTED {
-		return errcat.Category(rsp.ErrorCategory).New(rsp.ErrorText)
+		return tpGrpc.FromGRPC(err)
 	}
 	func() {
 		defer func() {

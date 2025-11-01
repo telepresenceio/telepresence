@@ -79,7 +79,7 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 	}
 	grpcListener, err := net.Listen("tcp", ":0")
 	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to open a port on localhost: %w", err)
+		return errcat.NoDaemonLogs.Errorf(err, "unable to open a port on localhost")
 	}
 
 	flags := cmd.Flags()

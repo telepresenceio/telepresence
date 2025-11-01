@@ -2,15 +2,21 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net"
 	"runtime"
 	"time"
 
+	"github.com/go-json-experiment/json"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dcontext"
 	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 )
 
 type mergedCtx struct {
@@ -34,19 +40,53 @@ func (s *mergedStream) Context() context.Context {
 	return &mergedCtx{Context: s.ServerStream.Context(), valCtx: s.valCtx}
 }
 
+func jsonError(err error) error {
+	var errStruct *tpGrpc.StructuredError
+	var grpcError tpGrpc.Error
+	switch {
+	case err == nil, errors.As(err, &grpcError):
+	// Don't touch
+	case errors.As(err, &errStruct):
+		s, _ := json.Marshal(errStruct)
+		err = status.Error(errStruct.Code, string(s))
+	case errors.Is(err, context.Canceled):
+		err = status.Error(codes.Canceled, err.Error())
+	case errors.Is(err, context.DeadlineExceeded):
+		err = status.Error(codes.DeadlineExceeded, err.Error())
+	default:
+		es := &tpGrpc.StructuredError{
+			Code:     codes.Internal,
+			Message:  err.Error(),
+			Category: errcat.GetCategory(err),
+		}
+		s, _ := json.Marshal(es)
+		err = status.Error(es.Code, string(s))
+	}
+	return err
+}
+
 // New creates a gRPC server which has no service registered and has not started to accept requests yet. Values
 // in the provided context will be included in the context passed to both unary and stream calls.
 func New(valCtx context.Context, options ...grpc.ServerOption) *grpc.Server {
 	requestCount := uint64(0)
-	unaryInterceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	unaryContextInterceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		return handler(&mergedCtx{Context: ctx, valCtx: callCtx(valCtx, info.FullMethod, &requestCount)}, req)
 	}
-	streamInterceptor := func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	streamContextInterceptor := func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		return handler(srv, &mergedStream{
 			ServerStream: ss,
 			valCtx:       callCtx(valCtx, info.FullMethod, &requestCount),
 		})
 	}
+
+	unaryErrorInterceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		v, err := handler(ctx, req)
+		return v, jsonError(err)
+	}
+	streamErrorInterceptor := func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		return jsonError(handler(srv, ss))
+	}
+
 	if dlog.MaxLogLevel(valCtx) >= dlog.LogLevelDebug {
 		opts := []logging.Option{
 			logging.WithLogOnEvents(logging.StartCall, logging.FinishCall),
@@ -55,16 +95,18 @@ func New(valCtx context.Context, options ...grpc.ServerOption) *grpc.Server {
 		options = append(
 			options,
 			grpc.ChainUnaryInterceptor(
-				unaryInterceptor,
+				unaryContextInterceptor,
 				logging.UnaryServerInterceptor(interceptorLogger(), opts...),
+				unaryErrorInterceptor,
 			),
 			grpc.ChainStreamInterceptor(
-				streamInterceptor,
+				streamContextInterceptor,
 				logging.StreamServerInterceptor(interceptorLogger(), opts...),
+				streamErrorInterceptor,
 			),
 		)
 	} else {
-		options = append(options, grpc.UnaryInterceptor(unaryInterceptor), grpc.StreamInterceptor(streamInterceptor))
+		options = append(options, grpc.UnaryInterceptor(unaryContextInterceptor), grpc.StreamInterceptor(streamContextInterceptor))
 	}
 	return grpc.NewServer(options...)
 }

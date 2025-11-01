@@ -190,7 +190,7 @@ func ConfigFlags(flagMap map[string]string) (*genericclioptions.ConfigFlags, err
 			err = flags.Set(k, v)
 		}
 		if err != nil {
-			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
+			return nil, errcat.User.Errorf(err, "error processing kubectl flag --%s=%s", k, v)
 		}
 	}
 	return configFlags, nil
@@ -513,7 +513,7 @@ func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespa
 			dlog.Debug(ctx, "unable to unmarshal extension as client config, trying legacy format")
 			ke := kubeconfigExtension{}
 			if keErr := json.Unmarshal(data, &ke); keErr != nil {
-				return errcat.Config.Newf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
+				return errcat.Config.Errorf(err, "unable to parse extension %s in kubeconfig", configExtension)
 			}
 			dlog.Debug(ctx, "legacy format was successfully parsed")
 			keCfg = ke.asConfig()
@@ -591,7 +591,7 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 	configFlags.AddFlags(flags)
 	for k, v := range flagMap {
 		if err := flags.Set(k, v); err != nil {
-			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
+			return nil, errcat.User.Errorf(err, "error processing kubectl flag --%s=%s", k, v)
 		}
 	}
 

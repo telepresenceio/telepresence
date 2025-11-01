@@ -7,7 +7,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -27,7 +26,6 @@ type WatchWorkloadsStream interface {
 }
 
 type InterceptInfo interface {
-	InterceptResult() *rpc.InterceptResult
 	PreparedIntercept() *manager.PreparedIntercept
 	PortIdentifier() (types.PortIdentifier, error)
 }
@@ -43,9 +41,9 @@ type Session interface {
 	KubeConfig
 	restapi.AgentState
 	tunnel.SyntheticIPResolver
-	AddIntercept(context.Context, *rpc.CreateInterceptRequest) *rpc.InterceptResult
+	AddIntercept(context.Context, *rpc.CreateInterceptRequest) (*manager.InterceptInfo, error)
 	AddInterceptor(string, *rpc.Interceptor) error
-	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (InterceptInfo, *rpc.InterceptResult)
+	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (InterceptInfo, error)
 	ClearIngestsAndIntercepts() error
 	GatherLogs(context.Context, *rpc.LogsRequest) (*rpc.LogsResponse, error)
 	GetConfig() (*client.SessionConfig, error)
@@ -71,10 +69,10 @@ type Session interface {
 
 	Run()
 	SessionInfo() *manager.SessionInfo
-	Status(context.Context) *rpc.ConnectInfo
-	Uninstall(context.Context, *rpc.UninstallRequest) (*common.Result, error)
-	CheckStatus(request *rpc.ConnectRequest) *rpc.ConnectInfo
-	UpdateStatus(context.Context, *rpc.ConnectRequest) *rpc.ConnectInfo
+	Status(context.Context) (*rpc.ConnectInfo, error)
+	Uninstall(context.Context, *rpc.UninstallRequest) error
+	CheckStatus(request *rpc.ConnectRequest) error
+	UpdateStatus(context.Context, *rpc.ConnectRequest) (*rpc.ConnectInfo, error)
 	WatchWorkloads(*rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
 	WorkloadInfoSnapshot([]string, rpc.ListRequest_Filter) (*rpc.WorkloadInfoSnapshot, error)
 }

@@ -83,7 +83,7 @@ func (e Syntax) writeFile(fileName string, env map[string]string) error {
 		var err error
 		file, err = os.Create(fileName)
 		if err != nil {
-			return errcat.NoDaemonLogs.Newf("failed to create environment file %q: %w", fileName, err)
+			return errcat.NoDaemonLogs.Errorf(err, "failed to create environment file %q", fileName)
 		}
 	}
 	return e.WriteToFileAndClose(file, env)

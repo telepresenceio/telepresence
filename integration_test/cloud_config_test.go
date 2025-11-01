@@ -2,7 +2,9 @@ package integration_test
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io/fs"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -176,7 +178,7 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	pos := int64(0)
 	st, err := os.Stat(rootLogName)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			s.T().Fatalf("Unexpected error stat'ing %s: %v", rootLogName, err)
 		}
 	} else {
@@ -267,7 +269,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 	pos := int64(0)
 	st, err := os.Stat(userLogName)
 	if err != nil {
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			s.T().Fatalf("Unexpected error stat'ing %s: %v", userLogName, err)
 		}
 	} else {
@@ -285,6 +287,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 		dlog.Infof(ctx, "stdout %s", so)
 		dlog.Infof(ctx, "stderr %s", se)
 		if err != nil {
+			dlog.Error(ctx, err)
 			return false
 		}
 		itest.TelepresenceDisconnectOk(ctx)
@@ -303,7 +306,7 @@ func (s *notConnectedSuite) Test_UserdCloudLogLevel() {
 			pos += int64(len(line)) + 1
 		}
 		return levelSet
-	}, 60*time.Second, 5*time.Second, "Connector log level not updated in 20 seconds")
+	}, 20*time.Second, 5*time.Second, "Connector log level not updated in 20 seconds")
 
 	// Make sure the log level was set back after disconnect
 	logF, err := os.Open(userLogName)

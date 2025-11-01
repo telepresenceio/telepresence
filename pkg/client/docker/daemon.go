@@ -39,6 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -160,7 +161,7 @@ func GetDaemonContainerNetworkInfo(ctx context.Context) (dns netip.Addr, network
 	info := ud.DaemonInfo()
 	status, err := ud.Status(ctx, &empty.Empty{})
 	if err != nil {
-		return dns, "", err
+		return dns, "", tpGrpc.FromGRPC(err)
 	}
 
 	rootCfg, err := daemon.GetRootClientConfig(status.DaemonStatus)
