@@ -38,7 +38,7 @@ items:
           defaults to `true` to maintain full backward compatibility with existing deployments. When a user
           attempts to create a global intercept while the setting is disabled, they receive a helpful error
           message suggesting the use of `--http-header` or `--http-path-*` flags for HTTP-filtered intercepts.
-        docs: reference/config#intercept
+        docs: reference/cluster_config#restricting_global_intercepts
       - type: change
         title: Remove unnecessary setcap from traffic binary
         body: >-
