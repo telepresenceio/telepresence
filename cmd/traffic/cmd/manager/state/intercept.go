@@ -155,6 +155,15 @@ func prepareAllContainerPorts(cn *agentconfig.Container, pi *rpc.PreparedInterce
 
 func (s *State) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container, cr *rpc.CreateInterceptRequest, pi *rpc.PreparedIntercept) (err error) {
 	spec := cr.InterceptSpec
+
+	// Check if global intercepts are allowed before proceeding
+	// Block replaces and global TCP/UDP intercepts, but allow HTTP intercepts and wiretaps
+	if !managerutil.GetEnv(s.backgroundCtx).AllowGlobalIntercepts {
+		if spec.Replace || !(spec.Wiretap || spec.Mechanism == "http") {
+			return fmt.Errorf("global TCP/UDP intercepts and replaces are disabled. Use --http-header or --http-path-* flags for HTTP intercepts")
+		}
+	}
+
 	portID := types.PortIdentifier(spec.PortIdentifier)
 	containerOnly := cn != nil
 

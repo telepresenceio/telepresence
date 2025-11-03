@@ -184,3 +184,10 @@ workloads:
     enabled: true
   argoRollouts:
     enabled: false
+
+# Intercept configuration
+intercept:
+  # Allow global TCP/UDP intercepts. When set to false, only HTTP intercepts
+  # with header or path filters are allowed. This prevents users from creating
+  # global intercepts that block other users from intercepting the same port.
+  allowGlobalIntercepts: true

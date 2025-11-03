@@ -359,6 +359,9 @@ properties:
     type: object
     additionalProperties: false
     properties:
+      allowGlobalIntercepts:
+        description: Allow global TCP/UDP intercepts. When set to false, only HTTP intercepts with header or path filters are allowed. This prevents users from creating global intercepts that block other users from intercepting the same port.
+        type: boolean
       environment:
         type: object
         properties:
