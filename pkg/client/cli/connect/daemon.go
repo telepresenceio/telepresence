@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -23,15 +24,15 @@ import (
 )
 
 func launchDaemon(ctx context.Context, cr *daemon.Request) (err error) {
+	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
+	logFile, err = logging.ValidateLogFilePath(logFile)
+	if err != nil {
+		return err
+	}
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// root permissions.
-	logDir := filelocation.AppUserLogDir(ctx)
-	logFile := filepath.Join(logDir, "daemon.log")
 	if _, err = os.Stat(logFile); err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		if err = os.MkdirAll(logDir, 0o700); err != nil {
 			return err
 		}
 		fh, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0o600)

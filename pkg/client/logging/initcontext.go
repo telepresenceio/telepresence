@@ -16,6 +16,7 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	tlog "github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -48,6 +49,12 @@ func InitContext(ctx context.Context, logFile string, logLevel logrus.Level, str
 				maxFiles = uint16(mx)
 			}
 		}
+
+		// Validate the path before using it.
+		logFile, err := ValidateLogFilePath(logFile)
+		if err != nil {
+			return ctx, err
+		}
 		rf, err := OpenRotatingFile(ctx, logFile, "20060102T150405", true, 0o600, strategy, maxFiles)
 		if err != nil {
 			return ctx, err
@@ -76,6 +83,22 @@ func InitContext(ctx context.Context, logFile string, logLevel logrus.Level, str
 	tlog.SetLogrusLevel(logger, logLevel.String(), false)
 	ctx = tlog.WithLevelSetter(ctx, logger)
 	return ctx, nil
+}
+
+// ValidateLogFilePath ensures that the log file path is valid and that the parent directory exists or can be created.
+func ValidateLogFilePath(logFile string) (string, error) {
+	// Convert to an absolute path. Abs ensures Clean.
+	logFile, err := filepath.Abs(logFile)
+	if err != nil {
+		return "", errcat.User.Errorf(err, "invalid log file path")
+	}
+
+	// Verify that the parent directory exists or can be created
+	dir := filepath.Dir(logFile)
+	if err = os.MkdirAll(dir, 0o700); err != nil {
+		return "", errcat.User.Errorf(err, "cannot create log directory %q", dir)
+	}
+	return logFile, nil
 }
 
 func SummarizeLog(ctx context.Context, name string) (string, error) {
