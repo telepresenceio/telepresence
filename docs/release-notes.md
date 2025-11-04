@@ -8,7 +8,42 @@
 A new Helm chart configuration option `intercept.allowGlobalIntercepts` has been added to control whether global TCP/UDP intercepts are permitted. When set to `false`, only HTTP intercepts with header or path filters are allowed, preventing users from creating global intercepts that block other developers from intercepting the same port. This is particularly useful in shared development environments where multiple developers need to work on the same service simultaneously. The setting defaults to `true` to maintain full backward compatibility with existing deployments. When a user attempts to create a global intercept while the setting is disabled, they receive a helpful error message suggesting the use of `--http-header` or `--http-path-*` flags for HTTP-filtered intercepts.
 </div>
 
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remove unnecessary setcap from traffic binary</div></div>
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Support customizable daemon log file paths</div></div>
+<div style="margin-left: 15px">
+
+Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile` that denotes a custom log file location or redirect of the log output to stdout/stderr. Two new log-level configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level controls beyond just `userDaemon` and `rootDaemon`.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Don't allow connect with --docker when client is configured with intercept.useFtp=true</div></div>
+<div style="margin-left: 15px">
+
+The `--docker` flag is not allowed when the client is configured with `intercept.useFtp=true` and an error is now generated
+instantly by the `telepresence connect --docker` command.
+
+The docker volume plugin cannot use FTP because it requires two ports: a fixed control port that Telepresence can proxy, and a
+dynamic data port (randomly chosen during connection) that Telepresence cannot proxy on-demand. The port-forwarder only forwards
+pre-configured ports and doesn't understand FTP's protocol. Consequently, FTP isn't allowed in this scenario. If it was, then when
+an FTP server tells the client to use an unpredictable second port for file transfers, Telepresence would block it—causing the
+connection to fail every time.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Better names for the Telepresence Daemons</div></div>
+<div style="margin-left: 15px">
+
+Using the name xxx-foreground isn't very intuitive when talking about daemon processes. Yes, the command, when issued in a
+terminal, will start the daemon in foreground so the names of the commands does have some logic to them, but then again, starting
+in the foreground is the default behavior of any command. And when the same command is started from the CLI, it will be started in
+the background, despite its name.
+
+The daemons are therefore now renamed:
+
+- connector-foreground => userd
+- daemon-foreground => rootd
+- kubeauth-foreground => kubeauthd
+</div>
+
+## Version 2.25.1
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remove unnecessary setcap from traffic binary</div></div>
 <div style="margin-left: 15px">
 
 The setcap capability (cap_net_bind_service) was removed from the traffic binary build process. This capability was originally added to allow the binary to bind to privileged ports, specifically port 443 for the mutating webhook. Since version 2.24.0, the default mutating webhook port was changed to 8443 (a non-privileged port), making this capability unnecessary. Removing it simplifies the build process and reduces the security surface area.

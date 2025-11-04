@@ -21,15 +21,16 @@ import (
 	"github.com/datawire/dlib/dlog"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 )
 
 const (
-	CommandName       = "kubeauth-foreground"
-	PortFileDir       = "kubeauth"
 	PortFileStaleTime = 3 * time.Second
+	logfileFlag       = "logfile"
 )
 
 type authService struct {
@@ -44,22 +45,28 @@ type PortFile struct {
 	Kubeconfig string `json:"kubeconfig"`
 }
 
-func Command() *cobra.Command {
+func Command(ctx context.Context) *cobra.Command {
 	as := authService{kubeFlags: genericclioptions.NewConfigFlags(false)}
 	c := &cobra.Command{
-		Use:    CommandName,
-		Short:  "Launch Telepresence Kubernetes authenticator",
+		Use:    client.KubeAuthDaemonName,
+		Short:  "Launch Telepresence Kubernetes Authenticator Daemon",
 		Args:   cobra.NoArgs,
 		Hidden: true,
 		RunE:   as.run,
 	}
 	flags := c.Flags()
 	flags.StringVar(&as.portFile, "portfile", "", "File where server existence is announced.")
+	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "kubeauth.log"),
+		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
 	as.kubeFlags.AddFlags(flags)
 	return c
 }
 
 func (as *authService) run(cmd *cobra.Command, _ []string) error {
+	err := global.InitConfig(cmd)
+	if err != nil {
+		return err
+	}
 	ctx := cmd.Context()
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
@@ -72,15 +79,17 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 	}
 	grpcListener, err := net.Listen("tcp", ":0")
 	if err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to open a port on localhost: %w", err)
+		return errcat.NoDaemonLogs.Errorf(err, "unable to open a port on localhost")
 	}
 
-	ctx, err = logging.InitContext(ctx, "kubeauth", logging.RotateNever, false, false)
+	flags := cmd.Flags()
+	logFile := flags.Lookup(logfileFlag).Value.String()
+	ctx, err = logging.InitContext(ctx, logFile, cfg.LogLevels().KubeAuthDaemon, logging.RotateNever, false)
 	if err != nil {
 		return err
 	}
 	addr := grpcListener.Addr().(*net.TCPAddr)
-	dlog.Infof(ctx, "kubeauth listening on address %s", addr)
+	dlog.Infof(ctx, "kubeauth daemon listening on address %s", addr)
 
 	as.clientConfig = as.kubeFlags.ToRawKubeConfigLoader()
 	as.configFiles = as.clientConfig.ConfigAccess().GetLoadingPrecedence()
@@ -109,9 +118,9 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return server.Serve(ctx, svc, grpcListener)
 	})
 	if err = g.Wait(); err != nil {
-		dlog.Errorf(ctx, "kubeauth exiting with error: %v", err)
+		dlog.Errorf(ctx, "kubeauth daemon exiting with error: %v", err)
 	} else {
-		dlog.Info(ctx, "kubeauth exiting")
+		dlog.Info(ctx, "kubeauth daemon exiting")
 	}
 	return err
 }
@@ -125,7 +134,7 @@ func (as *authService) keepPortFileAlive(ctx context.Context) error {
 	defer func() {
 		ticker.Stop()
 		_ = os.Remove(as.portFile)
-		dlog.Debugf(ctx, "kubeauth removed %s", as.portFile)
+		dlog.Debugf(ctx, "kubeauth daemon removed %s", as.portFile)
 	}()
 	now := time.Now()
 	for {
@@ -172,7 +181,7 @@ func (as *authService) watchFiles(ctx context.Context) error {
 		return false
 	}
 	for dir := range dirs {
-		// Can't watch things that don't exist. We want to know if files in there change though.
+		// Can't watch things that don't exist. We want to know if files in there change, though.
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}

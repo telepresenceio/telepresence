@@ -15,7 +15,42 @@ A new Helm chart configuration option `intercept.allowGlobalIntercepts` has been
   </Body>
 </Note>
 <Note>
-	<Title type="change">Remove unnecessary setcap from traffic binary</Title>
+	<Title type="feature">Support customizable daemon log file paths</Title>
+	<Body>
+Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile` that denotes a custom log file location or redirect of the log output to stdout/stderr. Two new log-level configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level controls beyond just `userDaemon` and `rootDaemon`.
+  </Body>
+</Note>
+<Note>
+	<Title type="change">Don't allow connect with --docker when client is configured with intercept.useFtp=true</Title>
+	<Body>
+The `--docker` flag is not allowed when the client is configured with `intercept.useFtp=true` and an error is now generated
+instantly by the `telepresence connect --docker` command.
+
+The docker volume plugin cannot use FTP because it requires two ports: a fixed control port that Telepresence can proxy, and a
+dynamic data port (randomly chosen during connection) that Telepresence cannot proxy on-demand. The port-forwarder only forwards
+pre-configured ports and doesn't understand FTP's protocol. Consequently, FTP isn't allowed in this scenario. If it was, then when
+an FTP server tells the client to use an unpredictable second port for file transfers, Telepresence would block it—causing the
+connection to fail every time.
+  </Body>
+</Note>
+<Note>
+	<Title type="change">Better names for the Telepresence Daemons</Title>
+	<Body>
+Using the name xxx-foreground isn't very intuitive when talking about daemon processes. Yes, the command, when issued in a
+terminal, will start the daemon in foreground so the names of the commands does have some logic to them, but then again, starting
+in the foreground is the default behavior of any command. And when the same command is started from the CLI, it will be started in
+the background, despite its name.
+
+The daemons are therefore now renamed:
+
+- connector-foreground => userd
+- daemon-foreground => rootd
+- kubeauth-foreground => kubeauthd
+  </Body>
+</Note>
+## Version 2.25.1
+<Note>
+	<Title type="bugfix">Remove unnecessary setcap from traffic binary</Title>
 	<Body>
 The setcap capability (cap_net_bind_service) was removed from the traffic binary build process. This capability was originally added to allow the binary to bind to privileged ports, specifically port 443 for the mutating webhook. Since version 2.24.0, the default mutating webhook port was changed to 8443 (a non-privileged port), making this capability unnecessary. Removing it simplifies the build process and reduces the security surface area.
   </Body>

@@ -98,7 +98,7 @@ const ConfigFile = "config.yml"
 
 type Config interface {
 	fmt.Stringer
-	Base() *BaseConfig
+	Base() *config
 	Cluster() *Cluster
 	DNS() *DNS
 	Docker() *Docker
@@ -116,8 +116,8 @@ type Config interface {
 	Merge(priority Config) Config
 }
 
-// BaseConfig contains all configuration values for the telepresence CLI.
-type BaseConfig struct {
+// config contains all configuration values for the telepresence CLI.
+type config struct {
 	OSSpecificConfig ``
 	ClusterV         Cluster   `json:"cluster,omitzero"`
 	DNSV             DNS       `json:"dns,omitzero"`
@@ -131,55 +131,55 @@ type BaseConfig struct {
 	TimeoutsV        Timeouts  `json:"timeouts,omitzero"`
 }
 
-func (c *BaseConfig) OSSpecific() *OSSpecificConfig {
+func (c *config) OSSpecific() *OSSpecificConfig {
 	return &c.OSSpecificConfig
 }
 
-func (c *BaseConfig) Base() *BaseConfig {
+func (c *config) Base() *config {
 	return c
 }
 
-func (c *BaseConfig) Timeouts() *Timeouts {
+func (c *config) Timeouts() *Timeouts {
 	return &c.TimeoutsV
 }
 
-func (c *BaseConfig) LogLevels() *LogLevels {
+func (c *config) LogLevels() *LogLevels {
 	return &c.LogLevelsV
 }
 
-func (c *BaseConfig) Images() *Images {
+func (c *config) Images() *Images {
 	return &c.ImagesV
 }
 
-func (c *BaseConfig) Grpc() *Grpc {
+func (c *config) Grpc() *Grpc {
 	return &c.GrpcV
 }
 
-func (c *BaseConfig) Intercept() *Intercept {
+func (c *config) Intercept() *Intercept {
 	return &c.InterceptV
 }
 
-func (c *BaseConfig) Cluster() *Cluster {
+func (c *config) Cluster() *Cluster {
 	return &c.ClusterV
 }
 
-func (c *BaseConfig) Docker() *Docker {
+func (c *config) Docker() *Docker {
 	return &c.DockerV
 }
 
-func (c *BaseConfig) DNS() *DNS {
+func (c *config) DNS() *DNS {
 	return &c.DNSV
 }
 
-func (c *BaseConfig) Routing() *Routing {
+func (c *config) Routing() *Routing {
 	return &c.RoutingV
 }
 
-func (c *BaseConfig) Helm() *Helm {
+func (c *config) Helm() *Helm {
 	return &c.HelmV
 }
 
-func (c *BaseConfig) MarshalYAML() ([]byte, error) {
+func (c *config) MarshalYAML() ([]byte, error) {
 	data, err := json2.Marshal(c)
 	if err == nil {
 		data, err = yaml.JSONToYAML(data)
@@ -232,7 +232,7 @@ func ParseConfigYAML(ctx context.Context, path string, data []byte) (Config, err
 }
 
 // DestructiveMerge merges this instance with the non-zero values of the given argument. The argument values take priority.
-func (c *BaseConfig) DestructiveMerge(lc Config) {
+func (c *config) DestructiveMerge(lc Config) {
 	c.OSSpecificConfig.Merge(lc.OSSpecific())
 	c.TimeoutsV.merge(lc.Timeouts())
 	c.LogLevelsV.merge(lc.LogLevels())
@@ -246,14 +246,14 @@ func (c *BaseConfig) DestructiveMerge(lc Config) {
 	c.HelmV.merge(lc.Helm())
 }
 
-func (c *BaseConfig) Merge(lc Config) Config {
-	cfg := GetDefaultBaseConfig()
+func (c *config) Merge(lc Config) Config {
+	cfg := getDefaultConfig()
 	*cfg = *c
 	cfg.DestructiveMerge(lc)
 	return cfg
 }
 
-func (c *BaseConfig) String() string {
+func (c *config) String() string {
 	y, _ := c.MarshalYAML()
 	return string(y)
 }
@@ -310,56 +310,64 @@ func WatchConfig(c context.Context, onReload func(context.Context) error) error 
 }
 
 type Timeouts struct {
-	// These all nave names starting with "Private" because we "want" them to be unexported in
-	// order to force you to use .TimeoutContext(), but (1) we dont' want them to be hidden from
-	// the JSON/YAML engines, and (2) in the rare case, we do want to be able to reach in and
-	// grab it, but we want it to be clear that this is "bad".  We should probably (TODO) get
-	// rid of those later cases, but let's not spend time doing that right now; and instead just
-	// make them easy to grep for (`grep Private`) later.
+	// These all nave names starting with "Private" because we "want" them to be unexported to force you to
+	// use .TimeoutContext(), but we dont' want them to be hidden from the JSON/YAML engines.
 
-	// PrivateClusterConnect is the maximum time to wait for a connection to the cluster to be established
-	PrivateClusterConnect time.Duration `json:"clusterConnect,format:units"`
-	// PrivateConnectivityCheck timeout used when checking if the cluster is already proxied on the workstation
-	PrivateConnectivityCheck time.Duration `json:"connectivityCheck,format:units"`
-	// PrivateEndpointDial is how long to wait for a Dial to a service for which the IP is known.
-	PrivateEndpointDial time.Duration `json:"endpointDial,format:units"`
-	// PrivateHelm is how long to wait for any helm operation.
-	PrivateHelm time.Duration `json:"helm,format:units"`
-	// PrivateIntercept is the time to wait for an intercept after the agents has been installed
-	PrivateIntercept time.Duration `json:"intercept,format:units"`
-	// PrivateRoundtripLatency is how much to add to the EndpointDial timeout when establishing a remote connection.
-	PrivateRoundtripLatency time.Duration `json:"roundtripLatency,format:units"`
-	// PrivateProxyDial is how long to wait for the proxy to establish an outbound connection
-	PrivateProxyDial time.Duration `json:"proxyDial,format:units"`
-	// PrivateTrafficManagerConnect is how long to wait for the traffic-manager API to connect
-	PrivateTrafficManagerAPI time.Duration `json:"trafficManagerAPI,format:units"`
-	// PrivateTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager
+	PrivateClusterConnect        time.Duration `json:"clusterConnect,format:units"`
+	PrivateConnectivityCheck     time.Duration `json:"connectivityCheck,format:units"`
+	PrivateEndpointDial          time.Duration `json:"endpointDial,format:units"`
+	PrivateHelm                  time.Duration `json:"helm,format:units"`
+	PrivateIntercept             time.Duration `json:"intercept,format:units"`
+	PrivateRoundtripLatency      time.Duration `json:"roundtripLatency,format:units"`
+	PrivateProxyDial             time.Duration `json:"proxyDial,format:units"`
+	PrivateTrafficManagerAPI     time.Duration `json:"trafficManagerAPI,format:units"`
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,format:units"`
-	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
-	PrivateTrafficAgentArrival time.Duration `json:"trafficAgentArrival,format:units"`
-	// PrivateFtpReadWrite read/write timeout used by the fuseftp client.
-	PrivateFtpReadWrite time.Duration `json:"ftpReadWrite,format:units"`
-	// PrivateFtpShutdown max time to wait for the fuseftp client to complete pending operations before forcing termination.
-	PrivateFtpShutdown time.Duration `json:"ftpShutdown,format:units"`
-	// PrivateContainerShutdown max time to wait for a docker container to stop before forcing termination.
-	PrivateContainerShutdown time.Duration `json:"containerShutdown,format:units"`
+	PrivateTrafficAgentArrival   time.Duration `json:"trafficAgentArrival,format:units"`
+	PrivateFtpReadWrite          time.Duration `json:"ftpReadWrite,format:units"`
+	PrivateFtpShutdown           time.Duration `json:"ftpShutdown,format:units"`
+	PrivateContainerShutdown     time.Duration `json:"containerShutdown,format:units"`
 }
 
 type TimeoutID int
 
 const (
+	// TimeoutClusterConnect is the maximum time to wait for a connection to the cluster to be established.
 	TimeoutClusterConnect TimeoutID = iota
+
+	// TimeoutConnectivityCheck timeout used when checking if the cluster is already proxied on the workstation.
 	TimeoutConnectivityCheck
+
+	// TimeoutEndpointDial is how long to wait for a Dial to a service for which the IP is known.
 	TimeoutEndpointDial
+
+	// TimeoutHelm is how long to wait for any helm operation.
 	TimeoutHelm
+
+	// TimeoutIntercept is the time to wait for an intercept after the agents has been installed.
 	TimeoutIntercept
+
+	// TimeoutProxyDial is how long to wait for the proxy to establish an outbound connection.
 	TimeoutProxyDial
+
+	// TimeoutRoundtripLatency is how much to add to the EndpointDial timeout when establishing a remote connection.
 	TimeoutRoundtripLatency
+
+	// TimeoutTrafficManagerAPI is how long to wait for the traffic-manager API to connect.
 	TimeoutTrafficManagerAPI
+
+	// TimeoutTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager.
 	TimeoutTrafficManagerConnect
+
+	// TimeoutTrafficAgentArrival is how long to wait for the traffic-agent to arrive.
 	TimeoutTrafficAgentArrival
+
+	// TimeoutFtpReadWrite read/write timeout used by the fuseftp client.
 	TimeoutFtpReadWrite
+
+	// TimeoutFtpShutdown max time to wait for the fuseftp client to complete pending operations before forcing termination.
 	TimeoutFtpShutdown
+
+	// TimeoutContainerShutdown max time to wait for a docker container to stop before forcing termination.
 	TimeoutContainerShutdown
 )
 
@@ -369,7 +377,7 @@ type timeoutContext struct {
 	timeoutVal time.Duration
 }
 
-func (ctx timeoutContext) Err() error {
+func (ctx *timeoutContext) Err() error {
 	err := ctx.Context.Err()
 	if errors.Is(err, context.DeadlineExceeded) {
 		err = timeoutError{
@@ -412,20 +420,25 @@ func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 	case TimeoutContainerShutdown:
 		timeoutVal = t.PrivateContainerShutdown
 	default:
-		panic("should not happen")
+		panic("invalid TimeoutID")
 	}
 	return timeoutVal
 }
 
+// TimeoutContext returns a context with the timeout that is configured for the given timeoutID and a cancel function.
+// The context will be canceled if:
+//
+//   - the timeout is reached
+//   - the cancel function is called
+//   - the parent context is canceled
 func (t *Timeouts) TimeoutContext(ctx context.Context, timeoutID TimeoutID) (context.Context, context.CancelFunc) {
 	timeoutVal := t.Get(timeoutID)
 	ctx, cancel := context.WithTimeout(ctx, timeoutVal)
-	ctx = timeoutContext{
+	return &timeoutContext{
 		Context:    ctx,
 		timeoutID:  timeoutID,
 		timeoutVal: timeoutVal,
-	}
-	return ctx, cancel
+	}, cancel
 }
 
 type timeoutError struct {
@@ -559,18 +572,24 @@ func (t *Timeouts) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 }
 
 const (
-	defaultLogLevelsUserDaemon = logrus.InfoLevel
-	defaultLogLevelsRootDaemon = logrus.InfoLevel
+	defaultLogLevelsCLI            = logrus.InfoLevel
+	defaultLogLevelsKubeAuthDaemon = logrus.InfoLevel
+	defaultLogLevelsUserDaemon     = logrus.InfoLevel
+	defaultLogLevelsRootDaemon     = logrus.InfoLevel
 )
 
 var defaultLogLevels = LogLevels{ //nolint:gochecknoglobals // constant
-	UserDaemon: defaultLogLevelsUserDaemon,
-	RootDaemon: defaultLogLevelsRootDaemon,
+	CLI:            defaultLogLevelsCLI,
+	KubeAuthDaemon: defaultLogLevelsKubeAuthDaemon,
+	UserDaemon:     defaultLogLevelsUserDaemon,
+	RootDaemon:     defaultLogLevelsRootDaemon,
 }
 
 type LogLevels struct {
-	UserDaemon logrus.Level `json:"userDaemon"`
-	RootDaemon logrus.Level `json:"rootDaemon"`
+	CLI            logrus.Level `json:"cli"`
+	KubeAuthDaemon logrus.Level `json:"kubeAuthDaemon"`
+	UserDaemon     logrus.Level `json:"userDaemon"`
+	RootDaemon     logrus.Level `json:"rootDaemon"`
 }
 
 func (ll *LogLevels) defaults() DefaultsAware {
@@ -1143,33 +1162,37 @@ func GetConfig(ctx context.Context) Config {
 }
 
 // ReplaceConfig replaces the config last stored using WithConfig with the given Config.
-func ReplaceConfig(ctx context.Context, config Config) {
+// The function returns true if an existing config was replaced, false if no such config
+// existed.
+func ReplaceConfig(ctx context.Context, config Config) bool {
 	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
 		atomic.StorePointer(configPtr, unsafe.Pointer(&config))
+		return true
 	}
+	return false
 }
 
-// GetConfigFile gets the path to the configFile as stored in filelocation.AppUserConfigDir.
+type configFileKey struct{}
+
+// WithConfigFile sets the config file to use and overrides the default which is using "config.yml" from the AppUserConfigDir.
+func WithConfigFile(ctx context.Context, configFile string) context.Context {
+	return context.WithValue(ctx, configFileKey{}, configFile)
+}
+
+// GetConfigFile gets the path to the configFile.
 func GetConfigFile(c context.Context) string {
+	if configFile, ok := c.Value(configFileKey{}).(string); ok {
+		return configFile
+	}
 	return filepath.Join(filelocation.AppUserConfigDir(c), ConfigFile)
-}
-
-//nolint:gochecknoglobals // extension point
-var GetDefaultConfigFunc = func() Config {
-	return GetDefaultBaseConfig()
-}
-
-//nolint:gochecknoglobals // extension point
-var ValidateConfigFunc = func(context.Context, Config) error {
-	return nil
 }
 
 // GetDefaultConfig returns the default configuration settings.
 func GetDefaultConfig() Config {
-	return GetDefaultConfigFunc()
+	return getDefaultConfig()
 }
 
-var defaultConfig = BaseConfig{ //nolint:gochecknoglobals // constant
+var defaultConfig = config{ //nolint:gochecknoglobals // constant
 	OSSpecificConfig: GetDefaultOSSpecificConfig(),
 	TimeoutsV:        defaultTimeouts,
 	LogLevelsV:       defaultLogLevels,
@@ -1183,9 +1206,9 @@ var defaultConfig = BaseConfig{ //nolint:gochecknoglobals // constant
 	HelmV:            defaultHelm,
 }
 
-// GetDefaultBaseConfig returns the default configuration settings.
-func GetDefaultBaseConfig() *BaseConfig {
-	c := new(BaseConfig)
+// getDefaultConfig returns the default configuration settings.
+func getDefaultConfig() *config {
+	c := new(config)
 	*c = defaultConfig
 	return c
 }
@@ -1193,46 +1216,21 @@ func GetDefaultBaseConfig() *BaseConfig {
 // LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
 // or filelocation.AppSystemConfigDirs.
 func LoadConfig(c context.Context) (cfg Config, err error) {
-	defer func() {
-		if err != nil {
-			err = errcat.Config.New(err)
+	fileName := GetConfigFile(c)
+	cfg = GetDefaultConfig()
+	bs, err := os.ReadFile(fileName)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			dlog.Infof(c, "No config file found at %q. Using default config", fileName)
+			return cfg, nil
 		}
-	}()
-
-	dirs := filelocation.AppSystemConfigDirs(c)
-	cfg = GetDefaultConfigFunc()
-	readMerge := func(dir string) error {
-		if stat, err := os.Stat(dir); err != nil || !stat.IsDir() { // skip unless directory
-			return nil
-		}
-		fileName := filepath.Join(dir, ConfigFile)
-		bs, err := os.ReadFile(fileName)
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				err = nil
-			}
-			return err
-		}
-		fileConfig, err := ParseConfigYAML(c, fileName, bs)
-		if err != nil {
-			return err
-		}
-		cfg.DestructiveMerge(fileConfig)
-		return nil
+		return nil, errcat.Config.New(err)
 	}
-
-	for _, dir := range dirs {
-		if err = readMerge(dir); err != nil {
-			return nil, err
-		}
+	fileConfig, err := ParseConfigYAML(c, fileName, bs)
+	if err != nil {
+		return nil, errcat.Config.New(err)
 	}
-	appDir := filelocation.AppUserConfigDir(c)
-	if err = readMerge(appDir); err != nil {
-		return nil, err
-	}
-	if err = ValidateConfigFunc(c, cfg); err != nil {
-		return nil, err
-	}
+	cfg.DestructiveMerge(fileConfig)
 	return cfg, nil
 }
 
@@ -1247,6 +1245,36 @@ type RoutingSnake struct {
 	VirtualSubnet          netip.Prefix   `json:"virtual_subnet"`
 	AutoResolveConflicts   bool           `json:"auto_resolve_conflicts"`
 	UseTAP                 bool           `json:"use_tap"`
+}
+
+// DNSMapping contains a hostname and its associated alias. When requesting the name, the intended behavior is
+// to resolve the alias instead.
+type DNSMapping struct {
+	Name     string `json:"name,omitempty" yaml:"name,omitempty"`
+	AliasFor string `json:"aliasFor,omitempty" yaml:"aliasFor,omitempty"`
+}
+
+type DNSMappings []*DNSMapping
+
+func (d *DNSMappings) FromRPC(rpcMappings []*daemon.DNSMapping) {
+	*d = make(DNSMappings, 0, len(rpcMappings))
+	for i := range rpcMappings {
+		*d = append(*d, &DNSMapping{
+			Name:     rpcMappings[i].Name,
+			AliasFor: rpcMappings[i].AliasFor,
+		})
+	}
+}
+
+func (d DNSMappings) ToRPC() []*daemon.DNSMapping {
+	rpcMappings := make([]*daemon.DNSMapping, 0, len(d))
+	for i := range d {
+		rpcMappings = append(rpcMappings, &daemon.DNSMapping{
+			Name:     d[i].Name,
+			AliasFor: d[i].AliasFor,
+		})
+	}
+	return rpcMappings
 }
 
 type DNS struct {

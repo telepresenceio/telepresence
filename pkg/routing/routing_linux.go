@@ -6,25 +6,14 @@ import (
 	"net"
 	"net/netip"
 	"os/exec"
-	"regexp"
 	"sort"
 	"syscall" //nolint:depguard // sys/unix does not have NetlinkRIB
-	"unsafe"
 
 	"github.com/vishvananda/netlink"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
-)
-
-const findInterfaceRegex = `( via (?P<gw>[0-9a-f.:]+))?.* dev (?P<dev>[a-z0-9-]+).* src (?P<src>[0-9a-f.:]+)`
-
-var (
-	findInterfaceRe = regexp.MustCompile(findInterfaceRegex) //nolint:gochecknoglobals // constant
-	gwidx           = findInterfaceRe.SubexpIndex("gw")      //nolint:gochecknoglobals // constant
-	devIdx          = findInterfaceRe.SubexpIndex("dev")     //nolint:gochecknoglobals // constant
-	srcIdx          = findInterfaceRe.SubexpIndex("src")     //nolint:gochecknoglobals // constant
 )
 
 type LinuxTable interface {
@@ -36,148 +25,62 @@ type table struct {
 	rule  *netlink.Rule
 }
 
-type rtmsg struct {
-	// Check out https://man7.org/linux/man-pages/man7/rtnetlink.7.html for the definition of rtmsg
-	Family   byte // Address family of route
-	DstLen   byte // Length of destination
-	SrcLen   byte // Length of source
-	TOS      byte // TOS filter
-	Table    byte // Routing table ID
-	Protocol byte // Routing protocol
-	Scope    byte
-	Type     byte
-
-	Flags uint32
-}
-
-func getConsistentRoutingTable(_ context.Context) ([]*Route, error) {
-	// Most of this logic was adapted from https://github.com/google/gopacket/blob/master/routing/routing.go
-	tab, err := syscall.NetlinkRIB(syscall.RTM_GETROUTE, syscall.AF_UNSPEC)
+func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
+	// List routes in the all tables.
+	rts, err := netlink.RouteListFiltered(
+		netlink.FAMILY_ALL,
+		&netlink.Route{},
+		netlink.RT_FILTER_TABLE,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("unable to call netlink for route table: %w", err)
+		return nil, fmt.Errorf("netlink.RouteListFiltered: %w", err)
 	}
-	msgs, err := syscall.ParseNetlinkMessage(tab)
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse netlink messages: %w", err)
-	}
+
 	var routes []*Route
-msgLoop:
-	for _, msg := range msgs {
-		switch msg.Header.Type {
-		case syscall.NLMSG_DONE:
-			break msgLoop
-		case syscall.RTM_NEWROUTE:
-			// Based on the gopacket code, we mainly need this rtmsg to grab the size of the mask for the destination network.
-			r, err := rowAsRoute((*rtmsg)(unsafe.Pointer(&msg.Data[0])), &msg)
+	for i := range rts {
+		nrt := &rts[i]
+		if nrt.Table > 255 {
+			// We only care about routes in the "local", "main", and "default" tables
+			continue
+		}
+		switch nrt.Family {
+		case syscall.AF_INET, syscall.AF_INET6:
+			rt, err := routeFromNetlinkRoute(nrt)
 			if err != nil {
-				return nil, err
+				return nil, errInconsistentRT
 			}
-			if r != nil {
-				routes = append(routes, r)
-			}
+			dlog.Debugf(ctx, "Found route %s", rt)
+			routes = append(routes, rt)
 		}
 	}
 	return routes, nil
 }
 
-func rowAsRoute(rt *rtmsg, msg *syscall.NetlinkMessage) (*Route, error) {
-	var unspec netip.Addr
-	ipv4 := false
-	switch rt.Family {
-	case syscall.AF_INET:
-		ipv4 = true
-		unspec = netip.IPv4Unspecified()
-	case syscall.AF_INET6:
-		unspec = netip.IPv6Unspecified()
-	default:
-		return nil, nil
-	}
-	attrs, err := syscall.ParseNetlinkRouteAttr(msg)
+func routeFromNetlinkRoute(rt *netlink.Route) (*Route, error) {
+	lnk, err := netlink.LinkByIndex(rt.LinkIndex)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse netlink route attributes: %w", err)
+		return nil, fmt.Errorf("netlink.LinkByIndex: %w", err)
 	}
-
-	gw := unspec
-	dstNet := netip.PrefixFrom(unspec, 0)
-	var ifaceIdx int
-	for _, attr := range attrs {
-		switch attr.Attr.Type {
-		case syscall.RTA_DST:
-			a, _ := netip.AddrFromSlice(attr.Value)
-			dstNet = netip.PrefixFrom(a, int(rt.DstLen))
-		case syscall.RTA_GATEWAY:
-			gw, _ = netip.AddrFromSlice(attr.Value)
-		case syscall.RTA_OIF:
-			ifaceIdx = int(*(*uint32)(unsafe.Pointer(&attr.Value[0])))
-		}
-	}
-	if ifaceIdx < 1 {
-		return nil, nil
-	}
-
-	dfltGw := dstNet.Addr().IsUnspecified() && !gw.IsUnspecified()
-	iface, err := net.InterfaceByIndex(ifaceIdx)
-	if err != nil {
-		// This is not an atomic operation. An intercept may vanish while we're creating this table. When that
-		// happens, the best cause of action is to redo the whole process.
-		return nil, errInconsistentRT
-	}
-	if iface.Flags&net.FlagUp == 0 {
-		return nil, nil
-	}
-	srcIP, err := interfaceLocalIP(iface, ipv4)
-	if err != nil || !srcIP.IsValid() {
-		return nil, err
-	}
+	addr, _ := netip.AddrFromSlice(rt.Src)
+	gw, _ := netip.AddrFromSlice(rt.Gw)
+	dst := iputil.PrefixFromIPNet(rt.Dst)
+	dfltGw := gw.IsValid() && dst.Addr().IsUnspecified()
 	return &Route{
-		LocalIP:        srcIP,
-		RoutedNet:      dstNet,
-		InterfaceIndex: iface.Index,
-		InterfaceName:  iface.Name,
-		// gw might be nil here, indicating a local route, i.e. directly connected without the packets having to go through a gateway.
-		Gateway: gw,
-		Default: dfltGw,
+		InterfaceIndex: rt.LinkIndex,
+		InterfaceName:  lnk.Attrs().Name,
+		LocalIP:        addr,
+		RoutedNet:      iputil.PrefixFromIPNet(rt.Dst),
+		Gateway:        gw,
+		Default:        dfltGw,
 	}, nil
 }
 
 func getOsRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
-	ip := routedNet.Addr()
-	cmd := exec.CommandContext(ctx, "ip", "route", "get", ip.String())
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get route for %s: %w", ip, err)
+	nrt, err := netlink.RouteGet(routedNet.Addr().AsSlice())
+	if err == nil && len(nrt) > 0 {
+		return routeFromNetlinkRoute(&nrt[0])
 	}
-	msg := string(out)
-	match := findInterfaceRe.FindStringSubmatch(msg)
-	if match == nil {
-		return nil, fmt.Errorf("output of ip route did not match %s (output: %s)", findInterfaceRegex, msg)
-	}
-	var gatewayIP netip.Addr
-	if gw := match[gwidx]; gw != "" {
-		gatewayIP, err = netip.ParseAddr(gw)
-		if err != nil {
-			return nil, fmt.Errorf("unable to parse gateway IP %s: %w", gw, err)
-		}
-	} else if ip.Is4() {
-		gatewayIP = netip.IPv4Unspecified()
-	} else {
-		gatewayIP = netip.IPv6Unspecified()
-	}
-	iface, err := net.InterfaceByName(match[devIdx])
-	if err != nil {
-		return nil, fmt.Errorf("unable to get interface %s: %w", match[devIdx], err)
-	}
-	localIP, err := netip.ParseAddr(match[srcIdx])
-	if err != nil {
-		return nil, fmt.Errorf("unable to parse local IP %s: %w", match[srcIdx], err)
-	}
-	return &Route{
-		Gateway:        gatewayIP,
-		InterfaceIndex: iface.Index,
-		InterfaceName:  iface.Name,
-		RoutedNet:      routedNet,
-		LocalIP:        localIP,
-	}, nil
+	return nil, err
 }
 
 func openTable(ctx context.Context) (Table, error) {
@@ -192,7 +95,6 @@ func openTable(ctx context.Context) (Table, error) {
 	index := 775
 	priority := 32766 // default initial priority
 	for _, rule := range rules {
-		dlog.Tracef(ctx, "Found routing rule %+v", rule)
 		if rule.Table == 0 || rule.Table == 255 {
 			// System rules, ignore
 			continue

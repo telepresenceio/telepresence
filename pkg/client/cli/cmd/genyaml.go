@@ -72,13 +72,13 @@ func getInput(inputFile string) ([]byte, error) {
 	} else {
 		var err error
 		if f, err = os.Open(inputFile); err != nil {
-			return nil, errcat.User.Newf("unable to open input file %q: %w", inputFile, err)
+			return nil, errcat.User.Errorf(err, "unable to open input file %q", inputFile)
 		}
 		defer f.Close()
 	}
 	b, err := io.ReadAll(f)
 	if err != nil {
-		return nil, errcat.User.Newf("error reading from %s: %w", inputFile, err)
+		return nil, errcat.User.Errorf(err, "error reading from %s", inputFile)
 	}
 	return b, nil
 }
@@ -89,7 +89,7 @@ func (i *genYAMLCommand) getOutputWriter() (io.WriteCloser, error) {
 	}
 	f, err := os.Create(i.outputFile)
 	if err != nil {
-		return nil, errcat.User.Newf("unable to open output file %s: %w", i.outputFile, err)
+		return nil, errcat.User.Errorf(err, "unable to open output file %s", i.outputFile)
 	}
 	return f, nil
 }
@@ -150,7 +150,7 @@ func (i *genYAMLCommand) writeObjToOutput(obj any) error {
 	// We use sigs.ks8.io/yaml because it treats json serialization tags as if they were yaml tags.
 	doc, err := yaml.Marshal(obj)
 	if err != nil {
-		return errcat.User.Newf("unable to marshal agent container: %w", err)
+		return errcat.User.Errorf(err, "unable to marshal agent container")
 	}
 	w, err := i.getOutputWriter()
 	if err != nil {
@@ -159,7 +159,7 @@ func (i *genYAMLCommand) writeObjToOutput(obj any) error {
 	defer w.Close()
 	_, err = w.Write(doc)
 	if err != nil {
-		return errcat.User.Newf("unable to write to output %s: %w", i.outputFile, err)
+		return errcat.User.Errorf(err, "unable to write to output %s", i.outputFile)
 	}
 	return nil
 }
@@ -170,7 +170,7 @@ func (i *genYAMLCommand) WithJoinedClientSetInterface(ctx context.Context, flagM
 	configFlags.AddFlags(fs)
 	for k, v := range flagMap {
 		if err := fs.Set(k, v); err != nil {
-			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
+			return nil, errcat.User.Errorf(err, "error processing kubectl flag --%s=%s", k, v)
 		}
 	}
 

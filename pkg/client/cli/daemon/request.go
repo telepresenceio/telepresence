@@ -372,6 +372,14 @@ func GetRequest(ctx context.Context) *Request {
 	return nil
 }
 
+func MustGetRequest(ctx context.Context) *Request {
+	rq := GetRequest(ctx)
+	if rq != nil {
+		return rq
+	}
+	panic("no request in context")
+}
+
 func WithDefaultRequest(cmd *cobra.Command) (context.Context, error) {
 	cr := NewDefaultRequest()
 	cr.Implicit = true

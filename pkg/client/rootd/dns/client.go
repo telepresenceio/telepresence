@@ -23,12 +23,12 @@ type luResult struct {
 // LookupIP performs an A and an AAAA query and returns the first answer.
 func LookupIP(ctx context.Context, localDNS netip.AddrPort, name string) (ip netip.Addr, err error) {
 	c := new(dns.Client)
-	c.Timeout = client.GetConfig(ctx).DNS().LookupTimeout
+	ctx, cancel := context.WithTimeout(ctx, client.GetConfig(ctx).DNS().LookupTimeout)
+	defer cancel()
+
 	dnsAddr := localDNS.String()
 	qName := dns.Fqdn(name)
 	ch := make(chan luResult, 2)
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 
 	go lookupIP(ctx, c, dnsAddr, qName, dns.TypeA, ch)
 	go lookupIP(ctx, c, dnsAddr, qName, dns.TypeAAAA, ch)

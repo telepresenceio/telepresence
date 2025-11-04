@@ -18,6 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -135,7 +136,7 @@ func (s *listCommand) list(cmd *cobra.Command, _ []string) error {
 	if !output.WantsStream(cmd) {
 		r, err := userD.List(ctx, &connector.ListRequest{Filter: filter, Namespace: s.namespace}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 		if err != nil {
-			return err
+			return tpGrpc.FromGRPC(err)
 		}
 		s.printList(ctx, r.Workloads, stdout, formattedOutput)
 		return nil
@@ -143,7 +144,7 @@ func (s *listCommand) list(cmd *cobra.Command, _ []string) error {
 
 	stream, streamErr := userD.WatchWorkloads(ctx, &connector.WatchWorkloadsRequest{Namespaces: []string{s.namespace}}, grpc.MaxCallRecvMsgSize(int(maxRecSize)))
 	if streamErr != nil {
-		return streamErr
+		return tpGrpc.FromGRPC(streamErr)
 	}
 
 	ch := make(chan *watchWorkloadStreamResponse)

@@ -12,7 +12,7 @@ func (s *notConnectedSuite) Test_EmptyConfigFile() {
 	ctx := s.Context()
 	cfgDir := itest.TempDir(ctx)
 	ctx = filelocation.WithAppUserConfigDir(ctx, cfgDir)
-	f, err := os.Create(filepath.Join(cfgDir, "config.json"))
+	f, err := os.Create(filepath.Join(cfgDir, "config.yml"))
 	s.Require().NoError(err)
 	f.Close()
 	s.TelepresenceConnect(ctx)

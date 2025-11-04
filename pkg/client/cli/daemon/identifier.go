@@ -3,7 +3,7 @@ package daemon
 import (
 	"context"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -55,7 +55,7 @@ func IdentifierFromFlags(ctx context.Context, name string, flagMap map[string]st
 	cc := flagMap["context"]
 	ns := flagMap["namespace"]
 	if cc == "" || ns == "" {
-		cld, err := client.ConfigLoader(ctx, flagMap, kubeConfigData)
+		cld, err := k8s.ConfigLoader(ctx, flagMap, kubeConfigData)
 		if err != nil {
 			return nil, err
 		}

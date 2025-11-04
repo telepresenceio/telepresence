@@ -137,8 +137,7 @@ func (s *multipleServicesSuite) Test_ListOnlyMapped() {
 	stdout := itest.TelepresenceOk(ctx, "list")
 	require.Contains(stdout, "No Workloads")
 
-	stdout = s.TelepresenceConnect(ctx, "--mapped-namespaces", "all")
-	require.Empty(stdout)
+	s.TelepresenceConnect(ctx, "--mapped-namespaces", "all")
 
 	stdout = itest.TelepresenceOk(ctx, "list")
 	require.NotContains(stdout, "No Workloads")

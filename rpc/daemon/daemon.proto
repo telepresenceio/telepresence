@@ -135,6 +135,12 @@ message NetworkConfig {
   // Connection namespace
   string namespace = 4;
 
+  // Namespace where the connected traffic-manager is installed.
+  string manager_namespace = 9;
+
+  // Mapped namespaces
+  repeated string mapped_namespaces = 10;
+
   // Kubernetes flags
   map<string, string> kube_flags = 5;
 

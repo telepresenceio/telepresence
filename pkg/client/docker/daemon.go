@@ -33,10 +33,13 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -76,7 +79,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
 		"-p", fmt.Sprintf("%s:%d/tcp", hostAddr, client.GetConfig(ctx).Grpc().DaemonPort),
-		"-v", fmt.Sprintf("%s:%s:ro", filelocation.AppUserConfigDir(ctx), DockerTpConfig),
+		"-v", fmt.Sprintf("%s:%s:ro", filepath.Dir(client.GetConfigFile(ctx)), DockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), TpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), DockerTpLog),
 	}
@@ -87,7 +90,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 	if cr.Hostname != "" {
 		opts = append(opts, "--hostname", cr.Hostname)
 	}
-	opts, err = proc.AppendOSSpecificContainerOpts(ctx, opts)
+	opts, err = appendOSSpecificContainerOpts(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +111,8 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 func DaemonArgs(ctx context.Context, daemonID *daemon.Identifier) []string {
 	grpcCfg := client.GetConfig(ctx).Grpc()
 	return []string{
-		"connector-foreground",
+		client.UserDaemonName,
+		"--config", filepath.Join(DockerTpConfig, filepath.Base(client.GetConfigFile(ctx))),
 		"--name", "docker-" + daemonID.String(),
 		"--address", fmt.Sprintf(":%d", grpcCfg.DaemonPort),
 		"--embed-network",
@@ -139,7 +143,7 @@ func ConnectDaemon(ctx context.Context, address netip.AddrPort) (conn *grpc.Clie
 }
 
 const (
-	kubeAuthPortFile = kubeauth.CommandName + ".port"
+	kubeAuthPortFile = client.KubeAuthDaemonName + ".port"
 )
 
 type ContainerInfo struct {
@@ -157,7 +161,7 @@ func GetDaemonContainerNetworkInfo(ctx context.Context) (dns netip.Addr, network
 	info := ud.DaemonInfo()
 	status, err := ud.Status(ctx, &empty.Empty{})
 	if err != nil {
-		return dns, "", err
+		return dns, "", tpGrpc.FromGRPC(err)
 	}
 
 	rootCfg, err := daemon.GetRootClientConfig(status.DaemonStatus)
@@ -255,10 +259,10 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	// remove any stale port file
 	_ = os.Remove(portFile)
 
-	args := make([]string, 0, 4+len(kubeFlags)*2)
-	args = append(args, client.GetExe(ctx), kubeauth.CommandName, "--portfile", portFile)
+	args := make([]string, 0, 6+len(kubeFlags)*2)
+	args = append(args, client.GetExe(ctx), client.KubeAuthDaemonName, "--"+global.FlagConfig, client.GetConfigFile(ctx), "--portfile", portFile)
 	var err error
-	if args, err = client.AppendKubeFlags(kubeFlags, args); err != nil {
+	if args, err = k8s.AppendKubeFlags(kubeFlags, args); err != nil {
 		return 0, err
 	}
 	if err := proc.StartInBackground(true, args...); err != nil {
@@ -280,7 +284,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 		dlog.Debugf(ctx, "Authenticator service started on port %d", port)
 		return port, nil
 	}
-	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), kubeauth.CommandName)
+	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), client.KubeAuthDaemonName)
 }
 
 func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string) (uint16, error) {
@@ -312,7 +316,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 		// Been there, done that
 		return nil
 	}
-	loader, err := client.ConfigLoader(ctx, cr.KubeFlags, cr.KubeconfigData)
+	loader, err := k8s.ConfigLoader(ctx, cr.KubeFlags, cr.KubeconfigData)
 	if err != nil {
 		return err
 	}
@@ -701,4 +705,18 @@ func WaitForExit(ctx context.Context, cli *dockerClient.Client, id string, maxTi
 		}
 		return err
 	}, backoff.WithContext(backoff.NewExponentialBackOff(backoff.WithInitialInterval(exitPollInterval), backoff.WithMaxElapsedTime(maxTime)), ctx))
+}
+
+func appendOSSpecificContainerOpts(ctx context.Context, opts []string) ([]string, error) {
+	if proc.RunningInWSL() {
+		// Using host.docker.internal:host-gateway won't work for the kubeauth process, because Windows Docker Desktop
+		// will assign the IP of the Windows host, not the host from where this process was started (the Linux host).
+		// We'll reach that using the gateway of the default host.
+		r, err := routing.DefaultRoute(ctx)
+		if err != nil {
+			return opts, err
+		}
+		opts = append(opts, "-e", fmt.Sprintf("TELEPRESENCE_KUBEAUTH_HOST=%s", r.LocalIP))
+	}
+	return opts, nil
 }

@@ -30,7 +30,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
-	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
 type InterceptFinalizer func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error
@@ -78,7 +77,7 @@ type State struct {
 	clients                    *xsync.Map[tunnel.SessionID, *ClientSession]    // info for client sessions, keyed by session id
 	timedLogLevel              log.TimedLevel
 	llSubs                     *loglevelSubscribers
-	workloadWatchers           *xsync.Map[string, workload.Watcher] // workload watchers, created on demand and keyed by namespace
+	workloadWatchers           *xsync.Map[string, Watcher] // workload watchers, created on demand and keyed by namespace
 	tunnelCounter              int32
 	tunnelIngressCounter       uint64
 	tunnelEgressCounter        uint64
@@ -107,7 +106,7 @@ func NewState(ctx context.Context, g *dgroup.Group) *State {
 		intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
 		agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
-		workloadWatchers: xsync.NewMap[string, workload.Watcher](),
+		workloadWatchers: xsync.NewMap[string, Watcher](),
 		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}
@@ -565,9 +564,9 @@ func (s *State) WatchAgents(
 	return s.agents.Subscribe(ctx.Done(), filter)
 }
 
-func (s *State) WatchWorkloads(ctx context.Context, ns string) (ch <-chan []workload.Event, err error) {
-	ww, _ := s.workloadWatchers.LoadOrCompute(ns, func() (ww workload.Watcher, rm bool) {
-		ww, err = workload.NewWatcher(s.backgroundCtx, ns, managerutil.GetEnv(ctx).EnabledWorkloadKinds)
+func (s *State) WatchWorkloads(ctx context.Context, ns string) (ch <-chan []Event, err error) {
+	ww, _ := s.workloadWatchers.LoadOrCompute(ns, func() (ww Watcher, rm bool) {
+		ww, err = NewWatcher(s.backgroundCtx, ns, managerutil.GetEnv(ctx).EnabledWorkloadKinds)
 		return ww, err != nil // delete if error.
 	})
 	if err != nil {

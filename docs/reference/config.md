@@ -198,10 +198,12 @@ For whichever log-level you select, you will get logs labeled with that level an
 
 These are the valid fields for the `client.logLevels` key:
 
-| Field        | Description                                                         | Type                                        | Default |
-|--------------|---------------------------------------------------------------------|---------------------------------------------|---------|
-| `userDaemon` | Logging level to be used by the User Daemon (logs to connector.log) | [loglevel][logrus-level] [string][yaml-str] | debug   |
-| `rootDaemon` | Logging level to be used for the Root Daemon (logs to daemon.log)   | [loglevel][logrus-level] [string][yaml-str] | info    |
+| Field            | Description                                                                             | Type                                        | Default |
+|------------------|-----------------------------------------------------------------------------------------|---------------------------------------------|---------|
+| `userDaemon`     | Logging level to be used by the User Daemon (logs to connector.log)                     | [loglevel][logrus-level] [string][yaml-str] | info    |
+| `rootDaemon`     | Logging level to be used for the Root Daemon (logs to daemon.log)                       | [loglevel][logrus-level] [string][yaml-str] | info    |
+| `kubeAuthDaemon` | Logging level to be used by the Kubernetes Authentication Daemon (logs to kubeauth.log) | [loglevel][logrus-level] [string][yaml-str] | info    |
+| `cli`            | Logging level to be used by the CLI frontend (logs to cli.log)                          | [loglevel][logrus-level] [string][yaml-str] | info    |
 
 ### Routing
 
@@ -296,15 +298,13 @@ In addition, it is possible to override each of these variables at the local lev
 There are two types of config values that can be set locally: those that apply to all clusters, which are set in a single `config.yml` file, and those
 that only apply to specific clusters, which are set as extensions to the `$KUBECONFIG` file.
 
-### Config for all clusters
-Telepresence uses a `config.yml` file to store and change those configuration values that will be used for all clusters you use Telepresence with.
+### Client Config
+Telepresence uses a `config.yml` file to store and change those configuration values that will be used by the Telepresence client.
 The location of this file varies based on your OS:
 
 * macOS: `$HOME/Library/Application Support/telepresence/config.yml`
 * Linux: `$XDG_CONFIG_HOME/telepresence/config.yml` or, if that variable is not set, `$HOME/.config/telepresence/config.yml`
 * Windows: `%APPDATA%\telepresence\config.yml`
-
-For Linux, the above paths are for a user-level configuration. For system-level configuration, use the file at `$XDG_CONFIG_DIRS/telepresence/config.yml` or, if that variable is empty, `/etc/xdg/telepresence/config.yml`.  If a file exists at both the user-level and system-level paths, the user-level path file will take precedence.
 
 ### Values
 
@@ -329,7 +329,7 @@ grpc:
 
 ## Workstation Per-Cluster Configuration
 
-Configuration that is specific to a cluster can also be overriden per-workstation by modifying your `$KUBECONFIG` file.
+Configuration that is specific to a cluster connection can also be overriden per-workstation by modifying your `$KUBECONFIG` file.
 It is recommended that you do not do this, and instead rely on upstream values provided to the Traffic Manager. This ensures
 that all users that connect to the Traffic Manager will behave the same.
 An important exception to this is the [`cluster.defaultManagerNamespace` configuration](#manager) which must be set locally.

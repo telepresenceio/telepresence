@@ -240,9 +240,11 @@ func commandLink(cmd *cobra.Command) string {
 }
 
 func addUsageTemplate(cmd *cobra.Command, markdown bool) {
-	cobra.AddTemplateFunc("globalFlags", func(cmd *cobra.Command) *pflag.FlagSet { return global.Flags(hasKubeFlags(cmd)) })
+	cobra.AddTemplateFunc("globalFlags", func(cmd *cobra.Command) *pflag.FlagSet {
+		return global.Flags(cmd.Context(), hasKubeFlags(cmd), markdown)
+	})
 	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) []*pflag.FlagSet {
-		return localFlags(cmd, kubeFlags(), global.Flags(hasKubeFlags(cmd)))
+		return localFlags(cmd, kubeFlags(), global.Flags(cmd.Context(), hasKubeFlags(cmd), markdown))
 	})
 	cobra.AddTemplateFunc("hasKubeFlags", hasKubeFlags)
 	cobra.AddTemplateFunc("kubeFlags", kubeFlags)

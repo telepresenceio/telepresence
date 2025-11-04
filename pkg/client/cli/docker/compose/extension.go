@@ -2,7 +2,6 @@ package compose
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -352,7 +352,7 @@ func (e *ingestExtension) activate(t *transformer) (*engagement, error) {
 	ii, err := ud.GetIngest(ctx, &connector.IngestIdentifier{WorkloadName: e.workload()})
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
-			return nil, err
+			return nil, grpc.FromGRPC(err)
 		}
 	}
 	if ii == nil {
@@ -368,11 +368,7 @@ func (e *ingestExtension) activate(t *transformer) (*engagement, error) {
 		}
 		ii, err = ud.Ingest(e.conn, ir)
 		if err != nil {
-			switch status.Code(err) {
-			case codes.AlreadyExists, codes.NotFound, codes.Unimplemented, codes.FailedPrecondition:
-				return nil, errors.New(status.Convert(err).Message())
-			}
-			return nil, fmt.Errorf("ingest: %w", err)
+			return nil, grpc.FromGRPC(err)
 		}
 	}
 	ae, err := createEngagement(ud, e, sftpPort)
@@ -398,13 +394,13 @@ func (e *ingestExtension) deactivate() error {
 		if status.Code(err) == codes.NotFound {
 			err = nil
 		}
-		return err
+		return grpc.FromGRPC(err)
 	}
 	_, err = ud.LeaveIngest(ctx, &connector.IngestIdentifier{
 		WorkloadName:  ig.Workload,
 		ContainerName: ig.Container,
 	})
-	return err
+	return grpc.FromGRPC(err)
 }
 
 func (e *ingestExtension) engaged() (*engagement, error) {
@@ -560,7 +556,7 @@ func activateIntercept(e workloadExtension, t *transformer) (*engagement, error)
 	ii, err := ud.GetIntercept(ctx, &manager.GetInterceptRequest{Name: e.name()})
 	if err != nil {
 		if status.Code(err) != codes.NotFound {
-			return nil, err
+			return nil, grpc.FromGRPC(err)
 		}
 	}
 	if ii == nil {
@@ -568,11 +564,10 @@ func activateIntercept(e workloadExtension, t *transformer) (*engagement, error)
 		if err != nil {
 			return nil, err
 		}
-		r, err := ud.CreateIntercept(e.connection(), ir)
-		if err = intercept.Result(r, err); err != nil {
+		ii, err = ud.CreateIntercept(e.connection(), ir)
+		if err = grpc.FromGRPC(err); err != nil {
 			return nil, fmt.Errorf("connector.CreateIntercept: %w", err)
 		}
-		ii = r.InterceptInfo
 	}
 	ae, err := createEngagement(ud, e, sftpPort)
 	if err != nil {
@@ -590,7 +585,8 @@ func deactivateIntercept(e workloadExtension) error {
 		if status.Code(err) == codes.NotFound {
 			err = nil
 		}
-		return err
+		return grpc.FromGRPC(err)
 	}
-	return intercept.Result(ud.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: ic.Spec.Name}))
+	_, err = ud.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: ic.Spec.Name})
+	return grpc.FromGRPC(err)
 }

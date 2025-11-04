@@ -22,8 +22,9 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/json"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 )
 
 type UserClient interface {
@@ -132,7 +133,7 @@ func (u *userClient) Executable() string {
 func (u *userClient) Lookup(ctx context.Context, name string) (addr netip.Addr, err error) {
 	ipb, err := u.LookupIP(ctx, &daemon.LookupIPRequest{Name: name})
 	if err != nil {
-		return addr, errcat.User.Newf("unable to resolve name %q: %v", name, err)
+		return addr, errcat.User.Errorf(tpGrpc.FromGRPC(err), "unable to resolve name %q", name)
 	}
 	err = addr.UnmarshalBinary(ipb.Ip)
 	if err != nil {
@@ -182,6 +183,7 @@ func (u *userClient) AddHandler(ctx context.Context, id string, cmd *exec.Cmd, c
 			dlog.Infof(ctx, "intercept no longer present when adding container %s as interceptor", containerName)
 			err = nil
 		default:
+			err = tpGrpc.FromGRPC(err)
 			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
 		}
 		_ = cmd.Process.Kill()
@@ -193,7 +195,7 @@ func (u *userClient) AddHandler(ctx context.Context, id string, cmd *exec.Cmd, c
 func (s *Session) GetAgentConfig(ctx context.Context, workload string) (*agentconfig.Sidecar, error) {
 	agc, err := s.UserClient.GetAgentConfig(ctx, &manager.AgentConfigRequest{Name: workload})
 	if err != nil {
-		return nil, err
+		return nil, tpGrpc.FromGRPC(err)
 	}
 	return agentconfig.UnmarshalYAML(agc.Data)
 }
@@ -207,34 +209,32 @@ func GetRootClientConfig(ds *daemon.DaemonStatus) (client.Config, error) {
 	if data == nil {
 		return nil, errors.New("no outbound config")
 	}
-	cfg := client.GetDefaultConfig()
-	if err := json.Unmarshal(data, cfg, true); err != nil {
-		return nil, err
-	}
-	return cfg, nil
+	return client.UnmarshalJSONConfig(data, false)
 }
 
 // GetCommandKubeConfig will return the fully resolved client.Kubeconfig for the given command.
-func GetCommandKubeConfig(cmd *cobra.Command) (context.Context, *client.Kubeconfig, error) {
+func GetCommandKubeConfig(cmd *cobra.Command) (*k8s.Kubeconfig, error) {
 	ctx := cmd.Context()
 	uc := GetUserClient(ctx)
-	var kc *client.Kubeconfig
+	var kc *k8s.Kubeconfig
 	var err error
 	if uc != nil && !cmd.Flag("context").Changed {
 		// Get the context that we're currently connected to.
 		var ci *connector.ConnectInfo
 		ci, err = uc.Status(ctx, &emptypb.Empty{})
 		if err == nil {
-			ctx, kc, err = client.NewKubeconfig(ctx, map[string]string{"context": ci.ClusterContext}, "")
+			kc, err = k8s.NewKubeconfig(ctx, false, map[string]string{"context": ci.ClusterContext}, "", nil)
+		} else {
+			err = tpGrpc.FromGRPC(err)
 		}
 	} else {
 		if GetRequest(ctx) == nil {
 			if ctx, err = WithDefaultRequest(cmd); err != nil {
-				return ctx, nil, err
+				return nil, err
 			}
 		}
-		rq := GetRequest(ctx)
-		ctx, kc, err = client.NewKubeconfig(ctx, rq.KubeFlags, rq.ManagerNamespace)
+		rq := MustGetRequest(ctx)
+		kc, err = k8s.NewKubeconfig(ctx, false, rq.KubeFlags, rq.ManagerNamespace, rq.KubeconfigData)
 	}
-	return ctx, kc, err
+	return kc, err
 }

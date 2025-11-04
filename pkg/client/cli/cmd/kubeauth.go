@@ -10,13 +10,14 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 )
 
 func kubeauthCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:               "kubeauth",
 		Args:              cobra.ExactArgs(2),
-		Short:             "Resolve kubeconfig context using gRPC to kubeauth server",
+		Short:             "Resolve kubeconfig context using gRPC to the kubeauth daemon",
 		RunE:              authenticateContext,
 		Hidden:            true,
 		ValidArgsFunction: cobra.NoFileCompletions,
@@ -24,7 +25,11 @@ func kubeauthCmd() *cobra.Command {
 	return cmd
 }
 
-func authenticateContext(cmd *cobra.Command, args []string) (err error) {
+func authenticateContext(cmd *cobra.Command, args []string) error {
+	err := global.InitConfig(cmd)
+	if err != nil {
+		return err
+	}
 	ctx := cmd.Context()
 	contextName := args[0]
 	serverAddr := args[1]

@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -138,14 +139,16 @@ func managerVersion(ctx context.Context) (*common.VersionInfo, error) {
 		}, nil
 	}
 	if userD := daemon.GetUserClient(ctx); userD != nil {
-		return userD.TrafficManagerVersion(ctx, &empty.Empty{})
+		mv, err := userD.TrafficManagerVersion(ctx, &empty.Empty{})
+		return mv, tpGrpc.FromGRPC(err)
 	}
 	return nil, connect.ErrNoUserDaemon
 }
 
 func trafficAgentFQN(ctx context.Context) (*manager.AgentImageFQN, error) {
 	if userD := daemon.GetUserClient(ctx); userD != nil {
-		return userD.AgentImageFQN(ctx, &empty.Empty{})
+		ai, err := userD.AgentImageFQN(ctx, &empty.Empty{})
+		return ai, tpGrpc.FromGRPC(err)
 	}
 	return nil, connect.ErrNoUserDaemon
 }

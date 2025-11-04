@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/hashicorp/go-multierror"
 	"gvisor.dev/gvisor/pkg/tcpip"
 	"gvisor.dev/gvisor/pkg/tcpip/adapters/gonet"
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv4"
@@ -26,16 +25,38 @@ type TunnelingDevice struct {
 	table  routing.Table
 }
 
-func NewTunnelingDevice(ctx context.Context, tunnelStreamCreator tunnel.StreamCreator) (*TunnelingDevice, error) {
-	routingTable, err := routing.OpenTable(ctx)
+func NewTunnelingDevice(ctx context.Context, tunnelStreamCreator tunnel.StreamCreator) (vif *TunnelingDevice, err error) {
+	var (
+		routingTable routing.Table
+		dev          Device
+		ep           stack.LinkEndpoint
+		netStack     *stack.Stack
+	)
+	defer func() {
+		if err != nil {
+			if netStack != nil {
+				netStack.Close()
+			}
+			if ep != nil {
+				ep.Close()
+			}
+			if dev != nil {
+				dev.Close()
+			}
+			if routingTable != nil {
+				routingTable.Close(ctx)
+			}
+		}
+	}()
+	routingTable, err = routing.OpenTable(ctx)
 	if err != nil {
 		return nil, err
 	}
-	dev, err := OpenTun(ctx)
+	dev, err = OpenTun(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ep, err := dev.NewLinkEndpoint()
+	ep, err = dev.NewLinkEndpoint()
 	if err != nil {
 		return nil, err
 	}
@@ -54,14 +75,10 @@ func NewTunnelingDevice(ctx context.Context, tunnelStreamCreator tunnel.StreamCr
 }
 
 func (vif *TunnelingDevice) Close(ctx context.Context) error {
-	var result error
 	vif.stack.Close()
 	vif.Router.Close(ctx)
 	vif.Device.Close()
-	if err := vif.table.Close(ctx); err != nil {
-		result = multierror.Append(result, err)
-	}
-	return result
+	return vif.table.Close(ctx)
 }
 
 func (vif *TunnelingDevice) AddStaticNeighbor(addr netip.Addr, linkAddr net.HardwareAddr) error {

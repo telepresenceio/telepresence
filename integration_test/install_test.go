@@ -25,7 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -75,8 +75,8 @@ func (is *installSuite) Test_UpgradeRetainsValues() {
 	is.TelepresenceHelmInstallOK(ctx, false, "--set", "logLevel=debug")
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
-	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
-	helmConfig, err := getHelmConfig(ctx, kc.Kubeconfig, is.ManagerNamespace())
+	kc := is.cluster(ctx, "", is.ManagerNamespace())
+	helmConfig, err := getHelmConfig(kc, kc.Kubeconfig, is.ManagerNamespace())
 	rq.NoError(err)
 
 	getValues := func() (map[string]any, error) {
@@ -170,14 +170,13 @@ func (is *installSuite) Test_HelmTemplateInstall() {
 }
 
 func (is *installSuite) Test_FindTrafficManager_notPresent() {
-	ctx := is.Context()
-	ctx, _ = is.cluster(ctx, "", is.ManagerNamespace()) // ensure that k8sapi is initialized
+	kc := is.cluster(is.Context(), "", is.ManagerNamespace()) // ensure that k8sapi is initialized
 
 	sv := version.Version
 	version.Version = "v0.0.0-bogus"
 	defer func() { version.Version = sv }()
 
-	_, err := k8sapi.GetDeployment(ctx, ManagerAppName, is.ManagerNamespace())
+	_, err := k8sapi.GetDeployment(kc, ManagerAppName, is.ManagerNamespace())
 	is.Error(err, "expected find to not find traffic-manager deployment")
 }
 
@@ -196,22 +195,22 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	defer restoreVersion()
 	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
 
-	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
-
 	failCtx := itest.WithConfig(ctx, func(cfg client.Config) {
 		cfg.Timeouts().PrivateHelm = 20 * time.Second // Give it time to discover the ImagePullbackOff error
 	})
 
-	err := ensureTrafficManager(failCtx, kc)
+	kc := is.cluster(failCtx, "", is.ManagerNamespace())
+	err := ensureTrafficManager(kc)
 	require.Error(err)
 	dlog.Infof(ctx, "Got expected install failure: %v", err)
 	restoreVersion()
 
-	ctx = itest.WithConfig(ctx, func(cfg client.Config) {
+	okCtx := itest.WithConfig(ctx, func(cfg client.Config) {
 		cfg.Timeouts().PrivateHelm = 20 * time.Second // Time to wait before pending state makes us assume it's stuck.
 	})
+	kc = is.cluster(okCtx, "", is.ManagerNamespace())
 	if !is.Eventually(func() bool {
-		err = ensureTrafficManager(ctx, kc)
+		err = ensureTrafficManager(kc)
 		if err != nil {
 			dlog.Errorf(ctx, "ensureTrafficManager failed: %v", err)
 		}
@@ -227,15 +226,15 @@ func (is *installSuite) Test_RemoveManager_canUninstall() {
 	}
 	require := is.Require()
 	ctx := is.Context()
-	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
+	kc := is.cluster(ctx, "", is.ManagerNamespace())
 
-	require.NoError(ensureTrafficManager(ctx, kc))
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, k8s.GetManagerNamespace(ctx), true, &helm.Request{}))
+	require.NoError(ensureTrafficManager(kc))
+	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, k8s.GetManagerNamespace(kc), true, &helm.Request{}))
 	// We want to make sure that we can re-install the manager after it's been uninstalled,
 	// so try to ensureManager again.
-	require.NoError(ensureTrafficManager(ctx, kc))
+	require.NoError(ensureTrafficManager(kc))
 	// Uninstall the manager one last time -- this should behave the same way as the previous uninstall
-	require.NoError(helm.DeleteTrafficManager(ctx, kc.Kubeconfig, k8s.GetManagerNamespace(ctx), true, &helm.Request{}))
+	require.NoError(helm.DeleteTrafficManager(kc, kc.Kubeconfig, k8s.GetManagerNamespace(kc), true, &helm.Request{}))
 }
 
 func (is *installSuite) Test_No_Upgrade() {
@@ -244,14 +243,14 @@ func (is *installSuite) Test_No_Upgrade() {
 	}
 	ctx := is.Context()
 	require := is.Require()
-	ctx, kc := is.cluster(ctx, "", is.ManagerNamespace())
+	kc := is.cluster(ctx, "", is.ManagerNamespace())
 
-	defer is.UninstallTrafficManager(ctx, is.ManagerNamespace())
+	defer is.UninstallTrafficManager(kc, is.ManagerNamespace())
 	// first install
-	require.NoError(ensureTrafficManager(ctx, kc))
+	require.NoError(ensureTrafficManager(kc))
 
 	// errors and asks for telepresence upgrade
-	require.Error(ensureTrafficManager(ctx, kc))
+	require.Error(ensureTrafficManager(kc))
 
 	// using upgrade and --values replaces TM with values
 	helmValues := filepath.Join("testdata", "routing-values.yaml")
@@ -261,7 +260,7 @@ func (is *installSuite) Test_No_Upgrade() {
 	jvp, err := json.Marshal(vp)
 	require.NoError(err)
 
-	require.NoError(helm.EnsureTrafficManager(ctx, kc.Kubeconfig, k8s.GetManagerNamespace(ctx), &helm.Request{
+	require.NoError(helm.EnsureTrafficManager(kc, kc.Kubeconfig, k8s.GetManagerNamespace(kc), &helm.Request{
 		Type:       helm.Upgrade,
 		ValuesJson: jvp,
 	}))
@@ -283,11 +282,11 @@ func (is *installSuite) Test_findTrafficManager_differentNamespace_present() {
 }
 
 func (is *installSuite) findTrafficManagerPresent(ctx context.Context, context, namespace string) {
-	ctx, kc := is.cluster(ctx, context, namespace)
+	kc := is.cluster(ctx, context, namespace)
 	require := is.Require()
-	require.NoError(ensureTrafficManager(ctx, kc))
+	require.NoError(ensureTrafficManager(kc))
 	require.Eventually(func() bool {
-		dep, err := k8sapi.GetDeployment(ctx, ManagerAppName, namespace)
+		dep, err := k8sapi.GetDeployment(kc, ManagerAppName, namespace)
 		if err != nil {
 			dlog.Error(ctx, err)
 			return false
@@ -299,17 +298,17 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, context, 
 	}, 10*time.Second, 2*time.Second, "traffic-manager deployment not found")
 }
 
-func (is *installSuite) cluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster) {
-	ctx, cluster, err := is.GetK8SCluster(ctx, context, managerNamespace)
+func (is *installSuite) cluster(ctx context.Context, context, managerNamespace string) *k8s.Cluster {
+	cluster, err := is.GetK8SCluster(ctx, context, managerNamespace)
 	is.Require().NoError(err)
-	return ctx, cluster
+	return cluster
 }
 
-func ensureTrafficManager(ctx context.Context, kc *k8s.Cluster) error {
+func ensureTrafficManager(kc *k8s.Cluster) error {
 	return helm.EnsureTrafficManager(
-		ctx,
+		kc,
 		kc.Kubeconfig,
-		k8s.GetManagerNamespace(ctx),
+		k8s.GetManagerNamespace(kc),
 		&helm.Request{Type: helm.Install})
 }
 

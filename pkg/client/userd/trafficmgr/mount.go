@@ -2,7 +2,6 @@ package trafficmgr
 
 import (
 	"context"
-	"fmt"
 	"net/netip"
 	"sync"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/telepresenceio/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -35,24 +33,24 @@ func (pa *podAccess) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGr
 	mountCtx := ctx
 	if useFtp {
 		if pa.ftpPort == 0 {
-			dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP is provided by the traffic-agent")
+			dlog.Error(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP is provided by the traffic-agent")
 			return
 		}
 		if pa.localMountPort > 0 {
-			dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP can be used with --local-mount-port")
+			dlog.Error(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP can be used with --local-mount-port")
 			return
 		}
 		// The FTP mounter survives multiple starts for the same intercept. It just resets the address
 		mountCtx = pa.ctx
-		fuseftp = userd.GetService(ctx).FuseFTPMgr().GetFuseFTPClient(ctx)
+		fuseftp = getSession(ctx).GetService().FuseFTPMgr().GetFuseFTPClient(ctx)
 		if fuseftp == nil {
-			dlog.Errorf(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
+			dlog.Error(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
 			return
 		}
 		port = uint16(pa.ftpPort)
 	} else {
 		if pa.sftpPort == 0 {
-			dlog.Errorf(ctx, "Client is configured to perform remote mounts using SFTP, but only FTP is provided by the traffic-agent")
+			dlog.Error(ctx, "Client is configured to perform remote mounts using SFTP, but only FTP is provided by the traffic-agent")
 			return
 		}
 		port = uint16(pa.sftpPort)
@@ -84,11 +82,11 @@ func (s *session) ensureNoMountConflict(localMountPoint string, localMountPort i
 	s.currentInterceptsLock.Lock()
 	for _, ic := range s.currentIntercepts {
 		if localMountPoint != "" && ic.ClientMountPoint == localMountPoint {
-			err = status.Error(codes.AlreadyExists, fmt.Sprintf("mount point %s already in use by intercept %s", localMountPoint, ic.Spec.Name))
+			err = status.Errorf(codes.AlreadyExists, "mount point %s already in use by intercept %s", localMountPoint, ic.Spec.Name)
 			break
 		}
 		if localMountPort != 0 && ic.localMountPort == localMountPort {
-			err = status.Error(codes.AlreadyExists, fmt.Sprintf("mount port %d already in use by intercept %s", localMountPort, ic.Spec.Name))
+			err = status.Errorf(codes.AlreadyExists, "mount port %d already in use by intercept %s", localMountPort, ic.Spec.Name)
 			break
 		}
 	}
@@ -99,11 +97,11 @@ func (s *session) ensureNoMountConflict(localMountPoint string, localMountPort i
 
 	s.currentIngests.Range(func(key ingestKey, ig *ingest) bool {
 		if localMountPoint != "" && ig.localMountPoint == localMountPoint {
-			err = status.Error(codes.AlreadyExists, fmt.Sprintf("mount point %s already in use by ingest %s", localMountPoint, key))
+			err = status.Errorf(codes.AlreadyExists, "mount point %s already in use by ingest %s", localMountPoint, key)
 			return false
 		}
 		if localMountPort != 0 && ig.localMountPort == localMountPort {
-			err = status.Error(codes.AlreadyExists, fmt.Sprintf("mount port %d already in use by ingest %s", localMountPort, key))
+			err = status.Errorf(codes.AlreadyExists, "mount port %d already in use by ingest %s", localMountPort, key)
 			return false
 		}
 		return true

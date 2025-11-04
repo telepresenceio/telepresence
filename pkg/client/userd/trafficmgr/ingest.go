@@ -12,6 +12,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 )
 
@@ -112,7 +113,7 @@ func (s *session) getCurrentAgent(name string) *manager.AgentInfo {
 	return nil
 }
 
-func (s *session) Ingest(rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) {
+func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) {
 	id := rq.Identifier
 	ik := ingestKey{
 		workload:  id.WorkloadName,
@@ -139,7 +140,9 @@ func (s *session) Ingest(rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) 
 
 	if ai == nil {
 		var as *manager.AgentInfoSnapshot
-		as, err = s.managerClient.EnsureAgent(s.context, &manager.EnsureAgentRequest{Session: s.sessionInfo, Name: ik.workload})
+		timeoutCtx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficAgentArrival)
+		defer cancel()
+		as, err = s.ManagerClient().EnsureAgent(timeoutCtx, &manager.EnsureAgentRequest{Session: s.sessionInfo, Name: ik.workload})
 		if err != nil {
 			return nil, err
 		}
@@ -158,13 +161,13 @@ func (s *session) Ingest(rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) 
 		return nil, fmt.Errorf("workload %s has no container named %s", ik.workload, ik.container)
 	}
 
-	err = s.translateContainerEnv(ai, ik.container)
+	err = s.translateContainerEnv(ctx, ai, ik.container)
 	if err != nil {
 		return nil, err
 	}
 
 	ig, loaded := s.currentIngests.LoadOrCompute(ik, func() (*ingest, bool) {
-		ctx, cancel := context.WithCancel(s.context)
+		ctx, cancel := context.WithCancel(s)
 		cancelIngest := func() {
 			s.currentIngests.Delete(ik)
 			dlog.Debugf(ctx, "Cancelling ingest %s", ik)
@@ -187,17 +190,18 @@ func (s *session) Ingest(rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) 
 	return ig.response(), nil
 }
 
-func (s *session) translateContainerEnv(ai *manager.AgentInfo, container string) error {
+func (s *session) translateContainerEnv(ctx context.Context, ai *manager.AgentInfo, container string) error {
 	cn, ok := ai.Containers[container]
 	if !ok {
 		return fmt.Errorf("workload %s has no container named %s", ai.Name, container)
 	}
-	env, err := s.rootDaemon.TranslateEnvIPs(s.context, &daemon.Environment{Env: cn.Environment})
-	if err != nil {
+	return s.WithRootClient(ctx, func(ctx context.Context, rd daemon.DaemonClient) (err error) {
+		env, err := s.rootDaemon.TranslateEnvIPs(s, &daemon.Environment{Env: cn.Environment})
+		if err == nil {
+			cn.Environment = env.Env
+		}
 		return err
-	}
-	cn.Environment = env.Env
-	return nil
+	})
 }
 
 func (s *session) getCurrentIngests() []*rpc.IngestInfo {

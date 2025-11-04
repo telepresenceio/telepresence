@@ -25,7 +25,7 @@ func head(str string, n int) string {
 	return str[:end]
 }
 
-func TestDupToStd(t *testing.T) {
+func TestDupStd(t *testing.T) {
 	dirname := t.TempDir()
 
 	ctx := dlog.NewTestContext(t, true)
@@ -47,12 +47,12 @@ func TestDupToStd(t *testing.T) {
 
 func TestMain(m *testing.M) {
 	if os.Getenv("GO_WANT_HELPER_PROCESS") == "1" {
-		os.Exit(testDupToStdHelper())
+		os.Exit(testDupStdHelper())
 	}
 	os.Exit(m.Run())
 }
 
-func testDupToStdHelper() int {
+func testDupStdHelper() int {
 	args := os.Args
 	for len(args) > 0 {
 		if args[0] == "--" {
@@ -74,12 +74,12 @@ func testDupToStdHelper() int {
 		return 1
 	}
 
-	if err := dupToStdOut(file); err != nil {
+	if err := dupStdOut(file); err != nil {
 		fmt.Fprintf(os.Stderr, "dup: %v\n", err)
 		return 1
 	}
 
-	if err := dupToStdErr(file); err != nil {
+	if err := dupStdErr(file); err != nil {
 		fmt.Fprintf(os.Stderr, "dup: %v\n", err)
 		return 1
 	}

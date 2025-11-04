@@ -3,6 +3,7 @@ package itest
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -14,7 +15,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
-	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -24,10 +24,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
+	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -78,15 +79,15 @@ func dialTrafficManager(ctx context.Context, cfg *rest.Config, managerNamespace 
 		return nil, err
 	}
 
-	argoRollouApi, err := argorollouts.NewForConfig(cfg)
+	ctx = k8sapi.WithK8sInterface(ctx, k8sApi)
+	ctx = portforward.WithRestConfig(ctx, cfg)
+	pap, err := portforward.ResolveSvcToPod(ctx, "traffic-manager", managerNamespace, "8081")
 	if err != nil {
+		dlog.Errorf(ctx, "cannot resolve svc/traffic-manager.%s:8081: %v", managerNamespace, err)
 		return nil, err
 	}
-
-	ctx = k8sapi.WithJoinedClientSetInterface(ctx, k8sApi, argoRollouApi)
-	ctx = portforward.WithRestConfig(ctx, cfg)
-	return grpc.NewClient(fmt.Sprintf(portforward.K8sPFScheme+":///svc/traffic-manager.%s:8081", managerNamespace),
-		grpc.WithResolvers(portforward.NewResolver(ctx)),
+	return grpcClient.DialGRPC(ctx, fmt.Sprintf(portforward.K8sPFScheme+":///svc/traffic-manager.%s:8081", managerNamespace),
+		grpc.WithResolvers(portforward.NewResolver(ctx, pap)),
 		grpc.WithContextDialer(portforward.Dialer(ctx)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
@@ -162,10 +163,12 @@ func (th *trafficManager) NewConnectRequest(ctx context.Context) *rpc.ConnectReq
 // call to quit is guaranteed after the function ends.
 func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequest, f func(context.Context, rpc.ConnectorServer)) error {
 	client.ProcessName = func() string {
-		return userd.ProcessName
+		return client.UserDaemonName
 	}
 	ctx = cli.InitContext(ctx)
-	ctx, err := logging.InitContext(ctx, "connector", logging.RotateNever, true, true)
+	cfg := client.GetConfig(ctx)
+	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log")
+	ctx, err := logging.InitContext(ctx, logFile, cfg.LogLevels().UserDaemon, logging.RotateNever, false)
 	if err != nil {
 		return err
 	}
@@ -184,17 +187,10 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 		ShutdownOnNonError:   true,
 	})
 
-	srv, err := daemon.NewService(cancel, g, client.GetConfig(ctx), grpc.NewServer())
-	if err != nil {
-		return err
-	}
-	g.Go("connector", srv.ManageSessions)
+	srv := daemon.NewService(ctx, cancel, client.GetConfig(ctx), grpc.NewServer())
+	sv := srv.ConnectorServer()
 
-	var sv rpc.ConnectorServer
-	srv.As(&sv)
-
-	cfg := client.GetConfig(ctx)
-	if cfg.Intercept().UseFtp {
+	if cfg.Intercept().UseFtp && !srv.LinkedFTP() {
 		g.Go("fuseftp-server", func(ctx context.Context) error {
 			if err := srv.InitFTPServer(ctx); err != nil {
 				dlog.Error(ctx, err)
@@ -204,13 +200,9 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 		})
 	}
 
-	var rsp *rpc.ConnectInfo
-	rsp, err = sv.Connect(ctx, cr)
+	_, err = sv.Connect(ctx, cr)
 	if err != nil {
-		return err
-	}
-	if rsp.Error != rpc.ConnectInfo_UNSPECIFIED && rsp.Error != rpc.ConnectInfo_ALREADY_CONNECTED {
-		return errcat.Category(rsp.ErrorCategory).New(rsp.ErrorText)
+		return tpGrpc.FromGRPC(err)
 	}
 	func() {
 		defer func() {

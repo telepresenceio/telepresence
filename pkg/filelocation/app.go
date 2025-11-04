@@ -22,12 +22,7 @@ func AppUserLogDir(ctx context.Context) string {
 	if logDir, ok := ctx.Value(logCtxKey{}).(string); ok && logDir != "" {
 		return logDir
 	}
-	switch goos(ctx) {
-	case "darwin":
-		return filepath.Join(UserHomeDir(ctx), "Library", "Logs", appName)
-	default: // Unix
-		return filepath.Join(AppUserCacheDir(ctx), "logs")
-	}
+	return appUserLogDir(ctx)
 }
 
 // AppUserCacheDir returns the directory to use for application-specific
@@ -58,24 +53,4 @@ func AppUserConfigDir(ctx context.Context) string {
 		return configDir
 	}
 	return filepath.Join(UserConfigDir(ctx), appName)
-}
-
-// AppSystemConfigDirs returns a list of directories to search for
-// application-specific (but not user-specific) configuration data.
-//
-// On all platforms, this returns the list from SystemConfigDirs, with
-// "/telepresence" appended to each directory (using the appropriate path
-// separator, if not "/").
-//
-// If the location cannot be determined, then it will return an error.
-func AppSystemConfigDirs(ctx context.Context) []string {
-	if sysConfigDirs, ok := ctx.Value(sysConfigsCtxKey{}).([]string); ok && sysConfigDirs != nil {
-		return sysConfigDirs
-	}
-	dirs := systemConfigDirs()
-	ret := make([]string, 0, len(dirs))
-	for _, dir := range dirs {
-		ret = append(ret, filepath.Join(dir, appName))
-	}
-	return ret
 }

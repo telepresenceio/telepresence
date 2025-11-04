@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -17,6 +18,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	userDaemon "github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
@@ -24,12 +27,13 @@ import (
 func Telepresence(ctx context.Context, args []string) *cobra.Command {
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v", err)
+		ioutil.Printf(os.Stderr, "Failed to load config: %v", err)
 		os.Exit(1)
 	}
 	ctx = client.WithConfig(ctx, cfg)
-	if ctx, err = logging.InitContext(ctx, "cli", logging.RotateDaily, false, false); err != nil {
-		fmt.Fprintln(os.Stderr, err.Error())
+	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "cli.log")
+	if ctx, err = logging.InitContext(ctx, logFile, cfg.LogLevels().CLI, logging.RotateDaily, false); err != nil {
+		ioutil.Println(os.Stderr, err.Error())
 		os.Exit(1)
 	}
 	useMarkdown := len(args) > 0 && args[0] == "man-pages"
@@ -58,7 +62,7 @@ func Telepresence(ctx context.Context, args []string) *cobra.Command {
 	return rootCmd
 }
 
-// TelepresenceDaemon returns the top level "telepresence" CLI limited to the subcommands [kubeauth|connector|daemon]-foreground.
+// TelepresenceDaemon returns the top level "telepresence" CLI limited to the subcommands kubeauthd, userd, and rootd.
 func TelepresenceDaemon(ctx context.Context, args []string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:  "telepresence",
@@ -97,7 +101,7 @@ func AddSubCommands(cmd *cobra.Command, markdown bool) {
 		setContext(command, ctx)
 	}
 	cmd.AddCommand(commands...)
-	cmd.PersistentFlags().AddFlagSet(global.Flags(false))
+	cmd.PersistentFlags().AddFlagSet(global.Flags(ctx, false, markdown))
 	addCompletion(cmd, markdown)
 	addUsageTemplate(cmd, markdown)
 	_ = cmd.RegisterFlagCompletionFunc("context", autocompleteContext)
@@ -174,7 +178,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 }
 
 func WithDaemonSubCommands(ctx context.Context) context.Context {
-	return MergeSubCommands(ctx, kubeauth.Command(), userDaemon.Command(), rootd.Command())
+	return MergeSubCommands(ctx, kubeauth.Command(ctx), userDaemon.Command(ctx), rootd.Command(ctx))
 }
 
 type subCommandsKey struct{}

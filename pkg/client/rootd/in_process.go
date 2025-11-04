@@ -13,14 +13,14 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-// InProcSession is like Session, but also implements the daemon.DaemonClient interface. This makes it possible to use the session
-// in-process from the user daemon, without starting the root daemon gRPC service.
+// InProcSession is like a session but also implements the daemon.DaemonClient interface. This makes it possible to use the session
+// in-process from the user daemon without starting the root daemon gRPC service.
 type InProcSession struct {
-	*Session
-	cancel context.CancelFunc
+	*session
 }
 
 func (rd *InProcSession) Version(context.Context, *empty.Empty, ...grpc.CallOption) (*common.VersionInfo, error) {
@@ -31,19 +31,18 @@ func (rd *InProcSession) Version(context.Context, *empty.Empty, ...grpc.CallOpti
 	}, nil
 }
 
-func (rd *InProcSession) Status(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*rpc.DaemonStatus, error) {
+func (rd *InProcSession) Status(context.Context, *empty.Empty, ...grpc.CallOption) (*rpc.DaemonStatus, error) {
 	return &rpc.DaemonStatus{
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
 			Version:    client.Version(),
 			Name:       client.DisplayName,
 		},
-		OutboundConfig: rd.getNetworkConfig(ctx),
+		OutboundConfig: rd.getNetworkConfig(),
 	}, nil
 }
 
 func (rd *InProcSession) Quit(context.Context, *empty.Empty, ...grpc.CallOption) (*empty.Empty, error) {
-	rd.cancel()
 	return &empty.Empty{}, nil
 }
 
@@ -52,26 +51,25 @@ func (rd *InProcSession) Connect(ctx context.Context, _ *rpc.NetworkConfig, opts
 }
 
 func (rd *InProcSession) Disconnect(context.Context, *empty.Empty, ...grpc.CallOption) (*empty.Empty, error) {
-	rd.cancel()
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) GetNetworkConfig(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*rpc.NetworkConfig, error) {
-	return rd.getNetworkConfig(ctx), nil
+func (rd *InProcSession) GetNetworkConfig(context.Context, *empty.Empty, ...grpc.CallOption) (*rpc.NetworkConfig, error) {
+	return rd.getNetworkConfig(), nil
 }
 
-func (rd *InProcSession) SetDNSTopLevelDomains(ctx context.Context, in *rpc.Domains, _ ...grpc.CallOption) (*empty.Empty, error) {
-	rd.SetTopLevelDomains(ctx, in.Domains)
+func (rd *InProcSession) SetDNSTopLevelDomains(_ context.Context, in *rpc.Domains, _ ...grpc.CallOption) (*empty.Empty, error) {
+	rd.SetTopLevelDomains(in.Domains)
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) SetDNSExcludes(ctx context.Context, in *rpc.SetDNSExcludesRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
-	rd.SetExcludes(ctx, in.Excludes)
+func (rd *InProcSession) SetDNSExcludes(_ context.Context, in *rpc.SetDNSExcludesRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	rd.SetExcludes(in.Excludes)
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) SetDNSMappings(ctx context.Context, in *rpc.SetDNSMappingsRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
-	rd.SetMappings(ctx, in.Mappings)
+func (rd *InProcSession) SetDNSMappings(_ context.Context, in *rpc.SetDNSMappingsRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	rd.SetMappings(in.Mappings)
 	return &empty.Empty{}, nil
 }
 
@@ -80,8 +78,8 @@ func (rd *InProcSession) SetLogLevel(context.Context, *manager.LogLevelRequest, 
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) TranslateEnvIPs(ctx context.Context, in *rpc.Environment, opts ...grpc.CallOption) (*rpc.Environment, error) {
-	in = rd.translateEnvIPs(ctx, in)
+func (rd *InProcSession) TranslateEnvIPs(_ context.Context, in *rpc.Environment, _ ...grpc.CallOption) (*rpc.Environment, error) {
+	in = rd.translateEnvIPs(in)
 	return in, nil
 }
 
@@ -92,8 +90,8 @@ func (rd *InProcSession) WaitForNetwork(ctx context.Context, _ *empty.Empty, _ .
 	return &empty.Empty{}, nil
 }
 
-func (rd *InProcSession) LookupIP(ctx context.Context, request *rpc.LookupIPRequest, _ ...grpc.CallOption) (*rpc.LookupIPResponse, error) {
-	return rd.lookupIP(ctx, request)
+func (rd *InProcSession) LookupIP(_ context.Context, request *rpc.LookupIPRequest, _ ...grpc.CallOption) (*rpc.LookupIPResponse, error) {
+	return rd.lookupIP(request)
 }
 
 func (rd *InProcSession) ResolvePort(ctx context.Context, request *rpc.ResolvePortRequest, _ ...grpc.CallOption) (*rpc.ResolvePortResponse, error) {
@@ -108,12 +106,12 @@ func (rd *InProcSession) ResolvePort(ctx context.Context, request *rpc.ResolvePo
 	return &rpc.ResolvePortResponse{HostPort: apb}, nil
 }
 
-func (rd *InProcSession) RerouteRemotePort(ctx context.Context, request *rpc.ReroutePortRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+func (rd *InProcSession) RerouteRemotePort(_ context.Context, request *rpc.ReroutePortRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	var ap types.AddrPortProto
 	if err := ap.UnmarshalBinary(request.DstHostPort); err != nil {
 		return nil, err
 	}
-	rd.rerouteRemotePort(ctx, ap, uint16(request.SrcPort))
+	rd.rerouteRemotePort(ap, uint16(request.SrcPort))
 	return &empty.Empty{}, nil
 }
 
@@ -124,17 +122,15 @@ func (rd *InProcSession) WaitForAgentIP(ctx context.Context, request *rpc.WaitFo
 // NewInProcSession returns a root daemon session suitable to use in-process (from the user daemon) and is primarily intended for
 // when the user daemon runs in a docker container with NET_ADMIN capabilities.
 func NewInProcSession(
-	ctx context.Context,
+	kc *k8s.Cluster,
 	mi *rpc.NetworkConfig,
-	mc manager.ManagerClient,
+	mc *grpc.ClientConn,
 	ver semver.Version,
 	isPodDaemon bool,
-) (context.Context, *InProcSession, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	ctx, session, err := newSession(ctx, mi, mc, ver, isPodDaemon)
+) (*InProcSession, error) {
+	session, err := newSession(kc, mi, mc, ver, isPodDaemon)
 	if err != nil {
-		cancel()
-		return ctx, nil, err
+		return nil, err
 	}
-	return ctx, &InProcSession{Session: session, cancel: cancel}, nil
+	return &InProcSession{session: session}, nil
 }

@@ -13,7 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
@@ -75,11 +75,8 @@ func (u *uninstallCommand) run(cmd *cobra.Command, args []string) error {
 		ur.Agents = args
 	}
 	ctx := cmd.Context()
-	r, err := daemon.MustGetUserClient(ctx).Uninstall(ctx, ur)
-	if err != nil {
-		return err
-	}
-	return errcat.FromResult(r)
+	_, err := daemon.MustGetUserClient(ctx).Uninstall(ctx, ur)
+	return grpc.FromGRPC(err)
 }
 
 func validWorkloads(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

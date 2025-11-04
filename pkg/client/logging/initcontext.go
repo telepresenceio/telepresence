@@ -15,8 +15,8 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	tlog "github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -25,7 +25,7 @@ import (
 var loggerForTest *logrus.Logger //nolint:gochecknoglobals // used by unit tests only
 
 // InitContext sets up standard Telepresence logging for a background process.
-func InitContext(ctx context.Context, name string, strategy RotationStrategy, captureStd, forceTerminal bool) (context.Context, error) {
+func InitContext(ctx context.Context, logFile string, logLevel logrus.Level, strategy RotationStrategy, captureStd bool) (context.Context, error) {
 	logger := logrus.StandardLogger()
 	loggerForTest = logger
 
@@ -33,9 +33,13 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 	logger.SetLevel(logrus.InfoLevel)
 	logger.ReportCaller = false // turned on when level >= logrus.TraceLevel
 
-	if forceTerminal || captureStd && IsTerminal(int(os.Stdout.Fd())) {
-		logger.Formatter = tlog.NewFormatter("15:04:05.0000")
-	} else {
+	logger.Formatter = tlog.NewFormatter("15:04:05.0000")
+	switch logFile {
+	case "stdout":
+		logger.SetOutput(os.Stdout)
+	case "", "-", "stderr":
+		logger.SetOutput(os.Stderr)
+	default:
 		logger.Formatter = tlog.NewFormatter("2006-01-02 15:04:05.0000")
 		maxFiles := uint16(5)
 
@@ -45,17 +49,26 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 				maxFiles = uint16(mx)
 			}
 		}
-		rf, err := OpenRotatingFile(ctx, filepath.Join(filelocation.AppUserLogDir(ctx), name+".log"), "20060102T150405", true, 0o600, strategy, maxFiles)
+
+		// Validate the path before using it.
+		logFile, err := ValidateLogFilePath(logFile)
+		if err != nil {
+			return ctx, err
+		}
+		rf, err := OpenRotatingFile(ctx, logFile, "20060102T150405", true, 0o600, strategy, maxFiles)
 		if err != nil {
 			return ctx, err
 		}
 		logger.SetOutput(rf)
 
 		if captureStd {
-			if err := dupToStdOut(rf.file.(*os.File)); err != nil {
+			rfFile := rf.file.(*os.File)
+			err = dupStdOut(rfFile)
+			if err != nil {
 				return ctx, err
 			}
-			if err := dupToStdErr(rf.file.(*os.File)); err != nil {
+			err = dupStdErr(rfFile)
+			if err != nil {
 				return ctx, err
 			}
 		}
@@ -67,16 +80,25 @@ func InitContext(ctx context.Context, name string, strategy RotationStrategy, ca
 	}
 
 	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
-
-	// Read the config and set the configured level.
-	logLevels := client.GetConfig(ctx).LogLevels()
-	level := logLevels.UserDaemon
-	if name == "daemon" {
-		level = logLevels.RootDaemon
-	}
-	tlog.SetLogrusLevel(logger, level.String(), false)
+	tlog.SetLogrusLevel(logger, logLevel.String(), false)
 	ctx = tlog.WithLevelSetter(ctx, logger)
 	return ctx, nil
+}
+
+// ValidateLogFilePath ensures that the log file path is valid and that the parent directory exists or can be created.
+func ValidateLogFilePath(logFile string) (string, error) {
+	// Convert to an absolute path. Abs ensures Clean.
+	logFile, err := filepath.Abs(logFile)
+	if err != nil {
+		return "", errcat.User.Errorf(err, "invalid log file path")
+	}
+
+	// Verify that the parent directory exists or can be created
+	dir := filepath.Dir(logFile)
+	if err = os.MkdirAll(dir, 0o700); err != nil {
+		return "", errcat.User.Errorf(err, "cannot create log directory %q", dir)
+	}
+	return logFile, nil
 }
 
 func SummarizeLog(ctx context.Context, name string) (string, error) {

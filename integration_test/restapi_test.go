@@ -14,6 +14,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -115,6 +116,12 @@ func (s *restAPISuite) TearDownSuite() {
 	itest.TelepresenceQuit(ctx)
 	s.KubectlOk(ctx, "delete", "svc,deploy", s.svc)
 	s.UninstallTrafficManager(ctx, s.ManagerNamespace())
+}
+
+func (s *restAPISuite) AmendSuiteContext(ctx context.Context) context.Context {
+	return itest.WithConfig(ctx, func(cfg client.Config) {
+		cfg.Intercept().UseFtp = false
+	})
 }
 
 func (s *restAPISuite) curlAPIServer(ctx context.Context, port uint16, path string, headers map[string]string, myArgs ...string) (string, error) {

@@ -1,7 +1,6 @@
 package vip
 
 import (
-	"context"
 	"maps"
 	"net/netip"
 	"testing"
@@ -33,11 +32,10 @@ func (l *localIPProviderTest) MapsIPv6() bool {
 	return false
 }
 
-func (l *localIPProviderTest) GetLocalIP(ctx context.Context, remoteIP netip.Addr) (netip.Addr, error) {
+func (l *localIPProviderTest) GetLocalIP(remoteIP netip.Addr) (netip.Addr, error) {
 	if lip, ok := l.mapped[remoteIP]; ok {
 		return lip, nil
 	}
-	dlog.Infof(ctx, "mapping %s", remoteIP)
 	for _, p := range l.cidrs {
 		if p.Contains(remoteIP) {
 			lip, err := l.generator.Next()

@@ -15,6 +15,8 @@ import (
 	rootDaemon "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -22,15 +24,15 @@ import (
 )
 
 func launchDaemon(ctx context.Context, cr *daemon.Request) (err error) {
+	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log")
+	logFile, err = logging.ValidateLogFilePath(logFile)
+	if err != nil {
+		return err
+	}
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// root permissions.
-	logDir := filelocation.AppUserLogDir(ctx)
-	logFile := filepath.Join(logDir, "daemon.log")
 	if _, err = os.Stat(logFile); err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			return err
-		}
-		if err = os.MkdirAll(logDir, 0o700); err != nil {
 			return err
 		}
 		fh, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0o600)
@@ -40,11 +42,11 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) (err error) {
 		_ = fh.Close()
 	}
 
-	args := []string{client.GetExe(ctx), "daemon-foreground"}
+	args := []string{client.GetExe(ctx), client.RootDaemonName, "--" + global.FlagConfig, client.GetConfigFile(ctx)}
 	if cr != nil && cr.RootDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))
 	}
-	args = append(args, logDir, filelocation.AppUserConfigDir(ctx), socket.RootDaemonPath(ctx))
+	args = append(args, "--logfile", logFile, filelocation.AppUserConfigDir(ctx), socket.RootDaemonPath(ctx))
 	return proc.StartInBackgroundAsRoot(ctx, args...)
 }
 
@@ -82,7 +84,7 @@ func quitRootDaemon(ctx context.Context) {
 
 func mkdir(dirType, path string) error {
 	if err := os.MkdirAll(path, 0o700); err != nil {
-		return errcat.NoDaemonLogs.Newf("unable to ensure that %s directory %q exists: %w", dirType, path, err)
+		return errcat.NoDaemonLogs.Errorf(err, "unable to ensure that %s directory %q exists", dirType, path)
 	}
 	return nil
 }

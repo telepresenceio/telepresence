@@ -19,7 +19,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
-	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
 type suiteState struct {
@@ -36,7 +35,7 @@ func (s *suiteState) SetupTest() {
 		intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
 		agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
-		workloadWatchers: xsync.NewMap[string, workload.Watcher](),
+		workloadWatchers: xsync.NewMap[string, Watcher](),
 		timedLogLevel:    log.NewTimedLevel("debug", log.SetLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}

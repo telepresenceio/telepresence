@@ -363,6 +363,10 @@ type NetworkConfig struct {
 	HomeDir string `protobuf:"bytes,3,opt,name=home_dir,json=homeDir,proto3" json:"home_dir,omitempty"`
 	// Connection namespace
 	Namespace string `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// Namespace where the connected traffic-manager is installed.
+	ManagerNamespace string `protobuf:"bytes,9,opt,name=manager_namespace,json=managerNamespace,proto3" json:"manager_namespace,omitempty"`
+	// Mapped namespaces
+	MappedNamespaces []string `protobuf:"bytes,10,rep,name=mapped_namespaces,json=mappedNamespaces,proto3" json:"mapped_namespaces,omitempty"`
 	// Kubernetes flags
 	KubeFlags map[string]string `protobuf:"bytes,5,rep,name=kube_flags,json=kubeFlags,proto3" json:"kube_flags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Kubeconfig YAML, if not to be loaded from file.
@@ -436,6 +440,20 @@ func (x *NetworkConfig) GetNamespace() string {
 		return x.Namespace
 	}
 	return ""
+}
+
+func (x *NetworkConfig) GetManagerNamespace() string {
+	if x != nil {
+		return x.ManagerNamespace
+	}
+	return ""
+}
+
+func (x *NetworkConfig) GetMappedNamespaces() []string {
+	if x != nil {
+		return x.MappedNamespaces
+	}
+	return nil
 }
 
 func (x *NetworkConfig) GetKubeFlags() map[string]string {
@@ -957,13 +975,16 @@ const file_daemon_daemon_proto_rawDesc = "" +
 	"\x05error\x18\a \x01(\tR\x05error\"G\n" +
 	"\x11SubnetViaWorkload\x12\x16\n" +
 	"\x06subnet\x18\x01 \x01(\tR\x06subnet\x12\x1a\n" +
-	"\bworkload\x18\x02 \x01(\tR\bworkload\"\x92\x04\n" +
+	"\bworkload\x18\x02 \x01(\tR\bworkload\"\xec\x04\n" +
 	"\rNetworkConfig\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12X\n" +
 	"\x14subnet_via_workloads\x18\x02 \x03(\v2&.telepresence.daemon.SubnetViaWorkloadR\x12subnetViaWorkloads\x12#\n" +
 	"\rport_mappings\x18\b \x03(\tR\fportMappings\x12\x19\n" +
 	"\bhome_dir\x18\x03 \x01(\tR\ahomeDir\x12\x1c\n" +
-	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12P\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12+\n" +
+	"\x11manager_namespace\x18\t \x01(\tR\x10managerNamespace\x12+\n" +
+	"\x11mapped_namespaces\x18\n" +
+	" \x03(\tR\x10mappedNamespaces\x12P\n" +
 	"\n" +
 	"kube_flags\x18\x05 \x03(\v21.telepresence.daemon.NetworkConfig.KubeFlagsEntryR\tkubeFlags\x12,\n" +
 	"\x0fkubeconfig_data\x18\x06 \x01(\fH\x00R\x0ekubeconfigData\x88\x01\x01\x12(\n" +

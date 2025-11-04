@@ -6,54 +6,32 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
-	"github.com/telepresenceio/telepresence/v2/pkg/types"
+	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
-type NewServiceFunc func(client.Config) *Service
-
-type newServiceKey struct{}
-
-func WithNewServiceFunc(ctx context.Context, f NewServiceFunc) context.Context {
-	return context.WithValue(ctx, newServiceKey{}, f)
-}
-
-func GetNewServiceFunc(ctx context.Context) NewServiceFunc {
-	if f, ok := ctx.Value(newServiceKey{}).(NewServiceFunc); ok {
-		return f
-	}
-	panic("No User daemon Service creator has been registered")
-}
-
 const (
-	ProcessName = "daemon"
 	titleName   = "Daemon"
 	pprofFlag   = "pprof"
+	logfileFlag = "logfile"
 )
 
 func help() string {
@@ -61,386 +39,100 @@ func help() string {
 connections and network state.
 
 Launch the Telepresence ` + titleName + `:
-    sudo telepresence Service
+    sudo telepresence rootd <config dir> <path to gRPC socket>
 
 Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), ProcessName+".log") + `
+    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), "daemon.log") + `
 to troubleshoot problems.
 `
 }
 
-type sessionReply struct {
-	status *rpc.DaemonStatus
-	err    error
-}
-
-// Service represents the state of the Telepresence Daemon.
-type Service struct {
+// service represents the state of the Telepresence Daemon.
+type service struct {
+	context.Context
 	rpc.UnsafeDaemonServer
-	quit            context.CancelFunc
-	connectCh       chan *rpc.NetworkConfig
-	connectReplyCh  chan sessionReply
-	sessionLock     sync.RWMutex
-	sessionCancel   context.CancelFunc
-	sessionContext  context.Context
-	sessionQuitting int32 // atomic boolean. True if non-zero.
-	session         *Session
-	timedLogLevel   log.TimedLevel
+	quit          context.CancelFunc
+	timedLogLevel log.TimedLevel
+
+	// sessionLock protects the session, sessionCancel, and sessionRunning fields.
+	sessionLock   sync.RWMutex
+	session       *session
+	sessionCancel context.CancelFunc
+
+	// sessionRunning is closed when the session is done running.
+	sessionRunning chan struct{}
 }
 
-func NewService(cfg client.Config) *Service {
-	return &Service{
+func newService(cfg client.Config) *service {
+	s := &service{
 		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon.String(), log.SetLevel),
-		connectCh:      make(chan *rpc.NetworkConfig),
-		connectReplyCh: make(chan sessionReply),
+		sessionRunning: make(chan struct{}),
 	}
+	close(s.sessionRunning)
+	return s
 }
 
-func (s *Service) As(ptr any) {
-	if sp, ok := ptr.(**Service); ok {
-		*sp = s
-	} else {
-		panic(fmt.Sprintf("%T does not implement %T", s, *sp))
-	}
-}
-
-// Command returns the telepresence sub-command "daemon-foreground".
-func Command() *cobra.Command {
+// Command returns the telepresence sub-command "rootd".
+func Command(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    ProcessName + "-foreground <logging dir> <config dir> <path to gRPC socket>",
+		Use:    client.RootDaemonName + " <config dir> <path to gRPC socket>",
 		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
-		Args:   cobra.ExactArgs(3),
+		Args:   cobra.ExactArgs(2),
 		Hidden: true,
 		Long:   help(),
 		RunE:   run,
 	}
 	flags := cmd.Flags()
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
+	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log"),
+		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
 	return cmd
 }
 
-func (s *Service) Version(_ context.Context, _ *emptypb.Empty) (*common.VersionInfo, error) {
-	return &common.VersionInfo{
-		ApiVersion: client.APIVersion,
-		Version:    client.Version(),
-		Name:       client.DisplayName,
-	}, nil
-}
-
-func (s *Service) Status(context.Context, *emptypb.Empty) (*rpc.DaemonStatus, error) {
-	s.sessionLock.RLock()
-	defer s.sessionLock.RUnlock()
-	r := &rpc.DaemonStatus{
-		Version: &common.VersionInfo{
-			ApiVersion: client.APIVersion,
-			Version:    client.Version(),
-			Name:       client.DisplayName,
-		},
-	}
-	if s.session != nil {
-		r.OutboundConfig = s.session.getNetworkConfig(s.sessionContext)
-	}
-	return r, nil
-}
-
-func (s *Service) Quit(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
-	dlog.Debug(ctx, "Received gRPC Quit")
-	s.cancelSession()
-	s.quit()
-	return &emptypb.Empty{}, nil
-}
-
-func (s *Service) SetDNSTopLevelDomains(ctx context.Context, domains *rpc.Domains) (*emptypb.Empty, error) {
-	err := s.WithSession(func(ctx context.Context, session *Session) error {
-		session.SetTopLevelDomains(ctx, domains.Domains)
-		return nil
-	})
-	return &emptypb.Empty{}, err
-}
-
-func (s *Service) SetDNSExcludes(ctx context.Context, req *rpc.SetDNSExcludesRequest) (*emptypb.Empty, error) {
-	err := s.WithSession(func(c context.Context, session *Session) error {
-		session.SetExcludes(c, req.Excludes)
-		return nil
-	})
-	return &emptypb.Empty{}, err
-}
-
-func (s *Service) SetDNSMappings(ctx context.Context, req *rpc.SetDNSMappingsRequest) (*emptypb.Empty, error) {
-	err := s.WithSession(func(c context.Context, session *Session) error {
-		session.SetMappings(c, req.Mappings)
-		return nil
-	})
-	return &emptypb.Empty{}, err
-}
-
-func (s *Service) Connect(ctx context.Context, info *rpc.NetworkConfig) (*rpc.DaemonStatus, error) {
-	dlog.Debug(ctx, "Received gRPC Connect")
-	select {
-	case <-ctx.Done():
-		return nil, status.Error(codes.Canceled, ctx.Err().Error())
-	case s.connectCh <- info:
-	}
-	select {
-	case <-ctx.Done():
-		return nil, status.Error(codes.Canceled, ctx.Err().Error())
-	case reply := <-s.connectReplyCh:
-		if reply.err == nil {
-			return reply.status, nil
-		}
-		st := status.New(codes.Unknown, reply.err.Error())
-		st, err := st.WithDetails(&common.Result{Data: []byte(reply.err.Error()), ErrorCategory: common.Result_ErrorCategory(errcat.GetCategory(reply.err))})
-		if err != nil {
-			dlog.Errorf(ctx, "Failed to add details to error: %v", err)
-			return reply.status, reply.err
-		}
-		return reply.status, st.Err()
-	}
-}
-
-func (s *Service) Disconnect(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
-	dlog.Debug(ctx, "Received gRPC Disconnect")
-	s.cancelSession()
-	return &emptypb.Empty{}, nil
-}
-
-func (s *Service) TranslateEnvIPs(ctx context.Context, environment *rpc.Environment) (result *rpc.Environment, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
-		result = session.translateEnvIPs(ctx, environment)
-		return nil
-	})
-	return result, err
-}
-
-func (s *Service) WaitForNetwork(ctx context.Context, e *emptypb.Empty) (*emptypb.Empty, error) {
-	err := s.WithSession(func(ctx context.Context, session *Session) error {
-		if err, ok := <-session.networkReady(ctx); ok {
-			return status.Error(codes.Unavailable, err.Error())
-		}
-		return nil
-	})
-	return &emptypb.Empty{}, err
-}
-
-func (s *Service) cancelSession() {
-	if atomic.CompareAndSwapInt32(&s.sessionQuitting, 0, 1) {
-		if s.sessionCancel != nil {
-			s.sessionCancel()
-		}
-		s.session = nil
-		s.sessionCancel = nil
-		atomic.StoreInt32(&s.sessionQuitting, 0)
-	}
-}
-
-func (s *Service) WithSession(f func(context.Context, *Session) error) error {
-	if atomic.LoadInt32(&s.sessionQuitting) != 0 {
-		return status.Error(codes.Canceled, "session cancelled")
-	}
-	s.sessionLock.RLock()
-	defer s.sessionLock.RUnlock()
-	if s.session == nil {
-		return status.Error(codes.Unavailable, "no active session")
-	}
-	return f(s.sessionContext, s.session)
-}
-
-func (s *Service) GetNetworkConfig(ctx context.Context, e *emptypb.Empty) (nc *rpc.NetworkConfig, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
-		nc = session.getNetworkConfig(s.sessionContext)
-		return nil
-	})
-	dlog.Debugf(ctx, "Returning session %v", nc.Session)
-	return nc, err
-}
-
-func (s *Service) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest) (rsp *rpc.WaitForAgentIPResponse, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
-		rsp, err = session.waitForAgentIP(ctx, request)
-		return err
-	})
-	return rsp, err
-}
-
-func (s *Service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*emptypb.Empty, error) {
-	duration := time.Duration(0)
-	if request.Duration != nil {
-		duration = request.Duration.AsDuration()
-	}
-	return &emptypb.Empty{}, logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, ProcessName)
-}
-
-func (s *Service) LookupIP(ctx context.Context, request *rpc.LookupIPRequest) (rsp *rpc.LookupIPResponse, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
-		rsp, err = session.lookupIP(ctx, request)
-		return err
-	})
-	return rsp, err
-}
-
-func (s *Service) ResolvePort(ctx context.Context, request *rpc.ResolvePortRequest) (rsp *rpc.ResolvePortResponse, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
-		ap, err := session.resolvePort(ctx, request.Host, request.Port)
-		if err != nil {
-			return err
-		}
-		apb, err := ap.MarshalBinary()
-		if err != nil {
-			return err
-		}
-		rsp = &rpc.ResolvePortResponse{HostPort: apb}
-		return nil
-	})
-	return rsp, err
-}
-
-func (s *Service) RerouteRemotePort(ctx context.Context, request *rpc.ReroutePortRequest) (rsp *emptypb.Empty, err error) {
-	err = s.WithSession(func(ctx context.Context, session *Session) error {
-		var ap types.AddrPortProto
-		err = ap.UnmarshalBinary(request.DstHostPort)
-		if err == nil {
-			session.rerouteRemotePort(ctx, ap, uint16(request.SrcPort))
-		}
-		return err
-	})
-	return &emptypb.Empty{}, err
-}
-
-func (s *Service) configReload(c context.Context) error {
+func (s *service) configReload(c context.Context) error {
 	return client.WatchConfig(c, func(c context.Context) error {
-		return client.ReloadDaemonLogLevel(c, true)
+		client.ReloadDaemonLogLevel(c)
+		return nil
 	})
 }
 
-// manageSessions is the counterpart to the Connect method. It reads the connectCh, creates
-// a session and writes a reply to the connectErrCh. The session is then started if it was
-// successfully created.
-func (s *Service) manageSessions(c context.Context) error {
-	// The d.quit is called when we receive a Quit. Since it
-	// terminates this function, it terminates the whole process.
-	wg := sync.WaitGroup{}
-	defer wg.Wait()
-
-	for {
-		// Wait for a connection request
-		select {
-		case <-c.Done():
-			return nil
-		case oi := <-s.connectCh:
-			reply := s.startSession(c, oi, &wg)
-			select {
-			case <-c.Done():
-				return nil
-			case s.connectReplyCh <- reply:
-			default:
-				// Nobody left to read the response? That's fine really. Just means that
-				// whoever wanted to start the session terminated early.
-				s.cancelSession()
-			}
-		}
-	}
-}
-
-func (s *Service) startSession(parentCtx context.Context, oi *rpc.NetworkConfig, wg *sync.WaitGroup) sessionReply {
-	s.sessionLock.Lock() // Locked during creation
-	defer s.sessionLock.Unlock()
-	reply := sessionReply{
-		status: &rpc.DaemonStatus{
-			Version: &common.VersionInfo{
-				ApiVersion: client.APIVersion,
-				Version:    client.Version(),
-			},
-		},
-	}
-	if s.session != nil {
-		reply.status.OutboundConfig = s.session.getNetworkConfig(s.sessionContext)
-		dlog.Debugf(parentCtx, "Returning session %v from existing session", reply.status.OutboundConfig.Session)
-		return reply
-	}
-
-	ctx, cancel := context.WithCancel(parentCtx)
-	ctx, session, err := GetNewSessionFunc(ctx)(ctx, oi)
-	if session == nil || ctx.Err() != nil || err != nil {
-		cancel()
-		if err == nil {
-			err = ctx.Err()
-		}
-		reply.err = err
-		dlog.Errorf(ctx, "session creation failed %v", err)
-		return reply
-	}
-
-	s.session = session
-	s.sessionContext = ctx
-	s.sessionCancel = func() {
-		cancel()
-		select {
-		case <-session.Done():
-		case <-time.After(5 * time.Second):
-			// Something is wrong. The session doesn't die.
-			if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
-				buf := make([]byte, 1024*1024)
-				n := runtime.Stack(buf, true)
-				dlog.Debug(ctx, string(buf[:n]))
-			}
-		}
-	}
-	_ = client.ReloadDaemonLogLevel(ctx, true)
-	reply.status.OutboundConfig = s.session.getNetworkConfig(ctx)
-	dlog.Debugf(ctx, "Returning session from new session %v", reply.status.OutboundConfig.Session)
-
-	initErrCh := make(chan error, 1)
-
-	// Run the session asynchronously. We must be able to respond to connect (with getNetworkConfig) while
-	// the session is running. The d.session.cancel is called from Disconnect
-	wg.Add(1)
-	go func() {
-		defer func() {
-			s.cancelSession()
-			_ = client.ReloadDaemonLogLevel(parentCtx, true)
-			wg.Done()
-		}()
-		if err := s.session.run(s.sessionContext, initErrCh); err != nil {
-			dlog.Error(ctx, err)
-		}
-	}()
-	select {
-	case <-ctx.Done():
-	case err := <-initErrCh:
-		if err != nil {
-			reply.err = err
-			s.cancelSession()
-		}
-	}
-	return reply
-}
-
-func (s *Service) serveGrpc(c context.Context, l net.Listener) error {
+func (s *service) serveGrpc(c context.Context, l net.Listener) error {
 	var opts []grpc.ServerOption
 	cfg := client.GetConfig(c)
 	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
 		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}
-	c, s.quit = context.WithCancel(c)
-	svc := server.New(c, opts...)
+	c, cancel := context.WithCancel(c)
+	s.Context = c
+	s.quit = func() {
+		cancel()
+		s.sessionLock.RLock()
+		sessionRunning := s.sessionRunning
+		s.sessionLock.RUnlock()
+		<-sessionRunning
+	}
+	svc := server.New(s, opts...)
 	rpc.RegisterDaemonServer(svc, s)
-	return server.Serve(c, svc, l)
+	return server.Serve(s, svc, l)
 }
 
 // run is the main function when executing as the daemon.
 func run(cmd *cobra.Command, args []string) error {
 	if !proc.IsAdmin() {
-		return fmt.Errorf("telepresence %s must run with elevated privileges", ProcessName)
+		return fmt.Errorf("telepresence %s must run with elevated privileges", client.RootDaemonName)
 	}
 
-	loggingDir := args[0]
-	configDir := args[1]
-	rootDaemonPath := args[2]
+	configDir := args[0]
+	rootDaemonPath := args[1]
+	err := global.InitConfig(cmd)
+	if err != nil {
+		return err
+	}
+
 	c := cmd.Context()
 
 	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's
 	// directories rather than directories for the root user.
-	c = filelocation.WithAppUserLogDir(c, loggingDir)
 	c = filelocation.WithAppUserConfigDir(c, configDir)
 
 	cfg, err := client.LoadConfig(c)
@@ -456,21 +148,24 @@ func run(cmd *cobra.Command, args []string) error {
 			}
 		}()
 	}
-	c = dgroup.WithGoroutineName(c, "/"+ProcessName)
-	c, err = logging.InitContext(c, ProcessName, logging.RotateDaily, true, false)
+	c = dgroup.WithGoroutineName(c, "/"+client.RootDaemonName)
+	logFile := flags.Lookup(logfileFlag).Value.String()
+	c, err = logging.InitContext(c, logFile, cfg.LogLevels().RootDaemon, logging.RotateDaily, true)
 	if err != nil {
 		return err
 	}
 
+	dlog.Debug(c, shellquote.ShellString(os.Args[0], os.Args[1:]))
+
 	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence %s %s starting...", ProcessName, client.DisplayVersion())
+	dlog.Infof(c, "Telepresence Root Daemon %s starting...", client.DisplayVersion())
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
 	// Listen on domain unix domain socket. The listener must be opened before other tasks because
 	// the CLI client will only wait for a short period of time for the socket to appear before it
 	// gives up.
-	grpcListener, err := socket.Listen(c, ProcessName, rootDaemonPath)
+	grpcListener, err := socket.Listen(c, client.RootDaemonName, rootDaemonPath)
 	if err != nil {
 		return err
 	}
@@ -479,8 +174,8 @@ func run(cmd *cobra.Command, args []string) error {
 	}()
 	dlog.Debug(c, "Listener opened")
 
-	d := GetNewServiceFunc(c)(cfg)
-	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, ProcessName); err != nil {
+	d := newService(cfg)
+	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, client.RootDaemonName); err != nil {
 		return err
 	}
 	vif.InitLogger(c)
@@ -493,7 +188,6 @@ func run(cmd *cobra.Command, args []string) error {
 
 	// Add a reload function that triggers on create and write of the config.yml file.
 	g.Go("config-reload", d.configReload)
-	g.Go("session", d.manageSessions)
 	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener) })
 	err = g.Wait()
 	if err != nil {

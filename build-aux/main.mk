@@ -31,26 +31,26 @@ bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 # https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md.
 export DOCKER_BUILDKIT := 1
 
-GOLANGCI_VERSION:=v2.5.0
+GOLANGCI_VERSION:=v2.6.0
 
 .PHONY: FORCE
 FORCE:
 
-EXTERNAL_FUSEFTP=0
-LINKED_FUSEFTP=1
+EXTERNAL_FUSEFTP ?= 0
+LINKED_FUSEFTP ?= 1
 
 # Build with CGO_ENABLED=0 on all platforms to ensure that the binary is as
 # portable as possible, but we must make an exception for darwin, because
 # the Go implementation of the DNS resolver doesn't work properly there unless
 # it's using clib
 ifeq ($(GOOS),darwin)
-CGO_ENABLED=1
+CGO_ENABLED ?= 1
 else
 ifeq ($(GOOS),linux)
 # The winfsp module requires CGO on Linux.
-CGO_ENABLED=$(LINKED_FUSEFTP)
+CGO_ENABLED ?= $(LINKED_FUSEFTP)
 else
-CGO_ENABLED=0
+CGO_ENABLED ?= 0
 endif
 endif
 

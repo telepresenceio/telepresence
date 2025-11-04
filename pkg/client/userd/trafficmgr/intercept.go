@@ -14,12 +14,11 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
-	grpcCodes "google.golang.org/grpc/codes"
-	grpcStatus "google.golang.org/grpc/status"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	core "k8s.io/api/core/v1"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -29,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
@@ -131,22 +131,15 @@ func (ic *intercept) podAccess() *podAccess {
 	}
 }
 
-func (s *session) watchInterceptsHandler(context.Context) error {
-	// Don't use a dgroup.Group because:
-	//  1. we don't actually care about tracking errors (we just always retry) or any of
-	//     dgroup's other functionality
-	//  2. because goroutines may churn as intercepts are created and deleted, tracking all of
-	//     their exit statuses is just a memory leak
-	//  3. because we want a per-worker cancel, we'd have to implement our own Context
-	//     management on top anyway, so dgroup wouldn't actually save us any complexity.
-	return runWithRetry(s.context, s.watchInterceptsLoop)
+func (s *session) watchInterceptsHandler(ctx context.Context) error {
+	return runWithRetry(ctx, s.watchInterceptsLoop)
 }
 
 func (s *session) watchInterceptsLoop(ctx context.Context) error {
 	pat := newPodAccessTracker()
 	err := watcher.WatchWithRetry(ctx, "WatchIntercepts", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.InterceptInfoSnapshot], error) {
-			return s.managerClient.WatchIntercepts(s.context, s.SessionInfo())
+			return s.ManagerClient().WatchIntercepts(s, s.SessionInfo())
 		},
 		func(snapshot *manager.InterceptInfoSnapshot) error {
 			s.handleInterceptSnapshot(pat, snapshot.Intercepts)
@@ -189,7 +182,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 
 		// Notify waiters for active intercepts
 		if aw != nil {
-			dlog.Debugf(s.context, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
+			dlog.Debugf(s, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
 			ir := interceptResult{
 				intercept: ic,
 				err:       err,
@@ -209,11 +202,11 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 				}
 			default:
 				// Channel was closed
-				dlog.Debugf(s.context, "unable to propagate intercept id=%q", ii.Id)
+				dlog.Debugf(s, "unable to propagate intercept id=%q", ii.Id)
 			}
 		}
 		if err != nil {
-			dlog.Error(s.context, err)
+			dlog.Error(s, err)
 			continue
 		}
 
@@ -224,7 +217,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 		}
 		pat.start(pa)
 	}
-	pat.cancelUnwanted(s.context)
+	pat.cancelUnwanted(s)
 }
 
 // getCurrentIntercepts returns a copy of the current intercept snapshot. This snapshot does
@@ -261,8 +254,8 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 			ic.InterceptInfo = ii
 		} else {
 			ic = &intercept{InterceptInfo: ii, finalRemovalDone: make(chan struct{})}
-			ic.ctx, ic.cancel = context.WithCancel(s.context)
-			dlog.Debugf(s.context, "Received new intercept %s", ic.Spec.Name)
+			ic.ctx, ic.cancel = context.WithCancel(s)
+			dlog.Debugf(s, "Received new intercept %s", ic.Spec.Name)
 			if aw, ok := s.interceptWaiters[ii.Spec.Name]; ok {
 				ic.ClientMountPoint = aw.mountPoint
 				ic.localMountPort = aw.mountPort
@@ -278,7 +271,7 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 		sb.WriteString(ii.PodIp)
 	}
 	sb.WriteByte(']')
-	dlog.Debugf(s.context, "setCurrentIntercepts(%s)", sb.String())
+	dlog.Debugf(s, "setCurrentIntercepts(%s)", sb.String())
 
 	// Cancel those that no longer exists
 	var removed []*intercept
@@ -292,31 +285,15 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 	s.currentInterceptsLock.Unlock()
 
 	for _, ic := range removed {
-		dlog.Debugf(s.context, "Cancelling context for intercept %s", ic.Spec.Name)
+		dlog.Debugf(s, "Cancelling context for intercept %s", ic.Spec.Name)
 		ic.cancel()
 		close(ic.finalRemovalDone)
-	}
-}
-
-func InterceptError(tp common.InterceptError, err error) *rpc.InterceptResult {
-	return &rpc.InterceptResult{
-		Error:         tp,
-		ErrorText:     err.Error(),
-		ErrorCategory: int32(errcat.GetCategory(err)),
 	}
 }
 
 type interceptInfo struct {
 	// Information provided by the traffic manager as response to the PrepareIntercept call
 	preparedIntercept *manager.PreparedIntercept
-}
-
-func (s *interceptInfo) InterceptResult() *rpc.InterceptResult {
-	pi := s.preparedIntercept
-	return &rpc.InterceptResult{
-		ServiceUid:   pi.ServiceUid,
-		WorkloadKind: pi.WorkloadKind,
-	}
 }
 
 func (s *interceptInfo) PortIdentifier() (types.PortIdentifier, error) {
@@ -333,21 +310,17 @@ func (s *interceptInfo) PreparedIntercept() *manager.PreparedIntercept {
 	return s.preparedIntercept
 }
 
-func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) *rpc.InterceptResult {
+func (s *session) ensureNoInterceptConflict(ir *rpc.CreateInterceptRequest) error {
 	err := s.ensureNoMountConflict(ir.MountPoint, ir.LocalMountPort)
 	if err != nil {
-		return &rpc.InterceptResult{
-			Error:         common.InterceptError_MOUNT_POINT_BUSY,
-			ErrorText:     err.Error(),
-			ErrorCategory: int32(errcat.User),
-		}
+		return err
 	}
 	s.currentInterceptsLock.Lock()
 	defer s.currentInterceptsLock.Unlock()
 	spec := ir.Spec
 	for _, iCept := range s.currentIntercepts {
 		if iCept.Spec.Name == spec.Name {
-			return InterceptError(common.InterceptError_ALREADY_EXISTS, errcat.User.New(spec.Name))
+			return status.Errorf(codes.AlreadyExists, "intercept with name %q already exists", spec.Name)
 		}
 	}
 	return nil
@@ -439,14 +412,14 @@ func ensureUniqueLocalPorts(targetHost netip.Addr, spec *manager.InterceptSpec, 
 	return ports, nil
 }
 
-func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.PreparedIntercept) *rpc.InterceptResult {
+func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.PreparedIntercept) error {
 	targetHost, err := netip.ParseAddr(spec.TargetHost)
 	if err != nil {
-		return InterceptError(common.InterceptError_INTERNAL, errcat.User.Newf("invalid target host: %v", err))
+		return errcat.User.Errorf(err, "invalid target host")
 	}
 	ports, err := ensureUniqueLocalPorts(targetHost, spec, ir)
 	if err != nil {
-		return InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.User.New(err))
+		return errcat.User.New(err)
 	}
 
 	s.currentInterceptsLock.Lock()
@@ -455,18 +428,18 @@ func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.
 		ciSpec := ci.Spec
 		targetHost, err = netip.ParseAddr(ciSpec.TargetHost)
 		if err != nil {
-			return InterceptError(common.InterceptError_INTERNAL, errcat.User.Newf("invalid target host: %v", err))
+			return errcat.User.Errorf(err, "invalid target host")
 		}
 		busyPorts, err := allBusyLocalPorts(targetHost, ciSpec)
 		if err != nil {
-			return InterceptError(common.InterceptError_INTERNAL, errcat.User.New(err))
+			return errcat.User.New(err)
 		}
 		for _, blp := range busyPorts {
 			if _, ok := ports[blp]; ok {
-				return &rpc.InterceptResult{
-					Error:         common.InterceptError_LOCAL_TARGET_IN_USE,
-					ErrorText:     fmt.Sprintf("Port %s is already in use by intercept %s", blp, ciSpec.Name),
-					ErrorCategory: int32(errcat.User),
+				return &tpGrpc.StructuredError{
+					Message:  fmt.Sprintf("port %s is already in use by intercept %s", blp, ciSpec.Name),
+					Category: errcat.User,
+					Code:     codes.AlreadyExists,
 				}
 			}
 		}
@@ -488,29 +461,24 @@ func (s *session) compareFinalizedManagerVersion(major, minor, patch uint64) int
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
-func (s *session) CanIntercept(ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, *rpc.InterceptResult) {
+func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, error) {
 	spec := ir.Spec
 	if spec.Namespace == "" {
 		spec.Namespace = s.Namespace
 	} else if s.Namespace != spec.Namespace {
-		return nil, InterceptError(common.InterceptError_NAMESPACE_AMBIGUITY, errcat.User.Newf("%s,%s", s.Namespace, spec.Namespace))
+		return nil, errcat.User.Newf("attempt to intercept in namespace %q. Only the connected %q namespace can be intercepted", spec.Namespace, s.Namespace)
 	}
 
 	if er := s.ensureNoInterceptConflict(ir); er != nil {
 		return nil, er
 	}
-	if spec.Agent == "" {
-		return nil, nil
-	}
 
 	if spec.Wiretap && s.compareFinalizedManagerVersion(2, 23, 0) < 0 {
-		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.User.Newf(
-			"traffic-manager version %s has no support for wiretaps", s.managerVersion))
+		return nil, errcat.User.Newf("traffic-manager version %s has no support for wiretaps", s.managerVersion)
 	}
 
 	if (spec.PortIdentifier == "all" || len(spec.PodPorts) > 0) && s.compareFinalizedManagerVersion(2, 22, 0) < 0 {
-		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.User.Newf(
-			"traffic-manager version %s has no support for multi-port intercepts", s.managerVersion))
+		return nil, errcat.User.Newf("traffic-manager version %s has no support for multi-port intercepts", s.managerVersion)
 	}
 
 	_, err := netip.ParseAddr(spec.TargetHost)
@@ -518,29 +486,31 @@ func (s *session) CanIntercept(ir *rpc.CreateInterceptRequest) (userd.InterceptI
 		// The targetHost is not a valid IP. Treat it as a name and create a synthetic IP for it.
 		rndIP, err := uuid.NewRandom()
 		if err != nil {
-			return nil, InterceptError(common.InterceptError_INTERNAL, err)
+			return nil, fmt.Errorf("unable to generate synthetic IP: %w", err)
 		}
 		targetIP := netip.AddrFrom16(rndIP)
 		if s.syntheticIPs == nil {
 			s.syntheticIPs = make(map[netip.Addr]string)
 		}
-		dlog.Debugf(s.context, "Replacing target host %s with synthetic IP %s", spec.TargetHost, targetIP)
+		dlog.Debugf(s, "Replacing target host %s with synthetic IP %s", spec.TargetHost, targetIP)
 		s.syntheticIPs[targetIP] = spec.TargetHost
 		spec.TargetHost = targetIP.String()
 	}
 
 	mgrIr := s.newCreateInterceptRequest(spec)
-	pi, err := s.managerClient.PrepareIntercept(s.context, mgrIr)
+	timeoutCtx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficAgentArrival)
+	defer cancel()
+	pi, err := s.ManagerClient().PrepareIntercept(timeoutCtx, mgrIr)
 	if err != nil {
-		if st, ok := grpcStatus.FromError(err); ok {
-			if st.Code() == grpcCodes.FailedPrecondition {
-				return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.User.New(st.Message()))
+		if st, ok := status.FromError(err); ok {
+			if st.Code() == codes.FailedPrecondition {
+				return nil, errcat.User.New(st.Message())
 			}
 		}
-		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
+		return nil, err
 	}
 	if pi.Error != "" {
-		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.Category(pi.ErrorCategory).New(pi.Error))
+		return nil, errcat.Category(pi.ErrorCategory).New(pi.Error)
 	}
 	if er := s.ensureNoPortConflict(spec, pi); er != nil {
 		return nil, er
@@ -576,17 +546,13 @@ func (s *session) newCreateInterceptRequest(spec *manager.InterceptSpec) *manage
 }
 
 // AddIntercept adds one intercept.
-func (s *session) AddIntercept(ir *rpc.CreateInterceptRequest) *rpc.InterceptResult {
-	iInfo, result := s.CanIntercept(ir)
-	if result != nil {
-		return result
+func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (*manager.InterceptInfo, error) {
+	iInfo, err := s.CanIntercept(ctx, ir)
+	if err != nil {
+		return nil, err
 	}
 
 	spec := ir.Spec
-	if iInfo == nil {
-		return &rpc.InterceptResult{Error: common.InterceptError_UNSPECIFIED}
-	}
-
 	spec.Client = s.clientID
 	if spec.Mechanism == "" {
 		spec.Mechanism = "tcp"
@@ -606,11 +572,11 @@ func (s *session) AddIntercept(ir *rpc.CreateInterceptRequest) *rpc.InterceptRes
 		spec.ServicePort = pi.ServicePort
 		pti, err := iInfo.PortIdentifier()
 		if err != nil {
-			return InterceptError(common.InterceptError_MISCONFIGURED_WORKLOAD, err)
+			return nil, err
 		}
 		spec.PortIdentifier = pti.String()
 	}
-	dlog.Debugf(s.context, "pi.Protocol = %s", pi.Protocol)
+	dlog.Debugf(s, "pi.Protocol = %s", pi.Protocol)
 	spec.Protocol = pi.Protocol
 	spec.ContainerPort = pi.ContainerPort
 	spec.ContainerName = pi.ContainerName
@@ -618,20 +584,18 @@ func (s *session) AddIntercept(ir *rpc.CreateInterceptRequest) *rpc.InterceptRes
 		spec.Name = spec.Agent + "/" + pi.ContainerName
 	}
 	spec.PodPorts = pi.PodPorts
-	result = iInfo.InterceptResult()
-
 	if spec.TargetPort == 0 {
 		spec.TargetPort = pi.ContainerPort
 	}
 
-	spec.ServiceUid = result.ServiceUid
-	spec.WorkloadKind = result.WorkloadKind
+	spec.ServiceUid = pi.ServiceUid
+	spec.WorkloadKind = pi.WorkloadKind
 
-	dlog.Debugf(s.context, "creating intercept %s", spec.Name)
-	tos := client.GetConfig(s.context).Timeouts()
+	dlog.Debugf(s, "creating intercept %s", spec.Name)
+	tos := client.GetConfig(ctx).Timeouts()
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
 	spec.DialTimeout = int64(tos.Get(client.TimeoutEndpointDial))
-	c, cancel := tos.TimeoutContext(s.context, client.TimeoutIntercept)
+	c, cancel := tos.TimeoutContext(ctx, client.TimeoutIntercept)
 	defer cancel()
 
 	// The agent is in place and the traffic-manager has acknowledged the creation of the intercept. It
@@ -657,7 +621,7 @@ func (s *session) AddIntercept(ir *rpc.CreateInterceptRequest) *rpc.InterceptRes
 	ii, err := mgrClient.CreateIntercept(c, s.newCreateInterceptRequest(spec))
 	if err != nil {
 		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
-		return InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)
+		return nil, err
 	}
 
 	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
@@ -677,40 +641,44 @@ func (s *session) AddIntercept(ir *rpc.CreateInterceptRequest) *rpc.InterceptRes
 	for {
 		select {
 		case <-c.Done():
-			return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, client.CheckTimeout(c, c.Err()))
+			return nil, fmt.Errorf("failed to establish intercept: %w", client.CheckTimeout(c, c.Err()))
 		case wr := <-waitCh:
 			if wr.err != nil {
-				return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, wr.err)
+				return nil, fmt.Errorf("failed to establish intercept: %w", wr.err)
 			}
 			ic := wr.intercept
 			ii = ic.InterceptInfo
 			if ii.Disposition != manager.InterceptDispositionType_ACTIVE {
 				continue
 			}
-			result.InterceptInfo = ii
 			select {
 			case <-c.Done():
-				return InterceptError(common.InterceptError_FAILED_TO_ESTABLISH, client.CheckTimeout(c, c.Err()))
+				return nil, fmt.Errorf("failed to establish intercept: %w", client.CheckTimeout(c, c.Err()))
 			case <-wr.mountsDone:
 			}
-			env, err := s.rootDaemon.TranslateEnvIPs(c, &daemon.Environment{Env: result.InterceptInfo.Environment})
+			err := s.WithRootClient(ctx, func(ctx context.Context, rd daemon.DaemonClient) (err error) {
+				env, err := s.rootDaemon.TranslateEnvIPs(c, &daemon.Environment{Env: ii.Environment})
+				if err == nil {
+					ii.Environment = env.Env
+				}
+				return err
+			})
 			if err != nil {
-				return InterceptError(common.InterceptError_INTERNAL, client.CheckTimeout(c, err))
+				return nil, client.CheckTimeout(c, err)
 			}
-			result.InterceptInfo.Environment = env.Env
 			success = true // Prevent removal in deferred function
-			return result
+			return ii, nil
 		}
 	}
 }
 
 // RemoveIntercept removes one intercept by name.
 func (s *session) RemoveIntercept(name string) error {
-	dlog.Debugf(s.context, "Removing intercept %s", name)
+	dlog.Debugf(s, "Removing intercept %s", name)
 
 	// Make an attempt to remove the created intercept using a time limited Context. Our
 	// context is already done.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(s.context), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(s), 5*time.Second)
 	defer cancel()
 	ii := s.getInterceptByName(name)
 	if ii == nil {
@@ -728,12 +696,12 @@ func (s *session) removeIntercept(ic *intercept) error {
 	ic.cancel()
 	ic.wg.Wait()
 
-	c := s.context
+	c := s.Context
 	dlog.Debugf(c, "telling manager to remove intercept %s", name)
 	tos := client.GetConfig(c).Timeouts()
 	cc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
-	_, err := s.managerClient.RemoveIntercept(cc, &manager.RemoveInterceptRequest2{
+	_, err := s.ManagerClient().RemoveIntercept(cc, &manager.RemoveInterceptRequest2{
 		Session: s.SessionInfo(),
 		Name:    name,
 	})
@@ -754,8 +722,8 @@ func (s *session) stopHandler(name, handlerContainer string, pid int) {
 	// that daemon runs as a normal user daemon with a separate root daemon.
 	// Some users run a standard telepresence client together with ingests/intercepts
 	// in one single container.
-	c := s.context
-	if !(proc.RunningInContainer() && userd.GetService(c).RootSessionInProcess()) {
+	c := s.Context
+	if !(proc.RunningInContainer() && s.GetService().RootSessionInProcess()) {
 		if handlerContainer != "" {
 			if err := docker.StopContainer(docker.EnableClient(c), handlerContainer); err != nil {
 				// It's possible that the container is stopped externally before we get here. If so,
@@ -782,14 +750,14 @@ func (s *session) AddInterceptor(id string, ih *rpc.Interceptor) error {
 	added := false
 	s.currentInterceptsLock.Lock()
 	if ci, ok := s.currentIntercepts[id]; ok {
-		dlog.Debugf(s.context, "Adding intercept handler for id %s, %v", id, ih)
+		dlog.Debugf(s, "Adding intercept handler for id %s, %v", id, ih)
 		ci.pid = int(ih.Pid)
 		ci.handlerContainer = ih.ContainerName
 		added = true
 	} else {
 		if parts := strings.Split(id, "/"); len(parts) == 2 {
 			if cg, ok := s.currentIngests.Load(ingestKey{workload: parts[0], container: parts[1]}); ok {
-				dlog.Debugf(s.context, "Adding ingest handler for id %s, %v", id, ih)
+				dlog.Debugf(s, "Adding ingest handler for id %s, %v", id, ih)
 				cg.pid = int(ih.Pid)
 				cg.handlerContainer = ih.ContainerName
 				added = true
@@ -798,7 +766,7 @@ func (s *session) AddInterceptor(id string, ih *rpc.Interceptor) error {
 	}
 	s.currentInterceptsLock.Unlock()
 	if !added {
-		return grpcStatus.Error(grpcCodes.NotFound, fmt.Sprintf("no intercept or ingest with id %s", id))
+		return status.Error(codes.NotFound, fmt.Sprintf("no intercept or ingest with id %s", id))
 	}
 	return nil
 }
@@ -903,14 +871,14 @@ func (s *session) InterceptsForWorkload(workloadName, namespace string) []*manag
 // ClearIngestsAndIntercepts removes all intercepts.
 func (s *session) ClearIngestsAndIntercepts() error {
 	for _, ic := range s.getCurrentIntercepts() {
-		dlog.Debugf(s.context, "Clearing intercept %s", ic.Spec.Name)
+		dlog.Debugf(s, "Clearing intercept %s", ic.Spec.Name)
 		err := s.removeIntercept(ic)
-		if err != nil && grpcStatus.Code(err) != grpcCodes.NotFound {
+		if err != nil && status.Code(err) != codes.NotFound {
 			return err
 		}
 	}
 	s.currentIngests.Range(func(key ingestKey, ig *ingest) bool {
-		dlog.Debugf(s.context, "Clearing ingest %s", key)
+		dlog.Debugf(s, "Clearing ingest %s", key)
 		s.stopHandler(key.workload+"/"+key.container, ig.handlerContainer, ig.pid)
 		return true
 	})
@@ -930,7 +898,7 @@ func (s *session) reconcileAPIServers() {
 			if err == nil {
 				return int(port)
 			}
-			dlog.Errorf(s.context, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, is.Agent, is.Namespace, err)
+			dlog.Errorf(s, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, is.Agent, is.Namespace, err)
 		}
 		return 0
 	}
@@ -969,7 +937,7 @@ func (s *session) reconcileAPIServers() {
 
 func (s *session) newAPIServerForPort(port int) {
 	svr := restapi.NewServer(s)
-	ctx, cancel := context.WithCancel(s.context)
+	ctx, cancel := context.WithCancel(s)
 	as := apiServer{Server: svr, cancel: cancel}
 	if s.currentAPIServers == nil {
 		s.currentAPIServers = map[int]*apiServer{port: &as}
@@ -1002,13 +970,13 @@ func (s *session) InterceptInfo(_ context.Context, callerID, path string, _ uint
 	am := s.currentMatchers[callerID]
 	switch {
 	case am == nil:
-		dlog.Debugf(s.context, "no matcher found for callerID %s", callerID)
+		dlog.Debugf(s, "no matcher found for callerID %s", callerID)
 	case am.requestMatcher.MatchesPathAndHeader(path, headers):
-		dlog.Debugf(s.context, "%s: matcher %s matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
+		dlog.Debugf(s, "%s: matcher %s matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
 		r.Intercepted = true
 		r.Metadata = am.metadata
 	default:
-		dlog.Debugf(s.context, "%s: matcher %s does not matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
+		dlog.Debugf(s, "%s: matcher %s does not matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
 	}
 	return r, nil
 }

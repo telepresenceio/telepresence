@@ -1,4 +1,4 @@
-package client
+package k8s
 
 import (
 	"bytes"
@@ -18,6 +18,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
+	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Important for various cloud provider auth
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
@@ -26,41 +27,13 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
-
-// DNSMapping contains a hostname and its associated alias. When requesting the name, the intended behavior is
-// to resolve the alias instead.
-type DNSMapping struct {
-	Name     string `json:"name,omitempty" yaml:"name,omitempty"`
-	AliasFor string `json:"aliasFor,omitempty" yaml:"aliasFor,omitempty"`
-}
-
-type DNSMappings []*DNSMapping
-
-func (d *DNSMappings) FromRPC(rpcMappings []*rpc.DNSMapping) {
-	*d = make(DNSMappings, 0, len(rpcMappings))
-	for i := range rpcMappings {
-		*d = append(*d, &DNSMapping{
-			Name:     rpcMappings[i].Name,
-			AliasFor: rpcMappings[i].AliasFor,
-		})
-	}
-}
-
-func (d DNSMappings) ToRPC() []*rpc.DNSMapping {
-	rpcMappings := make([]*rpc.DNSMapping, 0, len(d))
-	for i := range d {
-		rpcMappings = append(rpcMappings, &rpc.DNSMapping{
-			Name:     d[i].Name,
-			AliasFor: d[i].AliasFor,
-		})
-	}
-	return rpcMappings
-}
 
 // The dnsConfig is part of the kubeconfigExtension struct.
 //
@@ -89,7 +62,7 @@ type dnsConfig struct {
 
 	// Mappings contains a list of DNS Mappings. Each item references a hostname, and an associated alias. If a
 	// request is made for the name, the alias will be resolved instead.
-	Mappings DNSMappings `json:"mappings,omitempty"`
+	Mappings client.DNSMappings `json:"mappings,omitempty"`
 
 	// The maximum time to wait for a cluster side host lookup.
 	LookupTimeout v1.Duration `json:"lookup-timeout,omitempty"`
@@ -114,8 +87,8 @@ type kubeconfigExtension struct {
 	Manager                 *managerConfig `json:"manager,omitempty"`
 }
 
-func (ke *kubeconfigExtension) asConfig() Config {
-	cfg := GetDefaultConfig()
+func (ke *kubeconfigExtension) asConfig() client.Config {
+	cfg := client.GetDefaultConfig()
 	if keDns := ke.DNS; keDns != nil {
 		dns := cfg.DNS()
 		if len(keDns.Excludes) > 0 {
@@ -160,8 +133,9 @@ func (ke *kubeconfigExtension) asConfig() Config {
 // instead of the ConfigFlags (which also implements that interface) since the latter
 // will assume that the kubeconfig is loaded from disk.
 type Kubeconfig struct {
+	context.Context
 	Namespace        string // default cluster namespace.
-	Context          string
+	KubeContext      string
 	Server           string
 	OriginalFlagMap  map[string]string
 	EffectiveFlagMap map[string]string
@@ -216,7 +190,7 @@ func ConfigFlags(flagMap map[string]string) (*genericclioptions.ConfigFlags, err
 			err = flags.Set(k, v)
 		}
 		if err != nil {
-			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
+			return nil, errcat.User.Errorf(err, "error processing kubectl flag --%s=%s", k, v)
 		}
 	}
 	return configFlags, nil
@@ -231,43 +205,18 @@ func ConfigLoader(ctx context.Context, flagMap map[string]string, kubeConfigData
 	return NewClientConfig(ctx, configFlags, kubeConfigData)
 }
 
-// CurrentContext returns the name of the current Kubernetes context, the active namespace, and the context itself.
-func CurrentContext(ctx context.Context, flagMap map[string]string, configBytes []byte) (string, string, *api.Context, error) {
-	cld, err := ConfigLoader(ctx, flagMap, configBytes)
-	if err != nil {
-		return "", "", nil, err
-	}
-	ns, _, err := cld.Namespace()
-	if err != nil {
-		return "", "", nil, err
-	}
-
-	config, err := cld.RawConfig()
-	if err != nil {
-		return "", "", nil, err
-	}
-	if len(config.Contexts) == 0 {
-		return "", "", nil, errcat.Config.New("kubeconfig has no context definition")
-	}
-	cc := flagMap["context"]
-	if cc == "" {
-		cc = config.CurrentContext
-	}
-	return cc, ns, config.Contexts[cc], nil
-}
-
-func NewKubeconfig(c context.Context, flagMap map[string]string, managerNamespaceOverride string) (context.Context, *Kubeconfig, error) {
+func NewKubeconfig(c context.Context, tpClientConfigIsFinal bool, flagMap map[string]string, managerNamespaceOverride string, kubeconfigData []byte) (*Kubeconfig, error) {
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
-		return c, nil, err
+		return nil, err
 	}
-	return newKubeconfig(c, flagMap, flagMap, managerNamespaceOverride, configFlags, nil)
+	return newKubeconfig(c, tpClientConfigIsFinal, flagMap, flagMap, managerNamespaceOverride, configFlags, kubeconfigData)
 }
 
-func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (context.Context, *Kubeconfig, error) {
+func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubeconfig, error) {
 	if cr.IsPodDaemon {
 		ke, err := NewInClusterConfig(c, cr.KubeFlags)
-		return c, ke, err
+		return ke, err
 	}
 	flagMap := cr.KubeFlags
 	if proc.RunningInContainer() {
@@ -289,9 +238,9 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (context.
 	}
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
-		return c, nil, err
+		return nil, err
 	}
-	return newKubeconfig(c, cr.KubeFlags, flagMap, cr.ManagerNamespace, configFlags, cr.KubeconfigData)
+	return newKubeconfig(c, false, cr.KubeFlags, flagMap, cr.ManagerNamespace, configFlags, cr.KubeconfigData)
 }
 
 // AppendKubeFlags appends the flags in the given map to the given slice in the form of
@@ -486,20 +435,21 @@ func GetCluster(config api.Config, ctxName string) (*api.Cluster, error) {
 
 func newKubeconfig(
 	ctx context.Context,
+	tpClientConfigIsFinal bool,
 	originalFlags,
 	effectiveFlags map[string]string,
 	managerNamespaceOverride string,
 	configFlags *genericclioptions.ConfigFlags,
 	configData []byte,
-) (context.Context, *Kubeconfig, error) {
+) (*Kubeconfig, error) {
 	clientConfig, err := NewClientConfig(ctx, configFlags, configData)
 	if err != nil {
-		return ctx, nil, err
+		return nil, err
 	}
 
 	config, err := clientConfig.RawConfig()
 	if err != nil {
-		return ctx, nil, err
+		return nil, err
 	}
 
 	ctxName := effectiveFlags["context"]
@@ -509,30 +459,38 @@ func newKubeconfig(
 
 	cluster, err := GetCluster(config, ctxName)
 	if err != nil {
-		return ctx, nil, err
+		return nil, err
 	}
 
 	restConfig, err := clientConfig.ClientConfig()
 	if err != nil {
-		return ctx, nil, err
+		return nil, err
 	}
 
 	namespace, _, err := clientConfig.Namespace()
 	if err != nil {
-		return ctx, nil, err
+		return nil, err
 	}
-	dlog.Debugf(ctx, "using namespace %q", namespace)
 
-	managerNamespace := managerNamespaceOverride
-	if managerNamespace == "" {
-		managerNamespace = GetEnv(ctx).ManagerNamespace
+	if !tpClientConfigIsFinal {
+		managerNamespace := managerNamespaceOverride
+		if managerNamespace == "" {
+			managerNamespace = client.GetEnv(ctx).ManagerNamespace
+		}
+		err = WithKubeExtension(ctx, cluster, managerNamespace)
+		if err != nil {
+			return nil, err
+		}
 	}
-	ctx, err = WithKubeExtension(ctx, cluster, managerNamespace)
+	cs, err := kubernetes.NewForConfig(restConfig)
 	if err != nil {
-		return ctx, nil, err
+		return nil, err
 	}
-	return ctx, &Kubeconfig{
-		Context:          ctxName,
+	ctx = k8sapi.WithK8sInterface(ctx, cs)
+	ctx = portforward.WithRestConfig(ctx, restConfig)
+	return &Kubeconfig{
+		Context:          ctx,
+		KubeContext:      ctxName,
 		Server:           cluster.Server,
 		Namespace:        namespace,
 		EffectiveFlagMap: effectiveFlags,
@@ -542,20 +500,20 @@ func newKubeconfig(
 	}, nil
 }
 
-func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespace string) (context.Context, error) {
-	cfg := GetConfig(ctx)
-	var keCfg Config
+func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespace string) error {
+	cfg := client.GetConfig(ctx)
+	var keCfg client.Config
 	var data []byte
 	if ext, ok := cluster.Extensions[configExtension].(*runtime.Unknown); ok {
 		data = bytes.TrimSpace(ext.Raw)
 	}
 	if len(data) > 0 {
-		if kc, err := UnmarshalJSONConfig(data, true); err != nil {
+		if kc, err := client.UnmarshalJSONConfig(data, true); err != nil {
 			// Try with legacy kubeconfigExtension
 			dlog.Debug(ctx, "unable to unmarshal extension as client config, trying legacy format")
 			ke := kubeconfigExtension{}
 			if keErr := json.Unmarshal(data, &ke); keErr != nil {
-				return ctx, errcat.Config.Newf("unable to parse extension %s in kubeconfig: %w", configExtension, err)
+				return errcat.Config.Errorf(err, "unable to parse extension %s in kubeconfig", configExtension)
 			}
 			dlog.Debug(ctx, "legacy format was successfully parsed")
 			keCfg = ke.asConfig()
@@ -568,13 +526,13 @@ func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespa
 		}
 	} else if managerNamespace != "" && managerNamespace != cfg.Cluster().DefaultManagerNamespace {
 		// No kubeconfig exists but we still need a config when the managerNamespace is set.
-		keCfg = GetDefaultConfig()
+		keCfg = client.GetDefaultConfig()
 		keCfg.Cluster().DefaultManagerNamespace = managerNamespace
 	}
 	snps := getServerNeverProxy(ctx, cluster)
 	if len(snps) > 0 {
 		if keCfg == nil {
-			keCfg = GetDefaultConfig()
+			keCfg = client.GetDefaultConfig()
 		}
 		kr := keCfg.Routing()
 		kr.NeverProxy = append(kr.NeverProxy, snps...)
@@ -583,10 +541,9 @@ func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespa
 		keCfg = cfg.Merge(keCfg)
 		kr := keCfg.Routing()
 		kr.NeverProxy = append(kr.NeverProxy, cfg.Routing().NeverProxy...)
-		cfg = keCfg
-		ctx = WithConfig(ctx, cfg)
+		client.ReplaceConfig(ctx, keCfg)
 	}
-	return ctx, nil
+	return nil
 }
 
 func getServerNeverProxy(ctx context.Context, cluster *api.Cluster) []netip.Prefix {
@@ -634,7 +591,7 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 	configFlags.AddFlags(flags)
 	for k, v := range flagMap {
 		if err := flags.Set(k, v); err != nil {
-			return nil, errcat.User.Newf("error processing kubectl flag --%s=%s: %w", k, v, err)
+			return nil, errcat.User.Errorf(err, "error processing kubectl flag --%s=%s", k, v)
 		}
 	}
 
@@ -650,6 +607,7 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 	}
 
 	return &Kubeconfig{
+		Context:          c,
 		Namespace:        namespace,
 		Server:           restConfig.Host,
 		EffectiveFlagMap: flagMap,
@@ -663,13 +621,13 @@ func NewInClusterConfig(c context.Context, flagMap map[string]string) (*Kubeconf
 // server, and flag arguments.
 func (kf *Kubeconfig) ContextServiceAndFlagsEqual(okf *Kubeconfig) bool {
 	return kf != nil && okf != nil &&
-		kf.Context == okf.Context &&
+		kf.KubeContext == okf.KubeContext &&
 		kf.Server == okf.Server &&
 		maps.Equal(kf.EffectiveFlagMap, okf.EffectiveFlagMap)
 }
 
-func (kf *Kubeconfig) GetContext() string {
-	return kf.Context
+func (kf *Kubeconfig) GetKubeContext() string {
+	return kf.KubeContext
 }
 
 func (kf *Kubeconfig) GetClientConfig() clientcmd.ClientConfig {

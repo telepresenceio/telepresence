@@ -9,17 +9,14 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 )
 
 type managerGRPCSuite struct {
 	itest.Suite
 	itest.TrafficManager
-	conn   *grpc.ClientConn
-	client manager.ManagerClient
-	si     *manager.SessionInfo
+	conn *grpc.ClientConn
+	si   *manager.SessionInfo
 }
 
 func (m *managerGRPCSuite) SuiteName() string {
@@ -35,33 +32,29 @@ func init() {
 func (m *managerGRPCSuite) SetupSuite() {
 	m.Suite.SetupSuite()
 
-	ctx := m.Context()
-	ctx, k8sCluster, err := m.GetK8SCluster(ctx, "", m.ManagerNamespace())
+	k8sCluster, err := m.GetK8SCluster(m.Context(), "", m.ManagerNamespace())
 	m.Require().NoError(err)
 
-	ctx = portforward.WithRestConfig(ctx, k8sCluster.RestConfig)
-	m.Require().NoError(err)
-	m.conn, m.client, _, err = k8sclient.ConnectToManager(ctx, ctx, m.ManagerNamespace())
+	m.conn, _, _, err = k8sCluster.ConnectToManager(m.Context(), m.ManagerNamespace())
 	m.Require().NoError(err)
 
-	_, err = m.client.Version(ctx, &empty.Empty{})
+	_, err = manager.NewManagerClient(m.conn).Version(m.Context(), &empty.Empty{})
 	m.Require().NoError(err)
 
-	daemonID := daemon.NewIdentifier("", k8sCluster.Context, m.AppNamespace(), false)
-	m.si, err = trafficmgr.LoadSessionInfoFromUserCache(ctx, daemonID)
+	daemonID := daemon.NewIdentifier("", k8sCluster.KubeContext, m.AppNamespace(), false)
+	m.si, err = trafficmgr.LoadSessionInfoFromUserCache(m.Context(), daemonID)
 	m.Require().NoError(err)
 }
 
 func (m *managerGRPCSuite) TearDownSuite() {
 	if m.conn != nil {
-		m.conn.Close()
+		go m.conn.Close()
 		m.conn = nil
-		m.client = nil
 	}
 }
 
 func (m *managerGRPCSuite) Test_ClusterInfo() {
-	istream, err := m.client.WatchClusterInfo(m.Context(), m.si)
+	istream, err := manager.NewManagerClient(m.conn).WatchClusterInfo(m.Context(), m.si)
 	m.Require().NoError(err)
 	info, err := istream.Recv()
 	m.Require().NoError(err)

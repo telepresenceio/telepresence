@@ -41,8 +41,8 @@ import (
 	"github.com/datawire/dlib/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -75,7 +75,7 @@ type Cluster interface {
 	PackageHelmChart(ctx context.Context) (string, error)
 	GetValuesForHelm(ctx context.Context, values map[string]any, release bool) []string
 	GetSetArgsForHelm(ctx context.Context, values map[string]any, release bool) []string
-	GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error)
+	GetK8SCluster(ctx context.Context, context, managerNamespace string) (*k8s.Cluster, error)
 	TelepresenceHelmInstallOK(ctx context.Context, upgrade bool, args ...string) string
 	TelepresenceHelmInstall(ctx context.Context, upgrade bool, args ...string) (string, error)
 	UserdPProf() uint16
@@ -429,9 +429,12 @@ func PodCreateTimeout(c context.Context) time.Duration {
 }
 
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
-	config := client.GetDefaultConfigFunc()
-	config.LogLevels().UserDaemon = logrus.DebugLevel
-	config.LogLevels().RootDaemon = logrus.DebugLevel
+	config := client.GetDefaultConfig()
+	logLevels := config.LogLevels()
+	logLevels.CLI = logrus.DebugLevel
+	logLevels.UserDaemon = logrus.DebugLevel
+	logLevels.RootDaemon = logrus.DebugLevel
+	logLevels.KubeAuthDaemon = logrus.DebugLevel
 
 	to := config.Timeouts()
 	to.PrivateClusterConnect = 60 * time.Second
@@ -717,7 +720,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}
 }
 
-func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace string) (context.Context, *k8s.Cluster, error) {
+func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace string) (*k8s.Cluster, error) {
 	_ = os.Setenv("KUBECONFIG", KubeConfig(ctx))
 	flags := map[string]string{
 		"namespace": managerNamespace,
@@ -725,16 +728,12 @@ func (s *cluster) GetK8SCluster(ctx context.Context, context, managerNamespace s
 	if context != "" {
 		flags["context"] = context
 	}
-	ctx, cfgAndFlags, err := client.NewKubeconfig(ctx, flags, managerNamespace)
+	cfgAndFlags, err := k8s.NewKubeconfig(ctx, false, flags, managerNamespace, nil)
 	if err != nil {
-		return ctx, nil, err
+		return nil, err
 	}
 
-	ctx, kc, err := k8s.NewCluster(ctx, cfgAndFlags, nil)
-	if err != nil {
-		return ctx, nil, err
-	}
-	return kc.WithJoinedClientSetInterface(ctx), kc, nil
+	return k8s.NewCluster(cfgAndFlags, nil)
 }
 
 func KubeConfig(ctx context.Context) string {

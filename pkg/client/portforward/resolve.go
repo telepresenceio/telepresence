@@ -53,11 +53,11 @@ func ResolveServiceAndPort(ctx context.Context, name, namespace string, portName
 	}, nil
 }
 
-func resolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa *podAddress, err error) {
+func ResolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa *PodAddress, err error) {
 	// Get the service.
-	pa = new(podAddress)
-	pa.fromSvc = true
-	pa.namespace = namespace
+	pa = new(PodAddress)
+	pa.FromSvc = true
+	pa.Namespace = namespace
 	svcObj, err := k8sapi.GetService(ctx, name, namespace)
 	if err != nil {
 		return pa, err
@@ -89,9 +89,10 @@ func resolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa 
 	if err != nil {
 		return pa, fmt.Errorf("cannot find first pod for %s.%s: %v", name, namespace, err)
 	}
-	pa.name = pod.Name
-	pa.port, err = containerPortNumber(pod, svcPort.TargetPort)
-	pa.podID = pod.UID
+	pa.Name = pod.Name
+	pa.Port, err = containerPortNumber(pod, svcPort.TargetPort)
+	pa.Proto = types.FromK8sProtocol(svcPort.Protocol)
+	pa.PodID = pod.UID
 	if err != nil {
 		return pa, fmt.Errorf("cannot find first container port %s.%s: %v", pod.Name, pod.Namespace, err)
 	}
@@ -140,7 +141,7 @@ func containerPortNumber(pod *core.Pod, port intstr.IntOrString) (uint16, error)
 	return 0, fmt.Errorf("pod '%s' does not have a port named '%s'", pod.Name, name)
 }
 
-func resolve(ctx context.Context, addr string) (pa *podAddress, err error) {
+func resolve(ctx context.Context, addr string) (pa *PodAddress, err error) {
 	kind, name, namespace, port, podID, err := parseAddr(addr)
 	if err != nil {
 		dlog.Errorf(ctx, "cannot resolve addr %s: %v", addr, err)
@@ -149,7 +150,7 @@ func resolve(ctx context.Context, addr string) (pa *podAddress, err error) {
 
 	if kind == "svc" {
 		// Get the service.
-		return resolveSvcToPod(ctx, name, namespace, port)
+		return ResolveSvcToPod(ctx, name, namespace, port)
 	}
 
 	var pn uint16
@@ -157,7 +158,7 @@ func resolve(ctx context.Context, addr string) (pa *podAddress, err error) {
 		pn = uint16(p)
 	}
 	if pn != 0 && podID != "" {
-		return &podAddress{name: name, namespace: namespace, port: pn, podID: podID}, nil
+		return &PodAddress{Name: name, Namespace: namespace, Port: pn, PodID: podID}, nil
 	}
 
 	// Get the pod.
@@ -172,11 +173,11 @@ func resolve(ctx context.Context, addr string) (pa *podAddress, err error) {
 			return pa, err
 		}
 	}
-	return &podAddress{
-		name:      pod.Name,
-		namespace: pod.Namespace,
-		port:      pn,
-		podID:     pod.UID,
+	return &PodAddress{
+		Name:      pod.Name,
+		Namespace: pod.Namespace,
+		Port:      pn,
+		PodID:     pod.UID,
 	}, nil
 }
 

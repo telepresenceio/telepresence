@@ -27,9 +27,8 @@ type ftpMounter struct {
 
 type fuseFtpMgr struct{}
 
-type FuseFTPManager interface {
-	DeferInit(ctx context.Context) error
-	GetFuseFTPClient(ctx context.Context) rpc.FuseFTPClient
+func (s *fuseFtpMgr) LinkedFTP() bool {
+	return true
 }
 
 func NewFuseFTPManager() FuseFTPManager {

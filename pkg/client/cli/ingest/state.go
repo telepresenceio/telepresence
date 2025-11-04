@@ -2,7 +2,6 @@ package ingest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"runtime"
@@ -20,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -132,11 +132,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	progress.Working(ctx, types.EngagementTypeIngest.Working())
 	ii, err := ud.Ingest(ctx, ir)
 	if err != nil {
-		switch grpcStatus.Code(err) {
-		case grpcCodes.AlreadyExists, grpcCodes.NotFound, grpcCodes.Unimplemented, grpcCodes.FailedPrecondition:
-			err = errors.New(grpcStatus.Convert(err).Message())
-		}
-		return false, progress.MaybeWriteError(ctx, err)
+		return false, progress.MaybeWriteError(ctx, grpc.FromGRPC(err))
 	}
 
 	if s.MountFlags.Enabled {
@@ -186,6 +182,7 @@ func (s *state) leave(ctx context.Context) error {
 		err = nil
 	}
 	if err != nil {
+		err = grpc.FromGRPC(err)
 		err = progress.MaybeWriteError(ctx, err)
 	} else {
 		progress.Done(ctx, "Ended ingest")

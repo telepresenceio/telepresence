@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 )
 
 const defaultDuration = 30 * time.Minute
@@ -83,5 +84,5 @@ func (lls *logLevelCommand) setTempLogLevel(cmd *cobra.Command, args []string) e
 	ctx := cmd.Context()
 	userD := daemon.MustGetUserClient(ctx)
 	_, err := userD.SetLogLevel(ctx, rq)
-	return err
+	return grpc.FromGRPC(err)
 }

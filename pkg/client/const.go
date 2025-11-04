@@ -13,7 +13,10 @@ import (
 
 const (
 	// APIVersion is the API version of the daemon and connector API.
-	APIVersion = 3
+	APIVersion         = 3
+	UserDaemonName     = "userd"
+	RootDaemonName     = "rootd"
+	KubeAuthDaemonName = "kubeauthd"
 )
 
 // DisplayVersion returns a printable version for `telepresence`.
@@ -31,14 +34,20 @@ func GetExe(ctx context.Context) string {
 	return exeName
 }
 
+func isDaemonName(name string) bool {
+	switch name {
+	case UserDaemonName, RootDaemonName, KubeAuthDaemonName:
+		return true
+	default:
+		return false
+	}
+}
+
 func IsDaemon() bool {
-	const fg = "-foreground"
-	a := os.Args
-	return len(a) > 1 && strings.HasSuffix(a[1], fg) || len(a) > 2 && strings.HasSuffix(a[2], fg) && a[1] == "help"
+	return isDaemonName(ProcessName())
 }
 
 var ProcessName = func() string { //nolint:gochecknoglobals // extension point
-	const fg = "-foreground"
 	a := os.Args
 	var pn string
 	switch {
@@ -52,5 +61,5 @@ var ProcessName = func() string { //nolint:gochecknoglobals // extension point
 			pn = strings.TrimSuffix(pn, ".exe")
 		}
 	}
-	return strings.TrimSuffix(pn, fg)
+	return pn
 }
