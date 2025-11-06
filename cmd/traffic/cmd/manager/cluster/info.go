@@ -13,15 +13,15 @@ import (
 
 	"github.com/blang/semver/v4"
 	auth "k8s.io/api/authorization/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/informers"
-	v1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	typedCore "k8s.io/client-go/kubernetes/typed/core/v1"
 
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -116,7 +116,7 @@ func NewInfo(ctx context.Context) (Info, error) {
 	dlog.Infof(ctx, "Enabled support for the following workload kinds: %v", env.EnabledWorkloadKinds)
 
 	if k8sVersion.GE(semver.MustParse("1.33.0")) { // The ServiceCIDRs() API was introduced in version 1.33
-		svcCIDRs, err := ki.NetworkingV1().ServiceCIDRs().List(ctx, metav1.ListOptions{})
+		svcCIDRs, err := ki.NetworkingV1().ServiceCIDRs().List(ctx, meta.ListOptions{})
 		if err != nil {
 			dlog.Errorf(ctx, "error listing service CIDRs: %v", err)
 		} else {
@@ -141,20 +141,20 @@ func NewInfo(ctx context.Context) (Info, error) {
 		//   https://stackoverflow.com/questions/44190607/how-do-you-find-the-cluster-service-cidr-of-a-kubernetes-cluster
 		// This requires an additional permission to create a service, which the traffic-manager
 		// should have.
-		svc := corev1.Service{
-			TypeMeta: metav1.TypeMeta{
+		svc := core.Service{
+			TypeMeta: meta.TypeMeta{
 				Kind: "Service",
 			},
-			ObjectMeta: metav1.ObjectMeta{
+			ObjectMeta: meta.ObjectMeta{
 				Namespace: env.ManagerNamespace,
 				Name:      "t2-tst-dummy",
 			},
-			Spec: corev1.ServiceSpec{
-				Ports:     []corev1.ServicePort{{Port: 443}},
+			Spec: core.ServiceSpec{
+				Ports:     []core.ServicePort{{Port: 443}},
 				ClusterIP: dummyIP,
 			},
 		}
-		if _, err = client.Services(env.ManagerNamespace).Create(ctx, &svc, metav1.CreateOptions{}); err != nil {
+		if _, err = client.Services(env.ManagerNamespace).Create(ctx, &svc, meta.CreateOptions{}); err != nil {
 			svcCIDRrx := regexp.MustCompile(`range of valid IPs is (.*)$`)
 			if match := svcCIDRrx.FindStringSubmatch(err.Error()); match != nil {
 				if pfx, err := netip.ParsePrefix(match[1]); err != nil {
@@ -235,15 +235,13 @@ func NewInfo(ctx context.Context) (Info, error) {
 
 	switch {
 	case strings.EqualFold("auto", podCIDRStrategy):
-		go func() {
-			if !oi.watchNodeSubnets(ctx, false) {
-				oi.watchPodSubnets(ctx)
-			}
-		}()
+		if !oi.watchNodeSubnets(ctx, false) {
+			oi.watchPodSubnets(ctx)
+		}
 	case strings.EqualFold("nodePodCIDRs", podCIDRStrategy):
-		go oi.watchNodeSubnets(ctx, true)
+		oi.watchNodeSubnets(ctx, true)
 	case strings.EqualFold("coverPodIPs", podCIDRStrategy):
-		go oi.watchPodSubnets(ctx)
+		oi.watchPodSubnets(ctx)
 	case strings.EqualFold("environment", podCIDRStrategy):
 		oi.setSubnetsFromEnv(ctx)
 	default:
@@ -338,9 +336,7 @@ func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {
 		return false
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	informerFactory := informers.NewSharedInformerFactory(k8sapi.GetK8sInterface(ctx), 0)
+	informerFactory := informer.GetK8sFactory(ctx, "")
 	nodeController := informerFactory.Core().V1().Nodes()
 	nodeLister := nodeController.Lister()
 	nodeInformer := nodeController.Informer()
@@ -362,12 +358,12 @@ func (oi *info) watchNodeSubnets(ctx context.Context, mustSucceed bool) bool {
 		return false
 	}
 	dlog.Infof(ctx, "Deriving subnets from podCIRs of nodes")
-	oi.watchSubnets(ctx, retriever)
+	go oi.watchSubnets(ctx, retriever)
 	return true
 }
 
-func getInjectorSvcIP(ctx context.Context, env *managerutil.Env, client v1.CoreV1Interface) ([]byte, int32, error) {
-	sc, err := client.Services(env.ManagerNamespace).Get(ctx, env.AgentInjectorName, metav1.GetOptions{})
+func getInjectorSvcIP(ctx context.Context, env *managerutil.Env, client typedCore.CoreV1Interface) ([]byte, int32, error) {
+	sc, err := client.Services(env.ManagerNamespace).Get(ctx, env.AgentInjectorName, meta.GetOptions{})
 	if err != nil {
 		return nil, 0, err
 	}
@@ -393,7 +389,7 @@ func (oi *info) watchPodSubnets(ctx context.Context) {
 		return
 	}
 	dlog.Infof(ctx, "Deriving subnets from IPs of pods")
-	oi.watchSubnets(ctx, retriever)
+	go oi.watchSubnets(ctx, retriever)
 }
 
 func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {

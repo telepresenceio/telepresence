@@ -505,6 +505,10 @@ properties:
         description: The type of service for the traffic-manager
         type: string
 
+  startupProbe:
+    description: Define startupProbe for the Traffic Manger.
+    $ref: "#/$defs/probe"
+
   telepresenceAPI:
     type: object
     additionalProperties: false

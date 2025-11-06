@@ -271,7 +271,16 @@ spec:
           {{- end }}
           {{- with .livenessProbe }}
           livenessProbe:
-            {{- toYaml . | nindent 12 }}
+            {{ toYaml . | nindent 12 }}
+          {{- end }}
+          startupProbe:
+          {{- with .startupProbe }}
+            {{ toYaml . | nindent 12 }}
+          {{- else }}
+            grpc:
+              port: {{ .apiPort }}
+            periodSeconds: 2
+            failureThreshold: 5
           {{- end }}
           {{- with .readinessProbe }}
           readinessProbe:
