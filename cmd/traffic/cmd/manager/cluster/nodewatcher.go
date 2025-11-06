@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math"
 	"net/netip"
-	"strings"
 	"sync"
 	"time"
 
@@ -93,7 +92,7 @@ func (w *nodeWatcher) changeNotifier(ctx context.Context, updateSubnets func(set
 		}
 		w.lock.Unlock()
 		if doSend {
-			dlog.Debugf(ctx, "nodeWatcher calling updateSubnets with %v", w.subnets)
+			dlog.Debugf(ctx, "nodeWatcher calling updateSubnets with %v", lastSent)
 			updateSubnets(lastSent)
 		}
 	}
@@ -220,44 +219,23 @@ nextN:
 }
 
 // compareNodeConditions compares two NodeCondition objects and returns an integer indicating their
-// relative order based no transition time (last is highest), type (Ready is higher), and status (true is higher).
-//
-// If both conditions are nil, they are considered equal.
-//
-// If one condition is nil, it is considered less than the other.
+// relative order based on transition time (later is higher) and status (true is higher).
 func compareNodeConditions(a, b *core.NodeCondition) int {
-	switch {
-	case a == nil && b == nil:
-		return 0
-	case a == nil:
-		return -1
-	case b == nil:
-		return 1
-	}
-
 	cmp := a.LastTransitionTime.Compare(b.LastTransitionTime.Time)
-	switch {
-	case cmp != 0:
+	if cmp != 0 {
 		return cmp
-	case a.Type == b.Type:
-		switch a.Status {
-		case b.Status:
-			return 0
-		case core.ConditionTrue:
-			return 1
-		default:
-			return -1
-		}
-	case a.Type == core.NodeReady:
+	}
+	switch a.Status {
+	case b.Status:
+		return 0
+	case core.ConditionTrue:
 		return 1
-	case b.Type == core.NodeReady:
-		return -1
 	default:
-		return strings.Compare(string(a.Type), string(b.Type))
+		return -1
 	}
 }
 
-// nodeReady returns true if the last state transition resulted in a Ready condition.
+// nodeReady returns true if the last state transition to a Ready condition is true.
 func nodeReady(node *core.Node) bool {
 	if node == nil {
 		return false
@@ -266,11 +244,11 @@ func nodeReady(node *core.Node) bool {
 	conds := node.Status.Conditions
 	for i := range conds {
 		cond := &conds[i]
-		if compareNodeConditions(cond, lastCond) > 0 {
+		if cond.Type == core.NodeReady && (lastCond == nil || compareNodeConditions(cond, lastCond) > 0) {
 			lastCond = cond
 		}
 	}
-	return lastCond != nil && lastCond.Type == core.NodeReady && lastCond.Status == core.ConditionTrue
+	return lastCond != nil && lastCond.Status == core.ConditionTrue
 }
 
 func nodeSubnets(ctx context.Context, node *core.Node) []netip.Prefix {
