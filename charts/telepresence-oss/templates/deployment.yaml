@@ -6,12 +6,12 @@ metadata:
   name: {{ include "traffic-manager.name" $ }}
   namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
-    {{- include "telepresence.labels" $ | nindent 4 }}
+    {{ include "telepresence.labels" $ | nindent 4 }}
 spec:
   replicas: {{ .replicaCount }}
   selector:
     matchLabels:
-      {{- include "telepresence.selectorLabels" $ | nindent 6 }}
+      {{ include "telepresence.selectorLabels" $ | nindent 6 }}
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -21,27 +21,27 @@ spec:
     metadata:
     {{- with .podAnnotations }}
       annotations:
-        {{- toYaml . | nindent 8 }}
+        {{ toYaml . | nindent 8 }}
     {{- end }}
       labels:
-        {{- include "telepresence.selectorLabels" $ | nindent 8 }}
+        {{ include "telepresence.selectorLabels" $ | nindent 8 }}
     {{- with .podLabels }}
-        {{- toYaml . | nindent 8 }}
+        {{ toYaml . | nindent 8 }}
     {{- end }}
     spec:
       {{- with .image.imagePullSecrets }}
       imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
+        {{ toYaml . | nindent 8 }}
       {{- end }}
       securityContext:
-        {{- toYaml .podSecurityContext | nindent 8 }}
+        {{ toYaml .podSecurityContext | nindent 8 }}
       {{- if .hostNetwork }}
       hostNetwork: true
       {{- end }}
       containers:
         - name: {{ include "traffic-manager.name" $ }}
           securityContext:
-            {{- toYaml .securityContext | nindent 12 }}
+            {{ toYaml .securityContext | nindent 12 }}
           {{- with .image }}
           image: "{{ .registry }}/{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .pullPolicy }}
@@ -275,11 +275,11 @@ spec:
           {{- end }}
           {{- with .readinessProbe }}
           readinessProbe:
-            {{- toYaml . | nindent 12 }}
+            {{ toYaml . | nindent 12 }}
           {{- end }}
           {{- with .resources }}
           resources:
-            {{- toYaml . | nindent 12 }}
+            {{ toYaml . | nindent 12 }}
           {{- end }}
       {{- if eq .agentInjector.certificate.accessMethod "mount" }}
           volumeMounts:
@@ -294,15 +294,15 @@ spec:
       {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
+        {{ toYaml . | nindent 8 }}
       {{- end }}
       {{- with .affinity }}
       affinity:
-        {{- toYaml . | nindent 8 }}
+        {{ toYaml . | nindent 8 }}
       {{- end }}
       {{- with .tolerations }}
       tolerations:
-        {{- toYaml . | nindent 8 }}
+        {{ toYaml . | nindent 8 }}
       {{- end }}
       {{- with .priorityClassName }}
       priorityClassName: {{ . | quote }}
@@ -316,7 +316,6 @@ spec:
             secretName: {{ .agentInjector.secret.name }}
         {{- end }}
   {{- end }}
-      serviceAccount: traffic-manager
       serviceAccountName: traffic-manager
 {{- end }}
 {{- end }}
