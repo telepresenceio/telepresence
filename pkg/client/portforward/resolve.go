@@ -100,7 +100,7 @@ func ResolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa 
 			}
 		}
 	}
-	return pa, fmt.Errorf("cannot find pod for service %s.%s: %v", name, namespace, err)
+	return pa, fmt.Errorf("no running pods with accessible ports found for service %s.%s", name, namespace)
 }
 
 func servicePortByName(svc *core.Service, name string, proto core.Protocol) (*core.ServicePort, error) {
