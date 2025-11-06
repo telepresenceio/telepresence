@@ -21,7 +21,7 @@ following Free and Open Source software:
     github.com/chai2010/gettext-go                                 v1.0.3                                3-clause BSD license
     github.com/clipperhouse/uax29/v2                               v2.2.0                                MIT license
     github.com/compose-spec/compose-go/v2                          v2.9.0                                Apache License 2.0, MIT license
-    github.com/containerd/containerd                               v1.7.28                               Apache License 2.0
+    github.com/containerd/containerd                               v1.7.29                               Apache License 2.0
     github.com/containerd/errdefs                                  v1.0.0                                Apache License 2.0
     github.com/containerd/errdefs/pkg                              v0.3.0                                Apache License 2.0
     github.com/containerd/log                                      v0.1.0                                Apache License 2.0
