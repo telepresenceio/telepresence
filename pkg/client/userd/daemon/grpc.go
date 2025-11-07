@@ -102,7 +102,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	if err != nil {
 		sessionCancel()
 		if s.rootSessionInProc {
-			s.quit()
+			s.quit(true)
 		}
 		dlog.Errorf(ctx, "Failed to obtain kubeconfig: %v", err)
 		return result, err
@@ -131,7 +131,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		sessionCancel()
 		if s.rootSessionInProc {
 			// Simplified session management. The daemon handles one session, then exits.
-			s.quit()
+			s.quit(true)
 		}
 		return nil, err
 	}
@@ -154,7 +154,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		close(sessionRunning)
 		if s.rootSessionInProc {
 			// Simplified session management. The daemon handles one session, then exits.
-			s.quit()
+			s.quit(false)
 		}
 		s.clearSession(session)
 	}()
@@ -356,7 +356,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 
 func (s *service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
 	s.cancelSession(ctx, false)
-	s.quit()
+	s.quit(false)
 	_ = s.withRootDaemon(context.WithoutCancel(ctx), func(ctx context.Context, rd daemon.DaemonClient) error {
 		dlog.Debug(ctx, "Telling root daemon to Quit")
 		_, err := rd.Quit(ctx, ex)

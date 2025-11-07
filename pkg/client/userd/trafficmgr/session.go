@@ -157,7 +157,7 @@ func NewSession(
 
 	cluster, err := k8s.ConnectCluster(cr, config)
 	if err != nil {
-		dlog.Errorf(cluster, "unable to track k8s cluster: %+v", err)
+		dlog.Errorf(config, "unable to track k8s cluster: %+v", err)
 		return nil, nil, err
 	}
 	dlog.Infof(cluster, "Connected to context %s, namespace %s (%s)", cluster.KubeContext, cluster.Namespace, cluster.Server)
