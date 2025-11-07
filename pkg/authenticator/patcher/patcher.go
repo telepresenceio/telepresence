@@ -13,7 +13,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -33,7 +32,7 @@ const (
 // also passed a pointer to the minified config that will be stored in a file so that it
 // has a chance to modify it.
 type (
-	AddressProvider func(configFiles []string) (string, string, error)
+	AddressProvider func(configFiles []string) (executable, addr, configFile string, err error)
 	Patcher         func(*clientcmdapi.Config) error
 )
 
@@ -78,11 +77,11 @@ func CreateExternalKubeConfig(
 	}
 
 	if needsStubbedExec(&config) {
-		executable, addr, err := authAddressFunc(configFiles)
+		executable, addr, configFile, err := authAddressFunc(configFiles)
 		if err != nil {
 			return nil, err
 		}
-		if err = replaceAuthExecWithStub(ctx, &config, executable, addr); err != nil {
+		if err = replaceAuthExecWithStub(ctx, &config, executable, addr, configFile); err != nil {
 			return nil, err
 		}
 	}
@@ -124,7 +123,7 @@ func CreateExternalKubeConfig(
 
 // replaceAuthExecWithStub goes through the kubeconfig and replaces all uses of the Exec auth method by
 // an invocation of the stub binary.
-func replaceAuthExecWithStub(ctx context.Context, rawConfig *clientcmdapi.Config, executable, address string) error {
+func replaceAuthExecWithStub(ctx context.Context, rawConfig *clientcmdapi.Config, executable, address, configFile string) error {
 	for contextName, kubeContext := range rawConfig.Contexts {
 		// Find related Auth.
 		authInfo, ok := rawConfig.AuthInfos[kubeContext.AuthInfo]
@@ -142,7 +141,7 @@ func replaceAuthExecWithStub(ctx context.Context, rawConfig *clientcmdapi.Config
 			InteractiveMode: clientcmdapi.NeverExecInteractiveMode,
 			APIVersion:      authInfo.Exec.APIVersion,
 			Command:         executable,
-			Args:            []string{kubeConfigStubSubCommands, "--" + global.FlagConfig, client.GetConfigFile(ctx), contextName, address},
+			Args:            []string{kubeConfigStubSubCommands, "--" + global.FlagConfig, configFile, contextName, address},
 		}
 	}
 	return nil

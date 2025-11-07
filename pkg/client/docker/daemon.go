@@ -345,11 +345,11 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 		return err
 	}
 	config, err := patcher.CreateExternalKubeConfig(ctx, loader, cr.KubeFlags["context"],
-		func(configFiles []string) (string, string, error) {
+		func(configFiles []string) (string, string, string, error) {
 			port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
 			if err != nil {
 				dlog.Errorf(ctx, "failed to start k8s authenticator service: %v", err)
-				return "", "", err
+				return "", "", "", err
 			}
 
 			// The telepresence command that will run in order to retrieve the credentials from the authenticator service
@@ -361,11 +361,11 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 			if kubeAuthHost == "" {
 				r, err := routing.DefaultRoute(ctx)
 				if err != nil {
-					return "", "", err
+					return "", "", "", err
 				}
 				kubeAuthHost = r.LocalIP.String()
 			}
-			return "telepresence", iputil.JoinHostPort(kubeAuthHost, port), nil
+			return "telepresence", iputil.JoinHostPort(kubeAuthHost, port), filepath.Join(DockerTpConfig, filepath.Base(client.GetConfigFile(ctx))), nil
 		},
 		func(config *api.Config) error {
 			return handleLocalK8s(ctx, daemonID, config)
@@ -653,7 +653,7 @@ func detectControlPlane(ctx context.Context, cli dockerClient.APIClient, cns []*
 
 	switch len(candidates) {
 	case 0:
-		return ap, nn
+		break
 	case 1:
 		c := candidates[0]
 		dlog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q", c.container.Name, c.localAddr, hostAddr, c.networkName)
@@ -670,6 +670,7 @@ func detectControlPlane(ctx context.Context, cli dockerClient.APIClient, cns []*
 			}
 		}
 	}
+	dlog.Debugf(ctx, "found no control-plane for host address %s, container %s, container port %d", hostAddr, ncn.Name, port)
 	return ap, nn
 }
 

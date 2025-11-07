@@ -109,7 +109,8 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 		if useDocker {
 			args = []string{"--docker"}
 		}
-		s.TelepresenceConnect(ctx, args...)
+		_, err = s.TelepresenceTryConnect(ctx, args...)
+		rq.NoError(err)
 		defer itest.TelepresenceQuitOk(ctx)
 
 		// Scan the log from its previous end. It should now contain a message indicating that the gRPC service that
