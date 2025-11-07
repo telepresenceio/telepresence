@@ -15,6 +15,21 @@ A new Helm chart configuration option `intercept.allowGlobalIntercepts` has been
   </Body>
 </Note>
 <Note>
+	<Title type="feature">Enhanced Traffic Manager Startup Reliability</Title>
+	<Body>
+The Traffic Manager deployment now includes a `startupProbe` that accurately detects when the service is fully initialized and
+ready to handle traffic. This enhancement brings the following benefits:
+
+- **Prevents Premature Traffic Routing**: The manager only reports itself as ready after all configurations are loaded,
+eliminating potential race conditions
+- **Smoother Upgrades and Rollouts**: Deployment orchestration tools can reliably determine when the Traffic Manager is
+operational, improving overall installation stability
+
+This change is particularly beneficial in large clusters or complex networking environments where initialization may take longer
+than expected.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Support customizable daemon log file paths</Title>
 	<Body>
 Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile` that denotes a custom log file location or redirect of the log output to stdout/stderr. Two new log-level configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level controls beyond just `userDaemon` and `rootDaemon`.

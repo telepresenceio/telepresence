@@ -8,6 +8,21 @@
 A new Helm chart configuration option `intercept.allowGlobalIntercepts` has been added to control whether global TCP/UDP intercepts are permitted. When set to `false`, only HTTP intercepts with header or path filters are allowed, preventing users from creating global intercepts that block other developers from intercepting the same port. This is particularly useful in shared development environments where multiple developers need to work on the same service simultaneously. The setting defaults to `true` to maintain full backward compatibility with existing deployments. When a user attempts to create a global intercept while the setting is disabled, they receive a helpful error message suggesting the use of `--http-header` or `--http-path-*` flags for HTTP-filtered intercepts.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Enhanced Traffic Manager Startup Reliability</div></div>
+<div style="margin-left: 15px">
+
+The Traffic Manager deployment now includes a `startupProbe` that accurately detects when the service is fully initialized and
+ready to handle traffic. This enhancement brings the following benefits:
+
+- **Prevents Premature Traffic Routing**: The manager only reports itself as ready after all configurations are loaded,
+eliminating potential race conditions
+- **Smoother Upgrades and Rollouts**: Deployment orchestration tools can reliably determine when the Traffic Manager is
+operational, improving overall installation stability
+
+This change is particularly beneficial in large clusters or complex networking environments where initialization may take longer
+than expected.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Support customizable daemon log file paths</div></div>
 <div style="margin-left: 15px">
 

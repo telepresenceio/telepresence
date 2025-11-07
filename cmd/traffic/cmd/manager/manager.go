@@ -146,8 +146,6 @@ func MainWithEnv(ctx context.Context) (err error) {
 	}
 	watcher.SetConfigured()
 
-	// Serve HTTP (including gRPC)
-	g.Go("httpd", mgr.serveHTTP)
 	g.Go("config", namespaces.Listen)
 	g.Go("prometheus", mgr.servePrometheus)
 
@@ -165,6 +163,10 @@ func MainWithEnv(ctx context.Context) (err error) {
 		//  otherwise everything else is passively synced which is ok if we don't need to clean up idle agents
 		g.Go("configmap-updater", mgr.runUpdateTrafficManagerConfigMapLoop)
 	}
+
+	// Serve HTTP (including gRPC). The gRPC server is started last so that its readiness probe can be used to determine when the
+	// traffic-manager is fully configured and ready to serve traffic.
+	g.Go("httpd", mgr.serveHTTP)
 
 	// Wait for exit
 	return g.Wait()
@@ -304,7 +306,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 	}
 	svc := server.New(ctx, opts...)
 	s.RegisterServers(svc)
-	dlog.Debugf(ctx, "Serving client connections using idle TTL %s", env.ClientConnectionTTL)
+	dlog.Debugf(ctx, "Serving client connections on %s using idle TTL %s", l.Addr(), env.ClientConnectionTTL)
 	return server.Serve(ctx, svc, l)
 }
 

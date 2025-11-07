@@ -2,13 +2,15 @@ package cluster
 
 import (
 	"context"
+	"fmt"
+	"math"
 	"net/netip"
 	"sync"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
+	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	licorev1 "k8s.io/client-go/listers/core/v1"
+	listersCore "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/datawire/dlib/dlog"
@@ -17,37 +19,58 @@ import (
 )
 
 type nodeWatcher struct {
-	lister   licorev1.NodeLister
 	informer cache.SharedIndexInformer
 	subnets  subnet.Set
-	changed  time.Time
+	changed  chan struct{}
 	lock     sync.Mutex // Protects all access to subnets
 }
 
-func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer cache.SharedIndexInformer) (*nodeWatcher, error) {
-	w := &nodeWatcher{
-		lister:   lister,
-		informer: informer,
-		subnets:  make(subnet.Set),
+func newNodeWatcher(ctx context.Context, lister listersCore.NodeLister, informer cache.SharedIndexInformer) (*nodeWatcher, error) {
+	nodes, err := lister.List(labels.Everything())
+	if err != nil {
+		dlog.Errorf(ctx, "unable to list nodes: %v", err)
+		return nil, err
 	}
-	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	subnets := make(subnet.Set)
+	podIP := managerutil.GetEnv(ctx).PodIP
+	viable := false
+	dlog.Infof(ctx, "Scanning %d nodes", len(nodes))
+	for _, node := range nodes {
+		for _, sn := range nodeSubnets(ctx, node) {
+			if sn.Contains(podIP) {
+				viable = true
+			}
+			subnets.Add(sn)
+		}
+	}
+	if !viable {
+		return nil, fmt.Errorf("no node subnets contain the traffic manager pod IP %q", podIP)
+	}
+	dlog.Infof(ctx, "Found %d subnets", len(subnets))
+	w := &nodeWatcher{
+		informer: informer,
+		subnets:  subnets,
+		changed:  make(chan struct{}, 10),
+	}
+
+	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			if node, ok := obj.(*corev1.Node); ok {
+			if node, ok := obj.(*core.Node); ok {
 				w.onNodeAdded(ctx, node)
 			}
 		},
 		DeleteFunc: func(obj any) {
-			if node, ok := obj.(*corev1.Node); ok {
+			if node, ok := obj.(*core.Node); ok {
 				w.onNodeDeleted(ctx, node)
 			} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
-				if node, ok := dfsu.Obj.(*corev1.Node); ok {
+				if node, ok := dfsu.Obj.(*core.Node); ok {
 					w.onNodeDeleted(ctx, node)
 				}
 			}
 		},
 		UpdateFunc: func(oldObj, newObj any) {
-			if oldNode, ok := oldObj.(*corev1.Node); ok {
-				if newNode, ok := newObj.(*corev1.Node); ok {
+			if oldNode, ok := oldObj.(*core.Node); ok {
+				if newNode, ok := newObj.(*core.Node); ok {
 					w.onNodeUpdated(ctx, oldNode, newNode)
 				}
 			}
@@ -60,92 +83,53 @@ func newNodeWatcher(ctx context.Context, lister licorev1.NodeLister, informer ca
 }
 
 func (w *nodeWatcher) changeNotifier(ctx context.Context, updateSubnets func(set subnet.Set)) {
-	// Check for changes every 5 second
-	const nodeReviewPeriod = 5 * time.Second
+	var lastSent subnet.Set
+	sendUpdate := func() {
+		w.lock.Lock()
+		doSend := !w.subnets.Equals(lastSent)
+		if doSend {
+			lastSent = w.subnets.Clone()
+		}
+		w.lock.Unlock()
+		if doSend {
+			dlog.Debugf(ctx, "nodeWatcher calling updateSubnets with %v", lastSent)
+			updateSubnets(lastSent)
+		}
+	}
 
-	// The time we wait from when the first change arrived until we actually do something. This
-	// so that more changes can arrive (hopefully all of them) before everything is recalculated.
-	const nodeCollectTime = 3 * time.Second
+	// Send an initial update.
+	sendUpdate()
 
-	ticker := time.NewTicker(nodeReviewPeriod)
-	defer ticker.Stop()
-
+	// And then send updates with a short delay every time a change arrives.
+	const nodeCollectTime = 100 * time.Millisecond
+	triggerSend := time.AfterFunc(math.MaxInt64, sendUpdate)
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-w.changed:
+			triggerSend.Reset(nodeCollectTime)
 		}
-		w.lock.Lock()
-		if w.changed.IsZero() || time.Since(w.changed) < nodeCollectTime {
-			w.lock.Unlock()
-			continue
-		}
-		w.changed = time.Time{}
-		subnets := w.subnets.Clone()
-		w.lock.Unlock()
-		dlog.Debugf(ctx, "nodeWatcher calling updateSubnets with %v", subnets)
-		updateSubnets(subnets)
 	}
 }
 
 func (w *nodeWatcher) viable(ctx context.Context) bool {
-	// Create the initial snapshot
-	w.lock.Lock()
-	defer w.lock.Unlock()
-	if len(w.subnets) > 0 {
-		return true
-	}
-	if !w.changed.IsZero() {
-		// Tested before but didn't produce anything
-		return false
-	}
-
-	nodes, err := w.lister.List(labels.Everything())
-	if err != nil {
-		dlog.Errorf(ctx, "unable to list nodes: %v", err)
-		return false
-	}
-
-	changed := false
-	dlog.Infof(ctx, "Scanning %d nodes", len(nodes))
-	for _, node := range nodes {
-		if w.addLocked(nodeSubnets(ctx, node)) {
-			changed = true
-		}
-	}
-	w.changed = time.Now()
-	if changed {
-		// Don't consider the node subnets viable unless they contain the IP Of the traffic manager pod.
-		podIP := managerutil.GetEnv(ctx).PodIP
-		w.subnets.AppendSortedTo(nil)
-		for _, sn := range w.subnets.AppendSortedTo(nil) {
-			if sn.Contains(podIP) {
-				dlog.Infof(ctx, "Found %d subnets", len(w.subnets))
-				return true
-			}
-		}
-		w.subnets = make(subnet.Set)
-		dlog.Errorf(ctx, "no node subnet contains traffic-manager IP %s", podIP)
-	} else {
-		dlog.Info(ctx, "No subnets found")
-	}
-	return false
+	return true
 }
 
-func (w *nodeWatcher) onNodeAdded(ctx context.Context, node *corev1.Node) {
+func (w *nodeWatcher) onNodeAdded(ctx context.Context, node *core.Node) {
 	if subnets := nodeSubnets(ctx, node); len(subnets) > 0 {
 		w.add(subnets)
 	}
 }
 
-func (w *nodeWatcher) onNodeDeleted(ctx context.Context, node *corev1.Node) {
+func (w *nodeWatcher) onNodeDeleted(ctx context.Context, node *core.Node) {
 	if subnets := nodeSubnets(ctx, node); len(subnets) > 0 {
 		w.drop(subnets)
 	}
 }
 
-func (w *nodeWatcher) onNodeUpdated(ctx context.Context, oldNode, newNode *corev1.Node) {
+func (w *nodeWatcher) onNodeUpdated(ctx context.Context, oldNode, newNode *core.Node) {
 	added, dropped := getSubnetsDelta(nodeSubnets(ctx, oldNode), nodeSubnets(ctx, newNode))
 	if len(added) > 0 {
 		if len(dropped) > 0 {
@@ -161,12 +145,7 @@ func (w *nodeWatcher) onNodeUpdated(ctx context.Context, oldNode, newNode *corev
 func (w *nodeWatcher) add(subnets []netip.Prefix) {
 	w.lock.Lock()
 	if w.addLocked(subnets) {
-		// If this was the first change since the last subnet calculation, then store
-		// its timestamp. Subsequent changes will not change that timestamp until it's
-		// reset by the subnet compute worker.
-		if w.changed.IsZero() {
-			w.changed = time.Now()
-		}
+		w.changed <- struct{}{}
 	}
 	w.lock.Unlock()
 }
@@ -174,12 +153,7 @@ func (w *nodeWatcher) add(subnets []netip.Prefix) {
 func (w *nodeWatcher) drop(subnets []netip.Prefix) {
 	w.lock.Lock()
 	if w.dropLocked(subnets) {
-		// If this was the first change since the last subnet calculation, then store
-		// its timestamp. Subsequent changes will not change that timestamp until it's
-		// reset by the subnet compute worker.
-		if w.changed.IsZero() {
-			w.changed = time.Now()
-		}
+		w.changed <- struct{}{}
 	}
 	w.lock.Unlock()
 }
@@ -187,12 +161,7 @@ func (w *nodeWatcher) drop(subnets []netip.Prefix) {
 func (w *nodeWatcher) update(dropped, added []netip.Prefix) {
 	w.lock.Lock()
 	if w.dropLocked(dropped) || w.addLocked(added) {
-		// If this was the first change since the last subnet calculation, then store
-		// its timestamp. Subsequent changes will not change that timestamp until it's
-		// reset by the subnet compute worker.
-		if w.changed.IsZero() {
-			w.changed = time.Now()
-		}
+		w.changed <- struct{}{}
 	}
 	w.lock.Unlock()
 }
@@ -249,8 +218,41 @@ nextN:
 	return added, oldSubnets
 }
 
-func nodeSubnets(ctx context.Context, node *corev1.Node) []netip.Prefix {
+// compareNodeConditions compares two NodeCondition objects and returns an integer indicating their
+// relative order based on transition time (later is higher) and status (true is higher).
+func compareNodeConditions(a, b *core.NodeCondition) int {
+	cmp := a.LastTransitionTime.Compare(b.LastTransitionTime.Time)
+	if cmp != 0 {
+		return cmp
+	}
+	switch a.Status {
+	case b.Status:
+		return 0
+	case core.ConditionTrue:
+		return 1
+	default:
+		return -1
+	}
+}
+
+// nodeReady returns true if the last state transition to a Ready condition is true.
+func nodeReady(node *core.Node) bool {
 	if node == nil {
+		return false
+	}
+	var lastCond *core.NodeCondition
+	conds := node.Status.Conditions
+	for i := range conds {
+		cond := &conds[i]
+		if cond.Type == core.NodeReady && (lastCond == nil || compareNodeConditions(cond, lastCond) > 0) {
+			lastCond = cond
+		}
+	}
+	return lastCond != nil && lastCond.Status == core.ConditionTrue
+}
+
+func nodeSubnets(ctx context.Context, node *core.Node) []netip.Prefix {
+	if !nodeReady(node) {
 		return nil
 	}
 	spec := node.Spec

@@ -84,19 +84,23 @@ func ResolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa 
 	}()
 
 	sortBy := func(pods []*core.Pod) sort.Interface { return sort.Reverse(podutils.ActivePods(pods)) }
-	var pod *core.Pod
-	pod, err = getFirstPod(ctx, podNS, selector.String(), timeout, sortBy)
+	podList, err := getPods(ctx, podNS, selector.String(), timeout, sortBy)
 	if err != nil {
-		return pa, fmt.Errorf("cannot find first pod for %s.%s: %v", name, namespace, err)
+		return nil, err
 	}
-	pa.Name = pod.Name
-	pa.Port, err = containerPortNumber(pod, svcPort.TargetPort)
-	pa.Proto = types.FromK8sProtocol(svcPort.Protocol)
-	pa.PodID = pod.UID
-	if err != nil {
-		return pa, fmt.Errorf("cannot find first container port %s.%s: %v", pod.Name, pod.Namespace, err)
+	for _, p := range podList {
+		if p.Status.Phase == core.PodRunning {
+			containerPort, err := containerPortNumber(p, svcPort.TargetPort)
+			if err == nil {
+				pa.Name = p.Name
+				pa.Port = containerPort
+				pa.Proto = types.FromK8sProtocol(svcPort.Protocol)
+				pa.PodID = p.UID
+				return pa, nil
+			}
+		}
 	}
-	return pa, nil
+	return pa, fmt.Errorf("no running pods with accessible ports found for service %s.%s", name, namespace)
 }
 
 func servicePortByName(svc *core.Service, name string, proto core.Protocol) (*core.ServicePort, error) {
@@ -228,13 +232,4 @@ func getPods(ctx context.Context, namespace string, selector string, timeout tim
 		return nil, fmt.Errorf("%#v is not a pod event", event)
 	}
 	return []*core.Pod{po}, nil
-}
-
-// getFirstPod returns a pod matching the namespace and label selector.
-func getFirstPod(ctx context.Context, namespace string, selector string, timeout time.Duration, sortBy func([]*core.Pod) sort.Interface) (*core.Pod, error) {
-	podList, err := getPods(ctx, namespace, selector, timeout, sortBy)
-	if err != nil {
-		return nil, err
-	}
-	return podList[0], nil
 }

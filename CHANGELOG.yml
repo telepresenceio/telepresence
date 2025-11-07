@@ -40,6 +40,19 @@ items:
           message suggesting the use of `--http-header` or `--http-path-*` flags for HTTP-filtered intercepts.
         docs: reference/cluster_config#restricting_global_intercepts
       - type: feature
+        title: Enhanced Traffic Manager Startup Reliability
+        body: |-
+          The Traffic Manager deployment now includes a `startupProbe` that accurately detects when the service is fully initialized and
+          ready to handle traffic. This enhancement brings the following benefits:
+          
+          - **Prevents Premature Traffic Routing**: The manager only reports itself as ready after all configurations are loaded,
+          eliminating potential race conditions
+          - **Smoother Upgrades and Rollouts**: Deployment orchestration tools can reliably determine when the Traffic Manager is
+          operational, improving overall installation stability
+          
+          This change is particularly beneficial in large clusters or complex networking environments where initialization may take longer
+          than expected.
+      - type: feature
         title: Support customizable daemon log file paths
         body: >-
           Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile`

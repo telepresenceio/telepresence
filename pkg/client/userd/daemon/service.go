@@ -53,7 +53,7 @@ type service struct {
 	fuseFTPError  error
 
 	// The quit function that quits the server.
-	quit func()
+	quit func(sessionIsLocked bool)
 
 	clientConfigLock sync.Mutex
 	clientConfig     clientcmd.ClientConfig
@@ -98,11 +98,16 @@ func newService(ctx context.Context, cancel context.CancelFunc, cfg client.Confi
 		sessionRunning: make(chan struct{}),
 	}
 	close(s.sessionRunning)
-	s.quit = func() {
+	s.quit = func(sessionIsLocked bool) {
 		cancel()
-		s.sessionLock.RLock()
-		sessionRunning := s.sessionRunning
-		s.sessionLock.RUnlock()
+		var sessionRunning <-chan struct{}
+		if sessionIsLocked {
+			sessionRunning = s.sessionRunning
+		} else {
+			s.sessionLock.RLock()
+			sessionRunning = s.sessionRunning
+			s.sessionLock.RUnlock()
+		}
 		<-sessionRunning
 	}
 	if srv != nil {
