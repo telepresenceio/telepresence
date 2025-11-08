@@ -191,6 +191,7 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 	if err != nil {
 		return nil, err
 	}
+	dcfg := client.GetConfig(ctx).Docker()
 
 	bo := backoff.NewExponentialBackOff()
 	bo.MaxInterval = 300 * time.Millisecond
@@ -208,18 +209,25 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 			if ns == nil {
 				return errdefs.ErrNotFound
 			}
+			var addrStr, what string
 			tn, ok := ns.Networks[network]
-			if !ok || tn.IPAddress == "" && tn.GlobalIPv6Address == "" {
+			if ok {
+				switch {
+				case dcfg.EnableIPv6 && tn.GlobalIPv6Address != "":
+					what = "GlobalIPv6Address"
+					addrStr = tn.GlobalIPv6Address
+				case dcfg.EnableIPv4 && tn.IPAddress != "":
+					what = "IPAddress"
+					addrStr = tn.IPAddress
+				default:
+					ok = false
+				}
+			}
+			if !ok {
 				// retry the operation if this happens
 				return fmt.Errorf("container %q has no IP address in network %q: %w", ci.Name, network, errdefs.ErrNotFound)
 			}
-			what := "GlobalIPv6Address"
-			if tn.GlobalIPv6Address != "" {
-				addr, err = netip.ParseAddr(tn.GlobalIPv6Address)
-			} else {
-				what = "IPAddress"
-				addr, err = netip.ParseAddr(tn.IPAddress)
-			}
+			addr, err = netip.ParseAddr(addrStr)
 			if err != nil {
 				return backoff.Permanent(fmt.Errorf("failed to parse %s of network %q: %w", what, network, err))
 			}
@@ -330,7 +338,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 			// in this case is the client performing the authentication (as opposed to the Docker VM, when one is used).
 			cfg := client.GetConfig(ctx).Docker()
 			kubeAuthHost := cfg.HostGateway
-			if !(cfg.AddHostGateway || kubeAuthHost != client.DefaultHostGateway) {
+			if kubeAuthHost == "" {
 				r, err := routing.DefaultRoute(ctx)
 				if err != nil {
 					return "", "", err

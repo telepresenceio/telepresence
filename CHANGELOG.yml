@@ -27,6 +27,13 @@ items:
   - version: 2.25.1
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Volumes did not mount correctly when using `telepresence connect --docker` when Docker had IPv6 enabled.
+        body: >-
+          Telepresence failed to mount volumes after connecting with `telepresence connect --docker` when Docker Engine had IPv6 enabled in
+          its default bridge network. Disabling IPv6 in the Telepresence client configuration did not resolve the issue. This was fixed in
+          Telepresence Volume Plugin "telemount" version 0.3.2, which circumvented a [bug in sshfs](https://github.com/libfuse/sshfs/issues/335).
+          Additionally, the volume plugin will no longer use IPv6 when the client configuration `docker.enableIPv6` is set to `false`.
       - type: change
         title: Remove unnecessary setcap from traffic binary
         body: >-

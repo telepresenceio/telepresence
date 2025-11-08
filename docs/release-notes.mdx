@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.25.1
 <Note>
+	<Title type="bugfix">Volumes did not mount correctly when using `telepresence connect --docker` when Docker had IPv6 enabled.</Title>
+	<Body>
+Telepresence failed to mount volumes after connecting with `telepresence connect --docker` when Docker Engine had IPv6 enabled in its default bridge network. Disabling IPv6 in the Telepresence client configuration did not resolve the issue. This was fixed in Telepresence Volume Plugin "telemount" version 0.3.2, which circumvented a [bug in sshfs](https://github.com/libfuse/sshfs/issues/335). Additionally, the volume plugin will no longer use IPv6 when the client configuration `docker.enableIPv6` is set to `false`.
+  </Body>
+</Note>
+<Note>
 	<Title type="change">Remove unnecessary setcap from traffic binary</Title>
 	<Body>
 The setcap capability (cap_net_bind_service) was removed from the traffic binary build process. This capability was originally added to allow the binary to bind to privileged ports, specifically port 443 for the mutating webhook. Since version 2.24.0, the default mutating webhook port was changed to 8443 (a non-privileged port), making this capability unnecessary. Removing it simplifies the build process and reduces the security surface area.
