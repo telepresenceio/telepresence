@@ -832,7 +832,7 @@ var defaultTelemount = Telemount{ //nolint:gochecknoglobals // constant
 	Registry:    "ghcr.io",
 	Namespace:   "telepresenceio",
 	Repository:  "telemount",
-	Tag:         "0.3.1",
+	Tag:         "0.3.2",
 }
 
 func (tm *Telemount) defaults() DefaultsAware {

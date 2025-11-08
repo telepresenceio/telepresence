@@ -1,25 +1,26 @@
 ---
-title: telepresence mcp vscode list
-description: Show VSCode MCP servers
+title: telepresence mcp stream
+description: Stream the MCP server over HTTP
 hide_table_of_contents: true
 ---
 
-Show VSCode MCP servers
+Stream the MCP server over HTTP
 
 ## Synopsis:
 
-Show all MCP servers configured in VSCode
+Start HTTP server to expose CLI commands to AI assistants
 
 ### Usage:
 ```
-  telepresence mcp vscode list [flags]
+  telepresence mcp stream [flags]
 ```
 
 ### Flags:
 ```
-      --config-path string   Path to VSCode config file
-  -h, --help                 help for list
-      --workspace            List from workspace settings (.vscode/mcp.json) instead of user settings
+  -h, --help               help for stream
+      --host string        host to listen on
+      --log-level string   Log level (debug, info, warn, error)
+      --port int           port number to listen on (default 8080)
 ```
 
 ### Global Flags:

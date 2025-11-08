@@ -1,14 +1,14 @@
 ---
 title: telepresence mcp vscode
-description: Configure VSCode MCP servers
+description: Manage VSCode MCP servers
 hide_table_of_contents: true
 ---
 
-Configure VSCode MCP servers
+Manage VSCode MCP servers
 
 ## Synopsis:
 
-Configure MCP servers for Visual Studio Code
+Manage MCP server configuration for Visual Studio Code
 
 ### Usage:
 ```

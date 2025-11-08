@@ -1,25 +1,25 @@
 ---
-title: telepresence mcp vscode list
-description: Show VSCode MCP servers
+title: telepresence mcp cursor list
+description: Show Cursor MCP servers
 hide_table_of_contents: true
 ---
 
-Show VSCode MCP servers
+Show Cursor MCP servers
 
 ## Synopsis:
 
-Show all MCP servers configured in VSCode
+Show all MCP servers configured in Cursor
 
 ### Usage:
 ```
-  telepresence mcp vscode list [flags]
+  telepresence mcp cursor list [flags]
 ```
 
 ### Flags:
 ```
-      --config-path string   Path to VSCode config file
+      --config-path string   Path to Cursor config file
   -h, --help                 help for list
-      --workspace            List from workspace settings (.vscode/mcp.json) instead of user settings
+      --workspace            List from workspace settings (.cursor/mcp.json) instead of user settings
 ```
 
 ### Global Flags:

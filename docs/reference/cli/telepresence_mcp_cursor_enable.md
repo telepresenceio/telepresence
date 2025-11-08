@@ -1,27 +1,28 @@
 ---
-title: telepresence mcp claude enable
-description: Add server to Claude config
+title: telepresence mcp cursor enable
+description: Add server to Cursor config
 hide_table_of_contents: true
 ---
 
-Add server to Claude config
+Add server to Cursor config
 
 ## Synopsis:
 
-Add this application as an MCP server in Claude Desktop
+Add this application as an MCP server in Cursor
 
 ### Usage:
 ```
-  telepresence mcp claude enable [flags]
+  telepresence mcp cursor enable [flags]
 ```
 
 ### Flags:
 ```
-      --config-path string   Path to Claude config file
+      --config-path string   Path to Cursor config file
   -e, --env stringToString   Environment variables (e.g., --env KEY1=value1 --env KEY2=value2) (default [])
   -h, --help                 help for enable
       --log-level string     Log level (debug, info, warn, error)
       --server-name string   Name for the MCP server (default: derived from executable name)
+      --workspace            Add to workspace settings (.cursor/mcp.json) instead of user settings
 ```
 
 ### Global Flags:

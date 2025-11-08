@@ -1,14 +1,14 @@
 ---
 title: telepresence mcp claude
-description: Configure Claude Desktop MCP servers
+description: Manage Claude Desktop MCP servers
 hide_table_of_contents: true
 ---
 
-Configure Claude Desktop MCP servers
+Manage Claude Desktop MCP servers
 
 ## Synopsis:
 
-Configure MCP servers for Claude Desktop
+Manage MCP server configuration for Claude Desktop
 
 ### Usage:
 ```
