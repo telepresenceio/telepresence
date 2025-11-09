@@ -93,7 +93,7 @@ jobs:
         if: github.event.label.name == 'ok to test'
         uses: nick-fields/retry/@v3
         with:
-          max_attempts: 3
+          max_attempts: 1
           shell: bash
           timeout_minutes: 90
           command: |
