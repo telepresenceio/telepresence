@@ -1,26 +1,26 @@
 ---
-title: telepresence mcp vscode disable
-description: Remove server from VSCode config
+title: telepresence mcp cursor disable
+description: Remove server from Cursor config
 hide_table_of_contents: true
 ---
 
-Remove server from VSCode config
+Remove server from Cursor config
 
 ## Synopsis:
 
-Remove this application from VSCode MCP servers
+Remove this application from Cursor MCP servers
 
 ### Usage:
 ```
-  telepresence mcp vscode disable [flags]
+  telepresence mcp cursor disable [flags]
 ```
 
 ### Flags:
 ```
-      --config-path string   Path to VSCode config file
+      --config-path string   Path to Cursor config file
   -h, --help                 help for disable
       --server-name string   Name of the MCP server to remove (default: derived from executable name)
-      --workspace            Remove from workspace settings (.vscode/mcp.json) instead of user settings
+      --workspace            Remove from workspace settings (.cursor/mcp.json) instead of user settings
 ```
 
 ### Global Flags:

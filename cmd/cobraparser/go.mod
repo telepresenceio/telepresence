@@ -3,7 +3,7 @@ module github.com/telepresenceio/telepresence/cmd/cobraparser
 go 1.24
 
 require (
-	github.com/docker/docker v28.5.1+incompatible
+	github.com/docker/docker v28.5.2+incompatible
 	github.com/spf13/pflag v1.0.10
 )
 

@@ -14,6 +14,7 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
@@ -23,7 +24,10 @@ func CreateNetwork(ctx context.Context, info *daemon.Info, cli *dockerClient.Cli
 	cn := info.Name
 	dockerCfg := client.GetConfig(ctx).Docker()
 	ipv4 := dockerCfg.EnableIPv4
-	ipv6 := dockerCfg.EnableIPv6
+	ipv6, err := docker.UseIPv6(ctx)
+	if err != nil {
+		return err
+	}
 	host := info.ContainerIP
 	if ipv6 && !ipv4 && host.Is4() {
 		host = netip.AddrFrom16(host.As16())

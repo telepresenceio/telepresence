@@ -45,7 +45,6 @@ func Start(ctx context.Context, daemonInContainer bool, args ...string) (cni *Co
 	}
 	containerID := strings.TrimSpace(idReader.String())
 
-	ctx = EnableClient(ctx)
 	cli, err := GetClient(ctx)
 	if err != nil {
 		return nil, nil, err

@@ -304,7 +304,6 @@ func EnsureStopContainer(ctx context.Context, name, containerID string, volumes 
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
-	ctx = docker.EnableClient(ctx)
 	err := docker.StopContainer(ctx, containerID)
 	if err != nil {
 		if errdefs.IsNotFound(err) {

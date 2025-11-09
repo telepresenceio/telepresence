@@ -757,7 +757,7 @@ func (s *session) stopHandler(name, handlerContainer string, pid int) {
 	c := s.context
 	if !(proc.RunningInContainer() && userd.GetService(c).RootSessionInProcess()) {
 		if handlerContainer != "" {
-			if err := docker.StopContainer(docker.EnableClient(c), handlerContainer); err != nil {
+			if err := docker.StopContainer(c, handlerContainer); err != nil {
 				// It's possible that the container is stopped externally before we get here. If so,
 				// then that's not an error.
 				if !strings.Contains(err.Error(), "No such container") {

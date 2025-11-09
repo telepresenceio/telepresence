@@ -8,7 +8,7 @@ Start the MCP server
 
 ## Synopsis:
 
-Start MCP server to expose CLI commands to AI assistants
+Start stdio server to expose CLI commands to AI assistants
 
 ### Usage:
 ```

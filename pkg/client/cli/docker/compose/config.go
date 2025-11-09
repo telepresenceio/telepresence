@@ -21,7 +21,6 @@ import (
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/generate"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/types"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
@@ -400,7 +399,7 @@ func (c *config) getMountPort(e mountsExtension) (uint16, error) {
 			}
 		}
 	}
-	lma, err := ioutil.FreePortsTCP(1, client.GetConfig(e.connection()).Docker().EnableIPv6)
+	lma, err := ioutil.FreePortsTCP(1)
 	if err != nil {
 		return 0, err
 	}

@@ -18,7 +18,7 @@ Add this application as an MCP server in VSCode
 ### Flags:
 ```
       --config-path string   Path to VSCode config file
-      --config-type string   Configuration type: 'workspace' or 'user' (default: user)
+  -e, --env stringToString   Environment variables (e.g., --env KEY1=value1 --env KEY2=value2) (default [])
   -h, --help                 help for enable
       --log-level string     Log level (debug, info, warn, error)
       --server-name string   Name for the MCP server (default: derived from executable name)

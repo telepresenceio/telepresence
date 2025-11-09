@@ -298,7 +298,7 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 	dlog.Infof(ctx, "Using binary %s", executable)
 	ctx = WithExecutable(ctx, executable)
 
-	if ipv6, err := strconv.ParseBool("DEV_IPV6_CLUSTER"); err == nil {
+	if ipv6, err := strconv.ParseBool(dos.Getenv(ctx, "DEV_IPV6_CLUSTER")); err == nil {
 		s.ipv6 = ipv6
 	} else {
 		output, err := Output(ctx, "kubectl", "--namespace", "kube-system", "get", "svc", "kube-dns", "-o", "jsonpath={.spec.clusterIP}")
@@ -456,7 +456,6 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 		}
 	}
 
-	config.Docker().EnableIPv6 = s.ipv6
 	config.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("10Mi")
 	config.Intercept().UseFtp = true
 	if s.ClientIsVersion(">=2.23.0") {

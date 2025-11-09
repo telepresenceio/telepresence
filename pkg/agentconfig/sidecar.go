@@ -129,6 +129,7 @@ type Container struct {
 	Mounts types.MountPolicies `json:"mounts,omitempty"`
 
 	// MountPaths are the actual mount points that are mounted by this container
+	//
 	// Deprecated: Use Mounts.
 	MountPaths []string `json:"Mounts,omitempty"`
 
