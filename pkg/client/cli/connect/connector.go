@@ -185,7 +185,6 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 			return ctx, err
 		}
 		if len(rootCfg.Routing().Subnets) > 0 {
-			ctx = docker.EnableClient(ctx)
 			err = createTelerouteNetwork(ctx, s.DaemonInfo())
 			if err != nil {
 				return ctx, err
@@ -284,17 +283,9 @@ func resolveHostPort(ctx context.Context, ds *daemon.Session, proto types.Proto,
 }
 
 func ExistingDaemon(ctx context.Context, info *daemon.Info) (context.Context, error) {
-	var err error
-	var conn *grpc.ClientConn
 	if info.InDocker() {
 		// The host relies on that the daemon has exposed a port to localhost
-		var addr netip.Addr
-		if client.GetConfig(ctx).Docker().EnableIPv6 {
-			addr = netip.IPv6Loopback()
-		} else {
-			addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
-		}
-		conn, err = docker.ConnectDaemon(ctx, netip.AddrPortFrom(addr, info.DaemonPort))
+		conn, err := docker.ConnectDaemon(ctx, info)
 		if err != nil {
 			return ctx, err
 		}
@@ -417,7 +408,6 @@ func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *da
 		}
 		_ = fh.Close()
 	}
-	ctx = docker.EnableClient(ctx)
 	_, err := docker.EnsureNetworkPlugin(ctx)
 	if err != nil {
 		return ctx, nil, nil, err
@@ -483,7 +473,6 @@ func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, con
 	if err == nil {
 		ud := daemon.MustGetUserClient(ctx)
 		if ud.Containerized() {
-			ctx = docker.EnableClient(ctx)
 			cr.Docker = true
 		}
 		if ud.Containerized() == cr.Docker {
@@ -525,24 +514,19 @@ func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, con
 }
 
 // getConnectorVersion is the first call to the user daemon, so a backoff is used here to trap errors
-// caused during the initial state change of the connection.
+// caused during the initial state change of the gRPC connection.
 func getConnectorVersion(ctx context.Context, cc connector.ConnectorClient) (*common.VersionInfo, error) {
-	tos := client.GetConfig(ctx).Timeouts()
-	b := backoff.ExponentialBackOff{
-		InitialInterval:     500 * time.Millisecond,
-		RandomizationFactor: backoff.DefaultRandomizationFactor,
-		Multiplier:          backoff.DefaultMultiplier,
-		MaxInterval:         2 * time.Second,
-		MaxElapsedTime:      tos.Get(client.TimeoutTrafficManagerAPI),
-		Stop:                backoff.Stop,
-		Clock:               backoff.SystemClock,
-	}
-	b.Reset()
+	b := backoff.NewExponentialBackOff(
+		backoff.WithMaxElapsedTime(3*time.Second),
+		backoff.WithInitialInterval(50*time.Millisecond),
+		backoff.WithMaxInterval(time.Second))
 	var vi *common.VersionInfo
 	err := backoff.Retry(func() (err error) {
-		vi, err = cc.Version(ctx, &emptypb.Empty{})
+		quick, cancel := context.WithTimeout(ctx, 50*time.Millisecond) // This is a local call. Should be quick.
+		defer cancel()
+		vi, err = cc.Version(quick, &emptypb.Empty{})
 		return err
-	}, backoff.WithContext(&b, ctx))
+	}, backoff.WithContext(b, ctx))
 	return vi, err
 }
 
@@ -728,7 +712,6 @@ func createTelerouteNetwork(ctx context.Context, info *daemon.Info) error {
 
 func maybeDeleteNetwork(ctx context.Context, info *daemon.Info) {
 	// Wait for container exit.
-	ctx = docker.EnableClient(ctx)
 	dc, err := docker.GetClient(ctx)
 	if err == nil {
 		err = docker.WaitForExit(ctx, dc, info.ContainerID, 3*time.Second)

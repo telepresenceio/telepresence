@@ -18,7 +18,6 @@ import (
 	cliDocker "github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -95,7 +94,6 @@ func (s *state) Run(ctx context.Context) error {
 		} else {
 			defaultContainerName = fmt.Sprintf("ingest-%s", s.WorkloadName)
 		}
-		ctx = docker.EnableClient(ctx)
 		err = s.DockerFlags.PullOrBuildImage(progress.WithEventId(ctx, "Handler"))
 		if err != nil {
 			return err

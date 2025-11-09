@@ -25,6 +25,7 @@ import (
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
@@ -366,6 +367,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		sessionName = name[di+1:]
 		name = name[:di]
 	}
+	c = docker.EnableClient(c)
 	c = dgroup.WithGoroutineName(c, "/"+name)
 	c, err = logging.InitContext(c, userd.ProcessName, logging.RotateDaily, true, false)
 	if err != nil {

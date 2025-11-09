@@ -9,10 +9,10 @@ import (
 // the listeners and returns the addresses that were allocated.
 //
 // NOTE: Since the listeners are closed, there's a chance that someone else might allocate the returned addresses
-// before they are actually used. The chances are slim though, since tests show that in most cases (at least on
+// before they are actually used. The chances are slim, though, since tests show that in most cases (at least on
 // macOS and Linux), the same address isn't allocated for a while even if the allocation is made from different
 // processes.
-func FreePortsTCP(count int, enableIPv6 bool) ([]netip.AddrPort, error) {
+func FreePortsTCP(count int) ([]netip.AddrPort, error) {
 	ls := make([]net.Listener, 0, count)
 	as := make([]netip.AddrPort, count)
 	defer func() {
@@ -20,13 +20,8 @@ func FreePortsTCP(count int, enableIPv6 bool) ([]netip.AddrPort, error) {
 			_ = l.Close()
 		}
 	}()
-
-	network := "tcp4"
-	if enableIPv6 {
-		network = "tcp6"
-	}
 	for i := 0; i < count; i++ {
-		if l, err := net.Listen(network, "localhost:0"); err != nil {
+		if l, err := net.Listen("tcp", ":0"); err != nil {
 			return nil, err
 		} else {
 			ls = append(ls, l)

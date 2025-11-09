@@ -16,20 +16,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-type cmdInitKey struct{}
-
-func WithCommandInitializer(ctx context.Context, cmdInit func(cmd *cobra.Command) error) context.Context {
-	return context.WithValue(ctx, cmdInitKey{}, cmdInit)
-}
-
-func InitCommand(cmd *cobra.Command) (err error) {
-	cmdInit, ok := cmd.Context().Value(cmdInitKey{}).(func(cmd *cobra.Command) error)
-	if !ok {
-		panic("no registered command initializer")
-	}
-	return cmdInit(cmd)
-}
-
 func InitProgressWriter(cmd *cobra.Command) {
 	ctx := cmd.Context()
 	mode := progress.ModeAuto
@@ -48,7 +34,7 @@ func InitProgressWriter(cmd *cobra.Command) {
 	cmd.SetContext(progress.WithContextWriter(ctx, w))
 }
 
-func CommandInitializer(cmd *cobra.Command) (err error) {
+func InitCommand(cmd *cobra.Command) (err error) {
 	InitProgressWriter(cmd)
 	ctx := cmd.Context()
 	as := cmd.Annotations

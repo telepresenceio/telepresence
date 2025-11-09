@@ -123,7 +123,7 @@ func disengage(ctx context.Context, name, container string) error {
 		if stopContainer {
 			// Stop the handler's container. The daemon is most likely running in another
 			// container, and won't be able to.
-			err = docker.StopContainer(docker.EnableClient(ctx), handlerContainer)
+			err = docker.StopContainer(ctx, handlerContainer)
 			if err != nil {
 				dlog.Error(ctx, err)
 			}

@@ -67,7 +67,7 @@ func ClientImage(ctx context.Context) string {
 }
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
-func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr netip.AddrPort) (opts []string, err error) {
+func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, daemonPortOnHost uint16) (opts []string, err error) {
 	opts = []string{
 		"--name", daemonID.ContainerName(),
 		"--cap-add", "NET_ADMIN",
@@ -75,7 +75,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 		"--pid", "host",
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
-		"-p", fmt.Sprintf("%s:%d/tcp", hostAddr, client.GetConfig(ctx).Grpc().DaemonPort),
+		"-p", fmt.Sprintf("%d:%d/tcp", daemonPortOnHost, client.GetConfig(ctx).Grpc().DaemonPort),
 		"-v", fmt.Sprintf("%s:%s:ro", filelocation.AppUserConfigDir(ctx), DockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), TpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), DockerTpLog),
@@ -91,13 +91,17 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 	if err != nil {
 		return nil, err
 	}
-	cfg := client.GetConfig(ctx).Docker()
-	if cfg.EnableIPv6 {
+	ipv6, err := UseIPv6(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if ipv6 {
 		opts = append(opts,
 			"--sysctl", "net.ipv6.conf.all.forwarding=1",
 			"--sysctl", "net.ipv6.conf.all.disable_ipv6=0",
 		)
 	}
+	cfg := client.GetConfig(ctx).Docker()
 	if cfg.HostGateway != "" && (cfg.AddHostGateway || cfg.HostGateway != client.DefaultHostGateway) {
 		opts = append(opts, "--add-host", cfg.HostGateway+":host-gateway")
 	}
@@ -117,25 +121,18 @@ func DaemonArgs(ctx context.Context, daemonID *daemon.Identifier) []string {
 }
 
 // ConnectDaemon connects to a containerized daemon at the given address.
-func ConnectDaemon(ctx context.Context, address netip.AddrPort) (conn *grpc.ClientConn, err error) {
-	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-	for i := 1; ; i++ {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		conn, err = grpc.NewClient(address.String(),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithNoProxy())
-		if err != nil {
-			if i < 10 {
-				// It's likely that we were too quick. Let's take a nap and try again
-				time.Sleep(time.Duration(i*50) * time.Millisecond)
-				continue
-			}
-			return nil, err
-		}
-		return conn, nil
+func ConnectDaemon(ctx context.Context, info *daemon.Info) (conn *grpc.ClientConn, err error) {
+	ipv6, err := UseIPv6(ctx)
+	if err != nil {
+		return nil, err
 	}
+	var addr netip.Addr
+	if ipv6 {
+		addr = netip.IPv6Loopback()
+	} else {
+		addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
+	}
+	return grpc.NewClient(netip.AddrPortFrom(addr, info.DaemonPort).String(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithNoProxy())
 }
 
 const (
@@ -237,6 +234,22 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 		return nil
 	}, backoff.WithContext(bo, ctx))
 	return info, err
+}
+
+func UseIPv6(ctx context.Context) (bool, error) {
+	dcfg := client.GetConfig(ctx).Docker()
+	if !dcfg.EnableIPv6 {
+		return false, nil
+	}
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return false, err
+	}
+	ci, err := cli.NetworkInspect(ctx, "bridge", network.InspectOptions{})
+	if err != nil {
+		return false, err
+	}
+	return ci.EnableIPv6, nil
 }
 
 func readPortFile(ctx context.Context, portFile string, configFiles []string) (uint16, error) {
@@ -428,12 +441,12 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 	if err = PullImage(progress.WithEventId(ctx, daemonID.Name), image); err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
-	fp, err := ioutil.FreePortsTCP(1, client.GetConfig(ctx).Docker().EnableIPv6)
+	fp, err := ioutil.FreePortsTCP(1)
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
 	daemonAddr := fp[0]
-	opts, err := DaemonOptions(ctx, daemonID, daemonAddr)
+	opts, err := DaemonOptions(ctx, daemonID, daemonAddr.Port())
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
@@ -476,7 +489,7 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 	if err = enableK8SAuthenticator(ctx, daemonID); err != nil {
 		return nil, nil, err
 	}
-	conn, err = ConnectDaemon(ctx, daemonAddr)
+	conn, err = ConnectDaemon(ctx, info)
 	if err != nil {
 		return nil, nil, err
 	}

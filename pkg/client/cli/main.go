@@ -11,8 +11,8 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cmd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
@@ -47,7 +47,7 @@ func InitContext(ctx context.Context) context.Context {
 		ctx = rootd.WithNewSessionFunc(ctx, rootd.NewSession)
 	default:
 		client.DisplayName = "OSS Client"
-		ctx = connect.WithCommandInitializer(ctx, connect.CommandInitializer)
+		ctx = docker.EnableClient(ctx)
 	}
 	if client.IsDaemon() {
 		ctx = cmd.WithDaemonSubCommands(ctx)
