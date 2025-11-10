@@ -18,10 +18,12 @@ Manage MCP servers for AI assistants and code editors
 ### Available Commands:
 | Command | Description |
 |---------|-------------|
-| [claude](telepresence_mcp_claude) | Configure Claude Desktop MCP servers |
+| [claude](telepresence_mcp_claude) | Manage Claude Desktop MCP servers |
+| [cursor](telepresence_mcp_cursor) | Manage Cursor MCP servers |
 | [start](telepresence_mcp_start) | Start the MCP server |
+| [stream](telepresence_mcp_stream) | Stream the MCP server over HTTP |
 | [tools](telepresence_mcp_tools) | Export tools as JSON |
-| [vscode](telepresence_mcp_vscode) | Configure VSCode MCP servers |
+| [vscode](telepresence_mcp_vscode) | Manage VSCode MCP servers |
 
 ### Flags:
 ```

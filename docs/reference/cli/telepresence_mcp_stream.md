@@ -1,24 +1,26 @@
 ---
-title: telepresence mcp start
-description: Start the MCP server
+title: telepresence mcp stream
+description: Stream the MCP server over HTTP
 hide_table_of_contents: true
 ---
 
-Start the MCP server
+Stream the MCP server over HTTP
 
 ## Synopsis:
 
-Start stdio server to expose CLI commands to AI assistants
+Start HTTP server to expose CLI commands to AI assistants
 
 ### Usage:
 ```
-  telepresence mcp start [flags]
+  telepresence mcp stream [flags]
 ```
 
 ### Flags:
 ```
-  -h, --help               help for start
+  -h, --help               help for stream
+      --host string        host to listen on
       --log-level string   Log level (debug, info, warn, error)
+      --port int           port number to listen on (default 8080)
 ```
 
 ### Global Flags:

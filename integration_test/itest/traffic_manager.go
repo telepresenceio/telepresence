@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
@@ -165,6 +166,7 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 	client.ProcessName = func() string {
 		return client.UserDaemonName
 	}
+	ctx = docker.EnableClient(ctx)
 	ctx = cli.InitContext(ctx)
 	cfg := client.GetConfig(ctx)
 	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log")

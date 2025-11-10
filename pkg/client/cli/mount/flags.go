@@ -84,7 +84,7 @@ func (f *Flags) ValidateConnected(ctx context.Context) (err error) {
 		// Mounts will be facilitated by the Telemount plug-in connecting to our LocalMountPort
 		if f.LocalMountPort == 0 {
 			var lma []netip.AddrPort
-			lma, err = ioutil.FreePortsTCP(1, client.GetConfig(ctx).Docker().EnableIPv6)
+			lma, err = ioutil.FreePortsTCP(1)
 			if err != nil {
 				return err
 			}

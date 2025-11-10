@@ -31,6 +31,7 @@ func TestGetRoutingTable(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, rt)
 	for _, r := range rt {
+		t.Logf("Route: %s", r)
 		assert.False(t, r.LocalIP.IsUnspecified())
 		assert.NotZero(t, r.InterfaceIndex)
 		assert.True(t, r.Default || !r.RoutedNet.Addr().IsUnspecified())

@@ -18,7 +18,6 @@ Show all MCP servers configured in VSCode
 ### Flags:
 ```
       --config-path string   Path to VSCode config file
-      --config-type string   Configuration type: 'workspace' or 'user' (default: user)
   -h, --help                 help for list
       --workspace            List from workspace settings (.vscode/mcp.json) instead of user settings
 ```

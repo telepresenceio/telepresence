@@ -1,24 +1,25 @@
 ---
-title: telepresence mcp start
-description: Start the MCP server
+title: telepresence mcp cursor list
+description: Show Cursor MCP servers
 hide_table_of_contents: true
 ---
 
-Start the MCP server
+Show Cursor MCP servers
 
 ## Synopsis:
 
-Start stdio server to expose CLI commands to AI assistants
+Show all MCP servers configured in Cursor
 
 ### Usage:
 ```
-  telepresence mcp start [flags]
+  telepresence mcp cursor list [flags]
 ```
 
 ### Flags:
 ```
-  -h, --help               help for start
-      --log-level string   Log level (debug, info, warn, error)
+      --config-path string   Path to Cursor config file
+  -h, --help                 help for list
+      --workspace            List from workspace settings (.cursor/mcp.json) instead of user settings
 ```
 
 ### Global Flags:
