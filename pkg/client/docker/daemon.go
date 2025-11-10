@@ -143,7 +143,8 @@ type ContainerInfo struct {
 	ID   string
 	Name string
 	Pid  int
-	IP   netip.Addr
+	IPv4 netip.Addr
+	IPv6 netip.Addr
 }
 
 // GetDaemonContainerNetworkInfo checks if the daemon VIF routes any subnets. If it does, then the DNS IP
@@ -165,7 +166,11 @@ func GetDaemonContainerNetworkInfo(ctx context.Context) (dns netip.Addr, network
 	if len(rootCfg.Routing().Subnets) > 0 {
 		xi, err := GetContainerInfo(ctx, info.ContainerID, info.Name)
 		if err == nil {
-			dns = xi.IP
+			if xi.IPv4.IsValid() {
+				dns = xi.IPv4
+			} else {
+				dns = xi.IPv6
+			}
 		} else {
 			dns = rootCfg.DNS().VIFAddress.Addr()
 		}
@@ -200,37 +205,35 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 			// The container in question no longer exists
 			return backoff.Permanent(err)
 		}
-		var addr netip.Addr
+		var iPv4, iPv6 netip.Addr
 		if network != "" {
 			ns := ci.NetworkSettings
 			if ns == nil {
 				return errdefs.ErrNotFound
 			}
-			var addrStr, what string
 			tn, ok := ns.Networks[network]
 			if ok {
-				switch {
-				case dcfg.EnableIPv6 && tn.GlobalIPv6Address != "":
-					what = "GlobalIPv6Address"
-					addrStr = tn.GlobalIPv6Address
-				case dcfg.EnableIPv4 && tn.IPAddress != "":
-					what = "IPAddress"
-					addrStr = tn.IPAddress
-				default:
-					ok = false
+				if dcfg.EnableIPv4 && tn.IPAddress != "" {
+					iPv4, err = netip.ParseAddr(tn.IPAddress)
+					if err != nil {
+						return backoff.Permanent(fmt.Errorf("failed to parse IPAddress of network %q: %w", network, err))
+					}
+					dlog.Debugf(ctx, "container %q has IPv4 address %s in network %q", ci.Name, iPv4, network)
+				}
+				if dcfg.EnableIPv6 && tn.GlobalIPv6Address != "" {
+					iPv6, err = netip.ParseAddr(tn.GlobalIPv6Address)
+					if err != nil {
+						return backoff.Permanent(fmt.Errorf("failed to parse GlobalIPv6Address of network %q: %w", network, err))
+					}
+					dlog.Debugf(ctx, "container %q has IPv6 address %s in network %q", ci.Name, iPv6, network)
 				}
 			}
-			if !ok {
+			if !iPv4.IsValid() && !iPv6.IsValid() {
 				// retry the operation if this happens
 				return fmt.Errorf("container %q has no IP address in network %q: %w", ci.Name, network, errdefs.ErrNotFound)
 			}
-			addr, err = netip.ParseAddr(addrStr)
-			if err != nil {
-				return backoff.Permanent(fmt.Errorf("failed to parse %s of network %q: %w", what, network, err))
-			}
-			dlog.Debugf(ctx, "container %q has IP address %s in network %q", ci.Name, addr, network)
 		}
-		info = &ContainerInfo{ID: ci.ID, Pid: ci.State.Pid, IP: addr, Name: ci.Name}
+		info = &ContainerInfo{ID: ci.ID, Pid: ci.State.Pid, IPv4: iPv4, IPv6: iPv6, Name: ci.Name}
 		return nil
 	}, backoff.WithContext(bo, ctx))
 	return info, err
@@ -690,10 +693,16 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 	}
 	cr := daemon.GetRequest(ctx)
 	dlog.Debugf(ctx, "Creating daemon info file %s (runs in container)", daemonID.Name)
+	var ip netip.Addr
+	if cni.IPv4.IsValid() {
+		ip = cni.IPv4
+	} else {
+		ip = cni.IPv6
+	}
 	info := &daemon.Info{
 		ContainerID:  cid,
 		ContainerPID: cni.Pid,
-		ContainerIP:  cni.IP,
+		ContainerIP:  ip,
 		DaemonPort:   port,
 		Name:         daemonID.Name,
 		KubeContext:  daemonID.KubeContext,
