@@ -15,7 +15,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -94,7 +93,7 @@ const (
 func (sc *serveCommand) serveFromContainer(ctx context.Context, addr netip.Addr) error {
 	// We can't reliably just map a service port (typically port 80) to localhost, so instead of doing
 	// that, we create a random port and use that.
-	ps, err := ioutil.FreePortsTCP(1, client.GetConfig(ctx).Docker().EnableIPv6)
+	ps, err := ioutil.FreePortsTCP(1)
 	if err != nil {
 		return err
 	}

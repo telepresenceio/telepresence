@@ -43,14 +43,11 @@ func (s *interceptMountSuite) SetupSuite() {
 	}
 	s.Suite.SetupSuite()
 	switch runtime.GOOS {
-	case "darwin":
-		// Run without mounting on darwin. Apple prevents proper install of kernel extensions
-		s.mountPoint = "false"
 	case "windows":
 		s.mountPoint = "T:"
 	default:
 		var err error
-		s.mountPoint, err = os.MkdirTemp("", "mount-") // Don't use the testing.Tempdir() because deletion is delayed.
+		s.mountPoint, err = os.MkdirTemp("", "mount-") // Don't use the itest.Tempdir() because deletion is delayed.
 		s.Require().NoError(err)
 	}
 	ctx := s.Context()

@@ -70,7 +70,7 @@ func ClientImage(ctx context.Context) string {
 }
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
-func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr netip.AddrPort) (opts []string, err error) {
+func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, daemonPortOnHost uint16) (opts []string, err error) {
 	opts = []string{
 		"--name", daemonID.ContainerName(),
 		"--cap-add", "NET_ADMIN",
@@ -78,7 +78,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 		"--pid", "host",
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
-		"-p", fmt.Sprintf("%s:%d/tcp", hostAddr, client.GetConfig(ctx).Grpc().DaemonPort),
+		"-p", fmt.Sprintf("%d:%d/tcp", daemonPortOnHost, client.GetConfig(ctx).Grpc().DaemonPort),
 		"-v", fmt.Sprintf("%s:%s:ro", filepath.Dir(client.GetConfigFile(ctx)), DockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), TpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), DockerTpLog),
@@ -94,13 +94,17 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, hostAddr ne
 	if err != nil {
 		return nil, err
 	}
-	cfg := client.GetConfig(ctx).Docker()
-	if cfg.EnableIPv6 {
+	ipv6, err := UseIPv6(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if ipv6 {
 		opts = append(opts,
 			"--sysctl", "net.ipv6.conf.all.forwarding=1",
 			"--sysctl", "net.ipv6.conf.all.disable_ipv6=0",
 		)
 	}
+	cfg := client.GetConfig(ctx).Docker()
 	if cfg.HostGateway != "" && (cfg.AddHostGateway || cfg.HostGateway != client.DefaultHostGateway) {
 		opts = append(opts, "--add-host", cfg.HostGateway+":host-gateway")
 	}
@@ -121,25 +125,18 @@ func DaemonArgs(ctx context.Context, daemonID *daemon.Identifier) []string {
 }
 
 // ConnectDaemon connects to a containerized daemon at the given address.
-func ConnectDaemon(ctx context.Context, address netip.AddrPort) (conn *grpc.ClientConn, err error) {
-	// Assume that the user daemon is running and connect to it using the given address instead of using a socket.
-	for i := 1; ; i++ {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		conn, err = grpc.NewClient(address.String(),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithNoProxy())
-		if err != nil {
-			if i < 10 {
-				// It's likely that we were too quick. Let's take a nap and try again
-				time.Sleep(time.Duration(i*50) * time.Millisecond)
-				continue
-			}
-			return nil, err
-		}
-		return conn, nil
+func ConnectDaemon(ctx context.Context, info *daemon.Info) (conn *grpc.ClientConn, err error) {
+	ipv6, err := UseIPv6(ctx)
+	if err != nil {
+		return nil, err
 	}
+	var addr netip.Addr
+	if ipv6 {
+		addr = netip.IPv6Loopback()
+	} else {
+		addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
+	}
+	return grpc.NewClient(netip.AddrPortFrom(addr, info.DaemonPort).String(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithNoProxy())
 }
 
 const (
@@ -150,7 +147,8 @@ type ContainerInfo struct {
 	ID   string
 	Name string
 	Pid  int
-	IP   netip.Addr
+	IPv4 netip.Addr
+	IPv6 netip.Addr
 }
 
 // GetDaemonContainerNetworkInfo checks if the daemon VIF routes any subnets. If it does, then the DNS IP
@@ -172,7 +170,11 @@ func GetDaemonContainerNetworkInfo(ctx context.Context) (dns netip.Addr, network
 	if len(rootCfg.Routing().Subnets) > 0 {
 		xi, err := GetContainerInfo(ctx, info.ContainerID, info.Name)
 		if err == nil {
-			dns = xi.IP
+			if xi.IPv4.IsValid() {
+				dns = xi.IPv4
+			} else {
+				dns = xi.IPv6
+			}
 		} else {
 			dns = rootCfg.DNS().VIFAddress.Addr()
 		}
@@ -195,6 +197,7 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 	if err != nil {
 		return nil, err
 	}
+	dcfg := client.GetConfig(ctx).Docker()
 
 	bo := backoff.NewExponentialBackOff()
 	bo.MaxInterval = 300 * time.Millisecond
@@ -206,33 +209,54 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 			// The container in question no longer exists
 			return backoff.Permanent(err)
 		}
-		var addr netip.Addr
+		var iPv4, iPv6 netip.Addr
 		if network != "" {
 			ns := ci.NetworkSettings
 			if ns == nil {
 				return errdefs.ErrNotFound
 			}
 			tn, ok := ns.Networks[network]
-			if !ok || tn.IPAddress == "" && tn.GlobalIPv6Address == "" {
+			if ok {
+				if dcfg.EnableIPv4 && tn.IPAddress != "" {
+					iPv4, err = netip.ParseAddr(tn.IPAddress)
+					if err != nil {
+						return backoff.Permanent(fmt.Errorf("failed to parse IPAddress of network %q: %w", network, err))
+					}
+					dlog.Debugf(ctx, "container %q has IPv4 address %s in network %q", ci.Name, iPv4, network)
+				}
+				if dcfg.EnableIPv6 && tn.GlobalIPv6Address != "" {
+					iPv6, err = netip.ParseAddr(tn.GlobalIPv6Address)
+					if err != nil {
+						return backoff.Permanent(fmt.Errorf("failed to parse GlobalIPv6Address of network %q: %w", network, err))
+					}
+					dlog.Debugf(ctx, "container %q has IPv6 address %s in network %q", ci.Name, iPv6, network)
+				}
+			}
+			if !iPv4.IsValid() && !iPv6.IsValid() {
 				// retry the operation if this happens
 				return fmt.Errorf("container %q has no IP address in network %q: %w", ci.Name, network, errdefs.ErrNotFound)
 			}
-			what := "GlobalIPv6Address"
-			if tn.GlobalIPv6Address != "" {
-				addr, err = netip.ParseAddr(tn.GlobalIPv6Address)
-			} else {
-				what = "IPAddress"
-				addr, err = netip.ParseAddr(tn.IPAddress)
-			}
-			if err != nil {
-				return backoff.Permanent(fmt.Errorf("failed to parse %s of network %q: %w", what, network, err))
-			}
-			dlog.Debugf(ctx, "container %q has IP address %s in network %q", ci.Name, addr, network)
 		}
-		info = &ContainerInfo{ID: ci.ID, Pid: ci.State.Pid, IP: addr, Name: ci.Name}
+		info = &ContainerInfo{ID: ci.ID, Pid: ci.State.Pid, IPv4: iPv4, IPv6: iPv6, Name: ci.Name}
 		return nil
 	}, backoff.WithContext(bo, ctx))
 	return info, err
+}
+
+func UseIPv6(ctx context.Context) (bool, error) {
+	dcfg := client.GetConfig(ctx).Docker()
+	if !dcfg.EnableIPv6 {
+		return false, nil
+	}
+	cli, err := GetClient(ctx)
+	if err != nil {
+		return false, err
+	}
+	ci, err := cli.NetworkInspect(ctx, "bridge", network.InspectOptions{})
+	if err != nil {
+		return false, err
+	}
+	return ci.EnableIPv6, nil
 }
 
 func readPortFile(ctx context.Context, portFile string, configFiles []string) (uint16, error) {
@@ -334,7 +358,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 			// in this case is the client performing the authentication (as opposed to the Docker VM, when one is used).
 			cfg := client.GetConfig(ctx).Docker()
 			kubeAuthHost := cfg.HostGateway
-			if !(cfg.AddHostGateway || kubeAuthHost != client.DefaultHostGateway) {
+			if kubeAuthHost == "" {
 				r, err := routing.DefaultRoute(ctx)
 				if err != nil {
 					return "", "", err
@@ -424,12 +448,12 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 	if err = PullImage(progress.WithEventId(ctx, daemonID.Name), image); err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
-	fp, err := ioutil.FreePortsTCP(1, client.GetConfig(ctx).Docker().EnableIPv6)
+	fp, err := ioutil.FreePortsTCP(1)
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
 	daemonAddr := fp[0]
-	opts, err := DaemonOptions(ctx, daemonID, daemonAddr)
+	opts, err := DaemonOptions(ctx, daemonID, daemonAddr.Port())
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
@@ -472,7 +496,7 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 	if err = enableK8SAuthenticator(ctx, daemonID); err != nil {
 		return nil, nil, err
 	}
-	conn, err = ConnectDaemon(ctx, daemonAddr)
+	conn, err = ConnectDaemon(ctx, info)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -673,10 +697,16 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 	}
 	cr := daemon.GetRequest(ctx)
 	dlog.Debugf(ctx, "Creating daemon info file %s (runs in container)", daemonID.Name)
+	var ip netip.Addr
+	if cni.IPv4.IsValid() {
+		ip = cni.IPv4
+	} else {
+		ip = cni.IPv6
+	}
 	info := &daemon.Info{
 		ContainerID:  cid,
 		ContainerPID: cni.Pid,
-		ContainerIP:  cni.IP,
+		ContainerIP:  ip,
 		DaemonPort:   port,
 		Name:         daemonID.Name,
 		KubeContext:  daemonID.KubeContext,

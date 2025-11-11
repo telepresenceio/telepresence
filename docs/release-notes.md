@@ -57,7 +57,13 @@ The daemons are therefore now renamed:
 - kubeauth-foreground => kubeauthd
 </div>
 
-## Version 2.25.1
+## Version 2.25.1 <span style="font-size: 16px;">(November 10)</span>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Volumes did not mount correctly when using `telepresence connect --docker` when Docker had IPv6 enabled.</div></div>
+<div style="margin-left: 15px">
+
+Telepresence failed to mount volumes after connecting with `telepresence connect --docker` when Docker Engine had IPv6 enabled in its default bridge network. Disabling IPv6 in the Telepresence client configuration did not resolve the issue. This was fixed in Telepresence Volume Plugin "telemount" version 0.3.2, which circumvented a [bug in sshfs](https://github.com/libfuse/sshfs/issues/335). Additionally, the volume plugin will no longer use IPv6 when the client configuration `docker.enableIPv6` is set to `false`.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remove unnecessary setcap from traffic binary</div></div>
 <div style="margin-left: 15px">
 

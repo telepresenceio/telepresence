@@ -18,7 +18,6 @@ Remove this application from VSCode MCP servers
 ### Flags:
 ```
       --config-path string   Path to VSCode config file
-      --config-type string   Configuration type: 'workspace' or 'user' (default: user)
   -h, --help                 help for disable
       --server-name string   Name of the MCP server to remove (default: derived from executable name)
       --workspace            Remove from workspace settings (.vscode/mcp.json) instead of user settings

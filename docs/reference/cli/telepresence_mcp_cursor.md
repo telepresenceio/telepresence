@@ -1,30 +1,30 @@
 ---
-title: telepresence mcp claude
-description: Manage Claude Desktop MCP servers
+title: telepresence mcp cursor
+description: Manage Cursor MCP servers
 hide_table_of_contents: true
 ---
 
-Manage Claude Desktop MCP servers
+Manage Cursor MCP servers
 
 ## Synopsis:
 
-Manage MCP server configuration for Claude Desktop
+Manage MCP server configuration for Cursor
 
 ### Usage:
 ```
-  telepresence mcp claude [command] [flags]
+  telepresence mcp cursor [command] [flags]
 ```
 
 ### Available Commands:
 | Command | Description |
 |---------|-------------|
-| [disable](telepresence_mcp_claude_disable) | Remove server from Claude config |
-| [enable](telepresence_mcp_claude_enable) | Add server to Claude config |
-| [list](telepresence_mcp_claude_list) | Show Claude MCP servers |
+| [disable](telepresence_mcp_cursor_disable) | Remove server from Cursor config |
+| [enable](telepresence_mcp_cursor_enable) | Add server to Cursor config |
+| [list](telepresence_mcp_cursor_list) | Show Cursor MCP servers |
 
 ### Flags:
 ```
-  -h, --help   help for claude
+  -h, --help   help for cursor
 ```
 
 ### Global Flags:
@@ -35,4 +35,4 @@ Manage MCP server configuration for Claude Desktop
       --use string        Match expression that uniquely identifies the daemon container
 ```
 
-Use `telepresence mcp claude [command] --help` for more information about a command.
+Use `telepresence mcp cursor [command] --help` for more information about a command.

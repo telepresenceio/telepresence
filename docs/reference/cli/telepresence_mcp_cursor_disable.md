@@ -1,24 +1,26 @@
 ---
-title: telepresence mcp start
-description: Start the MCP server
+title: telepresence mcp cursor disable
+description: Remove server from Cursor config
 hide_table_of_contents: true
 ---
 
-Start the MCP server
+Remove server from Cursor config
 
 ## Synopsis:
 
-Start stdio server to expose CLI commands to AI assistants
+Remove this application from Cursor MCP servers
 
 ### Usage:
 ```
-  telepresence mcp start [flags]
+  telepresence mcp cursor disable [flags]
 ```
 
 ### Flags:
 ```
-  -h, --help               help for start
-      --log-level string   Log level (debug, info, warn, error)
+      --config-path string   Path to Cursor config file
+  -h, --help                 help for disable
+      --server-name string   Name of the MCP server to remove (default: derived from executable name)
+      --workspace            Remove from workspace settings (.cursor/mcp.json) instead of user settings
 ```
 
 ### Global Flags:
