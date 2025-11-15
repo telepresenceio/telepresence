@@ -283,6 +283,7 @@ func run(cmd *cobra.Command, _ []string) error {
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
+		IgnoreSignalError:    true,
 	})
 
 	// Start services from within a group routine so that it gets proper cancellation

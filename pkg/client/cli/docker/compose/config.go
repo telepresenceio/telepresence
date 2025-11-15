@@ -274,6 +274,7 @@ func (c *config) run(cmd *cobra.Command) (err error) {
 	}
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
+		IgnoreSignalError:    true,
 	})
 	aesCh := make(chan *engagement, len(es))
 	progress.Start(ctx, "Engaging")

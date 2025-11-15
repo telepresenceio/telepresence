@@ -107,6 +107,7 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
 		EnableSignalHandling: true,
+		IgnoreSignalError:    true,
 		ShutdownOnNonError:   true,
 		SoftShutdownTimeout:  time.Second,
 	})

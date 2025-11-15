@@ -184,6 +184,7 @@ func run(cmd *cobra.Command, args []string) error {
 		SoftShutdownTimeout:  5 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
+		IgnoreSignalError:    true,
 	})
 
 	// Add a reload function that triggers on create and write of the config.yml file.
