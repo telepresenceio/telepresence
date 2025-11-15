@@ -12,8 +12,8 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"

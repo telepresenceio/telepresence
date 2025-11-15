@@ -14,8 +14,8 @@ import (
 	"github.com/go-json-experiment/json"
 	"golang.org/x/sys/unix"
 
-	"github.com/datawire/dlib/dhttp"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dhttp"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"

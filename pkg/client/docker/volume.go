@@ -10,7 +10,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/docker/docker/api/types/volume"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"

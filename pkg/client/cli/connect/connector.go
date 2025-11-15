@@ -23,7 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	daemon2 "github.com/telepresenceio/telepresence/rpc/v2/daemon"

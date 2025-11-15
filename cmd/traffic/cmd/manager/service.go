@@ -26,9 +26,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
-	"github.com/datawire/dlib/derror"
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/derror"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"

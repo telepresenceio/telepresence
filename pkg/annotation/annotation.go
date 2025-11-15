@@ -3,7 +3,7 @@ package annotation
 import (
 	"context"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 const (

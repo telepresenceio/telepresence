@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/netip"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"

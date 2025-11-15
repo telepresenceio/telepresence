@@ -28,8 +28,8 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"

@@ -10,7 +10,7 @@ import (
 
 	compose "github.com/compose-spec/compose-go/v2/types"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"

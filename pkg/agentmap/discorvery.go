@@ -15,7 +15,7 @@ import (
 	apps "k8s.io/client-go/informers/apps/v1"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/informers/externalversions/rollouts/v1alpha1"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"

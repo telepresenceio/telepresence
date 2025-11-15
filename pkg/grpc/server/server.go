@@ -13,8 +13,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dcontext"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 )

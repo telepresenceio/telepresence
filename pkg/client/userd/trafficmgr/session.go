@@ -26,10 +26,9 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/yaml"
 
-	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -639,7 +638,7 @@ func (s *session) remainLoop(context.Context) error {
 	ticker := time.NewTicker(60 * time.Second)
 	defer func() {
 		ticker.Stop()
-		c, cancel := context.WithTimeout(dcontext.WithoutCancel(s), 3*time.Second)
+		c, cancel := context.WithTimeout(context.WithoutCancel(s), 3*time.Second)
 		defer cancel()
 		if _, err := s.ManagerClient().Depart(c, s.SessionInfo()); err != nil {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)

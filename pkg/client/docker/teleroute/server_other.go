@@ -5,7 +5,7 @@ package teleroute
 import (
 	"net/netip"
 
-	"github.com/datawire/dlib/dgroup"
+	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 

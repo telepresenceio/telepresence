@@ -13,6 +13,7 @@ following Free and Open Source software:
     github.com/Masterminds/sprig/v3                                v3.3.0                                MIT license
     github.com/Masterminds/squirrel                                v1.5.4                                MIT license
     github.com/Microsoft/go-winio                                  v0.6.2                                MIT license
+    github.com/alexflint/go-filemutex                              v1.3.0                                MIT license
     github.com/asaskevich/govalidator                              v0.0.0-20230301143203-a9d515a09cc2    MIT license
     github.com/beorn7/perks                                        v1.0.1                                MIT license
     github.com/blang/semver/v4                                     v4.0.0                                MIT license
@@ -31,7 +32,6 @@ following Free and Open Source software:
     github.com/cyphar/filepath-securejoin                          v0.6.1                                3-clause BSD license, Mozilla Public License 2.0
     github.com/datawire/argo-rollouts-go-client                    v0.0.0-20241216133646-cb1073556c99    Apache License 2.0
     github.com/datawire/dlib                                       v1.3.1                                Apache License 2.0
-    github.com/datawire/dtest                                      v0.0.0-20210928162311-722b199c4c2f    Apache License 2.0
     github.com/datawire/envconfig                                  v0.0.0-20221012222025-09524dc7d59b    Apache License 2.0
     github.com/davecgh/go-spew                                     v1.1.2-0.20180830191138-d8f796af33cc  ISC license
     github.com/distribution/reference                              v0.6.0                                Apache License 2.0

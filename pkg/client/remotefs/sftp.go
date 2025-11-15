@@ -12,8 +12,8 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )

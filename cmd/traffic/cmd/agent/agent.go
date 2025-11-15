@@ -21,8 +21,8 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	ftp "github.com/telepresenceio/go-ftpserver"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"

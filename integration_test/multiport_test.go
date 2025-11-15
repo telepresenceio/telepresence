@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 

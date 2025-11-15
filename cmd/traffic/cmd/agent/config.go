@@ -14,7 +14,7 @@ import (
 	"github.com/go-json-experiment/json"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"

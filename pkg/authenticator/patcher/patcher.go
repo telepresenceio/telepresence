@@ -10,7 +10,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
@@ -81,7 +81,7 @@ func CreateExternalKubeConfig(
 		if err != nil {
 			return nil, err
 		}
-		if err = replaceAuthExecWithStub(ctx, &config, executable, addr, configFile); err != nil {
+		if err = replaceAuthExecWithStub(&config, executable, addr, configFile); err != nil {
 			return nil, err
 		}
 	}
@@ -123,7 +123,7 @@ func CreateExternalKubeConfig(
 
 // replaceAuthExecWithStub goes through the kubeconfig and replaces all uses of the Exec auth method by
 // an invocation of the stub binary.
-func replaceAuthExecWithStub(ctx context.Context, rawConfig *clientcmdapi.Config, executable, address, configFile string) error {
+func replaceAuthExecWithStub(rawConfig *clientcmdapi.Config, executable, address, configFile string) error {
 	for contextName, kubeContext := range rawConfig.Contexts {
 		// Find related Auth.
 		authInfo, ok := rawConfig.AuthInfos[kubeContext.AuthInfo]

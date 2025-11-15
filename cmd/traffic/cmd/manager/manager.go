@@ -22,8 +22,8 @@ import (
 	"k8s.io/client-go/rest"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
-	"github.com/datawire/dlib/dhttp"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dhttp"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"

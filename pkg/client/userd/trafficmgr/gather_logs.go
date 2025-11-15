@@ -15,7 +15,7 @@ import (
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 	"sigs.k8s.io/yaml"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"

@@ -7,7 +7,7 @@ import (
 	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
 	"os/signal"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )

@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/util/deployment"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"

@@ -11,7 +11,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"

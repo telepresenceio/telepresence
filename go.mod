@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/alexflint/go-filemutex v1.3.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/compose-spec/compose-go/v2 v2.10.0
@@ -11,7 +12,6 @@ require (
 	github.com/coreos/go-iptables v0.8.0
 	github.com/datawire/argo-rollouts-go-client v0.0.0-20241216133646-cb1073556c99
 	github.com/datawire/dlib v1.3.1
-	github.com/datawire/dtest v0.0.0-20210928162311-722b199c4c2f
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-units v0.5.0
@@ -38,6 +38,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
+	github.com/telepresenceio/dlib/v2 v2.1.1
 	github.com/telepresenceio/go-ftpserver v1.1.0
 	github.com/telepresenceio/go-fuseftp v0.6.9
 	github.com/telepresenceio/go-fuseftp/rpc v0.6.9
@@ -162,7 +163,6 @@ require (
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/telepresenceio/dlib/v2 v2.1.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/winfsp/cgofuse v1.6.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 type Route struct {

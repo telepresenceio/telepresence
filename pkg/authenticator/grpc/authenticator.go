@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"

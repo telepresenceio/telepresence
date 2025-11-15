@@ -19,8 +19,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	grpcServer "github.com/telepresenceio/telepresence/v2/pkg/grpc/server"

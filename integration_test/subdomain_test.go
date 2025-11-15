@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 func (s *connectedSuite) Test_PodWithSubdomain() {

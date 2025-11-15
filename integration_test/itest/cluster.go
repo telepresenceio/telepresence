@@ -37,8 +37,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"

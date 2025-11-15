@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/dlib/dcontext"
+	"github.com/telepresenceio/dlib/v2/dcontext"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 

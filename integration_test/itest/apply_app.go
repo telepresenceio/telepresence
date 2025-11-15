@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 

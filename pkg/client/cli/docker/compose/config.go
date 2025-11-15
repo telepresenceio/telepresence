@@ -17,8 +17,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/generate"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"

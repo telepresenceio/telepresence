@@ -2,11 +2,13 @@ package itest
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/alexflint/go-filemutex"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/datawire/dtest"
 )
 
 type Runner interface {
@@ -143,58 +145,68 @@ func RunTests(c context.Context) {
 // RunTests creates all suites using the added constructors and runs them.
 func (r *runner) RunTests(c context.Context) { //nolint:gocognit
 	c = LoadEnvAndConfig(c)
-	dtest.WithMachineLock(c, func(c context.Context) {
-		WithCluster(c, func(c context.Context) {
-			func() {
-				t := getT(c)
-				for _, f := range r.withCluster {
-					s := f(c)
-					if suiteEnabled(c, s) {
-						t.Run(s.SuiteName(), func(t *testing.T) {
-							ts := f(c)
-							ts.setContext(ts.AmendSuiteContext(c))
-							suite.Run(t, ts)
-						})
-					}
+	m, err := filemutex.New(filepath.Join(os.TempDir(), "telepresence-itest.lock"))
+	if err != nil {
+		require.NoError(getT(c), err)
+	}
+	err = m.Lock() // Will block until lock can be acquired
+	if err != nil {
+		require.NoError(getT(c), err)
+	}
+	defer func() {
+		_ = m.Unlock()
+	}()
+
+	WithCluster(c, func(c context.Context) {
+		func() {
+			t := getT(c)
+			for _, f := range r.withCluster {
+				s := f(c)
+				if suiteEnabled(c, s) {
+					t.Run(s.SuiteName(), func(t *testing.T) {
+						ts := f(c)
+						ts.setContext(ts.AmendSuiteContext(c))
+						suite.Run(t, ts)
+					})
 				}
-			}()
-			for s, sr := range r.withSuffix {
-				WithNamespacePair(c, GetGlobalHarness(c).Suffix()+s, func(np NamespacePair) {
-					for _, f := range sr.withNamespace {
-						np.RunSuite(f(np))
-					}
-					if len(sr.withTrafficManager)+len(sr.withConnected)+len(sr.withName) > 0 {
-						WithTrafficManager(np, func(c context.Context, cnp TrafficManager) {
-							for _, f := range sr.withTrafficManager {
-								cnp.RunSuite(f(cnp))
-							}
-							if len(sr.withConnected)+len(sr.withName) > 0 {
-								WithConnected(cnp, func(c context.Context, cnp TrafficManager) {
-									for _, f := range sr.withConnected {
-										cnp.RunSuite(f(cnp))
-									}
-									for n, nr := range sr.withName {
-										if len(nr.withMultipleServices) > 0 {
-											WithMultipleServices(cnp, n.name, n.svcCount, func(ms MultipleServices) {
-												for _, f := range nr.withMultipleServices {
-													ms.RunSuite(f(ms))
-												}
-											})
-										}
-										if len(nr.withSingleService) > 0 {
-											WithSingleService(cnp, n.name, func(ss SingleService) {
-												for _, f := range nr.withSingleService {
-													ss.RunSuite(f(ss))
-												}
-											})
-										}
-									}
-								})
-							}
-						})
-					}
-				})
 			}
-		})
+		}()
+		for s, sr := range r.withSuffix {
+			WithNamespacePair(c, GetGlobalHarness(c).Suffix()+s, func(np NamespacePair) {
+				for _, f := range sr.withNamespace {
+					np.RunSuite(f(np))
+				}
+				if len(sr.withTrafficManager)+len(sr.withConnected)+len(sr.withName) > 0 {
+					WithTrafficManager(np, func(c context.Context, cnp TrafficManager) {
+						for _, f := range sr.withTrafficManager {
+							cnp.RunSuite(f(cnp))
+						}
+						if len(sr.withConnected)+len(sr.withName) > 0 {
+							WithConnected(cnp, func(c context.Context, cnp TrafficManager) {
+								for _, f := range sr.withConnected {
+									cnp.RunSuite(f(cnp))
+								}
+								for n, nr := range sr.withName {
+									if len(nr.withMultipleServices) > 0 {
+										WithMultipleServices(cnp, n.name, n.svcCount, func(ms MultipleServices) {
+											for _, f := range nr.withMultipleServices {
+												ms.RunSuite(f(ms))
+											}
+										})
+									}
+									if len(nr.withSingleService) > 0 {
+										WithSingleService(cnp, n.name, func(ss SingleService) {
+											for _, f := range nr.withSingleService {
+												ss.RunSuite(f(ss))
+											}
+										})
+									}
+								}
+							})
+						}
+					})
+				}
+			})
+		}
 	})
 }
