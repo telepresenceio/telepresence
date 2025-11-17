@@ -27,7 +27,6 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	daemon2 "github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
@@ -602,10 +601,6 @@ func connectResult(ctx context.Context, ci *connector.ConnectInfo, withProgress 
 
 func connectSession(ctx context.Context, useLine string, request *daemon.Request, required bool) (session *daemon.Session, err error) {
 	userD := daemon.MustGetUserClient(ctx)
-	if userD.Containerized() {
-		patcher.AnnotateConnectRequest(request.ConnectRequest, docker.TpCache, userD.DaemonID().KubeContext)
-	}
-
 	var ci *connector.ConnectInfo
 	defer func() {
 		if ci != nil {

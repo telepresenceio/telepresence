@@ -354,7 +354,6 @@ func (cr *Request) Clone() *Request {
 	cl.ConnectRequest = proto.Clone(cr.ConnectRequest).(*connector.ConnectRequest)
 	cl.AllowConflictingSubnets = slices.Clone(cr.AllowConflictingSubnets)
 	cl.AlsoProxy = slices.Clone(cr.AlsoProxy)
-	cl.ContainerKubeFlagOverrides = maps.Copy(cr.ContainerKubeFlagOverrides)
 	cl.Environment = maps.Copy(cl.Environment)
 	cl.ExposedPorts = slices.Clone(cr.ExposedPorts)
 	cl.KubeFlags = maps.Copy(cl.KubeFlags)

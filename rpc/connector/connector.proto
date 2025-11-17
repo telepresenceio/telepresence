@@ -147,9 +147,6 @@ message ConnectRequest {
   // The kubernetes flags from the telepresence connect command
   map<string, string> kube_flags = 1;
 
-  // The kubernetes flags used by a containerized daemon
-  map<string, string> container_kube_flag_overrides = 9;
-
   repeated string mapped_namespaces = 2;
   string name = 3;
   bool is_pod_daemon = 4;

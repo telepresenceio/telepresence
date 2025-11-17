@@ -222,12 +222,6 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 	if proc.RunningInContainer() {
 		// Don't trust the host's KUBECONFIG env.
 		delete(cr.Environment, "KUBECONFIG")
-
-		// Add potential overrides for kube flags.
-		if len(cr.ContainerKubeFlagOverrides) > 0 {
-			flagMap = maps.Copy(flagMap)
-			maps.Merge(flagMap, cr.ContainerKubeFlagOverrides)
-		}
 	}
 	for k, v := range cr.Environment {
 		if k[0] == '-' {

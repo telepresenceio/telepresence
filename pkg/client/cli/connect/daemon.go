@@ -92,9 +92,6 @@ func ensureAppUserCacheDirs(ctx context.Context) error {
 	if err := mkdir("cache", filepath.Join(cacheDir, "daemons")); err != nil {
 		return err
 	}
-	if err := mkdir("cache", filepath.Join(cacheDir, "kube")); err != nil {
-		return err
-	}
 	if err := mkdir("cache", filepath.Join(cacheDir, "sessions")); err != nil {
 		return err
 	}

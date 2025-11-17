@@ -336,7 +336,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	if cr.Implicit {
 		return nil
 	}
-	if kkf, ok := cr.ContainerKubeFlagOverrides["kubeconfig"]; ok && strings.HasPrefix(kkf, TpCache) {
+	if len(cr.KubeconfigData) > 0 {
 		// Been there, done that
 		return nil
 	}
@@ -344,7 +344,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	if err != nil {
 		return err
 	}
-	config, err := patcher.CreateExternalKubeConfig(ctx, loader, cr.KubeFlags["context"],
+	content, err := patcher.CreateExternalKubeConfig(ctx, loader, cr.KubeFlags["context"],
 		func(configFiles []string) (string, string, string, error) {
 			port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
 			if err != nil {
@@ -373,8 +373,8 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 	if err != nil {
 		return err
 	}
-	patcher.AnnotateConnectRequest(cr.ConnectRequest, TpCache, config.CurrentContext)
-	return err
+	cr.KubeconfigData = content
+	return nil
 }
 
 // handleLocalK8s checks if the cluster is using a well-known provider (currently minikube or kind)
