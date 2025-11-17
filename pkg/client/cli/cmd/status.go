@@ -12,6 +12,8 @@ import (
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	daemonRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -19,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
@@ -40,6 +43,7 @@ type SingleConnectStatusInfo struct {
 }
 
 type RootDaemonStatus struct {
+	Managed      bool             `json:"managed,omitempty"`
 	Running      bool             `json:"running,omitempty"`
 	Name         string           `json:"name,omitempty"`
 	Version      string           `json:"version,omitempty"`
@@ -253,13 +257,7 @@ func (s *StatusInfo) toMap() map[string]any {
 	}
 }
 
-func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
-	wt := &StatusInfo{}
-	userD := daemon.GetUserClient(ctx)
-	if userD == nil {
-		return wt, nil
-	}
-	us := &wt.UserDaemon
+func setUserDaemonStatus(ctx context.Context, userD daemon.UserClient, di *daemon.Info, us *UserDaemonStatus) (*connector.ConnectInfo, error) {
 	installID, err := client.InstallID(ctx)
 	if err != nil {
 		return nil, err
@@ -321,44 +319,69 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 	us.ManagerNamespace = status.ManagerNamespace
 	us.MappedNamespaces = status.MappedNamespaces
 
-	rStatus := status.DaemonStatus
-	if rStatus != nil {
-		rs := &wt.RootDaemon
-		rs.Running = true
-		rs.Name = rStatus.Version.Name
-		if rs.Name == "" {
-			rs.Name = "Root Daemon"
+	return status, nil
+}
+
+func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
+	wt := &StatusInfo{}
+	var rStatus *daemonRpc.DaemonStatus
+	userD := daemon.GetUserClient(ctx)
+	if userD != nil {
+		status, err := setUserDaemonStatus(ctx, userD, di, &wt.UserDaemon)
+		if err != nil {
+			return nil, err
 		}
-		rs.Version = rStatus.Version.Version
-		rs.APIVersion = rStatus.Version.ApiVersion
-		if obc := rStatus.OutboundConfig; obc != nil {
-			rs.PortMappings = obc.PortMappings
+		if mv := status.ManagerVersion; mv != nil {
+			tm := &wt.TrafficManager
+			tm.Name = mv.Name
+			tm.Version = mv.Version
+			if af, err := userD.AgentImageFQN(ctx, &empty.Empty{}); err == nil {
+				tm.TrafficAgent = af.FQN
+			}
+			tm.extendedInfo = GetTrafficManagerStatusExtras(ctx, userD)
 		}
-		if rootCfg, err := daemon.GetRootClientConfig(rStatus); err == nil {
-			rs.DNS = rootCfg.DNS().ToSnake()
-			rs.RoutingSnake = rootCfg.Routing().ToSnake()
-			if us.InDocker {
-				if len(rs.Subnets) == 0 {
-					// No teleroute network is started when there are no subnets to route.
-					// DNS is exposed on port 53 on the containerized daemon, so the
-					// IP that it exposes on the default bridge can be used for DNS.
-					rs.DNS.LocalAddresses = []netip.AddrPort{netip.AddrPortFrom(userD.DaemonInfo().ContainerIP, 53)}
-					us.ContainerNetwork = "default bridge"
-				}
+		rStatus = status.DaemonStatus
+	} else {
+		conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false)
+		if err != nil {
+			return wt, nil
+		}
+		defer conn.Close()
+		if rStatus, err = daemonRpc.NewDaemonClient(conn).Status(ctx, &empty.Empty{}); err != nil {
+			return wt, err
+		}
+	}
+
+	if rStatus == nil {
+		return wt, nil
+	}
+
+	rs := &wt.RootDaemon
+	rs.Running = true
+	rs.Managed = rStatus.Managed
+	rs.Name = rStatus.Version.Name
+	if rs.Name == "" {
+		rs.Name = "Root Daemon"
+	}
+	rs.Version = rStatus.Version.Version
+	rs.APIVersion = rStatus.Version.ApiVersion
+	if obc := rStatus.OutboundConfig; obc != nil {
+		rs.PortMappings = obc.PortMappings
+	}
+	if rootCfg, err := daemon.GetRootClientConfig(rStatus); err == nil {
+		us := &wt.UserDaemon
+		rs.DNS = rootCfg.DNS().ToSnake()
+		rs.RoutingSnake = rootCfg.Routing().ToSnake()
+		if us.InDocker {
+			if len(rs.Subnets) == 0 {
+				// No teleroute network is started when there are no subnets to route.
+				// DNS is exposed on port 53 on the containerized daemon, so the
+				// IP that it exposes on the default bridge can be used for DNS.
+				rs.DNS.LocalAddresses = []netip.AddrPort{netip.AddrPortFrom(userD.DaemonInfo().ContainerIP, 53)}
+				us.ContainerNetwork = "default bridge"
 			}
 		}
 	}
-
-	if mv := status.ManagerVersion; mv != nil {
-		tm := &wt.TrafficManager
-		tm.Name = mv.Name
-		tm.Version = mv.Version
-		if af, err := userD.AgentImageFQN(ctx, &empty.Empty{}); err == nil {
-			tm.TrafficAgent = af.FQN
-		}
-		tm.extendedInfo = GetTrafficManagerStatusExtras(ctx, userD)
-	}
-
 	return wt, nil
 }
 
@@ -461,7 +484,11 @@ func (cs *ContainerizedDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 func (ds *RootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 	n := 0
 	if ds.Running {
-		n += ioutil.Printf(out, "%s: Running\n", ds.Name)
+		mgd := ""
+		if ds.Managed {
+			mgd = " (managed)"
+		}
+		n += ioutil.Printf(out, "%s%s: Running\n", ds.Name, mgd)
 		kvf := ioutil.DefaultKeyValueFormatter()
 		kvf.Prefix = "  "
 		kvf.Indent = "  "
@@ -477,7 +504,7 @@ func (ds *RootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		}
 		n += kvf.Println(out)
 	} else {
-		n += ioutil.Println(out, "Root Daemon: Not running")
+		n += ioutil.Println(out, "OSS Root Daemon: Not running")
 	}
 	return int64(n), nil
 }
@@ -549,7 +576,7 @@ func (cs *UserDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		cs.print(kvf)
 		n += kvf.Println(out)
 	} else {
-		n += ioutil.Println(out, "User Daemon: Not running")
+		n += ioutil.Println(out, "OSS User Daemon: Not running")
 	}
 	return int64(n), nil
 }

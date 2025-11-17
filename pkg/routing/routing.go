@@ -99,7 +99,7 @@ func (r *Route) String() string {
 		bf.WriteString(r.RoutedNet.String())
 		bf.WriteByte(' ')
 	}
-	if !r.LocalIP.IsUnspecified() {
+	if r.LocalIP.IsValid() && !r.LocalIP.IsUnspecified() {
 		bf.WriteString("via ")
 		bf.WriteString(r.LocalIP.String())
 		bf.WriteByte(' ')

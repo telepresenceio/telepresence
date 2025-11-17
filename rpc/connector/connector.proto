@@ -81,7 +81,7 @@ service Connector {
   rpc SetLogLevel(LogLevelRequest) returns (google.protobuf.Empty);
 
   // Quits (terminates) the connector process.
-  rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc Quit(google.protobuf.Empty) returns (daemon.QuitResponse);
 
   // GatherLogs will acquire logs for the various Telepresence components in kubernetes
   // (pending the request) and return them to the caller

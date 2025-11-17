@@ -117,7 +117,7 @@ type ConnectorClient interface {
 	// SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
 	SetLogLevel(ctx context.Context, in *LogLevelRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
-	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*daemon.QuitResponse, error)
 	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
 	// (pending the request) and return them to the caller
 	GatherLogs(ctx context.Context, in *LogsRequest, opts ...grpc.CallOption) (*LogsResponse, error)
@@ -361,9 +361,9 @@ func (c *connectorClient) SetLogLevel(ctx context.Context, in *LogLevelRequest, 
 	return out, nil
 }
 
-func (c *connectorClient) Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *connectorClient) Quit(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*daemon.QuitResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(emptypb.Empty)
+	out := new(daemon.QuitResponse)
 	err := c.cc.Invoke(ctx, Connector_Quit_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
@@ -578,7 +578,7 @@ type ConnectorServer interface {
 	// SetLogLevel will temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons.
 	SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error)
 	// Quits (terminates) the connector process.
-	Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
+	Quit(context.Context, *emptypb.Empty) (*daemon.QuitResponse, error)
 	// GatherLogs will acquire logs for the various Telepresence components in kubernetes
 	// (pending the request) and return them to the caller
 	GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error)
@@ -680,7 +680,7 @@ func (UnimplementedConnectorServer) WatchWorkloads(*WatchWorkloadsRequest, grpc.
 func (UnimplementedConnectorServer) SetLogLevel(context.Context, *LogLevelRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method SetLogLevel not implemented")
 }
-func (UnimplementedConnectorServer) Quit(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+func (UnimplementedConnectorServer) Quit(context.Context, *emptypb.Empty) (*daemon.QuitResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Quit not implemented")
 }
 func (UnimplementedConnectorServer) GatherLogs(context.Context, *LogsRequest) (*LogsResponse, error) {

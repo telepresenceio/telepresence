@@ -33,13 +33,10 @@ func listen(_ context.Context, processName, socketName string) (net.Listener, er
 	listener, err := net.Listen("unix", socketName)
 	if err != nil {
 		if errors.Is(err, unix.EADDRINUSE) {
-			err = fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully", socketName, processName)
+			err = fs.ErrExist
 		}
 		return nil, err
 	}
-	// Don't have dhttp.ServerConfig.Serve unlink the socket; defer unlinking the socket
-	// until the process exits.
-	listener.(*net.UnixListener).SetUnlinkOnClose(false)
 	return listener, nil
 }
 

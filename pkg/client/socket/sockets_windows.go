@@ -3,6 +3,7 @@ package socket
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net"
 	"path/filepath"
 	"unsafe"
@@ -26,12 +27,9 @@ func rootDaemonPath(ctx context.Context) string {
 func listen(ctx context.Context, processName, socketName string) (net.Listener, error) {
 	listener, err := net.Listen("unix", socketName)
 	if err != nil {
-		err = fmt.Errorf("socket %q exists so the %s is either already running or terminated ungracefully: %T, %w", socketName, processName, err, err)
+		err = fs.ErrExist
 		return nil, err
 	}
-	// Don't have dhttp.ServerConfig.Serve unlink the socket; defer unlinking the socket
-	// until the process exits.
-	listener.(*net.UnixListener).SetUnlinkOnClose(false)
 	return listener, nil
 }
 

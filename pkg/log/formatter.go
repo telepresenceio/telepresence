@@ -8,63 +8,92 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 const thisModule = "github.com/telepresenceio/telepresence/v2"
 
-// Formatter formats log messages for Telepresence.
-type Formatter struct {
+// formatter implements logrus.Formatter.
+type formatter struct {
 	timestampFormat string
+	levelThreshold  logrus.Level
 }
 
-func NewFormatter(timestampFormat string) *Formatter {
-	return &Formatter{timestampFormat: timestampFormat}
+type FormatterOption func(*formatter)
+
+// WithTimestampFormat will cause log messages to include a timestamp formatted according to the given format.
+// Unless given, or if the format is an empty string, messages will be logged without a timestamp.
+func WithTimestampFormat(format string) FormatterOption {
+	return func(f *formatter) { f.timestampFormat = format }
+}
+
+// WithLevelPrefixThreshold will cause log messages with a level less than this threshold to be
+// logged without a level prefix.
+func WithLevelPrefixThreshold(level logrus.Level) FormatterOption {
+	return func(f *formatter) { f.levelThreshold = level }
+}
+
+func NewFormatter(options ...FormatterOption) logrus.Formatter {
+	f := &formatter{}
+	for _, opt := range options {
+		opt(f)
+	}
+	return f
+}
+
+func padLevel(b *bytes.Buffer, level logrus.Level) {
+	lvl := level.String()
+	b.WriteString(lvl)
+	for i := len(lvl); i < 8; i++ {
+		b.WriteByte(' ')
+	}
 }
 
 // Format implements logrus.Formatter.
-func (f *Formatter) Format(entry *logrus.Entry) ([]byte, error) {
-	var b *bytes.Buffer
-	if entry.Buffer != nil {
-		b = entry.Buffer
-	} else {
+func (f *formatter) Format(entry *logrus.Entry) ([]byte, error) {
+	b := entry.Buffer
+	if b == nil {
 		b = &bytes.Buffer{}
 	}
-	data := maps.Copy(entry.Data)
-	goroutine, _ := data["THREAD"].(string)
-	delete(data, "THREAD")
 
-	if len(goroutine) > 0 {
-		fmt.Fprintf(b, "%s %-*s %s : %s",
-			entry.Time.Format(f.timestampFormat),
-			len("warning"), entry.Level,
-			strings.TrimPrefix(goroutine, "/"),
-			entry.Message)
-	} else {
-		fmt.Fprintf(b, "%s %-*s %s",
-			entry.Time.Format(f.timestampFormat),
-			len("warning"), entry.Level,
-			entry.Message)
+	if f.timestampFormat != "" {
+		b.WriteString(entry.Time.Format(f.timestampFormat))
+		b.WriteByte(' ')
+	}
+	if entry.Level >= f.levelThreshold {
+		padLevel(b, entry.Level)
 	}
 
-	if len(data) > 0 {
+	data := entry.Data
+	dataLen := len(data)
+	if thread, ok := data["THREAD"]; ok {
+		dataLen--
+		if goroutine, ok := thread.(string); ok && goroutine != "" {
+			b.WriteString(strings.TrimPrefix(goroutine, "/"))
+			b.WriteString(" : ")
+		}
+	}
+	b.WriteString(entry.Message)
+
+	if dataLen > 0 {
 		b.WriteString(" :")
-		keys := make([]string, 0, len(data))
+		keys := make([]string, dataLen)
+		i := 0
 		for key := range data {
-			keys = append(keys, key)
+			if key != "THREAD" {
+				keys[i] = key
+				i++
+			}
 		}
 		sort.Strings(keys)
 		for _, key := range keys {
-			val := fmt.Sprintf("%+v", data[key])
-			fmt.Fprintf(b, " %s=%q", key, val)
+			ioutil.Printf(b, " %s=%q", key, fmt.Sprintf("%+v", data[key]))
 		}
 	}
 
-	if entry.HasCaller() && strings.HasPrefix(entry.Caller.File, thisModule+"/") {
-		fmt.Fprintf(b, " (from %s:%d)", strings.TrimPrefix(entry.Caller.File, thisModule+"/"), entry.Caller.Line)
+	if entry.HasCaller() && strings.HasPrefix(entry.Caller.File, thisModule) {
+		ioutil.Printf(b, " (from %s:%d)", strings.TrimPrefix(entry.Caller.File, thisModule), entry.Caller.Line)
 	}
-
 	b.WriteByte('\n')
-
 	return b.Bytes(), nil
 }

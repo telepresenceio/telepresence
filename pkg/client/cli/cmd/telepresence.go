@@ -101,10 +101,12 @@ func AddSubCommands(cmd *cobra.Command, markdown bool) {
 		setContext(command, ctx)
 	}
 	cmd.AddCommand(commands...)
-	cmd.PersistentFlags().AddFlagSet(global.Flags(ctx, false, markdown))
-	addCompletion(cmd, markdown)
-	addUsageTemplate(cmd, markdown)
-	_ = cmd.RegisterFlagCompletionFunc("context", autocompleteContext)
+	if client.ProcessName() != client.RootDaemonName {
+		cmd.PersistentFlags().AddFlagSet(global.Flags(ctx, false, markdown))
+		addCompletion(cmd, markdown)
+		addUsageTemplate(cmd, markdown)
+		_ = cmd.RegisterFlagCompletionFunc("context", autocompleteContext)
+	}
 }
 
 // RunSubcommands is for use as a cobra.interceptCmd.RunE for commands that don't do anything themselves

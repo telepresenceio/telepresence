@@ -18,7 +18,7 @@ service Daemon {
   rpc Status(google.protobuf.Empty) returns (DaemonStatus);
 
   // Quit quits (terminates) the service.
-  rpc Quit(google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc Quit(google.protobuf.Empty) returns (QuitResponse);
 
   // Connect creates a new session that provides outbound connectivity to the cluster
   rpc Connect(NetworkConfig) returns (DaemonStatus);
@@ -61,9 +61,10 @@ service Daemon {
 }
 
 message DaemonStatus {
+  bool managed = 2;
   NetworkConfig outbound_config = 4;
   telepresence.common.VersionInfo version = 5;
-  reserved 2, 3;
+  reserved 3;
 }
 
 message Domains {
@@ -201,4 +202,9 @@ message ReroutePortRequest {
 
   // port is will be rerouted to the host_port.
   uint32 src_port = 2;
+}
+
+message QuitResponse {
+  // Set to true when the root daemon runs as a service.
+  bool root_daemon_will_continue = 1;
 }

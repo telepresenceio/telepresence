@@ -360,15 +360,19 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 	return &empty.Empty{}, err
 }
 
-func (s *service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
+func (s *service) Quit(ctx context.Context, ex *empty.Empty) (qr *daemon.QuitResponse, err error) {
 	s.cancelSession(ctx, false)
 	s.quit(false)
-	_ = s.withRootDaemon(context.WithoutCancel(ctx), func(ctx context.Context, rd daemon.DaemonClient) error {
+	err = s.withRootDaemon(context.WithoutCancel(ctx), func(ctx context.Context, rd daemon.DaemonClient) (err error) {
 		dlog.Debug(ctx, "Telling root daemon to Quit")
-		_, err := rd.Quit(ctx, ex)
+		qr, err = rd.Quit(ctx, ex)
 		return err
 	})
-	return ex, nil
+	if err != nil {
+		qr = &daemon.QuitResponse{}
+		err = nil
+	}
+	return qr, err
 }
 
 func (s *service) RemoteMountAvailability(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {

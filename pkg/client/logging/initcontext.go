@@ -32,15 +32,39 @@ func InitContext(ctx context.Context, logFile string, logLevel logrus.Level, str
 	// Start with InfoLevel so that the config is read using that level
 	logger.SetLevel(logrus.InfoLevel)
 	logger.ReportCaller = false // turned on when level >= logrus.TraceLevel
+	dl := dlog.WrapLogrus(logger)
 
-	logger.Formatter = tlog.NewFormatter("15:04:05.0000")
 	switch logFile {
 	case "stdout":
+		logger.Formatter = tlog.NewFormatter(tlog.WithTimestampFormat("15:04:05.0000"))
 		logger.SetOutput(os.Stdout)
 	case "", "-", "stderr":
+		logger.Formatter = tlog.NewFormatter(tlog.WithTimestampFormat("15:04:05.0000"))
 		logger.SetOutput(os.Stderr)
+	case "managed":
+		// "managed" is a special case used by the daemon to log to stdout and stderr. It's
+		// assumed that the caller will add a timestamp, and that level is implicit for errors.
+		logger.Formatter = tlog.NewFormatter(tlog.WithLevelPrefixThreshold(logrus.DebugLevel))
+		logger.SetOutput(os.Stdout)
+
+		errLog := logrus.New()
+		errLog.SetLevel(logrus.ErrorLevel)
+		errLog.ReportCaller = false
+		errLog.Formatter = logger.Formatter
+		dl = dlog.NewSplitLogger(dl, dlog.WrapLogrus(errLog))
+	case "std":
+		// "std" is a special case used by the daemon to log to stdout and stderr. Contrary to
+		// "managed", it's not assumed that the caller will add a timestamp, or that the level is implicit.
+		logger.Formatter = tlog.NewFormatter(tlog.WithTimestampFormat("2006-01-02 15:04:05.0000"))
+		logger.SetOutput(os.Stdout)
+
+		errLog := logrus.New()
+		errLog.SetLevel(logrus.ErrorLevel)
+		errLog.ReportCaller = false
+		errLog.Formatter = logger.Formatter
+		dl = dlog.NewSplitLogger(dl, dlog.WrapLogrus(errLog))
 	default:
-		logger.Formatter = tlog.NewFormatter("2006-01-02 15:04:05.0000")
+		logger.Formatter = tlog.NewFormatter(tlog.WithTimestampFormat("2006-01-02 15:04:05.0000"))
 		maxFiles := uint16(5)
 
 		// TODO: Also make this a configurable setting in config.yml
@@ -79,7 +103,7 @@ func InitContext(ctx context.Context, logFile string, logLevel logrus.Level, str
 		log.SetFlags(0)
 	}
 
-	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logger))
+	ctx = dlog.WithLogger(ctx, dl)
 	tlog.SetLogrusLevel(logger, logLevel.String(), false)
 	ctx = tlog.WithLevelSetter(ctx, logger)
 	return ctx, nil

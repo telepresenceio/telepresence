@@ -86,14 +86,20 @@ func quitHostConnector(ctx context.Context) {
 	}
 	ud := daemon.MustGetUserClient(udCtx)
 	progress.Working(ctx, "Quitting")
-	_, _ = ud.Quit(ctx, &emptypb.Empty{})
+	qr, err := ud.Quit(ctx, &emptypb.Empty{})
+	if err != nil {
+		progress.Errorf(ctx, "failed to quit user daemon: %v", tpGrpc.FromGRPC(err))
+		return
+	}
 	_ = ud.Close()
 	_ = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
 
-	// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
-	// the fact that the user daemon might have been killed ungracefully.
-	if waitErr := socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); waitErr != nil {
-		quitRootDaemon(ctx)
+	if !qr.RootDaemonWillContinue {
+		// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
+		// the fact that the user daemon might have been killed ungracefully.
+		if waitErr := socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); waitErr != nil {
+			quitRootDaemon(ctx)
+		}
 	}
 	progress.PrintDone(ctx, "Quit")
 }
