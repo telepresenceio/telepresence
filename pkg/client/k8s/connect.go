@@ -28,7 +28,7 @@ import (
 )
 
 func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
-	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "http")
+	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "grpc")
 
 	dialCtx, cancel := client.GetConfig(kc).Timeouts().TimeoutContext(dialCtx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
