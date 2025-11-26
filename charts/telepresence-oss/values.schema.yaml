@@ -482,8 +482,10 @@ properties:
     $ref: "#/$defs/probe"
 
   replicaCount:
-    description: Number or replicas for the traffic-manager. The Traffic Manager only support running with one replica at the moment.
-    const: 1
+    description: Number of replicas for the traffic-manager. The Traffic Manager only support running with one replica at the moment. Valid values are 0 (to scale down) or 1.
+    enum:
+      - 0
+      - 1
 
   resources:
     description: Define resource requests and limits for the Traffic Manger

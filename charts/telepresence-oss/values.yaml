@@ -4,6 +4,7 @@
 
 # The Traffic Manager only support running with one replica at the moment.
 # Configuring the replicaCount will be added in future versions of Telepresence
+# Set to 0 to scale down the traffic-manager
 
 replicaCount: 1
 
