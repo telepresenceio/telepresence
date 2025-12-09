@@ -326,7 +326,6 @@ save-tel2-image: tel2-image
 	git pull origin release/v2 >&2
 	git checkout -b bh-new-branch >&2
 	git add . >&2
-	git commit -m "Add changes" >&2
 	git push -u origin my-new-branch >&2
 	docker save $(TEL2_IMAGE_FQN) > $(BUILDDIR)/tel2-image.tar >&2
 
