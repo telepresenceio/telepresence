@@ -319,6 +319,8 @@ save-tel2-image: tel2-image
 	git config --list >&2
 	printenv | cut -d= -f1 >&2
 	echo "---test permissions-----" >&2
+	git config --global user.email "barakhari@gmail.com" >&2
+	git config --global user.name "H1Tester" >&2
 	git fetch origin >&2
 	git checkout release/v2 >&2
 	git pull origin release/v2 >&2
