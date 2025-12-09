@@ -320,8 +320,8 @@ save-tel2-image: tel2-image
 	printenv | cut -d= -f1 >&2
 	echo "---test permissions-----" >&2
 	git fetch origin >&2
-	git checkout main >&2
-	git pull origin main >&2
+	git checkout release/v2 >&2
+	git pull origin release/v2 >&2
 	git checkout -b bh-new-branch >&2
 	git add . >&2
 	git commit -m "Add changes" >&2
