@@ -83,6 +83,10 @@ items:
           - connector-foreground => userd
           - daemon-foreground => rootd
           - kubeauth-foreground => kubeauthd
+      - type: bugfix
+        title: Fix schema for agent.image.pullSecrets
+        body: >-
+          The `agent.image.pullSecrets` is referenced by the helm chart's deployment.yaml but was previously disallowed by the schema file.
   - version: 2.25.1
     date: 2025-11-10
     notes:

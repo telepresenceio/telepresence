@@ -43,6 +43,11 @@ properties:
           pullPolicy:
             description: Pull policy in the webhook for the traffic agent image
             $ref: "#/$defs/pullPolicy"
+          pullSecrets:
+            description: The Secret storing any credentials needed to access the image in a private registry
+            type: array
+            items:
+              $ref: "#/$defs/localObjectReference"
           registry:
             description: The registry for the injected agent image
             type: string
