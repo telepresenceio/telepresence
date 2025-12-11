@@ -1,6 +1,13 @@
 package integration_test
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"sync"
+
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -169,4 +176,71 @@ func init() {
 	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) itest.TestingSuite {
 		return &httpInterceptsSuite{Suite: itest.Suite{Harness: h}, SingleService: h}
 	})
+}
+
+func (s *httpInterceptsSuite) Test_HTTPManySimultaneous() {
+	if _, ok := os.LookupEnv("HTTP_INTERCEPT_STRESS_TEST"); !ok {
+		s.T().Skip("Run this stress manually. It's too demanding for the CI infrastructure.")
+		return
+	}
+	require := s.Require()
+	ctx := s.Context()
+
+	const interceptCount = 250
+	const pingRepeatCount = 10
+	localPorts := make([]int, interceptCount)
+	httpCancels := make([]context.CancelFunc, interceptCount)
+	responseFunc := func(name string, r *http.Request) string {
+		return fmt.Sprintf("%s, X-Personal-Id: %s, X-Repeat-Count: %s",
+			name, r.Header.Get("X-Personal-Id"), r.Header.Get("X-Repeat-Count"))
+	}
+
+	// Ensure that a traffic-agent is running on the workload and capture its log
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", s.ServiceName())
+	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	s.CapturePodLogs(ctx, s.ServiceName(), "traffic-agent", s.AppNamespace())
+
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		localPorts[i], httpCancels[i] = itest.StartLocalHttpEchoServerWithAddr(ctx, "echo-"+id, "localhost:0", responseFunc)
+	}
+	defer func() {
+		for _, cancel := range httpCancels {
+			cancel()
+		}
+	}()
+
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		hdr := "X-Personal-Id=" + id
+		svc := "echo-" + id
+		stdout, stderr, err := itest.Telepresence(ctx, "intercept", svc,
+			"--workload", s.ServiceName(),
+			"--http-header", hdr,
+			"--port", strconv.Itoa(localPorts[i])+":80",
+			"--mount", "false")
+		require.NoError(err, "stderr: %s", stderr)
+		require.Contains(stdout, "Using Deployment")
+	}
+
+	wg := &sync.WaitGroup{}
+	wg.Add(interceptCount * pingRepeatCount)
+	for i := 0; i < interceptCount; i++ {
+		for n := 0; n < pingRepeatCount; n++ {
+			go func(i int) {
+				defer wg.Done()
+				hdr := "X-Personal-Id=" + strconv.Itoa(i)
+				rpt := "X-Repeat-Count=" + strconv.Itoa(n)
+				expectedOutput := fmt.Sprintf("echo-%d, X-Personal-Id: %d, X-Repeat-Count: %d", i, i, n)
+				itest.PingInterceptedEchoServerAndExpect(ctx, s.ServiceName(), "80", expectedOutput, hdr, rpt)
+			}(i)
+		}
+	}
+	wg.Wait()
+
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		_, _, err := itest.Telepresence(ctx, "leave", "echo-"+id)
+		require.NoError(err, "Failed to leave intercept echo-"+id)
+	}
 }
