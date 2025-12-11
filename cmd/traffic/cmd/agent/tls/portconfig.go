@@ -54,8 +54,9 @@ type portConfig struct {
 	upstreamInsecureSkipVerify bool
 	upstreamProbeTimeout       time.Duration
 
-	TLS   ValueState
-	HTTP2 ValueState
+	portMutex sync.Mutex
+	TLS       ValueState
+	HTTP2     ValueState
 }
 
 func newPortConfig(port uint16, containerName string) *portConfig {
@@ -116,6 +117,13 @@ func (p *portConfig) probeWarning(ctx context.Context, what string, err error) {
 }
 
 func (p *portConfig) probeTLS(ctx context.Context, podIP netip.Addr) bool {
+	p.portMutex.Lock()
+	supported := p.probeTLSWithLock(ctx, podIP)
+	p.portMutex.Unlock()
+	return supported
+}
+
+func (p *portConfig) probeTLSWithLock(ctx context.Context, podIP netip.Addr) bool {
 	if p.TLS != ValueUnknown && p.HTTP2 != ValueUnknown {
 		return p.TLS == ValueSupported
 	}
@@ -162,6 +170,8 @@ func (p *portConfig) probeTLS(ctx context.Context, podIP netip.Addr) bool {
 }
 
 func (p *portConfig) probeHTTP2(ctx context.Context, podIP netip.Addr) bool {
+	p.portMutex.Lock()
+	defer p.portMutex.Unlock()
 	if p.HTTP2 != ValueUnknown {
 		return p.HTTP2 == ValueSupported
 	}
@@ -170,19 +180,19 @@ func (p *portConfig) probeHTTP2(ctx context.Context, podIP netip.Addr) bool {
 	if p.TLS == ValueNotSupported {
 		dlog.Debugf(ctx, "Probing port %d for HTTP/2 clear-text support", port)
 		state := ValueNotSupported
-		if p.probeHTTP2ClearText(ctx) {
+		if p.probeHTTP2ClearTextWithLock(ctx) {
 			state = ValueSupported
 		}
 		p.setHTTP2(ctx, state)
 	} else {
 		// TLS has been determined from annotation or appProtocol because otherwise the HTTP/2 status would already be known.
 		// Let's probe TLS to also get HTTP/2 status.
-		p.probeTLS(ctx, podIP)
+		p.probeTLSWithLock(ctx, podIP)
 	}
 	return p.HTTP2 == ValueSupported
 }
 
-func (p *portConfig) probeHTTP2ClearText(ctx context.Context) bool {
+func (p *portConfig) probeHTTP2ClearTextWithLock(ctx context.Context) bool {
 	bc := backoff.NewExponentialBackOff()
 	bc.MaxElapsedTime = p.upstreamProbeTimeout
 	bc.MaxInterval = 300 * time.Millisecond
