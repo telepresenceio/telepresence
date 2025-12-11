@@ -14,6 +14,12 @@ When running a Docker command using `telepresence docker-run` or `telepresence c
 The Telepresence CLI would truncate the command text when generating help for external commands such as `docker compose` that had text spanning more than one line. This has been fixed so that the full command text is displayed.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Fix schema for agent.image.pullSecrets</div></div>
+<div style="margin-left: 15px">
+
+The `agent.image.pullSecrets` is referenced by the helm chart's deployment.yaml but was previously disallowed by the schema file.
+</div>
+
 ## Version 2.25.1 <span style="font-size: 16px;">(November 10)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Volumes did not mount correctly when using `telepresence connect --docker` when Docker had IPv6 enabled.</div></div>
 <div style="margin-left: 15px">
@@ -21,7 +27,7 @@ The Telepresence CLI would truncate the command text when generating help for ex
 Telepresence failed to mount volumes after connecting with `telepresence connect --docker` when Docker Engine had IPv6 enabled in its default bridge network. Disabling IPv6 in the Telepresence client configuration did not resolve the issue. This was fixed in Telepresence Volume Plugin "telemount" version 0.3.2, which circumvented a [bug in sshfs](https://github.com/libfuse/sshfs/issues/335). Additionally, the volume plugin will no longer use IPv6 when the client configuration `docker.enableIPv6` is set to `false`.
 </div>
 
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remove unnecessary setcap from traffic binary</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remove unnecessary setcap from traffic binary</div></div>
 <div style="margin-left: 15px">
 
 The setcap capability (cap_net_bind_service) was removed from the traffic binary build process. This capability was originally added to allow the binary to bind to privileged ports, specifically port 443 for the mutating webhook. Since version 2.24.0, the default mutating webhook port was changed to 8443 (a non-privileged port), making this capability unnecessary. Removing it simplifies the build process and reduces the security surface area.
