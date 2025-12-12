@@ -129,6 +129,7 @@ agentInjector:
 ################################################################################
 agent:
   port: 9900
+  enableH2cProbing: true
   mountPolicies:
     "/tmp": Local
   image:

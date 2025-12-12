@@ -24,6 +24,15 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.26.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Add ability to disable the Traffic Agent's HTTP2/Clear-Text probing.
+        body: >-
+          The Traffic Agent now has a new configuration option `agent.enableH2cProbing` that can be set to `false` to disable the
+          HTTP2/Clear-Text probing. The default setting is `true` to preserve backwards compatibility, but this will be changed to `false`
+          in a future release.
   - version: 2.25.2
     date: 2025-12-26
     notes:

@@ -58,6 +58,7 @@ type Env struct {
 	AgentInjectPolicy         agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,           parser=enable-policy,  default=Never"`
 	AgentLogLevel             string                      `env:"AGENT_LOG_LEVEL,               parser=logLevel,       defaultFrom=LogLevel"`
 	AgentPort                 uint16                      `env:"AGENT_PORT,                    parser=port-number,    default=0"`
+	AgentEnableH2cProbing     bool                        `env:"AGENT_ENABLE_H2C_PROBING,      parser=bool,           default=false"`
 	AgentResources            *core.ResourceRequirements  `env:"AGENT_RESOURCES,               parser=json-resources, default="`
 	AgentMountPolicies        types.MountPolicies         `env:"AGENT_MOUNT_POLICIES,          parser=json-mount-policies, default="`
 	AgentInitResources        *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,          parser=json-resources, default="`
@@ -97,6 +98,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		SecurityContext:     e.AgentSecurityContext,
 		InitSecurityContext: e.AgentInitSecurityContext,
 		MountPolicies:       e.AgentMountPolicies,
+		EnableH2cProbing:    e.AgentEnableH2cProbing,
 	}, nil
 }
 

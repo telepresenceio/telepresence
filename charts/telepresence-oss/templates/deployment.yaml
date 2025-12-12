@@ -132,6 +132,8 @@ spec:
           - name: AGENT_PORT
             value: {{ .port | quote }}
           {{- end }}
+          - name: AGENT_ENABLE_H2C_PROBING
+            value: {{ (default false .enableH2cProbing) | quote }}
           {{- if .resources }}
           - name: AGENT_RESOURCES
             value: '{{ toJson .resources }}'

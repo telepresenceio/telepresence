@@ -39,6 +39,7 @@ type GeneratorConfig struct {
 	InitSecurityContext *core.SecurityContext
 	MountPolicies       types.MountPolicies
 	ClientConnectionTTL time.Duration
+	EnableH2cProbing    bool
 }
 
 func portsFromContainerPortsAnnotation(ctx context.Context, wl k8sapi.Workload) (ports []types.PortIdentifier, err error) {
@@ -183,6 +184,7 @@ func (cfg *GeneratorConfig) Generate(
 		PullSecrets:         cfg.PullSecrets,
 		SecurityContext:     cfg.SecurityContext,
 		InitSecurityContext: cfg.InitSecurityContext,
+		EnableH2cProbing:    cfg.EnableH2cProbing,
 	}, nil
 }
 

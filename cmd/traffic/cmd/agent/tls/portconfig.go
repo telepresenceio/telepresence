@@ -54,18 +54,20 @@ type portConfig struct {
 	upstreamInsecureSkipVerify bool
 	upstreamProbeTimeout       time.Duration
 
-	portMutex sync.Mutex
-	TLS       ValueState
-	HTTP2     ValueState
+	portMutex        sync.Mutex
+	TLS              ValueState
+	HTTP2            ValueState
+	enableH2cProbing bool
 }
 
-func newPortConfig(port uint16, containerName string) *portConfig {
+func newPortConfig(port uint16, containerName string, enableH2C bool) *portConfig {
 	return &portConfig{
 		port:                 port,
 		containerName:        containerName,
 		upstreamProbeTimeout: defaultProbeTimeout,
 		TLS:                  ValueUnknown,
 		HTTP2:                ValueUnknown,
+		enableH2cProbing:     enableH2C,
 	}
 }
 
@@ -176,9 +178,7 @@ func (p *portConfig) probeHTTP2(ctx context.Context, podIP netip.Addr) bool {
 		return p.HTTP2 == ValueSupported
 	}
 
-	port := p.port
 	if p.TLS == ValueNotSupported {
-		dlog.Debugf(ctx, "Probing port %d for HTTP/2 clear-text support", port)
 		state := ValueNotSupported
 		if p.probeHTTP2ClearTextWithLock(ctx) {
 			state = ValueSupported
@@ -193,6 +193,10 @@ func (p *portConfig) probeHTTP2(ctx context.Context, podIP netip.Addr) bool {
 }
 
 func (p *portConfig) probeHTTP2ClearTextWithLock(ctx context.Context) bool {
+	if !p.enableH2cProbing {
+		return false
+	}
+	dlog.Debugf(ctx, "Probing port %d for HTTP/2 clear-text support", p.port)
 	bc := backoff.NewExponentialBackOff()
 	bc.MaxElapsedTime = p.upstreamProbeTimeout
 	bc.MaxInterval = 300 * time.Millisecond
