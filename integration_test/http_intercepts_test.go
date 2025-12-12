@@ -6,8 +6,11 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -243,4 +246,87 @@ func (s *httpInterceptsSuite) Test_HTTPManySimultaneous() {
 		_, _, err := itest.Telepresence(ctx, "leave", "echo-"+id)
 		require.NoError(err, "Failed to leave intercept echo-"+id)
 	}
+}
+
+func (s *notConnectedSuite) Test_HTTPManyClientsSimultaneous() {
+	if _, ok := os.LookupEnv("HTTP_INTERCEPT_STRESS_TEST"); !ok {
+		s.T().Skip("Run this stress manually. It's too demanding for the CI infrastructure.")
+		return
+	}
+
+	ctx := s.Context()
+
+	// High values here will likely cause errors like "too many open files" unless the docker service is configured to allow more.
+	// On a Linux box, this is typically done by adding a /etc/systemd/system/docker.service.d/override.conf file with the following contents:
+	// [Service]
+	// LimitNOFILE=infinity
+	//
+	// Also add the following line to /etc/docker/daemon.json:
+	// {
+	// 	"default-ulimits": {
+	//		"nofile": {
+	//			"Name": "nofile",
+	//			"Soft": 64000,
+	//			"Hard": 64000
+	//		}
+	//	}
+	// }
+	const interceptCount = 16
+
+	svc := "echo-auto-inject"
+	s.ApplyApp(ctx, svc, "deploy/"+svc)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+	s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
+
+	conns := make([]string, 0, interceptCount)
+	defer func() {
+		for _, connName := range conns {
+			_, _, err := itest.Telepresence(ctx, "--use", connName, "quit")
+			s.NoError(err)
+		}
+	}()
+
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		connName := "conn-" + id + "-v"
+		_, err := s.TelepresenceTryConnect(ctx, "--docker", "--name", connName)
+		if err != nil {
+			s.FailNow("Failed to connect to telepresence", err)
+		}
+		conns = append(conns, connName)
+	}
+
+	wg := &sync.WaitGroup{}
+	wg.Add(interceptCount)
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		hdr := "X-Personal-Id=" + id
+		connName := conns[i]
+		go func() {
+			defer wg.Done()
+			tpCtx, cancel := context.WithCancel(ctx)
+			outCh := make(chan string)
+			go func() {
+				defer close(outCh)
+				stdout, stderr, err := itest.Telepresence(tpCtx, "--use", connName, "intercept", svc, "--mount=false", "--http-header", hdr, "--docker-run", "--port", "8080:80", "--", "--name", connName+".local", "telepresenceio/echo-server")
+				s.NoError(err, "stderr: %s", stderr)
+				outCh <- stdout
+			}()
+			s.Eventually(func() bool {
+				so, se, err := itest.Telepresence(ctx, "--use", connName, "curl", "--silent", "--max-time", "2", "-H", "X-Personal-Id: "+id, svc)
+				if err != nil {
+					dlog.Error(ctx, so, se, err)
+					return false
+				}
+				return strings.Contains(so, "Intercepted container")
+			}, 10*time.Second, 1*time.Second)
+
+			itest.TelepresenceOk(ctx, "--use", connName, "quit")
+			cancel()
+			out := <-outCh
+			// Ensure that the GET call arrived to the local server.
+			s.Contains(out, "| GET /")
+		}()
+	}
+	wg.Wait()
 }
