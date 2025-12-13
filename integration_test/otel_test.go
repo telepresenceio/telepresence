@@ -84,7 +84,7 @@ func (s *otelSuite) SetupSuite() {
 	s.Require().NoError(err)
 
 	var so string
-	so, err = s.TelepresenceHelmInstall(ctx, false, "--set", "logLevel=trace")
+	so, err = s.TelepresenceHelmInstall(ctx, false, "--set", "logLevel=trace", "--set", "agentInjector.mutationAware=false")
 	s.Require().NoError(err, "telepresence install", so)
 }
 

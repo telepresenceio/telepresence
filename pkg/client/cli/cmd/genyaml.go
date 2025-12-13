@@ -8,8 +8,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	apps "k8s.io/api/apps/v1"
-	core "k8s.io/api/core/v1"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -335,16 +333,8 @@ func (g *genContainerInfo) run(cmd *cobra.Command, kubeFlags map[string]string) 
 		return errcat.User.Newf("kind %q of loaded workload is different from %q loaded configmap entry", wl.GetKind(), cm.WorkloadKind)
 	}
 
-	podTpl := wl.GetPodTemplate()
 	ab := agentconfig.ContainerBuilder{
-		Pod: &core.Pod{
-			TypeMeta: meta.TypeMeta{
-				Kind:       "pod",
-				APIVersion: "v1",
-			},
-			ObjectMeta: podTpl.ObjectMeta,
-			Spec:       podTpl.Spec,
-		},
+		Pod:    wl.GetPodTemplate(),
 		Config: cm,
 	}
 	agentContainer, _, err := ab.AgentContainer(ctx)

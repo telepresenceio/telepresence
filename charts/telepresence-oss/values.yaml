@@ -114,6 +114,7 @@ agentInjector:
         kind: Issuer
 
   injectPolicy: OnDemand
+  mutationAware: true
   webhook:
     name: agent-injector-webhook
     admissionReviewVersions: ["v1"]

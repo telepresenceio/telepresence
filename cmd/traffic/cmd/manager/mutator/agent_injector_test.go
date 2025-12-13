@@ -1960,15 +1960,15 @@ matchExpressions:
 				ServerHost: "tel-example",
 				ServerPort: 8081,
 
-				ManagerNamespace:  "default",
-				AgentRegistry:     "ghcr.io/telepresenceio",
-				AgentImageName:    "tel2",
-				AgentImageTag:     "2.13.3",
-				AgentPort:         9900,
-				AgentInjectPolicy: agentconfig.WhenEnabled,
-
-				EnabledWorkloadKinds:      k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
-				AgentInitContainerEnabled: true,
+				ManagerNamespace:           "default",
+				AgentRegistry:              "ghcr.io/telepresenceio",
+				AgentImageName:             "tel2",
+				AgentImageTag:              "2.13.3",
+				AgentPort:                  9900,
+				AgentInjectPolicy:          agentconfig.WhenEnabled,
+				AgentInjectorMutationAware: true,
+				AgentInitContainerEnabled:  true,
+				EnabledWorkloadKinds:       k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
 			}
 			ctx = managerutil.WithEnv(ctx, env)
 			if test.envAdditions != nil {
