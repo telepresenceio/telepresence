@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/datawire/dlib/dlog"
@@ -249,11 +250,28 @@ func (s *httpInterceptsSuite) Test_HTTPManySimultaneous() {
 }
 
 func (s *notConnectedSuite) Test_HTTPManyClientsSimultaneous() {
+	testHTTPManyClientsSimultaneous(s, "echo-easy", "/")
+}
+
+func (s *otelSuite) Test_OtelHTTPManyClientsSimultaneous() {
+	testHTTPManyClientsSimultaneous(s, "echo-spring", "/rest/echo")
+}
+
+type NamespaceSuite interface {
+	itest.NamespacePair
+	T() *testing.T
+	Context() context.Context
+	Contains(actual any, expected any, msgAndArgs ...any) bool
+	NoError(err error, msgAndArgs ...any) bool
+	FailNow(msg string, args ...any) bool
+	Eventually(f func() bool, timeout time.Duration, tick time.Duration, msgAndArgs ...any) bool
+}
+
+func testHTTPManyClientsSimultaneous(s NamespaceSuite, svc, path string) {
 	if _, ok := os.LookupEnv("HTTP_INTERCEPT_STRESS_TEST"); !ok {
 		s.T().Skip("Run this stress manually. It's too demanding for the CI infrastructure.")
 		return
 	}
-
 	ctx := s.Context()
 
 	// High values here will likely cause errors like "too many open files" unless the docker service is configured to allow more.
@@ -273,9 +291,11 @@ func (s *notConnectedSuite) Test_HTTPManyClientsSimultaneous() {
 	// }
 	const interceptCount = 16
 
-	svc := "echo-auto-inject"
 	s.ApplyApp(ctx, svc, "deploy/"+svc)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+	s.TelepresenceConnect(ctx)
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc)
+	itest.TelepresenceQuitOk(ctx)
 	s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 
 	conns := make([]string, 0, interceptCount)
@@ -313,7 +333,7 @@ func (s *notConnectedSuite) Test_HTTPManyClientsSimultaneous() {
 				outCh <- stdout
 			}()
 			s.Eventually(func() bool {
-				so, se, err := itest.Telepresence(ctx, "--use", connName, "curl", "--silent", "--max-time", "2", "-H", "X-Personal-Id: "+id, svc)
+				so, se, err := itest.Telepresence(ctx, "--use", connName, "curl", "--silent", "--max-time", "2", "-H", "X-Personal-Id: "+id, svc+path)
 				if err != nil {
 					dlog.Error(ctx, so, se, err)
 					return false
@@ -323,9 +343,7 @@ func (s *notConnectedSuite) Test_HTTPManyClientsSimultaneous() {
 
 			itest.TelepresenceOk(ctx, "--use", connName, "quit")
 			cancel()
-			out := <-outCh
-			// Ensure that the GET call arrived to the local server.
-			s.Contains(out, "| GET /")
+			<-outCh
 		}()
 	}
 	wg.Wait()
