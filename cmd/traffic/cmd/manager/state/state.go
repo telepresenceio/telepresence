@@ -25,8 +25,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -73,9 +73,9 @@ type State struct {
 
 	allClientSessionsFinalizer allClientSessionsFinalizer
 	allInterceptsFinalizer     allInterceptsFinalizer
-	intercepts                 *watchable.Map[string, *Intercept]              // info for intercepts, keyed by intercept id
-	agents                     *watchable.Map[tunnel.SessionID, *AgentSession] // info for agent sessions, keyed by session id
-	clients                    *xsync.Map[tunnel.SessionID, *ClientSession]    // info for client sessions, keyed by session id
+	intercepts                 *cache.Map[string, *Intercept]               // info for intercepts, keyed by intercept id
+	agents                     *cache.Map[tunnel.SessionID, *AgentSession]  // info for agent sessions, keyed by session id
+	clients                    *xsync.Map[tunnel.SessionID, *ClientSession] // info for client sessions, keyed by session id
 	timedLogLevel              log.TimedLevel
 	llSubs                     *loglevelSubscribers
 	workloadWatchers           *xsync.Map[string, workload.Watcher] // workload watchers, created on demand and keyed by namespace
@@ -104,8 +104,8 @@ func NewState(ctx context.Context, g *dgroup.Group) *State {
 	loglevel := os.Getenv("LOG_LEVEL")
 	s := &State{
 		backgroundCtx:    ctx,
-		intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
-		agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
+		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
 		workloadWatchers: xsync.NewMap[string, workload.Watcher](),
 		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
@@ -561,7 +561,7 @@ func (s *State) HasAgent(name, namespace string) (ok bool) {
 func (s *State) WatchAgents(
 	ctx context.Context,
 	filter func(tunnel.SessionID, *AgentSession) bool,
-) <-chan map[tunnel.SessionID]*AgentSession {
+) <-chan cache.Delta[tunnel.SessionID, *AgentSession] {
 	return s.agents.Subscribe(ctx.Done(), filter)
 }
 
@@ -650,7 +650,7 @@ func (s *State) GetIntercept(interceptID string) (*Intercept, bool) {
 func (s *State) WatchIntercepts(
 	ctx context.Context,
 	filter func(sessionID string, intercept *Intercept) bool,
-) <-chan map[string]*Intercept {
+) <-chan cache.Delta[string, *Intercept] {
 	return s.intercepts.Subscribe(ctx.Done(), filter)
 }
 

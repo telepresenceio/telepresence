@@ -705,7 +705,7 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 	name := ac.AgentName
 	namespace := ac.Namespace
 	dlog.Debugf(ctx, "Waiting for agent %s.%s", name, namespace)
-	snapshotCh := s.WatchAgents(ctx, func(_ tunnel.SessionID, agent *AgentSession) bool {
+	deltaCh := s.WatchAgents(ctx, func(_ tunnel.SessionID, agent *AgentSession) bool {
 		return agent.Name == name && agent.Namespace == namespace
 	})
 	failedContainerRx := regexp.MustCompile(`restarting failed container (\S+) in pod ([0-9A-Za-z_-]+)_` + namespace)
@@ -764,16 +764,17 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 				continue
 			}
 			return nil, errcat.User.New(msg)
-		case snapshot, ok := <-snapshotCh:
+		case delta, ok := <-deltaCh:
 			if !ok {
 				// The request has been canceled.
 				return nil, status.Error(codes.Canceled, fmt.Sprintf("channel closed while waiting for agent %s.%s to arrive", name, namespace))
 			}
-			if len(snapshot) == 0 {
+			upserts := delta.Upserts
+			if len(upserts) == 0 {
 				continue
 			}
-			as := make([]*AgentSession, 0, len(snapshot))
-			for _, a := range snapshot {
+			as := make([]*AgentSession, 0)
+			for _, a := range upserts {
 				if mm.IsInactive(k8sTypes.UID(a.PodUid)) {
 					dlog.Debugf(ctx, "Agent %s(%s) is blacklisted", a.PodName, a.PodIp)
 				} else {

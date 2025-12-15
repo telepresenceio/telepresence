@@ -22,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 type interceptsStringer []*rpc.InterceptInfo
@@ -113,7 +114,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	wg.Go("logLevelWatch", func(ctx context.Context) error {
 		return logLevelWatchLoop(ctx, manager)
 	})
-	snapshots := make(chan *rpc.InterceptInfoSnapshot)
+	snapshots := make(chan []*rpc.InterceptInfo)
 	wg.Go("interceptWatch", func(ctx context.Context) error {
 		return interceptWatchLoop(ctx, manager, session, info, snapshots)
 	})
@@ -150,23 +151,38 @@ func logLevelWatchLoop(ctx context.Context, manager rpc.ManagerClient) error {
 	)
 }
 
-func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, info *rpc.AgentInfo, snapshots chan<- *rpc.InterceptInfoSnapshot) error {
-	// Call WatchIntercepts and publish the snapshots on the channel
-	return watcher.WatchWithRetry(ctx, "WatchIntercepts", watchRetryInterval,
-		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoSnapshot], error) {
-			return manager.WatchIntercepts(ctx, session)
-		},
-		func(snapshot *rpc.InterceptInfoSnapshot) error {
-			snapshots <- snapshot
-			return nil
-		},
-		func() error {
-			_, err := manager.ReconnectAgent(ctx, &rpc.ReconnectAgentRequest{
-				Session: session,
-				Agent:   info,
-			})
-			return err
+func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, info *rpc.AgentInfo, snapshots chan<- []*rpc.InterceptInfo) error {
+	reconnectAgent := func() error {
+		_, err := manager.ReconnectAgent(ctx, &rpc.ReconnectAgentRequest{
+			Session: session,
+			Agent:   info,
 		})
+		return err
+	}
+	// Call WatchIntercepts and publish the snapshots on the channel
+	snapMap := make(map[string]*rpc.InterceptInfo)
+	err := watcher.WatchWithRetry(ctx, "WatchInterceptsDelta", watchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoDelta], error) {
+			return manager.WatchInterceptsDelta(ctx, session)
+		},
+		func(delta *rpc.InterceptInfoDelta) error {
+			maps.DeltaUpdate(snapMap, delta.Upserts, delta.Removals)
+			snapshots <- maps.Values(snapMap)
+			return nil
+		}, reconnectAgent)
+	if err != nil && status.Code(err) == codes.Unimplemented {
+		// Fall back to streaming all intercepts if the traffic manager doesn't support delta updates.'
+		dlog.Warnf(ctx, "WatchInterceptsDelta is not implemented by the traffic-manager, falling back to WatchIntercepts and full snapshots")
+		err = watcher.WatchWithRetry(ctx, "WatchIntercepts", watchRetryInterval,
+			func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoSnapshot], error) {
+				return manager.WatchIntercepts(ctx, session)
+			},
+			func(snapshot *rpc.InterceptInfoSnapshot) error {
+				snapshots <- snapshot.Intercepts
+				return nil
+			}, reconnectAgent)
+	}
+	return err
 }
 
 func remainLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo) error {
@@ -186,14 +202,14 @@ func remainLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.Ses
 	}
 }
 
-func handleInterceptLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, snapshots <-chan *rpc.InterceptInfoSnapshot, state State) error {
+func handleInterceptLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, snapshots <-chan []*rpc.InterceptInfo, state State) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return nil
 		case snapshot := <-snapshots:
-			dlog.Debugf(ctx, "HandleIntercepts %s", interceptsStringer(snapshot.Intercepts))
-			reviews := state.HandleIntercepts(ctx, snapshot.Intercepts)
+			dlog.Debugf(ctx, "HandleIntercepts %s", interceptsStringer(snapshot))
+			reviews := state.HandleIntercepts(ctx, snapshot)
 			for _, review := range reviews {
 				review.Session = session
 				if _, err := manager.ReviewIntercept(ctx, review); err != nil {

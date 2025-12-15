@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -440,65 +442,63 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_Wa
 		return err
 	}
 
-	var interceptInfos map[string]*state.Intercept
+	agentSessions := cache.NewClientMap[tunnel.SessionID, *state.AgentSession]()
+
+	interceptInfos := cache.NewClientMap[string, *state.Intercept]()
 	isIntercepted := func(a *rpc.AgentPodInfo) bool {
-		for _, ii := range interceptInfos {
+		found := false
+		interceptInfos.Range(func(id string, ii *state.Intercept) bool {
 			if a.WorkloadName == ii.Spec.Agent && a.Namespace == ii.Spec.Namespace {
+				found = true
+				return false
+			}
+			return true
+		})
+		return found
+	}
+
+	lock := sync.Mutex{}
+	var lastAgents []*rpc.AgentPodInfo
+
+	onChanged := func() (err error) {
+		lock.Lock()
+		defer lock.Unlock()
+		m := mutator.GetMap(ctx)
+		agents := make([]*rpc.AgentPodInfo, 0, agentSessions.Size())
+		agentNames := make([]string, 0, agentSessions.Size())
+		agentSessions.Range(func(id tunnel.SessionID, a *state.AgentSession) bool {
+			if m.IsInactive(types.UID(a.PodUid)) {
 				return true
 			}
-		}
-		return false
-	}
-	m := mutator.GetMap(ctx)
-	var agents []*rpc.AgentPodInfo
-	var agentNames []string
-	for {
-		select {
-		case <-sessionDone:
-			// Manager believes this session has ended.
-			return nil
-		case agm, ok := <-agentsCh:
-			if !ok {
-				return nil
+			aip, parseErr := netip.ParseAddr(a.PodIp)
+			if parseErr != nil {
+				dlog.Errorf(ctx, "error parsing agent pod ip %q: %v", a.PodIp, parseErr)
 			}
-			agents = make([]*rpc.AgentPodInfo, 0, len(agm))
-			agentNames = make([]string, 0, len(agm))
-			for _, a := range agm {
-				if m.IsInactive(types.UID(a.PodUid)) {
-					continue
-				}
-				aip, err := netip.ParseAddr(a.PodIp)
-				if err != nil {
-					dlog.Errorf(ctx, "error parsing agent pod ip %q: %v", a.PodIp, err)
-				}
-				ap := &rpc.AgentPodInfo{
-					WorkloadName: a.Name,
-					PodId:        a.PodUid,
-					PodName:      a.PodName,
-					Namespace:    a.Namespace,
-					PodIp:        aip.AsSlice(),
-					ApiPort:      a.ApiPort,
-				}
-				ap.Intercepted = isIntercepted(ap)
-				agents = append(agents, ap)
-				agentNames = append(agentNames, fmt.Sprintf("%s(%s)", ap.PodName, net.IP(ap.PodIp)))
+			ap := &rpc.AgentPodInfo{
+				WorkloadName: a.Name,
+				PodId:        a.PodUid,
+				PodName:      a.PodName,
+				Namespace:    a.Namespace,
+				PodIp:        aip.AsSlice(),
+				ApiPort:      a.ApiPort,
 			}
-		case is, ok := <-interceptsCh:
-			if !ok {
-				return nil
-			}
-			interceptInfos = is
-			for _, ap := range agents {
-				ap.Intercepted = isIntercepted(ap)
-			}
-		}
-		if agents != nil {
+			ap.Intercepted = isIntercepted(ap)
+			agents = append(agents, ap)
+			agentNames = append(agentNames, fmt.Sprintf("%s(%s)", ap.PodName, net.IP(ap.PodIp)))
+			return true
+		})
+		if !slices.Equal(lastAgents, agents) {
+			lastAgents = agents
 			dlog.Debugf(ctx, "Sending update for %s", agentNames)
-			if err = stream.Send(&rpc.AgentPodInfoSnapshot{Agents: agents}); err != nil {
-				return err
-			}
+			err = stream.Send(&rpc.AgentPodInfoSnapshot{Agents: agents})
 		}
+		return err
 	}
+
+	go func() {
+		_ = interceptInfos.Watch(sessionDone, interceptsCh, onChanged)
+	}()
+	return agentSessions.Watch(sessionDone, agentsCh, onChanged)
 }
 
 // WatchAgents notifies a client of the set of known Agents in the connected namespace.
@@ -543,60 +543,51 @@ func infosEqual(a, b *rpc.AgentInfo) bool {
 }
 
 func (s *service) watchAgents(ctx context.Context, includeAgent func(tunnel.SessionID, *state.AgentSession) bool, stream rpc.Manager_WatchAgentsServer) error {
-	snapshotCh := s.state.WatchAgents(ctx, includeAgent)
+	deltaCh := s.state.WatchAgents(ctx, includeAgent)
 	sessionDone, err := s.state.SessionDone(managerutil.GetSessionID(ctx))
 	if err != nil {
 		return err
 	}
-
+	snapshot := cache.NewClientMap[tunnel.SessionID, *state.AgentSession]()
 	// Ensure that the initial snapshot is not equal to lastSnap even if it is empty by
 	// creating a lastSnap with one nil entry.
 	lastSnap := make([]*rpc.AgentInfo, 1)
 
-	m := mutator.GetMap(ctx)
-	for {
-		select {
-		case snapshot, ok := <-snapshotCh:
-			if !ok {
-				// The request has been canceled.
-				dlog.Debug(ctx, "Request cancelled")
-				return nil
-			}
+	return snapshot.Watch(sessionDone, deltaCh, func() error {
+		m := mutator.GetMap(ctx)
 
-			// Sort snapshot by sessionID and discard inactive agents.
-			agentSessionIDs := slices.Sorted(maps.Keys(snapshot))
-			agents := make([]*rpc.AgentInfo, 0, len(agentSessionIDs))
-			for _, agentSessionID := range agentSessionIDs {
-				ag := snapshot[agentSessionID]
-				if !m.IsInactive(types.UID(ag.PodUid)) {
-					agents = append(agents, ag.AgentInfo)
-				}
+		// Sort snapshot by sessionID and discard inactive agents.
+		agentSessionIDs := make([]tunnel.SessionID, 0, snapshot.Size())
+		snapshot.Range(func(id tunnel.SessionID, _ *state.AgentSession) bool {
+			agentSessionIDs = append(agentSessionIDs, id)
+			return true
+		})
+		slices.Sort(agentSessionIDs)
+		agents := make([]*rpc.AgentInfo, 0, len(agentSessionIDs))
+		for _, agentSessionID := range agentSessionIDs {
+			ag, ok := snapshot.Load(agentSessionID)
+			if ok && !m.IsInactive(types.UID(ag.PodUid)) {
+				agents = append(agents, ag.AgentInfo)
 			}
-			if slices.EqualFunc(agents, lastSnap, infosEqual) {
-				continue
-			}
-			lastSnap = agents
-			if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
-				names := make([]string, len(agents))
-				i := 0
-				for _, a := range agents {
-					names[i] = a.PodName + "." + a.Namespace
-					i++
-				}
-				dlog.Tracef(ctx, "Sending update %v", names)
-			}
-			resp := &rpc.AgentInfoSnapshot{
-				Agents: agents,
-			}
-			if err := stream.Send(resp); err != nil {
-				return err
-			}
-		case <-sessionDone:
-			// Manager believes this session has ended.
-			dlog.Debug(ctx, "Session cancelled")
+		}
+		if slices.EqualFunc(agents, lastSnap, infosEqual) {
 			return nil
 		}
-	}
+		lastSnap = agents
+		if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
+			names := make([]string, len(agents))
+			i := 0
+			for _, a := range agents {
+				names[i] = a.PodName + "." + a.Namespace
+				i++
+			}
+			dlog.Debugf(ctx, "Sending update %v", names)
+		}
+		resp := &rpc.AgentInfoSnapshot{
+			Agents: agents,
+		}
+		return stream.Send(resp)
+	})
 }
 
 // WatchIntercepts notifies a client or agent of the set of intercepts
@@ -619,11 +610,11 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		if agent := s.state.GetAgent(sessionID); agent != nil {
 			filter = func(id string, info *state.Intercept) bool {
 				if info.Spec.Namespace != agent.Namespace || info.Spec.Agent != agent.Name {
+					dlog.Debugf(ctx, "Intercept %q is not for agent %q", info.Spec.Name, agent.Name)
 					// Don't return intercepts for different agents.
 					return false
 				}
 				if as := s.state.GetAgent(sessionID); as == nil {
-					dlog.Debugf(ctx, "Session no longer active")
 					return false
 				}
 				// Don't return intercepts that aren't in a "agent-owned" state.
@@ -637,6 +628,7 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 					return true
 				default:
 					// otherwise: don't return this intercept
+					dlog.Debugf(ctx, "Intercept %q is in state %s", info.Spec.Name, info.Disposition)
 					return false
 				}
 			}
@@ -650,37 +642,22 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 		}
 	}
 
-	snapshotCh := s.state.WatchIntercepts(ctx, filter)
-	for {
-		select {
-		case snapshot, ok := <-snapshotCh:
-			if !ok {
-				dlog.Debugf(ctx, "Request cancelled")
-				return nil
-			}
-			dlog.Debugf(ctx, "Sending update")
-			intercepts := make([]*rpc.InterceptInfo, 0, len(snapshot))
-			for _, intercept := range snapshot {
-				intercepts = append(intercepts, intercept.InterceptInfo)
-			}
-			resp := &rpc.InterceptInfoSnapshot{
-				Intercepts: intercepts,
-			}
-			sort.Slice(intercepts, func(i, j int) bool {
-				return intercepts[i].Id < intercepts[j].Id
-			})
-			if err := stream.Send(resp); err != nil {
-				dlog.Debugf(ctx, "Encountered a write error: %v", err)
-				return err
-			}
-		case <-ctx.Done():
-			dlog.Debugf(ctx, "Context cancelled")
-			return nil
-		case <-sessionDone:
-			dlog.Debugf(ctx, "Session cancelled")
-			return nil
-		}
-	}
+	deltaCh := s.state.WatchIntercepts(ctx, filter)
+	snapshot := cache.NewClientMap[string, *state.Intercept]()
+	return snapshot.Watch(sessionDone, deltaCh, func() error {
+		dlog.Debug(ctx, "Sending update")
+		intercepts := make([]*rpc.InterceptInfo, 0, snapshot.Size())
+		snapshot.Range(func(_ string, intercept *state.Intercept) bool {
+			intercepts = append(intercepts, intercept.InterceptInfo)
+			return true
+		})
+		sort.Slice(intercepts, func(i, j int) bool {
+			return intercepts[i].Id < intercepts[j].Id
+		})
+		return stream.Send(&rpc.InterceptInfoSnapshot{
+			Intercepts: intercepts,
+		})
+	})
 }
 
 func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (pi *rpc.PreparedIntercept, err error) {
