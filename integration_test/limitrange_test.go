@@ -28,6 +28,7 @@ func (is *installSuite) limitedRangeTest() {
 
 	_, _, err := itest.Telepresence(ctx, "intercept", "--mount", "false", svc)
 	if err != nil {
+		dlog.Error(ctx, err)
 		if out, err := itest.KubectlOut(ctx, is.AppNamespace(), "get", "pod", "-o", "yaml", "-l", "app="+svc); err == nil {
 			dlog.Info(ctx, out)
 		}
@@ -76,12 +77,12 @@ func (is *installSuite) TestLimitRange() {
 	}()
 
 	is.Run("Never", func() {
-		is.TelepresenceHelmInstallOK(is.Context(), false, "--set", "agentInjector.webhook.reinvocationPolicy=Never")
+		is.TelepresenceHelmInstallOK(is.Context(), false, "--set", "agentInjector.webhook.reinvocationPolicy=Never,agentInjector.mutationAware=false")
 		is.limitedRangeTest()
 	})
 
 	is.Run("IfNeeded", func() {
-		is.TelepresenceHelmInstallOK(is.Context(), true, "--set", "agentInjector.webhook.reinvocationPolicy=IfNeeded")
+		is.TelepresenceHelmInstallOK(is.Context(), true, "--set", "agentInjector.webhook.reinvocationPolicy=IfNeeded,agentInjector.mutationAware=true")
 		is.limitedRangeTest()
 	})
 }
