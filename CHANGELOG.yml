@@ -24,6 +24,15 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.25.2
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Ensure that the exit code from a docker command becomes the exit code of the Telepresence command.
+        body: >-
+          When running a Docker command using `telepresence docker-run` or `telepresence curl`, the exit code would be 1 for all non-zero
+          exit codes from the Docker command. This has been fixed so that the exit code from the Docker command becomes the exit code of the
+          Telepresence command.
   - version: 2.25.1
     date: 2025-11-10
     notes:
