@@ -57,6 +57,12 @@ The daemons are therefore now renamed:
 - kubeauth-foreground => kubeauthd
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Fix schema for agent.image.pullSecrets</div></div>
+<div style="margin-left: 15px">
+
+The `agent.image.pullSecrets` is referenced by the helm chart's deployment.yaml but was previously disallowed by the schema file.
+</div>
+
 ## Version 2.25.1 <span style="font-size: 16px;">(November 10)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Volumes did not mount correctly when using `telepresence connect --docker` when Docker had IPv6 enabled.</div></div>
 <div style="margin-left: 15px">
