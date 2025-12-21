@@ -46,6 +46,12 @@ items:
           transmits only incremental changes instead of full snapshots, significantly reducing payload sizes. This improvement is especially
           important for large clusters, where full snapshots can be sizable and costly to transmit. Full snapshot streaming remains
           available as a backward-compatible fallback for clients that do not support delta methods.
+      - type: feature
+        title: Add ability to configure the Traffic Agent's retry interval for watching intercepts.
+        body: >-
+          The Traffic Agent's retry interval when it establishes its watcher for intercepts is now configurable using the Helm chart value
+          `agent.watchRetryInterval`. The default retry interval was also increased from 2 seconds to 10 seconds to improve resilience when
+          connections to the traffic manager are lost.
   - version: 2.25.2
     date: 2025-12-26
     notes:

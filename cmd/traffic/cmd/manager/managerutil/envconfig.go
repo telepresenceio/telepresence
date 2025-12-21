@@ -68,7 +68,8 @@ type Env struct {
 	AgentSecurityContext       *core.SecurityContext       `env:"AGENT_SECURITY_CONTEXT,        parser=json-security-context, default="`
 	AgentInitSecurityContext   *core.SecurityContext       `env:"AGENT_INIT_SECURITY_CONTEXT,   parser=json-security-context, default="`
 	AgentInitContainerEnabled  bool                        `env:"AGENT_INIT_CONTAINER_ENABLED,  parser=bool, default=true"`
-	AgentMaxIdleTime           time.Duration               `env:"AGENT_MAX_IDLE_TIME,           parser=time.ParseDuration, default=0"`
+	AgentMaxIdleTime           time.Duration               `env:"AGENT_MAX_IDLE_TIME,           parser=time.ParseDuration, default=0s"`
+	AgentWatchRetryInterval    time.Duration               `env:"AGENT_WATCH_RETRY_INTERVAL,    parser=time.ParseDuration, default=10s"`
 
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets       []netip.Prefix `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`
@@ -100,6 +101,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		InitSecurityContext: e.AgentInitSecurityContext,
 		MountPolicies:       e.AgentMountPolicies,
 		EnableH2cProbing:    e.AgentEnableH2cProbing,
+		WatchRetryInterval:  e.AgentWatchRetryInterval,
 	}, nil
 }
 

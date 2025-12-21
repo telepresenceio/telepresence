@@ -770,7 +770,12 @@ func (s *Session) watchClusterInfo(ctx context.Context, teleroutePort uint16) er
 				}
 			}
 			return nil
-		}, nil)
+		},
+		// The user daemon will restore the session, and our managerClient will reconnect automatically
+		// thanks to the built-in resilience in the port-forward logic, so there's no need for a repair
+		// function here.
+		nil,
+	)
 }
 
 // createSubnetForDNSOnly will find a random IPv4 subnet that isn't currently routed and

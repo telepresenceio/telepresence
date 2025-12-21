@@ -687,14 +687,14 @@ type Grpc struct {
 	// Intended for debugging purposes only.
 	SimulateDisconnect time.Duration `json:"simulateDisconnect,format:units"`
 
-	// WatchRetryInterval is the interval between retries that a watcher uses when the gRPC connection is lost.
+	// WatchRetryInterval is the interval between retries that a watcher uses when the gRPC connection to the traffic-manager is lost.
 	WatchRetryInterval time.Duration `json:"watchRetryInterval,format:units"`
 }
 
 var defaultGrpc = Grpc{ //nolint:gochecknoglobals // constant
 	DaemonPort:         4038,
 	TeleroutePort:      4039,
-	WatchRetryInterval: 2 * time.Second,
+	WatchRetryInterval: 10 * time.Second,
 }
 
 func (g *Grpc) defaults() DefaultsAware {

@@ -78,6 +78,9 @@ properties:
       securityContext:
         description: Security context for the agent
         $ref: "#/$defs/securityContext"
+      watchRetryInterval:
+        description: The interval between retries that a watcher uses when the gRPC connection to the traffic manager is lost
+        $ref: "#/$defs/duration"
 
   agentInjector:
     description: Properties for the agent injector service

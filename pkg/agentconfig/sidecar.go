@@ -202,6 +202,9 @@ type Sidecar struct {
 
 	// EnableH2cProbing is true if the traffic-agent should enable H2C probing on TCP ports that have no TLS and no appProtocol.
 	EnableH2cProbing bool `json:"enableH2cProbing,omitempty"`
+
+	// WatchRetryInterval is the interval between retries that a watcher uses when the gRPC connection to the traffic-manager is lost.
+	WatchRetryInterval time.Duration `json:"watchRetryInterval,format:units"`
 }
 
 // InterceptTarget returns the container and intercepts that are parents of the given container port and protocol.

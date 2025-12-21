@@ -186,6 +186,10 @@ spec:
           - name: AGENT_INIT_SECURITY_CONTEXT
             value: '{{ toJson .initSecurityContext }}'
           {{- end }}
+          {{- if .watchRetryInterval }}
+          - name: AGENT_WATCH_RETRY_INTERVAL
+            value: .watchRetryInterval
+          {{- end }}
           {{- end }}
           {{- with fromJsonArray (include "traffic-manager.namespaces" $) }}
           {{- /*
