@@ -105,10 +105,10 @@ func NewState(ctx context.Context, g *dgroup.Group) *State {
 	loglevel := os.Getenv("LOG_LEVEL")
 	s := &State{
 		backgroundCtx:    ctx,
-		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
-		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
-		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
-		workloadWatchers: xsync.NewMap[string, workload.Watcher](),
+		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
+		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
+		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](xsync.WithGrowOnly()),
+		workloadWatchers: xsync.NewMap[string, workload.Watcher](xsync.WithGrowOnly()),
 		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}
