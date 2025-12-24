@@ -43,6 +43,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/vip"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
@@ -1493,18 +1494,10 @@ func (s *Session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentI
 		return nil, status.Error(codes.InvalidArgument, "")
 	}
 	err := s.agentClients.WaitForIP(ctx, request.Timeout.AsDuration(), ip)
-	switch {
-	case err == nil:
-	case errors.Is(err, context.DeadlineExceeded):
-		err = status.Error(codes.DeadlineExceeded, "")
-	case errors.Is(err, context.Canceled):
-		err = status.Error(codes.Canceled, "")
-	default:
-		err = status.Error(codes.Internal, err.Error())
+	if err != nil {
+		return nil, grpcErrors.FromError(err, codes.Internal, err.Error())
 	}
-	if err == nil {
-		ip, err = s.GetLocalIP(ctx, ip)
-	}
+	ip, err = s.GetLocalIP(ctx, ip)
 	if err != nil {
 		return nil, err
 	}

@@ -535,11 +535,7 @@ func (s *State) restoreAppContainer(ctx context.Context, ii *rpc.InterceptInfo, 
 func (s *State) GetOrGenerateAgentConfig(ctx context.Context, name, namespace string) (*agentconfig.Sidecar, error) {
 	wl, err := agentmap.GetWorkload(ctx, name, namespace, "")
 	if err != nil {
-		code := codes.Internal
-		if k8sErrors.IsNotFound(err) {
-			code = codes.NotFound
-		}
-		return nil, status.Error(code, err.Error())
+		return nil, grpcErrors.FromError(err, codes.Internal, err.Error())
 	}
 	return s.getOrCreateAgentConfig(ctx, wl, false, true, nil, agentconfig.ReplacePolicyInactive)
 }

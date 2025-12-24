@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -61,7 +62,7 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 	ctx := server.Context()
 	stream, err := tunnel.NewServerStream(ctx, tunnel.ClientToAgent, server)
 	if err != nil {
-		return status.Errorf(codes.FailedPrecondition, "failed to connect stream: %v", err)
+		return errors.FromError(err, codes.FailedPrecondition, err.Error())
 	}
 	if awc, ok := s.awaitingForwards.Load(stream.SessionID()); ok {
 		if awf, ok := awc.LoadAndDelete(stream.ID()); ok {
