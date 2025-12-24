@@ -27,7 +27,9 @@ Receive real time events from containers
 
 ### Compose events flags:
 ```
-      --json   Output events as a stream of json objects
+      --json           Output events as a stream of json objects
+      --since string   Show all events created since timestamp
+      --until string   Stream events until this timestamp
 ```
 
 ### Global Flags:

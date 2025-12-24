@@ -15,6 +15,7 @@ Define and run multi-container applications with Telepresence and Docker
 | Command | Description |
 |---------|-------------|
 | [attach](telepresence_compose_attach) | Attach local standard input, output, and error streams to a service's running container |
+| [bridge](telepresence_compose_bridge) | Convert compose files into another model |
 | [build](telepresence_compose_build) | Build or rebuild services |
 | [commit](telepresence_compose_commit) | Create a new image from a service container's changes |
 | [config](telepresence_compose_config) | Parse, resolve and render compose file in canonical format |
@@ -45,6 +46,7 @@ Define and run multi-container applications with Telepresence and Docker
 | [unpause](telepresence_compose_unpause) | Unpause services |
 | [up](telepresence_compose_up) | Create and start containers |
 | [version](telepresence_compose_version) | Show the Docker Compose version information |
+| [volumes](telepresence_compose_volumes) | List volumes |
 | [wait](telepresence_compose_wait) | Block until containers of all (or specified) services stop. |
 | [watch](telepresence_compose_watch) | Watch build context for service and rebuild/refresh containers when files are updated |
 
