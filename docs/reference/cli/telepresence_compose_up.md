@@ -45,7 +45,6 @@ Create and start containers
       --no-recreate                  If containers already exist, don't
       --no-start                     Don't start the services after
       --pull string                  Pull image before running
-      --quiet-build                  Suppress the build output
       --quiet-pull                   Pull without printing progress
       --remove-orphans               Remove containers for services not
   -V, --renew-anon-volumes           Recreate anonymous volumes instead
@@ -60,7 +59,7 @@ Create and start containers
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
+      --config string     Path to the Telepresence configuration file (default "$HOME/Library/Application Support/telepresence/config.yml")
       --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
       --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
       --use string        Match expression that uniquely identifies the daemon container

@@ -17,7 +17,7 @@ Generate YAML for the agent's entry in the telepresence-agents configmap. See ge
 
 ### Flags:
 ```
-      --agent-image string         The qualified name of the agent image (default "ghcr.io/telepresenceio/tel2:2.26.0")
+      --agent-image string         The qualified name of the agent image (default "ghcr.io/telepresenceio/tel2:2.27.0")
       --agent-port uint16          The port number you wish the agent to listen on. (default 9900)
   -h, --help                       help for config
   -i, --input string               Path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc). Pass '-' for stdin.. Mutually exclusive to --workload
@@ -52,7 +52,7 @@ Generate YAML for the agent's entry in the telepresence-agents configmap. See ge
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
+      --config string     Path to the Telepresence configuration file (default "$HOME/Library/Application Support/telepresence/config.yml")
       --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
       --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
       --use string        Match expression that uniquely identifies the daemon container

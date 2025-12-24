@@ -15,7 +15,6 @@ Define and run multi-container applications with Telepresence and Docker
 | Command | Description |
 |---------|-------------|
 | [attach](telepresence_compose_attach) | Attach local standard input, output, and error streams to a service's running container |
-| [bridge](telepresence_compose_bridge) | Convert compose files into another model |
 | [build](telepresence_compose_build) | Build or rebuild services |
 | [commit](telepresence_compose_commit) | Create a new image from a service container's changes |
 | [config](telepresence_compose_config) | Parse, resolve and render compose file in canonical format |
@@ -46,7 +45,6 @@ Define and run multi-container applications with Telepresence and Docker
 | [unpause](telepresence_compose_unpause) | Unpause services |
 | [up](telepresence_compose_up) | Create and start containers |
 | [version](telepresence_compose_version) | Show the Docker Compose version information |
-| [volumes](telepresence_compose_volumes) | List volumes |
 | [wait](telepresence_compose_wait) | Block until containers of all (or specified) services stop. |
 | [watch](telepresence_compose_watch) | Watch build context for service and rebuild/refresh containers when files are updated |
 
@@ -66,7 +64,7 @@ Define and run multi-container applications with Telepresence and Docker
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
+      --config string     Path to the Telepresence configuration file (default "$HOME/Library/Application Support/telepresence/config.yml")
       --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
       --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
       --use string        Match expression that uniquely identifies the daemon container

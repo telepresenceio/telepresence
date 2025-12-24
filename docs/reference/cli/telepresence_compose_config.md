@@ -31,9 +31,6 @@ Parse, resolve and render compose file in canonical format
       --format string           Format the output. Values: [yaml | json]
       --hash string             Print the service config hash, one per line.
       --images                  Print the image names, one per line.
-      --lock-image-digests      Produces an override file with image digests
-      --models                  Print the model names, one per line.
-      --networks                Print the network names, one per line.
       --no-consistency          Don't check model consistency - warning:
       --no-env-resolution       Don't resolve service env files
       --no-interpolate          Don't interpolate environment variables
@@ -50,7 +47,7 @@ Parse, resolve and render compose file in canonical format
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
+      --config string     Path to the Telepresence configuration file (default "$HOME/Library/Application Support/telepresence/config.yml")
       --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
       --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
       --use string        Match expression that uniquely identifies the daemon container
