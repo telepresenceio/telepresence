@@ -1,0 +1,71 @@
+---
+id: b513f23c-dece-4f11-8ff5-5d207f532f98
+---
+graph TB
+    subgraph Local["🖥️ LOCAL WORKSTATION"]
+        subgraph LocalSpace["User Space"]
+            LocalApp["Local Application<br/>(e.g., your service)"]
+            TelCLI["Telepresence CLI<br/>(telepresence binary)"]
+        end
+
+        subgraph KernelSpace["Kernel Space"]
+            TelVIF["Telepresence VIF<br/>(TUN Device)<br/>/dev/net/tun<br/>⚠️ LOCAL ONLY"]
+        end
+
+        LocalApp -->|"Route traffic to<br/>cluster subnets"| TelVIF
+        TelCLI -->|Controls| TelVIF
+    end
+
+    subgraph Network["🌐 NETWORK (gRPC over Internet/VPN)"]
+        Tunnel["gRPC Tunnel<br/>🔒 Encrypted<br/>📦 Higher-level abstraction"]
+    end
+
+    subgraph K8s["☸️ KUBERNETES CLUSTER"]
+        subgraph TMNamespace["Namespace: ambassador"]
+            TrafficMgr["Traffic Manager<br/>(tel2 image)<br/>🎯 Central routing hub"]
+        end
+
+        subgraph AppNamespace["Application Namespace"]
+            subgraph Pod1["Pod: my-service"]
+                Container1["Application Container<br/>(your microservice)"]
+                Agent1["Traffic Agent<br/>(tel2 sidecar)<br/>🔄 Intercept handler"]
+            end
+
+            subgraph Pod2["Pod: other-service"]
+                Container2["Application Container"]
+                Agent2["Traffic Agent<br/>(tel2 sidecar)"]
+            end
+        end
+
+        subgraph CNILayer["🔌 CNI LAYER (Cluster Network)"]
+            CNI["CNI Plugin<br/>(Calico/Cilium/Flannel/etc.)<br/>⚠️ CLUSTER ONLY"]
+            PodVIF1["Pod VIF<br/>(veth pair)<br/>10.244.x.x"]
+            PodVIF2["Pod VIF<br/>(veth pair)<br/>10.244.y.y"]
+        end
+
+        TrafficMgr -.->|"Manages DNS<br/>+ routing rules"| Agent1
+        TrafficMgr -.->|Coordinates| Agent2
+
+        Agent1 <-->|"Local pod traffic"| Container1
+        Agent2 <-->|"Local pod traffic"| Container2
+
+        CNI -->|"Creates & manages"| PodVIF1
+        CNI -->|"Creates & manages"| PodVIF2
+
+        PodVIF1 -.->|"Low-level<br/>network plumbing"| Pod1
+        PodVIF2 -.->|"Low-level<br/>network plumbing"| Pod2
+    end
+
+    TelVIF <-->|"gRPC packets"| Tunnel
+    Tunnel <-->|"gRPC packets"| TrafficMgr
+    TrafficMgr <-->|"gRPC tunnel"| Agent1
+
+    classDef localStyle fill:#e1f5ff,stroke:#0066cc,stroke-width:3px
+    classDef clusterStyle fill:#fff4e1,stroke:#ff9900,stroke-width:3px
+    classDef cniStyle fill:#ffe1e1,stroke:#cc0000,stroke-width:3px
+    classDef tunnelStyle fill:#e1ffe1,stroke:#00cc00,stroke-width:3px
+
+    class LocalApp,TelCLI,TelVIF localStyle
+    class TrafficMgr,Agent1,Agent2,Container1,Container2 clusterStyle
+    class CNI,PodVIF1,PodVIF2 cniStyle
+    class Tunnel tunnelStyle
