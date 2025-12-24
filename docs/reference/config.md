@@ -302,7 +302,7 @@ that only apply to specific clusters, which are set as extensions to the `$KUBEC
 Telepresence uses a `config.yml` file to store and change those configuration values that will be used by the Telepresence client.
 The location of this file varies based on your OS:
 
-* macOS: `$HOME/.config/telepresence/config.yml`
+* macOS: `$HOME/Library/Application Support/telepresence/config.yml`
 * Linux: `$XDG_CONFIG_HOME/telepresence/config.yml` or, if that variable is not set, `$HOME/.config/telepresence/config.yml`
 * Windows: `%APPDATA%\telepresence\config.yml`
 
