@@ -14,6 +14,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 When running a Docker command using `telepresence docker-run` or `telepresence curl`, the exit code would be 1 for all non-zero exit codes from the Docker command. This has been fixed so that the exit code from the Docker command becomes the exit code of the Telepresence command.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix">Fix a bug causing truncation of command text when generating external command help.</Title>
+	<Body>
+The Telepresence CLI would truncate the command text when generating help for external commands such as `docker compose` that had text spanning more than one line. This has been fixed so that the full command text is displayed.
+  </Body>
+</Note>
 ## Version 2.25.1 <span style={{fontSize:'16px'}}>(November 10)</span>
 <Note>
 	<Title type="bugfix">Volumes did not mount correctly when using `telepresence connect --docker` when Docker had IPv6 enabled.</Title>

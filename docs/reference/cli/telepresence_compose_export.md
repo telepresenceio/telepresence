@@ -27,7 +27,7 @@ Export a service container's filesystem as a tar archive
 
 ### Compose export flags:
 ```
-      --index int       index of the container if service has multiple
+      --index int       index of the container if service has multiple replicas.
   -o, --output string   Write to a file, instead of STDOUT
 ```
 

@@ -27,10 +27,10 @@ Stop and remove containers, networks
 
 ### Compose down flags:
 ```
-      --remove-orphans   Remove containers for services not defined in
-      --rmi string       Remove images used by services. "local" remove
+      --remove-orphans   Remove containers for services not defined in the Compose file
+      --rmi string       Remove images used by services. "local" remove only images that don't have a custom tag ("local"|"all")
   -t, --timeout int      Specify a shutdown timeout in seconds
-  -v, --volumes          Remove named volumes declared in the "volumes"
+  -v, --volumes          Remove named volumes declared in the "volumes" section of the Compose file and anonymous volumes attached to containers
 ```
 
 ### Global Flags:
