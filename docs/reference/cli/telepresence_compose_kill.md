@@ -27,7 +27,7 @@ Force stop service containers
 
 ### Compose kill flags:
 ```
-      --remove-orphans   Remove containers for services not defined in
+      --remove-orphans   Remove containers for services not defined in the Compose file
   -s, --signal string    SIGNAL to send to the container (default "\"SIGKILL\"")
 ```
 

@@ -34,14 +34,14 @@ Parse, resolve and render compose file in canonical format
       --lock-image-digests      Produces an override file with image digests
       --models                  Print the model names, one per line.
       --networks                Print the network names, one per line.
-      --no-consistency          Don't check model consistency - warning:
+      --no-consistency          Don't check model consistency - warning: may produce invalid Compose output
       --no-env-resolution       Don't resolve service env files
       --no-interpolate          Don't interpolate environment variables
       --no-normalize            Don't normalize compose model
       --no-path-resolution      Don't resolve file paths
   -o, --output string           Save to file (default to stdout)
       --profiles                Print the profile names, one per line.
-  -q, --quiet                   Only validate the configuration, don't
+  -q, --quiet                   Only validate the configuration, don't print anything
       --resolve-image-digests   Pin image tags to digests
       --services                Print the service names, one per line.
       --variables               Print model variables and default values.

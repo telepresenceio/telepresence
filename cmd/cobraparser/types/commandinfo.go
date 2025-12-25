@@ -214,6 +214,10 @@ func parseFlagsFromSection(text string, global, inherited bool, headerPattern st
 		line = trim
 		m := flagLineRe.FindStringSubmatch(line)
 		if len(m) == 0 {
+			// Indented line that doesn't match the flag regexp belongs to the previous message
+			if len(flags) > 0 {
+				flags[len(flags)-1].Description += " " + line
+			}
 			continue
 		}
 		short := m[1]

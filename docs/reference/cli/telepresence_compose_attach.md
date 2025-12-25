@@ -27,10 +27,10 @@ Attach local standard input, output, and error streams to a service's running co
 
 ### Compose attach flags:
 ```
-      --detach-keys string   Override the key sequence for detaching from
-      --index int            index of the container if service has
+      --detach-keys string   Override the key sequence for detaching from a container.
+      --index int            index of the container if service has multiple replicas.
       --no-stdin             Do not attach STDIN
-      --sig-proxy            Proxy all received signals to the process
+      --sig-proxy            Proxy all received signals to the process (default true)
 ```
 
 ### Global Flags:

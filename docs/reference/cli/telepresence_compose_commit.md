@@ -27,9 +27,9 @@ Create a new image from a service container's changes
 
 ### Compose commit flags:
 ```
-  -a, --author string    Author (e.g., "John Hannibal Smith
+  -a, --author string    Author (e.g., "John Hannibal Smith <hannibal@a-team.com>")
   -c, --change list      Apply Dockerfile instruction to the created image
-      --index int        index of the container if service has multiple
+      --index int        index of the container if service has multiple replicas.
   -m, --message string   Commit message
   -p, --pause            Pause container during commit (default true)
 ```
