@@ -131,6 +131,7 @@ generate-clean: ## (Generate) Delete generated files
 	rm -f DEPENDENCY_LICENSES.md
 	rm -f docs/release-notes.md*
 	rm -f docs/README.md
+	rm -f docs/helm/values.schema.json
 
 CHANGELOG.yml: FORCE
 	@# Check if the version is in the x.x.x format (GA release)
@@ -333,10 +334,11 @@ $(BUILDDIR)/telepresence-oss-chart.tgz: $(wildcard charts/**/*)
 	go run packaging/helmpackage.go -o $@ -v $(TELEPRESENCE_SEMVER)
 
 .PHONY: clobber
-clobber:  clobber-tools ## (Build) Remove all build artifacts and tools
+clobber:  clobber-tools generate-clean ## (Build) Remove all build artifacts and tools
 	rm -rf $(BUILDDIR)
 	find . -name 'go.sum' -type f -delete
 	rm -f pkg/client/cli/docker/compose/dc-cli.json
+	rm -f docs/helm/values.schema.json
 
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================
