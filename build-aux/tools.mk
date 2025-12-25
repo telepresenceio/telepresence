@@ -82,28 +82,28 @@ $(TOOLSDIR)/$(PROTOLINT_TGZ):
 #
 tools/test-report = $(TOOLSBINDIR)/test-report$(EXE)
 $(TOOLSBINDIR)/test-report$(EXE): $(TOOLSSRCDIR)/test-report/*.go $(TOOLSSRCDIR)/test-report/go.*
-	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) *.go
+	cd $(<D) && go mod tidy && GOOS= GOARCH= go build -o $(abspath $@) *.go
 
 # TOC generator
 # ==========
 #
 tools/tocgen = $(TOOLSBINDIR)/tocgen$(EXE)
 $(TOOLSBINDIR)/tocgen$(EXE): $(TOOLSSRCDIR)/tocgen/*.go
-	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) *.go
+	cd $(<D) && go mod tidy && GOOS= GOARCH= go build -o $(abspath $@) *.go
 
 # Release Notes generator
 # ==========
 #
 tools/relnotesgen = $(TOOLSBINDIR)/relnotesgen$(EXE)
 $(TOOLSBINDIR)/relnotesgen$(EXE): $(TOOLSSRCDIR)/relnotesgen/**/*.go $(TOOLSSRCDIR)/relnotesgen/relnotes/relnotes.*
-	(cd $(TOOLSSRCDIR)/relnotesgen && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/relnotesgen/relnotesgen $(TOOLSBINDIR)
+	(cd $(TOOLSSRCDIR)/relnotesgen && go mod tidy && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/relnotesgen/relnotesgen $(TOOLSBINDIR)
 
 # YAML to JSON
 # ==========
 #
 tools/y2j = $(TOOLSBINDIR)/y2j$(EXE)
 $(TOOLSBINDIR)/y2j$(EXE): $(TOOLSSRCDIR)/y2j/*
-	(cd $(TOOLSSRCDIR)/y2j && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/y2j/y2j $(TOOLSBINDIR)
+	(cd $(TOOLSSRCDIR)/y2j && go mod tidy && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/y2j/y2j $(TOOLSBINDIR)
 
 # Shellcheck
 # ==========
@@ -155,4 +155,4 @@ tools/ko                 = $(TOOLSBINDIR)/ko$(EXE)
 tools/gosimports         = $(TOOLSBINDIR)/gosimports$(EXE)
 tools/go-mkopensource    = $(TOOLSBINDIR)/go-mkopensource$(EXE)
 $(TOOLSBINDIR)/%$(EXE): $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
-	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)
+	cd $(<D) && go mod tidy && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)

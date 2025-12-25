@@ -875,6 +875,11 @@
       "description": "Publish compose application",
       "flags": [
         {
+          "name": "app",
+          "type": "bool",
+          "description": "Published compose application (includes"
+        },
+        {
           "name": "dry-run",
           "type": "bool",
           "description": "Execute command in dry run mode"
