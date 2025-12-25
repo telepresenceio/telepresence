@@ -1014,14 +1014,19 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 }
 
 // StartLocalHttpEchoServerWithAddr is like StartLocalHttpEchoServer but binds to a specific host instead of localhost.
-func StartLocalHttpEchoServerWithAddr(ctx context.Context, name, addr string) (int, context.CancelFunc) {
+func StartLocalHttpEchoServerWithAddr(ctx context.Context, name, addr string, responseFunc func(string, *http.Request) string) (int, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(ctx)
 	lc := net.ListenConfig{}
 	l, err := lc.Listen(ctx, "tcp", addr)
 	require.NoError(getT(ctx), err, "failed to listen on localhost")
+	if responseFunc == nil {
+		responseFunc = func(name string, r *http.Request) string {
+			return fmt.Sprintf("%s from intercept at %s", name, r.URL.Path)
+		}
+	}
 	sc := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ioutil.Printf(w, "%s from intercept at %s", name, r.URL.Path)
+			ioutil.Print(w, responseFunc(name, r))
 		}),
 	}
 	go func() {
@@ -1042,9 +1047,9 @@ func StartLocalHttpEchoServerWithAddr(ctx context.Context, name, addr string) (i
 }
 
 // StartLocalHttpEchoServer starts a local http server that echoes a line with the given name and
-// the current URL path. The port is returned together with function that cancels the server.
+// the current URL path. The port is returned together with a function that cancels the server.
 func StartLocalHttpEchoServer(ctx context.Context, name string) (int, context.CancelFunc) {
-	return StartLocalHttpEchoServerWithAddr(ctx, name, "localhost:0")
+	return StartLocalHttpEchoServerWithAddr(ctx, name, "localhost:0", nil)
 }
 
 // PingInterceptedEchoServer assumes that a server has been created using StartLocalHttpEchoServer and
@@ -1056,6 +1061,13 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers
 		svc = svc[:slashIdx]
 	}
 	expectedOutput := fmt.Sprintf("%s from intercept at /", wl)
+	PingInterceptedEchoServerAndExpect(ctx, svc, svcPort, expectedOutput, headers...)
+}
+
+// PingInterceptedEchoServerAndExpect assumes that a server has been created using StartLocalHttpEchoServer and
+// that an intercept is active for the given svc and svcPort that will redirect to that local server, and the server
+// will echo the given expectedOutput.
+func PingInterceptedEchoServerAndExpect(ctx context.Context, svc, svcPort, expectedOutput string, headers ...string) {
 	dlog.Infof(ctx, "pinging %s, expecting output: %s", net.JoinHostPort(svc, svcPort), expectedOutput)
 
 	ping := func() bool {

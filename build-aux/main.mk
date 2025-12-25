@@ -216,7 +216,8 @@ endif
 build-deps: pkg/client/remotefs/fuseftp.bits
 
 pkg/client/cli/docker/compose/dc-cli.json: go.mod
-	go run cmd/cobraparser/main.go docker compose > $@
+	go mod tidy
+	(cd cmd/cobraparser && go mod tidy) && GOOS= GOARCH= go run cmd/cobraparser/main.go docker compose > $@
 
 build-deps: pkg/client/cli/docker/compose/dc-cli.json
 
@@ -332,8 +333,10 @@ $(BUILDDIR)/telepresence-oss-chart.tgz: $(wildcard charts/**/*)
 	go run packaging/helmpackage.go -o $@ -v $(TELEPRESENCE_SEMVER)
 
 .PHONY: clobber
-clobber: ## (Build) Remove all build artifacts and tools
+clobber:  clobber-tools ## (Build) Remove all build artifacts and tools
 	rm -rf $(BUILDDIR)
+	find . -name 'go.sum' -type f -delete
+	rm -f pkg/client/cli/docker/compose/dc-cli.json
 
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================
