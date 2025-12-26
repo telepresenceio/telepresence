@@ -27,7 +27,8 @@ Start services
 
 ### Compose start flags:
 ```
-
+      --wait               Wait for services to be running|healthy. Implies detached mode.
+      --wait-timeout int   Maximum duration in seconds to wait for the project to be running|healthy
 ```
 
 ### Global Flags:
