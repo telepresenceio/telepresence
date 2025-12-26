@@ -28,6 +28,7 @@ func (is *installSuite) limitedRangeTest() {
 
 	_, _, err := itest.Telepresence(ctx, "intercept", "--mount", "false", svc)
 	if err != nil {
+		dlog.Error(ctx, err)
 		if out, err := itest.KubectlOut(ctx, is.AppNamespace(), "get", "pod", "-o", "yaml", "-l", "app="+svc); err == nil {
 			dlog.Info(ctx, out)
 		}

@@ -92,9 +92,9 @@ func (s *replaceSuite) TearDownSuite() {
 
 func (s *replaceSuite) Test_ReplaceWithMultiContainerPorts() {
 	ctx := s.Context()
-	_, httpCancel := itest.StartLocalHttpEchoServerWithAddr(ctx, s.svc+"-http", "localhost:8080")
+	_, httpCancel := itest.StartLocalHttpEchoServerWithAddr(ctx, s.svc+"-http", "localhost:8080", nil)
 	defer httpCancel()
-	_, extraCancel := itest.StartLocalHttpEchoServerWithAddr(ctx, s.svc+"-extra", "localhost:8081")
+	_, extraCancel := itest.StartLocalHttpEchoServerWithAddr(ctx, s.svc+"-extra", "localhost:8081", nil)
 	defer extraCancel()
 
 	// Use container port names here.

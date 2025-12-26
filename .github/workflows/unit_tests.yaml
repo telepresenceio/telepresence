@@ -1,6 +1,6 @@
 name: "Build and Unit test"
 on:
-  pull_request_target:
+  pull_request:
 env:
   HOMEBREW_NO_INSTALL_FROM_API:
 jobs:

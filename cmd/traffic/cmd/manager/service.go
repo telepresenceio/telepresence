@@ -684,8 +684,14 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 }
 
 func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (pi *rpc.PreparedIntercept, err error) {
-	ctx = managerutil.WithSessionInfo(ctx, request.Session)
 	dlog.Debugf(ctx, "Intercept name %s", request.InterceptSpec.Name)
+	session := request.GetSession()
+	ctx = managerutil.WithSessionInfo(ctx, session)
+	sessionID := tunnel.SessionID(session.GetSessionId())
+	client := s.state.GetClient(sessionID)
+	if client == nil {
+		return nil, status.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
 	return s.state.PrepareIntercept(ctx, request)
 }
 

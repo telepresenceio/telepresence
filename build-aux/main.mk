@@ -98,6 +98,9 @@ generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION |
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./pkg/vif/testdata/router && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./tools/src/test-report && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
+	cd ./cmd/teleroute && $(MAKE) rpc/teleroute/.rsync-stamp
+	cd ./cmd/teleroute && go mod tidy
+	cd ./cmd/teleroute/rpc && go mod tidy
 	cd ./integration_test/testdata/echo-server && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
@@ -131,6 +134,7 @@ generate-clean: ## (Generate) Delete generated files
 	rm -f DEPENDENCY_LICENSES.md
 	rm -f docs/release-notes.md*
 	rm -f docs/README.md
+	rm -f docs/helm/values.schema.json
 
 CHANGELOG.yml: FORCE
 	@# Check if the version is in the x.x.x format (GA release)
@@ -215,8 +219,9 @@ endif
 endif
 build-deps: pkg/client/remotefs/fuseftp.bits
 
-pkg/client/cli/docker/compose/dc-cli.json: go.mod
-	go run cmd/cobraparser/main.go docker compose > $@
+pkg/client/cli/docker/compose/dc-cli.json: go.mod go.mod cmd/cobraparser/main.go
+	go mod tidy
+	(cd cmd/cobraparser && go mod tidy) && GOOS= GOARCH= go run cmd/cobraparser/main.go docker compose > $@
 
 build-deps: pkg/client/cli/docker/compose/dc-cli.json
 
@@ -332,8 +337,13 @@ $(BUILDDIR)/telepresence-oss-chart.tgz: $(wildcard charts/**/*)
 	go run packaging/helmpackage.go -o $@ -v $(TELEPRESENCE_SEMVER)
 
 .PHONY: clobber
-clobber: ## (Build) Remove all build artifacts and tools
+clobber:  clobber-tools generate-clean ## (Build) Remove all build artifacts and tools
 	rm -rf $(BUILDDIR)
+	find . -name 'go.sum' -type f -delete
+	rm -rf cmd/teleroute/rpc
+	rm -rf cmd/teleroute/build-output
+	rm -f pkg/client/cli/docker/compose/dc-cli.json
+	rm -f docs/helm/values.schema.json
 
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================
@@ -414,7 +424,6 @@ promote-nightly: ## (Release) Update nightly.txt in S3
 .PHONY: lint-deps
 lint-deps: build-deps ## (QA) Everything necessary to lint
 lint-deps: $(tools/protolint)
-lint-deps: $(tools/gosimports)
 ifneq ($(GOHOSTOS), windows)
 lint-deps: $(tools/shellcheck)
 endif
@@ -430,8 +439,6 @@ shellscripts += ./packaging/windows-package.sh
 lint: lint-rpc lint-go
 
 lint-go: lint-deps ## (QA) Run the golangci-lint
-	$(eval badimports = $(shell find cmd integration_test pkg -name '*.go' | grep -v '/mocks/' | grep -v '.pb.go' | xargs $(tools/gosimports) --local github.com/datawire/,github.com/telepresenceio/ -l))
-	$(if $(strip $(badimports)), echo "The following files have bad import ordering (use make format to fix): " $(badimports) && false)
 ifeq ($(GOOS),windows)
 	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$(GOLANGCI_VERSION):/root/.cache -w /app golangci/golangci-lint:$(GOLANGCI_VERSION) golangci-lint \
 	run --timeout 8m ./cmd/cobraparser/... ./cmd/telepresence/... ./integration_test/... ./pkg/...
@@ -448,7 +455,6 @@ endif
 
 .PHONY: format
 format: lint-deps ## (QA) Automatically fix linter complaints
-	find cmd integration_test pkg -name '*.go' | grep -v '/mocks/' | grep -v '.pb.go' | xargs $(tools/gosimports) --local github.com/datawire/,github.com/telepresenceio/ -w
 ifeq ($(GOHOSTOS),windows)
 	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$(GOLANGCI_VERSION):/root/.cache -w /app golangci/golangci-lint:$(GOLANGCI_VERSION) golangci-lint \
 	run --timeout 8m --fix ./cmd/telepresence/... ./integration_test/... ./pkg/...

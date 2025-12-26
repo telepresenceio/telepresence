@@ -530,11 +530,26 @@ func (s *session) CanIntercept(ir *rpc.CreateInterceptRequest) (userd.InterceptI
 	}
 
 	mgrIr := s.newCreateInterceptRequest(spec)
-	pi, err := s.managerClient.PrepareIntercept(s.context, mgrIr)
-	if err != nil {
+	var pi *manager.PreparedIntercept
+	for retry := 0; retry < 2; retry++ {
+		pi, err = s.managerClient.PrepareIntercept(s.context, mgrIr)
+		if err == nil {
+			break
+		}
+
 		if st, ok := grpcStatus.FromError(err); ok {
-			if st.Code() == grpcCodes.FailedPrecondition {
+			switch st.Code() {
+			case grpcCodes.FailedPrecondition:
 				return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, errcat.User.New(st.Message()))
+			case grpcCodes.NotFound:
+				if strings.HasPrefix(st.Message(), "Client session ") {
+					// The manager is not aware of this session. This can happen if the manager is restarted and
+					// none of our watchers have yet detected and remedied the situation.
+					err = s.reconnectManager()
+					if err == nil {
+						continue
+					}
+				}
 			}
 		}
 		return nil, InterceptError(common.InterceptError_TRAFFIC_MANAGER_ERROR, err)

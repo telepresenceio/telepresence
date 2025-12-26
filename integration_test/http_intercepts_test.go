@@ -1,6 +1,17 @@
 package integration_test
 
 import (
+	"context"
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -169,4 +180,171 @@ func init() {
 	itest.AddSingleServiceSuite("", "echo", func(h itest.SingleService) itest.TestingSuite {
 		return &httpInterceptsSuite{Suite: itest.Suite{Harness: h}, SingleService: h}
 	})
+}
+
+func (s *httpInterceptsSuite) Test_HTTPManySimultaneous() {
+	if _, ok := os.LookupEnv("HTTP_INTERCEPT_STRESS_TEST"); !ok {
+		s.T().Skip("Run this stress manually. It's too demanding for the CI infrastructure.")
+		return
+	}
+	require := s.Require()
+	ctx := s.Context()
+
+	const interceptCount = 250
+	const pingRepeatCount = 10
+	localPorts := make([]int, interceptCount)
+	httpCancels := make([]context.CancelFunc, interceptCount)
+	responseFunc := func(name string, r *http.Request) string {
+		return fmt.Sprintf("%s, X-Personal-Id: %s, X-Repeat-Count: %s",
+			name, r.Header.Get("X-Personal-Id"), r.Header.Get("X-Repeat-Count"))
+	}
+
+	// Ensure that a traffic-agent is running on the workload and capture its log
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", s.ServiceName())
+	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	s.CapturePodLogs(ctx, s.ServiceName(), "traffic-agent", s.AppNamespace())
+
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		localPorts[i], httpCancels[i] = itest.StartLocalHttpEchoServerWithAddr(ctx, "echo-"+id, "localhost:0", responseFunc)
+	}
+	defer func() {
+		for _, cancel := range httpCancels {
+			cancel()
+		}
+	}()
+
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		hdr := "X-Personal-Id=" + id
+		svc := "echo-" + id
+		stdout, stderr, err := itest.Telepresence(ctx, "intercept", svc,
+			"--workload", s.ServiceName(),
+			"--http-header", hdr,
+			"--port", strconv.Itoa(localPorts[i])+":80",
+			"--mount", "false")
+		require.NoError(err, "stderr: %s", stderr)
+		require.Contains(stdout, "Using Deployment")
+	}
+
+	wg := &sync.WaitGroup{}
+	wg.Add(interceptCount * pingRepeatCount)
+	for i := 0; i < interceptCount; i++ {
+		for n := 0; n < pingRepeatCount; n++ {
+			go func(i int) {
+				defer wg.Done()
+				hdr := "X-Personal-Id=" + strconv.Itoa(i)
+				rpt := "X-Repeat-Count=" + strconv.Itoa(n)
+				expectedOutput := fmt.Sprintf("echo-%d, X-Personal-Id: %d, X-Repeat-Count: %d", i, i, n)
+				itest.PingInterceptedEchoServerAndExpect(ctx, s.ServiceName(), "80", expectedOutput, hdr, rpt)
+			}(i)
+		}
+	}
+	wg.Wait()
+
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		_, _, err := itest.Telepresence(ctx, "leave", "echo-"+id)
+		require.NoError(err, "Failed to leave intercept echo-"+id)
+	}
+}
+
+func (s *notConnectedSuite) Test_HTTPManyClientsSimultaneous() {
+	testHTTPManyClientsSimultaneous(s, "echo-easy", "/")
+}
+
+func (s *otelSuite) Test_OtelHTTPManyClientsSimultaneous() {
+	testHTTPManyClientsSimultaneous(s, "echo-spring", "/rest/echo")
+}
+
+type NamespaceSuite interface {
+	itest.NamespacePair
+	T() *testing.T
+	Context() context.Context
+	Contains(actual any, expected any, msgAndArgs ...any) bool
+	NoError(err error, msgAndArgs ...any) bool
+	FailNow(msg string, args ...any) bool
+	Eventually(f func() bool, timeout time.Duration, tick time.Duration, msgAndArgs ...any) bool
+}
+
+func testHTTPManyClientsSimultaneous(s NamespaceSuite, svc, path string) {
+	if _, ok := os.LookupEnv("HTTP_INTERCEPT_STRESS_TEST"); !ok {
+		s.T().Skip("Run this stress manually. It's too demanding for the CI infrastructure.")
+		return
+	}
+	ctx := s.Context()
+
+	// High values here will likely cause errors like "too many open files" unless the docker service is configured to allow more.
+	// On a Linux box, this is typically done by adding a /etc/systemd/system/docker.service.d/override.conf file with the following contents:
+	// [Service]
+	// LimitNOFILE=infinity
+	//
+	// Also add the following line to /etc/docker/daemon.json:
+	// {
+	// 	"default-ulimits": {
+	//		"nofile": {
+	//			"Name": "nofile",
+	//			"Soft": 64000,
+	//			"Hard": 64000
+	//		}
+	//	}
+	// }
+	const interceptCount = 16
+
+	s.ApplyApp(ctx, svc, "deploy/"+svc)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+	s.TelepresenceConnect(ctx)
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc)
+	itest.TelepresenceQuitOk(ctx)
+	s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
+
+	conns := make([]string, 0, interceptCount)
+	defer func() {
+		for _, connName := range conns {
+			_, _, err := itest.Telepresence(ctx, "--use", connName, "quit")
+			s.NoError(err)
+		}
+	}()
+
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		connName := "conn-" + id + "-v"
+		_, err := s.TelepresenceTryConnect(ctx, "--docker", "--name", connName)
+		if err != nil {
+			s.FailNow("Failed to connect to telepresence", err)
+		}
+		conns = append(conns, connName)
+	}
+
+	wg := &sync.WaitGroup{}
+	wg.Add(interceptCount)
+	for i := 0; i < interceptCount; i++ {
+		id := strconv.Itoa(i)
+		hdr := "X-Personal-Id=" + id
+		connName := conns[i]
+		go func() {
+			defer wg.Done()
+			tpCtx, cancel := context.WithCancel(ctx)
+			outCh := make(chan string)
+			go func() {
+				defer close(outCh)
+				stdout, stderr, err := itest.Telepresence(tpCtx, "--use", connName, "intercept", svc, "--mount=false", "--http-header", hdr, "--docker-run", "--port", "8080:80", "--", "--name", connName+".local", "telepresenceio/echo-server")
+				s.NoError(err, "stderr: %s", stderr)
+				outCh <- stdout
+			}()
+			s.Eventually(func() bool {
+				so, se, err := itest.Telepresence(ctx, "--use", connName, "curl", "--silent", "--max-time", "2", "-H", "X-Personal-Id: "+id, svc+path)
+				if err != nil {
+					dlog.Error(ctx, so, se, err)
+					return false
+				}
+				return strings.Contains(so, "Intercepted container")
+			}, 10*time.Second, 1*time.Second)
+
+			itest.TelepresenceOk(ctx, "--use", connName, "quit")
+			cancel()
+			<-outCh
+		}()
+	}
+	wg.Wait()
 }

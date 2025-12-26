@@ -28,7 +28,7 @@ Pull service images
 ### Compose pull flags:
 ```
       --ignore-buildable       Ignore images that can be built
-      --ignore-pull-failures   Pull what it can and ignores images with
+      --ignore-pull-failures   Pull what it can and ignores images with pull failures
       --include-deps           Also pull services declared as dependencies
       --policy string          Apply pull policy ("missing"|"always")
   -q, --quiet                  Pull without printing progress information
