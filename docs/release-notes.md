@@ -63,6 +63,25 @@ The daemons are therefore now renamed:
 The `agent.image.pullSecrets` is referenced by the helm chart's deployment.yaml but was previously disallowed by the schema file.
 </div>
 
+## Version 2.25.2 <span style="font-size: 16px;">(December 26)</span>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ensure that the exit code from a docker command becomes the exit code of the Telepresence command.</div></div>
+<div style="margin-left: 15px">
+
+When running a Docker command using `telepresence docker-run` or `telepresence curl`, the exit code would be 1 for all non-zero exit codes from the Docker command. This has been fixed so that the exit code from the Docker command becomes the exit code of the Telepresence command.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Fix a bug causing truncation of command text when generating external command help.</div></div>
+<div style="margin-left: 15px">
+
+The Telepresence CLI would truncate the command text when generating help for external commands such as `docker compose` that had text spanning more than one line. This has been fixed so that the full command text is displayed.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Fix schema for agent.image.pullSecrets</div></div>
+<div style="margin-left: 15px">
+
+The `agent.image.pullSecrets` is referenced by the helm chart's deployment.yaml but was previously disallowed by the schema file.
+</div>
+
 ## Version 2.25.1 <span style="font-size: 16px;">(November 10)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Volumes did not mount correctly when using `telepresence connect --docker` when Docker had IPv6 enabled.</div></div>
 <div style="margin-left: 15px">

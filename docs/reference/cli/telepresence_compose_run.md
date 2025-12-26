@@ -30,24 +30,24 @@ Run a one-off command on a service
       --build                       Build image before starting container
       --cap-add list                Add Linux capabilities
       --cap-drop list               Drop Linux capabilities
-  -d, --detach                      Run container in background and print
+  -d, --detach                      Run container in background and print container ID
       --entrypoint string           Override the entrypoint of the image
   -e, --env stringArray             Set environment variables
       --env-from-file stringArray   Set environment variables from file
-  -i, --interactive                 Keep STDIN open even if not attached
+  -i, --interactive                 Keep STDIN open even if not attached (default true)
   -l, --label stringArray           Add or override a label
       --name string                 Assign a name to the container
-  -T, --no-TTY                      Disable pseudo-TTY allocation
+  -T, --no-TTY                      Disable pseudo-TTY allocation (default: auto-detected) (default true)
       --no-deps                     Don't start linked services
   -p, --publish stringArray         Publish a container's port(s) to the host
-      --pull string                 Pull image before running
+      --pull string                 Pull image before running ("always"|"missing"|"never") (default "policy")
   -q, --quiet                       Don't print anything to STDOUT
-      --quiet-build                 Suppress progress output from the
+      --quiet-build                 Suppress progress output from the build process
       --quiet-pull                  Pull without printing progress information
-      --remove-orphans              Remove containers for services not
-      --rm                          Automatically remove the container
-  -P, --service-ports               Run command with all service's ports
-      --use-aliases                 Use the service's network useAliases
+      --remove-orphans              Remove containers for services not defined in the Compose file
+      --rm                          Automatically remove the container when it exits
+  -P, --service-ports               Run command with all service's ports enabled and mapped to the host
+      --use-aliases                 Use the service's network useAliases in the network(s) the container connects to
   -u, --user string                 Run as specified username or uid
   -v, --volume stringArray          Bind mount a volume
   -w, --workdir string              Working directory inside the container

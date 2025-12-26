@@ -27,7 +27,7 @@ Print the public port for a port binding
 
 ### Compose port flags:
 ```
-      --index int         Index of the container if service has multiple
+      --index int         Index of the container if service has multiple replicas
       --protocol string   tcp or udp (default "\"tcp\"")
 ```
 

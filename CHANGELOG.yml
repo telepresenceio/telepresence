@@ -87,6 +87,24 @@ items:
         title: Fix schema for agent.image.pullSecrets
         body: >-
           The `agent.image.pullSecrets` is referenced by the helm chart's deployment.yaml but was previously disallowed by the schema file.
+  - version: 2.25.2
+    date: 2025-12-26
+    notes:
+      - type: bugfix
+        title: Ensure that the exit code from a docker command becomes the exit code of the Telepresence command.
+        body: >-
+          When running a Docker command using `telepresence docker-run` or `telepresence curl`, the exit code would be 1 for all non-zero
+          exit codes from the Docker command. This has been fixed so that the exit code from the Docker command becomes the exit code of the
+          Telepresence command.
+      - type: bugfix
+        title: Fix a bug causing truncation of command text when generating external command help.
+        body: >-
+          The Telepresence CLI would truncate the command text when generating help for external commands such as `docker compose` that
+          had text spanning more than one line. This has been fixed so that the full command text is displayed.
+      - type: bugfix
+        title: Fix schema for agent.image.pullSecrets
+        body: >-
+          The `agent.image.pullSecrets` is referenced by the helm chart's deployment.yaml but was previously disallowed by the schema file.
   - version: 2.25.1
     date: 2025-11-10
     notes:

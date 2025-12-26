@@ -27,12 +27,12 @@ Execute a command in a running container
 
 ### Compose exec flags:
 ```
-  -d, --detach            Detached mode: Run command in the
+  -d, --detach            Detached mode: Run command in the background
   -e, --env stringArray   Set environment variables
-      --index int         Index of the container if service
+      --index int         Index of the container if service has multiple replicas -T, --no-tty docker compose exec   Disable pseudo-TTY allocation. By default docker compose exec allocates a TTY. (default true)
       --privileged        Give extended privileges to the process
   -u, --user string       Run the command as this user
-  -w, --workdir string    Path to workdir directory for this
+  -w, --workdir string    Path to workdir directory for this command
 ```
 
 ### Global Flags:

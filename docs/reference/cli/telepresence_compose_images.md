@@ -27,7 +27,7 @@ List images used by the created containers
 
 ### Compose images flags:
 ```
-      --format string   Format the output. Values: [table | json]
+      --format string   Format the output. Values: [table | json] (default "table")
   -q, --quiet           Only display IDs
 ```
 

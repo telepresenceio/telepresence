@@ -1,0 +1,40 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: otel-instrumentation
+spec:
+  exporter:
+    endpoint: http://alloy.__NAMESPACE__.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+  sampler:
+    type: parentbased_traceidratio  # see https://opentelemetry.io/docs/languages/erlang/sampling/#parentbasedsampler
+    argument: ".2"
+  env:
+    - name: OTEL_EXPORTER_OTLP_INSECURE
+      value: "true"
+    - name: OTEL_LOG_LEVEL
+      value: "debug"
+    - name: OTEL_TRACES_EXPORTER
+      value: "otlp"
+    - name: OTEL_METRICS_EXPORTER
+      value: "none"
+    - name: OTEL_LOGS_EXPORTER
+      value: "none"
+#    - name: PYROSCOPE_SERVER_ADDRESS
+#      value: "http://pyroscope.__NAMESPACE__.svc.cluster.local:4040"
+    - name: PYROSCOPE_ENABLED
+      value: "false"
+    - name: OTEL_PROFILING_START_PROFILING
+      value: "false"
+  go:
+    image: ghcr.io/open-telemetry/opentelemetry-go-instrumentation/autoinstrumentation-go:v0.23.0
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://alloy.__NAMESPACE__.svc.cluster.local:4318
+  java:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-java:latest
+    env:
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://alloy.__NAMESPACE__.svc.cluster.local:4318

@@ -19,8 +19,8 @@ import (
 
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/cmd/cobraparser/generate"
-	"github.com/telepresenceio/telepresence/cmd/cobraparser/types"
+	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/generate"
+	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"

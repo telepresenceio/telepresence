@@ -6,12 +6,12 @@
     {
       "name": "all-resources",
       "type": "bool",
-      "description": "Include all resources, even those not"
+      "description": "Include all resources, even those not used by services"
     },
     {
       "name": "ansi",
       "type": "string",
-      "description": "Control when to print ANSI control"
+      "description": "Control when to print ANSI control characters (\"never\"|\"always\"|\"auto\") (default \"auto\")"
     },
     {
       "name": "compatibility",
@@ -37,7 +37,7 @@
     {
       "name": "parallel",
       "type": "int",
-      "description": "Control max parallelism, -1 for"
+      "description": "Control max parallelism, -1 for unlimited (default -1)"
     },
     {
       "name": "profile",
@@ -47,12 +47,12 @@
     {
       "name": "progress",
       "type": "string",
-      "description": "Set type of progress output (auto,"
+      "description": "Set type of progress output (auto, tty, plain, json, quiet)"
     },
     {
       "name": "project-directory",
       "type": "string",
-      "description": "Specify an alternate working directory"
+      "description": "Specify an alternate working directory (default: the path of the, first specified, Compose file)"
     },
     {
       "name": "project-name",
@@ -100,7 +100,7 @@
                   "name": "from",
                   "shorthand": "f",
                   "type": "string",
-                  "description": "Existing transformation to copy (default:"
+                  "description": "Existing transformation to copy (default: docker/compose-bridge-kubernetes)"
                 }
               ]
             },
@@ -117,7 +117,7 @@
                 {
                   "name": "format",
                   "type": "string",
-                  "description": "Format the output. Values: [table | json]"
+                  "description": "Format the output. Values: [table | json] (default \"table\")"
                 },
                 {
                   "name": "quiet",
@@ -143,18 +143,18 @@
               "name": "output",
               "shorthand": "o",
               "type": "string",
-              "description": "The output directory for the"
+              "description": "The output directory for the Kubernetes resources (default \"out\")"
             },
             {
               "name": "templates",
               "type": "string",
-              "description": "Directory containing transformation"
+              "description": "Directory containing transformation templates"
             },
             {
               "name": "transformation",
               "shorthand": "t",
               "type": "stringArray",
-              "description": "Transformation to apply to compose"
+              "description": "Transformation to apply to compose model (default: docker/compose-bridge-kubernetes)"
             }
           ]
         }
@@ -168,7 +168,7 @@
         {
           "name": "detach-keys",
           "type": "string",
-          "description": "Override the key sequence for detaching from"
+          "description": "Override the key sequence for detaching from a container."
         },
         {
           "name": "dry-run",
@@ -178,7 +178,7 @@
         {
           "name": "index",
           "type": "int",
-          "description": "index of the container if service has"
+          "description": "index of the container if service has multiple replicas."
         },
         {
           "name": "no-stdin",
@@ -188,7 +188,7 @@
         {
           "name": "sig-proxy",
           "type": "bool",
-          "description": "Proxy all received signals to the process"
+          "description": "Proxy all received signals to the process (default true)"
         }
       ]
     },
@@ -221,7 +221,7 @@
           "name": "memory",
           "shorthand": "m",
           "type": "bytes",
-          "description": "Set memory limit for the build container."
+          "description": "Set memory limit for the build container. Not supported by BuildKit."
         },
         {
           "name": "no-cache",
@@ -241,7 +241,7 @@
         {
           "name": "pull",
           "type": "bool",
-          "description": "Always attempt to pull a newer version of"
+          "description": "Always attempt to pull a newer version of the image"
         },
         {
           "name": "push",
@@ -262,7 +262,7 @@
         {
           "name": "ssh",
           "type": "string",
-          "description": "Set SSH authentications used when"
+          "description": "Set SSH authentications used when building service images. (use 'default' for using your default SSH Agent)"
         },
         {
           "name": "with-dependencies",
@@ -280,7 +280,7 @@
           "name": "author",
           "shorthand": "a",
           "type": "string",
-          "description": "Author (e.g., \"John Hannibal Smith"
+          "description": "Author (e.g., \"John Hannibal Smith \u003channibal@a-team.com\u003e\")"
         },
         {
           "name": "change",
@@ -296,7 +296,7 @@
         {
           "name": "index",
           "type": "int",
-          "description": "index of the container if service has multiple"
+          "description": "index of the container if service has multiple replicas."
         },
         {
           "name": "message",
@@ -361,7 +361,7 @@
         {
           "name": "no-consistency",
           "type": "bool",
-          "description": "Don't check model consistency - warning:"
+          "description": "Don't check model consistency - warning: may produce invalid Compose output"
         },
         {
           "name": "no-env-resolution",
@@ -398,7 +398,7 @@
           "name": "quiet",
           "shorthand": "q",
           "type": "bool",
-          "description": "Only validate the configuration, don't"
+          "description": "Only validate the configuration, don't print anything"
         },
         {
           "name": "resolve-image-digests",
@@ -474,7 +474,7 @@
         {
           "name": "force-recreate",
           "type": "bool",
-          "description": "Recreate containers even if their configuration"
+          "description": "Recreate containers even if their configuration and image haven't changed"
         },
         {
           "name": "no-build",
@@ -484,12 +484,12 @@
         {
           "name": "no-recreate",
           "type": "bool",
-          "description": "If containers already exist, don't recreate"
+          "description": "If containers already exist, don't recreate them. Incompatible with --force-recreate."
         },
         {
           "name": "pull",
           "type": "string",
-          "description": "Pull image before running"
+          "description": "Pull image before running (\"always\"|\"missing\"|\"never\"|\"build\") (default \"policy\")"
         },
         {
           "name": "quiet-pull",
@@ -499,18 +499,18 @@
         {
           "name": "remove-orphans",
           "type": "bool",
-          "description": "Remove containers for services not defined in"
+          "description": "Remove containers for services not defined in the Compose file"
         },
         {
           "name": "scale",
           "type": "scale",
-          "description": "Scale SERVICE to NUM instances. Overrides the"
+          "description": "Scale SERVICE to NUM instances. Overrides the scale setting in the Compose file if present."
         },
         {
           "name": "yes",
           "shorthand": "y",
           "type": "bool",
-          "description": "Assume \"yes\" as answer to all prompts and run"
+          "description": "Assume \"yes\" as answer to all prompts and run non-interactively"
         }
       ]
     },
@@ -527,12 +527,12 @@
         {
           "name": "remove-orphans",
           "type": "bool",
-          "description": "Remove containers for services not defined in"
+          "description": "Remove containers for services not defined in the Compose file"
         },
         {
           "name": "rmi",
           "type": "string",
-          "description": "Remove images used by services. \"local\" remove"
+          "description": "Remove images used by services. \"local\" remove only images that don't have a custom tag (\"local\"|\"all\")"
         },
         {
           "name": "timeout",
@@ -544,7 +544,7 @@
           "name": "volumes",
           "shorthand": "v",
           "type": "bool",
-          "description": "Remove named volumes declared in the \"volumes\""
+          "description": "Remove named volumes declared in the \"volumes\" section of the Compose file and anonymous volumes attached to containers"
         }
       ]
     },
@@ -584,7 +584,7 @@
           "name": "detach",
           "shorthand": "d",
           "type": "bool",
-          "description": "Detached mode: Run command in the"
+          "description": "Detached mode: Run command in the background"
         },
         {
           "name": "dry-run",
@@ -600,7 +600,7 @@
         {
           "name": "index",
           "type": "int",
-          "description": "Index of the container if service"
+          "description": "Index of the container if service has multiple replicas -T, --no-tty docker compose exec   Disable pseudo-TTY allocation. By default docker compose exec allocates a TTY. (default true)"
         },
         {
           "name": "privileged",
@@ -617,7 +617,7 @@
           "name": "workdir",
           "shorthand": "w",
           "type": "string",
-          "description": "Path to workdir directory for this"
+          "description": "Path to workdir directory for this command"
         }
       ]
     },
@@ -634,7 +634,7 @@
         {
           "name": "index",
           "type": "int",
-          "description": "index of the container if service has multiple"
+          "description": "index of the container if service has multiple replicas."
         },
         {
           "name": "output",
@@ -657,7 +657,7 @@
         {
           "name": "format",
           "type": "string",
-          "description": "Format the output. Values: [table | json]"
+          "description": "Format the output. Values: [table | json] (default \"table\")"
         },
         {
           "name": "quiet",
@@ -680,7 +680,7 @@
         {
           "name": "remove-orphans",
           "type": "bool",
-          "description": "Remove containers for services not defined in"
+          "description": "Remove containers for services not defined in the Compose file"
         },
         {
           "name": "signal",
@@ -710,7 +710,7 @@
         {
           "name": "index",
           "type": "int",
-          "description": "index of the container if service has multiple"
+          "description": "index of the container if service has multiple replicas"
         },
         {
           "name": "no-color",
@@ -725,13 +725,13 @@
         {
           "name": "since",
           "type": "string",
-          "description": "Show logs since timestamp (e.g."
+          "description": "Show logs since timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)"
         },
         {
           "name": "tail",
           "shorthand": "n",
           "type": "string",
-          "description": "Number of lines to show from the end of the logs"
+          "description": "Number of lines to show from the end of the logs for each container (default \"all\")"
         },
         {
           "name": "timestamps",
@@ -742,7 +742,7 @@
         {
           "name": "until",
           "type": "string",
-          "description": "Show logs before a timestamp (e.g."
+          "description": "Show logs before a timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)"
         }
       ]
     },
@@ -770,7 +770,7 @@
         {
           "name": "format",
           "type": "string",
-          "description": "Format the output. Values: [table | json]"
+          "description": "Format the output. Values: [table | json] (default \"table\")"
         },
         {
           "name": "quiet",
@@ -805,7 +805,7 @@
         {
           "name": "index",
           "type": "int",
-          "description": "Index of the container if service has multiple"
+          "description": "Index of the container if service has multiple replicas"
         },
         {
           "name": "protocol",
@@ -824,7 +824,7 @@
           "name": "all",
           "shorthand": "a",
           "type": "bool",
-          "description": "Show all stopped containers (including those"
+          "description": "Show all stopped containers (including those created by the run command)"
         },
         {
           "name": "dry-run",
@@ -834,12 +834,12 @@
         {
           "name": "filter",
           "type": "string",
-          "description": "Filter services by a property (supported"
+          "description": "Filter services by a property (supported filters: status)"
         },
         {
           "name": "format",
           "type": "string",
-          "description": "Format output using a custom template:"
+          "description": "Format output using a custom template: 'table':            Print output in table format with column headers (default) 'table TEMPLATE':   Print output in table format using the given Go template 'json':             Print in JSON format 'TEMPLATE':         Print output using the given Go template. Refer to https://docs.docker.com/go/formatting/ for more information about formatting output with templates (default \"table\")"
         },
         {
           "name": "no-trunc",
@@ -849,7 +849,7 @@
         {
           "name": "orphans",
           "type": "bool",
-          "description": "Include orphaned services (not declared by"
+          "description": "Include orphaned services (not declared by project) (default true)"
         },
         {
           "name": "quiet",
@@ -865,7 +865,7 @@
         {
           "name": "status",
           "type": "stringArray",
-          "description": "Filter services by status. Values: [paused |"
+          "description": "Filter services by status. Values: [paused | restarting | removing | running | dead | created | exited]"
         }
       ]
     },
@@ -875,6 +875,11 @@
       "description": "Publish compose application",
       "flags": [
         {
+          "name": "app",
+          "type": "bool",
+          "description": "Published compose application (includes referenced images)"
+        },
+        {
           "name": "dry-run",
           "type": "bool",
           "description": "Execute command in dry run mode"
@@ -882,7 +887,7 @@
         {
           "name": "oci-version",
           "type": "string",
-          "description": "OCI image/artifact specification version"
+          "description": "OCI image/artifact specification version (automatically determined by default)"
         },
         {
           "name": "resolve-image-digests",
@@ -892,7 +897,7 @@
         {
           "name": "with-env",
           "type": "bool",
-          "description": "Include environment variables in the"
+          "description": "Include environment variables in the published OCI artifact"
         },
         {
           "name": "yes",
@@ -920,7 +925,7 @@
         {
           "name": "ignore-pull-failures",
           "type": "bool",
-          "description": "Pull what it can and ignores images with"
+          "description": "Pull what it can and ignores images with pull failures"
         },
         {
           "name": "include-deps",
@@ -953,12 +958,12 @@
         {
           "name": "ignore-push-failures",
           "type": "bool",
-          "description": "Push what it can and ignores images with"
+          "description": "Push what it can and ignores images with push failures"
         },
         {
           "name": "include-deps",
           "type": "bool",
-          "description": "Also push images of services declared as"
+          "description": "Also push images of services declared as dependencies"
         },
         {
           "name": "quiet",
@@ -1045,7 +1050,7 @@
           "name": "detach",
           "shorthand": "d",
           "type": "bool",
-          "description": "Run container in background and print"
+          "description": "Run container in background and print container ID"
         },
         {
           "name": "dry-run",
@@ -1072,7 +1077,7 @@
           "name": "interactive",
           "shorthand": "i",
           "type": "bool",
-          "description": "Keep STDIN open even if not attached"
+          "description": "Keep STDIN open even if not attached (default true)"
         },
         {
           "name": "label",
@@ -1089,7 +1094,7 @@
           "name": "no-TTY",
           "shorthand": "T",
           "type": "bool",
-          "description": "Disable pseudo-TTY allocation"
+          "description": "Disable pseudo-TTY allocation (default: auto-detected) (default true)"
         },
         {
           "name": "no-deps",
@@ -1105,7 +1110,7 @@
         {
           "name": "pull",
           "type": "string",
-          "description": "Pull image before running"
+          "description": "Pull image before running (\"always\"|\"missing\"|\"never\") (default \"policy\")"
         },
         {
           "name": "quiet",
@@ -1116,7 +1121,7 @@
         {
           "name": "quiet-build",
           "type": "bool",
-          "description": "Suppress progress output from the"
+          "description": "Suppress progress output from the build process"
         },
         {
           "name": "quiet-pull",
@@ -1126,23 +1131,23 @@
         {
           "name": "remove-orphans",
           "type": "bool",
-          "description": "Remove containers for services not"
+          "description": "Remove containers for services not defined in the Compose file"
         },
         {
           "name": "rm",
           "type": "bool",
-          "description": "Automatically remove the container"
+          "description": "Automatically remove the container when it exits"
         },
         {
           "name": "service-ports",
           "shorthand": "P",
           "type": "bool",
-          "description": "Run command with all service's ports"
+          "description": "Run command with all service's ports enabled and mapped to the host"
         },
         {
           "name": "use-aliases",
           "type": "bool",
-          "description": "Use the service's network useAliases"
+          "description": "Use the service's network useAliases in the network(s) the container connects to"
         },
         {
           "name": "user",
@@ -1212,7 +1217,7 @@
         {
           "name": "format",
           "type": "string",
-          "description": "Format output using a custom template:"
+          "description": "Format output using a custom template: 'table':            Print output in table format with column headers (default) 'table TEMPLATE':   Print output in table format using the given Go template 'json':             Print in JSON format 'TEMPLATE':         Print output using the given Go template. Refer to https://docs.docker.com/engine/cli/formatting/ for more information about formatting output with templates"
         },
         {
           "name": "no-stream",
@@ -1276,27 +1281,27 @@
         {
           "name": "abort-on-container-exit",
           "type": "bool",
-          "description": "Stops all containers if any"
+          "description": "Stops all containers if any container was stopped. Incompatible with -d"
         },
         {
           "name": "abort-on-container-failure",
           "type": "bool",
-          "description": "Stops all containers if any"
+          "description": "Stops all containers if any container exited with failure. Incompatible with -d"
         },
         {
           "name": "always-recreate-deps",
           "type": "bool",
-          "description": "Recreate dependent containers."
+          "description": "Recreate dependent containers. Incompatible with --no-recreate."
         },
         {
           "name": "attach",
           "type": "stringArray",
-          "description": "Restrict attaching to the specified"
+          "description": "Restrict attaching to the specified services. Incompatible with --attach-dependencies."
         },
         {
           "name": "attach-dependencies",
           "type": "bool",
-          "description": "Automatically attach to log output"
+          "description": "Automatically attach to log output of dependent services"
         },
         {
           "name": "build",
@@ -1307,7 +1312,7 @@
           "name": "detach",
           "shorthand": "d",
           "type": "bool",
-          "description": "Detached mode: Run containers in the"
+          "description": "Detached mode: Run containers in the background"
         },
         {
           "name": "dry-run",
@@ -1317,22 +1322,22 @@
         {
           "name": "exit-code-from",
           "type": "string",
-          "description": "Return the exit code of the selected"
+          "description": "Return the exit code of the selected service container. Implies --abort-on-container-exit"
         },
         {
           "name": "force-recreate",
           "type": "bool",
-          "description": "Recreate containers even if their"
+          "description": "Recreate containers even if their configuration and image haven't changed"
         },
         {
           "name": "menu",
           "type": "bool",
-          "description": "Enable interactive shortcuts when"
+          "description": "Enable interactive shortcuts when running attached. Incompatible with --detach. Can also be enable/disable by setting COMPOSE_MENU environment var."
         },
         {
           "name": "no-attach",
           "type": "stringArray",
-          "description": "Do not attach (stream logs) to the"
+          "description": "Do not attach (stream logs) to the specified services"
         },
         {
           "name": "no-build",
@@ -1357,17 +1362,17 @@
         {
           "name": "no-recreate",
           "type": "bool",
-          "description": "If containers already exist, don't"
+          "description": "If containers already exist, don't recreate them. Incompatible with --force-recreate."
         },
         {
           "name": "no-start",
           "type": "bool",
-          "description": "Don't start the services after"
+          "description": "Don't start the services after creating them"
         },
         {
           "name": "pull",
           "type": "string",
-          "description": "Pull image before running"
+          "description": "Pull image before running (\"always\"|\"missing\"|\"never\") (default \"policy\")"
         },
         {
           "name": "quiet-build",
@@ -1377,29 +1382,29 @@
         {
           "name": "quiet-pull",
           "type": "bool",
-          "description": "Pull without printing progress"
+          "description": "Pull without printing progress information"
         },
         {
           "name": "remove-orphans",
           "type": "bool",
-          "description": "Remove containers for services not"
+          "description": "Remove containers for services not defined in the Compose file"
         },
         {
           "name": "renew-anon-volumes",
           "shorthand": "V",
           "type": "bool",
-          "description": "Recreate anonymous volumes instead"
+          "description": "Recreate anonymous volumes instead of retrieving data from the previous containers"
         },
         {
           "name": "scale",
           "type": "scale",
-          "description": "Scale SERVICE to NUM instances."
+          "description": "Scale SERVICE to NUM instances. Overrides the scale setting in the Compose file if present."
         },
         {
           "name": "timeout",
           "shorthand": "t",
           "type": "int",
-          "description": "Use this timeout in seconds for"
+          "description": "Use this timeout in seconds for container shutdown when attached or when containers are already running"
         },
         {
           "name": "timestamps",
@@ -1409,24 +1414,24 @@
         {
           "name": "wait",
           "type": "bool",
-          "description": "Wait for services to be"
+          "description": "Wait for services to be running|healthy. Implies detached mode."
         },
         {
           "name": "wait-timeout",
           "type": "int",
-          "description": "Maximum duration in seconds to wait"
+          "description": "Maximum duration in seconds to wait for the project to be running|healthy"
         },
         {
           "name": "watch",
           "shorthand": "w",
           "type": "bool",
-          "description": "Watch source code and"
+          "description": "Watch source code and rebuild/refresh containers when files are updated."
         },
         {
           "name": "yes",
           "shorthand": "y",
           "type": "bool",
-          "description": "Assume \"yes\" as answer to all"
+          "description": "Assume \"yes\" as answer to all prompts and run non-interactively"
         }
       ]
     },
@@ -1444,7 +1449,7 @@
           "name": "format",
           "shorthand": "f",
           "type": "string",
-          "description": "Format the output. Values: [pretty | json]."
+          "description": "Format the output. Values: [pretty | json]. (Default: pretty)"
         },
         {
           "name": "short",
@@ -1466,7 +1471,7 @@
         {
           "name": "format",
           "type": "string",
-          "description": "Format output using a custom template:"
+          "description": "Format output using a custom template: 'table':            Print output in table format with column headers (default) 'table TEMPLATE':   Print output in table format using the given Go template 'json':             Print in JSON format 'TEMPLATE':         Print output using the given Go template. Refer to https://docs.docker.com/go/formatting/ for more information about formatting output with templates (default \"table\")"
         },
         {
           "name": "quiet",

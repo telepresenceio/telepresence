@@ -29,7 +29,7 @@ List running compose projects
 ```
   -a, --all             Show all stopped Compose projects
       --filter string   Filter output based on conditions provided
-      --format string   Format the output. Values: [table | json]
+      --format string   Format the output. Values: [table | json] (default "table")
   -q, --quiet           Only display project names
 ```
 

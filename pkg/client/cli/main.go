@@ -72,12 +72,12 @@ func Main(ctx context.Context, args []string) {
 		}
 	} else {
 		if command, fmtOutput, err := output.Execute(cmd.Telepresence(ctx, args)); err != nil {
+			exitCode := 1
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				exitCode = exitErr.ExitCode()
+			}
 			if fmtOutput || errcat.GetCategory(err) == errcat.Silent {
-				exitCode := 1
-				var exitErr *exec.ExitError
-				if errors.As(err, &exitErr) {
-					exitCode = exitErr.ExitCode()
-				}
 				os.Exit(exitCode)
 			}
 			if command != nil {
@@ -96,7 +96,7 @@ func Main(ctx context.Context, args []string) {
 			} else {
 				ioutil.Printf(os.Stderr, "%v\n", err)
 			}
-			os.Exit(1)
+			os.Exit(exitCode)
 		}
 	}
 }

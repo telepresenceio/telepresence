@@ -194,7 +194,7 @@ func timedRun(ctx context.Context, run func(time.Duration) error) error {
 	ctx, cancel := timeouts.TimeoutContext(ctx, client.TimeoutHelm)
 	defer cancel()
 
-	runResult := make(chan error)
+	runResult := make(chan error, 1)
 	go func() {
 		runResult <- run(timeouts.Get(client.TimeoutHelm))
 	}()

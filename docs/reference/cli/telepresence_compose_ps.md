@@ -27,14 +27,14 @@ List containers
 
 ### Compose ps flags:
 ```
-  -a, --all                  Show all stopped containers (including those
-      --filter string        Filter services by a property (supported
-      --format string        Format output using a custom template:
+  -a, --all                  Show all stopped containers (including those created by the run command)
+      --filter string        Filter services by a property (supported filters: status)
+      --format string        Format output using a custom template: 'table':            Print output in table format with column headers (default) 'table TEMPLATE':   Print output in table format using the given Go template 'json':             Print in JSON format 'TEMPLATE':         Print output using the given Go template. Refer to https://docs.docker.com/go/formatting/ for more information about formatting output with templates (default "table")
       --no-trunc             Don't truncate output
-      --orphans              Include orphaned services (not declared by
+      --orphans              Include orphaned services (not declared by project) (default true)
   -q, --quiet                Only display IDs
       --services             Display services
-      --status stringArray   Filter services by status. Values: [paused |
+      --status stringArray   Filter services by status. Values: [paused | restarting | removing | running | dead | created | exited]
 ```
 
 ### Global Flags:

@@ -500,11 +500,26 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	mgrIr := s.newCreateInterceptRequest(spec)
 	timeoutCtx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficAgentArrival)
 	defer cancel()
-	pi, err := s.ManagerClient().PrepareIntercept(timeoutCtx, mgrIr)
-	if err != nil {
+	var pi *manager.PreparedIntercept
+	for retry := 0; retry < 2; retry++ {
+		pi, err = s.ManagerClient().PrepareIntercept(timeoutCtx, mgrIr)
+		if err == nil {
+			break
+		}
+
 		if st, ok := status.FromError(err); ok {
-			if st.Code() == codes.FailedPrecondition {
+			switch st.Code() {
+			case codes.FailedPrecondition:
 				return nil, errcat.User.New(st.Message())
+			case codes.NotFound:
+				if strings.HasPrefix(st.Message(), "Client session ") {
+					// The manager is not aware of this session. This can happen if the manager is restarted and
+					// none of our watchers have yet detected and remedied the situation.
+					err = s.reconnectManager()
+					if err == nil {
+						continue
+					}
+				}
 			}
 		}
 		return nil, err

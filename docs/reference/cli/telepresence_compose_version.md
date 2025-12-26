@@ -27,7 +27,7 @@ Show the Docker Compose version information
 
 ### Compose version flags:
 ```
-  -f, --format string   Format the output. Values: [pretty | json].
+  -f, --format string   Format the output. Values: [pretty | json]. (Default: pretty)
       --short           Shows only Compose's version number
 ```
 
