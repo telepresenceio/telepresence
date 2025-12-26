@@ -63,12 +63,6 @@ The daemons are therefore now renamed:
 - kubeauth-foreground => kubeauthd
   </Body>
 </Note>
-<Note>
-	<Title type="bugfix">Fix schema for agent.image.pullSecrets</Title>
-	<Body>
-The `agent.image.pullSecrets` is referenced by the helm chart's deployment.yaml but was previously disallowed by the schema file.
-  </Body>
-</Note>
 ## Version 2.25.2 <span style={{fontSize:'16px'}}>(December 26)</span>
 <Note>
 	<Title type="bugfix">Ensure that the exit code from a docker command becomes the exit code of the Telepresence command.</Title>
