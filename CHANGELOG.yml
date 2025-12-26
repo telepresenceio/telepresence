@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.25.2
-    date: (TBD)
+    date: 2025-12-26
     notes:
       - type: bugfix
         title: Ensure that the exit code from a docker command becomes the exit code of the Telepresence command.
