@@ -24,6 +24,13 @@ func (s *httpInterceptsSuite) SuiteName() string {
 	return "HTTPIntercepts"
 }
 
+func (s *httpInterceptsSuite) SetupSuite() {
+	if !(s.ManagerIsVersion(">2.24.x") && s.ClientIsVersion(">2.24.x")) {
+		s.T().Skip("HTTP intercepts require Telepresence 2.25.0 or later")
+	}
+	s.Suite.SetupSuite()
+}
+
 func (s *httpInterceptsSuite) Test_HTTPHeaderFiltering() {
 	require := s.Require()
 	ctx := s.Context()
