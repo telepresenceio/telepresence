@@ -29,7 +29,8 @@ Execute a command in a running container
 ```
   -d, --detach            Detached mode: Run command in the background
   -e, --env stringArray   Set environment variables
-      --index int         Index of the container if service has multiple replicas -T, --no-tty docker compose exec   Disable pseudo-TTY allocation. By default docker compose exec allocates a TTY. (default true)
+      --index int         Index of the container if service has multiple replicas
+  -T, --no-tty            Disable pseudo-TTY allocation. By default 'docker compose exec' allocates a TTY. (default true)
       --privileged        Give extended privileges to the process
   -u, --user string       Run the command as this user
   -w, --workdir string    Path to workdir directory for this command

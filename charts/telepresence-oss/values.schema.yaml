@@ -14,17 +14,9 @@ properties:
     type: object
     additionalProperties: false
     properties:
-      mountPolicies:
-        description: 'List of volume mount policies. Defaults to {"/tmp" : "Ignore"}'
-        type: object
-        additionalProperties:
-          description: The name or path prefix match of the volume that the policy applies to
-          type: string
-          enum:
-            - Remote
-            - RemoteReadOnly
-            - Local
-            - Ignore
+      enableH2cProbing:
+        description: If enabled, the agent will probe for HTTP2 using clear-text (h2c) support non-TLS ports unless they are configured with appProtocol.
+        type: boolean
       initContainer:
         description: Configuration for the init-container that runs before the traffic-agent
         type: object
@@ -66,6 +58,17 @@ properties:
       maxIdleTime:
         description: maximum time the agent is idle (no engagements to the workload) before it is cleaned up by the traffic manager
         $ref: "#/$defs/duration"
+      mountPolicies:
+        description: 'List of volume mount policies. Defaults to {"/tmp" : "Ignore"}'
+        type: object
+        additionalProperties:
+          description: The name or path prefix match of the volume that the policy applies to
+          type: string
+          enum:
+            - Remote
+            - RemoteReadOnly
+            - Local
+            - Ignore
       port:
         description: Port number of the first port that the agent will use
         type: integer
