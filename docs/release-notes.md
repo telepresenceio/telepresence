@@ -14,6 +14,12 @@ The Traffic Agent now has a new configuration option `agentInjector.mutationAwar
 The Traffic Agent now has a new configuration option `agent.enableH2cProbing` that can be set to `false` to disable the HTTP2/Clear-Text probing. The default setting is `true` to preserve backwards compatibility, but this will be changed to `false` in a future release.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Improved efficiency of traffic manager map updates.</div></div>
+<div style="margin-left: 15px">
+
+The watchable map has been refactored into a client/server model that supports delta-based updates. Where supported, gRPC now transmits only incremental changes instead of full snapshots, significantly reducing payload sizes. This improvement is especially important for large clusters, where full snapshots can be sizable and costly to transmit. Full snapshot streaming remains available as a backward-compatible fallback for clients that do not support delta methods.
+</div>
+
 ## Version 2.25.2 <span style="font-size: 16px;">(December 26)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ensure that the exit code from a docker command becomes the exit code of the Telepresence command.</div></div>
 <div style="margin-left: 15px">

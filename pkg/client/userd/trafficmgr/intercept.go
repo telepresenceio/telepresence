@@ -144,14 +144,31 @@ func (s *session) watchInterceptsHandler(context.Context) error {
 
 func (s *session) watchInterceptsLoop(ctx context.Context) error {
 	pat := newPodAccessTracker()
-	err := watcher.WatchWithRetry(ctx, "WatchIntercepts", client.GetConfig(ctx).Grpc().WatchRetryInterval,
-		func(ctx context.Context) (grpc.ServerStreamingClient[manager.InterceptInfoSnapshot], error) {
-			return s.managerClient.WatchIntercepts(s.context, s.SessionInfo())
+	snapMap := make(map[string]*manager.InterceptInfo)
+	err := watcher.WatchWithRetry(ctx, "WatchInterceptsDelta", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[manager.InterceptInfoDelta], error) {
+			return s.managerClient.WatchInterceptsDelta(s.context, s.SessionInfo())
 		},
-		func(snapshot *manager.InterceptInfoSnapshot) error {
-			s.handleInterceptSnapshot(pat, snapshot.Intercepts)
+		func(delta *manager.InterceptInfoDelta) error {
+			maps.DeltaUpdate(snapMap, delta.Upserts, delta.Removals)
+			s.handleInterceptSnapshot(pat, maps.Values(snapMap))
 			return nil
-		}, s.reconnectManager)
+		}, func() error {
+			clear(snapMap)
+			return s.reconnectManager()
+		})
+	if err != nil && grpcStatus.Code(err) == grpcCodes.Unimplemented {
+		// Fall back to streaming all intercepts if the traffic manager doesn't support delta updates.'
+		dlog.Warnf(ctx, "WatchInterceptsDelta is not implemented by the traffic-manager, falling back to WatchIntercepts and full snapshots")
+		err = watcher.WatchWithRetry(ctx, "WatchIntercepts", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+			func(ctx context.Context) (grpc.ServerStreamingClient[manager.InterceptInfoSnapshot], error) {
+				return s.managerClient.WatchIntercepts(s.context, s.SessionInfo())
+			},
+			func(snapshot *manager.InterceptInfoSnapshot) error {
+				s.handleInterceptSnapshot(pat, snapshot.Intercepts)
+				return nil
+			}, s.reconnectManager)
+	}
 	// Handle as if we had an empty snapshot. This will ensure that port forwards and volume mounts are cancelled correctly.
 	s.handleInterceptSnapshot(pat, nil)
 	return err

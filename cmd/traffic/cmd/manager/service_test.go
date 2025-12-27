@@ -285,6 +285,7 @@ matchExpressions:
 		},
 		AgentInitContainerEnabled: true,
 		AgentMaxIdleTime:          24 * time.Hour,
+		ClientConnectionTTL:       24 * time.Minute,
 	}
 	ctx = managerutil.WithEnv(ctx, &env)
 	ctx = mutator.WithMap(ctx, mutator.Load(ctx))

@@ -5,23 +5,42 @@ import (
 	"slices"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 func (s *session) watchAgentsLoop(ctx context.Context) error {
-	err := watcher.WatchWithRetry(ctx, "WatchAgents", client.GetConfig(ctx).Grpc().WatchRetryInterval,
-		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentInfoSnapshot], error) {
-			return s.managerClient.WatchAgents(ctx, s.SessionInfo())
+	snapMap := make(map[string]*manager.AgentInfo)
+	err := watcher.WatchWithRetry(ctx, "WatchAgentsDelta", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentInfoDelta], error) {
+			return s.managerClient.WatchAgentsDelta(ctx, s.SessionInfo())
 		},
-		func(snapshot *manager.AgentInfoSnapshot) error {
-			s.handleAgentSnapshot(ctx, snapshot.Agents)
+		func(delta *manager.AgentInfoDelta) error {
+			maps.DeltaUpdate(snapMap, delta.Upserts, delta.Removals)
+			s.handleAgentSnapshot(ctx, maps.Values(snapMap))
 			return nil
-		}, nil)
+		}, func() error {
+			clear(snapMap)
+			return nil
+		})
 
+	if err != nil && status.Code(err) == codes.Unimplemented {
+		dlog.Warnf(ctx, "WatchAgentsDelta is not implemented by the traffic-manager, falling back to WatchAgents and full snapshots")
+		err = watcher.WatchWithRetry(ctx, "WatchAgents", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+			func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentInfoSnapshot], error) {
+				return s.managerClient.WatchAgents(ctx, s.SessionInfo())
+			},
+			func(snapshot *manager.AgentInfoSnapshot) error {
+				s.handleAgentSnapshot(ctx, snapshot.Agents)
+				return nil
+			}, nil)
+	}
 	// Handle as if we had an empty snapshot. This will ensure that port forwards and volume mounts are canceled correctly.
 	s.handleAgentSnapshot(ctx, nil)
 	return err

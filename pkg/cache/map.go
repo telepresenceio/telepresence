@@ -252,7 +252,7 @@ func (m *Map[K, V]) Store(key K, value V) {
 func (m *Map[K, V]) markSubscribers(key K, value V) {
 	m.subscribers.Range(func(_ uuid.UUID, sb *subscription[K, V]) bool {
 		// Don't run the filter if the subscriber is marked already.
-		if !sb.mark.Load() && sb.include(key, value) {
+		if !sb.mark.Load() && (sb.include == nil || sb.include(key, value)) {
 			sb.mark.Store(true)
 		}
 		return true
@@ -308,8 +308,9 @@ func (ad *allDelta[K, V]) filteredDelta(initialized bool, include func(K, V) boo
 }
 
 func (ad *allDelta[K, V]) send(sb *subscription[K, V]) {
-	fd := ad.filteredDelta(sb.initialized.Swap(true), sb.include)
-	if len(fd.Upserts) == 0 && len(fd.Removals) == 0 {
+	initialized := sb.initialized.Swap(true)
+	fd := ad.filteredDelta(initialized, sb.include)
+	if initialized && len(fd.Upserts) == 0 && len(fd.Removals) == 0 {
 		return
 	}
 	select {

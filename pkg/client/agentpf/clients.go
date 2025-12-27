@@ -21,6 +21,7 @@ import (
 	tpClient "github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8sclient"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -203,7 +204,7 @@ func (ac *client) refresh(ctx context.Context, ai *manager.AgentPodInfo) {
 	}
 }
 
-func (ac *client) startDialWatcherLocked(ctx context.Context) (err error) {
+func (ac *client) startDialWatcherLocked(ctx context.Context) error {
 	if ac.cancelDialWatch != nil {
 		// Already started
 		return nil
@@ -212,7 +213,7 @@ func (ac *client) startDialWatcherLocked(ctx context.Context) (err error) {
 
 	// Create the dial watcher
 	dlog.Debugf(ctx, "watching dials from agent pod %s", ac)
-	watcher, err := ac.cli.WatchDial(ctx, ac.session)
+	dialStream, err := ac.cli.WatchDial(ctx, ac.session)
 	if err != nil {
 		cancel()
 		return err
@@ -227,7 +228,7 @@ func (ac *client) startDialWatcherLocked(ctx context.Context) (err error) {
 	}
 
 	go func() {
-		err := tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(ac.cli), watcher, tunnel.SessionID(ac.session.SessionId))
+		err := tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(ac.cli), dialStream, tunnel.SessionID(ac.session.SessionId))
 		if err != nil {
 			// The traffic-agent closed the dial wait loop, which means that it's terminating.
 			dlog.Error(ctx, err)
@@ -383,7 +384,6 @@ func (s *clients) hasWaiterFor(info *manager.AgentPodInfo) bool {
 }
 
 func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient) error {
-	dlog.Debug(ctx, "WatchAgentPods starting")
 	defer func() {
 		activeCount := 0
 		s.clients.Range(func(_ string, ac *client) bool {
@@ -395,8 +395,30 @@ func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient)
 		dlog.Debugf(ctx, "WatchAgentPods ending with %d clients still active", activeCount)
 		s.disabled.Store(true)
 	}()
+
+	snapMap := make(map[string]*manager.AgentPodInfo)
+	err := watcher.WatchWithRetry(ctx, "WatchAgentPodsDelta", tpClient.GetConfig(ctx).Grpc().WatchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoDelta], error) {
+			dlog.Debugf(ctx, "WatchAgentPodsDelta starting")
+			return rmc.WatchAgentPodsDelta(ctx, s.session)
+		},
+		func(delta *manager.AgentPodInfoDelta) error {
+			dlog.Debugf(ctx, "WatchAgentPodsDelta received %d upserts, %d removals", len(delta.Upserts), len(delta.Removals))
+			maps.DeltaUpdate(snapMap, delta.Upserts, delta.Removals)
+			return s.updateClients(ctx, maps.Values(snapMap))
+		}, func() error {
+			clear(snapMap)
+			return nil
+		})
+	if err == nil || status.Code(err) != codes.Unimplemented {
+		return err
+	}
+
+	// Older traffic-manager. Fall back to watching all agents.
+	dlog.Warnf(ctx, "WatchAgentPodsDelta is not implemented by the traffic-manager, falling back to WatchAgentPods and full snapshots")
 	return watcher.WatchWithRetry(ctx, "WatchAgentPods", tpClient.GetConfig(ctx).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoSnapshot], error) {
+			dlog.Debugf(ctx, "No delta support in traffic-manager, starting WatchAgentPods instead")
 			return rmc.WatchAgentPods(ctx, s.session)
 		},
 		func(snapshot *manager.AgentPodInfoSnapshot) error {
@@ -404,26 +426,30 @@ func (s *clients) WatchAgentPods(ctx context.Context, rmc manager.ManagerClient)
 		}, nil)
 }
 
-func (s *clients) notifyWaiters() {
+func (ac *client) notify(ctx context.Context, waiter chan struct{}) {
+	// a client must be connected to be able to notify
+	if _, err := ac.ensureConnect(ctx); err != nil {
+		dlog.Errorf(ctx, "notifyWaiters %s (%s), ensureConnect failed: %v", ac.info.WorkloadName, net.IP(ac.info.PodIp), err)
+	}
+	close(waiter)
+}
+
+func (s *clients) notifyWaiters(ctx context.Context) {
 	s.clients.Range(func(name string, ac *client) bool {
-		// a client must be connected to be able to notify
-		if !ac.connected() {
-			return true
-		}
 		if podIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok {
 			if waiter, ok := s.ipWaiters.LoadAndDelete(podIP); ok {
-				close(waiter)
+				ac.notify(ctx, waiter)
 			}
 		}
 		if waiter, ok := s.wlWaiters.LoadAndDelete(ac.info.WorkloadName); ok {
-			close(waiter)
+			ac.notify(ctx, waiter)
 		}
 		return true
 	})
 }
 
 func (s *clients) waitWithTimeout(ctx context.Context, timeout time.Duration, waitOn <-chan struct{}) error {
-	s.notifyWaiters()
+	s.notifyWaiters(ctx)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	select {
@@ -503,15 +529,8 @@ func (s *clients) WaitForWorkload(ctx context.Context, timeout time.Duration, na
 }
 
 func (s *clients) updateClients(ctx context.Context, ais []*manager.AgentPodInfo) error {
-	defer s.notifyWaiters()
+	defer s.notifyWaiters(ctx)
 
-	if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
-		ns := make([]string, len(ais))
-		for i, ac := range ais {
-			ns[i] = fmt.Sprintf("%s(%s)", ac.PodName, net.IP(ac.PodIp))
-		}
-		dlog.Debugf(ctx, "updateClients %s", ns)
-	}
 	var aim map[string]*manager.AgentPodInfo
 	if len(ais) > 0 {
 		aim = make(map[string]*manager.AgentPodInfo, len(ais))

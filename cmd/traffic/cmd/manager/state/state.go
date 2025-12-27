@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
+	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -378,7 +379,7 @@ func (s *State) SessionDone(id tunnel.SessionID) (<-chan struct{}, error) {
 	if as, ok := s.agents.Load(id); ok {
 		return as.done(), nil
 	}
-	return nil, status.Errorf(codes.NotFound, "session %q not found", id)
+	return nil, grpcErrors.Errorf(codes.NotFound, "session %q not found", id)
 }
 
 // Sessions: Clients ///////////////////////////////////////////////////////////////////////////////
@@ -481,6 +482,31 @@ func (s *State) CountTunnelIngress() uint64 {
 
 func (s *State) CountTunnelEgress() uint64 {
 	return atomic.LoadUint64(&s.tunnelEgressCounter)
+}
+
+func (s *State) IsIntercepted(name, namespace string) bool {
+	found := false
+	s.intercepts.Range(func(id string, ii *Intercept) bool {
+		if name == ii.Spec.Agent && namespace == ii.Spec.Namespace {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+func (s *State) IsInterceptedBy(client tunnel.SessionID) bool {
+	found := false
+	clientSessionID := string(client)
+	s.intercepts.Range(func(id string, ii *Intercept) bool {
+		if ii.ClientSession.SessionId == clientSessionID {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // Sessions: Agents ////////////////////////////////////////////////////////////////////////////////
@@ -613,14 +639,14 @@ func (s *State) UninstallAgents(ctx context.Context, ur *rpc.UninstallAgentsRequ
 	id := tunnel.SessionID(ur.GetSessionInfo().GetSessionId())
 	clientInfo := s.GetClient(id)
 	if clientInfo == nil {
-		return status.Errorf(codes.NotFound, "Client session %q not found", id)
+		return grpcErrors.Errorf(codes.NotFound, "Client session %q not found", id)
 	}
 	ns := clientInfo.GetNamespace()
 	mm := mutator.GetMap(ctx)
 	agents := ur.Agents
 	if len(agents) == 0 {
 		if err := mm.EvictAllPodsWithAgentConfig(ctx, ns); err != nil {
-			return status.Errorf(codes.Internal, "unable to delete pods with agent: %v", err)
+			return grpcErrors.Errorf(codes.Internal, "unable to delete pods with agent: %v", err)
 		}
 		return nil
 	}
@@ -629,7 +655,7 @@ func (s *State) UninstallAgents(ctx context.Context, ur *rpc.UninstallAgentsRequ
 	for i, agent := range agents {
 		wl, err := k8sapi.GetWorkload(ctx, agent, ns, "")
 		if err != nil {
-			return status.Errorf(codes.NotFound, "Workload %s.%s not found", agent, ns)
+			return grpcErrors.Errorf(codes.NotFound, "Workload %s.%s not found", agent, ns)
 		}
 		wls[i] = wl
 	}
@@ -637,7 +663,7 @@ func (s *State) UninstallAgents(ctx context.Context, ur *rpc.UninstallAgentsRequ
 	for _, wl := range wls {
 		mm.Delete(wl.GetName(), ns)
 		if err := mm.EvictPodsWithAgentConfig(ctx, wl); err != nil {
-			return status.Errorf(codes.Internal, "unable to delete agent for workload %s.%s: %v", wl.GetName(), ns, err)
+			return grpcErrors.Errorf(codes.Internal, "unable to delete agent for workload %s.%s: %v", wl.GetName(), ns, err)
 		}
 	}
 	return nil
@@ -659,7 +685,7 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	if cs, ok := s.clients.Load(id); ok {
 		return s.clientTunnel(ctx, cs, stream)
 	}
-	return status.Errorf(codes.NotFound, "Session %q not found", id)
+	return grpcErrors.Errorf(codes.NotFound, "Session %q not found", id)
 }
 
 func (s *State) clientTunnel(ctx context.Context, client *ClientSession, stream tunnel.Stream) error {
