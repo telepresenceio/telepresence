@@ -119,6 +119,8 @@ spec:
             value: {{ .injectPolicy }}
           - name: AGENT_INJECTOR_NAME
             value:  {{ .name | quote }}
+          - name: AGENT_INJECTOR_MUTATION_AWARE
+            value: {{ (default false .mutationAware) | quote }}
           {{- end }}
         {{- /*
         Traffic agent configuration

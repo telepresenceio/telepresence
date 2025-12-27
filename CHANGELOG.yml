@@ -28,6 +28,12 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Add ability to exclude or include modifications made by other injectors when injecting the traffic agent.
+        body: >-
+          The Traffic Agent now has a new configuration option `agentInjector.mutationAware` that can be set to `false` to exclude
+          modifications made by other injectors when injecting the traffic agent. Setting `agentInjector.mutationAware=true` requires
+          `agentInjector.webhook.reinvocationPolicy=IfNeeded`. The default setting is `true`.
+      - type: feature
         title: Add ability to disable the Traffic Agent's HTTP2/Clear-Text probing.
         body: >-
           The Traffic Agent now has a new configuration option `agent.enableH2cProbing` that can be set to `false` to disable the

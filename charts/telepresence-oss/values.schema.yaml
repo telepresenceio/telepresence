@@ -136,6 +136,9 @@ properties:
         enum:
           - OnDemand
           - WhenEnabled
+      mutationAware:
+        description: Include changes to the pod template that are contributed by other injectors. Implies reinvocationPolicy=IfNeeded
+        type: boolean
       name:
         description: Name to use with objects associated with the agent-injector
         type: string

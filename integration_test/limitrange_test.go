@@ -77,12 +77,12 @@ func (is *installSuite) TestLimitRange() {
 	}()
 
 	is.Run("Never", func() {
-		is.TelepresenceHelmInstallOK(is.Context(), false, "--set", "agentInjector.webhook.reinvocationPolicy=Never")
+		is.TelepresenceHelmInstallOK(is.Context(), false, "--set", "agentInjector.webhook.reinvocationPolicy=Never,agentInjector.mutationAware=false")
 		is.limitedRangeTest()
 	})
 
 	is.Run("IfNeeded", func() {
-		is.TelepresenceHelmInstallOK(is.Context(), true, "--set", "agentInjector.webhook.reinvocationPolicy=IfNeeded")
+		is.TelepresenceHelmInstallOK(is.Context(), true, "--set", "agentInjector.webhook.reinvocationPolicy=IfNeeded,agentInjector.mutationAware=true")
 		is.limitedRangeTest()
 	})
 }

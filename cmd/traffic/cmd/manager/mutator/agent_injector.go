@@ -111,6 +111,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 
 	ia := annotation.GetAnnotation(ctx, pod.Annotations, annotation.InjectTrafficAgent, annotation.LegacyInjectTrafficAgent)
 
+	var wl k8sapi.Workload
 	var sc *agentconfig.Sidecar
 	switch ia {
 	case "false", "disabled":
@@ -130,7 +131,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 
-		wl, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod), env.EnabledWorkloadKinds)
+		wl, err = agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod), env.EnabledWorkloadKinds)
 		if err != nil {
 			uwkError := k8sapi.UnsupportedWorkloadKindError("")
 			switch {
@@ -156,13 +157,20 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	default:
 		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, annotation.InjectTrafficAgent)
 	}
-	return createPatch(ctx, sc, pod)
+
+	podTpl := &core.PodTemplateSpec{ObjectMeta: pod.ObjectMeta}
+	if env.AgentInjectorMutationAware {
+		podTpl.Spec = pod.Spec
+	} else {
+		podTpl.Spec = wl.GetPodTemplate().Spec
+	}
+	return createPatch(ctx, sc, pod, podTpl)
 }
 
-func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod) (patches PatchOps, err error) {
+func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod, wlTpl *core.PodTemplateSpec) (patches PatchOps, err error) {
 	var anns map[string]string
 	patches = addInitContainer(ctx, pod, config, patches)
-	patches, anns, err = addAgentContainer(ctx, pod, config, patches)
+	patches, anns, err = addAgentContainer(ctx, pod, wlTpl, config, patches)
 	if err != nil {
 		return nil, err
 	}
@@ -399,12 +407,13 @@ func containerEqual(ctx context.Context, a, b *core.Container) bool {
 func addAgentContainer(
 	ctx context.Context,
 	pod *core.Pod,
+	wlTpl *core.PodTemplateSpec,
 	config *agentconfig.Sidecar,
 	patches PatchOps,
 ) (PatchOps, map[string]string, error) {
 	ab := agentconfig.ContainerBuilder{
 		MountPolicies: managerutil.GetEnv(ctx).AgentMountPolicies,
-		Pod:           pod,
+		Pod:           wlTpl,
 		Config:        config,
 	}
 	acn, replaceAnnotations, err := ab.AgentContainer(ctx)

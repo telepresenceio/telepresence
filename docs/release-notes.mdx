@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.26.0
 <Note>
+	<Title type="feature">Add ability to exclude or include modifications made by other injectors when injecting the traffic agent.</Title>
+	<Body>
+The Traffic Agent now has a new configuration option `agentInjector.mutationAware` that can be set to `false` to exclude modifications made by other injectors when injecting the traffic agent. Setting `agentInjector.mutationAware=true` requires `agentInjector.webhook.reinvocationPolicy=IfNeeded`. The default setting is `true`.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Add ability to disable the Traffic Agent's HTTP2/Clear-Text probing.</Title>
 	<Body>
 The Traffic Agent now has a new configuration option `agent.enableH2cProbing` that can be set to `false` to disable the HTTP2/Clear-Text probing. The default setting is `true` to preserve backwards compatibility, but this will be changed to `false` in a future release.
