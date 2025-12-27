@@ -9,7 +9,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
-func (s *notConnectedSuite) Test_WorkspaceListener() {
+func (s *notConnectedSuite) Test_WorkloadListener() {
 	s.Require().NoError(s.DoWithTrafficManager(s.Context(), func(ctx context.Context, cancel context.CancelFunc, client manager.ManagerClient, session *manager.SessionInfo) {
 		rq := s.Require()
 
