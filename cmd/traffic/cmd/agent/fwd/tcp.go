@@ -151,8 +151,12 @@ func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
 		return err
 	}
 
-	ingressBytes := tunnel.NewCounterProbe("FromClientBytes")
-	egressBytes := tunnel.NewCounterProbe("ToClientBytes")
+	metricsEnabled := sp.MetricsEnabled()
+	var ingressBytes, egressBytes *tunnel.CounterProbe
+	if metricsEnabled {
+		ingressBytes = tunnel.NewCounterProbe("FromClientBytes")
+		egressBytes = tunnel.NewCounterProbe("ToClientBytes")
+	}
 
 	// Ingress and egress swap places here because this endpoint reflects a connection
 	// where the stream is attached to a connection *to* the client, not *from* the client.
@@ -160,11 +164,13 @@ func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
 	d.Start(ctx)
 	<-d.Done()
 
-	sp.ReportMetrics(ctx, &manager.TunnelMetrics{
-		ClientSessionId: ic.ClientSession.SessionId,
-		IngressBytes:    ingressBytes.GetValue(),
-		EgressBytes:     egressBytes.GetValue(),
-	})
+	if metricsEnabled {
+		sp.ReportMetrics(ctx, &manager.TunnelMetrics{
+			ClientSessionId: ic.ClientSession.SessionId,
+			IngressBytes:    ingressBytes.GetValue(),
+			EgressBytes:     egressBytes.GetValue(),
+		})
+	}
 	return nil
 }
 

@@ -136,6 +136,8 @@ spec:
           {{- end }}
           - name: AGENT_ENABLE_H2C_PROBING
             value: {{ (default false .enableH2cProbing) | quote }}
+          - name: AGENT_CONSUMPTION_METRICS
+            value: {{ (default true .enableConsumptionMetrics) | quote }}
           {{- if .resources }}
           - name: AGENT_RESOURCES
             value: '{{ toJson .resources }}'

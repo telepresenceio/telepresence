@@ -71,18 +71,24 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 			return nil
 		}
 	}
+	reporting := s.MetricsEnabled()
+	var ingressBytes, egressBytes *tunnel.CounterProbe
+	if reporting {
+		ingressBytes = tunnel.NewCounterProbe("FromClientBytes")
+		egressBytes = tunnel.NewCounterProbe("ToClientBytes")
+	}
 
-	ingressBytes := tunnel.NewCounterProbe("FromClientBytes")
-	egressBytes := tunnel.NewCounterProbe("ToClientBytes")
 	endPoint := tunnel.NewDialer(stream, func() {}, ingressBytes, egressBytes)
 	endPoint.Start(ctx)
 	<-endPoint.Done()
 
-	s.ReportMetrics(ctx, &rpc.TunnelMetrics{
-		ClientSessionId: string(stream.SessionID()),
-		IngressBytes:    ingressBytes.GetValue(),
-		EgressBytes:     egressBytes.GetValue(),
-	})
+	if reporting {
+		s.ReportMetrics(ctx, &rpc.TunnelMetrics{
+			ClientSessionId: string(stream.SessionID()),
+			IngressBytes:    ingressBytes.GetValue(),
+			EgressBytes:     egressBytes.GetValue(),
+		})
+	}
 	return nil
 }
 
@@ -156,4 +162,8 @@ func (s *state) ReportMetrics(ctx context.Context, metrics *rpc.TunnelMetrics) {
 			dlog.Errorf(ctx, "ReportMetrics failed: %v", err)
 		}
 	}()
+}
+
+func (s *state) MetricsEnabled() bool {
+	return s.AgentConfig().EnableMetrics
 }
