@@ -377,7 +377,7 @@ func (wf *workloadInfoWatcher) handleInterceptDelta(ctx context.Context, delta c
 		name := ii.Spec.Agent
 		iClients := makeInterceptClients(ipc[name])
 		as := rpc.WorkloadInfo_INTERCEPTED
-		if len(iClients) > 0 {
+		if len(iClients) == 0 {
 			as = rpc.WorkloadInfo_INSTALLED
 		}
 		wf.workloadEvents.Compute(name, func(w *rpc.WorkloadEvent, loaded bool) (*rpc.WorkloadEvent, xsync.ComputeOp) {
