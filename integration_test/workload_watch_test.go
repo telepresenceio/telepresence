@@ -10,6 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
+//nolint:gocognit // complex
 func (s *notConnectedSuite) Test_WorkloadListener() {
 	if !s.ClientVersion().EQ(version.Structured) {
 		s.T().Skip(`Not part of compatibility tests. DoWithTrafficManager assumes compiled executable`)
@@ -39,6 +40,13 @@ func (s *notConnectedSuite) Test_WorkloadListener() {
 					TargetPort:   8080,
 				},
 			}
+			_, err := client.SetLogLevel(ctx, &manager.LogLevelRequest{LogLevel: "trace"})
+			if !s.NoError(err) {
+				return
+			}
+			defer func() {
+				_, _ = client.SetLogLevel(ctx, &manager.LogLevelRequest{LogLevel: "debug"})
+			}()
 			pi, err := client.PrepareIntercept(ctx, ir)
 			if !s.NoError(err) {
 				return
