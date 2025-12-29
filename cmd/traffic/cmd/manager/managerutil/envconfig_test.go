@@ -55,6 +55,7 @@ func TestEnvconfig(t *testing.T) {
 		EnabledWorkloadKinds:         []k8sapi.Kind{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
 		MaxNamespaceSpecificWatchers: 10,
 		AgentInitContainerEnabled:    true,
+		AgentWatchRetryInterval:      10 * time.Second,
 	}
 
 	testcases := map[string]struct {

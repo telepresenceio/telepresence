@@ -956,7 +956,7 @@ func (s *service) Tunnel(server rpc.Manager_TunnelServer) error {
 	ctx := server.Context()
 	stream, err := tunnel.NewServerStream(ctx, tunnel.ClientToManager, server)
 	if err != nil {
-		return status.Errorf(codes.FailedPrecondition, "failed to connect stream: %v", err)
+		return errors.FromError(err, codes.FailedPrecondition, fmt.Sprintf("failed to connect stream: %v", err))
 	}
 	return s.state.Tunnel(ctx, stream)
 }

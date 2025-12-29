@@ -7,7 +7,7 @@ import (
 
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
-	errors2 "k8s.io/apimachinery/pkg/api/errors"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -56,11 +56,11 @@ func GetWorkload(c context.Context, name, namespace string, kind Kind) (obj Work
 			if obj, err = GetWorkload(c, name, namespace, wk); err == nil {
 				return obj, nil
 			}
-			if !errors2.IsNotFound(err) {
+			if !k8sErrors.IsNotFound(err) {
 				return nil, err
 			}
 		}
-		err = errors2.NewNotFound(core.Resource("workload"), name+"."+namespace)
+		err = k8sErrors.NewNotFound(core.Resource("workload"), name+"."+namespace)
 	default:
 		return nil, UnsupportedWorkloadKindError(kind)
 	}

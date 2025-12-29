@@ -222,11 +222,24 @@ func (c *Command) AddReplaceFlags(cmd *cobra.Command) {
 }
 
 func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
-	if len(positional) > 1 && cmd.Flags().ArgsLenAtDash() != 1 {
-		return errcat.User.New("commands to be run with intercept must come after options")
+	dashIndex := cmd.Flags().ArgsLenAtDash()
+	if dashIndex < 0 {
+		switch len(positional) {
+		case 0:
+			return errcat.User.New("intercept expects exactly one argument (the name for the intercept)")
+		case 1:
+			c.Name = positional[0]
+		default:
+			return errcat.User.New(`intercept expects exactly one argument (flags and arguments to docker must be added after "--"`)
+		}
+	} else {
+		if dashIndex == 1 {
+			c.Name = positional[0]
+			c.Cmdline = positional[dashIndex:]
+		} else {
+			return errcat.User.New(`intercept expects exactly one argument before "--" (the name for the intercept)`)
+		}
 	}
-	c.Name = positional[0]
-	c.Cmdline = positional[1:]
 	c.FormattedOutput = output.WantsFormatted(cmd)
 
 	for _, meta := range c.Metadata {

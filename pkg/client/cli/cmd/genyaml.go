@@ -4,7 +4,9 @@ import (
 	"context"
 	"io"
 	"os"
+	"time"
 
+	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	apps "k8s.io/api/apps/v1"
@@ -101,7 +103,11 @@ func (i *genYAMLCommand) loadConfigMapEntry() (*agentconfig.Sidecar, error) {
 		return nil, err
 	}
 	var cfg agentconfig.Sidecar
-	if err = yaml.Unmarshal(b, &cfg); err != nil {
+	b, err = yaml.YAMLToJSON(b)
+	if err == nil {
+		err = json.Unmarshal(b, &cfg)
+	}
+	if err != nil {
 		return nil, errcat.User.Newf("unable to parse config %s: %w", i.configFile, err)
 	}
 	return &cfg, nil
@@ -145,8 +151,10 @@ func (i *genYAMLCommand) loadWorkload(ctx context.Context) (k8sapi.Workload, err
 }
 
 func (i *genYAMLCommand) writeObjToOutput(obj any) error {
-	// We use sigs.ks8.io/yaml because it treats json serialization tags as if they were yaml tags.
-	doc, err := yaml.Marshal(obj)
+	doc, err := json.Marshal(obj)
+	if err == nil {
+		doc, err = yaml.JSONToYAML(doc)
+	}
 	if err != nil {
 		return errcat.User.Newf("unable to marshal agent container: %w", err)
 	}
@@ -256,6 +264,7 @@ func genConfigMapSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 }
 
 func (g *genConfigMap) generateConfigMap(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+	g.WatchRetryInterval = 10 * time.Second
 	ac, err := g.Generate(ctx, wl, nil)
 	if err != nil {
 		return nil, errcat.NoDaemonLogs.New(err)

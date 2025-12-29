@@ -42,8 +42,6 @@ func (is interceptsStringer) String() string {
 	return sb.String()
 }
 
-const watchRetryInterval = 2 * time.Second
-
 var NewExtendedManagerClient func(conn *grpc.ClientConn, ossManager rpc.ManagerClient) rpc.ManagerClient //nolint:gochecknoglobals // extension point
 
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {
@@ -111,12 +109,13 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		HardShutdownTimeout: time.Second * 10,
 	})
 
+	retryInterval := state.AgentConfig().WatchRetryInterval
 	wg.Go("logLevelWatch", func(ctx context.Context) error {
-		return logLevelWatchLoop(ctx, manager)
+		return logLevelWatchLoop(ctx, manager, retryInterval)
 	})
 	snapshots := make(chan []*rpc.InterceptInfo)
 	wg.Go("interceptWatch", func(ctx context.Context) error {
-		return interceptWatchLoop(ctx, manager, session, info, snapshots)
+		return interceptWatchLoop(ctx, manager, session, info, snapshots, retryInterval)
 	})
 	wg.Go("handleIntercept", func(ctx context.Context) error {
 		return handleInterceptLoop(ctx, manager, session, snapshots, state)
@@ -133,9 +132,9 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	return wg.Wait()
 }
 
-func logLevelWatchLoop(ctx context.Context, manager rpc.ManagerClient) error {
+func logLevelWatchLoop(ctx context.Context, manager rpc.ManagerClient, retryInterval time.Duration) error {
 	timedLevel := log.NewTimedLevel(log.DlogLevelNames[dlog.MaxLogLevel(ctx)], log.SetLevel)
-	return watcher.WatchWithRetry(ctx, "WatchLogLevel", watchRetryInterval,
+	return watcher.WatchWithRetry(ctx, "WatchLogLevel", retryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.LogLevelRequest], error) {
 			return manager.WatchLogLevel(ctx, &empty.Empty{})
 		},
@@ -151,7 +150,14 @@ func logLevelWatchLoop(ctx context.Context, manager rpc.ManagerClient) error {
 	)
 }
 
-func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.SessionInfo, info *rpc.AgentInfo, snapshots chan<- []*rpc.InterceptInfo) error {
+func interceptWatchLoop(
+	ctx context.Context,
+	manager rpc.ManagerClient,
+	session *rpc.SessionInfo,
+	info *rpc.AgentInfo,
+	snapshots chan<- []*rpc.InterceptInfo,
+	retryInterval time.Duration,
+) error {
 	reconnectAgent := func() error {
 		_, err := manager.ReconnectAgent(ctx, &rpc.ReconnectAgentRequest{
 			Session: session,
@@ -161,7 +167,7 @@ func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session 
 	}
 	// Call WatchIntercepts and publish the snapshots on the channel
 	snapMap := make(map[string]*rpc.InterceptInfo)
-	err := watcher.WatchWithRetry(ctx, "WatchInterceptsDelta", watchRetryInterval,
+	err := watcher.WatchWithRetry(ctx, "WatchInterceptsDelta", retryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoDelta], error) {
 			return manager.WatchInterceptsDelta(ctx, session)
 		},
@@ -173,7 +179,7 @@ func interceptWatchLoop(ctx context.Context, manager rpc.ManagerClient, session 
 	if err != nil && status.Code(err) == codes.Unimplemented {
 		// Fall back to streaming all intercepts if the traffic manager doesn't support delta updates.'
 		dlog.Warnf(ctx, "WatchInterceptsDelta is not implemented by the traffic-manager, falling back to WatchIntercepts and full snapshots")
-		err = watcher.WatchWithRetry(ctx, "WatchIntercepts", watchRetryInterval,
+		err = watcher.WatchWithRetry(ctx, "WatchIntercepts", retryInterval,
 			func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoSnapshot], error) {
 				return manager.WatchIntercepts(ctx, session)
 			},

@@ -149,8 +149,12 @@ func (wf *workloadInfoWatcher) sendEvents(ctx context.Context, sendEmpty bool) {
 	wf.start = time.Now()
 }
 
-func (wf *workloadInfoWatcher) resetTicker() {
-	wf.sendTimer.Reset(5 * time.Millisecond)
+func (wf *workloadInfoWatcher) stopSendTimer() {
+	wf.sendTimer.Stop()
+}
+
+func (wf *workloadInfoWatcher) resetSendTimer() {
+	wf.sendTimer.Reset(20 * time.Millisecond)
 }
 
 func rpcWorkloadState(s workload.State) (state rpc.WorkloadInfo_State) {
@@ -187,7 +191,8 @@ func (wf *workloadInfoWatcher) handleWorkloadEvents(ctx context.Context, wes []w
 			return
 		}
 	} else {
-		wf.resetTicker()
+		wf.stopSendTimer()
+		defer wf.resetSendTimer()
 	}
 	for _, we := range wes {
 		wl := we.Workload
@@ -224,7 +229,8 @@ func (wf *workloadInfoWatcher) handleWorkloadEvents(ctx context.Context, wes []w
 }
 
 func (wf *workloadInfoWatcher) handleAgentDelta(ctx context.Context, delta cache.Delta[tunnel.SessionID, *AgentSession]) {
-	wf.resetTicker()
+	wf.stopSendTimer()
+	defer wf.resetSendTimer()
 	m := mutator.GetMap(ctx)
 	onDeleted := func(_ tunnel.SessionID, a *AgentSession) {
 		name := a.Name
@@ -303,7 +309,8 @@ func (wf *workloadInfoWatcher) handleAgentDelta(ctx context.Context, delta cache
 }
 
 func (wf *workloadInfoWatcher) handleInterceptDelta(ctx context.Context, delta cache.Delta[string, *Intercept]) {
-	wf.resetTicker()
+	wf.stopSendTimer()
+	defer wf.resetSendTimer()
 
 	// Build a map of active intercepts by agent. This map must consider all intercepts, not just those that are provided as upserts.
 	// This is faster than calling getIntercepts() for each upserted intercept.

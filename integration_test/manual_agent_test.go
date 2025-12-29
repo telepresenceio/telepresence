@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-json-experiment/json"
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -76,7 +77,9 @@ func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
 	b, err := os.ReadFile(filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
 	require.NoError(err)
 	var deploy map[string]any
-	err = yaml.Unmarshal(b, &deploy)
+	b, err = yaml.YAMLToJSON(b)
+	require.NoError(err, string(b))
+	err = json.Unmarshal(b, &deploy)
 	require.NoError(err)
 
 	renameHttpPort := func(con map[string]any) {

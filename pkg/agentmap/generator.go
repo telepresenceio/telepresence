@@ -39,6 +39,7 @@ type GeneratorConfig struct {
 	InitSecurityContext *core.SecurityContext
 	MountPolicies       types.MountPolicies
 	ClientConnectionTTL time.Duration
+	WatchRetryInterval  time.Duration
 	EnableH2cProbing    bool
 }
 
@@ -185,6 +186,7 @@ func (cfg *GeneratorConfig) Generate(
 		SecurityContext:     cfg.SecurityContext,
 		InitSecurityContext: cfg.InitSecurityContext,
 		EnableH2cProbing:    cfg.EnableH2cProbing,
+		WatchRetryInterval:  cfg.WatchRetryInterval,
 	}, nil
 }
 
