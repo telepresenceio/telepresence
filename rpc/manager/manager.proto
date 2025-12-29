@@ -320,8 +320,18 @@ message AgentInfoSnapshot {
   repeated AgentInfo agents = 1;
 }
 
+message AgentInfoDelta {
+  map<string,AgentInfo>  upserts = 1;
+  repeated string removals = 2;
+}
+
 message InterceptInfoSnapshot {
   repeated InterceptInfo intercepts = 1;
+}
+
+message InterceptInfoDelta {
+  map <string,InterceptInfo> upserts = 1;
+  repeated string removals = 2;
 }
 
 message CreateInterceptRequest {
@@ -583,6 +593,11 @@ message AgentPodInfoSnapshot {
   repeated AgentPodInfo agents = 1;
 }
 
+message AgentPodInfoDelta {
+  map<string,AgentPodInfo> upserts = 1;
+  repeated string removals = 2;
+}
+
 message AgentConfigRequest {
   SessionInfo session = 1;
   string name = 2;
@@ -755,11 +770,19 @@ service Manager {
   // allowed.
   rpc WatchAgentPods(SessionInfo) returns (stream AgentPodInfoSnapshot);
 
+  // WatchAgentPods notifies a client of changes to the set of known Agents from the client
+  // connections namespace that the client can connect to when port-forwards are
+  // allowed.
+  rpc WatchAgentPodsDelta(SessionInfo) returns (stream AgentPodInfoDelta);
+
   // WatchAgents notifies a client of the set of known Agents.
   //
   // A session ID is required; if no session ID is given then the call
   // returns immediately, having not delivered any snapshots.
   rpc WatchAgents(SessionInfo) returns (stream AgentInfoSnapshot);
+
+  // WatchAgents notifies a client of changes to the set of known Agents.
+  rpc WatchAgentsDelta(SessionInfo) returns (stream AgentInfoDelta);
 
   // WatchIntercepts notifies a client or agent of the set of intercepts
   // relevant to that client or agent.
@@ -768,6 +791,10 @@ service Manager {
   // that session are watched.  If no session ID is given, then all
   // intercepts are watched.
   rpc WatchIntercepts(SessionInfo) returns (stream InterceptInfoSnapshot);
+
+  // WatchInterceptsDelta notifies a client or agent of changes in the set of intercepts
+  // relevant to that client or agent.
+  rpc WatchInterceptsDelta(SessionInfo) returns (stream InterceptInfoDelta);
 
   // WatchWorkloads notifies a client of the set of Workloads from the client
   // connection's namespace.

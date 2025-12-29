@@ -147,6 +147,9 @@ func (s *singleServiceSuite) Test_HelmUpgradeWebhookSecret() {
 // Test_HelmUpgradeMountedWebhookSecret tests that updating the webhook secret does interfere with
 // intercept operations.
 func (s *singleServiceSuite) Test_HelmUpgradeMountedWebhookSecret() {
+	if !(s.ManagerIsVersion(">2.24.x") && s.ClientIsVersion(">2.24.x")) {
+		s.T().Skip("Not part of compatibility tests. Uninterrupted intercepts was implemented in 2.25.0")
+	}
 	ctx := s.Context()
 	rq := s.Require()
 

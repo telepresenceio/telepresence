@@ -41,6 +41,9 @@ const (
 )
 
 func (s *proxyViaSuite) SetupSuite() {
+	if !s.ClientIsVersion(">2.24.x") {
+		s.T().Skip("ProxyVia have some quirks in versions <2.25.0")
+	}
 	s.Suite.SetupSuite()
 	tpl := struct {
 		AliasIP string

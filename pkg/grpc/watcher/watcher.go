@@ -39,7 +39,7 @@ func WatchWithRetry[T any](
 		switch status.Code(err) {
 		case codes.OK:
 		case codes.Unimplemented:
-			return backoff.Permanent(fmt.Errorf("%s is not implemented by the server", name))
+			return backoff.Permanent(err)
 		default:
 			return fmt.Errorf("error when calling stream provider for %s: %w", name, err)
 		}
@@ -59,7 +59,7 @@ func WatchWithRetry[T any](
 						return backoff.Permanent(err)
 					}
 				case codes.Unimplemented:
-					return backoff.Permanent(fmt.Errorf("%s is not implemented by the server", name))
+					return backoff.Permanent(err)
 				default:
 					return fmt.Errorf("error when calling Recv for %s: %w", name, err)
 				}

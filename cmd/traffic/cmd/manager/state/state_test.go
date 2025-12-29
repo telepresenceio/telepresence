@@ -16,7 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
+	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
@@ -33,8 +33,8 @@ func (s *suiteState) SetupTest() {
 	s.ctx = dlog.NewTestContext(s.T(), false)
 	s.state = &State{
 		backgroundCtx:    s.ctx,
-		intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
-		agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
+		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
 		workloadWatchers: xsync.NewMap[string, workload.Watcher](),
 		timedLogLevel:    log.NewTimedLevel("debug", log.SetLevel),

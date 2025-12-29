@@ -39,6 +39,13 @@ items:
           The Traffic Agent now has a new configuration option `agent.enableH2cProbing` that can be set to `false` to disable the
           HTTP2/Clear-Text probing. The default setting is `true` to preserve backwards compatibility, but this will be changed to `false`
           in a future release.
+      - type: feature
+        title: Improved efficiency of traffic manager map updates.
+        body: >-
+          The watchable map has been refactored into a client/server model that supports delta-based updates. Where supported, gRPC now
+          transmits only incremental changes instead of full snapshots, significantly reducing payload sizes. This improvement is especially
+          important for large clusters, where full snapshots can be sizable and costly to transmit. Full snapshot streaming remains
+          available as a backward-compatible fallback for clients that do not support delta methods.
   - version: 2.25.2
     date: 2025-12-26
     notes:

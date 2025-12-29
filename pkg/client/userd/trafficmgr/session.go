@@ -1021,7 +1021,7 @@ func (s *session) workloadsWatcher(ctx context.Context, namespace string, synced
 			synced.Done()
 		}
 	}()
-	return watcher.WatchWithRetry(ctx, "WatchAgentPods", client.GetConfig(ctx).Grpc().WatchRetryInterval,
+	return watcher.WatchWithRetry(ctx, "WatchWorkloads", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.WorkloadEventsDelta], error) {
 			return s.managerClient.WatchWorkloads(ctx, &manager.WorkloadEventsRequest{SessionInfo: s.sessionInfo, Namespace: namespace})
 		},

@@ -38,8 +38,11 @@ const (
 	Manager_SetLogLevel_FullMethodName           = "/telepresence.manager.Manager/SetLogLevel"
 	Manager_GetLogs_FullMethodName               = "/telepresence.manager.Manager/GetLogs"
 	Manager_WatchAgentPods_FullMethodName        = "/telepresence.manager.Manager/WatchAgentPods"
+	Manager_WatchAgentPodsDelta_FullMethodName   = "/telepresence.manager.Manager/WatchAgentPodsDelta"
 	Manager_WatchAgents_FullMethodName           = "/telepresence.manager.Manager/WatchAgents"
+	Manager_WatchAgentsDelta_FullMethodName      = "/telepresence.manager.Manager/WatchAgentsDelta"
 	Manager_WatchIntercepts_FullMethodName       = "/telepresence.manager.Manager/WatchIntercepts"
+	Manager_WatchInterceptsDelta_FullMethodName  = "/telepresence.manager.Manager/WatchInterceptsDelta"
 	Manager_WatchWorkloads_FullMethodName        = "/telepresence.manager.Manager/WatchWorkloads"
 	Manager_WatchClusterInfo_FullMethodName      = "/telepresence.manager.Manager/WatchClusterInfo"
 	Manager_EnsureAgent_FullMethodName           = "/telepresence.manager.Manager/EnsureAgent"
@@ -95,11 +98,17 @@ type ManagerClient interface {
 	// connections namespace that the client can connect to when port-forwards are
 	// allowed.
 	WatchAgentPods(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPodInfoSnapshot], error)
+	// WatchAgentPods notifies a client of changes to the set of known Agents from the client
+	// connections namespace that the client can connect to when port-forwards are
+	// allowed.
+	WatchAgentPodsDelta(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPodInfoDelta], error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
 	// returns immediately, having not delivered any snapshots.
 	WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentInfoSnapshot], error)
+	// WatchAgents notifies a client of changes to the set of known Agents.
+	WatchAgentsDelta(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentInfoDelta], error)
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
 	//
@@ -107,6 +116,9 @@ type ManagerClient interface {
 	// that session are watched.  If no session ID is given, then all
 	// intercepts are watched.
 	WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InterceptInfoSnapshot], error)
+	// WatchInterceptsDelta notifies a client or agent of changes in the set of intercepts
+	// relevant to that client or agent.
+	WatchInterceptsDelta(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InterceptInfoDelta], error)
 	// WatchWorkloads notifies a client of the set of Workloads from the client
 	// connection's namespace.
 	WatchWorkloads(ctx context.Context, in *WorkloadEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WorkloadEventsDelta], error)
@@ -316,9 +328,28 @@ func (c *managerClient) WatchAgentPods(ctx context.Context, in *SessionInfo, opt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchAgentPodsClient = grpc.ServerStreamingClient[AgentPodInfoSnapshot]
 
+func (c *managerClient) WatchAgentPodsDelta(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPodInfoDelta], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[1], Manager_WatchAgentPodsDelta_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SessionInfo, AgentPodInfoDelta]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchAgentPodsDeltaClient = grpc.ServerStreamingClient[AgentPodInfoDelta]
+
 func (c *managerClient) WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentInfoSnapshot], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[1], Manager_WatchAgents_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], Manager_WatchAgents_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -335,9 +366,28 @@ func (c *managerClient) WatchAgents(ctx context.Context, in *SessionInfo, opts .
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchAgentsClient = grpc.ServerStreamingClient[AgentInfoSnapshot]
 
+func (c *managerClient) WatchAgentsDelta(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentInfoDelta], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], Manager_WatchAgentsDelta_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SessionInfo, AgentInfoDelta]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchAgentsDeltaClient = grpc.ServerStreamingClient[AgentInfoDelta]
+
 func (c *managerClient) WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InterceptInfoSnapshot], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], Manager_WatchIntercepts_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_WatchIntercepts_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -354,9 +404,28 @@ func (c *managerClient) WatchIntercepts(ctx context.Context, in *SessionInfo, op
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchInterceptsClient = grpc.ServerStreamingClient[InterceptInfoSnapshot]
 
+func (c *managerClient) WatchInterceptsDelta(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InterceptInfoDelta], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_WatchInterceptsDelta_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[SessionInfo, InterceptInfoDelta]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchInterceptsDeltaClient = grpc.ServerStreamingClient[InterceptInfoDelta]
+
 func (c *managerClient) WatchWorkloads(ctx context.Context, in *WorkloadEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WorkloadEventsDelta], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], Manager_WatchWorkloads_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_WatchWorkloads_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -375,7 +444,7 @@ type Manager_WatchWorkloadsClient = grpc.ServerStreamingClient[WorkloadEventsDel
 
 func (c *managerClient) WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ClusterInfo], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_WatchClusterInfo_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], Manager_WatchClusterInfo_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -484,7 +553,7 @@ func (c *managerClient) LookupDNS(ctx context.Context, in *DNSRequest, opts ...g
 
 func (c *managerClient) WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLevelRequest], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_WatchLogLevel_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], Manager_WatchLogLevel_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +572,7 @@ type Manager_WatchLogLevelClient = grpc.ServerStreamingClient[LogLevelRequest]
 
 func (c *managerClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TunnelMessage, TunnelMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_Tunnel_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], Manager_Tunnel_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -572,11 +641,17 @@ type ManagerServer interface {
 	// connections namespace that the client can connect to when port-forwards are
 	// allowed.
 	WatchAgentPods(*SessionInfo, grpc.ServerStreamingServer[AgentPodInfoSnapshot]) error
+	// WatchAgentPods notifies a client of changes to the set of known Agents from the client
+	// connections namespace that the client can connect to when port-forwards are
+	// allowed.
+	WatchAgentPodsDelta(*SessionInfo, grpc.ServerStreamingServer[AgentPodInfoDelta]) error
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
 	// returns immediately, having not delivered any snapshots.
 	WatchAgents(*SessionInfo, grpc.ServerStreamingServer[AgentInfoSnapshot]) error
+	// WatchAgents notifies a client of changes to the set of known Agents.
+	WatchAgentsDelta(*SessionInfo, grpc.ServerStreamingServer[AgentInfoDelta]) error
 	// WatchIntercepts notifies a client or agent of the set of intercepts
 	// relevant to that client or agent.
 	//
@@ -584,6 +659,9 @@ type ManagerServer interface {
 	// that session are watched.  If no session ID is given, then all
 	// intercepts are watched.
 	WatchIntercepts(*SessionInfo, grpc.ServerStreamingServer[InterceptInfoSnapshot]) error
+	// WatchInterceptsDelta notifies a client or agent of changes in the set of intercepts
+	// relevant to that client or agent.
+	WatchInterceptsDelta(*SessionInfo, grpc.ServerStreamingServer[InterceptInfoDelta]) error
 	// WatchWorkloads notifies a client of the set of Workloads from the client
 	// connection's namespace.
 	WatchWorkloads(*WorkloadEventsRequest, grpc.ServerStreamingServer[WorkloadEventsDelta]) error
@@ -686,11 +764,20 @@ func (UnimplementedManagerServer) GetLogs(context.Context, *GetLogsRequest) (*Lo
 func (UnimplementedManagerServer) WatchAgentPods(*SessionInfo, grpc.ServerStreamingServer[AgentPodInfoSnapshot]) error {
 	return status.Errorf(codes.Unimplemented, "method WatchAgentPods not implemented")
 }
+func (UnimplementedManagerServer) WatchAgentPodsDelta(*SessionInfo, grpc.ServerStreamingServer[AgentPodInfoDelta]) error {
+	return status.Errorf(codes.Unimplemented, "method WatchAgentPodsDelta not implemented")
+}
 func (UnimplementedManagerServer) WatchAgents(*SessionInfo, grpc.ServerStreamingServer[AgentInfoSnapshot]) error {
 	return status.Errorf(codes.Unimplemented, "method WatchAgents not implemented")
 }
+func (UnimplementedManagerServer) WatchAgentsDelta(*SessionInfo, grpc.ServerStreamingServer[AgentInfoDelta]) error {
+	return status.Errorf(codes.Unimplemented, "method WatchAgentsDelta not implemented")
+}
 func (UnimplementedManagerServer) WatchIntercepts(*SessionInfo, grpc.ServerStreamingServer[InterceptInfoSnapshot]) error {
 	return status.Errorf(codes.Unimplemented, "method WatchIntercepts not implemented")
+}
+func (UnimplementedManagerServer) WatchInterceptsDelta(*SessionInfo, grpc.ServerStreamingServer[InterceptInfoDelta]) error {
+	return status.Errorf(codes.Unimplemented, "method WatchInterceptsDelta not implemented")
 }
 func (UnimplementedManagerServer) WatchWorkloads(*WorkloadEventsRequest, grpc.ServerStreamingServer[WorkloadEventsDelta]) error {
 	return status.Errorf(codes.Unimplemented, "method WatchWorkloads not implemented")
@@ -1003,6 +1090,17 @@ func _Manager_WatchAgentPods_Handler(srv interface{}, stream grpc.ServerStream) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchAgentPodsServer = grpc.ServerStreamingServer[AgentPodInfoSnapshot]
 
+func _Manager_WatchAgentPodsDelta_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SessionInfo)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchAgentPodsDelta(m, &grpc.GenericServerStream[SessionInfo, AgentPodInfoDelta]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchAgentPodsDeltaServer = grpc.ServerStreamingServer[AgentPodInfoDelta]
+
 func _Manager_WatchAgents_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SessionInfo)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1014,6 +1112,17 @@ func _Manager_WatchAgents_Handler(srv interface{}, stream grpc.ServerStream) err
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchAgentsServer = grpc.ServerStreamingServer[AgentInfoSnapshot]
 
+func _Manager_WatchAgentsDelta_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SessionInfo)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchAgentsDelta(m, &grpc.GenericServerStream[SessionInfo, AgentInfoDelta]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchAgentsDeltaServer = grpc.ServerStreamingServer[AgentInfoDelta]
+
 func _Manager_WatchIntercepts_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SessionInfo)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1024,6 +1133,17 @@ func _Manager_WatchIntercepts_Handler(srv interface{}, stream grpc.ServerStream)
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchInterceptsServer = grpc.ServerStreamingServer[InterceptInfoSnapshot]
+
+func _Manager_WatchInterceptsDelta_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SessionInfo)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchInterceptsDelta(m, &grpc.GenericServerStream[SessionInfo, InterceptInfoDelta]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchInterceptsDeltaServer = grpc.ServerStreamingServer[InterceptInfoDelta]
 
 func _Manager_WatchWorkloads_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(WorkloadEventsRequest)
@@ -1374,13 +1494,28 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 		{
+			StreamName:    "WatchAgentPodsDelta",
+			Handler:       _Manager_WatchAgentPodsDelta_Handler,
+			ServerStreams: true,
+		},
+		{
 			StreamName:    "WatchAgents",
 			Handler:       _Manager_WatchAgents_Handler,
 			ServerStreams: true,
 		},
 		{
+			StreamName:    "WatchAgentsDelta",
+			Handler:       _Manager_WatchAgentsDelta_Handler,
+			ServerStreams: true,
+		},
+		{
 			StreamName:    "WatchIntercepts",
 			Handler:       _Manager_WatchIntercepts_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchInterceptsDelta",
+			Handler:       _Manager_WatchInterceptsDelta_Handler,
 			ServerStreams: true,
 		},
 		{

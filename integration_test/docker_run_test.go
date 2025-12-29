@@ -290,6 +290,9 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 }
 
 func (s *dockerDaemonSuite) Test_DockerRun_VolumePresent() {
+	if !s.ClientIsVersion(">2.24.x") {
+		s.T().Skip("Not part of compatibility tests. Docker volume plugin is unstable for versions < 2.25.0")
+	}
 	ctx := s.Context()
 	s.ApplyTemplate(ctx, filepath.Join("testdata", "k8s", "hello-w-volumes.goyaml"), nil)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", "hello")

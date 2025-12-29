@@ -7,9 +7,13 @@ import (
 
 	"github.com/datawire/dlib/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func (s *notConnectedSuite) Test_WorkspaceListener() {
+func (s *notConnectedSuite) Test_WorkloadListener() {
+	if !s.ClientVersion().EQ(version.Structured) {
+		s.T().Skip(`Not part of compatibility tests. DoWithTrafficManager assumes compiled executable`)
+	}
 	s.Require().NoError(s.DoWithTrafficManager(s.Context(), func(ctx context.Context, cancel context.CancelFunc, client manager.ManagerClient, session *manager.SessionInfo) {
 		rq := s.Require()
 

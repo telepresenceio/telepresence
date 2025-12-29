@@ -16,6 +16,9 @@ import (
 )
 
 func (s *dockerDaemonSuite) Test_TLSAnnotations() {
+	if !(s.ManagerIsVersion(">2.24.x") && s.ClientIsVersion(">2.24.x")) {
+		s.T().Skip("Not part of compatibility tests. Versions < 2.25.0 have no support for http intercepts")
+	}
 	const (
 		svc           = "hello"
 		containerPort = 8443

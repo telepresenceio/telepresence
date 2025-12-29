@@ -30,6 +30,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -248,7 +249,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 	sessionID := tunnel.SessionID(clientSession.SessionId)
 	client := s.GetClient(sessionID)
 	if client == nil {
-		return nil, nil, status.Errorf(codes.NotFound, "session %q not found", sessionID)
+		return nil, nil, grpcErrors.Errorf(codes.NotFound, "session %q not found", sessionID)
 	}
 
 	spec := cir.InterceptSpec
@@ -260,7 +261,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		if k8sErrors.IsNotFound(err) {
 			code = codes.NotFound
 		}
-		return nil, nil, status.Error(code, err.Error())
+		return nil, nil, grpcErrors.Error(code, err.Error())
 	}
 
 	rp := agentconfig.ReplacePolicyIntercept
@@ -283,7 +284,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		from, to, err := pm.FromNumberAndTo()
 		if err != nil {
 			// Did PrepareIntercept create an invalid pod_port?
-			return nil, nil, status.Errorf(codes.Internal, "invalid pod_port %q: %v", pm, err)
+			return nil, nil, grpcErrors.Errorf(codes.Internal, "invalid pod_port %q: %v", pm, err)
 		}
 		pmCir := proto.Clone(cir).(*rpc.CreateInterceptRequest)
 		pmSpec := pmCir.InterceptSpec
@@ -354,7 +355,7 @@ func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest) (*Inter
 
 	if existingValue, hasConflict := s.intercepts.LoadOrStore(id, is); hasConflict {
 		if existingValue.Disposition != rpc.InterceptDispositionType_REMOVED {
-			return nil, status.Errorf(codes.AlreadyExists, "Intercept named %q already exists", is.Spec.Name)
+			return nil, grpcErrors.Errorf(codes.AlreadyExists, "Intercept named %q already exists", is.Spec.Name)
 		}
 		s.intercepts.Store(id, is)
 	}
@@ -377,7 +378,7 @@ func (s *State) NewInterceptInfo(interceptID string, ciReq *rpc.CreateInterceptR
 func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFinalizer) error {
 	is, ok := s.intercepts.Load(interceptID)
 	if !ok {
-		return status.Errorf(codes.NotFound, "no such intercept %s", interceptID)
+		return grpcErrors.Errorf(codes.NotFound, "no such intercept %s", interceptID)
 	}
 	is.addFinalizer(finalizer)
 	return nil
@@ -705,7 +706,7 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 	name := ac.AgentName
 	namespace := ac.Namespace
 	dlog.Debugf(ctx, "Waiting for agent %s.%s", name, namespace)
-	snapshotCh := s.WatchAgents(ctx, func(_ tunnel.SessionID, agent *AgentSession) bool {
+	deltaCh := s.WatchAgents(ctx, func(_ tunnel.SessionID, agent *AgentSession) bool {
 		return agent.Name == name && agent.Namespace == namespace
 	})
 	failedContainerRx := regexp.MustCompile(`restarting failed container (\S+) in pod ([0-9A-Za-z_-]+)_` + namespace)
@@ -764,16 +765,17 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 				continue
 			}
 			return nil, errcat.User.New(msg)
-		case snapshot, ok := <-snapshotCh:
+		case delta, ok := <-deltaCh:
 			if !ok {
 				// The request has been canceled.
 				return nil, status.Error(codes.Canceled, fmt.Sprintf("channel closed while waiting for agent %s.%s to arrive", name, namespace))
 			}
-			if len(snapshot) == 0 {
+			upserts := delta.Upserts
+			if len(upserts) == 0 {
 				continue
 			}
-			as := make([]*AgentSession, 0, len(snapshot))
-			for _, a := range snapshot {
+			as := make([]*AgentSession, 0)
+			for _, a := range upserts {
 				if mm.IsInactive(k8sTypes.UID(a.PodUid)) {
 					dlog.Debugf(ctx, "Agent %s(%s) is blacklisted", a.PodName, a.PodIp)
 				} else {
