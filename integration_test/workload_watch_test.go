@@ -10,7 +10,43 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-//nolint:gocognit // complex
+func (s *notConnectedSuite) createIntercept(ctx context.Context, client manager.ManagerClient, session *manager.SessionInfo) (*manager.InterceptInfo, error) {
+	ir := &manager.CreateInterceptRequest{
+		Session: session,
+		InterceptSpec: &manager.InterceptSpec{
+			Name:         "echo-easy",
+			Client:       "telepresence@datawire.io",
+			Agent:        "echo-easy",
+			WorkloadKind: "Deployment",
+			Namespace:    s.AppNamespace(),
+			Mechanism:    "tcp",
+			TargetHost:   "127.0.0.1",
+			TargetPort:   8080,
+		},
+	}
+	pi, err := client.PrepareIntercept(ctx, ir)
+	if err != nil {
+		return nil, err
+	}
+	spec := ir.InterceptSpec
+	spec.ServicePort = pi.ServicePort
+	spec.ServicePortName = pi.ServicePortName
+	spec.ServiceUid = pi.ServiceUid
+	spec.ContainerPort = pi.ContainerPort
+	spec.Protocol = pi.Protocol
+	spec.ContainerName = pi.ContainerName
+	if pi.ServiceUid != "" {
+		if pi.ServicePortName != "" {
+			spec.PortIdentifier = pi.ServicePortName
+		} else {
+			spec.PortIdentifier = strconv.Itoa(int(pi.ServicePort))
+		}
+	} else {
+		spec.PortIdentifier = strconv.Itoa(int(pi.ContainerPort))
+	}
+	return client.CreateIntercept(ctx, ir)
+}
+
 func (s *notConnectedSuite) Test_WorkloadListener() {
 	if !s.ClientVersion().EQ(version.Structured) {
 		s.T().Skip(`Not part of compatibility tests. DoWithTrafficManager assumes compiled executable`)
@@ -24,68 +60,24 @@ func (s *notConnectedSuite) Test_WorkloadListener() {
 		// 3. Create an intercept (changes state to INTERCEPTED)
 		// 4. Leave the intercept (state goes back to INSTALLED)
 		// 5. Remove the deployment
-		go func() {
-			defer cancel()
-			s.ApplyApp(ctx, "echo-easy", "deploy/echo-easy")
-			ir := &manager.CreateInterceptRequest{
-				Session: session,
-				InterceptSpec: &manager.InterceptSpec{
-					Name:         "echo-easy",
-					Client:       "telepresence@datawire.io",
-					Agent:        "echo-easy",
-					WorkloadKind: "Deployment",
-					Namespace:    s.AppNamespace(),
-					Mechanism:    "tcp",
-					TargetHost:   "127.0.0.1",
-					TargetPort:   8080,
-				},
-			}
-			_, err := client.SetLogLevel(ctx, &manager.LogLevelRequest{LogLevel: "trace"})
-			if !s.NoError(err) {
-				return
-			}
-			defer func() {
-				_, _ = client.SetLogLevel(ctx, &manager.LogLevelRequest{LogLevel: "debug"})
-			}()
-			pi, err := client.PrepareIntercept(ctx, ir)
-			if !s.NoError(err) {
-				return
-			}
-			spec := ir.InterceptSpec
-			spec.ServicePort = pi.ServicePort
-			spec.ServicePortName = pi.ServicePortName
-			spec.ServiceUid = pi.ServiceUid
-			spec.ContainerPort = pi.ContainerPort
-			spec.Protocol = pi.Protocol
-			spec.ContainerName = pi.ContainerName
-			if pi.ServiceUid != "" {
-				if pi.ServicePortName != "" {
-					spec.PortIdentifier = pi.ServicePortName
-				} else {
-					spec.PortIdentifier = strconv.Itoa(int(pi.ServicePort))
-				}
-			} else {
-				spec.PortIdentifier = strconv.Itoa(int(pi.ContainerPort))
-			}
-			_, err = client.CreateIntercept(ctx, ir)
-			if !s.NoError(err) {
-				return
-			}
-			time.Sleep(5 * time.Second)
-			_, err = client.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{
-				Session: session,
-				Name:    spec.Name,
-			})
-			s.NoError(err)
-			time.Sleep(5 * time.Second)
-			s.DeleteSvcAndWorkload(ctx, "deploy", "echo-easy")
-			time.Sleep(5 * time.Second)
-		}()
+		defer cancel()
+		_, err := client.SetLogLevel(ctx, &manager.LogLevelRequest{LogLevel: "trace"})
+		if !s.NoError(err) {
+			return
+		}
 
-		wwStream, err := client.WatchWorkloads(ctx, &manager.WorkloadEventsRequest{
+		toCtx, toCancel := context.WithTimeout(ctx, time.Minute)
+		defer toCancel()
+		wwStream, err := client.WatchWorkloads(toCtx, &manager.WorkloadEventsRequest{
 			SessionInfo: session,
 		})
 		rq.NoError(err)
+
+		defer func() {
+			_, _ = client.SetLogLevel(ctx, &manager.LogLevelRequest{LogLevel: "debug"})
+		}()
+
+		s.ApplyApp(ctx, "echo-easy", "deploy/echo-easy")
 
 		// This map contains a key for each expected event from the workload watcher
 		expectations := map[string]bool{
@@ -98,8 +90,9 @@ func (s *notConnectedSuite) Test_WorkloadListener() {
 			"deleted":               false,
 		}
 
+		var spec *manager.InterceptSpec
 		var interceptingClient string
-		for {
+		for !(s.T().Failed() || expectations["deleted"]) {
 			delta, err := wwStream.Recv()
 			if err != nil {
 				dlog.Infof(ctx, "watcher ended with %v", err)
@@ -108,33 +101,39 @@ func (s *notConnectedSuite) Test_WorkloadListener() {
 			for _, ev := range delta.Events {
 				dlog.Infof(ctx, "watcher event: %s %v", ev.Type, ev.Workload)
 				switch ev.Type {
-				case manager.WorkloadEvent_ADDED_UNSPECIFIED:
+				case manager.WorkloadEvent_ADDED_UNSPECIFIED, manager.WorkloadEvent_MODIFIED:
 					expectations["added"] = true
 					switch ev.Workload.State {
 					case manager.WorkloadInfo_PROGRESSING:
 						expectations["progressing"] = true
 					case manager.WorkloadInfo_AVAILABLE:
-						expectations["available"] = true
-					}
-				case manager.WorkloadEvent_MODIFIED:
-					switch ev.Workload.State {
-					case manager.WorkloadInfo_PROGRESSING:
-						expectations["progressing"] = true
-					case manager.WorkloadInfo_AVAILABLE:
-						expectations["available"] = true
-					}
-					switch ev.Workload.AgentState {
-					case manager.WorkloadInfo_INSTALLED:
-						if expectations["agent intercepted"] {
-							expectations["agent installed again"] = true
-						} else {
-							expectations["agent installed"] = true
+						if !expectations["available"] {
+							expectations["available"] = true
+							ii, err := s.createIntercept(ctx, client, session)
+							if !s.NoError(err) {
+								return
+							}
+							spec = ii.Spec
 						}
-					case manager.WorkloadInfo_INTERCEPTED:
-						expectations["agent installed"] = true
-						expectations["agent intercepted"] = true
-						if ics := ev.Workload.InterceptClients; len(ics) == 1 {
-							interceptingClient = ics[0].Client
+						switch ev.Workload.AgentState {
+						case manager.WorkloadInfo_INSTALLED:
+							if expectations["agent intercepted"] {
+								expectations["agent installed again"] = true
+								s.DeleteSvcAndWorkload(ctx, "deploy", "echo-easy")
+							} else {
+								expectations["agent installed"] = true
+							}
+						case manager.WorkloadInfo_INTERCEPTED:
+							expectations["agent installed"] = true
+							expectations["agent intercepted"] = true
+							if ics := ev.Workload.InterceptClients; len(ics) == 1 {
+								interceptingClient = ics[0].Client
+							}
+							_, err = client.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{
+								Session: session,
+								Name:    spec.Name,
+							})
+							s.NoError(err)
 						}
 					}
 				case manager.WorkloadEvent_DELETED:
