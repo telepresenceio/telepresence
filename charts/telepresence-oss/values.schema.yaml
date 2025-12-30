@@ -14,6 +14,9 @@ properties:
     type: object
     additionalProperties: false
     properties:
+      enableConsumptionMetrics:
+        description: Enable (the default) or disable the consumption metrics of the traffic-agent. Only valid when the prometheus.port is set.
+        type: boolean
       enableH2cProbing:
         description: If enabled, the agent will probe for HTTP2 using clear-text (h2c) support non-TLS ports unless they are configured with appProtocol.
         type: boolean

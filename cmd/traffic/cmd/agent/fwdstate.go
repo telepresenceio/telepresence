@@ -73,6 +73,10 @@ type ProviderMux struct {
 	ManagerProvider tunnel.StreamProvider
 }
 
+func (pm *ProviderMux) MetricsEnabled() bool {
+	return pm.AgentProvider.MetricsEnabled()
+}
+
 func (pm *ProviderMux) ReportMetrics(ctx context.Context, metrics *manager.TunnelMetrics) {
 	pm.AgentProvider.ReportMetrics(ctx, metrics)
 }

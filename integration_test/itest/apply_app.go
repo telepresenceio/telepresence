@@ -16,7 +16,7 @@ import (
 )
 
 func ApplyEchoService(ctx context.Context, name, namespace string, port int) {
-	ApplyService(ctx, name, namespace, "ghcr.io/telepresenceio/echo-server:latest", port, 8080)
+	ApplyService(ctx, name, namespace, "ghcr.io/telepresenceio/echo-server:0.3.1", port, 8080)
 }
 
 func ApplyService(ctx context.Context, name, namespace, image string, port, targetPort int) {

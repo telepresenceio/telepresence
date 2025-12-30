@@ -14,7 +14,7 @@ type Runner interface {
 	AddNamespacePairSuite(suffix string, f func(NamespacePair) TestingSuite)
 	AddTrafficManagerSuite(suffix string, f func(TrafficManager) TestingSuite)
 	AddConnectedSuite(suffix string, f func(TrafficManager) TestingSuite)
-	AddMultipleServicesSuite(suffix, name string, f func(MultipleServices) TestingSuite)
+	AddMultipleServicesSuite(suffix, name string, svcCount int, f func(MultipleServices) TestingSuite)
 	AddSingleServiceSuite(suffix, name string, f func(SingleService) TestingSuite)
 	RunTests(context.Context)
 }
@@ -24,11 +24,16 @@ type namedRunner struct {
 	withSingleService    []func(SingleService) TestingSuite
 }
 
+type runnerKey struct {
+	name     string
+	svcCount int
+}
+
 type suffixedRunner struct {
 	withNamespace      []func(NamespacePair) TestingSuite
 	withTrafficManager []func(TrafficManager) TestingSuite
 	withConnected      []func(TrafficManager) TestingSuite
-	withName           map[string]*namedRunner
+	withName           map[runnerKey]*namedRunner
 }
 
 type runner struct {
@@ -51,7 +56,7 @@ func (r *runner) AddClusterSuite(f func(context.Context) TestingSuite) {
 func (r *runner) forSuffix(suffix string) *suffixedRunner {
 	sr, ok := r.withSuffix[suffix]
 	if !ok {
-		sr = &suffixedRunner{withName: map[string]*namedRunner{}}
+		sr = &suffixedRunner{withName: map[runnerKey]*namedRunner{}}
 		r.withSuffix[suffix] = sr
 	}
 	return sr
@@ -83,11 +88,11 @@ func (r *runner) AddTrafficManagerSuite(suffix string, f func(TrafficManager) Te
 	sr.withTrafficManager = append(sr.withTrafficManager, f)
 }
 
-func (r *suffixedRunner) forName(name string) *namedRunner {
-	nr, ok := r.withName[name]
+func (r *suffixedRunner) forName(key runnerKey) *namedRunner {
+	nr, ok := r.withName[key]
 	if !ok {
 		nr = &namedRunner{}
-		r.withName[name] = nr
+		r.withName[key] = nr
 	}
 	return nr
 }
@@ -106,15 +111,15 @@ func (r *runner) AddConnectedSuite(suffix string, f func(TrafficManager) Testing
 }
 
 // AddMultipleServicesSuite adds a constructor for a test suite to the default runner that requires a cluster where a namespace
-// pair has been initialized, multiple services has been installed, and telepresence is connected.
-func AddMultipleServicesSuite(suffix, name string, f func(services MultipleServices) TestingSuite) {
-	defaultRunner.AddMultipleServicesSuite(suffix, name, f)
+// pair has been initialized, multiple services have been installed, and telepresence is connected.
+func AddMultipleServicesSuite(suffix, name string, svcCount int, f func(services MultipleServices) TestingSuite) {
+	defaultRunner.AddMultipleServicesSuite(suffix, name, svcCount, f)
 }
 
 // AddMultipleServicesSuite adds a constructor for a test suite that requires a cluster where a namespace
-// pair has been initialized, multiple services has been installed, and telepresence is connected.
-func (r *runner) AddMultipleServicesSuite(suffix, name string, f func(services MultipleServices) TestingSuite) {
-	nr := r.forSuffix(suffix).forName(name)
+// pair has been initialized, multiple services have been installed, and telepresence is connected.
+func (r *runner) AddMultipleServicesSuite(suffix, name string, svcCount int, f func(services MultipleServices) TestingSuite) {
+	nr := r.forSuffix(suffix).forName(runnerKey{name: name, svcCount: svcCount})
 	nr.withMultipleServices = append(nr.withMultipleServices, f)
 }
 
@@ -127,7 +132,7 @@ func AddSingleServiceSuite(suffix, name string, f func(services SingleService) T
 // AddSingleServiceSuite adds a constructor for a test suite that requires a cluster where a namespace
 // pair has been initialized, a service has been installed, and telepresence is connected.
 func (r *runner) AddSingleServiceSuite(suffix, name string, f func(services SingleService) TestingSuite) {
-	nr := r.forSuffix(suffix).forName(name)
+	nr := r.forSuffix(suffix).forName(runnerKey{name: name})
 	nr.withSingleService = append(nr.withSingleService, f)
 }
 
@@ -170,14 +175,14 @@ func (r *runner) RunTests(c context.Context) { //nolint:gocognit
 									}
 									for n, nr := range sr.withName {
 										if len(nr.withMultipleServices) > 0 {
-											WithMultipleServices(cnp, n, 3, func(ms MultipleServices) {
+											WithMultipleServices(cnp, n.name, n.svcCount, func(ms MultipleServices) {
 												for _, f := range nr.withMultipleServices {
 													ms.RunSuite(f(ms))
 												}
 											})
 										}
 										if len(nr.withSingleService) > 0 {
-											WithSingleService(cnp, n, func(ss SingleService) {
+											WithSingleService(cnp, n.name, func(ss SingleService) {
 												for _, f := range nr.withSingleService {
 													ss.RunSuite(f(ss))
 												}

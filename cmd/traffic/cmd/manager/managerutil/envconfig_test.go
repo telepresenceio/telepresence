@@ -56,6 +56,7 @@ func TestEnvconfig(t *testing.T) {
 		MaxNamespaceSpecificWatchers: 10,
 		AgentInitContainerEnabled:    true,
 		AgentWatchRetryInterval:      10 * time.Second,
+		AgentConsumptionMetrics:      true,
 	}
 
 	testcases := map[string]struct {

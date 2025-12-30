@@ -484,18 +484,6 @@ func (s *State) CountTunnelEgress() uint64 {
 	return atomic.LoadUint64(&s.tunnelEgressCounter)
 }
 
-func (s *State) IsIntercepted(name, namespace string) bool {
-	found := false
-	s.intercepts.Range(func(id string, ii *Intercept) bool {
-		if name == ii.Spec.Agent && namespace == ii.Spec.Namespace {
-			found = true
-			return false
-		}
-		return true
-	})
-	return found
-}
-
 func (s *State) IsInterceptedBy(client tunnel.SessionID) bool {
 	found := false
 	clientSessionID := string(client)
