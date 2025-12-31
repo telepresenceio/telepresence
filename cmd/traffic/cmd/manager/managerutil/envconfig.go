@@ -50,23 +50,27 @@ type Env struct {
 	PodCIDRs        []netip.Prefix `env:"POD_CIDRS,         parser=split-ipnet, default="`
 	PodIP           netip.Addr     `env:"POD_IP,            parser=ip"`
 
-	AgentRegistry             string                      `env:"AGENT_REGISTRY,                parser=string,         default="`
-	AgentImageName            string                      `env:"AGENT_IMAGE_NAME,              parser=string,         default="`
-	AgentImageTag             string                      `env:"AGENT_IMAGE_TAG,               parser=string,         default="`
-	AgentImagePullPolicy      string                      `env:"AGENT_IMAGE_PULL_POLICY,       parser=string,         default="`
-	AgentImagePullSecrets     []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS,      parser=json-local-refs,default="`
-	AgentInjectPolicy         agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,           parser=enable-policy,  default=Never"`
-	AgentLogLevel             string                      `env:"AGENT_LOG_LEVEL,               parser=logLevel,       defaultFrom=LogLevel"`
-	AgentPort                 uint16                      `env:"AGENT_PORT,                    parser=port-number,    default=0"`
-	AgentResources            *core.ResourceRequirements  `env:"AGENT_RESOURCES,               parser=json-resources, default="`
-	AgentMountPolicies        types.MountPolicies         `env:"AGENT_MOUNT_POLICIES,          parser=json-mount-policies, default="`
-	AgentInitResources        *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,          parser=json-resources, default="`
-	AgentInjectorName         string                      `env:"AGENT_INJECTOR_NAME,           parser=string,         default="`
-	AgentInjectorSecret       string                      `env:"AGENT_INJECTOR_SECRET,         parser=string,         default="`
-	AgentSecurityContext      *core.SecurityContext       `env:"AGENT_SECURITY_CONTEXT,        parser=json-security-context, default="`
-	AgentInitSecurityContext  *core.SecurityContext       `env:"AGENT_INIT_SECURITY_CONTEXT,   parser=json-security-context, default="`
-	AgentInitContainerEnabled bool                        `env:"AGENT_INIT_CONTAINER_ENABLED,  parser=bool, default=true"`
-	AgentMaxIdleTime          time.Duration               `env:"AGENT_MAX_IDLE_TIME,              		parser=time.ParseDuration, default=0"`
+	AgentRegistry              string                      `env:"AGENT_REGISTRY,                parser=string,         default="`
+	AgentImageName             string                      `env:"AGENT_IMAGE_NAME,              parser=string,         default="`
+	AgentImageTag              string                      `env:"AGENT_IMAGE_TAG,               parser=string,         default="`
+	AgentImagePullPolicy       string                      `env:"AGENT_IMAGE_PULL_POLICY,       parser=string,         default="`
+	AgentImagePullSecrets      []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS,      parser=json-local-refs,default="`
+	AgentInjectPolicy          agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,           parser=enable-policy,  default=Never"`
+	AgentLogLevel              string                      `env:"AGENT_LOG_LEVEL,               parser=logLevel,       defaultFrom=LogLevel"`
+	AgentPort                  uint16                      `env:"AGENT_PORT,                    parser=port-number,    default=0"`
+	AgentEnableH2cProbing      bool                        `env:"AGENT_ENABLE_H2C_PROBING,      parser=bool,           default=false"`
+	AgentConsumptionMetrics    bool                        `env:"AGENT_CONSUMPTION_METRICS,     parser=bool,           default=true"`
+	AgentResources             *core.ResourceRequirements  `env:"AGENT_RESOURCES,               parser=json-resources, default="`
+	AgentMountPolicies         types.MountPolicies         `env:"AGENT_MOUNT_POLICIES,          parser=json-mount-policies, default="`
+	AgentInitResources         *core.ResourceRequirements  `env:"AGENT_INIT_RESOURCES,          parser=json-resources, default="`
+	AgentInjectorName          string                      `env:"AGENT_INJECTOR_NAME,           parser=string,         default="`
+	AgentInjectorSecret        string                      `env:"AGENT_INJECTOR_SECRET,         parser=string,         default="`
+	AgentInjectorMutationAware bool                        `env:"AGENT_INJECTOR_MUTATION_AWARE, parser=bool,           default=false"`
+	AgentSecurityContext       *core.SecurityContext       `env:"AGENT_SECURITY_CONTEXT,        parser=json-security-context, default="`
+	AgentInitSecurityContext   *core.SecurityContext       `env:"AGENT_INIT_SECURITY_CONTEXT,   parser=json-security-context, default="`
+	AgentInitContainerEnabled  bool                        `env:"AGENT_INIT_CONTAINER_ENABLED,  parser=bool, default=true"`
+	AgentMaxIdleTime           time.Duration               `env:"AGENT_MAX_IDLE_TIME,           parser=time.ParseDuration, default=0s"`
+	AgentWatchRetryInterval    time.Duration               `env:"AGENT_WATCH_RETRY_INTERVAL,    parser=time.ParseDuration, default=10s"`
 
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `env:"CLIENT_ROUTING_ALSO_PROXY_SUBNETS,  		parser=split-ipnet, default="`
 	ClientRoutingNeverProxySubnets       []netip.Prefix `env:"CLIENT_ROUTING_NEVER_PROXY_SUBNETS, 		parser=split-ipnet, default="`
@@ -99,6 +103,9 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		SecurityContext:     e.AgentSecurityContext,
 		InitSecurityContext: e.AgentInitSecurityContext,
 		MountPolicies:       e.AgentMountPolicies,
+		EnableH2cProbing:    e.AgentEnableH2cProbing,
+		EnableMetrics:       e.AgentConsumptionMetrics && e.PrometheusPort != 0,
+		WatchRetryInterval:  e.AgentWatchRetryInterval,
 	}, nil
 }
 

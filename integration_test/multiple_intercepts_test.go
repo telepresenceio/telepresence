@@ -27,7 +27,7 @@ func (s *multipleInterceptsSuite) SuiteName() string {
 }
 
 func init() {
-	itest.AddMultipleServicesSuite("", "hello", func(h itest.MultipleServices) itest.TestingSuite {
+	itest.AddMultipleServicesSuite("", "hello", 3, func(h itest.MultipleServices) itest.TestingSuite {
 		return &multipleInterceptsSuite{
 			Suite:            itest.Suite{Harness: h},
 			MultipleServices: h,

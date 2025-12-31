@@ -12,8 +12,8 @@ import (
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
-	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/watchable"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -106,8 +106,8 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			// Create a minimal State for testing
 			state := &State{
 				backgroundCtx:    ctx,
-				intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
-				agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
+				intercepts:       cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+				agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
 				clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
 				workloadWatchers: xsync.NewMap[string, Watcher](),
 				timedLogLevel:    log.NewTimedLevel("debug", log.SetLevel),
@@ -165,8 +165,8 @@ func TestAllowGlobalIntercepts_ErrorMessage(t *testing.T) {
 
 	state := &State{
 		backgroundCtx:    ctx,
-		intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
-		agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
+		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
 		workloadWatchers: xsync.NewMap[string, Watcher](),
 		timedLogLevel:    log.NewTimedLevel("debug", log.SetLevel),
@@ -255,8 +255,8 @@ func TestAllowGlobalIntercepts_DefaultBehavior(t *testing.T) {
 
 	state := &State{
 		backgroundCtx:    ctx,
-		intercepts:       watchable.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
-		agents:           watchable.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
+		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
 		workloadWatchers: xsync.NewMap[string, Watcher](),
 		timedLogLevel:    log.NewTimedLevel("debug", log.SetLevel),

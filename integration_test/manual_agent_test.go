@@ -9,10 +9,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-json-experiment/json"
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 func (s *notConnectedSuite) Test_ManualAgent() {
@@ -20,8 +22,8 @@ func (s *notConnectedSuite) Test_ManualAgent() {
 }
 
 func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
-	if !(s.ManagerIsVersion(">2.21.x") && s.ClientIsVersion(">2.21.x")) {
-		s.T().Skip("Not part of compatibility tests. Manual setup changed in 2.22.0")
+	if !(s.ManagerVersion().EQ(version.Structured) && s.ClientVersion().EQ(version.Structured)) {
+		s.T().Skip("Not part of compatibility tests. Manual setup often change between versions")
 	}
 	require := s.Require()
 	ctx := s.Context()
@@ -75,7 +77,9 @@ func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
 	b, err := os.ReadFile(filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
 	require.NoError(err)
 	var deploy map[string]any
-	err = yaml.Unmarshal(b, &deploy)
+	b, err = yaml.YAMLToJSON(b)
+	require.NoError(err, string(b))
+	err = json.Unmarshal(b, &deploy)
 	require.NoError(err)
 
 	renameHttpPort := func(con map[string]any) {

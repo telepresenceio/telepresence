@@ -204,8 +204,16 @@ func (f *tcp) configureUpstreamTransport(ctx context.Context, requestProto int, 
 
 func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer http.ResponseWriter, request *http.Request, ii *manager.InterceptInfo) {
 	spec := ii.Spec
-	ingressBytes := tunnel.NewCounterProbe("FromClientBytes")
-	egressBytes := tunnel.NewCounterProbe("ToClientBytes")
+	f.mu.Lock()
+	sp := f.streamProvider
+	f.mu.Unlock()
+
+	metricsEnabled := sp != nil && sp.MetricsEnabled()
+	var ingressBytes, egressBytes *tunnel.CounterProbe
+	if metricsEnabled {
+		ingressBytes = tunnel.NewCounterProbe("FromClientBytes")
+		egressBytes = tunnel.NewCounterProbe("ToClientBytes")
+	}
 	trn := f.configureUpstreamTransport(ctx, request.ProtoMajor, spec.Plaintext)
 	trn.DialContext = func(context.Context, string, string) (net.Conn, error) {
 		s, err := f.createStream(ctx, src, ii)
@@ -239,12 +247,16 @@ func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer
 	targetProxy.Transport = trn
 	targetProxy.ServeHTTP(writer, request)
 
-	dlog.Debugf(ctx, "Connection to %s ended. IngressBytes: %d, egressBytes: %d", trg, ingressBytes.GetValue(), egressBytes.GetValue())
-	f.streamProvider.ReportMetrics(f.lCtx, &manager.TunnelMetrics{
-		ClientSessionId: ii.ClientSession.SessionId,
-		IngressBytes:    ingressBytes.GetValue(),
-		EgressBytes:     egressBytes.GetValue(),
-	})
+	if metricsEnabled {
+		dlog.Debugf(ctx, "Connection to %s ended. IngressBytes: %d, egressBytes: %d", trg, ingressBytes.GetValue(), egressBytes.GetValue())
+		sp.ReportMetrics(f.lCtx, &manager.TunnelMetrics{
+			ClientSessionId: ii.ClientSession.SessionId,
+			IngressBytes:    ingressBytes.GetValue(),
+			EgressBytes:     egressBytes.GetValue(),
+		})
+	} else {
+		dlog.Debugf(ctx, "Connection to %s ended", trg)
+	}
 }
 
 func proxyErrorHandler(rw http.ResponseWriter, _ *http.Request, err error) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/netip"
 	"os/exec"
@@ -30,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
@@ -623,7 +625,7 @@ func (s *service) withRootDaemon(ctx context.Context, f func(ctx context.Context
 		err = f(ctx, daemon.NewDaemonClient(conn))
 	}
 	if err != nil {
-		err = status.Errorf(status.Code(err), "root daemon: %s", err.Error())
+		err = grpcErrors.FromError(err, codes.Internal, fmt.Sprintf("root daemon: %s", err.Error()))
 	}
 	return err
 }

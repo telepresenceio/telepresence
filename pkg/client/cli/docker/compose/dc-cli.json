@@ -600,7 +600,13 @@
         {
           "name": "index",
           "type": "int",
-          "description": "Index of the container if service has multiple replicas -T, --no-tty docker compose exec   Disable pseudo-TTY allocation. By default docker compose exec allocates a TTY. (default true)"
+          "description": "Index of the container if service has multiple replicas"
+        },
+        {
+          "name": "no-tty",
+          "shorthand": "T",
+          "type": "bool",
+          "description": "Disable pseudo-TTY allocation. By default 'docker compose exec' allocates a TTY. (default true)"
         },
         {
           "name": "privileged",
@@ -1195,6 +1201,16 @@
           "name": "dry-run",
           "type": "bool",
           "description": "Execute command in dry run mode"
+        },
+        {
+          "name": "wait",
+          "type": "bool",
+          "description": "Wait for services to be running|healthy. Implies detached mode."
+        },
+        {
+          "name": "wait-timeout",
+          "type": "int",
+          "description": "Maximum duration in seconds to wait for the project to be running|healthy"
         }
       ]
     },

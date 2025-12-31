@@ -125,6 +125,8 @@ spec:
             value: {{ .injectPolicy }}
           - name: AGENT_INJECTOR_NAME
             value:  {{ .name | quote }}
+          - name: AGENT_INJECTOR_MUTATION_AWARE
+            value: {{ (default false .mutationAware) | quote }}
           {{- end }}
         {{- /*
         Traffic agent configuration
@@ -138,6 +140,10 @@ spec:
           - name: AGENT_PORT
             value: {{ .port | quote }}
           {{- end }}
+          - name: AGENT_ENABLE_H2C_PROBING
+            value: {{ (default false .enableH2cProbing) | quote }}
+          - name: AGENT_CONSUMPTION_METRICS
+            value: {{ (default true .enableConsumptionMetrics) | quote }}
           {{- if .resources }}
           - name: AGENT_RESOURCES
             value: '{{ toJson .resources }}'
@@ -187,6 +193,10 @@ spec:
           {{- if not (eq .initSecurityContext nil) }}
           - name: AGENT_INIT_SECURITY_CONTEXT
             value: '{{ toJson .initSecurityContext }}'
+          {{- end }}
+          {{- if .watchRetryInterval }}
+          - name: AGENT_WATCH_RETRY_INTERVAL
+            value: .watchRetryInterval
           {{- end }}
           {{- end }}
           {{- with fromJsonArray (include "traffic-manager.namespaces" $) }}

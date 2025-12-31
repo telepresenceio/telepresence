@@ -959,7 +959,7 @@ func (s *session) workloadsWatcher(namespace string, synced *sync.WaitGroup) err
 			synced.Done()
 		}
 	}()
-	return watcher.WatchWithRetry(s, "WatchAgentPods", client.GetConfig(s).Grpc().WatchRetryInterval,
+	return watcher.WatchWithRetry(s, "WatchWorkloads", client.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.WorkloadEventsDelta], error) {
 			return s.ManagerClient().WatchWorkloads(ctx, &manager.WorkloadEventsRequest{SessionInfo: s.sessionInfo, Namespace: namespace})
 		},

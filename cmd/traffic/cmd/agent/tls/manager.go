@@ -113,7 +113,7 @@ func (m *manager) createPortConfigs(ctx context.Context, am map[string]string) e
 
 			// The port config is associated with the proxy port, not the container port.
 			iap := m.sidecarConfig.InterceptorInactivePort(cp, types.ProtoTCP)
-			pc := newPortConfig(iap, cn.Name)
+			pc := newPortConfig(iap, cn.Name, m.sidecarConfig.EnableH2cProbing)
 			m.portConfigs[iap] = pc
 
 			// The configured TLS and HTTP/2 values must be determined using the container port.

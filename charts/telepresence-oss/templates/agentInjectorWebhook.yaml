@@ -70,6 +70,10 @@ already managed by some other traffic-manager.
 {{- $genCA := genCA "agent-injector-ca" 365 -}}
 {{- $genCert := genSignedCert "agent-injector" nil $altNames 365 $genCA -}}
 {{- $secretData := (lookup "v1" "Secret" (include "traffic-manager.namespace" $) .Values.agentInjector.secret.name).data -}}
+{{- $reinvocationPolicy := .Values.agentInjector.webhook.reinvocationPolicy }}
+{{- if (and .Values.agentInjector.mutationAware (not (eq $reinvocationPolicy "IfNeeded"))) }}
+   {{- fail (printf "agentInjector.mutationAware=true cannot be combined with reinvocationPolicy=%s" $reinvocationPolicy) }}
+{{- end }}
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
@@ -111,7 +115,7 @@ webhooks:
     - pods
     scope: '*'
   failurePolicy: {{ .Values.agentInjector.webhook.failurePolicy }}
-  reinvocationPolicy: {{ .Values.agentInjector.webhook.reinvocationPolicy }}
+  reinvocationPolicy: {{ $reinvocationPolicy }}
   name: agent-injector-{{ include "traffic-manager.namespace" $ }}.telepresence.io
   sideEffects: {{ .Values.agentInjector.webhook.sideEffects }}
   timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}

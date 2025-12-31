@@ -114,6 +114,7 @@ agentInjector:
         kind: Issuer
 
   injectPolicy: OnDemand
+  mutationAware: true
   webhook:
     name: agent-injector-webhook
     admissionReviewVersions: ["v1"]
@@ -129,6 +130,7 @@ agentInjector:
 ################################################################################
 agent:
   port: 9900
+  enableH2cProbing: true
   mountPolicies:
     "/tmp": Local
   image:

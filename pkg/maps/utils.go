@@ -35,14 +35,21 @@ func Merge[K comparable, V any](dst, src map[K]V) {
 	}
 }
 
-// SortedKeys returns the keys of the map m sorted alphabetically.
-func SortedKeys[M ~map[K]V, K cmp.Ordered, V any](m M) []K {
+// KeySlice returns the a slice containing the keys of the map m.
+func KeySlice[M ~map[K]V, K cmp.Ordered, V any](m M) []K {
 	r := make([]K, len(m))
 	i := 0
 	for k := range m {
 		r[i] = k
 		i++
 	}
+	slices.Sort(r)
+	return r
+}
+
+// SortedKeys returns the keys of the map m sorted alphabetically.
+func SortedKeys[M ~map[K]V, K cmp.Ordered, V any](m M) []K {
+	r := KeySlice(m)
 	slices.Sort(r)
 	return r
 }
@@ -59,6 +66,25 @@ func ToSortedSlice[K cmp.Ordered, V any](m map[K]V) []V {
 	vs := make([]V, i)
 	for i, n := range ns {
 		vs[i] = m[n]
+	}
+	return vs
+}
+
+func DeltaUpdate[K comparable, V any](m map[K]V, upserts map[K]V, removals []K) {
+	for k, v := range upserts {
+		m[k] = v
+	}
+	for _, k := range removals {
+		delete(m, k)
+	}
+}
+
+func Values[K comparable, V any](m map[K]V) []V {
+	ml := len(m)
+	vs := make([]V, ml)
+	for _, v := range m {
+		ml--
+		vs[ml] = v
 	}
 	return vs
 }

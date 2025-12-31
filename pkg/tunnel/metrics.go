@@ -16,6 +16,7 @@ type StreamProvider interface {
 type ClientStreamProvider interface {
 	CreateClientStream(ctx context.Context, tag Tag, clientSessionID SessionID, id ConnID, roundTripLatency, dialTimeout time.Duration) (Stream, error)
 	ReportMetrics(ctx context.Context, metrics *manager.TunnelMetrics)
+	MetricsEnabled() bool
 }
 
 type TrafficManagerStreamProvider struct {

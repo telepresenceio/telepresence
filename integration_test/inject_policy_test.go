@@ -149,6 +149,9 @@ func (is *installSuite) applyOrDeleteMultipleServices(svcCount int, applyOrDelet
 }
 
 func (is *installSuite) Test_MultiOnDemandInjectOnInstall() {
+	if !(is.ManagerIsVersion(">2.24.x") && is.ClientIsVersion(">2.24.x")) {
+		is.T().Skip("Not part of compatibility tests.")
+	}
 	svcCount := 8
 	if runtime.GOOS != "linux" {
 		// The GitHub runner is probably using Colima for Kubernetes and running with limited
@@ -182,6 +185,9 @@ func (is *installSuite) Test_MultiOnDemandInjectOnInstall() {
 }
 
 func (is *installSuite) Test_MultiOnDemandInjectOnApply() {
+	if !(is.ManagerIsVersion(">2.24.x") && is.ClientIsVersion(">2.24.x")) {
+		is.T().Skip("Not part of compatibility tests.")
+	}
 	svcCount := 8
 	if runtime.GOOS != "linux" {
 		// The GitHub runner is probably using Colima for Kubernetes and running with limited

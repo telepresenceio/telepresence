@@ -92,7 +92,6 @@ func (c *streamConn) Read(data []byte) (bytesRead int, err error) {
 			c.readProbe.Increment(uint64(bytesRead))
 		}
 		c.readLock.Unlock()
-		dlog.Debugf(c.ctx, "Read %d bytes: %v", bytesRead, err)
 	}()
 
 	if c.lastIncoming == nil {

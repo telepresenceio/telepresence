@@ -18,7 +18,7 @@ import (
 
 type ContainerBuilder struct {
 	MountPolicies types.MountPolicies
-	Pod           *core.Pod
+	Pod           *core.PodTemplateSpec
 	Config        *Sidecar
 }
 
