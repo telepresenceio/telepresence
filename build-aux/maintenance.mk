@@ -8,5 +8,5 @@ update-dependencies: $(dir $(shell find . -name go.mod))
  		 ) || \
  		 go get -u .);\
  	done
-	$(MAKE) clobber check-unit generate
+	$(MAKE) clobber generate check-unit
 

@@ -81,29 +81,29 @@ $(TOOLSDIR)/$(PROTOLINT_TGZ):
 # ==========
 #
 tools/test-report = $(TOOLSBINDIR)/test-report$(EXE)
-$(TOOLSBINDIR)/test-report$(EXE): $(TOOLSSRCDIR)/test-report/*.go $(TOOLSSRCDIR)/test-report/go.*
-	cd $(<D) && go mod tidy && GOOS= GOARCH= go build -o $(abspath $@) *.go
+$(TOOLSBINDIR)/test-report$(EXE): $(TOOLSSRCDIR)/test-report/*.go $(TOOLSSRCDIR)/test-report/go.* $(TOOLSSRCDIR)/test-report/go.sum
+	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) *.go
 
 # TOC generator
 # ==========
 #
 tools/tocgen = $(TOOLSBINDIR)/tocgen$(EXE)
 $(TOOLSBINDIR)/tocgen$(EXE): $(TOOLSSRCDIR)/tocgen/*.go
-	cd $(<D) && go mod tidy && GOOS= GOARCH= go build -o $(abspath $@) *.go
+	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) *.go
 
 # Release Notes generator
 # ==========
 #
 tools/relnotesgen = $(TOOLSBINDIR)/relnotesgen$(EXE)
-$(TOOLSBINDIR)/relnotesgen$(EXE): $(TOOLSSRCDIR)/relnotesgen/**/*.go $(TOOLSSRCDIR)/relnotesgen/relnotes/relnotes.*
-	(cd $(TOOLSSRCDIR)/relnotesgen && go mod tidy && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/relnotesgen/relnotesgen $(TOOLSBINDIR)
+$(TOOLSBINDIR)/relnotesgen$(EXE): $(TOOLSSRCDIR)/relnotesgen/**/*.go $(TOOLSSRCDIR)/relnotesgen/relnotes/relnotes.* $(TOOLSSRCDIR)/relnotesgen/go.sum
+	(cd $(TOOLSSRCDIR)/relnotesgen && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/relnotesgen/relnotesgen $(TOOLSBINDIR)
 
 # YAML to JSON
 # ==========
 #
 tools/y2j = $(TOOLSBINDIR)/y2j$(EXE)
-$(TOOLSBINDIR)/y2j$(EXE): $(TOOLSSRCDIR)/y2j/*
-	(cd $(TOOLSSRCDIR)/y2j && go mod tidy && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/y2j/y2j $(TOOLSBINDIR)
+$(TOOLSBINDIR)/y2j$(EXE): $(TOOLSSRCDIR)/y2j/*.go $(TOOLSSRCDIR)/y2j/go.sum
+	(cd $(TOOLSSRCDIR)/y2j && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/y2j/y2j $(TOOLSBINDIR)
 
 # Shellcheck
 # ==========
@@ -151,7 +151,11 @@ $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 # avoid them polluting our main go.mod file.
 tools/protoc-gen-go      = $(TOOLSBINDIR)/protoc-gen-go$(EXE)
 tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc$(EXE)
-tools/ko                 = $(TOOLSBINDIR)/ko$(EXE)
 tools/go-mkopensource    = $(TOOLSBINDIR)/go-mkopensource$(EXE)
-$(TOOLSBINDIR)/%$(EXE): $(TOOLSSRCDIR)/%/go.mod $(TOOLSSRCDIR)/%/pin.go
-	cd $(<D) && go mod tidy && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)
+tools/test-report        = $(TOOLSBINDIR)/test-report$(EXE)
+tools/y2j                = $(TOOLSBINDIR)/y2j$(EXE)
+$(TOOLSBINDIR)/%$(EXE): $(TOOLSSRCDIR)/%/go.sum $(TOOLSSRCDIR)/%/pin.go
+	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)
+
+$(TOOLSSRCDIR)/%/go.sum: $(TOOLSSRCDIR)/%/go.mod
+	cd $(<D) && go mod tidy
