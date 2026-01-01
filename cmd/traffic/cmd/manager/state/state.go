@@ -107,7 +107,7 @@ func NewState(ctx context.Context, g *dgroup.Group) *State {
 		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
 		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](xsync.WithGrowOnly()),
-		workloadWatchers: xsync.NewMap[string, workload.Watcher](xsync.WithGrowOnly()),
+		workloadWatchers: xsync.NewMap[string, Watcher](xsync.WithGrowOnly()),
 		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}
