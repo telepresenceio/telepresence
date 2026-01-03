@@ -17,7 +17,7 @@ Generate YAML for the traffic-agent init container. See genyaml for more info on
 
 ### Flags:
 ```
-  -c, --config string      Path to the yaml containing the generated configmap entry
+  -a, --agent string       Path to the yaml containing the generated agent config
   -h, --help               help for initcontainer
   -n, --namespace string   If present, the namespace scope for this CLI request
   -o, --output string      Path to the file to place the output in. Defaults to '-' which means stdout. (default "-")

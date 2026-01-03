@@ -30,6 +30,12 @@ than expected.
   </Body>
 </Note>
 <Note>
+	<Title type="feature">Support customizable daemon config file</Title>
+	<Body>
+The config file for Telepresence is now configurable through the command-line flag `--config`. The `--config <agent config>` flag of the `telepresence genyaml` command was renamed to `--agent` to avoid confusion.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Support customizable daemon log file paths</Title>
 	<Body>
 Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile` that denotes a custom log file location or redirect of the log output to stdout/stderr. Two new log-level configuration entries for `cli` and `kubeAuthDaemon` are also introduced, expanding the existing log-level controls beyond just `userDaemon` and `rootDaemon`.

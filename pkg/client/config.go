@@ -1221,7 +1221,6 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 	bs, err := os.ReadFile(fileName)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			dlog.Infof(c, "No config file found at %q. Using default config", fileName)
 			return cfg, nil
 		}
 		return nil, errcat.Config.New(err)

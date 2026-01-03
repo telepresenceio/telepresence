@@ -23,6 +23,12 @@ This change is particularly beneficial in large clusters or complex networking e
 than expected.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Support customizable daemon config file</div></div>
+<div style="margin-left: 15px">
+
+The config file for Telepresence is now configurable through the command-line flag `--config`. The `--config <agent config>` flag of the `telepresence genyaml` command was renamed to `--agent` to avoid confusion.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Support customizable daemon log file paths</div></div>
 <div style="margin-left: 15px">
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -13,29 +12,16 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	userDaemon "github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
-	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 // Telepresence returns the top level "telepresence" CLI command.
 func Telepresence(ctx context.Context, args []string) *cobra.Command {
-	cfg, err := client.LoadConfig(ctx)
-	if err != nil {
-		ioutil.Printf(os.Stderr, "Failed to load config: %v", err)
-		os.Exit(1)
-	}
-	ctx = client.WithConfig(ctx, cfg)
-	logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "cli.log")
-	if ctx, err = logging.InitContext(ctx, logFile, cfg.LogLevels().CLI, logging.RotateDaily, false); err != nil {
-		ioutil.Println(os.Stderr, err.Error())
-		os.Exit(1)
-	}
 	useMarkdown := len(args) > 0 && args[0] == "man-pages"
 	longHelp := helpPlain
 	if useMarkdown {
@@ -47,6 +33,7 @@ func Telepresence(ctx context.Context, args []string) *cobra.Command {
 		Args:              OnlySubcommands,
 		Short:             "Connect your workstation to a Kubernetes cluster",
 		Long:              longHelp,
+		PersistentPreRunE: output.SetFormat,
 		RunE:              RunSubcommands,
 		SilenceErrors:     true, // main() will handle it after .ExecuteContext() returns
 		SilenceUsage:      true, // our FlagErrorFunc will handle it

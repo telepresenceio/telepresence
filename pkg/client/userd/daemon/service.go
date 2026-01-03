@@ -187,7 +187,7 @@ func (s *service) configReload(c context.Context) error {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
-			client.ReloadDaemonLogLevel(ctx)
+			client.ReloadLogLevel(ctx)
 		}
 		return nil
 	})

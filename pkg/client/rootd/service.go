@@ -91,7 +91,7 @@ func Command(ctx context.Context) *cobra.Command {
 
 func (s *service) configReload(c context.Context) error {
 	return client.WatchConfig(c, func(c context.Context) error {
-		client.ReloadDaemonLogLevel(c)
+		client.ReloadLogLevel(c)
 		return nil
 	})
 }

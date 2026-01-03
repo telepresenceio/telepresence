@@ -18,7 +18,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
@@ -113,33 +112,15 @@ func statusCmd() *cobra.Command {
 		Use:  "status",
 		Args: cobra.NoArgs,
 
-		Short:             "Show connectivity status",
-		RunE:              run,
-		PersistentPreRunE: fixFlag,
+		Short: "Show connectivity status",
+		RunE:  run,
 		Annotations: map[string]string{
 			ann.UserDaemon: ann.Optional,
 		},
 	}
 	flags := cmd.Flags()
 	flags.Bool(multiDaemonFlag, false, "always use multi-daemon output format, even if there's only one daemon connected")
-	flags.BoolP(jsonFlag, "j", false, "output as json object")
-	flags.Lookup(jsonFlag).Hidden = true
 	return cmd
-}
-
-func fixFlag(cmd *cobra.Command, _ []string) error {
-	flags := cmd.Flags()
-	json, err := flags.GetBool(jsonFlag)
-	if err != nil {
-		return err
-	}
-	rootCmd := cmd.Parent()
-	if json {
-		if err = rootCmd.PersistentFlags().Set(global.FlagOutput, "json"); err != nil {
-			return err
-		}
-	}
-	return rootCmd.PersistentPreRunE(cmd, flags.Args())
 }
 
 // status will retrieve connectivity status from the daemon and print it on stdout.

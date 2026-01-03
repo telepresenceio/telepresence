@@ -17,7 +17,7 @@ Generate YAML for the pod template metadata annotations. See genyaml for more in
 
 ### Flags:
 ```
-  -c, --config string   Path to the yaml containing the generated configmap entry
+  -a, --agent string    Path to the yaml containing the generated agent config
   -h, --help            help for annotations
   -o, --output string   Path to the file to place the output in. Defaults to '-' which means stdout. (default "-")
 ```

@@ -17,7 +17,7 @@ Generate YAML for the traffic-agent volume. See genyaml for more info on what th
 
 ### Flags:
 ```
-  -c, --config string      Path to the yaml containing the generated configmap entry
+  -a, --agent string       Path to the yaml containing the generated agent config
   -h, --help               help for volume
   -i, --input string       Optional path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc). Pass '-' for stdin. Loaded from cluster by default
   -n, --namespace string   If present, the namespace scope for this CLI request

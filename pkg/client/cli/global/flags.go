@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -64,16 +65,28 @@ func SetProgressQuiet(cmd *cobra.Command) {
 }
 
 func InitConfig(cmd *cobra.Command) error {
-	if configFile := cmd.Flags().Lookup(FlagConfig).Value.String(); configFile != "" {
-		ctx := client.WithConfigFile(cmd.Context(), configFile)
-		cfg, err := client.LoadConfig(ctx)
-		if err != nil {
-			return err
+	ctx := cmd.Context()
+	if configFlag := cmd.Flag(FlagConfig); configFlag != nil {
+		if configFile := configFlag.Value.String(); configFile != "" {
+			ctx = client.WithConfigFile(ctx, configFile)
 		}
-		if client.ReplaceConfig(ctx, cfg) {
-			client.ReloadDaemonLogLevel(ctx)
-		}
-		cmd.SetContext(ctx)
 	}
+	cfg, err := client.LoadConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if client.ReplaceConfig(ctx, cfg) {
+		client.ReloadLogLevel(ctx)
+	} else {
+		ctx = client.WithConfig(ctx, cfg)
+		if !client.IsDaemon() {
+			logFile := filepath.Join(filelocation.AppUserLogDir(ctx), "cli.log")
+			ctx, err = logging.InitContext(ctx, logFile, cfg.LogLevels().CLI, logging.RotateDaily, false)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	cmd.SetContext(ctx)
 	return nil
 }

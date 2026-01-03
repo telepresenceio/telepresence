@@ -53,6 +53,11 @@ items:
           This change is particularly beneficial in large clusters or complex networking environments where initialization may take longer
           than expected.
       - type: feature
+        title: Support customizable daemon config file
+        body: >-
+          The config file for Telepresence is now configurable through the command-line flag `--config`.
+          The `--config <agent config>` flag of the `telepresence genyaml` command was renamed to `--agent` to avoid confusion.
+      - type: feature
         title: Support customizable daemon log file paths
         body: >-
           Log file paths for the Telepresence daemons are now configurable through the command-line flag `--logfile`

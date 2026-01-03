@@ -108,7 +108,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		sessionCancel()
 		return nil, err
 	}
-	client.ReloadDaemonLogLevel(sn)
+	client.ReloadLogLevel(sn)
 	reply.OutboundConfig = sn.getNetworkConfig()
 	initErrCh := make(chan error, 1)
 
@@ -116,7 +116,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 	go func() {
 		defer func() {
 			sessionCancel()
-			client.ReloadDaemonLogLevel(s)
+			client.ReloadLogLevel(s)
 			close(sessionRunning)
 		}()
 		sn.run(initErrCh)

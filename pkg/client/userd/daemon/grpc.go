@@ -137,7 +137,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		}
 		return nil, err
 	}
-	client.ReloadDaemonLogLevel(session)
+	client.ReloadLogLevel(session)
 	s.sessionCancel = func() {
 		if err := session.ClearIngestsAndIntercepts(); err != nil {
 			dlog.Errorf(ctx, "failed to clear intercepts: %v", err)
@@ -195,7 +195,7 @@ func (s *service) clearSession(oldSession userd.Session) bool {
 		s.clientConfigLock.Unlock()
 	}
 	s.sessionLock.Unlock()
-	client.ReloadDaemonLogLevel(s)
+	client.ReloadLogLevel(s)
 	return sameSession
 }
 

@@ -57,20 +57,20 @@ func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
 
 	stdout := itest.TelepresenceOk(ctx, "genyaml", "container",
 		"--output", "-",
-		"--config", configFile,
+		"--agent", configFile,
 		"--input", filepath.Join(k8sDir, "echo-manual-inject-deploy.yaml"))
 	var container map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &container))
 
-	stdout = itest.TelepresenceOk(ctx, "genyaml", "initcontainer", "--output", "-", "--config", configFile)
+	stdout = itest.TelepresenceOk(ctx, "genyaml", "initcontainer", "--output", "-", "--agent", configFile)
 	var initContainer map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &initContainer))
 
-	stdout = itest.TelepresenceOk(ctx, "genyaml", "volume", "--config", configFile, "--input", inputFile)
+	stdout = itest.TelepresenceOk(ctx, "genyaml", "volume", "--agent", configFile, "--input", inputFile)
 	var volumes []map[string]any
 	require.NoError(yaml.Unmarshal([]byte(stdout), &volumes))
 
-	stdout = itest.TelepresenceOk(ctx, "genyaml", "annotations", "--config", configFile)
+	stdout = itest.TelepresenceOk(ctx, "genyaml", "annotations", "--agent", configFile)
 	var anns map[string]string
 	require.NoError(yaml.Unmarshal([]byte(stdout), &anns))
 
