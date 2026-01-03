@@ -715,7 +715,7 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 		ExposedPorts: cr.ExposedPorts,
 		Hostname:     cr.Hostname,
 	}
-	return info, daemon.SaveInfo(ctx, info, daemonID.InfoFileName())
+	return info, daemon.NewUserInfoLoader(ctx).SaveInfo(info, daemonID.InfoFileName())
 }
 
 func WaitForExit(ctx context.Context, cli *dockerClient.Client, id string, maxTime time.Duration) error {

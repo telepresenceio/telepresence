@@ -42,7 +42,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -385,9 +384,6 @@ func (s *cluster) tearDown(ctx context.Context) {
 func (s *cluster) ensureQuit(ctx context.Context) {
 	// Ensure that no telepresence is running when the tests start
 	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:dogsled // don't care about any of the returns
-
-	// Ensure that the daemon-socket is non-existent.
-	_ = rmAsRoot(ctx, socket.RootDaemonPath(ctx))
 }
 
 func (s *cluster) ensureNoManager(ctx context.Context) {

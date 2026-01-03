@@ -396,7 +396,7 @@ func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecr
 			ud := daemon.MustGetUserClient(c)
 			info := ud.DaemonInfo()
 			info.ComposeFile = composeFile
-			err = daemon.SaveInfo(ctx, info, ud.DaemonID().InfoFileName())
+			err = daemon.NewUserInfoLoader(ctx).SaveInfo(info, ud.DaemonID().InfoFileName())
 		}
 	} else {
 		err = os.WriteFile(composeFile, yml, 0o644)

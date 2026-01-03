@@ -38,7 +38,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
@@ -184,15 +183,6 @@ func NewSession(
 
 	oi := tmgr.getNetworkInfo(cr)
 	if !service.RootSessionInProcess() {
-		// Connect to the root daemon if it is running. It's the CLI that starts it initially
-		rootRunning, err := socket.IsRunning(tmgr, socket.RootDaemonPath(tmgr))
-		if err != nil {
-			return nil, nil, err
-		}
-		if !rootRunning {
-			return nil, nil, errors.New("root daemon is not running")
-		}
-
 		// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
 		// must be executed by the user, not by root.
 		oi.KubeconfigData, err = patcher.CreateExternalKubeConfig(tmgr.Context, config.ClientConfig, tmgr.KubeContext, func([]string) (string, string, string, error) {
@@ -874,9 +864,9 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 		}()
 	} else {
 		var conn *grpc.ClientConn
-		conn, err = socket.Dial(timeoutCtx, socket.RootDaemonPath(s), true)
+		conn, err = daemon.DialRootDaemon(timeoutCtx, true)
 		if err != nil {
-			return nil, fmt.Errorf("unable open root daemon socket: %w", err)
+			return nil, err
 		}
 		defer func() {
 			if err != nil {

@@ -20,7 +20,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
@@ -323,7 +322,7 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		}
 		rStatus = status.DaemonStatus
 	} else {
-		conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false)
+		conn, err := daemon.DialRootDaemon(ctx, false)
 		if err != nil {
 			return wt, nil
 		}

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -14,15 +14,13 @@ import (
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
-	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/dlib/v2/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -33,12 +31,13 @@ import (
 )
 
 const (
-	titleName   = "Root Daemon"
-	pprofFlag   = "pprof"
-	configFlag  = "config"
-	logfileFlag = "logfile"
-	socketFlag  = "socket"
-	managedFlag = "managed"
+	titleName    = "Root Daemon"
+	pprofFlag    = "pprof"
+	cacheDirFlag = "cache"
+	configFlag   = "config"
+	logfileFlag  = "logfile"
+	addressFlag  = "address"
+	managedFlag  = "managed"
 )
 
 // service represents the state of the Telepresence Daemon.
@@ -83,8 +82,9 @@ func Command(ctx context.Context) *cobra.Command {
 	flags.String(logfileFlag, "", `Log file to write to { <path to a file> | "stdout" | "stderr" | "std" | "managed" }
 "std" will cause the daemon to log informal messages to stdout and error messages to stderr
 "managed" is like "std", but without timestamps and level tags for "error" or "info" messages`)
+	flags.String(cacheDirFlag, "", `Path to the Telepresence cache directory`)
 	flags.String(configFlag, "", `Path to the Telepresence configuration file`)
-	flags.String(socketFlag, "", `Path to gRPC socket`)
+	flags.String(addressFlag, "", "TCP address to listen to")
 	flags.Bool(managedFlag, false, "The daemon is managed by the system and will disconnect, but not exit, when it receives RPC calls to Quit")
 	return cmd
 }
@@ -126,7 +126,9 @@ func (s *service) serveGrpc(c context.Context, l net.Listener) error {
 // run is the main function when executing as the daemon.
 func run(cmd *cobra.Command, args []string) error {
 	if !proc.IsAdmin() {
-		return fmt.Errorf("telepresence %s must run with elevated privileges", client.RootDaemonName)
+		msg := fmt.Sprintf("telepresence %s must run with elevated privileges", client.RootDaemonName)
+		fmt.Fprintln(os.Stderr, msg)
+		return errors.New(msg)
 	}
 
 	flags := cmd.Flags()
@@ -136,23 +138,31 @@ func run(cmd *cobra.Command, args []string) error {
 	if cfgFlag.Changed {
 		configFile = cfgFlag.Value.String()
 	}
-	if configFile == "" {
-		return fmt.Errorf("must specify %s", configFlag)
-	}
 
-	c := client.WithConfigFile(cmd.Context(), configFile)
-	c = filelocation.WithAppUserConfigDir(c, filepath.Dir(configFile))
-	cfg, err := client.LoadConfig(c)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+	c := cmd.Context()
+	cacheDir := flags.Lookup(cacheDirFlag).Value.String()
+	if cacheDir != "" {
+		c = filelocation.WithAppUserCacheDir(c, cacheDir)
+	}
+	var cfg client.Config
+	var err error
+	if configFile == "" {
+		cfg = client.GetDefaultConfig()
+	} else {
+		c = client.WithConfigFile(c, configFile)
+		c = filelocation.WithAppUserConfigDir(c, filepath.Dir(configFile))
+		cfg, err = client.LoadConfig(c)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
 	}
 	c = client.WithConfig(c, cfg)
 
-	sockFlag := flags.Lookup(socketFlag)
-	if !sockFlag.Changed {
-		return fmt.Errorf("must specify %s", socketFlag)
+	addrFlag := flags.Lookup(addressFlag)
+	if !addrFlag.Changed {
+		return fmt.Errorf("must specify %s", addressFlag)
 	}
-	rootDaemonPath := sockFlag.Value.String()
+	addrStr := addrFlag.Value.String()
 	nqFlag := flags.Lookup(managedFlag)
 
 	var managed bool
@@ -184,45 +194,31 @@ func run(cmd *cobra.Command, args []string) error {
 	// Listen on domain unix domain socket. The listener must be opened before other tasks because
 	// the CLI client will only wait for a short period of time for the socket to appear before it
 	// gives up.
-	grpcListener, err := socket.Listen(c, client.RootDaemonName, rootDaemonPath)
+	lc := net.ListenConfig{}
+	grpcListener, err := lc.Listen(c, "tcp", addrStr)
 	if err != nil {
-		if errors.Is(err, fs.ErrExist) {
-			var conn *grpc.ClientConn
-			conn, err = socket.Dial(c, rootDaemonPath, false)
-			if err == nil {
-				var v *common.VersionInfo
-				v, err = rpc.NewDaemonClient(conn).Version(c, &empty.Empty{})
-				conn.Close()
-				if err == nil {
-					return fmt.Errorf("telepresence %s, version %s, is already running", titleName, v.Version)
-				}
-			}
-			dlog.Warnf(c, "Socket %q exists but is not responding so the %s was terminated ungracefully", rootDaemonPath, client.RootDaemonName)
-			dlog.Warnf(c, "Will remove and recreate %q", rootDaemonPath)
-			err = os.Remove(rootDaemonPath)
-			if err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return fmt.Errorf("failed to remove %q: %w", rootDaemonPath, err)
-			}
-			grpcListener, err = socket.Listen(c, client.RootDaemonName, rootDaemonPath)
-		}
-		if err != nil {
-			return fmt.Errorf("failed to listen on %q: %w", rootDaemonPath, err)
-		}
+		return err
 	}
-	dlog.Debug(c, "Listener opened")
+	defer grpcListener.Close()
+
+	daemonAddress := grpcListener.Addr().(interface{ AddrPort() netip.AddrPort }).AddrPort()
+	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 
 	d := newService(cfg, managed)
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, client.RootDaemonName); err != nil {
+		dlog.Error(c, err)
 		return err
 	}
 	vif.InitLogger(c)
 
+	c, cancel := context.WithCancel(c)
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  5 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
 		IgnoreSignalError:    true,
 	})
+	runAliveAndCancellation(g, daemonAddress.Port(), cancel, managed)
 
 	// Add a reload function that triggers on create and write of the config.yml file.
 	g.Go("config-reload", d.configReload)
@@ -232,4 +228,31 @@ func run(cmd *cobra.Command, args []string) error {
 		dlog.Error(c, err)
 	}
 	return err
+}
+
+func runAliveAndCancellation(g *dgroup.Group, daemonPort uint16, cancel context.CancelFunc, managed bool) {
+	g.Go("info-kicker", func(ctx context.Context) error {
+		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
+		il := daemon.NewRootInfoLoader(ctx, managed)
+		if managed {
+			info := &daemon.RootInfo{DaemonPort: daemonPort}
+			err := il.SaveInfo(info, daemon.InfoFileName)
+			if err != nil {
+				return err
+			}
+		}
+		return il.KeepInfoAlive(daemon.InfoFileName)
+	})
+	g.Go("info-watcher", func(ctx context.Context) error {
+		// Cancel the session if the daemon info file is removed.
+		il := daemon.NewRootInfoLoader(ctx, managed)
+		return il.WatchInfos(func(ctx context.Context) error {
+			ok, err := il.InfoExists(daemon.InfoFileName)
+			if err == nil && !ok {
+				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemon.InfoFileName)
+				cancel()
+			}
+			return err
+		}, daemon.InfoFileName)
+	})
 }

@@ -27,7 +27,6 @@ import (
 	cliDaemon "github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -160,7 +159,9 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		}
 		s.clearSession(session)
 	}()
-	go runAliveAndCancellation(session, s.sessionCancel, daemonID, wg)
+	if s.rootSessionInProc {
+		go runAliveAndCancellationSession(session, s.sessionCancel, daemonID, wg)
+	}
 	return result, err
 }
 
@@ -627,7 +628,7 @@ func (s *service) withRootDaemon(ctx context.Context, f func(ctx context.Context
 	if s.rootSessionInProc {
 		return status.Error(codes.Unavailable, "root daemon is embedded")
 	}
-	conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false)
+	conn, err := cliDaemon.DialRootDaemon(ctx, false)
 	if err == nil {
 		defer conn.Close()
 		err = f(ctx, daemon.NewDaemonClient(conn))

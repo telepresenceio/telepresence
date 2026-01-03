@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 )
 
-const appName = "telepresence"
-
 // AppUserLogDir returns the directory to use for application-specific
 // user-specific log files.
 //

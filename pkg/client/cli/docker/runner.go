@@ -84,7 +84,7 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 	// Ensure that the intercept handler is stopped properly if the daemon quits
 	procCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		if err := daemon.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID().InfoFileName()); err != nil {
+		if err := daemon.NewUserInfoLoader(procCtx).CancelWhenRmFromCache(cancel, ud.DaemonID().InfoFileName()); err != nil {
 			dlog.Error(ctx)
 		}
 	}()

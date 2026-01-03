@@ -42,7 +42,10 @@ func (id *Identifier) String() string {
 }
 
 func (id *Identifier) InfoFileName() string {
-	return id.String() + ".json"
+	if id.Containerized && id.Name != "" {
+		return id.Name + ".json"
+	}
+	return InfoFileName
 }
 
 func (id *Identifier) ContainerName() string {

@@ -27,6 +27,13 @@ items:
   - version: 2.26.0
     date: (TBD)
     notes:
+      - type: change
+        title: Use TCP/IP instead of Unix sockets for all communication between local processes.
+        body: >-
+          Telepresence now uses TCP/IP sockets for all communication between local processes. This change reduces the
+          risk of socket-related errors caused by lingering sockets from previous Telepresence sessions. It also
+          eliminates the difficulties of using Unix sockets for communication between a system service and user
+          processes on Windows.
       - type: feature
         title: Add configuration to disable global TCP/UDP intercepts
         body: >-
