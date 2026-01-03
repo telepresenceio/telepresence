@@ -208,6 +208,10 @@ func (s *service) Status(ctx context.Context, ex *empty.Empty) (result *rpc.Conn
 		return result, err
 	}
 	err = s.withRootDaemon(ctx, func(c context.Context, dc daemon.DaemonClient) (err error) {
+		if result == nil {
+			// This may happen if the session was unavailable, which in this particular case is OK.
+			result = &rpc.ConnectInfo{}
+		}
 		result.DaemonStatus, err = dc.Status(c, ex)
 		return err
 	})
