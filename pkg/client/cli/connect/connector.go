@@ -133,7 +133,7 @@ func quitDockerDaemons(ctx context.Context) {
 }
 
 func EnsureUserDaemon(ctx context.Context, required bool) (rc context.Context, err error) {
-	cr := daemon.GetRequest(ctx)
+	cr := daemon.MustGetRequest(ctx)
 	daemonID, err := daemon.IdentifierFromFlags(ctx, cr.Name, cr.KubeFlags, cr.KubeconfigData, cr.Docker)
 	if err != nil {
 		return ctx, err
@@ -156,7 +156,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (rc context.Context, e
 	if daemon.GetUserClient(ctx) != nil {
 		return ctx, nil
 	}
-	rc, launched, err = launchConnectorDaemon(ctx, daemonID, client.GetExe(ctx), required)
+	rc, launched, err = findOrLaunchConnectorDaemon(ctx, daemonID, client.GetExe(ctx), required)
 	return rc, err
 }
 
@@ -165,7 +165,7 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 		return ctx, nil
 	}
 
-	rq := daemon.GetRequest(ctx)
+	rq := daemon.MustGetRequest(ctx)
 	s, err := connectSession(ctx, useLine, rq, required)
 	if err != nil {
 		return ctx, err
@@ -359,7 +359,7 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 // DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
 // to that daemon is returned if such an entry is found.
 func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.Identifier) (context.Context, error) {
-	cr := daemon.GetRequest(ctx)
+	cr := daemon.MustGetRequest(ctx)
 	if match == nil && !cr.Implicit {
 		match = regexp.MustCompile(`\A` + regexp.QuoteMeta(daemonID.Name) + `\z`)
 	}
@@ -461,8 +461,8 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 	return ctx, info, conn, err
 }
 
-func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, required bool) (context.Context, bool, error) {
-	cr := daemon.GetRequest(ctx)
+func findOrLaunchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, required bool) (context.Context, bool, error) {
+	cr := daemon.MustGetRequest(ctx)
 
 	// Try dialing the host daemon using the well-known socket.
 	ctx, err := DiscoverDaemon(ctx, cr.Use, daemonID)

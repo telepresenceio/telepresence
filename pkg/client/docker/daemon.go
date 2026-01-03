@@ -696,7 +696,7 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 		progress.Error(ctx, err.Error())
 		return nil, err
 	}
-	cr := daemon.GetRequest(ctx)
+	cr := daemon.MustGetRequest(ctx)
 	dlog.Debugf(ctx, "Creating daemon info file %s (runs in container)", daemonID.Name)
 	var ip netip.Addr
 	if cni.IPv4.IsValid() {
