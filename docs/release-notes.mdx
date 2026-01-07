@@ -111,6 +111,12 @@ The traffic agent now includes a backoff-based retry mechanism when establishing
 The root daemon process would sometimes panic with "close of closed channel" due to a race condition in the DNS cache logic. This issue has been fixed.
   </Body>
 </Note>
+<Note>
+	<Title type="feature">Add ability for cluster admins to revoke other users' intercepts.</Title>
+	<Body>
+The Traffic Manager now has a new API endpoint `RevokeIntercept` that can be used to revoke intercepts created by other users. This endpoint is only accessible to cluster admins and requires authentication via a kubernetestoken and membership in the `system:masters` or `telepresence:admin` group.
+  </Body>
+</Note>
 ## Version 2.25.2 <span style={{fontSize:'16px'}}>(December 26)</span>
 <Note>
 	<Title type="bugfix">Ensure that the exit code from a docker command becomes the exit code of the Telepresence command.</Title>

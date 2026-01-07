@@ -49,6 +49,7 @@ const (
 	Manager_PrepareIntercept_FullMethodName      = "/telepresence.manager.Manager/PrepareIntercept"
 	Manager_CreateIntercept_FullMethodName       = "/telepresence.manager.Manager/CreateIntercept"
 	Manager_RemoveIntercept_FullMethodName       = "/telepresence.manager.Manager/RemoveIntercept"
+	Manager_RevokeIntercept_FullMethodName       = "/telepresence.manager.Manager/RevokeIntercept"
 	Manager_GetIntercept_FullMethodName          = "/telepresence.manager.Manager/GetIntercept"
 	Manager_ReviewIntercept_FullMethodName       = "/telepresence.manager.Manager/ReviewIntercept"
 	Manager_GetKnownWorkloadKinds_FullMethodName = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
@@ -139,6 +140,9 @@ type ManagerClient interface {
 	CreateIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(ctx context.Context, in *RemoveInterceptRequest2, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// RevokeIntercept lets the manager revoke any client's intercept by intercept ID.
+	// This is an administrative operation that can revoke intercepts for any client.
+	RevokeIntercept(ctx context.Context, in *RevokeInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetIntercept gets info from intercept name
 	GetIntercept(ctx context.Context, in *GetInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error)
 	// ReviewIntercept lets an agent approve or reject an intercept by
@@ -501,6 +505,16 @@ func (c *managerClient) RemoveIntercept(ctx context.Context, in *RemoveIntercept
 	return out, nil
 }
 
+func (c *managerClient) RevokeIntercept(ctx context.Context, in *RevokeInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Manager_RevokeIntercept_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) GetIntercept(ctx context.Context, in *GetInterceptRequest, opts ...grpc.CallOption) (*InterceptInfo, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(InterceptInfo)
@@ -682,6 +696,9 @@ type ManagerServer interface {
 	CreateIntercept(context.Context, *CreateInterceptRequest) (*InterceptInfo, error)
 	// RemoveIntercept lets a client remove an intercept.
 	RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*emptypb.Empty, error)
+	// RevokeIntercept lets the manager revoke any client's intercept by intercept ID.
+	// This is an administrative operation that can revoke intercepts for any client.
+	RevokeIntercept(context.Context, *RevokeInterceptRequest) (*emptypb.Empty, error)
 	// GetIntercept gets info from intercept name
 	GetIntercept(context.Context, *GetInterceptRequest) (*InterceptInfo, error)
 	// ReviewIntercept lets an agent approve or reject an intercept by
@@ -796,6 +813,9 @@ func (UnimplementedManagerServer) CreateIntercept(context.Context, *CreateInterc
 }
 func (UnimplementedManagerServer) RemoveIntercept(context.Context, *RemoveInterceptRequest2) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveIntercept not implemented")
+}
+func (UnimplementedManagerServer) RevokeIntercept(context.Context, *RevokeInterceptRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeIntercept not implemented")
 }
 func (UnimplementedManagerServer) GetIntercept(context.Context, *GetInterceptRequest) (*InterceptInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetIntercept not implemented")
@@ -1239,6 +1259,24 @@ func _Manager_RemoveIntercept_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_RevokeIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).RevokeIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_RevokeIntercept_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).RevokeIntercept(ctx, req.(*RevokeInterceptRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_GetIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetInterceptRequest)
 	if err := dec(in); err != nil {
@@ -1457,6 +1495,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveIntercept",
 			Handler:    _Manager_RemoveIntercept_Handler,
+		},
+		{
+			MethodName: "RevokeIntercept",
+			Handler:    _Manager_RevokeIntercept_Handler,
 		},
 		{
 			MethodName: "GetIntercept",

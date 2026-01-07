@@ -883,6 +883,47 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	return &empty.Empty{}, nil
 }
 
+// RevokeIntercept allows the manager to revoke any client's intercept by intercept ID.
+// This is an administrative operation that can revoke intercepts for any client.
+// Requires authentication via token and membership in system:telepresence-admin group.
+func (s *service) RevokeIntercept(ctx context.Context, riReq *rpc.RevokeInterceptRequest) (*empty.Empty, error) {
+	// Verify the authentication token
+	tokenResult := k8sapi.VerifyToken(ctx, riReq.Token)
+	if tokenResult.Error != nil || !tokenResult.Authenticated {
+		dlog.Warnf(ctx, "Authentication failed for RevokeIntercept: %v", tokenResult.Error)
+		return nil, status.Errorf(codes.PermissionDenied, "authentication failed")
+	}
+
+	// Check if user belongs to system:telepresence-admin group
+	if !(k8sapi.IsMemberOfGroup(tokenResult.Groups, "telepresence:admin") || k8sapi.IsMemberOfGroup(tokenResult.Groups, "system:masters")) {
+		dlog.Warnf(ctx, "User %s is not a member of telepresence:admin or system:masters group", tokenResult.Username)
+		return nil, status.Errorf(codes.PermissionDenied, "user must be a member of telepresence:admin or system:masters group")
+	}
+
+	dlog.Infof(ctx, "User %s authorized to revoke intercepts", tokenResult.Username)
+
+	interceptID := riReq.InterceptId
+	dlog.Debugf(ctx, "Revoking intercept ID %s", interceptID)
+
+	// Get the intercept to verify it exists and to update metrics
+	intercept, ok := s.state.GetIntercept(interceptID)
+	if !ok {
+		return nil, status.Errorf(codes.NotFound, "Intercept with ID %q not found", interceptID)
+	}
+
+	// Get the client session from the intercept to update metrics
+	clientSessionID := tunnel.SessionID(intercept.ClientSession.SessionId)
+	if client := s.state.GetClient(clientSessionID); client != nil {
+		interceptName := intercept.Spec.Name
+		SetGauge(ctx, s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, &interceptName, 0)
+	}
+
+	// Remove the intercept
+	s.state.RemoveIntercept(ctx, interceptID)
+	dlog.Infof(ctx, "Successfully revoked intercept ID %s", interceptID)
+	return &empty.Empty{}, nil
+}
+
 // GetIntercept gets an intercept info from intercept name.
 func (s *service) GetIntercept(ctx context.Context, request *rpc.GetInterceptRequest) (*rpc.InterceptInfo, error) {
 	interceptID, err := s.MakeInterceptID(ctx, request.GetSession().GetSessionId(), request.GetName())

@@ -367,6 +367,14 @@ message RemoveInterceptRequest2 {
   string name = 2;
 }
 
+message RevokeInterceptRequest {
+  // The full intercept ID in the format "sessionID:interceptName"
+  // This allows revoking intercepts for any client, not just the caller's own intercepts
+  string intercept_id = 1;
+  // Authentication token for verifying the caller's identity and permissions
+  string token = 2;
+}
+
 message GetInterceptRequest {
   SessionInfo session = 1;
   string name = 2;
@@ -821,6 +829,10 @@ service Manager {
 
   // RemoveIntercept lets a client remove an intercept.
   rpc RemoveIntercept(RemoveInterceptRequest2) returns (google.protobuf.Empty);
+
+  // RevokeIntercept lets the manager revoke any client's intercept by intercept ID.
+  // This is an administrative operation that can revoke intercepts for any client.
+  rpc RevokeIntercept(RevokeInterceptRequest) returns (google.protobuf.Empty);
 
   // GetIntercept gets info from intercept name
   rpc GetIntercept(GetInterceptRequest) returns (InterceptInfo);
