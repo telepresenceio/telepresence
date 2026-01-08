@@ -64,7 +64,7 @@ func Test_gatherLogsZipFiles(t *testing.T) {
 	for _, tc := range testCases {
 		tcName := tc.name
 		t.Run(tcName, func(t *testing.T) {
-			var fileNames []string
+			fileNames := make([]string, 0, len(tc.realFileNames)+len(tc.fakeFileNames))
 			fileNames = append(fileNames, tc.realFileNames...)
 			fileNames = append(fileNames, tc.fakeFileNames...)
 			if tc.fileDir != "" {
