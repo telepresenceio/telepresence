@@ -26,7 +26,7 @@ func InitContext(ctx context.Context) context.Context {
 		ioutil.Printf(os.Stderr, "Failed to load environment: %v", err)
 		os.Exit(1)
 	}
-	ctx = client.WithEnv(ctx, env)
+	ctx = client.WithEnv(ctx, &env)
 	switch client.ProcessName() {
 	case client.UserDaemonName:
 		client.DisplayName = "OSS User Daemon"

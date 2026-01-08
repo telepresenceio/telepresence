@@ -32,7 +32,7 @@ func newNodeWatcher(ctx context.Context, lister listersCore.NodeLister, informer
 		return nil, err
 	}
 	subnets := make(subnet.Set)
-	podIP := managerutil.GetEnv(ctx).PodIP
+	podIP := managerutil.GetEnv(ctx).PodIp
 	viable := false
 	clog.Infof(ctx, "Scanning %d nodes", len(nodes))
 	for _, node := range nodes {

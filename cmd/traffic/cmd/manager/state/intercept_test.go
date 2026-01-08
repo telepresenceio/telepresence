@@ -220,33 +220,21 @@ func TestAllowGlobalIntercepts_DefaultBehavior(t *testing.T) {
 	t.Parallel()
 
 	// Test that the default value is true when loaded from environment
-	lookupFunc := func(key string) (string, bool) {
+	envMap := map[string]string{
 		// Return minimal required environment variables
-		switch key {
-		case "REGISTRY":
-			return "ghcr.io/telepresenceio", true
-		case "LOG_LEVEL":
-			return "info", true
-		case "POD_IP":
-			return "203.0.113.18", true
-		case "POD_CIDR_STRATEGY":
-			return "auto", true
-		case "SERVER_PORT":
-			return "8081", true
-		case "GRPC_MAX_RECEIVE_SIZE":
-			return "4Mi", true
-		case "CLIENT_DNS_EXCLUDE_SUFFIXES":
-			return ".com .io .net .org .ru", true
-		case "CLIENT_CONNECTION_TTL":
-			return "24h", true
-		default:
-			return "", false
-		}
+		"REGISTRY":                    "ghcr.io/telepresenceio",
+		"LOG_LEVEL":                   "info",
+		"POD_IP":                      "203.0.113.18",
+		"POD_CIDR_STRATEGY":           "auto",
+		"SERVER_PORT":                 "8081",
+		"GRPC_MAX_RECEIVE_SIZE":       "4Mi",
+		"CLIENT_DNS_EXCLUDE_SUFFIXES": ".com .io .net .org .ru",
+		"CLIENT_CONNECTION_TTL":       "24h",
 	}
 
 	ctx := testutil.NewContext(t, false)
 	var err error
-	ctx, err = managerutil.LoadEnv(ctx, lookupFunc)
+	ctx, err = managerutil.LoadEnv(ctx, envMap)
 	require.NoError(t, err)
 
 	env := managerutil.GetEnv(ctx)

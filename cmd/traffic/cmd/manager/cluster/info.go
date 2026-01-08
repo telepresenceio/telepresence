@@ -189,10 +189,10 @@ func NewInfo(ctx context.Context) (Info, error) {
 		oi.ServiceCidrs = [][]byte{sc}
 	}
 
-	podCIDRStrategy := env.PodCIDRStrategy
+	podCIDRStrategy := env.PodCidrStrategy
 	clog.Infof(ctx, "Using podCIDRStrategy: %s", podCIDRStrategy)
 
-	oi.ManagerPodIp = env.PodIP.AsSlice()
+	oi.ManagerPodIp = env.PodIp.AsSlice()
 	oi.ManagerPodPort = int32(env.ServerPort)
 	oi.InjectorSvcHost = fmt.Sprintf("%s.%s", env.AgentInjectorName, env.ManagerNamespace)
 
@@ -224,7 +224,7 @@ func NewInfo(ctx context.Context) (Info, error) {
 	oi.Dns = &rpc.DNS{
 		IncludeSuffixes: env.ClientDnsIncludeSuffixes,
 		ExcludeSuffixes: env.ClientDnsExcludeSuffixes,
-		KubeIp:          env.PodIP.AsSlice(),
+		KubeIp:          env.PodIp.AsSlice(),
 		ClusterDomain:   clusterDomain,
 	}
 
@@ -393,7 +393,7 @@ func (oi *info) watchPodSubnets(ctx context.Context) {
 }
 
 func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
-	subnets := managerutil.GetEnv(ctx).PodCIDRs
+	subnets := managerutil.GetEnv(ctx).PodCidrs
 	if len(subnets) > 0 {
 		mgrIp, _ := netip.AddrFromSlice(oi.ManagerPodIp)
 		if !slices.ContainsFunc(subnets, func(s netip.Prefix) bool { return s.Contains(mgrIp) }) {

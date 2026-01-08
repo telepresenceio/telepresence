@@ -302,7 +302,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 			Timeout: 20 * time.Second,
 		}),
 	}
-	if mz, ok := env.MaxReceiveSize.AsInt64(); ok {
+	if mz, ok := env.GrpcMaxReceiveSize.AsInt64(); ok {
 		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}
 	svc := server.New(ctx, opts...)

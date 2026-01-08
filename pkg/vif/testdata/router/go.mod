@@ -3,14 +3,14 @@ module local
 go 1.25.0
 
 require (
-	github.com/telepresenceio/clog v0.0.0-20260110082410-a544580265f8
+	github.com/telepresenceio/clog v0.0.0-20260110145038-83948c443e24
 	github.com/telepresenceio/telepresence/v2 v2.25.2
 )
 
 require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
+	github.com/caarlos0/env/v11 v11.3.2-0.20251222100307-7b10cf56e20f // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
-	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20251027170946-4849db3c2f7e // indirect
@@ -22,10 +22,8 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/telepresenceio/telepresence/rpc/v2 v2.26.0-test.3 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect

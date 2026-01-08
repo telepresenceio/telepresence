@@ -276,10 +276,10 @@ matchExpressions:
 	f.WaitForCacheSync(ctx.Done())
 
 	env := managerutil.Env{
-		ManagerNamespace: mgrNs,
-		MaxReceiveSize:   resource.Quantity{},
-		PodCIDRStrategy:  "environment",
-		PodCIDRs: []netip.Prefix{
+		ManagerNamespace:   mgrNs,
+		GrpcMaxReceiveSize: resource.Quantity{},
+		PodCidrStrategy:    "environment",
+		PodCidrs: []netip.Prefix{
 			netip.PrefixFrom(netip.AddrFrom4([4]byte{192, 168, 0, 0}), 16),
 		},
 		AgentInitContainerEnabled: true,

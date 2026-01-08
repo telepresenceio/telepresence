@@ -6,12 +6,12 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alexflint/go-filemutex v1.3.0
 	github.com/blang/semver/v4 v4.0.0
+	github.com/caarlos0/env/v11 v11.3.2-0.20251222100307-7b10cf56e20f
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/compose-spec/compose-go/v2 v2.10.0
 	github.com/containerd/errdefs v1.0.0
 	github.com/coreos/go-iptables v0.8.0
 	github.com/datawire/argo-rollouts-go-client v0.0.0-20241216133646-cb1073556c99
-	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/fsnotify/fsnotify v1.9.0
@@ -205,3 +205,6 @@ require (
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
 
 replace github.com/telepresenceio/telepresence/cmd/cobraparser/v2 => ./cmd/cobraparser
+
+// Awaits https://github.com/caarlos0/env/pull/401
+replace github.com/caarlos0/env/v11 => github.com/thallgren/env/v11 v11.0.0-20260107112108-5d5593a09332

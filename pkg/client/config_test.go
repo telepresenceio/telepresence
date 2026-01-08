@@ -47,7 +47,7 @@ routing:
 	c = filelocation.WithAppUserConfigDir(c, user)
 	env, err := LoadEnv()
 	require.NoError(t, err)
-	c = WithEnv(c, env)
+	c = WithEnv(c, &env)
 
 	cfg, err := LoadConfig(c)
 	require.NoError(t, err)
@@ -72,11 +72,11 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	ctx := testutil.NewContext(t, true)
 	env, err := LoadEnv()
 	require.NoError(t, err)
-	ctx = WithEnv(ctx, env)
+	ctx = WithEnv(ctx, &env)
 	cfg := GetDefaultConfig()
 	cfg.Images().PrivateAgentImage = "something:else"
 	cfg.Timeouts().PrivateTrafficManagerAPI = defaultTimeoutsTrafficManagerAPI + 20*time.Second
-	cfg.LogLevels().UserDaemon = clog.LevelWithTrace(clog.LevelTrace)
+	cfg.LogLevels().UserDaemon = clog.LevelTrace
 	cfg.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("20Mi")
 	cfg.Intercept().DefaultPort = 9080
 	cfg.Cluster().DefaultManagerNamespace = "hello-there"
