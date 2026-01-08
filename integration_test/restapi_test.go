@@ -126,7 +126,7 @@ func (s *restAPISuite) curlAPIServer(ctx context.Context, port uint16, path stri
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
-	args := []string{
+	args := append([]string{
 		"curl",
 		"--silent",
 		"--max-time", "2",
@@ -134,8 +134,7 @@ func (s *restAPISuite) curlAPIServer(ctx context.Context, port uint16, path stri
 		"--request", "POST",
 		"--data", string(apiReqJSON),
 		fmt.Sprintf("http://%s/forward", s.svc),
-	}
-	args = append(args, myArgs...)
+	}, myArgs...)
 	so, se, err := itest.Telepresence(ctx, args...)
 	if se != "" {
 		dlog.Errorf(ctx, "stderr: %s", se)
