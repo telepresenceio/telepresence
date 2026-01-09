@@ -116,6 +116,8 @@ type Server struct {
 
 	error string
 
+	readyClose sync.Once
+
 	// ready is closed when the DNS server is fully configured
 	ready chan struct{}
 }
@@ -132,14 +134,6 @@ const cacheTTL = 60 * time.Second
 
 func (dv *cacheEntry) expired() bool {
 	return time.Since(dv.created) > cacheTTL
-}
-
-func (dv *cacheEntry) close() {
-	select {
-	case <-dv.wait:
-	default:
-		close(dv.wait)
-	}
 }
 
 func sliceToLower(ss []string) []string {
@@ -406,11 +400,7 @@ func (s *Server) Ready() <-chan struct{} {
 
 func (s *Server) Stop() {
 	// Close s.ready unless it's already closed
-	select {
-	case <-s.ready:
-	default:
-		close(s.ready)
-	}
+	s.readyClose.Do(func() { close(s.ready) })
 }
 
 func (s *Server) SetClusterDNS(dns *manager.DNS, vifDNS netip.AddrPort) {
@@ -445,10 +435,7 @@ func (s *Server) SetTopLevelDomainsAndSearchPath(ctx context.Context, domains []
 func (s *Server) purgeRecordsFromCache(keyName string) {
 	keyName = strings.TrimSuffix(keyName, ".") + "."
 	for _, qType := range []uint16{dns.TypeA, dns.TypeAAAA} {
-		toDeleteKey := cacheKey{name: keyName, qType: qType}
-		if old, ok := s.cache.LoadAndDelete(toDeleteKey); ok {
-			old.close()
-		}
+		s.cache.Delete(cacheKey{name: keyName, qType: qType})
 	}
 }
 
@@ -557,12 +544,7 @@ func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Cont
 }
 
 func (s *Server) flushDNS() {
-	s.cache.Range(func(key cacheKey, _ *cacheEntry) bool {
-		if old, ok := s.cache.LoadAndDelete(key); ok {
-			old.close()
-		}
-		return true
-	})
+	s.cache.Clear()
 }
 
 // splitToUDPAddr splits the given address into an address and port. It's
@@ -719,7 +701,7 @@ func (s *Server) resolveThruCache(q *dns.Question) (answer dnsproxy.RRs, rCode i
 		<-dv.wait
 		return dv.answer, dv.rCode, nil
 	}
-	defer dv.close()
+	defer close(dv.wait)
 
 	answer, rCode, err = s.resolveInCluster(s.ctx, q)
 	if err != nil {
@@ -769,11 +751,10 @@ func (s *Server) resolveThruCache(q *dns.Question) (answer dnsproxy.RRs, rCode i
 				if loaded {
 					oldValue.answer = rrs
 					oldValue.rCode = rCode
-					oldValue.close()
 					return oldValue, xsync.CancelOp
 				}
 				ce := &cacheEntry{wait: make(chan struct{}), created: time.Now(), answer: rrs, rCode: rCode}
-				ce.close()
+				close(ce.wait)
 				return ce, xsync.UpdateOp
 			})
 		}
@@ -792,12 +773,12 @@ func (d dfs) String() string {
 
 func (s *Server) performRecursionCheck(c context.Context) {
 	if proc.RunningInContainer() || !client.GetConfig(c).DNS().RecursionCheck {
-		close(s.ready)
+		s.readyClose.Do(func() { close(s.ready) })
 		return
 	}
 	defer func() {
 		dlog.Debug(c, "Recursion check finished")
-		close(s.ready)
+		s.readyClose.Do(func() { close(s.ready) })
 	}()
 	rc := recursionCheck + tel2SubDomain
 	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
