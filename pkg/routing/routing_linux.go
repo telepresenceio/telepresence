@@ -49,7 +49,7 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 			if err != nil {
 				return nil, errInconsistentRT
 			}
-			dlog.Debugf(ctx, "Found route %s", rt)
+			dlog.Tracef(ctx, "Found route %s", rt)
 			routes = append(routes, rt)
 		}
 	}

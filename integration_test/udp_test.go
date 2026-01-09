@@ -22,6 +22,7 @@ func (s *connectedSuite) TestUDPEcho() {
 		_ = s.Kubectl(ctx, "delete", "svc,deploy", svc)
 	}()
 	require.NoError(s.RolloutStatusWait(ctx, "deploy/"+svc))
+	s.CapturePodLogs(ctx, svc, "udp-echo", s.AppNamespace())
 
 	var conn net.Conn
 	require.Eventually(
