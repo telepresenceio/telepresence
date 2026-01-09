@@ -11,8 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 )
 
@@ -244,7 +243,7 @@ func Test_server_intercepts(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := dlog.WithLogger(context.Background(), log.NewTestLogger(t, dlog.LogLevelWarn))
+			c := testutil.NewContext(t, false)
 			c, cancel := context.WithCancel(c)
 			ln, err := net.Listen("tcp", ":0")
 			require.NoError(t, err)

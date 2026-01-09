@@ -28,7 +28,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -222,14 +222,14 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 					if err != nil {
 						return backoff.Permanent(fmt.Errorf("failed to parse IPAddress of network %q: %w", network, err))
 					}
-					dlog.Debugf(ctx, "container %q has IPv4 address %s in network %q", ci.Name, iPv4, network)
+					clog.Debugf(ctx, "container %q has IPv4 address %s in network %q", ci.Name, iPv4, network)
 				}
 				if dcfg.EnableIPv6 && tn.GlobalIPv6Address != "" {
 					iPv6, err = netip.ParseAddr(tn.GlobalIPv6Address)
 					if err != nil {
 						return backoff.Permanent(fmt.Errorf("failed to parse GlobalIPv6Address of network %q: %w", network, err))
 					}
-					dlog.Debugf(ctx, "container %q has IPv6 address %s in network %q", ci.Name, iPv6, network)
+					clog.Debugf(ctx, "container %q has IPv6 address %s in network %q", ci.Name, iPv6, network)
 				}
 			}
 			if !iPv4.IsValid() && !iPv6.IsValid() {
@@ -270,7 +270,7 @@ func readPortFile(ctx context.Context, portFile string, configFiles []string) (u
 		if p.Kubeconfig == strings.Join(configFiles, string(filepath.ListSeparator)) {
 			return uint16(p.Port), nil
 		}
-		dlog.Debug(ctx, "kubeconfig used by kubeauth is no longer valid")
+		clog.Debug(ctx, "kubeconfig used by kubeauth is no longer valid")
 	}
 	if err := os.Remove(portFile); err != nil {
 		return 0, err
@@ -279,7 +279,7 @@ func readPortFile(ctx context.Context, portFile string, configFiles []string) (u
 }
 
 func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string) (uint16, error) {
-	dlog.Debugf(ctx, "Starting authenticator service using portFile %s", portFile)
+	clog.Debugf(ctx, "Starting authenticator service using portFile %s", portFile)
 	// remove any stale port file
 	_ = os.Remove(portFile)
 
@@ -305,7 +305,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 			}
 			continue
 		}
-		dlog.Debugf(ctx, "Authenticator service started on port %d", port)
+		clog.Debugf(ctx, "Authenticator service started on port %d", port)
 		return port, nil
 	}
 	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), client.KubeAuthDaemonName)
@@ -321,7 +321,7 @@ func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string
 	} else if st.ModTime().Add(kubeauth.PortFileStaleTime).After(time.Now()) {
 		port, err := readPortFile(ctx, portFile, configFiles)
 		if err == nil {
-			dlog.Debug(ctx, "kubeauth service found alive and valid")
+			clog.Debug(ctx, "kubeauth service found alive and valid")
 			return port, nil
 		}
 		if !errors.Is(err, fs.ErrNotExist) {
@@ -348,7 +348,7 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 		func(configFiles []string) (string, string, string, error) {
 			port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
 			if err != nil {
-				dlog.Errorf(ctx, "failed to start k8s authenticator service: %v", err)
+				clog.Errorf(ctx, "failed to start k8s authenticator service: %v", err)
 				return "", "", "", err
 			}
 
@@ -424,16 +424,16 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 		// the best we can do here is to use the "host.docker.internal" (or whatever alias the user has configured for the GatewayHost) and
 		// hope that the server's certificate is configured to accept connections from that address.
 		server.Host = iputil.JoinHostPort(client.GetConfig(ctx).Docker().HostGateway, addrPort.Port())
-		dlog.Debugf(ctx, "Connecting to host's %s via alias %s", addrPort, server.Host)
+		clog.Debugf(ctx, "Connecting to host's %s via alias %s", addrPort, server.Host)
 		cl.Server = server.String()
 	}
 
 	if nw != "" {
 		dcName := daemonID.ContainerName()
-		dlog.Debugf(ctx, "Connecting network %s to container %s", nw, dcName)
+		clog.Debugf(ctx, "Connecting network %s to container %s", nw, dcName)
 		if err = cli.NetworkConnect(ctx, nw, dcName, nil); err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
-				dlog.Debugf(ctx, "failed to connect network %s to container %s: %v", nw, dcName, err)
+				clog.Debugf(ctx, "failed to connect network %s to container %s: %v", nw, dcName, err)
 			}
 		}
 	}
@@ -555,14 +555,14 @@ func runningContainers(ctx context.Context, cli dockerClient.APIClient) []*conta
 		Filters: filters.NewArgs(filters.KeyValuePair{Key: "status", Value: "running"}),
 	})
 	if err != nil {
-		dlog.Errorf(ctx, "failed to list containers: %v", err)
+		clog.Errorf(ctx, "failed to list containers: %v", err)
 		return nil
 	}
 	cjs := make([]*container.InspectResponse, 0, len(cl))
 	for _, cn := range cl {
 		cj, err := cli.ContainerInspect(ctx, cn.ID)
 		if err != nil {
-			dlog.Errorf(ctx, "container inspect on %v failed: %v", cn.Names, err)
+			clog.Errorf(ctx, "container inspect on %v failed: %v", cn.Names, err)
 		} else {
 			cjs = append(cjs, &cj)
 		}
@@ -626,7 +626,7 @@ var knownFilters = map[string]containerFilter{
 func detectControlPlane(ctx context.Context, cli dockerClient.APIClient, cns []*container.InspectResponse, hostAddr netip.AddrPort) (ap netip.AddrPort, nn string) {
 	ncn, port, isIPv6 := findNetworkSettingsForHostPort(cns, hostAddr)
 	if ncn == nil {
-		dlog.Debugf(ctx, "no network settings found that maps host address %s", hostAddr)
+		clog.Debugf(ctx, "no network settings found that maps host address %s", hostAddr)
 		return ap, nn
 	}
 
@@ -656,28 +656,28 @@ func detectControlPlane(ctx context.Context, cli dockerClient.APIClient, cns []*
 		break
 	case 1:
 		c := candidates[0]
-		dlog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q", c.container.Name, c.localAddr, hostAddr, c.networkName)
+		clog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q", c.container.Name, c.localAddr, hostAddr, c.networkName)
 		return c.localAddr, c.networkName
 	default:
 		// We have multiple candidates. Let's try and discriminate using the known filters.'
 		for _, c := range candidates {
 			for filterName, filter := range knownFilters {
 				if filter(c.container) {
-					dlog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q using filter %q",
+					clog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q using filter %q",
 						c.container.Name, c.localAddr, hostAddr, c.networkName, filterName)
 					return c.localAddr, c.networkName
 				}
 			}
 		}
 	}
-	dlog.Debugf(ctx, "found no control-plane for host address %s, container %s, container port %d", hostAddr, ncn.Name, port)
+	clog.Debugf(ctx, "found no control-plane for host address %s, container %s, container port %d", hostAddr, ncn.Name, port)
 	return ap, nn
 }
 
 func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, args []string) (*daemon.Info, error) {
 	stdErr := bytes.Buffer{}
 	stdOut := bytes.Buffer{}
-	dlog.Debug(ctx, shellquote.ShellString(Exe, args))
+	clog.Debug(ctx, shellquote.ShellString(Exe, args))
 	cmd := proc.CommandContext(ctx, Exe, args...)
 	cmd.Stderr = &stdErr
 	cmd.Stdout = &stdOut
@@ -686,7 +686,7 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 	errStr := strings.TrimSpace(stdErr.String())
 	if errStr != "" || err != nil {
 		err = fmt.Errorf("launch of daemon container failed: %s%s: %w", cid, errStr, err)
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return nil, err
 	}
 
@@ -697,7 +697,7 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 		return nil, err
 	}
 	cr := daemon.MustGetRequest(ctx)
-	dlog.Debugf(ctx, "Creating daemon info file %s (runs in container)", daemonID.Name)
+	clog.Debugf(ctx, "Creating daemon info file %s (runs in container)", daemonID.Name)
 	var ip netip.Addr
 	if cni.IPv4.IsValid() {
 		ip = cni.IPv4

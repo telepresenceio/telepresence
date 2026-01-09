@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -38,8 +38,8 @@ func LoadEnvAndConfig(ctx context.Context) context.Context {
 		data, err := yaml.YAMLToJSON(data)
 		if err == nil {
 			ic.Config = icConfig
-			ic.Config.LogLevels().UserDaemon = logrus.DebugLevel
-			ic.Config.LogLevels().RootDaemon = logrus.DebugLevel
+			ic.Config.LogLevels().UserDaemon = slog.LevelDebug
+			ic.Config.LogLevels().RootDaemon = slog.LevelDebug
 			err = json.Unmarshal(data, &ic, true)
 		}
 		if err != nil {

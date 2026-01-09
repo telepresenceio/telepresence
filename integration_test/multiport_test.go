@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -136,7 +136,7 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 				n, rr, err = pc.ReadFrom(buf[:])
 				if n > 0 {
 					msg := string(buf[0:n])
-					dlog.Infof(ctx, "Local UDP server received %q", msg)
+					clog.Infof(ctx, "Local UDP server received %q", msg)
 					_, werr := pc.WriteTo([]byte(fmt.Sprintf("received message %q", msg)), rr)
 					require.NoError(werr)
 				}
@@ -144,7 +144,7 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 					err = ctx.Err()
 				}
 			}
-			dlog.Debug(ctx, "UDP end")
+			clog.Debug(ctx, "UDP end")
 		}()
 		var localPort int
 		select {

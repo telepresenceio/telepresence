@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 )
@@ -52,16 +52,16 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	s.Eventually(func() bool {
 		stdout, err = s.KubectlOut(ctx, "get", "pods")
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			return false
 		}
 		match, err := regexp.MatchString(jobname+`-[a-z0-9]+-[a-z0-9]+\s+1/1\s+Running`, stdout)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			return false
 		}
 		if !match {
-			dlog.Infof(ctx, "stdout = %s", stdout)
+			clog.Infof(ctx, "stdout = %s", stdout)
 		}
 		return err == nil && match
 	}, itest.PodCreateTimeout(ctx), 2*time.Second)

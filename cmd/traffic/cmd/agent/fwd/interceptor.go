@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -82,13 +82,13 @@ func (f *interceptor) SetStreamProvider(streamProvider tunnel.ClientStreamProvid
 func (f *interceptor) SetIntercepting(infos []*manager.InterceptInfo) {
 	f.mu.Lock()
 	f.intercepts.reconcile(f.lCtx, infos)
-	dlog.Debugf(f.lCtx, "SetIntercepting %d intercepts", len(f.intercepts))
+	clog.Debugf(f.lCtx, "SetIntercepting %d intercepts", len(f.intercepts))
 	f.mu.Unlock()
 }
 
 func (f *interceptor) SetWiretapping(infos []*manager.InterceptInfo) {
 	f.mu.Lock()
 	f.wiretaps.reconcile(f.lCtx, infos)
-	dlog.Debugf(f.lCtx, "SetWiretapping %d wiretaps", len(f.wiretaps))
+	clog.Debugf(f.lCtx, "SetWiretapping %d wiretaps", len(f.wiretaps))
 	f.mu.Unlock()
 }

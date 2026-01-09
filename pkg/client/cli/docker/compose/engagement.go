@@ -11,7 +11,7 @@ import (
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"github.com/puzpuzpuz/xsync/v4"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -53,7 +53,7 @@ func (a *engagement) assignEnvAndCreateMounts(remoteEnv map[string]string, remot
 	}
 	ro := a.engagementType() == types.EngagementTypeIngest || a.engagementType() == types.EngagementTypeWiretap
 	ctx := a.connection().Context
-	dlog.Debugf(ctx, "mounts: %v, ro %t", mounts, ro)
+	clog.Debugf(ctx, "mounts: %v, ro %t", mounts, ro)
 	createVolumes(ctx, netip.AddrPortFrom(a.daemonIP, a.sftpPort), a.environment["TELEPRESENCE_CONTAINER"], mounts, serviceVolumes, ro, t)
 }
 
@@ -80,7 +80,7 @@ func (a *engagement) maybeAddConnection(s *compose.ServiceConfig) bool {
 			for _, osn := range subnets {
 				for _, msn := range conn.subnets {
 					if osn.Overlaps(msn) {
-						dlog.Warnf(conn, "Subnet %s in connection %s overlaps with subnet %s in connection %s. This prevents it from being added to service %s",
+						clog.Warnf(conn, "Subnet %s in connection %s overlaps with subnet %s in connection %s. This prevents it from being added to service %s",
 							msn, cn, osn, strings.TrimPrefix(k, connectionAnnotationPrefix), s.Name)
 						return false
 					}

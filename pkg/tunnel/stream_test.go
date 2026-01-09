@@ -15,9 +15,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -123,7 +122,7 @@ func (c *serverSide) SendContext(ctx context.Context, msg *manager.TunnelMessage
 }
 
 func testContext(t *testing.T, timeout time.Duration) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(dlog.WithLogger(context.Background(), log.NewTestLogger(t, dlog.LogLevelDebug)), timeout)
+	return context.WithTimeout(testutil.NewContext(t, false), timeout)
 }
 
 func TestStream_Connect(t *testing.T) {

@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
@@ -18,16 +19,16 @@ func DPipe(ctx context.Context, peer io.ReadWriteCloser, cmdName string, cmdArgs
 	cmd := exec.CommandContext(ctx, cmdName, cmdArgs...)
 	cmd.Stdin = peer
 	cmd.Stdout = peer
-	cmd.Stderr = dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
+	cmd.Stderr = clog.StdLogger(ctx, slog.LevelError).Writer()
 
 	cmdLine := shellquote.ShellString(cmd.Path, cmd.Args)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start %s: %w", cmdLine, err)
 	}
 
-	ctx = dlog.WithField(ctx, "exec.pid", cmd.Process.Pid)
-	dlog.Infof(ctx, "started command %s", cmdLine)
-	defer dlog.Infof(ctx, "ended command %s", cmdName)
+	ctx = clog.With(ctx, "exec.pid", cmd.Process.Pid)
+	clog.Infof(ctx, "started command %s", cmdLine)
+	defer clog.Infof(ctx, "ended command %s", cmdName)
 	runFinished := make(chan error)
 	go func() {
 		defer close(runFinished)

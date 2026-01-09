@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
@@ -82,7 +82,7 @@ func list() *cobra.Command {
 			Prefix:          toComplete,
 		})
 		if err != nil {
-			dlog.Debugf(cmd.Context(), "error getting namespaces: %v", err)
+			clog.Debugf(cmd.Context(), "error getting namespaces: %v", err)
 			shellCompDir |= cobra.ShellCompDirectiveError
 			return nil, shellCompDir
 		}

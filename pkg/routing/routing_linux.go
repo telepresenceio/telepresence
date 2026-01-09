@@ -11,7 +11,7 @@ import (
 
 	"github.com/vishvananda/netlink"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -49,7 +49,7 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 			if err != nil {
 				return nil, errInconsistentRT
 			}
-			dlog.Tracef(ctx, "Found route %s", rt)
+			clog.Tracef(ctx, "Found route %s", rt)
 			routes = append(routes, rt)
 		}
 	}
@@ -107,7 +107,7 @@ func openTable(ctx context.Context) (Table, error) {
 			index++
 		}
 	}
-	dlog.Infof(ctx, "Creating routing table with index %d and priority %d", index, priority)
+	clog.Infof(ctx, "Creating routing table with index %d and priority %d", index, priority)
 	rule := netlink.NewRule()
 	rule.Table = index
 	rule.Priority = priority
@@ -177,7 +177,7 @@ func osCompareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, err
 				return false, err
 			}
 			for _, addr := range addrs {
-				dlog.Tracef(ctx, "Checking address %s against %s", addr, osRoute.RoutedNet.Addr())
+				clog.Tracef(ctx, "Checking address %s against %s", addr, osRoute.RoutedNet.Addr())
 				if a, ok := netip.AddrFromSlice(iputil.Normalize(addr.(*net.IPNet).IP)); ok && a == osRoute.LocalIP {
 					return true, nil
 				}

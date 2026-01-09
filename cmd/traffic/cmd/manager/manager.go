@@ -3,6 +3,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"runtime/debug"
@@ -22,8 +23,8 @@ import (
 	"k8s.io/client-go/rest"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dhttp"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -57,7 +58,7 @@ var (
 
 // Main starts up the traffic manager and blocks until it ends.
 func Main(ctx context.Context, _ ...string) error {
-	ctx, err := managerutil.LoadEnv(ctx, os.LookupEnv)
+	ctx, err := managerutil.LoadEnv(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to LoadEnv: %w", err)
 	}
@@ -68,7 +69,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 	debug.SetTraceback("single")
 	defer runtime.RecoverFromPanic(&err)
 
-	dlog.Infof(ctx, "%s %s [uid:%d,gid:%d]", DisplayName, version.Version, os.Getuid(), os.Getgid())
+	clog.Infof(ctx, "%s %s [uid:%d,gid:%d]", DisplayName, version.Version, os.Getuid(), os.Getgid())
 
 	env := managerutil.GetEnv(ctx)
 
@@ -92,7 +93,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 	configWatcher := config.NewWatcher(env.ManagerNamespace)
 	go func() {
 		if err := configWatcher.Run(ctx); err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 		cancel()
 	}()
@@ -111,7 +112,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 	mns := namespaces.GetOrGlobal(ctx)
 	global := len(mns) == 1 && mns[0] == ""
 	if global {
-		dlog.Debug(ctx, "Using cluster wide informers")
+		clog.Debug(ctx, "Using cluster wide informers")
 	}
 	for _, ns := range mns {
 		ctx = informer.WithFactory(ctx, ns)
@@ -236,7 +237,7 @@ func SetGauge(ctx context.Context, metric *prometheus.GaugeVec, client, installI
 func (s *service) servePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	if env.PrometheusPort == 0 {
-		dlog.Info(ctx, "Prometheus metrics server not started")
+		clog.Info(ctx, "Prometheus metrics server not started")
 		return nil
 	}
 	newGaugeFunc("telepresence_agent_count", "Number of connected traffic agents", s.state.CountAgents)
@@ -275,14 +276,14 @@ func (s *service) servePrometheus(ctx context.Context) error {
 		SetGauge(ctx, s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, workload, 0)
 	})
 
-	lg := dlog.StdLogger(ctx, dlog.MaxLogLevel(ctx))
+	lg := clog.StdLogger(ctx, slog.LevelInfo)
 	lg.SetPrefix(fmt.Sprintf("prometheus:%d", env.PrometheusPort))
 	sc := &dhttp.ServerConfig{
 		Handler:  promhttp.Handler(),
 		ErrorLog: lg,
 	}
-	dlog.Infof(ctx, "Prometheus metrics server started on port: %d", env.PrometheusPort)
-	defer dlog.Info(ctx, "Prometheus metrics server stopped")
+	clog.Infof(ctx, "Prometheus metrics server started on port: %d", env.PrometheusPort)
+	defer clog.Info(ctx, "Prometheus metrics server stopped")
 	return sc.ListenAndServe(ctx, iputil.JoinHostPort(env.ServerHost, env.PrometheusPort))
 }
 
@@ -306,7 +307,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 	}
 	svc := server.New(ctx, opts...)
 	s.RegisterServers(svc)
-	dlog.Debugf(ctx, "Serving client connections on %s using idle TTL %s", l.Addr(), env.ClientConnectionTTL)
+	clog.Debugf(ctx, "Serving client connections on %s using idle TTL %s", l.Addr(), env.ClientConnectionTTL)
 	return server.Serve(ctx, svc, l)
 }
 
@@ -323,11 +324,11 @@ func (s *service) runUpdateTrafficManagerConfigMapLoop(ctx context.Context) erro
 	for {
 		select {
 		case <-ticker.C:
-			dlog.Tracef(ctx, "runUpdateTrafficManagerConfigMapLoop ticked, need to update configMap: %v", s.tmConfigMapUpdated.Load())
+			clog.Tracef(ctx, "runUpdateTrafficManagerConfigMapLoop ticked, need to update configMap: %v", s.tmConfigMapUpdated.Load())
 			if s.tmConfigMapUpdated.Load() {
 				err := s.updateTrafficManagerConfigMap(ctx)
 				if err != nil {
-					dlog.Errorf(ctx, "error in updating traffic manager config map, err: %v", err)
+					clog.Errorf(ctx, "error in updating traffic manager config map, err: %v", err)
 				}
 			}
 		case <-ctx.Done():

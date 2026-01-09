@@ -10,7 +10,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/docker/docker/api/types/volume"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -64,7 +64,7 @@ func CreateVolumes(
 func RemoveVolumes(ctx context.Context, vols []string) {
 	for _, vol := range vols {
 		if err := removeVolume(ctx, vol); err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}
 }
@@ -79,7 +79,7 @@ func VolumeDriverOpts(ctx context.Context, pluginName string, hostPort netip.Add
 	if ro {
 		ver := parsePluginSemver(pluginName)
 		if ver != nil && ver.LT(semver.MustParse("0.1.6")) {
-			dlog.Warnf(ctx, "The %q docker volume plugin does not support read-only mode. Please upgrade to a more recent version", pluginName)
+			clog.Warnf(ctx, "The %q docker volume plugin does not support read-only mode. Please upgrade to a more recent version", pluginName)
 		} else {
 			opts["ro"] = "true"
 		}
@@ -105,7 +105,7 @@ func createVolume(ctx context.Context, pluginName string, hostPort netip.AddrPor
 	}
 	opts := VolumeDriverOpts(ctx, pluginName, hostPort, volumeName, container, dir, ro)
 
-	dlog.Debugf(ctx, "VolumeCreate(%s, %s, %s)", pluginName, opts, volumeName)
+	clog.Debugf(ctx, "VolumeCreate(%s, %s, %s)", pluginName, opts, volumeName)
 	_, err = cli.VolumeCreate(ctx, volume.CreateOptions{
 		Driver:     pluginName,
 		DriverOpts: opts,

@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
@@ -54,7 +54,7 @@ func (s *State) PrepareIntercept(
 	cr *rpc.CreateInterceptRequest,
 ) (pi *rpc.PreparedIntercept, err error) {
 	interceptError := func(err error) (*rpc.PreparedIntercept, error) {
-		dlog.Errorf(ctx, "PrepareIntercept error %v", err)
+		clog.Errorf(ctx, "PrepareIntercept error %v", err)
 		if _, ok := status.FromError(err); ok {
 			return nil, err
 		}
@@ -74,7 +74,7 @@ func (s *State) PrepareIntercept(
 			if k8sErrors.IsNotFound(err) {
 				continue
 			}
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			return interceptError(err)
 		}
 		if wl == nil {
@@ -90,7 +90,7 @@ func (s *State) PrepareIntercept(
 			if k8sErrors.IsNotFound(err) {
 				err = errcat.User.New(err)
 			}
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			return interceptError(err)
 		}
 	}
@@ -330,7 +330,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		return s.restoreAppContainer(ctx, interceptInfo, wl)
 	})
 	if err != nil {
-		dlog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptID, err)
+		clog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptID, err)
 	}
 	return client, is.InterceptInfo, nil
 }
@@ -422,7 +422,7 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 ) {
 	if agentmap.TrafficManagerSelector.Matches(labels.Set(wl.GetLabels())) {
 		msg := fmt.Sprintf("%s is the Telepresence Traffic Manager. It can not have a traffic-agent", wl)
-		dlog.Error(parentCtx, msg)
+		clog.Error(parentCtx, msg)
 		return nil, nil, status.Error(codes.FailedPrecondition, msg)
 	}
 
@@ -471,7 +471,7 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 	}
 	err = mutator.GetMap(ctx).EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
 	if err != nil {
-		dlog.Errorf(ctx, "failed to inactivate pods: %v", err)
+		clog.Errorf(ctx, "failed to inactivate pods: %v", err)
 		return nil, nil, err
 	}
 	as, err := s.waitForAgents(ctx, sc, failedCreateCh)
@@ -507,7 +507,7 @@ func (s *State) dropAgentConfig(
 }
 
 func (s *State) restoreAppContainer(ctx context.Context, ii *rpc.InterceptInfo, wl k8sapi.Workload) error {
-	dlog.Debugf(ctx, "Restoring app container for %s", ii.Id)
+	clog.Debugf(ctx, "Restoring app container for %s", ii.Id)
 	spec := ii.Spec
 	n := spec.Agent
 	ns := spec.Namespace
@@ -554,7 +554,7 @@ func (s *State) createAgentConfig(ctx context.Context, wl k8sapi.Workload, agent
 	if err != nil {
 		return nil, err
 	}
-	dlog.Debugf(ctx, "generating new agent config for %s", wl)
+	clog.Debugf(ctx, "generating new agent config for %s", wl)
 	sc, err := gc.Generate(ctx, wl, nil)
 	if err != nil {
 		return nil, err
@@ -600,7 +600,7 @@ func (s *State) getOrCreateAgentConfig(
 			if sc.AgentImage != agentImage {
 				sc.AgentImage = agentImage
 			}
-			dlog.Debugf(ctx, "found existing agent config for %s", wl)
+			clog.Debugf(ctx, "found existing agent config for %s", wl)
 		} else {
 			sc, err = s.createAgentConfig(ctx, wl, agentImage)
 			if err != nil {
@@ -697,7 +697,7 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 					!strings.HasPrefix(e.Note, "(combined from similar events):") {
 					n := e.Regarding.Name
 					if strings.HasPrefix(n, nd) || n == name {
-						dlog.Infof(ctx, "%s %s %s", e.Type, e.Reason, e.Note)
+						clog.Infof(ctx, "%s %s %s", e.Type, e.Reason, e.Note)
 						ec <- e
 					}
 				}
@@ -710,7 +710,7 @@ func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-
 func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, failedCreateCh <-chan *events.Event) ([]*AgentSession, error) {
 	name := ac.AgentName
 	namespace := ac.Namespace
-	dlog.Debugf(ctx, "Waiting for agent %s.%s", name, namespace)
+	clog.Debugf(ctx, "Waiting for agent %s.%s", name, namespace)
 	deltaCh := s.WatchAgents(ctx, func(_ tunnel.SessionID, agent *AgentSession) bool {
 		return agent.Name == name && agent.Namespace == namespace
 	})
@@ -740,13 +740,13 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 					})
 					if rs, err := rq.Stream(ctx); err == nil {
 						if log, err := io.ReadAll(rs); err == nil {
-							dlog.Infof(ctx, "Log from failing pod %q, container %s\n%s", pod, cn, string(log))
+							clog.Infof(ctx, "Log from failing pod %q, container %s\n%s", pod, cn, string(log))
 						} else {
-							dlog.Errorf(ctx, "failed to read log stream from pod %q, container %s\n%s", pod, cn, err)
+							clog.Errorf(ctx, "failed to read log stream from pod %q, container %s\n%s", pod, cn, err)
 						}
 						_ = rs.Close()
 					} else {
-						dlog.Errorf(ctx, "failed to read log from pod %q, container %s\n%s", pod, cn, err)
+						clog.Errorf(ctx, "failed to read log from pod %q, container %s\n%s", pod, cn, err)
 					}
 				}
 				msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
@@ -782,9 +782,9 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 			as := make([]*AgentSession, 0)
 			for _, a := range upserts {
 				if mm.IsInactive(k8sTypes.UID(a.PodUid)) {
-					dlog.Debugf(ctx, "Agent %s(%s) is blacklisted", a.PodName, a.PodIp)
+					clog.Debugf(ctx, "Agent %s(%s) is blacklisted", a.PodName, a.PodIp)
 				} else {
-					dlog.Debugf(ctx, "Agent %s(%s) is ready", a.PodName, a.PodIp)
+					clog.Debugf(ctx, "Agent %s(%s) is ready", a.PodName, a.PodIp)
 					as = append(as, a)
 					break
 				}

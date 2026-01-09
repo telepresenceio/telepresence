@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,8 +10,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 func head(str string, n int) string {
@@ -28,7 +27,7 @@ func head(str string, n int) string {
 func TestDupStd(t *testing.T) {
 	dirname := t.TempDir()
 
-	ctx := dlog.NewTestContext(t, true)
+	ctx := context.Background()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.v", "-test.run="+t.Name()+"Helper", "--", dirname)
 	cmd.Env = append(os.Environ(),
 		"GO_WANT_HELPER_PROCESS=1")

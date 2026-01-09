@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"math"
 	"net/netip"
 	"os"
@@ -21,12 +22,11 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-json-experiment/json"
 	"github.com/go-json-experiment/json/jsontext"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -213,7 +213,7 @@ func ParseConfigYAML(ctx context.Context, path string, data []byte) (Config, err
 			if m := regexp.MustCompile(`json:.+ of type (.*)$`).FindStringSubmatch(s); len(m) == 2 {
 				s = m[1]
 			}
-			dlog.Errorf(ctx, "%s: %v", path, s)
+			clog.Errorf(ctx, "%s: %v", path, s)
 			cfg, err = UnmarshalJSONConfig(data, false)
 		}
 		if err != nil {
@@ -221,7 +221,7 @@ func ParseConfigYAML(ctx context.Context, path string, data []byte) (Config, err
 		}
 	}
 	if cfg.Routing().VirtualSubnet == defaultVirtualSubnet && cfg.Cluster().OldVirtualIPSubnet != "" {
-		dlog.Warningf(ctx, "please use routing.VirtualSubnet instead of deprecated deprecated cluster.VirtualIPSubnet")
+		clog.Warnf(ctx, "please use routing.VirtualSubnet instead of deprecated deprecated cluster.VirtualIPSubnet")
 		sn, err := netip.ParsePrefix(cfg.Cluster().OldVirtualIPSubnet)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse deprecated cluster.VirtualIPSubnet: %w", err)
@@ -281,13 +281,13 @@ func WatchConfig(c context.Context, onReload func(context.Context) error) error 
 	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
 		cfg, err := LoadConfig(c)
 		if err != nil {
-			dlog.Error(c, err)
+			clog.Error(c, err)
 		} else {
 			ReplaceConfig(c, cfg)
 			err = onReload(c)
 		}
 		if err != nil {
-			dlog.Error(c, err)
+			clog.Error(c, err)
 		}
 	})
 	defer delay.Stop()
@@ -297,7 +297,7 @@ func WatchConfig(c context.Context, onReload func(context.Context) error) error 
 		case <-c.Done():
 			return nil
 		case err = <-watcher.Errors:
-			dlog.Error(c, err)
+			clog.Error(c, err)
 		case event := <-watcher.Events:
 			if event.Op&(fsnotify.Write|fsnotify.Create) != 0 && event.Name == configFile {
 				// The config file was created or modified. Let's defer the load just a little bit
@@ -572,10 +572,10 @@ func (t *Timeouts) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 }
 
 const (
-	defaultLogLevelsCLI            = logrus.InfoLevel
-	defaultLogLevelsKubeAuthDaemon = logrus.InfoLevel
-	defaultLogLevelsUserDaemon     = logrus.InfoLevel
-	defaultLogLevelsRootDaemon     = logrus.InfoLevel
+	defaultLogLevelsCLI            = slog.LevelInfo
+	defaultLogLevelsKubeAuthDaemon = slog.LevelInfo
+	defaultLogLevelsUserDaemon     = slog.LevelInfo
+	defaultLogLevelsRootDaemon     = slog.LevelInfo
 )
 
 var defaultLogLevels = LogLevels{ //nolint:gochecknoglobals // constant
@@ -586,10 +586,10 @@ var defaultLogLevels = LogLevels{ //nolint:gochecknoglobals // constant
 }
 
 type LogLevels struct {
-	CLI            logrus.Level `json:"cli"`
-	KubeAuthDaemon logrus.Level `json:"kubeAuthDaemon"`
-	UserDaemon     logrus.Level `json:"userDaemon"`
-	RootDaemon     logrus.Level `json:"rootDaemon"`
+	CLI            slog.Level `json:"cli"`
+	KubeAuthDaemon slog.Level `json:"kubeAuthDaemon"`
+	UserDaemon     slog.Level `json:"userDaemon"`
+	RootDaemon     slog.Level `json:"rootDaemon"`
 }
 
 func (ll *LogLevels) defaults() DefaultsAware {

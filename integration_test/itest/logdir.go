@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -21,7 +21,7 @@ func CleanLogDir(ctx context.Context, require *Requirements, nsRx, mgrNamespace,
 
 	for _, file := range files {
 		if match.MatchString(file.Name()) {
-			dlog.Infof(ctx, "Deleting log-file %s", file.Name())
+			clog.Infof(ctx, "Deleting log-file %s", file.Name())
 			require.NoError(os.Remove(filepath.Join(logDir, file.Name())))
 		}
 	}

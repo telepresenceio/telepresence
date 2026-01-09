@@ -1,6 +1,7 @@
 package agentconfig
 
 import (
+	"log/slog"
 	"time"
 
 	core "k8s.io/api/core/v1"
@@ -161,7 +162,7 @@ type Sidecar struct {
 	Namespace string `json:"namespace,omitzero"`
 
 	// LogLevel used for all traffic-agent logging.
-	LogLevel string `json:"logLevel,omitzero"`
+	LogLevel slog.Level `json:"logLevel,omitzero"`
 
 	// The name of the workload that the pod originates from.
 	WorkloadName string `json:"workloadName,omitzero"`

@@ -3,8 +3,7 @@ module local
 go 1.25.0
 
 require (
-	github.com/sirupsen/logrus v1.9.3
-	github.com/telepresenceio/dlib/v2 v2.1.1
+	github.com/telepresenceio/clog v0.0.0-20260110082410-a544580265f8
 	github.com/telepresenceio/telepresence/v2 v2.25.2
 )
 
@@ -26,6 +25,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/telepresenceio/telepresence/rpc/v2 v2.26.0-test.3 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
@@ -46,7 +46,7 @@ require (
 	k8s.io/api v0.34.2 // indirect
 	k8s.io/apimachinery v0.34.2 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
-	k8s.io/utils v0.0.0-20251222233032-718f0e51e6d2 // indirect
+	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.1 // indirect

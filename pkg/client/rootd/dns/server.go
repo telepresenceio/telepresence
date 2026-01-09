@@ -17,9 +17,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dcontext"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -212,7 +212,7 @@ var (
 func (s *Server) shouldDoClusterLookup(query string) bool {
 	for _, pf := range excludePrefixes {
 		if strings.HasPrefix(query, pf) {
-			dlog.Debugf(s.ctx, `Cluster DNS excluded by exclude-prefix %q for name %q`, pf, query)
+			clog.Debugf(s.ctx, `Cluster DNS excluded by exclude-prefix %q for name %q`, pf, query)
 			return false
 		}
 	}
@@ -220,13 +220,13 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 
 	if s.isExcluded(name) {
 		// Reject any host explicitly added to the exclude list.
-		dlog.Debugf(s.ctx, "Cluster DNS explicitly excluded for name %q", name)
+		clog.Debugf(s.ctx, "Cluster DNS explicitly excluded for name %q", name)
 		return false
 	}
 
 	if !strings.ContainsRune(name, '.') {
 		// Single label names are always included.
-		dlog.Debugf(s.ctx, "Cluster DNS included for single label name %q", name)
+		clog.Debugf(s.ctx, "Cluster DNS included for single label name %q", name)
 		return true
 	}
 
@@ -238,12 +238,12 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 				// Exclude unless more specific include.
 				for _, is := range s.IncludeSuffixes {
 					if len(is) >= len(es) && strings.HasSuffix(n, is) {
-						dlog.Debugf(s.ctx,
+						clog.Debugf(s.ctx,
 							"Cluster DNS included by include-suffix %q (overriding exclude-suffix %q) for name %q", is, es, n)
 						return true, false
 					}
 				}
-				dlog.Debugf(s.ctx, "Cluster DNS excluded by exclude-suffix %q for name %q", es, n)
+				clog.Debugf(s.ctx, "Cluster DNS excluded by exclude-suffix %q for name %q", es, n)
 				return false, true
 			}
 		}
@@ -262,7 +262,7 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 			if include, exclude := suffixExcluded(name[:li]); include || exclude {
 				return include
 			}
-			dlog.Debugf(s.ctx, "Cluster DNS included by search %q of name %q", sfx, name)
+			clog.Debugf(s.ctx, "Cluster DNS included by search %q of name %q", sfx, name)
 			return true
 		}
 	}
@@ -274,14 +274,14 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 			if include, exclude := suffixExcluded(name[:li]); include || exclude {
 				return include
 			}
-			dlog.Debugf(s.ctx, "Cluster DNS included by namespace %q of name %q", sfx, name)
+			clog.Debugf(s.ctx, "Cluster DNS included by namespace %q of name %q", sfx, name)
 			return true
 		}
 	}
 
 	// Always include queries for the cluster domain.
 	if strings.HasSuffix(query, "."+s.clusterDomain) {
-		dlog.Debugf(s.ctx, "Cluster DNS included by cluster domain %q of name %q", s.clusterDomain, name)
+		clog.Debugf(s.ctx, "Cluster DNS included by cluster domain %q of name %q", s.clusterDomain, name)
 		return true
 	}
 
@@ -293,14 +293,14 @@ func (s *Server) shouldDoClusterLookup(query string) bool {
 					return include
 				}
 			}
-			dlog.Debugf(s.ctx,
+			clog.Debugf(s.ctx,
 				"Cluster DNS included by include-suffix %q for name %q", sfx, name)
 			return true
 		}
 	}
 
 	// Pass any queries for the cluster domain.
-	dlog.Debugf(s.ctx, "Cluster DNS excluded for name %q. No inclusion rule was matched", name)
+	clog.Debugf(s.ctx, "Cluster DNS excluded for name %q. No inclusion rule was matched", name)
 	return false
 }
 
@@ -370,7 +370,7 @@ func (s *Server) resolveInCluster(c context.Context, q *dns.Question) (result dn
 			rCode = dns.RcodeNameError
 			err = nil
 		default:
-			dlog.Errorf(s.ctx, "Error resolving %q in cluster: %T %v", query, err, err)
+			clog.Errorf(s.ctx, "Error resolving %q in cluster: %T %v", query, err, err)
 		}
 		return nil, rCode, client.CheckTimeout(c, err)
 	}
@@ -602,7 +602,7 @@ const (
 func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, error) {
 	if strings.HasPrefix(q.Name, recursionCheck) {
 		if atomic.CompareAndSwapInt32(&s.recursive, recursionQueryReceived, recursionDetected) {
-			dlog.Debug(s.ctx, "DNS resolver is recursive")
+			clog.Debug(s.ctx, "DNS resolver is recursive")
 			return nil, dns.RcodeNameError, nil
 		}
 
@@ -616,7 +616,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 
 			// When we've gotten the reply from the cluster, we know if recursion did occur.
 			if atomic.CompareAndSwapInt32(&s.recursive, recursionQueryReceived, recursionNotDetected) {
-				dlog.Debug(s.ctx, "DNS resolver is not recursive")
+				clog.Debug(s.ctx, "DNS resolver is not recursive")
 			}
 		}
 		return localHostReply(q), dns.RcodeSuccess, nil
@@ -638,7 +638,7 @@ func (s *Server) resolveWithRecursionCheck(q *dns.Question) (dnsproxy.RRs, int, 
 			return true
 		})
 		if recursive {
-			dlog.Debugf(s.ctx, "returning error for query %q: assumed to be recursive", q.Name)
+			clog.Debugf(s.ctx, "returning error for query %q: assumed to be recursive", q.Name)
 			// Do we know that the name is correct?
 			rCode := dns.RcodeNameError
 			if s.isNameCachedWithSuccess(q) {
@@ -668,12 +668,12 @@ func (s *Server) isNameCachedWithSuccess(q *dns.Question) bool {
 	}
 	for _, name := range names {
 		cKey.name = name
-		dlog.Debugf(s.ctx, "checking if name %q is cached with success", name)
+		clog.Debugf(s.ctx, "checking if name %q is cached with success", name)
 		if aRec, ok := s.cache.Load(cKey); ok {
 			// The name is OK, but there were no records
 			select {
 			case <-aRec.wait:
-				dlog.Debugf(s.ctx, "found %q cached with %s", name, dns.RcodeToString[aRec.rCode])
+				clog.Debugf(s.ctx, "found %q cached with %s", name, dns.RcodeToString[aRec.rCode])
 				if aRec.rCode == dns.RcodeSuccess {
 					return true
 				}
@@ -705,7 +705,7 @@ func (s *Server) resolveThruCache(q *dns.Question) (answer dnsproxy.RRs, rCode i
 
 	answer, rCode, err = s.resolveInCluster(s.ctx, q)
 	if err != nil {
-		dlog.Debugf(s.ctx, "cache lookup failed for %s %s: %v", dns.TypeToString[q.Qtype], q.Name, err)
+		clog.Debugf(s.ctx, "cache lookup failed for %s %s: %v", dns.TypeToString[q.Qtype], q.Name, err)
 		if errors.Is(err, context.DeadlineExceeded) || status.Code(err) == codes.Canceled {
 			rCode = dns.RcodeNameError
 		}
@@ -777,11 +777,11 @@ func (s *Server) performRecursionCheck(c context.Context) {
 		return
 	}
 	defer func() {
-		dlog.Debug(c, "Recursion check finished")
+		clog.Debug(c, "Recursion check finished")
 		s.readyClose.Do(func() { close(s.ready) })
 	}()
 	rc := recursionCheck + tel2SubDomain
-	dlog.Debugf(c, "Performing initial recursion check with %s", rc)
+	clog.Debugf(c, "Performing initial recursion check with %s", rc)
 	i := 0
 	atomic.StoreInt32(&s.recursive, recursionQueryNotYetReceived)
 	for ; c.Err() == nil && i < maxRecursionTestRetries && atomic.LoadInt32(&s.recursive) == recursionQueryNotYetReceived; i++ {
@@ -792,7 +792,7 @@ func (s *Server) performRecursionCheck(c context.Context) {
 	}
 	if i == maxRecursionTestRetries {
 		msg := "DNS doesn't seem to work properly"
-		dlog.Error(c, msg)
+		clog.Error(c, msg)
 		s.Lock()
 		s.error = msg
 		s.Unlock()
@@ -840,7 +840,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 
 	q := &r.Question[0]
 	qts := dns.TypeToString[q.Qtype]
-	dlog.Debugf(c, "ServeDNS %5d %-6s %s", r.Id, qts, q.Name)
+	clog.Debugf(c, "ServeDNS %5d %-6s %s", r.Id, qts, q.Name)
 
 	msg := new(dns.Msg)
 	var pfx dfs = func() string { return "" }
@@ -848,7 +848,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 	var rct dfs = func() string { return dns.RcodeToString[msg.Rcode] }
 
 	defer func() {
-		dlog.Debugf(c, "%s%5d %-6s %s -> %s %s", pfx, r.Id, qts, q.Name, rct, txt)
+		clog.Debugf(c, "%s%5d %-6s %s -> %s %s", pfx, r.Id, qts, q.Name, rct, txt)
 		_ = w.WriteMsg(msg)
 
 		// Closing the response tells the DNS service to terminate
@@ -872,7 +872,7 @@ func (s *Server) ServeDNS(w dns.ResponseWriter, r *dns.Msg) {
 		msg.Answer = answer
 		msg.Authoritative = true
 		txt = func() string { return answer.String() }
-		dlog.Debug(c, "sanity-check OK")
+		clog.Debug(c, "sanity-check OK")
 		return
 	}
 
@@ -1091,7 +1091,7 @@ func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []ne
 		g.Go(listener.LocalAddr().String(), func(c context.Context) error {
 			go func() {
 				<-c.Done()
-				dlog.Debugf(c, "Shutting down DNS server")
+				clog.Debugf(c, "Shutting down DNS server")
 				_ = srv.ShutdownContext(dcontext.HardContext(c))
 			}()
 			return srv.ActivateAndServe()

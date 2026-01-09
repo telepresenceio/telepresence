@@ -21,8 +21,8 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	ftp "github.com/telepresenceio/go-ftpserver"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -126,7 +126,7 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 	}
 	sftpPortCh <- ap.Port()
 
-	dlog.Infof(ctx, "Listening at: %s", l.Addr())
+	clog.Infof(ctx, "Listening at: %s", l.Addr())
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -138,12 +138,12 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 		go func() {
 			s, err := sftp.NewServer(conn)
 			if err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
-			dlog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
+			clog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
 			if err = s.Serve(); err != nil {
 				if !errors.Is(err, io.EOF) {
-					dlog.Errorf(ctx, "sftp server completed with error %v", err)
+					clog.Errorf(ctx, "sftp server completed with error %v", err)
 				}
 			}
 		}()
@@ -152,7 +152,7 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 
 func Main(ctx context.Context, _ ...string) error {
 	debug.SetTraceback("single")
-	dlog.Infof(ctx, "Traffic Agent %s", version.Version)
+	clog.Infof(ctx, "Traffic Agent %s", version.Version)
 
 	ctx, cancel := context.WithCancel(ctx)
 	sigs := make(chan os.Signal, 1)
@@ -165,7 +165,7 @@ func Main(ctx context.Context, _ ...string) error {
 	go func() {
 		select {
 		case sig := <-sigs:
-			dlog.Infof(ctx, "Received %s, shutting down", sig)
+			clog.Infof(ctx, "Received %s, shutting down", sig)
 			cancel()
 		case <-ctx.Done():
 		}
@@ -247,7 +247,7 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 				// This won't change, so abort here.
 				return
 			}
-			dlog.Errorf(ctx, "error talking to traffic-manager: %v", err)
+			clog.Errorf(ctx, "error talking to traffic-manager: %v", err)
 		}
 
 		select {
@@ -271,13 +271,13 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 		grpcAddress := grpcListener.Addr().(*net.TCPAddr)
 		grpcPortCh <- uint16(grpcAddress.Port)
 
-		dlog.Debugf(ctx, "Listener opened on %s", grpcAddress)
+		clog.Debugf(ctx, "Listener opened on %s", grpcAddress)
 		svc := server.New(ctx, grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:    ac.ClientConnectionTTL,
 			Timeout: 20 * time.Second,
 		}))
 		agent.RegisterAgentServer(svc, srv)
-		dlog.Debugf(ctx, "Serving client connections using idle TTL %s", ac.ClientConnectionTTL)
+		clog.Debugf(ctx, "Serving client connections using idle TTL %s", ac.ClientConnectionTTL)
 		return server.Serve(ctx, svc, grpcListener)
 	})
 
@@ -297,7 +297,7 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 	} else {
 		close(sftpPortCh)
 		close(ftpPortCh)
-		dlog.Info(ctx, "Not starting ftp and sftp servers because there's nothing to mount")
+		clog.Info(ctx, "Not starting ftp and sftp servers because there's nothing to mount")
 	}
 	grpcPort, err := waitForPort(ctx, grpcPortCh)
 	if err != nil {

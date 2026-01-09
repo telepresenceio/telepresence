@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -171,7 +171,7 @@ func (sc *serveCommand) openBrowser(ctx context.Context, on *url.URL, wg *sync.W
 		browser.Stdout = working.Pump(ctx, progress.EventStatusInfo)
 		err := browser.OpenURL(onStr)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}()
 	<-ctx.Done()

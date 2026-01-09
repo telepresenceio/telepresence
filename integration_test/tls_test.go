@@ -9,7 +9,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -183,10 +183,10 @@ func (s *dockerDaemonSuite) Test_TLSAnnotations() {
 				args = append(args, registry+"/"+image)
 				stdout, _, err := itest.Telepresence(ctx, args...)
 				if err != nil {
-					dlog.Errorf(ctx, "stdout: %s", stdout)
-					dlog.Error(ctx, err)
+					clog.Errorf(ctx, "stdout: %s", stdout)
+					clog.Error(ctx, err)
 				} else {
-					dlog.Infof(ctx, "stdout: %s", stdout)
+					clog.Infof(ctx, "stdout: %s", stdout)
 				}
 			}()
 
@@ -208,25 +208,25 @@ func (s *dockerDaemonSuite) Test_TLSAnnotations() {
 			so, se, err := itest.Telepresence(ctx, args...)
 			s.NoError(err)
 			if se != "" {
-				dlog.Error(ctx, se)
+				clog.Error(ctx, se)
 			}
 			if tt.errorPattern != "" {
 				s.Regexp(tt.errorPattern, so)
 			} else {
 				s.Contains(so, "HTTP/2.0 GET /")
 			}
-			dlog.Info(ctx, so)
+			clog.Info(ctx, so)
 
 			// Terminate the ongoing intercept
 			so, se, err = itest.Telepresence(ctx, "leave", ttSvc)
 			if so != "" {
-				dlog.Info(ctx, so)
+				clog.Info(ctx, so)
 			}
 			if se != "" {
-				dlog.Info(ctx, se)
+				clog.Info(ctx, se)
 			}
 			if err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 			cancel()
 		})

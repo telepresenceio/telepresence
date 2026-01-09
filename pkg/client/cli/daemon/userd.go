@@ -16,7 +16,7 @@ import (
 	grpcStatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -180,11 +180,11 @@ func (u *userClient) AddHandler(ctx context.Context, id string, cmd *exec.Cmd, c
 		switch grpcStatus.Code(err) {
 		case grpcCodes.NotFound, grpcCodes.Canceled:
 			// The intercept was already deleted or deactivation was caused by a disconnect
-			dlog.Infof(ctx, "intercept no longer present when adding container %s as interceptor", containerName)
+			clog.Infof(ctx, "intercept no longer present when adding container %s as interceptor", containerName)
 			err = nil
 		default:
 			err = tpGrpc.FromGRPC(err)
-			dlog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
+			clog.Errorf(ctx, "error adding process with pid %d as interceptor: %v", ior.Pid, err)
 		}
 		_ = cmd.Process.Kill()
 		return err

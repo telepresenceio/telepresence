@@ -7,7 +7,7 @@ import (
 	auth "k8s.io/api/authorization/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 func CanI(ctx context.Context, ras ...*auth.ResourceAttributes) (bool, error) {
@@ -25,10 +25,10 @@ func CanI(ctx context.Context, ras ...*auth.ResourceAttributes) (bool, error) {
 		if err != nil {
 			err = fmt.Errorf(`unable to do "can-i %s %s%s": %v`, ra.Verb, ra.Resource, where, err)
 			if ctx.Err() == nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 		} else {
-			dlog.Infof(ctx, `"can-i %s %s%s" is not allowed`, ra.Verb, ra.Resource, where)
+			clog.Infof(ctx, `"can-i %s %s%s" is not allowed`, ra.Verb, ra.Resource, where)
 		}
 		return false, err
 	}

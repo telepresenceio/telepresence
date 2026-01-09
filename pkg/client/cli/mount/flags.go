@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/pflag"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -99,7 +99,7 @@ func (f *Flags) ValidateConnected(ctx context.Context) (err error) {
 		f.Enabled = false
 		f.Mount = ""
 		f.LocalMountPort = 0
-		dlog.Warning(ctx, err)
+		clog.Warn(ctx, err)
 		return err
 	}
 

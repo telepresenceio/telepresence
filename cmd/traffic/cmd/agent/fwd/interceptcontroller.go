@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -55,7 +55,7 @@ func (im interceptControllerMap) reconcile(ctx context.Context, iis []*manager.I
 			if ii.Spec.Wiretap {
 				what = "wiretap"
 			}
-			dlog.Debugf(ctx, "Controller for %s %s created", what, ii.Spec.Name)
+			clog.Debugf(ctx, "Controller for %s %s created", what, ii.Spec.Name)
 			im[ii.Id] = ic
 		}
 		icm[ii.Id] = struct{}{}
@@ -66,7 +66,7 @@ func (im interceptControllerMap) reconcile(ctx context.Context, iis []*manager.I
 			if ic.Spec.Wiretap {
 				what = "wiretap"
 			}
-			dlog.Debugf(ctx, "Controller for %s %s cancelled", what, ic.Spec.Name)
+			clog.Debugf(ctx, "Controller for %s %s cancelled", what, ic.Spec.Name)
 			ic.cancel()
 			delete(im, id)
 		}

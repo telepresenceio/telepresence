@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -10,8 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
@@ -29,14 +31,14 @@ type suiteState struct {
 }
 
 func (s *suiteState) SetupTest() {
-	s.ctx = dlog.NewTestContext(s.T(), false)
+	s.ctx = testutil.NewContext(s.T(), false)
 	s.state = &State{
 		backgroundCtx:    s.ctx,
 		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, 5*time.Millisecond),
 		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, 5*time.Millisecond),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
 		workloadWatchers: xsync.NewMap[string, Watcher](),
-		timedLogLevel:    log.NewTimedLevel("debug", log.SetLevel),
+		timedLogLevel:    log.NewTimedLevel(slog.LevelDebug, clog.SetTreeLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}
 }

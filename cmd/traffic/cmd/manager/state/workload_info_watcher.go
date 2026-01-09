@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -88,7 +88,7 @@ func (wf *workloadInfoWatcher) Watch(ctx context.Context, stream rpc.Manager_Wat
 			return nil
 		case wes, ok := <-workloadsCh:
 			if !ok {
-				dlog.Debug(ctx, "Workloads channel closed")
+				clog.Debug(ctx, "Workloads channel closed")
 				return nil
 			}
 			wf.handleWorkloadEvents(ctx, wes, initial)
@@ -137,13 +137,13 @@ func (wf *workloadInfoWatcher) sendEvents(ctx context.Context, sendEmpty bool) {
 	if !sendEmpty && len(evs) == 0 {
 		return
 	}
-	dlog.Debugf(ctx, "Sending %d WorkloadEvents", len(evs))
+	clog.Debugf(ctx, "Sending %d WorkloadEvents", len(evs))
 	err := wf.stream.Send(&rpc.WorkloadEventsDelta{
 		Since:  timestamppb.New(wf.start),
 		Events: evs,
 	})
 	if err != nil {
-		dlog.Warnf(ctx, "failed to send workload events delta: %v", err)
+		clog.Warnf(ctx, "failed to send workload events delta: %v", err)
 		return
 	}
 	wf.start = time.Now()
@@ -222,7 +222,7 @@ func (wf *workloadInfoWatcher) handleWorkloadEvents(ctx context.Context, wes []E
 					Workload: rpcWorkload(wl, as, iClients),
 				}
 			}
-			dlog.Tracef(ctx, "WorkloadInfoEvent: Workload %s %s %s %s", we.Type, wl, as, w.Workload.State)
+			clog.Tracef(ctx, "WorkloadInfoEvent: Workload %s %s %s %s", we.Type, wl, as, w.Workload.State)
 			return w, xsync.UpdateOp
 		})
 	}
@@ -258,7 +258,7 @@ func (wf *workloadInfoWatcher) handleAgentDelta(ctx context.Context, delta cache
 					Workload: rpcWorkload(wl, as, nil),
 				}
 			}
-			dlog.Tracef(ctx, "WorkloadInfoEvent: AgentInfo %s(%s).%s %s %s", a.PodName, a.PodIp, a.Namespace, as, w.Workload.State)
+			clog.Tracef(ctx, "WorkloadInfoEvent: AgentInfo %s(%s).%s %s %s", a.PodName, a.PodIp, a.Namespace, as, w.Workload.State)
 			return w, xsync.UpdateOp
 		})
 	}
@@ -302,7 +302,7 @@ func (wf *workloadInfoWatcher) handleAgentDelta(ctx context.Context, delta cache
 					Workload: rpcWorkload(wl, as, iClients),
 				}
 			}
-			dlog.Tracef(ctx, "WorkloadInfoEvent: AgentInfo %s(%s).%s %s %s", a.PodName, a.PodIp, a.Namespace, as, w.Workload.State)
+			clog.Tracef(ctx, "WorkloadInfoEvent: AgentInfo %s(%s).%s %s %s", a.PodName, a.PodIp, a.Namespace, as, w.Workload.State)
 			return w, xsync.UpdateOp
 		})
 	}
@@ -365,7 +365,7 @@ func (wf *workloadInfoWatcher) handleInterceptDelta(ctx context.Context, delta c
 					Workload: rpcWorkload(wl, as, iClients),
 				}
 			}
-			dlog.Tracef(ctx, "WorkloadInfoEvent: InterceptInfo %s %s %s", name, as, w.Workload.State)
+			clog.Tracef(ctx, "WorkloadInfoEvent: InterceptInfo %s %s %s", name, as, w.Workload.State)
 			return w, xsync.UpdateOp
 		})
 	}
@@ -402,7 +402,7 @@ func (wf *workloadInfoWatcher) handleInterceptDelta(ctx context.Context, delta c
 					Workload: rpcWorkload(wl, as, iClients),
 				}
 			}
-			dlog.Tracef(ctx, "WorkloadInfoEvent: InterceptInfo %s.%s %s %s", w.Workload.Name, w.Workload.Namespace, as, w.Workload.State)
+			clog.Tracef(ctx, "WorkloadInfoEvent: InterceptInfo %s.%s %s %s", w.Workload.Name, w.Workload.Namespace, as, w.Workload.State)
 			return w, xsync.UpdateOp
 		})
 	}

@@ -19,8 +19,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	grpcServer "github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
@@ -145,13 +145,13 @@ func (ts *server) createAddressEndpoint(ctx context.Context) ([2]netlink.Link, e
 	}
 	vhn := pair[0].Attrs().Name
 	brn := br.Attrs().Name
-	dlog.Debugf(ctx, "link set %s master %s", vhn, brn)
+	clog.Debugf(ctx, "link set %s master %s", vhn, brn)
 	err = netlink.LinkSetMaster(pair[0], br)
 	if err != nil {
 		return pair, fmt.Errorf("link set %s master %s failed: %w", vhn, brn, err)
 	}
 	vcn := pair[1].Attrs().Name
-	dlog.Debugf(ctx, "link set %s netns %d", vcn, ts.pluginPid)
+	clog.Debugf(ctx, "link set %s netns %d", vcn, ts.pluginPid)
 	err = netlink.LinkSetNsPid(pair[1], ts.pluginPid)
 	if err != nil {
 		return pair, fmt.Errorf("link set %s netns %d failed: %w", vcn, ts.pluginPid, err)
@@ -282,7 +282,7 @@ func (ts *server) join(ctx context.Context, request *rpc.EndpointIdentifier) (*r
 		return nil, status.Error(codes.NotFound, fmt.Sprintf("endpoint %s not found", request.Id))
 	}
 	vhn := ep.vethHost.Attrs().Name
-	dlog.Debugf(ctx, "link set %s up", vhn)
+	clog.Debugf(ctx, "link set %s up", vhn)
 	err := netlink.LinkSetUp(ep.vethHost)
 	if err != nil {
 		return nil, fmt.Errorf("link set %s up failed: %w", vhn, err)
@@ -323,7 +323,7 @@ func (ts *server) join(ctx context.Context, request *rpc.EndpointIdentifier) (*r
 			rsp.GwIpV6, _ = gw.MarshalBinary()
 		}
 	}
-	dlog.Debug(ctx, responseStringer{JoinResponse: rsp})
+	clog.Debug(ctx, responseStringer{JoinResponse: rsp})
 	return rsp, nil
 }
 
@@ -352,8 +352,8 @@ func (ts *server) bridge() (netlink.Link, error) {
 }
 
 func (ts *server) serve(ctx context.Context) error {
-	dlog.Infof(ctx, "Starting service on port %d", ts.port)
-	defer dlog.Info(ctx, "Service stopped")
+	clog.Infof(ctx, "Starting service on port %d", ts.port)
+	defer clog.Info(ctx, "Service stopped")
 
 	lc := net.ListenConfig{}
 	trListener, err := lc.Listen(ctx, "tcp", fmt.Sprintf(":%d", ts.port))
@@ -366,12 +366,12 @@ func (ts *server) serve(ctx context.Context) error {
 			Name: bridgeName,
 		},
 	}
-	dlog.Debugf(ctx, "link add %s", bridgeName)
+	clog.Debugf(ctx, "link add %s", bridgeName)
 	err = netlink.LinkAdd(br)
 	if err != nil {
 		return fmt.Errorf("link add %s failed: %w", bridgeName, err)
 	}
-	dlog.Debugf(ctx, "link set %s up", bridgeName)
+	clog.Debugf(ctx, "link set %s up", bridgeName)
 	err = netlink.LinkSetUp(br)
 	if err != nil {
 		return fmt.Errorf("link set %s up failed: %w", bridgeName, err)
@@ -420,7 +420,7 @@ func createVethPair(ctx context.Context) (pair [2]netlink.Link, err error) {
 		PeerHardwareAddr: vif.RandomMAC(),
 	}
 
-	dlog.Debugf(ctx, "link add veth %s/%s", veth.Attrs().Name, veth.PeerName)
+	clog.Debugf(ctx, "link add veth %s/%s", veth.Attrs().Name, veth.PeerName)
 	err = netlink.LinkAdd(veth)
 	if err != nil {
 		return pair, fmt.Errorf("cannot create veth pair %s/%s: %w", veth.Name, veth.PeerName, err)

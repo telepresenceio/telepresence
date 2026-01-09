@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -159,7 +159,7 @@ func (m *manager) createPortConfigs(ctx context.Context, am map[string]string) e
 	// Warn about ports that weren't dealt with when iterating over the containers
 	warnNotHTTPPort := func(ports map[uint16]string, ann string) {
 		for port := range ports {
-			dlog.Warnf(ctx, "Annotation %s.%d does not match a port where HTTP-filters can be applied.", ann, port)
+			clog.Warnf(ctx, "Annotation %s.%d does not match a port where HTTP-filters can be applied.", ann, port)
 		}
 	}
 	warnNotHTTPPort(dsPaths, annotation.DownstreamCertificatePath)

@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -50,8 +50,8 @@ func (f *udp) interceptConn(conn net.Conn, ic *interceptController) error {
 	}
 	dest := netip.AddrPortFrom(ip, uint16(spec.TargetPort))
 	ctx := ic.ctx
-	dlog.Infof(ctx, "Forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
-	defer dlog.Infof(ctx, "Done forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
+	clog.Infof(ctx, "Forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
+	defer clog.Infof(ctx, "Done forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
 	d := tunnel.NewUDPListener(conn.(*net.UDPConn), tunnel.AgentToClient, dest, func(ctx context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
 		f.mu.Lock()
 		sp := f.streamProvider

@@ -21,7 +21,7 @@ import (
 	"golang.org/x/net/http2"
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 type ValueState int32
@@ -97,7 +97,7 @@ func (p *portConfig) setTLS(ctx context.Context, tls ValueState) {
 	if tls != ValueSupported {
 		s = "does not support"
 	}
-	dlog.Debugf(ctx, "Port %d %s TLS", p.port, s)
+	clog.Debugf(ctx, "Port %d %s TLS", p.port, s)
 	p.TLS = tls
 }
 
@@ -106,12 +106,12 @@ func (p *portConfig) setHTTP2(ctx context.Context, http2 ValueState) {
 	if http2 != ValueSupported {
 		s = "does not support"
 	}
-	dlog.Debugf(ctx, "Port %d %s HTTP/2", p.port, s)
+	clog.Debugf(ctx, "Port %d %s HTTP/2", p.port, s)
 	p.HTTP2 = http2
 }
 
 func (p *portConfig) probeWarning(ctx context.Context, what string, err error) {
-	dlog.Warnf(ctx, "Failed to probe port %d for %s support: %v. "+
+	clog.Warnf(ctx, "Failed to probe port %d for %s support: %v. "+
 		"To avoid probing and improve startup time, add 'appProtocol: https' "+
 		"(or 'appProtocol: h2c' for HTTP/2 cleartext) to your Service definition. "+
 		"See: https://kubernetes.io/docs/concepts/services-networking/service/#application-protocol",
@@ -130,7 +130,7 @@ func (p *portConfig) probeTLSWithLock(ctx context.Context, podIP netip.Addr) boo
 		return p.TLS == ValueSupported
 	}
 	port := p.port
-	dlog.Debugf(ctx, "Probing port %d for TLS and HTTP/2 support", port)
+	clog.Debugf(ctx, "Probing port %d for TLS and HTTP/2 support", port)
 	addr := netip.AddrPortFrom(podIP, port).String()
 	bc := backoff.NewExponentialBackOff()
 	bc.MaxElapsedTime = p.upstreamProbeTimeout
@@ -142,7 +142,7 @@ func (p *portConfig) probeTLSWithLock(ctx context.Context, podIP netip.Addr) boo
 		dialer := &net.Dialer{}
 		conn, err := dialer.DialContext(ctx, "tcp", addr)
 		if err != nil {
-			dlog.Debugf(ctx, "Unable to dial %s: %v", addr, err)
+			clog.Debugf(ctx, "Unable to dial %s: %v", addr, err)
 			return err
 		}
 		defer conn.Close()
@@ -153,7 +153,7 @@ func (p *portConfig) probeTLSWithLock(ctx context.Context, podIP netip.Addr) boo
 		})
 
 		if err = tlsConn.HandshakeContext(ctx); err != nil {
-			dlog.Debugf(ctx, "Port %d does not support TLS: %v", port, err)
+			clog.Debugf(ctx, "Port %d does not support TLS: %v", port, err)
 			p.TLS = ValueNotSupported
 		} else {
 			p.setTLS(ctx, ValueSupported)
@@ -196,7 +196,7 @@ func (p *portConfig) probeHTTP2ClearTextWithLock(ctx context.Context) bool {
 	if !p.enableH2cProbing {
 		return false
 	}
-	dlog.Debugf(ctx, "Probing port %d for HTTP/2 clear-text support", p.port)
+	clog.Debugf(ctx, "Probing port %d for HTTP/2 clear-text support", p.port)
 	bc := backoff.NewExponentialBackOff()
 	bc.MaxElapsedTime = p.upstreamProbeTimeout
 	bc.MaxInterval = 300 * time.Millisecond
@@ -219,7 +219,7 @@ func (p *portConfig) probeHTTP2ClearTextWithLock(ctx context.Context) bool {
 	// up and return false.
 	deadline := time.Now().Add(200 * time.Millisecond)
 	if err := conn.SetDeadline(deadline); err != nil {
-		dlog.Debugf(ctx, "failed to set connection deadline on port %d: %v", p.port, err)
+		clog.Debugf(ctx, "failed to set connection deadline on port %d: %v", p.port, err)
 		return false
 	}
 
@@ -228,13 +228,13 @@ func (p *portConfig) probeHTTP2ClearTextWithLock(ctx context.Context) bool {
 	port := p.port
 	_, err = conn.Write([]byte("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"))
 	if err != nil {
-		dlog.Debugf(ctx, "failed to send connection preface on port %d: %v", port, err)
+		clog.Debugf(ctx, "failed to send connection preface on port %d: %v", port, err)
 		return false
 	}
 	// Send the required settings frame (empty).
 	_, err = conn.Write([]byte{0, 0, 0, byte(http2.FrameSettings), 0, 0, 0, 0, 0})
 	if err != nil {
-		dlog.Debugf(ctx, "failed to send empty settings frame on port %d: %v", port, err)
+		clog.Debugf(ctx, "failed to send empty settings frame on port %d: %v", port, err)
 		return false
 	}
 
@@ -242,20 +242,20 @@ func (p *portConfig) probeHTTP2ClearTextWithLock(ctx context.Context) bool {
 	buf := make([]byte, 9) // Frame header is 9 bytes.
 	n, err := conn.Read(buf)
 	if err != nil || n != 9 {
-		dlog.Debugf(ctx, "failed to read settings frame on port %d: %v", port, err)
+		clog.Debugf(ctx, "failed to read settings frame on port %d: %v", port, err)
 		return false
 	}
 
 	// Parse as HTTP/2 frame header.
 	fr, err := http2.ReadFrameHeader(bytes.NewReader(buf))
 	if err != nil {
-		dlog.Debugf(ctx, "invalid frame header: %v", err)
+		clog.Debugf(ctx, "invalid frame header: %v", err)
 		return false
 	}
 
 	// Check if it's a valid, but empty SETTINGS frame with no flags.
 	if fr.Type != http2.FrameSettings || fr.Flags != 0 {
-		dlog.Debugf(ctx, "expected SETTINGS frame and empty flags, got %v, %b", fr.Type, fr.Flags)
+		clog.Debugf(ctx, "expected SETTINGS frame and empty flags, got %v, %b", fr.Type, fr.Flags)
 		return false
 	}
 
@@ -264,15 +264,15 @@ func (p *portConfig) probeHTTP2ClearTextWithLock(ctx context.Context) bool {
 		buf = make([]byte, fr.Length)
 		n, err = conn.Read(buf)
 		if err != nil || n != int(fr.Length) {
-			dlog.Debugf(ctx, "failed to read settings payload on port %d: %v", port, err)
+			clog.Debugf(ctx, "failed to read settings payload on port %d: %v", port, err)
 			return false
 		} else {
-			dlog.Debugf(ctx, "SETTINGS payload %s", hex.Dump(buf))
+			clog.Debugf(ctx, "SETTINGS payload %s", hex.Dump(buf))
 		}
 	}
 	_, err = conn.Write([]byte{0, 0, 0, byte(http2.FrameSettings), byte(http2.FlagSettingsAck), 0, 0, 0, 0})
 	if err != nil {
-		dlog.Debugf(ctx, "failed to write ack settings frame on port %d: %v", port, err)
+		clog.Debugf(ctx, "failed to write ack settings frame on port %d: %v", port, err)
 	}
 	return err == nil
 }
@@ -443,7 +443,7 @@ func loadCertFromPath(direction, path string) (*tls.Certificate, error) {
 
 	// Warn if the certificate expires soon (within 7 days)
 	if now.Add(7 * 24 * time.Hour).After(x509Cert.NotAfter) {
-		dlog.Warnf(context.Background(), "%s certificate will expire on %s", direction, x509Cert.NotAfter.Format(time.RFC3339))
+		clog.Warnf(context.Background(), "%s certificate will expire on %s", direction, x509Cert.NotAfter.Format(time.RFC3339))
 	}
 	return &tc, nil
 }

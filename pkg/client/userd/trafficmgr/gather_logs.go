@@ -15,7 +15,7 @@ import (
 	typed "k8s.io/client-go/kubernetes/typed/core/v1"
 	"sigs.k8s.io/yaml"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -38,7 +38,7 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 	logStream, err := req.Stream(ctx)
 	if err != nil {
 		err = fmt.Errorf("failed to get log for %s.%s: %w", pod.Name, pod.Namespace, err)
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		result.Store(podLog, err.Error())
 		return
 	}
@@ -46,7 +46,7 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 
 	f, err := os.Create(filepath.Join(exportDir, podLog))
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		result.Store(podLog, err.Error())
 		return
 	}
@@ -54,7 +54,7 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 
 	if _, err = io.Copy(f, logStream); err != nil {
 		err = fmt.Errorf("failed writing log to buffer: %w", err)
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		result.Store(podLog, err.Error())
 		return
 	}
@@ -66,7 +66,7 @@ func getPodLog(ctx context.Context, exportDir string, result *sync.Map, podsAPI 
 		podYaml := pod.Name + "." + pod.Namespace + ".yaml"
 		if b, err = yaml.Marshal(pod); err != nil {
 			err = fmt.Errorf("failed marshaling pod yaml: %w", err)
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			result.Store(podYaml, err.Error())
 			return
 		}
@@ -131,7 +131,7 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 	if !strings.EqualFold(request.Agents, "none") {
 		err := s.foreachAgentPod(func(podsAPI typed.PodInterface, pod *core.Pod) {
 			podAndNs := fmt.Sprintf("%s.%s", pod.Name, pod.Namespace)
-			dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
+			clog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
 			getPodLog(ctx, exportDir, &result, podsAPI, pod, agentconfig.ContainerName, request.GetPodYaml, true)
 		}, func(pod *core.Pod) bool {
 			return strings.EqualFold(request.Agents, "all") || strings.Contains(pod.Name, request.Agents)
@@ -156,20 +156,20 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 		switch {
 		case err != nil:
 			err = fmt.Errorf("failed to gather logs for traffic manager in namespace %s: %w", ns, err)
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			resp.Error = err.Error()
 		case len(podList.Items) == 1:
 			pod := &podList.Items[0]
 			podAndNs := fmt.Sprintf("%s.%s", pod.Name, ns)
-			dlog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
+			clog.Debugf(ctx, "gathering logs for %s, yaml = %t", podAndNs, request.GetPodYaml)
 			getPodLog(ctx, exportDir, &result, podsAPI, pod, agentconfig.ManagerAppName, request.GetPodYaml, false)
 		case len(podList.Items) > 1:
 			err = fmt.Errorf("multiple traffic managers found in namespace %s using selector %s", ns, selector.String())
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			resp.Error = err.Error()
 		default:
 			err := fmt.Errorf("no traffic manager found in namespace %s using selector %s", ns, selector.String())
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			resp.Error = err.Error()
 		}
 	}

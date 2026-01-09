@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"io"
+	"log/slog"
 	"os"
 	"time"
 
@@ -257,7 +258,7 @@ func genConfigMapSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 		`The traffic-manager API port`)
 	fs.StringVar(&info.ManagerNamespace, "manager-namespace", "ambassador",
 		`The traffic-manager namespace`)
-	fs.StringVar(&info.LogLevel, "loglevel", "info",
+	fs.TextVar(&info.LogLevel, "loglevel", slog.LevelInfo,
 		`The loglevel for the generated traffic-agent sidecar`)
 	fs.AddFlagSet(kubeFlags)
 	return cmd

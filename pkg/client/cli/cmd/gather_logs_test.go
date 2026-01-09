@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"regexp"
 	"testing"
@@ -13,7 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -215,7 +217,7 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			// files inside were modified after the test started.
 			startTime := time.Now()
 			// Prepare the context + use our testdata log dir for these tests
-			ctx := dlog.NewTestContext(t, false)
+			ctx := testutil.NewContext(t, false)
 			testLogDir := "testdata/testLogDir"
 			ctx = filelocation.WithAppUserLogDir(ctx, testLogDir)
 
@@ -228,8 +230,8 @@ func Test_gatherLogsNoK8s(t *testing.T) {
 			if tc.outputFile == "" {
 				tc.outputFile = fmt.Sprintf("%s/telepresence_logs.zip", outputDir)
 			}
-			stdout := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
-			stderr := dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
+			stdout := clog.StdLogger(ctx, slog.LevelInfo).Writer()
+			stderr := clog.StdLogger(ctx, slog.LevelError).Writer()
 			cmd.SetOut(stdout)
 			cmd.SetErr(stderr)
 			cmd.PersistentFlags().AddFlagSet(global.Flags(ctx, false, false))

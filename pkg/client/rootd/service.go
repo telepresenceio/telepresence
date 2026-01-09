@@ -15,8 +15,8 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -59,7 +59,7 @@ type service struct {
 
 func newService(cfg client.Config, managed bool) *service {
 	s := &service{
-		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon.String(), log.SetLevel),
+		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon, clog.SetTreeLevel),
 		sessionRunning: make(chan struct{}),
 		managed:        managed,
 	}
@@ -173,7 +173,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if pprofPort, _ := flags.GetUint16(pprofFlag); pprofPort > 0 {
 		go func() {
 			if err := pprof.PprofServer(c, pprofPort); err != nil {
-				dlog.Error(c, err)
+				clog.Error(c, err)
 			}
 		}()
 	}
@@ -182,14 +182,14 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	c = clog.WithGroup(c, client.RootDaemonName)
 
-	c = dgroup.WithGoroutineName(c, "/"+client.RootDaemonName)
-	dlog.Debug(c, shellquote.ShellString(os.Args[0], os.Args[1:]))
+	clog.Debug(c, shellquote.ShellString(os.Args[0], os.Args[1:]))
 
-	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
-	dlog.Infof(c, "PID is %d", os.Getpid())
-	dlog.Info(c, "")
+	clog.Info(c, "---")
+	clog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
+	clog.Infof(c, "PID is %d", os.Getpid())
+	clog.Info(c, "")
 
 	// Listen on domain unix domain socket. The listener must be opened before other tasks because
 	// the CLI client will only wait for a short period of time for the socket to appear before it
@@ -202,11 +202,11 @@ func run(cmd *cobra.Command, args []string) error {
 	defer grpcListener.Close()
 
 	daemonAddress := grpcListener.Addr().(interface{ AddrPort() netip.AddrPort }).AddrPort()
-	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
+	clog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 
 	d := newService(cfg, managed)
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, client.RootDaemonName); err != nil {
-		dlog.Error(c, err)
+		clog.Error(c, err)
 		return err
 	}
 	vif.InitLogger(c)
@@ -225,7 +225,7 @@ func run(cmd *cobra.Command, args []string) error {
 	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener) })
 	err = g.Wait()
 	if err != nil {
-		dlog.Error(c, err)
+		clog.Error(c, err)
 	}
 	return err
 }
@@ -249,7 +249,7 @@ func runAliveAndCancellation(g *dgroup.Group, daemonPort uint16, cancel context.
 		return il.WatchInfos(func(ctx context.Context) error {
 			ok, err := il.InfoExists(daemon.InfoFileName)
 			if err == nil && !ok {
-				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemon.InfoFileName)
+				clog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemon.InfoFileName)
 				cancel()
 			}
 			return err

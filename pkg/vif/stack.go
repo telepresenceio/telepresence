@@ -22,7 +22,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/transport/udp"
 	"gvisor.dev/gvisor/pkg/waiter"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -131,11 +131,11 @@ func forwardTCP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *tcp
 	var ep tcpip.Endpoint
 	var err tcpip.Error
 	id := fr.ID()
-	dlog.Tracef(ctx, "Forward TCP %s", idStringer(id))
+	clog.Tracef(ctx, "Forward TCP %s", idStringer(id))
 	defer func() {
 		if err != nil {
 			msg := fmt.Sprintf("forward TCP %s: %s", idStringer(id), err)
-			dlog.Error(ctx, msg)
+			clog.Error(ctx, msg)
 		}
 	}()
 
@@ -214,7 +214,7 @@ func forwardUDP(ctx context.Context, streamCreator tunnel.StreamCreator, fr *udp
 	ep, err := fr.CreateEndpoint(&wq)
 	if err != nil {
 		msg := fmt.Sprintf("forward UDP %s: %s", idStringer(id), err)
-		dlog.Error(ctx, msg)
+		clog.Error(ctx, msg)
 		return false
 	}
 	return dispatchToStream(ctx, newConnID(udp.ProtocolNumber, id), gonet.NewUDPConn(&wq, ep), streamCreator)
@@ -251,7 +251,7 @@ func dispatchToStream(ctx context.Context, id tunnel.ConnID, conn net.Conn, stre
 		case codes.Canceled, codes.Aborted:
 			return false
 		}
-		dlog.Errorf(ctx, "forward %s: %v", id, err)
+		clog.Errorf(ctx, "forward %s: %v", id, err)
 		return false
 	}
 	ep := tunnel.NewConnEndpoint(stream, conn, cancel, nil, nil)

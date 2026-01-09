@@ -18,7 +18,7 @@ import (
 
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -88,9 +88,9 @@ func (s *notConnectedSuite) Test_APIServerIsProxied() {
 			if m := expect.FindStringSubmatch(stdout); m != nil && m[1] == strconv.Itoa(expectedLen) {
 				return true
 			}
-			dlog.Infof(ctx, "%q does not match %q to %d subnets", stdout, expect, expectedLen)
+			clog.Infof(ctx, "%q does not match %q to %d subnets", stdout, expect, expectedLen)
 		} else {
-			dlog.Errorf(ctx, "%s: %v", stderr, err)
+			clog.Errorf(ctx, "%s: %v", stderr, err)
 		}
 		return false
 	}, 30*time.Second, 3*time.Second, fmt.Sprintf("did not find %d also-proxied subnets", expectedLen))
@@ -128,7 +128,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 		require.NoError(err)
 		for _, cip := range ips {
 			if !cip.IsLoopback() {
-				dlog.Infof(ctx, "expect never-proxy of %s", cip)
+				clog.Infof(ctx, "expect never-proxy of %s", cip)
 				neverProxiedCount++
 			}
 		}
@@ -149,7 +149,7 @@ func (s *notConnectedSuite) Test_NeverProxy() {
 			npcOk = npc > 0 && npc <= neverProxiedCount
 		}
 		if !npcOk {
-			dlog.Infof(ctx, "did not find 1-%d never-proxied subnets\nOut: %s", neverProxiedCount, stdout)
+			clog.Infof(ctx, "did not find 1-%d never-proxied subnets\nOut: %s", neverProxiedCount, stdout)
 			return false
 		}
 		return true
@@ -219,7 +219,7 @@ func (s *notConnectedSuite) Test_ConflictingProxies() {
 			s.Eventually(func() bool {
 				newRoute, err := routing.GetRoute(ctx, testIP)
 				if err != nil {
-					dlog.Errorf(ctx, "failed to get route for %s: %v", testIP, err)
+					clog.Errorf(ctx, "failed to get route for %s: %v", testIP, err)
 					return false
 				}
 				if t.expectEq {

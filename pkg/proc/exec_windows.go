@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
 
@@ -88,9 +88,9 @@ func killProcessGroup(ctx context.Context, cmd *exec.Cmd, sig os.Signal) {
 		return true
 	})
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 	} else if err = terminateProcess(ctx, cmd.Path, uint32(cmd.Process.Pid), sig, pes); err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 	}
 }
 
@@ -107,14 +107,14 @@ func terminateProcess(ctx context.Context, exe string, pid uint32, sig os.Signal
 			// died just after the handle to it was opened.
 			if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
 				if alive, aliveErr := processIsAlive(pid); aliveErr != nil {
-					dlog.Error(ctx, aliveErr)
+					clog.Error(ctx, aliveErr)
 				} else if !alive {
 					return nil
 				}
 			}
 			return fmt.Errorf("%q: %w", exe, &os.SyscallError{Syscall: "GenerateConsoleCtrlEvent", Err: err})
 		}
-		dlog.Debugf(ctx, "sent ctrl-c to process %q (pid %d)", exe, pid)
+		clog.Debugf(ctx, "sent ctrl-c to process %q (pid %d)", exe, pid)
 		return nil
 	}
 
@@ -137,14 +137,14 @@ func terminateProcess(ctx context.Context, exe string, pid uint32, sig os.Signal
 		// died just after the handle to it was opened.
 		if errors.Is(err, windows.ERROR_ACCESS_DENIED) {
 			if alive, aliveErr := processIsAlive(pid); aliveErr != nil {
-				dlog.Error(ctx, aliveErr)
+				clog.Error(ctx, aliveErr)
 			} else if !alive {
 				return nil
 			}
 		}
 		return fmt.Errorf("%q: %w", exe, &os.SyscallError{Syscall: "TerminateProcess", Err: err})
 	}
-	dlog.Debugf(ctx, "terminated process %q (pid %d)", exe, pid)
+	clog.Debugf(ctx, "terminated process %q (pid %d)", exe, pid)
 	return nil
 }
 

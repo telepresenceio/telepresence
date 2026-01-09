@@ -16,8 +16,8 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -290,7 +290,7 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 	pc, _, _, ok := runtime.Caller(1)
 	s.Require().True(ok)
 	details := runtime.FuncForPC(pc)
-	pCtx = dlog.WithField(pCtx, "test", regexp.MustCompile(`^.*\.(.*)$`).ReplaceAllString(details.Name(), "$1"))
+	pCtx = clog.With(pCtx, "test", regexp.MustCompile(`^.*\.(.*)$`).ReplaceAllString(details.Name(), "$1"))
 
 	outRead, outWrite, err := os.Pipe()
 	if err != nil {
@@ -318,7 +318,7 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 		pCancel()
 		return "", nil, err
 	}
-	pCtx = dlog.WithField(pCtx, "pid", cmd.Process.Pid)
+	pCtx = clog.With(pCtx, "pid", cmd.Process.Pid)
 
 	wg := dgroup.NewGroup(pCtx, dgroup.GroupConfig{EnableSignalHandling: true})
 
@@ -353,9 +353,9 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 			if strings.HasPrefix(text, "Device: ") {
 				readyCh <- strings.TrimSpace(strings.TrimPrefix(text, "Device: "))
 			}
-			dlog.Infof(ctx, "router: %s", text)
+			clog.Infof(ctx, "router: %s", text)
 		}
-		dlog.Infof(ctx, "router: EOF")
+		clog.Infof(ctx, "router: EOF")
 		return nil
 	})
 	wg.Go("run", func(ctx context.Context) error {

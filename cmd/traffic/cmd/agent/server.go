@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
@@ -33,7 +33,7 @@ func (s *state) Version(context.Context, *emptypb.Empty) (*rpc.VersionInfo2, err
 
 func (s *state) Lookup(ctx context.Context, request *rpc.LookupRequest) (*rpc.LookupResponse, error) {
 	name := request.Name
-	dlog.Debugf(ctx, "lookup %q", name)
+	clog.Debugf(ctx, "lookup %q", name)
 	nl := len(name)
 	if nl < 2 || name[nl-1] != '.' {
 		return nil, status.Errorf(codes.InvalidArgument, "empty name")
@@ -55,7 +55,7 @@ func (s *state) Lookup(ctx context.Context, request *rpc.LookupRequest) (*rpc.Lo
 			response.Ips[i], _ = ip.MarshalBinary()
 		}
 	}
-	dlog.Debugf(ctx, "lookup %q => %v", request.Name, ips)
+	clog.Debugf(ctx, "lookup %q => %v", request.Name, ips)
 	return response, err
 }
 
@@ -95,8 +95,8 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 
 func (s *state) WatchDial(session *rpc.SessionInfo, server agent.Agent_WatchDialServer) error {
 	ctx := server.Context()
-	dlog.Debugf(ctx, "WatchDial called from client %s", session.SessionId)
-	defer dlog.Debugf(ctx, "WatchDial ended from client %s", session.SessionId)
+	clog.Debugf(ctx, "WatchDial called from client %s", session.SessionId)
+	defer clog.Debugf(ctx, "WatchDial ended from client %s", session.SessionId)
 	drCh := make(chan *rpc.DialRequest)
 	sid := tunnel.SessionID(session.SessionId)
 	s.dialWatchers.Store(sid, drCh)
@@ -113,7 +113,7 @@ func (s *state) WatchDial(session *rpc.SessionInfo, server agent.Agent_WatchDial
 				return nil
 			}
 			if err := server.Send(dr); err != nil {
-				dlog.Errorf(ctx, "send of DialRequest failed: %v", err)
+				clog.Errorf(ctx, "send of DialRequest failed: %v", err)
 				return nil
 			}
 		}
@@ -122,7 +122,7 @@ func (s *state) WatchDial(session *rpc.SessionInfo, server agent.Agent_WatchDial
 
 func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID tunnel.SessionID, id tunnel.ConnID, roundTripLatency, dialTimeout time.Duration,
 ) (tunnel.Stream, error) {
-	dlog.Debugf(ctx, "Creating tunnel to client %s for id %s", sessionID, id)
+	clog.Debugf(ctx, "Creating tunnel to client %s for id %s", sessionID, id)
 	var drCh chan<- *rpc.DialRequest
 	var stCh <-chan tunnel.Stream
 
@@ -155,10 +155,10 @@ func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID 
 
 	select {
 	case <-ctx.Done():
-		dlog.Errorf(ctx, "unable to create tunnel to client %s for id %s: %v", sessionID, id, ctx.Done())
+		clog.Errorf(ctx, "unable to create tunnel to client %s for id %s: %v", sessionID, id, ctx.Done())
 		return nil, ctx.Err()
 	case stream := <-stCh:
-		dlog.Debugf(ctx, "Created tunnel to client %s for id %s", sessionID, id)
+		clog.Debugf(ctx, "Created tunnel to client %s for id %s", sessionID, id)
 		return stream, nil
 	}
 }
@@ -171,7 +171,7 @@ func (s *state) ReportMetrics(ctx context.Context, metrics *rpc.TunnelMetrics) {
 		defer mCancel()
 		_, err := s.manager.ReportMetrics(mCtx, metrics)
 		if err != nil && status.Code(err) != codes.Canceled {
-			dlog.Errorf(ctx, "ReportMetrics failed: %v", err)
+			clog.Errorf(ctx, "ReportMetrics failed: %v", err)
 		}
 	}()
 }

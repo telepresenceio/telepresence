@@ -7,7 +7,7 @@ import (
 
 	"sigs.k8s.io/yaml"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -50,7 +50,7 @@ func (s *podCIDRSuite) Test_PodCIDRStrategy() {
 		}
 		return sns
 	}
-	dlog.Infof(ctx, "subnets %v", si.RootDaemon.Subnets)
+	clog.Infof(ctx, "subnets %v", si.RootDaemon.Subnets)
 	podCIDRs := subnetsAsStrings(si.RootDaemon.Subnets[1:])
 
 	tests := []struct {

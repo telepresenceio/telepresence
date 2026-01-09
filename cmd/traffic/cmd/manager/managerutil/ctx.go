@@ -3,7 +3,7 @@ package managerutil
 import (
 	"context"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -17,7 +17,7 @@ func WithSessionInfo(ctx context.Context, si *manager.SessionInfo) context.Conte
 
 func WithSessionID(ctx context.Context, sessionID tunnel.SessionID) context.Context {
 	ctx = context.WithValue(ctx, sessionContextKey{}, sessionID)
-	ctx = dlog.WithField(ctx, "session_id", sessionID)
+	ctx = clog.With(ctx, "session_id", sessionID)
 	return ctx
 }
 

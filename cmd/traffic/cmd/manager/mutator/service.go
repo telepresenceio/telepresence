@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"regexp"
@@ -23,9 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dcontext"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 )
 
@@ -98,7 +99,7 @@ func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
 	var cert tls.Certificate
 	l.Lock()
 	if !(bytes.Equal(newCertPEM, l.certPEM) && bytes.Equal(newKeyPEM, l.keyPEM)) {
-		dlog.Debug(l.ctx, "Replacing certificate")
+		clog.Debug(l.ctx, "Replacing certificate")
 		cert, err = tls.X509KeyPair(newCertPEM, newKeyPEM)
 		if err == nil {
 			l.cert = cert
@@ -126,7 +127,7 @@ func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) er
 		rsp, statusCode, err := serveMutatingFunc(ctx, r, ai.Inject)
 		h := w.Header()
 		if err != nil {
-			dlog.Errorf(ctx, "error handling webhook request: %v", err)
+			clog.Errorf(ctx, "error handling webhook request: %v", err)
 			w.WriteHeader(statusCode)
 			rsp = []byte(err.Error())
 		} else {
@@ -134,19 +135,19 @@ func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) er
 		}
 		h.Set("Content-Length", strconv.Itoa(len(rsp)))
 		if _, err = w.Write(rsp); err != nil {
-			dlog.Errorf(ctx, "could not write response: %v", err)
+			clog.Errorf(ctx, "could not write response: %v", err)
 		}
 	})
 	mux.HandleFunc("/uninstall", func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		dlog.Debug(ctx, "Received uninstall request...")
+		clog.Debug(ctx, "Received uninstall request...")
 		statusCode, err := serveRequest(ctx, r, http.MethodDelete, ai.Uninstall)
 		if err != nil {
-			dlog.Errorf(ctx, "error handling uninstall request: %v", err)
+			clog.Errorf(ctx, "error handling uninstall request: %v", err)
 			w.WriteHeader(statusCode)
 			_, _ = w.Write([]byte(err.Error()))
 		} else {
-			dlog.Debug(ctx, "uninstall request handled successfully")
+			clog.Debug(ctx, "uninstall request handled successfully")
 			w.WriteHeader(http.StatusOK)
 		}
 	})
@@ -155,7 +156,7 @@ func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) er
 	})
 
 	port := managerutil.GetEnv(ctx).MutatorWebhookPort
-	lg := dlog.StdLogger(ctx, dlog.MaxLogLevel(ctx))
+	lg := clog.StdLogger(ctx, slog.LevelInfo)
 	lg.SetPrefix(fmt.Sprintf("%d/", port))
 
 	// Filter this message. It's harmless and caused by the kube-apiserver dropping the connection
@@ -209,8 +210,8 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGett
 	if err != nil {
 		return err
 	}
-	defer dlog.Debug(ctx, "service stopped")
-	dlog.Debug(ctx, "service started")
+	defer clog.Debug(ctx, "service stopped")
+	clog.Debug(ctx, "service started")
 
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
 	if err != nil {
@@ -322,7 +323,7 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 	if err != nil {
 		// If the handler returned an error, still allow the object creation, and incorporate
 		// the error message into the response
-		dlog.Errorf(ctx, "mutating function error: %v", err)
+		clog.Errorf(ctx, "mutating function error: %v", err)
 		response.Allowed = false
 		response.Result = &meta.Status{
 			Message: err.Error(),

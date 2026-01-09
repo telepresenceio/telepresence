@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-json-experiment/json"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dhttp"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 )
 
@@ -71,7 +71,7 @@ func (s *server) interceptInfo(c context.Context, p string, cp uint16, h http.He
 	if err != nil {
 		return nil, err
 	}
-	dlog.Debugf(c, "InterceptInfo(path: %s, port %d, header %s => %v", p, cp, matcher.HeaderStringer(h), ii)
+	clog.Debugf(c, "InterceptInfo(path: %s, port %d, header %s => %v", p, cp, matcher.HeaderStringer(h), ii)
 	return ii, nil
 }
 
@@ -81,7 +81,7 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 	writeError := func(w http.ResponseWriter, status int, err error) {
 		w.WriteHeader(status)
 		if err := json.MarshalWrite(w, &ErrorResponse{Error: err.Error()}); err != nil {
-			dlog.Errorf(c, "error %v when responding with error %v", err, err)
+			clog.Errorf(c, "error %v when responding with error %v", err, err)
 		}
 	}
 
@@ -98,7 +98,7 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 	}
 
 	mux.HandleFunc(EndPointConsumeHere, func(w http.ResponseWriter, r *http.Request) {
-		dlog.Debugf(c, "Received %s", EndPointConsumeHere)
+		clog.Debugf(c, "Received %s", EndPointConsumeHere)
 		w.Header().Set("Content-Type", "application/json")
 		cp, ok := containerPort(w, r)
 		if !ok {
@@ -113,12 +113,12 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 				consumeHere = !consumeHere
 			}
 			if err = json.MarshalWrite(w, consumeHere); err != nil {
-				dlog.Errorf(c, "error %v when responding with %t", err, consumeHere)
+				clog.Errorf(c, "error %v when responding with %t", err, consumeHere)
 			}
 		}
 	})
 	mux.HandleFunc(EndPointInterceptInfo, func(w http.ResponseWriter, r *http.Request) {
-		dlog.Debugf(c, "Received %s", EndPointInterceptInfo)
+		clog.Debugf(c, "Received %s", EndPointInterceptInfo)
 		w.Header().Set("Content-Type", "application/json")
 		cp, ok := containerPort(w, r)
 		if !ok {
@@ -127,7 +127,7 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 		if ii, err := s.interceptInfo(c, r.FormValue("path"), cp, r.Header); err != nil {
 			writeError(w, http.StatusInternalServerError, err)
 		} else if err = json.MarshalWrite(w, &ii); err != nil {
-			dlog.Errorf(c, "error %v when responding with %v", err, ii)
+			clog.Errorf(c, "error %v when responding with %v", err, ii)
 		}
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -136,8 +136,8 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 
 	server := &dhttp.ServerConfig{Handler: mux}
 	info := fmt.Sprintf("Telepresence API server on %v", ln.Addr())
-	dlog.Infof(c, "%s started", info)
-	defer dlog.Infof(c, "%s ended", info)
+	clog.Infof(c, "%s started", info)
+	defer clog.Infof(c, "%s ended", info)
 	if err := server.Serve(c, ln); err != nil && err != c.Err() {
 		return fmt.Errorf("%s stopped. %w", info, err)
 	}

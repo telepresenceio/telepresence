@@ -11,7 +11,7 @@ import (
 	"golang.org/x/sys/windows"
 
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
@@ -37,24 +37,24 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		// Create the connection pool later used for fallback.
 		dnsServers, err := getDNSServerList()
 		if err != nil {
-			dlog.Warnf(c, "Failed to get DNS servers: %v", err)
+			clog.Warnf(c, "Failed to get DNS servers: %v", err)
 		} else {
 			for _, dnsServer := range dnsServers {
 				addr, err := netip.ParseAddr(dnsServer)
 				if err != nil {
-					dlog.Warn(c, err)
+					clog.Warn(c, err)
 					continue
 				}
 				p, err := NewConnPool(netip.AddrPortFrom(addr, 53), 10)
 				if err == nil {
-					dlog.Infof(c, "Using fallback DNS server: %s", dnsServer)
+					clog.Infof(c, "Using fallback DNS server: %s", dnsServer)
 					pool = p
 					break
 				}
-				dlog.Warn(c, err)
+				clog.Warn(c, err)
 			}
 			if pool == nil {
-				dlog.Warnf(c, "No viable fallback DNS server found")
+				clog.Warnf(c, "No viable fallback DNS server found")
 			} else {
 				defer pool.Close()
 			}

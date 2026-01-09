@@ -5,7 +5,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -25,7 +25,7 @@ func (p ImageFromEnv) GetImage() string {
 }
 
 func LogAgentImageInfo(ctx context.Context, img string) {
-	dlog.Infof(ctx, "Using traffic-agent image %q", img)
+	clog.Infof(ctx, "Using traffic-agent image %q", img)
 }
 
 type irKey struct{}
@@ -49,7 +49,7 @@ func WithAgentImageRetriever(ctx context.Context, onChange func(context.Context,
 	if img != "" {
 		LogAgentImageInfo(ctx, img)
 		if err := onChange(ctx, img); err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}
 	return ctx, nil
@@ -73,6 +73,6 @@ func GetAgentImage(ctx context.Context) string {
 		return ir.GetImage()
 	}
 	// The code isn't doing what it's supposed to do during startup.
-	dlog.Error(ctx, string(debug.Stack()))
+	clog.Error(ctx, string(debug.Stack()))
 	panic("no ImageRetriever has been configured")
 }

@@ -1,6 +1,7 @@
 package logging_test
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
@@ -42,7 +42,7 @@ func testFStat(t *testing.T, okIfBTimeIsCTime bool) (btimeIsCTime bool) {
 		minDelta        = 2 * time.Second
 	)
 
-	ctx := dlog.NewTestContext(t, false)
+	ctx := context.Background()
 	ctx = client.WithEnv(ctx, &client.Env{})
 	filename := filepath.Join(t.TempDir(), "stamp.txt")
 	withFile := func(flags int, fn func(dos.File)) (time.Time, time.Time) {

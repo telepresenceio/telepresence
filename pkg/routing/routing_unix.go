@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 func GetRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
@@ -35,18 +35,18 @@ func GetRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {
 				defaultRoute = r
 			}
 		} else if err != nil {
-			dlog.Errorf(ctx, "Unable to compare routes %s and %s: %v", r, osRoute, err)
+			clog.Errorf(ctx, "Unable to compare routes %s and %s: %v", r, osRoute, err)
 		}
 	}
 	if defaultRoute != nil {
-		dlog.Tracef(ctx, "Picked default route %s for network %s", defaultRoute, routedNet)
+		clog.Tracef(ctx, "Picked default route %s for network %s", defaultRoute, routedNet)
 		return defaultRoute, nil
 	}
 	return nil, fmt.Errorf("unable to find route for %s", routedNet)
 }
 
 func compareRoutes(ctx context.Context, osRoute, tableRoute *Route) (bool, error) {
-	dlog.Tracef(ctx, "Comparing OS route %q to table route %q", osRoute, tableRoute)
+	clog.Tracef(ctx, "Comparing OS route %q to table route %q", osRoute, tableRoute)
 	if osRoute.InterfaceIndex == tableRoute.InterfaceIndex {
 		return true, nil
 	}

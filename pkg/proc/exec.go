@@ -7,7 +7,7 @@ import (
 	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
 	"os/signal"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
@@ -37,7 +37,7 @@ func CommandStd(ctx context.Context, env map[string]string, exe string, args ...
 
 // StartCmd will run the given command with debug logging.
 func StartCmd(ctx context.Context, cmd *exec.Cmd) error {
-	dlog.Debug(ctx, shellquote.ShellArgsString(cmd.Args))
+	clog.Debug(ctx, shellquote.ShellArgsString(cmd.Args))
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("%s: %w", shellquote.ShellArgsString(cmd.Args), err)
 	}

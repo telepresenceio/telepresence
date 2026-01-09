@@ -5,15 +5,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 func TestPresence(t *testing.T) {
-	ctx := dlog.NewTestContext(t, false)
+	ctx := testutil.NewContext(t, false)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{})
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 	p := NewState(ctx, g)

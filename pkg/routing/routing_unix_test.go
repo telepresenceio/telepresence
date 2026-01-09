@@ -11,12 +11,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
 func TestGetRouteConsistency(t *testing.T) {
-	ctx := dlog.NewTestContext(t, true)
+	ctx := testutil.NewContext(t, true)
 	addresses := map[string]struct{}{
 		"192.168.1.23": {},
 		"10.0.5.3":     {},
@@ -31,14 +32,14 @@ func TestGetRouteConsistency(t *testing.T) {
 				// Don't test 0.0.0.0 or any multicast addresses.
 				continue
 			}
-			dlog.Debugf(ctx, "Adding route %s", route)
+			clog.Debugf(ctx, "Adding route %s", route)
 			addresses[ip.String()] = struct{}{}
 			if route.RoutedNet.Bits() < 32 {
 				ip2 := ip.As4()
 				ip2[3] += 2
 				a := netip.AddrFrom4(ip2)
 				addresses[a.String()] = struct{}{}
-				dlog.Debugf(ctx, "Adding IP %s", a)
+				clog.Debugf(ctx, "Adding IP %s", a)
 			}
 		}
 	}

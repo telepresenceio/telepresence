@@ -10,7 +10,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/header"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 // Queue length for outbound packets, arriving at fd side for read. Overflow
@@ -36,7 +36,7 @@ func (d *device) Attach(dp stack.NetworkDispatcher) {
 			// Stack is closing
 			return
 		}
-		dlog.Info(d.ctx, "Starting Endpoint")
+		clog.Info(d.ctx, "Starting Endpoint")
 		ctx, cancel := context.WithCancel(d.ctx)
 		d.wg.Add(2)
 		go d.tunToDispatch(cancel)
@@ -52,11 +52,11 @@ func (d *device) tunToDispatch(cancel context.CancelFunc) {
 	buf := make([]byte, ioBufferSize)
 	skip := d.headerSkip()
 	for {
-		dlog.Trace(d.ctx, "readPacket")
+		clog.Trace(d.ctx, "readPacket")
 		n, err := d.readPacket(buf)
 		if err != nil {
 			if d.IsAttached() && d.ctx.Err() == nil {
-				dlog.Errorf(d.ctx, "read packet error: %v", err)
+				clog.Errorf(d.ctx, "read packet error: %v", err)
 			}
 			return
 		}
@@ -87,13 +87,13 @@ func (d *device) tunToDispatch(cancel context.CancelFunc) {
 func (d *device) dispatchToTun(ctx context.Context) {
 	defer d.wg.Done()
 	for {
-		dlog.Trace(d.ctx, "ReadContext")
+		clog.Trace(d.ctx, "ReadContext")
 		pb := d.ReadContext(ctx)
 		if pb == nil {
 			break
 		}
 		if err := d.writePacket(pb); err != nil {
-			dlog.Errorf(ctx, "WritePacket failed: %v", err)
+			clog.Errorf(ctx, "WritePacket failed: %v", err)
 		}
 		pb.DecRef()
 	}

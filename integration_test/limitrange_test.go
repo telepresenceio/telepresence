@@ -9,7 +9,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -28,9 +28,9 @@ func (is *installSuite) limitedRangeTest() {
 
 	_, _, err := itest.Telepresence(ctx, "intercept", "--mount", "false", svc)
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		if out, err := itest.KubectlOut(ctx, is.AppNamespace(), "get", "pod", "-o", "yaml", "-l", "app="+svc); err == nil {
-			dlog.Info(ctx, out)
+			clog.Info(ctx, out)
 		}
 	}
 	require.NoError(err)
@@ -48,7 +48,7 @@ func (is *installSuite) limitedRangeTest() {
 	out, err := itest.KubectlOut(ctx, is.AppNamespace(), "get", "pods", "-l", "app="+svc, "-o",
 		`jsonpath={range .items.*.spec.containers[?(@.name=='traffic-agent')]}{.resources}{","}{end}`)
 	require.NoError(err)
-	dlog.Infof(ctx, "resources = %s", out)
+	clog.Infof(ctx, "resources = %s", out)
 	var rrs []v1.ResourceRequirements
 	require.NoError(json.Unmarshal([]byte("["+strings.TrimSuffix(out, ",")+"]"), &rrs))
 	oneGig, err := resource.ParseQuantity("100Mi")

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -27,7 +28,6 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/cenkalti/backoff/v4"
 	"github.com/go-json-experiment/json"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	core "k8s.io/api/core/v1"
@@ -37,7 +37,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -294,7 +294,7 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 	} else {
 		executable = s.executable
 	}
-	dlog.Infof(ctx, "Using binary %s", executable)
+	clog.Infof(ctx, "Using binary %s", executable)
 	ctx = WithExecutable(ctx, executable)
 
 	if ipv6, err := strconv.ParseBool(dos.Getenv(ctx, "DEV_IPV6_CLUSTER")); err == nil {
@@ -305,7 +305,7 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 			ip, err := netip.ParseAddr(strings.TrimSpace(output))
 			assert.NoError(t, err)
 			if ip.Is6() {
-				dlog.Info(ctx, "Using IPv6 because the kube-dns.kube-system has an IPv6 IP")
+				clog.Info(ctx, "Using IPv6 because the kube-dns.kube-system has an IPv6 IP")
 				s.ipv6 = true
 			}
 		}
@@ -316,7 +316,7 @@ func (s *cluster) Initialize(ctx context.Context) context.Context {
 	_ = Run(ctx, "kubectl", "delete", "-f", filepath.Join("testdata", "k8s", "client_rbac.yaml"))
 	err = Run(ctx, "kubectl", "delete", "ns,svc,deploy,clusterrole,clusterrolebinding,mutatingwebhookconfiguration,pvc,pv", "-l", AssignPurposeLabel)
 	if err != nil {
-		dlog.Errorf(ctx, "kubectl delete: %v", err)
+		clog.Errorf(ctx, "kubectl delete: %v", err)
 	}
 	return ctx
 }
@@ -336,7 +336,7 @@ func (s *cluster) downloadBinary(ctx context.Context, t testing.TB, v semver.Ver
 		cdURL += ".zip"
 		cdPath += ".zip"
 	}
-	dlog.Infof(ctx, "Downloading telepresence binary from %s", cdURL)
+	clog.Infof(ctx, "Downloading telepresence binary from %s", cdURL)
 	cdFile, err := os.Create(cdPath)
 	require.NoError(t, err)
 	rsp, err := http.Get(cdURL)
@@ -427,10 +427,10 @@ func PodCreateTimeout(c context.Context) time.Duration {
 func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Context {
 	config := client.GetDefaultConfig()
 	logLevels := config.LogLevels()
-	logLevels.CLI = logrus.DebugLevel
-	logLevels.UserDaemon = logrus.DebugLevel
-	logLevels.RootDaemon = logrus.DebugLevel
-	logLevels.KubeAuthDaemon = logrus.DebugLevel
+	logLevels.CLI = slog.LevelDebug
+	logLevels.UserDaemon = slog.LevelDebug
+	logLevels.RootDaemon = slog.LevelDebug
+	logLevels.KubeAuthDaemon = slog.LevelDebug
 
 	to := config.Timeouts()
 	to.PrivateClusterConnect = 60 * time.Second
@@ -632,9 +632,9 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 
 	if len(pods) == 0 {
 		if container == "" {
-			dlog.Errorf(ctx, "found no %s pods in namespace %s", app, ns)
+			clog.Errorf(ctx, "found no %s pods in namespace %s", app, ns)
 		} else {
-			dlog.Errorf(ctx, "found no %s pods in namespace %s with a %s container", app, ns, container)
+			clog.Errorf(ctx, "found no %s pods in namespace %s with a %s container", app, ns, container)
 		}
 		return ""
 	}
@@ -655,7 +655,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
-	ctx = dlog.WithLogger(ctx, dlog.WrapLogrus(logrus.StandardLogger()))
+	ctx = clog.WithLogger(ctx, slog.Default())
 	logName := pod
 	if container != "" {
 		logName = fmt.Sprintf("%s-%s", pod, container)
@@ -664,7 +664,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), logName)))
 	if err != nil {
 		s.logCapturingPods.Delete(pod)
-		dlog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
+		clog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
 		return ""
 	}
 
@@ -686,9 +686,9 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		err := cmd.Start()
 		if err == nil {
 			if container == "" {
-				dlog.Infof(ctx, "Capturing logs for pod %s", pod)
+				clog.Infof(ctx, "Capturing logs for pod %s", pod)
 			} else {
-				dlog.Infof(ctx, "Capturing logs for pod %s, container %s", pod, container)
+				clog.Infof(ctx, "Capturing logs for pod %s, container %s", pod, container)
 			}
 			ready <- logFile.Name()
 			close(ready)
@@ -697,9 +697,9 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		}
 		if err != nil {
 			if container == "" {
-				dlog.Errorf(ctx, "log capture for pod %s failed: %v", pod, err)
+				clog.Errorf(ctx, "log capture for pod %s failed: %v", pod, err)
 			} else {
-				dlog.Errorf(ctx, "log capture for pod %s, container %s failed: %v", pod, container, err)
+				clog.Errorf(ctx, "log capture for pod %s, container %s failed: %v", pod, container, err)
 			}
 			if !readyClosed {
 				close(ready)
@@ -708,7 +708,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	}()
 	select {
 	case <-ctx.Done():
-		dlog.Infof(ctx, "log capture for pod %s interrupted prior to start", pod)
+		clog.Infof(ctx, "log capture for pod %s interrupted prior to start", pod)
 		return ""
 	case file := <-ready:
 		return file
@@ -766,7 +766,7 @@ func Command(ctx context.Context, executable string, args ...string) *exec.Cmd {
 			args[i] = strings.TrimPrefix(a, sensitivePrefix)
 		}
 	}
-	dlog.Debug(ctx, "executing ", shellquote.ShellString(filepath.Base(executable), dbgArgs))
+	clog.Debugf(ctx, "executing %s", shellquote.ShellString(filepath.Base(executable), dbgArgs))
 	cmd := proc.CommandContext(ctx, executable, args...)
 	cmd.Env = EnvironMap(ctx).Environ()
 	cmd.Dir = GetWorkingDir(ctx)
@@ -791,7 +791,7 @@ func TelepresenceOk(ctx context.Context, args ...string) string {
 	require.NoError(t, err, "telepresence was unable to run, stdout %s", stdout)
 	if (strings.HasPrefix(stderr, "Warning:") || strings.Contains(stderr, "has been deprecated")) && !strings.ContainsRune(stderr, '\n') {
 		// Accept warnings, but log them.
-		dlog.Warn(ctx, stderr)
+		clog.Warn(ctx, stderr)
 	} else {
 		assert.Empty(t, stderr, "Expected stderr to be empty, but got: %s", stderr)
 	}
@@ -997,7 +997,7 @@ func DeleteNamespaces(ctx context.Context, namespaces ...string) {
 	for _, ns := range namespaces {
 		if t.Failed() {
 			if out, err := KubectlOut(ctx, ns, "get", "events", "--field-selector", "type!=Normal"); err == nil {
-				dlog.Debugf(ctx, "Events where type != Normal from namespace %s\n%s", ns, out)
+				clog.Debugf(ctx, "Events where type != Normal from namespace %s\n%s", ns, out)
 			}
 		}
 		go func(ns string) {
@@ -1033,9 +1033,9 @@ func StartLocalHttpEchoServerWithAddr(ctx context.Context, name, addr string, re
 		defer cancel()
 		err = sc.Shutdown(ctx)
 		if err != nil {
-			dlog.Errorf(ctx, "http server on %s exited with error: %v", addr, err)
+			clog.Errorf(ctx, "http server on %s exited with error: %v", addr, err)
 		} else {
-			dlog.Errorf(ctx, "http server on %s exited", addr)
+			clog.Errorf(ctx, "http server on %s exited", addr)
 		}
 	}()
 	return l.Addr().(*net.TCPAddr).Port, cancel
@@ -1063,25 +1063,25 @@ func PingInterceptedEchoServer(ctx context.Context, svc, svcPort string, headers
 // that an intercept is active for the given svc and svcPort that will redirect to that local server, and the server
 // will echo the given expectedOutput.
 func PingInterceptedEchoServerAndExpect(ctx context.Context, svc, svcPort, expectedOutput string, headers ...string) {
-	dlog.Infof(ctx, "pinging %s, expecting output: %s", net.JoinHostPort(svc, svcPort), expectedOutput)
+	clog.Infof(ctx, "pinging %s, expecting output: %s", net.JoinHostPort(svc, svcPort), expectedOutput)
 
 	ping := func() bool {
 		// condition
 		ips, err := net.DefaultResolver.LookupIP(ctx, "ip", svc)
 		if err != nil {
-			dlog.Info(ctx, err)
+			clog.Info(ctx, err)
 			return false
 		}
 		ips = iputil.UniqueSorted(ips)
 		if len(ips) != 1 {
-			dlog.Infof(ctx, "Lookup for %s returned %v", svc, ips)
+			clog.Infof(ctx, "Lookup for %s returned %v", svc, ips)
 			return false
 		}
 
 		hc := http.Client{Timeout: 2 * time.Second}
 		rq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s", net.JoinHostPort(ips[0].String(), svcPort)), nil)
 		if err != nil {
-			dlog.Info(ctx, err)
+			clog.Info(ctx, err)
 			return false
 		}
 		for _, h := range headers {
@@ -1090,18 +1090,18 @@ func PingInterceptedEchoServerAndExpect(ctx context.Context, svc, svcPort, expec
 		}
 		resp, err := hc.Do(rq)
 		if err != nil {
-			dlog.Info(ctx, err)
+			clog.Info(ctx, err)
 			return false
 		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			dlog.Info(ctx, err)
+			clog.Info(ctx, err)
 			return false
 		}
 		r := string(body)
 		if r != expectedOutput {
-			dlog.Infof(ctx, "body: %q != %q", r, expectedOutput)
+			clog.Infof(ctx, "body: %q != %q", r, expectedOutput)
 			return false
 		}
 		return true
@@ -1207,7 +1207,7 @@ func RunningPodNames(ctx context.Context, svc, ns string) []string {
 	for i := range pods {
 		podNames[i] = pods[i].Name
 	}
-	dlog.Infof(ctx, "Running pods %v", podNames)
+	clog.Infof(ctx, "Running pods %v", podNames)
 	return podNames
 }
 

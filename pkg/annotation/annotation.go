@@ -3,7 +3,7 @@ package annotation
 import (
 	"context"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 const (
@@ -40,7 +40,7 @@ func GetAnnotation(ctx context.Context, annotations map[string]string, key, depr
 	if !ok {
 		value, ok = annotations[deprecatedKey]
 		if ok {
-			dlog.Warningf(ctx, "Annotation %q is deprecated. Use %q instead", key, value)
+			clog.Warnf(ctx, "Annotation %q is deprecated. Use %q instead", key, value)
 		}
 	}
 	return value

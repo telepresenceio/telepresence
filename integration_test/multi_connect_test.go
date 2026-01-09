@@ -14,7 +14,7 @@ import (
 	"github.com/go-json-experiment/json"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -199,13 +199,13 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 		defer cancel()
 		so, se, err := itest.Telepresence(ctx, "intercept", "--use", use, "--mount", "false", svc, "--docker-run", "--port", "8080", "--", "--rm", "--name", use+"-app", s.handlerTag)
 		if err != nil {
-			dlog.Errorf(ctx, "intercept %s ended with error: %v", svc, err)
+			clog.Errorf(ctx, "intercept %s ended with error: %v", svc, err)
 		}
 		if so != "" {
-			dlog.Infof(ctx, "intercept %s stdout: %s", svc, so)
+			clog.Infof(ctx, "intercept %s stdout: %s", svc, so)
 		}
 		if se != "" {
-			dlog.Infof(ctx, "intercept %s stderr: %s", svc, se)
+			clog.Infof(ctx, "intercept %s stderr: %s", svc, se)
 		}
 	}
 
@@ -216,9 +216,9 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 				if strings.Contains(stdout, svc+": intercepted") {
 					return true
 				}
-				dlog.Infof(ctx, "stdout: %s", stdout)
+				clog.Infof(ctx, "stdout: %s", stdout)
 			} else {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 			return false
 		}, 30*time.Second, 3*time.Second)
@@ -230,10 +230,10 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 			func() bool {
 				ot, et, err := itest.Telepresence(ctx, "--use", cn, "curl", "--silent", "--max-time", "2", svc)
 				if err != nil {
-					dlog.Errorf(ctx, "%s%s:%v", ot, et, err)
+					clog.Errorf(ctx, "%s%s:%v", ot, et, err)
 					return false
 				}
-				dlog.Info(ctx, ot)
+				clog.Info(ctx, ot)
 				return expectedOutput.MatchString(ot)
 			},
 			20*time.Second, // waitFor

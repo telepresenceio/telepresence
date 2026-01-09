@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"os"
 	"os/user"
@@ -26,8 +27,8 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/yaml"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -149,18 +150,18 @@ func NewSession(
 	config *k8s.Kubeconfig,
 	wg *sync.WaitGroup,
 ) (session userd.Session, info *rpc.ConnectInfo, err error) {
-	dlog.Info(config, "-- Starting new session")
+	clog.Info(config, "-- Starting new session")
 
-	dlog.Infof(config, "Connecting to k8s context %s (%s) ...", config.KubeContext, config.Server)
+	clog.Infof(config, "Connecting to k8s context %s (%s) ...", config.KubeContext, config.Server)
 
 	cluster, err := k8s.ConnectCluster(cr, config)
 	if err != nil {
-		dlog.Errorf(config, "unable to track k8s cluster: %+v", err)
+		clog.Errorf(config, "unable to track k8s cluster: %+v", err)
 		return nil, nil, err
 	}
-	dlog.Infof(cluster, "Connected to context %s, namespace %s (%s)", cluster.KubeContext, cluster.Namespace, cluster.Server)
+	clog.Infof(cluster, "Connected to context %s, namespace %s (%s)", cluster.KubeContext, cluster.Namespace, cluster.Server)
 
-	dlog.Info(cluster, "Connecting to traffic manager...")
+	clog.Info(cluster, "Connecting to traffic manager...")
 	installID, err := client.InstallID(cluster)
 	if err != nil {
 		return nil, nil, err
@@ -172,7 +173,7 @@ func NewSession(
 
 	tmgr, err := connectMgr(ctx, service, cluster, installID, cr)
 	if err != nil {
-		dlog.Errorf(config, "Unable to connect to session: %s", err)
+		clog.Errorf(config, "Unable to connect to session: %s", err)
 		return nil, nil, err
 	}
 	if tmgr.compareFinalizedManagerVersion(2, 21, 0) < 0 {
@@ -202,7 +203,7 @@ func NewSession(
 	}
 
 	// Collect data on how long connection time took
-	dlog.Debug(tmgr, "Finished connecting to traffic manager")
+	clog.Debug(tmgr, "Finished connecting to traffic manager")
 
 	tmgr.AddNamespaceEventHandler(tmgr.updateDaemonNamespaces)
 	ci, err := tmgr.status(ctx, true)
@@ -227,12 +228,12 @@ func (s *session) Run() {
 			_, _ = rd.Disconnect(ctx, &empty.Empty{})
 			return nil
 		})
-		dlog.Info(s, "-- session ended")
+		clog.Info(s, "-- session ended")
 	}()
 	s.startServices(g)
 	err := g.Wait()
 	if err != nil {
-		dlog.Errorf(s, "session ended with error: %v", err)
+		clog.Errorf(s, "session ended with error: %v", err)
 	}
 }
 
@@ -268,7 +269,7 @@ func connectMgr(
 	}
 	if sdc := cfg.Grpc().SimulateDisconnect; sdc > 0 {
 		time.AfterFunc(sdc, func() {
-			dlog.Info(cluster, "Simulated disconnect from manager")
+			clog.Info(cluster, "Simulated disconnect from manager")
 			conn.Close()
 		})
 	}
@@ -302,14 +303,14 @@ func connectMgr(
 				// Call timed out, so the traffic-manager isn't responding at all
 				return nil, timeoutCtx.Err()
 			}
-			dlog.Debugf(cluster, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", clientID)
+			clog.Debugf(cluster, "traffic-manager port-forward established, client was already known to the traffic-manager as %q", clientID)
 		} else {
 			si = nil
 		}
 	}
 
 	if si == nil {
-		dlog.Debugf(cluster, "traffic-manager port-forward established, making client known to the traffic-manager as %q", clientID)
+		clog.Debugf(cluster, "traffic-manager port-forward established, making client known to the traffic-manager as %q", clientID)
 		si, err = mClient.ArriveAsClient(timeoutCtx, &manager.ClientInfo{
 			Name:      clientID,
 			Namespace: cluster.Namespace,
@@ -392,7 +393,7 @@ func (s *session) remain() error {
 	defer cancel()
 	_, err := s.ManagerClient().Remain(ctx, &manager.RemainRequest{Session: s.SessionInfo()})
 	if err != nil {
-		dlog.Errorf(ctx, "error calling Remain: %v", client.CheckTimeout(ctx, err))
+		clog.Errorf(ctx, "error calling Remain: %v", client.CheckTimeout(ctx, err))
 	}
 	return nil
 }
@@ -406,16 +407,16 @@ func (s *session) updateDaemonNamespaces() {
 	if !slices.Contains(domains, svcDomain) {
 		domains = append(domains, svcDomain)
 	}
-	dlog.Debugf(s, "posting top-level domains %v to root daemon", domains)
+	clog.Debugf(s, "posting top-level domains %v to root daemon", domains)
 
 	err := s.WithRootClient(s, func(ctx context.Context, rd rootdRpc.DaemonClient) (err error) {
 		_, err = rd.SetDNSTopLevelDomains(ctx, &rootdRpc.Domains{Domains: domains})
 		return err
 	})
 	if err != nil {
-		dlog.Errorf(s, "error posting domains %v to root daemon: %v", domains, err)
+		clog.Errorf(s, "error posting domains %v to root daemon: %v", domains, err)
 	}
-	dlog.Debug(s, "domains posted successfully")
+	clog.Debug(s, "domains posted successfully")
 }
 
 func (s *session) startServices(g *dgroup.Group) {
@@ -428,7 +429,7 @@ func runWithRetry(ctx context.Context, f func(context.Context) error) error {
 	backoff := 100 * time.Millisecond
 	for ctx.Err() == nil {
 		if err := f(ctx); err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			dtime.SleepWithContext(ctx, backoff)
 			backoff *= 2
 			if backoff > 3*time.Second {
@@ -496,7 +497,7 @@ func (s *session) getInfosForWorkloads(
 		if wlInfo.AgentVersion, ok = sMap[name]; !ok {
 			filterMatch &= ^rpc.ListRequest_INSTALLED_AGENTS
 		}
-		dlog.Debugf(s, "filter %d, filterMatch %d", filter, filterMatch)
+		clog.Debugf(s, "filter %d, filterMatch %d", filter, filterMatch)
 		if filter != 0 && filter&filterMatch == 0 {
 			return
 		}
@@ -565,11 +566,11 @@ func (s *session) ensureWatchers(namespaces []string) {
 			go func() {
 				err := s.workloadsWatcher(ns, &wg)
 				if err != nil {
-					dlog.Errorf(s, "error ensuring watcher for namespace %s: %v", ns, err)
+					clog.Errorf(s, "error ensuring watcher for namespace %s: %v", ns, err)
 					return
 				}
 			}()
-			dlog.Debugf(s, "watcher for namespace %s started", ns)
+			clog.Debugf(s, "watcher for namespace %s started", ns)
 		}
 	}
 	wg.Wait()
@@ -592,7 +593,7 @@ func (s *session) WorkloadInfoSnapshot(
 	}
 	if len(nss) == 0 {
 		// none of the namespaces are currently mapped
-		dlog.Debug(s, "No namespaces are mapped")
+		clog.Debug(s, "No namespaces are mapped")
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
 	if len(nss) == 1 && nss[0] == s.Namespace {
@@ -630,11 +631,11 @@ func (s *session) remainLoop(context.Context) error {
 		c, cancel := context.WithTimeout(context.WithoutCancel(s), 3*time.Second)
 		defer cancel()
 		if _, err := s.ManagerClient().Depart(c, s.SessionInfo()); err != nil {
-			dlog.Errorf(c, "failed to depart from manager: %v", err)
+			clog.Errorf(c, "failed to depart from manager: %v", err)
 		} else {
 			// Depart succeeded, so the traffic-manager has dropped the session. We should too
 			if err = deleteSessionInfoFromUserCache(c, s.daemonID); err != nil {
-				dlog.Errorf(c, "failed to delete session from user cache: %v", err)
+				clog.Errorf(c, "failed to delete session from user cache: %v", err)
 			}
 		}
 		// Call Close() in separate go-routine because it might block.
@@ -716,12 +717,12 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 	cliCfg, err := s.ManagerClient().GetClientConfig(ctx, &empty.Empty{})
 	if err != nil {
 		if status.Code(err) != codes.Unimplemented {
-			dlog.Warnf(s, "Failed to get remote config from traffic manager: %v", err)
+			clog.Warnf(s, "Failed to get remote config from traffic manager: %v", err)
 		}
 	} else {
 		tmCfg, err = client.ParseConfigYAML(ctx, "client configuration from cluster", cliCfg.ConfigYaml)
 		if err != nil {
-			dlog.Warn(s, err.Error())
+			clog.Warn(s, err.Error())
 		}
 	}
 
@@ -747,26 +748,26 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 		if s.SetMappedNamespaces(namespaces) {
 			if len(namespaces) == 0 {
 				if k8sapi.CanWatchNamespaces(s) {
-					dlog.Infof(s, "Will watch all namespaces")
+					clog.Infof(s, "Will watch all namespaces")
 					s.StartNamespaceWatcher()
 				} else {
-					dlog.Warnf(s, "Unable to watch all namespaces")
+					clog.Warnf(s, "Unable to watch all namespaces")
 				}
 			} else {
-				dlog.Infof(s, "Will use mapped namespaces %s", namespaces)
+				clog.Infof(s, "Will use mapped namespaces %s", namespaces)
 			}
 		}
 		rt := cfg.Routing()
 		rt.NeverProxy = subnet.Unique(append(rt.NeverProxy, tmCfg.Routing().NeverProxy...))
 		client.ReplaceConfig(s, cfg)
 	}
-	if dlog.MaxLogLevel(s) >= dlog.LogLevelDebug {
-		dlog.Debug(s, "Client configuration")
+	if clog.Enabled(s, slog.LevelDebug) {
+		clog.Debug(s, "Client configuration")
 		buf, _ := json.Marshal(cfg)
 		buf, _ = yaml.JSONToYAML(buf)
 		sc := bufio.NewScanner(bytes.NewReader(buf))
 		for sc.Scan() {
-			dlog.Debug(s, sc.Text())
+			clog.Debug(s, sc.Text())
 		}
 	}
 }
@@ -839,7 +840,7 @@ func (s *session) getNetworkInfo(cr *rpc.ConnectRequest) *rootdRpc.NetworkConfig
 
 func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.NetworkConfig, wg *sync.WaitGroup, isPodDaemon bool) (rd rootdRpc.DaemonClient, err error) {
 	// establish a connection to the root daemon gRPC grpcService
-	dlog.Info(s, "Connecting to root daemon...")
+	clog.Info(s, "Connecting to root daemon...")
 	svc := s.GetService()
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
@@ -859,7 +860,7 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 			defer wg.Done()
 			err := g.Wait()
 			if err != nil && !errors.Is(err, context.Canceled) {
-				dlog.Errorf(s, "root session exited with error: %v", err)
+				clog.Errorf(s, "root session exited with error: %v", err)
 			}
 		}()
 	} else {
@@ -910,7 +911,7 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 		}
 		return nil, fmt.Errorf("failed to connect to root daemon: %v", err)
 	}
-	dlog.Debug(s, "Connected to root daemon")
+	clog.Debug(s, "Connected to root daemon")
 	return rd, nil
 }
 
@@ -936,7 +937,7 @@ func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
 		ctx := dgroup.WithGoroutineName(s, fmt.Sprintf("/%d=>%s", srcPort, ap))
 		err := fw.Serve(ctx, nil)
 		if err != nil && ctx.Err() == nil {
-			dlog.Errorf(ctx, "port-forwarder failed with %v", err)
+			clog.Errorf(ctx, "port-forwarder failed with %v", err)
 		}
 	}()
 }
@@ -963,7 +964,7 @@ func (s *session) workloadsWatcher(namespace string, synced *sync.WaitGroup) err
 				w := we.Workload
 				key := workloadInfoKey{kind: w.Kind, name: w.Name}
 				if we.Type == manager.WorkloadEvent_DELETED {
-					dlog.Debugf(s, "Deleting workload %s/%s.%s", key.kind, key.name, namespace)
+					clog.Debugf(s, "Deleting workload %s/%s.%s", key.kind, key.name, namespace)
 					delete(workloads, key)
 				} else {
 					var clients []string
@@ -974,7 +975,7 @@ func (s *session) workloadsWatcher(namespace string, synced *sync.WaitGroup) err
 						}
 					}
 					state := workload.StateFromRPC(w.State)
-					dlog.Debugf(s, "Adding workload %s/%s.%s %s %s %s", key.kind, key.name, namespace, state, w.AgentState, clients)
+					clog.Debugf(s, "Adding workload %s/%s.%s %s %s %s", key.kind, key.name, namespace, state, w.AgentState, clients)
 					workloads[key] = workloadInfo{
 						uid:              k8sTypes.UID(w.Uid),
 						state:            state,

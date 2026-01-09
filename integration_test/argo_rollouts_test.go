@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -45,7 +45,7 @@ func (s *argoRolloutsSuite) SetupSuite() {
 	}
 	out, err := itest.KubectlOut(ctx, "", "argo", "rollouts", "version")
 	rq.NoError(err)
-	dlog.Info(ctx, out)
+	clog.Info(ctx, out)
 	rq.NoError(itest.Kubectl(ctx, "argo-rollouts", "apply", "-f", "https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml"))
 }
 
@@ -57,7 +57,7 @@ func downloadKubectlArgoRollouts(ctx context.Context, arExe string) error {
 	du := fmt.Sprintf(
 		"https://github.com/argoproj/argo-rollouts/releases/latest/download/kubectl-argo-rollouts-%s-%s",
 		runtime.GOOS, runtime.GOARCH)
-	dlog.Infof(ctx, "Downloading %s", du)
+	clog.Infof(ctx, "Downloading %s", du)
 	resp, err := http.Get(du)
 	if err != nil {
 		return err
@@ -141,7 +141,7 @@ func (s *argoRolloutsSuite) Test_ListsReplicaSetWhenRolloutDisabled() {
 	require.Eventually(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list")
-			dlog.Info(ctx, stdout)
+			clog.Info(ctx, stdout)
 			return err == nil && strings.Contains(stdout, svc+"-")
 		},
 		6*time.Second, // waitFor

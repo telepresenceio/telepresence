@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -133,7 +133,7 @@ func (s *ingestSuite) Test_IngestCLI() {
 
 	mountPoint := s.mountPoint()
 	js := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo-env", "--output", "json")
-	dlog.Info(ctx, js)
+	clog.Info(ctx, js)
 	var rsp ingest.Info
 	s.Require().NoError(json.Unmarshal([]byte(js), &rsp))
 	env := rsp.Environment

@@ -15,8 +15,8 @@ import (
 	"google.golang.org/grpc"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -92,7 +92,7 @@ func newService(ctx context.Context, cancel context.CancelFunc, cfg client.Confi
 	s := &service{
 		Context:        ctx,
 		srv:            srv,
-		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().UserDaemon.String(), log.SetLevel),
+		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().UserDaemon, clog.SetTreeLevel),
 		fuseFtpMgr:     remotefs.NewFuseFTPManager(),
 		sessionRunning: make(chan struct{}),
 	}
@@ -194,7 +194,7 @@ func runAliveAndCancellationSession(ctx context.Context, cancel context.CancelFu
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 	runAliveAndCancellation(g, cancel, daemonID.InfoFileName(), "-"+daemonID.String())
 	if err := g.Wait(); err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 	}
 }
 
@@ -209,7 +209,7 @@ func runAliveAndCancellation(g *dgroup.Group, cancel context.CancelFunc, daemonI
 		return il.WatchInfos(func(ctx context.Context) error {
 			ok, err := il.InfoExists(daemonInfoFile)
 			if err == nil && !ok {
-				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemonInfoFile)
+				clog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemonInfoFile)
 				cancel()
 			}
 			return err
@@ -233,7 +233,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	if pprofPort, _ := flags.GetUint16(pprofFlag); pprofPort > 0 {
 		go func() {
 			if err := pprof.PprofServer(c, pprofPort); err != nil {
-				dlog.Error(c, err)
+				clog.Error(c, err)
 			}
 		}()
 	}
@@ -250,6 +250,8 @@ func run(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+	c = clog.WithGroup(c, client.UserDaemonName)
+
 	c = docker.EnableClient(c)
 
 	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
@@ -261,12 +263,12 @@ func run(cmd *cobra.Command, _ []string) error {
 	defer grpcListener.Close()
 
 	daemonAddress := grpcListener.Addr().(interface{ AddrPort() netip.AddrPort }).AddrPort()
-	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
+	clog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 
-	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence User Daemon %s starting...", client.DisplayVersion())
-	dlog.Infof(c, "PID is %d", os.Getpid())
-	dlog.Info(c, "")
+	clog.Info(c, "---")
+	clog.Infof(c, "Telepresence User Daemon %s starting...", client.DisplayVersion())
+	clog.Infof(c, "PID is %d", os.Getpid())
+	clog.Info(c, "")
 
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  2 * time.Second,
@@ -303,7 +305,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	s.rootSessionInProc = rootSessionInProc
 	s.daemonAddress = daemonAddress
 	if tp, err := flags.GetUint16(teleroutePortFlag); err == nil && tp > 0 {
-		dlog.Debugf(c, "Using teleroute %d", tp)
+		clog.Debugf(c, "Using teleroute %d", tp)
 		s.teleroutePort = tp
 	}
 
@@ -329,7 +331,7 @@ func run(cmd *cobra.Command, _ []string) error {
 
 	err = g.Wait()
 	if err != nil {
-		dlog.Error(c, err)
+		clog.Error(c, err)
 	}
 	return err
 }

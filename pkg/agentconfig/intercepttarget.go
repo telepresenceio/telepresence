@@ -8,7 +8,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -94,7 +94,7 @@ func (cp InterceptTarget) AppProtocol(ctx context.Context) (proto string) {
 			foundIc = ic
 			proto = foundIc.AppProtocol
 		} else if foundIc.AppProtocol != ic.AppProtocol {
-			dlog.Warningf(ctx, "%s appProtocol %s differs from %s appProtocol %s. %s will be used for %s",
+			clog.Warnf(ctx, "%s appProtocol %s differs from %s appProtocol %s. %s will be used for %s",
 				portString(foundIc), proto,
 				portString(ic), ic.AppProtocol,
 				proto, portString(ic))

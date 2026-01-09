@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
@@ -31,7 +31,7 @@ func (s *session) watchAgentsLoop(ctx context.Context) error {
 		})
 
 	if err != nil && status.Code(err) == codes.Unimplemented {
-		dlog.Warnf(ctx, "WatchAgentsDelta is not implemented by the traffic-manager, falling back to WatchAgents and full snapshots")
+		clog.Warnf(ctx, "WatchAgentsDelta is not implemented by the traffic-manager, falling back to WatchAgents and full snapshots")
 		err = watcher.WatchWithRetry(ctx, "WatchAgents", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 			func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentInfoSnapshot], error) {
 				return s.ManagerClient().WatchAgents(ctx, s.SessionInfo())
@@ -72,7 +72,7 @@ func (s *session) handleAgentSnapshot(ctx context.Context, infos []*manager.Agen
 				ai := ais[0]
 				err := s.translateContainerEnv(ctx, ai, ig.container)
 				if err != nil {
-					dlog.Errorf(ctx, "failed to translate container env: %v", err)
+					clog.Errorf(ctx, "failed to translate container env: %v", err)
 				}
 				ig.AgentInfo = ai
 			}

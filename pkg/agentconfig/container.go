@@ -10,7 +10,7 @@ import (
 	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -149,7 +149,7 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 		if cc.Replace == ReplacePolicyContainer {
 			cnJson, err := json.Marshal(app)
 			if err != nil {
-				dlog.Errorf(ctx, "unable to marshal container %s.%s/%s to json: %v", a.Config.WorkloadName, a.Config.Namespace, app.Name, err)
+				clog.Errorf(ctx, "unable to marshal container %s.%s/%s to json: %v", a.Config.WorkloadName, a.Config.Namespace, app.Name, err)
 			}
 			anns[annotation.ReplaceAnnotationKey(cc.Name)] = string(cnJson)
 		}
@@ -285,7 +285,7 @@ func (a *ContainerBuilder) configuredContainers(ctx context.Context) []*core.Con
 					var cn core.Container
 					err := json.Unmarshal([]byte(appJson), &cn)
 					if err != nil {
-						dlog.Errorf(ctx, "failed to unmarshal container annotation %s: %v", annName, err)
+						clog.Errorf(ctx, "failed to unmarshal container annotation %s: %v", annName, err)
 					}
 					result[ci] = &cn
 					break

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -31,30 +31,21 @@ func logLevelArg(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return errors.New("accepts exactly one argument (the log level)")
 	}
-	lvl, err := logrus.ParseLevel(args[0])
+	_, err := clog.ParseLevel(args[0])
 	if err != nil {
 		return err
-	}
-	switch lvl {
-	case logrus.PanicLevel, logrus.FatalLevel:
-		return fmt.Errorf("unsupported log level: %s", lvl)
 	}
 	return nil
 }
 
 func loglevel() *cobra.Command {
-	lvs := logrus.AllLevels[2:] // Don't include `panic` and `fatal`
-	lvStrs := make([]string, len(lvs))
-	for i, lv := range lvs {
-		lvStrs[i] = lv.String()
-	}
 	lls := logLevelCommand{}
 	cmd := &cobra.Command{
-		Use:       fmt.Sprintf("loglevel <%s>", strings.Join(lvStrs, ",")),
+		Use:       fmt.Sprintf("loglevel <%s>", strings.Join(clog.LevelStrings, ",")),
 		Args:      logLevelArg,
 		Short:     "Temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons",
 		RunE:      lls.setTempLogLevel,
-		ValidArgs: lvStrs,
+		ValidArgs: clog.LevelStrings,
 		Annotations: map[string]string{
 			ann.Session: ann.Required,
 		},

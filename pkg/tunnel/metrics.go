@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -32,7 +32,7 @@ func (sp *TrafficManagerStreamProvider) CreateClientStream(
 	roundTripLatency,
 	dialTimeout time.Duration,
 ) (Stream, error) {
-	dlog.Debugf(ctx, "creating tunnel to manager for id %s", id)
+	clog.Debugf(ctx, "creating tunnel to manager for id %s", id)
 	ms, err := sp.Manager.Tunnel(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("call to manager.Tunnel() failed. Id %s: %v", id, err)

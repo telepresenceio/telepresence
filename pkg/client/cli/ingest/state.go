@@ -9,7 +9,7 @@ import (
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -198,7 +198,7 @@ func (s *state) runCommand(ctx context.Context) error {
 		env := s.info.Environment
 		cmd, err := proc.Start(ctx, env, s.Cmdline[0], s.Cmdline[1:]...)
 		if err != nil {
-			dlog.Errorf(ctx, "error interceptor starting process: %v", err)
+			clog.Errorf(ctx, "error interceptor starting process: %v", err)
 			return errcat.NoDaemonLogs.New(err)
 		}
 		if err = ud.AddHandler(ctx, fmt.Sprintf("%s/%s", s.WorkloadName, s.handlerContainer), cmd, ""); err != nil {

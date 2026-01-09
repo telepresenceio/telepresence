@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -248,7 +248,7 @@ func (il *InfoLoader[T]) deleteIfStale(name string, fi fs.FileInfo) error {
 	age := time.Since(fi.ModTime())
 	if age > maxNoSignOfLife {
 		name = filepath.Join(il.dirName, name)
-		dlog.Debugf(il.ctx, "Deleting stale info %s with age = %s", name, age)
+		clog.Debugf(il.ctx, "Deleting stale info %s with age = %s", name, age)
 		if err := cache.DeleteFromUserCache(il.ctx, name); err != nil {
 			return err
 		}
@@ -326,7 +326,7 @@ func (il *InfoLoader[T]) CancelWhenRmFromCache(cancel context.CancelFunc, filena
 		}
 		if !exists {
 			// spec removed from cache, shut down gracefully
-			dlog.Infof(ctx, "daemon file %s removed from cache, shutting down gracefully", filename)
+			clog.Infof(ctx, "daemon file %s removed from cache, shutting down gracefully", filename)
 			cancel()
 		}
 		return nil
@@ -348,14 +348,14 @@ func (il *InfoLoader[T]) KeepInfoAlive(file string) error {
 		if err := os.Chtimes(daemonFile, now, now); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				// File is removed, so stop trying to update its timestamps
-				dlog.Debugf(il.ctx, "Daemon info %s does not exist", daemonFile)
+				clog.Debugf(il.ctx, "Daemon info %s does not exist", daemonFile)
 				return nil
 			}
 			return fmt.Errorf("failed to update timestamp on %s: %w", daemonFile, err)
 		}
 		select {
 		case <-il.ctx.Done():
-			dlog.Debugf(il.ctx, "Deleting daemon info %s because context was cancelled", file)
+			clog.Debugf(il.ctx, "Deleting daemon info %s because context was cancelled", file)
 			_ = il.DeleteInfo(file)
 			return nil
 		case now = <-ticker.C:

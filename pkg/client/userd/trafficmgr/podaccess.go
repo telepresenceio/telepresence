@@ -10,8 +10,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
@@ -108,7 +108,7 @@ func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) e
 	if cc.Cluster().AgentPortForward {
 		// An agent port-forward to the pod with a designated to the podIP is necessary to
 		// mount or port-forward to localhost.
-		dlog.Debugf(ctx, "Waiting for root-daemon to receive agent IP %s", pa.podIP)
+		clog.Debugf(ctx, "Waiting for root-daemon to receive agent IP %s", pa.podIP)
 		ip, err := netip.ParseAddr(pa.podIP)
 		if err != nil {
 			return err
@@ -136,18 +136,18 @@ func (pa *podAccess) workerPortForward(ctx context.Context, port string, wg *syn
 	defer wg.Done()
 	pp, err := types.ParsePortAndProto(port)
 	if err != nil {
-		dlog.Errorf(ctx, "malformed extra port %q: %v", port, err)
+		clog.Errorf(ctx, "malformed extra port %q: %v", port, err)
 		return
 	}
 	addr, err := netip.ParseAddr(pa.podIP)
 	if err != nil {
-		dlog.Errorf(ctx, "error parsing pod IP address %q: %v", pa.podIP, err)
+		clog.Errorf(ctx, "error parsing pod IP address %q: %v", pa.podIP, err)
 		return
 	}
 	f := forwarder.New(pp, tunnel.ClientToAgent, netip.AddrPortFrom(addr, pp.Port))
 	err = f.Serve(ctx, nil)
 	if err != nil && ctx.Err() == nil {
-		dlog.Errorf(ctx, "port-forwarder failed with %v", err)
+		clog.Errorf(ctx, "port-forwarder failed with %v", err)
 	}
 }
 
@@ -191,7 +191,7 @@ func (lpf *podAccessTracker) initialStart(ic *podAccess) {
 func (lpf *podAccessTracker) privateStart(pa *podAccess) {
 	ctx := pa.ctx
 	if !pa.shouldForward() && !pa.shouldMount() {
-		dlog.Debugf(ctx, "No mounts or port-forwards needed for pod-ip %s, container %s", pa.podIP, pa.container)
+		clog.Debugf(ctx, "No mounts or port-forwards needed for pod-ip %s, container %s", pa.podIP, pa.container)
 		return
 	}
 
@@ -201,7 +201,7 @@ func (lpf *podAccessTracker) privateStart(pa *podAccess) {
 		podIP:     pa.podIP,
 	}
 	if _, isLive := lpf.alivePods[fk]; isLive {
-		dlog.Debugf(ctx, "Mounts and port-forwards already active for %+v", fk)
+		clog.Debugf(ctx, "Mounts and port-forwards already active for %+v", fk)
 		return
 	}
 
@@ -214,7 +214,7 @@ func (lpf *podAccessTracker) privateStart(pa *podAccess) {
 		pa.startForwards(ctx, &lp.wg)
 	}
 	lpf.alivePods[fk] = lp
-	dlog.Debugf(ctx, "Started mounts and port-forwards for pod-ip %s, container %s", pa.podIP, pa.container)
+	clog.Debugf(ctx, "Started mounts and port-forwards for pod-ip %s, container %s", pa.podIP, pa.container)
 }
 
 // initSnapshot prepares this instance for a new round of start calls followed by a cancelUnwanted.
@@ -269,7 +269,7 @@ func (lpf *podAccessTracker) cancelUnwanted(ctx context.Context) {
 	lpf.Lock()
 	for fk, lp := range lpf.alivePods {
 		if _, isWanted := lpf.snapshot[fk]; !isWanted {
-			dlog.Infof(ctx, "Terminating mounts and port-forwards for %+v", fk)
+			clog.Infof(ctx, "Terminating mounts and port-forwards for %+v", fk)
 			lpf.privateDelete(fk, lp)
 		}
 	}

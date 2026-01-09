@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"slices"
@@ -26,9 +27,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/derror"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
@@ -97,13 +98,13 @@ func NewService(ctx context.Context, configWatcher config.Watcher) (Service, *dg
 	if managerutil.AgentInjectorEnabled(ctx) {
 		ctx, err = managerutil.WithAgentImageRetriever(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
 		if err != nil {
-			dlog.Errorf(ctx, "unable to initialize agent injector: %v", err)
+			clog.Errorf(ctx, "unable to initialize agent injector: %v", err)
 		}
 	}
 	// These are context-dependent, so build them once the pool is up
 	ret.clusterInfo, err = cluster.NewInfo(ctx)
 	if err != nil {
-		dlog.Errorf(ctx, "unable to initialize cluster info: %v", err)
+		clog.Errorf(ctx, "unable to initialize cluster info: %v", err)
 		return nil, nil, err
 	}
 	ns := managerutil.GetEnv(ctx).ManagerNamespace
@@ -174,7 +175,7 @@ func (s *service) GetTelepresenceAPI(ctx context.Context, e *empty.Empty) (*rpc.
 
 // ArriveAsClient establishes a session between a client and the Manager.
 func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*rpc.SessionInfo, error) {
-	dlog.Debugf(ctx, "Namespace: %s", client.Namespace)
+	clog.Debugf(ctx, "Namespace: %s", client.Namespace)
 
 	if !s.State().ManagesNamespace(ctx, client.Namespace) {
 		return nil, status.Error(codes.FailedPrecondition, fmt.Sprintf("namespace %s is not managed", client.Namespace))
@@ -221,7 +222,7 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
 func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc.SessionInfo, error) {
-	dlog.Debugf(ctx, "Name %s, IP %s", agent.PodName, agent.PodIp)
+	clog.Debugf(ctx, "Name %s, IP %s", agent.PodName, agent.PodIp)
 	if val := validateAgent(agent); val != "" {
 		return nil, status.Error(codes.InvalidArgument, val)
 	}
@@ -280,11 +281,11 @@ func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 
 	err := s.UpdateLastEngagementTime(ctx, workloadKey)
 	if err != nil {
-		dlog.Errorf(ctx, "error updating last engagement time: %v", err)
+		clog.Errorf(ctx, "error updating last engagement time: %v", err)
 	}
 	err = s.removeUnusedAgent(ctx, workloadKey)
 	if err != nil {
-		dlog.Errorf(ctx, "error removing unused agent: %v", err)
+		clog.Errorf(ctx, "error removing unused agent: %v", err)
 	}
 
 	return &empty.Empty{}, err
@@ -325,16 +326,16 @@ func (s *service) removeUnusedAgent(ctx context.Context, workloadKey *mutator.Wo
 		return fmt.Errorf("error in looking up workload key %s in agentStateFile, err: %w", workloadKey, err)
 	}
 	lastEngagementTime := agentState.LastEngagementTime
-	dlog.Tracef(ctx, "Last engagement time for agent %s: %s", *workloadKey, lastEngagementTime)
+	clog.Tracef(ctx, "Last engagement time for agent %s: %s", *workloadKey, lastEngagementTime)
 	if lastEngagementTime.IsZero() {
 		// means it was never engaged
 		return nil
 	}
 	idleTime := time.Since(lastEngagementTime)
-	dlog.Tracef(ctx, "Idle time for agent %s: %s", *workloadKey, idleTime)
+	clog.Tracef(ctx, "Idle time for agent %s: %s", *workloadKey, idleTime)
 	if idleTime > maxIdleTime {
 		// construct uninstall agents request
-		dlog.Infof(ctx, "Removing agent %s due to idle time %s exceeding max idle time %s", *workloadKey, idleTime, maxIdleTime)
+		clog.Infof(ctx, "Removing agent %s due to idle time %s exceeding max idle time %s", *workloadKey, idleTime, maxIdleTime)
 		ns := workloadKey.Namespace
 		mm := mutator.GetMap(ctx)
 		wl, err := k8sapi.GetWorkload(ctx, workloadKey.Name, ns, "")
@@ -351,14 +352,14 @@ func (s *service) removeUnusedAgent(ctx context.Context, workloadKey *mutator.Wo
 
 func (s *service) UpdateLastEngagementTime(ctx context.Context, workloadKey *mutator.WorkloadKey) error {
 	// updates last engagement time IN MEMORY, this is persisted to the configmap by another goroutine that runs periodically
-	dlog.Tracef(ctx, "Logging workloadKey for last engagement time: %s", *workloadKey)
+	clog.Tracef(ctx, "Logging workloadKey for last engagement time: %s", *workloadKey)
 
 	agentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
-	dlog.Tracef(ctx, "Logging agentStateFileYAML: %s", agentStateFileYAML)
+	clog.Tracef(ctx, "Logging agentStateFileYAML: %s", agentStateFileYAML)
 
 	var agentStateFile AgentStateFile
 	if string(agentStateFileYAML) != "" {
-		dlog.Tracef(ctx, "Unmarshalling agent states from YAML")
+		clog.Tracef(ctx, "Unmarshalling agent states from YAML")
 		err := yaml.Unmarshal(agentStateFileYAML, &agentStateFile)
 		if err != nil {
 			return fmt.Errorf("error unmarshalling agent states: %w", err)
@@ -463,7 +464,7 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_Wa
 			}
 			aip, parseErr := netip.ParseAddr(a.PodIp)
 			if parseErr != nil {
-				dlog.Errorf(ctx, "error parsing agent pod ip %q: %v", a.PodIp, parseErr)
+				clog.Errorf(ctx, "error parsing agent pod ip %q: %v", a.PodIp, parseErr)
 			}
 			ap := &rpc.AgentPodInfo{
 				WorkloadName: a.Name,
@@ -516,7 +517,7 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 					}
 					aip, parseErr := netip.ParseAddr(a.PodIp)
 					if parseErr != nil {
-						dlog.Errorf(ctx, "error parsing agent pod ip %q: %v", a.PodIp, parseErr)
+						clog.Errorf(ctx, "error parsing agent pod ip %q: %v", a.PodIp, parseErr)
 						continue
 					}
 					ap := &rpc.AgentPodInfo{
@@ -626,14 +627,14 @@ func (s *service) watchAgents(ctx context.Context, includeAgent func(tunnel.Sess
 			return nil
 		}
 		lastSnap = agents
-		if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
+		if clog.Enabled(ctx, slog.LevelDebug) {
 			names := make([]string, len(agents))
 			i := 0
 			for _, a := range agents {
 				names[i] = a.PodName + "." + a.Namespace
 				i++
 			}
-			dlog.Debugf(ctx, "Sending update %v", names)
+			clog.Debugf(ctx, "Sending update %v", names)
 		}
 		resp := &rpc.AgentInfoSnapshot{
 			Agents: agents,
@@ -674,7 +675,7 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 					aid.Removals[rl] = string(k)
 				}
 			}
-			dlog.Debugf(ctx, "Sending %d upserts and %d removals", len(aid.Upserts), len(aid.Removals))
+			clog.Debugf(ctx, "Sending %d upserts and %d removals", len(aid.Upserts), len(aid.Removals))
 			err = stream.Send(&aid)
 			if err != nil {
 				return err
@@ -717,7 +718,7 @@ func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo)
 					return true
 				default:
 					// otherwise: don't return this intercept
-					dlog.Debugf(ctx, "Intercept %q is in state %s", info.Spec.Name, info.Disposition)
+					clog.Debugf(ctx, "Intercept %q is in state %s", info.Spec.Name, info.Disposition)
 					return false
 				}
 			}
@@ -744,7 +745,7 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_W
 	}
 	snapshot := cache.NewClientMap[string, *state.Intercept]()
 	return snapshot.Watch(sessionDone, deltaCh, func() error {
-		dlog.Debug(ctx, "Sending update")
+		clog.Debug(ctx, "Sending update")
 		intercepts := make([]*rpc.InterceptInfo, 0, snapshot.Size())
 		snapshot.Range(func(_ string, intercept *state.Intercept) bool {
 			intercepts = append(intercepts, intercept.InterceptInfo)
@@ -779,7 +780,7 @@ func (s *service) WatchInterceptsDelta(session *rpc.SessionInfo, stream grpc.Ser
 					iid.Upserts[k] = v.InterceptInfo
 				}
 			}
-			dlog.Debugf(ctx, "Sending %d upserts and %d removals", len(iid.Upserts), len(iid.Removals))
+			clog.Debugf(ctx, "Sending %d upserts and %d removals", len(iid.Upserts), len(iid.Removals))
 			err = stream.Send(&iid)
 			if err != nil {
 				return err
@@ -789,7 +790,7 @@ func (s *service) WatchInterceptsDelta(session *rpc.SessionInfo, stream grpc.Ser
 }
 
 func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (pi *rpc.PreparedIntercept, err error) {
-	dlog.Debugf(ctx, "Intercept name %s", request.InterceptSpec.Name)
+	clog.Debugf(ctx, "Intercept name %s", request.InterceptSpec.Name)
 	ctx, _, err = s.ensureClientSession(ctx, request.Session)
 	if err != nil {
 		return nil, err
@@ -833,7 +834,7 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateInterceptRequest) (*rpc.InterceptInfo, error) {
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
 	spec := ciReq.InterceptSpec
-	dlog.Debugf(ctx, "Intercept name %s", ciReq.InterceptSpec.Name)
+	clog.Debugf(ctx, "Intercept name %s", ciReq.InterceptSpec.Name)
 
 	if val := validateIntercept(spec); val != "" {
 		return nil, status.Error(codes.InvalidArgument, val)
@@ -871,7 +872,7 @@ func (s *service) MakeInterceptID(_ context.Context, sessionID string, name stri
 // RemoveIntercept lets a client remove an intercept.
 func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveInterceptRequest2) (*empty.Empty, error) {
 	name := riReq.Name
-	dlog.Debugf(ctx, "Intercept name %s", name)
+	clog.Debugf(ctx, "Intercept name %s", name)
 
 	ctx, client, err := s.ensureClientSession(ctx, riReq.Session)
 	if err != nil {
@@ -907,9 +908,9 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 	}
 
 	if rIReq.Disposition == rpc.InterceptDispositionType_AGENT_ERROR {
-		dlog.Errorf(ctx, "%s - %s: %s", ceptID, rIReq.Disposition, rIReq.Message)
+		clog.Errorf(ctx, "%s - %s: %s", ceptID, rIReq.Disposition, rIReq.Message)
 	} else {
-		dlog.Debugf(ctx, "%s - %s", ceptID, rIReq.Disposition)
+		clog.Debugf(ctx, "%s - %s", ceptID, rIReq.Disposition)
 	}
 
 	s.removeExcludedEnvVars(rIReq.Environment)
@@ -920,7 +921,7 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			return
 		}
 		if mutator.GetMap(ctx).IsInactive(types.UID(agent.PodUid)) {
-			dlog.Debugf(ctx, "Pod %s(%s) is blacklisted", agent.PodName, agent.PodIp)
+			clog.Debugf(ctx, "Pod %s(%s) is blacklisted", agent.PodName, agent.PodIp)
 			return
 		}
 
@@ -1034,11 +1035,11 @@ func (s *service) resolveSelfDNS(svcIP net.IP, request *rpc.DNSRequest) (rrs dns
 }
 
 func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (response *rpc.LookupResponse, err error) {
-	dlog.Debugf(ctx, "lookup %q", request.Name)
+	clog.Debugf(ctx, "lookup %q", request.Name)
 	var ips []netip.Addr
 	defer func() {
 		if err == nil {
-			dlog.Debugf(ctx, "lookup %q => %v", request.Name, ips)
+			clog.Debugf(ctx, "lookup %q => %v", request.Name, ips)
 		}
 	}()
 	ctx, client, err := s.ensureClientSession(ctx, request.Session)
@@ -1070,7 +1071,7 @@ func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (respo
 		// Strip trailing dot in query.
 		name = name[:nl-1]
 	}
-	dlog.Debugf(ctx, `LookupNetIP("ip", %q)`, name)
+	clog.Debugf(ctx, `LookupNetIP("ip", %q)`, name)
 	ips, err = net.DefaultResolver.LookupNetIP(ctx, "ip", name)
 	if err != nil {
 		_, err = dnsproxy.MakeDNSError(err)
@@ -1097,7 +1098,7 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (respo
 	qType := uint16(request.Type)
 	qtn := dns2.TypeToString[qType]
 	var rrs dnsproxy.RRs
-	if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
+	if clog.Enabled(ctx, slog.LevelDebug) {
 		defer func() {
 			var result string
 			switch {
@@ -1108,7 +1109,7 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (respo
 			default:
 				result = rrs.String()
 			}
-			dlog.Debugf(ctx, "%s %s -> %s", request.Name, qtn, result)
+			clog.Debugf(ctx, "%s %s -> %s", request.Name, qtn, result)
 		}()
 	}
 
@@ -1142,7 +1143,7 @@ func (s *service) lookupFromManager(ctx context.Context, sessionID tunnel.Sessio
 			restoreName = true
 		}
 	}
-	dlog.Tracef(ctx, "traffic-manager: %s", name)
+	clog.Tracef(ctx, "traffic-manager: %s", name)
 	qtn := dns2.TypeToString[qType]
 	rrs, rCode, err := dnsproxy.Lookup(ctx, qType, name, noSearchDomain)
 	if err == nil && rCode == dns2.RcodeNameError {
@@ -1150,24 +1151,24 @@ func (s *service) lookupFromManager(ctx context.Context, sessionID tunnel.Sessio
 		if client != nil && nDots > 1 && client.Namespace != tmNamespace && !strings.HasSuffix(name, s.dotClusterDomain) && !hasDomainSuffix(name, client.Namespace) {
 			name += client.Namespace + "."
 			restoreName = true
-			dlog.Debugf(ctx, "traffic-manager: %s", name)
+			clog.Debugf(ctx, "traffic-manager: %s", name)
 			rrs, rCode, err = dnsproxy.Lookup(ctx, qType, name, noSearchDomain)
 		}
 	}
 	if err != nil {
-		dlog.Errorf(ctx, "traffic-manager: %s %s -> %s %s", qName, qtn, dns2.RcodeToString[rCode], err)
+		clog.Errorf(ctx, "traffic-manager: %s %s -> %s %s", qName, qtn, dns2.RcodeToString[rCode], err)
 		return nil, rCode
 	}
 	if len(rrs) == 0 {
-		dlog.Tracef(ctx, "traffic-manager: %s %s -> %s", qName, qtn, dns2.RcodeToString[rCode])
+		clog.Tracef(ctx, "traffic-manager: %s %s -> %s", qName, qtn, dns2.RcodeToString[rCode])
 	} else {
 		if restoreName {
-			dlog.Tracef(ctx, "traffic-manager: restore %s to %s", name, qName)
+			clog.Tracef(ctx, "traffic-manager: restore %s to %s", name, qName)
 			for _, rr := range rrs {
 				rr.Header().Name = qName
 			}
 		}
-		dlog.Tracef(ctx, "traffic-manager: %s %s -> %s", qName, qtn, rrs)
+		clog.Tracef(ctx, "traffic-manager: %s %s -> %s", qName, qtn, rrs)
 	}
 	return rrs, rCode
 }
@@ -1185,13 +1186,16 @@ func (s *service) GetLogs(_ context.Context, _ *rpc.GetLogsRequest) (*rpc.LogsRe
 }
 
 func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (*empty.Empty, error) {
-	s.state.SetTempLogLevel(ctx, request)
-	return &empty.Empty{}, nil
+	err := s.state.SetTempLogLevel(ctx, request)
+	if err != nil {
+		err = errors.FromError(err, codes.InvalidArgument, err.Error())
+	}
+	return &empty.Empty{}, err
 }
 
 func (s *service) UninstallAgents(ctx context.Context, request *rpc.UninstallAgentsRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSessionInfo())
-	dlog.Debugf(ctx, "%s", request.Agents)
+	clog.Debugf(ctx, "%s", request.Agents)
 	return &empty.Empty{}, s.state.UninstallAgents(ctx, request)
 }
 
@@ -1214,11 +1218,11 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 	defer func() {
 		if r := recover(); r != nil {
 			err = derror.PanicToError(r)
-			dlog.Errorf(ctx, "WatchWorkloads panic: %+v", err)
+			clog.Errorf(ctx, "WatchWorkloads panic: %+v", err)
 			err = status.Error(codes.Internal, err.Error())
 		}
 	}()
-	dlog.Debugf(ctx, "Namespace %q", request.Namespace)
+	clog.Debugf(ctx, "Namespace %q", request.Namespace)
 
 	if request.SessionInfo == nil {
 		return status.Error(codes.InvalidArgument, "SessionInfo is required")

@@ -31,7 +31,6 @@ following Free and Open Source software:
     github.com/coreos/go-iptables                                  v0.8.0                                Apache License 2.0
     github.com/cyphar/filepath-securejoin                          v0.6.1                                3-clause BSD license, Mozilla Public License 2.0
     github.com/datawire/argo-rollouts-go-client                    v0.0.0-20241216133646-cb1073556c99    Apache License 2.0
-    github.com/datawire/dlib                                       v1.3.1                                Apache License 2.0
     github.com/datawire/envconfig                                  v0.0.0-20221012222025-09524dc7d59b    Apache License 2.0
     github.com/davecgh/go-spew                                     v1.1.2-0.20180830191138-d8f796af33cc  ISC license
     github.com/distribution/reference                              v0.6.0                                Apache License 2.0
@@ -78,7 +77,7 @@ following Free and Open Source software:
     github.com/gorilla/websocket                                   v1.5.4-0.20250319132907-e064f32e3674  2-clause BSD license
     github.com/gosuri/uitable                                      v0.0.4                                MIT license
     github.com/gregjones/httpcache                                 v0.0.0-20190611155906-901d90724c79    MIT license
-    github.com/grpc-ecosystem/go-grpc-middleware/v2                v2.3.3                                Apache License 2.0
+    github.com/grpc-ecosystem/go-grpc-middleware/v2                v2.3.0                                Apache License 2.0
     github.com/hashicorp/errwrap                                   v1.1.0                                Mozilla Public License 2.0
     github.com/hashicorp/go-multierror                             v1.1.1                                Mozilla Public License 2.0
     github.com/hectane/go-acl                                      v0.0.0-20230122075934-ca0b05cb1adb    MIT license
@@ -136,10 +135,11 @@ following Free and Open Source software:
     github.com/spf13/cobra                                         v1.10.2                               Apache License 2.0
     github.com/spf13/pflag                                         v1.0.10                               3-clause BSD license
     github.com/stretchr/testify                                    v1.11.1                               MIT license
-    github.com/telepresenceio/dlib/v2                              v2.1.1                                Apache License 2.0
-    github.com/telepresenceio/go-ftpserver                         v1.1.0                                Apache License 2.0
-    github.com/telepresenceio/go-fuseftp                           v0.6.9                                Apache License 2.0
-    github.com/telepresenceio/go-fuseftp/rpc                       v0.6.9                                Apache License 2.0
+    github.com/telepresenceio/clog                                 v0.0.0-20260106210742-5ac3655861fc    Apache License 2.0
+    github.com/telepresenceio/dlib/v2                              v2.1.2                                Apache License 2.0
+    github.com/telepresenceio/go-ftpserver                         v1.2.1                                Apache License 2.0
+    github.com/telepresenceio/go-fuseftp                           v1.0.1                                Apache License 2.0
+    github.com/telepresenceio/go-fuseftp/rpc                       v1.0.1                                Apache License 2.0
     github.com/telepresenceio/telepresence/cmd/cobraparser/v2      (modified)                            Apache License 2.0
     github.com/telepresenceio/telepresence/rpc/v2                  (modified)                            Apache License 2.0
     github.com/vishvananda/netlink                                 v1.3.1                                Apache License 2.0

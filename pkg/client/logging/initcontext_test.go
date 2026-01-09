@@ -4,45 +4,37 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
-type dtimeHook struct{}
-
-func (dtimeHook) Levels() []logrus.Level {
-	return logrus.AllLevels
-}
-
-func (dtimeHook) Fire(entry *logrus.Entry) error {
-	entry.Time = dtime.Now()
-	return nil
-}
-
 func TestInitContext(t *testing.T) {
 	const logName = "testing"
 
 	ft := dtime.NewFakeTime()
+	testutil.SetTimeProvider(ft.Now)
 
 	testSetup := func(t *testing.T) (ctx context.Context, logDir, logFile string) {
 		t.Helper()
-		ctx = dlog.NewTestContext(t, false)
+		ctx = testutil.NewContext(t, false)
+		ctx, cancel := context.WithCancel(ctx)
 		env, err := client.LoadEnv()
 		if err != nil {
 			t.Fatal(err)
 		}
-		ctx = client.WithEnv(ctx, env)
+		ctx = client.WithEnv(ctx, &env)
 
 		// Ensure that we use a temporary log dir
 		logDir = t.TempDir()
@@ -71,27 +63,21 @@ func TestInitContext(t *testing.T) {
 			os.Stdout = saveStdout
 			os.Stderr = saveStderr
 			restoreStd()
+			cancel()
 		})
 
 		return ctx, logDir, filepath.Join(logDir, logName+".log")
-	}
-
-	closeLog := func(t *testing.T) {
-		t.Helper()
-		check := require.New(t)
-		check.IsType(&RotatingFile{}, loggerForTest.Out)
-		check.NoError(loggerForTest.Out.(*RotatingFile).Close())
 	}
 
 	t.Run("stdout and stderr", func(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), true)
-		loggerForTest.AddHook(&dtimeHook{})
+		clog.Info(ctx, "test setup")
+
+		c, err := InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), true)
 		check.NoError(err)
 		check.NotNil(c)
-		defer closeLog(t)
 
 		require.FileExists(t, logFile)
 
@@ -115,11 +101,9 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), true)
-		loggerForTest.AddHook(&dtimeHook{})
+		c, err := InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), true)
 		check.NoError(err)
 		check.NotNil(c)
-		defer closeLog(t)
 
 		msg := "some message"
 		println(msg) //nolint:forbidigo // we're testing this builtin function
@@ -134,11 +118,9 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), true)
-		loggerForTest.AddHook(&dtimeHook{})
+		c, err := InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), true)
 		check.NoError(err)
 		check.NotNil(c)
-		defer closeLog(t)
 
 		msg := "some message"
 		log.Print(msg)
@@ -147,29 +129,25 @@ func TestInitContext(t *testing.T) {
 
 		bs, err := os.ReadFile(logFile)
 		check.NoError(err)
-		check.Contains(string(bs), fmt.Sprintf("info    stdlog : %s\n", msg))
+		check.Contains(string(bs), fmt.Sprintf("INFO  stdlog : %s\n", msg))
 	})
 
 	t.Run("next session rotates on write", func(t *testing.T) {
 		ctx, logDir, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
-		loggerForTest.AddHook(&dtimeHook{})
+		c, err := InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), false)
 		check.NoError(err)
 		check.NotNil(c)
 		infoMsg := "info message"
-		dlog.Info(c, infoMsg)
-		closeLog(t)
+		clog.Info(c, infoMsg)
 		ft.Step(time.Second)
 
-		c, err = InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
-		loggerForTest.AddHook(&dtimeHook{})
+		c, err = InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), false)
 		check.NoError(err)
 		check.NotNil(c)
-		dlog.Info(c, infoMsg)
+		clog.Info(c, infoMsg)
 		check.FileExists(logFile)
-		defer closeLog(t)
 
 		infoTs := dtime.Now().Format("2006-01-02 15:04:05.0000")
 		backupFile := filepath.Join(logDir, fmt.Sprintf("%s-%s.log", logName, dtime.Now().Format("20060102T150405")))
@@ -177,28 +155,26 @@ func TestInitContext(t *testing.T) {
 
 		bs, err := os.ReadFile(logFile)
 		check.NoError(err)
-		check.Contains(string(bs), fmt.Sprintf("%s info    %s\n", infoTs, infoMsg))
+		check.Contains(string(bs), fmt.Sprintf("%s INFO  %s\n", infoTs, infoMsg))
 	})
 
 	t.Run("birthtime updates after rotate", func(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
-		loggerForTest.AddHook(&dtimeHook{})
+		c, err := InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), false)
 		check.NoError(err)
 		check.NotNil(c)
-		dlog.Info(c, "info message")
-		bt1 := loggerForTest.Out.(*RotatingFile).birthTime
-		closeLog(t)
+		clog.Info(c, "info message")
+		check.NotNil(rotatingFileForTest)
+		bt1 := rotatingFileForTest.birthTime
 
-		c, err = InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
-		loggerForTest.AddHook(&dtimeHook{})
+		c, err = InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), false)
 		check.NoError(err)
 		check.NotNil(c)
-		dlog.Info(c, "info message")
-		bt2 := loggerForTest.Out.(*RotatingFile).birthTime
-		closeLog(t)
+		clog.Info(c, "info message")
+		check.NotNil(rotatingFileForTest)
+		bt2 := rotatingFileForTest.birthTime
 		check.Equal(bt1, bt2)
 	})
 
@@ -206,27 +182,23 @@ func TestInitContext(t *testing.T) {
 		ctx, _, logFile := testSetup(t)
 		check := require.New(t)
 
-		c, err := InitContext(ctx, logFile, logrus.InfoLevel, RotateNever, false)
-		loggerForTest.AddHook(&dtimeHook{})
+		c, err := InitContext(ctx, logFile, slog.LevelInfo, RotateNever, false)
 		check.NoError(err)
 		check.NotNil(c)
 		infoMsg1 := "info message 1"
-		dlog.Info(c, infoMsg1)
-		closeLog(t)
+		clog.Info(c, infoMsg1)
 
-		c, err = InitContext(ctx, logFile, logrus.InfoLevel, RotateNever, false)
-		loggerForTest.AddHook(&dtimeHook{})
+		c, err = InitContext(ctx, logFile, slog.LevelInfo, RotateNever, false)
 		check.NoError(err)
 		check.NotNil(c)
 		infoMsg2 := "info message 2"
-		dlog.Info(c, infoMsg2)
-		closeLog(t)
+		clog.Info(c, infoMsg2)
 
 		bs, err := os.ReadFile(logFile)
 		check.NoError(err)
 		infoTs := dtime.Now().Format("2006-01-02 15:04:05.0000")
-		check.Contains(string(bs), fmt.Sprintf("%s info    %s\n", infoTs, infoMsg1))
-		check.Contains(string(bs), fmt.Sprintf("%s info    %s\n", infoTs, infoMsg2))
+		check.Contains(string(bs), fmt.Sprintf("%s INFO  %s\n", infoTs, infoMsg1))
+		check.Contains(string(bs), fmt.Sprintf("%s INFO  %s\n", infoTs, infoMsg2))
 	})
 
 	t.Run("old files are removed", func(t *testing.T) {
@@ -241,13 +213,11 @@ func TestInitContext(t *testing.T) {
 		}
 		for i := 0; i < maxFiles+2; i++ {
 			ft.Step(24 * time.Hour)
-			c, err := InitContext(ctx, logFile, logrus.InfoLevel, NewRotateOnce(), false)
-			loggerForTest.AddHook(&dtimeHook{})
+			c, err := InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), false)
 			check.NoError(err)
 			check.NotNil(c)
 			infoMsg := "info message"
-			dlog.Info(c, infoMsg)
-			closeLog(t)
+			clog.Info(c, infoMsg)
 		}
 		// Give file remover some time to finish
 		time.Sleep(100 * time.Millisecond)

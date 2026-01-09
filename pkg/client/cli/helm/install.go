@@ -18,7 +18,7 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -75,7 +75,7 @@ func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) (err e
 			cr.ManagerNamespace = "ambassador"
 		}
 	}
-	dlog.Debugf(ctx, "using manager namespace %q", cr.ManagerNamespace)
+	clog.Debugf(ctx, "using manager namespace %q", cr.ManagerNamespace)
 
 	allValues, err := hr.MergeValues(getter.All(cli.New()))
 	if err != nil {
@@ -106,7 +106,7 @@ func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) (err e
 	case Lint:
 		err = lint(ctx, cluster.Kubeconfig, mgrNs, hr)
 	default:
-		dlog.Debug(ctx, "ensuring that traffic-manager exists")
+		clog.Debug(ctx, "ensuring that traffic-manager exists")
 		err = EnsureTrafficManager(cluster.Context, cluster.Kubeconfig, mgrNs, hr)
 	}
 	if err != nil {
@@ -133,8 +133,8 @@ func (hr *Request) Run(ctx context.Context, cr *connector.ConnectRequest) (err e
 func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
 	err := helmConfig.Init(clientGetter, namespace, helmDriver, func(format string, args ...any) {
-		ctx := dlog.WithField(ctx, "source", "helm")
-		dlog.Infof(ctx, format, args...)
+		ctx := clog.With(ctx, "source", "helm")
+		clog.Infof(ctx, format, args...)
 	})
 	if err != nil {
 		return nil, err
@@ -218,7 +218,7 @@ func installNew(
 	req *Request,
 	values map[string]any,
 ) error {
-	dlog.Infof(ctx, "No existing %s found in namespace %s, installing %s...", releaseName, namespace, chrt.Metadata.Version)
+	clog.Infof(ctx, "No existing %s found in namespace %s, installing %s...", releaseName, namespace, chrt.Metadata.Version)
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
@@ -244,7 +244,7 @@ func upgradeExisting(
 	req *Request,
 	values map[string]any,
 ) error {
-	dlog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, ns, chrt.Metadata.Version)
+	clog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, ns, chrt.Metadata.Version)
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
 	upgrade.Wait = true
@@ -261,7 +261,7 @@ func upgradeExisting(
 }
 
 func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, releaseName, namespace string, req *Request) error {
-	dlog.Infof(ctx, "Uninstalling %s in namespace %s", releaseName, namespace)
+	clog.Infof(ctx, "Uninstalling %s in namespace %s", releaseName, namespace)
 	uninstall := action.NewUninstall(helmConfig)
 	uninstall.DisableHooks = req.NoHooks
 	uninstall.Wait = true
@@ -280,7 +280,7 @@ func isInstalled(
 	clientGetter genericclioptions.RESTClientGetter,
 	releaseName, namespace string,
 ) (*release.Release, *action.Configuration, error) {
-	dlog.Debug(ctx, "getHelmConfig")
+	clog.Debug(ctx, "getHelmConfig")
 	helmConfig, err := getHelmConfig(ctx, clientGetter, namespace)
 	if err != nil {
 		err = fmt.Errorf("failed to initialize helm config: %w", err)
@@ -290,7 +290,7 @@ func isInstalled(
 	var existing *release.Release
 	transitionStart := time.Now()
 	for time.Since(transitionStart) < timeout {
-		dlog.Debugf(ctx, "getHelmRelease")
+		clog.Debugf(ctx, "getHelmRelease")
 		if existing, err = getHelmRelease(ctx, releaseName, helmConfig); err != nil {
 			// If we weren't able to get the helm release at all, there's no hope for installing it
 			// This could have happened because the user doesn't have the requisite permissions, or because there was some
@@ -300,7 +300,7 @@ func isInstalled(
 			return nil, nil, err
 		}
 		if existing == nil {
-			dlog.Infof(ctx, "isInstalled(namespace=%q): current install: none", namespace)
+			clog.Infof(ctx, "isInstalled(namespace=%q): current install: none", namespace)
 			return nil, helmConfig, nil
 		}
 		st := existing.Info.Status
@@ -309,11 +309,11 @@ func isInstalled(
 			if ow, ok := existing.Config["createdBy"]; ok {
 				owner = ow.(string)
 			}
-			dlog.Infof(ctx, "isInstalled(namespace=%q): current install: version=%q, owner=%q, state.status=%q, state.desc=%q",
+			clog.Infof(ctx, "isInstalled(namespace=%q): current install: version=%q, owner=%q, state.status=%q, state.desc=%q",
 				namespace, releaseVer(existing), owner, st, existing.Info.Description)
 			return existing, helmConfig, nil
 		}
-		dlog.Infof(ctx, "isInstalled(namespace=%q): current install is in a pending or uninstalling state, waiting for it to transition...",
+		clog.Infof(ctx, "isInstalled(namespace=%q): current install is in a pending or uninstalling state, waiting for it to transition...",
 			namespace)
 		dtime.SleepWithContext(ctx, 1*time.Second)
 	}
@@ -347,7 +347,7 @@ func ensureIsInstalled(
 		if !(errors.Is(err, errStuck) && req.Type == Install) {
 			return err
 		}
-		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): current install is has been in a pending state for longer than `timeouts.helm` (%v); "+
+		clog.Infof(ctx, "ensureIsInstalled(namespace=%q): current install is has been in a pending state for longer than `timeouts.helm` (%v); "+
 			"assuming it's stuck and will attempt uninstall", namespace, timeout)
 		err = cleanFailedState(helmConfig)
 		if err != nil {
@@ -359,7 +359,7 @@ func ensureIsInstalled(
 	// Under various conditions, helm can leave the release history hanging around after the release is gone.
 	// In those cases, uninstalling should clean everything up and leave us ready to install again
 	if existing != nil && (existing.Info.Status != release.StatusDeployed) {
-		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt or stuck; removing it...",
+		clog.Infof(ctx, "ensureIsInstalled(namespace=%q): current status (status=%q, desc=%q) is not %q, so assuming it's corrupt or stuck; removing it...",
 			namespace, existing.Info.Status, existing.Info.Description, release.StatusDeployed)
 		err = cleanFailedState(helmConfig)
 		if err != nil {
@@ -377,10 +377,10 @@ func ensureIsInstalled(
 	case existing == nil && req.Type == Upgrade: // fresh install
 		err = fmt.Errorf("%s is not installed, use 'telepresence helm install' to install it", releaseName)
 	case existing == nil:
-		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): performing fresh install...", namespace)
+		clog.Infof(ctx, "ensureIsInstalled(namespace=%q): performing fresh install...", namespace)
 		err = installNew(ctx, chrt, helmConfig, releaseName, namespace, req, vals)
 	case req.Type == Upgrade: // replace existing install
-		dlog.Infof(ctx, "ensureIsInstalled(namespace=%q): replacing %s from %q to %q...",
+		clog.Infof(ctx, "ensureIsInstalled(namespace=%q): replacing %s from %q to %q...",
 			namespace, releaseName, releaseVer(existing), chrt.Metadata.AppVersion)
 		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, releaseName, namespace, req, vals)
 	default:
@@ -420,7 +420,7 @@ func ensureIsDeleted(
 		if errOnFail {
 			return err
 		}
-		dlog.Infof(ctx, "%s. Assuming it's already gone...", err.Error())
+		clog.Infof(ctx, "%s. Assuming it's already gone...", err.Error())
 		return nil
 	}
 	if existing == nil {
@@ -428,7 +428,7 @@ func ensureIsDeleted(
 		if errOnFail {
 			return err
 		}
-		dlog.Info(ctx, err.Error())
+		clog.Info(ctx, err.Error())
 		return nil
 	}
 	return uninstallExisting(ctx, helmConfig, releaseName, namespace, req)

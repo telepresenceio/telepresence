@@ -8,6 +8,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -207,11 +208,15 @@ func (s *service) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentI
 }
 
 func (s *service) SetLogLevel(ctx context.Context, request *manager.LogLevelRequest) (*emptypb.Empty, error) {
+	lvl, err := clog.ParseLevel(request.LogLevel)
+	if err != nil {
+		return &emptypb.Empty{}, status.Error(codes.InvalidArgument, err.Error())
+	}
 	duration := time.Duration(0)
 	if request.Duration != nil {
 		duration = request.Duration.AsDuration()
 	}
-	return &emptypb.Empty{}, logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, request.LogLevel, duration, client.RootDaemonName)
+	return &emptypb.Empty{}, logging.SetAndStoreTimedLevel(ctx, s.timedLogLevel, lvl, duration, client.RootDaemonName)
 }
 
 func (s *service) LookupIP(ctx context.Context, request *rpc.LookupIPRequest) (rsp *rpc.LookupIPResponse, err error) {

@@ -6,11 +6,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 )
 
 func TestGetRoutingTable_defaultRoute(t *testing.T) {
-	ctx := dlog.NewTestContext(t, true)
+	ctx := testutil.NewContext(t, true)
 	rt, err := GetRoutingTable(ctx)
 	assert.NoError(t, err)
 	var dflt *Route
@@ -26,7 +26,7 @@ func TestGetRoutingTable_defaultRoute(t *testing.T) {
 }
 
 func TestGetRoutingTable(t *testing.T) {
-	ctx := dlog.NewTestContext(t, true)
+	ctx := testutil.NewContext(t, true)
 	rt, err := GetRoutingTable(ctx)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, rt)

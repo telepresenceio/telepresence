@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -16,8 +17,8 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
@@ -65,7 +66,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	}
 
 	verStr := strings.TrimPrefix(ver.Version, "v")
-	dlog.Infof(ctx, "Connected to Manager %s", verStr)
+	clog.Infof(ctx, "Connected to Manager %s", verStr)
 	mgrVer, err := semver.Parse(verStr)
 	if err != nil {
 		return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
@@ -100,7 +101,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 
 		// Depart session
 		if _, err := manager.Depart(ctx, session); err != nil {
-			dlog.Errorf(ctx, "depart session: %+v", err)
+			clog.Errorf(ctx, "depart session: %+v", err)
 		}
 	}()
 
@@ -111,7 +112,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 
 	retryInterval := state.AgentConfig().WatchRetryInterval
 	wg.Go("logLevelWatch", func(ctx context.Context) error {
-		return logLevelWatchLoop(ctx, manager, retryInterval)
+		return logLevelWatchLoop(ctx, state.AgentConfig().LogLevel, manager, retryInterval)
 	})
 	snapshots := make(chan []*rpc.InterceptInfo)
 	wg.Go("interceptWatch", func(ctx context.Context) error {
@@ -132,18 +133,22 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	return wg.Wait()
 }
 
-func logLevelWatchLoop(ctx context.Context, manager rpc.ManagerClient, retryInterval time.Duration) error {
-	timedLevel := log.NewTimedLevel(log.DlogLevelNames[dlog.MaxLogLevel(ctx)], log.SetLevel)
+func logLevelWatchLoop(ctx context.Context, level slog.Level, manager rpc.ManagerClient, retryInterval time.Duration) error {
+	timedLevel := log.NewTimedLevel(level, clog.SetTreeLevel)
 	return watcher.WatchWithRetry(ctx, "WatchLogLevel", retryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.LogLevelRequest], error) {
 			return manager.WatchLogLevel(ctx, &empty.Empty{})
 		},
 		func(ll *rpc.LogLevelRequest) error {
+			lvl, err := clog.ParseLevel(ll.LogLevel)
+			if err != nil {
+				return err
+			}
 			duration := time.Duration(0)
 			if ll.Duration != nil {
 				duration = ll.Duration.AsDuration()
 			}
-			timedLevel.Set(ctx, ll.LogLevel, duration)
+			timedLevel.Set(ctx, lvl, duration)
 			return nil
 		},
 		nil,
@@ -178,7 +183,7 @@ func interceptWatchLoop(
 		}, reconnectAgent)
 	if err != nil && status.Code(err) == codes.Unimplemented {
 		// Fall back to streaming all intercepts if the traffic manager doesn't support delta updates.'
-		dlog.Warnf(ctx, "WatchInterceptsDelta is not implemented by the traffic-manager, falling back to WatchIntercepts and full snapshots")
+		clog.Warnf(ctx, "WatchInterceptsDelta is not implemented by the traffic-manager, falling back to WatchIntercepts and full snapshots")
 		err = watcher.WatchWithRetry(ctx, "WatchIntercepts", retryInterval,
 			func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoSnapshot], error) {
 				return manager.WatchIntercepts(ctx, session)
@@ -203,7 +208,7 @@ func remainLoop(ctx context.Context, manager rpc.ManagerClient, session *rpc.Ses
 		}
 
 		if _, err := manager.Remain(ctx, &rpc.RemainRequest{Session: session}); err != nil {
-			dlog.Warnf(ctx, "remain: %v", err)
+			clog.Warnf(ctx, "remain: %v", err)
 		}
 	}
 }
@@ -214,7 +219,7 @@ func handleInterceptLoop(ctx context.Context, manager rpc.ManagerClient, session
 		case <-ctx.Done():
 			return nil
 		case snapshot := <-snapshots:
-			dlog.Debugf(ctx, "HandleIntercepts %s", interceptsStringer(snapshot))
+			clog.Debugf(ctx, "HandleIntercepts %s", interceptsStringer(snapshot))
 			reviews := state.HandleIntercepts(ctx, snapshot)
 			for _, review := range reviews {
 				review.Session = session

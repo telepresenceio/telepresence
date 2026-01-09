@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
@@ -37,7 +37,7 @@ func (s *interceptLocalhostSuite) SetupSuite() {
 	var err error
 	s.defaultRoute, err = routing.DefaultRoute(ctx)
 	s.Require().NoError(err)
-	dlog.Infof(ctx, "ip: %s: route: %s", s.defaultRoute.LocalIP, s.defaultRoute)
+	clog.Infof(ctx, "ip: %s: route: %s", s.defaultRoute.LocalIP, s.defaultRoute)
 	s.port, s.cancelLocal = itest.StartLocalHttpEchoServerWithAddr(ctx, s.ServiceName(), net.JoinHostPort(s.defaultRoute.LocalIP.String(), "0"), nil)
 }
 

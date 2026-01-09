@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
 )
 
@@ -30,7 +30,7 @@ func authenticateContext(cmd *cobra.Command, args []string) (err error) {
 	serverAddr := args[1]
 	defer func() {
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}()
 	var conn *grpc.ClientConn

@@ -15,7 +15,7 @@ import (
 
 	"github.com/coreos/go-iptables/iptables"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -90,14 +90,14 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 				if proto == ic.Protocol {
 					// Add REDIRECT to both PREROUTING and OUTPUT, because we want connections that
 					// originate from the agent to be subjected to this rule.
-					dlog.Debugf(ctx, "preroute redirect %d -> %d", ic.ContainerPort, ic.AgentPort)
+					clog.Debugf(ctx, "preroute redirect %d -> %d", ic.ContainerPort, ic.AgentPort)
 					err = iptables.AppendUnique(nat, preRoutingChain,
 						"-p", lcProto, "--dport", strconv.Itoa(int(ic.ContainerPort)),
 						"-j", "REDIRECT", "--to-ports", strconv.Itoa(int(ic.AgentPort)))
 					if err != nil {
 						return fmt.Errorf("failed to append rule to %s: %w", preRoutingChain, err)
 					}
-					dlog.Debugf(ctx, "output redirect %d -> %d", ic.ContainerPort, ic.AgentPort)
+					clog.Debugf(ctx, "output redirect %d -> %d", ic.ContainerPort, ic.AgentPort)
 					err = iptables.AppendUnique(nat, outputChain,
 						"-p", lcProto, "--dport", strconv.Itoa(int(ic.ContainerPort)),
 						"-j", "REDIRECT", "--to-ports", strconv.Itoa(int(ic.AgentPort)))
@@ -111,7 +111,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 						// Why? Because if it wrote directly to the container port, we wouldn't be able to
 						// prevent an endless loop that would otherwise occur here when the previous rule would
 						// loop it back into the agent.
-						dlog.Debugf(ctx, "output DNAT %s:%d -> %s:%d", podIP, c.ProxyPort(ic.AgentPort), podIP, ic.ContainerPort)
+						clog.Debugf(ctx, "output DNAT %s:%d -> %s:%d", podIP, c.ProxyPort(ic.AgentPort), podIP, ic.ContainerPort)
 						err = iptables.AppendUnique(nat, outputChain,
 							"-p", lcProto, "-d", podIP.String(), "--dport", strconv.Itoa(int(c.ProxyPort(ic.AgentPort))),
 							"-j", "DNAT", "--to-destination", netip.AddrPortFrom(podIP, ic.ContainerPort).String())
@@ -195,23 +195,23 @@ func findLoopback() (string, error) {
 // Main is the main function for the agent init container.
 func Main(ctx context.Context, args ...string) error {
 	debug.SetTraceback("single")
-	dlog.Infof(ctx, "Traffic Agent Init %s", version.Version)
+	clog.Infof(ctx, "Traffic Agent Init %s", version.Version)
 	cfg, err := loadConfig()
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return err
 	}
 
 	lo, err := findLoopback()
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return err
 	}
 	proto := iptables.ProtocolIPv4
 	localhostCIDR := netip.PrefixFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 32)
 	podIP, err := netip.ParseAddr(os.Getenv("POD_IP"))
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return err
 	}
 	if podIP.Is6() {
@@ -221,11 +221,11 @@ func Main(ctx context.Context, args ...string) error {
 	it, err := iptables.NewWithProtocol(proto)
 	if err != nil {
 		err = fmt.Errorf("unable to create iptables instance: %w", err)
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return err
 	}
 	if err = cfg.configureIptables(ctx, it, lo, localhostCIDR, podIP); err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 	}
 	return err
 }

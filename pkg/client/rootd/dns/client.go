@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
@@ -65,7 +65,7 @@ func lookupIP(ctx context.Context, c *dns.Client, localDNS, name string, qType u
 		case errors.As(err, &opErr) && opErr.Timeout():
 			rCode = dns.RcodeNameError
 		default:
-			dlog.Errorf(ctx, "dns.ExchangeContext: %v", err)
+			clog.Errorf(ctx, "dns.ExchangeContext: %v", err)
 		}
 		ch <- luResult{rCode: rCode}
 		return

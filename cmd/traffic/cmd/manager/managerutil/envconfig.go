@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/datawire/envconfig"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/derror"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -95,7 +96,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		ManagerPort:         e.ServerPort,
 		QualifiedAgentImage: qualifiedAgentImage,
 		ManagerNamespace:    e.ManagerNamespace,
-		LogLevel:            e.AgentLogLevel,
+		LogLevel:            clog.MustParseLevel(e.AgentLogLevel),
 		InitResources:       e.AgentInitResources,
 		Resources:           e.AgentResources,
 		PullPolicy:          e.AgentImagePullPolicy,

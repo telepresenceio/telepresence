@@ -7,7 +7,7 @@ import (
 	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cmd"
 )
 
@@ -31,10 +31,10 @@ func TelepresenceStatus(ctx context.Context, args ...string) (*StatusResponse, e
 	jErr := json.Unmarshal([]byte(stdout), &status)
 	if err != nil {
 		if jErr == nil && status.Error != "" {
-			dlog.Error(ctx, status.Error)
+			clog.Error(ctx, status.Error)
 			return nil, errors.New(status.Error)
 		}
-		dlog.Error(ctx, stderr)
+		clog.Error(ctx, stderr)
 		return nil, err
 	}
 	if jErr != nil {

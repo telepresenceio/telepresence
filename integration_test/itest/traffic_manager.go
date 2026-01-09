@@ -15,8 +15,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -84,7 +84,7 @@ func dialTrafficManager(ctx context.Context, cfg *rest.Config, managerNamespace 
 	ctx = portforward.WithRestConfig(ctx, cfg)
 	pap, err := portforward.ResolveSvcToPod(ctx, "traffic-manager", managerNamespace, "8081")
 	if err != nil {
-		dlog.Errorf(ctx, "cannot resolve svc/traffic-manager.%s:8081: %v", managerNamespace, err)
+		clog.Errorf(ctx, "cannot resolve svc/traffic-manager.%s:8081: %v", managerNamespace, err)
 		return nil, err
 	}
 	return grpcClient.DialGRPC(ctx, fmt.Sprintf(portforward.K8sPFScheme+":///svc/traffic-manager.%s:8081", managerNamespace),
@@ -195,7 +195,7 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 	if cfg.Intercept().UseFtp && !srv.LinkedFTP() {
 		g.Go("fuseftp-server", func(ctx context.Context) error {
 			if err := srv.InitFTPServer(ctx); err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 			<-ctx.Done()
 			return nil

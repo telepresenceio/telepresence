@@ -6,9 +6,8 @@ import (
 
 	"github.com/docker/go-plugins-helpers/network"
 	"github.com/puzpuzpuz/xsync/v4"
-	"github.com/sirupsen/logrus"
 
-	"github.com/telepresenceio/telepresence/cmd/teleroute/log"
+	"github.com/telepresenceio/clog"
 )
 
 type driver struct {
@@ -32,15 +31,14 @@ func (e errNetworkNotFound) Error() string {
 }
 
 func (d *driver) GetCapabilities() (*network.CapabilitiesResponse, error) {
-	logrus.Debug("GetCapabilities")
+	clog.Debug(d.ctx, "GetCapabilities")
 	return &network.CapabilitiesResponse{
 		Scope: network.LocalScope,
 	}, nil
 }
 
 func (d *driver) CreateNetwork(r *network.CreateNetworkRequest) error {
-	logger := log.NetworkLogger(r.NetworkID)
-	n, err := newNetwork(d.ctx, logger, d.pid, r)
+	n, err := newNetwork(d.ctx, d.pid, r)
 	if err != nil {
 		return err
 	}
@@ -49,8 +47,8 @@ func (d *driver) CreateNetwork(r *network.CreateNetworkRequest) error {
 }
 
 func (d *driver) DeleteNetwork(r *network.DeleteNetworkRequest) error {
-	log.NetworkLogger(r.NetworkID).Debug("DeleteNetwork")
 	if n, ok := d.networks.LoadAndDelete(r.NetworkID); ok {
+		clog.Debug(n.ctx, "Deleting network")
 		n.cancel()
 	}
 	return nil
@@ -81,7 +79,6 @@ func (d *driver) Leave(r *network.LeaveRequest) (err error) {
 }
 
 func (d *driver) EndpointInfo(r *network.InfoRequest) (*network.InfoResponse, error) {
-	log.NetworkLogger(r.NetworkID).Debugf("EndpointInfo %.8s", r.EndpointID)
 	return nil, nil
 }
 

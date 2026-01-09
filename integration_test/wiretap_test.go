@@ -14,7 +14,7 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -97,9 +97,9 @@ func (s *wiretapSuite) startWiretapHandler(ctx context.Context, name, addr strin
 		defer cancel()
 		err = sc.Shutdown(ctx)
 		if err != nil {
-			dlog.Errorf(ctx, "http server on %s exited with error: %v", addr, err)
+			clog.Errorf(ctx, "http server on %s exited with error: %v", addr, err)
 		} else {
-			dlog.Errorf(ctx, "http server on %s exited", addr)
+			clog.Errorf(ctx, "http server on %s exited", addr)
 		}
 	}()
 	return port, cancel
@@ -135,7 +135,7 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 		ctx := s.Context()
 		s.Eventually(func() bool {
 			pods := itest.RunningPodsWithAgents(ctx, s.svc, s.AppNamespace())
-			dlog.Infof(ctx, "%s pods with agents: %v", s.svc, pods)
+			clog.Infof(ctx, "%s pods with agents: %v", s.svc, pods)
 			if len(pods) != 1 {
 				return false
 			}
@@ -163,11 +163,11 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 			so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", s.svc)
 			// Output must yield the standard response from the cluster's service
 			if err != nil {
-				dlog.Errorf(ctx, "curl: %s", err)
+				clog.Errorf(ctx, "curl: %s", err)
 				return false
 			}
 
-			dlog.Infof(ctx, "curl output: %s", so)
+			clog.Infof(ctx, "curl output: %s", so)
 			if !strings.Contains(so, `Request served by `+podName) {
 				return false
 			}

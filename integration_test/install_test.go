@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -20,7 +21,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -51,8 +52,8 @@ func init() {
 func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string) (*action.Configuration, error) {
 	helmConfig := &action.Configuration{}
 	err := helmConfig.Init(clientGetter, namespace, "secrets", func(format string, args ...any) {
-		ctx := dlog.WithField(ctx, "source", "helm")
-		dlog.Infof(ctx, format, args...)
+		ctx := clog.With(ctx, "source", "helm")
+		clog.Infof(ctx, format, args...)
 	})
 	if err != nil {
 		return nil, err
@@ -155,7 +156,7 @@ func (is *installSuite) Test_HelmTemplateInstall() {
 	values = append([]string{"template", agentconfig.ManagerAppName, chart, "-n", is.ManagerNamespace()}, values...)
 	manifest, err := itest.Output(ctx, "helm", values...)
 	require.NoError(err)
-	out := dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
+	out := clog.StdLogger(ctx, slog.LevelInfo).Writer()
 	logCtx := dos.WithStdout(dos.WithStderr(ctx, out), out)
 	require.NoError(itest.Kubectl(dos.WithStdin(logCtx, strings.NewReader(manifest)), "", "apply", "-f", "-"))
 	defer func() {
@@ -202,7 +203,7 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	kc := is.cluster(failCtx, "", is.ManagerNamespace())
 	err := ensureTrafficManager(kc)
 	require.Error(err)
-	dlog.Infof(ctx, "Got expected install failure: %v", err)
+	clog.Infof(ctx, "Got expected install failure: %v", err)
 	restoreVersion()
 
 	okCtx := itest.WithConfig(ctx, func(cfg client.Config) {
@@ -212,7 +213,7 @@ func (is *installSuite) Test_EnsureManager_toleratesFailedInstall() {
 	if !is.Eventually(func() bool {
 		err = ensureTrafficManager(kc)
 		if err != nil {
-			dlog.Errorf(ctx, "ensureTrafficManager failed: %v", err)
+			clog.Errorf(ctx, "ensureTrafficManager failed: %v", err)
 		}
 		return err == nil
 	}, time.Minute, 5*time.Second) {
@@ -288,12 +289,12 @@ func (is *installSuite) findTrafficManagerPresent(ctx context.Context, context, 
 	require.Eventually(func() bool {
 		dep, err := k8sapi.GetDeployment(kc, ManagerAppName, namespace)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			return false
 		}
 		v := strings.TrimPrefix(version.Version, "v")
 		img := dep.GetPodTemplate().Spec.Containers[0].Image
-		dlog.Infof(ctx, "traffic-manager image %s, our version %s", img, v)
+		clog.Infof(ctx, "traffic-manager image %s, our version %s", img, v)
 		return strings.Contains(img, v)
 	}, 10*time.Second, 2*time.Second, "traffic-manager deployment not found")
 }

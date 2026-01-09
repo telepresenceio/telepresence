@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -108,23 +108,23 @@ func (s *proxyViaSuite) Test_ProxyViaLoopBack() {
 				// hostname will resolve to 127.0.0.1 remotely and then be translated into a virtual IP
 				ips, err := net.LookupIP(tt.hostName)
 				if err != nil {
-					dlog.Error(ctx, err)
+					clog.Error(ctx, err)
 					return false
 				}
 				if len(ips) != 1 {
-					dlog.Error(ctx, "LookupIP did not return one IP")
+					clog.Error(ctx, "LookupIP did not return one IP")
 					return false
 				}
 				var ok bool
 				vip, ok = netip.AddrFromSlice(ips[0])
 				return ok
 			}, 30*time.Second, 2*time.Second)
-			dlog.Infof(ctx, "%s uses IP %s", tt.hostName, vip)
+			clog.Infof(ctx, "%s uses IP %s", tt.hostName, vip)
 			rq.Truef(virtualSubnet.Contains(vip), "virtualIPSubnet %s does not contain %s", virtualSubnet, vip)
 
 			rq.Eventually(func() bool {
 				out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", net.JoinHostPort(tt.hostName, "8080"))
-				dlog.Info(ctx, out)
+				clog.Info(ctx, out)
 				return err == nil && tt.expectedOutput.MatchString(out)
 			}, 10*time.Second, 2*time.Second)
 		})
@@ -159,7 +159,7 @@ func (s *proxyViaSuite) Test_ProxyViaEverything() {
 	rq.Len(st.RootDaemon.Subnets, 1) // Virtual subnet
 	rq.Eventually(func() bool {
 		out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", "echo")
-		dlog.Infof(ctx, "Output from echo service %s", out)
+		clog.Infof(ctx, "Output from echo service %s", out)
 		return err == nil
 	}, 10*time.Second, 2*time.Second)
 }
@@ -180,7 +180,7 @@ func (s *proxyViaSuite) Test_ProxyViaAll() {
 	rq.Len(st.RootDaemon.Subnets, 1) // Virtual subnet
 	rq.Eventually(func() bool {
 		out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", "echo")
-		dlog.Infof(ctx, "Output from echo service %s", out)
+		clog.Infof(ctx, "Output from echo service %s", out)
 		return err == nil
 	}, 30*time.Second, 2*time.Second)
 }

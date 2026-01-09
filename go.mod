@@ -11,7 +11,6 @@ require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/coreos/go-iptables v0.8.0
 	github.com/datawire/argo-rollouts-go-client v0.0.0-20241216133646-cb1073556c99
-	github.com/datawire/dlib v1.3.1
 	github.com/datawire/envconfig v0.0.0-20221012222025-09524dc7d59b
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-units v0.5.0
@@ -20,7 +19,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.0
 	github.com/hectane/go-acl v0.0.0-20230122075934-ca0b05cb1adb
 	github.com/miekg/dns v1.1.69
 	github.com/mitchellh/go-wordwrap v1.0.1
@@ -33,15 +32,15 @@ require (
 	github.com/puzpuzpuz/xsync/v4 v4.2.0
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
-	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.15.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
-	github.com/telepresenceio/dlib/v2 v2.1.1
-	github.com/telepresenceio/go-ftpserver v1.1.0
-	github.com/telepresenceio/go-fuseftp v0.6.9
-	github.com/telepresenceio/go-fuseftp/rpc v0.6.9
+	github.com/telepresenceio/clog v0.0.0-20260110145038-83948c443e24
+	github.com/telepresenceio/dlib/v2 v2.1.2
+	github.com/telepresenceio/go-ftpserver v1.2.1
+	github.com/telepresenceio/go-fuseftp v1.0.1
+	github.com/telepresenceio/go-fuseftp/rpc v1.0.1
 	github.com/telepresenceio/telepresence/cmd/cobraparser/v2 v2.0.0-20251231045731-1bea4faed995
 	github.com/telepresenceio/telepresence/rpc/v2 v2.26.0-test.3
 	github.com/vishvananda/netlink v1.3.1
@@ -162,6 +161,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/winfsp/cgofuse v1.6.0 // indirect

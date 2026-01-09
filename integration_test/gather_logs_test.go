@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 )
@@ -115,7 +115,7 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 	require := s.Require()
 	defer func() {
 		so, se, err := itest.Telepresence(ctx, "quit")
-		dlog.Debug(ctx, so, se, err)
+		clog.Debug(ctx, "stdout", so, "stderr", se, "err", err)
 		s.RollbackTM(ctx)
 		stdout := s.TelepresenceConnect(ctx)
 		require.Contains(stdout, "Connected to context")

@@ -6,7 +6,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -30,7 +30,7 @@ type AuthenticatorServer struct {
 
 // GetContextExecCredentials returns credentials for a particular Kubernetes context on the host machine.
 func (h *AuthenticatorServer) GetContextExecCredentials(ctx context.Context, request *rpc.GetContextExecCredentialsRequest) (*rpc.GetContextExecCredentialsResponse, error) {
-	dlog.Debugf(ctx, "GetContextExecCredentials(%s)", request.ContextName)
+	clog.Debugf(ctx, "GetContextExecCredentials(%s)", request.ContextName)
 	rawExecCredentials, err := h.authenticator.GetExecCredentials(ctx, request.ContextName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve exec credentils: %w", err)

@@ -17,8 +17,8 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
@@ -84,7 +84,7 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	addr := grpcListener.Addr().(*net.TCPAddr)
-	dlog.Infof(ctx, "kubeauth daemon listening on address %s", addr)
+	clog.Infof(ctx, "kubeauth daemon listening on address %s", addr)
 
 	as.clientConfig = as.kubeFlags.ToRawKubeConfigLoader()
 	as.configFiles = as.clientConfig.ConfigAccess().GetLoadingPrecedence()
@@ -114,9 +114,9 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return server.Serve(ctx, svc, grpcListener)
 	})
 	if err = g.Wait(); err != nil {
-		dlog.Errorf(ctx, "kubeauth daemon exiting with error: %v", err)
+		clog.Errorf(ctx, "kubeauth daemon exiting with error: %v", err)
 	} else {
-		dlog.Info(ctx, "kubeauth daemon exiting")
+		clog.Info(ctx, "kubeauth daemon exiting")
 	}
 	return err
 }
@@ -130,7 +130,7 @@ func (as *authService) keepPortFileAlive(ctx context.Context) error {
 	defer func() {
 		ticker.Stop()
 		_ = os.Remove(as.portFile)
-		dlog.Debugf(ctx, "kubeauth daemon removed %s", as.portFile)
+		clog.Debugf(ctx, "kubeauth daemon removed %s", as.portFile)
 	}()
 	now := time.Now()
 	for {
@@ -190,10 +190,10 @@ func (as *authService) watchFiles(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case err = <-watcher.Errors:
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		case event := <-watcher.Events:
 			if event.Op&(fsnotify.Remove|fsnotify.Write|fsnotify.Create) != 0 && isOfInterest(event.Name, files) {
-				dlog.Infof(ctx, "Terminated due to %s in %s", event.Op, event.Name)
+				clog.Infof(ctx, "Terminated due to %s in %s", event.Op, event.Name)
 				return nil
 			}
 		}

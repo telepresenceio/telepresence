@@ -7,7 +7,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/puzpuzpuz/xsync/v4"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
@@ -148,7 +148,7 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*rpc.InterceptInfo) 
 			if !handled[i] {
 				ic := ist.Target()
 				if ic.MatchForSpec(ii.Spec) {
-					dlog.Debugf(ctx, "intercept id %s svc=%q, portId=%q matches target protocol=%s, agentPort=%d, containerPort=%d",
+					clog.Debugf(ctx, "intercept id %s svc=%q, portId=%q matches target protocol=%s, agentPort=%d, containerPort=%d",
 						ii.Id, ii.Spec.ServiceName, ii.Spec.PortIdentifier, ic.Protocol(), ic.AgentPort(), ic.ContainerPort())
 					ms = append(ms, ii)
 					handled[i] = true
@@ -175,7 +175,7 @@ func (s *state) HandleIntercepts(ctx context.Context, iis []*rpc.InterceptInfo) 
 }
 
 func (s *state) InterceptInfo(ctx context.Context, callerID, path string, containerPort uint16, headers http.Header) (*restapi.InterceptInfo, error) {
-	dlog.Debugf(ctx, "State with %d interceptStates. InterceptInfo for callerID %q, path %q, port %d, headers %s", len(s.interceptStates), callerID, path, containerPort, headers)
+	clog.Debugf(ctx, "State with %d interceptStates. InterceptInfo for callerID %q, path %q, port %d, headers %s", len(s.interceptStates), callerID, path, containerPort, headers)
 	for _, is := range s.interceptStates {
 		ic := is.Target()
 		if (containerPort == 0 || containerPort == ic.ContainerPort()) && ic.Protocol() == types.ProtoTCP {

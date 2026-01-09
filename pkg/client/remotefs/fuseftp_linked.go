@@ -9,9 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/go-fuseftp/pkg/fs"
 	"github.com/telepresenceio/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -44,8 +42,6 @@ func (s *fuseFtpMgr) GetFuseFTPClient(_ context.Context) rpc.FuseFTPClient {
 }
 
 func NewFTPMounter(_ rpc.FuseFTPClient, iceptWG *sync.WaitGroup) Mounter {
-	// The FTPClient uses the global logrus logger. It's very verbose on DebugLevel.
-	logrus.SetLevel(logrus.InfoLevel)
 	return &ftpMounter{iceptWG: iceptWG}
 }
 
@@ -56,7 +52,7 @@ func (m *ftpMounter) Start(ctx context.Context, workload, container, clientMount
 	}
 	if m.ftpClient == nil {
 		cfg := client.GetConfig(ctx)
-		dlog.Infof(ctx, "Mounting FTP file system for container %s[%s] (address %s)%s at %q", workload, container, podAddrPort, roTxt, clientMountPoint)
+		clog.Infof(ctx, "Mounting FTP file system for container %s[%s] (address %s)%s at %q", workload, container, podAddrPort, roTxt, clientMountPoint)
 		// FTPs remote mount is already relative to the agentconfig.ExportsMountPoint
 		rmp := strings.TrimPrefix(mountPoint, agentconfig.ExportsMountPoint)
 		ftpClient, err := fs.NewFTPClient(ctx.Done(), podAddrPort, rmp, ro, cfg.Timeouts().Get(client.TimeoutFtpReadWrite))
@@ -74,13 +70,13 @@ func (m *ftpMounter) Start(ctx context.Context, workload, container, clientMount
 		go func() {
 			defer m.iceptWG.Done()
 			<-ctx.Done()
-			dlog.Debugf(ctx, "Unmounting FTP file system for container %s[%s] (address %s) at %q", workload, container, podAddrPort, clientMountPoint)
+			clog.Debugf(ctx, "Unmounting FTP file system for container %s[%s] (address %s) at %q", workload, container, podAddrPort, clientMountPoint)
 		}()
-		dlog.Infof(ctx, "File system for container %s[%s] (address %s) successfully mounted%s at %q", workload, container, podAddrPort, roTxt, clientMountPoint)
+		clog.Infof(ctx, "File system for container %s[%s] (address %s) successfully mounted%s at %q", workload, container, podAddrPort, roTxt, clientMountPoint)
 		return nil
 	}
 
 	// Assign a new address to the FTP client. This kills any open connections but leaves the FUSE driver intact
-	dlog.Infof(ctx, "Switching remote address to %s for FTP file system for workload container %s[%s] at %q", podAddrPort, workload, container, clientMountPoint)
+	clog.Infof(ctx, "Switching remote address to %s for FTP file system for workload container %s[%s] at %q", podAddrPort, workload, container, clientMountPoint)
 	return m.ftpClient.SetAddress(podAddrPort)
 }

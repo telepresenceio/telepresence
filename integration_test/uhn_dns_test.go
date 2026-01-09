@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -62,7 +62,7 @@ func (s *unqualifiedHostNameDNSSuite) Test_UHNExcludes() {
 		s.Eventually(func() bool {
 			conn, err := net.DialTimeout("tcp", iputil.JoinHostPort(excluded, uint16(port)), 2*time.Second)
 			if err == nil {
-				dlog.Errorf(ctx, "excluded DNS name %s resolved to %s", excluded, conn.RemoteAddr())
+				clog.Errorf(ctx, "excluded DNS name %s resolved to %s", excluded, conn.RemoteAddr())
 				_ = conn.Close()
 			}
 			return err != nil

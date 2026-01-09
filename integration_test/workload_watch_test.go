@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -95,11 +95,11 @@ func (s *notConnectedSuite) Test_WorkloadListener() {
 		for !(s.T().Failed() || expectations["deleted"]) {
 			delta, err := wwStream.Recv()
 			if err != nil {
-				dlog.Infof(ctx, "watcher ended with %v", err)
+				clog.Infof(ctx, "watcher ended with %v", err)
 				break
 			}
 			for _, ev := range delta.Events {
-				dlog.Infof(ctx, "watcher event: %s %v", ev.Type, ev.Workload)
+				clog.Infof(ctx, "watcher event: %s %v", ev.Type, ev.Workload)
 				switch ev.Type {
 				case manager.WorkloadEvent_ADDED_UNSPECIFIED, manager.WorkloadEvent_MODIFIED:
 					expectations["added"] = true

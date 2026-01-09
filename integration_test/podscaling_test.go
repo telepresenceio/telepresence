@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -64,7 +64,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 	assert.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list")
 		if err != nil {
-			dlog.Errorf(ctx, "%s: %v", stdout, err)
+			clog.Errorf(ctx, "%s: %v", stdout, err)
 			return false
 		}
 		if match := rx.FindStringSubmatch(stdout); match != nil {
@@ -72,7 +72,7 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 				return true
 			}
 		}
-		dlog.Info(ctx, stdout)
+		clog.Info(ctx, stdout)
 		return false
 	}, 30*time.Second, 3*time.Second)
 
@@ -140,7 +140,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 		if err != nil {
 			return false
 		}
-		dlog.Debugf(ctx, "match %q in %q", rx.String(), stdout)
+		clog.Debugf(ctx, "match %q in %q", rx.String(), stdout)
 		if match := rx.FindStringSubmatch(stdout); match != nil {
 			return match[1] == "ACTIVE"
 		}
@@ -163,7 +163,7 @@ func (s *interceptMountSuite) Test_StopInterceptedPodOfMany() {
 		if expect == string(body) {
 			return true
 		}
-		dlog.Infof(ctx, "%s != %s", expect, string(body))
+		clog.Infof(ctx, "%s != %s", expect, string(body))
 		return false
 	}, 30*time.Second, time.Second)
 

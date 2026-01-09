@@ -17,7 +17,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	telcharts "github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
@@ -73,7 +73,7 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]any, r
 	if nss != nil && nss.Selector != nil {
 		j, err := json.Marshal(nss.Selector)
 		if err != nil {
-			dlog.Errorf(ctx, "unable to marshal selector '%v': %v", nss.Selector, err)
+			clog.Errorf(ctx, "unable to marshal selector '%v': %v", nss.Selector, err)
 		} else {
 			settings = append(settings, `namespaceSelector=`+string(j))
 		}
@@ -92,7 +92,7 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]any, r
 	for k, v := range values {
 		j, err := json.Marshal(v)
 		if err != nil {
-			dlog.Errorf(ctx, "unable to marshal value %v: %v", v, err)
+			clog.Errorf(ctx, "unable to marshal value %v: %v", v, err)
 		} else {
 			settings = append(settings, k+"="+string(j))
 		}

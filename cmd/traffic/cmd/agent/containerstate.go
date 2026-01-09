@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/netip"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -77,7 +77,7 @@ func (c *containerState) HandleContainer(ctx context.Context, iis []*manager.Int
 		if ii.Disposition == manager.InterceptDispositionType_WAITING {
 			spec := ii.Spec
 			if c.ReplaceContainer() && c.Name() == spec.ContainerName && spec.ContainerPort == 0 {
-				dlog.Debugf(ctx, "container %s handling replace %s", c.Name(), spec.Name)
+				clog.Debugf(ctx, "container %s handling replace %s", c.Name(), spec.Name)
 				rs = append(rs, &manager.ReviewInterceptRequest{
 					Id:          ii.Id,
 					Disposition: manager.InterceptDispositionType_ACTIVE,

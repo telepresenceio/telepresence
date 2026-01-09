@@ -48,6 +48,7 @@ func (aps InjectPolicy) MarshalJSON() ([]byte, error) {
 	return []byte(aps.String()), nil
 }
 
+//goland:noinspection GoMixedReceiverTypes
 func (aps *InjectPolicy) EnvDecode(val string) (err error) {
 	var as InjectPolicy
 	if val == "" {
@@ -59,6 +60,12 @@ func (aps *InjectPolicy) EnvDecode(val string) (err error) {
 	return nil
 }
 
+//goland:noinspection GoMixedReceiverTypes
+func (aps *InjectPolicy) UnmarshalText(value []byte) error {
+	return aps.EnvDecode(string(value))
+}
+
+//goland:noinspection GoMixedReceiverTypes
 func (aps *InjectPolicy) UnmarshalJSON(value []byte) error {
 	return aps.EnvDecode(string(value))
 }

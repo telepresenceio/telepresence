@@ -1,12 +1,12 @@
 module github.com/telepresenceio/telepresence/cmd/teleroute
 
-go 1.24.0
+go 1.25
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/docker/go-plugins-helpers v0.0.0-20240701071450-45e2431495c8
 	github.com/puzpuzpuz/xsync/v4 v4.2.0
-	github.com/sirupsen/logrus v1.9.3
+	github.com/telepresenceio/clog v0.0.0-20260104063026-a6df47d45492
 	github.com/telepresenceio/telepresence/rpc/v2 v2.25.2
 	google.golang.org/grpc v1.78.0
 	google.golang.org/protobuf v1.36.11

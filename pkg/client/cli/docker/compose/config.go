@@ -17,8 +17,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/generate"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -265,7 +265,7 @@ func (c *config) run(cmd *cobra.Command) (err error) {
 	}
 
 	if existingComposeFile != "" {
-		dlog.Debugf(ctx, "Existing compose file: %s", existingComposeFile)
+		clog.Debugf(ctx, "Existing compose file: %s", existingComposeFile)
 		p, err := loadExistingProject(ctx, c.projectDir, existingComposeFile)
 		if err != nil {
 			return err
@@ -319,7 +319,7 @@ func (c *config) connect(ctx context.Context, es map[string]serviceExtension, co
 			}
 			connections[cc.Name] = cx
 		}
-		dlog.Debugf(ctx, "Service %q will be %s", e.composeService().Name, e.engagementType().WorkDone())
+		clog.Debugf(ctx, "Service %q will be %s", e.composeService().Name, e.engagementType().WorkDone())
 		if existingComposeFile == "" {
 			existingComposeFile = daemon.MustGetSession(cx).DaemonInfo().ComposeFile
 		}
@@ -394,7 +394,7 @@ func (c *config) getMountPort(e mountsExtension) (uint16, error) {
 		if s, ok := ep.Services[cn]; ok {
 			if pa, ok := s.Annotations[mountPortAnnotation]; ok {
 				if p, err := strconv.Atoi(pa); err == nil {
-					dlog.Debugf(e.connection(), "Found existing mount port %d for %q", p, cn)
+					clog.Debugf(e.connection(), "Found existing mount port %d for %q", p, cn)
 					return uint16(p), nil
 				}
 			}

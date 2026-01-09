@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
@@ -82,7 +82,7 @@ func (s *Server) removeResolverFiles(c context.Context, resolverDirName string) 
 	for _, file := range files {
 		if n := file.Name(); strings.HasPrefix(n, "telepresence.") {
 			fn := filepath.Join(resolverDirName, n)
-			dlog.Debugf(c, "Removing file %q", fn)
+			clog.Debugf(c, "Removing file %q", fn)
 			if err := os.Remove(fn); err != nil {
 				return err
 			}
@@ -134,9 +134,9 @@ nextSearch:
 	for domain := range s.domains {
 		if _, ok := domains[domain]; !ok {
 			nsFile := domainResolverFile(resolverDirName, domain)
-			dlog.Infof(c, "Removing %s", nsFile)
+			clog.Infof(c, "Removing %s", nsFile)
 			if err := os.Remove(nsFile); err != nil {
-				dlog.Error(c, err)
+				clog.Error(c, err)
 			}
 			delete(s.domains, domain)
 		}
@@ -148,13 +148,13 @@ nextSearch:
 			if oldRf, err := dnsproxy.ReadResolveFile(nsFile); err != nil && rf.Equals(oldRf) {
 				continue
 			}
-			dlog.Infof(c, "Regenerating %s", nsFile)
+			clog.Infof(c, "Regenerating %s", nsFile)
 		} else {
 			s.domains[domain] = struct{}{}
-			dlog.Infof(c, "Generating %s", nsFile)
+			clog.Infof(c, "Generating %s", nsFile)
 		}
 		if err := rf.Write(nsFile); err != nil {
-			dlog.Error(c, err)
+			clog.Error(c, err)
 		}
 	}
 	s.flushDNS()

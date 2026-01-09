@@ -18,7 +18,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -53,7 +53,7 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 		if err != nil {
 			conn.Close()
 		} else {
-			dlog.Infof(kc, "Connected to Manager %s", ver)
+			clog.Infof(kc, "Connected to Manager %s", ver)
 		}
 	}()
 
@@ -125,7 +125,7 @@ func getVersion(ctx context.Context, gc versionAPI) (*manager.VersionInfo2, erro
 		return err
 	}, backoff.WithContext(&b, ctx))
 	if err == nil {
-		dlog.Infof(ctx, "Connected to %s %s", vi.Name, vi.Version)
+		clog.Infof(ctx, "Connected to %s %s", vi.Name, vi.Version)
 	}
 	return vi, err
 }

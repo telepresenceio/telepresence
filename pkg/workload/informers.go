@@ -8,7 +8,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 )
 
@@ -36,7 +36,7 @@ func StartDeployments(ctx context.Context, ns string) cache.SharedIndexInformer 
 		return o, nil
 	})
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "watcher for Deployments %s: %v", whereWeWatch(ns), err)
+		clog.Errorf(ctx, "watcher for Deployments %s: %v", whereWeWatch(ns), err)
 	})
 	return ix
 }
@@ -57,7 +57,7 @@ func StartReplicaSets(ctx context.Context, ns string) cache.SharedIndexInformer 
 		return o, nil
 	})
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "watcher for ReplicaSets %s: %v", whereWeWatch(ns), err)
+		clog.Errorf(ctx, "watcher for ReplicaSets %s: %v", whereWeWatch(ns), err)
 	})
 	return ix
 }
@@ -78,14 +78,14 @@ func StartStatefulSets(ctx context.Context, ns string) cache.SharedIndexInformer
 		return o, nil
 	})
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "watcher for StatefulSet %s: %v", whereWeWatch(ns), err)
+		clog.Errorf(ctx, "watcher for StatefulSet %s: %v", whereWeWatch(ns), err)
 	})
 	return ix
 }
 
 func StartRollouts(ctx context.Context, ns string) cache.SharedIndexInformer {
 	f := informer.GetArgoRolloutsFactory(ctx, ns)
-	dlog.Infof(ctx, "Watching Rollouts in %s", ns)
+	clog.Infof(ctx, "Watching Rollouts in %s", ns)
 	ix := f.Argoproj().V1alpha1().Rollouts().Informer()
 	_ = ix.SetTransform(func(o any) (any, error) {
 		// Strip the parts of the rollout that we don't care about. Saves memory
@@ -100,7 +100,7 @@ func StartRollouts(ctx context.Context, ns string) cache.SharedIndexInformer {
 		return o, nil
 	})
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "watcher for Rollouts %s: %v", whereWeWatch(ns), err)
+		clog.Errorf(ctx, "watcher for Rollouts %s: %v", whereWeWatch(ns), err)
 	})
 	return ix
 }

@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 const dnsTTL = 4
@@ -177,7 +177,7 @@ func lookupIP(ctx context.Context, network, qName, noSearchDomain string, r *net
 	name, final := useLookupName(qName, noSearchDomain)
 	ips, err := r.LookupIP(ctx, network, name)
 	if err != nil && !final {
-		dlog.Errorf(ctx, "LookupIP failed %q failed, trying LookupIP %q", name, qName)
+		clog.Errorf(ctx, "LookupIP failed %q failed, trying LookupIP %q", name, qName)
 		ips, err = r.LookupIP(ctx, network, qName)
 	}
 	if err == nil && len(ips) == 0 {

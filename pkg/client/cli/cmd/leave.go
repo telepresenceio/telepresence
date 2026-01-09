@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
@@ -125,7 +125,7 @@ func disengage(ctx context.Context, name, container string) error {
 			// container, and won't be able to.
 			err = docker.StopContainer(ctx, handlerContainer)
 			if err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 		}
 	}

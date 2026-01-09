@@ -339,7 +339,6 @@ $(BUILDDIR)/telepresence-oss-chart.tgz: $(wildcard charts/**/*)
 .PHONY: clobber
 clobber:  clobber-tools generate-clean ## (Build) Remove all build artifacts and tools
 	rm -rf $(BUILDDIR)
-	find . -name 'go.sum' -type f -delete
 	rm -rf cmd/teleroute/rpc
 	rm -rf cmd/teleroute/build-output
 	rm -f pkg/client/cli/docker/compose/dc-cli.json

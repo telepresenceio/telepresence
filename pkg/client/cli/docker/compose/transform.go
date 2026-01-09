@@ -11,8 +11,8 @@ import (
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"github.com/puzpuzpuz/xsync/v4"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
@@ -39,7 +39,7 @@ func newTransformer(config *config, p *compose.Project) (tr *transformer, err er
 	t := &transformer{config: config, project: p, tpVolumes: xsync.NewMap[string, *compose.VolumeConfig](), selectsAll: true}
 	t.extensions = make(map[string]serviceExtension)
 	for n, sv := range t.project.Services {
-		dlog.Debugf(context.Background(), "Service %q has extension %q", n, sv.Extensions)
+		clog.Debugf(context.Background(), "Service %q has extension %q", n, sv.Extensions)
 		ex, ok := sv.Extensions[extensionKey]
 		if ok {
 			if len(config.services) > 0 && !slices.Contains(config.services, n) {
@@ -121,7 +121,7 @@ func (t *transformer) disengage(ctx context.Context) {
 		progress.Workingf(eCtx, fmt.Sprintf("%s %s", e.engagementType().Leaving(), n))
 		err := e.deactivate()
 		if err != nil {
-			dlog.Error(eCtx, err)
+			clog.Error(eCtx, err)
 		}
 		progress.Donef(eCtx, fmt.Sprintf("%s %s", e.engagementType().Left(), n))
 	}
@@ -151,7 +151,7 @@ func (t *transformer) runCommand(ctx context.Context, name string) error {
 				teleVols[n] = struct{}{}
 			}
 		}
-		dlog.Debugf(ctx, "teleVols: %v", teleVols)
+		clog.Debugf(ctx, "teleVols: %v", teleVols)
 		for n, sv := range ep.Services {
 			ex, ok := sv.Extensions[extensionKey]
 			if !ok {
@@ -169,7 +169,7 @@ func (t *transformer) runCommand(ctx context.Context, name string) error {
 				continue
 			default:
 			}
-			dlog.Debugf(ctx, "Checking if service %q is a volume provider", n)
+			clog.Debugf(ctx, "Checking if service %q is a volume provider", n)
 			if sv.Volumes != nil {
 				for _, v := range sv.Volumes {
 					if v.Type == compose.VolumeTypeVolume {
@@ -227,7 +227,7 @@ func (t *transformer) runAttachedUp(parentCtx context.Context, composeFile strin
 		stopCmd := exec.CommandContext(ctx, docker.Exe, args...)
 		// Don't assign stdout/stderr. Avoid duplicated output from "compose up" and "compose stop".
 		stopCmd.Env = os.Environ()
-		dlog.Debug(ctx, shellquote.ShellString(docker.Exe, args))
+		clog.Debug(ctx, shellquote.ShellString(docker.Exe, args))
 		_ = stopCmd.Run()
 		close(stopDone)
 	}()
@@ -357,7 +357,7 @@ func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecr
 	}
 
 	if composeFile != "" {
-		dlog.Debugf(ctx, "Recreating existing compose file %q", composeFile)
+		clog.Debugf(ctx, "Recreating existing compose file %q", composeFile)
 	}
 
 	err = t.applyEngagements()
@@ -369,7 +369,7 @@ func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecr
 	if err != nil {
 		return "", err
 	}
-	dlog.Debug(ctx, string(yml))
+	clog.Debug(ctx, string(yml))
 
 	if composeFile == "" {
 		var mcf *os.File

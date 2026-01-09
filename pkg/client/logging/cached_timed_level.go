@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"log/slog"
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
@@ -11,11 +12,11 @@ import (
 )
 
 type cachedTLData struct {
-	Level   string `json:"level"`
-	Expires int64  // Seconds since epoch
+	Level   slog.Level `json:"level"`
+	Expires int64      // Seconds since epoch
 }
 
-func SetAndStoreTimedLevel(ctx context.Context, tl log.TimedLevel, level string, duration time.Duration, procName string) error {
+func SetAndStoreTimedLevel(ctx context.Context, tl log.TimedLevel, level slog.Level, duration time.Duration, procName string) error {
 	tl.Set(ctx, level, duration)
 	cd := cachedTLData{Level: level}
 	if duration > 0 {
