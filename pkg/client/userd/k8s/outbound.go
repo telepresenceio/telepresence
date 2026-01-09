@@ -4,6 +4,7 @@ import (
 	"context"
 	"math"
 	"sort"
+	"sync"
 	"time"
 
 	auth "k8s.io/api/authorization/v1"
@@ -42,13 +43,13 @@ func (kc *Cluster) StartNamespaceWatcher(ctx context.Context) {
 func (kc *Cluster) namespacesEventHandler(ctx context.Context, evCh <-chan watch.Event, nsSynced chan struct{}) {
 	// The delay timer will initially sleep forever. It's reset to a very short
 	// delay when the file is modified.
+	var synced sync.Once
+	defer func() {
+		synced.Do(func() { close(nsSynced) })
+	}()
 	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
 		kc.refreshNamespaces(ctx)
-		select {
-		case <-nsSynced:
-		default:
-			close(nsSynced)
-		}
+		synced.Do(func() { close(nsSynced) })
 	})
 	defer delay.Stop()
 
