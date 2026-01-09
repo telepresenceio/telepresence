@@ -3,6 +3,7 @@ package state
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"os"
 	"slices"
 	"strings"
@@ -483,11 +484,11 @@ func (s *State) CountTunnelEgress() uint64 {
 	return atomic.LoadUint64(&s.tunnelEgressCounter)
 }
 
-func (s *State) IsInterceptedBy(client tunnel.SessionID) bool {
-	found := false
+func (s *State) IsInterceptedBy(agentPodIP netip.Addr, client tunnel.SessionID) (found bool) {
 	clientSessionID := string(client)
+	podIPStr := agentPodIP.String()
 	s.intercepts.Range(func(id string, ii *Intercept) bool {
-		if ii.ClientSession.SessionId == clientSessionID {
+		if ii.PodIp == podIPStr && ii.ClientSession.SessionId == clientSessionID {
 			found = true
 			return false
 		}

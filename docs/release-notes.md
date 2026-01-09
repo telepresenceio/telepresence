@@ -87,6 +87,12 @@ The watchable map has been refactored into a client/server model that supports d
 The Traffic Agent's retry interval when it establishes its watcher for intercepts is now configurable using the Helm chart value `agent.watchRetryInterval`. The default retry interval was also increased from 2 seconds to 10 seconds to improve resilience when connections to the traffic manager are lost.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Fix "close of closed channel" panic in the root daemon process.</div></div>
+<div style="margin-left: 15px">
+
+The root daemon process would sometimes panic with "close of closed channel" due to a race condition in the DNS cache logic. This issue has been fixed.
+</div>
+
 ## Version 2.25.2 <span style="font-size: 16px;">(December 26)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ensure that the exit code from a docker command becomes the exit code of the Telepresence command.</div></div>
 <div style="margin-left: 15px">

@@ -681,6 +681,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	ready := make(chan string, 1)
+	readyClosed := false
 	go func() {
 		defer func() {
 			_ = logFile.Close()
@@ -695,6 +696,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 			}
 			ready <- logFile.Name()
 			close(ready)
+			readyClosed = true
 			err = cmd.Wait()
 		}
 		if err != nil {
@@ -703,9 +705,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 			} else {
 				dlog.Errorf(ctx, "log capture for pod %s, container %s failed: %v", pod, container, err)
 			}
-			select {
-			case <-ready:
-			default:
+			if !readyClosed {
 				close(ready)
 			}
 		}

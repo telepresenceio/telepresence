@@ -197,16 +197,12 @@ func (l *logFilter) Write(data []byte) (int, error) {
 }
 
 func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGetter InjectorCertGetter, rdy chan error) (err error) {
+	var rdyClose sync.Once
 	defer func() {
-		select {
-		case <-rdy:
-		// Already closed
-		default:
-			if err != nil {
-				rdy <- err
-			}
-			close(rdy)
+		if err != nil {
+			rdy <- err
 		}
+		rdyClose.Do(func() { close(rdy) })
 	}()
 
 	certPEM, keyPEM, err := certGetter.LoadCert()
@@ -231,7 +227,7 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGett
 		// Give the http server some time to start accepting calls from the listener. We don't want
 		// our own rollouts to happen before we are able to receive events from the mutating webhook.
 		time.Sleep(3 * time.Second)
-		close(rdy)
+		rdyClose.Do(func() { close(rdy) })
 		<-ctx.Done()
 		errc <- s.Shutdown(dcontext.HardContext(ctx))
 	}()

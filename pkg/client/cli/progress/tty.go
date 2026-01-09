@@ -40,6 +40,7 @@ type ttyWriter struct {
 	eventIDs        []string
 	repeated        bool
 	numLines        int
+	doneOnce        sync.Once
 	done            chan struct{}
 	mtx             sync.Mutex
 	skipChildEvents bool
@@ -87,14 +88,10 @@ func (w *ttyWriter) IsNoOp() bool {
 }
 
 func (w *ttyWriter) Stop() {
-	select {
-	case <-w.done:
-		// Already closed
-		return
-	default:
+	w.doneOnce.Do(func() {
 		close(w.done)
 		w.print()
-	}
+	})
 }
 
 func (w *ttyWriter) event(e *Event) {
