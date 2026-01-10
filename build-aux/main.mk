@@ -468,14 +468,11 @@ check-all: check-integration check-unit ## (QA) Run the test suite
 
 .PHONY: check-unit
 check-unit: build-deps $(tools/test-report) ## (QA) Run the test suite
-	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
-	# is only used for extensions. Therefore, we want to validate that our tests, and
-	# telepresence, run without requiring any outside dependencies.
 	set -o pipefail
 ifeq ($(GOOS),linux)
-	TELEPRESENCE_MAX_LOGFILES=300 SCOUT_DISABLE=1 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./cmd/... ./pkg/... | $(tools/test-report)
+	CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./cmd/... ./pkg/... | $(tools/test-report)
 else
-	TELEPRESENCE_MAX_LOGFILES=300 SCOUT_DISABLE=1 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./pkg/... | $(tools/test-report)
+	CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./pkg/... | $(tools/test-report)
 endif
 
 .PHONY: check-integration
