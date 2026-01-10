@@ -46,9 +46,6 @@ func main() {
 				fmt.Fprintf(progressBar, "Failed to unmarshal line: %s\n", err)
 				continue
 			}
-			if line.Test == "" {
-				continue
-			}
 			progressBar.ReportCh <- line
 			logger.Report(line)
 		}

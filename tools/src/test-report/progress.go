@@ -1,8 +1,8 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -13,12 +13,13 @@ import (
 )
 
 const (
-	START  = "start"
-	RUN    = "run"
-	FAIL   = "fail"
-	PASS   = "pass"
-	SKIP   = "skip"
-	OUTPUT = "output"
+	START      = "start"
+	RUN        = "run"
+	FAIL       = "fail"
+	BUILD_FAIL = "build-fail"
+	PASS       = "pass"
+	SKIP       = "skip"
+	OUTPUT     = "output"
 
 	passed  = "✅"
 	failed  = "❌"
@@ -69,7 +70,7 @@ func (p *progressBar) monitorProgress(ctx context.Context) {
 					p.askingForPw = false
 					p.Unlock()
 				}
-			case FAIL, PASS, SKIP:
+			case BUILD_FAIL, FAIL, PASS, SKIP:
 				p.Lock()
 				if _, ok := p.resultsCounters[line.Action]; !ok {
 					p.resultsCounters[line.Action] = 0
@@ -101,11 +102,19 @@ func (p *progressBar) renderCurrentTest(s decor.Statistics) string {
 func (p *progressBar) renderResults(_ decor.Statistics) string {
 	p.RLock()
 	defer p.RUnlock()
-	return fmt.Sprintf("(%s %s %s) ",
-		color.GreenString("%s %d passed", passed, p.resultsCounters[PASS]),
-		color.RedString("%s %d failed", failed, p.resultsCounters[FAIL]),
-		color.YellowString("%s %d skipped", skipped, p.resultsCounters[SKIP]),
-	)
+	out := bytes.Buffer{}
+	out.WriteByte('(')
+	out.WriteString(color.GreenString("%s %d passed", passed, p.resultsCounters[PASS]))
+	out.WriteByte(' ')
+	if buildFail := p.resultsCounters[BUILD_FAIL]; buildFail > 0 {
+		out.WriteString(color.MagentaString("%s %d build failures", failed, buildFail))
+		out.WriteByte(' ')
+	}
+	out.WriteString(color.RedString("%s %d failed", failed, p.resultsCounters[FAIL]))
+	out.WriteByte(' ')
+	out.WriteString(color.YellowString("%s %d skipped", skipped, p.resultsCounters[SKIP]))
+	out.WriteByte(')')
+	return out.String()
 }
 
 func (p *progressBar) renderPasswordPrompt(_ decor.Statistics) string {
