@@ -61,6 +61,11 @@ items:
           `agent.watchRetryInterval`. The default retry interval was also increased from 2 seconds to 10 seconds to improve resilience when
           connections to the traffic manager are lost.
       - type: bugfix
+        title: Add retry logic for tunnel connection attempts
+        body: >-
+          The tunnel dialer now uses a backoff-based retry mechanism when establishing connections. This ensures that dialing attempts for
+          both TCP and UDP protocols persist if the target IP is not immediately ready to receive requests.
+      - type: bugfix
         title: Retry mechanism for client tunnel creation
         body: >-
           The traffic agent now includes a backoff-based retry mechanism when establishing tunnel streams to a client. This prevents
