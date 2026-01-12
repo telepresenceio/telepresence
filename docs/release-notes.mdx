@@ -39,6 +39,12 @@ The Traffic Agent's retry interval when it establishes its watcher for intercept
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix">Retry mechanism for client tunnel creation</Title>
+	<Body>
+The traffic agent now includes a backoff-based retry mechanism when establishing tunnel streams to a client. This prevents "no dial watcher" connection failures caused by a race condition where the tunnel request arrives before the client has fully initialized its communication channel.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Fix "close of closed channel" panic in the root daemon process.</Title>
 	<Body>
 The root daemon process would sometimes panic with "close of closed channel" due to a race condition in the DNS cache logic. This issue has been fixed.
