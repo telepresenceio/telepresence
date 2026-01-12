@@ -87,6 +87,18 @@ The watchable map has been refactored into a client/server model that supports d
 The Traffic Agent's retry interval when it establishes its watcher for intercepts is now configurable using the Helm chart value `agent.watchRetryInterval`. The default retry interval was also increased from 2 seconds to 10 seconds to improve resilience when connections to the traffic manager are lost.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add retry logic for tunnel connection attempts</div></div>
+<div style="margin-left: 15px">
+
+The tunnel dialer now uses a backoff-based retry mechanism when establishing connections. This ensures that dialing attempts for both TCP and UDP protocols persist if the target IP is not immediately ready to receive requests.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Retry mechanism for client tunnel creation</div></div>
+<div style="margin-left: 15px">
+
+The traffic agent now includes a backoff-based retry mechanism when establishing tunnel streams to a client. This prevents "no dial watcher" connection failures caused by a race condition where the tunnel request arrives before the client has fully initialized its communication channel.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Fix "close of closed channel" panic in the root daemon process.</div></div>
 <div style="margin-left: 15px">
 

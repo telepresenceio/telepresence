@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -122,23 +123,34 @@ func (s *state) WatchDial(session *rpc.SessionInfo, server agent.Agent_WatchDial
 func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID tunnel.SessionID, id tunnel.ConnID, roundTripLatency, dialTimeout time.Duration,
 ) (tunnel.Stream, error) {
 	dlog.Debugf(ctx, "Creating tunnel to client %s for id %s", sessionID, id)
-	drCh, ok := s.dialWatchers.Load(sessionID)
+	var drCh chan<- *rpc.DialRequest
 	var stCh <-chan tunnel.Stream
-	if ok {
-		awc, _ := s.awaitingForwards.LoadOrCompute(sessionID, func() (*xsync.Map[tunnel.ConnID, *awaitingForward], bool) {
-			return xsync.NewMap[tunnel.ConnID, *awaitingForward](), false
-		})
-		aw, _ := awc.LoadOrCompute(id, func() (*awaitingForward, bool) {
-			return &awaitingForward{
-				streamCh: make(chan tunnel.Stream),
-				doneCh:   ctx.Done(),
-			}, false
-		})
-		stCh = aw.streamCh
+
+	// A retry is needed here because what actually happens is that the dial watcher channel drCh is inserted when the
+	// client calls WatchDial. That call arrives only after the client received confirmation that it is intercepting
+	// this agent, and some latency is to be expected.
+	err := backoff.Retry(func() error {
+		var ok bool
+		drCh, ok = s.dialWatchers.Load(sessionID)
+		if ok {
+			awc, _ := s.awaitingForwards.LoadOrCompute(sessionID, func() (*xsync.Map[tunnel.ConnID, *awaitingForward], bool) {
+				return xsync.NewMap[tunnel.ConnID, *awaitingForward](), false
+			})
+			aw, _ := awc.LoadOrCompute(id, func() (*awaitingForward, bool) {
+				return &awaitingForward{
+					streamCh: make(chan tunnel.Stream),
+					doneCh:   ctx.Done(),
+				}, false
+			})
+			stCh = aw.streamCh
+			return nil
+		}
+		return fmt.Errorf("unable to create tunnel to client %s for id %s: no dial watcher", sessionID, id)
+	}, backoff.WithContext(backoff.NewConstantBackOff(20*time.Millisecond), ctx))
+	if err != nil {
+		return nil, err
 	}
-	if !ok {
-		return nil, fmt.Errorf("unable to create tunnel to client %s for id %s: no dial watcher", sessionID, id)
-	}
+
 	drCh <- &rpc.DialRequest{ConnId: []byte(id), DialTimeout: int64(dialTimeout), RoundtripLatency: int64(roundTripLatency)}
 
 	select {
