@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -167,12 +168,19 @@ func (h *dialer) Start(ctx context.Context) {
 			dtoCtx, cancel := context.WithTimeout(ctx, dto)
 			defer cancel()
 			var conn net.Conn
-			var err error
-			if id.Protocol() == types.ProtoUDP {
-				conn, err = d.DialUDP(dtoCtx, netip.AddrPort{}, id.Destination())
-			} else {
-				conn, err = d.DialTCP(dtoCtx, id.Destination())
-			}
+
+			// A retry is needed here because the attempt to establish a Tunnel might arrive before
+			// the target IP is ready to receive requests. The target IP might well be intercepted
+			// (or in progress of switching to become intercepted).
+			err := backoff.Retry(func() error {
+				var err error
+				if id.Protocol() == types.ProtoUDP {
+					conn, err = d.DialUDP(dtoCtx, netip.AddrPort{}, id.Destination())
+				} else {
+					conn, err = d.DialTCP(dtoCtx, id.Destination())
+				}
+				return err
+			}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), dtoCtx))
 			if err != nil {
 				dlog.Errorf(ctx, "!> %s %s, failed to establish connection: %v", tag, id, err)
 				if err = h.stream.Send(ctx, NewMessage(DialReject, nil)); err != nil {
