@@ -15,6 +15,7 @@ import (
 	"github.com/datawire/dlib/dgroup"
 	"github.com/datawire/dlib/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -51,6 +52,16 @@ func TestRevokeIntercept_Authentication(t *testing.T) {
 			errMessage:    "not found",
 		},
 		{
+			name:          "authorized user with kubeadm:cluster-admins",
+			token:         "valid-kubeadm-token",
+			authenticated: true,
+			username:      "kubeadm-admin",
+			groups:        []string{"system:authenticated", "kubeadm:cluster-admins"},
+			wantCode:      codes.NotFound, // Will fail on intercept lookup, but auth passes
+			wantErr:       true,
+			errMessage:    "not found",
+		},
+		{
 			name:          "unauthorized user - not in allowed groups",
 			token:         "valid-user-token",
 			authenticated: true,
@@ -58,7 +69,7 @@ func TestRevokeIntercept_Authentication(t *testing.T) {
 			groups:        []string{"system:authenticated", "developers"},
 			wantCode:      codes.PermissionDenied,
 			wantErr:       true,
-			errMessage:    "user must be a member of telepresence:admin or system:masters group",
+			errMessage:    "user must be a member of one of the following groups",
 		},
 		{
 			name:          "unauthenticated token",
@@ -81,11 +92,11 @@ func TestRevokeIntercept_Authentication(t *testing.T) {
 			errMessage:    "authentication failed",
 		},
 		{
-			name:          "user with both groups",
+			name:          "user with multiple admin groups",
 			token:         "super-admin-token",
 			authenticated: true,
 			username:      "super-admin",
-			groups:        []string{"system:authenticated", "system:masters", "telepresence:admin"},
+			groups:        []string{"system:authenticated", "system:masters", "telepresence:admin", "kubeadm:cluster-admins"},
 			wantCode:      codes.NotFound, // Will fail on intercept lookup, but auth passes
 			wantErr:       true,
 			errMessage:    "not found",
@@ -122,6 +133,12 @@ func TestRevokeIntercept_Authentication(t *testing.T) {
 
 			// Set up context with fake K8s client
 			ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
+
+			// Set up environment with default admin groups
+			env := &managerutil.Env{
+				AgentK8sAdminGroups: []string{"system:masters", "telepresence:admin", "kubeadm:cluster-admins"},
+			}
+			ctx = managerutil.WithEnv(ctx, env)
 
 			// Create a minimal service instance
 			g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
@@ -176,6 +193,12 @@ func TestRevokeIntercept_SuccessfulRevocation(t *testing.T) {
 	// Set up context with fake K8s client
 	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
 
+	// Set up environment with default admin groups
+	env := &managerutil.Env{
+		AgentK8sAdminGroups: []string{"system:masters"},
+	}
+	ctx = managerutil.WithEnv(ctx, env)
+
 	// Create a service instance with state
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 	svc := &service{
@@ -229,7 +252,7 @@ func TestRevokeIntercept_SuccessfulRevocation(t *testing.T) {
 }
 
 func TestRevokeIntercept_OnlySystemMasters(t *testing.T) {
-	// This test specifically verifies that ONLY system:masters (or telepresence:admin) can revoke
+	// This test specifically verifies that ONLY configured admin groups can revoke
 	unauthorizedGroups := [][]string{
 		{"system:authenticated"},
 		{"system:authenticated", "developers"},
@@ -261,6 +284,12 @@ func TestRevokeIntercept_OnlySystemMasters(t *testing.T) {
 
 			ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
 
+			// Set up environment with default admin groups
+			env := &managerutil.Env{
+				AgentK8sAdminGroups: []string{"system:masters", "telepresence:admin", "kubeadm:cluster-admins"},
+			}
+			ctx = managerutil.WithEnv(ctx, env)
+
 			g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
 			svc := &service{
 				state: state.NewState(ctx, g),
@@ -277,9 +306,59 @@ func TestRevokeIntercept_OnlySystemMasters(t *testing.T) {
 			st, ok := status.FromError(err)
 			require.True(t, ok)
 			assert.Equal(t, codes.PermissionDenied, st.Code())
-			assert.Contains(t, st.Message(), "user must be a member of telepresence:admin or system:masters group")
+			assert.Contains(t, st.Message(), "user must be a member of one of the following groups")
 
 			t.Logf("Correctly denied access for groups: %v", groups)
 		})
 	}
+}
+
+func TestRevokeIntercept_CustomAdminGroups(t *testing.T) {
+	// Test with custom admin groups from environment
+	ctx := dlog.NewTestContext(t, true)
+
+	fakeClient := fake.NewClientset()
+	fakeClient.PrependReactor("create", "tokenreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		createAction := action.(k8stesting.CreateAction)
+		tr := createAction.GetObject().(*authv1.TokenReview)
+
+		// Return authenticated user with test-admin service account
+		tr.Status = authv1.TokenReviewStatus{
+			Authenticated: true,
+			User: authv1.UserInfo{
+				Username: "system:serviceaccount:ambassador:test-admin",
+				Groups:   []string{"system:serviceaccounts", "system:serviceaccounts:ambassador", "system:authenticated"},
+			},
+		}
+
+		return true, tr, nil
+	})
+
+	ctx = k8sapi.WithK8sInterface(ctx, fakeClient)
+
+	// Set up environment with custom admin groups including the service account
+	env := &managerutil.Env{
+		AgentK8sAdminGroups: []string{"system:masters", "system:serviceaccount:ambassador:test-admin"},
+	}
+	ctx = managerutil.WithEnv(ctx, env)
+
+	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+	svc := &service{
+		state: state.NewState(ctx, g),
+	}
+
+	req := &rpc.RevokeInterceptRequest{
+		InterceptId: "test:intercept",
+		Token:       "test-token",
+	}
+
+	_, err := svc.RevokeIntercept(ctx, req)
+
+	// Should get NotFound (auth passed, but intercept doesn't exist) instead of PermissionDenied
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	// Auth should pass, so we get NotFound instead of PermissionDenied
+	assert.Equal(t, codes.NotFound, st.Code(), "Expected NotFound since auth passed but intercept doesn't exist")
+	t.Logf("Successfully verified that custom admin group (system:serviceaccount:ambassador:test-admin) is allowed")
 }

@@ -136,7 +136,7 @@ items:
         title: Add ability for cluster admins to revoke other users' intercepts.
         body: >-
           The Traffic Manager now has a new API endpoint `RevokeIntercept` that can be used to revoke intercepts created by other users.
-          This endpoint is only accessible to cluster admins and requires authentication via a kubernetestoken and membership in the `system:masters` or `telepresence:admin` group.
+          This endpoint is only accessible to cluster admins and requires authentication via a kubernetestoken and membership in the `system:masters` or `telepresence:admin` or `kubeadm:cluster-admins` group.
   - version: 2.25.2
     date: 2025-12-26
     notes:

@@ -23,7 +23,7 @@ func revokeCmd() *cobra.Command {
 		Short: "Revoke an intercept by intercept ID. The intercept ID must be in the format <session_id>:<intercept_name>",
 		Long: `Revoke an intercept by intercept ID. This is an administrative operation that
 requires authentication via a Kubernetes token and membership in the telepresence:admin
-or system:masters group.`,
+or system:masters or kubeadm:cluster-admins group.`,
 		Annotations: map[string]string{
 			ann.Session: ann.Required,
 		},

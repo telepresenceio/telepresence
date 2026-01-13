@@ -110,7 +110,7 @@ type ConnectorClient interface {
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Revokes an intercept by intercept ID. This is an administrative operation
 	// that requires authentication via token and membership in telepresence:admin
-	// or system:masters group. Requires having already called Connect.
+	// or system:masters or kubeadm:cluster-admins group. Requires having already called Connect.
 	RevokeIntercept(ctx context.Context, in *manager.RevokeInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
@@ -585,7 +585,7 @@ type ConnectorServer interface {
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*emptypb.Empty, error)
 	// Revokes an intercept by intercept ID. This is an administrative operation
 	// that requires authentication via token and membership in telepresence:admin
-	// or system:masters group. Requires having already called Connect.
+	// or system:masters or kubeadm:cluster-admins group. Requires having already called Connect.
 	RevokeIntercept(context.Context, *manager.RevokeInterceptRequest) (*emptypb.Empty, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.

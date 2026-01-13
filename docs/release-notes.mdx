@@ -114,7 +114,7 @@ The root daemon process would sometimes panic with "close of closed channel" due
 <Note>
 	<Title type="feature">Add ability for cluster admins to revoke other users' intercepts.</Title>
 	<Body>
-The Traffic Manager now has a new API endpoint `RevokeIntercept` that can be used to revoke intercepts created by other users. This endpoint is only accessible to cluster admins and requires authentication via a kubernetestoken and membership in the `system:masters` or `telepresence:admin` group.
+The Traffic Manager now has a new API endpoint `RevokeIntercept` that can be used to revoke intercepts created by other users. This endpoint is only accessible to cluster admins and requires authentication via a kubernetestoken and membership in the `system:masters` or `telepresence:admin` or `kubeadm:cluster-admins` group.
   </Body>
 </Note>
 ## Version 2.25.2 <span style={{fontSize:'16px'}}>(December 26)</span>

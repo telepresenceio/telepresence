@@ -885,7 +885,8 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 
 // RevokeIntercept allows the manager to revoke any client's intercept by intercept ID.
 // This is an administrative operation that can revoke intercepts for any client.
-// Requires authentication via token and membership in system:telepresence-admin group.
+// Requires authentication via token and membership in one of the groups specified
+// by the AGENT_K8S_ADMIN_GROUPS environment variable (default: system:masters).
 func (s *service) RevokeIntercept(ctx context.Context, riReq *rpc.RevokeInterceptRequest) (*empty.Empty, error) {
 	// Verify the authentication token
 	tokenResult, error := k8sapi.VerifyToken(ctx, riReq.Token)
@@ -894,10 +895,23 @@ func (s *service) RevokeIntercept(ctx context.Context, riReq *rpc.RevokeIntercep
 		return nil, status.Errorf(codes.PermissionDenied, "authentication failed")
 	}
 
-	// Check if user belongs to system:telepresence-admin group
-	if !(tokenResult.IsMemberOfGroup("telepresence:admin") || tokenResult.IsMemberOfGroup("system:masters")) {
-		dlog.Warnf(ctx, "User %s is not a member of telepresence:admin or system:masters group", tokenResult.Username)
-		return nil, status.Errorf(codes.PermissionDenied, "user must be a member of telepresence:admin or system:masters group")
+	// Check if user belongs to one of the allowed admin groups
+	allowedGroups := managerutil.GetEnv(ctx).AgentK8sAdminGroups
+	if len(allowedGroups) == 0 {
+		// Default to system:masters if not configured
+		allowedGroups = []string{"system:masters"}
+	}
+	isAuthorized := false
+	for _, group := range allowedGroups {
+		if tokenResult.IsMemberOfGroup(group) {
+			isAuthorized = true
+			break
+		}
+	}
+	if !isAuthorized {
+		groupsStr := strings.Join(allowedGroups, ", ")
+		dlog.Warnf(ctx, "User %s is not a member of any allowed admin groups: %s", tokenResult.Username, groupsStr)
+		return nil, status.Errorf(codes.PermissionDenied, "user must be a member of one of the following groups: %s", groupsStr)
 	}
 
 	dlog.Infof(ctx, "Authorized to revoke intercepts")

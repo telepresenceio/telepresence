@@ -42,7 +42,8 @@ func VerifyToken(ctx context.Context, token string) (*VerifyTokenResult, error) 
 		return nil, fmt.Errorf("token is not authenticated")
 	}
 
-	dlog.Infof(ctx, "Token authenticated for user %s with groups %v", result.Status.User.Username, result.Status.User.Groups)
+	// dlog.Infof(ctx, "Token authenticated for user %s with groups %v", result.Status.User.Username, result.Status.User.Groups)
+	dlog.Infof(ctx, "Token authenticated")
 	return &VerifyTokenResult{
 		Username: result.Status.User.Username,
 		Groups:   result.Status.User.Groups,

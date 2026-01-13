@@ -56,6 +56,7 @@ type Env struct {
 	AgentImagePullPolicy       string                      `env:"AGENT_IMAGE_PULL_POLICY,       parser=string,         default="`
 	AgentImagePullSecrets      []core.LocalObjectReference `env:"AGENT_IMAGE_PULL_SECRETS,      parser=json-local-refs,default="`
 	AgentInjectPolicy          agentconfig.InjectPolicy    `env:"AGENT_INJECT_POLICY,           parser=enable-policy,  default=Never"`
+	AgentK8sAdminGroups        []string                    `env:"AGENT_K8S_ADMIN_GROUPS,        parser=split-trim,    default=system:masters"`
 	AgentLogLevel              string                      `env:"AGENT_LOG_LEVEL,               parser=logLevel,       defaultFrom=LogLevel"`
 	AgentPort                  uint16                      `env:"AGENT_PORT,                    parser=port-number,    default=0"`
 	AgentEnableH2cProbing      bool                        `env:"AGENT_ENABLE_H2C_PROBING,      parser=bool,           default=false"`
