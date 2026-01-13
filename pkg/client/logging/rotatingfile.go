@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
@@ -61,7 +60,7 @@ func (rotateDaily) RotateNow(rf *RotatingFile, _ int) bool {
 		return false
 	}
 	bt := rf.BirthTime()
-	return dtime.Now().In(bt.Location()).Day() != rf.BirthTime().Day()
+	return time.Now().In(bt.Location()).Day() != rf.BirthTime().Day()
 }
 
 type RotatingFile struct {
@@ -258,7 +257,7 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error)
 	if rf.file, err = dos.OpenFile(rf.ctx, fullPath, flag, rf.fileMode); err != nil {
 		return fmt.Errorf("failed to open file %s: %w", fullPath, err)
 	}
-	rf.birthTime = rf.fileTime(dtime.Now())
+	rf.birthTime = rf.fileTime(time.Now())
 	rf.size = 0
 	rf.afterOpen()
 	return nil
@@ -327,7 +326,7 @@ func (rf *RotatingFile) rotate() error {
 		fullPath := filepath.Join(rf.dirName, rf.fileName)
 		ex := filepath.Ext(rf.fileName)
 		sf := fullPath[:len(fullPath)-len(ex)]
-		ts := rf.fileTime(dtime.Now()).Format(rf.timeFormat)
+		ts := rf.fileTime(time.Now()).Format(rf.timeFormat)
 		backupName = fmt.Sprintf("%s-%s%s", sf, ts, ex)
 	}
 	err := rf.openNew(prevInfo, backupName)

@@ -38,7 +38,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
@@ -627,7 +626,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		if len(pods) > 0 || i == 5 {
 			break
 		}
-		dtime.SleepWithContext(ctx, 2*time.Second)
+		time.Sleep(2 * time.Second)
 	}
 
 	if len(pods) == 0 {
@@ -661,7 +660,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		logName = fmt.Sprintf("%s-%s", pod, container)
 	}
 	logFile, err := os.Create(
-		filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", dtime.Now().Format("20060102T150405"), logName)))
+		filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", time.Now().Format("20060102T150405"), logName)))
 	if err != nil {
 		s.logCapturingPods.Delete(pod)
 		clog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)

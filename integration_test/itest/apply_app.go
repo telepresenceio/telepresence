@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
@@ -110,7 +109,7 @@ func RolloutStatusWait(ctx context.Context, namespace, workload string) error {
 			if status.ReadyReplicas == status.Replicas {
 				return nil
 			}
-			dtime.SleepWithContext(ctx, 3*time.Second)
+			time.Sleep(3 * time.Second)
 		}
 	}
 	return Kubectl(ctx, namespace, "rollout", "status", "-w", workload)

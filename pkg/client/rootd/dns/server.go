@@ -18,7 +18,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -803,7 +802,7 @@ func (s *Server) performRecursionCheck(c context.Context) {
 		if rc == recursionDetected || rc == recursionNotDetected {
 			break
 		}
-		dtime.SleepWithContext(c, 10*time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

@@ -19,7 +19,6 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -315,7 +314,7 @@ func isInstalled(
 		}
 		clog.Infof(ctx, "isInstalled(namespace=%q): current install is in a pending or uninstalling state, waiting for it to transition...",
 			namespace)
-		dtime.SleepWithContext(ctx, 1*time.Second)
+		time.Sleep(1 * time.Second)
 	}
 	return existing, helmConfig, errStuck
 }

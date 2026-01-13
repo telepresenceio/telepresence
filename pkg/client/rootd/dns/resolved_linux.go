@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -88,7 +87,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 					cmdCancel()
 				}
 			}()
-			dtime.SleepWithContext(cmdC, 200*time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 		}
 		<-cmdC.Done()
 		if s.RequestCount() > 0 {

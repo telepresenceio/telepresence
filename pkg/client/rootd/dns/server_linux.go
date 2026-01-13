@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -125,7 +124,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 			case <-c.Done():
 			case <-serverStarted:
 				// Give DNS server time to start before rerouting NAT
-				dtime.SleepWithContext(c, time.Millisecond)
+				time.Sleep(time.Millisecond)
 
 				lc := net.ListenConfig{}
 				pc, err := lc.ListenPacket(c, "udp", ":53")
@@ -147,7 +146,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 		case <-c.Done():
 		case <-serverStarted:
 			// Give DNS server time to start before rerouting NAT
-			dtime.SleepWithContext(c, time.Millisecond)
+			time.Sleep(time.Millisecond)
 
 			err := routeDNS(c, s.LocalAddresses[0], dnsResolverAddr, pool.LocalAddrs())
 			if err != nil {

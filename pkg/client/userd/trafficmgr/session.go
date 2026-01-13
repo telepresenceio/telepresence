@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -430,7 +429,7 @@ func runWithRetry(ctx context.Context, f func(context.Context) error) error {
 	for ctx.Err() == nil {
 		if err := f(ctx); err != nil {
 			clog.Error(ctx, err)
-			dtime.SleepWithContext(ctx, backoff)
+			time.Sleep(backoff)
 			backoff *= 2
 			if backoff > 3*time.Second {
 				backoff = 3 * time.Second

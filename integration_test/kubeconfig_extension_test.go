@@ -19,7 +19,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -462,7 +461,7 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 			_, _ = net.DefaultResolver.LookupIPAddr(short, tt.domainName)
 
 			// Give query time to reach telepresence and produce a log entry
-			dtime.SleepWithContext(ctx, 500*time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 
 			for _, wl := range tt.wantedLogEntry {
 				_, err = rootLog.Seek(pos, io.SeekStart)

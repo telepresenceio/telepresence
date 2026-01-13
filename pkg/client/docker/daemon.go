@@ -29,7 +29,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -297,7 +296,7 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	for ctx.Err() == nil {
-		dtime.SleepWithContext(ctx, 10*time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		port, err := readPortFile(ctx, portFile, configFiles)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
@@ -478,7 +477,7 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 			// This may happen if the daemon has died (and hence, we never discovered it), but
 			// the container still hasn't died. Let's sleep for a short while and retry.
 			if i < 6 {
-				dtime.SleepWithContext(ctx, time.Duration(i)*500*time.Millisecond)
+				time.Sleep(time.Duration(i)*500*time.Millisecond)
 				continue
 			}
 			if stopAttempted {
