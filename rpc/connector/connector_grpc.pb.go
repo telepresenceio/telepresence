@@ -8,6 +8,7 @@ package connector
 
 import (
 	context "context"
+
 	common "github.com/telepresenceio/telepresence/rpc/v2/common"
 	daemon "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	manager "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -38,6 +39,7 @@ const (
 	Connector_LeaveIngest_FullMethodName             = "/telepresence.connector.Connector/LeaveIngest"
 	Connector_CreateIntercept_FullMethodName         = "/telepresence.connector.Connector/CreateIntercept"
 	Connector_RemoveIntercept_FullMethodName         = "/telepresence.connector.Connector/RemoveIntercept"
+	Connector_RevokeIntercept_FullMethodName         = "/telepresence.connector.Connector/RevokeIntercept"
 	Connector_Uninstall_FullMethodName               = "/telepresence.connector.Connector/Uninstall"
 	Connector_List_FullMethodName                    = "/telepresence.connector.Connector/List"
 	Connector_WatchWorkloads_FullMethodName          = "/telepresence.connector.Connector/WatchWorkloads"
@@ -106,6 +108,10 @@ type ConnectorClient interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Revokes an intercept by intercept ID. This is an administrative operation
+	// that requires authentication via token and membership in telepresence:admin
+	// or system:masters group. Requires having already called Connect.
+	RevokeIntercept(ctx context.Context, in *manager.RevokeInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
 	Uninstall(ctx context.Context, in *UninstallRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -306,6 +312,16 @@ func (c *connectorClient) RemoveIntercept(ctx context.Context, in *manager.Remov
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Connector_RemoveIntercept_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) RevokeIntercept(ctx context.Context, in *manager.RevokeInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Connector_RevokeIntercept_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -567,6 +583,10 @@ type ConnectorServer interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*emptypb.Empty, error)
+	// Revokes an intercept by intercept ID. This is an administrative operation
+	// that requires authentication via token and membership in telepresence:admin
+	// or system:masters group. Requires having already called Connect.
+	RevokeIntercept(context.Context, *manager.RevokeInterceptRequest) (*emptypb.Empty, error)
 	// Uninstalls traffic-agents from the cluster.
 	// Requires having already called Connect.
 	Uninstall(context.Context, *UninstallRequest) (*emptypb.Empty, error)
@@ -667,6 +687,9 @@ func (UnimplementedConnectorServer) CreateIntercept(context.Context, *CreateInte
 }
 func (UnimplementedConnectorServer) RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method RemoveIntercept not implemented")
+}
+func (UnimplementedConnectorServer) RevokeIntercept(context.Context, *manager.RevokeInterceptRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeIntercept not implemented")
 }
 func (UnimplementedConnectorServer) Uninstall(context.Context, *UninstallRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method Uninstall not implemented")
@@ -1015,6 +1038,24 @@ func _Connector_RemoveIntercept_Handler(srv interface{}, ctx context.Context, de
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).RemoveIntercept(ctx, req.(*manager.RemoveInterceptRequest2))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_RevokeIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(manager.RevokeInterceptRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).RevokeIntercept(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_RevokeIntercept_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).RevokeIntercept(ctx, req.(*manager.RevokeInterceptRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1438,6 +1479,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RemoveIntercept",
 			Handler:    _Connector_RemoveIntercept_Handler,
+		},
+		{
+			MethodName: "RevokeIntercept",
+			Handler:    _Connector_RevokeIntercept_Handler,
 		},
 		{
 			MethodName: "Uninstall",

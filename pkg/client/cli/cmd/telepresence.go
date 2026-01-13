@@ -163,6 +163,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 		leaveCmd(),
 		list(),
 		listContexts(),
+		revokeCmd(),
 		listNamespaces(),
 		loglevel(),
 		manPages(),
