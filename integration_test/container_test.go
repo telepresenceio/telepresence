@@ -12,13 +12,12 @@ import (
 	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dcontext"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 )
 
 func (s *connectedSuite) Test_InterceptsContainer() {
-	ctx, cancel := context.WithCancel(dcontext.WithSoftness(s.Context()))
+	ctx, cancel := context.WithCancel(s.Context())
 	defer cancel()
 	const svc = "echo-secondary"
 
@@ -90,7 +89,7 @@ func (s *connectedSuite) Test_InterceptsContainer() {
 }
 
 func (s *connectedSuite) Test_InterceptsContainerAndReplace() {
-	ctx, cancel := context.WithCancel(dcontext.WithSoftness(s.Context()))
+	ctx, cancel := context.WithCancel(s.Context())
 	defer cancel()
 	const svc = "echo-secondary"
 

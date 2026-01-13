@@ -11,7 +11,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
@@ -94,9 +93,9 @@ func (pa *podAccess) startForwards(ctx context.Context, wg *sync.WaitGroup) {
 	for _, port := range pa.localPorts {
 		var pfCtx context.Context
 		if iputil.IsIpV6Addr(pa.podIP) {
-			pfCtx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/[%s]:%s", pa.podIP, port))
+			pfCtx = clog.WithGroup(ctx, fmt.Sprintf("[%s]:%s", pa.podIP, port))
 		} else {
-			pfCtx = dgroup.WithGoroutineName(ctx, fmt.Sprintf("/%s:%s", pa.podIP, port))
+			pfCtx = clog.WithGroup(ctx, fmt.Sprintf("%s:%s", pa.podIP, port))
 		}
 		wg.Add(1)
 		go pa.workerPortForward(pfCtx, port, wg)

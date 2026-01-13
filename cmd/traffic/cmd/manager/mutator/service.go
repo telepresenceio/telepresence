@@ -25,9 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dcontext"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 const jsonContentType = `application/json`
@@ -117,7 +116,7 @@ func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
 	return tls.Server(tcpConn, &tls.Config{Certificates: []tls.Certificate{cert}}), nil
 }
 
-func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) error {
+func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorCertGetter) error {
 	cw := GetMap(ctx)
 	ai := NewAgentInjectorFunc(ctx, cw)
 
@@ -173,7 +172,7 @@ func ServeMutator(ctx context.Context, injectorCertGetter InjectorCertGetter) er
 		},
 	}
 	injectorReady := make(chan error)
-	dgroup.ParentGroup(ctx).Go("agent-configs", func(ctx context.Context) error {
+	g.Go("agent-configs", func(ctx context.Context) error {
 		if _, ok := <-injectorReady; ok {
 			// An error was posted on the injectorReady channel. We don't report the
 			// error from here, but we refrain from waiting on the watchers.
@@ -230,7 +229,7 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGett
 		time.Sleep(3 * time.Second)
 		rdyClose.Do(func() { close(rdy) })
 		<-ctx.Done()
-		errc <- s.Shutdown(dcontext.HardContext(ctx))
+		errc <- s.Shutdown(ctx)
 	}()
 
 	err = s.Serve(

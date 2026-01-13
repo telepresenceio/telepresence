@@ -9,10 +9,9 @@ import (
 	"time"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dcontext"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dbus"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -37,7 +36,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 	}
 	configureDNS(s.VIFAddress, dnsResolverAddr)
 
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g := log.NewGroup(c)
 
 	// DNS resolver
 	initDone := make(chan struct{})
@@ -130,7 +129,7 @@ func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
 	paths[i] = "~" + s.clusterDomain
 	s.Unlock()
 
-	if err := dbus.SetLinkDomains(dcontext.HardContext(c), int(dev.Index()), paths...); err != nil {
+	if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
 		return fmt.Errorf("failed to set link domains on %q: %w", dev.Name(), err)
 	}
 	s.flushDNS()

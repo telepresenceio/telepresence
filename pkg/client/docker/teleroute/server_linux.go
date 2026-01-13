@@ -20,10 +20,10 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	grpcServer "github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
@@ -67,7 +67,7 @@ type server struct {
 	daemonAddrIPv6 netip.Addr
 }
 
-func StartServer(g *dgroup.Group, tap *vif.TunnelingDevice, routesCh <-chan []netip.Prefix, teleroutePort uint16) (Server, error) {
+func StartServer(g log.Group, tap *vif.TunnelingDevice, routesCh <-chan []netip.Prefix, teleroutePort uint16) (Server, error) {
 	ts := &server{
 		routesCh:      routesCh,
 		done:          make(chan struct{}),

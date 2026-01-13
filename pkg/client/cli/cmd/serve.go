@@ -7,7 +7,6 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"os/signal"
 	"sync"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
 )
 
 type serveCommand struct {
@@ -59,30 +59,19 @@ func (sc *serveCommand) run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	ctx := cmd.Context()
-
-	// Cancel everything on exit
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt)
-	go func() {
-		<-sigCh
-		cancel()
-	}()
-
-	uc := daemon.MustGetUserClient(ctx)
-	ip, err := uc.Lookup(ctx, svc)
-	if err != nil {
+	return sigctx.DoWithSignalHandler(cmd.Context(), func(ctx context.Context) error {
+		uc := daemon.MustGetUserClient(ctx)
+		ip, err := uc.Lookup(ctx, svc)
+		if err != nil {
+			return err
+		}
+		if uc.Containerized() {
+			err = sc.serveFromContainer(ctx, ip)
+		} else {
+			err = sc.serveFromHost(ctx, ip)
+		}
 		return err
-	}
-	if uc.Containerized() {
-		err = sc.serveFromContainer(ctx, ip)
-	} else {
-		err = sc.serveFromHost(ctx, ip)
-	}
-	return err
+	})
 }
 
 const (

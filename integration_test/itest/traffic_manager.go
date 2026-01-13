@@ -16,7 +16,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -31,6 +30,7 @@ import (
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 type TrafficManager interface {
@@ -183,11 +183,7 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		SoftShutdownTimeout:  2 * time.Second,
-		EnableSignalHandling: true,
-		ShutdownOnNonError:   true,
-	})
+	g := log.NewGroup(ctx)
 
 	srv := daemon.NewService(ctx, cancel, client.GetConfig(ctx), grpc.NewServer())
 	sv := srv.ConnectorServer()

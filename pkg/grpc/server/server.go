@@ -15,7 +15,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dcontext"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 )
@@ -136,21 +135,22 @@ func Serve(ctx context.Context, svc *grpc.Server, lis net.Listener) error {
 // be logged.
 func Stop(ctx context.Context, svc *grpc.Server, maxTime time.Duration) {
 	dead := make(chan struct{})
-	clog.Debug(ctx, "Initiating hard shutdown")
+	clog.Debug(ctx, "Initiating shutdown")
 	go func() {
 		defer close(dead)
-		svc.Stop()
-		clog.Debug(ctx, "Hard shutdown complete")
+		svc.GracefulStop()
+		clog.Debug(ctx, "Shutdown complete")
 	}()
 	select {
 	case <-dead:
 	case <-time.After(maxTime):
-		// Hard shutdown is stuck! This shouldn't happen, and we need to find out why
+		// Graceful shutdown is stuck! This shouldn't happen, and we need to find out why
 		if clog.Enabled(ctx, slog.LevelDebug) {
 			buf := make([]byte, 1024*256)
 			n := runtime.Stack(buf, true)
 			clog.Debug(ctx, string(buf[:n]))
 		}
+		svc.Stop()
 	}
 }
 
@@ -159,24 +159,5 @@ func Stop(ctx context.Context, svc *grpc.Server, maxTime time.Duration) {
 // when the GracefulStop doesn't finish until the Done channel of the hard context closed.
 func Wait(ctx context.Context, svc *grpc.Server) {
 	<-ctx.Done()
-	hardCtx := dcontext.HardContext(ctx)
-	if hardCtx != ctx {
-		clog.Debugf(ctx, "wait context has softness")
-		dead := make(chan struct{})
-		go func() {
-			clog.Debug(ctx, "Initiating soft shutdown")
-			svc.GracefulStop()
-			close(dead)
-			clog.Debug(ctx, "Soft shutdown complete")
-		}()
-		select {
-		case <-dead:
-			// GracefulStop did the job.
-		case <-hardCtx.Done():
-			Stop(ctx, svc, 5*time.Second)
-		}
-	} else {
-		clog.Debugf(ctx, "wait context has no softness")
-		Stop(ctx, svc, 5*time.Second)
-	}
+	Stop(ctx, svc, 5*time.Second)
 }

@@ -35,6 +35,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -85,92 +87,99 @@ func MainWithEnv(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("unable to create the Argo Rollouts Interface from InClusterConfig: %w", err)
 	}
+	return sigctx.DoWithSignalHandler(ctx, func(ctx context.Context) error {
+		ctx = k8sapi.WithJoinedClientSetInterface(ctx, ki, ari)
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	ctx = k8sapi.WithJoinedClientSetInterface(ctx, ki, ari)
-
-	configWatcher := config.NewWatcher(env.ManagerNamespace)
-	go func() {
-		if err := configWatcher.Run(ctx); err != nil {
-			clog.Error(ctx, err)
-		}
-		cancel()
-	}()
-
-	ctx, err = namespaces.InitContext(ctx, configWatcher.SelectorChannel())
-	if err != nil {
-		return err
-	}
-
-	// Ensure that the manager has access to shared informer factories for all relevant namespaces.
-	//
-	// This will make the informers more verbose. Good for debugging
-	// l := klog.Level(6)
-	// _ = l.Set("6")
-	mgrFactory := false
-	mns := namespaces.GetOrGlobal(ctx)
-	global := len(mns) == 1 && mns[0] == ""
-	if global {
-		clog.Debug(ctx, "Using cluster wide informers")
-	}
-	for _, ns := range mns {
-		ctx = informer.WithFactory(ctx, ns)
-	}
-	if !(global || slices.Contains(mns, env.ManagerNamespace)) {
-		mgrFactory = true
-		ctx = informer.WithFactory(ctx, env.ManagerNamespace)
-	}
-
-	var injectorCertGetter mutator.InjectorCertGetter
-	if managerutil.AgentInjectorEnabled(ctx) {
-		// The GetInjectorCertGetter and the mutator.Load both create SharedInformer instances
-		// from informer factories, so these calls must be placed here in order for the factories
-		// to start correctly.
-		injectorCertGetter = mutator.GetInjectorCertGetter(ctx)
-	}
-
-	// We load the Map regardless of if the agent-injector is enabled or not. Intercepts can still
-	// be added manually.
-	watcher := mutator.Load(ctx)
-	ctx = mutator.WithMap(ctx, watcher)
-
-	if mgrFactory {
-		f := informer.GetK8sFactory(ctx, env.ManagerNamespace)
-		f.Start(ctx.Done())
-		f.WaitForCacheSync(ctx.Done())
-	}
-
-	mgr, g, err := NewService(ctx, configWatcher)
-	if err != nil {
-		return fmt.Errorf("unable to initialize traffic manager: %w", err)
-	}
-	watcher.SetConfigured()
-
-	g.Go("config", namespaces.Listen)
-	g.Go("prometheus", mgr.servePrometheus)
-
-	if managerutil.AgentInjectorEnabled(ctx) {
-		g.Go("agent-injector", func(ctx context.Context) error {
-			if managerutil.GetAgentImageRetriever(ctx) == nil {
-				return nil
+		configWatcher := config.NewWatcher(env.ManagerNamespace)
+		go func() {
+			if err := configWatcher.Run(ctx); err != nil {
+				clog.Error(ctx, err)
 			}
-			return mutator.ServeMutator(ctx, injectorCertGetter)
-		})
-	}
+		}()
 
-	if managerutil.GetEnv(ctx).AgentMaxIdleTime != 0 {
-		// only start the configmap updater if we set the agent max idle time, as we need to persist the latest agent state to the config map
-		//  otherwise everything else is passively synced which is ok if we don't need to clean up idle agents
-		g.Go("configmap-updater", mgr.runUpdateTrafficManagerConfigMapLoop)
-	}
+		ctx, err = namespaces.InitContext(ctx, configWatcher.SelectorChannel())
+		if err != nil {
+			return err
+		}
 
-	// Serve HTTP (including gRPC). The gRPC server is started last so that its readiness probe can be used to determine when the
-	// traffic-manager is fully configured and ready to serve traffic.
-	g.Go("httpd", mgr.serveHTTP)
+		// Ensure that the manager has access to shared informer factories for all relevant namespaces.
+		//
+		// This will make the informers more verbose. Good for debugging
+		// l := klog.Level(6)
+		// _ = l.Set("6")
+		mgrFactory := false
+		mns := namespaces.GetOrGlobal(ctx)
+		global := len(mns) == 1 && mns[0] == ""
+		if global {
+			clog.Debug(ctx, "Using cluster wide informers")
+		}
+		for _, ns := range mns {
+			ctx = informer.WithFactory(ctx, ns)
+		}
+		if !(global || slices.Contains(mns, env.ManagerNamespace)) {
+			mgrFactory = true
+			ctx = informer.WithFactory(ctx, env.ManagerNamespace)
+		}
 
-	// Wait for exit
-	return g.Wait()
+		var injectorCertGetter mutator.InjectorCertGetter
+		if managerutil.AgentInjectorEnabled(ctx) {
+			// The GetInjectorCertGetter and the mutator.Load both create SharedInformer instances
+			// from informer factories, so these calls must be placed here in order for the factories
+			// to start correctly.
+			injectorCertGetter = mutator.GetInjectorCertGetter(ctx)
+		}
+
+		// We load the Map regardless of if the agent-injector is enabled or not. Intercepts can still
+		// be added manually.
+		watcher := mutator.Load(ctx)
+		ctx = mutator.WithMap(ctx, watcher)
+
+		if mgrFactory {
+			f := informer.GetK8sFactory(ctx, env.ManagerNamespace)
+			f.Start(ctx.Done())
+			f.WaitForCacheSync(ctx.Done())
+		}
+
+		var err error
+		if managerutil.AgentInjectorEnabled(ctx) {
+			ctx, err = managerutil.WithAgentImageRetriever(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
+			if err != nil {
+				clog.Errorf(ctx, "unable to initialize agent injector: %v", err)
+			}
+		}
+
+		g := log.NewGroup(ctx)
+		mgr, err := NewService(ctx, g, configWatcher)
+		if err != nil {
+			return fmt.Errorf("unable to initialize traffic manager: %w", err)
+		}
+		watcher.SetConfigured()
+
+		g.Go("config", namespaces.Listen)
+		g.Go("prometheus", mgr.servePrometheus)
+
+		if managerutil.AgentInjectorEnabled(ctx) {
+			g.Go("agent-injector", func(ctx context.Context) error {
+				if managerutil.GetAgentImageRetriever(ctx) == nil {
+					return nil
+				}
+				return mutator.ServeMutator(ctx, g, injectorCertGetter)
+			})
+		}
+
+		if managerutil.GetEnv(ctx).AgentMaxIdleTime != 0 {
+			// only start the configmap updater if we set the agent max idle time, as we need to persist the latest agent state to the config map
+			//  otherwise everything else is passively synced which is ok if we don't need to clean up idle agents
+			g.Go("configmap-updater", mgr.runUpdateTrafficManagerConfigMapLoop)
+		}
+
+		// Serve HTTP (including gRPC). The gRPC server is started last so that its readiness probe can be used to determine when the
+		// traffic-manager is fully configured and ready to serve traffic.
+		g.Go("httpd", mgr.serveHTTP)
+
+		// Wait for exit
+		return g.Wait()
+	})
 }
 
 func newCounterFunc[T int | uint64](n, h string, f func() T) {

@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -45,6 +44,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
@@ -222,7 +222,7 @@ func (s *session) GetService() userd.Service {
 //     Services, and
 //   - (4) mount the appropriate remote volumes.
 func (s *session) Run() {
-	g := dgroup.NewGroup(s, dgroup.GroupConfig{})
+	g := log.NewGroup(s)
 	defer func() {
 		_ = s.WithRootClient(context.WithoutCancel(s), func(ctx context.Context, rd rootdRpc.DaemonClient) error {
 			_, _ = rd.Disconnect(ctx, &empty.Empty{})
@@ -419,7 +419,7 @@ func (s *session) updateDaemonNamespaces() {
 	clog.Debug(s, "domains posted successfully")
 }
 
-func (s *session) startServices(g *dgroup.Group) {
+func (s *session) startServices(g log.Group) {
 	g.Go("remain", s.remainLoop)
 	g.Go("agents", s.watchAgentsLoop)
 	g.Go("intercept-port-forward", s.watchInterceptsHandler)
@@ -848,7 +848,7 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 		if err != nil {
 			return nil, err
 		}
-		g := dgroup.NewGroup(rootSession, dgroup.GroupConfig{})
+		g := log.NewGroup(rootSession)
 		if err = rootSession.Start(g, svc.TeleroutePort()); err != nil {
 			return nil, err
 		}
@@ -934,7 +934,7 @@ func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
 	}, tunnel.ClientToAgent, ap.AddrPort)
 
 	go func() {
-		ctx := dgroup.WithGoroutineName(s, fmt.Sprintf("/%d=>%s", srcPort, ap))
+		ctx := clog.WithGroup(s, fmt.Sprintf("%d=>%s", srcPort, ap))
 		err := fw.Serve(ctx, nil)
 		if err != nil && ctx.Err() == nil {
 			clog.Errorf(ctx, "port-forwarder failed with %v", err)

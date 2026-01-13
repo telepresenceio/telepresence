@@ -18,14 +18,13 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dcontext"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -489,7 +488,7 @@ func newLocalUDPListener(c context.Context) (net.PacketConn, error) {
 	return lc.ListenPacket(c, "udp", "127.0.0.1:0")
 }
 
-func (s *Server) processSearchPaths(g *dgroup.Group, processor func(context.Context, vif.Device) error, dev vif.Device) {
+func (s *Server) processSearchPaths(g log.Group, processor func(context.Context, vif.Device) error, dev vif.Device) {
 	g.Go("SearchPaths", func(c context.Context) error {
 		prevDas := nsAndDomains{
 			domains:   []string{},
@@ -1085,14 +1084,14 @@ func (s *Server) Run(c context.Context, initDone chan<- struct{}, listeners []ne
 		s.clientLookup = s.resolveThruCache
 	}
 
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g := log.NewGroup(c)
 	for _, listener := range listeners {
 		srv := &dns.Server{PacketConn: listener, Handler: s, ReadTimeout: time.Second}
 		g.Go(listener.LocalAddr().String(), func(c context.Context) error {
 			go func() {
 				<-c.Done()
 				clog.Debugf(c, "Shutting down DNS server")
-				_ = srv.ShutdownContext(dcontext.HardContext(c))
+				_ = srv.ShutdownContext(c)
 			}()
 			return srv.ActivateAndServe()
 		})

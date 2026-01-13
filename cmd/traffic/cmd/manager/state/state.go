@@ -22,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
@@ -102,7 +101,7 @@ func agentsEqual(a, b *AgentSession) bool {
 	return proto.Equal(a.AgentInfo, b.AgentInfo)
 }
 
-func NewState(ctx context.Context, g *dgroup.Group) *State {
+func NewState(ctx context.Context, g log.Group) *State {
 	loglevel, err := clog.ParseLevel(os.Getenv("LOG_LEVEL"))
 	if err != nil {
 		loglevel = slog.LevelInfo

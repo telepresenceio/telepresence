@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -32,7 +32,7 @@ type Manager interface {
 	UseTLS(ctx context.Context, proxyPort uint16) bool
 
 	// StartWatchers starts the watchers that keep the TLS configuration up to date.
-	StartWatchers(g *dgroup.Group, certsReady chan<- struct{})
+	StartWatchers(g log.Group, certsReady chan<- struct{})
 }
 
 func NewManager(ctx context.Context, config *agentconfig.Sidecar, podIP netip.Addr, annotations map[string]string) (Manager, error) {
@@ -185,7 +185,7 @@ func (m *manager) GetUpstreamCertificate(proxyPort uint16) (*tls.Certificate, bo
 	return nil, false
 }
 
-func (m *manager) StartWatchers(g *dgroup.Group, certsReady chan<- struct{}) {
+func (m *manager) StartWatchers(g log.Group, certsReady chan<- struct{}) {
 	allReady := sync.WaitGroup{}
 	allReady.Add(len(m.portConfigs))
 	for p, pc := range m.portConfigs {

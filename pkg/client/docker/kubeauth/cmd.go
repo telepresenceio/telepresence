@@ -14,17 +14,19 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
 )
 
 const (
@@ -62,7 +64,10 @@ func Command(ctx context.Context) *cobra.Command {
 }
 
 func (as *authService) run(cmd *cobra.Command, _ []string) error {
-	ctx := cmd.Context()
+	return sigctx.DoWithSignalHandler(cmd.Context(), func(ctx context.Context) error { return as.internalRun(ctx, cmd.Flags()) })
+}
+
+func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) error {
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
 		return err
@@ -77,7 +82,6 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return errcat.NoDaemonLogs.Errorf(err, "unable to open a port on localhost")
 	}
 
-	flags := cmd.Flags()
 	logFile := flags.Lookup(logfileFlag).Value.String()
 	ctx, err = logging.InitContext(ctx, logFile, cfg.LogLevels().KubeAuthDaemon, logging.RotateNever, false)
 	if err != nil {
@@ -100,12 +104,7 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		EnableSignalHandling: true,
-		IgnoreSignalError:    true,
-		ShutdownOnNonError:   true,
-		SoftShutdownTimeout:  time.Second,
-	})
+	g := log.NewGroup(ctx)
 	g.Go("portfile-alive", as.keepPortFileAlive)
 	g.Go("portfile-watcher", as.watchFiles)
 	g.Go("grpc-server", func(ctx context.Context) error {

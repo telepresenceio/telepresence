@@ -18,7 +18,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
@@ -105,10 +104,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		}
 	}()
 
-	wg := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		SoftShutdownTimeout: time.Second * 10,
-		HardShutdownTimeout: time.Second * 10,
-	})
+	wg := log.NewGroup(ctx)
 
 	retryInterval := state.AgentConfig().WatchRetryInterval
 	wg.Go("logLevelWatch", func(ctx context.Context) error {

@@ -612,6 +612,11 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
 		ci, err = userD.Status(ctx, &emptypb.Empty{})
+		if err == nil && ci.ManagerVersion == nil {
+			// If the manager version is nil, the user daemon is not connected. This is the same
+			// as it being unavailable when the request is implicit.
+			err = status.Errorf(codes.Unavailable, "user daemon is not connected")
+		}
 		if err == nil {
 			return connectResult(ctx, ci, false), nil
 		}

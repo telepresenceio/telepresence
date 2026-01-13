@@ -13,7 +13,6 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/clog/testutil"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
@@ -71,7 +70,7 @@ func (s *suiteState) TestStateInternal() {
 		clock := &FakeClock{}
 		m := mutator.NewWatcher()
 		ctx = mutator.WithMap(ctx, m)
-		g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+		g := log.NewGroup(ctx)
 		st := NewState(ctx, g)
 
 		h, err := st.AddAgent(ctx, helloAgent, clock.Now())
@@ -94,7 +93,7 @@ func (s *suiteState) TestStateInternal() {
 
 		clock := &FakeClock{}
 		epoch := clock.Now()
-		g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+		g := log.NewGroup(ctx)
 		s := NewState(ctx, g)
 
 		c1 := s.AddClient(testClients["alice"], clock.Now())

@@ -13,6 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/tls"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -51,7 +52,7 @@ type ContainerState interface {
 	MountPoint() string
 	Mounts() types.MountPolicies
 	Env() map[string]string
-	AddPortHandler(ctx context.Context, pp types.PortAndProto, it agentconfig.InterceptTarget)
+	AddPortHandler(g log.Group, pp types.PortAndProto, it agentconfig.InterceptTarget)
 }
 
 // An InterceptState implements what's needed to intercept one target port.

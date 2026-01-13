@@ -13,7 +13,6 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -29,7 +28,7 @@ func NewSFTPMounter(iceptWG, podWG *sync.WaitGroup) Mounter {
 }
 
 func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMountPoint, mountPoint string, podAddrPort netip.AddrPort, ro bool) error {
-	ctx = dgroup.WithGoroutineName(ctx, podAddrPort.String())
+	ctx = clog.WithGroup(ctx, podAddrPort.String())
 	podIP := podAddrPort.Addr().Unmap()
 
 	// The mount is terminated and restarted when the intercept pod changes, so we

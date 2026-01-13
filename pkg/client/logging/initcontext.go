@@ -16,8 +16,6 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/clog/handler"
-	"github.com/telepresenceio/dlib/v2/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/logging/dslog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -102,7 +100,6 @@ func InitContext(ctx context.Context, logFile string, logLevel slog.Level, strat
 		stdLog.SetFlags(stl.Flags())
 		stdLog.SetPrefix("stdlog : ")
 	}
-	ctx = dlog.WithWrapper(ctx, dslog.Wrapper())
 	return clog.WithLogger(ctx, sl), nil
 }
 

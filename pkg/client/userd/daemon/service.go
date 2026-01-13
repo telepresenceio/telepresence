@@ -9,14 +9,13 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -29,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
+	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
 )
 
 func help() string {
@@ -191,14 +191,14 @@ func (s *service) configReload(c context.Context) error {
 func runAliveAndCancellationSession(ctx context.Context, cancel context.CancelFunc, daemonID *daemon.Identifier, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
+	g := log.NewGroup(ctx)
 	runAliveAndCancellation(g, cancel, daemonID.InfoFileName(), "-"+daemonID.String())
 	if err := g.Wait(); err != nil {
 		clog.Error(ctx, err)
 	}
 }
 
-func runAliveAndCancellation(g *dgroup.Group, cancel context.CancelFunc, daemonInfoFile, groupNameSuffix string) {
+func runAliveAndCancellation(g log.Group, cancel context.CancelFunc, daemonInfoFile, groupNameSuffix string) {
 	g.Go(fmt.Sprintf("info-kicker%s", groupNameSuffix), func(ctx context.Context) error {
 		// Ensure that the daemon info file is kept up to date. This tells clients that we're alive.
 		return daemon.NewUserInfoLoader(ctx).KeepInfoAlive(daemonInfoFile)
@@ -219,7 +219,12 @@ func runAliveAndCancellation(g *dgroup.Group, cancel context.CancelFunc, daemonI
 
 // run is the main function when executing as the connector.
 func run(cmd *cobra.Command, _ []string) error {
-	c := cmd.Context()
+	return sigctx.DoWithSignalHandler(cmd.Context(), func(ctx context.Context) error {
+		return internalRun(ctx, cmd.Flags())
+	})
+}
+
+func internalRun(c context.Context, flags *pflag.FlagSet) error {
 	cfg, err := client.LoadConfig(c)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -229,7 +234,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
 	// before other tasks because the CLI client will only wait for a short period of time for
 	// the connection/socket/pipe to appear before it gives up.
-	flags := cmd.Flags()
 	if pprofPort, _ := flags.GetUint16(pprofFlag); pprofPort > 0 {
 		go func() {
 			if err := pprof.PprofServer(c, pprofPort); err != nil {
@@ -244,7 +248,7 @@ func run(cmd *cobra.Command, _ []string) error {
 	addrStr := addrFlag.Value.String()
 
 	name, _ := flags.GetString(nameFlag)
-	c = dgroup.WithGoroutineName(c, "/"+name)
+	c = clog.WithGroup(c, name)
 	logFile := flags.Lookup(logfileFlag).Value.String()
 	c, err = logging.InitContext(c, logFile, cfg.LogLevels().UserDaemon, logging.RotateDaily, true)
 	if err != nil {
@@ -270,22 +274,14 @@ func run(cmd *cobra.Command, _ []string) error {
 	clog.Infof(c, "PID is %d", os.Getpid())
 	clog.Info(c, "")
 
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{
-		SoftShutdownTimeout:  2 * time.Second,
-		EnableSignalHandling: true,
-		ShutdownOnNonError:   true,
-		IgnoreSignalError:    true,
-	})
+	c, svcCancel := context.WithCancel(c)
+	g := log.NewGroup(c)
 
 	// Start services from within a group routine so that it gets proper cancellation
 	// when the group is cancelled.
 	siCh := make(chan *service)
-	svcCancel := func() {}
 	g.Go("serve-grpc", func(c context.Context) error {
-		// svcCancel is what a `quit -s` call will cancel. The Group provides soft cancellation to it.
-		// which will result in a graceful termination of the grpc server.
-		c, svcCancel = context.WithCancel(c)
-
+		// svcCancel is what a `quit -s` call will cancel. It cancels the group.
 		var opts []grpc.ServerOption
 		if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
 			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))

@@ -10,9 +10,9 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -62,7 +62,7 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	}
 
 	// Start local DNS server
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g := log.NewGroup(c)
 	g.Go("Server", func(c context.Context) error {
 		// No need to close listener. It's closed by the dns server.
 		defer func() {

@@ -28,7 +28,6 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -45,6 +44,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
@@ -1134,7 +1134,7 @@ func (s *session) run(initErrs chan<- error) {
 	defer func() {
 		clog.Info(s, "-- session ended")
 	}()
-	g := dgroup.NewGroup(s, dgroup.GroupConfig{})
+	g := log.NewGroup(s)
 	if err := s.Start(g, 0); err != nil {
 		defer close(initErrs)
 		initErrs <- err
@@ -1147,7 +1147,7 @@ func (s *session) run(initErrs chan<- error) {
 	}
 }
 
-func (s *session) Start(g *dgroup.Group, teleroutePort uint16) error {
+func (s *session) Start(g log.Group, teleroutePort uint16) error {
 	clusterCfg := client.GetConfig(s).Cluster()
 	if clusterCfg.AgentPortForward {
 		if k8s.CanPortForward(s, s.Namespace) {

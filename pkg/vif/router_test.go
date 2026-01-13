@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -320,7 +320,7 @@ func (s *RoutingSuite) runRouter(pCtx context.Context, args ...string) (string, 
 	}
 	pCtx = clog.With(pCtx, "pid", cmd.Process.Pid)
 
-	wg := dgroup.NewGroup(pCtx, dgroup.GroupConfig{EnableSignalHandling: true})
+	wg := log.NewGroup(pCtx)
 
 	readyCh := make(chan string)
 	defer close(readyCh)

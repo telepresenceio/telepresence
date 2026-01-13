@@ -12,7 +12,6 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
@@ -93,24 +92,22 @@ func (t *transformer) marshalYAML() ([]byte, error) {
 	return t.project.MarshalYAML()
 }
 
-func (t *transformer) engage(g *dgroup.Group, e serviceExtension, aesCh chan<- *engagement) {
+func (t *transformer) engage(ctx context.Context, e serviceExtension, aesCh chan<- *engagement) (err error) {
 	cn := e.composeService().Name
-	g.Go(cn, func(ctx context.Context) (err error) {
-		ctx = progress.WithEventId(ctx, cn)
-		progress.Workingf(ctx, fmt.Sprintf("%s %s", e.engagementType().Working(), cn))
-		var ae *engagement
-		if t.config.mustBeConnected {
-			ae, err = e.engaged()
-		} else {
-			ae, err = e.activate(t)
-		}
-		if err != nil {
-			return progress.MaybeWriteError(ctx, err)
-		}
-		progress.Donef(ctx, fmt.Sprintf("%s %s", e.engagementType().WorkDone(), cn))
-		aesCh <- ae
-		return nil
-	})
+	ctx = progress.WithEventId(ctx, cn)
+	progress.Workingf(ctx, fmt.Sprintf("%s %s", e.engagementType().Working(), cn))
+	var ae *engagement
+	if t.config.mustBeConnected {
+		ae, err = e.engaged()
+	} else {
+		ae, err = e.activate(t)
+	}
+	if err != nil {
+		return progress.MaybeWriteError(ctx, err)
+	}
+	progress.Donef(ctx, fmt.Sprintf("%s %s", e.engagementType().WorkDone(), cn))
+	aesCh <- ae
+	return nil
 }
 
 func (t *transformer) disengage(ctx context.Context) {

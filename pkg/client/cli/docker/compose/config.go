@@ -18,7 +18,6 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/generate"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -29,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -272,14 +272,11 @@ func (c *config) run(cmd *cobra.Command) (err error) {
 		}
 		c.existingProject = p
 	}
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		EnableSignalHandling: true,
-		IgnoreSignalError:    true,
-	})
+	g := log.NewGroup(ctx)
 	aesCh := make(chan *engagement, len(es))
 	progress.Start(ctx, "Engaging")
 	for _, e := range es {
-		tr.engage(g, e, aesCh)
+		g.Go(e.composeService().Name, func(ctx context.Context) error { return tr.engage(ctx, e, aesCh) })
 	}
 
 	g.Go("compose", func(ctx context.Context) error {

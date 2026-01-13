@@ -29,7 +29,6 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/dlib/v2/derror"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
@@ -41,6 +40,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	maps2 "github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -88,36 +88,26 @@ func checkCompat(ctx context.Context, name, requiredVersion string) error {
 	return nil
 }
 
-func NewService(ctx context.Context, configWatcher config.Watcher) (Service, *dgroup.Group, error) {
+func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) (Service, error) {
 	ret := &service{
 		id:            uuid.New().String(),
 		configWatcher: configWatcher,
 	}
 
-	var err error
-	if managerutil.AgentInjectorEnabled(ctx) {
-		ctx, err = managerutil.WithAgentImageRetriever(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
-		if err != nil {
-			clog.Errorf(ctx, "unable to initialize agent injector: %v", err)
-		}
-	}
 	// These are context-dependent, so build them once the pool is up
+	var err error
 	ret.clusterInfo, err = cluster.NewInfo(ctx)
 	if err != nil {
 		clog.Errorf(ctx, "unable to initialize cluster info: %v", err)
-		return nil, nil, err
+		return nil, err
 	}
 	ns := managerutil.GetEnv(ctx).ManagerNamespace
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
 
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		EnableSignalHandling: true,
-		SoftShutdownTimeout:  5 * time.Second,
-	})
 	ret.state = state.NewState(ctx, g)
-	return ret, g, nil
+	return ret, nil
 }
 
 func (s *service) ClusterInfo() cluster.Info {

@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dgroup"
 	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -37,12 +37,12 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		return s.runContainerServer(c, dev, configureDNS)
 	}
 
-	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), dev, configureDNS)
+	err := s.tryResolveD(clog.WithGroup(c, "resolved"), dev, configureDNS)
 	if err == errResolveDNotConfigured {
 		err = nil
 		if c.Err() == nil {
 			clog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), dev, configureDNS)
+			err = s.runOverridingServer(clog.WithGroup(c, "legacy"), dev, configureDNS)
 		}
 	}
 	return err
@@ -106,7 +106,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 
 	serverStarted := make(chan struct{})
 	serverDone := make(chan struct{})
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g := log.NewGroup(c)
 	g.Go("Server", func(c context.Context) error {
 		defer close(serverDone)
 		// The server will close the listener, so no need to close it here.
@@ -195,7 +195,7 @@ func (s *Server) runContainerServer(c context.Context, dev vif.Device, configure
 	clog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
 	serverStarted := make(chan struct{})
 	serverDone := make(chan struct{})
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g := log.NewGroup(c)
 	g.Go("Server", func(c context.Context) error {
 		defer close(serverDone)
 		// The server will close the listener, so no need to close it here.
