@@ -6,11 +6,11 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-json-experiment/json"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dhttp"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 )
 
@@ -134,11 +134,21 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	server := &dhttp.ServerConfig{Handler: mux}
+	svc := http.Server{
+		Handler:     mux,
+		BaseContext: func(_ net.Listener) context.Context { return c },
+	}
 	info := fmt.Sprintf("Telepresence API server on %v", ln.Addr())
 	clog.Infof(c, "%s started", info)
+	go func() {
+		<-c.Done()
+		clog.Infof(c, "Shutting down %s", info)
+		sc, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = svc.Shutdown(sc)
+		cancel()
+	}()
 	defer clog.Infof(c, "%s ended", info)
-	if err := server.Serve(c, ln); err != nil && err != c.Err() {
+	if err := svc.Serve(ln); err != nil {
 		return fmt.Errorf("%s stopped. %w", info, err)
 	}
 	return nil

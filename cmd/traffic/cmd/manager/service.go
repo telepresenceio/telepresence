@@ -1194,7 +1194,11 @@ func (s *service) WatchLogLevel(_ *empty.Empty, stream rpc.Manager_WatchLogLevel
 
 func (s *service) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_WatchClusterInfoServer) error {
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
-	return s.clusterInfo.Watch(ctx, stream)
+	sessionDone, err := s.state.SessionDone(tunnel.SessionID(session.SessionId))
+	if err != nil {
+		return err
+	}
+	return s.clusterInfo.Watch(ctx, sessionDone, stream)
 }
 
 func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.Manager_WatchWorkloadsServer) (err error) {

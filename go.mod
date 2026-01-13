@@ -37,7 +37,6 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	github.com/telepresenceio/clog v0.0.0-20260110145038-83948c443e24
-	github.com/telepresenceio/dlib/v2 v2.1.2
 	github.com/telepresenceio/go-ftpserver v1.2.1
 	github.com/telepresenceio/go-fuseftp v1.0.1
 	github.com/telepresenceio/go-fuseftp/rpc v1.0.1

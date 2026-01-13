@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"runtime/debug"
 	"slices"
@@ -24,7 +25,6 @@ import (
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dhttp"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -287,13 +287,18 @@ func (s *service) servePrometheus(ctx context.Context) error {
 
 	lg := clog.StdLogger(ctx, slog.LevelInfo)
 	lg.SetPrefix(fmt.Sprintf("prometheus:%d", env.PrometheusPort))
-	sc := &dhttp.ServerConfig{
-		Handler:  promhttp.Handler(),
-		ErrorLog: lg,
-	}
 	clog.Infof(ctx, "Prometheus metrics server started on port: %d", env.PrometheusPort)
 	defer clog.Info(ctx, "Prometheus metrics server stopped")
-	return sc.ListenAndServe(ctx, iputil.JoinHostPort(env.ServerHost, env.PrometheusPort))
+	svc := http.Server{
+		Handler:  promhttp.Handler(),
+		ErrorLog: lg,
+		Addr:     iputil.JoinHostPort(env.ServerHost, env.PrometheusPort),
+	}
+	go func() {
+		<-ctx.Done()
+		_ = svc.Shutdown(context.Background())
+	}()
+	return svc.ListenAndServe()
 }
 
 func (s *service) serveHTTP(ctx context.Context) error {

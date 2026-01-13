@@ -15,7 +15,6 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/dhttp"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
@@ -104,11 +103,17 @@ func run(c context.Context) error {
 		})
 	}
 
-	server := &dhttp.ServerConfig{Handler: mux}
 	info := fmt.Sprintf("API test server on %v", ln.Addr())
 	clog.Infof(c, "%s started", info)
 	defer clog.Infof(c, "%s ended", info)
-	if err := server.Serve(c, ln); err != nil && err != c.Err() {
+	svc := http.Server{Handler: mux, BaseContext: func(listener net.Listener) context.Context {
+		return c
+	}}
+	go func() {
+		<-c.Done()
+		_ = svc.Shutdown(context.Background())
+	}()
+	if err := svc.Serve(ln); err != nil {
 		return fmt.Errorf("%s stopped: %w", info, err)
 	}
 	return nil

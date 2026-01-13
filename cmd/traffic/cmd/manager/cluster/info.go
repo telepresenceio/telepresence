@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/blang/semver/v4"
+	"google.golang.org/grpc"
 	auth "k8s.io/api/authorization/v1"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +34,7 @@ const (
 
 type Info interface {
 	// Watch changes of an ClusterInfo and write them on the given stream
-	Watch(context.Context, rpc.Manager_WatchClusterInfoServer) error
+	Watch(context.Context, <-chan struct{}, grpc.ServerStreamingServer[rpc.ClusterInfo]) error
 
 	// ID of the installed ns
 	ID() string
@@ -411,8 +412,8 @@ func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
 
 // Watch will start by sending an initial snapshot of the ClusterInfo on the given stream
 // and then enter a loop where it waits for updates and sends new snapshots.
-func (oi *info) Watch(ctx context.Context, oiStream rpc.Manager_WatchClusterInfoServer) error {
-	return oi.ciSubs.subscriberLoop(ctx, oiStream)
+func (oi *info) Watch(ctx context.Context, sessionDone <-chan struct{}, oiStream grpc.ServerStreamingServer[rpc.ClusterInfo]) error {
+	return oi.ciSubs.subscriberLoop(ctx, sessionDone, oiStream)
 }
 
 // SetAdditionalAlsoProxy assigns a slice that will be added to the Routing.AlsoProxySubnets slice
