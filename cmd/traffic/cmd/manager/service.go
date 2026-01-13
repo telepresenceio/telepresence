@@ -888,19 +888,19 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 // Requires authentication via token and membership in system:telepresence-admin group.
 func (s *service) RevokeIntercept(ctx context.Context, riReq *rpc.RevokeInterceptRequest) (*empty.Empty, error) {
 	// Verify the authentication token
-	tokenResult := k8sapi.VerifyToken(ctx, riReq.Token)
-	if tokenResult.Error != nil || !tokenResult.Authenticated {
-		dlog.Warnf(ctx, "Authentication failed for RevokeIntercept: %v", tokenResult.Error)
+	tokenResult, error := k8sapi.VerifyToken(ctx, riReq.Token)
+	if error != nil {
+		dlog.Warnf(ctx, "Authentication failed for RevokeIntercept: %v", error)
 		return nil, status.Errorf(codes.PermissionDenied, "authentication failed")
 	}
 
 	// Check if user belongs to system:telepresence-admin group
-	if !(k8sapi.IsMemberOfGroup(tokenResult.Groups, "telepresence:admin") || k8sapi.IsMemberOfGroup(tokenResult.Groups, "system:masters")) {
+	if !(tokenResult.IsMemberOfGroup("telepresence:admin") || tokenResult.IsMemberOfGroup("system:masters")) {
 		dlog.Warnf(ctx, "User %s is not a member of telepresence:admin or system:masters group", tokenResult.Username)
 		return nil, status.Errorf(codes.PermissionDenied, "user must be a member of telepresence:admin or system:masters group")
 	}
 
-	dlog.Infof(ctx, "User %s authorized to revoke intercepts", tokenResult.Username)
+	dlog.Infof(ctx, "Authorized to revoke intercepts")
 
 	interceptID := riReq.InterceptId
 	dlog.Debugf(ctx, "Revoking intercept ID %s", interceptID)
