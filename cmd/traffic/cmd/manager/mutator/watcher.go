@@ -2,6 +2,7 @@ package mutator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync/atomic"
@@ -15,7 +16,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/derror"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -308,18 +308,15 @@ func (c *configWatcher) StartWatchers(ctx context.Context) error {
 	defer c.running.Store(true)
 	c.startedAt = time.Now()
 	ctx, c.cancel = context.WithCancel(ctx)
-	var errs []error
+	var errs error
 	c.informers.Range(func(ns string, iwc *informersWithCancel) bool {
 		if err := c.startWatchers(ctx, iwc); err != nil {
-			errs = append(errs, err)
+			errs = errors.Join(errs, err)
 			return false
 		}
 		return true
 	})
-	if len(errs) > 0 {
-		return derror.MultiError(errs)
-	}
-	return nil
+	return errs
 }
 
 func (c *configWatcher) Wait(ctx context.Context) error {

@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/derror"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
@@ -1205,13 +1204,6 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.
 		return err
 	}
 	ctx = managerutil.WithSessionInfo(ctx, request.SessionInfo)
-	defer func() {
-		if r := recover(); r != nil {
-			err = derror.PanicToError(r)
-			clog.Errorf(ctx, "WatchWorkloads panic: %+v", err)
-			err = status.Error(codes.Internal, err.Error())
-		}
-	}()
 	clog.Debugf(ctx, "Namespace %q", request.Namespace)
 
 	if request.SessionInfo == nil {

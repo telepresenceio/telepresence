@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/dlib/v2/derror"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -68,21 +67,14 @@ func (c *configWatcher) EvictAllPodsWithAgentConfig(ctx context.Context, namespa
 	if err != nil {
 		return err
 	}
-	var errs derror.MultiError
+	var errs error
 	for _, wp := range evictMap {
 		err = c.evictPodsWithAgentConfigMismatch(ctx, wp.wl, wp.pods, "")
 		if err != nil {
-			errs = append(errs, err)
+			errs = errors.Join(errs, err)
 		}
 	}
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errs[0]
-	default:
-		return errs
-	}
+	return errs
 }
 
 func (c *configWatcher) evictPodsWithAgentConfigMismatch(ctx context.Context, wl k8sapi.Workload, pods []*core.Pod, cfgJSON string) error {
