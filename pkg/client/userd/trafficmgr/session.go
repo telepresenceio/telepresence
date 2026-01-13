@@ -28,7 +28,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/clog"
-	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -790,12 +789,7 @@ func (s *session) status(ctx context.Context, initial bool) (*rpc.ConnectInfo, e
 		},
 		ManagerNamespace:   k8s.GetManagerNamespace(s),
 		SubnetViaWorkloads: s.subnetViaWorkloads,
-		Version: &common.VersionInfo{
-			ApiVersion: client.APIVersion,
-			Version:    client.Version(),
-			Executable: client.GetExe(s),
-			Name:       client.DisplayName,
-		},
+		Version:            client.VersionInfo(s),
 	}
 	if len(s.MappedNamespaces) > 0 || len(client.GetConfig(s).Cluster().MappedNamespaces) > 0 {
 		ret.MappedNamespaces = s.GetCurrentNamespaces(true)

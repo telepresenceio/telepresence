@@ -57,17 +57,8 @@ func (s *service) withSession(ctx context.Context, f func(context.Context, userd
 	}
 }
 
-func (s *service) Version(_ context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
-	executable, err := client.Executable()
-	if err != nil {
-		return &common.VersionInfo{}, err
-	}
-	return &common.VersionInfo{
-		ApiVersion: client.APIVersion,
-		Version:    client.Version(),
-		Executable: executable,
-		Name:       client.DisplayName,
-	}, nil
+func (s *service) Version(ctx context.Context, _ *empty.Empty) (*common.VersionInfo, error) {
+	return client.VersionInfo(ctx), nil
 }
 
 func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *rpc.ConnectInfo, err error) {
@@ -92,15 +83,17 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		return s.session.Status(server.NewCombinedContext(s.session, ctx))
 	}
 
-	cfg, err := client.LoadConfig(s)
+	var cfg client.Config
+	cfg, err = client.LoadConfig(s)
 	if err != nil {
 		return nil, err
 	}
 
 	// Obtain the kubeconfig from the request parameters so that we can determine
 	// what kubernetes context that will be used.
+	var kubeConfig *k8s.Kubeconfig
 	sessionCtx, sessionCancel := context.WithCancel(s.Context)
-	config, err := k8s.DaemonKubeconfig(client.WithConfig(sessionCtx, cfg), cr)
+	kubeConfig, err = k8s.DaemonKubeconfig(client.WithConfig(sessionCtx, cfg), cr)
 	if err != nil {
 		sessionCancel()
 		if s.rootSessionInProc {
@@ -114,7 +107,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	// will connect to the root daemon, which in turn might call back to the Authenticator service provided by
 	// this service.
 	s.clientConfigLock.Lock()
-	s.clientConfig = config.ClientConfig
+	s.clientConfig = kubeConfig.ClientConfig
 	s.clientConfigLock.Unlock()
 	defer func() {
 		if err != nil {
@@ -124,11 +117,11 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		}
 	}()
 
-	daemonID := cliDaemon.NewIdentifier(cr.Name, config.KubeContext, config.Namespace, proc.RunningInContainer())
+	daemonID := cliDaemon.NewIdentifier(cr.Name, kubeConfig.KubeContext, kubeConfig.Namespace, proc.RunningInContainer())
 	wg := &sync.WaitGroup{}
 
 	var session userd.Session
-	session, result, err = trafficmgr.NewSession(s, server.NewCombinedContext(s, ctx), cr, config, wg)
+	session, result, err = trafficmgr.NewSession(s, server.NewCombinedContext(s, ctx), cr, kubeConfig, wg)
 	if err != nil {
 		sessionCancel()
 		if s.rootSessionInProc {

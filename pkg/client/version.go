@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/blang/semver/v4"
 
+	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -25,6 +27,15 @@ func Semver() semver.Version {
 
 func Executable() (string, error) {
 	return version.GetExecutable()
+}
+
+func VersionInfo(ctx context.Context) *common.VersionInfo {
+	return &common.VersionInfo{
+		ApiVersion: APIVersion,
+		Version:    Version(),
+		Executable: GetExe(ctx),
+		Name:       DisplayName,
+	}
 }
 
 // GetInstallMechanism returns how the executable was installed on the machine.

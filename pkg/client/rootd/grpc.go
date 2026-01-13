@@ -18,24 +18,16 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-func (s *service) Version(_ context.Context, _ *emptypb.Empty) (*common.VersionInfo, error) {
-	return &common.VersionInfo{
-		ApiVersion: client.APIVersion,
-		Version:    client.Version(),
-		Name:       client.DisplayName,
-	}, nil
+func (s *service) Version(ctx context.Context, _ *emptypb.Empty) (*common.VersionInfo, error) {
+	return client.VersionInfo(ctx), nil
 }
 
-func (s *service) Status(context.Context, *emptypb.Empty) (*rpc.DaemonStatus, error) {
+func (s *service) Status(ctx context.Context, _ *emptypb.Empty) (*rpc.DaemonStatus, error) {
 	s.sessionLock.RLock()
 	defer s.sessionLock.RUnlock()
 	r := &rpc.DaemonStatus{
 		Managed: s.managed,
-		Version: &common.VersionInfo{
-			ApiVersion: client.APIVersion,
-			Version:    client.Version(),
-			Name:       client.DisplayName,
-		},
+		Version: client.VersionInfo(ctx),
 	}
 	if s.session != nil {
 		r.OutboundConfig = s.session.getNetworkConfig()
@@ -74,13 +66,7 @@ func (s *service) SetDNSMappings(ctx context.Context, req *rpc.SetDNSMappingsReq
 }
 
 func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *rpc.DaemonStatus, err error) {
-	reply = &rpc.DaemonStatus{
-		Version: &common.VersionInfo{
-			ApiVersion: client.APIVersion,
-			Version:    client.Version(),
-			Name:       client.DisplayName,
-		},
-	}
+	reply = &rpc.DaemonStatus{Version: client.VersionInfo(ctx)}
 	err = s.withSession(ctx, func(_ context.Context, session *session) error {
 		reply.OutboundConfig = s.session.getNetworkConfig()
 		return nil
