@@ -889,9 +889,9 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 // by the AGENT_K8S_ADMIN_GROUPS environment variable (default: system:masters).
 func (s *service) RevokeIntercept(ctx context.Context, riReq *rpc.RevokeInterceptRequest) (*empty.Empty, error) {
 	// Verify the authentication token
-	tokenResult, error := k8sapi.VerifyToken(ctx, riReq.Token)
-	if error != nil {
-		dlog.Warnf(ctx, "Authentication failed for RevokeIntercept: %v", error)
+	tokenResult, err := k8sapi.VerifyToken(ctx, riReq.Token)
+	if err != nil {
+		dlog.Warnf(ctx, "Authentication failed for RevokeIntercept: %v", err)
 		return nil, status.Errorf(codes.PermissionDenied, "authentication failed")
 	}
 
