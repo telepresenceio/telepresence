@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
@@ -30,7 +30,7 @@ func (w *tbWriter) Write(data []byte) (n int, err error) {
 }
 
 func NewTestLogger(t testing.TB, level dlog.LogLevel) dlog.Logger {
-	return &tbWrapper{TB: t, level: level}
+	return dlog.BaseLogger{GenericLogger: &tbWrapper{TB: t, level: level}}
 }
 
 func (w *tbWrapper) StdLogger(l dlog.LogLevel) *log.Logger {
@@ -45,18 +45,15 @@ func (w *tbWrapper) WithField(key string, value any) dlog.Logger {
 	}
 	maps.Merge(ret.fields, w.fields)
 	ret.fields[key] = value
-	return &ret
+	return dlog.BaseLogger{GenericLogger: &ret}
 }
 
-func (w *tbWrapper) Log(level dlog.LogLevel, msg string) {
-	if level > w.level {
-		return
-	}
+func (w *tbWrapper) LogMessage(level dlog.LogLevel, msg string) {
 	w.Helper()
-	w.UnformattedLog(level, msg)
+	w.Log(level, msg)
 }
 
-func (w *tbWrapper) UnformattedLog(level dlog.LogLevel, args ...any) {
+func (w *tbWrapper) Log(level dlog.LogLevel, args ...any) {
 	if level > w.level {
 		return
 	}
@@ -85,18 +82,12 @@ func (w *tbWrapper) UnformattedLog(level dlog.LogLevel, args ...any) {
 	w.TB.Log(sb.String())
 }
 
-func (w *tbWrapper) UnformattedLogf(level dlog.LogLevel, format string, args ...any) {
-	if level > w.level {
-		return
-	}
+func (w *tbWrapper) Logf(level dlog.LogLevel, format string, args ...any) {
 	w.Helper()
 	w.Log(level, fmt.Sprintf(format, args...))
 }
 
-func (w *tbWrapper) UnformattedLogln(level dlog.LogLevel, args ...any) {
-	if level > w.level {
-		return
-	}
+func (w *tbWrapper) Logln(level dlog.LogLevel, args ...any) {
 	w.Helper()
 	w.Log(level, fmt.Sprintln(args...))
 }

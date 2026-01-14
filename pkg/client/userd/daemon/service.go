@@ -15,17 +15,15 @@ import (
 	"google.golang.org/grpc"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
@@ -126,10 +124,7 @@ func (s *service) ConnectorServer() rpc.ConnectorServer {
 }
 
 func (s *service) ListenerAddress(ctx context.Context) string {
-	if s.daemonAddress.IsValid() {
-		return s.daemonAddress.String()
-	}
-	return "unix:" + socket.UserDaemonPath(ctx)
+	return s.daemonAddress.String()
 }
 
 func (s *service) FuseFTPMgr() remotefs.FuseFTPManager {
@@ -171,7 +166,7 @@ func Command(ctx context.Context) *cobra.Command {
 	flags.String(nameFlag, client.UserDaemonName, "Daemon name")
 	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log"),
 		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
-	flags.String(addressFlag, "", "Address to listen to. Defaults to "+socket.UserDaemonPath(ctx))
+	flags.String(addressFlag, "", "TCP Address to listen to")
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
 	flags.Uint16(teleroutePortFlag, 0, "start teleroute server on the given port")
@@ -187,25 +182,32 @@ func (s *service) configReload(c context.Context) error {
 		s.sessionLock.RLock()
 		defer s.sessionLock.RUnlock()
 		if s.session == nil {
-			client.ReloadDaemonLogLevel(ctx)
+			client.ReloadLogLevel(ctx)
 		}
 		return nil
 	})
 }
 
-func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, daemonID *daemon.Identifier, wg *sync.WaitGroup) {
+func runAliveAndCancellationSession(ctx context.Context, cancel context.CancelFunc, daemonID *daemon.Identifier, wg *sync.WaitGroup) {
 	wg.Add(1)
 	defer wg.Done()
-	daemonInfoFile := daemonID.InfoFileName()
 	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{})
-	g.Go(fmt.Sprintf("info-kicker-%s", daemonID), func(ctx context.Context) error {
-		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
-		return daemon.KeepInfoAlive(ctx, daemonInfoFile)
+	runAliveAndCancellation(g, cancel, daemonID.InfoFileName(), "-"+daemonID.String())
+	if err := g.Wait(); err != nil {
+		dlog.Error(ctx, err)
+	}
+}
+
+func runAliveAndCancellation(g *dgroup.Group, cancel context.CancelFunc, daemonInfoFile, groupNameSuffix string) {
+	g.Go(fmt.Sprintf("info-kicker%s", groupNameSuffix), func(ctx context.Context) error {
+		// Ensure that the daemon info file is kept up to date. This tells clients that we're alive.
+		return daemon.NewUserInfoLoader(ctx).KeepInfoAlive(daemonInfoFile)
 	})
-	g.Go(fmt.Sprintf("info-watcher-%s", daemonID), func(ctx context.Context) error {
+	g.Go(fmt.Sprintf("info-watcher%s", groupNameSuffix), func(ctx context.Context) error {
 		// Cancel the session if the daemon info file is removed.
-		return daemon.WatchInfos(ctx, func(ctx context.Context) error {
-			ok, err := daemon.InfoExists(ctx, daemonInfoFile)
+		il := daemon.NewUserInfoLoader(ctx)
+		return il.WatchInfos(func(ctx context.Context) error {
+			ok, err := il.InfoExists(daemonInfoFile)
 			if err == nil && !ok {
 				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemonInfoFile)
 				cancel()
@@ -213,17 +215,10 @@ func runAliveAndCancellation(ctx context.Context, cancel context.CancelFunc, dae
 			return err
 		}, daemonInfoFile)
 	})
-	if err := g.Wait(); err != nil {
-		dlog.Error(ctx, err)
-	}
 }
 
 // run is the main function when executing as the connector.
 func run(cmd *cobra.Command, _ []string) error {
-	err := global.InitConfig(cmd)
-	if err != nil {
-		return err
-	}
 	c := cmd.Context()
 	cfg, err := client.LoadConfig(c)
 	if err != nil {
@@ -234,7 +229,6 @@ func run(cmd *cobra.Command, _ []string) error {
 	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
 	// before other tasks because the CLI client will only wait for a short period of time for
 	// the connection/socket/pipe to appear before it gives up.
-	var grpcListener net.Listener
 	flags := cmd.Flags()
 	if pprofPort, _ := flags.GetUint16(pprofFlag); pprofPort > 0 {
 		go func() {
@@ -243,6 +237,11 @@ func run(cmd *cobra.Command, _ []string) error {
 			}
 		}()
 	}
+	addrFlag := flags.Lookup(addressFlag)
+	if !addrFlag.Changed {
+		return fmt.Errorf("must specify %s", addressFlag)
+	}
+	addrStr := addrFlag.Value.String()
 
 	name, _ := flags.GetString(nameFlag)
 	c = dgroup.WithGoroutineName(c, "/"+name)
@@ -254,24 +253,14 @@ func run(cmd *cobra.Command, _ []string) error {
 	c = docker.EnableClient(c)
 
 	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
-	var daemonAddress netip.AddrPort
-	if addr, _ := flags.GetString(addressFlag); addr != "" {
-		lc := net.ListenConfig{}
-		if grpcListener, err = lc.Listen(c, "tcp", addr); err != nil {
-			return err
-		}
-		daemonAddress = grpcListener.Addr().(interface{ AddrPort() netip.AddrPort }).AddrPort()
-	} else {
-		socketPath := socket.UserDaemonPath(c)
-		dlog.Infof(c, "Starting socket listener for %s", socketPath)
-		if grpcListener, err = socket.Listen(c, client.UserDaemonName, socketPath); err != nil {
-			dlog.Errorf(c, "socket listener for %s failed: %v", socketPath, err)
-			return err
-		}
-		defer func() {
-			_ = socket.Remove(grpcListener)
-		}()
+	lc := net.ListenConfig{}
+	grpcListener, err := lc.Listen(c, "tcp", addrStr)
+	if err != nil {
+		return err
 	}
+	defer grpcListener.Close()
+
+	daemonAddress := grpcListener.Addr().(interface{ AddrPort() netip.AddrPort }).AddrPort()
 	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 
 	dlog.Info(c, "---")
@@ -283,15 +272,17 @@ func run(cmd *cobra.Command, _ []string) error {
 		SoftShutdownTimeout:  2 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
+		IgnoreSignalError:    true,
 	})
 
 	// Start services from within a group routine so that it gets proper cancellation
 	// when the group is cancelled.
 	siCh := make(chan *service)
+	svcCancel := func() {}
 	g.Go("serve-grpc", func(c context.Context) error {
 		// svcCancel is what a `quit -s` call will cancel. The Group provides soft cancellation to it.
 		// which will result in a graceful termination of the grpc server.
-		c, svcCancel := context.WithCancel(c)
+		c, svcCancel = context.WithCancel(c)
 
 		var opts []grpc.ServerOption
 		if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
@@ -331,6 +322,11 @@ func run(cmd *cobra.Command, _ []string) error {
 	}
 
 	g.Go("config-reload", s.configReload)
+	if !rootSessionInProc {
+		// User daemon process survives multiple sessions.
+		runAliveAndCancellation(g, svcCancel, daemon.InfoFileName, "")
+	}
+
 	err = g.Wait()
 	if err != nil {
 		dlog.Error(c, err)

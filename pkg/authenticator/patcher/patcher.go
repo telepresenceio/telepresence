@@ -1,28 +1,18 @@
 package patcher
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/datawire/dlib/dlog"
-	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
-	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
 const (
 	kubeConfigStubSubCommands = "kubeauth"
-	kubeConfigs               = "kube"
 )
 
 // AddressProvider is a function that returns the path to the telepresence executable and an address to a service that
@@ -33,7 +23,7 @@ const (
 // also passed a pointer to the minified config that will be stored in a file so that it
 // has a chance to modify it.
 type (
-	AddressProvider func(configFiles []string) (string, string, error)
+	AddressProvider func(configFiles []string) (executable, addr, configFile string, err error)
 	Patcher         func(*clientcmdapi.Config) error
 )
 
@@ -47,7 +37,7 @@ func CreateExternalKubeConfig(
 	kubeContext string,
 	authAddressFunc AddressProvider,
 	patcher Patcher,
-) (*clientcmdapi.Config, error) {
+) ([]byte, error) {
 	ns, _, err := loader.Namespace()
 	if err != nil {
 		return nil, err
@@ -78,11 +68,11 @@ func CreateExternalKubeConfig(
 	}
 
 	if needsStubbedExec(&config) {
-		executable, addr, err := authAddressFunc(configFiles)
+		executable, addr, configFile, err := authAddressFunc(configFiles)
 		if err != nil {
 			return nil, err
 		}
-		if err = replaceAuthExecWithStub(ctx, &config, executable, addr); err != nil {
+		if err = replaceAuthExecWithStub(&config, executable, addr, configFile); err != nil {
 			return nil, err
 		}
 	}
@@ -97,34 +87,12 @@ func CreateExternalKubeConfig(
 			return nil, err
 		}
 	}
-
-	content, err := clientcmd.Write(config)
-	if err != nil {
-		return nil, err
-	}
-
-	// Store the file using its context name under the <telepresence cache>/kube directory
-	kubeConfigFile := ioutil.SafeName(config.CurrentContext)
-	kubeConfigDir := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeConfigs)
-	path := filepath.Join(kubeConfigDir, kubeConfigFile)
-	oldContent, err := os.ReadFile(path)
-	if err == nil && bytes.Equal(oldContent, content) {
-		dlog.Debugf(ctx, "kubeconfig unchanged")
-		return &config, nil
-	}
-
-	if err = os.MkdirAll(kubeConfigDir, 0o700); err != nil {
-		return nil, err
-	}
-	if err = os.WriteFile(path, content, 0o644); err != nil {
-		return nil, err
-	}
-	return &config, nil
+	return clientcmd.Write(config)
 }
 
 // replaceAuthExecWithStub goes through the kubeconfig and replaces all uses of the Exec auth method by
 // an invocation of the stub binary.
-func replaceAuthExecWithStub(ctx context.Context, rawConfig *clientcmdapi.Config, executable, address string) error {
+func replaceAuthExecWithStub(rawConfig *clientcmdapi.Config, executable, address, configFile string) error {
 	for contextName, kubeContext := range rawConfig.Contexts {
 		// Find related Auth.
 		authInfo, ok := rawConfig.AuthInfos[kubeContext.AuthInfo]
@@ -142,7 +110,7 @@ func replaceAuthExecWithStub(ctx context.Context, rawConfig *clientcmdapi.Config
 			InteractiveMode: clientcmdapi.NeverExecInteractiveMode,
 			APIVersion:      authInfo.Exec.APIVersion,
 			Command:         executable,
-			Args:            []string{kubeConfigStubSubCommands, "--" + global.FlagConfig, client.GetConfigFile(ctx), contextName, address},
+			Args:            []string{kubeConfigStubSubCommands, "--" + global.FlagConfig, configFile, contextName, address},
 		}
 	}
 	return nil
@@ -156,32 +124,4 @@ func needsStubbedExec(rawConfig *clientcmdapi.Config) bool {
 		}
 	}
 	return false
-}
-
-// AnnotateConnectRequest is used when the CLI connects to a containerized user-daemon. It adds a ContainerKubeFlagOverrides
-// to the given ConnectRequest containing the path to the modified kubeconfig file to be used in the container.
-func AnnotateConnectRequest(cr *connector.ConnectRequest, cacheDir, kubeContext string) {
-	kubeConfigFile := ioutil.SafeName(kubeContext)
-	if cr.ContainerKubeFlagOverrides == nil {
-		cr.ContainerKubeFlagOverrides = make(map[string]string)
-	}
-	// Concatenate using "/". This will be used in linux
-	cr.ContainerKubeFlagOverrides["kubeconfig"] = fmt.Sprintf("%s/%s/%s", cacheDir, kubeConfigs, kubeConfigFile)
-
-	// We never instruct the remote containerized daemon to modify its KUBECONFIG environment.
-	delete(cr.Environment, "KUBECONFIG")
-	delete(cr.Environment, "-KUBECONFIG")
-}
-
-// AnnotateNetworkConfig is used when a non-containerized user-daemon connects to the root-daemon. The KubeFlags
-// are modified to contain the path to the modified kubeconfig file.
-func AnnotateNetworkConfig(ctx context.Context, oi *daemon.NetworkConfig, kubeContext string) {
-	kubeConfigFile := ioutil.SafeName(kubeContext)
-	if oi.KubeFlags == nil {
-		oi.KubeFlags = make(map[string]string)
-	} else {
-		oi.KubeFlags = maps.Copy(oi.KubeFlags)
-	}
-	// Concatenate using "/". This will be used in linux
-	oi.KubeFlags["kubeconfig"] = fmt.Sprintf("%s/%s/%s", filelocation.AppUserCacheDir(ctx), kubeConfigs, kubeConfigFile)
 }

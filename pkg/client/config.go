@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -1221,7 +1221,6 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 	bs, err := os.ReadFile(fileName)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			dlog.Infof(c, "No config file found at %q. Using default config", fileName)
 			return cfg, nil
 		}
 		return nil, errcat.Config.New(err)

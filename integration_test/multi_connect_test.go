@@ -14,7 +14,7 @@ import (
 	"github.com/go-json-experiment/json"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -177,12 +177,12 @@ func (s *multiConnectSuite) doubleConnectCheck(ctx1, ctx2 context.Context, n1, n
 	cacheDir := filelocation.AppUserCacheDir(ctx1)
 	var di daemon.Info
 
-	info, err := os.ReadFile(filepath.Join(cacheDir, "daemons", n1+".json"))
+	info, err := os.ReadFile(filepath.Join(cacheDir, "userd", n1+".json"))
 	require.NoError(err)
 	require.NoError(json.Unmarshal(info, &di))
 	require.Equal(ns1, di.Namespace)
 
-	info, err = os.ReadFile(filepath.Join(cacheDir, "daemons", n2+".json"))
+	info, err = os.ReadFile(filepath.Join(cacheDir, "userd", n2+".json"))
 	require.NoError(err)
 	require.NoError(json.Unmarshal(info, &di))
 	require.Equal(ns2, di.Namespace)

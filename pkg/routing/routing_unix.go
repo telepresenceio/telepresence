@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 func GetRoute(ctx context.Context, routedNet netip.Prefix) (*Route, error) {

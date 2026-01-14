@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 

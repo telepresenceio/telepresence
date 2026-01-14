@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 // addConnectionTaps installs wiretaps on a connection. The wiretapped connection is returned along with the wiretaps.

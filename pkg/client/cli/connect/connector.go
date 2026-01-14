@@ -23,11 +23,10 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
-	daemon2 "github.com/telepresenceio/telepresence/rpc/v2/daemon"
-	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
+	daemonRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
@@ -35,20 +34,17 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-var (
-	ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
-	ErrNoRootDaemon = errors.New("telepresence root daemon is not running")
-)
+var ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
 
 //nolint:gochecknoglobals // extension point
 var QuitDaemonFuncs = []func(context.Context){
@@ -76,30 +72,55 @@ func maybeComposeDown(ctx context.Context, info *daemon.Info) {
 	progress.Start(ctx, "Quitting")
 }
 
+func findHostConnectorInfo(ctx context.Context) (*daemon.Info, error) {
+	il := daemon.NewUserInfoLoader(ctx)
+	infos, err := il.LoadInfos()
+	if err != nil {
+		return nil, err
+	}
+	for _, info := range infos {
+		if !info.InDocker() {
+			return info, nil
+		}
+	}
+	return nil, fs.ErrNotExist
+}
+
 func quitHostConnector(ctx context.Context) {
-	udCtx, err := ExistingHostDaemon(ctx, &daemon.Info{})
+	info, err := findHostConnectorInfo(ctx)
+	if err == nil {
+		ctx, err = ExistingDaemon(ctx, info)
+	}
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
 			progress.Errorf(ctx, "unable to quit existing user daemon: %v", err)
 		}
 		return
 	}
-	ud := daemon.MustGetUserClient(udCtx)
+	ud := daemon.MustGetUserClient(ctx)
 	progress.Working(ctx, "Quitting")
-	_, _ = ud.Quit(ctx, &emptypb.Empty{})
+	qr, err := ud.Quit(ctx, &emptypb.Empty{})
+	if err != nil {
+		progress.Errorf(ctx, "failed to quit user daemon: %v", tpGrpc.FromGRPC(err))
+		return
+	}
 	_ = ud.Close()
-	_ = socket.WaitUntilVanishes("user daemon", socket.UserDaemonPath(ctx), 5*time.Second)
-
-	// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
-	// the fact that the user daemon might have been killed ungracefully.
-	if waitErr := socket.WaitUntilVanishes("root daemon", socket.RootDaemonPath(ctx), 5*time.Second); waitErr != nil {
-		quitRootDaemon(ctx)
+	if !qr.RootDaemonWillContinue {
+		// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
+		// the fact that the user daemon might have been killed ungracefully.
+		if conn, err := daemon.DialRootDaemon(ctx, false); err == nil {
+			if _, err = daemonRpc.NewDaemonClient(conn).Quit(ctx, &emptypb.Empty{}); err != nil {
+				dlog.Errorf(ctx, "error when quitting root daemon: %v", err)
+			}
+			_ = conn.Close()
+		}
 	}
 	progress.PrintDone(ctx, "Quit")
 }
 
 func quitDockerDaemons(ctx context.Context) {
-	infos, err := daemon.LoadInfos(ctx)
+	il := daemon.NewUserInfoLoader(ctx)
+	infos, err := il.LoadInfos()
 	if err != nil {
 		dlog.Error(ctx, err)
 		return
@@ -121,14 +142,10 @@ func quitDockerDaemons(ctx context.Context) {
 		maybeDeleteNetwork(ctx, ud.DaemonInfo())
 		progress.PrintDone(ctx, "Quit")
 	}
-	if err = daemon.WaitUntilAllVanishes(ctx, 5*time.Second); err != nil {
-		dlog.Error(ctx, err)
-		_ = daemon.DeleteAllInfos(ctx)
-	}
 }
 
 func EnsureUserDaemon(ctx context.Context, required bool) (rc context.Context, err error) {
-	cr := daemon.GetRequest(ctx)
+	cr := daemon.MustGetRequest(ctx)
 	daemonID, err := daemon.IdentifierFromFlags(ctx, cr.Name, cr.KubeFlags, cr.KubeconfigData, cr.Docker)
 	if err != nil {
 		return ctx, err
@@ -151,7 +168,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (rc context.Context, e
 	if daemon.GetUserClient(ctx) != nil {
 		return ctx, nil
 	}
-	rc, launched, err = launchConnectorDaemon(ctx, daemonID, client.GetExe(ctx), required)
+	rc, launched, err = findOrLaunchConnectorDaemon(ctx, daemonID, client.GetExe(ctx), required)
 	return rc, err
 }
 
@@ -160,7 +177,7 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 		return ctx, nil
 	}
 
-	rq := daemon.GetRequest(ctx)
+	rq := daemon.MustGetRequest(ctx)
 	s, err := connectSession(ctx, useLine, rq, required)
 	if err != nil {
 		return ctx, err
@@ -215,7 +232,7 @@ func ResolveLocalReroute(ctx context.Context, ds *daemon.Session, pm string) (er
 	if err != nil {
 		return err
 	}
-	_, err = ds.RerouteLocalPort(ctx, &daemon2.ReroutePortRequest{
+	_, err = ds.RerouteLocalPort(ctx, &daemonRpc.ReroutePortRequest{
 		DstHostPort: hpb,
 		SrcPort:     uint32(localPort.Port),
 	})
@@ -239,7 +256,7 @@ func ResolveRemoteReroute(ctx context.Context, ds *daemon.Session, pm string) (e
 	if err != nil {
 		return err
 	}
-	_, err = ds.RerouteRemotePort(ctx, &daemon2.ReroutePortRequest{
+	_, err = ds.RerouteRemotePort(ctx, &daemonRpc.ReroutePortRequest{
 		DstHostPort: hpb,
 		SrcPort:     uint32(newPort.Port),
 	})
@@ -261,7 +278,7 @@ func resolveHostPort(ctx context.Context, ds *daemon.Session, proto types.Proto,
 	if hostPort.Proto != types.ProtoTCP {
 		portStr = fmt.Sprintf("%s%c%s", portStr, types.ProtoSeparator, hostPort.Proto)
 	}
-	rsp, err := ds.ResolvePort(ctx, &daemon2.ResolvePortRequest{
+	rsp, err := ds.ResolvePort(ctx, &daemonRpc.ResolvePortRequest{
 		Host: hostPortStr[:ix],
 		Port: portStr,
 	})
@@ -273,31 +290,18 @@ func resolveHostPort(ctx context.Context, ds *daemon.Session, proto types.Proto,
 }
 
 func ExistingDaemon(ctx context.Context, info *daemon.Info) (context.Context, error) {
+	var conn *grpc.ClientConn
+	var err error
 	if info.InDocker() {
 		// The host relies on that the daemon has exposed a port to localhost
-		conn, err := docker.ConnectDaemon(ctx, info)
-		if err != nil {
-			return ctx, err
-		}
-		return newUserDaemon(ctx, conn, info)
+		conn, err = docker.ConnectDaemon(ctx, info)
+	} else {
+		conn, err = daemon.DialUserDaemon(ctx, false)
 	}
-	return ExistingHostDaemon(ctx, info)
-}
-
-func ExistingHostDaemon(ctx context.Context, info *daemon.Info) (context.Context, error) {
-	// Try dialing the host daemon using the well-known socket.
-	socketName := socket.UserDaemonPath(ctx)
-	conn, err := socket.Dial(ctx, socketName, false)
-	if err == nil {
-		ctx, err = newUserDaemon(ctx, conn, info)
-		if err != nil {
-			// User daemon is not responding. Make an attempt to delete the lingering socket.
-			if rmErr := os.Remove(socketName); rmErr != nil {
-				err = fmt.Errorf("%v; remove of unresponsive socket failed: %v", err, rmErr)
-			}
-		}
+	if err != nil {
+		return ctx, err
 	}
-	return ctx, err
+	return newUserDaemon(ctx, conn, info)
 }
 
 // Quit shuts down all daemons.
@@ -354,27 +358,13 @@ func RunConnect(cmd *cobra.Command, args []string) error {
 // DiscoverDaemon searches the daemon cache for an entry corresponding to the given name. A connection
 // to that daemon is returned if such an entry is found.
 func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.Identifier) (context.Context, error) {
-	cr := daemon.GetRequest(ctx)
+	cr := daemon.MustGetRequest(ctx)
 	if match == nil && !cr.Implicit {
 		match = regexp.MustCompile(`\A` + regexp.QuoteMeta(daemonID.Name) + `\z`)
 	}
-	info, err := daemon.LoadMatchingInfo(ctx, match)
+	il := daemon.NewUserInfoLoader(ctx)
+	info, err := il.LoadMatchingInfo(match)
 	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) && !cr.Docker {
-			// Try dialing the host daemon using the well-known socket. If we find one, the daemon is running,
-			// but it is not yet connected.
-			if conn, sockErr := socket.Dial(ctx, socket.UserDaemonPath(ctx), false); sockErr == nil {
-				// Provide a daemon.Info that reflects the expected connection. It will be adjusted when
-				// the connection attempt succeeds.
-				return newUserDaemon(ctx, conn, &daemon.Info{
-					Name:         daemonID.Name,
-					KubeContext:  daemonID.KubeContext,
-					Namespace:    daemonID.Namespace,
-					ExposedPorts: cr.ExposedPorts,
-					Hostname:     cr.Hostname,
-				})
-			}
-		}
 		return ctx, err
 	}
 	if len(cr.ExposedPorts) > 0 && !slices.Equal(info.ExposedPorts, cr.ExposedPorts) {
@@ -383,43 +373,46 @@ func DiscoverDaemon(ctx context.Context, match *regexp.Regexp, daemonID *daemon.
 	return ExistingDaemon(ctx, info)
 }
 
-func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *daemon.Request) (context.Context, *daemon.Info, *grpc.ClientConn, error) {
+func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *daemon.Request) (context.Context, error) {
 	// Ensure that the logfile is present before the daemon starts so that it isn't created with
 	// permissions from the docker container.
 	logDir := filelocation.AppUserLogDir(ctx)
 	logFile := filepath.Join(logDir, "connector.log")
 	if _, err := os.Stat(logFile); err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			return ctx, nil, nil, err
+			return ctx, err
 		}
 		fh, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY, 0o666)
 		if err != nil {
-			return ctx, nil, nil, err
+			return ctx, err
 		}
 		_ = fh.Close()
 	}
 	_, err := docker.EnsureNetworkPlugin(ctx)
 	if err != nil {
-		return ctx, nil, nil, err
+		return ctx, err
 	}
 
 	// An initialized kubernetes interface is required by LaunchDaemon, because it is necessary
 	// when checking if the containerized daemon is connecting to a k3s control plane node.
 	kc, err := k8s.NewKubeconfig(ctx, false, cr.KubeFlags, cr.ManagerNamespace, cr.KubeconfigData)
 	if err != nil {
-		return ctx, nil, nil, err
+		return ctx, err
 	}
 	var ki *kubernetes.Clientset
 	ki, err = kubernetes.NewForConfig(kc.RestConfig)
 	if err != nil {
-		return ctx, nil, nil, err
+		return ctx, err
 	}
 	ctx = kc.Context
 	info, conn, err := docker.LaunchDaemon(k8sapi.WithK8sInterface(ctx, ki), daemonID)
-	return ctx, info, conn, err
+	if err != nil {
+		return ctx, err
+	}
+	return newUserDaemon(ctx, conn, info)
 }
 
-func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, cr *daemon.Request) (context.Context, *daemon.Info, *grpc.ClientConn, error) {
+func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, cr *daemon.Request) (context.Context, error) {
 	args := []string{connectorDaemon, client.UserDaemonName, "--" + global.FlagConfig, client.GetConfigFile(ctx)}
 	if cr.UserDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
@@ -429,35 +422,46 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 		args = append(args, "--embed-network")
 	}
 	dlog.Debugf(ctx, "Creating daemon info file %s (runs on host, or both CLI and daemon runs in container)", daemonID.Name)
+	fp, err := ioutil.FreePortsTCP(1)
+	if err != nil {
+		return ctx, errcat.NoDaemonLogs.New(err)
+	}
 	info := &daemon.Info{
-		DaemonPort:   0,
+		DaemonPort:   fp[0].Port(),
 		Name:         daemonID.Name,
 		KubeContext:  daemonID.KubeContext,
 		Namespace:    daemonID.Namespace,
 		ExposedPorts: cr.ExposedPorts,
 		Hostname:     cr.Hostname,
 	}
-	err := daemon.SaveInfo(ctx, info, daemonID.InfoFileName())
+	args = append(args, "--address", fmt.Sprintf(":%d", info.DaemonPort))
+	fn := daemonID.InfoFileName()
+	il := daemon.NewUserInfoLoader(ctx)
+	err = il.SaveInfo(info, fn)
 	if err != nil {
-		return ctx, nil, nil, err
+		return ctx, errcat.NoDaemonLogs.New(err)
 	}
+
 	defer func() {
 		if err != nil {
 			file := daemonID.InfoFileName()
 			dlog.Debugf(ctx, "Deleting daemon info %s due to launch error: %v", file, err)
-			_ = daemon.DeleteInfo(ctx, file)
+			_ = il.DeleteInfo(file)
 		}
 	}()
 
 	if err = proc.StartInBackground(false, args...); err != nil {
-		return ctx, nil, nil, errcat.NoDaemonLogs.Errorf(err, "failed to launch the connector service")
+		return ctx, errcat.NoDaemonLogs.Errorf(err, "failed to launch the connector service")
 	}
-	conn, err := socket.Dial(ctx, socket.UserDaemonPath(ctx), true)
-	return ctx, info, conn, err
+	conn, err := il.DialDaemon(ctx, true)
+	if err != nil {
+		return ctx, errcat.NoDaemonLogs.New(err)
+	}
+	return newUserDaemon(ctx, conn, info)
 }
 
-func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, required bool) (context.Context, bool, error) {
-	cr := daemon.GetRequest(ctx)
+func findOrLaunchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, required bool) (context.Context, bool, error) {
+	cr := daemon.MustGetRequest(ctx)
 
 	// Try dialing the host daemon using the well-known socket.
 	ctx, err := DiscoverDaemon(ctx, cr.Use, daemonID)
@@ -489,22 +493,16 @@ func launchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifier, con
 		return ctx, false, err
 	}
 
-	var conn *grpc.ClientConn
-	var info *daemon.Info
 	if cr.Docker {
 		if client.GetConfig(ctx).Intercept().UseFtp {
 			err = errcat.Silent.New("FTP is not supported when using Docker. Please set intercept.useFtp=false in your config.yml and try again.")
 			progress.Error(ctx, err)
 			return ctx, false, err
 		}
-		ctx, info, conn, err = launchDockerDaemon(ctx, daemonID, cr)
+		ctx, err = launchDockerDaemon(ctx, daemonID, cr)
 	} else {
-		ctx, info, conn, err = launchHostDaemon(ctx, daemonID, connectorDaemon, cr)
+		ctx, err = launchHostDaemon(ctx, daemonID, connectorDaemon, cr)
 	}
-	if err != nil {
-		return ctx, false, err
-	}
-	ctx, err = newUserDaemon(ctx, conn, info)
 	return ctx, err == nil, err
 }
 
@@ -596,10 +594,6 @@ func connectResult(ctx context.Context, ci *connector.ConnectInfo, withProgress 
 
 func connectSession(ctx context.Context, useLine string, request *daemon.Request, required bool) (session *daemon.Session, err error) {
 	userD := daemon.MustGetUserClient(ctx)
-	if userD.Containerized() {
-		patcher.AnnotateConnectRequest(request.ConnectRequest, docker.TpCache, userD.DaemonID().KubeContext)
-	}
-
 	var ci *connector.ConnectInfo
 	defer func() {
 		if ci != nil {
@@ -646,7 +640,7 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 		if !userD.Containerized() {
 			file := userD.DaemonID().InfoFileName()
 			dlog.Debugf(ctx, "Deleting daemon info %s due to connect error: %v", file, err)
-			_ = daemon.DeleteInfo(ctx, file)
+			_ = daemon.NewUserInfoLoader(ctx).DeleteInfo(file)
 		}
 		return nil, tpGrpc.FromGRPC(err)
 	}

@@ -11,8 +11,8 @@ import (
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"github.com/puzpuzpuz/xsync/v4"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
@@ -396,7 +396,7 @@ func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecr
 			ud := daemon.MustGetUserClient(c)
 			info := ud.DaemonInfo()
 			info.ComposeFile = composeFile
-			err = daemon.SaveInfo(ctx, info, ud.DaemonID().InfoFileName())
+			err = daemon.NewUserInfoLoader(ctx).SaveInfo(info, ud.DaemonID().InfoFileName())
 		}
 	} else {
 		err = os.WriteFile(composeFile, yml, 0o644)

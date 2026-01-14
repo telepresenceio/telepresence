@@ -96,10 +96,10 @@ linters:
               desc: Use `google.golang.org/protobuf` instead of `github.com/golang/protobuf`
             - pkg: github.com/kballard/go-shellquote
               desc: Use `github.com/telepresenceio/telepresence/pkg/shellquote.ShellString` instead of `github.com/kballard/go-shellquote.Join`
-            - pkg: github.com/datawire/dlib/dutil
-              desc: Use either `github.com/datawire/dlib/derror` or `github.com/datawire/dlib/dhttp` instead of `github.com/datawire/dlib/dutil`
+            - pkg: github.com/telepresenceio/dlib/v2/dutil
+              desc: Use either `github.com/telepresenceio/dlib/v2/derror` or `github.com/telepresenceio/dlib/v2/dhttp` instead of `github.com/telepresenceio/dlib/v2/dutil`
             - pkg: golang.org/x/net/http2/h2c
-              desc: Use `github.com/datawire/dlib/dhttp` instead of `golang.org/x/net/http2/h2c`
+              desc: Use `github.com/telepresenceio/dlib/v2/dhttp` instead of `golang.org/x/net/http2/h2c`
     forbidigo:
       forbid:
         - pattern: '^os\.IsNotExist$'

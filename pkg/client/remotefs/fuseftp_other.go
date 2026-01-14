@@ -7,10 +7,14 @@ import (
 	_ "embed"
 	"os"
 	"runtime"
+	"time"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/go-fuseftp/rpc"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -108,7 +112,7 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 }
 
 func waitForSocketAndConnect(ctx context.Context, socketName string, cCh chan<- rpc.FuseFTPClient) {
-	conn, err := socket.Dial(ctx, socketName, true)
+	conn, err := dial(ctx, socketName)
 	if err != nil {
 		dlog.Error(ctx, err)
 		close(cCh)
@@ -118,4 +122,14 @@ func waitForSocketAndConnect(ctx context.Context, socketName string, cCh chan<- 
 	case <-ctx.Done():
 	case cCh <- rpc.NewFuseFTPClient(conn):
 	}
+}
+
+func dial(ctx context.Context, socketName string) (conn *grpc.ClientConn, err error) {
+	err = backoff.Retry(func() (err error) {
+		conn, err = grpc.NewClient("unix:"+socketName,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithNoProxy())
+		return err
+	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(200*time.Millisecond), 5), ctx))
+	return conn, err
 }

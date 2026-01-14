@@ -29,6 +29,7 @@ func (s *service) Status(context.Context, *emptypb.Empty) (*rpc.DaemonStatus, er
 	s.sessionLock.RLock()
 	defer s.sessionLock.RUnlock()
 	r := &rpc.DaemonStatus{
+		Managed: s.managed,
 		Version: &common.VersionInfo{
 			ApiVersion: client.APIVersion,
 			Version:    client.Version(),
@@ -41,10 +42,10 @@ func (s *service) Status(context.Context, *emptypb.Empty) (*rpc.DaemonStatus, er
 	return r, nil
 }
 
-func (s *service) Quit(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
+func (s *service) Quit(ctx context.Context, _ *emptypb.Empty) (*rpc.QuitResponse, error) {
 	s.cancelSession(ctx)
 	s.quit()
-	return &emptypb.Empty{}, nil
+	return &rpc.QuitResponse{RootDaemonWillContinue: s.managed}, nil
 }
 
 func (s *service) SetDNSTopLevelDomains(ctx context.Context, domains *rpc.Domains) (*emptypb.Empty, error) {
@@ -107,7 +108,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		sessionCancel()
 		return nil, err
 	}
-	client.ReloadDaemonLogLevel(sn)
+	client.ReloadLogLevel(sn)
 	reply.OutboundConfig = sn.getNetworkConfig()
 	initErrCh := make(chan error, 1)
 
@@ -115,7 +116,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 	go func() {
 		defer func() {
 			sessionCancel()
-			client.ReloadDaemonLogLevel(s)
+			client.ReloadLogLevel(s)
 			close(sessionRunning)
 		}()
 		sn.run(initErrCh)

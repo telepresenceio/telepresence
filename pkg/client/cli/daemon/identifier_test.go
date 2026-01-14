@@ -9,16 +9,18 @@ import (
 
 func TestDaemonInfoFileName(t *testing.T) {
 	tests := []struct {
-		name      string
-		namespace string
-		result    string
+		name        string
+		namespace   string
+		result      string
+		inContainer bool
 	}{
-		{name: "the-cure", namespace: "ns1", result: "the-cure-ns1.json"},
-		{name: "arn:aws:eks:us-east-2:914373874199:cluster/test-auth", namespace: "ns1", result: "arn_aws_eks_us-east-2_914373874199_cluster_test-auth-ns1.json"},
-		{name: "gke_datawireio_us-central1-b_kube-staging-apps-1", namespace: "ns1", result: "gke_datawireio_us-central1-b_kube-staging-apps-1-ns1.json"},
+		{name: "the-cure", namespace: "ns1", result: "the-cure-ns1-cn.json", inContainer: true},
+		{name: "arn:aws:eks:us-east-2:914373874199:cluster/test-auth", namespace: "ns1", result: "arn_aws_eks_us-east-2_914373874199_cluster_test-auth-ns1-cn.json", inContainer: true},
+		{name: "gke_datawireio_us-central1-b_kube-staging-apps-1", namespace: "ns1", result: "gke_datawireio_us-central1-b_kube-staging-apps-1-ns1-cn.json", inContainer: true},
+		{name: "the-cure", namespace: "ns1", result: "daemon.json", inContainer: false},
 	}
 	for _, test := range tests {
-		di := daemon.NewIdentifier("", test.name, test.namespace, false)
+		di := daemon.NewIdentifier("", test.name, test.namespace, test.inContainer)
 		result := di.InfoFileName()
 		if result != test.result {
 			t.Fatalf("DaemonInfoFile gave bad output; expected %s got %s", test.result, result)

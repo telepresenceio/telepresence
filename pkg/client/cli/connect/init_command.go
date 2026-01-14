@@ -35,10 +35,6 @@ func InitProgressWriter(cmd *cobra.Command) {
 }
 
 func InitCommand(cmd *cobra.Command) (err error) {
-	err = global.InitConfig(cmd)
-	if err != nil {
-		return err
-	}
 	InitProgressWriter(cmd)
 	ctx := cmd.Context()
 	as := cmd.Annotations

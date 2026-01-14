@@ -6,10 +6,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
-// ReloadDaemonLogLevel calls SetLevel with the log level defined
-// for the rootDaemon or userDaemon
-// depending on the root flag. Assumes that the config has already been reloaded.
-func ReloadDaemonLogLevel(c context.Context) {
+// ReloadLogLevel calls SetLevel with the log level defined for the current process.
+// Assumes that the config has already been reloaded.
+func ReloadLogLevel(c context.Context) {
 	newCfg := GetConfig(c)
 	var level string
 	levels := newCfg.LogLevels()

@@ -21,7 +21,7 @@ import (
 	"golang.org/x/net/http2"
 	core "k8s.io/api/core/v1"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 type ValueState int32

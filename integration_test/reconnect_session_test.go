@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/client-go/tools/clientcmd"
@@ -99,26 +100,22 @@ func (s *reconnectSuite) Test_ReconnectAfterNetworkFailure() {
 	// going from the telepresence daemons to the kubernetes server.
 	rq.NoError(itest.Run(ctx, "sudo", "iptables", "-t", "filter", "-I", "OUTPUT", "-p", "tcp", "-j", s.iptablesChain))
 
-	restore := true
+	var restore atomic.Bool
+	restore.Store(true)
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 	restoreOutput := func() {
-		wg.Done()
-		s.NoError(itest.Run(ctx, "sudo", "iptables", "-t", "filter", "-D", "OUTPUT", "-p", "tcp", "-j", s.iptablesChain))
-		restore = false
-	}
-
-	defer func() {
-		// Remove the redirect
-		if restore {
-			restoreOutput()
+		if restore.CompareAndSwap(true, false) {
+			wg.Done()
+			s.NoError(itest.Run(ctx, "sudo", "iptables", "-t", "filter", "-D", "OUTPUT", "-p", "tcp", "-j", s.iptablesChain))
 		}
-	}()
+	}
+	defer restoreOutput()
 
-	// Restore connection
+	// Restore connection after 7 seconds. This ensures that the first ping will fail.
 	time.AfterFunc(7*time.Second, restoreOutput)
 
+	// Ping the intercepted service. The first ping will certainly fail, but eventually the connection will be restored.
 	itest.PingInterceptedEchoServer(ctx, s.svc, "80")
-
 	wg.Wait()
 }

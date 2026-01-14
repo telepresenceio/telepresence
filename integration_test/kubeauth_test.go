@@ -15,7 +15,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
@@ -109,7 +108,8 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 		if useDocker {
 			args = []string{"--docker"}
 		}
-		s.TelepresenceConnect(ctx, args...)
+		_, err = s.TelepresenceTryConnect(ctx, args...)
+		rq.NoError(err)
 		defer itest.TelepresenceQuitOk(ctx)
 
 		// Scan the log from its previous end. It should now contain a message indicating that the gRPC service that
@@ -127,14 +127,6 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 			found = strings.Contains(scn.Text(), "GetContextExecCredentials("+extContext+")")
 		}
 		rq.Truef(found, "unable to find expected GetContextExecCredentials in the %s", logName)
-
-		modifiedKubeConfig := filepath.Join(filelocation.AppUserCacheDir(ctx), "kube", ioutil.SafeName(extContext))
-		modCfg, err := clientcmd.LoadFromFile(modifiedKubeConfig)
-		rq.NoError(err)
-		defer func() {
-			_ = os.Remove(modifiedKubeConfig)
-		}()
-		rq.Equal(modCfg.CurrentContext, extContext)
 	}
 	s.Run("root-daemon", func() { connectWithExec(s.Context(), false) })
 	s.Run("containerized-daemon", func() {

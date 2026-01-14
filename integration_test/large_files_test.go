@@ -16,7 +16,7 @@ import (
 	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
-	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"

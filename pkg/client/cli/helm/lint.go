@@ -9,7 +9,7 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/datawire/dlib/derror"
+	"github.com/telepresenceio/dlib/v2/derror"
 	"github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"

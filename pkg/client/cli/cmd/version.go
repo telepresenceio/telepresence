@@ -18,7 +18,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -51,7 +50,7 @@ func addDaemonVersions(ctx context.Context, kvf *ioutil.KeyValueFormatter) {
 		switch {
 		case err == nil:
 			kvf.Add(version.Name, version.Version)
-		case errors.Is(err, connect.ErrNoRootDaemon):
+		case errors.Is(err, daemon.ErrNoRootDaemon):
 			kvf.Add("Root Daemon", "not running")
 		default:
 			kvf.Add("Root Daemon", fmt.Sprintf("error: %v", err))
@@ -123,11 +122,11 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 }
 
 func daemonVersion(ctx context.Context) (*common.VersionInfo, error) {
-	if conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false); err == nil {
+	if conn, err := daemon.DialRootDaemon(ctx, false); err == nil {
 		defer conn.Close()
 		return daemonRpc.NewDaemonClient(conn).Version(ctx, &empty.Empty{})
 	}
-	return nil, connect.ErrNoRootDaemon
+	return nil, daemon.ErrNoRootDaemon
 }
 
 func managerVersion(ctx context.Context) (*common.VersionInfo, error) {

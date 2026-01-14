@@ -18,8 +18,8 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"

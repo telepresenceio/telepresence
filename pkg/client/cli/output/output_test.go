@@ -38,6 +38,7 @@ func TestWithOutput(t *testing.T) {
 		cmd.SetOut(&stdoutBuf)
 		cmd.SetErr(&stderrBuf)
 		cmd.SetContext(context.Background())
+		cmd.PersistentPreRunE = SetFormat
 		cmd.RunE = re
 
 		cmd.PersistentFlags().String(global.FlagOutput, "default", "")

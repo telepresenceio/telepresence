@@ -26,10 +26,9 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/yaml"
 
-	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -39,7 +38,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
@@ -185,24 +183,14 @@ func NewSession(
 
 	oi := tmgr.getNetworkInfo(cr)
 	if !service.RootSessionInProcess() {
-		// Connect to the root daemon if it is running. It's the CLI that starts it initially
-		rootRunning, err := socket.IsRunning(tmgr, socket.RootDaemonPath(tmgr))
-		if err != nil {
-			return nil, nil, err
-		}
-		if !rootRunning {
-			return nil, nil, errors.New("root daemon is not running")
-		}
-
 		// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
 		// must be executed by the user, not by root.
-		konfig, err := patcher.CreateExternalKubeConfig(tmgr.Context, config.ClientConfig, tmgr.KubeContext, func([]string) (string, string, error) {
-			return client.GetExe(tmgr), service.ListenerAddress(tmgr), nil
+		oi.KubeconfigData, err = patcher.CreateExternalKubeConfig(tmgr.Context, config.ClientConfig, tmgr.KubeContext, func([]string) (string, string, string, error) {
+			return client.GetExe(tmgr), service.ListenerAddress(tmgr), client.GetConfigFile(tmgr), nil
 		}, nil)
 		if err != nil {
 			return nil, nil, err
 		}
-		patcher.AnnotateNetworkConfig(tmgr, oi, konfig.CurrentContext)
 	}
 
 	tmgr.Context = tunnel.WithSyntheticIPResolver(tmgr.Context, tmgr)
@@ -639,7 +627,7 @@ func (s *session) remainLoop(context.Context) error {
 	ticker := time.NewTicker(60 * time.Second)
 	defer func() {
 		ticker.Stop()
-		c, cancel := context.WithTimeout(dcontext.WithoutCancel(s), 3*time.Second)
+		c, cancel := context.WithTimeout(context.WithoutCancel(s), 3*time.Second)
 		defer cancel()
 		if _, err := s.ManagerClient().Depart(c, s.SessionInfo()); err != nil {
 			dlog.Errorf(c, "failed to depart from manager: %v", err)
@@ -876,9 +864,9 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 		}()
 	} else {
 		var conn *grpc.ClientConn
-		conn, err = socket.Dial(timeoutCtx, socket.RootDaemonPath(s), true)
+		conn, err = daemon.DialRootDaemon(timeoutCtx, true)
 		if err != nil {
-			return nil, fmt.Errorf("unable open root daemon socket: %w", err)
+			return nil, err
 		}
 		defer func() {
 			if err != nil {

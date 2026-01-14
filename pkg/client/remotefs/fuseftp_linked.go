@@ -11,7 +11,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/go-fuseftp/pkg/fs"
 	"github.com/telepresenceio/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"

@@ -18,7 +18,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/containerd/errdefs"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/env"
@@ -84,7 +84,7 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 	// Ensure that the intercept handler is stopped properly if the daemon quits
 	procCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		if err := daemon.CancelWhenRmFromCache(procCtx, cancel, ud.DaemonID().InfoFileName()); err != nil {
+		if err := daemon.NewUserInfoLoader(procCtx).CancelWhenRmFromCache(cancel, ud.DaemonID().InfoFileName()); err != nil {
 			dlog.Error(ctx)
 		}
 	}()

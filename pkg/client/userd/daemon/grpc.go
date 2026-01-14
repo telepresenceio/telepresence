@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -27,7 +27,6 @@ import (
 	cliDaemon "github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -137,7 +136,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		}
 		return nil, err
 	}
-	client.ReloadDaemonLogLevel(session)
+	client.ReloadLogLevel(session)
 	s.sessionCancel = func() {
 		if err := session.ClearIngestsAndIntercepts(); err != nil {
 			dlog.Errorf(ctx, "failed to clear intercepts: %v", err)
@@ -160,7 +159,9 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		}
 		s.clearSession(session)
 	}()
-	go runAliveAndCancellation(session, s.sessionCancel, daemonID, wg)
+	if s.rootSessionInProc {
+		go runAliveAndCancellationSession(session, s.sessionCancel, daemonID, wg)
+	}
 	return result, err
 }
 
@@ -195,7 +196,7 @@ func (s *service) clearSession(oldSession userd.Session) bool {
 		s.clientConfigLock.Unlock()
 	}
 	s.sessionLock.Unlock()
-	client.ReloadDaemonLogLevel(s)
+	client.ReloadLogLevel(s)
 	return sameSession
 }
 
@@ -360,15 +361,19 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 	return &empty.Empty{}, err
 }
 
-func (s *service) Quit(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
+func (s *service) Quit(ctx context.Context, ex *empty.Empty) (qr *daemon.QuitResponse, err error) {
 	s.cancelSession(ctx, false)
 	s.quit(false)
-	_ = s.withRootDaemon(context.WithoutCancel(ctx), func(ctx context.Context, rd daemon.DaemonClient) error {
+	err = s.withRootDaemon(context.WithoutCancel(ctx), func(ctx context.Context, rd daemon.DaemonClient) (err error) {
 		dlog.Debug(ctx, "Telling root daemon to Quit")
-		_, err := rd.Quit(ctx, ex)
+		qr, err = rd.Quit(ctx, ex)
 		return err
 	})
-	return ex, nil
+	if err != nil {
+		qr = &daemon.QuitResponse{}
+		err = nil
+	}
+	return qr, err
 }
 
 func (s *service) RemoteMountAvailability(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
@@ -623,7 +628,7 @@ func (s *service) withRootDaemon(ctx context.Context, f func(ctx context.Context
 	if s.rootSessionInProc {
 		return status.Error(codes.Unavailable, "root daemon is embedded")
 	}
-	conn, err := socket.Dial(ctx, socket.RootDaemonPath(ctx), false)
+	conn, err := cliDaemon.DialRootDaemon(ctx, false)
 	if err == nil {
 		defer conn.Close()
 		err = f(ctx, daemon.NewDaemonClient(conn))

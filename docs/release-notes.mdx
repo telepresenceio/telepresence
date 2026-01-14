@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.26.0
 <Note>
+	<Title type="change">Use TCP/IP instead of Unix sockets for all communication between local processes.</Title>
+	<Body>
+Telepresence now uses TCP/IP sockets for all communication between local processes. This change reduces the risk of socket-related errors caused by lingering sockets from previous Telepresence sessions. It also eliminates the difficulties of using Unix sockets for communication between a system service and user processes on Windows.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="reference/cluster_config#restricting_global_intercepts">Add configuration to disable global TCP/UDP intercepts</Title>
 	<Body>
 A new Helm chart configuration option `intercept.allowGlobalIntercepts` has been added to control whether global TCP/UDP intercepts are permitted. When set to `false`, only HTTP intercepts with header or path filters are allowed, preventing users from creating global intercepts that block other developers from intercepting the same port. This is particularly useful in shared development environments where multiple developers need to work on the same service simultaneously. The setting defaults to `true` to maintain full backward compatibility with existing deployments. When a user attempts to create a global intercept while the setting is disabled, they receive a helpful error message suggesting the use of `--http-header` or `--http-path-*` flags for HTTP-filtered intercepts.
@@ -27,6 +33,12 @@ operational, improving overall installation stability
 
 This change is particularly beneficial in large clusters or complex networking environments where initialization may take longer
 than expected.
+  </Body>
+</Note>
+<Note>
+	<Title type="feature">Support customizable daemon config file</Title>
+	<Body>
+The config file for Telepresence is now configurable through the command-line flag `--config`. The `--config <agent config>` flag of the `telepresence genyaml` command was renamed to `--agent` to avoid confusion.
   </Body>
 </Note>
 <Note>

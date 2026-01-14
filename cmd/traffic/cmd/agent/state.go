@@ -7,7 +7,7 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/puzpuzpuz/xsync/v4"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"

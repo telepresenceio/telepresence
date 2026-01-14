@@ -6,7 +6,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 
-	"github.com/datawire/dlib/dhttp"
+	"github.com/telepresenceio/dlib/v2/dhttp"
 )
 
 func PprofServer(ctx context.Context, port uint16) error {

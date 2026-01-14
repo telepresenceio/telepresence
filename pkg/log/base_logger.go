@@ -5,12 +5,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 func MakeBaseLogger(ctx context.Context, logLevel string) context.Context {
 	logrusLogger := logrus.StandardLogger()
-	logrusFormatter := NewFormatter("2006-01-02 15:04:05.0000")
+	logrusFormatter := NewFormatter(WithTimestampFormat("2006-01-02 15:04:05.0000"))
 	logrusLogger.SetFormatter(logrusFormatter)
 
 	SetLogrusLevel(logrusLogger, logLevel, false)

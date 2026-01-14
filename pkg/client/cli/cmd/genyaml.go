@@ -96,7 +96,7 @@ func (i *genYAMLCommand) getOutputWriter() (io.WriteCloser, error) {
 
 func (i *genYAMLCommand) loadConfigMapEntry() (*agentconfig.Sidecar, error) {
 	if i.configFile == "" {
-		return nil, errcat.User.New("--config <config> must be provided")
+		return nil, errcat.User.New("--agent <agent config> must be provided")
 	}
 	b, err := getInput(i.configFile)
 	if err != nil {
@@ -310,7 +310,7 @@ func genContainerSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 	fs := cmd.Flags()
 	fs.StringVarP(&info.inputFile, "input", "i", "",
 		"Optional path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc). Pass '-' for stdin. Loaded from cluster by default")
-	fs.StringVarP(&info.configFile, "config", "c", "", "Path to the yaml containing the generated configmap entry")
+	fs.StringVarP(&info.configFile, "agent", "a", "", "Path to the yaml containing the generated agent config")
 	fs.AddFlagSet(kubeFlags)
 	return cmd
 }
@@ -370,7 +370,7 @@ func genInitContainerSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 		},
 	}
 	fs := cmd.Flags()
-	fs.StringVarP(&info.configFile, "config", "c", "", "Path to the yaml containing the generated configmap entry")
+	fs.StringVarP(&info.configFile, "agent", "a", "", "Path to the yaml containing the generated agent config")
 	fs.AddFlagSet(kubeFlags)
 	return cmd
 }
@@ -407,7 +407,7 @@ func genVAnnotationsSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 		},
 	}
 	fs := cmd.Flags()
-	fs.StringVarP(&info.configFile, "config", "c", "", "Path to the yaml containing the generated configmap entry")
+	fs.StringVarP(&info.configFile, "agent", "a", "", "Path to the yaml containing the generated agent config")
 	return cmd
 }
 
@@ -447,7 +447,7 @@ func genVolumeSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 	fs := cmd.Flags()
 	fs.StringVarP(&info.inputFile, "input", "i", "",
 		"Optional path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc). Pass '-' for stdin. Loaded from cluster by default")
-	fs.StringVarP(&info.configFile, "config", "c", "", "Path to the yaml containing the generated configmap entry")
+	fs.StringVarP(&info.configFile, "agent", "a", "", "Path to the yaml containing the generated agent config")
 	fs.AddFlagSet(kubeFlags)
 	return cmd
 }

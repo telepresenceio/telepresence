@@ -7,7 +7,7 @@ import (
 	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/require"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cmd"
 )
 

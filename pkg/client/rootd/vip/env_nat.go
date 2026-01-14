@@ -5,7 +5,7 @@ import (
 	"net/netip"
 	"regexp"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 var (

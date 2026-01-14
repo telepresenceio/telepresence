@@ -12,7 +12,7 @@ import (
 	"github.com/godbus/dbus/v5"
 	"golang.org/x/sys/unix"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 )
 
 type (

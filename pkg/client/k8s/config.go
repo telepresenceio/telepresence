@@ -25,7 +25,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
@@ -222,12 +222,6 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 	if proc.RunningInContainer() {
 		// Don't trust the host's KUBECONFIG env.
 		delete(cr.Environment, "KUBECONFIG")
-
-		// Add potential overrides for kube flags.
-		if len(cr.ContainerKubeFlagOverrides) > 0 {
-			flagMap = maps.Copy(flagMap)
-			maps.Merge(flagMap, cr.ContainerKubeFlagOverrides)
-		}
 	}
 	for k, v := range cr.Environment {
 		if k[0] == '-' {

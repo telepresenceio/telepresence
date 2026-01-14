@@ -42,8 +42,8 @@ func (rd *InProcSession) Status(context.Context, *empty.Empty, ...grpc.CallOptio
 	}, nil
 }
 
-func (rd *InProcSession) Quit(context.Context, *empty.Empty, ...grpc.CallOption) (*empty.Empty, error) {
-	return &empty.Empty{}, nil
+func (rd *InProcSession) Quit(context.Context, *empty.Empty, ...grpc.CallOption) (*rpc.QuitResponse, error) {
+	return &rpc.QuitResponse{}, nil
 }
 
 func (rd *InProcSession) Connect(ctx context.Context, _ *rpc.NetworkConfig, opts ...grpc.CallOption) (*rpc.DaemonStatus, error) {

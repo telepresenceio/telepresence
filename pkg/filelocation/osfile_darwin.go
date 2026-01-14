@@ -6,6 +6,12 @@ import (
 	"path/filepath"
 )
 
+const (
+	appName       = "telepresence"
+	RootCacheDir  = "/Library/Caches/" + appName
+	RootConfigDir = "/Library/Application Support/" + appName
+)
+
 func userHomeDir() string {
 	if v := os.Getenv("HOME"); v != "" {
 		return v

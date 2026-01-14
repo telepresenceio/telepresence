@@ -8,9 +8,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 )
 
 func kubeauthCmd() *cobra.Command {
@@ -25,11 +24,7 @@ func kubeauthCmd() *cobra.Command {
 	return cmd
 }
 
-func authenticateContext(cmd *cobra.Command, args []string) error {
-	err := global.InitConfig(cmd)
-	if err != nil {
-		return err
-	}
+func authenticateContext(cmd *cobra.Command, args []string) (err error) {
 	ctx := cmd.Context()
 	contextName := args[0]
 	serverAddr := args[1]

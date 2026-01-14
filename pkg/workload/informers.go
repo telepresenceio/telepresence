@@ -8,7 +8,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 )
 

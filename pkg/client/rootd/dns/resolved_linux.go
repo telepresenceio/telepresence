@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/datawire/dlib/dcontext"
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
-	"github.com/datawire/dlib/dtime"
+	"github.com/telepresenceio/dlib/v2/dcontext"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )

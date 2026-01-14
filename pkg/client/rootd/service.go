@@ -2,23 +2,25 @@ package rootd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 
-	"github.com/datawire/dlib/dgroup"
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/dlib/v2/dgroup"
+	"github.com/telepresenceio/dlib/v2/dlog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/socket"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -29,23 +31,14 @@ import (
 )
 
 const (
-	titleName   = "Daemon"
-	pprofFlag   = "pprof"
-	logfileFlag = "logfile"
+	titleName    = "Root Daemon"
+	pprofFlag    = "pprof"
+	cacheDirFlag = "cache"
+	configFlag   = "config"
+	logfileFlag  = "logfile"
+	addressFlag  = "address"
+	managedFlag  = "managed"
 )
-
-func help() string {
-	return `The Telepresence ` + titleName + ` is a long-lived background component that manages
-connections and network state.
-
-Launch the Telepresence ` + titleName + `:
-    sudo telepresence rootd <config dir> <path to gRPC socket>
-
-Examine the ` + titleName + `'s log output in
-    ` + filepath.Join(filelocation.AppUserLogDir(context.Background()), "daemon.log") + `
-to troubleshoot problems.
-`
-}
 
 // service represents the state of the Telepresence Daemon.
 type service struct {
@@ -61,12 +54,14 @@ type service struct {
 
 	// sessionRunning is closed when the session is done running.
 	sessionRunning chan struct{}
+	managed        bool
 }
 
-func newService(cfg client.Config) *service {
+func newService(cfg client.Config, managed bool) *service {
 	s := &service{
 		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon.String(), log.SetLevel),
 		sessionRunning: make(chan struct{}),
+		managed:        managed,
 	}
 	close(s.sessionRunning)
 	return s
@@ -75,23 +70,28 @@ func newService(cfg client.Config) *service {
 // Command returns the telepresence sub-command "rootd".
 func Command(ctx context.Context) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    client.RootDaemonName + " <config dir> <path to gRPC socket>",
-		Short:  "Launch Telepresence " + titleName + " in the foreground (debug)",
-		Args:   cobra.ExactArgs(2),
+		Use:    client.RootDaemonName,
+		Short:  "Launch Telepresence " + titleName,
+		Args:   cobra.NoArgs,
 		Hidden: true,
-		Long:   help(),
+		Long:   `The Telepresence ` + titleName + ` is a long-lived background component that manages connections and network state.`,
 		RunE:   run,
 	}
 	flags := cmd.Flags()
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
-	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "daemon.log"),
-		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
+	flags.String(logfileFlag, "", `Log file to write to { <path to a file> | "stdout" | "stderr" | "std" | "managed" }
+"std" will cause the daemon to log informal messages to stdout and error messages to stderr
+"managed" is like "std", but without timestamps and level tags for "error" or "info" messages`)
+	flags.String(cacheDirFlag, "", `Path to the Telepresence cache directory`)
+	flags.String(configFlag, "", `Path to the Telepresence configuration file`)
+	flags.String(addressFlag, "", "TCP address to listen to")
+	flags.Bool(managedFlag, false, "The daemon is managed by the system and will disconnect, but not exit, when it receives RPC calls to Quit")
 	return cmd
 }
 
 func (s *service) configReload(c context.Context) error {
 	return client.WatchConfig(c, func(c context.Context) error {
-		client.ReloadDaemonLogLevel(c)
+		client.ReloadLogLevel(c)
 		return nil
 	})
 }
@@ -102,7 +102,14 @@ func (s *service) serveGrpc(c context.Context, l net.Listener) error {
 	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
 		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}
-	c, cancel := context.WithCancel(c)
+
+	var cancel context.CancelFunc
+	if s.managed {
+		// This essentially makes the quit() function wait until the session is done but otherwise do nothing.
+		cancel = func() {}
+	} else {
+		c, cancel = context.WithCancel(c)
+	}
 	s.Context = c
 	s.quit = func() {
 		cancel()
@@ -119,28 +126,50 @@ func (s *service) serveGrpc(c context.Context, l net.Listener) error {
 // run is the main function when executing as the daemon.
 func run(cmd *cobra.Command, args []string) error {
 	if !proc.IsAdmin() {
-		return fmt.Errorf("telepresence %s must run with elevated privileges", client.RootDaemonName)
+		msg := fmt.Sprintf("telepresence %s must run with elevated privileges", client.RootDaemonName)
+		fmt.Fprintln(os.Stderr, msg)
+		return errors.New(msg)
 	}
 
-	configDir := args[0]
-	rootDaemonPath := args[1]
-	err := global.InitConfig(cmd)
-	if err != nil {
-		return err
+	flags := cmd.Flags()
+
+	var configFile string
+	cfgFlag := flags.Lookup(configFlag)
+	if cfgFlag.Changed {
+		configFile = cfgFlag.Value.String()
 	}
 
 	c := cmd.Context()
-
-	// Spoof the AppUserLogDir and AppUserConfigDir so that they return the original user's
-	// directories rather than directories for the root user.
-	c = filelocation.WithAppUserConfigDir(c, configDir)
-
-	cfg, err := client.LoadConfig(c)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+	cacheDir := flags.Lookup(cacheDirFlag).Value.String()
+	if cacheDir != "" {
+		c = filelocation.WithAppUserCacheDir(c, cacheDir)
+	}
+	var cfg client.Config
+	var err error
+	if configFile == "" {
+		cfg = client.GetDefaultConfig()
+	} else {
+		c = client.WithConfigFile(c, configFile)
+		c = filelocation.WithAppUserConfigDir(c, filepath.Dir(configFile))
+		cfg, err = client.LoadConfig(c)
+		if err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
 	}
 	c = client.WithConfig(c, cfg)
-	flags := cmd.Flags()
+
+	addrFlag := flags.Lookup(addressFlag)
+	if !addrFlag.Changed {
+		return fmt.Errorf("must specify %s", addressFlag)
+	}
+	addrStr := addrFlag.Value.String()
+	nqFlag := flags.Lookup(managedFlag)
+
+	var managed bool
+	if nqFlag.Changed {
+		managed, _ = strconv.ParseBool(nqFlag.Value.String())
+	}
+
 	if pprofPort, _ := flags.GetUint16(pprofFlag); pprofPort > 0 {
 		go func() {
 			if err := pprof.PprofServer(c, pprofPort); err != nil {
@@ -148,43 +177,48 @@ func run(cmd *cobra.Command, args []string) error {
 			}
 		}()
 	}
-	c = dgroup.WithGoroutineName(c, "/"+client.RootDaemonName)
 	logFile := flags.Lookup(logfileFlag).Value.String()
 	c, err = logging.InitContext(c, logFile, cfg.LogLevels().RootDaemon, logging.RotateDaily, true)
 	if err != nil {
 		return err
 	}
 
+	c = dgroup.WithGoroutineName(c, "/"+client.RootDaemonName)
 	dlog.Debug(c, shellquote.ShellString(os.Args[0], os.Args[1:]))
 
 	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence Root Daemon %s starting...", client.DisplayVersion())
+	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
 	dlog.Infof(c, "PID is %d", os.Getpid())
 	dlog.Info(c, "")
 
 	// Listen on domain unix domain socket. The listener must be opened before other tasks because
 	// the CLI client will only wait for a short period of time for the socket to appear before it
 	// gives up.
-	grpcListener, err := socket.Listen(c, client.RootDaemonName, rootDaemonPath)
+	lc := net.ListenConfig{}
+	grpcListener, err := lc.Listen(c, "tcp", addrStr)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		_ = socket.Remove(grpcListener)
-	}()
-	dlog.Debug(c, "Listener opened")
+	defer grpcListener.Close()
 
-	d := newService(cfg)
+	daemonAddress := grpcListener.Addr().(interface{ AddrPort() netip.AddrPort }).AddrPort()
+	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
+
+	d := newService(cfg, managed)
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, client.RootDaemonName); err != nil {
+		dlog.Error(c, err)
 		return err
 	}
 	vif.InitLogger(c)
 
+	c, cancel := context.WithCancel(c)
 	g := dgroup.NewGroup(c, dgroup.GroupConfig{
 		SoftShutdownTimeout:  5 * time.Second,
 		EnableSignalHandling: true,
 		ShutdownOnNonError:   true,
+		IgnoreSignalError:    true,
 	})
+	runAliveAndCancellation(g, daemonAddress.Port(), cancel, managed)
 
 	// Add a reload function that triggers on create and write of the config.yml file.
 	g.Go("config-reload", d.configReload)
@@ -194,4 +228,31 @@ func run(cmd *cobra.Command, args []string) error {
 		dlog.Error(c, err)
 	}
 	return err
+}
+
+func runAliveAndCancellation(g *dgroup.Group, daemonPort uint16, cancel context.CancelFunc, managed bool) {
+	g.Go("info-kicker", func(ctx context.Context) error {
+		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
+		il := daemon.NewRootInfoLoader(ctx, managed)
+		if managed {
+			info := &daemon.RootInfo{DaemonPort: daemonPort}
+			err := il.SaveInfo(info, daemon.InfoFileName)
+			if err != nil {
+				return err
+			}
+		}
+		return il.KeepInfoAlive(daemon.InfoFileName)
+	})
+	g.Go("info-watcher", func(ctx context.Context) error {
+		// Cancel the session if the daemon info file is removed.
+		il := daemon.NewRootInfoLoader(ctx, managed)
+		return il.WatchInfos(func(ctx context.Context) error {
+			ok, err := il.InfoExists(daemon.InfoFileName)
+			if err == nil && !ok {
+				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemon.InfoFileName)
+				cancel()
+			}
+			return err
+		}, daemon.InfoFileName)
+	})
 }
