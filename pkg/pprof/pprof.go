@@ -14,8 +14,8 @@ func PprofServer(ctx context.Context, port uint16) error {
 		Addr:        fmt.Sprintf("localhost:%d", port),
 	}
 	go func() {
-		<-ctx.Done()
-		_ = svc.Shutdown(context.Background())
+		_ = svc.ListenAndServe()
 	}()
-	return svc.ListenAndServe()
+	<-ctx.Done()
+	return svc.Shutdown(context.Background())
 }

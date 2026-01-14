@@ -96,16 +96,17 @@ func (f *tcp) acceptHTTPLoop(ctx context.Context, listener net.Listener) {
 	}
 
 	go func() {
-		<-ctx.Done()
-		if err := server.Shutdown(context.WithoutCancel(ctx)); err != nil {
-			clog.Errorf(ctx, "Error shutting down HTTP forwarder: %v", err)
+		clog.Debugf(ctx, "Starting HTTP intercept forwarder on %s", la)
+		defer clog.Debugf(ctx, "Done HTTP interceptor forwarding from %s", la)
+
+		if err := server.Serve(listener); err != nil {
+			clog.Errorf(ctx, "Error serving HTTP intercept: %v", err)
 		}
 	}()
-	clog.Debugf(ctx, "Starting HTTP intercept forwarder on %s", la)
-	defer clog.Debugf(ctx, "Done HTTP interceptor forwarding from %s", la)
 
-	if err := server.Serve(listener); err != nil {
-		clog.Errorf(ctx, "Error serving HTTP intercept: %v", err)
+	<-ctx.Done()
+	if err := server.Shutdown(context.WithoutCancel(ctx)); err != nil {
+		clog.Errorf(ctx, "Error shutting down HTTP forwarder: %v", err)
 	}
 }
 

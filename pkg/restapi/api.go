@@ -2,6 +2,7 @@ package restapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -138,18 +139,21 @@ func (s *server) Serve(c context.Context, ln net.Listener) error {
 		Handler:     mux,
 		BaseContext: func(_ net.Listener) context.Context { return c },
 	}
+
 	info := fmt.Sprintf("Telepresence API server on %v", ln.Addr())
-	clog.Infof(c, "%s started", info)
 	go func() {
-		<-c.Done()
-		clog.Infof(c, "Shutting down %s", info)
-		sc, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		_ = svc.Shutdown(sc)
-		cancel()
+		clog.Infof(c, "%s started", info)
+		defer clog.Infof(c, "%s ended", info)
+		err := svc.Serve(ln)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			clog.Errorf(c, "%s stopped. %v", info, err)
+		}
 	}()
-	defer clog.Infof(c, "%s ended", info)
-	if err := svc.Serve(ln); err != nil {
-		return fmt.Errorf("%s stopped. %w", info, err)
-	}
-	return nil
+
+	<-c.Done()
+	clog.Infof(c, "Shutting down %s", info)
+	sc, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err := svc.Shutdown(sc)
+	cancel()
+	return err
 }

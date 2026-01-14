@@ -477,7 +477,7 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 			// This may happen if the daemon has died (and hence, we never discovered it), but
 			// the container still hasn't died. Let's sleep for a short while and retry.
 			if i < 6 {
-				time.Sleep(time.Duration(i)*500*time.Millisecond)
+				time.Sleep(time.Duration(i) * 500 * time.Millisecond)
 				continue
 			}
 			if stopAttempted {

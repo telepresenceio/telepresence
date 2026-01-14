@@ -2,6 +2,7 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -287,18 +288,23 @@ func (s *service) servePrometheus(ctx context.Context) error {
 
 	lg := clog.StdLogger(ctx, slog.LevelInfo)
 	lg.SetPrefix(fmt.Sprintf("prometheus:%d", env.PrometheusPort))
-	clog.Infof(ctx, "Prometheus metrics server started on port: %d", env.PrometheusPort)
-	defer clog.Info(ctx, "Prometheus metrics server stopped")
 	svc := http.Server{
 		Handler:  promhttp.Handler(),
 		ErrorLog: lg,
 		Addr:     iputil.JoinHostPort(env.ServerHost, env.PrometheusPort),
 	}
+
 	go func() {
-		<-ctx.Done()
-		_ = svc.Shutdown(context.Background())
+		defer clog.Info(ctx, "Prometheus metrics server stopped")
+		err := svc.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			clog.Errorf(ctx, "Error serving Prometheus metrics: %v", err)
+		}
 	}()
-	return svc.ListenAndServe()
+	clog.Infof(ctx, "Prometheus metrics server started on port: %d", env.PrometheusPort)
+
+	<-ctx.Done()
+	return svc.Shutdown(context.Background())
 }
 
 func (s *service) serveHTTP(ctx context.Context) error {

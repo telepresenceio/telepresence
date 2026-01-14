@@ -62,7 +62,7 @@ func WithT(ctx context.Context, t *testing.T) context.Context {
 	ctx = context.WithValue(ctx, tContextKey{}, t)
 	ctx, cancel := context.WithCancel(
 		clog.WithLogger(ctx,
-			slog.New(handler.NewText(handler.Output(testutil.OutputWriter(t)), handler.EnabledLevel(slog.LevelDebug)))))
+			slog.New(handler.NewText(handler.Output(t.Output()), handler.EnabledLevel(slog.LevelDebug)))))
 	t.Cleanup(cancel)
 	return ctx
 }

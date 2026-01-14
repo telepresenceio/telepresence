@@ -110,13 +110,10 @@ func run(c context.Context) error {
 		return c
 	}}
 	go func() {
-		<-c.Done()
-		_ = svc.Shutdown(context.Background())
+		_ = svc.Serve(ln)
 	}()
-	if err := svc.Serve(ln); err != nil {
-		return fmt.Errorf("%s stopped: %w", info, err)
-	}
-	return nil
+	<-c.Done()
+	return svc.Shutdown(context.Background())
 }
 
 const interceptIdEnv = "TELEPRESENCE_INTERCEPT_ID"

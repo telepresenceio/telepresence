@@ -222,31 +222,28 @@ func serveAndWatchTLS(ctx context.Context, s *http.Server, addr string, certGett
 		return err
 	}
 
-	errc := make(chan error, 1)
 	go func() {
-		// Give the http server some time to start accepting calls from the listener. We don't want
-		// our own rollouts to happen before we are able to receive events from the mutating webhook.
-		time.Sleep(3 * time.Second)
-		rdyClose.Do(func() { close(rdy) })
-		<-ctx.Done()
-		errc <- s.Shutdown(ctx)
+		err := s.Serve(
+			&tlsListener{
+				ctx:         ctx,
+				certGetter:  certGetter,
+				cert:        cert,
+				certPEM:     certPEM,
+				keyPEM:      keyPEM,
+				tcpListener: tcpListener,
+			},
+		)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			clog.Errorf(ctx, "failed to serve: %v", err)
+		}
 	}()
 
-	err = s.Serve(
-		&tlsListener{
-			ctx:         ctx,
-			certGetter:  certGetter,
-			cert:        cert,
-			certPEM:     certPEM,
-			keyPEM:      keyPEM,
-			tcpListener: tcpListener,
-		},
-	)
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return fmt.Errorf("failed to serve: %v", err)
-	}
-
-	return <-errc
+	// Give the http server some time to start accepting calls from the listener. We don't want
+	// our own rollouts to happen before we are able to receive events from the mutating webhook.
+	time.Sleep(3 * time.Second)
+	rdyClose.Do(func() { close(rdy) })
+	<-ctx.Done()
+	return s.Shutdown(ctx)
 }
 
 // Skip mutate requests in these namespaces.
