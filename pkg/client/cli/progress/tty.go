@@ -90,8 +90,8 @@ func (w *ttyWriter) IsNoOp() bool {
 func (w *ttyWriter) Stop() {
 	w.doneOnce.Do(func() {
 		close(w.done)
-		w.print()
 	})
+	w.print()
 }
 
 func (w *ttyWriter) event(e *Event) {
