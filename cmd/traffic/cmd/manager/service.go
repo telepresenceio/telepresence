@@ -429,7 +429,7 @@ func (s *service) createAgentPodWatchers(ctx context.Context, ns string) (
 }
 
 // WatchAgentPods notifies a client of the set of known Agents.
-func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentPodsServer) error {
+func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentPodInfoSnapshot]) error {
 	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), session)
 	if err != nil {
 		return err
@@ -565,7 +565,7 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 }
 
 // WatchAgents notifies a client of the set of known Agents in the connected namespace.
-func (s *service) WatchAgents(session *rpc.SessionInfo, stream rpc.Manager_WatchAgentsServer) error {
+func (s *service) WatchAgents(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentInfoSnapshot]) error {
 	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), session)
 	if err != nil {
 		return err
@@ -581,7 +581,7 @@ func infosEqual(a, b *rpc.AgentInfo) bool {
 	return proto.Equal(a, b)
 }
 
-func (s *service) watchAgents(ctx context.Context, includeAgent func(tunnel.SessionID, *state.AgentSession) bool, stream rpc.Manager_WatchAgentsServer) error {
+func (s *service) watchAgents(ctx context.Context, includeAgent func(tunnel.SessionID, *state.AgentSession) bool, stream grpc.ServerStreamingServer[rpc.AgentInfoSnapshot]) error {
 	deltaCh := s.state.WatchAgents(ctx, includeAgent)
 	sessionDone, err := s.state.SessionDone(managerutil.GetSessionID(ctx))
 	if err != nil {
@@ -726,7 +726,7 @@ func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo)
 
 // WatchIntercepts notifies a client or agent of the set of intercepts
 // relevant to that client or agent.
-func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream rpc.Manager_WatchInterceptsServer) error {
+func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.InterceptInfoSnapshot]) error {
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	deltaCh, sessionDone, err := s.watchIntercepts(ctx, session)
 	if err != nil {
@@ -943,7 +943,7 @@ func (s *service) removeExcludedEnvVars(envVars map[string]string) {
 	}
 }
 
-func (s *service) Tunnel(server rpc.Manager_TunnelServer) error {
+func (s *service) Tunnel(server grpc.BidiStreamingServer[rpc.TunnelMessage, rpc.TunnelMessage]) error {
 	ctx := server.Context()
 	stream, err := tunnel.NewServerStream(ctx, tunnel.ClientToManager, server)
 	if err != nil {
@@ -1188,11 +1188,11 @@ func (s *service) UninstallAgents(ctx context.Context, request *rpc.UninstallAge
 	return &empty.Empty{}, s.state.UninstallAgents(ctx, request)
 }
 
-func (s *service) WatchLogLevel(_ *empty.Empty, stream rpc.Manager_WatchLogLevelServer) error {
+func (s *service) WatchLogLevel(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.LogLevelRequest]) error {
 	return s.state.WaitForTempLogLevel(stream)
 }
 
-func (s *service) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_WatchClusterInfoServer) error {
+func (s *service) WatchClusterInfo(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.ClusterInfo]) error {
 	ctx := managerutil.WithSessionInfo(stream.Context(), session)
 	sessionDone, err := s.state.SessionDone(tunnel.SessionID(session.SessionId))
 	if err != nil {
@@ -1201,7 +1201,7 @@ func (s *service) WatchClusterInfo(session *rpc.SessionInfo, stream rpc.Manager_
 	return s.clusterInfo.Watch(ctx, sessionDone, stream)
 }
 
-func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream rpc.Manager_WatchWorkloadsServer) (err error) {
+func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream grpc.ServerStreamingServer[rpc.WorkloadEventsDelta]) (err error) {
 	ctx := stream.Context()
 	// Dysfunctional prior to 2.21.0 because no initial snapshot was sent.
 	if err := checkCompat(ctx, "WatchWorkloads", "2.21.0-alpha.4"); err != nil {

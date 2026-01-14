@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/puzpuzpuz/xsync/v4"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -720,7 +721,7 @@ func (s *State) InitialTempLogLevel() *rpc.LogLevelRequest {
 
 // WaitForTempLogLevel waits for a new temporary log-level request. It returns the values
 // of the last request that was made.
-func (s *State) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) error {
+func (s *State) WaitForTempLogLevel(stream grpc.ServerStreamingServer[rpc.LogLevelRequest]) error {
 	return s.llSubs.subscriberLoop(stream.Context(), stream)
 }
 

@@ -367,8 +367,8 @@ github.com/stretchr/testify v1.6.1/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/telepresenceio/clog v0.0.0-20260110145038-83948c443e24 h1:KNDsN471emfYAar+aQ+48RnETJSFWFCpfpuCxFK7lho=
-github.com/telepresenceio/clog v0.0.0-20260110145038-83948c443e24/go.mod h1:UNeuJUkHiI0y2x59WmgSNMTTCYLMU12U5AUHhFi3BOA=
+github.com/telepresenceio/clog v0.0.0-20260114095906-871c1e5d508d h1:iEpPanvqQ08ri1xAWE8qb/tXUYLvpUKcxM2oMzas5gQ=
+github.com/telepresenceio/clog v0.0.0-20260114095906-871c1e5d508d/go.mod h1:UNeuJUkHiI0y2x59WmgSNMTTCYLMU12U5AUHhFi3BOA=
 github.com/telepresenceio/go-ftpserver v1.2.1 h1:iv33eT7r2yptzfVU9ONj5BbZkZ3HStN6NaHZN99dBIQ=
 github.com/telepresenceio/go-ftpserver v1.2.1/go.mod h1:PWBrLTzbsYc4hi1mleS3MJmVyJkHMSc4Q5EAzNqB+qQ=
 github.com/telepresenceio/go-fuseftp v1.0.1 h1:Wrf/eefwBGlrIRXDS/fJy/PUYNLdOe8ZmYi7PsydjdM=

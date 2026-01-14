@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v4"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/types"
@@ -21,14 +22,14 @@ import (
 )
 
 type WorkloadInfoWatcher interface {
-	Watch(context.Context, rpc.Manager_WatchWorkloadsServer) error
+	Watch(context.Context, grpc.ServerStreamingServer[rpc.WorkloadEventsDelta]) error
 }
 
 type workloadInfoWatcher struct {
 	*State
 	clientSession  tunnel.SessionID
 	namespace      string
-	stream         rpc.Manager_WatchWorkloadsServer
+	stream         grpc.ServerStreamingServer[rpc.WorkloadEventsDelta]
 	workloadEvents *xsync.Map[string, *rpc.WorkloadEvent]
 	lastEvents     map[string]*rpc.WorkloadEvent
 	start          time.Time
@@ -43,7 +44,7 @@ func (s *State) NewWorkloadInfoWatcher(clientSession tunnel.SessionID, namespace
 	}
 }
 
-func (wf *workloadInfoWatcher) Watch(ctx context.Context, stream rpc.Manager_WatchWorkloadsServer) error {
+func (wf *workloadInfoWatcher) Watch(ctx context.Context, stream grpc.ServerStreamingServer[rpc.WorkloadEventsDelta]) error {
 	wf.start = time.Now()
 	defer func() {
 		wf.sendTimer.Stop()

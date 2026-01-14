@@ -106,7 +106,17 @@ func New(valCtx context.Context, options ...grpc.ServerOption) *grpc.Server {
 			),
 		)
 	} else {
-		options = append(options, grpc.UnaryInterceptor(unaryContextInterceptor), grpc.StreamInterceptor(streamContextInterceptor))
+		options = append(
+			options,
+			grpc.ChainUnaryInterceptor(
+				unaryContextInterceptor,
+				unaryErrorInterceptor,
+			),
+			grpc.ChainStreamInterceptor(
+				streamContextInterceptor,
+				streamErrorInterceptor,
+			),
+		)
 	}
 	return grpc.NewServer(options...)
 }
