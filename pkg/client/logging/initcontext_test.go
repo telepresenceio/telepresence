@@ -72,7 +72,6 @@ func TestInitContext(t *testing.T) {
 			c, err := InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), true)
 			check.NoError(err)
 			check.NotNil(c)
-
 			require.FileExists(t, logFile)
 
 			infoMsg := "info"
@@ -82,6 +81,7 @@ func TestInitContext(t *testing.T) {
 			errMsg := "error"
 			fmt.Fprintln(os.Stderr, errMsg)
 			time.Sleep(30 * time.Millisecond)
+			_ = rotatingFileForTest.Close()
 
 			bs, err := os.ReadFile(logFile)
 			check.NoError(err)
@@ -103,6 +103,7 @@ func TestInitContext(t *testing.T) {
 		println(msg) //nolint:forbidigo // we're testing this builtin function
 		check.FileExists(logFile)
 		time.Sleep(30 * time.Millisecond)
+		_ = rotatingFileForTest.Close()
 		bs, err := os.ReadFile(logFile)
 		check.NoError(err)
 		check.Contains(string(bs), msg)
@@ -120,6 +121,7 @@ func TestInitContext(t *testing.T) {
 		log.Print(msg)
 		time.Sleep(100 * time.Millisecond)
 		check.FileExists(logFile)
+		_ = rotatingFileForTest.Close()
 
 		bs, err := os.ReadFile(logFile)
 		check.NoError(err)
@@ -136,12 +138,14 @@ func TestInitContext(t *testing.T) {
 			check.NotNil(c)
 			infoMsg := "info message"
 			clog.Info(c, infoMsg)
+			_ = rotatingFileForTest.Close()
 			time.Sleep(time.Second)
 
 			c, err = InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), false)
 			check.NoError(err)
 			check.NotNil(c)
 			clog.Info(c, infoMsg)
+			_ = rotatingFileForTest.Close()
 			check.FileExists(logFile)
 
 			infoTs := time.Now().Format("2006-01-02 15:04:05.0000")
@@ -164,6 +168,7 @@ func TestInitContext(t *testing.T) {
 			check.NotNil(c)
 			clog.Info(c, "info message")
 			check.NotNil(rotatingFileForTest)
+			_ = rotatingFileForTest.Close()
 			bt1 := rotatingFileForTest.birthTime
 
 			c, err = InitContext(ctx, logFile, slog.LevelInfo, NewRotateOnce(), false)
@@ -171,6 +176,7 @@ func TestInitContext(t *testing.T) {
 			check.NotNil(c)
 			clog.Info(c, "info message")
 			check.NotNil(rotatingFileForTest)
+			_ = rotatingFileForTest.Close()
 			bt2 := rotatingFileForTest.birthTime
 			check.Equal(bt1, bt2)
 		})
@@ -186,12 +192,14 @@ func TestInitContext(t *testing.T) {
 			check.NotNil(c)
 			infoMsg1 := "info message 1"
 			clog.Info(c, infoMsg1)
+			_ = rotatingFileForTest.Close()
 
 			c, err = InitContext(ctx, logFile, slog.LevelInfo, RotateNever, false)
 			check.NoError(err)
 			check.NotNil(c)
 			infoMsg2 := "info message 2"
 			clog.Info(c, infoMsg2)
+			_ = rotatingFileForTest.Close()
 
 			bs, err := os.ReadFile(logFile)
 			check.NoError(err)
@@ -219,6 +227,7 @@ func TestInitContext(t *testing.T) {
 				check.NotNil(c)
 				infoMsg := "info message"
 				clog.Info(c, infoMsg)
+				_ = rotatingFileForTest.Close()
 			}
 			// Give file remover some time to finish
 			time.Sleep(100 * time.Millisecond)

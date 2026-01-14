@@ -94,13 +94,14 @@ func InitContext(ctx context.Context, logFile string, logLevel slog.Level, strat
 
 	sl := slog.New(handler.NewText(append(opts, handler.LevelEnabler(clog.TreeEnabled))...))
 	slog.SetDefault(sl)
+	ctx = clog.WithLogger(ctx, sl)
 	if initStdLog {
 		stl := clog.StdLogger(ctx, logLevel)
 		stdLog.SetOutput(stl.Writer())
 		stdLog.SetFlags(stl.Flags())
 		stdLog.SetPrefix("stdlog : ")
 	}
-	return clog.WithLogger(ctx, sl), nil
+	return ctx, nil
 }
 
 // ValidateLogFilePath ensures that the log file path is valid and that the parent directory exists or can be created.
