@@ -189,7 +189,7 @@ func (il *InfoLoader[T]) DialDaemon(ctx context.Context, waitForConnect bool) (c
 			return err
 		}, backoff.WithContext(backoff.NewConstantBackOff(200*time.Millisecond), ctx))
 	} else {
-		ctx, cancel = context.WithTimeout(ctx, 200*time.Millisecond)
+		ctx, cancel = context.WithTimeout(ctx, 500*time.Millisecond)
 		info, err = il.LoadInfo(InfoFileName)
 	}
 	defer cancel()
