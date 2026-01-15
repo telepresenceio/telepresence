@@ -247,14 +247,16 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 	}
 	addrStr := addrFlag.Value.String()
 
-	name, _ := flags.GetString(nameFlag)
-	c = clog.WithGroup(c, name)
 	logFile := flags.Lookup(logfileFlag).Value.String()
 	c, err = logging.InitContext(c, logFile, cfg.LogLevels().UserDaemon, logging.RotateDaily, true)
 	if err != nil {
 		return err
 	}
-	c = clog.WithGroup(c, client.UserDaemonName)
+	name, _ := flags.GetString(nameFlag)
+	if name == "" {
+		name = client.UserDaemonName
+	}
+	c = clog.WithGroup(c, name)
 
 	c = docker.EnableClient(c)
 
