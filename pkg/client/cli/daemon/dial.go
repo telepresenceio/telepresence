@@ -11,6 +11,8 @@ const InfoFileName = "daemon.json"
 
 var ErrNoRootDaemon = errors.New("telepresence root daemon is not running")
 
+var ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
+
 func DialRootDaemon(ctx context.Context, waitForConnect bool) (conn *grpc.ClientConn, err error) {
 	if ri, err := LoadRootServiceInfo(ctx); err == nil {
 		return dialDaemon(ctx, "root", ri.DaemonPort)

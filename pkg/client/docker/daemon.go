@@ -274,7 +274,7 @@ func readPortFile(ctx context.Context, portFile string, configFiles []string) (u
 	if err := os.Remove(portFile); err != nil {
 		return 0, err
 	}
-	return 0, os.ErrNotExist
+	return 0, fmt.Errorf("%s: %w", portFile, os.ErrNotExist)
 }
 
 func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string) (uint16, error) {

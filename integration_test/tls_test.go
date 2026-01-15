@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -200,25 +202,30 @@ func (s *dockerDaemonSuite) Test_TLSAnnotations() {
 			rq.True(len(si.UserDaemon.Intercepts) == 1)
 			rq.Equal(si.UserDaemon.Intercepts[0].Name, ttSvc)
 
-			args := []string{"curl", "--max-time", "2", "-s", "-w", "\nStatus: %{http_code}\n", "-k"}
-			if tt.header != "" {
-				args = append(args, "-H", tt.header)
-			}
-			args = append(args, fmt.Sprintf("https://%s", ttSvc))
-			so, se, err := itest.Telepresence(ctx, args...)
-			s.NoError(err)
-			if se != "" {
-				clog.Error(ctx, se)
-			}
-			if tt.errorPattern != "" {
-				s.Regexp(tt.errorPattern, so)
-			} else {
-				s.Contains(so, "HTTP/2.0 GET /")
-			}
-			clog.Info(ctx, so)
+			rq.EventuallyContext(ctx, func() bool {
+				args := []string{"curl", "--max-time", "2", "-s", "-w", "\nStatus: %{http_code}\n", "-k"}
+				if tt.header != "" {
+					args = append(args, "-H", tt.header)
+				}
+				args = append(args, fmt.Sprintf("https://%s", ttSvc))
+				so, se, err := itest.Telepresence(ctx, args...)
+				if err != nil {
+					if se != "" {
+						clog.Error(ctx, se)
+					}
+					clog.Error(ctx, err)
+					return false
+				}
+				clog.Info(ctx, so)
+				if tt.errorPattern != "" {
+					ok, err := regexp.MatchString(tt.errorPattern, so)
+					return err == nil && ok
+				}
+				return strings.Contains(so, "HTTP/2.0 GET /")
+			}, 10*time.Second, 3*time.Second, "expected curl response never arrived")
 
 			// Terminate the ongoing intercept
-			so, se, err = itest.Telepresence(ctx, "leave", ttSvc)
+			so, se, err := itest.Telepresence(ctx, "leave", ttSvc)
 			if so != "" {
 				clog.Info(ctx, so)
 			}

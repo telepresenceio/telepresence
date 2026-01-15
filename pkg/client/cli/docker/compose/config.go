@@ -20,7 +20,6 @@ import (
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/generate"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/types"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
@@ -256,7 +255,7 @@ func (c *config) run(cmd *cobra.Command) (err error) {
 	progress.Start(ctx, "Connecting")
 	existingComposeFile, err := c.connect(ctx, es, connections)
 	if err != nil {
-		if c.mustBeConnected && errors.Is(err, connect.ErrNoUserDaemon) {
+		if c.mustBeConnected && errors.Is(err, daemon.ErrNoUserDaemon) {
 			// The daemon is not running, although the command expects it to. This means that no services should be running either.
 			// So let's just run the command without any extensions so that docker compose produces the expected error output.
 			err = tr.runCommand(ctx, name)

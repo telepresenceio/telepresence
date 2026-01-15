@@ -194,16 +194,26 @@ func (il *InfoLoader[T]) DialDaemon(ctx context.Context, waitForConnect bool) (c
 	}
 	defer cancel()
 	if err != nil {
-		return nil, fs.ErrNotExist
+		return nil, err
 	}
+
+	var daemonName string
+	var daemonPort uint16
 	if ii, ok := any(info).(*Info); ok {
-		conn, err = dialDaemon(ctx, "user", ii.DaemonPort)
+		daemonName = "user"
+		daemonPort = ii.DaemonPort
 	} else {
-		conn, err = dialDaemon(ctx, "root", (any(info).(*RootInfo)).DaemonPort)
+		daemonName = "root"
+		daemonPort = (any(info).(*RootInfo)).DaemonPort
 	}
+	conn, err = dialDaemon(ctx, daemonName, daemonPort)
 	if errors.Is(err, context.DeadlineExceeded) && !waitForConnect {
 		// A race may occur where the daemon is shutting down. We found the info file, but the daemon has since stopped responding.
-		err = fs.ErrNotExist
+		if daemonName == "user" {
+			err = ErrNoUserDaemon
+		} else {
+			err = ErrNoRootDaemon
+		}
 	}
 	return conn, err
 }
@@ -252,7 +262,7 @@ func (il *InfoLoader[T]) deleteIfStale(name string, fi fs.FileInfo) error {
 		if err := cache.DeleteFromUserCache(il.ctx, name); err != nil {
 			return err
 		}
-		return fs.ErrNotExist
+		return fmt.Errorf("%s: %w (file stale and removed)", name, fs.ErrNotExist)
 	}
 	return nil
 }
@@ -306,7 +316,12 @@ func (il *InfoLoader[T]) LoadMatchingInfo(match *regexp.Regexp) (*T, error) {
 	}
 	switch len(infos) {
 	case 0:
-		return nil, os.ErrNotExist
+		if match == nil {
+			err = fmt.Errorf("unable to find daemon info matching %s: %w", match, os.ErrNotExist)
+		} else {
+			err = fmt.Errorf("unable to find daemon info: %w", os.ErrNotExist)
+		}
+		return nil, err
 	case 1:
 		return infos[0], nil
 	default:

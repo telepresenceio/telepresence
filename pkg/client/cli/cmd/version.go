@@ -141,7 +141,7 @@ func managerVersion(ctx context.Context) (*common.VersionInfo, error) {
 		mv, err := userD.TrafficManagerVersion(ctx, &empty.Empty{})
 		return mv, tpGrpc.FromGRPC(err)
 	}
-	return nil, connect.ErrNoUserDaemon
+	return nil, daemon.ErrNoUserDaemon
 }
 
 func trafficAgentFQN(ctx context.Context) (*manager.AgentImageFQN, error) {
@@ -149,5 +149,5 @@ func trafficAgentFQN(ctx context.Context) (*manager.AgentImageFQN, error) {
 		ai, err := userD.AgentImageFQN(ctx, &empty.Empty{})
 		return ai, tpGrpc.FromGRPC(err)
 	}
-	return nil, connect.ErrNoUserDaemon
+	return nil, daemon.ErrNoUserDaemon
 }

@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/containerd/errdefs"
 
 	"github.com/telepresenceio/clog"
@@ -313,24 +312,4 @@ func EnsureStopContainer(ctx context.Context, name, containerID string, volumes 
 		}
 	}
 	done <- err
-}
-
-// ReadContainerID reads the containerID that docker run --cidfile <cidfils> writes to a file, and then
-// removes the file. It returns fs.ErrNotExist if no such file has been produced within 200 ms.
-func ReadContainerID(ctx context.Context, cidFile string) (containerID string, err error) {
-	defer func() {
-		_ = os.Remove(cidFile)
-	}()
-	err = backoff.Retry(func() error {
-		cid, err := os.ReadFile(cidFile)
-		if err != nil {
-			return err
-		}
-		if len(cid) == 0 {
-			return fs.ErrNotExist
-		}
-		containerID = string(cid)
-		return nil
-	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(10*time.Millisecond), 200), ctx))
-	return containerID, err
 }

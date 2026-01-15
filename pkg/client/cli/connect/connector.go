@@ -44,8 +44,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-var ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
-
 //nolint:gochecknoglobals // extension point
 var QuitDaemonFuncs = []func(context.Context){
 	quitHostConnector, quitDockerDaemons,
@@ -83,7 +81,7 @@ func findHostConnectorInfo(ctx context.Context) (*daemon.Info, error) {
 			return info, nil
 		}
 	}
-	return nil, fs.ErrNotExist
+	return nil, fmt.Errorf("unable to find host connector info: %w", fs.ErrNotExist)
 }
 
 func quitHostConnector(ctx context.Context) {
@@ -158,7 +156,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (rc context.Context, e
 			// The RootDaemon must be started if the UserDaemon was started
 			err = EnsureRootDaemonRunning(ctx)
 		}
-		if err != nil && !(errors.Is(err, ErrNoUserDaemon) && !required) {
+		if err != nil && !(errors.Is(err, daemon.ErrNoUserDaemon) && !required) {
 			err = progress.MaybeWriteError(ctx, err)
 		} else if launched {
 			progress.PrintDone(ctx, "Launched Daemon")
@@ -481,7 +479,7 @@ func findOrLaunchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifie
 		return ctx, false, errcat.NoDaemonLogs.New(err)
 	}
 	if !required {
-		return ctx, false, ErrNoUserDaemon
+		return ctx, false, daemon.ErrNoUserDaemon
 	}
 	ctx = progress.WithEventId(ctx, daemonID.Name)
 	progress.Working(ctx, "Launching Daemon")
