@@ -11,7 +11,6 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/docker/go-plugins-helpers/network"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -19,6 +18,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/teleroute"
 )
 
@@ -31,24 +31,22 @@ type networkState struct {
 
 	pid int
 
-	log logrus.FieldLogger
-
 	// clientConn is connected to the Telepresence daemon telemount gRPC.
 	clientConn *grpc.ClientConn
 }
 
-func newNetwork(ctx context.Context, logger logrus.FieldLogger, pid int, r *network.CreateNetworkRequest) (n *networkState, err error) {
-	logger.Debugf("CreateNetwork, %v", r.Options)
+func newNetwork(ctx context.Context, pid int, r *network.CreateNetworkRequest) (n *networkState, err error) {
 	ctx, cancel := context.WithCancel(ctx)
+	ctx = clog.WithGroup(ctx, r.NetworkID[:12])
+	clog.Debugf(ctx, "CreateNetwork, %v", r.Options)
 	n = &networkState{
 		ctx:    ctx,
 		cancel: cancel,
 		pid:    pid,
-		log:    logger,
 	}
 	err = n.initialize(r)
 	if err != nil {
-		logrus.Error(err)
+		clog.Error(ctx, err)
 		return nil, err
 	}
 	return n, nil
@@ -91,7 +89,7 @@ func callDaemon[R proto.Message](ns *networkState, f func(ctx context.Context, c
 	ctx, cancel := context.WithTimeout(ns.ctx, 3*time.Second)
 	rsp, err = f(ctx, teleroute.NewTelerouteClient(ns.clientConn))
 	cancel()
-	return
+	return rsp, err
 }
 
 func (n *networkState) connectToDaemon(gateways []netip.Prefix) (err error) {
@@ -103,7 +101,7 @@ func (n *networkState) connectToDaemon(gateways []netip.Prefix) (err error) {
 	n.clientConn, err = grpc.NewClient(ap.String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		err = fmt.Errorf("unable to create gRPC connection to daemon: %w", err)
-		n.log.Error(err)
+		clog.Error(n.ctx, err)
 		return err
 	}
 	defer func() {
@@ -141,12 +139,12 @@ func (n *networkState) connectToDaemon(gateways []netip.Prefix) (err error) {
 			info, err := infoStream.Recv()
 			if err != nil {
 				if !errors.Is(err, io.EOF) {
-					n.log.Errorf("error receiving info: %v", err)
+					clog.Errorf(n.ctx, "error receiving info: %v", err)
 				}
 				break
 			}
 			im := info.GetInfo()
-			n.log.Infof("Connected to %s version %s", im["name"], im["version"])
+			clog.Infof(n.ctx, "Connected to %s version %s", im["name"], im["version"])
 		}
 	}()
 	return nil
@@ -168,10 +166,10 @@ func rawAddrFromPrefixString(s string) (rawAddr []byte, err error) {
 }
 
 func (n *networkState) createEndpoint(r *network.CreateEndpointRequest) (_ *network.CreateEndpointResponse, err error) {
-	n.log.Debugf("Create endpoint %.8s %v %v", r.EndpointID, r.Interface, r.Options)
+	clog.Debugf(n.ctx, "Create endpoint %.8s %v %v", r.EndpointID, r.Interface, r.Options)
 	defer func() {
 		if err != nil {
-			n.log.Error(err)
+			clog.Error(n.ctx, err)
 		}
 	}()
 
@@ -197,7 +195,7 @@ func (n *networkState) createEndpoint(r *network.CreateEndpointRequest) (_ *netw
 
 func (n *networkState) join(r *network.JoinRequest) (response *network.JoinResponse, err error) {
 	endpointID := r.EndpointID
-	n.log.Debugf("Join endpoint %.8s, sandbox %.8s %v", endpointID, r.SandboxKey, r.Options)
+	clog.Debugf(n.ctx, "Join endpoint %.8s, sandbox %.8s %v", endpointID, r.SandboxKey, r.Options)
 
 	rsp, err := callDaemon(n, func(ctx context.Context, client teleroute.TelerouteClient) (*teleroute.JoinResponse, error) {
 		return client.Join(ctx, &teleroute.EndpointIdentifier{
@@ -256,12 +254,12 @@ func (n *networkState) join(r *network.JoinRequest) (response *network.JoinRespo
 		}
 		response.GatewayIPv6 = gwIPv6.Addr().String()
 	}
-	n.log.Debugf("Join response %v", response)
+	clog.Debugf(n.ctx, "Join response %v", response)
 	return response, nil
 }
 
 func (n *networkState) leaveEndpoint(endpointID string) error {
-	n.log.Debugf("Leave endpoint %.8s", endpointID)
+	clog.Debugf(n.ctx, "Leave endpoint %.8s", endpointID)
 	_, err := callDaemon(n, func(ctx context.Context, client teleroute.TelerouteClient) (*emptypb.Empty, error) {
 		return client.Leave(ctx, &teleroute.EndpointIdentifier{
 			Id: endpointID,
@@ -272,14 +270,14 @@ func (n *networkState) leaveEndpoint(endpointID string) error {
 		if code == codes.Canceled || code == codes.Unavailable {
 			err = nil
 		} else {
-			n.log.Errorf("failed to leave endpoint %s: %v", endpointID, err)
+			clog.Errorf(n.ctx, "failed to leave endpoint %s: %v", endpointID, err)
 		}
 	}
 	return err
 }
 
 func (n *networkState) deleteEndpoint(endpointID string) error {
-	n.log.Debugf("Delete endpoint %.8s", endpointID)
+	clog.Debugf(n.ctx, "Delete endpoint %.8s", endpointID)
 	_, err := callDaemon(n, func(ctx context.Context, client teleroute.TelerouteClient) (*emptypb.Empty, error) {
 		return client.RemoveEndpoint(ctx, &teleroute.EndpointIdentifier{Id: endpointID})
 	})
@@ -288,7 +286,7 @@ func (n *networkState) deleteEndpoint(endpointID string) error {
 		if code == codes.Canceled || code == codes.Unavailable {
 			err = nil
 		} else {
-			n.log.Errorf("failed to leave endpoint %s: %v", endpointID, err)
+			clog.Errorf(n.ctx, "failed to leave endpoint %s: %v", endpointID, err)
 		}
 	}
 	return err

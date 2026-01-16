@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"sync/atomic"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 // The dialer takes care of dispatching messages between gRPC and UDP connections.
@@ -73,7 +74,7 @@ func (h *udpListener) connToStreamLoop(ctx context.Context) {
 				if err != nil {
 					return nil, err
 				}
-				dlog.Debugf(ctx, "-> %s %s conn-to-stream loop started", h.tag, id)
+				clog.Debugf(ctx, "-> %s %s conn-to-stream loop started", h.tag, id)
 				return &udpStream{
 					TimedHandler: NewTimedHandler(id, udpConnTTL, release),
 					udpListener:  h,
@@ -81,14 +82,14 @@ func (h *udpListener) connToStreamLoop(ctx context.Context) {
 				}, nil
 			})
 			if err != nil {
-				dlog.Errorf(ctx, ">! %s udp %s get target: %v", h.tag, id, err)
+				clog.Errorf(ctx, ">! %s udp %s get target: %v", h.tag, id, err)
 				return
 			}
 			ps := target.(*udpStream)
-			dlog.Tracef(ctx, "-> %s %s, len %d", h.tag, id, len(rr.Payload))
+			clog.Tracef(ctx, "-> %s %s, len %d", h.tag, id, len(rr.Payload))
 			err = ps.stream.Send(ctx, NewMessage(Normal, rr.Payload))
 			if err != nil {
-				dlog.Errorf(ctx, ">! %s udp %s write: %v", h.tag, id, err)
+				clog.Errorf(ctx, ">! %s udp %s write: %v", h.tag, id, err)
 				return
 			}
 		}
@@ -142,9 +143,9 @@ func IsTimeout(err error) bool {
 func UdpReader(ctx context.Context, tag Tag, conn net.PacketConn, ch chan<- UdpReadResult) {
 	defer close(ch)
 	var endReason string
-	endLevel := dlog.LogLevelTrace
+	endLevel := clog.LevelTrace
 	defer func() {
-		dlog.Logf(ctx, endLevel, "<- %s %s UDP read loop ended because %s", tag, conn.LocalAddr(), endReason)
+		clog.Logf(ctx, endLevel, "<- %s %s UDP read loop ended because %s", tag, conn.LocalAddr(), endReason)
 	}()
 	buf := [0x10000]byte{}
 	for {
@@ -168,7 +169,7 @@ func UdpReader(ctx context.Context, tag Tag, conn net.PacketConn, ch chan<- UdpR
 			endReason = "the connection was closed"
 		default:
 			endReason = fmt.Sprintf("a read error occurred: %v", err)
-			endLevel = dlog.LogLevelError
+			endLevel = slog.LevelError
 		}
 		break
 	}

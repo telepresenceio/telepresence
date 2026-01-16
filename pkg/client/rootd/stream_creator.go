@@ -8,7 +8,7 @@ import (
 
 	"github.com/puzpuzpuz/xsync/v4"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -58,7 +58,7 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 		if p == types.ProtoUDP {
 			if s.isForDNS(destAddr, id.DestinationPort()) {
 				pipeId := tunnel.NewConnID(p, id.Source(), s.localDNS)
-				dlog.Tracef(c, "Intercept DNS %s to %s", id, pipeId.Destination())
+				clog.Tracef(c, "Intercept DNS %s to %s", id, pipeId.Destination())
 				from, to := tunnel.NewPipe(pipeId, tunnel.SessionID(s.session.SessionId), tunnel.DnsToTun, tunnel.TunToDNS)
 				tunnel.NewDialerTTL(to, func() {}, dnsConnTTL, nil, nil).Start(c)
 				return from, nil
@@ -112,9 +112,9 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 				// Replace the virtual IP with the original destination IP. This will ensure that the agent
 				// dials the original destination when the tunnel is established.
 				id = tunnel.NewConnID(id.Protocol(), id.Source(), netip.AddrPortFrom(a.destinationIP, id.DestinationPort()))
-				dlog.Debugf(c, "Opening proxy-via %s tunnel for id %s", a.workload, id)
+				clog.Debugf(c, "Opening proxy-via %s tunnel for id %s", a.workload, id)
 			} else {
-				dlog.Debugf(c, "Translating proxy-via %s to %s", destAddr, a.destinationIP)
+				clog.Debugf(c, "Translating proxy-via %s to %s", destAddr, a.destinationIP)
 				destAddr = a.destinationIP
 				id = tunnel.NewConnID(id.Protocol(), id.Source(), netip.AddrPortFrom(destAddr, id.DestinationPort()))
 			}
@@ -123,10 +123,10 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 		if tp == nil {
 			tp = s.getAgentClient(destAddr)
 			if tp != nil {
-				dlog.Debugf(c, "Opening traffic-agent tunnel for id %s using agent %s", id, tp)
+				clog.Debugf(c, "Opening traffic-agent tunnel for id %s using agent %s", id, tp)
 			} else {
 				tp = tunnel.ManagerProvider(s.managerClient())
-				dlog.Debugf(c, "Opening traffic-manager tunnel for id %s", id)
+				clog.Debugf(c, "Opening traffic-manager tunnel for id %s", id)
 			}
 		}
 		ct, err := tp.Tunnel(c)

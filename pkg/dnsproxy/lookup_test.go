@@ -8,7 +8,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 )
 
 func TestLookup(t *testing.T) {
@@ -55,7 +55,7 @@ func TestLookup(t *testing.T) {
 			if tt.qType == dns.TypeSRV && runtime.GOOS == "darwin" {
 				t.Skip("SRV sporadically fails to parse reply on darwin")
 			}
-			ctx := dlog.NewTestContext(t, false)
+			ctx := testutil.NewContext(t, false)
 			got, _, err := Lookup(ctx, tt.qType, tt.qName, "")
 			require.NoError(t, err)
 			require.Greater(t, len(got), 0)

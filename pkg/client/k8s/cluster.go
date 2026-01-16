@@ -22,7 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -84,7 +84,7 @@ func (kc *Cluster) check(c context.Context) error {
 		return fmt.Errorf("initial cluster check failed: %w", client.RunError(err))
 	}
 	// Validate that the kubernetes server version is supported
-	dlog.Infof(c, "Server version %s", info.GitVersion)
+	clog.Infof(c, "Server version %s", info.GitVersion)
 	gitVer, err := semver.Parse(strings.TrimPrefix(info.GitVersion, "v"))
 	if err != nil {
 		return fmt.Errorf("error converting version %s to semver: %s", info.GitVersion, err)
@@ -100,14 +100,14 @@ func (kc *Cluster) check(c context.Context) error {
 }
 
 func (kc *Cluster) CheckTrafficManagerService(ctx context.Context, namespace string) error {
-	dlog.Debug(ctx, "checking that traffic-manager exists")
+	clog.Debug(ctx, "checking that traffic-manager exists")
 	coreV1 := k8sapi.GetK8sInterface(kc).CoreV1()
 	if _, err := coreV1.Services(namespace).Get(ctx, agentconfig.ManagerAppName, meta.GetOptions{}); err != nil {
 		msg := fmt.Sprintf("unable to get service %s in %s: %v", agentconfig.ManagerAppName, namespace, err)
 		se := &k8serrors.StatusError{}
 		if errors.As(err, &se) {
 			if se.Status().Code == http.StatusNotFound {
-				dlog.Error(ctx, msg)
+				clog.Error(ctx, msg)
 				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
 					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in."
 			}
@@ -136,8 +136,8 @@ func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
 		return nil, err
 	}
 
-	dlog.Infof(ret, "Context: %s", ret.KubeContext)
-	dlog.Infof(ret, "Server: %s", ret.Server)
+	clog.Infof(ret, "Context: %s", ret.KubeContext)
+	clog.Infof(ret, "Server: %s", ret.Server)
 
 	if len(namespaces) == 1 && namespaces[0] == "all" {
 		namespaces = nil
@@ -147,13 +147,13 @@ func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
 	}
 	if len(namespaces) == 0 {
 		if k8sapi.CanWatchNamespaces(ret) {
-			dlog.Infof(ret, "Will watch all namespaces")
+			clog.Infof(ret, "Will watch all namespaces")
 			ret.StartNamespaceWatcher()
 		} else {
-			dlog.Warnf(ret, "Unable to watch all namespaces")
+			clog.Warnf(ret, "Unable to watch all namespaces")
 		}
 	} else {
-		dlog.Infof(ret, "Will use mapped namespaces %s", namespaces)
+		clog.Infof(ret, "Will use mapped namespaces %s", namespaces)
 		ret.SetMappedNamespaces(namespaces)
 	}
 	if GetManagerNamespace(ret) == "" {
@@ -163,7 +163,7 @@ func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
 		}
 		cfg.Cluster().DefaultManagerNamespace = tns
 	}
-	dlog.Infof(ret, "Will look for traffic manager in namespace %s", GetManagerNamespace(ret))
+	clog.Infof(ret, "Will look for traffic manager in namespace %s", GetManagerNamespace(ret))
 	return ret, nil
 }
 
@@ -315,7 +315,7 @@ func (kc *Cluster) StartNamespaceWatcher() {
 		for kc.Err() == nil {
 			w, err := api.Namespaces().Watch(kc, meta.ListOptions{})
 			if err != nil {
-				dlog.Errorf(kc, "unable to create service watcher: %v", err)
+				clog.Errorf(kc, "unable to create service watcher: %v", err)
 				return
 			}
 			kc.namespacesEventHandler(w.ResultChan(), nsSynced)
@@ -416,7 +416,7 @@ func (kc *Cluster) refreshNamespaces() {
 	if maps.Equal(namespaces, kc.currentMappedNamespaces) {
 		kc.nsLock.Unlock()
 	} else {
-		dlog.Debugf(kc, "Namespaces changed: %v", namespaces)
+		clog.Debugf(kc, "Namespaces changed: %v", namespaces)
 		kc.currentMappedNamespaces = namespaces
 		nsListeners := slices.Clone(kc.namespaceEventHandlers)
 		kc.nsLock.Unlock()

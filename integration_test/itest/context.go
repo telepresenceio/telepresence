@@ -2,16 +2,18 @@ package itest
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/clog/handler"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
 
@@ -48,8 +50,7 @@ func GetProfile(ctx context.Context) Profile {
 type tContextKey struct{}
 
 func TestContext(t *testing.T, ossRoot, moduleRoot string) context.Context {
-	ctx := context.Background()
-	ctx = dlog.WithLogger(ctx, log.NewTestLogger(t, dlog.LogLevelDebug))
+	ctx := testutil.NewContext(t, false)
 	ctx = client.WithEnv(ctx, &client.Env{})
 	ctx = SetOSSRoot(ctx, ossRoot)
 	ctx = SetModuleRoot(ctx, moduleRoot)
@@ -58,7 +59,10 @@ func TestContext(t *testing.T, ossRoot, moduleRoot string) context.Context {
 }
 
 func WithT(ctx context.Context, t *testing.T) context.Context {
-	ctx, cancel := context.WithCancel(dlog.WithLogger(context.WithValue(ctx, tContextKey{}, t), log.NewTestLogger(t, dlog.LogLevelDebug)))
+	ctx = context.WithValue(ctx, tContextKey{}, t)
+	ctx, cancel := context.WithCancel(
+		clog.WithLogger(ctx,
+			slog.New(handler.NewText(handler.Output(t.Output()), handler.EnabledLevel(slog.LevelDebug)))))
 	t.Cleanup(cancel)
 	return ctx
 }
@@ -136,14 +140,6 @@ func GetWorkingDir(ctx context.Context) string {
 
 type envContextKey struct{}
 
-type envCtxLookuper struct {
-	context.Context
-}
-
-func (e envCtxLookuper) Lookup(key string) (string, bool) {
-	return LookupEnv(e, key)
-}
-
 // WithEnv adds environment variables to be used by the Command function.
 func WithEnv(ctx context.Context, env dos.MapEnv) context.Context {
 	if prevEnv := getEnv(ctx); prevEnv != nil {
@@ -153,11 +149,11 @@ func WithEnv(ctx context.Context, env dos.MapEnv) context.Context {
 		env = merged
 	}
 	ctx = context.WithValue(ctx, envContextKey{}, env)
-	evx, err := client.LoadEnvWith((&envCtxLookuper{ctx}).Lookup)
+	evx, err := client.LoadEnvWith(env)
 	if err != nil {
 		getT(ctx).Fatal(err)
 	}
-	return client.WithEnv(ctx, evx)
+	return client.WithEnv(ctx, &evx)
 }
 
 // WithoutEnv prevents environment variables to be used by the Command function.
@@ -171,11 +167,11 @@ func WithoutEnv(ctx context.Context, keysToRemove []string) context.Context {
 		delete(env, key)
 	}
 	ctx = context.WithValue(ctx, envContextKey{}, env)
-	evx, err := client.LoadEnvWith((&envCtxLookuper{ctx}).Lookup)
+	evx, err := client.LoadEnvWith(env)
 	if err != nil {
 		getT(ctx).Fatal(err)
 	}
-	return client.WithEnv(ctx, evx)
+	return client.WithEnv(ctx, &evx)
 }
 
 type userContextkey struct{}

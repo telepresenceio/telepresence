@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -57,7 +57,7 @@ func (ig *ingest) podAccess(rd daemon.DaemonClient) *podAccess {
 		wg:               &ig.wg,
 	}
 	if err := pa.ensureAccess(ig.ctx, rd); err != nil {
-		dlog.Error(ig.ctx, err)
+		clog.Error(ig.ctx, err)
 	}
 	return pa
 }
@@ -170,7 +170,7 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 		ctx, cancel := context.WithCancel(s)
 		cancelIngest := func() {
 			s.currentIngests.Delete(ik)
-			dlog.Debugf(ctx, "Cancelling ingest %s", ik)
+			clog.Debugf(ctx, "Cancelling ingest %s", ik)
 			cancel()
 			s.ingestTracker.cancelContainer(ik.workload, ik.container)
 		}

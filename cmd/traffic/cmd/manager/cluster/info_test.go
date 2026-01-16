@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,6 +13,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -49,7 +49,7 @@ func TestNewInfo_GetInstallID(t *testing.T) {
 	}
 
 	t.Run("from default namespace", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := testutil.NewContext(t, false)
 
 		cs := fakeClientSet(t, append(namespaces,
 			&v1.Namespace{
@@ -70,7 +70,7 @@ func TestNewInfo_GetInstallID(t *testing.T) {
 	})
 
 	t.Run("from non-default namespace", func(t *testing.T) {
-		ctx := context.Background()
+		ctx := testutil.NewContext(t, false)
 
 		cs := fakeClientSet(t, namespaces...)
 

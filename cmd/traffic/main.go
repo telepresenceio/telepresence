@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agentinit"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
@@ -37,9 +37,9 @@ func main() {
 
 	if cmd, cmdOK := cmds[name]; cmdOK {
 		ctx := context.Background()
-		ctx = log.MakeBaseLogger(ctx, os.Getenv("LOG_LEVEL"))
+		ctx = log.MakeBaseLogger(ctx, os.Stdout, os.Getenv("LOG_LEVEL"))
 		if err := cmd(ctx, args...); err != nil {
-			dlog.Errorf(ctx, "quit: %v", err)
+			clog.Errorf(ctx, "quit: %v", err)
 			os.Exit(1)
 		}
 	} else {

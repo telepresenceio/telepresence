@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos/aferofs"
 )
@@ -29,7 +29,7 @@ func TestWithFS(t *testing.T) {
 	require.NoError(t, afero.WriteFile(appFS, "/a/b/c.txt", cData, 0o644))
 	require.NoError(t, afero.WriteFile(appFS, "/a/d.txt", dData, 0o644))
 
-	ctx := dos.WithFS(dlog.NewTestContext(t, false), dos.WorkingDirWrapper(aferofs.Wrap(appFS)))
+	ctx := dos.WithFS(testutil.NewContext(t, false), dos.WorkingDirWrapper(aferofs.Wrap(appFS)))
 
 	require.NoError(t, dos.Chdir(ctx, "/a/b"))
 	data, err := dos.ReadFile(ctx, "c.txt")
@@ -52,9 +52,8 @@ func TestFileNil(t *testing.T) {
 		return os.Open(name)
 	}
 
-	dlog.NewTestContext(t, false)
-	uuid, err := uuid.NewUUID()
-	badFile := filepath.Join(fmt.Sprintf("%c%s", filepath.Separator, uuid), "does", "not", "exist")
+	id, err := uuid.NewUUID()
+	badFile := filepath.Join(fmt.Sprintf("%c%s", filepath.Separator, id), "does", "not", "exist")
 	require.NoError(t, err)
 	f, err := neverDoThis(badFile)
 	assert.Error(t, err)

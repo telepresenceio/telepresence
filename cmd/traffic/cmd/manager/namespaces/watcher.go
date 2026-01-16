@@ -17,7 +17,7 @@ import (
 	listersCore "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
@@ -85,7 +85,7 @@ func (h *namesspacesHandle) listen(ctx context.Context) error {
 				}
 			default:
 				if err := h.updateSelection(); err != nil {
-					dlog.Error(ctx, err)
+					clog.Error(ctx, err)
 				}
 			}
 		}
@@ -97,13 +97,13 @@ func (h *namesspacesHandle) newWatcher(ctx context.Context) error {
 	nsApi := informerFactory.Core().V1().Namespaces()
 	ix := nsApi.Informer()
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "Watcher for namespaces: %v", err)
+		clog.Errorf(ctx, "Watcher for namespaces: %v", err)
 	})
 
 	h.lister = nsApi.Lister()
 	kickTheBucket := time.AfterFunc(time.Duration(math.MaxInt64), func() {
 		if err := h.updateSelection(); err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	})
 	_, err := ix.AddEventHandler(
@@ -173,7 +173,7 @@ func (h *namesspacesHandle) computeNamesStatic(ctx context.Context) error {
 	// can of this, by instead using the names we know of.
 	names := h.selector.StaticNames()
 	if len(names) > 0 {
-		dlog.Debugf(ctx, "Using fixed set of namespaces %v", names)
+		clog.Debugf(ctx, "Using fixed set of namespaces %v", names)
 		h.set(names)
 		return nil
 	}
@@ -185,16 +185,16 @@ func (h *namesspacesHandle) computeNames(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	dlog.Debugf(ctx, "Selecting namespaces based on %s", sel)
+	clog.Debugf(ctx, "Selecting namespaces based on %s", sel)
 	nl, err := k8sapi.GetK8sInterface(ctx).CoreV1().Namespaces().List(ctx, metav1.ListOptions{LabelSelector: sel.String()})
 	if err != nil {
 		if k8serrors.IsForbidden(err) {
-			dlog.Debug(ctx, "Listing namespaces is not permitted")
+			clog.Debug(ctx, "Listing namespaces is not permitted")
 			staticErr := h.computeNamesStatic(ctx)
 			if staticErr == nil {
 				return false, nil
 			}
-			dlog.Error(ctx, staticErr)
+			clog.Error(ctx, staticErr)
 		}
 		return false, fmt.Errorf("error listing namespaces: %v", err)
 	}
@@ -205,10 +205,10 @@ func (h *namesspacesHandle) computeNames(ctx context.Context) (bool, error) {
 		names[i] = n.Name
 	}
 	if len(names) == 0 {
-		dlog.Warnf(ctx, "no namespaces were found that matches the namespace selector %v", sel)
+		clog.Warnf(ctx, "no namespaces were found that matches the namespace selector %v", sel)
 	} else {
 		sort.Strings(names)
-		dlog.Debugf(ctx, "Using dynamic set of namespaces %v", names)
+		clog.Debugf(ctx, "Using dynamic set of namespaces %v", names)
 	}
 	h.set(names)
 	return true, nil

@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
@@ -86,7 +86,7 @@ func (s *mountsSuite) Test_IgnoredMounts() {
 			for _, notDesired := range tt.notExpected {
 				st, err := os.Stat(filepath.Join(mountPoint, notDesired))
 				if !s.Errorf(err, "mount of %s should not be successful", notDesired) {
-					dlog.Infof(ctx, "stat gave us %s %t %s", st.Name(), st.IsDir(), st.Mode())
+					clog.Infof(ctx, "stat gave us %s %t %s", st.Name(), st.IsDir(), st.Mode())
 				}
 			}
 		})

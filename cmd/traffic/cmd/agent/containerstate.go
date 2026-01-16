@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -21,9 +21,9 @@ type containerState struct {
 	env        map[string]string
 }
 
-func (c *containerState) AddPortHandler(ctx context.Context, pp types.PortAndProto, it agentconfig.InterceptTarget) {
-	ph := c.newPortHandler(ctx, pp, it)
-	dgroup.ParentGroup(ctx).Go(fmt.Sprintf("forward-%s-%s:%d", c.container.Name, it.Protocol(), it.ContainerPort()), func(ctx context.Context) error {
+func (c *containerState) AddPortHandler(g log.Group, pp types.PortAndProto, it agentconfig.InterceptTarget) {
+	ph := c.newPortHandler(g, pp, it)
+	g.Go(fmt.Sprintf("forward-%s-%s:%d", c.container.Name, it.Protocol(), it.ContainerPort()), func(ctx context.Context) error {
 		return ph.Serve(tunnel.WithPool(ctx, tunnel.NewPool()), nil)
 	})
 	c.AddInterceptState(c.NewInterceptState(ph, it, c.container.Name))
@@ -77,7 +77,7 @@ func (c *containerState) HandleContainer(ctx context.Context, iis []*manager.Int
 		if ii.Disposition == manager.InterceptDispositionType_WAITING {
 			spec := ii.Spec
 			if c.ReplaceContainer() && c.Name() == spec.ContainerName && spec.ContainerPort == 0 {
-				dlog.Debugf(ctx, "container %s handling replace %s", c.Name(), spec.Name)
+				clog.Debugf(ctx, "container %s handling replace %s", c.Name(), spec.Name)
 				rs = append(rs, &manager.ReviewInterceptRequest{
 					Id:          ii.Id,
 					Disposition: manager.InterceptDispositionType_ACTIVE,

@@ -9,7 +9,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
@@ -75,7 +75,7 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		}
 		cfg, err := env.GeneratorConfig(img)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			return
 		}
 		var sc *agentconfig.Sidecar
@@ -86,29 +86,29 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		if sc == nil {
 			action = "Regenerating"
 		}
-		dlog.Debugf(ctx, "%s config entry for %s", action, wl)
+		clog.Debugf(ctx, "%s config entry for %s", action, wl)
 
 		sc, err = cfg.Generate(ctx, wl, sc)
 		if err != nil {
 			if strings.Contains(err.Error(), "unable to find") {
 				c.Delete(wl.GetName(), wl.GetNamespace())
 			} else {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 			return
 		}
 
 		c.Store(sc)
-		dlog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
+		clog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
 		err = c.EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	case "false", "disabled":
 		c.Delete(wl.GetName(), wl.GetNamespace())
 		err := c.EvictPodsWithAgentConfig(ctx, wl)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}
 }

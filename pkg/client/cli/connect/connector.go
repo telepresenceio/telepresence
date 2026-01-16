@@ -23,7 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/common"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	daemonRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -44,8 +44,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-var ErrNoUserDaemon = errors.New("telepresence user daemon is not running")
-
 //nolint:gochecknoglobals // extension point
 var QuitDaemonFuncs = []func(context.Context){
 	quitHostConnector, quitDockerDaemons,
@@ -61,13 +59,13 @@ func maybeComposeDown(ctx context.Context, info *daemon.Info) {
 	defer func() {
 		err := os.Remove(info.ComposeFile)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}()
 	progress.Stop(ctx)
 	err := proc.StdCommand(ctx, docker.Exe, "compose", "--file", info.ComposeFile, "down", "--remove-orphans", "--volumes").Run()
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 	}
 	progress.Start(ctx, "Quitting")
 }
@@ -83,7 +81,7 @@ func findHostConnectorInfo(ctx context.Context) (*daemon.Info, error) {
 			return info, nil
 		}
 	}
-	return nil, fs.ErrNotExist
+	return nil, fmt.Errorf("unable to find host connector info: %w", fs.ErrNotExist)
 }
 
 func quitHostConnector(ctx context.Context) {
@@ -110,7 +108,7 @@ func quitHostConnector(ctx context.Context) {
 		// the fact that the user daemon might have been killed ungracefully.
 		if conn, err := daemon.DialRootDaemon(ctx, false); err == nil {
 			if _, err = daemonRpc.NewDaemonClient(conn).Quit(ctx, &emptypb.Empty{}); err != nil {
-				dlog.Errorf(ctx, "error when quitting root daemon: %v", err)
+				clog.Errorf(ctx, "error when quitting root daemon: %v", err)
 			}
 			_ = conn.Close()
 		}
@@ -122,7 +120,7 @@ func quitDockerDaemons(ctx context.Context) {
 	il := daemon.NewUserInfoLoader(ctx)
 	infos, err := il.LoadInfos()
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return
 	}
 	for _, info := range infos {
@@ -158,7 +156,7 @@ func EnsureUserDaemon(ctx context.Context, required bool) (rc context.Context, e
 			// The RootDaemon must be started if the UserDaemon was started
 			err = EnsureRootDaemonRunning(ctx)
 		}
-		if err != nil && !(errors.Is(err, ErrNoUserDaemon) && !required) {
+		if err != nil && !(errors.Is(err, daemon.ErrNoUserDaemon) && !required) {
 			err = progress.MaybeWriteError(ctx, err)
 		} else if launched {
 			progress.PrintDone(ctx, "Launched Daemon")
@@ -421,7 +419,7 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 		// No use having multiple daemons when running as root.
 		args = append(args, "--embed-network")
 	}
-	dlog.Debugf(ctx, "Creating daemon info file %s (runs on host, or both CLI and daemon runs in container)", daemonID.Name)
+	clog.Debugf(ctx, "Creating daemon info file %s (runs on host, or both CLI and daemon runs in container)", daemonID.Name)
 	fp, err := ioutil.FreePortsTCP(1)
 	if err != nil {
 		return ctx, errcat.NoDaemonLogs.New(err)
@@ -445,7 +443,7 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 	defer func() {
 		if err != nil {
 			file := daemonID.InfoFileName()
-			dlog.Debugf(ctx, "Deleting daemon info %s due to launch error: %v", file, err)
+			clog.Debugf(ctx, "Deleting daemon info %s due to launch error: %v", file, err)
 			_ = il.DeleteInfo(file)
 		}
 	}()
@@ -481,7 +479,7 @@ func findOrLaunchConnectorDaemon(ctx context.Context, daemonID *daemon.Identifie
 		return ctx, false, errcat.NoDaemonLogs.New(err)
 	}
 	if !required {
-		return ctx, false, ErrNoUserDaemon
+		return ctx, false, daemon.ErrNoUserDaemon
 	}
 	ctx = progress.WithEventId(ctx, daemonID.Name)
 	progress.Working(ctx, "Launching Daemon")
@@ -567,7 +565,7 @@ func warnMngrVersion(ctx context.Context, ci *connector.ConnectInfo) error {
 			"The Traffic Manager version (%s) is more than %v minor versions diff from client version (%s), please consider upgrading.",
 			mv.Version, maxDiff, client.Version())
 	} else if diff > 0 {
-		dlog.Debugf(ctx, "Diff between client and manager minor versions: %d", diff)
+		clog.Debugf(ctx, "Diff between client and manager minor versions: %d", diff)
 	}
 
 	cv := ci.Version
@@ -584,7 +582,7 @@ func warnMngrVersion(ctx context.Context, ci *connector.ConnectInfo) error {
 func connectResult(ctx context.Context, ci *connector.ConnectInfo, withProgress bool) *daemon.Session {
 	err := warnMngrVersion(ctx, ci)
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 	}
 	if withProgress {
 		progress.PrintDonef(ctx, "Connected to context %s, namespace %s (%s)", ci.ClusterContext, ci.Namespace, ci.ClusterServer)
@@ -612,6 +610,11 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 	if request.Implicit {
 		// implicit calls use the current Status instead of passing flags and mapped namespaces.
 		ci, err = userD.Status(ctx, &emptypb.Empty{})
+		if err == nil && ci.ManagerVersion == nil {
+			// If the manager version is nil, the user daemon is not connected. This is the same
+			// as it being unavailable when the request is implicit.
+			err = status.Errorf(codes.Unavailable, "user daemon is not connected")
+		}
 		if err == nil {
 			return connectResult(ctx, ci, false), nil
 		}
@@ -639,7 +642,7 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 	if ci, err = userD.Connect(ctx, request.ConnectRequest); err != nil {
 		if !userD.Containerized() {
 			file := userD.DaemonID().InfoFileName()
-			dlog.Debugf(ctx, "Deleting daemon info %s due to connect error: %v", file, err)
+			clog.Debugf(ctx, "Deleting daemon info %s due to connect error: %v", file, err)
 			_ = daemon.NewUserInfoLoader(ctx).DeleteInfo(file)
 		}
 		return nil, tpGrpc.FromGRPC(err)
@@ -689,6 +692,6 @@ func maybeDeleteNetwork(ctx context.Context, info *daemon.Info) {
 		}
 	}
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 	}
 }

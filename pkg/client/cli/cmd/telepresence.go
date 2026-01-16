@@ -8,7 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
@@ -214,10 +214,10 @@ func argsCheck(f cobra.PositionalArgs) cobra.PositionalArgs {
 
 func autocompleteContext(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	ctx := cmd.Context()
-	dlog.Debugf(ctx, "context completion: %q", toComplete)
+	clog.Debugf(ctx, "context completion: %q", toComplete)
 	cfg, err := daemon.GetKubeStartingConfig(cmd)
 	if err != nil {
-		dlog.Errorf(ctx, "GetKubeStartingConfig: %v", err)
+		clog.Errorf(ctx, "GetKubeStartingConfig: %v", err)
 		return nil, cobra.ShellCompDirectiveError
 	}
 	cxl := cfg.Contexts

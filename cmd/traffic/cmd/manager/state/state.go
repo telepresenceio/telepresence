@@ -3,6 +3,7 @@ package state
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"os"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/puzpuzpuz/xsync/v4"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -20,8 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
@@ -56,7 +57,7 @@ func (is *Intercept) terminate(ctx context.Context) {
 	for i := len(is.finalizers) - 1; i >= 0; i-- {
 		f := is.finalizers[i]
 		if err := f(ctx, is.InterceptInfo); err != nil {
-			dlog.Errorf(ctx, "finalizer for intercept %s failed: %v", is.Id, err)
+			clog.Errorf(ctx, "finalizer for intercept %s failed: %v", is.Id, err)
 		}
 	}
 }
@@ -101,15 +102,18 @@ func agentsEqual(a, b *AgentSession) bool {
 	return proto.Equal(a.AgentInfo, b.AgentInfo)
 }
 
-func NewState(ctx context.Context, g *dgroup.Group) *State {
-	loglevel := os.Getenv("LOG_LEVEL")
+func NewState(ctx context.Context, g log.Group) *State {
+	loglevel, err := clog.ParseLevel(os.Getenv("LOG_LEVEL"))
+	if err != nil {
+		loglevel = slog.LevelInfo
+	}
 	s := &State{
 		backgroundCtx:    ctx,
 		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
 		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](xsync.WithGrowOnly()),
 		workloadWatchers: xsync.NewMap[string, Watcher](xsync.WithGrowOnly()),
-		timedLogLevel:    log.NewTimedLevel(loglevel, log.SetLevel),
+		timedLogLevel:    log.NewTimedLevel(loglevel, clog.SetTreeLevel),
 		llSubs:           newLoglevelSubscribers(),
 	}
 	g.Go("namespace-GC", s.pruneSessionGCLoop)
@@ -136,7 +140,7 @@ func (s *State) runSessionGCLoop(ctx context.Context) error {
 			if diff > tickInterval {
 				// It's been more than tickInterval*2 since the last tick, so the computer must have been sleeping. Let's adjust
 				// all marks with the delay.
-				dlog.Debugf(ctx, "Computer slept %s, adjusting session marks", diff)
+				clog.Debugf(ctx, "Computer slept %s, adjusting session marks", diff)
 				s.clients.Range(func(id tunnel.SessionID, cs *ClientSession) bool {
 					cs.adjustMark(diff)
 					return true
@@ -284,7 +288,7 @@ func (s *State) RemoveSession(ctx context.Context, id tunnel.SessionID) {
 // removeAgentSession removes an AgentSession from the set of present session IDs.
 func (s *State) removeAgentSession(ctx context.Context, id tunnel.SessionID) {
 	if as, loaded := s.agents.LoadAndDelete(id); loaded {
-		dlog.Debugf(ctx, "AgentSession %s removed. Explicit removal", id)
+		clog.Debugf(ctx, "AgentSession %s removed. Explicit removal", id)
 		mutator.GetMap(s.backgroundCtx).Inactivate(types.UID(as.PodUid))
 		s.consolidateAgentSessionIntercepts(ctx, as)
 	}
@@ -292,7 +296,7 @@ func (s *State) removeAgentSession(ctx context.Context, id tunnel.SessionID) {
 
 // removeClientSession removes an AgentSession from the set of present session IDs.
 func (s *State) removeClientSession(ctx context.Context, cs *ClientSession) {
-	dlog.Debugf(ctx, "ClientSession %s removed. Explicit removal", cs.sessionID())
+	clog.Debugf(ctx, "ClientSession %s removed. Explicit removal", cs.sessionID())
 
 	// kill the session
 	cs.cancel()
@@ -304,7 +308,7 @@ func (s *State) removeClientSession(ctx context.Context, cs *ClientSession) {
 }
 
 func (s *State) consolidateAgentSessionIntercepts(ctx context.Context, agent *AgentSession) {
-	dlog.Debugf(ctx, "Consolidating intercepts after removal of agent %s(%s)", agent.PodName, agent.PodIp)
+	clog.Debugf(ctx, "Consolidating intercepts after removal of agent %s(%s)", agent.PodName, agent.PodIp)
 	s.intercepts.Range(func(interceptID string, intercept *Intercept) bool {
 		if intercept.Disposition == rpc.InterceptDispositionType_REMOVED || agent.PodIp != intercept.PodIp {
 			// Not of interest. Continue iteration.
@@ -313,7 +317,7 @@ func (s *State) consolidateAgentSessionIntercepts(ctx context.Context, agent *Ag
 
 		if errCode, errMsg := s.checkAgentsForIntercept(intercept); errCode != rpc.InterceptDispositionType_UNSPECIFIED {
 			// No agents matching this intercept are available, so the intercept is now dormant or in error.
-			dlog.Debugf(ctx, "Intercept %q no longer has available agents. Setting its disposition to %s", interceptID, errCode)
+			clog.Debugf(ctx, "Intercept %q no longer has available agents. Setting its disposition to %s", interceptID, errCode)
 			s.UpdateIntercept(interceptID, func(intercept *Intercept) {
 				intercept.PodIp = ""
 				intercept.PodName = ""
@@ -322,7 +326,7 @@ func (s *State) consolidateAgentSessionIntercepts(ctx context.Context, agent *Ag
 			})
 		} else if agent.PodIp == intercept.PodIp {
 			// The agent is about to die, but apparently more agents are present. Let some other agent pick it up then.
-			dlog.Debugf(ctx, "Intercept %q lost its agent pod %s(%s). Setting its disposition to WAITING", interceptID, agent.PodName, agent.PodIp)
+			clog.Debugf(ctx, "Intercept %q lost its agent pod %s(%s). Setting its disposition to WAITING", interceptID, agent.PodName, agent.PodIp)
 			s.UpdateIntercept(interceptID, func(intercept *Intercept) {
 				intercept.PodIp = ""
 				intercept.PodName = ""
@@ -687,13 +691,18 @@ func (s *State) clientTunnel(ctx context.Context, client *ClientSession, stream 
 // SetTempLogLevel sets the temporary log-level for the traffic-manager and all agents and,
 // if a duration is given, it also starts a timer that will reset the log-level once it
 // fires.
-func (s *State) SetTempLogLevel(ctx context.Context, logLevelRequest *rpc.LogLevelRequest) {
+func (s *State) SetTempLogLevel(ctx context.Context, logLevelRequest *rpc.LogLevelRequest) error {
+	lvl, err := clog.ParseLevel(logLevelRequest.LogLevel)
+	if err != nil {
+		return err
+	}
 	duration := time.Duration(0)
 	if gd := logLevelRequest.Duration; gd != nil {
 		duration = gd.AsDuration()
 	}
-	s.timedLogLevel.Set(ctx, logLevelRequest.LogLevel, duration)
+	s.timedLogLevel.Set(ctx, lvl, duration)
 	s.llSubs.notify(ctx, logLevelRequest)
+	return nil
 }
 
 // InitialTempLogLevel returns the temporary log-level if it exists, along with the remaining
@@ -701,18 +710,18 @@ func (s *State) SetTempLogLevel(ctx context.Context, logLevelRequest *rpc.LogLev
 // level is requested.
 func (s *State) InitialTempLogLevel() *rpc.LogLevelRequest {
 	level, duration := s.timedLogLevel.Get()
-	if level == "" {
+	if level == log.UnsetLevel {
 		return nil
 	}
 	return &rpc.LogLevelRequest{
-		LogLevel: level,
+		LogLevel: level.String(),
 		Duration: durationpb.New(duration),
 	}
 }
 
 // WaitForTempLogLevel waits for a new temporary log-level request. It returns the values
 // of the last request that was made.
-func (s *State) WaitForTempLogLevel(stream rpc.Manager_WatchLogLevelServer) error {
+func (s *State) WaitForTempLogLevel(stream grpc.ServerStreamingServer[rpc.LogLevelRequest]) error {
 	return s.llSubs.subscriberLoop(stream.Context(), stream)
 }
 

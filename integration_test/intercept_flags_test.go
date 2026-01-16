@@ -11,7 +11,7 @@ import (
 
 	"github.com/go-json-experiment/json"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -144,13 +144,13 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 				s.Eventually(func() bool {
 					out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", iputil.JoinHostPort(s.serviceName, tt.port))
 					if err != nil {
-						dlog.Error(ctx, err)
+						clog.Error(ctx, err)
 						return false
 					}
 					if !expectedOutput.MatchString(out) {
 						return true
 					}
-					dlog.Info(ctx, out)
+					clog.Info(ctx, out)
 					return false
 				}, 1*time.Minute, 6*time.Second)
 			}()
@@ -164,7 +164,7 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 			require.NotNil(ii.Mount)
 			mounts := ii.Mount.Mounts
 			require.True(len(mounts) > 2)
-			dlog.Infof(ctx, "Mounts = %v", mounts)
+			clog.Infof(ctx, "Mounts = %v", mounts)
 			require.Eventually(func() bool {
 				for mount := range mounts {
 					st, err := os.Stat(filepath.Join(ii.Mount.LocalDir, mount))
@@ -178,13 +178,13 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 			require.Eventually(func() bool {
 				out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", iputil.JoinHostPort(s.serviceName, tt.port))
 				if err != nil {
-					dlog.Error(ctx, err)
+					clog.Error(ctx, err)
 					return false
 				}
 				if expectedOutput.MatchString(out) {
 					return true
 				}
-				dlog.Info(ctx, out)
+				clog.Info(ctx, out)
 				return false
 			}, 1*time.Minute, 6*time.Second)
 		})

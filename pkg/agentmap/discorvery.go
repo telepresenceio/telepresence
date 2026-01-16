@@ -15,7 +15,7 @@ import (
 	apps "k8s.io/client-go/informers/apps/v1"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/informers/externalversions/rollouts/v1alpha1"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
@@ -29,7 +29,7 @@ type WorkloadOwnerNotFoundError struct {
 }
 
 func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object, supportedWorkloadKinds k8sapi.Kinds) (k8sapi.Workload, error) {
-	dlog.Tracef(ctx, "FindOwnerWorkload(%s,%s,%s)", obj.GetName(), obj.GetNamespace(), obj.GetKind())
+	clog.Tracef(ctx, "FindOwnerWorkload(%s,%s,%s)", obj.GetName(), obj.GetNamespace(), obj.GetKind())
 	lbs := obj.GetLabels()
 	if wlName, ok := lbs[agentconfig.WorkloadNameLabel]; ok {
 		kind, ok := lbs[agentconfig.WorkloadKindLabel]
@@ -73,10 +73,10 @@ func FindOwnerWorkload(ctx context.Context, obj k8sapi.Object, supportedWorkload
 }
 
 func GetWorkload(ctx context.Context, name, namespace string, workloadKind k8sapi.Kind) (obj k8sapi.Workload, err error) {
-	dlog.Tracef(ctx, "GetWorkload(%s,%s,%s)", name, namespace, workloadKind)
+	clog.Tracef(ctx, "GetWorkload(%s,%s,%s)", name, namespace, workloadKind)
 	i := informer.GetFactory(ctx, namespace)
 	if i == nil {
-		dlog.Debugf(ctx, "fetching %s %s.%s using direct API call", workloadKind, name, namespace)
+		clog.Debugf(ctx, "fetching %s %s.%s using direct API call", workloadKind, name, namespace)
 		return k8sapi.GetWorkload(ctx, name, namespace, workloadKind)
 	}
 	ai, ri := i.GetK8sInformerFactory().Apps().V1(), i.GetArgoRolloutsInformerFactory().Argoproj().V1alpha1().Rollouts()
@@ -152,7 +152,7 @@ func FindServicesForPod(ctx context.Context, pod *core.PodTemplateSpec, svcName 
 			svc, err = f.Core().V1().Services().Lister().Services(pod.Namespace).Get(svcName)
 		} else {
 			// This shouldn't happen really.
-			dlog.Debugf(ctx, "fetching service %s.%s using direct API call", svcName, pod.Namespace)
+			clog.Debugf(ctx, "fetching service %s.%s using direct API call", svcName, pod.Namespace)
 			svc, err = k8sapi.GetK8sInterface(ctx).CoreV1().Services(pod.Namespace).Get(ctx, svcName, meta.GetOptions{})
 		}
 		if err != nil {
@@ -211,7 +211,7 @@ func findServicesSelecting(ctx context.Context, namespace string, lbs labels.Lab
 		}
 	} else {
 		// This shouldn't happen really.
-		dlog.Tracef(ctx, "Fetching services in %s using direct API call", namespace)
+		clog.Tracef(ctx, "Fetching services in %s using direct API call", namespace)
 		l, err := k8sapi.GetK8sInterface(ctx).CoreV1().Services(namespace).List(ctx, meta.ListOptions{})
 		if err != nil {
 			return nil, err
@@ -230,7 +230,7 @@ func findServicesSelecting(ctx context.Context, namespace string, lbs labels.Lab
 	sort.Slice(ms, func(i, j int) bool {
 		return ms[i].GetName() < ms[j].GetName()
 	})
-	dlog.Tracef(ctx, "Scanned %d services in namespace %s and found that %s selects labels %v", scanned, namespace, objectsStringer(ms), lbs)
+	clog.Tracef(ctx, "Scanned %d services in namespace %s and found that %s selects labels %v", scanned, namespace, objectsStringer(ms), lbs)
 	return ms, nil
 }
 

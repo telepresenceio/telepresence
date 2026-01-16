@@ -19,7 +19,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -189,21 +189,31 @@ func (il *InfoLoader[T]) DialDaemon(ctx context.Context, waitForConnect bool) (c
 			return err
 		}, backoff.WithContext(backoff.NewConstantBackOff(200*time.Millisecond), ctx))
 	} else {
-		ctx, cancel = context.WithTimeout(ctx, 200*time.Millisecond)
+		ctx, cancel = context.WithTimeout(ctx, 500*time.Millisecond)
 		info, err = il.LoadInfo(InfoFileName)
 	}
 	defer cancel()
 	if err != nil {
-		return nil, fs.ErrNotExist
+		return nil, err
 	}
+
+	var daemonName string
+	var daemonPort uint16
 	if ii, ok := any(info).(*Info); ok {
-		conn, err = dialDaemon(ctx, "user", ii.DaemonPort)
+		daemonName = "user"
+		daemonPort = ii.DaemonPort
 	} else {
-		conn, err = dialDaemon(ctx, "root", (any(info).(*RootInfo)).DaemonPort)
+		daemonName = "root"
+		daemonPort = (any(info).(*RootInfo)).DaemonPort
 	}
+	conn, err = dialDaemon(ctx, daemonName, daemonPort)
 	if errors.Is(err, context.DeadlineExceeded) && !waitForConnect {
 		// A race may occur where the daemon is shutting down. We found the info file, but the daemon has since stopped responding.
-		err = fs.ErrNotExist
+		if daemonName == "user" {
+			err = ErrNoUserDaemon
+		} else {
+			err = ErrNoRootDaemon
+		}
 	}
 	return conn, err
 }
@@ -248,11 +258,11 @@ func (il *InfoLoader[T]) deleteIfStale(name string, fi fs.FileInfo) error {
 	age := time.Since(fi.ModTime())
 	if age > maxNoSignOfLife {
 		name = filepath.Join(il.dirName, name)
-		dlog.Debugf(il.ctx, "Deleting stale info %s with age = %s", name, age)
+		clog.Debugf(il.ctx, "Deleting stale info %s with age = %s", name, age)
 		if err := cache.DeleteFromUserCache(il.ctx, name); err != nil {
 			return err
 		}
-		return fs.ErrNotExist
+		return fmt.Errorf("%s: %w (file stale and removed)", name, fs.ErrNotExist)
 	}
 	return nil
 }
@@ -306,7 +316,12 @@ func (il *InfoLoader[T]) LoadMatchingInfo(match *regexp.Regexp) (*T, error) {
 	}
 	switch len(infos) {
 	case 0:
-		return nil, os.ErrNotExist
+		if match == nil {
+			err = fmt.Errorf("unable to find daemon info matching %s: %w", match, os.ErrNotExist)
+		} else {
+			err = fmt.Errorf("unable to find daemon info: %w", os.ErrNotExist)
+		}
+		return nil, err
 	case 1:
 		return infos[0], nil
 	default:
@@ -326,7 +341,7 @@ func (il *InfoLoader[T]) CancelWhenRmFromCache(cancel context.CancelFunc, filena
 		}
 		if !exists {
 			// spec removed from cache, shut down gracefully
-			dlog.Infof(ctx, "daemon file %s removed from cache, shutting down gracefully", filename)
+			clog.Infof(ctx, "daemon file %s removed from cache, shutting down gracefully", filename)
 			cancel()
 		}
 		return nil
@@ -348,14 +363,14 @@ func (il *InfoLoader[T]) KeepInfoAlive(file string) error {
 		if err := os.Chtimes(daemonFile, now, now); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				// File is removed, so stop trying to update its timestamps
-				dlog.Debugf(il.ctx, "Daemon info %s does not exist", daemonFile)
+				clog.Debugf(il.ctx, "Daemon info %s does not exist", daemonFile)
 				return nil
 			}
 			return fmt.Errorf("failed to update timestamp on %s: %w", daemonFile, err)
 		}
 		select {
 		case <-il.ctx.Done():
-			dlog.Debugf(il.ctx, "Deleting daemon info %s because context was cancelled", file)
+			clog.Debugf(il.ctx, "Deleting daemon info %s because context was cancelled", file)
 			_ = il.DeleteInfo(file)
 			return nil
 		case now = <-ticker.C:

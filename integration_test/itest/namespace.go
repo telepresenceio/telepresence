@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
@@ -198,7 +198,7 @@ func (s *nsPair) DeleteTemplate(ctx context.Context, path string, values any) {
 	yml, err := ReadTemplate(ctx, path, values)
 	require.NoError(getT(ctx), err)
 	if err = s.Kubectl(dos.WithStdin(ctx, bytes.NewReader(yml)), "delete", "-f", "-"); err != nil {
-		dlog.Errorf(ctx, "unable to delete %q", string(yml))
+		clog.Errorf(ctx, "unable to delete %q", string(yml))
 		getT(ctx).Fatal(err)
 	}
 }
@@ -207,7 +207,7 @@ func (s *nsPair) doWithTemplate(ctx context.Context, action, path string, values
 	yml, err := ReadTemplate(ctx, path, values)
 	require.NoError(getT(ctx), err)
 	if err = s.Kubectl(dos.WithStdin(ctx, bytes.NewReader(yml)), action, "-f", "-"); err != nil {
-		dlog.Errorf(ctx, "unable to %s %q", action, string(yml))
+		clog.Errorf(ctx, "unable to %s %q", action, string(yml))
 		getT(ctx).Fatal(err)
 	}
 }

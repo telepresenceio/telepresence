@@ -10,23 +10,24 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
 
-	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
+	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -59,7 +60,7 @@ type service struct {
 
 func newService(cfg client.Config, managed bool) *service {
 	s := &service{
-		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon.String(), log.SetLevel),
+		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon, clog.SetTreeLevel),
 		sessionRunning: make(chan struct{}),
 		managed:        managed,
 	}
@@ -96,23 +97,20 @@ func (s *service) configReload(c context.Context) error {
 	})
 }
 
-func (s *service) serveGrpc(c context.Context, l net.Listener) error {
+func (s *service) serveGrpc(c context.Context, groupCancel context.CancelFunc, l net.Listener) error {
 	var opts []grpc.ServerOption
 	cfg := client.GetConfig(c)
 	if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
 		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}
 
-	var cancel context.CancelFunc
 	if s.managed {
 		// This essentially makes the quit() function wait until the session is done but otherwise do nothing.
-		cancel = func() {}
-	} else {
-		c, cancel = context.WithCancel(c)
+		groupCancel = func() {}
 	}
 	s.Context = c
 	s.quit = func() {
-		cancel()
+		groupCancel()
 		s.sessionLock.RLock()
 		sessionRunning := s.sessionRunning
 		s.sessionLock.RUnlock()
@@ -127,11 +125,21 @@ func (s *service) serveGrpc(c context.Context, l net.Listener) error {
 func run(cmd *cobra.Command, args []string) error {
 	if !proc.IsAdmin() {
 		msg := fmt.Sprintf("telepresence %s must run with elevated privileges", client.RootDaemonName)
-		fmt.Fprintln(os.Stderr, msg)
+		ioutil.Println(os.Stderr, msg)
 		return errors.New(msg)
 	}
+	return sigctx.DoWithSignalHandler(cmd.Context(), func(ctx context.Context) error {
+		return internalRun(ctx, cmd.Flags())
+	})
+}
 
-	flags := cmd.Flags()
+func internalRun(c context.Context, flags *pflag.FlagSet) error {
+	cacheDir := flags.Lookup(cacheDirFlag).Value.String()
+	if cacheDir != "" {
+		c = filelocation.WithAppUserCacheDir(c, cacheDir)
+	}
+	var cfg client.Config
+	var err error
 
 	var configFile string
 	cfgFlag := flags.Lookup(configFlag)
@@ -139,13 +147,6 @@ func run(cmd *cobra.Command, args []string) error {
 		configFile = cfgFlag.Value.String()
 	}
 
-	c := cmd.Context()
-	cacheDir := flags.Lookup(cacheDirFlag).Value.String()
-	if cacheDir != "" {
-		c = filelocation.WithAppUserCacheDir(c, cacheDir)
-	}
-	var cfg client.Config
-	var err error
 	if configFile == "" {
 		cfg = client.GetDefaultConfig()
 	} else {
@@ -173,7 +174,7 @@ func run(cmd *cobra.Command, args []string) error {
 	if pprofPort, _ := flags.GetUint16(pprofFlag); pprofPort > 0 {
 		go func() {
 			if err := pprof.PprofServer(c, pprofPort); err != nil {
-				dlog.Error(c, err)
+				clog.Error(c, err)
 			}
 		}()
 	}
@@ -182,14 +183,14 @@ func run(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	c = clog.WithGroup(c, client.RootDaemonName)
 
-	c = dgroup.WithGoroutineName(c, "/"+client.RootDaemonName)
-	dlog.Debug(c, shellquote.ShellString(os.Args[0], os.Args[1:]))
+	clog.Debug(c, shellquote.ShellString(os.Args[0], os.Args[1:]))
 
-	dlog.Info(c, "---")
-	dlog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
-	dlog.Infof(c, "PID is %d", os.Getpid())
-	dlog.Info(c, "")
+	clog.Info(c, "---")
+	clog.Infof(c, "Telepresence %s %s starting...", titleName, client.DisplayVersion())
+	clog.Infof(c, "PID is %d", os.Getpid())
+	clog.Info(c, "")
 
 	// Listen on domain unix domain socket. The listener must be opened before other tasks because
 	// the CLI client will only wait for a short period of time for the socket to appear before it
@@ -202,35 +203,30 @@ func run(cmd *cobra.Command, args []string) error {
 	defer grpcListener.Close()
 
 	daemonAddress := grpcListener.Addr().(interface{ AddrPort() netip.AddrPort }).AddrPort()
-	dlog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
+	clog.Debugf(c, "Listener opened on %s", grpcListener.Addr())
 
 	d := newService(cfg, managed)
 	if err = logging.LoadTimedLevelFromCache(c, d.timedLogLevel, client.RootDaemonName); err != nil {
-		dlog.Error(c, err)
+		clog.Error(c, err)
 		return err
 	}
 	vif.InitLogger(c)
 
 	c, cancel := context.WithCancel(c)
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{
-		SoftShutdownTimeout:  5 * time.Second,
-		EnableSignalHandling: true,
-		ShutdownOnNonError:   true,
-		IgnoreSignalError:    true,
-	})
+	g := log.NewGroup(c)
 	runAliveAndCancellation(g, daemonAddress.Port(), cancel, managed)
 
 	// Add a reload function that triggers on create and write of the config.yml file.
 	g.Go("config-reload", d.configReload)
-	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, grpcListener) })
+	g.Go("server-grpc", func(c context.Context) error { return d.serveGrpc(c, cancel, grpcListener) })
 	err = g.Wait()
 	if err != nil {
-		dlog.Error(c, err)
+		clog.Error(c, err)
 	}
 	return err
 }
 
-func runAliveAndCancellation(g *dgroup.Group, daemonPort uint16, cancel context.CancelFunc, managed bool) {
+func runAliveAndCancellation(g log.Group, daemonPort uint16, cancel context.CancelFunc, managed bool) {
 	g.Go("info-kicker", func(ctx context.Context) error {
 		// Ensure that the daemon info file is kept recent. This tells clients that we're alive.
 		il := daemon.NewRootInfoLoader(ctx, managed)
@@ -249,7 +245,7 @@ func runAliveAndCancellation(g *dgroup.Group, daemonPort uint16, cancel context.
 		return il.WatchInfos(func(ctx context.Context) error {
 			ok, err := il.InfoExists(daemon.InfoFileName)
 			if err == nil && !ok {
-				dlog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemon.InfoFileName)
+				clog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemon.InfoFileName)
 				cancel()
 			}
 			return err

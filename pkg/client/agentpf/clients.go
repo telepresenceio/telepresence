@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	tpClient "github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -60,19 +60,19 @@ func (ac *client) Tunnel(ctx context.Context, opts ...grpc.CallOption) (tunnel.C
 	if err != nil {
 		return nil, err
 	}
-	dlog.Tracef(ctx, "%s(%s) creating Tunnel over gRPC", ac, net.IP(ac.info.PodIp))
+	clog.Tracef(ctx, "%s(%s) creating Tunnel over gRPC", ac, net.IP(ac.info.PodIp))
 	tc, err := cli.Tunnel(ctx, opts...)
 	if err != nil {
-		dlog.Tracef(ctx, "%s(%s) failed to create Tunnel over gRPC: %v", ac, net.IP(ac.info.PodIp), err)
+		clog.Tracef(ctx, "%s(%s) failed to create Tunnel over gRPC: %v", ac, net.IP(ac.info.PodIp), err)
 		return nil, err
 	}
 	atomic.AddInt32(&ac.tunnelCount, 1)
-	dlog.Tracef(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), atomic.LoadInt32(&ac.tunnelCount))
+	clog.Tracef(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), atomic.LoadInt32(&ac.tunnelCount))
 	go func() {
 		<-ctx.Done()
 		tc := atomic.LoadInt32(&ac.tunnelCount)
 		if tc > 0 && atomic.CompareAndSwapInt32(&ac.tunnelCount, tc, tc-1) {
-			dlog.Tracef(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), tc-1)
+			clog.Tracef(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), tc-1)
 		}
 	}()
 	atomic.StoreInt64(&ac.lastActive, time.Now().UnixNano())
@@ -194,13 +194,13 @@ func (ac *client) refresh(ai *manager.AgentPodInfo) {
 		return
 	}
 	if ai.Intercepted {
-		dlog.Debugf(ac, "Agent %s(%s) changed to intercepted", ai.PodName, net.IP(ai.PodIp))
+		clog.Debugf(ac, "Agent %s(%s) changed to intercepted", ai.PodName, net.IP(ai.PodIp))
 		if _, err := ac.ensureConnectLocked(ac); err != nil {
-			dlog.Errorf(ac, "failed to start client watcher for %s(%s): %v", ai.PodName, net.IP(ai.PodIp), err)
+			clog.Errorf(ac, "failed to start client watcher for %s(%s): %v", ai.PodName, net.IP(ai.PodIp), err)
 		}
 	} else {
 		// This agent is no longer intercepting. Stop the dial watcher
-		dlog.Debugf(ac, "Agent %s(%s) changed to not intercepted", ai.PodName, net.IP(ai.PodIp))
+		clog.Debugf(ac, "Agent %s(%s) changed to not intercepted", ai.PodName, net.IP(ai.PodIp))
 		cdw = ac.cancelDialWatch
 	}
 }
@@ -213,7 +213,7 @@ func (ac *client) startDialWatcherLocked() error {
 	ctx, cancel := context.WithCancel(ac)
 
 	// Create the dial watcher
-	dlog.Debugf(ctx, "watching dials from agent pod %s", ac)
+	clog.Debugf(ctx, "watching dials from agent pod %s", ac)
 	dialStream, err := ac.cli.WatchDial(ctx, ac.session)
 	if err != nil {
 		cancel()
@@ -232,10 +232,10 @@ func (ac *client) startDialWatcherLocked() error {
 		err := tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(ac.cli), dialStream, tunnel.SessionID(ac.session.SessionId))
 		if err != nil {
 			// The traffic-agent closed the dial wait loop, which means that it's terminating.
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 		ai := ac.info
-		dlog.Debugf(ctx, "DialWaitLoop ended for %s.%s", ai.PodName, ai.Namespace)
+		clog.Debugf(ctx, "DialWaitLoop ended for %s.%s", ai.PodName, ai.Namespace)
 		ac.RLock()
 		dwCancel := ac.cancelDialWatch
 		ac.RUnlock()
@@ -345,7 +345,7 @@ func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
 		aa, err = other.ensureConnect(ctx)
 	}
 	if err != nil {
-		dlog.Warn(s, err)
+		clog.Warn(s, err)
 	}
 	return aa
 }
@@ -395,18 +395,18 @@ func (s *clients) WatchAgentPods(rmc manager.ManagerClient) error {
 			}
 			return true
 		})
-		dlog.Debugf(s, "WatchAgentPods ending with %d clients still active", activeCount)
+		clog.Debugf(s, "WatchAgentPods ending with %d clients still active", activeCount)
 		s.disabled.Store(true)
 	}()
 
 	snapMap := make(map[string]*manager.AgentPodInfo)
 	err := watcher.WatchWithRetry(s, "WatchAgentPodsDelta", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoDelta], error) {
-			dlog.Debugf(ctx, "WatchAgentPodsDelta starting")
+			clog.Debugf(ctx, "WatchAgentPodsDelta starting")
 			return rmc.WatchAgentPodsDelta(ctx, s.session)
 		},
 		func(delta *manager.AgentPodInfoDelta) error {
-			dlog.Debugf(s, "WatchAgentPodsDelta received %d upserts, %d removals", len(delta.Upserts), len(delta.Removals))
+			clog.Debugf(s, "WatchAgentPodsDelta received %d upserts, %d removals", len(delta.Upserts), len(delta.Removals))
 			maps.DeltaUpdate(snapMap, delta.Upserts, delta.Removals)
 			return s.updateClients(maps.Values(snapMap))
 		}, func() error {
@@ -418,10 +418,10 @@ func (s *clients) WatchAgentPods(rmc manager.ManagerClient) error {
 	}
 
 	// Older traffic-manager. Fall back to watching all agents.
-	dlog.Warnf(s, "WatchAgentPodsDelta is not implemented by the traffic-manager, falling back to WatchAgentPods and full snapshots")
+	clog.Warnf(s, "WatchAgentPodsDelta is not implemented by the traffic-manager, falling back to WatchAgentPods and full snapshots")
 	return watcher.WatchWithRetry(s, "WatchAgentPods", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoSnapshot], error) {
-			dlog.Debugf(ctx, "No delta support in traffic-manager, starting WatchAgentPods instead")
+			clog.Debugf(ctx, "No delta support in traffic-manager, starting WatchAgentPods instead")
 			return rmc.WatchAgentPods(ctx, s.session)
 		},
 		func(snapshot *manager.AgentPodInfoSnapshot) error {
@@ -432,7 +432,7 @@ func (s *clients) WatchAgentPods(rmc manager.ManagerClient) error {
 func (ac *client) notify(waiter chan struct{}) {
 	// a client must be connected to be able to notify
 	if _, err := ac.ensureConnect(ac); err != nil {
-		dlog.Errorf(ac, "notifyWaiters %s (%s), ensureConnect failed: %v", ac.info.WorkloadName, net.IP(ac.info.PodIp), err)
+		clog.Errorf(ac, "notifyWaiters %s (%s), ensureConnect failed: %v", ac.info.WorkloadName, net.IP(ac.info.PodIp), err)
 	}
 	close(waiter)
 }
@@ -544,7 +544,7 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 		}
 		if len(aim) == 0 {
 			// The current traffic-manager injects old style clients that doesn't report a pod name.
-			dlog.Debugf(s, "disabling, because traffic-agent doesn't report pod name")
+			clog.Debugf(s, "disabling, because traffic-agent doesn't report pod name")
 			s.disabled.Store(true)
 			return nil
 		}
@@ -553,7 +553,7 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 	deleteClient := func(k string) {
 		s.clients.Compute(k, func(oldValue *client, loaded bool) (*client, xsync.ComputeOp) {
 			if loaded {
-				dlog.Debugf(s, "Deleting agent %s", k)
+				clog.Debugf(s, "Deleting agent %s", k)
 				oldValue.cancel()
 				return nil, xsync.DeleteOp
 			}
@@ -586,7 +586,7 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 				},
 				info: ai,
 			}
-			dlog.Debugf(s, "Adding agent pod %s (%s)", k, net.IP(ai.PodIp))
+			clog.Debugf(s, "Adding agent pod %s (%s)", k, net.IP(ai.PodIp))
 			return ac, false
 		})
 	}
@@ -602,14 +602,14 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 		if ac.dormant() && !s.isProxyVIA(ac.info) && !s.hasWaiterFor(ac.info) {
 			dormantCount++
 			if dormantCount > 1 {
-				dlog.Debugf(s, "Deleting dormant agent %s", k)
+				clog.Debugf(s, "Deleting dormant agent %s", k)
 				ac.cancel()
 			}
 		}
 		return true
 	})
 	if dormantCount > 1 {
-		dlog.Debugf(s, "Cancelled %d dormant clients", dormantCount-1)
+		clog.Debugf(s, "Cancelled %d dormant clients", dormantCount-1)
 	}
 	return nil
 }

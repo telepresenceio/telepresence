@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -146,7 +146,7 @@ func (c *streamConn) Write(b []byte) (n int, err error) {
 	if c.writeProbe != nil {
 		c.writeProbe.Increment(uint64(n))
 	}
-	dlog.Debugf(c.ctx, "Write %d bytes", n)
+	clog.Debugf(c.ctx, "Write %d bytes", n)
 	return n, nil
 }
 

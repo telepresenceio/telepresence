@@ -8,7 +8,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 )
@@ -61,9 +61,9 @@ func (s *connectedSuite) Test_BindToPodIP() {
 			// Ensure that we now reach the original app again.
 			s.Eventually(func() bool {
 				out, err := itest.Output(ctx, "curl", "--verbose", "--max-time", "0.5", svc)
-				dlog.Infof(ctx, "Received %s", out)
+				clog.Infof(ctx, "Received %s", out)
 				if err != nil {
-					dlog.Errorf(ctx, "curl error %v", err)
+					clog.Errorf(ctx, "curl error %v", err)
 					return false
 				}
 				return true

@@ -12,7 +12,7 @@ import (
 	"github.com/godbus/dbus/v5"
 	"golang.org/x/sys/unix"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 type (
@@ -36,7 +36,7 @@ func withDBus(c context.Context, f func(*dbus.Conn) error) error {
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
 		err = fmt.Errorf("failed to connect to system bus: %w", err)
-		dlog.Error(c, err)
+		clog.Error(c, err)
 		return err
 	}
 	defer conn.Close()

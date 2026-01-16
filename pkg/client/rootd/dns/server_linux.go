@@ -10,11 +10,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
-	"github.com/telepresenceio/dlib/v2/dtime"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -37,12 +36,12 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 		return s.runContainerServer(c, dev, configureDNS)
 	}
 
-	err := s.tryResolveD(dgroup.WithGoroutineName(c, "/resolved"), dev, configureDNS)
+	err := s.tryResolveD(clog.WithGroup(c, "resolved"), dev, configureDNS)
 	if err == errResolveDNotConfigured {
 		err = nil
 		if c.Err() == nil {
-			dlog.Info(c, "Unable to use systemd-resolved, falling back to local server")
-			err = s.runOverridingServer(dgroup.WithGoroutineName(c, "/legacy"), dev, configureDNS)
+			clog.Info(c, "Unable to use systemd-resolved, falling back to local server")
+			err = s.runOverridingServer(clog.WithGroup(c, "legacy"), dev, configureDNS)
 		}
 	}
 	return err
@@ -54,7 +53,7 @@ func addressFromResolvConf(c context.Context) (ap netip.AddrPort, err error) {
 	if err != nil {
 		return ap, err
 	}
-	dlog.Debug(c, rf.String())
+	clog.Debug(c, rf.String())
 	if len(rf.Nameservers) > 0 {
 		nsAddr := rf.Nameservers[0]
 		addr, err := netip.ParseAddr(nsAddr)
@@ -77,7 +76,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 			return err
 		}
 		s.LocalAddresses = []netip.AddrPort{ap}
-		dlog.Infof(c, "Automatically set dns=%s", ap)
+		clog.Infof(c, "Automatically set dns=%s", ap)
 	}
 	if len(s.LocalAddresses) == 0 {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
@@ -91,7 +90,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 	if err != nil {
 		return err
 	}
-	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
+	clog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
 
 	// Create the connection pool later used for fallback. We need to create this before the firewall
 	// rule because the rule must exclude the local address of this connection in order to
@@ -106,7 +105,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 
 	serverStarted := make(chan struct{})
 	serverDone := make(chan struct{})
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g := log.NewGroup(c)
 	g.Go("Server", func(c context.Context) error {
 		defer close(serverDone)
 		// The server will close the listener, so no need to close it here.
@@ -125,7 +124,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 			case <-c.Done():
 			case <-serverStarted:
 				// Give DNS server time to start before rerouting NAT
-				dtime.SleepWithContext(c, time.Millisecond)
+				time.Sleep(time.Millisecond)
 
 				lc := net.ListenConfig{}
 				pc, err := lc.ListenPacket(c, "udp", ":53")
@@ -134,7 +133,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 				}
 				go func() {
 					if err = forwarder.ForwardUDP(c, tunnel.ClientToDNS, pc.(*net.UDPConn), dnsResolverAddr); err != nil {
-						dlog.Error(c, err)
+						clog.Error(c, err)
 					}
 				}()
 			}
@@ -147,7 +146,7 @@ func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configur
 		case <-c.Done():
 		case <-serverStarted:
 			// Give DNS server time to start before rerouting NAT
-			dtime.SleepWithContext(c, time.Millisecond)
+			time.Sleep(time.Millisecond)
 
 			err := routeDNS(c, s.LocalAddresses[0], dnsResolverAddr, pool.LocalAddrs())
 			if err != nil {
@@ -177,13 +176,13 @@ func (s *Server) runContainerServer(c context.Context, dev vif.Device, configure
 	if err != nil {
 		return err
 	}
-	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
+	clog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
 
 	ap, err := addressFromResolvConf(c)
 	if err != nil {
 		return err
 	}
-	dlog.Debugf(c, "Using DNS fallback=%s", ap)
+	clog.Debugf(c, "Using DNS fallback=%s", ap)
 	pool, err := NewConnPool(ap, 10)
 	if err != nil {
 		return err
@@ -192,10 +191,10 @@ func (s *Server) runContainerServer(c context.Context, dev vif.Device, configure
 		pool.Close()
 	}()
 
-	dlog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
+	clog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
 	serverStarted := make(chan struct{})
 	serverDone := make(chan struct{})
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g := log.NewGroup(c)
 	g.Go("Server", func(c context.Context) error {
 		defer close(serverDone)
 		// The server will close the listener, so no need to close it here.
@@ -225,8 +224,8 @@ func runNatTableCmd(c context.Context, args ...string) error {
 	c = context.WithoutCancel(c)
 	args = append([]string{"-t", "nat"}, args...)
 	cmd := exec.CommandContext(c, "iptables", args...)
-	if dlog.MaxLogLevel(c) >= dlog.LogLevelTrace {
-		dlog.Trace(c, shellquote.ShellString("iptables", args))
+	if clog.Enabled(c, clog.LevelTrace) {
+		clog.Trace(c, shellquote.ShellString("iptables", args))
 	}
 	return cmd.Run()
 }

@@ -23,21 +23,13 @@ type InProcSession struct {
 	*session
 }
 
-func (rd *InProcSession) Version(context.Context, *empty.Empty, ...grpc.CallOption) (*common.VersionInfo, error) {
-	return &common.VersionInfo{
-		ApiVersion: client.APIVersion,
-		Version:    client.Version(),
-		Name:       client.DisplayName,
-	}, nil
+func (rd *InProcSession) Version(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*common.VersionInfo, error) {
+	return client.VersionInfo(ctx), nil
 }
 
-func (rd *InProcSession) Status(context.Context, *empty.Empty, ...grpc.CallOption) (*rpc.DaemonStatus, error) {
+func (rd *InProcSession) Status(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*rpc.DaemonStatus, error) {
 	return &rpc.DaemonStatus{
-		Version: &common.VersionInfo{
-			ApiVersion: client.APIVersion,
-			Version:    client.Version(),
-			Name:       client.DisplayName,
-		},
+		Version:        client.VersionInfo(ctx),
 		OutboundConfig: rd.getNetworkConfig(),
 	}, nil
 }

@@ -2,17 +2,23 @@ package managerutil_test
 
 import (
 	"context"
+	"log/slog"
 	"net/netip"
 	"testing"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 func TestEnvconfig(t *testing.T) {
@@ -22,15 +28,16 @@ func TestEnvconfig(t *testing.T) {
 		"AGENT_ENVOY_ADMIN_PORT":          "19000",
 		"AGENT_ENVOY_SERVER_PORT":         "18000",
 		"AGENT_ENVOY_HTTP_IDLE_TIMEOUT":   "70s",
-		"AGENT_INJECT_POLICY":             agentconfig.OnDemand.String(),
+		"AGENT_INJECT_POLICY":             agentconfig.WhenEnabled.String(),
 		"AGENT_INJECTOR_NAME":             "agent-injector",
 		"AGENT_INJECTOR_SECRET":           "mutator-webhook-tls",
 		"AGENT_PORT":                      "9900",
 		"AGENT_ARRIVAL_TIMEOUT":           "45s",
 		"CLIENT_CONNECTION_TTL":           (24 * time.Hour).String(),
 		"CLIENT_DNS_EXCLUDE_SUFFIXES":     ".com .io .net .org .ru",
+		"ENABLED_WORKLOAD_KINDS":          "Deployment StatefulSet ReplicaSet Rollout",
 		"GRPC_MAX_RECEIVE_SIZE":           "4Mi",
-		"LOG_LEVEL":                       "info",
+		"LOG_LEVEL":                       "trace",
 		"POD_IP":                          "203.0.113.18",
 		"POD_CIDR_STRATEGY":               "auto",
 		"SERVER_PORT":                     "8081",
@@ -39,22 +46,23 @@ func TestEnvconfig(t *testing.T) {
 
 	defaults := managerutil.Env{
 		Registry:                     "ghcr.io/telepresenceio",
-		AgentLogLevel:                "info",
+		AgentLogLevel:                slog.LevelDebug - 4,
 		AgentPort:                    9900,
 		AgentInjectorName:            "agent-injector",
 		AgentInjectorSecret:          "mutator-webhook-tls",
+		AgentInjectPolicy:            agentconfig.WhenEnabled,
 		AgentArrivalTimeout:          45 * time.Second,
 		ClientConnectionTTL:          24 * time.Hour,
 		ClientDnsExcludeSuffixes:     []string{".com", ".io", ".net", ".org", ".ru"},
-		LogLevel:                     "info",
-		MaxReceiveSize:               resource.MustParse("4Mi"),
-		PodCIDRStrategy:              "auto",
-		PodIP:                        netip.AddrFrom4([4]byte{203, 0, 113, 18}),
+		LogLevel:                     clog.LevelTrace,
+		GrpcMaxReceiveSize:           resource.MustParse("4Mi"),
+		PodCidrStrategy:              "auto",
+		PodIp:                        netip.AddrFrom4([4]byte{203, 0, 113, 18}),
 		ServerPort:                   8081,
-		EnabledWorkloadKinds:         []k8sapi.Kind{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind},
+		EnabledWorkloadKinds:         []k8sapi.Kind{k8sapi.DeploymentKind, k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind, k8sapi.RolloutKind},
 		MaxNamespaceSpecificWatchers: 10,
 		AgentInitContainerEnabled:    true,
-		AllowGlobalIntercepts:        true,
+		InterceptAllowGlobal:         true,
 		AgentWatchRetryInterval:      10 * time.Second,
 		AgentConsumptionMetrics:      true,
 	}
@@ -85,12 +93,75 @@ func TestEnvconfig(t *testing.T) {
 				e.ClientRoutingNeverProxySubnets = []netip.Prefix{a, b}
 			},
 		},
+		"version": {
+			Input: map[string]string{
+				"COMPATIBILITY_VERSION": `2.15.3-rc.0`,
+			},
+			Output: func(e *managerutil.Env) {
+				v := semver.MustParse("2.15.3-rc.0")
+				e.CompatibilityVersion = &v
+			},
+		},
+		"mountPolicies": {
+			Input: map[string]string{
+				"AGENT_MOUNT_POLICIES": `{"/home/bob":"remote","/home/alice":"local"}`,
+			},
+			Output: func(e *managerutil.Env) {
+				e.AgentMountPolicies = types.MountPolicies{
+					"/home/bob":   types.MountPolicyRemote,
+					"/home/alice": types.MountPolicyLocal,
+				}
+			},
+		},
+		"resourceRequirements": {
+			Input: map[string]string{
+				"AGENT_RESOURCES": `{"requests":{"cpu":"100m","memory":"128Mi"},"limits":{"cpu":"200m","memory":"256Mi"}}`,
+			},
+			Output: func(e *managerutil.Env) {
+				e.AgentResources = &corev1.ResourceRequirements{
+					Limits: map[corev1.ResourceName]resource.Quantity{
+						corev1.ResourceCPU:    resource.MustParse("200m"),
+						corev1.ResourceMemory: resource.MustParse("256Mi"),
+					},
+					Requests: map[corev1.ResourceName]resource.Quantity{
+						corev1.ResourceCPU:    resource.MustParse("100m"),
+						corev1.ResourceMemory: resource.MustParse("128Mi"),
+					},
+				}
+			},
+		},
+		"agent-image-pull-secrets": {
+			Input: map[string]string{
+				"AGENT_IMAGE_PULL_SECRETS": `[{"name":"my-secret"},{"name":"my-other-secret"}]`,
+			},
+			Output: func(e *managerutil.Env) {
+				e.AgentImagePullSecrets = []corev1.LocalObjectReference{
+					{
+						Name: "my-secret",
+					},
+					{
+						Name: "my-other-secret",
+					},
+				}
+			},
+		},
+		"securityContext": {
+			Input: map[string]string{
+				"AGENT_SECURITY_CONTEXT": `{"runAsUser":1000,"runAsGroup":2000}`,
+			},
+			Output: func(e *managerutil.Env) {
+				e.AgentSecurityContext = &corev1.SecurityContext{
+					RunAsUser:  func(i int64) *int64 { return &i }(1000),
+					RunAsGroup: func(i int64) *int64 { return &i }(2000),
+				}
+			},
+		},
 		"allow-global-intercepts-true": {
 			Input: map[string]string{
 				"INTERCEPT_ALLOW_GLOBAL": "true",
 			},
 			Output: func(e *managerutil.Env) {
-				e.AllowGlobalIntercepts = true
+				e.InterceptAllowGlobal = true
 			},
 		},
 		"allow-global-intercepts-false": {
@@ -98,7 +169,7 @@ func TestEnvconfig(t *testing.T) {
 				"INTERCEPT_ALLOW_GLOBAL": "false",
 			},
 			Output: func(e *managerutil.Env) {
-				e.AllowGlobalIntercepts = false
+				e.InterceptAllowGlobal = false
 			},
 		},
 	}
@@ -106,18 +177,12 @@ func TestEnvconfig(t *testing.T) {
 	for tcName, tc := range testcases {
 		t.Run(tcName, func(t *testing.T) {
 			t.Parallel()
-			lookup := func(key string) (string, bool) {
-				val, ok := tc.Input[key]
-				if !ok {
-					val, ok = env[key]
-				}
-				return val, ok
-			}
-
+			testEnv := maps.Copy(env)
+			maps.Merge(testEnv, tc.Input)
 			expected := defaults
 			tc.Output(&expected)
 
-			ctx, err := managerutil.LoadEnv(context.Background(), lookup)
+			ctx, err := managerutil.LoadEnv(context.Background(), testEnv)
 			require.NoError(t, err)
 			actual := managerutil.GetEnv(ctx)
 			assert.Equal(t, &expected, actual)

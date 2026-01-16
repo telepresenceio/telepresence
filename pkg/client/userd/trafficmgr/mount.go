@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
@@ -26,31 +26,31 @@ func (pa *podAccess) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGr
 	useFtp := client.GetConfig(ctx).Intercept().UseFtp
 	addr, err := netip.ParseAddr(pa.podIP)
 	if err != nil {
-		dlog.Errorf(ctx, "error parsing pod IP address %q: %v", pa.podIP, err)
+		clog.Errorf(ctx, "error parsing pod IP address %q: %v", pa.podIP, err)
 		return
 	}
 	var port uint16
 	mountCtx := ctx
 	if useFtp {
 		if pa.ftpPort == 0 {
-			dlog.Error(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP is provided by the traffic-agent")
+			clog.Error(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP is provided by the traffic-agent")
 			return
 		}
 		if pa.localMountPort > 0 {
-			dlog.Error(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP can be used with --local-mount-port")
+			clog.Error(ctx, "Client is configured to perform remote mounts using FTP, but only SFTP can be used with --local-mount-port")
 			return
 		}
 		// The FTP mounter survives multiple starts for the same intercept. It just resets the address
 		mountCtx = pa.ctx
 		fuseftp = getSession(ctx).GetService().FuseFTPMgr().GetFuseFTPClient(ctx)
 		if fuseftp == nil {
-			dlog.Error(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
+			clog.Error(ctx, "Client is configured to perform remote mounts using FTP, but the fuseftp server was unable to start")
 			return
 		}
 		port = uint16(pa.ftpPort)
 	} else {
 		if pa.sftpPort == 0 {
-			dlog.Error(ctx, "Client is configured to perform remote mounts using SFTP, but only FTP is provided by the traffic-agent")
+			clog.Error(ctx, "Client is configured to perform remote mounts using SFTP, but only FTP is provided by the traffic-agent")
 			return
 		}
 		port = uint16(pa.sftpPort)
@@ -71,7 +71,7 @@ func (pa *podAccess) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGr
 	}
 	err = m.Start(mountCtx, pa.workload, pa.container, pa.clientMountPoint, pa.mountPoint, netip.AddrPortFrom(addr, port), pa.readOnly)
 	if err != nil && ctx.Err() == nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 	}
 }
 

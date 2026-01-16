@@ -15,10 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"github.com/containerd/errdefs"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/env"
@@ -50,7 +49,7 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 		origRunArgs := slices.Clone(runArgs)
 		runFlags, runArgs, err = ParseRunFlags(runArgs)
 		if err != nil {
-			dlog.Debugf(ctx, "error parsing run-flags %v: %v", origRunArgs, err)
+			clog.Debugf(ctx, "error parsing run-flags %v: %v", origRunArgs, err)
 			return err
 		}
 		s.imageIndex = len(runArgs)
@@ -65,11 +64,11 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 	}
 	defer func() {
 		if err := os.Remove(file.Name()); err != nil {
-			dlog.Errorf(ctx, "failed to remove temporary environment file %q: %v", file.Name(), err)
+			clog.Errorf(ctx, "failed to remove temporary environment file %q: %v", file.Name(), err)
 		}
 		if s.localMountDir != "" {
 			if err := os.RemoveAll(s.localMountDir); err != nil {
-				dlog.Errorf(ctx, "failed to remove local mount directory %q: %v", s.localMountDir, err)
+				clog.Errorf(ctx, "failed to remove local mount directory %q: %v", s.localMountDir, err)
 			}
 		}
 	}()
@@ -85,7 +84,7 @@ func (s *Runner) Run(ctx context.Context, waitMessage string, args ...string) er
 	procCtx, cancel := context.WithCancel(ctx)
 	go func() {
 		if err := daemon.NewUserInfoLoader(procCtx).CancelWhenRmFromCache(cancel, ud.DaemonID().InfoFileName()); err != nil {
-			dlog.Error(ctx)
+			clog.Error(ctx)
 		}
 	}()
 
@@ -119,11 +118,11 @@ func (s *Runner) adjustMounts(ctx context.Context, runFlags *RunFlags, args []st
 			if len(runFlags.Volumes) > 0 || len(runFlags.Mounts) > 0 {
 				mounts = maps.Clone(mounts)
 				for _, v := range runFlags.Volumes {
-					dlog.Infof(ctx, "Skipping auto-mounting of path %s due to user provided -v %s", v.Target, v)
+					clog.Infof(ctx, "Skipping auto-mounting of path %s due to user provided -v %s", v.Target, v)
 					delete(mounts, v.Target)
 				}
 				for _, v := range runFlags.Mounts {
-					dlog.Infof(ctx, "Skipping auto-mounting of path %s due to user provided --mount %s", v.Target, v)
+					clog.Infof(ctx, "Skipping auto-mounting of path %s due to user provided --mount %s", v.Target, v)
 					delete(mounts, v.Target)
 				}
 			}
@@ -139,11 +138,11 @@ func (s *Runner) adjustMounts(ctx context.Context, runFlags *RunFlags, args []st
 				}
 				hostPath := filepath.Join(s.localMountDir, path)
 				if err := os.MkdirAll(hostPath, 0o755); err != nil {
-					dlog.Error(ctx, err)
+					clog.Error(ctx, err)
 					continue
 				}
 				ma := fmt.Sprintf("type=bind,src=%s,dst=%s", hostPath, path)
-				dlog.Infof(ctx, "Adding --mount %s for remote path %s, because it has a local mount policy and is not provided by user", ma, path)
+				clog.Infof(ctx, "Adding --mount %s for remote path %s, because it has a local mount policy and is not provided by user", ma, path)
 				args = append(args, "--mount", ma)
 			}
 		}
@@ -204,7 +203,7 @@ func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, 
 			m := s.Mount
 			w.volumes, w.err = docker.CreateVolumes(ctx, netip.AddrPortFrom(ud.DaemonInfo().ContainerIP, m.Port), container, mounts, m.ReadOnly)
 			if w.err != nil {
-				dlog.Error(ctx, w.err)
+				clog.Error(ctx, w.err)
 				return w
 			}
 			for vol, path := range w.volumes {
@@ -245,7 +244,7 @@ type waiter struct {
 
 func (w *waiter) wait(ctx context.Context) error {
 	if w.err != nil {
-		dlog.Error(ctx, w.err)
+		clog.Error(ctx, w.err)
 		return errcat.NoDaemonLogs.New(w.err)
 	}
 
@@ -277,8 +276,8 @@ func (w *waiter) wait(ctx context.Context) error {
 }
 
 func EnsureStopContainer(ctx context.Context, name, containerID string, volumes []string, exited, signalled *atomic.Bool, done chan<- error) {
-	dlog.Debugf(ctx, "EnsureStopContainer %s", name)
-	defer dlog.Debugf(ctx, "EnsureStopContainer %s ended", name)
+	clog.Debugf(ctx, "EnsureStopContainer %s", name)
+	defer clog.Debugf(ctx, "EnsureStopContainer %s ended", name)
 	defer close(done)
 	if len(volumes) > 0 {
 		defer func() {
@@ -295,9 +294,9 @@ func EnsureStopContainer(ctx context.Context, name, containerID string, volumes 
 	}()
 	select {
 	case <-ctx.Done():
-		dlog.Debugf(ctx, "EnsureStopContainer %s: Context done", name)
+		clog.Debugf(ctx, "EnsureStopContainer %s: Context done", name)
 	case <-sigCh:
-		dlog.Debugf(ctx, "EnsureStopContainer %s: Signalled", name)
+		clog.Debugf(ctx, "EnsureStopContainer %s: Signalled", name)
 	}
 	signalled.Store(true)
 	if exited.Load() {
@@ -313,24 +312,4 @@ func EnsureStopContainer(ctx context.Context, name, containerID string, volumes 
 		}
 	}
 	done <- err
-}
-
-// ReadContainerID reads the containerID that docker run --cidfile <cidfils> writes to a file, and then
-// removes the file. It returns fs.ErrNotExist if no such file has been produced within 200 ms.
-func ReadContainerID(ctx context.Context, cidFile string) (containerID string, err error) {
-	defer func() {
-		_ = os.Remove(cidFile)
-	}()
-	err = backoff.Retry(func() error {
-		cid, err := os.ReadFile(cidFile)
-		if err != nil {
-			return err
-		}
-		if len(cid) == 0 {
-			return fs.ErrNotExist
-		}
-		containerID = string(cid)
-		return nil
-	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(10*time.Millisecond), 200), ctx))
-	return containerID, err
 }

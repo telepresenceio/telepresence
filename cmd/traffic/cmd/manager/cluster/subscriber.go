@@ -68,7 +68,7 @@ func (ss *clusterInfoSubscribers) unsubscribe(id int) {
 	}
 }
 
-func (ss *clusterInfoSubscribers) subscriberLoop(ctx context.Context, rec interface {
+func (ss *clusterInfoSubscribers) subscriberLoop(ctx context.Context, sessionDone <-chan struct{}, rec interface {
 	Send(request *rpc.ClusterInfo) error
 },
 ) error {
@@ -77,6 +77,8 @@ func (ss *clusterInfoSubscribers) subscriberLoop(ctx context.Context, rec interf
 	for {
 		select {
 		case <-ctx.Done():
+			return nil
+		case <-sessionDone:
 			return nil
 		case ll := <-ch:
 			if ll == nil {

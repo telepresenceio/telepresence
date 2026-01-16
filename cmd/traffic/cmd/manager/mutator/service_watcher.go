@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -78,7 +78,7 @@ func (c *configWatcher) startServices(ctx context.Context, ns string) cache.Shar
 		return o, nil
 	})
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "watcher for Services %s: %v", whereWeWatch(ns), err)
+		clog.Errorf(ctx, "watcher for Services %s: %v", whereWeWatch(ns), err)
 	})
 	return ix
 }
@@ -117,7 +117,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustU
 	}
 	cfg, err := managerutil.GetEnv(ctx).GeneratorConfig(img)
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return
 	}
 	for _, ax := range c.affectedConfigs(ctx, svc, trustUID) {
@@ -130,29 +130,29 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustU
 			}
 			if err != nil {
 				if errors.IsNotFound(err) {
-					dlog.Debugf(ctx, "Deleting config entry for %s", wl)
+					clog.Debugf(ctx, "Deleting config entry for %s", wl)
 					c.Delete(ac.AgentName, ac.Namespace)
 				} else {
-					dlog.Error(ctx, err)
+					clog.Error(ctx, err)
 				}
 				continue
 			}
 		}
-		dlog.Debugf(ctx, "Regenerating config entry for %s", wl)
+		clog.Debugf(ctx, "Regenerating config entry for %s", wl)
 		acn, err := cfg.Generate(ctx, wl, ac)
 		if err != nil {
 			if strings.Contains(err.Error(), "unable to find") {
 				c.Delete(ac.AgentName, ac.Namespace)
 			} else {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 			continue
 		}
 		c.Store(acn)
-		dlog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
+		clog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
 		err = c.EvictPodsWithAgentConfigMismatch(ctx, wl, acn)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}
 }

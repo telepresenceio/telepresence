@@ -18,7 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -152,7 +152,7 @@ func (s *session) watchInterceptsLoop(ctx context.Context) error {
 		})
 	if err != nil && status.Code(err) == codes.Unimplemented {
 		// Fall back to streaming all intercepts if the traffic manager doesn't support delta updates.'
-		dlog.Warnf(ctx, "WatchInterceptsDelta is not implemented by the traffic-manager, falling back to WatchIntercepts and full snapshots")
+		clog.Warnf(ctx, "WatchInterceptsDelta is not implemented by the traffic-manager, falling back to WatchIntercepts and full snapshots")
 		err = watcher.WatchWithRetry(ctx, "WatchIntercepts", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 			func(ctx context.Context) (grpc.ServerStreamingClient[manager.InterceptInfoSnapshot], error) {
 				return s.ManagerClient().WatchIntercepts(s, s.SessionInfo())
@@ -199,7 +199,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 
 		// Notify waiters for active intercepts
 		if aw != nil {
-			dlog.Debugf(s, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
+			clog.Debugf(s, "wait status: intercept id=%q is no longer WAITING; is now %v", ii.Id, ii.Disposition)
 			ir := interceptResult{
 				intercept: ic,
 				err:       err,
@@ -219,11 +219,11 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 				}
 			default:
 				// Channel was closed
-				dlog.Debugf(s, "unable to propagate intercept id=%q", ii.Id)
+				clog.Debugf(s, "unable to propagate intercept id=%q", ii.Id)
 			}
 		}
 		if err != nil {
-			dlog.Error(s, err)
+			clog.Error(s, err)
 			continue
 		}
 
@@ -272,7 +272,7 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 		} else {
 			ic = &intercept{InterceptInfo: ii, finalRemovalDone: make(chan struct{})}
 			ic.ctx, ic.cancel = context.WithCancel(s)
-			dlog.Debugf(s, "Received new intercept %s", ic.Spec.Name)
+			clog.Debugf(s, "Received new intercept %s", ic.Spec.Name)
 			if aw, ok := s.interceptWaiters[ii.Spec.Name]; ok {
 				ic.ClientMountPoint = aw.mountPoint
 				ic.localMountPort = aw.mountPort
@@ -288,7 +288,7 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 		sb.WriteString(ii.PodIp)
 	}
 	sb.WriteByte(']')
-	dlog.Debugf(s, "setCurrentIntercepts(%s)", sb.String())
+	clog.Debugf(s, "setCurrentIntercepts(%s)", sb.String())
 
 	// Cancel those that no longer exists
 	var removed []*intercept
@@ -302,7 +302,7 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 	s.currentInterceptsLock.Unlock()
 
 	for _, ic := range removed {
-		dlog.Debugf(s, "Cancelling context for intercept %s", ic.Spec.Name)
+		clog.Debugf(s, "Cancelling context for intercept %s", ic.Spec.Name)
 		ic.cancel()
 		close(ic.finalRemovalDone)
 	}
@@ -509,7 +509,7 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		if s.syntheticIPs == nil {
 			s.syntheticIPs = make(map[netip.Addr]string)
 		}
-		dlog.Debugf(s, "Replacing target host %s with synthetic IP %s", spec.TargetHost, targetIP)
+		clog.Debugf(s, "Replacing target host %s with synthetic IP %s", spec.TargetHost, targetIP)
 		s.syntheticIPs[targetIP] = spec.TargetHost
 		spec.TargetHost = targetIP.String()
 	}
@@ -608,7 +608,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		}
 		spec.PortIdentifier = pti.String()
 	}
-	dlog.Debugf(s, "pi.Protocol = %s", pi.Protocol)
+	clog.Debugf(s, "pi.Protocol = %s", pi.Protocol)
 	spec.Protocol = pi.Protocol
 	spec.ContainerPort = pi.ContainerPort
 	spec.ContainerName = pi.ContainerName
@@ -623,7 +623,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	spec.ServiceUid = pi.ServiceUid
 	spec.WorkloadKind = pi.WorkloadKind
 
-	dlog.Debugf(s, "creating intercept %s", spec.Name)
+	clog.Debugf(s, "creating intercept %s", spec.Name)
 	tos := client.GetConfig(ctx).Timeouts()
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
 	spec.DialTimeout = int64(tos.Get(client.TimeoutEndpointDial))
@@ -652,18 +652,18 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 
 	ii, err := mgrClient.CreateIntercept(c, s.newCreateInterceptRequest(spec))
 	if err != nil {
-		dlog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
+		clog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		return nil, err
 	}
 
-	dlog.Debugf(c, "created intercept %s", ii.Spec.Name)
+	clog.Debugf(c, "created intercept %s", ii.Spec.Name)
 
 	success := false
 	defer func() {
 		if !success {
-			dlog.Debugf(c, "intercept %s failed to create, will remove...", ii.Spec.Name)
+			clog.Debugf(c, "intercept %s failed to create, will remove...", ii.Spec.Name)
 			if removeErr := s.RemoveIntercept(ii.Spec.Name); removeErr != nil {
-				dlog.Warnf(c, "failed to remove failed intercept %s: %v", ii.Spec.Name, removeErr)
+				clog.Warnf(c, "failed to remove failed intercept %s: %v", ii.Spec.Name, removeErr)
 			}
 		}
 	}()
@@ -706,7 +706,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 
 // RemoveIntercept removes one intercept by name.
 func (s *session) RemoveIntercept(name string) error {
-	dlog.Debugf(s, "Removing intercept %s", name)
+	clog.Debugf(s, "Removing intercept %s", name)
 
 	// Make an attempt to remove the created intercept using a time limited Context. Our
 	// context is already done.
@@ -714,7 +714,7 @@ func (s *session) RemoveIntercept(name string) error {
 	defer cancel()
 	ii := s.getInterceptByName(name)
 	if ii == nil {
-		dlog.Debugf(ctx, "Intercept %s was already removed", name)
+		clog.Debugf(ctx, "Intercept %s was already removed", name)
 		return nil
 	}
 	return s.removeIntercept(ii)
@@ -729,7 +729,7 @@ func (s *session) removeIntercept(ic *intercept) error {
 	ic.wg.Wait()
 
 	c := s.Context
-	dlog.Debugf(c, "telling manager to remove intercept %s", name)
+	clog.Debugf(c, "telling manager to remove intercept %s", name)
 	tos := client.GetConfig(c).Timeouts()
 	cc, cancel := tos.TimeoutContext(c, client.TimeoutTrafficManagerAPI)
 	defer cancel()
@@ -761,15 +761,15 @@ func (s *session) stopHandler(name, handlerContainer string, pid int) {
 				// It's possible that the container is stopped externally before we get here. If so,
 				// then that's not an error.
 				if !strings.Contains(err.Error(), "No such container") {
-					dlog.Error(c, err)
+					clog.Error(c, err)
 				}
 			}
 		} else if pid != 0 {
 			p, err := os.FindProcess(pid)
 			if err != nil {
-				dlog.Errorf(c, "unable to find handler for ingest/intercept %s with pid %d", name, pid)
+				clog.Errorf(c, "unable to find handler for ingest/intercept %s with pid %d", name, pid)
 			} else {
-				dlog.Debugf(c, "terminating interceptor for ingest/intercept %s with pid %d", name, pid)
+				clog.Debugf(c, "terminating interceptor for ingest/intercept %s with pid %d", name, pid)
 				_ = proc.Terminate(p)
 			}
 		}
@@ -782,14 +782,14 @@ func (s *session) AddInterceptor(id string, ih *rpc.Interceptor) error {
 	added := false
 	s.currentInterceptsLock.Lock()
 	if ci, ok := s.currentIntercepts[id]; ok {
-		dlog.Debugf(s, "Adding intercept handler for id %s, %v", id, ih)
+		clog.Debugf(s, "Adding intercept handler for id %s, %v", id, ih)
 		ci.pid = int(ih.Pid)
 		ci.handlerContainer = ih.ContainerName
 		added = true
 	} else {
 		if parts := strings.Split(id, "/"); len(parts) == 2 {
 			if cg, ok := s.currentIngests.Load(ingestKey{workload: parts[0], container: parts[1]}); ok {
-				dlog.Debugf(s, "Adding ingest handler for id %s, %v", id, ih)
+				clog.Debugf(s, "Adding ingest handler for id %s, %v", id, ih)
 				cg.pid = int(ih.Pid)
 				cg.handlerContainer = ih.ContainerName
 				added = true
@@ -903,14 +903,14 @@ func (s *session) InterceptsForWorkload(workloadName, namespace string) []*manag
 // ClearIngestsAndIntercepts removes all intercepts.
 func (s *session) ClearIngestsAndIntercepts() error {
 	for _, ic := range s.getCurrentIntercepts() {
-		dlog.Debugf(s, "Clearing intercept %s", ic.Spec.Name)
+		clog.Debugf(s, "Clearing intercept %s", ic.Spec.Name)
 		err := s.removeIntercept(ic)
 		if err != nil && status.Code(err) != codes.NotFound {
 			return err
 		}
 	}
 	s.currentIngests.Range(func(key ingestKey, ig *ingest) bool {
-		dlog.Debugf(s, "Clearing ingest %s", key)
+		clog.Debugf(s, "Clearing ingest %s", key)
 		s.stopHandler(key.workload+"/"+key.container, ig.handlerContainer, ig.pid)
 		return true
 	})
@@ -930,7 +930,7 @@ func (s *session) reconcileAPIServers() {
 			if err == nil {
 				return int(port)
 			}
-			dlog.Errorf(s, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, is.Agent, is.Namespace, err)
+			clog.Errorf(s, "unable to parse TELEPRESENCE_API_PORT(%q) to a port number in agent %s.%s: %v", ps, is.Agent, is.Namespace, err)
 		}
 		return 0
 	}
@@ -978,7 +978,7 @@ func (s *session) newAPIServerForPort(port int) {
 	}
 	go func() {
 		if err := svr.ListenAndServe(ctx, port); err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}()
 }
@@ -1002,13 +1002,13 @@ func (s *session) InterceptInfo(_ context.Context, callerID, path string, _ uint
 	am := s.currentMatchers[callerID]
 	switch {
 	case am == nil:
-		dlog.Debugf(s, "no matcher found for callerID %s", callerID)
+		clog.Debugf(s, "no matcher found for callerID %s", callerID)
 	case am.requestMatcher.MatchesPathAndHeader(path, headers):
-		dlog.Debugf(s, "%s: matcher %s matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
+		clog.Debugf(s, "%s: matcher %s matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
 		r.Intercepted = true
 		r.Metadata = am.metadata
 	default:
-		dlog.Debugf(s, "%s: matcher %s does not matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
+		clog.Debugf(s, "%s: matcher %s does not matches path %q and headers %s", callerID, am.requestMatcher, path, matcher.HeaderStringer(headers))
 	}
 	return r, nil
 }

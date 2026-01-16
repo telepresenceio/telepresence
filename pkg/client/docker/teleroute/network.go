@@ -11,7 +11,7 @@ import (
 	"github.com/docker/docker/api/types/network"
 	dockerClient "github.com/docker/docker/client"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -35,7 +35,7 @@ func CreateNetwork(ctx context.Context, info *daemon.Info, cli *dockerClient.Cli
 	if !ipv4 && !ipv6 {
 		return errcat.User.New("unable to create teleroute network because both the IPv4 and IPv6 families are disabled")
 	}
-	dlog.Debugf(ctx, "Creating teleroute network %s", cn)
+	clog.Debugf(ctx, "Creating teleroute network %s", cn)
 	rsp, err := cli.NetworkCreate(ctx, cn, network.CreateOptions{
 		Driver:     teleroutePlugin,
 		Scope:      "local",
@@ -54,9 +54,9 @@ func CreateNetwork(ctx context.Context, info *daemon.Info, cli *dockerClient.Cli
 		return err
 	}
 	if rsp.Warning != "" {
-		dlog.Warning(ctx, rsp.Warning)
+		clog.Warn(ctx, rsp.Warning)
 	} else {
-		dlog.Debugf(ctx, "Network %s created", cn)
+		clog.Debugf(ctx, "Network %s created", cn)
 
 		// The daemon must be the first container to join the network. This join is special in that
 		// it will not receive the routes that the daemon makes available. The connect is necessary
@@ -96,12 +96,12 @@ func NetworkGC(ctx context.Context, cli *dockerClient.Client) error {
 	for _, n := range ns {
 		_, err := cli.ContainerInspect(ctx, n.Labels[daemonLabel])
 		if errdefs.IsNotFound(err) {
-			dlog.Debugf(ctx, "Garbage collecting network %s", n.Name)
+			clog.Debugf(ctx, "Garbage collecting network %s", n.Name)
 			err = cli.NetworkRemove(ctx, n.ID)
 			if err != nil {
 				ee := err.Error()
 				if ix := strings.Index(ee, "has active endpoints"); ix > 0 {
-					dlog.Debugf(ctx, "Network %s was not garbage collected. It %s", n.ID, ee[ix:])
+					clog.Debugf(ctx, "Network %s was not garbage collected. It %s", n.ID, ee[ix:])
 				}
 			}
 		}
@@ -117,29 +117,29 @@ func RemoveNetwork(ctx context.Context, cli *dockerClient.Client, name string) (
 	}
 
 	if nc := len(ni.Containers); nc > 0 {
-		dlog.Debugf(ctx, "Disconnecting %d containers from network %s", nc, name)
+		clog.Debugf(ctx, "Disconnecting %d containers from network %s", nc, name)
 		disconnected = make([]string, 0, nc)
 		for cid := range ni.Containers {
 			err = cli.NetworkDisconnect(ctx, name, cid, true)
 			if err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			} else {
 				disconnected = append(disconnected, cid)
 			}
 		}
 	}
 
-	dlog.Debugf(ctx, "Removing network %s", name)
+	clog.Debugf(ctx, "Removing network %s", name)
 	return disconnected, cli.NetworkRemove(ctx, name)
 }
 
 func ReconnectNetwork(ctx context.Context, cli *dockerClient.Client, name string, disconnected []string) {
 	if nc := len(disconnected); nc > 0 {
-		dlog.Debugf(ctx, "Reconnecting %d containers to network %s", nc, name)
+		clog.Debugf(ctx, "Reconnecting %d containers to network %s", nc, name)
 		for _, cid := range disconnected {
 			err := cli.NetworkConnect(ctx, name, cid, &network.EndpointSettings{})
 			if err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 		}
 	}

@@ -5,66 +5,58 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
-	"log"
+	stdLog "log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/sirupsen/logrus"
-
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/clog/handler"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
-	tlog "github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
-// loggerForTest exposes internals to initcontext_test.go.
-var loggerForTest *logrus.Logger //nolint:gochecknoglobals // used by unit tests only
+// rotatingFileForTest exposes internals to initcontext_test.go.
+var rotatingFileForTest *RotatingFile //nolint:gochecknoglobals // used by unit tests only
+
+type splitErrorWriter struct {
+	outWriter io.Writer
+	errWriter io.Writer
+}
+
+func (w *splitErrorWriter) Write(level slog.Level, p []byte) (n int, err error) {
+	if level >= slog.LevelError {
+		return w.errWriter.Write(p)
+	}
+	return w.outWriter.Write(p)
+}
 
 // InitContext sets up standard Telepresence logging for a background process.
-func InitContext(ctx context.Context, logFile string, logLevel logrus.Level, strategy RotationStrategy, captureStd bool) (context.Context, error) {
-	logger := logrus.StandardLogger()
-	loggerForTest = logger
+func InitContext(ctx context.Context, logFile string, logLevel slog.Level, strategy RotationStrategy, captureStd bool) (context.Context, error) {
+	ctx = clog.WithTreeLevel(ctx, logLevel)
 
-	// Start with InfoLevel so that the config is read using that level
-	logger.SetLevel(logrus.InfoLevel)
-	logger.ReportCaller = false // turned on when level >= logrus.TraceLevel
-	dl := dlog.WrapLogrus(logger)
-
+	var opts []handler.Option
+	initStdLog := false
 	switch logFile {
 	case "stdout":
-		logger.Formatter = tlog.NewFormatter(tlog.WithTimestampFormat("15:04:05.0000"))
-		logger.SetOutput(os.Stdout)
+		opts = append(opts, handler.TimeFormat("15:04:05.0000"), handler.Output(os.Stdout))
 	case "", "-", "stderr":
-		logger.Formatter = tlog.NewFormatter(tlog.WithTimestampFormat("15:04:05.0000"))
-		logger.SetOutput(os.Stderr)
+		opts = append(opts, handler.TimeFormat("15:04:05.0000"), handler.Output(os.Stderr))
 	case "managed":
 		// "managed" is a special case used by the daemon to log to stdout and stderr. It's
 		// assumed that the caller will add a timestamp, and that level is implicit for errors.
-		logger.Formatter = tlog.NewFormatter(tlog.WithLevelPrefixThreshold(logrus.DebugLevel))
-		logger.SetOutput(os.Stdout)
-
-		errLog := logrus.New()
-		errLog.SetLevel(logrus.ErrorLevel)
-		errLog.ReportCaller = false
-		errLog.Formatter = logger.Formatter
-		dl = dlog.NewSplitLogger(dl, dlog.WrapLogrus(errLog))
+		opts = append(opts, handler.TimeFormat(""), handler.HideLevel(slog.LevelError), handler.LevelOutput(&splitErrorWriter{os.Stdout, os.Stderr}))
 	case "std":
 		// "std" is a special case used by the daemon to log to stdout and stderr. Contrary to
-		// "managed", it's not assumed that the caller will add a timestamp, or that the level is implicit.
-		logger.Formatter = tlog.NewFormatter(tlog.WithTimestampFormat("2006-01-02 15:04:05.0000"))
-		logger.SetOutput(os.Stdout)
-
-		errLog := logrus.New()
-		errLog.SetLevel(logrus.ErrorLevel)
-		errLog.ReportCaller = false
-		errLog.Formatter = logger.Formatter
-		dl = dlog.NewSplitLogger(dl, dlog.WrapLogrus(errLog))
+		// "managed", it's not assumed that the caller will add a timestamp or that the level is implicit.
+		opts = append(opts, handler.TimeFormat("2006-01-02 15:04:05.0000"), handler.LevelOutput(&splitErrorWriter{os.Stdout, os.Stderr}))
 	default:
-		logger.Formatter = tlog.NewFormatter(tlog.WithTimestampFormat("2006-01-02 15:04:05.0000"))
+		initStdLog = true
 		maxFiles := uint16(5)
 
 		// TODO: Also make this a configurable setting in config.yml
@@ -83,29 +75,32 @@ func InitContext(ctx context.Context, logFile string, logLevel logrus.Level, str
 		if err != nil {
 			return ctx, err
 		}
-		logger.SetOutput(rf)
-
+		rotatingFileForTest = rf
 		if captureStd {
 			rfFile := rf.file.(*os.File)
 			err = dupStdOut(rfFile)
 			if err != nil {
+				_ = rf.Close()
 				return ctx, err
 			}
 			err = dupStdErr(rfFile)
 			if err != nil {
+				_ = rf.Close()
 				return ctx, err
 			}
 		}
-
-		// Configure the standard logger to write without any fields and with prefix "stdlog"
-		log.SetOutput(logger.Writer())
-		log.SetPrefix("stdlog : ")
-		log.SetFlags(0)
+		opts = append(opts, handler.TimeFormat("2006-01-02 15:04:05.0000"), handler.Output(rf))
 	}
 
-	ctx = dlog.WithLogger(ctx, dl)
-	tlog.SetLogrusLevel(logger, logLevel.String(), false)
-	ctx = tlog.WithLevelSetter(ctx, logger)
+	sl := slog.New(handler.NewText(append(opts, handler.LevelEnabler(clog.TreeEnabled))...))
+	slog.SetDefault(sl)
+	ctx = clog.WithLogger(ctx, sl)
+	if initStdLog {
+		stl := clog.StdLogger(ctx, logLevel)
+		stdLog.SetOutput(stl.Writer())
+		stdLog.SetFlags(stl.Flags())
+		stdLog.SetPrefix("stdlog : ")
+	}
 	return ctx, nil
 }
 

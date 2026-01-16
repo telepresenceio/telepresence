@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
@@ -102,13 +102,13 @@ type StreamCreator func(context.Context, ConnID) (Stream, error)
 func ReadLoop(ctx context.Context, s Stream, p *CounterProbe) (<-chan Message, <-chan error) {
 	msgCh := make(chan Message, 50)
 	errCh := make(chan error, 1) // Max one message will be sent on this channel
-	dlog.Tracef(ctx, "<- %s %s, ReadLoop starting", s.Tag(), s.ID())
+	clog.Tracef(ctx, "<- %s %s, ReadLoop starting", s.Tag(), s.ID())
 	go func() {
 		var endReason string
 		defer func() {
 			close(errCh)
 			close(msgCh)
-			dlog.Tracef(ctx, "<- %s %s, ReadLoop ended: %s", s.Tag(), s.ID(), endReason)
+			clog.Tracef(ctx, "<- %s %s, ReadLoop ended: %s", s.Tag(), s.ID(), endReason)
 		}()
 
 		for {
@@ -167,13 +167,13 @@ func WriteLoop(
 	wg *sync.WaitGroup,
 	p *CounterProbe,
 ) {
-	dlog.Tracef(ctx, "-> %s %s, WriteLoop starting", s.Tag(), s.ID())
+	clog.Tracef(ctx, "-> %s %s, WriteLoop starting", s.Tag(), s.ID())
 	go func() {
 		var endReason string
 		defer func() {
-			dlog.Tracef(ctx, "   %s %s, WriteLoop ended: %s", s.Tag(), s.ID(), endReason)
+			clog.Tracef(ctx, "   %s %s, WriteLoop ended: %s", s.Tag(), s.ID(), endReason)
 			if err := s.CloseSend(ctx); err != nil {
-				dlog.Errorf(ctx, "!> %s %s, Send of closeSend failed: %v", s.Tag(), s.ID(), err)
+				clog.Errorf(ctx, "!> %s %s, Send of closeSend failed: %v", s.Tag(), s.ID(), err)
 			}
 			wg.Done()
 		}()
@@ -199,7 +199,7 @@ func WriteLoop(
 					endReason = "output stream is closed"
 				default:
 					endReason = err.Error()
-					dlog.Errorf(ctx, "!! %s %s, Send failed: %v", s.Tag(), s.ID(), err)
+					clog.Errorf(ctx, "!! %s %s, Send failed: %v", s.Tag(), s.ID(), err)
 				}
 			}
 			break
@@ -265,12 +265,12 @@ func (s *stream) Receive(ctx context.Context) (Message, error) {
 	m := msg(cm.Payload)
 	switch m.Code() {
 	case closeSend:
-		dlog.Tracef(ctx, "<- %s %s, close send", s.tag, s.id)
+		clog.Tracef(ctx, "<- %s %s, close send", s.tag, s.id)
 		return nil, net.ErrClosed
 	case streamInfo:
-		dlog.Tracef(ctx, "<- %s, %s", s.tag, m)
+		clog.Tracef(ctx, "<- %s, %s", s.tag, m)
 	default:
-		dlog.Tracef(ctx, "<- %s %s, %s", s.tag, s.id, m)
+		clog.Tracef(ctx, "<- %s %s, %s", s.tag, s.id, m)
 	}
 	return m, nil
 }
@@ -284,11 +284,11 @@ func (s *stream) Send(ctx context.Context, m Message) error {
 	}
 	if err != nil {
 		if ctx.Err() == nil && !errors.Is(err, net.ErrClosed) {
-			dlog.Errorf(ctx, "!! %s %s, Send failed: %v", s.tag, s.id, err)
+			clog.Errorf(ctx, "!! %s %s, Send failed: %v", s.tag, s.id, err)
 		}
 		return err
 	}
-	dlog.Tracef(ctx, "-> %s %s, %s", s.tag, s.id, m)
+	clog.Tracef(ctx, "-> %s %s, %s", s.tag, s.id, m)
 	return nil
 }
 

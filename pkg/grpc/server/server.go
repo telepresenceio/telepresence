@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"runtime"
 	"time"
@@ -13,8 +14,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dcontext"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 )
@@ -87,7 +87,7 @@ func New(valCtx context.Context, options ...grpc.ServerOption) *grpc.Server {
 		return jsonError(handler(srv, ss))
 	}
 
-	if dlog.MaxLogLevel(valCtx) >= dlog.LogLevelDebug {
+	if clog.Enabled(valCtx, slog.LevelDebug) {
 		opts := []logging.Option{
 			logging.WithLogOnEvents(logging.StartCall, logging.FinishCall),
 			// Add any other option (check functions starting with logging.With).
@@ -106,7 +106,17 @@ func New(valCtx context.Context, options ...grpc.ServerOption) *grpc.Server {
 			),
 		)
 	} else {
-		options = append(options, grpc.UnaryInterceptor(unaryContextInterceptor), grpc.StreamInterceptor(streamContextInterceptor))
+		options = append(
+			options,
+			grpc.ChainUnaryInterceptor(
+				unaryContextInterceptor,
+				unaryErrorInterceptor,
+			),
+			grpc.ChainStreamInterceptor(
+				streamContextInterceptor,
+				streamErrorInterceptor,
+			),
+		)
 	}
 	return grpc.NewServer(options...)
 }
@@ -119,13 +129,13 @@ func New(valCtx context.Context, options ...grpc.ServerOption) *grpc.Server {
 // enabled. The svc.Stop function will be called if no soft-cancel is enabled or when the GracefulStop doesn't finish
 // until the hard context is done.
 func Serve(ctx context.Context, svc *grpc.Server, lis net.Listener) error {
-	dlog.Debug(ctx, "gRPC server started")
+	clog.Debug(ctx, "gRPC server started")
 	go Wait(ctx, svc)
 	err := svc.Serve(lis)
 	if err != nil {
-		dlog.Errorf(ctx, "gRPC server ended with error: %v", err)
+		clog.Errorf(ctx, "gRPC server ended with error: %v", err)
 	} else {
-		dlog.Debug(ctx, "gRPC server ended")
+		clog.Debug(ctx, "gRPC server ended")
 	}
 	return err
 }
@@ -135,21 +145,22 @@ func Serve(ctx context.Context, svc *grpc.Server, lis net.Listener) error {
 // be logged.
 func Stop(ctx context.Context, svc *grpc.Server, maxTime time.Duration) {
 	dead := make(chan struct{})
-	dlog.Debug(ctx, "Initiating hard shutdown")
+	clog.Debug(ctx, "Initiating shutdown")
 	go func() {
 		defer close(dead)
-		svc.Stop()
-		dlog.Debug(ctx, "Hard shutdown complete")
+		svc.GracefulStop()
+		clog.Debug(ctx, "Shutdown complete")
 	}()
 	select {
 	case <-dead:
 	case <-time.After(maxTime):
-		// Hard shutdown is stuck! This shouldn't happen, and we need to find out why
-		if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
+		// Graceful shutdown is stuck! This shouldn't happen, and we need to find out why
+		if clog.Enabled(ctx, slog.LevelDebug) {
 			buf := make([]byte, 1024*256)
 			n := runtime.Stack(buf, true)
-			dlog.Debug(ctx, string(buf[:n]))
+			clog.Debug(ctx, string(buf[:n]))
 		}
+		svc.Stop()
 	}
 }
 
@@ -158,24 +169,5 @@ func Stop(ctx context.Context, svc *grpc.Server, maxTime time.Duration) {
 // when the GracefulStop doesn't finish until the Done channel of the hard context closed.
 func Wait(ctx context.Context, svc *grpc.Server) {
 	<-ctx.Done()
-	hardCtx := dcontext.HardContext(ctx)
-	if hardCtx != ctx {
-		dlog.Debugf(ctx, "wait context has softness")
-		dead := make(chan struct{})
-		go func() {
-			dlog.Debug(ctx, "Initiating soft shutdown")
-			svc.GracefulStop()
-			close(dead)
-			dlog.Debug(ctx, "Soft shutdown complete")
-		}()
-		select {
-		case <-dead:
-			// GracefulStop did the job.
-		case <-hardCtx.Done():
-			Stop(ctx, svc, 5*time.Second)
-		}
-	} else {
-		dlog.Debugf(ctx, "wait context has no softness")
-		Stop(ctx, svc, 5*time.Second)
-	}
+	Stop(ctx, svc, 5*time.Second)
 }

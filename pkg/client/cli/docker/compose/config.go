@@ -17,11 +17,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/generate"
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/types"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
@@ -29,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
@@ -256,7 +255,7 @@ func (c *config) run(cmd *cobra.Command) (err error) {
 	progress.Start(ctx, "Connecting")
 	existingComposeFile, err := c.connect(ctx, es, connections)
 	if err != nil {
-		if c.mustBeConnected && errors.Is(err, connect.ErrNoUserDaemon) {
+		if c.mustBeConnected && errors.Is(err, daemon.ErrNoUserDaemon) {
 			// The daemon is not running, although the command expects it to. This means that no services should be running either.
 			// So let's just run the command without any extensions so that docker compose produces the expected error output.
 			err = tr.runCommand(ctx, name)
@@ -265,21 +264,18 @@ func (c *config) run(cmd *cobra.Command) (err error) {
 	}
 
 	if existingComposeFile != "" {
-		dlog.Debugf(ctx, "Existing compose file: %s", existingComposeFile)
+		clog.Debugf(ctx, "Existing compose file: %s", existingComposeFile)
 		p, err := loadExistingProject(ctx, c.projectDir, existingComposeFile)
 		if err != nil {
 			return err
 		}
 		c.existingProject = p
 	}
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		EnableSignalHandling: true,
-		IgnoreSignalError:    true,
-	})
+	g := log.NewGroup(ctx)
 	aesCh := make(chan *engagement, len(es))
 	progress.Start(ctx, "Engaging")
 	for _, e := range es {
-		tr.engage(g, e, aesCh)
+		g.Go(e.composeService().Name, func(ctx context.Context) error { return tr.engage(ctx, e, aesCh) })
 	}
 
 	g.Go("compose", func(ctx context.Context) error {
@@ -319,7 +315,7 @@ func (c *config) connect(ctx context.Context, es map[string]serviceExtension, co
 			}
 			connections[cc.Name] = cx
 		}
-		dlog.Debugf(ctx, "Service %q will be %s", e.composeService().Name, e.engagementType().WorkDone())
+		clog.Debugf(ctx, "Service %q will be %s", e.composeService().Name, e.engagementType().WorkDone())
 		if existingComposeFile == "" {
 			existingComposeFile = daemon.MustGetSession(cx).DaemonInfo().ComposeFile
 		}
@@ -394,7 +390,7 @@ func (c *config) getMountPort(e mountsExtension) (uint16, error) {
 		if s, ok := ep.Services[cn]; ok {
 			if pa, ok := s.Annotations[mountPortAnnotation]; ok {
 				if p, err := strconv.Atoi(pa); err == nil {
-					dlog.Debugf(e.connection(), "Found existing mount port %d for %q", p, cn)
+					clog.Debugf(e.connection(), "Found existing mount port %d for %q", p, cn)
 					return uint16(p), nil
 				}
 			}

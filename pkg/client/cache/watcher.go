@@ -8,7 +8,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -45,7 +45,7 @@ func WatchUserCache(ctx context.Context, subDir string, onChange func(context.Co
 			return
 		default:
 			if err := onChange(ctx); err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 		}
 	})
@@ -70,7 +70,7 @@ func WatchUserCache(ctx context.Context, subDir string, onChange func(context.Co
 		case <-ctx.Done():
 			return nil
 		case err = <-watcher.Errors:
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		case event := <-watcher.Events:
 			if event.Op&(fsnotify.Remove|fsnotify.Write|fsnotify.Create) != 0 && isOfInterest(event.Name) {
 				// The file was created, modified, or removed. Let's defer the call to onChange just

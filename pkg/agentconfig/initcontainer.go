@@ -16,7 +16,7 @@ func InitContainer(config *Sidecar) *core.Container {
 		Env: []core.EnvVar{
 			{
 				Name:  "LOG_LEVEL",
-				Value: config.LogLevel,
+				Value: config.LogLevel.String(),
 			},
 			{
 				Name: "AGENT_CONFIG",

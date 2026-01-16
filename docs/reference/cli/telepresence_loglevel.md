@@ -8,7 +8,7 @@ Temporarily change the log-level of the traffic-manager, traffic-agent, and user
 
 ### Usage:
 ```
-  telepresence loglevel <error,warning,info,debug,trace> [flags]
+  telepresence loglevel <ERROR,WARN,INFO,DEBUG,TRACE> [flags]
 ```
 
 ### Flags:

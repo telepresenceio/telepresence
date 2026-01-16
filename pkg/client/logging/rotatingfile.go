@@ -12,8 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
-	"github.com/telepresenceio/dlib/v2/dtime"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
 
@@ -61,7 +60,7 @@ func (rotateDaily) RotateNow(rf *RotatingFile, _ int) bool {
 		return false
 	}
 	bt := rf.BirthTime()
-	return dtime.Now().In(bt.Location()).Day() != rf.BirthTime().Day()
+	return time.Now().In(bt.Location()).Day() != rf.BirthTime().Day()
 }
 
 type RotatingFile struct {
@@ -91,23 +90,13 @@ type RotatingFile struct {
 //
 // Parameters:
 //
-// - dirName:   full path to the directory of the log file and its backups
-//
-// - fileName:   name of the file that should be opened (relative to dirName)
-//
-// - timeFormat: the format to use for the timestamp that is added to rotated files
-//
-// - localTime: if true, use local time in timestamps, if false, use UTC
-//
-// - stdLogger: if not nil, all writes to os.Stdout and os.Stderr will be redirected to this logger as INFO level
-// messages prefixed with <stdout> or <stderr>
-//
-// - fileMode: the mode to use when creating new files the file
-//
-// - strategy:  determines when a rotation should take place
-//
-// - maxFiles: maximum number of files in rotation, including the currently active logfile. A value of zero means
-// unlimited.
+//   - ctx: context used to close the file.
+//   - logFilePath: full path to the directory of the log file and its backups
+//   - timeFormat: the format to use for the timestamp that is added to rotated files
+//   - localTime: if true, use local time in timestamps, if false, use UTC
+//   - fileMode: the mode to use when creating new files the file
+//   - strategy:  determines when a rotation should take place
+//   - maxFiles: maximum number of files in rotation, including the currently active logfile. A value of zero means unlimited.
 func OpenRotatingFile(
 	ctx context.Context,
 	logfilePath string,
@@ -153,6 +142,10 @@ func OpenRotatingFile(
 	rf.birthTime = stat.BirthTime()
 	rf.size = stat.Size()
 	rf.afterOpen()
+	go func() {
+		<-ctx.Done()
+		_ = rf.Close()
+	}()
 	return rf, nil
 }
 
@@ -264,7 +257,7 @@ func (rf *RotatingFile) openNew(prevInfo SysInfo, backupName string) (err error)
 	if rf.file, err = dos.OpenFile(rf.ctx, fullPath, flag, rf.fileMode); err != nil {
 		return fmt.Errorf("failed to open file %s: %w", fullPath, err)
 	}
-	rf.birthTime = rf.fileTime(dtime.Now())
+	rf.birthTime = rf.fileTime(time.Now())
 	rf.size = 0
 	rf.afterOpen()
 	return nil
@@ -326,19 +319,19 @@ func (rf *RotatingFile) rotate() error {
 		prevInfo, err = FStat(rf.file)
 		if err != nil || prevInfo == nil {
 			err = fmt.Errorf("failed to stat %s: %w", rf.file.Name(), err)
-			dlog.Error(rf.ctx, err)
+			clog.Error(rf.ctx, err)
 			return err
 		}
 
 		fullPath := filepath.Join(rf.dirName, rf.fileName)
 		ex := filepath.Ext(rf.fileName)
 		sf := fullPath[:len(fullPath)-len(ex)]
-		ts := rf.fileTime(dtime.Now()).Format(rf.timeFormat)
+		ts := rf.fileTime(time.Now()).Format(rf.timeFormat)
 		backupName = fmt.Sprintf("%s-%s%s", sf, ts, ex)
 	}
 	err := rf.openNew(prevInfo, backupName)
 	if err != nil {
-		dlog.Error(rf.ctx, err)
+		clog.Error(rf.ctx, err)
 	}
 	return err
 }

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -108,29 +108,29 @@ func (s *multipleInterceptsSuite) Test_Intercepts() {
 				func() bool {
 					ip, err := net.DefaultResolver.LookupHost(ctx, svc)
 					if err != nil {
-						dlog.Infof(ctx, "%v", err)
+						clog.Infof(ctx, "%v", err)
 						return false
 					}
 					if len(ip) != 1 {
-						dlog.Infof(ctx, "Lookup for %s returned %v", svc, ip)
+						clog.Infof(ctx, "Lookup for %s returned %v", svc, ip)
 						return false
 					}
 
-					dlog.Infof(ctx, "trying %q...", "http://"+svc)
+					clog.Infof(ctx, "trying %q...", "http://"+svc)
 					hc := http.Client{Timeout: 2 * time.Second}
 					resp, err := hc.Get("http://" + svc)
 					if err != nil {
-						dlog.Infof(ctx, "%v", err)
+						clog.Infof(ctx, "%v", err)
 						return false
 					}
 					defer resp.Body.Close()
-					dlog.Infof(ctx, "status code: %v", resp.StatusCode)
+					clog.Infof(ctx, "status code: %v", resp.StatusCode)
 					body, err := io.ReadAll(resp.Body)
 					if err != nil {
-						dlog.Infof(ctx, "%v", err)
+						clog.Infof(ctx, "%v", err)
 						return false
 					}
-					dlog.Infof(ctx, "body: %q", body)
+					clog.Infof(ctx, "body: %q", body)
 					return string(body) == expectedOutput
 				},
 				time.Minute,   // waitFor

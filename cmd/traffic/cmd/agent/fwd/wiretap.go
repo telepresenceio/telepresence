@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 // addConnectionTaps installs wiretaps on a connection. The wiretapped connection is returned along with the wiretaps.
@@ -180,7 +180,7 @@ func writePump(ctx context.Context, ch <-chan readResult, w *io.PipeWriter) {
 					err = io.ErrShortWrite
 				}
 				if err != nil {
-					dlog.Errorf(ctx, "failed to write wiretap data: %v", err)
+					clog.Errorf(ctx, "failed to write wiretap data: %v", err)
 					return
 				}
 			}
@@ -242,7 +242,7 @@ func addRequestTaps(ctx context.Context, request *http.Request, count, cacheSize
 		go func() {
 			_, err = wr.Write(headerData)
 			if err != nil {
-				dlog.Errorf(ctx, "Failed to write request to tap: %v", err)
+				clog.Errorf(ctx, "Failed to write request to tap: %v", err)
 			} else {
 				writePump(ctx, c, wr)
 			}

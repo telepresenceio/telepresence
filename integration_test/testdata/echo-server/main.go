@@ -102,11 +102,15 @@ func main() {
 		switch proto {
 		case "http":
 			prs.SetUnencryptedHTTP2(true)
-			g.Go(server.ListenAndServe)
+			g.Go(func() error {
+				_ = server.ListenAndServe()
+				return nil
+			})
 		case "https":
 			prs.SetHTTP2(true)
 			g.Go(func() error {
-				return server.ListenAndServeTLS(certFile, keyFile)
+				_ = server.ListenAndServeTLS(certFile, keyFile)
+				return nil
 			})
 		default:
 			errLog.Fatalf("unknown protocol %q", proto)
@@ -123,17 +127,15 @@ func main() {
 		}
 		sdCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
+		var errs error
 		for _, server := range servers {
-			err := server.Shutdown(sdCtx)
-			if err != nil {
-				errLog.Print(err.Error())
-			}
+			errs = errors.Join(errs, server.Shutdown(sdCtx))
 		}
-		return context.Canceled
+		return errs
 	})
 
 	err := g.Wait()
-	if err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		errLog.Fatalf("Echo server exited with error: %v", err)
 	}
 }

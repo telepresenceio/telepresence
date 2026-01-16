@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 type Pool struct {
@@ -29,7 +29,7 @@ func (p *Pool) release(ctx context.Context, id ConnID) {
 	delete(p.handlers, id)
 	count := len(p.handlers)
 	p.lock.Unlock()
-	dlog.Debugf(ctx, "-- POOL %s, count now is %d", id, count)
+	clog.Debugf(ctx, "-- POOL %s, count now is %d", id, count)
 }
 
 // HandlerCreator describes the function signature for the function that creates a handler.
@@ -83,7 +83,7 @@ func (p *Pool) GetOrCreate(ctx context.Context, id ConnID, createHandler Handler
 		return old, true, nil
 	}
 	handler.Start(handlerCtx)
-	dlog.Debugf(ctx, "++ POOL %s, count now is %d", id, count)
+	clog.Debugf(ctx, "++ POOL %s, count now is %d", id, count)
 	return handler, false, nil
 }
 

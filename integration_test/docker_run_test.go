@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -37,12 +37,12 @@ func runDockerRun(ctx context.Context, name, svc, port, appDir, tag string, rq *
 			defer close(wch)
 		}
 		err := cmd.Wait()
-		dlog.Info(ctx, so.String())
+		clog.Info(ctx, so.String())
 		if ses := se.String(); ses != "" {
-			dlog.Error(ctx, ses)
+			clog.Error(ctx, ses)
 		}
 		if err != nil {
-			dlog.Error(ctx, err.Error())
+			clog.Error(ctx, err.Error())
 		}
 	}()
 	return proc
@@ -76,9 +76,9 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 		expectedOutput := regexp.MustCompile(`Intercept id [0-9a-f-]+:` + svc)
 		assert.EventuallyContext(ctx, func() bool {
 			out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", "http://"+svc)
-			dlog.Info(ctx, out)
+			clog.Info(ctx, out)
 			if err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 				return false
 			}
 			return expectedOutput.MatchString(out)
@@ -94,11 +94,11 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 		assert.EventuallyContext(ctx, func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 			if err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 				return false
 			}
 			if strings.Contains(stdout, svc+": intercepted") {
-				dlog.Debugf(ctx, "stdout: %q", stdout)
+				clog.Debugf(ctx, "stdout: %q", stdout)
 				return false
 			}
 			return true
@@ -194,7 +194,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 	assertInterceptResponse := func(ctx context.Context) {
 		s.Eventually(func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
-			dlog.Info(ctx, stdout)
+			clog.Info(ctx, stdout)
 			return err == nil && strings.Contains(stdout, svc+": intercepted")
 		}, 30*time.Second, 3*time.Second)
 
@@ -203,9 +203,9 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 			// condition
 			func() bool {
 				so, _, err := itest.Telepresence(ctx, "curl", "--silent", "--max-time", "2", "http://"+svc)
-				dlog.Info(ctx, so)
+				clog.Info(ctx, so)
 				if err != nil {
-					dlog.Error(ctx, err)
+					clog.Error(ctx, err)
 					return false
 				}
 				return expectedOutput.MatchString(so)
@@ -303,7 +303,7 @@ func (s *dockerDaemonSuite) Test_DockerRun_VolumePresent() {
 	stdout, _, err := itest.Telepresence(ctx, "intercept", "--docker-run", "hello", "-p", "8080:http", "--",
 		"--rm", "busybox", "ls", "/var/run/secrets/datawire.io/auth")
 	s.NoError(err)
-	dlog.Infof(ctx, "stdout = %s", stdout)
+	clog.Infof(ctx, "stdout = %s", stdout)
 	s.True(strings.HasSuffix(stdout, "\nusername"))
 }
 
@@ -315,7 +315,7 @@ func (s *dockerDaemonSuite) Test_DockerRunCommand() {
 
 	stdout, _, err := itest.Telepresence(ctx, "docker-run", "--rm", "busybox", "ip", "r")
 	require.NoError(err)
-	dlog.Infof(ctx, "stdout = %s", stdout)
+	clog.Infof(ctx, "stdout = %s", stdout)
 	if s.ClientIsVersion(">=2.23.0") {
 		s.Contains(stdout, "dev tpd-0")
 	}
@@ -329,6 +329,6 @@ func (s *dockerDaemonSuite) Test_DockerRunExternalDNS() {
 
 	stdout, _, err := itest.Telepresence(ctx, "docker-run", "--rm", "busybox", "nslookup", "google.com")
 	require.NoError(err)
-	dlog.Infof(ctx, "stdout = %s", stdout)
+	clog.Infof(ctx, "stdout = %s", stdout)
 	s.Contains(stdout, "Address: ")
 }

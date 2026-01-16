@@ -12,8 +12,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 
-	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -29,7 +28,7 @@ func NewSFTPMounter(iceptWG, podWG *sync.WaitGroup) Mounter {
 }
 
 func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMountPoint, mountPoint string, podAddrPort netip.AddrPort, ro bool) error {
-	ctx = dgroup.WithGoroutineName(ctx, podAddrPort.String())
+	ctx = clog.WithGroup(ctx, podAddrPort.String())
 	podIP := podAddrPort.Addr().Unmap()
 
 	// The mount is terminated and restarted when the intercept pod changes, so we
@@ -45,10 +44,10 @@ func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMoun
 		m.Lock()
 		defer m.Unlock()
 
-		dlog.Infof(ctx, "Mounting SFTP file system for container %s[%s] (pod %s) at %q", workload, container, podIP, clientMountPoint)
+		clog.Infof(ctx, "Mounting SFTP file system for container %s[%s] (pod %s) at %q", workload, container, podIP, clientMountPoint)
 		if runtime.GOOS != "windows" {
 			defer func() {
-				dlog.Infof(ctx, "Unmounting SFTP file system for container %s[%s] (pod %s) at %q", workload, container, podIP, clientMountPoint)
+				clog.Infof(ctx, "Unmounting SFTP file system for container %s[%s] (pod %s) at %q", workload, container, podIP, clientMountPoint)
 				time.Sleep(time.Second)
 
 				// sshfs sometimes leave the mount point in a bad state. This will clean it up
@@ -118,7 +117,7 @@ func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMoun
 			return err
 		}, bc)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}()
 	return nil

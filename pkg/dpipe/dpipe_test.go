@@ -4,16 +4,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec" //nolint:depguard // This short script has no logging and no Contexts.
 	"runtime"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/clog/handler"
 )
 
 var echoBinary string
@@ -46,10 +47,7 @@ func (b *bufClose) Close() error {
 }
 
 func makeLoggerOn(bf *bytes.Buffer) context.Context {
-	logger := logrus.New()
-	logger.SetLevel(logrus.ErrorLevel)
-	logger.SetOutput(bf)
-	return dlog.WithLogger(context.Background(), dlog.WrapLogrus(logger))
+	return clog.WithLogger(context.Background(), slog.New(handler.NewText(handler.Output(bf))))
 }
 
 // Test that stdout of a process executed by DPipe is sent to peer.
@@ -69,6 +67,6 @@ func TestDPipe_stderr(t *testing.T) {
 	peer := &bufClose{}
 	assert.NoError(t, DPipe(ctx, peer, echoBinary, "-d", "2", "hello stderr"))
 	time.Sleep(time.Second)
-	assert.Contains(t, log.String(), `level=error msg="hello stderr"`)
+	assert.Contains(t, log.String(), `ERROR hello stderr`)
 	assert.Empty(t, peer.String())
 }

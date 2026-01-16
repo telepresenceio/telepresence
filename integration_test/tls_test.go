@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -183,10 +185,10 @@ func (s *dockerDaemonSuite) Test_TLSAnnotations() {
 				args = append(args, registry+"/"+image)
 				stdout, _, err := itest.Telepresence(ctx, args...)
 				if err != nil {
-					dlog.Errorf(ctx, "stdout: %s", stdout)
-					dlog.Error(ctx, err)
+					clog.Errorf(ctx, "stdout: %s", stdout)
+					clog.Error(ctx, err)
 				} else {
-					dlog.Infof(ctx, "stdout: %s", stdout)
+					clog.Infof(ctx, "stdout: %s", stdout)
 				}
 			}()
 
@@ -200,33 +202,38 @@ func (s *dockerDaemonSuite) Test_TLSAnnotations() {
 			rq.True(len(si.UserDaemon.Intercepts) == 1)
 			rq.Equal(si.UserDaemon.Intercepts[0].Name, ttSvc)
 
-			args := []string{"curl", "--max-time", "2", "-s", "-w", "\nStatus: %{http_code}\n", "-k"}
-			if tt.header != "" {
-				args = append(args, "-H", tt.header)
-			}
-			args = append(args, fmt.Sprintf("https://%s", ttSvc))
-			so, se, err := itest.Telepresence(ctx, args...)
-			s.NoError(err)
-			if se != "" {
-				dlog.Error(ctx, se)
-			}
-			if tt.errorPattern != "" {
-				s.Regexp(tt.errorPattern, so)
-			} else {
-				s.Contains(so, "HTTP/2.0 GET /")
-			}
-			dlog.Info(ctx, so)
+			rq.EventuallyContext(ctx, func() bool {
+				args := []string{"curl", "--max-time", "2", "-s", "-w", "\nStatus: %{http_code}\n", "-k"}
+				if tt.header != "" {
+					args = append(args, "-H", tt.header)
+				}
+				args = append(args, fmt.Sprintf("https://%s", ttSvc))
+				so, se, err := itest.Telepresence(ctx, args...)
+				if err != nil {
+					if se != "" {
+						clog.Error(ctx, se)
+					}
+					clog.Error(ctx, err)
+					return false
+				}
+				clog.Info(ctx, so)
+				if tt.errorPattern != "" {
+					ok, err := regexp.MatchString(tt.errorPattern, so)
+					return err == nil && ok
+				}
+				return strings.Contains(so, "HTTP/2.0 GET /")
+			}, 10*time.Second, 3*time.Second, "expected curl response never arrived")
 
 			// Terminate the ongoing intercept
-			so, se, err = itest.Telepresence(ctx, "leave", ttSvc)
+			so, se, err := itest.Telepresence(ctx, "leave", ttSvc)
 			if so != "" {
-				dlog.Info(ctx, so)
+				clog.Info(ctx, so)
 			}
 			if se != "" {
-				dlog.Info(ctx, se)
+				clog.Info(ctx, se)
 			}
 			if err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 			cancel()
 		})

@@ -7,7 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 )
 
 var (
@@ -185,7 +185,8 @@ func Test_nodeSubnets(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := nodeSubnets(dlog.NewTestContext(t, false), tt.node); !reflect.DeepEqual(got, tt.want) {
+			ctx := testutil.NewContext(t, false)
+			if got := nodeSubnets(ctx, tt.node); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("nodeSubnets() = %v, want %v", got, tt.want)
 			}
 		})

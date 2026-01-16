@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 )
@@ -18,7 +18,7 @@ func StdCommand(ctx context.Context, exe string, args ...string) *exec.Cmd {
 	cmd := CommandContext(ctx, exe, args...)
 	cmd.Stdout = dos.Stdout(ctx)
 	cmd.Stderr = dos.Stderr(ctx)
-	dlog.Debug(ctx, shellquote.ShellString(exe, args))
+	clog.Debug(ctx, shellquote.ShellString(exe, args))
 	return cmd
 }
 

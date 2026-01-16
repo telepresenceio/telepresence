@@ -5,13 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"os"
 	"strings"
 
-	"github.com/sirupsen/logrus"
-
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/clog/handler"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -20,9 +20,7 @@ import (
 func main() {
 	cfg := client.GetDefaultConfig()
 	bCtx := client.WithConfig(context.Background(), cfg)
-	logger := logrus.StandardLogger()
-	logger.SetLevel(logrus.DebugLevel)
-	bCtx = dlog.WithLogger(bCtx, dlog.WrapLogrus(logger))
+	bCtx = clog.WithLogger(bCtx, slog.New(handler.NewText(handler.EnabledLevel(slog.LevelDebug))))
 	vif.InitLogger(bCtx)
 
 	ctx, cancel := context.WithCancel(bCtx)

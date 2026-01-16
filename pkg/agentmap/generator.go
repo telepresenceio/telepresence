@@ -3,6 +3,7 @@ package agentmap
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"sort"
 	"strconv"
@@ -30,7 +31,7 @@ type GeneratorConfig struct {
 	APIPort             uint16
 	QualifiedAgentImage string
 	ManagerNamespace    string
-	LogLevel            string
+	LogLevel            slog.Level
 	InitResources       *core.ResourceRequirements
 	Resources           *core.ResourceRequirements
 	PullPolicy          string

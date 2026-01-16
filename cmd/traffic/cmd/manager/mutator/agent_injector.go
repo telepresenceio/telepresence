@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,9 +20,8 @@ import (
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/utils/strings/slices"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -92,7 +93,7 @@ func getPod(req *admission.AdmissionRequest, isDelete bool) (*core.Pod, error) {
 func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequest) (p PatchOps, err error) {
 	isDelete := req.Operation == admission.Delete
 	if atomic.LoadInt64(&a.terminating) > 0 {
-		dlog.Debugf(ctx, "Skipping webhook for %s.%s because the agent-injector is terminating", req.Name, req.Namespace)
+		clog.Debugf(ctx, "Skipping webhook for %s.%s because the agent-injector is terminating", req.Name, req.Namespace)
 		return nil, nil
 	}
 
@@ -106,7 +107,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		return nil, nil
 	}
 
-	dlog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
+	clog.Debugf(ctx, "Handling admission request %s %s.%s", req.Operation, pod.Name, pod.Namespace)
 	env := managerutil.GetEnv(ctx)
 
 	ia := annotation.GetAnnotation(ctx, pod.Annotations, annotation.InjectTrafficAgent, annotation.LegacyInjectTrafficAgent)
@@ -115,11 +116,11 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	var sc *agentconfig.Sidecar
 	switch ia {
 	case "false", "disabled":
-		dlog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, annotation.InjectTrafficAgent)
+		clog.Debugf(ctx, `The %s.%s pod is explicitly disabled using a %q annotation; skipping`, pod.Name, pod.Namespace, annotation.InjectTrafficAgent)
 		return nil, nil
 	case "":
 		if env.AgentInjectPolicy != agentconfig.OnDemand {
-			dlog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q annotation; skipping`,
+			clog.Debugf(ctx, `The %s.%s pod has not enabled %s container injection through %q annotation; skipping`,
 				pod.Name, pod.Namespace, agentconfig.ContainerName, annotation.InjectTrafficAgent)
 			return nil, nil
 		}
@@ -127,7 +128,7 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 	case "enabled":
 		img := managerutil.GetAgentImage(ctx)
 		if img == "" {
-			dlog.Debug(ctx, "Skipping webhook injection because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
+			clog.Debug(ctx, "Skipping webhook injection because the traffic-manager is unable to determine what image to use for injected traffic-agents.")
 			return nil, nil
 		}
 
@@ -136,11 +137,11 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			uwkError := k8sapi.UnsupportedWorkloadKindError("")
 			switch {
 			case k8sErrors.IsNotFound(err):
-				dlog.Tracef(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
+				clog.Tracef(ctx, "No workload owner found for pod %s.%s", pod.Name, pod.Namespace)
 			case errors.As(err, &uwkError):
-				dlog.Debugf(ctx, "Workload owner with %s found for pod %s.%s", uwkError.Error(), pod.Name, pod.Namespace)
+				clog.Debugf(ctx, "Workload owner with %s found for pod %s.%s", uwkError.Error(), pod.Name, pod.Namespace)
 			default:
-				dlog.Debugf(ctx, "No workload owner found for pod %s.%s: %v", pod.Name, pod.Namespace, err)
+				clog.Debugf(ctx, "No workload owner found for pod %s.%s: %v", pod.Name, pod.Namespace, err)
 			}
 			// Not an error. It just means that the pod is not eligible for intercepts.
 			return nil, nil
@@ -148,10 +149,10 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 		sc = a.agentConfigs.Get(wl.GetName(), wl.GetNamespace())
 		switch {
 		case sc == nil:
-			dlog.Tracef(ctx, "Skipping %s (no agent config)", wl)
+			clog.Tracef(ctx, "Skipping %s (no agent config)", wl)
 			return nil, nil
 		case sc.Manual:
-			dlog.Tracef(ctx, "Skipping webhook where agent is manually injected %s", wl.GetNamespace())
+			clog.Tracef(ctx, "Skipping webhook where agent is manually injected %s", wl.GetNamespace())
 			return nil, nil
 		}
 	default:
@@ -194,19 +195,19 @@ func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod
 
 	// Create patch operations to add the traffic-agent sidecar
 	if len(patches) > 0 {
-		dlog.Debugf(ctx, "Injecting %d patches into pod %s.%s", len(patches), pod.Name, pod.Namespace)
-		if dlog.MaxLogLevel(ctx) >= dlog.LogLevelTrace {
+		clog.Debugf(ctx, "Injecting %d patches into pod %s.%s", len(patches), pod.Name, pod.Namespace)
+		if clog.Enabled(ctx, clog.LevelTrace) {
 			cns := strings.Builder{}
 			for i, cn := range pod.Spec.Containers {
 				cns.WriteString(fmt.Sprintf("%d %s\n", i, cn.Name))
 			}
-			dlog.Tracef(ctx, "Containers \n%s", cns.String())
+			clog.Tracef(ctx, "Containers \n%s", cns.String())
 			if pj, err := json.Marshal(patches, jsontext.WithIndent("  ")); err == nil {
-				dlog.Tracef(ctx, "\n%s", string(pj))
+				clog.Tracef(ctx, "\n%s", string(pj))
 			}
 		}
 	} else {
-		dlog.Debugf(ctx, "Pod %s.%s was left untouched", pod.Name, pod.Namespace)
+		clog.Debugf(ctx, "Pod %s.%s was left untouched", pod.Name, pod.Namespace)
 	}
 	return patches, nil
 }
@@ -220,7 +221,7 @@ func (a *agentInjector) Uninstall(ctx context.Context) {
 
 func needInitContainer(ctx context.Context, config *agentconfig.Sidecar) bool {
 	if !managerutil.GetEnv(ctx).AgentInitContainerEnabled {
-		dlog.Info(ctx, "Injection of initContainer is disabled in the config. It is enabled by default and can be modified by setting agent.initContainer.enabled in values.yaml")
+		clog.Info(ctx, "Injection of initContainer is disabled in the config. It is enabled by default and can be modified by setting agent.initContainer.enabled in values.yaml")
 		return false
 	}
 	for _, cc := range config.Containers {
@@ -393,10 +394,10 @@ func containerEqual(ctx context.Context, a, b *core.Container) bool {
 		cmp.Comparer(compareVolumeMounts),
 		cmpopts.IgnoreFields(core.Container{}, "ImagePullPolicy", "Resources", "TerminationMessagePath", "TerminationMessagePolicy"),
 	}
-	if dlog.MaxLogLevel(ctx) >= dlog.LogLevelDebug {
+	if clog.Enabled(ctx, slog.LevelDebug) {
 		diff := cmp.Diff(a, b, options...)
 		if diff != "" {
-			dlog.Debug(ctx, diff)
+			clog.Debug(ctx, diff)
 		}
 		return diff == ""
 	}
@@ -429,10 +430,10 @@ func addAgentContainer(
 		pcn := &pod.Spec.Containers[i]
 		if pcn.Name == agentconfig.ContainerName {
 			if containerEqual(ctx, pcn, acn) {
-				dlog.Debugf(ctx, "Pod %s already has container %s and it isn't modified", refPodName, agentconfig.ContainerName)
+				clog.Debugf(ctx, "Pod %s already has container %s and it isn't modified", refPodName, agentconfig.ContainerName)
 				return patches, replaceAnnotations, nil
 			}
-			dlog.Debugf(ctx, "Pod %s already has container %s but it is modified", refPodName, agentconfig.ContainerName)
+			clog.Debugf(ctx, "Pod %s already has container %s but it is modified", refPodName, agentconfig.ContainerName)
 			return append(patches, PatchOperation{
 				Op:    "replace",
 				Path:  "/spec/containers/" + strconv.Itoa(i),

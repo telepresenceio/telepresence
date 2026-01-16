@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -82,14 +82,14 @@ func (u *uninstallCommand) run(cmd *cobra.Command, args []string) error {
 func validWorkloads(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// Trace level is used here, because we generally don't want to log expansion attempts
 	// in the cli.log
-	dlog.Tracef(cmd.Context(), "toComplete = %s, args = %v", toComplete, args)
+	clog.Tracef(cmd.Context(), "toComplete = %s, args = %v", toComplete, args)
 
 	all, _ := cmd.Flags().GetBool(allAgentsFlag)
 	if all {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	if err := connect.InitCommand(cmd); err != nil {
-		dlog.Debug(cmd.Context(), err)
+		clog.Debug(cmd.Context(), err)
 		return nil, cobra.ShellCompDirectiveError
 	}
 	req := connector.ListRequest{
@@ -99,7 +99,7 @@ func validWorkloads(cmd *cobra.Command, args []string, toComplete string) ([]str
 
 	r, err := daemon.MustGetUserClient(ctx).List(ctx, &req)
 	if err != nil {
-		dlog.Debugf(ctx, "unable to get list of workloads with agents: %v", err)
+		clog.Debugf(ctx, "unable to get list of workloads with agents: %v", err)
 		return nil, cobra.ShellCompDirectiveError
 	}
 

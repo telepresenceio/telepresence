@@ -7,7 +7,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 )
 
@@ -44,7 +44,7 @@ func CreateExternalKubeConfig(
 	}
 
 	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
-	dlog.Debugf(ctx, "host kubeconfig = %v", configFiles)
+	clog.Debugf(ctx, "host kubeconfig = %v", configFiles)
 	origConfig, err := loader.RawConfig()
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func CreateExternalKubeConfig(
 	if err = clientcmdapi.MinifyConfig(&config); err != nil {
 		return nil, err
 	}
-	dlog.Debugf(ctx, "context = %q, namespace %q", config.CurrentContext, ns)
+	clog.Debugf(ctx, "context = %q, namespace %q", config.CurrentContext, ns)
 
 	// Minify guarantees that the CurrentContext is set, but not that it has a cluster
 	cc := config.Contexts[config.CurrentContext]

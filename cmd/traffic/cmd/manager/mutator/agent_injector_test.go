@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	argorolloutsfake "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned/fake"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
@@ -849,7 +849,7 @@ matchExpressions:
 	}
 
 	runFunc := func(t *testing.T, test *testInput) {
-		ctx := dlog.NewTestContext(t, false)
+		ctx := testutil.NewContext(t, false)
 		env := &managerutil.Env{
 			ServerHost: "tel-example",
 			ServerPort: 8081,
@@ -1314,7 +1314,7 @@ matchExpressions:
 `,
 			"",
 			&managerutil.Env{
-				APIPort:                   9981,
+				AgentRestApiPort:          9981,
 				AgentInitContainerEnabled: true,
 			},
 		},
@@ -1473,6 +1473,7 @@ matchExpressions:
     - agent-init
     env:
     - name: LOG_LEVEL
+      value: INFO
     - name: AGENT_CONFIG
       valueFrom:
         fieldRef:
@@ -1584,6 +1585,7 @@ matchExpressions:
     - agent-init
     env:
     - name: LOG_LEVEL
+      value: INFO
     - name: AGENT_CONFIG
       valueFrom:
         fieldRef:
@@ -1955,7 +1957,7 @@ matchExpressions:
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctx := dlog.NewTestContext(t, false)
+			ctx := testutil.NewContext(t, false)
 			env := &managerutil.Env{
 				ServerHost: "tel-example",
 				ServerPort: 8081,

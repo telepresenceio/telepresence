@@ -8,7 +8,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -73,7 +73,7 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 	// okay, there's not going to be hundreds of routes.
 	// In any case, we really wanna run over the table as the outer loop, since it's bigger.
 	for _, tr := range table {
-		dlog.Tracef(ctx, "checking for overlap with route %q", tr)
+		clog.Tracef(ctx, "checking for overlap with route %q", tr)
 		if (tr.RoutedNet.Bits() == 0 || tr.Default) || // Default route, overlapped if needed
 			subnet.IsHalfOfDefault(tr.RoutedNet) || // OpenVPN covers half the address space with a /1 route and the other half with another. This is its way of doing a default route.
 			tr.InterfaceName == rt.device.Name() { // This is the interface we're routing through, so we can overlap it
@@ -147,7 +147,7 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 
 	for _, sn := range removed {
 		if err := rt.device.RemoveSubnet(ctx, sn); err != nil {
-			dlog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
+			clog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
 		}
 	}
 
@@ -164,7 +164,7 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 
 		// On linux, this adds a link, so it's still relevant after adding a static route.
 		if err := rt.device.AddSubnet(ctx, sn); err != nil {
-			dlog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
+			clog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
 			continue
 		}
 
@@ -172,7 +172,7 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 			// On linux, we use static routes for conflicting subnets, because those subnets will then belong
 			// to our own routing table.
 			if slices.ContainsFunc(rt.whitelistedSubnets, func(r netip.Prefix) bool { return r.Overlaps(sn) }) {
-				dlog.Debugf(ctx, "Using static route for %s because it is an override", sn)
+				clog.Debugf(ctx, "Using static route for %s because it is an override", sn)
 				staticRoutes = append(staticRoutes, routing.NewRoute(sn, ourIdx, ourName))
 			}
 		}
@@ -197,13 +197,13 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	for i := range addRts {
 		r := &addRts[i]
 		if err = rt.routingTable.Add(ctx, r); err != nil {
-			dlog.Errorf(ctx, "failed to add static route %s: %v", r, err)
+			clog.Errorf(ctx, "failed to add static route %s: %v", r, err)
 		}
 	}
 	for i := range removeRts {
 		r := &removeRts[i]
 		if err = rt.routingTable.Remove(ctx, r); err != nil {
-			dlog.Errorf(ctx, "failed to remove static route %s: %v", r, err)
+			clog.Errorf(ctx, "failed to remove static route %s: %v", r, err)
 		}
 	}
 	rt.staticOverrides = staticRoutes
@@ -230,7 +230,7 @@ func (rt *Router) dropStaticOverrides(ctx context.Context) {
 	for i := range rt.staticOverrides {
 		r := &rt.staticOverrides[i]
 		if err := rt.routingTable.Remove(ctx, r); err != nil {
-			dlog.Errorf(ctx, "failed to remove static route %s: %v", r, err)
+			clog.Errorf(ctx, "failed to remove static route %s: %v", r, err)
 		}
 	}
 	rt.staticOverrides = nil
@@ -240,7 +240,7 @@ func (rt *Router) Close(ctx context.Context) {
 	rt.RLock()
 	for _, sn := range rt.routedSubnets {
 		if err := rt.device.RemoveSubnet(ctx, sn); err != nil {
-			dlog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
+			clog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
 		}
 	}
 	rt.dropStaticOverrides(ctx)

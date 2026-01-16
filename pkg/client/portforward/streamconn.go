@@ -19,7 +19,7 @@ import (
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
@@ -52,7 +52,7 @@ func Dialer(ctx context.Context) func(ctx context.Context, address string) (net.
 		if !ok {
 			return nil, errors.New("grpc dialer is not configured")
 		}
-		dlog.Debugf(ctx, "portforward.Dialer dialing %s", address)
+		clog.Debugf(ctx, "portforward.Dialer dialing %s", address)
 		return dialContext(grpcCtx, ctx, address, cfg)
 	}
 }
@@ -60,13 +60,13 @@ func Dialer(ctx context.Context) func(ctx context.Context, address string) (net.
 func dialContext(grpcCtx, logCtx context.Context, addr string, cfg *config) (net.Conn, error) {
 	pa, err := parsePodAddr(addr)
 	if err != nil {
-		dlog.Error(logCtx, err)
+		clog.Error(logCtx, err)
 		return nil, err
 	}
 	key := pa.PodID
 	if key == "" {
 		err = errors.New("pod ID is empty")
-		dlog.Error(logCtx, err)
+		clog.Error(logCtx, err)
 		return nil, err
 	}
 	pc, _ := cfg.podDialers.LoadOrCompute(key, func() (pc *podDialer, cancel bool) {
@@ -119,7 +119,7 @@ func newStreamDialer(ctx context.Context, config *rest.Config, podName, namespac
 	}
 	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", url)
 	if !forceSPDY {
-		dlog.Debugf(ctx, "Using WebSocket based port-forward to pod %s.%s", podName, namespace)
+		clog.Debugf(ctx, "Using WebSocket based port-forward to pod %s.%s", podName, namespace)
 		tunnelingDialer, err := portforward.NewSPDYOverWebsocketDialer(url, config)
 		if err != nil {
 			return nil, err
@@ -129,7 +129,7 @@ func newStreamDialer(ctx context.Context, config *rest.Config, podName, namespac
 			return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
 		})
 	} else {
-		dlog.Debugf(ctx, "Using SPDY based port-forward to pod %s.%s", podName, namespace)
+		clog.Debugf(ctx, "Using SPDY based port-forward to pod %s.%s", podName, namespace)
 	}
 	return dialer, nil
 }
@@ -162,10 +162,10 @@ func (pc *podDialer) dial(ctx context.Context, remotePort uint16) (conn net.Conn
 		message, err := io.ReadAll(errorStream)
 		switch {
 		case err != nil:
-			dlog.Errorf(ctx, "error reading from error stream for port %d: %v", remotePort, err)
+			clog.Errorf(ctx, "error reading from error stream for port %d: %v", remotePort, err)
 			pc.onClose()
 		case len(message) > 0:
-			dlog.Errorf(ctx, "error forwarding to %d: %v", remotePort, string(message))
+			clog.Errorf(ctx, "error forwarding to %d: %v", remotePort, string(message))
 			pc.onClose()
 		}
 	}()

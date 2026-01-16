@@ -16,7 +16,7 @@ import (
 	dockerTypes "github.com/docker/docker/api/types"
 	"github.com/go-json-experiment/json"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -55,14 +55,14 @@ func ensurePlugin(ctx context.Context, pluginType string, cfg *client.DockerImag
 	pi, _, err := cli.PluginInspectWithRaw(ctx, pn)
 	if err != nil {
 		if !errdefs.IsNotFound(err) {
-			dlog.Errorf(ctx, "docker plugin inspect: %v", err)
+			clog.Errorf(ctx, "docker plugin inspect: %v", err)
 		}
 		return pn, installPlugin(ctx, pn)
 	}
 	if !pi.Enabled {
 		err = cli.PluginEnable(ctx, pn, dockerTypes.PluginEnableOptions{Timeout: 5})
 	}
-	dlog.Debugf(ctx, "using %s plugin: %s", pluginType, pn)
+	clog.Debugf(ctx, "using %s plugin: %s", pluginType, pn)
 	return pn, err
 }
 
@@ -77,13 +77,13 @@ func latestPluginName(ctx context.Context, cfg *client.DockerImage, pluginType s
 	} else if lv, err := latestPluginVersion(ctx, pn, pluginType, cfg); err == nil {
 		pn += "-" + lv.String()
 	} else {
-		dlog.Warnf(ctx, "failed to get latest version of docker %s plugin %s: %v", pluginType, pn, err)
+		clog.Warnf(ctx, "failed to get latest version of docker %s plugin %s: %v", pluginType, pn, err)
 	}
 	return pn
 }
 
 func installPlugin(ctx context.Context, pluginName string) error {
-	dlog.Debugf(ctx, "Installing docker plugin %s", pluginName)
+	clog.Debugf(ctx, "Installing docker plugin %s", pluginName)
 	cmd := proc.CommandContext(ctx, Exe, "plugin", "install", "--grant-all-permissions", pluginName)
 	_, err := proc.CaptureErr(cmd)
 	if err != nil {
@@ -120,7 +120,7 @@ func latestPluginVersion(ctx context.Context, pluginName, pluginType string, cfg
 			err = cache.SaveToUserCache(ctx, &pi, file, cache.Public)
 		}
 	} else {
-		dlog.Debugf(ctx, "Using cached version %s for %s", pi.LatestVersion, pluginName)
+		clog.Debugf(ctx, "Using cached version %s for %s", pi.LatestVersion, pluginName)
 		ver, err = semver.Parse(pi.LatestVersion)
 	}
 	return ver, err
@@ -134,7 +134,7 @@ type repsResponse struct {
 }
 
 func getLatestPluginVersion(ctx context.Context, pluginName string, cfg *client.DockerImage) (ver semver.Version, err error) {
-	dlog.Debugf(ctx, "Checking for latest version of %s", pluginName)
+	clog.Debugf(ctx, "Checking for latest version of %s", pluginName)
 	tag := cfg.Tag
 	if tag == "debug" {
 		return zeroVersion, nil
@@ -180,6 +180,6 @@ func getLatestPluginVersion(ctx context.Context, pluginName string, cfg *client.
 			}
 		}
 	}
-	dlog.Debugf(ctx, "Found latest version of %s to be %s", pluginName, ver)
+	clog.Debugf(ctx, "Found latest version of %s to be %s", pluginName, ver)
 	return ver, err
 }

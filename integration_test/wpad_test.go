@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -68,7 +67,7 @@ func (s *connectedSuite) Test_WpadNotForwarded() {
 			short, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
 			defer cancel()
 			_, _ = net.DefaultResolver.LookupIPAddr(short, tt.qn)
-			dtime.SleepWithContext(ctx, 200*time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 
 			// Seek to the end of the log as it were before the lookup
 			rootLog, err := os.Open(logFile)

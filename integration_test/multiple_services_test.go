@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
@@ -181,20 +181,20 @@ func (s *multipleServicesSuite) Test_ProxiesOutboundTraffic() {
 		s.Require().Eventually(
 			// condition
 			func() bool {
-				dlog.Infof(ctx, "trying %q...", "http://"+svc)
+				clog.Infof(ctx, "trying %q...", "http://"+svc)
 				hc := http.Client{Timeout: time.Second}
 				resp, err := hc.Get("http://" + svc)
 				if err != nil {
-					dlog.Error(ctx, err)
+					clog.Error(ctx, err)
 					return false
 				}
 				defer resp.Body.Close()
 				body, err := io.ReadAll(resp.Body)
 				if err != nil {
-					dlog.Error(ctx, err)
+					clog.Error(ctx, err)
 					return false
 				}
-				dlog.Infof(ctx, "body: %q", body)
+				clog.Infof(ctx, "body: %q", body)
 				return strings.Contains(string(body), expectedOutput)
 			},
 			15*time.Second, // waitfor

@@ -12,7 +12,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/network/ipv6"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -138,7 +138,7 @@ func (vif *TunnelingDevice) DialUDP(_ context.Context, addr, returnAddr netip.Ad
 
 func (vif *TunnelingDevice) Run(ctx context.Context) (err error) {
 	vif.stack.Wait()
-	dlog.Debug(ctx, "VIF ended")
+	clog.Debug(ctx, "VIF ended")
 	return nil
 }
 

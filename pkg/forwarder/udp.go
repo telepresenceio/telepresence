@@ -7,7 +7,7 @@ import (
 	"net/netip"
 	"sync/atomic"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -51,7 +51,7 @@ func (f *udp) ServeTo(ctx context.Context, initCh chan<- netip.AddrPort, fw func
 		if initCh != nil {
 			close(initCh)
 		}
-		dlog.Infof(ctx, "Done forwarding udp from :%d", lp)
+		clog.Infof(ctx, "Done forwarding udp from :%d", lp)
 	}()
 
 	for first := true; ; first = false {
@@ -70,7 +70,7 @@ func (f *udp) ServeTo(ctx context.Context, initCh chan<- netip.AddrPort, fw func
 			// be ":0", so let's ensure that the same address is used next time
 			la := pc.LocalAddr().(*net.UDPAddr)
 			atomic.StoreInt32(&f.listenPort, int32(la.Port))
-			dlog.Infof(ctx, "Forwarding udp from %s", la)
+			clog.Infof(ctx, "Forwarding udp from %s", la)
 			if initCh != nil {
 				initCh <- la.AddrPort()
 				close(initCh)
@@ -90,14 +90,14 @@ func (f *udp) ServeTo(ctx context.Context, initCh chan<- netip.AddrPort, fw func
 func ForwardUDP(ctx context.Context, tag tunnel.Tag, conn *net.UDPConn, targetAddr netip.AddrPort) error {
 	targets := tunnel.NewPool()
 	la := conn.LocalAddr()
-	dlog.Infof(ctx, "Forwarding udp from %s to %s", la, targetAddr)
+	clog.Infof(ctx, "Forwarding udp from %s to %s", la, targetAddr)
 	defer func() {
 		targets.CloseAll(ctx)
 		_ = conn.Close()
-		dlog.Infof(ctx, "Done forwarding udp from %s to %s", la, targetAddr)
+		clog.Infof(ctx, "Done forwarding udp from %s to %s", la, targetAddr)
 	}()
 	if targetAddr.Port() == 0 {
-		dlog.Debug(ctx, "Forwarding to /dev/null")
+		clog.Debug(ctx, "Forwarding to /dev/null")
 		return nil
 	}
 
@@ -112,7 +112,7 @@ func ForwardUDP(ctx context.Context, tag tunnel.Tag, conn *net.UDPConn, targetAd
 				return nil
 			}
 			id := tunnel.ConnIDFromUDP(rr.Address, targetAddr)
-			dlog.Tracef(ctx, "<- %s udp %s, len %d", tag, id, len(rr.Payload))
+			clog.Tracef(ctx, "<- %s udp %s, len %d", tag, id, len(rr.Payload))
 			h, _, err := targets.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
 				tc, err := net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(id.Destination()))
 				if err != nil {
@@ -134,10 +134,10 @@ func ForwardUDP(ctx context.Context, tag tunnel.Tag, conn *net.UDPConn, targetAd
 			for n := 0; n < pn; {
 				wn, err := uh.Write(rr.Payload[n:])
 				if err != nil {
-					dlog.Errorf(ctx, "!> %s udp %s write: %v", tag, id, err)
+					clog.Errorf(ctx, "!> %s udp %s write: %v", tag, id, err)
 					return err
 				}
-				dlog.Tracef(ctx, "-> %s udp %s, len %d", tag, id, wn)
+				clog.Tracef(ctx, "-> %s udp %s, len %d", tag, id, wn)
 				n += wn
 			}
 		}
@@ -180,10 +180,10 @@ func (u *udpHandler) forward(ctx context.Context, tag tunnel.Tag) {
 			for n := 0; n < pn; {
 				wn, err := u.replyWith.WriteTo(rr.Payload[n:], net.UDPAddrFromAddrPort(u.id.Source()))
 				if err != nil {
-					dlog.Errorf(ctx, "!> %s udp %s write: %v", tag, u.id, err)
+					clog.Errorf(ctx, "!> %s udp %s write: %v", tag, u.id, err)
 					return
 				}
-				dlog.Tracef(ctx, "-> %s udp %s, len %d", tag, u.id, wn)
+				clog.Tracef(ctx, "-> %s udp %s, len %d", tag, u.id, wn)
 				n += wn
 			}
 		}

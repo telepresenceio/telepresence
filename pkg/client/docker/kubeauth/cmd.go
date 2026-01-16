@@ -14,17 +14,19 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/tools/clientcmd"
 
-	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
 )
 
 const (
@@ -62,7 +64,10 @@ func Command(ctx context.Context) *cobra.Command {
 }
 
 func (as *authService) run(cmd *cobra.Command, _ []string) error {
-	ctx := cmd.Context()
+	return sigctx.DoWithSignalHandler(cmd.Context(), func(ctx context.Context) error { return as.internalRun(ctx, cmd.Flags()) })
+}
+
+func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) error {
 	cfg, err := client.LoadConfig(ctx)
 	if err != nil {
 		return err
@@ -77,14 +82,13 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return errcat.NoDaemonLogs.Errorf(err, "unable to open a port on localhost")
 	}
 
-	flags := cmd.Flags()
 	logFile := flags.Lookup(logfileFlag).Value.String()
 	ctx, err = logging.InitContext(ctx, logFile, cfg.LogLevels().KubeAuthDaemon, logging.RotateNever, false)
 	if err != nil {
 		return err
 	}
 	addr := grpcListener.Addr().(*net.TCPAddr)
-	dlog.Infof(ctx, "kubeauth daemon listening on address %s", addr)
+	clog.Infof(ctx, "kubeauth daemon listening on address %s", addr)
 
 	as.clientConfig = as.kubeFlags.ToRawKubeConfigLoader()
 	as.configFiles = as.clientConfig.ConfigAccess().GetLoadingPrecedence()
@@ -100,12 +104,7 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		EnableSignalHandling: true,
-		IgnoreSignalError:    true,
-		ShutdownOnNonError:   true,
-		SoftShutdownTimeout:  time.Second,
-	})
+	g := log.NewGroup(ctx)
 	g.Go("portfile-alive", as.keepPortFileAlive)
 	g.Go("portfile-watcher", as.watchFiles)
 	g.Go("grpc-server", func(ctx context.Context) error {
@@ -114,9 +113,9 @@ func (as *authService) run(cmd *cobra.Command, _ []string) error {
 		return server.Serve(ctx, svc, grpcListener)
 	})
 	if err = g.Wait(); err != nil {
-		dlog.Errorf(ctx, "kubeauth daemon exiting with error: %v", err)
+		clog.Errorf(ctx, "kubeauth daemon exiting with error: %v", err)
 	} else {
-		dlog.Info(ctx, "kubeauth daemon exiting")
+		clog.Info(ctx, "kubeauth daemon exiting")
 	}
 	return err
 }
@@ -130,7 +129,7 @@ func (as *authService) keepPortFileAlive(ctx context.Context) error {
 	defer func() {
 		ticker.Stop()
 		_ = os.Remove(as.portFile)
-		dlog.Debugf(ctx, "kubeauth daemon removed %s", as.portFile)
+		clog.Debugf(ctx, "kubeauth daemon removed %s", as.portFile)
 	}()
 	now := time.Now()
 	for {
@@ -190,10 +189,10 @@ func (as *authService) watchFiles(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case err = <-watcher.Errors:
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		case event := <-watcher.Events:
 			if event.Op&(fsnotify.Remove|fsnotify.Write|fsnotify.Create) != 0 && isOfInterest(event.Name, files) {
-				dlog.Infof(ctx, "Terminated due to %s in %s", event.Op, event.Name)
+				clog.Infof(ctx, "Terminated due to %s in %s", event.Op, event.Name)
 				return nil
 			}
 		}

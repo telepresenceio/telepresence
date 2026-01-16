@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 func (s *connectedSuite) Test_PodWithSubdomain() {
@@ -21,7 +21,7 @@ func (s *connectedSuite) Test_PodWithSubdomain() {
 		s.Eventually(func() bool {
 			c, cancel := context.WithTimeout(c, 1800*time.Millisecond)
 			defer cancel()
-			dlog.Info(c, "LookupHost("+host+")")
+			clog.Info(c, "LookupHost("+host+")")
 			_, err = net.DefaultResolver.LookupHost(c, host)
 			return err == nil
 		}, 10*time.Second, 2*time.Second, "%s did not resolve: %v", host, err)

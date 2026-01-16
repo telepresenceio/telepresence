@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 type Route struct {
@@ -119,12 +119,12 @@ func (r *Route) String() string {
 // AddStatic adds a specific route. This can be used to prevent certain IP addresses
 // from being routed to the route's interface.
 func (r *Route) AddStatic(ctx context.Context) (err error) {
-	dlog.Debugf(ctx, "Adding static route %s", r)
+	clog.Debugf(ctx, "Adding static route %s", r)
 	return r.addStatic(ctx)
 }
 
 // RemoveStatic removes a specific route added via AddStatic.
 func (r *Route) RemoveStatic(ctx context.Context) (err error) {
-	dlog.Debugf(ctx, "Dropping static route %s", r)
+	clog.Debugf(ctx, "Dropping static route %s", r)
 	return r.removeStatic(ctx)
 }

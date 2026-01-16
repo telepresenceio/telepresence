@@ -25,7 +25,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
@@ -393,12 +393,12 @@ func NewClientConfig(ctx context.Context, configFlags *genericclioptions.ConfigF
 	}
 	directConfig, err := clientcmd.NewClientConfigFromBytes(configData)
 	if err != nil {
-		dlog.Errorf(ctx, "loading kubeconfig failed: %v", err)
+		clog.Errorf(ctx, "loading kubeconfig failed: %v", err)
 		return nil, err
 	}
 	config, err := directConfig.RawConfig()
 	if err != nil {
-		dlog.Errorf(ctx, "raw kubeconfig failed: %v", err)
+		clog.Errorf(ctx, "raw kubeconfig failed: %v", err)
 		return nil, err
 	}
 	overrides := flagOverrides(configFlags)
@@ -504,15 +504,15 @@ func WithKubeExtension(ctx context.Context, cluster *api.Cluster, managerNamespa
 	if len(data) > 0 {
 		if kc, err := client.UnmarshalJSONConfig(data, true); err != nil {
 			// Try with legacy kubeconfigExtension
-			dlog.Debug(ctx, "unable to unmarshal extension as client config, trying legacy format")
+			clog.Debug(ctx, "unable to unmarshal extension as client config, trying legacy format")
 			ke := kubeconfigExtension{}
 			if keErr := json.Unmarshal(data, &ke); keErr != nil {
 				return errcat.Config.Errorf(err, "unable to parse extension %s in kubeconfig", configExtension)
 			}
-			dlog.Debug(ctx, "legacy format was successfully parsed")
+			clog.Debug(ctx, "legacy format was successfully parsed")
 			keCfg = ke.asConfig()
 		} else {
-			dlog.Debug(ctx, "successfully parsed extension as client config")
+			clog.Debug(ctx, "successfully parsed extension as client config")
 			keCfg = kc
 		}
 		if managerNamespace != "" {
@@ -545,17 +545,17 @@ func getServerNeverProxy(ctx context.Context, cluster *api.Cluster) []netip.Pref
 	serverURL, err := url.Parse(server)
 	if err != nil {
 		// This really shouldn't happen as we are connected to the server
-		dlog.Errorf(ctx, "Unable to parse url for k8s server %s: %v", server, err)
+		clog.Errorf(ctx, "Unable to parse url for k8s server %s: %v", server, err)
 		return nil
 	}
 	hostname := serverURL.Hostname()
 	rawIP, err := netip.ParseAddr(hostname)
 	var ips []netip.Addr
 	if err != nil {
-		dlog.Debugf(ctx, "Hostname for k8s server %s is not an IP address", server)
+		clog.Debugf(ctx, "Hostname for k8s server %s is not an IP address", server)
 		li, err := net.LookupIP(hostname)
 		if err != nil {
-			dlog.Errorf(ctx, "Unable to do DNS lookup for k8s server %s: %v", hostname, err)
+			clog.Errorf(ctx, "Unable to do DNS lookup for k8s server %s: %v", hostname, err)
 		} else {
 			ips = make([]netip.Addr, len(li))
 			for i, ip := range li {

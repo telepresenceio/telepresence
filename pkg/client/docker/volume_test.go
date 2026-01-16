@@ -6,15 +6,15 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 func Test_getLatestPluginVersion(t *testing.T) {
-	c := dlog.NewTestContext(t, false)
+	c := testutil.NewContext(t, false)
 	env, err := client.LoadEnv()
 	require.NoError(t, err)
-	c = client.WithEnv(c, env)
+	c = client.WithEnv(c, &env)
 
 	cfg, err := client.LoadConfig(c)
 	require.NoError(t, err)

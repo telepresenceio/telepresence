@@ -62,7 +62,7 @@ func InitCommand(cmd *cobra.Command) (err error) {
 		progressStarted = true
 		ctx, err = EnsureUserDaemon(ctx, v == ann.Required)
 		if err != nil {
-			if v == ann.Optional && (errors.Is(err, ErrNoUserDaemon) || errcat.GetCategory(err) == errcat.Config) {
+			if v == ann.Optional && (errors.Is(err, daemon.ErrNoUserDaemon) || errcat.GetCategory(err) == errcat.Config) {
 				// This is OK, but further initialization is not possible
 				err = nil
 			}

@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"context"
+	"log/slog"
 	"net/netip"
 	"path/filepath"
 	"runtime"
@@ -11,7 +12,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
@@ -32,7 +33,7 @@ var testConfig = agentconfig.Sidecar{
 	Create:              false,
 	AgentImage:          "ghcr.io/telepresenceio/tel2:2.5.4",
 	AgentName:           "test-echo",
-	LogLevel:            "debug",
+	LogLevel:            slog.LevelDebug,
 	Namespace:           namespace,
 	WorkloadName:        "test-echo",
 	WorkloadKind:        "Deployment",
@@ -86,7 +87,7 @@ func testContext(t *testing.T, env dos.MapEnv) context.Context {
 	env[agentconfig.EnvPrefixAgent+"POD_UID"] = podUID
 	env[agentconfig.EnvAgentConfig] = cfgJSON
 
-	ctx := dlog.NewTestContext(t, false)
+	ctx := testutil.NewContext(t, false)
 	ctx = dos.WithFS(ctx, aferofs.Wrap(fs))
 	return dos.WithEnv(ctx, env)
 }

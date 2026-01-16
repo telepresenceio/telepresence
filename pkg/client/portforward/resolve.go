@@ -17,7 +17,7 @@ import (
 	"k8s.io/kubectl/pkg/polymorphichelpers"
 	"k8s.io/kubectl/pkg/util/podutils"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -148,7 +148,7 @@ func containerPortNumber(pod *core.Pod, port intstr.IntOrString) (uint16, error)
 func resolve(ctx context.Context, addr string) (pa *PodAddress, err error) {
 	kind, name, namespace, port, podID, err := parseAddr(addr)
 	if err != nil {
-		dlog.Errorf(ctx, "cannot resolve addr %s: %v", addr, err)
+		clog.Errorf(ctx, "cannot resolve addr %s: %v", addr, err)
 		return nil, err
 	}
 

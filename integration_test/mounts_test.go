@@ -9,7 +9,6 @@ import (
 
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -194,7 +193,7 @@ func (s *mountsSuite) Test_CollidingMounts() {
 				s.CapturePodLogs(ctx, "hello", "traffic-agent", s.AppNamespace())
 			} else {
 				// Mounts are sometimes slow
-				dtime.SleepWithContext(ctx, 3*time.Second)
+				time.Sleep(3 * time.Second)
 			}
 			ns, err := os.ReadFile(filepath.Join(tt.mountPoint, "var", "run", "secrets", "kubernetes.io", "serviceaccount", "namespace"))
 			require.NoError(err)

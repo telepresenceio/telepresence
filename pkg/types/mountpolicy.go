@@ -47,19 +47,29 @@ func (mp MountPolicy) MarshalJSONTo(out *jsontext.Encoder) error {
 	return json.MarshalEncode(out, mp.String())
 }
 
+//goland:noinspection GoMixedReceiverTypes
 func (mp *MountPolicy) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	var s string
 	err := json.UnmarshalDecode(in, &s)
 	if err == nil {
-		if ix := slices.IndexFunc(mountPolicyNames, func(pn string) bool {
-			return strings.EqualFold(pn, s)
-		}); ix >= 0 {
-			*mp = MountPolicy(ix)
-		} else {
-			err = fmt.Errorf("invalid mount policy: %q", s)
-		}
+		*mp, err = ParseMountPolicy(s)
 	}
 	return err
+}
+
+//goland:noinspection GoMixedReceiverTypes
+func (mp *MountPolicy) UnmarshalText(value []byte) (err error) {
+	*mp, err = ParseMountPolicy(string(value))
+	return err
+}
+
+func ParseMountPolicy(s string) (MountPolicy, error) {
+	if ix := slices.IndexFunc(mountPolicyNames, func(pn string) bool {
+		return strings.EqualFold(pn, s)
+	}); ix >= 0 {
+		return MountPolicy(ix), nil
+	}
+	return MountPolicyIgnore, fmt.Errorf("invalid mount policy: %q", s)
 }
 
 func (iv MountPolicies) AddAnnotations(ctx context.Context, annotations map[string]string) (MountPolicies, error) {

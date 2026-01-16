@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"sigs.k8s.io/yaml"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -78,8 +78,8 @@ func NewWatcher(namespace string) Watcher {
 }
 
 func (c *config) Run(ctx context.Context) error {
-	dlog.Infof(ctx, "Started watcher for ConfigMap %s", cfgConfigMapName)
-	defer dlog.Infof(ctx, "Ended watcher for ConfigMap %s", cfgConfigMapName)
+	clog.Infof(ctx, "Started watcher for ConfigMap %s", cfgConfigMapName)
+	defer clog.Infof(ctx, "Ended watcher for ConfigMap %s", cfgConfigMapName)
 	defer close(c.selectorChannel)
 
 	// The WatchConfig will perform an http GET call to the kubernetes API server, and that connection will not remain open forever,
@@ -124,12 +124,12 @@ func (c *config) configMapEventHandler(ctx context.Context, evCh <-chan watch.Ev
 			switch event.Type {
 			case watch.Deleted:
 				if m, ok := event.Object.(*core.ConfigMap); ok {
-					dlog.Debugf(ctx, "%s %s", event.Type, m.Name)
+					clog.Debugf(ctx, "%s %s", event.Type, m.Name)
 					c.refreshFile(ctx, nil)
 				}
 			case watch.Added, watch.Modified:
 				if m, ok := event.Object.(*core.ConfigMap); ok {
-					dlog.Debugf(ctx, "%s %s", event.Type, m.Name)
+					clog.Debugf(ctx, "%s %s", event.Type, m.Name)
 					c.refreshFile(ctx, m.Data)
 				}
 			}
@@ -141,14 +141,14 @@ func AmendClientConfig(ctx context.Context, cfg client.Config) bool {
 	nss := namespaces.Get(ctx)
 	changed := false
 	if !slices.Equal(nss, cfg.Cluster().MappedNamespaces) {
-		dlog.Debugf(ctx, "AmendClientConfig: cluster.mappedNamespaces: %v", nss)
+		clog.Debugf(ctx, "AmendClientConfig: cluster.mappedNamespaces: %v", nss)
 		cfg.Cluster().MappedNamespaces = nss
 		changed = true
 	}
 	// The intercept timeout must be equal to or greater than the agent arrival timeout.
 	env := managerutil.GetEnv(ctx)
 	if env.AgentArrivalTimeout > cfg.Timeouts().PrivateIntercept {
-		dlog.Debugf(ctx, "AmendClientConfig: timeouts.privateIntercept: %v", env.AgentArrivalTimeout)
+		clog.Debugf(ctx, "AmendClientConfig: timeouts.privateIntercept: %v", env.AgentArrivalTimeout)
 		cfg.Timeouts().PrivateIntercept = env.AgentArrivalTimeout
 		changed = true
 	}
@@ -165,7 +165,7 @@ func (c *config) refreshFile(ctx context.Context, mapData map[string]string) {
 		}
 	} else if len(c.clientYAML) > 0 {
 		c.clientYAML = nil
-		dlog.Debug(ctx, "Cleared client config")
+		clog.Debug(ctx, "Cleared client config")
 	}
 
 	ae := AgentEnv{}
@@ -175,44 +175,44 @@ func (c *config) refreshFile(ctx context.Context, mapData map[string]string) {
 			err = json.Unmarshal(data, &ae)
 		}
 		if err != nil {
-			dlog.Errorf(ctx, "failed to unmarshal YAML from %s: %v", agentEnvConfigFileName, err)
+			clog.Errorf(ctx, "failed to unmarshal YAML from %s: %v", agentEnvConfigFileName, err)
 		} else {
 			sort.Strings(ae.Excluded)
 			if !ae.Equal(c.agentEnv) {
 				c.agentEnv = ae
-				dlog.Debugf(ctx, "Refreshed agent-env:\n%s", yml)
+				clog.Debugf(ctx, "Refreshed agent-env:\n%s", yml)
 			}
 		}
 	} else if !c.agentEnv.Equal(ae) {
 		c.agentEnv = ae
-		dlog.Debug(ctx, "Cleared agent-env")
+		clog.Debug(ctx, "Cleared agent-env")
 	}
 
 	if yml, ok := mapData[namespaceSelectorConfigFileName]; ok {
 		nsSelector, err := labels.UnmarshalSelector([]byte(yml))
 		if err != nil {
-			dlog.Errorf(ctx, "failed to unmarshal YAML from %s: %v", namespaceSelectorConfigFileName, err)
+			clog.Errorf(ctx, "failed to unmarshal YAML from %s: %v", namespaceSelectorConfigFileName, err)
 		}
 		es := nsSelector.GetAllRequirements()
 		if !slices.EqualFunc(es, c.namespaceSelector, rqEqual) {
 			c.namespaceSelector = es
-			dlog.Debugf(ctx, "Refreshed namespaceSelector: %s", yml)
+			clog.Debugf(ctx, "Refreshed namespaceSelector: %s", yml)
 			c.selectorChannel <- &labels.Selector{MatchExpressions: es}
 		}
 	} else if len(c.namespaceSelector) > 0 {
 		c.namespaceSelector = nil
 		c.selectorChannel <- nil
-		dlog.Debug(ctx, "Cleared namespaceSelector")
+		clog.Debug(ctx, "Cleared namespaceSelector")
 	}
 	if yml, ok := mapData[AgentStateFileName]; ok {
 		data := []byte(yml)
 		if !bytes.Equal(data, c.agentStateYAML) {
 			c.agentStateYAML = data
-			dlog.Debugf(ctx, "Refreshed agent state:\n%s", yml)
+			clog.Debugf(ctx, "Refreshed agent state:\n%s", yml)
 		}
 	} else if len(c.agentStateYAML) > 0 {
 		c.agentStateYAML = nil
-		dlog.Debug(ctx, "Cleared agent state")
+		clog.Debug(ctx, "Cleared agent state")
 	}
 }
 
@@ -230,7 +230,7 @@ func (c *config) GetClientConfigYaml(ctx context.Context) (ret []byte) {
 		var err error
 		cfg, err = client.ParseConfigYAML(ctx, clientConfigFileName, c.clientYAML)
 		if err != nil {
-			dlog.Errorf(ctx, "failed to unmarshal YAML from %s: %v", clientConfigFileName, err)
+			clog.Errorf(ctx, "failed to unmarshal YAML from %s: %v", clientConfigFileName, err)
 			return ret
 		}
 	}
@@ -239,7 +239,7 @@ func (c *config) GetClientConfigYaml(ctx context.Context) (ret []byte) {
 	} else {
 		ret = c.clientYAML
 	}
-	dlog.Debugf(ctx, "Client config:\n%s", string(ret))
+	clog.Debugf(ctx, "Client config:\n%s", string(ret))
 	return ret
 }
 

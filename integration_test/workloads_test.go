@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 )
@@ -80,7 +80,7 @@ func (s *connectedSuite) doIntercept(tp, wl, port string) {
 	require.NotContains(stdout, "Volume Mount Point")
 	s.Eventually(func() bool {
 		ras := itest.RunningPodsWithAgents(ctx, wl, s.AppNamespace())
-		dlog.Infof(ctx, "pod with agent count %d, expected %d", len(ras), replicas)
+		clog.Infof(ctx, "pod with agent count %d, expected %d", len(ras), replicas)
 		return len(ras) == replicas
 	}, 60*time.Second, 5*time.Second)
 	s.CapturePodLogs(ctx, wl, "traffic-agent", s.AppNamespace())

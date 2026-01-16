@@ -13,7 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -48,7 +48,7 @@ func newPodWatcher(ctx context.Context, managerIP netip.Addr) *podWatcher {
 
 		newSubnets := subnet.NewSet(subnet.CoveringPrefixes(ips))
 		if !newSubnets.Equals(oldSubnets) {
-			dlog.Debugf(ctx, "podWatcher calling updateSubnets with %v", newSubnets)
+			clog.Debugf(ctx, "podWatcher calling updateSubnets with %v", newSubnets)
 			select {
 			case <-ctx.Done():
 				return
@@ -113,10 +113,10 @@ func (w *podWatcher) refreshWatchers(ctx context.Context) {
 				},
 			})
 			if err != nil {
-				dlog.Errorf(ctx, "failed to add pod watcher %q : %v", ns, err)
+				clog.Errorf(ctx, "failed to add pod watcher %q : %v", ns, err)
 				return nil, true
 			}
-			dlog.Debugf(ctx, "add pod watcher %q", ns)
+			clog.Debugf(ctx, "add pod watcher %q", ns)
 			return reg, false
 		})
 	}
@@ -126,9 +126,9 @@ func (w *podWatcher) refreshWatchers(ctx context.Context) {
 		if !slices.Contains(nss, ns) {
 			err := informer.GetK8sFactory(ctx, ns).Core().V1().Pods().Informer().RemoveEventHandler(reg)
 			if err != nil {
-				dlog.Errorf(ctx, "failed to remove pod watcher %q : %v", ns, err)
+				clog.Errorf(ctx, "failed to remove pod watcher %q : %v", ns, err)
 			} else {
-				dlog.Debugf(ctx, "removed pod watcher %q", ns)
+				clog.Debugf(ctx, "removed pod watcher %q", ns)
 			}
 		}
 		return true
@@ -166,7 +166,7 @@ func (w *podWatcher) viable(ctx context.Context) bool {
 			pods, err = lister.List(labels.Everything())
 		}
 		if err != nil {
-			dlog.Errorf(ctx, "unable to list pods: %v", err)
+			clog.Errorf(ctx, "unable to list pods: %v", err)
 			return false
 		}
 		for _, pod := range pods {
@@ -302,7 +302,7 @@ func podIPs(ctx context.Context, pod *corev1.Pod) []netip.Addr {
 	for _, ps := range podIPs {
 		ip, err := netip.ParseAddr(ps.IP)
 		if err != nil {
-			dlog.Errorf(ctx, "unable to parse IP %q in pod %s.%s", ps.IP, pod.Name, pod.Namespace)
+			clog.Errorf(ctx, "unable to parse IP %q in pod %s.%s", ps.IP, pod.Name, pod.Namespace)
 			continue
 		}
 		ips = append(ips, ip)

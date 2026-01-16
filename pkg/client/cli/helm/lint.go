@@ -2,6 +2,7 @@ package helm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -9,7 +10,6 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/telepresenceio/dlib/v2/derror"
 	"github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -56,21 +56,17 @@ func lint(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, 
 	return runLint(fh.Name(), namespace, vals, req)
 }
 
-func runLint(path, namespace string, vals map[string]any, req *Request) (err error) {
+func runLint(path, namespace string, vals map[string]any, req *Request) error {
 	lint := action.NewLint()
 	lint.Namespace = namespace
 	lint.Strict = true
 	lint.KubeVersion = req.KubeVersion
 	lr := lint.Run([]string{path}, vals)
-	switch len(lr.Errors) {
-	case 0:
-		for _, msg := range lr.Messages {
-			ioutil.Println(os.Stdout, msg)
-		}
-	case 1:
-		err = lr.Errors[0]
-	default:
-		err = derror.MultiError(lr.Errors)
+	if err := errors.Join(lr.Errors...); err != nil {
+		return err
 	}
-	return err
+	for _, msg := range lr.Messages {
+		ioutil.Println(os.Stdout, msg)
+	}
+	return nil
 }

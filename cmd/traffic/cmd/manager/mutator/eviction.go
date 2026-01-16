@@ -16,8 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/telepresenceio/dlib/v2/derror"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
@@ -68,27 +67,20 @@ func (c *configWatcher) EvictAllPodsWithAgentConfig(ctx context.Context, namespa
 	if err != nil {
 		return err
 	}
-	var errs derror.MultiError
+	var errs error
 	for _, wp := range evictMap {
 		err = c.evictPodsWithAgentConfigMismatch(ctx, wp.wl, wp.pods, "")
 		if err != nil {
-			errs = append(errs, err)
+			errs = errors.Join(errs, err)
 		}
 	}
-	switch len(errs) {
-	case 0:
-		return nil
-	case 1:
-		return errs[0]
-	default:
-		return errs
-	}
+	return errs
 }
 
 func (c *configWatcher) evictPodsWithAgentConfigMismatch(ctx context.Context, wl k8sapi.Workload, pods []*core.Pod, cfgJSON string) error {
 	pods = slices.DeleteFunc(pods, func(pod *core.Pod) bool {
 		if pod.Annotations[annotation.Config] == cfgJSON {
-			dlog.Tracef(ctx, "Keeping pod %s because its config is still valid", pod.Name)
+			clog.Tracef(ctx, "Keeping pod %s because its config is still valid", pod.Name)
 			return true
 		}
 		return false
@@ -102,12 +94,12 @@ func (c *configWatcher) evictPods(ctx context.Context, wl k8sapi.Workload, pods 
 	for _, pod := range pods {
 		podID := pod.UID
 		if c.isEvicted(podID) {
-			dlog.Debugf(ctx, "Skipping pod %s because it is already deleted", pod.Name)
+			clog.Debugf(ctx, "Skipping pod %s because it is already deleted", pod.Name)
 			continue
 		}
 		v := annotation.GetAnnotation(ctx, pod.Annotations, annotation.ManuallyInjected, annotation.LegacyManuallyInjected)
 		if v == "true" {
-			dlog.Tracef(ctx, "Skipping pod %s because it is managed manually", pod.Name)
+			clog.Tracef(ctx, "Skipping pod %s because it is managed manually", pod.Name)
 			continue
 		}
 		c.inactivePods.Compute(podID, func(v inactivation, loaded bool) (inactivation, xsync.ComputeOp) {
@@ -149,13 +141,13 @@ func evictOrRollout(ctx context.Context, wl k8sapi.Workload, pod *core.Pod, coun
 	if wl == nil || !errors.As(err, &disruptionBudgetError{}) {
 		return false, fmt.Errorf("failed to evict pod %s: %v", pod.Name, err)
 	}
-	dlog.Debug(ctx, err.Error())
+	clog.Debug(ctx, err.Error())
 	if counter > 0 {
 		// Other pod siblings were evicted successfully, which means that an engagement will be able to
 		// proceed, Wait for the previous eviction(s) to trigger pod recreation, so the disruption budget
 		// can be satisfied even though this pod is evicted.
 		go func() {
-			dlog.Debugf(ctx, "Waiting for other %s pods to be recreated so that the disruption budget can be satisfied when evicting %s", wl.GetNamespace(), pod.Name)
+			clog.Debugf(ctx, "Waiting for other %s pods to be recreated so that the disruption budget can be satisfied when evicting %s", wl.GetNamespace(), pod.Name)
 			evictCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), managerutil.GetEnv(ctx).AgentArrivalTimeout)
 			defer cancel()
 			_ = retryEvictPod(evictCtx, wl, pod, wl.Replicas())
@@ -166,12 +158,12 @@ func evictOrRollout(ctx context.Context, wl k8sapi.Workload, pod *core.Pod, coun
 	case k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind:
 		return false, triggerScalingEviction(ctx, wl, pod)
 	default:
-		dlog.Debugf(ctx, "Patching %s to trigger pod recreation", wl)
+		clog.Debugf(ctx, "Patching %s to trigger pod recreation", wl)
 		restartAnnotation := generateRestartAnnotationPatch(wl.GetPodTemplate().Annotations)
 		if err = wl.Patch(ctx, types.JSONPatchType, []byte(restartAnnotation)); err != nil {
 			return false, fmt.Errorf("unable to patch %s: %v", wl, err)
 		}
-		dlog.Debugf(ctx, "Successfully patched %s", wl)
+		clog.Debugf(ctx, "Successfully patched %s", wl)
 	}
 	// Rollout applies to all pods for the workload, so we're done here
 	return true, nil
@@ -180,17 +172,17 @@ func evictOrRollout(ctx context.Context, wl k8sapi.Workload, pod *core.Pod, coun
 func retryEvictPod(ctx context.Context, wl k8sapi.Workload, pod *core.Pod, replicas int) error {
 	err := waitForReplicaCount(ctx, wl, replicas)
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return err
 	}
 	for {
 		err = evictPod(ctx, pod)
 		if err == nil || !errors.As(err, &disruptionBudgetError{}) {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 			return err
 		}
 		delay := 2 * time.Second
-		dlog.Debugf(ctx, "%v. Will retry in %s", err, delay)
+		clog.Debugf(ctx, "%v. Will retry in %s", err, delay)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -243,7 +235,7 @@ func waitForReplicaCount(ctx context.Context, wl k8sapi.Workload, count int) err
 }
 
 func scaleIt(ctx context.Context, wl k8sapi.Workload, replicas int) error {
-	dlog.Debugf(ctx, "Scaling %s to %d replicas", wl, replicas)
+	clog.Debugf(ctx, "Scaling %s to %d replicas", wl, replicas)
 	patch := fmt.Sprintf(`{"spec": {"replicas": %d}}`, replicas)
 	err := wl.Patch(ctx, types.StrategicMergePatchType, []byte(patch))
 	if err != nil {
@@ -264,7 +256,7 @@ func triggerScalingEviction(ctx context.Context, wl k8sapi.Workload, pod *core.P
 		// Ensure that the original replica count is restored but don't wait for it.
 		go func() {
 			if err := scaleIt(context.WithoutCancel(ctx), wl, replicas); err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 		}()
 	}()
@@ -272,14 +264,14 @@ func triggerScalingEviction(ctx context.Context, wl k8sapi.Workload, pod *core.P
 }
 
 func evictPod(ctx context.Context, pod *core.Pod) error {
-	dlog.Debugf(ctx, "Attempting to evict pod %s", pod.Name)
+	clog.Debugf(ctx, "Attempting to evict pod %s", pod.Name)
 	err := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(pod.Namespace).EvictV1(ctx, &v1.Eviction{
 		ObjectMeta: meta.ObjectMeta{Name: pod.Name, Namespace: pod.Namespace},
 	})
 	if err == nil {
 		store := informer.GetK8sFactory(ctx, pod.Namespace).Core().V1().Pods().Informer().GetStore()
 		_ = store.Delete(pod)
-		dlog.Debugf(ctx, "Successfully evicted pod %s", pod.Name)
+		clog.Debugf(ctx, "Successfully evicted pod %s", pod.Name)
 		return nil
 	}
 	if strings.Contains(err.Error(), "disruption budget") {

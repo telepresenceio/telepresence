@@ -13,7 +13,7 @@ import (
 	listersCore "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -28,13 +28,13 @@ type nodeWatcher struct {
 func newNodeWatcher(ctx context.Context, lister listersCore.NodeLister, informer cache.SharedIndexInformer) (*nodeWatcher, error) {
 	nodes, err := lister.List(labels.Everything())
 	if err != nil {
-		dlog.Errorf(ctx, "unable to list nodes: %v", err)
+		clog.Errorf(ctx, "unable to list nodes: %v", err)
 		return nil, err
 	}
 	subnets := make(subnet.Set)
-	podIP := managerutil.GetEnv(ctx).PodIP
+	podIP := managerutil.GetEnv(ctx).PodIp
 	viable := false
-	dlog.Infof(ctx, "Scanning %d nodes", len(nodes))
+	clog.Infof(ctx, "Scanning %d nodes", len(nodes))
 	for _, node := range nodes {
 		for _, sn := range nodeSubnets(ctx, node) {
 			if sn.Contains(podIP) {
@@ -46,7 +46,7 @@ func newNodeWatcher(ctx context.Context, lister listersCore.NodeLister, informer
 	if !viable {
 		return nil, fmt.Errorf("no node subnets contain the traffic manager pod IP %q", podIP)
 	}
-	dlog.Infof(ctx, "Found %d subnets", len(subnets))
+	clog.Infof(ctx, "Found %d subnets", len(subnets))
 	w := &nodeWatcher{
 		informer: informer,
 		subnets:  subnets,
@@ -92,7 +92,7 @@ func (w *nodeWatcher) changeNotifier(ctx context.Context, updateSubnets func(set
 		}
 		w.lock.Unlock()
 		if doSend {
-			dlog.Debugf(ctx, "nodeWatcher calling updateSubnets with %v", lastSent)
+			clog.Debugf(ctx, "nodeWatcher calling updateSubnets with %v", lastSent)
 			updateSubnets(lastSent)
 		}
 	}
@@ -264,7 +264,7 @@ func nodeSubnets(ctx context.Context, node *core.Node) []netip.Prefix {
 	for _, cs := range cidrs {
 		cidr, err := netip.ParsePrefix(cs)
 		if err != nil {
-			dlog.Errorf(ctx, "unable to parse podCIDR %q in node %s", cs, node.Name)
+			clog.Errorf(ctx, "unable to parse podCIDR %q in node %s", cs, node.Name)
 			continue
 		}
 		subnets = append(subnets, cidr)

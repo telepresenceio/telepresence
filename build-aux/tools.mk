@@ -154,7 +154,7 @@ tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc$(EXE)
 tools/go-mkopensource    = $(TOOLSBINDIR)/go-mkopensource$(EXE)
 tools/test-report        = $(TOOLSBINDIR)/test-report$(EXE)
 tools/y2j                = $(TOOLSBINDIR)/y2j$(EXE)
-$(TOOLSBINDIR)/%$(EXE): $(TOOLSSRCDIR)/%/go.sum $(TOOLSSRCDIR)/%/pin.go
+$(TOOLSBINDIR)/%$(EXE): $(TOOLSSRCDIR)/%/pin.go | $(TOOLSSRCDIR)/%/go.sum
 	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)
 
 $(TOOLSSRCDIR)/%/go.sum: $(TOOLSSRCDIR)/%/go.mod

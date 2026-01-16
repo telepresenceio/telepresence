@@ -5,7 +5,7 @@ import (
 	"net/netip"
 	"regexp"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 var (
@@ -35,7 +35,7 @@ func TranslateEnvironmentIPs(ctx context.Context, env map[string]string, provide
 		for k, ev := range env {
 			rv := replaceIP(provider, ipV4Rx, ev)
 			if ev != rv {
-				dlog.Debugf(ctx, "%s: %s -> %s", k, ev, rv)
+				clog.Debugf(ctx, "%s: %s -> %s", k, ev, rv)
 				env[k] = rv
 			}
 		}
@@ -44,7 +44,7 @@ func TranslateEnvironmentIPs(ctx context.Context, env map[string]string, provide
 		for k, ev := range env {
 			rv := replaceIP(provider, ipV6Rx, ev)
 			if ev != rv {
-				dlog.Debugf(ctx, "%s: %s -> %s", k, ev, rv)
+				clog.Debugf(ctx, "%s: %s -> %s", k, ev, rv)
 				env[k] = rv
 			}
 		}

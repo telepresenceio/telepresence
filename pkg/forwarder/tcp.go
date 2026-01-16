@@ -8,7 +8,7 @@ import (
 	"net/netip"
 	"sync/atomic"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -25,18 +25,18 @@ func NewTCP(from uint16, tag tunnel.Tag, target netip.AddrPort) Forwarder {
 }
 
 func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
-	defer dlog.Debug(ctx, "Done forwarding")
+	defer clog.Debug(ctx, "Done forwarding")
 	defer clientConn.Close()
 
 	if f.target.Port() == 0 {
-		dlog.Debug(ctx, "Forwarding to /dev/null")
+		clog.Debug(ctx, "Forwarding to /dev/null")
 		_, _ = io.Copy(io.Discard, clientConn)
 		return nil
 	}
 
-	ctx = dlog.WithField(ctx, "target", f.target.String())
+	ctx = clog.With(ctx, "target", f.target)
 
-	dlog.Debug(ctx, "Forwarding...")
+	clog.Debug(ctx, "Forwarding...")
 	targetConn, err := net.DialTCP("tcp", nil, net.TCPAddrFromAddrPort(f.target))
 	if err != nil {
 		return fmt.Errorf("error on dial: %w", err)
@@ -47,14 +47,14 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 
 	go func() {
 		if _, err := io.Copy(targetConn, clientConn); err != nil && ctx.Err() == nil {
-			dlog.Debugf(ctx, "Error clientConn->targetConn: %+v", err)
+			clog.Debugf(ctx, "Error clientConn->targetConn: %+v", err)
 		}
 		_ = targetConn.CloseWrite()
 		done <- struct{}{}
 	}()
 	go func() {
 		if _, err := io.Copy(clientConn, targetConn); err != nil && ctx.Err() == nil {
-			dlog.Debugf(ctx, "Error targetConn->clientConn: %+v", err)
+			clog.Debugf(ctx, "Error targetConn->clientConn: %+v", err)
 		}
 		if hwCloser, ok := clientConn.(interface{ CloseWrite() error }); ok {
 			_ = hwCloser.CloseWrite()
@@ -120,12 +120,12 @@ func AcceptLoop(ctx context.Context, listener net.Listener, fw func(context.Cont
 			case <-ctx.Done():
 				return
 			default:
-				dlog.Infof(ctx, "listener.Accept ended with error: %v", err)
+				clog.Infof(ctx, "listener.Accept ended with error: %v", err)
 			}
 		}
 		go func() {
 			if err := fw(ctx, conn); err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 		}()
 	}

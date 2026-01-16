@@ -14,8 +14,7 @@ import (
 	"github.com/go-json-experiment/json"
 	"golang.org/x/sys/unix"
 
-	"github.com/telepresenceio/dlib/v2/dhttp"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
@@ -34,7 +33,7 @@ import (
 //
 // Run it locally using an intercept with -- so that TELEPRESENCE_INTERCEPT_ID is propagated in the env
 func main() {
-	c, cancel := context.WithCancel(log.MakeBaseLogger(context.Background(), "DEBUG"))
+	c, cancel := context.WithCancel(log.MakeBaseLogger(context.Background(), os.Stderr, "DEBUG"))
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, unix.SIGTERM)
 	defer func() {
@@ -60,7 +59,7 @@ func main() {
 
 func run(c context.Context) error {
 	if lv, ok := os.LookupEnv("LOG_LEVEL"); ok {
-		log.SetLevel(c, lv)
+		clog.SetTreeLevel(c, clog.MustParseLevel(lv))
 	}
 
 	ap, ok := os.LookupEnv("APP_PORT")
@@ -104,14 +103,17 @@ func run(c context.Context) error {
 		})
 	}
 
-	server := &dhttp.ServerConfig{Handler: mux}
 	info := fmt.Sprintf("API test server on %v", ln.Addr())
-	dlog.Infof(c, "%s started", info)
-	defer dlog.Infof(c, "%s ended", info)
-	if err := server.Serve(c, ln); err != nil && err != c.Err() {
-		return fmt.Errorf("%s stopped: %w", info, err)
-	}
-	return nil
+	clog.Infof(c, "%s started", info)
+	defer clog.Infof(c, "%s ended", info)
+	svc := http.Server{Handler: mux, BaseContext: func(listener net.Listener) context.Context {
+		return c
+	}}
+	go func() {
+		_ = svc.Serve(ln)
+	}()
+	<-c.Done()
+	return svc.Shutdown(context.Background())
 }
 
 const interceptIdEnv = "TELEPRESENCE_INTERCEPT_ID"
@@ -136,7 +138,7 @@ func doRequest(c context.Context, rqUrl string, path string, hm map[string]strin
 	for k, v := range hm {
 		rq.Header.Set(k, v)
 	}
-	dlog.Debugf(c, "%s with headers\n%s", rqUrl, matcher.HeaderStringer(rq.Header))
+	clog.Debugf(c, "%s with headers\n%s", rqUrl, matcher.HeaderStringer(rq.Header))
 	rs, err := http.DefaultClient.Do(rq)
 	if err != nil {
 		return 0, err
@@ -184,7 +186,7 @@ func intercepted(c context.Context, url string, path string, w http.ResponseWrit
 			err = json.MarshalWrite(w, er)
 		}
 		if err != nil {
-			dlog.Error(c, err)
+			clog.Error(c, err)
 		}
 	}
 }

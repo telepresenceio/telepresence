@@ -2,6 +2,7 @@ package mutator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync/atomic"
@@ -14,8 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/telepresenceio/dlib/v2/derror"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -97,7 +97,7 @@ func (c *configWatcher) RegenerateAgentMaps(ctx context.Context, agentImage stri
 }
 
 func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, gc *agentmap.GeneratorConfig) error {
-	dlog.Debugf(ctx, "regenerate agent maps %s", whereWeWatch(ns))
+	clog.Debugf(ctx, "regenerate agent maps %s", whereWeWatch(ns))
 	evictMap, err := podList(ctx, ns)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 			}
 			sc, err := agentconfig.UnmarshalJSON(cfgJSON)
 			if err != nil {
-				dlog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
+				clog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
 				continue
 			}
 			if configured {
@@ -132,7 +132,7 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 				if !ok && managerutil.GetEnv(ctx).EnabledWorkloadKinds.Contains(sc.WorkloadKind) {
 					newSc, err = gc.Generate(ctx, wl, sc)
 					if err != nil {
-						dlog.Errorf(ctx, "unable to update config for %s", wl)
+						clog.Errorf(ctx, "unable to update config for %s", wl)
 						continue
 					}
 					wls[key] = newSc
@@ -147,7 +147,7 @@ func (c *configWatcher) regenerateAgentConfigs(ctx context.Context, ns string, g
 		}
 		if len(podsOfInterest) > 0 {
 			if err := c.evictPods(ctx, wl, podsOfInterest); err != nil {
-				dlog.Errorf(ctx, "failed to evict pods for %s", wl)
+				clog.Errorf(ctx, "failed to evict pods for %s", wl)
 			}
 		}
 	}
@@ -308,18 +308,15 @@ func (c *configWatcher) StartWatchers(ctx context.Context) error {
 	defer c.running.Store(true)
 	c.startedAt = time.Now()
 	ctx, c.cancel = context.WithCancel(ctx)
-	var errs []error
+	var errs error
 	c.informers.Range(func(ns string, iwc *informersWithCancel) bool {
 		if err := c.startWatchers(ctx, iwc); err != nil {
-			errs = append(errs, err)
+			errs = errors.Join(errs, err)
 			return false
 		}
 		return true
 	})
-	if len(errs) > 0 {
-		return derror.MultiError(errs)
-	}
-	return nil
+	return errs
 }
 
 func (c *configWatcher) Wait(ctx context.Context) error {
@@ -381,7 +378,7 @@ func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIn
 		return o, nil
 	})
 	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
-		dlog.Errorf(ctx, "Watcher for pods %s: %v", whereWeWatch(ns), err)
+		clog.Errorf(ctx, "Watcher for pods %s: %v", whereWeWatch(ns), err)
 	})
 	return ix
 }
@@ -392,10 +389,10 @@ func (c *configWatcher) Start(ctx context.Context) {
 	})
 
 	for _, ns := range namespaces.GetOrGlobal(ctx) {
-		dlog.Debugf(ctx, "Adding watchers for namespace %s", ns)
+		clog.Debugf(ctx, "Adding watchers for namespace %s", ns)
 		iwc, err := c.startInformers(ctx, ns)
 		if err != nil {
-			dlog.Errorf(ctx, "Failed to create watchers namespace %s: %v", ns, err)
+			clog.Errorf(ctx, "Failed to create watchers namespace %s: %v", ns, err)
 			continue
 		}
 		c.informers.Store(ns, iwc)
@@ -418,14 +415,14 @@ func (c *configWatcher) namespacesChangeWatcher(ctx context.Context) error {
 			// Start informers for added namespaces
 			for _, ns := range nss {
 				c.informers.LoadOrCompute(ns, func() (*informersWithCancel, bool) {
-					dlog.Debugf(ctx, "Adding watchers for namespace %s", ns)
+					clog.Debugf(ctx, "Adding watchers for namespace %s", ns)
 					iwc, err := c.startInformers(ctx, ns)
 					if err != nil {
-						dlog.Errorf(ctx, "Failed to create watchers for namespace %s: %v", ns, err)
+						clog.Errorf(ctx, "Failed to create watchers for namespace %s: %v", ns, err)
 						return nil, true
 					}
 					if err = c.startWatchers(ctx, iwc); err != nil {
-						dlog.Errorf(ctx, "Failed to start watchers for namespace %s: %v", ns, err)
+						clog.Errorf(ctx, "Failed to start watchers for namespace %s: %v", ns, err)
 						return nil, true
 					}
 					return iwc, false
@@ -459,7 +456,7 @@ func (c *configWatcher) deleteMapsAndRolloutNS(ctx context.Context, ns string, i
 		informer.DropFactory(ctx, ns)
 	}()
 
-	dlog.Debugf(ctx, "Cancelling watchers for namespace %s", ns)
+	clog.Debugf(ctx, "Cancelling watchers for namespace %s", ns)
 	for i := 0; i < watcherMax; i++ {
 		if reg := iwc.eventRegs[i]; reg != nil {
 			_ = iwc.informers[i].RemoveEventHandler(reg)
@@ -469,7 +466,7 @@ func (c *configWatcher) deleteMapsAndRolloutNS(ctx context.Context, ns string, i
 
 	err := c.EvictAllPodsWithAgentConfig(ctx, ns)
 	if err != nil {
-		dlog.Errorf(ctx, "unable to delete agents in namespace %s: %v", ns, err)
+		clog.Errorf(ctx, "unable to delete agents in namespace %s: %v", ns, err)
 	}
 }
 

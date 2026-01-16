@@ -14,7 +14,7 @@ import (
 	"github.com/go-json-experiment/json"
 	"golang.org/x/net/http2"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
@@ -96,16 +96,17 @@ func (f *tcp) acceptHTTPLoop(ctx context.Context, listener net.Listener) {
 	}
 
 	go func() {
-		<-ctx.Done()
-		if err := server.Shutdown(context.WithoutCancel(ctx)); err != nil {
-			dlog.Errorf(ctx, "Error shutting down HTTP forwarder: %v", err)
+		clog.Debugf(ctx, "Starting HTTP intercept forwarder on %s", la)
+		defer clog.Debugf(ctx, "Done HTTP interceptor forwarding from %s", la)
+
+		if err := server.Serve(listener); err != nil {
+			clog.Errorf(ctx, "Error serving HTTP intercept: %v", err)
 		}
 	}()
-	dlog.Debugf(ctx, "Starting HTTP intercept forwarder on %s", la)
-	defer dlog.Debugf(ctx, "Done HTTP interceptor forwarding from %s", la)
 
-	if err := server.Serve(listener); err != nil {
-		dlog.Errorf(ctx, "Error serving HTTP intercept: %v", err)
+	<-ctx.Done()
+	if err := server.Shutdown(context.WithoutCancel(ctx)); err != nil {
+		clog.Errorf(ctx, "Error shutting down HTTP forwarder: %v", err)
 	}
 }
 
@@ -116,7 +117,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 	intercepts := f.intercepts.sorted()
 	f.mu.Unlock()
 
-	dlog.Debugf(f.lCtx, "Handling %s %s %s", req.Proto, req.Method, req.URL.Path)
+	clog.Debugf(f.lCtx, "Handling %s %s %s", req.Proto, req.Method, req.URL.Path)
 	src, err := netip.ParseAddrPort(req.RemoteAddr)
 	if err != nil {
 		src = netip.AddrPortFrom(netip.IPv4Unspecified(), 0)
@@ -135,7 +136,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 		if tapCount := len(wts); tapCount > 0 {
 			taps, err := addRequestTaps(f.lCtx, req, tapCount, 1024)
 			if err != nil {
-				dlog.Errorf(f.lCtx, "Failed to add request taps: %v", err)
+				clog.Errorf(f.lCtx, "Failed to add request taps: %v", err)
 			} else {
 				for i, ii := range wts {
 					f.serveTap(ii.ctx, src, taps[i], ii.InterceptInfo)
@@ -149,7 +150,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 		spec := ic.Spec
 		if len(spec.HeaderFilters) > 0 {
 			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
-				dlog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with header-based intercept %s",
+				clog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with header-based intercept %s",
 					req.Method, req.URL.Path, ic.Id)
 				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
 				return
@@ -162,7 +163,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 		spec := ic.Spec
 		if len(spec.HeaderFilters) == 0 && len(spec.PathFilters) > 0 {
 			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
-				dlog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with path-based intercept %s",
+				clog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with path-based intercept %s",
 					req.Method, req.URL.Path, ic.Id)
 				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
 				return
@@ -232,15 +233,15 @@ func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer
 
 	if tlsConfig := trn.TLSClientConfig; tlsConfig != nil {
 		if len(tlsConfig.Certificates) > 0 {
-			dlog.Debugf(ctx, "Using a client certificate when connecting to %s", trg)
+			clog.Debugf(ctx, "Using a client certificate when connecting to %s", trg)
 		} else {
-			dlog.Debugf(ctx, "Not using a client certificate when connecting to %s", trg)
+			clog.Debugf(ctx, "Not using a client certificate when connecting to %s", trg)
 		}
 		if tlsConfig.InsecureSkipVerify {
-			dlog.Warnf(ctx, "Skipping verification of server's certificate chain and host name when connecting to %s", trg)
+			clog.Warnf(ctx, "Skipping verification of server's certificate chain and host name when connecting to %s", trg)
 		}
 	} else {
-		dlog.Debugf(ctx, "No TLS config used when connecting to %s", trg)
+		clog.Debugf(ctx, "No TLS config used when connecting to %s", trg)
 	}
 	targetProxy := httputil.NewSingleHostReverseProxy(trg)
 	targetProxy.ErrorHandler = proxyErrorHandler
@@ -248,14 +249,14 @@ func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer
 	targetProxy.ServeHTTP(writer, request)
 
 	if metricsEnabled {
-		dlog.Debugf(ctx, "Connection to %s ended. IngressBytes: %d, egressBytes: %d", trg, ingressBytes.GetValue(), egressBytes.GetValue())
+		clog.Debugf(ctx, "Connection to %s ended. IngressBytes: %d, egressBytes: %d", trg, ingressBytes.GetValue(), egressBytes.GetValue())
 		sp.ReportMetrics(f.lCtx, &manager.TunnelMetrics{
 			ClientSessionId: ii.ClientSession.SessionId,
 			IngressBytes:    ingressBytes.GetValue(),
 			EgressBytes:     egressBytes.GetValue(),
 		})
 	} else {
-		dlog.Debugf(ctx, "Connection to %s ended", trg)
+		clog.Debugf(ctx, "Connection to %s ended", trg)
 	}
 }
 
@@ -281,13 +282,13 @@ func (f *tcp) serveTap(ctx context.Context, src netip.AddrPort, tap io.Reader, i
 		n, err := tap.Read(buf)
 		if err != nil {
 			if err != io.EOF {
-				dlog.Errorf(ctx, "Failed to read from tap: %v", err)
+				clog.Errorf(ctx, "Failed to read from tap: %v", err)
 			}
 			break
 		}
 		err = s.Send(ctx, tunnel.NewMessage(tunnel.Normal, buf[:n]))
 		if err != nil {
-			dlog.Errorf(ctx, "Failed to send to stream: %v", err)
+			clog.Errorf(ctx, "Failed to send to stream: %v", err)
 			break
 		}
 	}

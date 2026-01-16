@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/kubectl/pkg/util/deployment"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
@@ -114,7 +114,7 @@ func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
 	id := uuid.New()
 	kf := informer.GetFactory(ctx, w.namespace)
 	ai := kf.GetK8sInformerFactory().Apps().V1()
-	dlog.Debugf(ctx, "workload.Watcher producing initial events for namespace %s", w.namespace)
+	clog.Debugf(ctx, "workload.Watcher producing initial events for namespace %s", w.namespace)
 	if w.enabledWorkloadKinds.Contains(k8sapi.DeploymentKind) {
 		if dps, err := ai.Deployments().Lister().Deployments(w.namespace).List(labels.Everything()); err == nil {
 			for _, obj := range dps {
@@ -233,7 +233,7 @@ func (w *watcher) watch(ix cache.SharedIndexInformer, ns string, hasValidControl
 						// if diff == "" {
 						//   return
 						// }
-						// dlog.Debugf(ctx, "DIFF:\n%s", diff)
+						// clog.Debugf(ctx, "DIFF:\n%s", diff)
 						w.handleEvent(Event{Type: EventTypeUpdate, Workload: wl})
 					}
 				}

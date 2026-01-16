@@ -10,7 +10,7 @@ import (
 
 	compose "github.com/compose-spec/compose-go/v2/types"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -110,7 +110,7 @@ func (cc *connectionConfig) Connect(ctx context.Context, es map[string]serviceEx
 	ds := daemon.MustGetSession(ctx)
 	rootCfg, err := daemon.GetRootClientConfig(ds.Info.DaemonStatus)
 	if err != nil {
-		dlog.Errorf(ctx, "unable to obtain routing info for connection: %v", err)
+		clog.Errorf(ctx, "unable to obtain routing info for connection: %v", err)
 	}
 
 	proxies, err := cc.resolveProxies(ctx, ds, es)

@@ -5,7 +5,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 )
 
 type localIPProviderTest struct {
@@ -101,7 +101,7 @@ func Test_translateEnvironmentIPs(t *testing.T) {
 		},
 	}
 
-	ctx := dlog.NewTestContext(t, false)
+	ctx := testutil.NewContext(t, false)
 	for _, tt := range tests {
 		provider := &localIPProviderTest{
 			generator: NewGenerator(netip.MustParsePrefix(tt.vCidr)),

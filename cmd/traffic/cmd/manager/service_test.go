@@ -22,8 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	fakeargorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned/fake"
-	"github.com/telepresenceio/dlib/v2/dhttp"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -31,9 +30,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -43,8 +44,7 @@ func dumps(o any) string {
 }
 
 func TestConnect(t *testing.T) {
-	dlog.SetFallbackLogger(dlog.WrapTB(t, false))
-	ctx := dlog.NewTestContext(t, true)
+	ctx := testutil.NewContext(t, true)
 	require := require.New(t)
 
 	testClients := testdata.GetTestClients(t)
@@ -277,10 +277,10 @@ matchExpressions:
 	f.WaitForCacheSync(ctx.Done())
 
 	env := managerutil.Env{
-		ManagerNamespace: mgrNs,
-		MaxReceiveSize:   resource.Quantity{},
-		PodCIDRStrategy:  "environment",
-		PodCIDRs: []netip.Prefix{
+		ManagerNamespace:   mgrNs,
+		GrpcMaxReceiveSize: resource.Quantity{},
+		PodCidrStrategy:    "environment",
+		PodCidrs: []netip.Prefix{
 			netip.PrefixFrom(netip.AddrFrom4([4]byte{192, 168, 0, 0}), 16),
 		},
 		AgentInitContainerEnabled: true,
@@ -294,30 +294,25 @@ matchExpressions:
 	if err != nil {
 		t.Fatalf("Failed to dial bufnet: %v", err)
 	}
-	s := grpc.NewServer()
-	mgr, g, err := NewService(ctx, configWatcher)
+	s := server.New(ctx)
+	g := log.NewGroup(ctx)
+	mgr, err := NewService(ctx, g, configWatcher)
 	if err != nil {
 		t.Fatalf("failed to build manager: %v", err)
 	}
 	mgr.RegisterServers(s)
-	sc := &dhttp.ServerConfig{
-		Handler: s,
-	}
 	err = configWatcher.ForceEvent(ctx)
 	if err != nil {
 		t.Fatalf("configMap watcher failed: %v", err)
 	}
 
-	shutdownServer := func() {}
 	g.Go("server", func(ctx context.Context) error {
 		defer cancel()
-		var serverCtx context.Context
-		serverCtx, shutdownServer = context.WithCancel(ctx)
-		return sc.Serve(serverCtx, lis)
+		return s.Serve(lis)
 	})
 	t.Cleanup(func() {
-		shutdownServer()
-		if err := g.Wait(); err != nil && err != ctx.Err() {
+		s.GracefulStop()
+		if err := g.Wait(); err != nil {
 			t.Error(err)
 		}
 	})

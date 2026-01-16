@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime/debug"
 	"sort"
@@ -15,14 +13,12 @@ import (
 	"time"
 
 	"github.com/pkg/sftp"
-	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	ftp "github.com/telepresenceio/go-ftpserver"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -30,7 +26,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -126,7 +124,7 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 	}
 	sftpPortCh <- ap.Port()
 
-	dlog.Infof(ctx, "Listening at: %s", l.Addr())
+	clog.Infof(ctx, "Listening at: %s", l.Addr())
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -138,12 +136,12 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 		go func() {
 			s, err := sftp.NewServer(conn)
 			if err != nil {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
-			dlog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
+			clog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
 			if err = s.Serve(); err != nil {
 				if !errors.Is(err, io.EOF) {
-					dlog.Errorf(ctx, "sftp server completed with error %v", err)
+					clog.Errorf(ctx, "sftp server completed with error %v", err)
 				}
 			}
 		}()
@@ -152,56 +150,39 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 
 func Main(ctx context.Context, _ ...string) error {
 	debug.SetTraceback("single")
-	dlog.Infof(ctx, "Traffic Agent %s", version.Version)
+	clog.Infof(ctx, "Traffic Agent %s", version.Version)
 
-	ctx, cancel := context.WithCancel(ctx)
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, unix.SIGTERM)
-	defer func() {
-		signal.Stop(sigs)
-		cancel()
-	}()
-
-	go func() {
-		select {
-		case sig := <-sigs:
-			dlog.Infof(ctx, "Received %s, shutting down", sig)
-			cancel()
-		case <-ctx.Done():
+	return sigctx.DoWithSignalHandler(ctx, func(ctx context.Context) error {
+		// Handle configuration
+		config, err := LoadConfig(ctx)
+		if err != nil {
+			return fmt.Errorf("unable to load config: %w", err)
 		}
-	}()
 
-	// Handle configuration
-	config, err := LoadConfig(ctx)
-	if err != nil {
-		return fmt.Errorf("unable to load config: %w", err)
-	}
+		g := log.NewGroup(ctx)
+		s, err := NewState(ctx, config)
+		if err != nil {
+			return err
+		}
+		info, err := StartServices(g, config, s)
+		if err != nil {
+			return err
+		}
 
-	g := dgroup.NewGroup(ctx, dgroup.GroupConfig{
-		SoftShutdownTimeout: 10 * time.Second, // Agent must be able to depart.
+		certsReadyCh := make(chan struct{})
+		s.TLSManager().StartWatchers(g, certsReadyCh)
+
+		g.Go("sidecar", func(ctx context.Context) error {
+			<-certsReadyCh
+			return Sidecar(g, s, info)
+		})
+
+		// Wait for exit
+		return g.Wait()
 	})
-	s, err := NewState(ctx, config)
-	if err != nil {
-		return err
-	}
-	info, err := StartServices(ctx, g, config, s)
-	if err != nil {
-		return err
-	}
-
-	certsReadyCh := make(chan struct{})
-	s.TLSManager().StartWatchers(g, certsReadyCh)
-
-	g.Go("sidecar", func(ctx context.Context) error {
-		<-certsReadyCh
-		return Sidecar(ctx, s, info)
-	})
-
-	// Wait for exit
-	return g.Wait()
 }
 
-func Sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
+func Sidecar(g log.Group, s State, info *rpc.AgentInfo) error {
 	// Manage the forwarders
 	ac := s.AgentConfig()
 	for _, cn := range ac.Containers {
@@ -209,10 +190,10 @@ func Sidecar(ctx context.Context, s State, info *rpc.AgentInfo) error {
 		cs := s.NewContainerState(s, cn, ci.MountPoint, ci.Environment)
 		s.AddContainerState(cn.Name, cs)
 		for pp, ics := range MakeInterceptStates(cn) {
-			cs.AddPortHandler(ctx, pp, ics)
+			cs.AddPortHandler(g, pp, ics)
 		}
 	}
-	TalkToManagerLoop(ctx, s, info)
+	TalkToManagerLoop(g, s, info)
 	return nil
 }
 
@@ -247,7 +228,7 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 				// This won't change, so abort here.
 				return
 			}
-			dlog.Errorf(ctx, "error talking to traffic-manager: %v", err)
+			clog.Errorf(ctx, "error talking to traffic-manager: %v", err)
 		}
 
 		select {
@@ -258,7 +239,7 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 	}
 }
 
-func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv State) (*rpc.AgentInfo, error) {
+func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error) {
 	ac := config.AgentConfig()
 	grpcPortCh := make(chan uint16)
 	g.Go("tunneling", func(ctx context.Context) error {
@@ -271,13 +252,13 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 		grpcAddress := grpcListener.Addr().(*net.TCPAddr)
 		grpcPortCh <- uint16(grpcAddress.Port)
 
-		dlog.Debugf(ctx, "Listener opened on %s", grpcAddress)
+		clog.Debugf(ctx, "Listener opened on %s", grpcAddress)
 		svc := server.New(ctx, grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:    ac.ClientConnectionTTL,
 			Timeout: 20 * time.Second,
 		}))
 		agent.RegisterAgentServer(svc, srv)
-		dlog.Debugf(ctx, "Serving client connections using idle TTL %s", ac.ClientConnectionTTL)
+		clog.Debugf(ctx, "Serving client connections using idle TTL %s", ac.ClientConnectionTTL)
 		return server.Serve(ctx, svc, grpcListener)
 	})
 
@@ -297,17 +278,17 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 	} else {
 		close(sftpPortCh)
 		close(ftpPortCh)
-		dlog.Info(ctx, "Not starting ftp and sftp servers because there's nothing to mount")
+		clog.Info(g, "Not starting ftp and sftp servers because there's nothing to mount")
 	}
-	grpcPort, err := waitForPort(ctx, grpcPortCh)
+	grpcPort, err := waitForPort(g, grpcPortCh)
 	if err != nil {
 		return nil, err
 	}
-	ftpPort, err := waitForPort(ctx, ftpPortCh)
+	ftpPort, err := waitForPort(g, ftpPortCh)
 	if err != nil {
 		return nil, err
 	}
-	sftpPort, err := waitForPort(ctx, sftpPortCh)
+	sftpPort, err := waitForPort(g, sftpPortCh)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +303,7 @@ func StartServices(ctx context.Context, g *dgroup.Group, config Config, srv Stat
 	containers := make(map[string]*rpc.AgentInfo_ContainerInfo, len(ac.Containers))
 	for _, cn := range ac.Containers {
 		appMounts := cn.Mounts
-		env, err := AppEnvironment(ctx, cn)
+		env, err := AppEnvironment(g, cn)
 		if err != nil {
 			return nil, err
 		}

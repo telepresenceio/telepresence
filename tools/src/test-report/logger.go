@@ -16,7 +16,7 @@ type Logger struct {
 }
 
 func NewLogger(ctx context.Context, path string) (*Logger, error) {
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return nil, err
 	}
@@ -70,12 +70,13 @@ func (l *Logger) Report(line *Line) {
 				l.outputs[parent] = ""
 			}
 		}
-	case PASS, FAIL, SKIP:
+	case PASS, SKIP:
 		l.outputs[line.TestID] += "\n"
 		l.outCh <- l.outputs[line.TestID]
-		if line.Action != FAIL {
-			delete(l.outputs, line.TestID)
-		}
+		delete(l.outputs, line.TestID)
+	case BUILD_FAIL, FAIL:
+		l.outputs[line.TestID] += "\n"
+		l.outCh <- l.outputs[line.TestID]
 	case OUTPUT:
 		l.outputs[line.TestID] += line.Output
 	}

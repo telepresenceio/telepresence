@@ -8,18 +8,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dcontext"
-	"github.com/telepresenceio/dlib/v2/dgroup"
-	"github.com/telepresenceio/dlib/v2/dlog"
-	"github.com/telepresenceio/dlib/v2/dtime"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dbus"
+	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
 	// Connect to ResolveD via DBUS.
 	if !dbus.IsResolveDRunning(c) {
-		dlog.Error(c, "systemd-resolved is not running")
+		clog.Error(c, "systemd-resolved is not running")
 		return errResolveDNotConfigured
 	}
 
@@ -37,18 +35,18 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 	}
 	configureDNS(s.VIFAddress, dnsResolverAddr)
 
-	g := dgroup.NewGroup(c, dgroup.GroupConfig{})
+	g := log.NewGroup(c)
 
 	// DNS resolver
 	initDone := make(chan struct{})
 
 	g.Go("Server", func(c context.Context) error {
-		dlog.Infof(c, "Configuring DNS IP %s", s.VIFAddress)
+		clog.Infof(c, "Configuring DNS IP %s", s.VIFAddress)
 		if s.VIFAddress.Port() != 53 {
 			return fmt.Errorf("DBUS link only accepts DNS address with port 53, got %s", s.VIFAddress)
 		}
 		if err = dbus.SetLinkDNS(c, int(dev.Index()), s.VIFAddress.Addr().AsSlice()); err != nil {
-			dlog.Error(c, err)
+			clog.Error(c, err)
 			initDone <- struct{}{}
 			return errResolveDNotConfigured
 		}
@@ -57,15 +55,15 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 			// anyway, stripped from cancellation, to retain logging.
 			c, cancel := context.WithTimeout(context.WithoutCancel(c), time.Second)
 			defer cancel()
-			dlog.Debugf(c, "Reverting Link settings for %s", dev.Name())
+			clog.Debugf(c, "Reverting Link settings for %s", dev.Name())
 			configureDNS(netip.AddrPort{}, netip.AddrPort{}) // Don't route from TUN-device
 			if err = dbus.RevertLink(c, int(dev.Index())); err != nil {
-				dlog.Error(c, err)
+				clog.Error(c, err)
 			}
 			// No need to close listeners here. They are closed by the dnsServer
 		}()
 		if err = s.updateLinkDomains(c, dev); err != nil {
-			dlog.Error(c, err)
+			clog.Error(c, err)
 			initDone <- struct{}{}
 			return errResolveDNotConfigured
 		}
@@ -83,13 +81,13 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 		defer cmdCancel()
 		for cmdC.Err() == nil {
 			go func() {
-				dlog.Debug(cmdC, "sanity-check lookup")
+				clog.Debug(cmdC, "sanity-check lookup")
 				_, _ = net.DefaultResolver.LookupHost(cmdC, santiyCheck)
 				if s.RequestCount() > 0 {
 					cmdCancel()
 				}
 			}()
-			dtime.SleepWithContext(cmdC, 200*time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 		}
 		<-cmdC.Done()
 		if s.RequestCount() > 0 {
@@ -99,7 +97,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 			return nil
 		}
 		s.flushDNS()
-		dlog.Error(c, "resolver did not receive requests from systemd-resolved")
+		clog.Error(c, "resolver did not receive requests from systemd-resolved")
 		return errResolveDNotConfigured
 	})
 	return g.Wait()
@@ -130,10 +128,10 @@ func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
 	paths[i] = "~" + s.clusterDomain
 	s.Unlock()
 
-	if err := dbus.SetLinkDomains(dcontext.HardContext(c), int(dev.Index()), paths...); err != nil {
+	if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
 		return fmt.Errorf("failed to set link domains on %q: %w", dev.Name(), err)
 	}
 	s.flushDNS()
-	dlog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
+	clog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
 	return nil
 }

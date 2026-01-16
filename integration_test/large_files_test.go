@@ -16,7 +16,6 @@ import (
 	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dtime"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
@@ -172,7 +171,7 @@ func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
 		}(i)
 	}
 	wg.Wait()
-	dtime.SleepWithContext(ctx, 7*time.Second)
+	time.Sleep(7 * time.Second)
 }
 
 func (s *largeFilesSuite) leaveIntercepts(ctx context.Context) {

@@ -11,7 +11,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -144,7 +144,7 @@ func (s *restAPISuite) curlAPIServer(ctx context.Context, port uint16, path stri
 	}, myArgs...)
 	so, se, err := itest.Telepresence(ctx, args...)
 	if se != "" {
-		dlog.Errorf(ctx, "stderr: %s", se)
+		clog.Errorf(ctx, "stderr: %s", se)
 	}
 	return so, err
 }
@@ -163,10 +163,10 @@ func (s *restAPISuite) startIntercept(ctx context.Context, meta, header string, 
 	args = append(args, "--port", "8080:80", "--mount=false", "--docker-run", "--", "--rm", "--name", s.svc+"-local", s.registry+"/"+s.image)
 	so, se, err := itest.Telepresence(ctx, args...)
 	if so != "" {
-		dlog.Infof(ctx, "stdout: %s", so)
+		clog.Infof(ctx, "stdout: %s", so)
 	}
 	if se != "" {
-		dlog.Errorf(ctx, "stderr: %s", se)
+		clog.Errorf(ctx, "stderr: %s", se)
 	}
 	if err != nil {
 		errCh <- err
@@ -204,7 +204,7 @@ func (s *restAPISuite) Test_RestAPI_GlobalConsume() {
 
 	so, err := s.curlAPIServer(ctx, 8080, "consume-here", nil)
 	rq.NoError(err)
-	dlog.Infof(ctx, "stdout: %s", so)
+	clog.Infof(ctx, "stdout: %s", so)
 	var jv any
 	err = json.Unmarshal([]byte(so), &jv)
 	rq.NoError(err)
@@ -230,7 +230,7 @@ func (s *restAPISuite) Test_RestAPI_GlobalConsume() {
 	jv = nil
 	err = json.Unmarshal([]byte(so), &jv)
 	rq.NoError(err)
-	dlog.Infof(ctx, "stdout: %s", so)
+	clog.Infof(ctx, "stdout: %s", so)
 
 	// A global intercept will always hit the client, and the client's API server will always return true for the intercept id.
 	yes, ok = jv.(bool)
@@ -244,7 +244,7 @@ func (s *restAPISuite) Test_RestAPI_GlobalInfo() {
 
 	so, err := s.curlAPIServer(ctx, 8080, "intercept-info", nil)
 	rq.NoError(err)
-	dlog.Infof(ctx, "stdout: %s", so)
+	clog.Infof(ctx, "stdout: %s", so)
 	var jv any
 	err = json.Unmarshal([]byte(so), &jv)
 	rq.NoError(err)
@@ -271,7 +271,7 @@ func (s *restAPISuite) Test_RestAPI_GlobalInfo() {
 	jv = nil
 	err = json.Unmarshal([]byte(so), &jv)
 	rq.NoError(err)
-	dlog.Infof(ctx, "stdout: %s", so)
+	clog.Infof(ctx, "stdout: %s", so)
 	info, ok = jv.(map[string]any)
 	rq.True(ok)
 	yes, ok = info["intercepted"].(bool)
@@ -343,7 +343,7 @@ func (s *restAPISuite) Test_RestAPI_FilteredConsume() {
 			rq := s.Require()
 			so, err := s.curlAPIServer(ctx, tt.containerPort, "consume-here", tt.apiHeaders, tt.args...)
 			rq.NoError(err)
-			dlog.Infof(ctx, "stdout: %s", so)
+			clog.Infof(ctx, "stdout: %s", so)
 			var jv any
 			err = json.Unmarshal([]byte(so), &jv)
 			rq.NoError(err)
@@ -421,11 +421,11 @@ func (s *restAPISuite) Test_RestAPI_FilteredInfo() {
 			rq := s.Require()
 			so, err := s.curlAPIServer(ctx, tt.containerPort, "intercept-info", tt.apiHeaders, tt.args...)
 			rq.NoError(err)
-			dlog.Infof(ctx, "stdout: %s", so)
+			clog.Infof(ctx, "stdout: %s", so)
 			var jv any
 			err = json.Unmarshal([]byte(so), &jv)
 			rq.NoError(err)
-			dlog.Infof(ctx, "stdout: %s", so)
+			clog.Infof(ctx, "stdout: %s", so)
 			info, ok := jv.(map[string]any)
 			rq.True(ok)
 			yes, ok := info["intercepted"].(bool)

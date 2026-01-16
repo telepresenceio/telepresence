@@ -14,11 +14,10 @@ import (
 	"github.com/go-json-experiment/json"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -48,11 +47,11 @@ func LoadConfig(ctx context.Context) (Config, error) {
 	annData, err := dos.ReadFile(ctx, annFile)
 	if err != nil {
 		// Was an older traffic-manager in charge of injecting this agent so that the config can be found from the environment?
-		dlog.Warnf(ctx, "Unable to read annotations from %s: %v", annFile, err)
-		dlog.Warnf(ctx, "Loading agent config from env %s", agentconfig.EnvAgentConfig)
+		clog.Warnf(ctx, "Unable to read annotations from %s: %v", annFile, err)
+		clog.Warnf(ctx, "Loading agent config from env %s", agentconfig.EnvAgentConfig)
 		cfgTight, ok = dos.LookupEnv(ctx, agentconfig.EnvAgentConfig)
 	} else {
-		dlog.Infof(ctx, "Loading agent config from %s", annFile)
+		clog.Infof(ctx, "Loading agent config from %s", annFile)
 		c.annotations, err = readMap(string(annData))
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse annotations from %s: %v", annFile, err)
@@ -68,10 +67,8 @@ func LoadConfig(ctx context.Context) (Config, error) {
 		return nil, fmt.Errorf("unable to decode agent ConfigMap: %w", err)
 	}
 	sc := c.AgentConfig()
-	if sc.LogLevel != "" {
-		// Override default from environment
-		log.SetLevel(ctx, sc.LogLevel)
-	}
+	// Override default from environment
+	clog.SetTreeLevel(ctx, sc.LogLevel)
 	if sc.ManagerPort == 0 {
 		sc.ManagerPort = 8081
 	}
@@ -138,13 +135,13 @@ func (c *config) PodIP() netip.Addr {
 // symlink under the agentconfig.ExportsMountPoint/<container mount>/.
 // Returns MountPolicies keyed by the full path of each mount.
 func addAppMounts(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Container) error {
-	dlog.Infof(ctx, "Adding exported mounts for container %s", ag.Name)
+	clog.Infof(ctx, "Adding exported mounts for container %s", ag.Name)
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
 	if err := dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
 		if !os.IsExist(err) {
 			return err
 		}
-		dlog.Infof(ctx, "The directory %q already exists. Container restarted?", cnMountPoint)
+		clog.Infof(ctx, "The directory %q already exists. Container restarted?", cnMountPoint)
 		if err = dos.RemoveAll(ctx, cnMountPoint); err != nil {
 			return err
 		}
@@ -184,7 +181,7 @@ func addAppMounts(ctx context.Context, mps types.MountPolicies, ag *agentconfig.
 		if policy == types.MountPolicyRemote || policy == types.MountPolicyRemoteReadOnly {
 			_, err := dos.Stat(ctx, mp)
 			if err != nil {
-				dlog.Infof(ctx, "Failed to stat %q. It will not be exported: %v", mp, err)
+				clog.Infof(ctx, "Failed to stat %q. It will not be exported: %v", mp, err)
 				delete(ag.Mounts, path)
 			}
 		}

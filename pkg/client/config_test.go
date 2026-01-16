@@ -2,18 +2,19 @@ package client
 
 import (
 	"context"
+	"log/slog"
 	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
 
@@ -42,11 +43,11 @@ routing:
 	require.NoError(t, os.MkdirAll(user, 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(user, ConfigFile), []byte(config), 0o600))
 
-	c := dlog.NewTestContext(t, false)
+	c := testutil.NewContext(t, false)
 	c = filelocation.WithAppUserConfigDir(c, user)
 	env, err := LoadEnv()
 	require.NoError(t, err)
-	c = WithEnv(c, env)
+	c = WithEnv(c, &env)
 
 	cfg, err := LoadConfig(c)
 	require.NoError(t, err)
@@ -54,9 +55,9 @@ routing:
 
 	cfg = GetConfig(c)
 	to := cfg.Timeouts()
-	assert.Equal(t, 25*time.Second, to.PrivateClusterConnect)      // from user
-	assert.Equal(t, 17*time.Second, to.PrivateProxyDial)           // from user
-	assert.Equal(t, logrus.TraceLevel, cfg.LogLevels().RootDaemon) // from user
+	assert.Equal(t, 25*time.Second, to.PrivateClusterConnect)    // from user
+	assert.Equal(t, 17*time.Second, to.PrivateProxyDial)         // from user
+	assert.Equal(t, clog.LevelTrace, cfg.LogLevels().RootDaemon) // from user
 
 	assert.Equal(t, "testregistry.io", cfg.Images().PrivateRegistry)                             // from user
 	assert.Equal(t, "ambassador-telepresence-agent-image:0.0.2", cfg.Images().PrivateAgentImage) // from user
@@ -68,14 +69,14 @@ routing:
 }
 
 func Test_ConfigMarshalYAML(t *testing.T) {
-	ctx := dlog.NewTestContext(t, true)
+	ctx := testutil.NewContext(t, true)
 	env, err := LoadEnv()
 	require.NoError(t, err)
-	ctx = WithEnv(ctx, env)
+	ctx = WithEnv(ctx, &env)
 	cfg := GetDefaultConfig()
 	cfg.Images().PrivateAgentImage = "something:else"
 	cfg.Timeouts().PrivateTrafficManagerAPI = defaultTimeoutsTrafficManagerAPI + 20*time.Second
-	cfg.LogLevels().UserDaemon = logrus.TraceLevel
+	cfg.LogLevels().UserDaemon = clog.LevelTrace
 	cfg.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("20Mi")
 	cfg.Intercept().DefaultPort = 9080
 	cfg.Cluster().DefaultManagerNamespace = "hello-there"
@@ -100,13 +101,13 @@ func Test_ConfigMarshalYAMLDefaults(t *testing.T) {
 }
 
 func Test_ConfigUnmarshalYAMLEmpty(t *testing.T) {
-	cfg, err := ParseConfigYAML(dlog.NewTestContext(t, true), "", []byte("{}"))
+	cfg, err := ParseConfigYAML(testutil.NewContext(t, true), "", []byte("{}"))
 	require.NoError(t, err)
 	require.Equal(t, GetDefaultConfig(), cfg)
 }
 
 func Test_ConfigUnmarshalYAMLBooleanTrueDefault(t *testing.T) {
-	cfg, err := ParseConfigYAML(dlog.NewTestContext(t, true), "", []byte(`
+	cfg, err := ParseConfigYAML(testutil.NewContext(t, true), "", []byte(`
 docker:
   enableIPv4: true
 `))
@@ -115,7 +116,7 @@ docker:
 }
 
 func Test_ConfigUnmarshalYAMLBooleanTrueDefaultFalse(t *testing.T) {
-	cfg, err := ParseConfigYAML(dlog.NewTestContext(t, true), "", []byte(`
+	cfg, err := ParseConfigYAML(testutil.NewContext(t, true), "", []byte(`
 docker:
   enableIPv4: false
 `))
@@ -124,7 +125,7 @@ docker:
 }
 
 func Test_ConfigUnmarshalYAMLEmptyParent(t *testing.T) {
-	cfg, err := ParseConfigYAML(dlog.NewTestContext(t, true), "", []byte(`
+	cfg, err := ParseConfigYAML(testutil.NewContext(t, true), "", []byte(`
 docker:
 `))
 	require.NoError(t, err)
@@ -135,10 +136,10 @@ func Test_ConfigMarshalYAMLDefaultsNotEmitted(t *testing.T) {
 	cfg := GetDefaultConfig()
 	lls := cfg.LogLevels()
 	lls.UserDaemon = defaultLogLevels.UserDaemon
-	lls.RootDaemon = logrus.DebugLevel
+	lls.RootDaemon = slog.LevelDebug
 	cfgBytes, err := cfg.MarshalYAML()
 	require.NoError(t, err)
-	require.Equal(t, "logLevels:\n  rootDaemon: debug\n", string(cfgBytes))
+	require.Equal(t, "logLevels:\n  rootDaemon: DEBUG\n", string(cfgBytes))
 }
 
 func Test_ConfigUnmarshalUnsupported(t *testing.T) {
@@ -149,5 +150,5 @@ logLevels:
 `)
 	cfg, err := ParseConfigYAML(context.Background(), "config.yml", config)
 	require.NoError(t, err)
-	require.Equal(t, cfg.LogLevels().UserDaemon, logrus.DebugLevel)
+	require.Equal(t, cfg.LogLevels().UserDaemon, slog.LevelDebug)
 }

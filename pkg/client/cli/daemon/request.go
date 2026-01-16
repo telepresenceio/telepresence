@@ -22,7 +22,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
@@ -447,7 +447,7 @@ func (cr *CobraRequest) GetAllNamespaces(cmd *cobra.Command) ([]string, error) {
 }
 
 func (cr *CobraRequest) autocompleteNamespace(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	dlog.Debugf(cmd.Context(), "autocompleteNamespace %q", toComplete)
+	clog.Debugf(cmd.Context(), "autocompleteNamespace %q", toComplete)
 	var stripFunc func(s string) bool
 	if toComplete != "" {
 		stripFunc = func(s string) bool { return !strings.HasPrefix(s, toComplete) }
@@ -486,7 +486,7 @@ func (cr *CobraRequest) autocompleteNamespaceFunc(cmd *cobra.Command, stripFunc 
 	ctx := cmd.Context()
 	nss, err := cr.GetAllNamespaces(cmd)
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return nil, cobra.ShellCompDirectiveError
 	}
 	if stripFunc != nil {
@@ -499,7 +499,7 @@ func (cr *CobraRequest) autocompleteCluster(cmd *cobra.Command, _ []string, toCo
 	ctx := cmd.Context()
 	config, err := cr.GetConfig(cmd)
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		return nil, cobra.ShellCompDirectiveError
 	}
 

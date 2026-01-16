@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dcontext"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -14,7 +13,7 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 	if itest.GetProfile(s.Context()) == itest.GkeAutopilotProfile {
 		s.T().Skip("GKE Autopilot does not support NET_ADMIN containers which means headless services can't be intercepted")
 	}
-	ctx, cancel := context.WithCancel(dcontext.WithSoftness(s.Context()))
+	ctx, cancel := context.WithCancel(s.Context())
 	defer cancel()
 	const svc = "echo-headless"
 

@@ -21,7 +21,7 @@ Generate YAML for the agent's entry in the telepresence-agents configmap. See ge
       --agent-port uint16          The port number you wish the agent to listen on. (default 9900)
   -h, --help                       help for config
   -i, --input string               Path to the yaml containing the workload definition (i.e. Deployment, StatefulSet, etc). Pass '-' for stdin.. Mutually exclusive to --workload
-      --loglevel string            The loglevel for the generated traffic-agent sidecar (default "info")
+      --loglevel                   The loglevel for the generated traffic-agent sidecar (default INFO)
       --manager-namespace string   The traffic-manager namespace (default "ambassador")
       --manager-port uint16        The traffic-manager API port (default 8081)
   -n, --namespace string           If present, the namespace scope for this CLI request

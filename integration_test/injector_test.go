@@ -9,7 +9,7 @@ import (
 	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -27,32 +27,32 @@ func (s *singleServiceSuite) Test_InterceptOperationRestoredAfterFailingInject()
 	oneContainer := func() bool {
 		pods := itest.RunningPodNames(ctx, s.ServiceName(), s.AppNamespace())
 		if len(pods) != 1 {
-			dlog.Infof(ctx, "got %d pods", len(pods))
+			clog.Infof(ctx, "got %d pods", len(pods))
 			return false
 		}
 		podJSON, err := s.KubectlOut(ctx, "get", "pod", pods[0], "--output", "json")
 		if err != nil {
-			dlog.Errorf(ctx, "unable to get pod %s: %v", pods[0], err)
+			clog.Errorf(ctx, "unable to get pod %s: %v", pods[0], err)
 			return false
 		}
 		var pod core.Pod
 		err = json.Unmarshal([]byte(podJSON), &pod)
 		if err != nil {
-			dlog.Errorf(ctx, "unable to parse json of pod %s: %v", pods[0], err)
+			clog.Errorf(ctx, "unable to parse json of pod %s: %v", pods[0], err)
 			return false
 		}
 		nc := len(pod.Spec.Containers)
 		if nc == 1 {
 			return true
 		}
-		dlog.Errorf(ctx, "pod %s has %d containers", pods[0], nc)
+		clog.Errorf(ctx, "pod %s has %d containers", pods[0], nc)
 		return false
 	}
 
 	// Ensure that agent is uninstalled.
 	so, se, err := itest.Telepresence(ctx, "uninstall", s.ServiceName())
 	// We don't care if it succeeds, but the output and error might be of interest when debugging.
-	dlog.Debugf(ctx, "stdout: %s, stderr %s, err: %v", so, se, err)
+	clog.Debugf(ctx, "stdout: %s, stderr %s, err: %v", so, se, err)
 
 	rq.Eventually(oneContainer, 60*time.Second, 3*time.Second)
 

@@ -12,7 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
@@ -295,7 +295,7 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 		return err
 	}
 
-	dlog.Debugf(cmd.Context(), "Docker flags = %v", c.DockerFlags)
+	clog.Debugf(cmd.Context(), "Docker flags = %v", c.DockerFlags)
 	return nil
 }
 
@@ -405,7 +405,7 @@ func autocompleteService(cmd *cobra.Command, args []string, toComplete string) (
 func ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// Trace level is used here, because we generally don't want to log expansion attempts
 	// in the cli.log
-	dlog.Tracef(cmd.Context(), "toComplete = %s, args = %v", toComplete, args)
+	clog.Tracef(cmd.Context(), "toComplete = %s, args = %v", toComplete, args)
 
 	if len(args) > 0 {
 		if slices.Contains(os.Args, "--") {
@@ -425,7 +425,7 @@ func ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, 
 
 	r, err := daemon.MustGetUserClient(ctx).List(ctx, &connector.ListRequest{Filter: connector.ListRequest_UNSPECIFIED})
 	if err != nil {
-		dlog.Debugf(ctx, "unable to get list of interceptable workloads: %v", err)
+		clog.Debugf(ctx, "unable to get list of interceptable workloads: %v", err)
 		return nil, cobra.ShellCompDirectiveError
 	}
 

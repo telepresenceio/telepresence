@@ -5,6 +5,7 @@ package remotefs
 import (
 	"context"
 	_ "embed"
+	"log/slog"
 	"os"
 	"runtime"
 	"time"
@@ -13,7 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/go-fuseftp/rpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -84,10 +85,10 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 	}
 	qn, err := getFuseFTPServer(ctx, exe)
 	if err != nil {
-		dlog.Warnf(ctx, "no fuseftp server is installed in PATH %s, FTP mounts will be disabled: %v", os.Getenv("PATH"), err)
+		clog.Warnf(ctx, "no fuseftp server is installed in PATH %s, FTP mounts will be disabled: %v", os.Getenv("PATH"), err)
 		return err
 	}
-	dlog.Infof(ctx, "using FuseFTP server %s", qn)
+	clog.Infof(ctx, "using FuseFTP server %s", qn)
 
 	sf, err := os.CreateTemp("", "fuseftp-*.socket")
 	if err != nil {
@@ -99,8 +100,8 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 
 	cmd := proc.CommandContext(ctx, qn, socketName)
 
-	cmd.Stderr = dlog.StdLogger(ctx, dlog.LogLevelError).Writer()
-	cmd.Stdout = dlog.StdLogger(ctx, dlog.LogLevelInfo).Writer()
+	cmd.Stderr = clog.StdLogger(ctx, slog.LevelError).Writer()
+	cmd.Stdout = clog.StdLogger(ctx, slog.LevelInfo).Writer()
 	err = cmd.Start()
 	if err != nil {
 		return err
@@ -114,7 +115,7 @@ func runFuseFTPServer(ctx context.Context, cCh chan<- rpc.FuseFTPClient) error {
 func waitForSocketAndConnect(ctx context.Context, socketName string, cCh chan<- rpc.FuseFTPClient) {
 	conn, err := dial(ctx, socketName)
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		close(cCh)
 		return
 	}

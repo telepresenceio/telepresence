@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -116,7 +116,7 @@ func (s *workloadConfigurationSuite) Test_InterceptsReplicaSetWithDisabledDeploy
 	require.Eventuallyf(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list")
-			dlog.Info(ctx, stdout)
+			clog.Info(ctx, stdout)
 			return err == nil && strings.Contains(stdout, expect)
 		},
 		6*time.Second, // waitFor

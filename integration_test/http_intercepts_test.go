@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/datawire/dlib/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 )
 
@@ -342,7 +342,7 @@ func testHTTPManyClientsSimultaneous(s NamespaceSuite, svc, path string) {
 			s.Eventually(func() bool {
 				so, se, err := itest.Telepresence(ctx, "--use", connName, "curl", "--silent", "--max-time", "2", "-H", "X-Personal-Id: "+id, svc+path)
 				if err != nil {
-					dlog.Error(ctx, so, se, err)
+					clog.Error(ctx, so, se, err)
 					return false
 				}
 				return strings.Contains(so, "Intercepted container")

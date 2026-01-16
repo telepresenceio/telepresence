@@ -17,7 +17,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/link/channel"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 )
 
 // This device will require that wintun.dll is available to the loader.
@@ -42,7 +42,7 @@ func openTun(ctx context.Context) (td *device, err error) {
 		return nil, fmt.Errorf("failed to get interfaces: %w", err)
 	}
 	for _, iface := range ifaces {
-		dlog.Tracef(ctx, "Found interface %s", iface.Name)
+		clog.Tracef(ctx, "Found interface %s", iface.Name)
 		// Parse the tel%d number if it's there
 		var num int
 		if _, err := fmt.Sscanf(iface.Name, interfaceFmt, &num); err == nil {
@@ -53,7 +53,7 @@ func openTun(ctx context.Context) (td *device, err error) {
 	}
 	interfaceName := fmt.Sprintf(interfaceFmt, ifaceNumber)
 
-	dlog.Infof(ctx, "Creating interface %s", interfaceName)
+	clog.Infof(ctx, "Creating interface %s", interfaceName)
 	dev, err := tun.CreateTUN(interfaceName, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TUN device: %w", err)
@@ -75,7 +75,7 @@ func openTun(ctx context.Context) (td *device, err error) {
 	if mtu < 1500 {
 		mtu = 1500
 	}
-	dlog.Debugf(ctx, "using MTU = %d", mtu)
+	clog.Debugf(ctx, "using MTU = %d", mtu)
 	return &device{
 		Endpoint:       channel.New(defaultDevOutQueueLen, uint32(mtu), ""),
 		dev:            dev,
@@ -133,8 +133,8 @@ func (d *device) removeSubnet(_ context.Context, subnet netip.Prefix) error {
 
 func (d *device) setDNS(ctx context.Context, clusterDomain string, server netip.AddrPort, searchList []string) (err error) {
 	// This function must not be interrupted by a context cancellation, so we give it a timeout instead.
-	dlog.Debugf(ctx, "SetDNS server: %s, searchList: %v, domain: %q", server, searchList, clusterDomain)
-	defer dlog.Debug(ctx, "SetDNS done")
+	clog.Debugf(ctx, "SetDNS server: %s, searchList: %v, domain: %q", server, searchList, clusterDomain)
+	defer clog.Debug(ctx, "SetDNS done")
 
 	luid := d.getLUID()
 	family := addressFamily(server.Addr())

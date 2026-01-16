@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -49,7 +49,7 @@ func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, co
 	fw := fs.forwarder
 	r := &restapi.InterceptInfo{}
 	if containerPort != 0 && containerPort != fs.intercept.ContainerPort() {
-		dlog.Debugf(ctx, "no match found for path %q, port %d, %s", path, containerPort, headers)
+		clog.Debugf(ctx, "no match found for path %q, port %d, %s", path, containerPort, headers)
 		return r, nil
 	}
 	for _, ii := range fw.InterceptInfos() {
@@ -416,7 +416,7 @@ func (fs *fwdState) processRegularIntercept(
 		// Reject due to actual conflict
 		chosenID := conflictingIntercept.Id
 		reason := explainConflict(ii.Spec, conflictingIntercept.Spec)
-		dlog.Infof(ctx, "Setting intercept %q as AGENT_ERROR; as it conflicts with %q: %s", ii.Id, chosenID, reason)
+		clog.Infof(ctx, "Setting intercept %q as AGENT_ERROR; as it conflicts with %q: %s", ii.Id, chosenID, reason)
 		var msg string
 		if conflictingIntercept.Disposition == manager.InterceptDispositionType_ACTIVE {
 			msg = fmt.Sprintf("Conflicts with the currently-served intercept %q: %s", chosenID, reason)
@@ -445,7 +445,7 @@ func (fs *fwdState) processRegularIntercept(
 			MechanismArgsDesc: generateMechanismDescription(ii.Spec),
 		}
 	}
-	dlog.Infof(ctx, "Allowing non-conflicting intercept %q to become active", ii.Id)
+	clog.Infof(ctx, "Allowing non-conflicting intercept %q to become active", ii.Id)
 	return &manager.ReviewInterceptRequest{
 		Id:                ii.Id,
 		Disposition:       manager.InterceptDispositionType_ACTIVE,
@@ -460,7 +460,7 @@ func (fs *fwdState) processRegularIntercept(
 }
 
 func (fs *fwdState) HandlePort(ctx context.Context, cepts []*manager.InterceptInfo) []*manager.ReviewInterceptRequest {
-	dlog.Debugf(ctx, "fwdState.HandlePort %d called with %d intercepts", fs.intercept.ContainerPort(), len(cepts))
+	clog.Debugf(ctx, "fwdState.HandlePort %d called with %d intercepts", fs.intercept.ContainerPort(), len(cepts))
 
 	var active []*manager.InterceptInfo
 	var waiting []*manager.InterceptInfo

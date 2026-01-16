@@ -25,12 +25,12 @@ func SetConfig(ctx context.Context, configDir, configYml string) (context.Contex
 
 	// Load env if it isn't loaded already
 	ctx = filelocation.WithAppUserConfigDir(ctx, configDir)
-	if env := client.GetEnv(ctx); env == nil {
-		env, err = client.LoadEnv()
+	if client.GetEnv(ctx) == nil {
+		env, err := client.LoadEnv()
 		if err != nil {
 			return ctx, err
 		}
-		ctx = client.WithEnv(ctx, env)
+		ctx = client.WithEnv(ctx, &env)
 	}
 
 	cfg, err := client.LoadConfig(ctx)

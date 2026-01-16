@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"os"
@@ -17,7 +18,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -151,19 +152,19 @@ func (h *dialer) Start(ctx context.Context) {
 			if dstAddr.Is6() {
 				addr, err := sr.Resolve(dstAddr)
 				if err != nil {
-					dlog.Errorf(ctx, "!> %s %s, failed to establish connection: %v", tag, id, err)
+					clog.Errorf(ctx, "!> %s %s, failed to establish connection: %v", tag, id, err)
 					h.connected = notConnected
 					return
 				}
 				if addr != dstAddr {
-					dlog.Debugf(ctx, "-> %s synthetic destination resolved to %s", id, addr)
+					clog.Debugf(ctx, "-> %s synthetic destination resolved to %s", id, addr)
 					id = NewConnID(id.Protocol(), id.Source(), netip.AddrPortFrom(addr, dst.Port()))
 					if dto > localDialTimeout {
 						dto = localDialTimeout
 					}
 				}
 			}
-			dlog.Debugf(ctx, "   %s %s, dialing", tag, id)
+			clog.Debugf(ctx, "   %s %s, dialing", tag, id)
 			d := GetDialer(ctx)
 			dtoCtx, cancel := context.WithTimeout(ctx, dto)
 			defer cancel()
@@ -182,27 +183,27 @@ func (h *dialer) Start(ctx context.Context) {
 				return err
 			}, backoff.WithContext(backoff.NewConstantBackOff(time.Second), dtoCtx))
 			if err != nil {
-				dlog.Errorf(ctx, "!> %s %s, failed to establish connection: %v", tag, id, err)
+				clog.Errorf(ctx, "!> %s %s, failed to establish connection: %v", tag, id, err)
 				if err = h.stream.Send(ctx, NewMessage(DialReject, nil)); err != nil {
-					dlog.Errorf(ctx, "!> %s %s, failed to send DialReject: %v", tag, id, err)
+					clog.Errorf(ctx, "!> %s %s, failed to send DialReject: %v", tag, id, err)
 				}
 				if err = h.stream.CloseSend(ctx); err != nil {
-					dlog.Errorf(ctx, "!> %s %s, stream.CloseSend failed: %v", tag, id, err)
+					clog.Errorf(ctx, "!> %s %s, stream.CloseSend failed: %v", tag, id, err)
 				}
 				h.connected = notConnected
 				return
 			}
 			if err = h.stream.Send(ctx, NewMessage(DialOK, nil)); err != nil {
 				_ = conn.Close()
-				dlog.Errorf(ctx, "!> %s %s, failed to send DialOK: %v", tag, id, err)
+				clog.Errorf(ctx, "!> %s %s, failed to send DialOK: %v", tag, id, err)
 				return
 			}
-			dlog.Debugf(ctx, "<- %s %s, dial answered", tag, id)
+			clog.Debugf(ctx, "<- %s %s, dial answered", tag, id)
 			h.conn = conn
 
 		case connecting:
 		default:
-			dlog.Errorf(ctx, "!! %s %s, start called in invalid state", tag, id)
+			clog.Errorf(ctx, "!! %s %s, start called in invalid state", tag, id)
 			return
 		}
 
@@ -238,18 +239,18 @@ func (h *dialer) startDisconnect(ctx context.Context, reason string, isReader bo
 			h.startWriterDisconnect(ctx, reason, wrConn)
 		}
 	} else if atomic.CompareAndSwapInt32(&h.connected, connected, notConnected) {
-		dlog.Tracef(ctx, "<> %s %s closing connection: %s", h.stream.Tag(), h.stream.ID(), reason)
+		clog.Tracef(ctx, "<> %s %s closing connection: %s", h.stream.Tag(), h.stream.ID(), reason)
 		if err := h.conn.Close(); err != nil {
-			dlog.Tracef(ctx, "!! %s %s, Close failed: %v", h.stream.Tag(), h.stream.ID(), err)
+			clog.Tracef(ctx, "!! %s %s, Close failed: %v", h.stream.Tag(), h.stream.ID(), err)
 		}
 	}
 }
 
 func (h *dialer) startReaderDisconnect(ctx context.Context, reason string, conn halfCloser) {
 	if atomic.CompareAndSwapInt32(&h.connected, connected, readClosed) || atomic.CompareAndSwapInt32(&h.connected, writeClosed, notConnected) {
-		dlog.Tracef(ctx, "<- %s %s closing connection write: %s", h.stream.Tag(), h.stream.ID(), reason)
+		clog.Tracef(ctx, "<- %s %s closing connection write: %s", h.stream.Tag(), h.stream.ID(), reason)
 		if err := conn.CloseWrite(); err != nil && !strings.HasSuffix(err.Error(), "not connected") {
-			dlog.Debugf(ctx, "<! %s %s, CloseWrite failed: %v", h.stream.Tag(), h.stream.ID(), err)
+			clog.Debugf(ctx, "<! %s %s, CloseWrite failed: %v", h.stream.Tag(), h.stream.ID(), err)
 		}
 		return
 	}
@@ -257,19 +258,19 @@ func (h *dialer) startReaderDisconnect(ctx context.Context, reason string, conn 
 
 func (h *dialer) startWriterDisconnect(ctx context.Context, reason string, conn halfCloser) {
 	if atomic.CompareAndSwapInt32(&h.connected, connected, writeClosed) || atomic.CompareAndSwapInt32(&h.connected, readClosed, notConnected) {
-		dlog.Tracef(ctx, "-> %s %s closing connection read: %s", h.stream.Tag(), h.stream.ID(), reason)
+		clog.Tracef(ctx, "-> %s %s closing connection read: %s", h.stream.Tag(), h.stream.ID(), reason)
 		err := conn.CloseRead()
 		switch {
 		case err == nil, err == io.EOF, strings.Contains(err.Error(), "not connected"):
 		default:
-			dlog.Debugf(ctx, "!< %s %s, CloseRead failed: %v", h.stream.Tag(), h.stream.ID(), err)
+			clog.Debugf(ctx, "!< %s %s, CloseRead failed: %v", h.stream.Tag(), h.stream.ID(), err)
 		}
 	}
 }
 
 func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 	var endReason string
-	endLevel := dlog.LogLevelTrace
+	endLevel := clog.LevelTrace
 	id := h.stream.ID()
 	tag := h.stream.Tag()
 
@@ -286,7 +287,7 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 			}
 		}
 		close(outgoing)
-		dlog.Logf(ctx, endLevel, "<- %s %s conn-to-stream loop ended because %s", tag, id, endReason)
+		clog.Logf(ctx, endLevel, "<- %s %s conn-to-stream loop ended because %s", tag, id, endReason)
 		wg.Done()
 	}()
 
@@ -294,12 +295,12 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 	WriteLoop(ctx, h.stream, outgoing, wg, h.egressBytesProbe)
 
 	buf := make([]byte, 0x80000)
-	dlog.Tracef(ctx, "-> %s %s conn-to-stream loop started", tag, id)
+	clog.Tracef(ctx, "-> %s %s conn-to-stream loop started", tag, id)
 	for {
 		_ = h.conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 		n, err := h.conn.Read(buf)
 		if n > 0 {
-			dlog.Tracef(ctx, "-> %s %s, read len %d from conn", tag, id, n)
+			clog.Tracef(ctx, "-> %s %s, read len %d from conn", tag, id, n)
 			select {
 			case <-ctx.Done():
 				endReason = ctx.Err().Error()
@@ -325,7 +326,7 @@ func (h *dialer) connToStreamLoop(ctx context.Context, wg *sync.WaitGroup) {
 				endReason = "the connection was aborted"
 			default:
 				endReason = fmt.Sprintf("a read error occurred: %T %v", err, err)
-				endLevel = dlog.LogLevelError
+				endLevel = slog.LevelError
 			}
 			h.startDisconnect(ctx, endReason, false)
 			return
@@ -368,21 +369,21 @@ func handleControl(ctx context.Context, h streamReader, cm Message) {
 		// 4. A new dialer is attached to that tunnel (reused as a tunnel endpoint)
 		// 5. The dialer at the workstation dials and responds with DialOK, and here we are.
 	default:
-		dlog.Errorf(ctx, "!! CONN %s: unhandled connection control message: %s", h.getStream().ID(), cm)
+		clog.Errorf(ctx, "!! CONN %s: unhandled connection control message: %s", h.getStream().ID(), cm)
 	}
 }
 
 func readLoop(ctx context.Context, tag Tag, h streamReader, trafficProbe *CounterProbe) {
 	var endReason string
-	endLevel := dlog.LogLevelTrace
+	endLevel := clog.LevelTrace
 	id := h.getStream().ID()
 	defer func() {
 		h.startDisconnect(ctx, endReason, true)
-		dlog.Logf(ctx, endLevel, "<- %s %s stream-to-conn loop ended because %s", tag, id, endReason)
+		clog.Logf(ctx, endLevel, "<- %s %s stream-to-conn loop ended because %s", tag, id, endReason)
 	}()
 
 	incoming, errCh := ReadLoop(ctx, h.getStream(), trafficProbe)
-	dlog.Tracef(ctx, "<- %s %s stream-to-conn loop started", tag, id)
+	clog.Tracef(ctx, "<- %s %s stream-to-conn loop started", tag, id)
 	for {
 		select {
 		case <-ctx.Done():
@@ -393,7 +394,7 @@ func readLoop(ctx context.Context, tag Tag, h streamReader, trafficProbe *Counte
 			return
 		case err, ok := <-errCh:
 			if ok {
-				dlog.Error(ctx, err)
+				clog.Error(ctx, err)
 			}
 		case dg, ok := <-incoming:
 			if !ok {
@@ -415,10 +416,10 @@ func readLoop(ctx context.Context, tag Tag, h streamReader, trafficProbe *Counte
 				wn, err := h.reply(payload[n:])
 				if err != nil {
 					endReason = fmt.Sprintf("a write error occurred: %v", err)
-					endLevel = dlog.LogLevelError
+					endLevel = slog.LevelError
 					return
 				}
-				dlog.Tracef(ctx, "<- %s %s, len %d", tag, id, wn)
+				clog.Tracef(ctx, "<- %s %s, len %d", tag, id, wn)
 				n += wn
 			}
 		}
@@ -464,13 +465,13 @@ func dialRespond(ctx context.Context, tag Tag, tunnelProvider Provider, dr *rpc.
 	ctx, cancel := context.WithCancel(ctx)
 	mt, err := tunnelProvider.Tunnel(ctx)
 	if err != nil {
-		dlog.Errorf(ctx, "!! %s %s, call to manager Tunnel failed: %v", tag, id, err)
+		clog.Errorf(ctx, "!! %s %s, call to manager Tunnel failed: %v", tag, id, err)
 		cancel()
 		return
 	}
 	s, err := NewClientStream(ctx, tag, mt, id, sessionID, time.Duration(dr.RoundtripLatency), time.Duration(dr.DialTimeout))
 	if err != nil {
-		dlog.Error(ctx, err)
+		clog.Error(ctx, err)
 		cancel()
 		return
 	}

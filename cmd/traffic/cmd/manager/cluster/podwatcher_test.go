@@ -7,7 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog/testutil"
 )
 
 var (
@@ -159,7 +159,8 @@ func Test_podIPs(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := podIPs(dlog.NewTestContext(t, false), tt.pod); !reflect.DeepEqual(got, tt.want) {
+			ctx := testutil.NewContext(t, false)
+			if got := podIPs(ctx, tt.pod); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("podIPs() = %v, want %v", got, tt.want)
 			}
 		})

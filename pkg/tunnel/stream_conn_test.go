@@ -11,15 +11,14 @@ import (
 	"golang.org/x/net/nettest"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
-	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/clog/testutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // TestStreamConn uses nettest.TestConn to test the StreamConn implementation.
 func TestStreamConn(t *testing.T) {
 	nettest.TestConn(t, func() (c1, c2 net.Conn, stop func(), err error) {
-		ctx, stop := context.WithCancel(dlog.WithLogger(context.Background(), log.NewTestLogger(t, dlog.LogLevelDebug)))
+		ctx, stop := context.WithCancel(testutil.NewContext(t, false))
 		tunnel := newBidi(1, ctx)
 		localAddr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001)
 		remoteAddr := netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080)

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -16,7 +17,7 @@ import (
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/registry"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/charts"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
@@ -32,7 +33,7 @@ func loadCoreChart(version semver.Version) (*chart.Chart, error) {
 func newDefaultRegistryClient(ctx context.Context) (*registry.Client, error) {
 	return registry.NewClient(
 		registry.ClientOptEnableCache(true),
-		registry.ClientOptWriter(dlog.StdLogger(ctx, dlog.LogLevelDebug).Writer()),
+		registry.ClientOptWriter(clog.StdLogger(ctx, slog.LevelDebug).Writer()),
 	)
 }
 
@@ -48,7 +49,7 @@ func withDownloadedChart(ctx context.Context, helmConfig *action.Configuration, 
 	defer func() {
 		err = os.RemoveAll(dir)
 		if err != nil {
-			dlog.Error(ctx, err)
+			clog.Error(ctx, err)
 		}
 	}()
 	pull := action.NewPullWithOpts(action.WithConfig(helmConfig))
@@ -57,7 +58,7 @@ func withDownloadedChart(ctx context.Context, helmConfig *action.Configuration, 
 	pull.Settings = cli.New()
 	pull.SetRegistryClient(client)
 	out, err := pull.Run(ref)
-	dlog.Info(ctx, out)
+	clog.Info(ctx, out)
 	if err != nil {
 		return err
 	}

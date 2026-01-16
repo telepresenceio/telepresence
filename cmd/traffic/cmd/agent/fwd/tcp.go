@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/telepresenceio/dlib/v2/dlog"
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/tls"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
@@ -64,7 +64,7 @@ func (f *tcp) Serve(_ context.Context, initCh chan<- netip.AddrPort) error {
 	}
 	go func() {
 		<-ctx.Done()
-		dlog.Debugf(ctx, "Listener closed")
+		clog.Debugf(ctx, "Listener closed")
 		listener.Close()
 	}()
 
@@ -74,8 +74,8 @@ func (f *tcp) Serve(_ context.Context, initCh chan<- netip.AddrPort) error {
 		close(initCh)
 	}
 
-	dlog.Debugf(ctx, "Forwarding from %s", la)
-	defer dlog.Debugf(ctx, "Done forwarding from %s", la)
+	clog.Debugf(ctx, "Forwarding from %s", la)
+	defer clog.Debugf(ctx, "Done forwarding from %s", la)
 
 	// The listener switch is used to switch between the primary listener (for TCP) and the secondary listener (for HTTP).
 	// The switch is initially on the primary listener and will be switched to the secondary listener when there is at least
@@ -103,11 +103,11 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 		return err
 	}
 
-	ctx = dlog.WithField(ctx, "client", clientConn.RemoteAddr().String())
+	ctx = clog.With(ctx, "client", clientConn.RemoteAddr().String())
 	if f.Target().Port() > 0 {
 		if tapCount := len(wtIntercepts); tapCount > 0 {
 			var taps []net.Conn
-			dlog.Debugf(ctx, "forwarding to %d wiretaps", tapCount)
+			clog.Debugf(ctx, "forwarding to %d wiretaps", tapCount)
 			clientConn, taps = addConnectionTaps(ctx, clientConn, tapCount, wiretapCacheSize)
 			wg := sync.WaitGroup{}
 			wg.Add(tapCount)
@@ -115,10 +115,10 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 			for i, ii := range wtIntercepts {
 				go func(conn net.Conn, intercept *interceptController) {
 					defer wg.Done()
-					dlog.Debugf(ctx, "wiretap to %d", ii.Spec.TargetPort)
+					clog.Debugf(ctx, "wiretap to %d", ii.Spec.TargetPort)
 					err := f.interceptConn(conn, intercept)
 					if err != nil {
-						dlog.Errorf(ctx, "wiretap ended with error: %v", err)
+						clog.Errorf(ctx, "wiretap ended with error: %v", err)
 					}
 				}(taps[i], ii)
 			}
@@ -134,8 +134,8 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
 	ctx := ic.ctx
 	srcAddr := conn.RemoteAddr()
-	dlog.Debugf(ctx, "Accept got connection from %s", srcAddr)
-	defer dlog.Debugf(ctx, "Done serving connection from %s", srcAddr)
+	clog.Debugf(ctx, "Accept got connection from %s", srcAddr)
+	defer clog.Debugf(ctx, "Done serving connection from %s", srcAddr)
 
 	src, err := iputil.SplitToIPPort(conn.RemoteAddr())
 	if err != nil {
