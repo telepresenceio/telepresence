@@ -53,6 +53,7 @@ func (s *service) withSession(ctx context.Context, f func(context.Context, userd
 	case <-s.session.Done():
 		return status.Error(codes.Canceled, "session cancelled")
 	default:
+		s.session.MarkActivity()
 		return f(server.NewCombinedContext(s.session, ctx), s.session)
 	}
 }

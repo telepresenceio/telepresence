@@ -403,6 +403,7 @@ message ReviewInterceptRequest {
 
 message RemainRequest {
   SessionInfo session = 1;
+  google.protobuf.Timestamp last_activity = 3;
   reserved 2; // was api_key
 }
 

@@ -278,7 +278,7 @@ func PotentialConflict(agentName, namespace string, containerPorts []types.PortA
 	switch info.Disposition {
 	case manager.InterceptDispositionType_ACTIVE, manager.InterceptDispositionType_WAITING, manager.InterceptDispositionType_NO_AGENT:
 		spec := info.Spec
-		if spec.Agent == agentName && spec.Namespace == namespace {
+		if !spec.Wiretap && spec.Agent == agentName && spec.Namespace == namespace {
 			pp := types.PortAndProto{Port: uint16(spec.ContainerPort), Proto: types.FromK8sProtocol(v1.Protocol(spec.Protocol))}
 			if slices.Contains(containerPorts, pp) {
 				return true

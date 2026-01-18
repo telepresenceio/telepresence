@@ -250,18 +250,28 @@ func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 
 // Remain indicates that the session is still valid.
 func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
-	sessionID := tunnel.SessionID(req.GetSession().GetSessionId())
-	if ok := s.state.MarkSession(req, time.Now()); !ok {
-		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
-	}
-
-	s.state.RefreshSessionConsumptionMetrics(sessionID)
-
+	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
+	sessionID := managerutil.GetSessionID(ctx)
 	agent := s.state.GetAgent(sessionID)
 	if agent == nil {
+		client := s.state.GetClient(sessionID)
+		if client == nil {
+			return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
+		}
+		var lastActivity time.Time
+		if la := req.LastActivity; la != nil {
+			lastActivity = la.AsTime()
+		} else {
+			lastActivity = time.Now()
+		}
+		if client.Mark(lastActivity) {
+			clog.Tracef(ctx, "Last activity: %s", lastActivity)
+		}
+		client.ConsumptionMetrics().AddTimeSpent()
 		return &empty.Empty{}, nil
 	}
 
+	agent.Mark(time.Now())
 	workloadKey := &mutator.WorkloadKey{
 		Name:      agent.Name,
 		Namespace: agent.Namespace,
@@ -816,6 +826,10 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 	for i, a := range as {
 		rpcAs[i] = a.AgentInfo
 	}
+	lastActivity := time.Now()
+	if client.Mark(lastActivity) {
+		clog.Tracef(ctx, "Last activity %s", lastActivity)
+	}
 	return &rpc.AgentInfoSnapshot{Agents: rpcAs}, nil
 }
 
@@ -837,6 +851,10 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	SetGauge(ctx, s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, &spec.Name, 1)
 
 	IncrementInterceptCounterFunc(ctx, s.state.GetInterceptCounter(), client.Name, client.InstallId, spec)
+	lastActivity := time.Now()
+	if client.Mark(lastActivity) {
+		clog.Tracef(ctx, "Last activity %s", lastActivity)
+	}
 
 	return interceptInfo, nil
 }

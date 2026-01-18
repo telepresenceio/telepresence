@@ -262,20 +262,6 @@ func (s *State) checkAgentsForIntercept(intercept *Intercept) (errCode rpc.Inter
 
 // Sessions: common ////////////////////////////////////////////////////////////////////////////////
 
-// MarkSession marks a session as being present at the indicated time.  Returns true if everything goes OK,
-// returns false if the given session ID does not exist.
-func (s *State) MarkSession(req *rpc.RemainRequest, now time.Time) (ok bool) {
-	id := tunnel.SessionID(req.Session.SessionId)
-	if cs, ok := s.clients.Load(id); ok {
-		cs.mark(now)
-		return true
-	} else if as, ok := s.agents.Load(id); ok {
-		as.mark(now)
-		return true
-	}
-	return false
-}
-
 // RemoveSession removes an AgentSession from the set of present session IDs.
 func (s *State) RemoveSession(ctx context.Context, id tunnel.SessionID) {
 	if cs, ok := s.clients.LoadAndDelete(id); ok {

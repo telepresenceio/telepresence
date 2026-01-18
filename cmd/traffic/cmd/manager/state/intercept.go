@@ -136,6 +136,10 @@ func (s *State) PrepareIntercept(
 	if err != nil {
 		return interceptError(errcat.User.New(err))
 	}
+	lastActivity := time.Now()
+	if client.Mark(lastActivity) {
+		clog.Tracef(ctx, "Last activity %s", lastActivity)
+	}
 	return pi, nil
 }
 
@@ -268,6 +272,7 @@ func (s *State) checkInterceptConflicts(ac *agentconfig.Sidecar, client *ClientS
 		return nil
 	}
 
+	var overrides map[string]string
 	for _, otherIc := range potentialConflicts {
 		oSpec := otherIc.Spec
 		if icept.IsInConflict(spec, oSpec) {
@@ -281,8 +286,23 @@ func (s *State) checkInterceptConflicts(ac *agentconfig.Sidecar, client *ClientS
 				port = fmt.Sprintf("port %q", oSpec.ServicePortName)
 			}
 			msg := fmt.Sprintf("conflict with intercept %s on %s created by client %q: %s", otherIc.Id, port, client.Name, icept.ExplainConflict(spec, oSpec))
+			otherClient := s.GetClient(tunnel.SessionID(otherIc.ClientSession.SessionId))
+			if otherClient == nil || time.Since(otherClient.lastMarked()) > managerutil.GetEnv(s.backgroundCtx).InterceptInactiveBlockTimeout {
+				if overrides == nil {
+					overrides = make(map[string]string)
+				}
+				overrides[otherIc.Id] = msg
+				continue
+			}
 			return errors.New(msg)
 		}
+	}
+	for id, msg := range overrides {
+		// Intercept is in conflict and the client is inactive, so mark it for removal.
+		s.UpdateIntercept(id, func(intercept *Intercept) {
+			intercept.Disposition = rpc.InterceptDispositionType_AGENT_ERROR
+			intercept.Message = msg
+		})
 	}
 	return nil
 }

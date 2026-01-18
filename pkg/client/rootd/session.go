@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -192,6 +193,9 @@ type session struct {
 	podDaemon bool
 	routesCh  chan []netip.Prefix
 
+	// Timestamps sent on this channel are propagated to the user daemon.
+	activity chan<- time.Time
+
 	// Maps one UDP or TCP AddrPort to another
 	l4PortMap *xsync.Map[types.AddrPortProto, uint16]
 
@@ -199,7 +203,7 @@ type session struct {
 }
 
 // createSession will establish a connection to the traffic-manager and return a new properly initialized session object.
-func createSession(sessionCtx, dialCtx context.Context, mi *rpc.NetworkConfig) (s *session, err error) {
+func createSession(sessionCtx, dialCtx context.Context, mi *rpc.NetworkConfig, activity chan<- time.Time) (s *session, err error) {
 	clog.Info(sessionCtx, "-- Starting new session")
 	kc, err := k8s.NewKubeconfig(sessionCtx, true, mi.KubeFlags, mi.ManagerNamespace, mi.KubeconfigData)
 	if err != nil {
@@ -213,12 +217,19 @@ func createSession(sessionCtx, dialCtx context.Context, mi *rpc.NetworkConfig) (
 	if err != nil {
 		return nil, err
 	}
-	return newSession(cl, mi, conn, ver, false)
+	return newSession(cl, mi, conn, ver, activity, false)
 }
 
 func nope() bool { return false }
 
-func newSession(cluster *k8s.Cluster, mi *rpc.NetworkConfig, managerConn *grpc.ClientConn, ver semver.Version, isPodDaemon bool) (*session, error) {
+func newSession(
+	cluster *k8s.Cluster,
+	mi *rpc.NetworkConfig,
+	managerConn *grpc.ClientConn,
+	ver semver.Version,
+	activity chan<- time.Time,
+	isPodDaemon bool,
+) (*session, error) {
 	clog.Debugf(cluster, "Creating session with id %v", mi.Session)
 
 	s := &session{
@@ -233,6 +244,7 @@ func newSession(cluster *k8s.Cluster, mi *rpc.NetworkConfig, managerConn *grpc.C
 		proxyClusterSvcs:      true,
 		vifReady:              make(chan error, 2),
 		routesCh:              make(chan []netip.Prefix, 2),
+		activity:              activity,
 		podDaemon:             isPodDaemon,
 		localTranslationTable: xsync.NewMap[netip.Addr, netip.Addr](),
 		virtualIPs:            xsync.NewMap[netip.Addr, agentVIP](),
@@ -1463,4 +1475,27 @@ func (s *session) DialUDP(ctx context.Context, localAddr netip.AddrPort, remoteA
 		d = tunnel.DefaultDialer{}
 	}
 	return d.DialUDP(ctx, localAddr, remoteAddr)
+}
+
+func (s *session) MarkActivity() {
+	select {
+	case s.activity <- time.Now():
+	default:
+	}
+}
+
+func (s *service) ActivityWatcher(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.Activity]) error {
+	for {
+		select {
+		case <-stream.Context().Done():
+			return nil
+		case <-s.session.Done():
+			return nil
+		case at := <-s.activity:
+			err := stream.Send(&rpc.Activity{Activity: timestamppb.New(at)})
+			if err != nil {
+				return err
+			}
+		}
+	}
 }

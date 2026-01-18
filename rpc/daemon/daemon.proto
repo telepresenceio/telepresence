@@ -4,6 +4,7 @@ package telepresence.daemon;
 import "common/version.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
 import "manager/manager.proto";
 
 option go_package = "github.com/telepresenceio/telepresence/rpc/v2/daemon";
@@ -58,6 +59,8 @@ service Daemon {
 
   // RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
   rpc RerouteRemotePort(ReroutePortRequest) returns (google.protobuf.Empty);
+
+  rpc ActivityWatcher(google.protobuf.Empty) returns (stream Activity);
 }
 
 message DaemonStatus {
@@ -207,4 +210,13 @@ message ReroutePortRequest {
 message QuitResponse {
   // Set to true when the root daemon runs as a service.
   bool root_daemon_will_continue = 1;
+}
+
+// WorkloadEventDelta contains the changes made to the subscribed namespace since
+// the time given in the timestamp. A watcher can rely on that received deltas are
+// consecutive.
+message Activity {
+  // The timestamp from which this delta is computed. Typically
+  // equal to the time when the previous delta was sent.
+  google.protobuf.Timestamp activity = 1;
 }

@@ -58,6 +58,7 @@ type Session interface {
 	ManagerClient() manager.ManagerClient
 	ManagerName() string
 	ManagerVersion() semver.Version
+	MarkActivity()
 	RemoveIntercept(string) error
 	RemoveInterceptor(string) error
 	RerouteLocalPort(ap types.AddrPortProto, srcPort uint16)

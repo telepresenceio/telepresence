@@ -13,6 +13,7 @@ import (
 	"slices"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/blang/semver/v4"
@@ -23,6 +24,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/yaml"
@@ -139,6 +141,14 @@ type session struct {
 	// Synthetic IPs are generated when the targetIP is a hostname, so that we can defer the
 	// lookup of that host until the time when it is dialed.
 	syntheticIPs map[netip.Addr]string
+
+	// lastActivity is set when something happens to the session that counts as proof that the
+	// client is in use. All gRPC calls involving a session will update this timestamp, and
+	// the root daemon will also update this timestamp when a new TCP tunnel is created to
+	// a traffic-agent. The root daemon will not update this timestamp when resolving DNS
+	// calls because they often arrive sporadically due to activity that isn't related to
+	// Telepresence at all.
+	lastActivity int64
 }
 
 func NewSession(
@@ -249,6 +259,10 @@ func (s *session) ManagerName() string {
 
 func (s *session) ManagerVersion() semver.Version {
 	return s.managerVersion
+}
+
+func (s *session) MarkActivity() {
+	atomic.StoreInt64(&s.lastActivity, time.Now().UnixNano())
 }
 
 // connectMgr returns a session for the given cluster that is connected to the traffic-manager.
@@ -389,7 +403,15 @@ func (s *session) reconnectManager() (returnedErr error) {
 func (s *session) remain() error {
 	ctx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerAPI)
 	defer cancel()
-	_, err := s.ManagerClient().Remain(ctx, &manager.RemainRequest{Session: s.SessionInfo()})
+	var lastActivity *timestamppb.Timestamp
+	ln := atomic.LoadInt64(&s.lastActivity)
+	if ln != 0 {
+		lastActivity = timestamppb.New(time.Unix(0, ln))
+	}
+	_, err := s.ManagerClient().Remain(ctx, &manager.RemainRequest{
+		Session:      s.SessionInfo(),
+		LastActivity: lastActivity,
+	})
 	if err != nil {
 		clog.Errorf(ctx, "error calling Remain: %v", client.CheckTimeout(ctx, err))
 	}
@@ -837,10 +859,27 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 	svc := s.GetService()
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
-		rootSession, err := rootd.NewInProcSession(s.Cluster, nc, s.managerConn, s.managerVersion, isPodDaemon)
+		activity := make(chan time.Time)
+		defer close(activity)
+		rootSession, err := rootd.NewInProcSession(s.Cluster, nc, s.managerConn, s.managerVersion, activity, isPodDaemon)
 		if err != nil {
 			return nil, err
 		}
+		go func() {
+			for {
+				select {
+				case <-s.Done():
+					return
+				case ats, ok := <-activity:
+					if !ok {
+						return
+					}
+					clog.Debugf(s, "root session last activity: %v", ats)
+					atomic.StoreInt64(&s.lastActivity, ats.UnixNano())
+				}
+			}
+		}()
+
 		g := log.NewGroup(rootSession)
 		if err = rootSession.Start(g, svc.TeleroutePort()); err != nil {
 			return nil, err
@@ -848,14 +887,12 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 		rd = rootSession
 
 		// Give in-proc root session services a chance to clean up.
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			err := g.Wait()
 			if err != nil && !errors.Is(err, context.Canceled) {
 				clog.Errorf(s, "root session exited with error: %v", err)
 			}
-		}()
+		})
 	} else {
 		var conn *grpc.ClientConn
 		conn, err = daemon.DialRootDaemon(timeoutCtx, true)
@@ -894,6 +931,22 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 				return nil, fmt.Errorf("failed to disconnect from the root daemon: %w", err)
 			}
 		}
+		aw, err := rd.ActivityWatcher(s, &empty.Empty{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get activity watcher: %w", err)
+		}
+		go func() {
+			for {
+				at, err := aw.Recv()
+				if err != nil {
+					clog.Errorf(s, "activity watcher failed: %v", err)
+					return
+				}
+				ats := at.Activity.AsTime()
+				clog.Debugf(s, "root session last activity: %v", ats)
+				atomic.StoreInt64(&s.lastActivity, ats.UnixNano())
+			}
+		}()
 	}
 
 	// The root daemon needs time to set up the TUN-device and DNS, which involves interacting

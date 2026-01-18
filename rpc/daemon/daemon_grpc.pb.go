@@ -38,6 +38,7 @@ const (
 	Daemon_LookupIP_FullMethodName              = "/telepresence.daemon.Daemon/LookupIP"
 	Daemon_ResolvePort_FullMethodName           = "/telepresence.daemon.Daemon/ResolvePort"
 	Daemon_RerouteRemotePort_FullMethodName     = "/telepresence.daemon.Daemon/RerouteRemotePort"
+	Daemon_ActivityWatcher_FullMethodName       = "/telepresence.daemon.Daemon/ActivityWatcher"
 )
 
 // DaemonClient is the client API for Daemon service.
@@ -79,6 +80,7 @@ type DaemonClient interface {
 	ResolvePort(ctx context.Context, in *ResolvePortRequest, opts ...grpc.CallOption) (*ResolvePortResponse, error)
 	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
 	RerouteRemotePort(ctx context.Context, in *ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ActivityWatcher(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Activity], error)
 }
 
 type daemonClient struct {
@@ -249,6 +251,25 @@ func (c *daemonClient) RerouteRemotePort(ctx context.Context, in *ReroutePortReq
 	return out, nil
 }
 
+func (c *daemonClient) ActivityWatcher(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Activity], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Daemon_ServiceDesc.Streams[0], Daemon_ActivityWatcher_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[emptypb.Empty, Activity]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Daemon_ActivityWatcherClient = grpc.ServerStreamingClient[Activity]
+
 // DaemonServer is the server API for Daemon service.
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility.
@@ -288,6 +309,7 @@ type DaemonServer interface {
 	ResolvePort(context.Context, *ResolvePortRequest) (*ResolvePortResponse, error)
 	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
 	RerouteRemotePort(context.Context, *ReroutePortRequest) (*emptypb.Empty, error)
+	ActivityWatcher(*emptypb.Empty, grpc.ServerStreamingServer[Activity]) error
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -345,6 +367,9 @@ func (UnimplementedDaemonServer) ResolvePort(context.Context, *ResolvePortReques
 }
 func (UnimplementedDaemonServer) RerouteRemotePort(context.Context, *ReroutePortRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method RerouteRemotePort not implemented")
+}
+func (UnimplementedDaemonServer) ActivityWatcher(*emptypb.Empty, grpc.ServerStreamingServer[Activity]) error {
+	return status.Error(codes.Unimplemented, "method ActivityWatcher not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
 func (UnimplementedDaemonServer) testEmbeddedByValue()                {}
@@ -655,6 +680,17 @@ func _Daemon_RerouteRemotePort_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_ActivityWatcher_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(emptypb.Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(DaemonServer).ActivityWatcher(m, &grpc.GenericServerStream[emptypb.Empty, Activity]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Daemon_ActivityWatcherServer = grpc.ServerStreamingServer[Activity]
+
 // Daemon_ServiceDesc is the grpc.ServiceDesc for Daemon service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -727,6 +763,12 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Daemon_RerouteRemotePort_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ActivityWatcher",
+			Handler:       _Daemon_ActivityWatcher_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "daemon/daemon.proto",
 }

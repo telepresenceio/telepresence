@@ -84,11 +84,3 @@ func (s *State) AddSessionConsumptionMetrics(metrics *manager.TunnelMetrics) {
 		cm.ToClientBytes.Increment(metrics.EgressBytes)
 	}
 }
-
-// RefreshSessionConsumptionMetrics refreshes the metrics associated to a specific session.
-func (s *State) RefreshSessionConsumptionMetrics(sessionID tunnel.SessionID) {
-	cs := s.GetClient(sessionID)
-	if cs != nil {
-		cs.ConsumptionMetrics().AddTimeSpent()
-	}
-}

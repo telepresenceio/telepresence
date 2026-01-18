@@ -226,6 +226,8 @@
           link: reference/engagements/sidecar
         - title: Target a specific container
           link: reference/engagements/container
+        - title: Dealing With Conflicting Engagements
+          link: reference/engagements/conflicts
     - title: Telepresence Docker Plugins
       link: reference/plugins
     - title: Volume mounts

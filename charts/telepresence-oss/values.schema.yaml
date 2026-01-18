@@ -387,6 +387,11 @@ properties:
             type: array
             items:
               type: string
+      inactiveBlockTimeout:
+        description: >-
+          The maximum amount of time an intercept may be held by a client that is unreachable or inactive. Once this timeout is exceeded,the intercept
+          no longer blocks conflicting intercepts and may be automatically removed when another client attempts to create a conflicting intercept.
+        $ref: "#/$defs/duration"
 
   isCI:
     description: isCI can be set to force the traffic-manager namespace to be "ambassador"
