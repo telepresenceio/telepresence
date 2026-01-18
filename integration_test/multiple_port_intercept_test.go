@@ -140,5 +140,5 @@ func (s *multiportInterceptSuite) Test_MultiPortRemoteConflict() {
 		"--mount=false",
 		"--port", strconv.Itoa(s.servicePort[1]), "--service", "echo-two")
 	s.Require().Error(err)
-	s.Regexp(fmt.Sprintf(`container port 8081 is already intercepted by \S+ intercept %s`, s.workloads[0]), err.Error())
+	s.Regexp(`one intercept has no filters \(intercepts all traffic\)`, err.Error())
 }

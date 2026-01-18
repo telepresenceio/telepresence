@@ -852,6 +852,11 @@ func TelepresenceDisconnectOk(ctx context.Context, args ...string) {
 	AssertDisconnectOutput(ctx, TelepresenceOk(ctx, append([]string{"quit"}, args...)...))
 }
 
+// TelepresenceDisconnect tells telepresence to quit and asserts that the stdout contains the correct output.
+func TelepresenceDisconnect(ctx context.Context, args ...string) {
+	_, _, _ = Telepresence(ctx, append([]string{"quit"}, args...)...) //nolint:nolintlint,dogsled
+}
+
 // AssertDisconnectOutput asserts that the stdout contains the correct output from a telepresence quit command.
 func AssertDisconnectOutput(ctx context.Context, stdout string) {
 	t := getT(ctx)
@@ -862,14 +867,14 @@ func AssertDisconnectOutput(ctx context.Context, stdout string) {
 }
 
 // TelepresenceQuitOk tells telepresence to quit and asserts that the stdout contains the correct output.
-func TelepresenceQuitOk(ctx context.Context) {
-	AssertQuitOutput(ctx, TelepresenceOk(ctx, "quit", "-s"))
+func TelepresenceQuitOk(ctx context.Context, args ...string) {
+	AssertQuitOutput(ctx, TelepresenceOk(ctx, append([]string{"quit", "-s"}, args...)...))
 }
 
 // TelepresenceQuit tells telepresence to quit but disregards any errors. Suitable for use in a defer statement
 // or when tearing down a suite.
-func TelepresenceQuit(ctx context.Context) {
-	_, _, _ = Telepresence(ctx, "quit", "-s") //nolint:nolintlint,dogsled
+func TelepresenceQuit(ctx context.Context, args ...string) {
+	_, _, _ = Telepresence(ctx, append([]string{"quit", "-s"}, args...)...) //nolint:nolintlint,dogsled
 }
 
 // AssertQuitOutput asserts that the stdout contains the correct output from a telepresence quit command.

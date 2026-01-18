@@ -622,8 +622,8 @@ nextIs:
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
 
-func (s *session) remainLoop(context.Context) error {
-	ticker := time.NewTicker(60 * time.Second)
+func (s *session) remainLoop(ctx context.Context) error {
+	ticker := time.NewTicker(client.GetConfig(ctx).Grpc().PingInterval)
 	defer func() {
 		ticker.Stop()
 		c, cancel := context.WithTimeout(context.WithoutCancel(s), 3*time.Second)

@@ -360,6 +360,7 @@ func (il *InfoLoader[T]) KeepInfoAlive(file string) error {
 	defer ticker.Stop()
 	now := time.Now()
 	for {
+		clog.Debugf(il.ctx, "Updating timestamps on %s", daemonFile)
 		if err := os.Chtimes(daemonFile, now, now); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				// File is removed, so stop trying to update its timestamps

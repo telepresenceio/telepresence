@@ -1,6 +1,7 @@
 package agentconfig
 
 import (
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -276,6 +278,75 @@ func (s *Sidecar) EachContainer(pod *core.Pod, f func(*core.Container, *Containe
 			}
 		}
 	}
+}
+
+// FindIntercept finds the [Container] and [Intercept] configuration that matches the given service name, container name, and service- or container port.
+// The port will be considered a service port for intercepts that have a service UID and a container port for service less intercepts.
+func (s *Sidecar) FindIntercept(serviceName, containerName string, port types.PortIdentifier) (foundCN *Container, foundIC *Intercept, err error) {
+	for _, cn := range s.Containers {
+		for _, ic := range cn.Intercepts {
+			if !(serviceName == "" || serviceName == ic.ServiceName) {
+				continue
+			}
+			if port != "" {
+				if ic.ServiceUID != "" {
+					if !IsInterceptForService(port, ic) {
+						continue
+					}
+				} else if !IsInterceptForContainer(port, ic) {
+					continue
+				}
+			}
+			if foundIC == nil {
+				foundCN = cn
+				if containerName != "" {
+					for _, cx := range s.Containers {
+						if cx.Name == containerName {
+							foundCN = cx
+							break
+						}
+					}
+				}
+				foundIC = ic
+				continue
+			}
+			var msg string
+			switch {
+			case serviceName == "" && port == "":
+				msg = fmt.Sprintf("%s %s.%s has multiple interceptable ports.\n"+
+					"Please specify the service and/or port you want to intercept "+
+					"by passing the --service=<svc> and/or --port=<local:portName/portNumber> flag.",
+					s.WorkloadKind, s.WorkloadName, s.Namespace)
+			case serviceName == "":
+				msg = fmt.Sprintf("%s %s.%s has multiple interceptable services with port %s.\n"+
+					"Please specify the service you want to intercept by passing the --service=<svc> flag.",
+					s.WorkloadKind, s.WorkloadName, s.Namespace, port)
+			case port == "":
+				msg = fmt.Sprintf("%s %s.%s has multiple interceptable ports in service %s.\n"+
+					"Please specify the port you want to intercept by passing the --port=<local:svcPortName> flag.",
+					s.WorkloadKind, s.WorkloadName, s.Namespace, serviceName)
+			default:
+				msg = fmt.Sprintf("%s %s.%s intercept config is broken. Service %s, port %s is declared more than once\n",
+					s.WorkloadKind, s.WorkloadName, s.Namespace, serviceName, port)
+			}
+			return nil, nil, errcat.User.New(msg)
+		}
+	}
+	if foundIC != nil {
+		return foundCN, foundIC, nil
+	}
+
+	ss := ""
+	if serviceName != "" {
+		if port != "" {
+			ss = fmt.Sprintf(" matching service %s, port %s", serviceName, port)
+		} else {
+			ss = fmt.Sprintf(" matching service %s", serviceName)
+		}
+	} else if port != "" {
+		ss = fmt.Sprintf(" matching port %s", port)
+	}
+	return nil, nil, errcat.User.Newf("%s %s.%s has no interceptable port%s", s.WorkloadKind, s.WorkloadName, s.Namespace, ss)
 }
 
 // Marshal returns YAML encoding of the Sidecar.

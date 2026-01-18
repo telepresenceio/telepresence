@@ -778,13 +778,13 @@ func (s *service) WatchInterceptsDelta(session *rpc.SessionInfo, stream grpc.Ser
 	}
 }
 
-func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (pi *rpc.PreparedIntercept, err error) {
+func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
 	clog.Debugf(ctx, "Intercept name %s", request.InterceptSpec.Name)
-	ctx, _, err = s.ensureClientSession(ctx, request.Session)
+	ctx, client, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
 		return nil, err
 	}
-	return s.state.PrepareIntercept(ctx, request)
+	return s.state.PrepareIntercept(ctx, request, client)
 }
 
 func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.SessionInfo) (*rpc.KnownWorkloadKinds, error) {
