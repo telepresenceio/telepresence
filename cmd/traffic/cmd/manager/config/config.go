@@ -236,8 +236,6 @@ func (c *config) refreshFile(ctx context.Context, mapData map[string]string) {
 					clog.Warnf(ctx, "Unable to refreshed admin commands:\n%s", yml)
 				}
 			}
-		} else {
-			clog.Debug(ctx, "admin commands unchanged: %s\n", yml)
 		}
 	} else if len(c.adminCommandsYAML) > 0 {
 		c.adminCommandsYAML = nil

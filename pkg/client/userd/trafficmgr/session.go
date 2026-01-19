@@ -948,7 +948,9 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 			for {
 				at, err := aw.Recv()
 				if err != nil {
-					clog.Errorf(s, "activity watcher failed: %v", err)
+					if !errors.Is(err, context.Canceled) {
+						clog.Errorf(s, "activity watcher failed: %v", err)
+					}
 					return
 				}
 				ats := at.Activity.AsTime()
