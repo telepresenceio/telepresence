@@ -49,6 +49,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/restapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
+	"github.com/telepresenceio/telepresence/v2/pkg/tmconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
@@ -149,6 +150,14 @@ type session struct {
 	// calls because they often arrive sporadically due to activity that isn't related to
 	// Telepresence at all.
 	lastActivity int64
+}
+
+func (s *session) RevokeIntercept(ctx context.Context, interceptID string) error {
+	return tmconfig.AddCommand(s, k8s.GetManagerNamespace(ctx), tmconfig.AdminCommand{
+		Name:      tmconfig.RemoveIntercept,
+		Args:      []string{interceptID},
+		Timestamp: time.Now().UnixNano(),
+	})
 }
 
 func NewSession(

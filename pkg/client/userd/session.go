@@ -76,4 +76,5 @@ type Session interface {
 	UpdateStatus(context.Context, *rpc.ConnectRequest) (*rpc.ConnectInfo, error)
 	WatchWorkloads(*rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
 	WorkloadInfoSnapshot([]string, rpc.ListRequest_Filter) (*rpc.WorkloadInfoSnapshot, error)
+	RevokeIntercept(ctx context.Context, interceptID string) error
 }

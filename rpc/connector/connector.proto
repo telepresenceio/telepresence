@@ -66,10 +66,9 @@ service Connector {
   // Requires having already called Connect.
   rpc RemoveIntercept(manager.RemoveInterceptRequest2) returns (google.protobuf.Empty);
 
-  // Revokes an intercept by intercept ID. This is an administrative operation
-  // that requires authentication via token and membership in telepresence:admin
-  // or system:masters group. Requires having already called Connect.
-  rpc RevokeIntercept(manager.RevokeInterceptRequest) returns (google.protobuf.Empty);
+  // Revokes an intercept by intercept ID.This is an administrative operation that
+  // requires RBAC permissions to modify the "traffic-manager" configmap.
+  rpc RevokeIntercept(RevokeInterceptRequest) returns (google.protobuf.Empty);
 
   // Uninstalls traffic-agents from the cluster.
   // Requires having already called Connect.
@@ -421,4 +420,10 @@ message ResolveSyntheticResponse {
 
   // The IP resulting from a DNS lookup using the resolved name.
   bytes resolved_ip = 2;
+}
+
+message RevokeInterceptRequest {
+  // The full intercept ID in the format "sessionID:interceptName"
+  // This allows revoking intercepts for any client, not just the caller's own intercepts
+  string intercept_id = 1;
 }

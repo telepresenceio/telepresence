@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
@@ -17,13 +17,12 @@ import (
 
 func revokeCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:  "revoke <token> <intercept_id>",
-		Args: cobra.ExactArgs(2),
+		Use:  "revoke <intercept_id>",
+		Args: cobra.ExactArgs(1),
 
 		Short: "Revoke an intercept by intercept ID. The intercept ID must be in the format <session_id>:<intercept_name>",
 		Long: `Revoke an intercept by intercept ID. This is an administrative operation that
-requires authentication via a Kubernetes token and membership in the telepresence:admin
-or system:masters group.`,
+requires RBAC permissions to modify the "traffic-manager" configmap.`,
 		Annotations: map[string]string{
 			ann.Session: ann.Required,
 		},
@@ -32,23 +31,19 @@ or system:masters group.`,
 				return err
 			}
 			defer progress.Stop(cmd.Context())
-			return revokeIntercept(cmd.Context(), strings.TrimSpace(args[0]), strings.TrimSpace(args[1]))
+			return revokeIntercept(cmd.Context(), strings.TrimSpace(args[0]))
 		},
 	}
 	return cmd
 }
 
-func revokeIntercept(ctx context.Context, token, interceptID string) error {
-	if token == "" {
-		return errcat.User.New("token cannot be empty")
-	}
+func revokeIntercept(ctx context.Context, interceptID string) error {
 	if interceptID == "" {
 		return errcat.User.New("intercept_id cannot be empty")
 	}
 
 	userD := daemon.MustGetUserClient(ctx)
-	_, err := userD.RevokeIntercept(ctx, &manager.RevokeInterceptRequest{
-		Token:       token,
+	_, err := userD.RevokeIntercept(ctx, &connector.RevokeInterceptRequest{
 		InterceptId: interceptID,
 	})
 	return grpc.FromGRPC(err)

@@ -235,10 +235,9 @@ func (s *service) RemoveIntercept(ctx context.Context, rr *manager.RemoveInterce
 	})
 }
 
-func (s *service) RevokeIntercept(ctx context.Context, rr *manager.RevokeInterceptRequest) (*empty.Empty, error) {
+func (s *service) RevokeIntercept(ctx context.Context, rr *rpc.RevokeInterceptRequest) (*empty.Empty, error) {
 	return &empty.Empty{}, s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
-		_, err := session.ManagerClient().RevokeIntercept(ctx, rr)
-		return err
+		return session.RevokeIntercept(ctx, rr.InterceptId)
 	})
 }
 
