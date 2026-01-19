@@ -1,5 +1,0 @@
-package cache
-
-func TouchActivity() {
-
-}

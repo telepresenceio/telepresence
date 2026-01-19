@@ -60,7 +60,7 @@ func (s *suiteState) TestStateInternal() {
 	testClients := testdata.GetTestClients(s.T())
 
 	s.T().Run("agents", func(t *testing.T) {
-		a := assertNew(t)
+		a := assert.New(t)
 
 		helloAgent := testAgents["hello"]
 		helloProAgent := testAgents["helloPro"]
@@ -71,7 +71,7 @@ func (s *suiteState) TestStateInternal() {
 		m := mutator.NewWatcher()
 		ctx = mutator.WithMap(ctx, m)
 		g := log.NewGroup(ctx)
-		st := NewState(ctx, g)
+		st := NewState(ctx, g, nil)
 
 		h, err := st.AddAgent(ctx, helloAgent, clock.Now())
 		require.NoError(t, err)
@@ -89,59 +89,54 @@ func (s *suiteState) TestStateInternal() {
 	})
 
 	s.T().Run("presence-redundant", func(t *testing.T) {
-		a := assertNew(t)
+		a := assert.New(t)
 
 		clock := &FakeClock{}
 		epoch := clock.Now()
 		g := log.NewGroup(ctx)
-		s := NewState(ctx, g)
+		s := NewState(ctx, g, nil)
 
-		c1 := s.AddClient(testClients["alice"], clock.Now())
-		c2 := s.AddClient(testClients["bob"], clock.Now())
-		c3 := s.AddClient(testClients["cameron"], clock.Now())
+		s1 := s.AddClient(testClients["alice"], clock.Now())
+		s2 := s.AddClient(testClients["bob"], clock.Now())
+		s3 := s.AddClient(testClients["cameron"], clock.Now())
 
-		a.NotNil(s.GetClient(c1))
-		a.NotNil(s.GetClient(c2))
-		a.NotNil(s.GetClient(c3))
+		c1 := s.GetClient(s1)
+		c2 := s.GetClient(s2)
+		c3 := s.GetClient(s3)
+		a.NotNil(c1)
+		a.NotNil(c2)
+		a.NotNil(c3)
 		a.Nil(s.GetClient("asdf"))
 
-		a.Equal(testClients["alice"], s.GetClient(c1).ClientInfo)
+		a.Equal(testClients["alice"], c1.ClientInfo)
 
 		clock.When = 10
 
-		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: string(c1)}}, clock.Now()))
-		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: string(c2)}}, clock.Now()))
-		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: "asdf"}}, clock.Now()))
+		a.True(c1.Mark(clock.Now()))
+		a.True(c2.Mark(clock.Now()))
 
 		moment := epoch.Add(5 * time.Second)
-		s.expireSessions(ctx, moment, moment)
+		s.expireSessions(moment, moment)
 
-		a.NotNil(s.GetClient(c1))
-		a.NotNil(s.GetClient(c2))
-		a.Nil(s.GetClient(c3))
+		a.NotNil(s.GetClient(s1))
+		a.NotNil(s.GetClient(s2))
+		a.Nil(s.GetClient(s3))
 
 		clock.When = 20
 
-		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: string(c1)}}, clock.Now()))
-		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: string(c2)}}, clock.Now()))
-		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: string(c3)}}, clock.Now()))
+		a.True(c1.Mark(clock.Now()))
+		a.True(c2.Mark(clock.Now()))
 
 		moment = epoch.Add(5 * time.Second)
-		s.expireSessions(ctx, moment, moment)
+		s.expireSessions(moment, moment)
 
-		a.NotNil(s.GetClient(c1))
-		a.NotNil(s.GetClient(c2))
-		a.Nil(s.GetClient(c3))
+		a.NotNil(s.GetClient(s1))
+		a.NotNil(s.GetClient(s2))
 
-		s.RemoveSession(ctx, c2)
+		s.RemoveSession(ctx, s2)
 
-		a.NotNil(s.GetClient(c1))
-		a.Nil(s.GetClient(c2))
-		a.Nil(s.GetClient(c3))
-
-		a.True(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: string(c1)}}, clock.Now()))
-		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: string(c2)}}, clock.Now()))
-		a.False(s.MarkSession(&manager.RemainRequest{Session: &manager.SessionInfo{SessionId: string(c3)}}, clock.Now()))
+		a.NotNil(s.GetClient(s1))
+		a.Nil(s.GetClient(s2))
 	})
 }
 

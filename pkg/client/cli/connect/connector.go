@@ -116,6 +116,9 @@ func quitHostConnector(ctx context.Context) {
 			_ = conn.Close()
 		}
 	}
+	if errs != nil {
+		_ = progress.MaybeWriteError(ctx, errs)
+	}
 	progress.PrintDone(ctx, "Quit")
 }
 
