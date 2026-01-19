@@ -123,8 +123,12 @@ func (s *service) ConnectorServer() rpc.ConnectorServer {
 	return s
 }
 
-func (s *service) ListenerAddress(ctx context.Context) string {
-	return s.daemonAddress.String()
+func (s *service) SetListenerAddress(addr netip.AddrPort) {
+	s.daemonAddress = addr
+}
+
+func (s *service) ListenerAddress() netip.AddrPort {
+	return s.daemonAddress
 }
 
 func (s *service) FuseFTPMgr() remotefs.FuseFTPManager {

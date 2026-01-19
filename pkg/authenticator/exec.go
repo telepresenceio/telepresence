@@ -11,12 +11,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
-type execCredentialBinary struct{}
-
-func (e execCredentialBinary) Resolve(
-	ctx context.Context,
-	execConfig *clientcmdapi.ExecConfig,
-) ([]byte, error) {
+func ResolveExecConfig(ctx context.Context, execConfig *clientcmdapi.ExecConfig) ([]byte, error) {
 	var buf bytes.Buffer
 
 	cmd := proc.CommandContext(ctx, execConfig.Command, execConfig.Args...)

@@ -81,7 +81,7 @@ func resolveCreds(ai *api.AuthInfo, cl *api.Cluster) ([]byte, error) {
 	if len(ai.ClientCertificateData) > 0 {
 		st.ClientCertificateData = string(ai.ClientCertificateData)
 	}
-	if len(ai.ClientCertificateData) > 0 {
+	if len(ai.ClientKeyData) > 0 {
 		st.ClientKeyData = string(ai.ClientKeyData)
 	}
 	creds := clientauthentication.ExecCredential{

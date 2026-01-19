@@ -3,6 +3,7 @@ package itest
 import (
 	"context"
 	"fmt"
+	"net"
 	"path/filepath"
 	"testing"
 	"time"
@@ -29,6 +30,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
@@ -185,8 +188,8 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 	defer cancel()
 	g := log.NewGroup(ctx)
 
-	srv := daemon.NewService(ctx, cancel, client.GetConfig(ctx), grpc.NewServer())
-	sv := srv.ConnectorServer()
+	grpcServer := grpc.NewServer()
+	srv := daemon.NewService(ctx, cancel, client.GetConfig(ctx), grpcServer)
 
 	if cfg.Intercept().UseFtp && !srv.LinkedFTP() {
 		g.Go("fuseftp-server", func(ctx context.Context) error {
@@ -198,6 +201,24 @@ func (th *trafficManager) DoWithSession(ctx context.Context, cr *rpc.ConnectRequ
 		})
 	}
 
+	lc := net.ListenConfig{}
+	fp, err := ioutil.FreePortsTCP(1)
+	if err != nil {
+		return err
+	}
+	addr := fp[0]
+	grpcListener, err := lc.Listen(ctx, "tcp", addr.String())
+	if err != nil {
+		return err
+	}
+	defer grpcListener.Close()
+	srv.SetListenerAddress(addr)
+
+	g.Go("server-grpc", func(ctx context.Context) error {
+		return server.Serve(ctx, grpcServer, grpcListener)
+	})
+
+	sv := srv.ConnectorServer()
 	_, err = sv.Connect(ctx, cr)
 	if err != nil {
 		return tpGrpc.FromGRPC(err)

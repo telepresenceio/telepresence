@@ -2,6 +2,7 @@ package userd
 
 import (
 	"context"
+	"net/netip"
 
 	"google.golang.org/grpc"
 
@@ -13,7 +14,9 @@ import (
 // This should be used to augment the daemon with GRPC services.
 type Service interface {
 	// ListenerAddress returns the address that this service is listening to.
-	ListenerAddress(ctx context.Context) string
+	ListenerAddress() netip.AddrPort
+
+	SetListenerAddress(addr netip.AddrPort)
 
 	Server() *grpc.Server
 
