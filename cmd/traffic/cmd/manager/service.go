@@ -41,6 +41,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	maps2 "github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/tmconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
@@ -105,7 +106,7 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
 
-	ret.state = state.NewState(ctx, g)
+	ret.state = state.NewState(ctx, g, configWatcher.AdminCommandChannel())
 	return ret, nil
 }
 
@@ -887,7 +888,7 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	}
 	SetGauge(ctx, s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, &name, 0)
 
-	s.state.RemoveIntercept(ctx, string(managerutil.GetSessionID(ctx))+":"+name)
+	s.state.RemoveIntercept(string(managerutil.GetSessionID(ctx)) + ":" + name)
 	return &empty.Empty{}, nil
 }
 
@@ -1250,7 +1251,7 @@ func (s *service) updateTrafficManagerConfigMap(ctx context.Context) error {
 	updatedAgentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
 	patch := map[string]interface{}{
 		"data": map[string]string{
-			config.AgentStateFileName: string(updatedAgentStateFileYAML),
+			tmconfig.AgentStateFileName: string(updatedAgentStateFileYAML),
 		},
 	}
 

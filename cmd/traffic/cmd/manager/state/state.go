@@ -32,6 +32,7 @@ import (
 	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/tmconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -88,6 +89,9 @@ type State struct {
 	connectActiveStatusGauge   *prometheus.GaugeVec
 	interceptCounter           *prometheus.CounterVec
 	interceptActiveStatusGauge *prometheus.GaugeVec
+
+	// lastAdminRun is the timestamp when the RunAdminCommands was last executed.
+	lastAdminRun int64
 }
 
 func (s *State) ManagesNamespace(ctx context.Context, ns string) bool {
@@ -102,7 +106,7 @@ func agentsEqual(a, b *AgentSession) bool {
 	return proto.Equal(a.AgentInfo, b.AgentInfo)
 }
 
-func NewState(ctx context.Context, g log.Group) *State {
+func NewState(ctx context.Context, g log.Group, adminCommandCh <-chan tmconfig.AdminCommandList) *State {
 	loglevel, err := clog.ParseLevel(os.Getenv("LOG_LEVEL"))
 	if err != nil {
 		loglevel = slog.LevelInfo
@@ -118,6 +122,19 @@ func NewState(ctx context.Context, g log.Group) *State {
 	}
 	g.Go("namespace-GC", s.pruneSessionGCLoop)
 	g.Go("expired-GC", s.runSessionGCLoop)
+	g.Go("admin-commands", func(ctx context.Context) error {
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case al := <-adminCommandCh:
+				err := s.RunAdminCommands(al)
+				if err != nil {
+					clog.Errorf(ctx, "Error running admin commands: %v", err)
+				}
+			}
+		}
+	})
 	return s
 }
 
@@ -334,7 +351,7 @@ func (s *State) gcClientSessionIntercepts(ctx context.Context, client *ClientSes
 			// Delete it.
 			wl := strings.SplitN(interceptID, ":", 2)[1]
 			s.allInterceptsFinalizerCall(client, &wl)
-			s.RemoveIntercept(ctx, interceptID)
+			s.RemoveIntercept(interceptID)
 		}
 		return true
 	})
@@ -607,7 +624,7 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*Intercept)) *Int
 	}
 }
 
-func (s *State) RemoveIntercept(ctx context.Context, interceptID string) {
+func (s *State) RemoveIntercept(interceptID string) {
 	if is, ok := s.intercepts.LoadAndDelete(interceptID); ok {
 		is.terminate(s.backgroundCtx)
 	}
