@@ -33,20 +33,20 @@ func (s *State) RunAdminCommands(l tmconfig.AdminCommandList) error {
 	if !atomic.CompareAndSwapInt64(&s.lastAdminRun, lri, now) {
 		return nil
 	}
-	mostResent := int64(0)
+	mostRecent := int64(0)
 	var errs error
 	for _, cmd := range l {
-		if cmd.Timestamp > mostResent {
-			mostResent = cmd.Timestamp
+		if cmd.Timestamp > mostRecent {
+			mostRecent = cmd.Timestamp
 		}
 		if cmd.Timestamp > lri {
 			errs = errors.Join(errs, s.runAdminCommand(cmd))
 		}
 	}
-	if mostResent > 0 {
+	if mostRecent > 0 {
 		// Delete all commands that are older than, or have the same age as, the most recent command found here.
 		// This operation reloads the configmap and may retain more recent entries.
-		errs = errors.Join(errs, tmconfig.ClearCommands(s.backgroundCtx, managerutil.GetEnv(s.backgroundCtx).ManagerNamespace, mostResent))
+		errs = errors.Join(errs, tmconfig.ClearCommands(s.backgroundCtx, managerutil.GetEnv(s.backgroundCtx).ManagerNamespace, mostRecent))
 	}
 	return errs
 }

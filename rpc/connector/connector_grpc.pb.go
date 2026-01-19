@@ -107,7 +107,7 @@ type ConnectorClient interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(ctx context.Context, in *manager.RemoveInterceptRequest2, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Revokes an intercept by intercept ID.This is an administrative operation that
+	// Revokes an intercept by intercept ID. This is an administrative operation that
 	// requires RBAC permissions to modify the "traffic-manager" configmap.
 	RevokeIntercept(ctx context.Context, in *RevokeInterceptRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Uninstalls traffic-agents from the cluster.
@@ -581,7 +581,7 @@ type ConnectorServer interface {
 	// Deactivates and removes an existent workload intercept.
 	// Requires having already called Connect.
 	RemoveIntercept(context.Context, *manager.RemoveInterceptRequest2) (*emptypb.Empty, error)
-	// Revokes an intercept by intercept ID.This is an administrative operation that
+	// Revokes an intercept by intercept ID. This is an administrative operation that
 	// requires RBAC permissions to modify the "traffic-manager" configmap.
 	RevokeIntercept(context.Context, *RevokeInterceptRequest) (*emptypb.Empty, error)
 	// Uninstalls traffic-agents from the cluster.

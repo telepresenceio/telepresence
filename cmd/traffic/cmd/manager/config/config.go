@@ -108,7 +108,8 @@ func (c *config) SelectorChannel() <-chan *labels.Selector {
 	return c.selectorChannel
 }
 
-// AdminCommandChannel returns a channel that will emit an [tmconfig.AdminCommandList] list everytime the label selector configuration changes.
+// AdminCommandChannel returns a channel that will emit a [tmconfig.AdminCommandList] list whenever the
+// admin commands configuration (from admin-commands.yaml in the manager ConfigMap) is reloaded.
 func (c *config) AdminCommandChannel() <-chan tmconfig.AdminCommandList {
 	return c.commandsChannel
 }
@@ -206,9 +207,13 @@ func (c *config) refreshFile(ctx context.Context, mapData map[string]string) {
 			}
 		}
 	} else if len(c.namespaceSelector) > 0 {
-		c.namespaceSelector = nil
-		c.selectorChannel <- nil
-		clog.Debug(ctx, "Cleared namespaceSelector")
+		select {
+		case c.selectorChannel <- nil:
+			c.namespaceSelector = nil
+			clog.Debug(ctx, "Cleared namespaceSelector")
+		default:
+			clog.Warnf(ctx, "Unable to clear namespaceSelector")
+		}
 	}
 	if yml, ok := mapData[tmconfig.AgentStateFileName]; ok {
 		data := []byte(yml)

@@ -197,4 +197,4 @@ intercept:
   # The maximum amount of time an intercept may be held by a client that is unreachable or inactive.
   # Once this timeout is exceeded, the intercept no longer blocks conflicting intercepts and may be
   # automatically removed when another client attempts to create a conflicting intercept.
-  inactiveBlockTimeout: 5m
+  inactiveBlockTimeout: 10m

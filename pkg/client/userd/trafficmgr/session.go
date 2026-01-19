@@ -869,15 +869,16 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
 		activity := make(chan time.Time)
-		defer close(activity)
 		rootSession, err := rootd.NewInProcSession(s.Cluster, nc, s.managerConn, s.managerVersion, activity, isPodDaemon)
 		if err != nil {
+			close(activity)
 			return nil, err
 		}
 		go func() {
 			for {
 				select {
 				case <-s.Done():
+					close(activity)
 					return
 				case ats, ok := <-activity:
 					if !ok {

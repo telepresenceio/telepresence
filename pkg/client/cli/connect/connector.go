@@ -111,7 +111,7 @@ func quitHostConnector(ctx context.Context) {
 		// the fact that the user daemon might have been killed ungracefully.
 		if conn, err := daemon.DialRootDaemon(ctx, false); err == nil {
 			if _, err = daemonRpc.NewDaemonClient(conn).Quit(ctx, &emptypb.Empty{}); err != nil {
-				errs = errors.Join(errs, errors.Join(errs, err))
+				errs = errors.Join(errs, err)
 			}
 			_ = conn.Close()
 		}

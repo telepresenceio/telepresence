@@ -49,6 +49,9 @@ func AddCommand(ctx context.Context, namespace string, command AdminCommand) err
 	if err != nil {
 		return err
 	}
+	if cm.Data == nil {
+		cm.Data = make(map[string]string)
+	}
 	cm.Data[AdminCommandsFileName] = string(data)
 	_, err = UpdateConfig(ctx, cm)
 	return err

@@ -66,7 +66,7 @@ service Connector {
   // Requires having already called Connect.
   rpc RemoveIntercept(manager.RemoveInterceptRequest2) returns (google.protobuf.Empty);
 
-  // Revokes an intercept by intercept ID.This is an administrative operation that
+  // Revokes an intercept by intercept ID. This is an administrative operation that
   // requires RBAC permissions to modify the "traffic-manager" configmap.
   rpc RevokeIntercept(RevokeInterceptRequest) returns (google.protobuf.Empty);
 

@@ -285,16 +285,16 @@ func (s *State) checkInterceptConflicts(ac *agentconfig.Sidecar, client *ClientS
 			default:
 				port = fmt.Sprintf("port %q", oSpec.ServicePortName)
 			}
-			msg := fmt.Sprintf("conflict with intercept %s on %s created by client %q: %s", otherIc.Id, port, client.Name, icept.ExplainConflict(spec, oSpec))
 			otherClient := s.GetClient(tunnel.SessionID(otherIc.ClientSession.SessionId))
+			explain := icept.ExplainConflict(spec, oSpec)
 			if otherClient == nil || time.Since(otherClient.lastMarked()) > managerutil.GetEnv(s.backgroundCtx).InterceptInactiveBlockTimeout {
 				if overrides == nil {
 					overrides = make(map[string]string)
 				}
-				overrides[otherIc.Id] = msg
+				overrides[otherIc.Id] = fmt.Sprintf("conflict with intercept %s:%s on %s created by client %q: %s", client.id, spec.Name, port, spec.Client, explain)
 				continue
 			}
-			return errors.New(msg)
+			return fmt.Errorf("conflict with intercept %s on %s created by client %q: %s", otherIc.Id, port, oSpec.Client, explain)
 		}
 	}
 	for id, msg := range overrides {

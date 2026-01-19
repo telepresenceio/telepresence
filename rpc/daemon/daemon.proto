@@ -212,11 +212,6 @@ message QuitResponse {
   bool root_daemon_will_continue = 1;
 }
 
-// WorkloadEventDelta contains the changes made to the subscribed namespace since
-// the time given in the timestamp. A watcher can rely on that received deltas are
-// consecutive.
 message Activity {
-  // The timestamp from which this delta is computed. Typically
-  // equal to the time when the previous delta was sent.
   google.protobuf.Timestamp activity = 1;
 }

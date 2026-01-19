@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/telepresenceio/clog"
@@ -127,8 +128,7 @@ func (s *inactiveClientSuite) Test_ConflictOverrideInactive() {
 	if se != "" {
 		clog.Error(ctx, se)
 	}
-	s.Contains(so, "Intercept name: conflict-one")
-	s.Contains(so, `conflict with intercept "conflict-two"`)
+	s.Regexp(regexp.MustCompile(`(?m)Intercept name: conflict-one\n.*AGENT_ERROR: conflict with intercept [\w-]+:conflict-two`), so)
 	clog.Info(ctx, so)
 }
 
@@ -195,8 +195,7 @@ func (s *inactiveClientSuite) Test_ConflictOverrideSleeping() {
 	if se != "" {
 		clog.Error(ctx, se)
 	}
-	s.Contains(so, "Intercept name: conflict-one")
-	s.Contains(so, `conflict with intercept "conflict-two"`)
+	s.Regexp(regexp.MustCompile(`(?m)Intercept name: conflict-one\n.*AGENT_ERROR: conflict with intercept [\w-]+:conflict-two`), so)
 	clog.Info(ctx, so)
 }
 

@@ -1002,13 +1002,8 @@ func (x *QuitResponse) GetRootDaemonWillContinue() bool {
 	return false
 }
 
-// WorkloadEventDelta contains the changes made to the subscribed namespace since
-// the time given in the timestamp. A watcher can rely on that received deltas are
-// consecutive.
 type Activity struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The timestamp from which this delta is computed. Typically
-	// equal to the time when the previous delta was sent.
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	Activity      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=activity,proto3" json:"activity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
