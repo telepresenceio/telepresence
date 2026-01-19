@@ -85,30 +85,33 @@ func findHostConnectorInfo(ctx context.Context) (*daemon.Info, error) {
 }
 
 func quitHostConnector(ctx context.Context) {
+	progress.Working(ctx, "Quitting")
 	info, err := findHostConnectorInfo(ctx)
 	if err == nil {
 		ctx, err = ExistingDaemon(ctx, info)
 	}
+	var errs error
+	rootWillContinue := false
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			progress.Errorf(ctx, "unable to quit existing user daemon: %v", err)
+			errs = errors.Join(errs, err)
 		}
-		return
+	} else {
+		ud := daemon.MustGetUserClient(ctx)
+		qr, err := ud.Quit(ctx, &emptypb.Empty{})
+		if err != nil {
+			errs = errors.Join(errs, tpGrpc.FromGRPC(err))
+		} else {
+			rootWillContinue = qr.RootDaemonWillContinue
+		}
+		_ = ud.Close()
 	}
-	ud := daemon.MustGetUserClient(ctx)
-	progress.Working(ctx, "Quitting")
-	qr, err := ud.Quit(ctx, &emptypb.Empty{})
-	if err != nil {
-		progress.Errorf(ctx, "failed to quit user daemon: %v", tpGrpc.FromGRPC(err))
-		return
-	}
-	_ = ud.Close()
-	if !qr.RootDaemonWillContinue {
+	if !rootWillContinue {
 		// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
 		// the fact that the user daemon might have been killed ungracefully.
 		if conn, err := daemon.DialRootDaemon(ctx, false); err == nil {
 			if _, err = daemonRpc.NewDaemonClient(conn).Quit(ctx, &emptypb.Empty{}); err != nil {
-				clog.Errorf(ctx, "error when quitting root daemon: %v", err)
+				errs = errors.Join(errs, errors.Join(errs, err))
 			}
 			_ = conn.Close()
 		}
