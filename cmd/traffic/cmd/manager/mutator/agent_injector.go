@@ -146,12 +146,19 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			// Not an error. It just means that the pod is not eligible for intercepts.
 			return nil, nil
 		}
-		sc = a.agentConfigs.Get(wl.GetName(), wl.GetNamespace())
-		switch {
-		case sc == nil:
-			clog.Tracef(ctx, "Skipping %s (no agent config)", wl)
-			return nil, nil
-		case sc.Manual:
+		if ia == "enabled" {
+			sc, err = a.agentConfigs.GetOrGenerate(ctx, wl)
+			if err != nil {
+				return nil, fmt.Errorf("unable to get or generate agent config for workload %s.%s: %w", wl.GetNamespace(), wl.GetName(), err)
+			}
+		} else {
+			sc = a.agentConfigs.Get(wl.GetName(), wl.GetNamespace())
+			if sc == nil {
+				clog.Tracef(ctx, "Skipping %s (no agent config)", wl)
+				return nil, nil
+			}
+		}
+		if sc.Manual {
 			clog.Tracef(ctx, "Skipping webhook where agent is manually injected %s", wl.GetNamespace())
 			return nil, nil
 		}

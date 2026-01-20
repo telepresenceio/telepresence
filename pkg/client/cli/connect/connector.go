@@ -93,7 +93,7 @@ func quitHostConnector(ctx context.Context) {
 	var errs error
 	rootWillContinue := false
 	if err != nil {
-		if !errors.Is(err, fs.ErrNotExist) {
+		if !(errors.Is(err, fs.ErrNotExist) || errors.Is(err, daemon.ErrNoUserDaemon)) {
 			errs = errors.Join(errs, err)
 		}
 	} else {

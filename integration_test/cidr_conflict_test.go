@@ -69,7 +69,7 @@ func (s *cidrConflictSuite) SetupSuite() {
 	ctx := s.Context()
 	s.TelepresenceConnect(ctx)
 	st := itest.TelepresenceStatusOk(ctx)
-	itest.TelepresenceQuitOk(ctx)
+	itest.TelepresenceQuit(ctx)
 	s.subnets = st.RootDaemon.Subnets
 	if len(s.subnets) < 2 {
 		s.T().Skip("Test cannot run unless client maps at least two subnets")
@@ -94,7 +94,7 @@ func (s *cidrConflictSuite) Test_AutoConflictResolution() {
 	ctx := s.Context()
 	s.TelepresenceConnect(ctx)
 	st := itest.TelepresenceStatusOk(ctx)
-	defer itest.TelepresenceQuitOk(ctx)
+	defer itest.TelepresenceQuit(ctx)
 	sns := st.RootDaemon.Subnets
 	rq := s.Require()
 	rq.Less(len(sns), len(s.subnets), "pod and service subnets should be combined into one virtual subnet")
