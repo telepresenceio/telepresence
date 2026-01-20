@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/cmd"
 )
 
@@ -41,6 +42,9 @@ func TelepresenceStatus(ctx context.Context, args ...string) (*StatusResponse, e
 		return nil, jErr
 	}
 	if cd := status.ContainerizedDaemon; cd != nil {
+		if cd.RoutingSnake == nil {
+			cd.RoutingSnake = &client.RoutingSnake{}
+		}
 		status.UserDaemon = cd.UserDaemonStatus
 		status.RootDaemon = &cmd.RootDaemonStatus{
 			Running:      cd.Running,
@@ -51,7 +55,7 @@ func TelepresenceStatus(ctx context.Context, args ...string) (*StatusResponse, e
 			PortMappings: cd.PortMappings,
 		}
 	} else if status.RootDaemon == nil {
-		status.RootDaemon = &cmd.RootDaemonStatus{}
+		status.RootDaemon = &cmd.RootDaemonStatus{RoutingSnake: &client.RoutingSnake{}}
 	}
 	return &status, nil
 }

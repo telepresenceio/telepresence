@@ -29,6 +29,7 @@ import (
 
 type Map interface {
 	Get(string, string) *agentconfig.Sidecar
+	GetOrGenerate(context.Context, k8sapi.Workload) (*agentconfig.Sidecar, error)
 	Store(*agentconfig.Sidecar)
 	Start(context.Context)
 	StartWatchers(context.Context) error
@@ -338,6 +339,27 @@ func (c *configWatcher) Get(key, ns string) (ac *agentconfig.Sidecar) {
 		return nil, xsync.CancelOp
 	})
 	return ac
+}
+
+// GetOrGenerate returns the Sidecar configuration for the given workload. If no configuration is found, it blocks the entry from access while
+// it generates a new one using the given generator.
+func (c *configWatcher) GetOrGenerate(ctx context.Context, wl k8sapi.Workload) (ac *agentconfig.Sidecar, err error) {
+	c.agentConfigs.Compute(wl.GetNamespace(), func(scMap map[string]*agentconfig.Sidecar, loaded bool) (map[string]*agentconfig.Sidecar, xsync.ComputeOp) {
+		if loaded {
+			ac = scMap[wl.GetName()]
+		} else {
+			var gc *agentmap.GeneratorConfig
+			gc, err = managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+			if err == nil {
+				ac, err = gc.Generate(ctx, wl, nil)
+				if err == nil {
+					scMap[wl.GetName()] = ac
+				}
+			}
+		}
+		return nil, xsync.CancelOp
+	})
+	return ac, err
 }
 
 func whereWeWatch(ns string) string {
