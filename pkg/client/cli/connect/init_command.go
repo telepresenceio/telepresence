@@ -58,8 +58,6 @@ func InitCommand(cmd *cobra.Command) (err error) {
 			flags.DeprecationIfChanged(cmd, global.FlagDocker, "use telepresence connect to initiate the connection")
 			flags.DeprecationIfChanged(cmd, global.FlagContext, "use telepresence connect to initiate the connection")
 		}
-		progress.Start(ctx, "Connecting")
-		progressStarted = true
 		ctx, err = EnsureUserDaemon(ctx, v == ann.Required)
 		if err != nil {
 			if v == ann.Optional && (errors.Is(err, daemon.ErrNoUserDaemon) || errcat.GetCategory(err) == errcat.Config) {
@@ -80,10 +78,8 @@ func InitCommand(cmd *cobra.Command) (err error) {
 	}
 
 	if v := as[ann.Session]; v == ann.Optional || v == ann.Required {
-		if !progressStarted {
-			progress.Start(ctx, "Connecting")
-			progressStarted = true
-		}
+		progress.Start(ctx, "Connecting")
+		progressStarted = true
 		ctx, err = EnsureSession(ctx, cmd.UseLine(), v == ann.Required)
 		defer progress.Stop(ctx)
 		if err != nil {

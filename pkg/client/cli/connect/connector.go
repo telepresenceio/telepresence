@@ -85,11 +85,11 @@ func findHostConnectorInfo(ctx context.Context) (*daemon.Info, error) {
 }
 
 func quitHostConnector(ctx context.Context) {
-	progress.Working(ctx, "Quitting")
 	info, err := findHostConnectorInfo(ctx)
 	if err == nil {
 		ctx, err = ExistingDaemon(ctx, info)
 	}
+	progress.Working(ctx, "Quitting")
 	var errs error
 	rootWillContinue := false
 	if err != nil {

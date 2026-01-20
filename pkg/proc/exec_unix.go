@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
+	"slices"
+	"strings"
 
 	"golang.org/x/sys/unix"
 
@@ -41,18 +43,26 @@ func startInBackground(includeEnv bool, args ...string) error {
 	return nil
 }
 
-func startInBackgroundAsRoot(_ context.Context, args ...string) error {
+func startInBackgroundAsRoot(ctx context.Context, args ...string) error {
 	if isAdmin() {
 		return startInBackground(false, args...)
 	}
 	// Run sudo with a prompt explaining why root credentials are needed.
-	cmd := exec.Command("sudo", append([]string{
-		"-b", "-p",
-		fmt.Sprintf(
-			"Need root privileges to run: %s\nPassword:",
-			shellquote.ShellString(args[0], args[1:])),
-	}, args...)...)
-	return cmd.Run()
+	const promptContext = "telepresence network daemon"
+	err := exec.Command("sudo", append([]string{"-b", "-p", fmt.Sprintf("[sudo: %s] Password: ", promptContext)}, args...)...).Run()
+	if err == nil {
+		return nil
+	}
+	// Are we using sudo-rs?
+	out, err2 := exec.Command("sudo", "--version").CombinedOutput()
+	if err2 != nil || !strings.Contains(string(out), "sudo-rs") {
+		// return the original error
+		return err
+	}
+	// sudo-rs does not support the "-b" (background) option. We need it to start a shell command that backgrounds the executable
+	// once the user has entered their password.
+	cmdString := shellquote.ShellArgsString(slices.Insert(args, 0, "setsid")) + "</dev/null >/dev/null 2>&1 &"
+	return exec.Command("sudo", "-p", promptContext, "sh", "-c", cmdString).Run()
 }
 
 func terminate(p *os.Process) error {
