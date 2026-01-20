@@ -79,7 +79,8 @@ type Env struct {
 
 	EnabledWorkloadKinds k8sapi.Kinds `envSeparator:" " default:"Deployment StatefulSet ReplicaSet"`
 
-	InterceptAllowGlobal bool `default:"true"`
+	InterceptAllowGlobal          bool `default:"true"`
+	InterceptInactiveBlockTimeout time.Duration
 
 	// For testing only
 	CompatibilityVersion *semver.Version

@@ -31,8 +31,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
+	"github.com/telepresenceio/telepresence/v2/pkg/icept"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -52,6 +54,7 @@ import (
 func (s *State) PrepareIntercept(
 	ctx context.Context,
 	cr *rpc.CreateInterceptRequest,
+	client *ClientSession,
 ) (pi *rpc.PreparedIntercept, err error) {
 	interceptError := func(err error) (*rpc.PreparedIntercept, error) {
 		clog.Errorf(ctx, "PrepareIntercept error %v", err)
@@ -117,21 +120,25 @@ func (s *State) PrepareIntercept(
 
 	var cn *agentconfig.Container
 	if spec.NoDefaultPort {
-		if cn, err = findContainer(ac, spec); err == nil {
+		if cn, err = icept.FindContainer(ac, spec); err == nil {
 			pi.ContainerName = cn.Name
 			pi.ServiceName = ""
 			if spec.PortIdentifier == "all" {
 				prepareAllContainerPorts(cn, pi)
 			} else if spec.PortIdentifier != "" {
-				err = s.preparePorts(ac, cn, cr, pi)
+				err = s.checkInterceptConsistency(ac, cn, cr, client, pi)
 			}
 		}
 	} else {
-		err = s.preparePorts(ac, nil, cr, pi)
+		err = s.checkInterceptConsistency(ac, nil, cr, client, pi)
 	}
 
 	if err != nil {
 		return interceptError(errcat.User.New(err))
+	}
+	lastActivity := time.Now()
+	if client.Mark(lastActivity) {
+		clog.Tracef(ctx, "Last activity %s", lastActivity)
 	}
 	return pi, nil
 }
@@ -154,15 +161,20 @@ func prepareAllContainerPorts(cn *agentconfig.Container, pi *rpc.PreparedInterce
 	}
 }
 
-func (s *State) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container, cr *rpc.CreateInterceptRequest, pi *rpc.PreparedIntercept) (err error) {
+func (s *State) checkInterceptConsistency(
+	ac *agentconfig.Sidecar,
+	cn *agentconfig.Container,
+	cr *rpc.CreateInterceptRequest,
+	client *ClientSession,
+	pi *rpc.PreparedIntercept,
+) (err error) {
 	spec := cr.InterceptSpec
+	env := managerutil.GetEnv(s.backgroundCtx)
 
 	// Check if global intercepts are allowed before proceeding
 	// Block replaces and global TCP/UDP intercepts, but allow HTTP intercepts and wiretaps
-	if !managerutil.GetEnv(s.backgroundCtx).InterceptAllowGlobal {
-		if spec.Replace || !(spec.Wiretap || spec.Mechanism == "http") {
-			return fmt.Errorf("global TCP/UDP intercepts and replaces are disabled. Use --http-header or --http-path-* flags for HTTP intercepts")
-		}
+	if !env.InterceptAllowGlobal && (spec.Replace || !(spec.Wiretap || spec.Mechanism == "http")) {
+		return fmt.Errorf("global TCP/UDP intercepts and replaces are disabled. Use --http-header or --http-path-* flags for HTTP intercepts")
 	}
 
 	portID := types.PortIdentifier(spec.PortIdentifier)
@@ -170,86 +182,128 @@ func (s *State) preparePorts(ac *agentconfig.Sidecar, cn *agentconfig.Container,
 
 	var ic *agentconfig.Intercept
 	if containerOnly {
-		ic, err = findContainerIntercept(ac, cn, portID)
+		ic, err = icept.FindContainerIntercept(ac, cn, portID)
 	} else {
-		cn, ic, err = findIntercept2(ac, pi.ServiceName, pi.ContainerName, portID)
+		cn, ic, err = ac.FindIntercept(pi.ServiceName, pi.ContainerName, portID)
 	}
 	if err != nil {
 		return err
 	}
-
-	uniqueContainerPorts := make(map[types.PortAndProto]struct{})
-	uniqueContainerPorts[types.PortAndProto{Proto: ic.Protocol, Port: ic.ContainerPort}] = struct{}{}
-
-	var podPorts []string
-	if len(spec.PodPorts) > 0 {
-		uniqueTargets := make(map[types.PortAndProto]struct{})
-		uniqueTargets[types.PortAndProto{Proto: ic.Protocol, Port: uint16(spec.TargetPort)}] = struct{}{}
-		podPorts = make([]string, len(spec.PodPorts))
-		for i, pms := range spec.PodPorts {
-			pm := types.PortMapping(pms)
-			var pmIc *agentconfig.Intercept
-			if containerOnly {
-				pmIc, err = findContainerIntercept(ac, cn, pm.From())
-			} else {
-				_, pmIc, err = findIntercept2(ac, spec.ServiceName, spec.ContainerName, pm.From())
-			}
-			if err != nil {
-				return err
-			}
-
-			to := pm.ToAsNumeric()
-			if _, ok := uniqueTargets[to]; ok {
-				return fmt.Errorf("multiple port definitions targeting %s", &to)
-			}
-			uniqueTargets[to] = struct{}{}
-
-			from := types.PortAndProto{Proto: pmIc.Protocol, Port: pmIc.ContainerPort}
-			if _, ok := uniqueContainerPorts[from]; ok {
-				return fmt.Errorf("multiple port definitions using container port %s", &from)
-			}
-			uniqueContainerPorts[from] = struct{}{}
-
-			// Return the resolved numeric container port.
-			podPorts[i] = fmt.Sprintf("%d:%s", pmIc.ContainerPort, &to)
-		}
-	}
-
-	// Validate that there's no port conflict with other intercepts using the same agent.
-	otherIcs := s.intercepts.LoadMatching(func(s string, info *Intercept) bool {
-		return info.Disposition == rpc.InterceptDispositionType_ACTIVE && info.Spec.Agent == ac.AgentName && info.Spec.Namespace == ac.Namespace
-	})
-
-	if !(spec.Wiretap || spec.Mechanism == "http") {
-		// Intercept is global, so it will conflict with any other intercept using the same port and protocol.
-		for _, otherIc := range otherIcs {
-			oSpec := otherIc.Spec // Validate that there's no port conflict
-			if oSpec.Wiretap {
-				// wiretaps will not cause conflicts
-				continue
-			}
-			for cp := range uniqueContainerPorts {
-				if cp.Port == uint16(oSpec.ContainerPort) && cp.Proto == types.FromK8sProtocol(core.Protocol(spec.Protocol)) {
-					name := oSpec.Name
-					client := oSpec.Client
-					if IsChildIntercept(oSpec) {
-						if cps := strings.Fields(client); len(cps) == 4 {
-							name = cps[2]
-							client = cps[3]
-						}
-					}
-					return fmt.Errorf("container port %d is already intercepted by %s, intercept %s", cp.Port, client, name)
-				}
-			}
-		}
-	}
 	pi.ContainerName = cn.Name
+	if !containerOnly {
+		cn = nil
+	}
+	podPorts, containerPorts, err := checkPortConsistency(ac, cn, ic, spec)
+	if err != nil {
+		return err
+	}
+	err = s.checkInterceptConflicts(ac, client, containerPorts, spec)
+	if err != nil {
+		return err
+	}
 	pi.ServiceUid = string(ic.ServiceUID)
 	pi.ServicePortName = ic.ServicePortName
 	pi.Protocol = ic.Protocol.String()
 	pi.ContainerPort = int32(ic.ContainerPort)
 	pi.ServicePort = int32(ic.ServicePort)
 	pi.PodPorts = podPorts
+	return nil
+}
+
+func checkPortConsistency(
+	ac *agentconfig.Sidecar,
+	cn *agentconfig.Container,
+	ic *agentconfig.Intercept,
+	spec *rpc.InterceptSpec,
+) ([]string, []types.PortAndProto, error) {
+	cp := types.PortAndProto{Proto: ic.Protocol, Port: ic.ContainerPort}
+	if len(spec.PodPorts) == 0 {
+		return nil, []types.PortAndProto{cp}, nil
+	}
+
+	containerPorts := make(map[types.PortAndProto]struct{})
+	containerPorts[types.PortAndProto{Proto: ic.Protocol, Port: ic.ContainerPort}] = struct{}{}
+
+	podPorts := make([]string, len(spec.PodPorts))
+	uniqueTargets := make(map[types.PortAndProto]struct{})
+	uniqueTargets[types.PortAndProto{Proto: ic.Protocol, Port: uint16(spec.TargetPort)}] = struct{}{}
+	for i, pms := range spec.PodPorts {
+		pm := types.PortMapping(pms)
+		var pmIc *agentconfig.Intercept
+		var err error
+		if cn != nil {
+			pmIc, err = icept.FindContainerIntercept(ac, cn, pm.From())
+		} else {
+			_, pmIc, err = ac.FindIntercept(spec.ServiceName, spec.ContainerName, pm.From())
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+
+		to := pm.ToAsNumeric()
+		if _, ok := uniqueTargets[to]; ok {
+			return nil, nil, fmt.Errorf("multiple port definitions targeting %s", &to)
+		}
+		uniqueTargets[to] = struct{}{}
+
+		from := types.PortAndProto{Proto: pmIc.Protocol, Port: pmIc.ContainerPort}
+		if _, ok := containerPorts[from]; ok {
+			return nil, nil, fmt.Errorf("multiple port definitions using container port %s", &from)
+		}
+		containerPorts[from] = struct{}{}
+
+		// Return the resolved numeric container port.
+		podPorts[i] = fmt.Sprintf("%d:%s", pmIc.ContainerPort, &to)
+	}
+	return podPorts, maps.KeySlice(containerPorts), nil
+}
+
+func (s *State) checkInterceptConflicts(ac *agentconfig.Sidecar, client *ClientSession, containerPorts []types.PortAndProto, spec *rpc.InterceptSpec) error {
+	if spec.Wiretap {
+		// A wiretap intercept is never in conflict with any other intercept.
+		return nil
+	}
+
+	// Validate that there's no port conflict with other intercepts using the same agent.
+	potentialConflicts := s.intercepts.LoadMatching(func(s string, info *Intercept) bool {
+		return icept.PotentialConflict(ac.AgentName, ac.Namespace, containerPorts, info.InterceptInfo)
+	})
+	if len(potentialConflicts) == 0 {
+		return nil
+	}
+
+	var overrides map[string]string
+	for _, otherIc := range potentialConflicts {
+		oSpec := otherIc.Spec
+		if icept.IsInConflict(spec, oSpec) {
+			var port string
+			switch {
+			case oSpec.ServiceUid == "":
+				port = fmt.Sprintf("container %s, port %d", oSpec.ContainerName, oSpec.ContainerPort)
+			case oSpec.ServicePort > 0:
+				port = fmt.Sprintf("port %d", oSpec.ServicePort)
+			default:
+				port = fmt.Sprintf("port %q", oSpec.ServicePortName)
+			}
+			otherClient := s.GetClient(tunnel.SessionID(otherIc.ClientSession.SessionId))
+			explain := icept.ExplainConflict(spec, oSpec)
+			if otherClient == nil || time.Since(otherClient.lastMarked()) > managerutil.GetEnv(s.backgroundCtx).InterceptInactiveBlockTimeout {
+				if overrides == nil {
+					overrides = make(map[string]string)
+				}
+				overrides[otherIc.Id] = fmt.Sprintf("conflict with intercept %s:%s on %s created by client %q: %s", client.id, spec.Name, port, spec.Client, explain)
+				continue
+			}
+			return fmt.Errorf("conflict with intercept %s on %s created by client %q: %s", otherIc.Id, port, oSpec.Client, explain)
+		}
+	}
+	for id, msg := range overrides {
+		// Intercept is in conflict and the client is inactive, so mark it for removal.
+		s.UpdateIntercept(id, func(intercept *Intercept) {
+			intercept.Disposition = rpc.InterceptDispositionType_AGENT_ERROR
+			intercept.Message = msg
+		})
+	}
 	return nil
 }
 
@@ -521,11 +575,11 @@ func (s *State) restoreAppContainer(ctx context.Context, ii *rpc.InterceptInfo, 
 		var desiredPolicy agentconfig.ReplacePolicy
 		if spec.NoDefaultPort {
 			desiredPolicy = agentconfig.ReplacePolicyInactive
-			cn, err = findContainer(sc, spec)
+			cn, err = icept.FindContainer(sc, spec)
 		} else {
 			// Let's keep the intercepting agent in place. There might be other intercepts or wiretaps active.
 			desiredPolicy = agentconfig.ReplacePolicyIntercept
-			cn, _, err = findIntercept(sc, spec)
+			cn, _, err = icept.FindIntercept(sc, spec)
 		}
 		if err != nil || cn.Replace == desiredPolicy {
 			return nil, nil
@@ -611,9 +665,9 @@ func (s *State) getOrCreateAgentConfig(
 		if spec != nil {
 			var cn *agentconfig.Container
 			if spec.NoDefaultPort {
-				cn, err = findContainer(sc, spec)
+				cn, err = icept.FindContainer(sc, spec)
 			} else {
-				cn, _, err = findIntercept(sc, spec)
+				cn, _, err = icept.FindIntercept(sc, spec)
 			}
 			if err != nil {
 				return nil, err
@@ -840,107 +894,4 @@ func writeEventList(bf *strings.Builder, es []*events.Event) {
 	for _, e := range es {
 		ioutil.Printf(bf, "%-*s%-*s%-*s%-*s%s\n", ageLen, age(e), typeLen, e.Type, reasonLen, e.Reason, objectLen, object(e), e.Note)
 	}
-}
-
-// findContainer finds the container configuration that matches the given InterceptSpec.
-func findContainer(ac *agentconfig.Sidecar, spec *rpc.InterceptSpec) (foundCN *agentconfig.Container, err error) {
-	if spec.ContainerName == "" {
-		if len(ac.Containers) == 1 {
-			return ac.Containers[0], nil
-		}
-		return nil, errcat.User.Newf("%s %s.%s has more than one container",
-			ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-	}
-	for _, cn := range ac.Containers {
-		if spec.ContainerName == cn.Name {
-			return cn, nil
-		}
-	}
-	return nil, errcat.User.Newf("%s %s.%s has no container named %s",
-		ac.WorkloadKind, ac.WorkloadName, ac.Namespace, spec.ContainerName)
-}
-
-// findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port or container port.
-func findIntercept(ac *agentconfig.Sidecar, spec *rpc.InterceptSpec) (foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error) {
-	return findIntercept2(ac, spec.ServiceName, spec.ContainerName, types.PortIdentifier(spec.PortIdentifier))
-}
-
-// findIntercept finds the intercept configuration that matches the given InterceptSpec's service/service port or container port.
-func findIntercept2(ac *agentconfig.Sidecar, serviceName, containerName string, pi types.PortIdentifier) (
-	foundCN *agentconfig.Container, foundIC *agentconfig.Intercept, err error,
-) {
-	for _, cn := range ac.Containers {
-		for _, ic := range cn.Intercepts {
-			if !(serviceName == "" || serviceName == ic.ServiceName) {
-				continue
-			}
-			if pi != "" {
-				if ic.ServiceUID != "" {
-					if !agentconfig.IsInterceptForService(pi, ic) {
-						continue
-					}
-				} else if !agentconfig.IsInterceptForContainer(pi, ic) {
-					continue
-				}
-			}
-			if foundIC == nil {
-				foundCN = cn
-				if containerName != "" {
-					for _, cx := range ac.Containers {
-						if cx.Name == containerName {
-							foundCN = cx
-							break
-						}
-					}
-				}
-				foundIC = ic
-				continue
-			}
-			var msg string
-			switch {
-			case serviceName == "" && pi == "":
-				msg = fmt.Sprintf("%s %s.%s has multiple interceptable ports.\n"+
-					"Please specify the service and/or port you want to intercept "+
-					"by passing the --service=<svc> and/or --port=<local:portName/portNumber> flag.",
-					ac.WorkloadKind, ac.WorkloadName, ac.Namespace)
-			case serviceName == "":
-				msg = fmt.Sprintf("%s %s.%s has multiple interceptable services with port %s.\n"+
-					"Please specify the service you want to intercept by passing the --service=<svc> flag.",
-					ac.WorkloadKind, ac.WorkloadName, ac.Namespace, pi)
-			case pi == "":
-				msg = fmt.Sprintf("%s %s.%s has multiple interceptable ports in service %s.\n"+
-					"Please specify the port you want to intercept by passing the --port=<local:svcPortName> flag.",
-					ac.WorkloadKind, ac.WorkloadName, ac.Namespace, serviceName)
-			default:
-				msg = fmt.Sprintf("%s %s.%s intercept config is broken. Service %s, port %s is declared more than once\n",
-					ac.WorkloadKind, ac.WorkloadName, ac.Namespace, serviceName, pi)
-			}
-			return nil, nil, errcat.User.New(msg)
-		}
-	}
-	if foundIC != nil {
-		return foundCN, foundIC, nil
-	}
-
-	ss := ""
-	if serviceName != "" {
-		if pi != "" {
-			ss = fmt.Sprintf(" matching service %s, port %s", serviceName, pi)
-		} else {
-			ss = fmt.Sprintf(" matching service %s", serviceName)
-		}
-	} else if pi != "" {
-		ss = fmt.Sprintf(" matching port %s", pi)
-	}
-	return nil, nil, errcat.User.Newf("%s %s.%s has no interceptable port%s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace, ss)
-}
-
-// findContainerIntercept finds the intercept configuration that matches container port.
-func findContainerIntercept(ac *agentconfig.Sidecar, cn *agentconfig.Container, pi types.PortIdentifier) (*agentconfig.Intercept, error) {
-	for _, ic := range cn.Intercepts {
-		if agentconfig.IsInterceptForContainer(pi, ic) {
-			return ic, nil
-		}
-	}
-	return nil, errcat.User.Newf("%s %s.%s has no container port matching %s", ac.WorkloadKind, ac.WorkloadName, ac.Namespace, pi)
 }

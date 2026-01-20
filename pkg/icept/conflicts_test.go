@@ -1,4 +1,4 @@
-package agent
+package icept
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 )
 
 func TestGenerateMechanismDescription(t *testing.T) {
@@ -119,7 +120,7 @@ func TestGenerateMechanismDescription(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := generateMechanismDescription(tt.spec)
+			result := matcher.NewRequest(tt.spec.PathFilters, tt.spec.HeaderFilters).String()
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -946,7 +947,7 @@ func TestInterceptSpecsConflict(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := interceptSpecsConflict(tt.spec1, tt.spec2)
+			result := IsInConflict(tt.spec1, tt.spec2)
 			assert.Equal(t, tt.conflicts, result)
 		})
 	}

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -55,6 +56,7 @@ type service struct {
 
 	// sessionRunning is closed when the session is done running.
 	sessionRunning chan struct{}
+	activity       chan time.Time
 	managed        bool
 }
 
@@ -62,6 +64,7 @@ func newService(cfg client.Config, managed bool) *service {
 	s := &service{
 		timedLogLevel:  log.NewTimedLevel(cfg.LogLevels().RootDaemon, clog.SetTreeLevel),
 		sessionRunning: make(chan struct{}),
+		activity:       make(chan time.Time, 10),
 		managed:        managed,
 	}
 	close(s.sessionRunning)

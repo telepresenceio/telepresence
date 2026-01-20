@@ -41,6 +41,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	maps2 "github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/tmconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
@@ -105,7 +106,7 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
 
-	ret.state = state.NewState(ctx, g)
+	ret.state = state.NewState(ctx, g, configWatcher.AdminCommandChannel())
 	return ret, nil
 }
 
@@ -250,18 +251,28 @@ func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 
 // Remain indicates that the session is still valid.
 func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
-	sessionID := tunnel.SessionID(req.GetSession().GetSessionId())
-	if ok := s.state.MarkSession(req, time.Now()); !ok {
-		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
-	}
-
-	s.state.RefreshSessionConsumptionMetrics(sessionID)
-
+	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
+	sessionID := managerutil.GetSessionID(ctx)
 	agent := s.state.GetAgent(sessionID)
 	if agent == nil {
+		client := s.state.GetClient(sessionID)
+		if client == nil {
+			return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
+		}
+		var lastActivity time.Time
+		if la := req.LastActivity; la != nil {
+			lastActivity = la.AsTime()
+		} else {
+			lastActivity = time.Now()
+		}
+		if client.Mark(lastActivity) {
+			clog.Tracef(ctx, "Last activity: %s", lastActivity)
+		}
+		client.ConsumptionMetrics().AddTimeSpent()
 		return &empty.Empty{}, nil
 	}
 
+	agent.Mark(time.Now())
 	workloadKey := &mutator.WorkloadKey{
 		Name:      agent.Name,
 		Namespace: agent.Namespace,
@@ -778,13 +789,13 @@ func (s *service) WatchInterceptsDelta(session *rpc.SessionInfo, stream grpc.Ser
 	}
 }
 
-func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (pi *rpc.PreparedIntercept, err error) {
+func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
 	clog.Debugf(ctx, "Intercept name %s", request.InterceptSpec.Name)
-	ctx, _, err = s.ensureClientSession(ctx, request.Session)
+	ctx, client, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
 		return nil, err
 	}
-	return s.state.PrepareIntercept(ctx, request)
+	return s.state.PrepareIntercept(ctx, request, client)
 }
 
 func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.SessionInfo) (*rpc.KnownWorkloadKinds, error) {
@@ -816,6 +827,10 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 	for i, a := range as {
 		rpcAs[i] = a.AgentInfo
 	}
+	lastActivity := time.Now()
+	if client.Mark(lastActivity) {
+		clog.Tracef(ctx, "Last activity %s", lastActivity)
+	}
 	return &rpc.AgentInfoSnapshot{Agents: rpcAs}, nil
 }
 
@@ -837,6 +852,10 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	SetGauge(ctx, s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, &spec.Name, 1)
 
 	IncrementInterceptCounterFunc(ctx, s.state.GetInterceptCounter(), client.Name, client.InstallId, spec)
+	lastActivity := time.Now()
+	if client.Mark(lastActivity) {
+		clog.Tracef(ctx, "Last activity %s", lastActivity)
+	}
 
 	return interceptInfo, nil
 }
@@ -869,7 +888,7 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	}
 	SetGauge(ctx, s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, &name, 0)
 
-	s.state.RemoveIntercept(ctx, string(managerutil.GetSessionID(ctx))+":"+name)
+	s.state.RemoveIntercept(string(managerutil.GetSessionID(ctx)) + ":" + name)
 	return &empty.Empty{}, nil
 }
 
@@ -1232,7 +1251,7 @@ func (s *service) updateTrafficManagerConfigMap(ctx context.Context) error {
 	updatedAgentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
 	patch := map[string]interface{}{
 		"data": map[string]string{
-			config.AgentStateFileName: string(updatedAgentStateFileYAML),
+			tmconfig.AgentStateFileName: string(updatedAgentStateFileYAML),
 		},
 	}
 

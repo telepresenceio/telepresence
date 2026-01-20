@@ -133,6 +133,9 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 		if err != nil {
 			return nil, err
 		}
+		if id.Protocol() == types.ProtoTCP {
+			s.MarkActivity()
+		}
 
 		tc := client.GetConfig(c).Timeouts()
 		return tunnel.NewClientStream(

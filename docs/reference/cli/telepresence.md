@@ -56,6 +56,7 @@ recommended) which in turn may result in a password prompt.
 | [mcp](telepresence_mcp) | MCP server management |
 | [quit](telepresence_quit) | Tell telepresence daemons to quit |
 | [replace](telepresence_replace) | Replace a container |
+| [revoke](telepresence_revoke) | Revoke an intercept by intercept ID. The intercept ID must be in the format <session_id>:<intercept_name> |
 | [serve](telepresence_serve) | Start the browser on a remote service |
 | [status](telepresence_status) | Show connectivity status |
 | [uninstall](telepresence_uninstall) | Uninstall telepresence agents |

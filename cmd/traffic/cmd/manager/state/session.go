@@ -30,8 +30,10 @@ func (s *sessionState) lastMarked() time.Time {
 	return time.Unix(0, atomic.LoadInt64(&s.timestamp))
 }
 
-func (s *sessionState) mark(lastMarked time.Time) {
-	atomic.StoreInt64(&s.timestamp, lastMarked.UnixNano())
+func (s *sessionState) Mark(lastMarked time.Time) bool {
+	oldMark := atomic.LoadInt64(&s.timestamp)
+	newMark := lastMarked.UnixNano()
+	return oldMark < newMark && atomic.CompareAndSwapInt64(&s.timestamp, oldMark, newMark)
 }
 
 func (s *sessionState) adjustMark(diff time.Duration) {

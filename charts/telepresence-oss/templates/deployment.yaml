@@ -113,6 +113,8 @@ spec:
           - name: INTERCEPT_ALLOW_GLOBAL
             value: {{ .allowGlobalIntercepts | quote }}
           {{- end }}
+          - name: INTERCEPT_INACTIVE_BLOCK_TIMEOUT
+            value: {{ .inactiveBlockTimeout }}
           {{- end }}
       {{- if .agentInjector.enabled }}
         {{- /*

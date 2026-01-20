@@ -35,15 +35,14 @@ func Merge[K comparable, V any](dst, src map[K]V) {
 	}
 }
 
-// KeySlice returns the a slice containing the keys of the map m.
-func KeySlice[M ~map[K]V, K cmp.Ordered, V any](m M) []K {
+// KeySlice returns a slice containing the keys of the map m.
+func KeySlice[M ~map[K]V, K comparable, V any](m M) []K {
 	r := make([]K, len(m))
 	i := 0
 	for k := range m {
 		r[i] = k
 		i++
 	}
-	slices.Sort(r)
 	return r
 }
 

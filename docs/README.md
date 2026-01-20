@@ -114,6 +114,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
     - [Configure intercept using CLI](reference/engagements/cli.md)
     - [Traffic Agent Sidecar](reference/engagements/sidecar.md)
     - [Target a specific container](reference/engagements/container.md)
+    - [Dealing With Conflicting Engagements](reference/engagements/conflicts.md)
   - [Telepresence Docker Plugins](reference/plugins.md)
   - [Volume mounts](reference/volume.md)
   - [RESTful API service](reference/restapi.md)

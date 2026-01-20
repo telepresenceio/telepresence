@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/go-json-experiment/json"
 
@@ -57,6 +58,19 @@ func DeleteFromUserCache(ctx context.Context, file string) error {
 		return err
 	}
 	return nil
+}
+
+func TouchUserCache(ctx context.Context, file string) error {
+	now := time.Now()
+	return os.Chtimes(filepath.Join(filelocation.AppUserCacheDir(ctx), file), now, now)
+}
+
+func UserCacheModTime(ctx context.Context, file string) (time.Time, error) {
+	st, err := os.Stat(filepath.Join(filelocation.AppUserCacheDir(ctx), file))
+	if err != nil {
+		return time.Time{}, err
+	}
+	return st.ModTime(), nil
 }
 
 func ExistsInCache(ctx context.Context, fileName string) (bool, error) {

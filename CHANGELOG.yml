@@ -27,6 +27,23 @@ items:
   - version: 2.26.0
     date: (TBD)
     notes:
+      - type: feature
+        title: Add ability for cluster admins to revoke other users' intercepts.
+        body: |-
+          The traffic-manager can now execute commands defined in the traffic-manager ConfigMap. As a result, clients that are authorized to
+          update this ConfigMap can issue those commands.
+
+          This mechanism lays the groundwork for distinguishing administrators from regular users in Telepresence. Administrators can be
+          granted RBAC permissions that allow them to update the traffic-manager ConfigMap, while regular users cannot.
+
+          The new command, `telepresence revoke <intercept-id>`, uses this mechanism to revoke the intercept associated with the specified
+          ID.
+      - type: feature
+        title: Add support for overriding intercepts owned by inactive clients
+        body: >-
+          Introduce the Helm chart setting `intercept.inactiveBlockTimeout` that controls the maximum amount of time an intercept may be
+          held by a client that is unreachable or inactive. Once this timeout is exceeded, the intercept no longer blocks conflicting
+          intercepts and may be automatically removed when another client attempts to create a conflicting intercept.
       - type: change
         title: Use TCP/IP instead of Unix sockets for all communication between local processes.
         body: >-

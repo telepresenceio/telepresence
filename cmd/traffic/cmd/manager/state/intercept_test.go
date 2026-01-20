@@ -138,7 +138,8 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			pi := &rpc.PreparedIntercept{}
 
 			// Call preparePorts which contains our validation logic
-			err := state.preparePorts(ac, nil, cr, pi)
+			client := &ClientSession{ClientInfo: &rpc.ClientInfo{Name: "client-name"}}
+			err := state.checkInterceptConsistency(ac, nil, cr, client, pi)
 
 			// Verify expectations
 			if tt.expectError {
@@ -191,7 +192,8 @@ func TestAllowGlobalIntercepts_ErrorMessage(t *testing.T) {
 
 	pi := &rpc.PreparedIntercept{}
 
-	err := state.preparePorts(ac, nil, cr, pi)
+	client := &ClientSession{ClientInfo: &rpc.ClientInfo{Name: "client-name"}}
+	err := state.checkInterceptConsistency(ac, nil, cr, client, pi)
 
 	require.Error(t, err)
 
@@ -269,7 +271,8 @@ func TestAllowGlobalIntercepts_DefaultBehavior(t *testing.T) {
 
 	pi := &rpc.PreparedIntercept{}
 
-	prepErr := state.preparePorts(ac, nil, cr, pi)
+	client := &ClientSession{ClientInfo: &rpc.ClientInfo{Name: "client-name"}}
+	prepErr := state.checkInterceptConsistency(ac, nil, cr, client, pi)
 
 	// Should not fail due to AllowGlobalIntercepts check
 	// (may fail for other reasons like missing port config)

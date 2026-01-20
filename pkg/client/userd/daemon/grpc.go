@@ -53,6 +53,7 @@ func (s *service) withSession(ctx context.Context, f func(context.Context, userd
 	case <-s.session.Done():
 		return status.Error(codes.Canceled, "session cancelled")
 	default:
+		s.session.MarkActivity()
 		return f(server.NewCombinedContext(s.session, ctx), s.session)
 	}
 }
@@ -231,6 +232,12 @@ func (s *service) CreateIntercept(ctx context.Context, ir *rpc.CreateInterceptRe
 func (s *service) RemoveIntercept(ctx context.Context, rr *manager.RemoveInterceptRequest2) (*empty.Empty, error) {
 	return &empty.Empty{}, s.withSession(ctx, func(_ context.Context, session userd.Session) error {
 		return session.RemoveIntercept(rr.Name)
+	})
+}
+
+func (s *service) RevokeIntercept(ctx context.Context, rr *rpc.RevokeInterceptRequest) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
+		return session.RevokeIntercept(ctx, rr.InterceptId)
 	})
 }
 

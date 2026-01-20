@@ -90,7 +90,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 
 	sessionCtx, sessionCancel := context.WithCancel(s)
 	var sn *session
-	sn, err = createSession(client.WithConfig(sessionCtx, cfg), ctx, info)
+	sn, err = createSession(client.WithConfig(sessionCtx, cfg), ctx, info, s.activity)
 	if err != nil {
 		sessionCancel()
 		return nil, err

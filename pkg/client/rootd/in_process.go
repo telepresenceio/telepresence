@@ -2,6 +2,7 @@ package rootd
 
 import (
 	"context"
+	"time"
 
 	"github.com/blang/semver/v4"
 	"google.golang.org/grpc"
@@ -111,6 +112,11 @@ func (rd *InProcSession) WaitForAgentIP(ctx context.Context, request *rpc.WaitFo
 	return rd.waitForAgentIP(ctx, request)
 }
 
+func (rd *InProcSession) ActivityWatcher(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[rpc.Activity], error) {
+	// The InProcSession shortcuts this watcher with a channel passed to the [NewInProcSession] constructor.
+	return nil, status.Error(codes.Unimplemented, "ActivityWatcher not implemented")
+}
+
 // NewInProcSession returns a root daemon session suitable to use in-process (from the user daemon) and is primarily intended for
 // when the user daemon runs in a docker container with NET_ADMIN capabilities.
 func NewInProcSession(
@@ -118,9 +124,10 @@ func NewInProcSession(
 	mi *rpc.NetworkConfig,
 	mc *grpc.ClientConn,
 	ver semver.Version,
+	activity chan<- time.Time,
 	isPodDaemon bool,
 ) (*InProcSession, error) {
-	session, err := newSession(kc, mi, mc, ver, isPodDaemon)
+	session, err := newSession(kc, mi, mc, ver, activity, isPodDaemon)
 	if err != nil {
 		return nil, err
 	}

@@ -58,6 +58,7 @@ type Session interface {
 	ManagerClient() manager.ManagerClient
 	ManagerName() string
 	ManagerVersion() semver.Version
+	MarkActivity()
 	RemoveIntercept(string) error
 	RemoveInterceptor(string) error
 	RerouteLocalPort(ap types.AddrPortProto, srcPort uint16)
@@ -75,4 +76,5 @@ type Session interface {
 	UpdateStatus(context.Context, *rpc.ConnectRequest) (*rpc.ConnectInfo, error)
 	WatchWorkloads(*rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
 	WorkloadInfoSnapshot([]string, rpc.ListRequest_Filter) (*rpc.WorkloadInfoSnapshot, error)
+	RevokeIntercept(ctx context.Context, interceptID string) error
 }

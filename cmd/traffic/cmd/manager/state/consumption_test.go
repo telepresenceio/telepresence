@@ -24,10 +24,8 @@ func (s *suiteState) TestRefreshSessionConsumptionMetrics() {
 	session3.consumptionMetrics.lastUpdate.Store(now.Add(time.Duration(-ConnectionStaleTimeout) - time.Minute).UnixNano())
 
 	// when
-	s.state.RefreshSessionConsumptionMetrics("session-1")
-	s.state.RefreshSessionConsumptionMetrics("session-2") // should not fail even if it's an agent session.
-	s.state.RefreshSessionConsumptionMetrics("session-3") // should not refresh a stale metric.
-	s.state.RefreshSessionConsumptionMetrics("session-4") // doesn't exist but shouldn't fail.
+	session1.consumptionMetrics.AddTimeSpent()
+	session3.consumptionMetrics.AddTimeSpent()
 
 	// then
 	ccs1, _ := s.state.clients.Load("session-1")

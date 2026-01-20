@@ -18,6 +18,66 @@ import (
 )
 
 func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
+	extContext, cfg := s.makeKubeConfigWithExec()
+	connectWithExec := func(ctx context.Context, useDocker bool) {
+		if useDocker && s.IsCI() {
+			if !(runtime.GOOS == "linux" && runtime.GOARCH == "amd64") {
+				s.T().Skip("CI can't run linux docker containers inside non-linux runners")
+			}
+		}
+
+		// Retrieve the current size of the connector.log so that we can scan the messages that appear after connect
+		rq := s.Require()
+		logSize := int64(0)
+		logName := "connector.log"
+		if useDocker {
+			// Authenticator runs as a separate process on the host
+			logName = "kubeauth.log"
+		}
+		logFQName := filepath.Join(filelocation.AppUserLogDir(ctx), logName)
+		st, err := os.Stat(logFQName)
+		if err == nil {
+			logSize = st.Size()
+		} else if !errors.Is(err, os.ErrNotExist) {
+			rq.FailNow(err.Error())
+		}
+
+		ctx = itest.WithKubeConfig(ctx, cfg)
+
+		var args []string
+		if useDocker {
+			args = []string{"--docker"}
+		}
+		_, err = s.TelepresenceTryConnect(ctx, args...)
+		rq.NoError(err)
+		defer itest.TelepresenceQuitOk(ctx)
+
+		// Scan the log from its previous end. It should now contain a message indicating that the gRPC service that
+		// it contains have served an exec request from a modified kubeconfig requesting credentials from extContext.
+		logF, err := os.Open(logFQName)
+		rq.NoError(err)
+		defer logF.Close()
+		if logSize > 0 {
+			_, err = logF.Seek(logSize, 0)
+			rq.NoError(err)
+		}
+		scn := bufio.NewScanner(logF)
+		found := false
+		for !found && scn.Scan() {
+			found = strings.Contains(scn.Text(), "GetContextExecCredentials("+extContext+")")
+		}
+		rq.Truef(found, "unable to find expected GetContextExecCredentials in the %s", logName)
+	}
+	s.Run("root-daemon", func() { connectWithExec(s.Context(), false) })
+	s.Run("containerized-daemon", func() {
+		ctx := itest.WithConfig(s.Context(), func(config client.Config) {
+			config.Intercept().UseFtp = false
+		})
+		connectWithExec(ctx, true)
+	})
+}
+
+func (s *notConnectedSuite) makeKubeConfigWithExec() (string, *api.Config) {
 	ctx := s.Context()
 	rq := s.Require()
 	kc := itest.KubeConfig(ctx)
@@ -78,61 +138,5 @@ func (s *notConnectedSuite) Test_ConnectWithKubeconfigExec() {
 
 	cfg.Contexts[extContext] = extCc
 	cfg.CurrentContext = extContext
-
-	connectWithExec := func(ctx context.Context, useDocker bool) {
-		if useDocker && s.IsCI() {
-			if !(runtime.GOOS == "linux" && runtime.GOARCH == "amd64") {
-				s.T().Skip("CI can't run linux docker containers inside non-linux runners")
-			}
-		}
-
-		// Retrieve the current size of the connector.log so that we can scan the messages that appear after connect
-		rq := s.Require()
-		logSize := int64(0)
-		logName := "connector.log"
-		if useDocker {
-			// Authenticator runs as a separate process on the host
-			logName = "kubeauth.log"
-		}
-		logFQName := filepath.Join(filelocation.AppUserLogDir(ctx), logName)
-		st, err := os.Stat(logFQName)
-		if err == nil {
-			logSize = st.Size()
-		} else if !errors.Is(err, os.ErrNotExist) {
-			rq.FailNow(err.Error())
-		}
-
-		ctx = itest.WithKubeConfig(ctx, cfg)
-
-		var args []string
-		if useDocker {
-			args = []string{"--docker"}
-		}
-		_, err = s.TelepresenceTryConnect(ctx, args...)
-		rq.NoError(err)
-		defer itest.TelepresenceQuitOk(ctx)
-
-		// Scan the log from its previous end. It should now contain a message indicating that the gRPC service that
-		// it contains have served an exec request from a modified kubeconfig requesting credentials from extContext.
-		logF, err := os.Open(logFQName)
-		rq.NoError(err)
-		defer logF.Close()
-		if logSize > 0 {
-			_, err = logF.Seek(logSize, 0)
-			rq.NoError(err)
-		}
-		scn := bufio.NewScanner(logF)
-		found := false
-		for !found && scn.Scan() {
-			found = strings.Contains(scn.Text(), "GetContextExecCredentials("+extContext+")")
-		}
-		rq.Truef(found, "unable to find expected GetContextExecCredentials in the %s", logName)
-	}
-	s.Run("root-daemon", func() { connectWithExec(s.Context(), false) })
-	s.Run("containerized-daemon", func() {
-		ctx := itest.WithConfig(s.Context(), func(config client.Config) {
-			config.Intercept().UseFtp = false
-		})
-		connectWithExec(ctx, true)
-	})
+	return extContext, cfg
 }

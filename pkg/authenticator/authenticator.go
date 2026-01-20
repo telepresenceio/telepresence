@@ -13,8 +13,7 @@ func NewService(
 	clientConfigProvider k8sapi.ClientConfigProvider,
 ) *Service {
 	return &Service{
-		clientConfigProvider:    clientConfigProvider,
-		execCredentialsResolver: execCredentialBinary{},
+		clientConfigProvider: clientConfigProvider,
 	}
 }
 
@@ -26,8 +25,7 @@ type ExecCredentialsResolver interface {
 }
 
 type Service struct {
-	clientConfigProvider    k8sapi.ClientConfigProvider
-	execCredentialsResolver ExecCredentialsResolver
+	clientConfigProvider k8sapi.ClientConfigProvider
 }
 
 func (a Service) GetExecCredentials(ctx context.Context, contextName string) ([]byte, error) {
@@ -36,7 +34,7 @@ func (a Service) GetExecCredentials(ctx context.Context, contextName string) ([]
 		return nil, fmt.Errorf("failed to get exec config from context %s, %w", contextName, err)
 	}
 
-	rawExecCredentials, err := a.execCredentialsResolver.Resolve(ctx, execConfig)
+	rawExecCredentials, err := ResolveExecConfig(ctx, execConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve credentials: %w", err)
 	}

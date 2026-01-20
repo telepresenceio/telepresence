@@ -706,6 +706,9 @@ type Grpc struct {
 	// Intended for debugging purposes only.
 	SimulateDisconnect time.Duration `json:"simulateDisconnect,format:units"`
 
+	// PingInterval is the interval between "remain" pings that the client makes to the traffic-manager.
+	PingInterval time.Duration `json:"pingInterval,format:units"`
+
 	// WatchRetryInterval is the interval between retries that a watcher uses when the gRPC connection to the traffic-manager is lost.
 	WatchRetryInterval time.Duration `json:"watchRetryInterval,format:units"`
 }
@@ -713,6 +716,7 @@ type Grpc struct {
 var defaultGrpc = Grpc{ //nolint:gochecknoglobals // constant
 	DaemonPort:         4038,
 	TeleroutePort:      4039,
+	PingInterval:       time.Minute,
 	WatchRetryInterval: 10 * time.Second,
 }
 

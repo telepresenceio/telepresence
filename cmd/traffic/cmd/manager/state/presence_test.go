@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/telepresenceio/clog/testutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -16,21 +19,19 @@ func TestPresence(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{})
 	g := log.NewGroup(ctx)
-	p := NewState(ctx, g)
+	p := NewState(ctx, g, nil)
 
 	now := time.Now()
 
 	sa := p.AddClient(&rpc.ClientInfo{Name: "item-a"}, now)
 	sb := p.AddClient(&rpc.ClientInfo{Name: "item-b"}, now)
 
-	// A@0 B@0
-
 	isPresent := func(sessionID tunnel.SessionID) bool {
 		_, err := p.SessionDone(sessionID)
 		return err == nil
 	}
 
-	a := assertNew(t)
+	a := assert.New(t)
 	a.True(isPresent(sa))
 	a.True(isPresent(sb))
 	a.False(isPresent("c"))
@@ -40,12 +41,21 @@ func TestPresence(t *testing.T) {
 	a.Equal("item-a", p.GetClient(sa).Name)
 	a.Nil(p.GetClient("c"))
 
-	a.True(p.MarkSession(&rpc.RemainRequest{Session: &rpc.SessionInfo{SessionId: string(sa)}}, now))
-	a.True(p.MarkSession(&rpc.RemainRequest{Session: &rpc.SessionInfo{SessionId: string(sb)}}, now))
-	a.False(p.MarkSession(&rpc.RemainRequest{Session: &rpc.SessionInfo{SessionId: "c"}}, now))
+	now = now.Add(time.Second)
+	ca := p.GetClient(sa)
+	require.NotNil(t, ca)
+
+	a.True(ca.Mark(now))
+	a.False(ca.Mark(now))
+
+	cb := p.GetClient(sb)
+	require.NotNil(t, cb)
+
+	a.True(cb.Mark(now))
+	a.False(cb.Mark(now))
 
 	now = now.Add(time.Second)
-	a.True(p.MarkSession(&rpc.RemainRequest{Session: &rpc.SessionInfo{SessionId: string(sb)}}, now))
+	a.True(cb.Mark(now))
 	sc := p.AddClient(&rpc.ClientInfo{Name: "item-c"}, now)
 
 	// A@0 B@1 C@1
@@ -64,7 +74,7 @@ func TestPresence(t *testing.T) {
 	a.Contains(collected, fmt.Sprintf("%s/item-b", sb))
 	a.Contains(collected, fmt.Sprintf("%s/item-c", sc))
 
-	p.expireSessions(ctx, now, now)
+	p.expireSessions(now, now)
 
 	// B@1 C@1
 
