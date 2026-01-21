@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.26.0
 <Note>
+	<Title type="bugfix">Add support for sudo-rs</Title>
+	<Body>
+Telepresence now supports running the root daemon using `sudo-rs`. This is necessary on Ubuntu where `sudo-rs` has become the default for `sudo`.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Add ability for cluster admins to revoke other users' intercepts.</Title>
 	<Body>
 The traffic-manager can now execute commands defined in the traffic-manager ConfigMap. As a result, clients that are authorized to

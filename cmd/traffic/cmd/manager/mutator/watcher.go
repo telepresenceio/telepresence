@@ -347,10 +347,12 @@ func (c *configWatcher) GetOrGenerate(ctx context.Context, wl k8sapi.Workload) (
 	c.agentConfigs.Compute(wl.GetNamespace(), func(scMap map[string]*agentconfig.Sidecar, loaded bool) (map[string]*agentconfig.Sidecar, xsync.ComputeOp) {
 		if loaded {
 			ac = scMap[wl.GetName()]
-		} else {
+		}
+		if ac == nil {
 			var gc *agentmap.GeneratorConfig
 			gc, err = managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
 			if err == nil {
+				clog.Debugf(ctx, "GetOrGenerate generates config for workload %s.%s", wl.GetName(), wl.GetNamespace())
 				ac, err = gc.Generate(ctx, wl, nil)
 				if err == nil {
 					scMap[wl.GetName()] = ac

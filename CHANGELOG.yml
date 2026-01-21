@@ -27,6 +27,11 @@ items:
   - version: 2.26.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Add support for sudo-rs
+        body: >-
+          Telepresence now supports running the root daemon using `sudo-rs`. This is necessary on Ubuntu where `sudo-rs` has become the
+          default for `sudo`.
       - type: feature
         title: Add ability for cluster admins to revoke other users' intercepts.
         body: |-
