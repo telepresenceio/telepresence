@@ -40,7 +40,7 @@ Run a one-off command on a service
   -T, --no-TTY                      Disable pseudo-TTY allocation (default: auto-detected) (default true)
       --no-deps                     Don't start linked services
   -p, --publish stringArray         Publish a container's port(s) to the host
-      --pull string                 Pull image before running ("always"|"missing"|"never") (default "policy")
+      --pull string                 Pull image before running (&quot;always&quot;|&quot;missing&quot;|&quot;never&quot;) (default &quot;policy&quot;)
   -q, --quiet                       Don't print anything to STDOUT
       --quiet-build                 Suppress progress output from the build process
       --quiet-pull                  Pull without printing progress information
@@ -55,8 +55,8 @@ Run a one-off command on a service
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
-      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
-      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
+      --config string     Path to the Telepresence configuration file (default &quot;$HOME/.config/telepresence/config.yml&quot;)
+      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default &quot;default&quot;)
+      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default &quot;auto&quot;)
       --use string        Match expression that uniquely identifies the daemon container
 ```

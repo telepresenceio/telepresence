@@ -29,7 +29,7 @@ List containers
 ```
   -a, --all                  Show all stopped containers (including those created by the run command)
       --filter string        Filter services by a property (supported filters: status)
-      --format string        Format output using a custom template: 'table':            Print output in table format with column headers (default) 'table TEMPLATE':   Print output in table format using the given Go template 'json':             Print in JSON format 'TEMPLATE':         Print output using the given Go template. Refer to https://docs.docker.com/go/formatting/ for more information about formatting output with templates (default "table")
+      --format string        Format output using a custom template: 'table':            Print output in table format with column headers (default) 'table TEMPLATE':   Print output in table format using the given Go template 'json':             Print in JSON format 'TEMPLATE':         Print output using the given Go template. Refer to https://docs.docker.com/go/formatting/ for more information about formatting output with templates (default &quot;table&quot;)
       --no-trunc             Don't truncate output
       --orphans              Include orphaned services (not declared by project) (default true)
   -q, --quiet                Only display IDs
@@ -39,8 +39,8 @@ List containers
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
-      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
-      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
+      --config string     Path to the Telepresence configuration file (default &quot;$HOME/.config/telepresence/config.yml&quot;)
+      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default &quot;default&quot;)
+      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default &quot;auto&quot;)
       --use string        Match expression that uniquely identifies the daemon container
 ```

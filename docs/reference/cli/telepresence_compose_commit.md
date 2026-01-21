@@ -27,7 +27,7 @@ Create a new image from a service container's changes
 
 ### Compose commit flags:
 ```
-  -a, --author string    Author (e.g., "John Hannibal Smith <hannibal@a-team.com>")
+  -a, --author string    Author (e.g., &quot;John Hannibal Smith &lt;hannibal@a-team.com&gt;&quot;)
   -c, --change list      Apply Dockerfile instruction to the created image
       --index int        index of the container if service has multiple replicas.
   -m, --message string   Commit message
@@ -36,8 +36,8 @@ Create a new image from a service container's changes
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
-      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
-      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
+      --config string     Path to the Telepresence configuration file (default &quot;$HOME/.config/telepresence/config.yml&quot;)
+      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default &quot;default&quot;)
+      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default &quot;auto&quot;)
       --use string        Match expression that uniquely identifies the daemon container
 ```
