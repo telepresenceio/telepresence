@@ -9,7 +9,7 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.26.0
 <Note>
-	<Title type="bugfix">Add support for sudo-rs</Title>
+	<Title type="feature">Add support for sudo-rs</Title>
 	<Body>
 Telepresence now supports running the root daemon using `sudo-rs`. This is necessary on Ubuntu where `sudo-rs` has become the default for `sudo`.
   </Body>
@@ -95,9 +95,11 @@ the background, despite its name.
 
 The daemons are therefore now renamed:
 
-- connector-foreground => userd
-- daemon-foreground => rootd
-- kubeauth-foreground => kubeauthd
+- connector-foreground =&gt; userd
+- daemon-foreground =&gt; rootd
+- kubeauth-foreground =&gt; kubeauthd
+
+This also affects the Telepresence hidden CLI commands `telepresence daemon-foreground` and `telepresence connector-foreground`.
   </Body>
 </Note>
 <Note>

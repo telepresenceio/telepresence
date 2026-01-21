@@ -27,7 +27,7 @@ items:
   - version: 2.26.0
     date: (TBD)
     notes:
-      - type: bugfix
+      - type: feature
         title: Add support for sudo-rs
         body: >-
           Telepresence now supports running the root daemon using `sudo-rs`. This is necessary on Ubuntu where `sudo-rs` has become the
@@ -111,12 +111,14 @@ items:
           terminal, will start the daemon in foreground so the names of the commands does have some logic to them, but then again, starting
           in the foreground is the default behavior of any command. And when the same command is started from the CLI, it will be started in
           the background, despite its name.
-        
+
           The daemons are therefore now renamed:
-        
-          - connector-foreground => userd
-          - daemon-foreground => rootd
-          - kubeauth-foreground => kubeauthd
+
+          - connector-foreground =&gt; userd
+          - daemon-foreground =&gt; rootd
+          - kubeauth-foreground =&gt; kubeauthd
+          
+          This also affects the Telepresence hidden CLI commands `telepresence daemon-foreground` and `telepresence connector-foreground`.
       - type: feature
         title: Make traffic-agent consumption metrics reporting optional.
         body: >-
