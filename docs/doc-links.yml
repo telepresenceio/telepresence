@@ -48,6 +48,8 @@
           items:
             - title: attach
               link: reference/cli/telepresence_compose_attach
+            - title: bridge
+              link: reference/cli/telepresence_compose_bridge
             - title: build
               link: reference/cli/telepresence_compose_build
             - title: commit
@@ -108,6 +110,8 @@
               link: reference/cli/telepresence_compose_up
             - title: version
               link: reference/cli/telepresence_compose_version
+            - title: volumes
+              link: reference/cli/telepresence_compose_volumes
             - title: wait
               link: reference/cli/telepresence_compose_wait
             - title: watch
@@ -174,6 +178,8 @@
               link: reference/cli/telepresence_mcp_start
             - title: tools
               link: reference/cli/telepresence_mcp_tools
+            - title: stream
+              link: reference/cli/telepresence_mcp_stream
             - title: claude
               link: reference/cli/telepresence_mcp_claude
               items:
@@ -183,6 +189,15 @@
                   link: reference/cli/telepresence_mcp_claude_disable
                 - title: list
                   link: reference/cli/telepresence_mcp_claude_list
+            - title: cursor
+              link: reference/cli/telepresence_mcp_cursor
+              items:
+                - title: enable
+                  link: reference/cli/telepresence_mcp_cursor_enable
+                - title: disable
+                  link: reference/cli/telepresence_mcp_cursor_disable
+                - title: list
+                  link: reference/cli/telepresence_mcp_cursor_list
             - title: vscode
               link: reference/cli/telepresence_mcp_vscode
               items:
@@ -196,6 +211,8 @@
           link: reference/cli/telepresence_quit
         - title: telepresence replace
           link: reference/cli/telepresence_replace
+        - title: telepresence revoke
+          link: reference/cli/telepresence_revoke
         - title: telepresence serve
           link: reference/cli/telepresence_serve
         - title: telepresence status
