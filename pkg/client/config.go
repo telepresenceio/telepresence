@@ -1145,9 +1145,6 @@ type configKey struct{}
 
 // WithConfig returns a context with the given Config.
 func WithConfig(ctx context.Context, cfg Config) context.Context {
-	if ReplaceConfig(ctx, cfg) {
-		return ctx
-	}
 	cfgCopy := *cfg.Base()
 	return context.WithValue(ctx, configKey{}, &cfgCopy)
 }
