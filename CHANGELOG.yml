@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.26.0
-    date: (TBD)
+    date: 2026-01-23
     notes:
       - type: feature
         title: Add ability for cluster admins to revoke other users' intercepts.
