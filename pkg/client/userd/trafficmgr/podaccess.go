@@ -114,7 +114,7 @@ func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) e
 		}
 		rsp, err := rd.WaitForAgentIP(ctx, &daemon.WaitForAgentIPRequest{
 			Ip:      ip.AsSlice(),
-			Timeout: durationpb.New(cc.Timeouts().Get(client.TimeoutTrafficAgentArrival)),
+			Timeout: durationpb.New(cc.Timeouts().Get(client.TimeoutIntercept)),
 		})
 		switch status.Code(err) {
 		case codes.Unavailable: // Unavailable means that the feature disabled. This is OK, the traffic-manager will do the forwarding
