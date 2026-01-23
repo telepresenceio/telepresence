@@ -310,6 +310,7 @@ func canAccessNS(ctx context.Context, namespace string) bool {
 func (kc *Cluster) StartNamespaceWatcher() {
 	kc.namespaceWatcherSnapshot = make(map[string]struct{})
 	nsSynced := make(chan struct{})
+	closeSynced := sync.Once{}
 	go func() {
 		api := k8sapi.GetK8sInterface(kc).CoreV1()
 		for kc.Err() == nil {
@@ -318,7 +319,7 @@ func (kc *Cluster) StartNamespaceWatcher() {
 				clog.Errorf(kc, "unable to create service watcher: %v", err)
 				return
 			}
-			kc.namespacesEventHandler(w.ResultChan(), nsSynced)
+			kc.namespacesEventHandler(w.ResultChan(), nsSynced, &closeSynced)
 		}
 	}()
 	select {
@@ -327,16 +328,15 @@ func (kc *Cluster) StartNamespaceWatcher() {
 	}
 }
 
-func (kc *Cluster) namespacesEventHandler(evCh <-chan watch.Event, nsSynced chan struct{}) {
+func (kc *Cluster) namespacesEventHandler(evCh <-chan watch.Event, nsSynced chan struct{}, closeSynced *sync.Once) {
 	// The delay timer will initially sleep forever. It's reset to a very short
 	// delay when the file is modified.
-	var synced sync.Once
 	defer func() {
-		synced.Do(func() { close(nsSynced) })
+		closeSynced.Do(func() { close(nsSynced) })
 	}()
 	delay := time.AfterFunc(time.Duration(math.MaxInt64), func() {
 		kc.refreshNamespaces()
-		synced.Do(func() { close(nsSynced) })
+		closeSynced.Do(func() { close(nsSynced) })
 	})
 	defer delay.Stop()
 

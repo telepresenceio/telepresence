@@ -32,15 +32,15 @@ View output from containers
       --no-color        Produce monochrome output
       --no-log-prefix   Don't print prefix in logs
       --since string    Show logs since timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)
-  -n, --tail string     Number of lines to show from the end of the logs for each container (default "all")
+  -n, --tail string     Number of lines to show from the end of the logs for each container (default &quot;all&quot;)
   -t, --timestamps      Show timestamps
       --until string    Show logs before a timestamp (e.g. 2013-01-02T13:23:37Z) or relative (e.g. 42m for 42 minutes)
 ```
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
-      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
-      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
+      --config string     Path to the Telepresence configuration file (default &quot;$HOME/.config/telepresence/config.yml&quot;)
+      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default &quot;default&quot;)
+      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default &quot;auto&quot;)
       --use string        Match expression that uniquely identifies the daemon container
 ```

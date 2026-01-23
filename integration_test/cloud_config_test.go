@@ -110,13 +110,8 @@ func (s *notConnectedSuite) Test_CloudNeverProxy() {
 			return false
 		}
 
-		jsonStdout, _, err := itest.Telepresence(ctx, "config", "view", "--output", "json")
-		if err != nil {
-			clog.Error(ctx, err)
-			return false
-		}
-		var view client.SessionConfig
-		require.NoError(json.Unmarshal([]byte(jsonStdout), &view, false))
+		view, err := s.configView()
+		require.NoError(err)
 		npc := len(view.Config.Routing().NeverProxy)
 		npcOk = npc > 0 && npc <= neverProxiedCount
 		if !npcOk {
@@ -167,6 +162,45 @@ func (s *notConnectedSuite) Test_CloudAllowConflicting() {
 		}
 		return len(ac) == 1 && netip.MustParsePrefix(ac[0].String()) == acs
 	}, timeout, 5*time.Second, "allow-conflicting-subnets not updated in %s", timeout)
+}
+
+func (s *notConnectedSuite) configView() (*client.SessionConfig, error) {
+	stdout, _, err := itest.Telepresence(s.Context(), "config", "view", "--output", "json")
+	if err != nil {
+		return nil, err
+	}
+	var view client.SessionConfig
+	err = json.Unmarshal([]byte(stdout), &view, false)
+	return &view, err
+}
+
+func (s *notConnectedSuite) Test_CloudAgentArrival() {
+	ctx := s.Context()
+	const agentArrivalTimeout = 2 * time.Minute
+	s.TelepresenceHelmInstallOK(ctx, true, "--set", fmt.Sprintf("timeouts.agentArrival=%s", agentArrivalTimeout))
+	defer s.RollbackTM(ctx)
+
+	timeout := 20 * time.Second
+	if runtime.GOOS == "windows" {
+		timeout *= 5
+	}
+
+	s.Eventuallyf(func() bool {
+		defer func() {
+			stdout, stderr, err := itest.Telepresence(ctx, "quit")
+			clog.Infof(ctx, "stdout: %q", stdout)
+			clog.Infof(ctx, "stderr: %q", stderr)
+			if err != nil {
+				clog.Error(ctx, err)
+			}
+		}()
+		s.TelepresenceConnect(ctx)
+		view, err := s.configView()
+		if err != nil {
+			return false
+		}
+		return view.Timeouts().Get(client.TimeoutIntercept) == agentArrivalTimeout
+	}, timeout, 5*time.Second, "timeouts.intercept not updated by changing traffic-manager's timeouts.agentArrival in %s", timeout)
 }
 
 func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
@@ -252,11 +286,8 @@ func (s *notConnectedSuite) Test_RootdCloudLogLevel() {
 	}
 	itest.TelepresenceDisconnectOk(ctx)
 	require.False(levelSet, "Root log level not respected when set in config file")
-
-	var view client.SessionConfig
-	s.TelepresenceConnect(ctx)
-	jsonStdout := itest.TelepresenceOk(ctx, "config", "view", "--output", "json")
-	require.NoError(json.Unmarshal([]byte(jsonStdout), &view, false))
+	view, err := s.configView()
+	require.NoError(err)
 	require.Equal(view.LogLevels().RootDaemon, slog.LevelDebug)
 }
 

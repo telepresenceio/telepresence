@@ -20,7 +20,7 @@ Telepresence can also intercept traffic intended for a specific service in a
 cluster and redirect it to your local workstation:
 
 ```bash
-telepresence intercept <name of service>
+telepresence intercept &lt;name of service&gt;
 ```
 
 Telepresence uses background processes to manage the cluster session. One of
@@ -56,7 +56,7 @@ recommended) which in turn may result in a password prompt.
 | [mcp](telepresence_mcp) | MCP server management |
 | [quit](telepresence_quit) | Tell telepresence daemons to quit |
 | [replace](telepresence_replace) | Replace a container |
-| [revoke](telepresence_revoke) | Revoke an intercept by intercept ID. The intercept ID must be in the format <session_id>:<intercept_name> |
+| [revoke](telepresence_revoke) | Revoke an intercept by intercept ID. The intercept ID must be in the format &lt;session_id&gt;:&lt;intercept_name&gt; |
 | [serve](telepresence_serve) | Start the browser on a remote service |
 | [status](telepresence_status) | Show connectivity status |
 | [uninstall](telepresence_uninstall) | Uninstall telepresence agents |
@@ -70,9 +70,9 @@ recommended) which in turn may result in a password prompt.
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
-      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
-      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
+      --config string     Path to the Telepresence configuration file (default &quot;$HOME/.config/telepresence/config.yml&quot;)
+      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default &quot;default&quot;)
+      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default &quot;auto&quot;)
       --use string        Match expression that uniquely identifies the daemon container
 ```
 

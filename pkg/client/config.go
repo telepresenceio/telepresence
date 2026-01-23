@@ -15,9 +15,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-json-experiment/json"
@@ -220,6 +218,9 @@ func ParseConfigYAML(ctx context.Context, path string, data []byte) (Config, err
 			return nil, err
 		}
 	}
+	if cfg.Timeouts().PrivateTrafficAgentArrival != 0 {
+		clog.Warnf(ctx, "please use Helm chart setting timeouts.agentArrival instead of deprecated timeouts.trafficAgentArrival")
+	}
 	if cfg.Routing().VirtualSubnet == defaultVirtualSubnet && cfg.Cluster().OldVirtualIPSubnet != "" {
 		clog.Warnf(ctx, "please use routing.VirtualSubnet instead of deprecated deprecated cluster.VirtualIPSubnet")
 		sn, err := netip.ParsePrefix(cfg.Cluster().OldVirtualIPSubnet)
@@ -322,7 +323,7 @@ type Timeouts struct {
 	PrivateProxyDial             time.Duration `json:"proxyDial,format:units"`
 	PrivateTrafficManagerAPI     time.Duration `json:"trafficManagerAPI,format:units"`
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,format:units"`
-	PrivateTrafficAgentArrival   time.Duration `json:"trafficAgentArrival,format:units"`
+	PrivateTrafficAgentArrival   time.Duration `json:"trafficAgentArrival,format:units"` // Deprecated.
 	PrivateFtpReadWrite          time.Duration `json:"ftpReadWrite,format:units"`
 	PrivateFtpShutdown           time.Duration `json:"ftpShutdown,format:units"`
 	PrivateContainerShutdown     time.Duration `json:"containerShutdown,format:units"`
@@ -357,9 +358,6 @@ const (
 
 	// TimeoutTrafficManagerConnect is how long to wait for the initial port-forwards to the traffic-manager.
 	TimeoutTrafficManagerConnect
-
-	// TimeoutTrafficAgentArrival is how long to wait for the traffic-agent to arrive.
-	TimeoutTrafficAgentArrival
 
 	// TimeoutFtpReadWrite read/write timeout used by the fuseftp client.
 	TimeoutFtpReadWrite
@@ -411,8 +409,6 @@ func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 		timeoutVal = t.PrivateTrafficManagerAPI
 	case TimeoutTrafficManagerConnect:
 		timeoutVal = t.PrivateTrafficManagerConnect
-	case TimeoutTrafficAgentArrival:
-		timeoutVal = t.PrivateTrafficAgentArrival
 	case TimeoutFtpReadWrite:
 		timeoutVal = t.PrivateFtpReadWrite
 	case TimeoutFtpShutdown:
@@ -478,9 +474,6 @@ func (e timeoutError) Error() string {
 	case TimeoutTrafficManagerConnect:
 		yamlName = "trafficManagerConnect"
 		humanName = "port-forward connection to the traffic manager"
-	case TimeoutTrafficAgentArrival:
-		yamlName = "trafficAgentArrival"
-		humanName = "waiting for traffic agent arrival"
 	case TimeoutFtpReadWrite:
 		yamlName = "ftpReadWrite"
 		humanName = "FTP client read/write"
@@ -518,7 +511,6 @@ const (
 	defaultTimeoutsRoundtripLatency      = 2 * time.Second
 	defaultTimeoutsTrafficManagerAPI     = 15 * time.Second
 	defaultTimeoutsTrafficManagerConnect = 60 * time.Second
-	defaultTimeoutsTrafficAgentArrival   = 60 * time.Second
 	defaultTimeoutsFtpReadWrite          = 1 * time.Minute
 	defaultTimeoutsFtpShutdown           = 2 * time.Minute
 	defaultTimeoutsContainerShutdown     = 0
@@ -535,7 +527,6 @@ var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
 	PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
 	PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
 	PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
-	PrivateTrafficAgentArrival:   defaultTimeoutsTrafficAgentArrival,
 	PrivateFtpReadWrite:          defaultTimeoutsFtpReadWrite,
 	PrivateFtpShutdown:           defaultTimeoutsFtpShutdown,
 	PrivateContainerShutdown:     defaultTimeoutsContainerShutdown,
@@ -1153,14 +1144,14 @@ func (d *DNS) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 type configKey struct{}
 
 // WithConfig returns a context with the given Config.
-func WithConfig(ctx context.Context, config Config) context.Context {
-	pv := &config
-	return context.WithValue(ctx, configKey{}, (*unsafe.Pointer)(unsafe.Pointer(&pv)))
+func WithConfig(ctx context.Context, cfg Config) context.Context {
+	cfgCopy := *cfg.Base()
+	return context.WithValue(ctx, configKey{}, &cfgCopy)
 }
 
 func GetConfig(ctx context.Context) Config {
-	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
-		return *(*Config)(atomic.LoadPointer(configPtr))
+	if cfg, ok := ctx.Value(configKey{}).(*config); ok {
+		return cfg
 	}
 	panic("no Config has been set")
 }
@@ -1168,9 +1159,9 @@ func GetConfig(ctx context.Context) Config {
 // ReplaceConfig replaces the config last stored using WithConfig with the given Config.
 // The function returns true if an existing config was replaced, false if no such config
 // existed.
-func ReplaceConfig(ctx context.Context, config Config) bool {
-	if configPtr, ok := ctx.Value(configKey{}).(*unsafe.Pointer); ok {
-		atomic.StorePointer(configPtr, unsafe.Pointer(&config))
+func ReplaceConfig(ctx context.Context, cfg Config) bool {
+	if cfgImpl, ok := ctx.Value(configKey{}).(*config); ok {
+		*cfgImpl = *cfg.Base()
 		return true
 	}
 	return false

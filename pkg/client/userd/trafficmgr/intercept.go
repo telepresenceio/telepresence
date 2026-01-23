@@ -515,7 +515,7 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	}
 
 	mgrIr := s.newCreateInterceptRequest(spec)
-	timeoutCtx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutTrafficAgentArrival)
+	timeoutCtx, cancel := client.GetConfig(ctx).Timeouts().TimeoutContext(ctx, client.TimeoutIntercept)
 	defer cancel()
 	var pi *manager.PreparedIntercept
 	for retry := 0; retry < 2; retry++ {

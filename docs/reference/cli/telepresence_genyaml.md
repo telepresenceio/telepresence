@@ -11,8 +11,8 @@ Generate YAML for use in kubernetes manifests.
 Generate traffic-agent yaml for use in kubernetes manifests.
 This allows the traffic agent to be injected by hand into existing kubernetes manifests.
 For your modified workload to be valid, you'll have to manually inject annotations, a
-container, and a volume into the workload; you can do this by running "genyaml config",
-"genyaml container", "genyaml initcontainer", "genyaml annotations", and "genyaml volume".
+container, and a volume into the workload; you can do this by running &quot;genyaml config&quot;,
+&quot;genyaml container&quot;, &quot;genyaml initcontainer&quot;, &quot;genyaml annotations&quot;, and &quot;genyaml volume&quot;.
 
 NOTE: It is recommended that you not do this unless strictly necessary. Instead, we suggest letting
 telepresence's webhook injector configure the traffic agents on demand.
@@ -34,14 +34,14 @@ telepresence's webhook injector configure the traffic agents on demand.
 ### Flags:
 ```
   -h, --help            help for genyaml
-  -o, --output string   Path to the file to place the output in. Defaults to '-' which means stdout. (default "-")
+  -o, --output string   Path to the file to place the output in. Defaults to '-' which means stdout. (default &quot;-&quot;)
 ```
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
-      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
-      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
+      --config string     Path to the Telepresence configuration file (default &quot;$HOME/.config/telepresence/config.yml&quot;)
+      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default &quot;default&quot;)
+      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default &quot;auto&quot;)
       --use string        Match expression that uniquely identifies the daemon container
 ```
 

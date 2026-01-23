@@ -31,13 +31,13 @@ Publish compose application
       --oci-version string      OCI image/artifact specification version (automatically determined by default)
       --resolve-image-digests   Pin image tags to digests
       --with-env                Include environment variables in the published OCI artifact
-  -y, --yes                     Assume "yes" as answer to all prompts
+  -y, --yes                     Assume &quot;yes&quot; as answer to all prompts
 ```
 
 ### Global Flags:
 ```
-      --config string     Path to the Telepresence configuration file (default "$HOME/.config/telepresence/config.yml")
-      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default "default")
-      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default "auto")
+      --config string     Path to the Telepresence configuration file (default &quot;$HOME/.config/telepresence/config.yml&quot;)
+      --output string     Set the output format, supported values are 'json', 'yaml', and 'default' (default &quot;default&quot;)
+      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default &quot;auto&quot;)
       --use string        Match expression that uniquely identifies the daemon container
 ```

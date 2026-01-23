@@ -35,6 +35,23 @@ func genMarkdown(cmd *cobra.Command, dir string) error {
 	return genCommandMarkdown(cmd, dir, buf)
 }
 
+func entityEscape(s string, w *bytes.Buffer) {
+	for _, c := range s {
+		switch c {
+		case '&':
+			w.WriteString("&amp;")
+		case '<':
+			w.WriteString("&lt;")
+		case '>':
+			w.WriteString("&gt;")
+		case '"':
+			w.WriteString("&quot;")
+		default:
+			w.WriteRune(c)
+		}
+	}
+}
+
 // GenMarkdownCustom creates custom markdown output.
 func genCommandMarkdown(cmd *cobra.Command, dir string, buf *bytes.Buffer) error {
 	cmd.InitDefaultHelpFlag()
@@ -45,21 +62,21 @@ func genCommandMarkdown(cmd *cobra.Command, dir string, buf *bytes.Buffer) error
 	buf.WriteByte('\n')
 	if cmd.Short != "" {
 		buf.WriteString("description: ")
-		buf.WriteString(cmd.Short)
+		entityEscape(cmd.Short, buf)
 		buf.WriteByte('\n')
 	}
 	buf.WriteString("hide_table_of_contents: true\n---\n\n")
 	if cmd.Short != "" {
-		buf.WriteString(cmd.Short)
+		entityEscape(cmd.Short, buf)
 		buf.WriteString("\n\n")
 	}
 	if cmd.Long != "" {
 		buf.WriteString("## Synopsis:\n\n")
-		buf.WriteString(cmd.Long)
+		entityEscape(cmd.Long, buf)
 		buf.WriteString("\n\n")
 	}
 
-	buf.WriteString(cmd.UsageString())
+	entityEscape(cmd.UsageString(), buf)
 	err := os.WriteFile(fmt.Sprintf("%s/%s.md", dir, strings.ReplaceAll(cmd.CommandPath(), " ", "_")), buf.Bytes(), 0o644)
 	if err != nil {
 		return err
