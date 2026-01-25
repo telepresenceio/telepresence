@@ -181,3 +181,29 @@ telepresence rootd --logfile -
 telepresence connect --userd-profiling-port 6060 --rootd-profiling-port 6061
 # Then browse http://localhost:6060/debug/pprof/
 ```
+
+## Releases
+
+To create a release, set `TELEPRESENCE_VERSION` and run `make prepare-release`. This creates two annotated tags (`vX.Y.Z` and `rpc/vX.Y.Z`) and a commit updating go.mod references. Pushing the tags and branch triggers the release workflow.
+
+```bash
+# Test release (marked as pre-release, not promoted to latest)
+export TELEPRESENCE_VERSION=v2.27.0-test.0
+make prepare-release
+git push origin HEAD $TELEPRESENCE_VERSION rpc/$TELEPRESENCE_VERSION
+
+# Release candidate
+export TELEPRESENCE_VERSION=v2.27.0-rc.0
+make prepare-release
+git push origin HEAD $TELEPRESENCE_VERSION rpc/$TELEPRESENCE_VERSION
+
+# GA release (becomes "latest", updates Homebrew)
+export TELEPRESENCE_VERSION=v2.27.0
+make prepare-release
+git push origin HEAD $TELEPRESENCE_VERSION rpc/$TELEPRESENCE_VERSION
+```
+
+Version formats:
+- `vX.Y.Z-test.N` - Test release (pre-release)
+- `vX.Y.Z-rc.N` - Release candidate (pre-release)
+- `vX.Y.Z` - GA release (marked as latest, triggers Homebrew update)
