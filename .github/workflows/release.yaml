@@ -37,6 +37,43 @@ jobs:
         run: echo "TELEPRESENCE_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
       - name: generate binaries
         run: make release-binary
+      - name: Install WiX Toolset
+        if: runner.os == 'Windows' && matrix.arch == 'amd64'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix
+          wix extension add -g WixToolset.BootstrapperApplications.wixext
+          wix extension add -g WixToolset.UI.wixext
+          wix extension add -g WixToolset.Util.wixext
+      - name: Build WiX Installer
+        if: runner.os == 'Windows' && matrix.arch == 'amd64'
+        shell: bash
+        run: |
+          export PATH="$USERPROFILE/.dotnet/tools:$PATH"
+          cd build-aux/wix-installer
+          make bundle ARCH=${{ matrix.arch }}
+          cp ../../build-output/bin/TelepresenceInstall.exe ../../build-output/release/telepresence-windows-${{ matrix.arch }}-setup.exe
+      - name: Build macOS Installer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cd build-aux/pkg-installer
+          VERSION="${TELEPRESENCE_VERSION#v}" ARCH=${{ matrix.arch }} ./build-pkg.sh
+          cp ../../build-output/Telepresence.pkg ../../build-output/release/telepresence-darwin-${{ matrix.arch }}.pkg
+      - name: Install nfpm
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          # Always download x86_64 nfpm since ubuntu-latest runners are x86_64
+          # nfpm cross-compiles packages for the target arch specified in config
+          curl -sfL "https://github.com/goreleaser/nfpm/releases/download/v2.44.1/nfpm_2.44.1_Linux_x86_64.tar.gz" | tar xz -C /tmp
+          sudo mv /tmp/nfpm /usr/local/bin/nfpm
+      - name: Build Linux Packages
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cd build-aux/systemd-installer
+          VERSION="${TELEPRESENCE_VERSION#v}" ARCH=${{ matrix.arch }} ./build-packages.sh
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
@@ -89,6 +126,7 @@ jobs:
     outputs:
       draft: ${{ steps.semver_check.outputs.draft }}
       prerelease: ${{ steps.semver_check.outputs.prerelease }}
+      semver: ${{ steps.semver_check.outputs.semver }}
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -138,15 +176,32 @@ jobs:
           tag: ${{ github.ref_name }}
           body: |
             ## Official Release Artifacts
-            ### Linux
-               - 📦 [telepresence-linux-amd64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-amd64)
-               - 📦 [telepresence-linux-arm64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-arm64)
-            ### OSX Darwin
-               - 📦 [telepresence-darwin-amd64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64)
-               - 📦 [telepresence-darwin-arm64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64)
-            ### Windows
-               - 📦 [telepresence-windows-amd64.zip](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.zip)
-               - 📦 [telepresence-windows-arm64.zip](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-arm64.zip)
+
+            ### Installers (with root daemon as a system service)
+            These installers include the option to run the root daemon as a system service, eliminating the need for elevated privileges when using Telepresence.
+
+            | Platform | Architecture | Package |
+            |----------|--------------|---------|
+            | Linux (Debian/Ubuntu) | amd64 | [telepresence-linux-amd64.deb](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-${{ steps.semver_check.outputs.semver }}-linux-amd64.deb) |
+            | Linux (Debian/Ubuntu) | arm64 | [telepresence-linux-arm64.deb](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-${{ steps.semver_check.outputs.semver }}-linux-arm64.deb) |
+            | Linux (Fedora/RHEL) | amd64 | [telepresence-linux-amd64.rpm](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-${{ steps.semver_check.outputs.semver }}-linux-amd64.rpm) |
+            | Linux (Fedora/RHEL) | arm64 | [telepresence-linux-arm64.rpm](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-${{ steps.semver_check.outputs.semver }}-linux-arm64.rpm) |
+            | macOS | amd64 | [telepresence-darwin-amd64.pkg](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64.pkg) |
+            | macOS | arm64 | [telepresence-darwin-arm64.pkg](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64.pkg) |
+            | Windows | amd64 | [telepresence-windows-amd64-setup.exe](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64-setup.exe) |
+            | Windows | arm64 | *Not available — WinFSP and SSHFS-Win installers lack arm64 versions. Use the zip file below.* |
+
+            ### Standalone Binaries
+            Standalone binaries for manual installation. The root daemon runs on-demand with elevated privileges.
+
+            | Platform | Architecture | Binary |
+            |----------|--------------|--------|
+            | Linux | amd64 | [telepresence-linux-amd64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-amd64) |
+            | Linux | arm64 | [telepresence-linux-arm64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-arm64) |
+            | macOS | amd64 | [telepresence-darwin-amd64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64) |
+            | macOS | arm64 | [telepresence-darwin-arm64](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64) |
+            | Windows | amd64 | [telepresence-windows-amd64.zip](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.zip) |
+            | Windows | arm64 | [telepresence-windows-arm64.zip](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-arm64.zip) |
 
             ### Helm Chart
                - 📦 [Telepresence Helm Chart](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss/${{ steps.semver_check.outputs.semver }})
@@ -213,3 +268,4 @@ jobs:
               echo "Version does not match!"
               exit 1
           fi
+
