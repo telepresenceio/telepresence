@@ -95,7 +95,11 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		sessionCancel()
 		return nil, err
 	}
-	client.ReloadLogLevel(sn)
+	if !s.managed {
+		// Only reload log level from client config if not running as a managed service.
+		// A managed service should maintain its own log level configuration.
+		client.ReloadLogLevel(sn)
+	}
 	reply.OutboundConfig = sn.getNetworkConfig()
 	initErrCh := make(chan error, 1)
 
@@ -103,7 +107,10 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 	go func() {
 		defer func() {
 			sessionCancel()
-			client.ReloadLogLevel(s)
+			if !s.managed {
+				// Restore log level from service config after session ends.
+				client.ReloadLogLevel(s)
+			}
 			close(sessionRunning)
 		}()
 		sn.run(initErrCh)
