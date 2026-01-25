@@ -88,6 +88,22 @@ curl -fLO https://github.com/telepresenceio/telepresence/releases/latest/downloa
 sudo dnf install ./telepresence-linux-*.rpm
 ```
 
+### Viewing service logs
+
+The root daemon service logs to the systemd journal:
+
+```shell
+journalctl -u telepresence-rootd
+```
+
+> [!NOTE]
+> If you get a permission error, your user needs to be in a group that can read the journal.
+> On Fedora/RHEL, add yourself to the `wheel` group. On Debian/Ubuntu, use `systemd-journal` or `adm`:
+> ```shell
+> sudo usermod -aG systemd-journal $USER
+> ```
+> Log out and back in for the change to take effect.
+
 ## OR download the binary manually
 
 ```shell

@@ -3,11 +3,9 @@ set -e
 
 # Create required directories
 mkdir -p /var/cache/telepresence/rootd
-mkdir -p /var/log/telepresence
 mkdir -p /etc/telepresence
 chmod 755 /var/cache/telepresence
 chmod 755 /var/cache/telepresence/rootd
-chmod 755 /var/log/telepresence
 
 # Reload systemd to pick up the new service file (may fail in containers)
 systemctl daemon-reload 2>/dev/null || true
@@ -24,5 +22,6 @@ echo ""
 echo "To check service status:"
 echo "  sudo systemctl status telepresence-rootd"
 echo ""
-echo "Service logs are written to /var/log/telepresence/rootd.log"
+echo "To view service logs:"
+echo "  sudo journalctl -u telepresence-rootd"
 echo ""
