@@ -88,6 +88,14 @@ curl -fLO https://github.com/telepresenceio/telepresence/releases/latest/downloa
 sudo dnf install ./telepresence-linux-*.rpm
 ```
 
+### Viewing service logs
+
+The root daemon service logs to the systemd journal. To view logs:
+
+```shell
+sudo journalctl -u telepresence-rootd
+```
+
 ## OR download the binary manually
 
 ```shell
