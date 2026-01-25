@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>io.telepresence.rootd</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/telepresence</string>
+    <string>rootd</string>
+    <string>--logfile</string>  <string>std</string>
+    <string>--config</string>   <string>/Library/Application Support/telepresence/config.yml</string>
+    <string>--address</string>  <string>:4037</string>
+    <string>--managed</string>
+  </array>
+
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+
+  <key>StandardOutPath</key>
+  <string>/var/log/telepresence-rootd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/telepresence-rootd.log</string>
+
+  <key>ProcessType</key>
+  <string>Interactive</string>
+
+  <key>WorkingDirectory</key>
+  <string>/Library/Caches/telepresence</string>
+
+  <!-- === Environment === -->
+  <key>EnvironmentVariables</key>
+  <dict>
+      <key>PATH</key>
+      <string>/usr/local/bin:/usr/bin:/bin</string>
+      <key>HOME</key>
+      <string>/var/root</string>
+  </dict>
+</dict>
+</plist>
