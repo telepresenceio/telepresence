@@ -6,13 +6,13 @@ arch: ${ARCH}
 platform: linux
 version: ${PKG_VERSION}
 release: ${PKG_RELEASE}
-maintainer: Telepresence Maintainers <telepresence@datawire.io>
+maintainer: https://github.com/telepresenceio/telepresence
 description: |
   Telepresence: fast, local development for Kubernetes.
   Telepresence connects your local workstation to a remote Kubernetes cluster,
   allowing you to run services locally while accessing cluster resources.
 vendor: Telepresence.io
-homepage: https://www.telepresence.io/
+homepage: https://telepresence.io/
 license: Apache-2.0
 
 # Package dependencies
