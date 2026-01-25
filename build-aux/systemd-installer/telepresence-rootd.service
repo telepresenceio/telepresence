@@ -1,6 +1,6 @@
 [Unit]
 Description=Telepresence root daemon (rootd)
-Documentation=https://www.telepresence.io/
+Documentation=https://telepresence.io/
 After=network.target
 
 [Service]
@@ -25,9 +25,9 @@ RuntimeDirectoryMode=0755
 Restart=always
 RestartSec=3
 
-# Logging
-StandardOutput=append:/var/log/telepresence/rootd.log
-StandardError=append:/var/log/telepresence/rootd.log
+# Logging (use journalctl -u telepresence-rootd to view logs)
+StandardOutput=journal
+StandardError=journal
 
 # Environment
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
@@ -37,7 +37,7 @@ Environment=HOME=/var/root
 # Security hardening (recommended)
 NoNewPrivileges=yes
 ProtectSystem=strict
-ReadWritePaths=/var/cache/telepresence /var/log/telepresence
+ReadWritePaths=/var/cache/telepresence
 ProtectHome=read-only
 PrivateTmp=yes
 RestrictSUIDSGID=yes

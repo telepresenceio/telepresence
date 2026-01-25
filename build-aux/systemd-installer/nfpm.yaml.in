@@ -55,13 +55,6 @@ contents:
       owner: root
       group: root
 
-  - dst: /var/log/telepresence
-    type: dir
-    file_info:
-      mode: 0755
-      owner: root
-      group: root
-
 scripts:
   postinstall: ./postinstall.sh
   preremove: ./preremove.sh
