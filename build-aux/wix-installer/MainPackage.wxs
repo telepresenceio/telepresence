@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+    xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Id="MainPackage"
+      Name="Telepresence Components"
+      Manufacturer="TelepresenceIO"
+      Version="$(var.BundleVersion)">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed."/>
+    <Property Id="PORT" Secure="yes" Value="4037"/>
+    <Property Id="PPROFPORT" Secure="yes" Value="0"/>
+    <Property Id="LOGLEVEL" Secure="yes" Value="info"/>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="Telepresence"/>
+      <Directory Id="SSHFSFOLDER" Name="SSHFS-Win">
+        <Directory Id="SSHFSBIN" Name="bin"/>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="CONFIGDIR" Name="Telepresence">
+        <Directory Id="LOGDIR" Name="Logs"/>
+        <Directory Id="CACHEDIR" Name="Cache">
+          <Directory Id="ROOTD" Name="rootd"/>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="TelepresenceFiles">
+      <Component Id="Cmp_RemoveSSH" Guid="3b05194e-3065-4f65-b184-5319eaeed41e" Directory="SSHFSBIN">
+        <!-- Remove the ssh.exe installed by the SSHFS-Win package. It conflicts with a more recent OpenSSH that Windows bundles by default -->
+        <RemoveFile Id="RemoveSSH" Name="ssh.exe" On="install"/>
+      </Component>
+      <Component Id="Cmp_WintunDll" Directory="INSTALLDIR" Guid="*">
+        <File Id="WintunDll" Source="wintun.dll" KeyPath="yes"/>
+      </Component>
+      <Component Id="Cmp_TelepresenceExe" Directory="INSTALLDIR" Guid="*">
+        <File Id="TelepresenceExe" Source="telepresence.exe" Checksum="yes" KeyPath="yes"/>
+      </Component>
+      <Component Id="Cmp_PathEnv" Directory="INSTALLDIR" Guid="a1b2c3d4-e5f6-7890-abcd-ef1234567890">
+        <Environment Id="PATH" Name="PATH" Value="[INSTALLDIR]" Permanent="no" Part="last" Action="set" System="yes"/>
+      </Component>
+    </ComponentGroup>
+
+    <ComponentGroup Id="TelepresenceService">
+      <Component Id="Cmp_TelepresenceService" Guid="*" Directory="INSTALLDIR">
+        <File Id="TelepresenceDaemonExe" Source="TelepresenceDaemon.exe" KeyPath="yes"/>
+        <ServiceInstall Id="svc.Install"
+            Name="TelepresenceDaemon"
+            Type="ownProcess"
+            Start="auto"
+            ErrorControl="normal"
+            Account="LocalSystem"
+            DisplayName="Telepresence Daemon"
+            Interactive="no"
+            Description="Provides cluster connectivity"
+            Arguments='--executable "[#TelepresenceExe]" --config "[CONFIGDIR]config.yml" --loglevel [LOGLEVEL] --logfile "[LOGDIR]rootd.log" --address ":[PORT]" --pprof [PPROFPORT]'/>
+        <ServiceControl Id="svc.Control"
+            Name="TelepresenceDaemon"
+            Start="install"
+            Stop="both"
+            Remove="uninstall"
+            Wait="yes"/>
+      </Component>
+      <Component Id="Cmd_RemoveRootd" Guid="0ddbad7d-65d2-417d-a4af-f2d3492d3cd6" Directory="ROOTD">
+        <RemoveFile Id="PurgeRootdFolder" Name="*.*" On="uninstall"/>
+        <RemoveFolder On="uninstall"/>
+      </Component>
+      <Component Id="Cmd_RemoveCache" Guid="6ae39c09-285a-4e3f-9add-f9aad238cc15" Directory="CACHEDIR">
+        <RemoveFile Id="PurgeCacheFolder" Name="*.*" On="uninstall"/>
+        <RemoveFolder On="uninstall"/>
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="Main"
+        Level="1"
+        AllowAbsent="no"
+        AllowAdvertise="no"
+        Title="Telepresence CLI"
+        Description="Installs everything needed to interact with services in your cluster."
+        Display="expand"
+        ConfigurableDirectory="INSTALLDIR">
+      <ComponentGroupRef Id="TelepresenceFiles"/>
+      <Feature Id="Service"
+          Level="2"
+          AllowAbsent="yes"
+          AllowAdvertise="no"
+          Title="Telepresence Network Service"
+          Description="Runs the telepresence root daemon as a Windows service, so that no administrative privileges are needed when using the CLI."
+          Display="expand"
+          ConfigurableDirectory="INSTALLDIR">
+        <ComponentGroupRef Id="TelepresenceService"/>
+      </Feature>
+    </Feature>
+
+    <WixVariable Id="WixUIDialogBmp" Value="dialog.png"/>
+    <WixVariable Id="WixUIBannerBmp" Value="banner.png"/>
+
+    <UI>
+      <ui:WixUI Id="WixUI_Mondo" InstallDirectory="INSTALLDIR"/>
+
+      <!-- Daemon servic configuration dialog. Only visible when the service is installed -->
+      <Dialog Id="PortDlg" Width="370" Height="270" Title="Telepresence Core Setup">
+        <!-- Make this dialog look like the other ones (no localization yet) -->
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no"
+            Text="WixUI_Bmp_Banner"/>
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0"/>
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0"/>
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes"
+            Text="{\WixUI_Font_Title}Daemon Configuration"/>
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes"
+            Text="Configure the Telepresence Service Daemon"/>
+
+        <!-- Navigation -->
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="Back">
+          <Publish Event="NewDialog" Value="CustomizeDlg" Condition="WixUI_InstallMode = &quot;InstallCustom&quot;"/>
+          <Publish Event="NewDialog" Value="SetupTypeDlg" Condition="WixUI_InstallMode = &quot;InstallComplete&quot;"/>
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next">
+          <Publish Event="EndDialog" Value="Return"/>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg"/>
+        </Control>
+
+        <!--Property controls -->
+        <Control Id="SvcPortLabel" Type="Text" X="15" Y="80" Width="85" Height="15" Text="Daemon Port number:"/>
+        <Control Id="SvcPortEdit" Type="Edit" X="100" Y="77" Width="35" Height="20" Property="PORT" Integer="yes"
+            RightAligned="yes"/>
+        <Control Id="SvcPortHelp" Type="Text" X="140" Y="80" Width="130" Height="15"
+            Text="0 = select random available port."/>
+        <Control Id="PProfPortLabel" Type="Text" X="15" Y="110" Width="85" Height="15" Text="PProf Port number:"/>
+        <Control Id="PProfPortEdit" Type="Edit" X="100" Y="107" Width="35" Height="20" Property="PPROFPORT"
+            Integer="yes"
+            RightAligned="yes"/>
+        <Control Id="PProfPortHelp" Type="Text" X="140" Y="110" Width="130" Height="15"
+            Text="0 = don't start pprof server."/>
+        <Control Id="LogLevelLabel" Type="Text" X="15" Y="140" Width="85" Height="15" Text="Log-Level:"/>
+        <Control Id="LogLevel" Type="ListView" X="100" Y="137" Width="70" Height="70" Sunken="yes" Property="LOGLEVEL">
+          <ListView Property="LOGLEVEL">
+            <ListItem Value="error" Text="Error"/>
+            <ListItem Value="warning" Text="Warning"/>
+            <ListItem Value="info" Text="Info"/>
+            <ListItem Value="debug" Text="Debug"/>
+          </ListView>
+        </Control>
+      </Dialog>
+
+      <Dialog Id="ErrorInvalidPort" Width="260" Height="85" Title="Error">
+        <Control Id="ErrorText" Type="Text" X="48" Y="15" Width="200" Height="30"
+            Text="Ports must be a number from 0 to 65535."/>
+        <Control Id="OK" Type="PushButton" X="102" Y="60" Width="56" Height="17" Text="OK">
+          <Publish Event="EndDialog" Value="Return"/>
+        </Control>
+      </Dialog>
+
+      <!-- Jump the LicenseAgreementDlg -->
+      <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="SetupTypeDlg" Order="10"/>
+      <Publish Dialog="SetupTypeDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="10"/>
+
+      <!-- Let SetupTypeDlg jump to PortDlg if the Service feature is enabled -->
+      <Publish Dialog="SetupTypeDlg" Control="CompleteButton" Event="NewDialog" Value="PortDlg" Order="10"/>
+      <Publish Dialog="CustomizeDlg" Control="Next" Event="NewDialog" Value="PortDlg" Order="10"
+          Condition="&amp;Service = 3"/>
+      <Publish Dialog="PortDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="10"
+          Condition="PORT &gt;= 0 AND PORT &lt;= 65535 AND PPROFPORT &gt;= 0 AND PPROFPORT &lt;= 65535"/>
+      <Publish Dialog="PortDlg" Control="Next" Event="SpawnDialog" Value="ErrorInvalidPort" Order="10"
+          Condition="NOT (PORT &gt;= 0 AND PORT &lt;= 65535 AND PPROFPORT &gt;= 0 AND PPROFPORT &lt;= 65535)"/>
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="PortDlg" Order="10"
+          Condition="&amp;Service = 3"/>
+    </UI>
+  </Package>
+</Wix>

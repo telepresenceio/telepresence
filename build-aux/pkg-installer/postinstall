@@ -1,0 +1,20 @@
+#!/bin/bash
+set -e
+
+mkdir -p "/Library/Application Support/telepresence"
+mkdir -p "/Library/Caches/telepresence"
+touch "/Library/Application Support/telepresence/config.yml"
+
+chown -R root:wheel \
+    "/Library/Application Support/telepresence" \
+    "/Library/Caches/telepresence"
+
+chmod 755 "/Library/Application Support/telepresence"
+chmod 755 "/Library/Caches/telepresence"
+chmod 644 "/Library/Application Support/telepresence/config.yml"
+
+echo "Starting Telepresence Root Daemon..."
+/bin/launchctl load -w /Library/LaunchDaemons/io.telepresence.rootd.plist
+
+echo "Telepresence Root Daemon is running."
+echo "Control with: telepresence-rootd start|stop|restart"

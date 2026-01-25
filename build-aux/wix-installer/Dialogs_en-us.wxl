@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization xmlns="http://wixtoolset.org/schemas/v4/wxl" Culture="en-US" Codepage="1252">
+  <String Id="SetupTypeDlgDescription"
+      Value="Install Command Line Interface and optionally the Network Service"/>
+  <String Id="SetupTypeDlgTypicalText"
+      Value="Only install the Telepresence CLI. This means that a telepresence connect will require admin privileges unless the --docker flag is used."/>
+  <String Id="SetupTypeDlgCustomText" Value="Choose what to install and where to install it."/>
+  <String Id="SetupTypeDlgCompleteText"
+      Value="Install both the Telepresence CLI and the Telepresence Network System Service. Removes the need for admin privileges when using the CLI."/>
+</WixLocalization>

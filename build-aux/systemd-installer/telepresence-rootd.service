@@ -1,0 +1,52 @@
+[Unit]
+Description=Telepresence root daemon (rootd)
+Documentation=https://www.telepresence.io/
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/telepresence rootd \
+    --logfile managed \
+    --config /etc/telepresence/config.yml \
+    --address :4037 \
+    --managed
+
+# Runs as root (LaunchDaemon equivalent)
+User=root
+Group=root
+
+# Linux-standard directories
+WorkingDirectory=/var/cache/telepresence
+# Creates /run/telepresence for runtime socket
+RuntimeDirectory=telepresence
+RuntimeDirectoryMode=0755
+
+# Restart behaviour = KeepAlive<true/> + RunAtLoad<true/>
+Restart=always
+RestartSec=3
+
+# Logging
+StandardOutput=append:/var/log/telepresence/rootd.log
+StandardError=append:/var/log/telepresence/rootd.log
+
+# Environment
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+# Telepresence sometimes expects a writable HOME
+Environment=HOME=/var/root
+
+# Security hardening (recommended)
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/cache/telepresence /var/log/telepresence
+ProtectHome=read-only
+PrivateTmp=yes
+RestrictSUIDSGID=yes
+RemoveIPC=yes
+RestrictNamespaces=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target

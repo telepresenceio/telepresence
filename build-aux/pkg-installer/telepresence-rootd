@@ -1,0 +1,12 @@
+#!/bin/bash
+ACTION="$1"
+if [[ "$ACTION" != "start" && "$ACTION" != "stop" && "$ACTION" != "restart" ]]; then
+    echo "Usage: $0 start|stop|restart"
+    exit 1
+fi
+case "$ACTION" in
+    start)   sudo /bin/launchctl load -w /Library/LaunchDaemons/io.telepresence.rootd.plist ;;
+    stop)    sudo /bin/launchctl unload -w /Library/LaunchDaemons/io.telepresence.rootd.plist ;;
+    restart) sudo /bin/launchctl unload -w /Library/LaunchDaemons/io.telepresence.rootd.plist 2>/dev/null || true; sudo /bin/launchctl load -w /Library/LaunchDaemons/io.telepresence.rootd.plist ;;
+esac
+echo "Telepresence Daemon $ACTION requested."

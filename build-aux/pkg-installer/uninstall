@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+echo "Uninstalling Telepresence..."
+sudo /bin/launchctl unload -w /Library/LaunchDaemons/io.telepresence.rootd.plist 2>/dev/null || true
+sudo rm -f /usr/local/bin/telepresence
+sudo rm -f /usr/local/bin/telepresence-rootd
+sudo rm -f /Library/LaunchDaemons/io.telepresence.rootd.plist
+sudo rm -rf "/Library/Application Support/telepresence"
+sudo rm -rf "/Library/Caches/telepresence"
+echo "Uninstalled."

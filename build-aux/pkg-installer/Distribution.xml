@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-script minSpecVersion="1" forVolumeCalculation="any" authoringTool="com.apple.PackageMaker">
+  <title>Telepresence __VERSION__</title>
+  <welcome file="welcome.rtf"/>
+  <license file="license.rtf"/>
+  <!-- === Always install CLI === -->
+  <pkg-ref id="io.telepresence.cli"/>
+  <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+
+  <!-- === Optional: Root Daemon === -->
+  <choices-outline>
+     <line choice="choice-cli"/>
+     <line choice="choice-rootd"/>
+  </choices-outline>
+
+  <choice id="choice-cli"
+            title="Install CLI"
+            description="Install Telepresence CLI."
+            selected="true"
+            enabled="false"
+            visible="false">
+        <pkg-ref id="io.telepresence.cli"/>
+  </choice>
+
+  <choice id="choice-rootd"
+            title="Enable Root Daemon"
+            description="Run telepresence rootd as a system service."
+            selected="true"
+            start_selected="true">
+        <pkg-ref id="io.telepresence.rootd"/>
+  </choice>
+
+  <!-- === Packages === -->
+  <pkg-ref id="io.telepresence.cli" auth="Root">cli.pkg</pkg-ref>
+  <pkg-ref id="io.telepresence.rootd" auth="Root">rootd.pkg</pkg-ref>
+</installer-script>
