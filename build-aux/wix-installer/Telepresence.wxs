@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle Name="Telepresence"
+      Manufacturer="TelepresenceIO"
+      Version="$(var.BundleVersion)"
+      UpgradeCode="b3716fff-1f9c-4a87-8f7a-8fe4721aee2e">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="hyperlinkSidebarLicense"
+          LogoFile="logo.png"
+          LogoSideFile="sidebar.png"
+          LicenseUrl=""
+          SuppressOptionsUI="yes"
+          ShowVersion="yes"/>
+    </BootstrapperApplication>
+
+    <Chain>
+      <MsiPackage Id="WinFsp"
+          SourceFile="winfsp.msi"
+          Visible="yes"
+          Vital="yes"
+          EnableFeatureSelection="no"
+          bal:DisplayInternalUICondition="WixBundleAction = 6"
+          LogPathVariable="WixBundleLog">
+      </MsiPackage>
+
+      <MsiPackage Id="SshfsWin"
+          SourceFile="sshfs-win.msi"
+          Visible="yes"
+          Vital="yes"
+          EnableFeatureSelection="no"
+          bal:DisplayInternalUICondition="WixBundleAction = 6"
+          LogPathVariable="WixBundleLog">
+      </MsiPackage>
+
+      <MsiPackage Id="TelepresenceCore"
+          SourceFile="MainPackage.msi"
+          Visible="yes"
+          Vital="yes"
+          bal:DisplayInternalUICondition="WixBundleAction = 6"
+          EnableFeatureSelection="yes"
+          LogPathVariable="WixBundleLog">
+      </MsiPackage>
+    </Chain>
+  </Bundle>
+</Wix>
