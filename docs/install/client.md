@@ -14,12 +14,22 @@ Install the Telepresence client on your workstation by running the commands belo
 <Platform.TabGroup>
 <Platform.MacOSTab>
 
-## Install with brew:
+## Install with brew (Recommended):
 ```shell
 brew install telepresenceio/telepresence/telepresence-oss
 ```
 
-## OR download the binary for your platform
+## OR install using the package installer
+
+The package installer includes the root daemon as a system service via launchd, eliminating the need for elevated privileges when using Telepresence.
+
+Download the appropriate installer for your architecture:
+- [telepresence-darwin-amd64.pkg](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-amd64.pkg) (Intel Macs)
+- [telepresence-darwin-arm64.pkg](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64.pkg) (Apple Silicon Macs)
+
+Double-click the downloaded `.pkg` file and follow the installation prompts.
+
+## OR download the binary manually
 
 ### AMD (Intel) Macs
 
@@ -48,6 +58,38 @@ sudo chmod a+x /usr/local/bin/telepresence
 </Platform.MacOSTab>
 <Platform.GNULinuxTab>
 
+## Install using package manager (Recommended)
+
+The package installers include the root daemon as a systemd service, eliminating the need for elevated privileges when using Telepresence.
+
+### Debian/Ubuntu (.deb)
+
+```shell
+# Download the latest .deb package
+# AMD64
+curl -fLO https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-amd64.deb
+# ARM64
+curl -fLO https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-arm64.deb
+
+# Install the package
+sudo apt install ./telepresence-linux-*.deb
+```
+
+### Fedora/RHEL (.rpm)
+
+```shell
+# Download the latest .rpm package
+# AMD64
+curl -fLO https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-amd64.rpm
+# ARM64
+curl -fLO https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-linux-arm64.rpm
+
+# Install the package
+sudo dnf install ./telepresence-linux-*.rpm
+```
+
+## OR download the binary manually
+
 ```shell
 # 1. Download the latest binary (~95 MB):
 # AMD
@@ -62,6 +104,18 @@ sudo chmod a+x /usr/local/bin/telepresence
 
 </Platform.GNULinuxTab>
 <Platform.WindowsTab>
+
+## Install using the setup installer (Recommended)
+
+The setup installer includes the root daemon as a Windows service, eliminating the need for elevated privileges when using Telepresence. It also bundles WinFSP and SSHFS-Win for volume mount support.
+
+Download and run the installer:
+- [telepresence-windows-amd64-setup.exe](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-windows-amd64-setup.exe)
+
+> [!NOTE]
+> The Windows installer is currently only available for AMD64. For ARM64, use the manual installation method below.
+
+## OR install manually using PowerShell
 
 We've developed a Powershell script to simplify the process of installing telepresence. Here are the commands you can execute:
 
