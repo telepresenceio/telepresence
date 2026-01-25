@@ -1,0 +1,79 @@
+# nfpm configuration for building .deb and .rpm packages
+# Documentation: https://nfpm.goreleaser.com/configuration/
+
+name: telepresence
+arch: ${ARCH}
+platform: linux
+version: ${PKG_VERSION}
+release: ${PKG_RELEASE}
+maintainer: Telepresence Maintainers <telepresence@datawire.io>
+description: |
+  Telepresence: fast, local development for Kubernetes.
+  Telepresence connects your local workstation to a remote Kubernetes cluster,
+  allowing you to run services locally while accessing cluster resources.
+vendor: Telepresence.io
+homepage: https://www.telepresence.io/
+license: Apache-2.0
+
+# Package dependencies
+depends:
+  - fuse3
+recommends:
+  - sshfs
+
+contents:
+  # Main binary
+  - src: ${BINDIR}/telepresence
+    dst: /usr/local/bin/telepresence
+    file_info:
+      mode: 0755
+
+  # Systemd service file
+  - src: telepresence-rootd.service
+    dst: /usr/lib/systemd/system/telepresence-rootd.service
+    file_info:
+      mode: 0644
+
+  # Default configuration
+  - src: config.yml
+    dst: /etc/telepresence/config.yml
+    type: config|noreplace
+    file_info:
+      mode: 0644
+
+  # Uninstall script
+  - src: uninstall.sh
+    dst: /usr/local/bin/telepresence-uninstall
+    file_info:
+      mode: 0755
+
+  # Create required directories
+  - dst: /var/cache/telepresence
+    type: dir
+    file_info:
+      mode: 0700
+      owner: root
+      group: root
+
+  - dst: /var/log/telepresence
+    type: dir
+    file_info:
+      mode: 0755
+      owner: root
+      group: root
+
+scripts:
+  postinstall: ./postinstall.sh
+  preremove: ./preremove.sh
+  postremove: ./postremove.sh
+
+# RPM-specific settings
+rpm:
+  group: Applications/Internet
+  summary: Fast, local development for Kubernetes
+
+# Deb-specific settings
+deb:
+  fields:
+    Priority: optional
+    Section: net

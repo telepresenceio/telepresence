@@ -1,0 +1,5 @@
+# Telepresence root daemon configuration
+# See https://www.telepresence.io/docs/reference/config for all options
+
+logLevels:
+  rootDaemon: info
