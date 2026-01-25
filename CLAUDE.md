@@ -78,7 +78,12 @@ make generate
 
 # Regenerate protobuf files only
 make protoc
+
+# Regenerate documentation files (after changing CHANGELOG.yml)
+make docs-files
 ```
+
+**Important:** After modifying `CHANGELOG.yml`, always run `make docs-files` to regenerate the documentation files (`docs/release-notes.md`, `docs/release-notes.mdx`, `docs/variables.yml`).
 
 ## Architecture
 
@@ -207,3 +212,10 @@ Version formats:
 - `vX.Y.Z-test.N` - Test release (pre-release)
 - `vX.Y.Z-rc.N` - Release candidate (pre-release)
 - `vX.Y.Z` - GA release (marked as latest, triggers Homebrew update)
+
+### Changelog
+
+When adding entries to `CHANGELOG.yml` for an upcoming release:
+- Use `date: (TBD)` for unreleased versions
+- The `make prepare-release` command will set the actual date when `TELEPRESENCE_VERSION` is a GA version (e.g., `v2.27.0`)
+- After modifying `CHANGELOG.yml`, run `make docs-files` to regenerate documentation

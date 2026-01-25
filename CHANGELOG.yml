@@ -24,6 +24,34 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.27.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Add macOS package installer with root daemon as a system service
+        body: >-
+          A new macOS package installer (.pkg) is now available that installs Telepresence with the root daemon
+          configured as a launchd service. This eliminates the need for elevated privileges when using Telepresence,
+          as the daemon starts automatically at boot and runs in the background. Available for both Intel (amd64)
+          and Apple Silicon (arm64) Macs.
+        docs: install/client
+      - type: feature
+        title: Add Linux package installers with root daemon as a system service
+        body: >-
+          New Linux package installers (.deb for Debian/Ubuntu and .rpm for Fedora/RHEL) are now available that
+          install Telepresence with the root daemon configured as a systemd service. This eliminates the need for
+          elevated privileges when using Telepresence, as the service is enabled and started automatically during
+          installation. Available for both amd64 and arm64 architectures.
+        docs: install/client
+      - type: feature
+        title: Add Windows installer with root daemon as a system service
+        body: >-
+          A new Windows installer (.exe) is now available that installs Telepresence with the root daemon configured
+          as a Windows service. The installer bundles WinFSP and SSHFS-Win dependencies for volume mount support,
+          adds Telepresence to the system PATH, and optionally installs the TelepresenceDaemon service. This eliminates
+          the need for elevated privileges when using Telepresence. Currently available for amd64 architecture only
+          due to dependency constraints.
+        docs: install/client
   - version: 2.26.0
     date: 2026-01-23
     notes:
