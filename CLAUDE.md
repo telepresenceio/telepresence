@@ -295,3 +295,11 @@ When adding entries to `CHANGELOG.yml` for an upcoming release:
 - Use `date: (TBD)` for unreleased versions
 - The `make prepare-release` command will set the actual date when `TELEPRESENCE_VERSION` is a GA version (e.g., `v2.27.0`)
 - After modifying `CHANGELOG.yml`, run `make docs-files` to regenerate documentation
+
+### Documentation Website
+
+The documentation website at [telepresence.io](https://telepresence.io) is managed in the [telepresenceio/telepresence.io](https://github.com/telepresenceio/telepresence.io) repository. When creating a GA release, update the website by running `make generate-version` in that repository with:
+- `DOCS_BRANCH` - Branch in this repository containing the docs (e.g., `release/v2`)
+- `DOCS_VERSION` - Major.minor version to generate or update (e.g., `2.27`)
+
+See the telepresence.io repository for full instructions.
