@@ -599,6 +599,7 @@ $defs:
     enum:
       - error
       - warning
+      - warn
       - info
       - debug
       - trace
