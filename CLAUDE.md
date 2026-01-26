@@ -1,10 +1,27 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance for contributors and AI assistants working with this repository.
 
 ## Project Overview
 
 Telepresence is a Kubernetes development tool that enables fast local development by connecting your local workstation to a Kubernetes cluster. It allows developers to run services locally while accessing cluster resources and intercepting traffic from the cluster to their local machine.
+
+## Git Workflow
+
+- Never commit directly to the `release/v2` branch. Always create a feature branch with a name following the pattern `username/topic` (e.g., `thallgren/fix-dns-resolution`).
+- All commits must be signed and signed-off (`git commit -s -S`).
+- Push the branch and create a pull request for review.
+
+## Build Artifacts
+
+The Open Source version of Telepresence consists of three artifacts:
+
+**Client-side (runs on developer workstation):**
+- **`telepresence` binary** - The same binary serves as CLI, user daemon, and root daemon.
+- **`telepresence` Docker image** - Used as both user and root daemon when running `telepresence connect --docker`.
+
+**Cluster-side (runs in Kubernetes):**
+- **`tel2` Docker image** - Used by the traffic-manager deployment and injected as traffic-agent sidecars.
 
 ## Build Commands
 
@@ -31,6 +48,16 @@ make clean
 make clobber  # Also removes tools
 ```
 
+Environment variables:
+- `TELEPRESENCE_REGISTRY` (required) - Docker registry for images. Use `local` for docker-based Kubernetes, or `ghcr.io/telepresenceio` for the release registry.
+- `TELEPRESENCE_VERSION` (optional) - Version string to compile into binaries and images. If not set, auto-generated from CHANGELOG.yml and source hash.
+
+Run `make help` for more information.
+
+### Building on Windows
+
+Windows builds use `build-aux\winmake.bat` instead of `make` directly. Pass the same parameters as you would to make. The script runs make inside a Docker container with appropriate parameters for Windows binaries.
+
 ## Testing
 
 ```bash
@@ -50,7 +77,47 @@ TEST_SUITE='^WorkloadConfiguration$' go test ./integration_test/... -v
 make build-tests
 ```
 
-Integration tests use testify suites. The test harness is in `integration_test/itest/`. Use `-testify.m=<pattern>` to filter tests by name.
+Integration tests use testify suites. The test harness is in `integration_test/itest/`. Use `-testify.m=<pattern>` to filter tests by name. Verbose output (`-v`) is recommended as tests produce human-readable output with timestamps that correlate with log files.
+
+### Integration Test Environment Variables
+
+| Environment Name           | Description                                   | Default                   |
+|----------------------------|-----------------------------------------------|---------------------------|
+| `DEV_KUBECONFIG`           | Cluster configuration used by the tests       | Kubernetes default        |
+| `DEV_CLIENT_REGISTRY`      | Docker registry for the client image          | ${TELEPRESENCE_REGISTRY}  |
+| `DEV_MANAGER_REGISTRY`     | Docker registry for the traffic-manager image | ${TELEPRESENCE_REGISTRY}  |
+| `DEV_AGENT_REGISTRY`       | Docker registry for the traffic-agent image   | Traffic-manager registry  |
+| `DEV_CLIENT_IMAGE`         | Name of the client image                      | "telepresence"            |
+| `DEV_MANAGER_IMAGE`        | Name of the traffic-manager image             | "tel2"                    |
+| `DEV_AGENT_IMAGE`          | Name of the traffic-agent image               | Traffic-manager image     |
+| `DEV_CLIENT_VERSION`       | Client version                                | ${TELEPRESENCE_VERSION#v} |
+| `DEV_MANAGER_VERSION`      | Traffic-manager version                       | ${TELEPRESENCE_VERSION#v} |
+| `DEV_AGENT_VERSION`        | Traffic-agent image version                   | Traffic-manager version   |
+| `DEV_USERD_PROFILING_PORT` | Start user daemon with pprof enabled          |                           |
+| `DEV_ROOTD_PROFILING_PORT` | Start root daemon with pprof enabled          |                           |
+| `TEST_SUITE`               | Regexp matching test suite name(s)            |                           |
+
+These can also be provided in an `itest.yml` file placed next to `config.yml`:
+
+```yaml
+Env:
+  DEV_CLIENT_VERSION: v2.x.x-alpha.0
+  DEV_KUBECONFIG: /path/to/kubeconfig
+Config:
+  docker:
+    addHostGateway: false
+```
+
+### Using Docker Desktop with Kubernetes
+
+Using Kubernetes bundled with Docker Desktop is the quickest way to run tests. No need to push images to a registry - Kubernetes finds them in Docker's local cache. Integration tests automatically use `pullPolicy=Never` when `DEV_CLIENT_REGISTRY` is set to "local".
+
+```bash
+export TELEPRESENCE_VERSION=v2.x.x-alpha.0
+export TELEPRESENCE_REGISTRY=local
+make build client-image tel2-image
+go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
+```
 
 ## Linting
 
@@ -83,7 +150,11 @@ make protoc
 make docs-files
 ```
 
-**Important:** After modifying `CHANGELOG.yml`, always run `make docs-files` to regenerate the documentation files (`docs/release-notes.md`, `docs/release-notes.mdx`, `docs/variables.yml`).
+**Important:** After modifying `CHANGELOG.yml`, always run `make docs-files` to regenerate documentation files (`docs/release-notes.md`, `docs/release-notes.mdx`, `docs/variables.yml`).
+
+### Updating License Documentation
+
+Run `make generate` and commit changes to `DEPENDENCY_LICENSES.md` and `DEPENDENCIES.md`.
 
 ## Architecture
 
@@ -112,6 +183,10 @@ make docs-files
 6. **Agent Init** (`cmd/traffic/cmd/agentinit/`)
    - Init container for setting up iptables rules in pods
 
+7. **Docker Network Driver** (`cmd/teleroute/`)
+   - Only used when connecting with `--docker` flag
+   - Provides the Docker network that enables communication between the Telepresence daemon container and other containers
+
 ### Key Packages
 
 - `pkg/vif/` - Virtual network interface implementation
@@ -133,58 +208,59 @@ Protocol buffers are in `rpc/` with separate packages:
 
 The traffic-manager Helm chart is in `charts/telepresence-oss/`.
 
-## Local Development with Docker Desktop
+## Debugging and Troubleshooting
 
-For fastest iteration when using Docker Desktop with Kubernetes:
+### Log Files
 
-```bash
-export TELEPRESENCE_VERSION=v2.x.x-alpha.0
-export TELEPRESENCE_REGISTRY=local
-make build client-image tel2-image
+There are three log files:
+- `connector.log` - Output from user daemon: traffic-manager interaction, intercepts, port forwards
+- `daemon.log` - Output from root daemon: networking changes on your workstation
+- `cli.log` - Output from the command line interface
 
-# Install traffic-manager with debug logging
-./build-output/bin/telepresence helm install --set logLevel=debug,image.pullPolicy=Never,agent.image.pullPolicy=Never
-
-# Connect to cluster
-./build-output/bin/telepresence connect
-```
-
-## Integration Test Configuration
-
-Tests can be configured via environment variables or `itest.yml` file placed next to `config.yml`:
-
-```yaml
-Env:
-  DEV_CLIENT_VERSION: v2.x.x-alpha.0
-  DEV_KUBECONFIG: /path/to/kubeconfig
-Config:
-  docker:
-    addHostGateway: false
-```
-
-Key environment variables:
-- `DEV_KUBECONFIG` - Kubernetes config for tests
-- `DEV_CLIENT_REGISTRY`, `DEV_MANAGER_REGISTRY`, `DEV_AGENT_REGISTRY` - Image registries
-- `TEST_SUITE` - Regexp to filter test suites
-
-## Log Files
-
+Locations:
 - macOS: `~/Library/Logs/telepresence/`
 - Linux: `~/.cache/telepresence/logs/`
 - Windows: `%USERPROFILE%\AppData\Local\logs`
 
-Files: `daemon.log` (rootd), `connector.log` (userd), `cli.log` (CLI)
+Logs rotate daily. Use `tail -F <filename>` to watch rotating logs seamlessly.
 
-## Debugging Daemons
+### Debugging Early-Initialization Errors
+
+If daemons fail during early initialization before logfiles are set up, run them directly to see stderr output. The `--address` flag is mandatory:
 
 ```bash
-# Run daemon with stderr logging
-telepresence userd --logfile -
-telepresence rootd --logfile -
+# Run user daemon directly
+telepresence userd --logfile - --address :8083
 
-# Enable pprof profiling
+# Run root daemon directly (requires sudo)
+sudo telepresence rootd --logfile - --address :8084
+```
+
+### Profiling the Daemons
+
+Enable [pprof](https://pkg.go.dev/net/http/pprof) profiling:
+
+```bash
+telepresence quit -s
 telepresence connect --userd-profiling-port 6060 --rootd-profiling-port 6061
 # Then browse http://localhost:6060/debug/pprof/
+```
+
+### Dumping Goroutine Stacks
+
+Send SIGQUIT to a daemon to dump goroutine stacks to its log file. On Windows, use profiling instead.
+
+### RBAC Testing
+
+To test with limited RBAC privileges:
+
+```bash
+kubectl apply -f k8s/client_rbac.yaml
+kubectl get sa telepresence-test-developer -o "jsonpath={.secrets[0].name}"
+# Get the token from the secret and configure kubectl
+kubectl get secret <secret-name> -o "jsonpath={.data.token}" | base64 --decode
+kubectl config set-credentials telepresence-test-developer --token <token>
+kubectl config use-context telepresence-test-developer
 ```
 
 ## Releases
