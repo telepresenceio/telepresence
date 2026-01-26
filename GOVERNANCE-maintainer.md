@@ -110,15 +110,9 @@ and can be rapidly returned to Maintainer status if their availability changes.
 
 ## Meetings
 
-Time zones permitting, Maintainers are expected to participate in the public
-developer meeting.
-
-Details can be found [here](./MEETING_SCHEDULE.md#monthly-contributors-meeting).
-
-Maintainers will also have closed meetings in order to discuss security reports
-or Code of Conduct violations.  Such meetings should be scheduled by any
-Maintainer on receipt of a security issue or CoC report.  All current Maintainers
-must be invited to such closed meetings, except for any Maintainer who is
+Maintainers meet on demand to discuss project matters, security reports,
+or Code of Conduct violations. Any Maintainer may schedule a meeting as needed.
+All current Maintainers must be invited, except for any Maintainer who is
 accused of a CoC violation.
 
 ## CNCF Resources
