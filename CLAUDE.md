@@ -322,10 +322,10 @@ The `build-macos-pkg` job uses the `macos-signing` environment, which must be co
 
 | Secret Name | Description |
 |-------------|-------------|
-| `MACOS_CERTIFICATE_P12` | Base64-encoded P12 file containing both Developer ID certificates |
+| `MACOS_CERTIFICATE_P12` | Base64-encoded P12 file containing both Application and Developer ID Installer certificates |
 | `MACOS_CERTIFICATE_PASSWORD` | Password for the P12 file |
-| `MACOS_SIGN_APPLICATION` | Developer ID Application certificate name |
-| `MACOS_SIGN_INSTALLER` | Developer ID Installer certificate name |
+| `MACOS_SIGN_APPLICATION` | Developer ID Application certificate name (e.g., `Developer ID Application: Your Name (TEAMID)`) |
+| `MACOS_SIGN_INSTALLER` | Developer ID Installer certificate name (e.g., `Developer ID Installer: Your Name (TEAMID)`) |
 | `MACOS_NOTARIZE_APPLE_ID` | Apple ID email for notarization |
 | `MACOS_NOTARIZE_TEAM_ID` | Apple Developer Team ID |
 | `MACOS_NOTARIZE_PASSWORD` | App-specific password for notarization |
