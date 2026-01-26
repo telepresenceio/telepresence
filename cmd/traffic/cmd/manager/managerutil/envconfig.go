@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"reflect"
+	"strings"
 	"time"
 
 	"github.com/blang/semver/v4"
@@ -130,6 +131,9 @@ func LoadEnv(ctx context.Context, envMap map[string]string) (context.Context, er
 		UseFieldNameByDefault: true,
 		FuncMap: map[reflect.Type]env.ParserFunc{
 			reflect.TypeOf(slog.Level(0)): func(s string) (any, error) {
+				if strings.EqualFold(s, "warning") {
+					s = "warn"
+				}
 				return clog.ParseLevel(s)
 			},
 			reflect.TypeOf([]core.LocalObjectReference{}): func(s string) (any, error) {
