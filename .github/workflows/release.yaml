@@ -53,54 +53,6 @@ jobs:
           cd build-aux/wix-installer
           make bundle ARCH=${{ matrix.arch }}
           cp ../../build-output/bin/TelepresenceInstall.exe ../../build-output/release/telepresence-windows-${{ matrix.arch }}-setup.exe
-      - name: Import Apple certificates
-        if: runner.os == 'macOS' && env.MACOS_CERTIFICATE_P12 != ''
-        env:
-          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-        run: |
-          # Create a temporary keychain
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Import certificates from base64-encoded P12
-          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
-          security import $RUNNER_TEMP/certificate.p12 -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          rm $RUNNER_TEMP/certificate.p12
-
-          # Add keychain to search list and set as default
-          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
-          security default-keychain -s "$KEYCHAIN_PATH"
-
-          # Allow codesign to access the keychain without prompting
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          # Store keychain path for cleanup
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
-
-      - name: Build macOS Installer
-        if: runner.os == 'macOS'
-        shell: bash
-        env:
-          MACOS_SIGN_APPLICATION: ${{ secrets.MACOS_SIGN_APPLICATION }}
-          MACOS_SIGN_INSTALLER: ${{ secrets.MACOS_SIGN_INSTALLER }}
-          MACOS_NOTARIZE_APPLE_ID: ${{ secrets.MACOS_NOTARIZE_APPLE_ID }}
-          MACOS_NOTARIZE_TEAM_ID: ${{ secrets.MACOS_NOTARIZE_TEAM_ID }}
-          MACOS_NOTARIZE_PASSWORD: ${{ secrets.MACOS_NOTARIZE_PASSWORD }}
-        run: |
-          cd build-aux/pkg-installer
-          VERSION="${TELEPRESENCE_VERSION#v}" ARCH=${{ matrix.arch }} ./build-pkg.sh
-          cp ../../build-output/Telepresence.pkg ../../build-output/release/telepresence-darwin-${{ matrix.arch }}.pkg
-
-      - name: Cleanup macOS keychain
-        if: runner.os == 'macOS' && always() && env.KEYCHAIN_PATH != ''
-        run: |
-          security delete-keychain "$KEYCHAIN_PATH" || true
       - name: Install nfpm
         if: runner.os == 'Linux'
         shell: bash
@@ -256,6 +208,85 @@ jobs:
           v=${{ github.ref_name }}
           packaging/homebrew-package.sh "${v#v}" "${{ vars.GH_BOT_USER }}" "${{ vars.GH_BOT_EMAIL }}" "${{ secrets.HOMEBREW_TAP_TOKEN }}"
 
+  build-macos-pkg:
+    # This job builds signed and notarized macOS .pkg installers.
+    # It uses a protected environment requiring approval from authorized reviewers.
+    # If not approved, the release proceeds without .pkg installers (standalone binaries are still available).
+    environment: macos-signing
+    needs:
+      - publish-release
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
+    runs-on: macos-latest
+    env:
+      GOARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/install-dependencies
+        name: install dependencies
+      - name: set version
+        shell: bash
+        run: echo "TELEPRESENCE_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+      - name: generate binaries
+        run: make release-binary
+      - name: Import Apple certificates
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create a temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificates from base64-encoded P12
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          rm $RUNNER_TEMP/certificate.p12
+
+          # Add keychain to search list and set as default
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+          security default-keychain -s "$KEYCHAIN_PATH"
+
+          # Allow codesign to access the keychain without prompting
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Store keychain path for cleanup
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+
+      - name: Build signed macOS Installer
+        env:
+          MACOS_SIGN_APPLICATION: ${{ secrets.MACOS_SIGN_APPLICATION }}
+          MACOS_SIGN_INSTALLER: ${{ secrets.MACOS_SIGN_INSTALLER }}
+          MACOS_NOTARIZE_APPLE_ID: ${{ secrets.MACOS_NOTARIZE_APPLE_ID }}
+          MACOS_NOTARIZE_TEAM_ID: ${{ secrets.MACOS_NOTARIZE_TEAM_ID }}
+          MACOS_NOTARIZE_PASSWORD: ${{ secrets.MACOS_NOTARIZE_PASSWORD }}
+        run: |
+          cd build-aux/pkg-installer
+          VERSION="${TELEPRESENCE_VERSION#v}" ARCH=${{ matrix.arch }} ./build-pkg.sh
+
+      - name: Cleanup macOS keychain
+        if: always() && env.KEYCHAIN_PATH != ''
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" || true
+
+      - name: Add signed package to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} \
+            build-output/Telepresence.pkg#telepresence-darwin-${{ matrix.arch }}.pkg \
+            --clobber
+
   test-release:
     needs:
       - push-images
@@ -309,4 +340,3 @@ jobs:
               echo "Version does not match!"
               exit 1
           fi
-
