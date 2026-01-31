@@ -303,3 +303,84 @@ The documentation website at [telepresence.io](https://telepresence.io) is manag
 - `DOCS_VERSION` - Major.minor version to generate or update (e.g., `2.27`)
 
 See the telepresence.io repository for full instructions.
+
+### macOS Installer Signing and Notarization
+
+The macOS `.pkg` installers are signed and notarized to pass Gatekeeper verification. This requires the following GitHub secrets to be configured:
+
+| Secret Name | Description |
+|-------------|-------------|
+| `MACOS_CERTIFICATE_P12` | Base64-encoded P12 file containing both Developer ID certificates |
+| `MACOS_CERTIFICATE_PASSWORD` | Password for the P12 file |
+| `MACOS_SIGN_APPLICATION` | Developer ID Application certificate name |
+| `MACOS_SIGN_INSTALLER` | Developer ID Installer certificate name |
+| `MACOS_NOTARIZE_APPLE_ID` | Apple ID email for notarization |
+| `MACOS_NOTARIZE_TEAM_ID` | Apple Developer Team ID |
+| `MACOS_NOTARIZE_PASSWORD` | App-specific password for notarization |
+
+If these secrets are not configured, packages will be built unsigned (suitable for testing but will trigger Gatekeeper warnings on user machines).
+
+#### Obtaining the Certificates
+
+You need an [Apple Developer Program](https://developer.apple.com/programs/) membership ($99/year) to obtain signing certificates.
+
+1. **Create certificates in Apple Developer Portal:**
+   - Go to [Certificates, Identifiers & Profiles](https://developer.apple.com/account/resources/certificates/list)
+   - Click the + button to create a new certificate
+   - Create **Developer ID Application** certificate (for signing binaries)
+   - Create **Developer ID Installer** certificate (for signing .pkg files)
+   - Download both certificates and double-click to install in Keychain Access
+
+2. **Find your Team ID:**
+   - Go to [Membership Details](https://developer.apple.com/account#MembershipDetailsCard)
+   - Copy the Team ID (10-character alphanumeric string)
+   - Set as `MACOS_NOTARIZE_TEAM_ID`
+
+3. **Find the certificate names:**
+   - Open Keychain Access and look under "My Certificates"
+   - The names will be like:
+     - `Developer ID Application: Your Name (TEAMID)` → `MACOS_SIGN_APPLICATION`
+     - `Developer ID Installer: Your Name (TEAMID)` → `MACOS_SIGN_INSTALLER`
+   - You can also list them with: `security find-identity -v -p codesigning`
+
+4. **Export certificates to P12:**
+   ```bash
+   # Export each certificate from Keychain Access:
+   # - Right-click certificate → Export
+   # - Choose .p12 format
+   # - Set a strong password (will be MACOS_CERTIFICATE_PASSWORD)
+
+   # If you have both in separate .p12 files, you can import them together
+   # or export them together from Keychain Access by selecting both
+
+   # Base64-encode for GitHub secrets:
+   base64 -i certificates.p12 | pbcopy
+   # Paste as MACOS_CERTIFICATE_P12
+   ```
+
+5. **Create app-specific password for notarization:**
+   - Go to [appleid.apple.com](https://appleid.apple.com/) → Sign-In and Security → App-Specific Passwords
+   - Generate a new password with a descriptive name (e.g., "GitHub Actions Notarization")
+   - Copy the generated password → `MACOS_NOTARIZE_PASSWORD`
+   - Use your Apple ID email → `MACOS_NOTARIZE_APPLE_ID`
+
+#### Testing Locally
+
+To test signing locally before configuring GitHub secrets:
+
+```bash
+# Set environment variables
+export MACOS_SIGN_APPLICATION="Developer ID Application: Your Name (TEAMID)"
+export MACOS_SIGN_INSTALLER="Developer ID Installer: Your Name (TEAMID)"
+export MACOS_NOTARIZE_APPLE_ID="your@email.com"
+export MACOS_NOTARIZE_TEAM_ID="ABCD123456"
+export MACOS_NOTARIZE_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+
+# Build the signed and notarized package
+cd build-aux/pkg-installer
+VERSION=2.26.0 ./build-pkg.sh
+
+# Verify the signature
+pkgutil --check-signature ../../build-output/Telepresence.pkg
+spctl --assess --type install ../../build-output/Telepresence.pkg
+```
