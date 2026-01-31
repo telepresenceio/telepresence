@@ -37,7 +37,11 @@ func main() {
 
 	if cmd, cmdOK := cmds[name]; cmdOK {
 		ctx := context.Background()
-		ctx = log.MakeBaseLogger(ctx, os.Stdout, os.Getenv("LOG_LEVEL"))
+		lvl := os.Getenv("LOG_LEVEL")
+		if strings.EqualFold(lvl, "warning") {
+			lvl = "warn"
+		}
+		ctx = log.MakeBaseLogger(ctx, os.Stdout, lvl)
 		if err := cmd(ctx, args...); err != nil {
 			clog.Errorf(ctx, "quit: %v", err)
 			os.Exit(1)

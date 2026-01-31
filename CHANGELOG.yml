@@ -52,6 +52,15 @@ items:
           the need for elevated privileges when using Telepresence. Currently available for amd64 architecture only
           due to dependency constraints.
         docs: install/client
+  - version: 2.26.1
+    date: 2026-01-26
+    notes:
+      - type: bugfix
+        title: Add support for "warning" as an alias for "warn" in log levels
+        body: >-
+          The "warning" alias for "warn" was the only acceptable value in the Helm chart, yet the traffic manager didn't accept it. This is
+          now fixed so that both names are accepted by the Helm chart and by the traffic manager.
+        docs: https://github.com/telepresenceio/telepresence/issues/4043
   - version: 2.26.0
     date: 2026-01-23
     notes:
