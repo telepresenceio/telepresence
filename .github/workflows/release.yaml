@@ -53,13 +53,54 @@ jobs:
           cd build-aux/wix-installer
           make bundle ARCH=${{ matrix.arch }}
           cp ../../build-output/bin/TelepresenceInstall.exe ../../build-output/release/telepresence-windows-${{ matrix.arch }}-setup.exe
+      - name: Import Apple certificates
+        if: runner.os == 'macOS' && env.MACOS_CERTIFICATE_P12 != ''
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create a temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificates from base64-encoded P12
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
+          security import $RUNNER_TEMP/certificate.p12 -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          rm $RUNNER_TEMP/certificate.p12
+
+          # Add keychain to search list and set as default
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+          security default-keychain -s "$KEYCHAIN_PATH"
+
+          # Allow codesign to access the keychain without prompting
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Store keychain path for cleanup
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+
       - name: Build macOS Installer
         if: runner.os == 'macOS'
         shell: bash
+        env:
+          MACOS_SIGN_APPLICATION: ${{ secrets.MACOS_SIGN_APPLICATION }}
+          MACOS_SIGN_INSTALLER: ${{ secrets.MACOS_SIGN_INSTALLER }}
+          MACOS_NOTARIZE_APPLE_ID: ${{ secrets.MACOS_NOTARIZE_APPLE_ID }}
+          MACOS_NOTARIZE_TEAM_ID: ${{ secrets.MACOS_NOTARIZE_TEAM_ID }}
+          MACOS_NOTARIZE_PASSWORD: ${{ secrets.MACOS_NOTARIZE_PASSWORD }}
         run: |
           cd build-aux/pkg-installer
           VERSION="${TELEPRESENCE_VERSION#v}" ARCH=${{ matrix.arch }} ./build-pkg.sh
           cp ../../build-output/Telepresence.pkg ../../build-output/release/telepresence-darwin-${{ matrix.arch }}.pkg
+
+      - name: Cleanup macOS keychain
+        if: runner.os == 'macOS' && always() && env.KEYCHAIN_PATH != ''
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" || true
       - name: Install nfpm
         if: runner.os == 'Linux'
         shell: bash
