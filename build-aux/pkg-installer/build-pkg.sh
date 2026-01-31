@@ -50,11 +50,13 @@ notarize_package() {
     local pkg="$1"
     if [[ -n "${MACOS_NOTARIZE_APPLE_ID}" && -n "${MACOS_NOTARIZE_TEAM_ID}" && -n "${MACOS_NOTARIZE_PASSWORD}" ]]; then
         echo "Submitting package for notarization: $pkg"
+        # Use --timeout to prevent indefinite waiting (15 minutes should be plenty)
         xcrun notarytool submit "$pkg" \
             --apple-id "${MACOS_NOTARIZE_APPLE_ID}" \
             --team-id "${MACOS_NOTARIZE_TEAM_ID}" \
             --password "${MACOS_NOTARIZE_PASSWORD}" \
-            --wait
+            --wait \
+            --timeout 15m
 
         echo "Stapling notarization ticket to: $pkg"
         xcrun stapler staple "$pkg"
