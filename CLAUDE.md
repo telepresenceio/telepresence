@@ -308,7 +308,17 @@ See the telepresence.io repository for full instructions.
 
 ### macOS Installer Signing and Notarization
 
-The macOS `.pkg` installers are signed and notarized to pass Gatekeeper verification. This requires the following GitHub secrets to be configured:
+The macOS `.pkg` installers are signed and notarized to pass Gatekeeper verification. The signing process uses a protected GitHub Environment to secure the signing credentials.
+
+#### Environment Setup
+
+The `build-macos-pkg` job uses the `macos-signing` environment, which must be configured in the repository settings:
+
+1. Go to https://github.com/telepresenceio/telepresence/settings/environments
+2. Create an environment named `macos-signing`
+3. Enable "Required reviewers" and add authorized personnel
+4. Optionally restrict deployment branches to `release/*`
+5. Add the following secrets to the environment (not repository-level):
 
 | Secret Name | Description |
 |-------------|-------------|
@@ -320,7 +330,21 @@ The macOS `.pkg` installers are signed and notarized to pass Gatekeeper verifica
 | `MACOS_NOTARIZE_TEAM_ID` | Apple Developer Team ID |
 | `MACOS_NOTARIZE_PASSWORD` | App-specific password for notarization |
 
-If these secrets are not configured, packages will be built unsigned (suitable for testing but will trigger Gatekeeper warnings on user machines).
+#### Release Workflow
+
+When a release tag is pushed:
+1. All platform binaries (Linux, Windows, macOS) are built immediately
+2. Linux `.deb`/`.rpm` and Windows `.exe` installers are built
+3. The release is published with all binaries and Linux/Windows installers
+4. The `build-macos-pkg` job waits for approval from a required reviewer
+5. Once approved, signed `.pkg` installers are built and added to the release
+
+This design ensures:
+- **Emergency releases can proceed** without the signing approver being available (all binaries and Linux/Windows installers are released)
+- **Signing credentials are protected** by requiring explicit approval before they are exposed
+- **Signed packages are added later** when the approver reviews and approves the job
+
+If the environment is not configured or never approved, the release will contain macOS standalone binaries but not `.pkg` installers.
 
 #### Obtaining the Certificates
 
