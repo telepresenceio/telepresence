@@ -302,9 +302,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} \
-            build-output/Telepresence.pkg#telepresence-darwin-${{ matrix.arch }}.pkg \
-            --clobber
+          cp build-output/Telepresence.pkg telepresence-darwin-${{ matrix.arch }}.pkg
+          gh release upload ${{ github.ref_name }} telepresence-darwin-${{ matrix.arch }}.pkg --clobber
 
   test-release:
     needs:
