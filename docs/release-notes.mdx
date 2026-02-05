@@ -26,6 +26,13 @@ New Linux package installers (.deb for Debian/Ubuntu and .rpm for Fedora/RHEL) a
 A new Windows installer (.exe) is now available that installs Telepresence with the root daemon configured as a Windows service. The installer bundles WinFSP and SSHFS-Win dependencies for volume mount support, adds Telepresence to the system PATH, and optionally installs the TelepresenceDaemon service. This eliminates the need for elevated privileges when using Telepresence. Currently available for amd64 architecture only due to dependency constraints.
   </Body>
 </Note>
+## Version 2.26.2 <span style={{fontSize:'16px'}}>(February  5)</span>
+<Note>
+	<Title type="bugfix">Fix HTTP intercepts via telepresence compose failing when httpFilters or httpPaths are set</Title>
+	<Body>
+The compose extension set HeaderFilters and PathFilters on the intercept spec but left the mechanism as "tcp". This caused the traffic manager to reject the intercept with "global TCP/UDP intercepts are disabled". The mechanism is now correctly switched to "http" when any HTTP filters are specified, matching the behavior of the CLI intercept command.
+  </Body>
+</Note>
 ## Version 2.26.1 <span style={{fontSize:'16px'}}>(January 26)</span>
 <Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/4043">Add support for "warning" as an alias for "warn" in log levels</Title>
