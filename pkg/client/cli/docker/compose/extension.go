@@ -273,6 +273,9 @@ func (e *httpFilterExtension) amendInterceptSpec(spec *manager.InterceptSpec) er
 	}
 	spec.HeaderFilters = e.HttpFilters
 	spec.PathFilters = intercept.BuildPathFilters(e.Paths, e.PathPrefixes, e.PathRegexps)
+	if len(spec.HeaderFilters) > 0 || len(spec.PathFilters) > 0 {
+		spec.Mechanism = "http"
+	}
 	spec.Metadata = e.Metadata
 	return nil
 }
