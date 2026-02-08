@@ -4,16 +4,26 @@ on:
     types:
       - labeled
 
+permissions:
+  contents: read
+  pull-requests: write
+
 env:
-  TELEPRESENCE_REGISTRY: ghcr.io/telepresenceio
+  TELEPRESENCE_REGISTRY: local
 
 jobs:
-  build_images:
+  build_and_test:
     if: ${{ github.event.label.name == 'ok to test' || github.event.label.name == 'compatibility test' }}
-    runs-on: ubuntu-latest
-    outputs:
-      telepresenceVersion: ${{ steps.version.outputs.version }}
-      telepresenceSemver: ${{ steps.version.outputs.semver }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runners:
+          - ubuntu-latest
+          # Re-enable when we can run a proper cluster. Colima almost works on macOS but the very limited
+          # resources available make the test fail very often. On windows, we'll need WSL2
+          # - macos-latest
+          # - windows-latest
+    runs-on: ${{ matrix.runners }}
     steps:
       - name: Remove ok to test label
         if: github.event.label.name == 'ok to test'
@@ -33,55 +43,14 @@ jobs:
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
       - name: Get Telepresence Version
         id: version
         run: |
           v=$(go run build-aux/genversion/main.go ${{github.run_id}})
           echo "TELEPRESENCE_VERSION=$v" >> "$GITHUB_ENV"
           echo "TELEPRESENCE_SEMVER=${v#v}" >> "$GITHUB_ENV"
-          echo "version=$v" >> $GITHUB_OUTPUT
-          echo "semver=${v#v}" >> $GITHUB_OUTPUT
-      - name: Setup docker buildx
-        uses: docker/setup-buildx-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
-      - name: Build image dependencies
-        run: make images-deps
-      - name: Log in to registry
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - name: Push client image
-        run: |
-          docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=${{env.TELEPRESENCE_SEMVER}} \
-          --push --tag ${{env.TELEPRESENCE_REGISTRY}}/telepresence:${{env.TELEPRESENCE_SEMVER}} -f build-aux/docker/images/Dockerfile.client .
-      - name: Push tel2 image
-        run: |
-          docker buildx build --platform=linux/amd64,linux/arm64 --build-arg TELEPRESENCE_VERSION=${{env.TELEPRESENCE_SEMVER}} \
-          --push --tag ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}} -f build-aux/docker/images/Dockerfile.traffic .
-      - name: Log out from registry
-        if: always()
-        run: docker logout
-
-  run_tests:
-    if: ${{ github.event.label.name == 'ok to test' || github.event.label.name == 'compatibility test' }}
-    strategy:
-      fail-fast: false
-      matrix:
-        runners:
-          - ubuntu-latest
-          # Re-enable when we can run a proper cluster. Colima almost works on macOS but the very limited
-          # resources available make the test fail very often. On windows, we'll need WSL2
-          # - macos-latest
-          # - windows-latest
-    runs-on: ${{ matrix.runners }}
-    needs: build_images
-    env:
-      TELEPRESENCE_VERSION: ${{ needs.build_images.outputs.telepresenceVersion }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: "${{ github.event.pull_request.head.sha }}"
-      - name: install dependencies
-        uses: ./.github/actions/install-dependencies
       - name: Start minikube
         if: runner.os == 'Linux'
         uses: medyagh/setup-minikube@latest
@@ -89,6 +58,12 @@ jobs:
           kubernetes-version: v1.33.5
       - name: Build client
         run: make build
+      - name: Build images
+        run: make client-image tel2-image
+      - name: Load images into minikube
+        run: |
+          minikube image load ${{env.TELEPRESENCE_REGISTRY}}/telepresence:${{env.TELEPRESENCE_SEMVER}}
+          minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
       - name: Run integration tests
         if: github.event.label.name == 'ok to test'
         uses: nick-fields/retry/@v3
@@ -106,6 +81,7 @@ jobs:
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
           DEV_MANAGER_VERSION: "2.24.1"
+          DEV_MANAGER_REGISTRY: ghcr.io/telepresenceio
         uses: nick-fields/retry/@v3
         with:
           max_attempts: 3
@@ -121,6 +97,7 @@ jobs:
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
           DEV_CLIENT_VERSION: "2.24.1"
+          DEV_CLIENT_REGISTRY: ghcr.io/telepresenceio
         uses: nick-fields/retry/@v3
         with:
           max_attempts: 3
@@ -136,30 +113,3 @@ jobs:
         env:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
         if: ${{ always() }}
-  purge_images:
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    permissions:
-      packages: write
-    needs:
-      - build_images
-      - run_tests
-    steps:
-      - name: Delete tel2 and telepresence image
-        uses: dataaxiom/ghcr-cleanup-action@v1
-        continue-on-error: true
-        with:
-          owner: telepresenceio
-          packages: tel2,telepresence
-          token: ${{ secrets.GITHUB_TOKEN }}
-          delete-tags: ${{ needs.build_images.outputs.telepresenceSemver }}
-      - name: Prune tel2 and telepresence
-        uses: dataaxiom/ghcr-cleanup-action@v1
-        with:
-          owner: telepresenceio
-          packages: tel2,telepresence
-          token: ${{ secrets.GITHUB_TOKEN }}
-          delete-untagged: true
-          delete-ghost-images: true
-          delete-partial-images: true
-          delete-orphaned-images: true

@@ -40,15 +40,24 @@ runs:
           brew install jq
         fi
     - if: runner.os == 'Windows'
-      name: setup make and zip
+      name: setup make
       shell: pwsh
       run: |
         # Use make from Git for Windows (pre-installed on runners)
         echo "C:\Program Files\Git\usr\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
-        # Download Info-ZIP (Git for Windows only has unzip, not zip)
-        Invoke-WebRequest -Uri "https://www.willus.com/archive/zip64/infozip_binaries_win32.zip" -OutFile infozip.zip
-        Expand-Archive -Path infozip.zip -DestinationPath C:\infozip
-        echo "C:\infozip" | Out-File -FilePath $env:GITHUB_PATH -Append
+    - if: runner.os == 'Windows'
+      name: download Info-ZIP
+      uses: nick-fields/retry/@v3
+      with:
+        max_attempts: 3
+        timeout_minutes: 1
+        shell: pwsh
+        command: |
+          $ErrorActionPreference = 'Stop'
+          # Download Info-ZIP (Git for Windows only has unzip, not zip)
+          Invoke-WebRequest -Uri "https://www.willus.com/archive/zip64/infozip_binaries_win32.zip" -OutFile infozip.zip
+          Expand-Archive -Path infozip.zip -DestinationPath C:\infozip
+          echo "C:\infozip" | Out-File -FilePath $env:GITHUB_PATH -Append
     - if: runner.os == 'Windows'
       name: download winfsp
       uses: nick-fields/retry/@v3

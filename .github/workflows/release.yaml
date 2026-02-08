@@ -215,6 +215,25 @@ jobs:
           v=${{ github.ref_name }}
           packaging/homebrew-package.sh "${v#v}" "${{ vars.GH_BOT_USER }}" "${{ vars.GH_BOT_EMAIL }}" "${{ secrets.HOMEBREW_TAP_TOKEN }}"
 
+  prune-images:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    needs:
+      - push-images
+    steps:
+      - name: Prune tel2 and telepresence
+        uses: dataaxiom/ghcr-cleanup-action@v1
+        with:
+          owner: telepresenceio
+          packages: tel2,telepresence
+          token: ${{ secrets.GITHUB_TOKEN }}
+          delete-untagged: true
+          delete-ghost-images: true
+          delete-partial-images: true
+          delete-orphaned-images: true
+
   test-release:
     needs:
       - push-images
