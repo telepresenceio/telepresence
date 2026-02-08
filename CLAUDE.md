@@ -195,6 +195,7 @@ Run `make generate` and commit changes to `DEPENDENCY_LICENSES.md` and `DEPENDEN
 - `pkg/agentconfig/` - Traffic-agent configuration
 - `pkg/client/k8s/` - Kubernetes client interactions
 - `pkg/routing/` - Network routing logic
+- `pkg/client/cli/cmd/` - CLI commands. One per file.
 
 ### RPC Definitions
 

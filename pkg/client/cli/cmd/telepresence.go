@@ -2,14 +2,20 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/blang/semver/v4"
 	"github.com/spf13/cobra"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
@@ -17,7 +23,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
 	userDaemon "github.com/telepresenceio/telepresence/v2/pkg/client/userd/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
 // Telepresence returns the top level "telepresence" CLI command.
@@ -29,11 +37,16 @@ func Telepresence(ctx context.Context, args []string) *cobra.Command {
 		longHelp = helpMarkdown
 	}
 	rootCmd := &cobra.Command{
-		Use:               "telepresence",
-		Args:              OnlySubcommands,
-		Short:             "Connect your workstation to a Kubernetes cluster",
-		Long:              longHelp,
-		PersistentPreRunE: output.SetFormat,
+		Use:   "telepresence",
+		Args:  OnlySubcommands,
+		Short: "Connect your workstation to a Kubernetes cluster",
+		Long:  longHelp,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := output.SetFormat(cmd, args); err != nil {
+				return err
+			}
+			return ensureCacheVersion(cmd, args)
+		},
 		RunE:              RunSubcommands,
 		SilenceErrors:     true, // main() will handle it after .ExecuteContext() returns
 		SilenceUsage:      true, // our FlagErrorFunc will handle it
@@ -229,4 +242,38 @@ func autocompleteContext(cmd *cobra.Command, _ []string, toComplete string) ([]s
 		i++
 	}
 	return nss, cobra.ShellCompDirectiveNoFileComp
+}
+
+type versionFile struct {
+	Version semver.Version `json:"version"`
+}
+
+func ensureCacheVersion(cmd *cobra.Command, _ []string) error {
+	ctx := cmd.Context()
+	var vf versionFile
+	majorMinorMatch := false
+	if err := cache.LoadFromUserCache(ctx, &vf, "version.json"); err == nil {
+		majorMinorMatch = vf.Version.Major == version.Structured.Major && vf.Version.Minor == version.Structured.Minor
+		if majorMinorMatch {
+			return nil
+		}
+	}
+
+	// Quit all daemons (best effort, ignore errors).
+	connect.Quit(ctx)
+
+	// Clear cache except logs.
+	cacheDir := filelocation.AppUserCacheDir(ctx)
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.Name() == "logs" {
+			continue
+		}
+		_ = os.RemoveAll(filepath.Join(cacheDir, entry.Name()))
+	}
+
+	return cache.SaveToUserCache(ctx, &versionFile{Version: version.Structured}, "version.json", cache.Public)
 }
