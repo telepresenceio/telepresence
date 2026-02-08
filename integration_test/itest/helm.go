@@ -260,15 +260,16 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	}
 
 	vx.Image = GetImage(ctx)
-	if !s.isCI && s.ManagerVersion().EQ(s.ClientVersion()) {
-		pp := "Always"
+	if s.ManagerVersion().EQ(s.ClientVersion()) {
 		if s.ManagerRegistry() == "local" {
 			// Using minikube with local images.
 			// They are automatically present and must not be pulled.
-			pp = "Never"
+			vx.Image.PullPolicy = "Never"
+			vx.Agent.Image.PullPolicy = "Never"
+		} else if !s.isCI {
+			vx.Image.PullPolicy = "Always"
+			vx.Agent.Image.PullPolicy = "Always"
 		}
-		vx.Image.PullPolicy = pp
-		vx.Agent.Image.PullPolicy = pp
 	}
 
 	ss, err := yaml.Marshal(&vx)
