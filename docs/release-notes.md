@@ -20,11 +20,17 @@ New Linux package installers (.deb for Debian/Ubuntu and .rpm for Fedora/RHEL) a
 A new Windows installer (.exe) is now available that installs Telepresence with the root daemon configured as a Windows service. The installer bundles WinFSP and SSHFS-Win dependencies for volume mount support, adds Telepresence to the system PATH, and optionally installs the TelepresenceDaemon service. This eliminates the need for elevated privileges when using Telepresence. Currently available for amd64 architecture only due to dependency constraints.
 </div>
 
-## Version 2.26.2 <span style="font-size: 16px;">(February  5)</span>
+## Version 2.26.2
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Fix HTTP intercepts via telepresence compose failing when httpFilters or httpPaths are set</div></div>
 <div style="margin-left: 15px">
 
 The compose extension set HeaderFilters and PathFilters on the intercept spec but left the mechanism as "tcp". This caused the traffic manager to reject the intercept with "global TCP/UDP intercepts are disabled". The mechanism is now correctly switched to "http" when any HTTP filters are specified, matching the behavior of the CLI intercept command.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Fix "root daemon is embedded" error on Windows elevated terminals](https://github.com/telepresenceio/telepresence/issues/4049)</div></div>
+<div style="margin-left: 15px">
+
+When running Telepresence in an elevated (administrator) terminal on Windows, commands like connect and loglevel failed with "root daemon is embedded". The user daemon now correctly delegates to the in-process root daemon session instead of returning an error.
 </div>
 
 ## Version 2.26.1 <span style="font-size: 16px;">(January 26)</span>
