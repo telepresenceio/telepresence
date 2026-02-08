@@ -448,6 +448,9 @@ func (s *service) TrafficManagerVersion(ctx context.Context, _ *empty.Empty) (vi
 }
 
 func (s *service) RootDaemonVersion(ctx context.Context, empty *empty.Empty) (vi *common.VersionInfo, err error) {
+	if s.rootSessionInProc {
+		return client.VersionInfo(ctx), nil
+	}
 	err = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
 		vi, err = rd.Version(s, empty)
 		return err
@@ -631,6 +634,12 @@ func (s *service) RerouteRemotePort(ctx context.Context, request *daemon.Reroute
 }
 
 func (s *service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {
+	s.sessionLock.RLock()
+	defer s.sessionLock.RUnlock()
+	if s.session != nil {
+		return s.session.WithRootClient(ctx, f)
+	}
+
 	if s.rootSessionInProc {
 		return status.Error(codes.Unavailable, "root daemon is embedded")
 	}
