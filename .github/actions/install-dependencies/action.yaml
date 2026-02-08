@@ -53,6 +53,7 @@ runs:
         timeout_minutes: 1
         shell: pwsh
         command: |
+          $ErrorActionPreference = 'Stop'
           # Download Info-ZIP (Git for Windows only has unzip, not zip)
           Invoke-WebRequest -Uri "https://www.willus.com/archive/zip64/infozip_binaries_win32.zip" -OutFile infozip.zip
           Expand-Archive -Path infozip.zip -DestinationPath C:\infozip
