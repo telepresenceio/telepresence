@@ -219,7 +219,7 @@ func (il *InfoLoader[T]) DialDaemon(ctx context.Context, waitForConnect bool) (c
 }
 
 func dialDaemon(ctx context.Context, name string, port uint16) (conn *grpc.ClientConn, err error) {
-	conn, err = grpcClient.DialGRPC(ctx, fmt.Sprintf(":%d", port),
+	conn, err = grpcClient.DialGRPC(ctx, fmt.Sprintf("127.0.0.1:%d", port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy())
 	if err != nil {
