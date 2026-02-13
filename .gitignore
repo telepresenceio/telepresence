@@ -51,3 +51,4 @@ fuseftp.bits
 # Vagrant
 .vagrant/
 tests.log
+/.claude/settings.local.json

@@ -70,6 +70,11 @@ func ClientImage(ctx context.Context) string {
 
 // DaemonOptions returns the options necessary to pass to a docker run when starting a daemon container.
 func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, daemonPortOnHost uint16) (opts []string, err error) {
+	ipv6, err := UseIPv6(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ap := daemonAddr(ipv6)
 	opts = []string{
 		"--name", daemonID.ContainerName(),
 		"--cap-add", "NET_ADMIN",
@@ -77,7 +82,7 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, daemonPortO
 		"--pid", "host",
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
-		"-p", fmt.Sprintf("%d:%d/tcp", daemonPortOnHost, client.GetConfig(ctx).Grpc().DaemonPort),
+		"-p", fmt.Sprintf("%s:%d/tcp", netip.AddrPortFrom(ap, daemonPortOnHost), client.GetConfig(ctx).Grpc().DaemonPort),
 		"-v", fmt.Sprintf("%s:%s:ro", filepath.Dir(client.GetConfigFile(ctx)), DockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), TpCache),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserLogDir(ctx), DockerTpLog),
@@ -90,10 +95,6 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, daemonPortO
 		opts = append(opts, "--hostname", cr.Hostname)
 	}
 	opts, err = appendOSSpecificContainerOpts(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	ipv6, err := UseIPv6(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -129,13 +130,16 @@ func ConnectDaemon(ctx context.Context, info *daemon.Info) (conn *grpc.ClientCon
 	if err != nil {
 		return nil, err
 	}
-	var addr netip.Addr
+	return grpc.NewClient(
+		netip.AddrPortFrom(daemonAddr(ipv6), info.DaemonPort).String(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithNoProxy())
+}
+
+func daemonAddr(ipv6 bool) netip.Addr {
 	if ipv6 {
-		addr = netip.IPv6Loopback()
-	} else {
-		addr = netip.AddrFrom4([4]byte{127, 0, 0, 1})
+		return netip.IPv6Loopback()
 	}
-	return grpc.NewClient(netip.AddrPortFrom(addr, info.DaemonPort).String(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithNoProxy())
+	return netip.AddrFrom4([4]byte{127, 0, 0, 1})
 }
 
 const (
