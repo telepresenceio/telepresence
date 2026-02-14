@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.27.0
-    date: 2026-02-14
+    date: (TBD)
     notes:
       - type: feature
         title: Add macOS package installer with root daemon as a system service
