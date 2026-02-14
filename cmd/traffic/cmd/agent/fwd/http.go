@@ -40,6 +40,9 @@ func (f *tcp) protocols(ctx context.Context, plainText bool) *http.Protocols {
 func (f *tcp) configureTransport(ctx context.Context, plainText bool) *http.Transport {
 	trn := http.DefaultTransport.(*http.Transport).Clone()
 	trn.Protocols = f.protocols(ctx, plainText)
+	if trn.Protocols.UnencryptedHTTP2() {
+		trn.Protocols.SetHTTP1(false)
+	}
 	return trn
 }
 
@@ -177,15 +180,11 @@ func shouldInterceptRequest(req *http.Request, headerFilters map[string]string, 
 	return matcher.NewRequest(pathFilters, headerFilters).Matches(req)
 }
 
-func (f *tcp) configureUpstreamTransport(ctx context.Context, requestProto int, plaintext bool) *http.Transport {
+func (f *tcp) configureUpstreamTransport(ctx context.Context, plaintext bool) *http.Transport {
 	tm := f.tlsManager
 	tp := f.Target().Port()
 	trn := f.configureTransport(ctx, plaintext)
 	if plaintext {
-		if requestProto == 2 && trn.Protocols.UnencryptedHTTP2() {
-			// Force upstream use of clear-text HTTP/2
-			trn.Protocols.SetHTTP1(false)
-		}
 		return trn
 	}
 	if tm == nil || !tm.UseTLS(ctx, tp) {
@@ -215,7 +214,7 @@ func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer
 		ingressBytes = tunnel.NewCounterProbe("FromClientBytes")
 		egressBytes = tunnel.NewCounterProbe("ToClientBytes")
 	}
-	trn := f.configureUpstreamTransport(ctx, request.ProtoMajor, spec.Plaintext)
+	trn := f.configureUpstreamTransport(ctx, spec.Plaintext)
 	trn.DialContext = func(context.Context, string, string) (net.Conn, error) {
 		s, err := f.createStream(ctx, src, ii)
 		if err != nil {

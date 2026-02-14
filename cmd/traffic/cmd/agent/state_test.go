@@ -26,9 +26,11 @@ const (
 var appTarget = netip.AddrPortFrom(netip.MustParseAddr("192.168.1.100"), appPort)
 
 func makeFS(t *testing.T, ctx context.Context) (fwd.Interceptor, agent.State) {
+	ctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
 	f := fwd.NewInterceptor(ctx, types.PortAndProto{Proto: types.ProtoTCP, Port: 1111}, tunnel.AgentToProxied, appTarget)
 	go func() {
-		if err := f.Serve(context.Background(), nil); err != nil {
+		if err := f.Serve(ctx, nil); err != nil {
 			clog.Error(ctx, err)
 		}
 	}()
