@@ -54,7 +54,7 @@ cp "${BINDIR}/telepresence.exe" "${ZIPDIR}/telepresence.exe"
 # Copy powershell install script into $ZIPDIR
 cp "${SCRIPT_DIR}/install-telepresence.ps1" "${ZIPDIR}/install-telepresence.ps1"
 
-zip -r -j "${BINDIR}/telepresence.zip" "${ZIPDIR}"
+powershell -Command "Compress-Archive -Path '${ZIPDIR}/*' -DestinationPath '${BINDIR}/telepresence.zip'"
 
 # Generate installer
 cp "${SCRIPT_DIR}/sidebar.png" "${ZIPDIR}/sidebar.png"

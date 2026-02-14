@@ -56,6 +56,14 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Dial 127.0.0.1 instead of 0.0.0.0 when connecting to local daemons
+        body: >-
+          When a VPN routes all private network addresses, dialing 0.0.0.0 gets routed through the VPN instead
+          of reaching the locally running daemon. This causes Telepresence to report that no daemon is running
+          even though the processes are active and listening. The client now dials 127.0.0.1 explicitly, and
+          the Docker-published daemon port is bound to 127.0.0.1 to match.
+        docs: https://github.com/telepresenceio/telepresence/issues/4048
+      - type: bugfix
         title: Fix HTTP intercepts via telepresence compose failing when httpFilters or httpPaths are set
         body: >-
           The compose extension set HeaderFilters and PathFilters on the intercept spec but left the mechanism as "tcp".
