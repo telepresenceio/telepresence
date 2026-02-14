@@ -22,6 +22,9 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
+
+	clientfeatures "k8s.io/client-go/features"
+	clientfeaturestesting "k8s.io/client-go/features/testing"
 	"sigs.k8s.io/yaml"
 
 	argorolloutsfake "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned/fake"
@@ -55,6 +58,9 @@ func stringP(s string) *string {
 const mgrNs = "default"
 
 func TestTrafficAgentConfigGenerator(t *testing.T) {
+	// The fake clientset doesn't support the WatchListClient feature (no bookmark events),
+	// which is enabled by default in client-go v0.35+. Disable it for this test.
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	managerConfig := core.ConfigMap{
 		ObjectMeta: meta.ObjectMeta{
 			Name:      agentconfig.ManagerAppName,
@@ -888,6 +894,7 @@ matchExpressions:
 }
 
 func TestTrafficAgentInjector(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	one := int32(1)
 	managerConfig := core.ConfigMap{
 		ObjectMeta: meta.ObjectMeta{
