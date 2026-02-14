@@ -41,10 +41,10 @@ jobs:
         if: runner.os == 'Windows' && matrix.arch == 'amd64'
         shell: pwsh
         run: |
-          dotnet tool install --global wix
-          wix extension add -g WixToolset.BootstrapperApplications.wixext
-          wix extension add -g WixToolset.UI.wixext
-          wix extension add -g WixToolset.Util.wixext
+          dotnet tool install --global wix --version 6.0.2
+          wix extension add -g WixToolset.BootstrapperApplications.wixext/6.0.2
+          wix extension add -g WixToolset.UI.wixext/6.0.2
+          wix extension add -g WixToolset.Util.wixext/6.0.2
       - name: Build WiX Installer
         if: runner.os == 'Windows' && matrix.arch == 'amd64'
         shell: bash
