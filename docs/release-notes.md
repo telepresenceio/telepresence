@@ -39,6 +39,12 @@ The compose extension set HeaderFilters and PathFilters on the intercept spec bu
 When running Telepresence in an elevated (administrator) terminal on Windows, commands like connect and loglevel failed with "root daemon is embedded". The user daemon now correctly delegates to the in-process root daemon session instead of returning an error.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Fix h2c (HTTP/2 cleartext) prior knowledge not working on transport](https://github.com/telepresenceio/telepresence/issues/4056)</div></div>
+<div style="margin-left: 15px">
+
+Since Go 1.24, having both HTTP1 and UnencryptedHTTP2 enabled on an HTTP transport causes Go to default to HTTP/1.1 instead of using h2c prior knowledge. The transport now explicitly disables HTTP1 when UnencryptedHTTP2 is enabled, fixing h2c communication for both the default forwarding handler and intercepted traffic.
+</div>
+
 ## Version 2.26.1 <span style="font-size: 16px;">(January 26)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Add support for "warning" as an alias for "warn" in log levels](https://github.com/telepresenceio/telepresence/issues/4043)</div></div>
 <div style="margin-left: 15px">
