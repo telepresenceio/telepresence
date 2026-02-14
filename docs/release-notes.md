@@ -21,6 +21,12 @@ A new Windows installer (.exe) is now available that installs Telepresence with 
 </div>
 
 ## Version 2.26.2
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Dial 127.0.0.1 instead of 0.0.0.0 when connecting to local daemons](https://github.com/telepresenceio/telepresence/issues/4048)</div></div>
+<div style="margin-left: 15px">
+
+When a VPN routes all private network addresses, dialing 0.0.0.0 gets routed through the VPN instead of reaching the locally running daemon. This causes Telepresence to report that no daemon is running even though the processes are active and listening. The client now dials 127.0.0.1 explicitly, and the Docker-published daemon port is bound to 127.0.0.1 to match.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Fix HTTP intercepts via telepresence compose failing when httpFilters or httpPaths are set</div></div>
 <div style="margin-left: 15px">
 
