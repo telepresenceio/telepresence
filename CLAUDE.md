@@ -11,6 +11,7 @@ Telepresence is a Kubernetes development tool that enables fast local developmen
 - Never commit directly to the `release/v2` branch. Always create a feature branch with a name following the pattern `username/topic` (e.g., `thallgren/fix-dns-resolution`).
 - All commits must be signed and signed-off (`git commit -s -S`).
 - Push the branch and create a pull request for review.
+- Always merge PRs with a merge commit (never squash or rebase).
 
 ## Build Artifacts
 
