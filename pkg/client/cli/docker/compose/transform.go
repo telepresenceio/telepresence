@@ -195,6 +195,7 @@ func (t *transformer) runCompose(ctx context.Context, name, composeFile string, 
 		return t.runAttachedUp(ctx, composeFile, opts)
 	}
 	cmd := proc.StdCommand(ctx, docker.Exe, append(opts, t.config.services...)...)
+	cmd.Stdin = dos.Stdin(ctx)
 	cmd.Env = os.Environ()
 	return cmd.Run()
 }
