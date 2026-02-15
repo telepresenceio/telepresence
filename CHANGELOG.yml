@@ -59,6 +59,13 @@ items:
           that the major.minor version differs from the running binary, it automatically quits running daemons and
           clears stale cache entries (preserving logs). This prevents issues caused by leftover cache files from a
           previous version. Patch and pre-release version changes do not trigger a cache cleanup.
+      - type: bugfix
+        title: Cluster DNS not injected into containers started by telepresence compose
+        body: >-
+          When using <code>telepresence compose up</code>, cluster hostnames did not resolve inside the compose 
+          container because the daemon DNS IP and the tel2-search DNS search domain were not being added to the
+          generated compose spec. DNS and dns_search are now correctly set for all engaged compose services.
+        docs: https://github.com/telepresenceio/telepresence/issues/4053
   - version: 2.26.2
     date: 2026-02-14
     notes:
