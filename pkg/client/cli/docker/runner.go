@@ -193,7 +193,7 @@ func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, 
 				ourArgs = append(ourArgs, "--mount", fmt.Sprintf("type=bind,src=%s,dst=%s%s", filepath.Join(s.Mount.LocalDir, path), path, ro))
 			}
 		}
-		ourArgs = append(ourArgs, "--dns-search", "tel2-search")
+		ourArgs = append(ourArgs, "--dns-search", client.Tel2SubDomain)
 	} else {
 		maps.DeleteFunc(mounts, func(s string, policy types.MountPolicy) bool {
 			return policy == types.MountPolicyIgnore || policy == types.MountPolicyLocal

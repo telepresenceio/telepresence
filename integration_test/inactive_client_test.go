@@ -38,7 +38,7 @@ func init() {
 			Suite:                itest.Suite{Harness: h},
 			NamespacePair:        h,
 			svc:                  "echo-easy",
-			inactiveBlockTimeout: 6 * time.Second,
+			inactiveBlockTimeout: 10 * time.Second,
 			pingInterval:         2 * time.Second,
 		}
 	})

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
@@ -114,7 +115,7 @@ func (s *Server) updateResolverFiles(c context.Context, resolverDirName string, 
 	}
 	clusterDomain := strings.TrimSuffix(s.clusterDomain, ".")
 	domains[clusterDomain] = newDomainResolveFile(clusterDomain)
-	domains[tel2SubDomain] = newDomainResolveFile(tel2SubDomain)
+	domains[client.Tel2SubDomain] = newDomainResolveFile(client.Tel2SubDomain)
 
 nextSearch:
 	for _, search := range s.search {

@@ -37,7 +37,7 @@ const (
 
 	// sanityCheck is the query used when verifying that a DNS query reaches our DNS server. It should result
 	// in an increase of the requestCount but always yield an NXDOMAIN reply.
-	santiyCheck    = "jhfweoitnkgyeta." + tel2SubDomain
+	santiyCheck    = "jhfweoitnkgyeta." + client.Tel2SubDomain
 	santiyCheckDot = santiyCheck + "."
 
 	// dnsTTL is the number of seconds that a found DNS record should be allowed to live in the callers cache. We
@@ -159,7 +159,7 @@ func NewServer(config *client.DNS, namespace string, clusterLookup Resolver) *Se
 		routes:          make(map[string]struct{}),
 		domains:         make(map[string]struct{}),
 		dropSuffixes:    []string{tel2SubDomainDot},
-		search:          []string{tel2SubDomain},
+		search:          []string{client.Tel2SubDomain},
 		nsAndDomainsCh:  make(chan nsAndDomains, 5),
 		clusterDomain:   defaultClusterDomain,
 		namespaceDomain: namespace + ".",
@@ -183,8 +183,7 @@ func NewServer(config *client.DNS, namespace string, clusterLookup Resolver) *Se
 // the query. We then strip the "tel2-search" and send the original single label name to the
 // cluster, and we add it back before we forward the reply.
 const (
-	tel2SubDomain    = "tel2-search"
-	tel2SubDomainDot = tel2SubDomain + "."
+	tel2SubDomainDot = client.Tel2SubDomain + "."
 )
 
 // excludePrefixes are prefixes for name queries that we just want to respond NXNAME to
@@ -524,7 +523,7 @@ func (s *Server) processSearchPaths(g log.Group, processor func(context.Context,
 				// The connected namespace must be included as a search path for the cases
 				// where it's up to the traffic-manager to resolve. It cannot resolve a single
 				// label name intended for other namespaces.
-				s.search = []string{tel2SubDomain, das.namespace}
+				s.search = []string{client.Tel2SubDomain, das.namespace}
 				s.Unlock()
 
 				if err := processor(c, dev); err != nil {
@@ -778,7 +777,7 @@ func (s *Server) performRecursionCheck(c context.Context) {
 		clog.Debug(c, "Recursion check finished")
 		s.readyClose.Do(func() { close(s.ready) })
 	}()
-	rc := recursionCheck + tel2SubDomain
+	rc := recursionCheck + client.Tel2SubDomain
 	clog.Debugf(c, "Performing initial recursion check with %s", rc)
 	i := 0
 	atomic.StoreInt32(&s.recursive, recursionQueryNotYetReceived)
