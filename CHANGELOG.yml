@@ -52,6 +52,13 @@ items:
           the need for elevated privileges when using Telepresence. Currently available for amd64 architecture only
           due to dependency constraints.
         docs: install/client
+      - type: feature
+        title: Automatic cache cleanup on version change
+        body: >-
+          Telepresence now tracks its version in a version.json file in the cache directory. When the CLI detects
+          that the major.minor version differs from the running binary, it automatically quits running daemons and
+          clears stale cache entries (preserving logs). This prevents issues caused by leftover cache files from a
+          previous version. Patch and pre-release version changes do not trigger a cache cleanup.
   - version: 2.26.2
     date: 2026-02-14
     notes:

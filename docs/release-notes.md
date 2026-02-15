@@ -20,6 +20,12 @@ New Linux package installers (.deb for Debian/Ubuntu and .rpm for Fedora/RHEL) a
 A new Windows installer (.exe) is now available that installs Telepresence with the root daemon configured as a Windows service. The installer bundles WinFSP and SSHFS-Win dependencies for volume mount support, adds Telepresence to the system PATH, and optionally installs the TelepresenceDaemon service. This eliminates the need for elevated privileges when using Telepresence. Currently available for amd64 architecture only due to dependency constraints.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Automatic cache cleanup on version change</div></div>
+<div style="margin-left: 15px">
+
+Telepresence now tracks its version in a version.json file in the cache directory. When the CLI detects that the major.minor version differs from the running binary, it automatically quits running daemons and clears stale cache entries (preserving logs). This prevents issues caused by leftover cache files from a previous version. Patch and pre-release version changes do not trigger a cache cleanup.
+</div>
+
 ## Version 2.26.2 <span style="font-size: 16px;">(February 14)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Dial 127.0.0.1 instead of 0.0.0.0 when connecting to local daemons](https://github.com/telepresenceio/telepresence/issues/4048)</div></div>
 <div style="margin-left: 15px">
