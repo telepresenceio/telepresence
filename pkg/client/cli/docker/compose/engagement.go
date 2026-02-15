@@ -12,6 +12,7 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -102,6 +103,13 @@ func (a *engagement) maybeAddConnection(s *compose.ServiceConfig) bool {
 
 func (a *engagement) engageService(s *compose.ServiceConfig) {
 	a.maybeAddConnection(s)
+	dnsIP := a.connection().dnsIP
+	if ipS := dnsIP.String(); !slices.Contains(s.DNS, ipS) {
+		s.DNS = append(s.DNS, ipS)
+	}
+	if !slices.Contains(s.DNSSearch, client.Tel2SubDomain) {
+		s.DNSSearch = append(s.DNSSearch, client.Tel2SubDomain)
+	}
 	env := a.environment
 	if len(env) > 0 {
 		if s.Environment == nil {
@@ -126,6 +134,7 @@ func (a *engagement) engageProxyDependents(p *compose.Project, n string, depende
 	conn := a.connection()
 	sm := p.Services
 
+	dnsIP := a.connection().dnsIP.String()
 	for _, d := range dependents {
 		// Dependent services need a new DNS for the proxy, and also the network
 		// that routes its IP.
@@ -144,8 +153,11 @@ func (a *engagement) engageProxyDependents(p *compose.Project, n string, depende
 				ds.ExtraHosts = extraHosts
 			}
 		}
-		if ipS := a.daemonIP.String(); !slices.Contains(ds.DNS, ipS) {
-			ds.DNS = append(ds.DNS, ipS)
+		if !slices.Contains(ds.DNS, dnsIP) {
+			ds.DNS = append(ds.DNS, dnsIP)
+		}
+		if !slices.Contains(ds.DNSSearch, client.Tel2SubDomain) {
+			ds.DNSSearch = append(ds.DNSSearch, client.Tel2SubDomain)
 		}
 		// A proxied service is simply removed from the compose-spec along with any dependents.
 		delete(ds.DependsOn, n)

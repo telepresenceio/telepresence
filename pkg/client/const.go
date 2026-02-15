@@ -63,3 +63,5 @@ var ProcessName = func() string { //nolint:gochecknoglobals // extension point
 	}
 	return pn
 }
+
+const Tel2SubDomain = "tel2-search"

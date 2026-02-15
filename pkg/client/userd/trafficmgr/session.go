@@ -689,7 +689,9 @@ func (s *session) remainLoop(_ context.Context) error {
 func (s *session) CheckStatus(cr *rpc.ConnectRequest) error {
 	config, err := k8s.DaemonKubeconfig(s, cr)
 	if err != nil {
-		return err
+		// Treat an incomplete request as OK. It stems from an implicit
+		// connect that doesn't define a kubeconfig at all.
+		config = s.Kubeconfig
 	}
 	if len(cr.MappedNamespaces) == 1 && cr.MappedNamespaces[0] == "all" {
 		cr.MappedNamespaces = nil

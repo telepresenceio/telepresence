@@ -10,9 +10,9 @@ import (
 
 	compose "github.com/compose-spec/compose-go/v2/types"
 
-	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -30,6 +30,7 @@ type connectionConfig struct {
 type connection struct {
 	context.Context
 	*connectionConfig
+	dnsIP   netip.Addr
 	subnets []netip.Prefix
 	proxies map[string]netip.Addr
 }
@@ -98,7 +99,7 @@ func (cc *connectionConfig) Connect(ctx context.Context, es map[string]serviceEx
 		return nil, err
 	}
 	defer func() {
-		if err != nil {
+		if err != nil && !mustPreExist {
 			connect.Disconnect(ctx)
 		}
 	}()
@@ -110,14 +111,19 @@ func (cc *connectionConfig) Connect(ctx context.Context, es map[string]serviceEx
 	ds := daemon.MustGetSession(ctx)
 	rootCfg, err := daemon.GetRootClientConfig(ds.Info.DaemonStatus)
 	if err != nil {
-		clog.Errorf(ctx, "unable to obtain routing info for connection: %v", err)
+		return nil, fmt.Errorf("unable to obtain routing info for connection: %w", err)
+	}
+
+	dns, _, err := docker.GetDaemonContainerNetworkInfo(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	proxies, err := cc.resolveProxies(ctx, ds, es)
 	if err != nil {
 		return nil, err
 	}
-	return &connection{Context: ctx, connectionConfig: cc, proxies: proxies, subnets: rootCfg.Routing().Subnets}, nil
+	return &connection{Context: ctx, connectionConfig: cc, dnsIP: dns, proxies: proxies, subnets: rootCfg.Routing().Subnets}, nil
 }
 
 // resolveProxies resolves the name of the proxy definition into its remote service IP. This IP will then be
