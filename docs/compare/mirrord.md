@@ -9,7 +9,7 @@ Telepresence is a very feature rich tool, designed to handle a large majority of
 
 Telepresence is intended to be installed in the cluster by an administrator and then let clients connect with a very limited set of permissions. This model is generally required by larger companies.
 
-The client can be either completely contained in Docker or run directly on the workstation. The latter will require the creation of a virtual network device, and hence admin access.
+The client can be either completely contained in Docker or run directly on the workstation. The latter requires the creation of a virtual network device, but admin access is not needed when Telepresence is installed using a package installer that configures the root daemon as a system service.
 
 ## mirrord
 
@@ -70,7 +70,7 @@ This comparison chart applies to the Open Source editions of both products.
 | Installed using a JSON-schema validated Helm chart                           | ✅            | ❌       |
 | Client need no special RBAC permissions                                      | ✅            | ❌       |
 
-[^1]: Telepresence will not require root access on the workstation when running in docker mode.
+[^1]: Telepresence does not require root access on the workstation when installed using a package installer (which configures the root daemon as a system service) or when running in docker mode.
 
 [^2]: The remote service will only restart when a traffic-agent sidecar is installed. Pod disruption budgets or pre-installed agents can be used to avoid interruptions.
 

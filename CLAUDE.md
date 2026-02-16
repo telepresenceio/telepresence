@@ -153,6 +153,8 @@ make docs-files
 
 **Important:** After modifying `CHANGELOG.yml`, always run `make docs-files` to regenerate documentation files (`docs/release-notes.md`, `docs/release-notes.mdx`, `docs/variables.yml`).
 
+**Important:** All files under `docs/reference/cli/` are generated from Go source code. Do not edit them directly; instead, modify the corresponding Go source and regenerate.
+
 ### Updating License Documentation
 
 Run `make generate` and commit changes to `DEPENDENCY_LICENSES.md` and `DEPENDENCIES.md`.
