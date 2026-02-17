@@ -17,6 +17,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
+// interceptSnapshot holds an interceptController with its InterceptInfo captured at a point in time.
+// This prevents race conditions where the InterceptInfo pointer could be updated by reconcile()
+// while using it, leading to inconsistent TargetPort values and other data races.
+type interceptSnapshot struct {
+	ic   *interceptController
+	info *manager.InterceptInfo
+}
+
 type tcp struct {
 	*interceptor
 	tlsManager     tls.Manager
@@ -98,16 +106,17 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 	f.mu.Lock()
 	intercept, err := f.intercepts.global()
 	wtIntercepts := f.wiretaps.sorted()
-	// Copy InterceptInfo while holding mutex to avoid race condition.
-	// The InterceptInfo pointer in interceptController can be updated by reconcile()
-	// while using it, leading to inconsistent TargetPort values.
-	var interceptInfo *manager.InterceptInfo
+
+	// Create snapshots with captured InterceptInfo to avoid race condition.
+	// reconcile() can update the InterceptInfo pointer concurrently, so we capture
+	// it while holding the mutex to ensure consistent values throughout the connection.
+	var interceptSnap *interceptSnapshot
 	if intercept != nil {
-		interceptInfo = intercept.InterceptInfo
+		interceptSnap = &interceptSnapshot{ic: intercept, info: intercept.InterceptInfo}
 	}
-	wtInterceptInfos := make([]*manager.InterceptInfo, len(wtIntercepts))
+	wtSnapshots := make([]interceptSnapshot, len(wtIntercepts))
 	for i, wt := range wtIntercepts {
-		wtInterceptInfos[i] = wt.InterceptInfo
+		wtSnapshots[i] = interceptSnapshot{ic: wt, info: wt.InterceptInfo}
 	}
 	f.mu.Unlock()
 	if err != nil {
@@ -116,41 +125,30 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 
 	ctx = clog.With(ctx, "client", clientConn.RemoteAddr().String())
 	if f.Target().Port() > 0 {
-		if tapCount := len(wtIntercepts); tapCount > 0 {
+		if tapCount := len(wtSnapshots); tapCount > 0 {
 			var taps []net.Conn
 			clog.Debugf(ctx, "forwarding to %d wiretaps", tapCount)
 			clientConn, taps = addConnectionTaps(ctx, clientConn, tapCount, wiretapCacheSize)
 			wg := sync.WaitGroup{}
 			wg.Add(tapCount)
 			defer wg.Wait()
-			for i, ii := range wtIntercepts {
-				// Use the InterceptInfo captured under mutex
-				wiretapInfo := wtInterceptInfos[i]
-				go func(conn net.Conn, ic *interceptController, info *manager.InterceptInfo) {
+			for i, snap := range wtSnapshots {
+				go func(conn net.Conn, snap interceptSnapshot) {
 					defer wg.Done()
-					clog.Debugf(ctx, "wiretap to %d", info.Spec.TargetPort)
-					err := f.interceptConnWithInfo(conn, ic, info)
+					clog.Debugf(ctx, "wiretap to %d", snap.info.Spec.TargetPort)
+					err := f.interceptConnWithInfo(conn, snap.ic, snap.info)
 					if err != nil {
 						clog.Errorf(ctx, "wiretap ended with error: %v", err)
 					}
-				}(taps[i], ii, wiretapInfo)
+				}(taps[i], snap)
 			}
 		}
 	}
-	if intercept != nil {
+	if interceptSnap != nil {
 		defer clientConn.Close()
-		// Use the InterceptInfo captured under mutex
-		return f.interceptConnWithInfo(clientConn, intercept, interceptInfo)
+		return f.interceptConnWithInfo(clientConn, interceptSnap.ic, interceptSnap.info)
 	}
 	return f.Forwarder.Forward(ctx, clientConn)
-}
-
-func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
-	// For backwards compatibility, capture InterceptInfo under mutex
-	f.mu.Lock()
-	ii := ic.InterceptInfo
-	f.mu.Unlock()
-	return f.interceptConnWithInfo(conn, ic, ii)
 }
 
 // interceptConnWithInfo handles the intercept connection with a pre-captured InterceptInfo.

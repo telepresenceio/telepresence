@@ -113,13 +113,6 @@ func (f *tcp) acceptHTTPLoop(ctx context.Context, listener net.Listener) {
 	}
 }
 
-// interceptSnapshot holds an interceptController with its InterceptInfo captured at a point in time.
-// This prevents race conditions where InterceptInfo pointer could be updated while using it.
-type interceptSnapshot struct {
-	ic   *interceptController
-	info *manager.InterceptInfo
-}
-
 func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, defaultHandler http.Handler) {
 	// Copy wiretaps and intercepts to avoid holding a lock during request processing.
 	// Also capture InterceptInfo pointers while holding the mutex to avoid race condition

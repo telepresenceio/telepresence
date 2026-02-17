@@ -47,6 +47,9 @@ func (im interceptControllerMap) reconcile(ctx context.Context, iis []*manager.I
 	for _, ii := range iis {
 		ic, ok := im[ii.Id]
 		if ok {
+			// IMPORTANT: This pointer assignment can race with readers in Forward() and handleHTTPRequest().
+			// Those functions must capture InterceptInfo under mutex (using interceptSnapshot) before
+			// releasing the lock to ensure they use consistent values throughout request processing.
 			ic.InterceptInfo = ii
 		} else {
 			ic = &interceptController{InterceptInfo: ii}
