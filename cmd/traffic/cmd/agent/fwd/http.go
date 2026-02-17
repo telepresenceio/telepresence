@@ -113,11 +113,30 @@ func (f *tcp) acceptHTTPLoop(ctx context.Context, listener net.Listener) {
 	}
 }
 
+// interceptSnapshot holds an interceptController with its InterceptInfo captured at a point in time.
+// This prevents race conditions where InterceptInfo pointer could be updated while using it.
+type interceptSnapshot struct {
+	ic   *interceptController
+	info *manager.InterceptInfo
+}
+
 func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, defaultHandler http.Handler) {
-	// Copy wiretaps and intercepts to avoid holding a lock during request processing
+	// Copy wiretaps and intercepts to avoid holding a lock during request processing.
+	// Also capture InterceptInfo pointers while holding the mutex to avoid race condition
+	// where reconcile() might update the pointer concurrently.
 	f.mu.Lock()
 	wtIntercepts := f.wiretaps.sorted()
 	intercepts := f.intercepts.sorted()
+
+	// Create snapshots with captured InterceptInfo
+	wtSnapshots := make([]interceptSnapshot, len(wtIntercepts))
+	for i, ic := range wtIntercepts {
+		wtSnapshots[i] = interceptSnapshot{ic: ic, info: ic.InterceptInfo}
+	}
+	interceptSnapshots := make([]interceptSnapshot, len(intercepts))
+	for i, ic := range intercepts {
+		interceptSnapshots[i] = interceptSnapshot{ic: ic, info: ic.InterceptInfo}
+	}
 	f.mu.Unlock()
 
 	clog.Debugf(f.lCtx, "Handling %s %s %s", req.Proto, req.Method, req.URL.Path)
@@ -128,12 +147,12 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 
 	// Check each intercept to see if it matches this request
 	// No precedence here because taps are not conflicting.
-	if len(wtIntercepts) > 0 {
-		wts := make([]*interceptController, 0, len(wtIntercepts))
-		for _, ic := range wtIntercepts {
-			spec := ic.Spec
+	if len(wtSnapshots) > 0 {
+		wts := make([]interceptSnapshot, 0, len(wtSnapshots))
+		for _, snap := range wtSnapshots {
+			spec := snap.info.Spec
 			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
-				wts = append(wts, ic)
+				wts = append(wts, snap)
 			}
 		}
 		if tapCount := len(wts); tapCount > 0 {
@@ -141,34 +160,37 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 			if err != nil {
 				clog.Errorf(f.lCtx, "Failed to add request taps: %v", err)
 			} else {
-				for i, ii := range wts {
-					f.serveTap(ii.ctx, src, taps[i], ii.InterceptInfo)
+				for i, snap := range wts {
+					// Use the captured InterceptInfo from snapshot
+					f.serveTap(snap.ic.ctx, src, taps[i], snap.info)
 				}
 			}
 		}
 	}
 
 	// Pass 1: Check intercepts with headers (high-priority tier)
-	for _, ic := range intercepts {
-		spec := ic.Spec
+	for _, snap := range interceptSnapshots {
+		spec := snap.info.Spec
 		if len(spec.HeaderFilters) > 0 {
 			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
 				clog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with header-based intercept %s",
-					req.Method, req.URL.Path, ic.Id)
-				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
+					req.Method, req.URL.Path, snap.info.Id)
+				// Use the captured InterceptInfo from snapshot
+				f.serveHTTPIntercept(snap.ic.ctx, src, writer, req, snap.info)
 				return
 			}
 		}
 	}
 
 	// Pass 2: Check intercepts with only paths (low-priority tier)
-	for _, ic := range intercepts {
-		spec := ic.Spec
+	for _, snap := range interceptSnapshots {
+		spec := snap.info.Spec
 		if len(spec.HeaderFilters) == 0 && len(spec.PathFilters) > 0 {
 			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
 				clog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with path-based intercept %s",
-					req.Method, req.URL.Path, ic.Id)
-				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
+					req.Method, req.URL.Path, snap.info.Id)
+				// Use the captured InterceptInfo from snapshot
+				f.serveHTTPIntercept(snap.ic.ctx, src, writer, req, snap.info)
 				return
 			}
 		}

@@ -98,6 +98,17 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 	f.mu.Lock()
 	intercept, err := f.intercepts.global()
 	wtIntercepts := f.wiretaps.sorted()
+	// Copy InterceptInfo while holding mutex to avoid race condition.
+	// The InterceptInfo pointer in interceptController can be updated by reconcile()
+	// while using it, leading to inconsistent TargetPort values.
+	var interceptInfo *manager.InterceptInfo
+	if intercept != nil {
+		interceptInfo = intercept.InterceptInfo
+	}
+	wtInterceptInfos := make([]*manager.InterceptInfo, len(wtIntercepts))
+	for i, wt := range wtIntercepts {
+		wtInterceptInfos[i] = wt.InterceptInfo
+	}
 	f.mu.Unlock()
 	if err != nil {
 		return err
@@ -113,25 +124,39 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 			wg.Add(tapCount)
 			defer wg.Wait()
 			for i, ii := range wtIntercepts {
-				go func(conn net.Conn, intercept *interceptController) {
+				// Use the InterceptInfo captured under mutex
+				wiretapInfo := wtInterceptInfos[i]
+				go func(conn net.Conn, ic *interceptController, info *manager.InterceptInfo) {
 					defer wg.Done()
-					clog.Debugf(ctx, "wiretap to %d", ii.Spec.TargetPort)
-					err := f.interceptConn(conn, intercept)
+					clog.Debugf(ctx, "wiretap to %d", info.Spec.TargetPort)
+					err := f.interceptConnWithInfo(conn, ic, info)
 					if err != nil {
 						clog.Errorf(ctx, "wiretap ended with error: %v", err)
 					}
-				}(taps[i], ii)
+				}(taps[i], ii, wiretapInfo)
 			}
 		}
 	}
 	if intercept != nil {
 		defer clientConn.Close()
-		return f.interceptConn(clientConn, intercept)
+		// Use the InterceptInfo captured under mutex
+		return f.interceptConnWithInfo(clientConn, intercept, interceptInfo)
 	}
 	return f.Forwarder.Forward(ctx, clientConn)
 }
 
 func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
+	// For backwards compatibility, capture InterceptInfo under mutex
+	f.mu.Lock()
+	ii := ic.InterceptInfo
+	f.mu.Unlock()
+	return f.interceptConnWithInfo(conn, ic, ii)
+}
+
+// interceptConnWithInfo handles the intercept connection with a pre-captured InterceptInfo.
+// This ensures that the InterceptInfo used is consistent throughout the connection handling,
+// avoiding race conditions where reconcile() might update the pointer concurrently.
+func (f *tcp) interceptConnWithInfo(conn net.Conn, ic *interceptController, ii *manager.InterceptInfo) error {
 	ctx := ic.ctx
 	srcAddr := conn.RemoteAddr()
 	clog.Debugf(ctx, "Accept got connection from %s", srcAddr)
@@ -145,7 +170,7 @@ func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
 	f.mu.Lock()
 	sp := f.streamProvider
 	f.mu.Unlock()
-	s, err := f.createStream(ctx, src, ic.InterceptInfo)
+	s, err := f.createStream(ctx, src, ii)
 	if err != nil {
 		ic.cancel()
 		return err
@@ -166,7 +191,7 @@ func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
 
 	if metricsEnabled {
 		sp.ReportMetrics(ctx, &manager.TunnelMetrics{
-			ClientSessionId: ic.ClientSession.SessionId,
+			ClientSessionId: ii.ClientSession.SessionId,
 			IngressBytes:    ingressBytes.GetValue(),
 			EgressBytes:     egressBytes.GetValue(),
 		})
