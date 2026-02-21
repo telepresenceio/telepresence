@@ -115,7 +115,7 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 			for i, ii := range wtIntercepts {
 				go func(conn net.Conn, intercept *interceptController) {
 					defer wg.Done()
-					clog.Debugf(ctx, "wiretap to %d", ii.Spec.TargetPort)
+					clog.Debugf(ctx, "wiretap to %d", ii.TargetPort)
 					err := f.interceptConn(conn, intercept)
 					if err != nil {
 						clog.Errorf(ctx, "wiretap ended with error: %v", err)
@@ -145,7 +145,7 @@ func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
 	f.mu.Lock()
 	sp := f.streamProvider
 	f.mu.Unlock()
-	s, err := f.createStream(ctx, src, ic.InterceptInfo)
+	s, err := f.createStream(ctx, src, ic.InterceptSpec, ic.sessionID)
 	if err != nil {
 		ic.cancel()
 		return err
@@ -166,7 +166,7 @@ func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
 
 	if metricsEnabled {
 		sp.ReportMetrics(ctx, &manager.TunnelMetrics{
-			ClientSessionId: ic.ClientSession.SessionId,
+			ClientSessionId: string(ic.sessionID),
 			IngressBytes:    ingressBytes.GetValue(),
 			EgressBytes:     egressBytes.GetValue(),
 		})
@@ -174,15 +174,13 @@ func (f *tcp) interceptConn(conn net.Conn, ic *interceptController) error {
 	return nil
 }
 
-func (f *tcp) createStream(ctx context.Context, src netip.AddrPort, ii *manager.InterceptInfo) (tunnel.Stream, error) {
-	spec := ii.Spec
+func (f *tcp) createStream(ctx context.Context, src netip.AddrPort, spec *manager.InterceptSpec, clientSession tunnel.SessionID) (tunnel.Stream, error) {
 	ip, err := iputil.ParseAddr(spec.TargetHost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse intercept target address %s: %w", spec.TargetHost, err)
 	}
 	dst := netip.AddrPortFrom(ip, uint16(spec.TargetPort))
 	id := tunnel.NewConnID(types.ProtoTCP, src, dst)
-	clientSession := tunnel.SessionID(ii.ClientSession.SessionId)
 	latency := time.Duration(spec.RoundtripLatency)
 	timeout := time.Duration(spec.DialTimeout)
 	f.mu.Lock()

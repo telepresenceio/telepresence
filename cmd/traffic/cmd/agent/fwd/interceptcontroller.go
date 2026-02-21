@@ -7,17 +7,19 @@ import (
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 type interceptController struct {
-	*manager.InterceptInfo
-	cancel context.CancelFunc
-	ctx    context.Context
+	*manager.InterceptSpec
+	id        string
+	sessionID tunnel.SessionID
+	cancel    context.CancelFunc
+	ctx       context.Context
 }
 
 func (ic *interceptController) isHTTP() bool {
-	spec := ic.Spec
-	return len(spec.HeaderFilters) > 0 || len(spec.PathFilters) > 0
+	return len(ic.HeaderFilters) > 0 || len(ic.PathFilters) > 0
 }
 
 type interceptControllerMap map[string]*interceptController
@@ -31,25 +33,13 @@ func (im interceptControllerMap) sorted() []*interceptController {
 	return infos
 }
 
-// sortedInfos return the InterceptInfos in the map, sorted by ID.
-func (im interceptControllerMap) sortedInfos() []*manager.InterceptInfo {
-	infos := make([]*manager.InterceptInfo, len(im))
-	for i, k := range maps.SortedKeys(im) {
-		infos[i] = im[k].InterceptInfo
-	}
-	return infos
-}
-
 // reconcile updates the interceptControllerMap to match the given interceptInfos and cancels any
 // interceptControllers that are no longer in the given list.
 func (im interceptControllerMap) reconcile(ctx context.Context, iis []*manager.InterceptInfo) {
 	icm := make(map[string]struct{}, len(iis))
 	for _, ii := range iis {
-		ic, ok := im[ii.Id]
-		if ok {
-			ic.InterceptInfo = ii
-		} else {
-			ic = &interceptController{InterceptInfo: ii}
+		if _, ok := im[ii.Id]; !ok {
+			ic := &interceptController{InterceptSpec: ii.Spec, id: ii.Id, sessionID: tunnel.SessionID(ii.ClientSession.SessionId)}
 			ic.ctx, ic.cancel = context.WithCancel(ctx)
 			what := "intercept"
 			if ii.Spec.Wiretap {
@@ -63,10 +53,10 @@ func (im interceptControllerMap) reconcile(ctx context.Context, iis []*manager.I
 	for id, ic := range im {
 		if _, ok := icm[id]; !ok {
 			what := "intercept"
-			if ic.Spec.Wiretap {
+			if ic.Wiretap {
 				what = "wiretap"
 			}
-			clog.Debugf(ctx, "Controller for %s %s cancelled", what, ic.Spec.Name)
+			clog.Debugf(ctx, "Controller for %s %s cancelled", what, ic.Name)
 			ic.cancel()
 			delete(im, id)
 		}

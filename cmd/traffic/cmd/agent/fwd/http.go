@@ -131,8 +131,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 	if len(wtIntercepts) > 0 {
 		wts := make([]*interceptController, 0, len(wtIntercepts))
 		for _, ic := range wtIntercepts {
-			spec := ic.Spec
-			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
+			if shouldInterceptRequest(req, ic.HeaderFilters, ic.PathFilters) {
 				wts = append(wts, ic)
 			}
 		}
@@ -142,7 +141,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 				clog.Errorf(f.lCtx, "Failed to add request taps: %v", err)
 			} else {
 				for i, ii := range wts {
-					f.serveTap(ii.ctx, src, taps[i], ii.InterceptInfo)
+					f.serveTap(ii.ctx, src, taps[i], ii.InterceptSpec, ii.sessionID)
 				}
 			}
 		}
@@ -150,12 +149,11 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 
 	// Pass 1: Check intercepts with headers (high-priority tier)
 	for _, ic := range intercepts {
-		spec := ic.Spec
-		if len(spec.HeaderFilters) > 0 {
-			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
+		if len(ic.HeaderFilters) > 0 {
+			if shouldInterceptRequest(req, ic.HeaderFilters, ic.PathFilters) {
 				clog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with header-based intercept %s",
-					req.Method, req.URL.Path, ic.Id)
-				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
+					req.Method, req.URL.Path, ic.id)
+				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptSpec, ic.sessionID)
 				return
 			}
 		}
@@ -163,12 +161,11 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 
 	// Pass 2: Check intercepts with only paths (low-priority tier)
 	for _, ic := range intercepts {
-		spec := ic.Spec
-		if len(spec.HeaderFilters) == 0 && len(spec.PathFilters) > 0 {
-			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
+		if len(ic.HeaderFilters) == 0 && len(ic.PathFilters) > 0 {
+			if shouldInterceptRequest(req, ic.HeaderFilters, ic.PathFilters) {
 				clog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with path-based intercept %s",
-					req.Method, req.URL.Path, ic.Id)
-				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
+					req.Method, req.URL.Path, ic.id)
+				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptSpec, ic.sessionID)
 				return
 			}
 		}
@@ -202,8 +199,14 @@ func (f *tcp) configureUpstreamTransport(ctx context.Context, plaintext bool) *h
 	return trn
 }
 
-func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer http.ResponseWriter, request *http.Request, ii *manager.InterceptInfo) {
-	spec := ii.Spec
+func (f *tcp) serveHTTPIntercept(
+	ctx context.Context,
+	src netip.AddrPort,
+	writer http.ResponseWriter,
+	request *http.Request,
+	spec *manager.InterceptSpec,
+	sessionID tunnel.SessionID,
+) {
 	f.mu.Lock()
 	sp := f.streamProvider
 	f.mu.Unlock()
@@ -216,7 +219,7 @@ func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer
 	}
 	trn := f.configureUpstreamTransport(ctx, spec.Plaintext)
 	trn.DialContext = func(context.Context, string, string) (net.Conn, error) {
-		s, err := f.createStream(ctx, src, ii)
+		s, err := f.createStream(ctx, src, spec, sessionID)
 		if err != nil {
 			return nil, err
 		}
@@ -250,7 +253,7 @@ func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer
 	if metricsEnabled {
 		clog.Debugf(ctx, "Connection to %s ended. IngressBytes: %d, egressBytes: %d", trg, ingressBytes.GetValue(), egressBytes.GetValue())
 		sp.ReportMetrics(f.lCtx, &manager.TunnelMetrics{
-			ClientSessionId: ii.ClientSession.SessionId,
+			ClientSessionId: string(sessionID),
 			IngressBytes:    ingressBytes.GetValue(),
 			EgressBytes:     egressBytes.GetValue(),
 		})
@@ -271,8 +274,8 @@ func proxyErrorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
 	_, _ = rw.Write(b)
 }
 
-func (f *tcp) serveTap(ctx context.Context, src netip.AddrPort, tap io.Reader, ii *manager.InterceptInfo) {
-	s, err := f.createStream(ctx, src, ii)
+func (f *tcp) serveTap(ctx context.Context, src netip.AddrPort, tap io.Reader, spec *manager.InterceptSpec, sessionID tunnel.SessionID) {
+	s, err := f.createStream(ctx, src, spec, sessionID)
 	if err != nil {
 		return
 	}

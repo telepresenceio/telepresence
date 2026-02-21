@@ -24,9 +24,9 @@ type Interceptor interface {
 	SetStreamProvider(tunnel.ClientStreamProvider)
 	Tag() tunnel.Tag
 
-	// InterceptInfos returns the intercepts that are currently being handled by this interceptor. The
+	// InterceptSpecs returns the intercepts that are currently being handled by this interceptor. The
 	// wiretaps are not included.
-	InterceptInfos() []*manager.InterceptInfo
+	InterceptSpecs(callerID string) []*manager.InterceptSpec
 }
 
 type interceptor struct {
@@ -59,17 +59,17 @@ func newInterceptor(ctx context.Context, listenPort types.PortAndProto, tag tunn
 	return fx
 }
 
-func (f *interceptor) InterceptInfos() []*manager.InterceptInfo {
+func (f *interceptor) InterceptSpecs(callerID string) []*manager.InterceptSpec {
 	f.mu.Lock()
-	infos := f.intercepts.sortedInfos()
+	sis := f.intercepts.sorted()
 	f.mu.Unlock()
-	return infos
-}
-
-func (f *interceptor) WiretapInfos() []*manager.InterceptInfo {
-	f.mu.Lock()
-	infos := f.wiretaps.sortedInfos()
-	f.mu.Unlock()
+	infos := make([]*manager.InterceptSpec, 0, len(sis))
+	for _, si := range sis {
+		if callerID != "" && callerID != si.id {
+			continue
+		}
+		infos = append(infos, si.InterceptSpec)
+	}
 	return infos
 }
 

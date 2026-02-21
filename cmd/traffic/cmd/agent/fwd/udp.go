@@ -43,21 +43,20 @@ func (f *udp) Forward(ctx context.Context, conn net.Conn) error {
 }
 
 func (f *udp) interceptConn(conn net.Conn, ic *interceptController) error {
-	spec := ic.Spec
-	ip, err := iputil.ParseAddr(spec.TargetHost)
+	ip, err := iputil.ParseAddr(ic.TargetHost)
 	if err != nil {
 		return err
 	}
-	dest := netip.AddrPortFrom(ip, uint16(spec.TargetPort))
+	dest := netip.AddrPortFrom(ip, uint16(ic.TargetPort))
 	ctx := ic.ctx
-	clog.Infof(ctx, "Forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
-	defer clog.Infof(ctx, "Done forwarding udp from %s to %s %s", conn.LocalAddr(), spec.Client, dest)
+	clog.Infof(ctx, "Forwarding udp from %s to %s %s", conn.LocalAddr(), ic.Client, dest)
+	defer clog.Infof(ctx, "Done forwarding udp from %s to %s %s", conn.LocalAddr(), ic.Client, dest)
 	d := tunnel.NewUDPListener(conn.(*net.UDPConn), tunnel.AgentToClient, dest, func(ctx context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
 		f.mu.Lock()
 		sp := f.streamProvider
 		f.mu.Unlock()
 		return sp.CreateClientStream(
-			ctx, tunnel.AgentToClient, tunnel.SessionID(ic.ClientSession.SessionId), id, time.Duration(spec.RoundtripLatency), time.Duration(spec.DialTimeout))
+			ctx, tunnel.AgentToClient, ic.sessionID, id, time.Duration(ic.RoundtripLatency), time.Duration(ic.DialTimeout))
 	})
 	d.Start(ctx)
 	<-d.Done()

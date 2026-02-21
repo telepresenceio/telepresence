@@ -52,17 +52,12 @@ func (fs *fwdState) InterceptInfo(ctx context.Context, callerID, path string, co
 		clog.Debugf(ctx, "no match found for path %q, port %d, %s", path, containerPort, headers)
 		return r, nil
 	}
-	for _, ii := range fw.InterceptInfos() {
-		if callerID != "" && callerID != ii.Id {
-			continue
-		}
-		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
-			m := matcher.NewRequest(ii.Spec.PathFilters, ii.Spec.HeaderFilters)
-			if m.MatchesPathAndHeader(path, headers) {
-				r.Intercepted = true
-				r.Metadata = ii.Spec.Metadata
-				break
-			}
+	for _, ii := range fw.InterceptSpecs(callerID) {
+		m := matcher.NewRequest(ii.PathFilters, ii.HeaderFilters)
+		if m.MatchesPathAndHeader(path, headers) {
+			r.Intercepted = true
+			r.Metadata = ii.Metadata
+			break
 		}
 	}
 	return r, nil
