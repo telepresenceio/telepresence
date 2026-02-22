@@ -1,0 +1,39 @@
+{{- $localCluster := or (eq .Values.image.registry "local") (hasPrefix "localhost:" .Values.image.registry) }}
+{{- $rcEnabled := ternary $localCluster .Values.routeController.enabled (kindIs "invalid" .Values.routeController.enabled) }}
+{{- if and .Values.routeController $rcEnabled }}
+{{- $roleName := printf "route-controller-%s" (include "traffic-manager.namespace" $) }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: route-controller
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $roleName }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["servicecidrs"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $roleName }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $roleName }}
+subjects:
+  - kind: ServiceAccount
+    name: route-controller
+    namespace: {{ include "traffic-manager.namespace" $ }}
+{{- end }}

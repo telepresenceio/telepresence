@@ -229,6 +229,10 @@ func ParseConfigYAML(ctx context.Context, path string, data []byte) (Config, err
 		}
 		cfg.Routing().VirtualSubnet = sn
 	}
+	if r := cfg.Routing(); r.RecursionBlockDuration > 0 || r.RecursionBlockTreads > 0 {
+		clog.Warnf(ctx, "routing.recursionBlockDuration and routing.recursionBlockTreads are deprecated and no longer used; "+
+			"use the route-controller DaemonSet instead (see docs/reference/route-controller.md)")
+	}
 	return cfg, nil
 }
 
@@ -991,31 +995,30 @@ func (d *Helm) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 }
 
 type Routing struct {
-	Subnets                []netip.Prefix `json:"subnets,omitempty"`
-	AlsoProxy              []netip.Prefix `json:"alsoProxySubnets,omitempty"`
-	NeverProxy             []netip.Prefix `json:"neverProxySubnets,omitempty"`
-	AllowConflicting       []netip.Prefix `json:"allowConflictingSubnets,omitempty"`
-	RecursionBlockDuration time.Duration  `json:"recursionBlockDuration,omitempty,format:units"`
-	RecursionBlockTreads   int            `json:"recursionBlockTreads,omitempty"`
-	VirtualSubnet          netip.Prefix   `json:"virtualSubnet"`
-	AutoResolveConflicts   bool           `json:"autoResolveConflicts"`
-	UseTAP                 bool           `json:"useTAP"`
+	Subnets              []netip.Prefix `json:"subnets,omitempty"`
+	AlsoProxy            []netip.Prefix `json:"alsoProxySubnets,omitempty"`
+	NeverProxy           []netip.Prefix `json:"neverProxySubnets,omitempty"`
+	AllowConflicting     []netip.Prefix `json:"allowConflictingSubnets,omitempty"`
+	VirtualSubnet        netip.Prefix   `json:"virtualSubnet"`
+	AutoResolveConflicts bool           `json:"autoResolveConflicts"`
+	UseTAP               bool           `json:"useTAP"`
 
 	// For backward compatibility.
 	OldAlsoProxy        []netip.Prefix `json:"alsoProxy,omitempty"`
 	OldNeverProxy       []netip.Prefix `json:"neverProxy,omitempty"`
 	OldAllowConflicting []netip.Prefix `json:"allowConflicting,omitempty"`
+
+	// Deprecated: no longer used. Use the route-controller DaemonSet instead.
+	RecursionBlockDuration time.Duration `json:"recursionBlockDuration,omitempty,format:units"`
+	// Deprecated: no longer used. Use the route-controller DaemonSet instead.
+	RecursionBlockTreads int `json:"recursionBlockTreads,omitempty"`
 }
 
-const (
-	defaultAutoResolveConflicts  = true
-	defaultRecursionBlockThreads = 5
-)
+const defaultAutoResolveConflicts = true
 
 var defaultRouting = Routing{ //nolint:gochecknoglobals // constant
 	VirtualSubnet:        defaultVirtualSubnet,
 	AutoResolveConflicts: defaultAutoResolveConflicts,
-	RecursionBlockTreads: defaultRecursionBlockThreads,
 }
 
 func (r *Routing) defaults() DefaultsAware {
@@ -1040,12 +1043,6 @@ func (r *Routing) merge(o *Routing) {
 	}
 	if len(o.Subnets) > 0 {
 		r.Subnets = o.Subnets
-	}
-	if o.RecursionBlockDuration > 0 {
-		r.RecursionBlockDuration = o.RecursionBlockDuration
-	}
-	if o.RecursionBlockTreads != defaultRecursionBlockThreads {
-		r.RecursionBlockTreads = o.RecursionBlockTreads
 	}
 	if o.VirtualSubnet != defaultVirtualSubnet {
 		r.VirtualSubnet = o.VirtualSubnet
@@ -1230,15 +1227,13 @@ func LoadConfig(c context.Context) (cfg Config, err error) {
 
 // RoutingSnake is the same as Routing but with snake_case json/yaml names.
 type RoutingSnake struct {
-	Subnets                []netip.Prefix `json:"subnets"`
-	AlsoProxy              []netip.Prefix `json:"also_proxy_subnets"`
-	NeverProxy             []netip.Prefix `json:"never_proxy_subnets"`
-	AllowConflicting       []netip.Prefix `json:"allow_conflicting_subnets"`
-	RecursionBlockDuration time.Duration  `json:"recursion_block_duration,format:units"`
-	RecursionBlockTreads   int            `json:"recursion_block_treads"`
-	VirtualSubnet          netip.Prefix   `json:"virtual_subnet"`
-	AutoResolveConflicts   bool           `json:"auto_resolve_conflicts"`
-	UseTAP                 bool           `json:"use_tap"`
+	Subnets              []netip.Prefix `json:"subnets"`
+	AlsoProxy            []netip.Prefix `json:"also_proxy_subnets"`
+	NeverProxy           []netip.Prefix `json:"never_proxy_subnets"`
+	AllowConflicting     []netip.Prefix `json:"allow_conflicting_subnets"`
+	VirtualSubnet        netip.Prefix   `json:"virtual_subnet"`
+	AutoResolveConflicts bool           `json:"auto_resolve_conflicts"`
+	UseTAP               bool           `json:"use_tap"`
 }
 
 // DNSMapping contains a hostname and its associated alias. When requesting the name, the intended behavior is
@@ -1371,15 +1366,13 @@ func MappingsFromRPC(mappings []*daemon.DNSMapping) DNSMappings {
 
 func (r *Routing) ToSnake() *RoutingSnake {
 	return &RoutingSnake{
-		Subnets:                r.Subnets,
-		AlsoProxy:              r.AlsoProxy,
-		NeverProxy:             r.NeverProxy,
-		AllowConflicting:       r.AllowConflicting,
-		AutoResolveConflicts:   r.AutoResolveConflicts,
-		RecursionBlockDuration: r.RecursionBlockDuration,
-		RecursionBlockTreads:   r.RecursionBlockTreads,
-		VirtualSubnet:          r.VirtualSubnet,
-		UseTAP:                 r.UseTAP,
+		Subnets:              r.Subnets,
+		AlsoProxy:            r.AlsoProxy,
+		NeverProxy:           r.NeverProxy,
+		AllowConflicting:     r.AllowConflicting,
+		AutoResolveConflicts: r.AutoResolveConflicts,
+		VirtualSubnet:        r.VirtualSubnet,
+		UseTAP:               r.UseTAP,
 	}
 }
 

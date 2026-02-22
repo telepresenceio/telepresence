@@ -31,8 +31,6 @@ bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 # https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md.
 export DOCKER_BUILDKIT := 1
 
-GOLANGCI_VERSION:=v2.9.0
-
 .PHONY: FORCE
 FORCE:
 
@@ -326,8 +324,20 @@ save-tel2-image: tel2-image
 push-client-image: client-image ## (Build) Push the client container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(CLIENT_IMAGE_FQN)
 
+ROUTECONTROLLER_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/route-controller:$(TELEPRESENCE_SEMVER)
+
+.PHONY: routecontroller-image
+routecontroller-image: images-deps  ## (Build) Build the route-controller DaemonSet image
+	$(eval PLATFORM_ARG := $(if $(TELEPRESENCE_ROUTECONTROLLER_IMAGE_PLATFORM), --platform=$(TELEPRESENCE_ROUTECONTROLLER_IMAGE_PLATFORM),))
+	docker build $(PLATFORM_ARG) --target routecontroller --tag route-controller --tag $(ROUTECONTROLLER_IMAGE_FQN) \
+	    -f build-aux/docker/images/Dockerfile.routecontroller .
+
+.PHONY: push-routecontroller-image
+push-routecontroller-image: routecontroller-image ## (Build) Push the route-controller DaemonSet image to $(TELEPRESENCE_REGISTRY)
+	docker push $(ROUTECONTROLLER_IMAGE_FQN)
+
 .PHONY: push-images
-push-images: push-tel2-image push-client-image
+push-images: push-tel2-image push-client-image push-routecontroller-image
 
 .PHONY: helm-chart
 helm-chart: $(BUILDDIR)/telepresence-oss-chart.tgz
@@ -439,10 +449,12 @@ lint: lint-rpc lint-go
 
 lint-go: lint-deps ## (QA) Run the golangci-lint
 ifeq ($(GOOS),windows)
-	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$(GOLANGCI_VERSION):/root/.cache -w /app golangci/golangci-lint:$(GOLANGCI_VERSION) golangci-lint \
+	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
+	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
 	run --timeout 8m ./cmd/cobraparser/... ./cmd/telepresence/... ./integration_test/... ./pkg/...
 else
-	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$(GOLANGCI_VERSION):/root/.cache -w /app golangci/golangci-lint:$(GOLANGCI_VERSION) golangci-lint \
+	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
+	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
 	run --timeout 8m ./...
 endif
 
@@ -455,10 +467,12 @@ endif
 .PHONY: format
 format: lint-deps ## (QA) Automatically fix linter complaints
 ifeq ($(GOHOSTOS),windows)
-	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$(GOLANGCI_VERSION):/root/.cache -w /app golangci/golangci-lint:$(GOLANGCI_VERSION) golangci-lint \
+	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
+	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
 	run --timeout 8m --fix ./cmd/telepresence/... ./integration_test/... ./pkg/...
 else
-	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$(GOLANGCI_VERSION):/root/.cache -w /app golangci/golangci-lint:$(GOLANGCI_VERSION) golangci-lint \
+	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
+	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
 	run --timeout 8m --fix ./...
 endif
 	$(tools/protolint) lint --fix rpc || true

@@ -65,7 +65,7 @@ func (s *cluster) GetValuesForHelm(ctx context.Context, values map[string]any, r
 		if reg == "local" {
 			settings = append(settings, `image.pullPolicy="Never"`)
 			settings = append(settings, `agent.image.pullPolicy="Never"`)
-		} else if !s.isCI {
+		} else if strings.HasPrefix(reg, "localhost:") {
 			settings = append(settings, `image.pullPolicy="Always"`)
 			settings = append(settings, `agent.image.pullPolicy="Always"`)
 		}
@@ -261,12 +261,14 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 
 	vx.Image = GetImage(ctx)
 	if s.ManagerVersion().EQ(s.ClientVersion()) {
-		if s.ManagerRegistry() == "local" {
-			// Using minikube with local images.
+		reg := s.ManagerRegistry()
+		if reg == "local" {
+			// Using Kind/minikube/k3d/Docker Desktop with images loaded directly into the cluster.
 			// They are automatically present and must not be pulled.
 			vx.Image.PullPolicy = "Never"
 			vx.Agent.Image.PullPolicy = "Never"
-		} else if !s.isCI {
+		} else if strings.HasPrefix(reg, "localhost:") {
+			// Using a local registry. Images must always be pulled to get the latest build.
 			vx.Image.PullPolicy = "Always"
 			vx.Agent.Image.PullPolicy = "Always"
 		}

@@ -72,9 +72,11 @@ func (l *listenerSwitch) Serve() error {
 		conn, err := l.listener.Accept()
 		ce := connOrErr{conn: conn, err: err}
 		if err != nil {
-			// Both the on and off listeners will get the same error.
 			primaryCh <- ce
-			secondaryCh <- ce
+			if l.secondaryAcceptLoop == nil {
+				// Secondary accept loop is running; notify it of the error too.
+				secondaryCh <- ce
+			}
 			return err
 		}
 		if l.secondary.Load() {

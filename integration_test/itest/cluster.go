@@ -459,7 +459,6 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	if s.ClientIsVersion(">=2.23.0") {
 		config.Intercept().MountsRoot = TempDir(c)
 	}
-	config.Routing().RecursionBlockDuration = 10 * time.Millisecond
 	config = config.Merge(client.GetConfig(c))
 
 	configYaml, err := config.MarshalYAML()

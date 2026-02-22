@@ -507,6 +507,53 @@ properties:
     description: Number or replicas for the traffic-manager. The Traffic Manager only support running with one replica at the moment.
     const: 1
 
+  routeController:
+    description: >-
+      Configuration for the route-controller DaemonSet that installs blackhole routes for deleted service ClusterIPs
+      to prevent routing loops on local clusters.
+    type: object
+    additionalProperties: false
+    properties:
+      enabled:
+        description: >-
+          Enable or disable the route-controller DaemonSet. When null (the default), the
+          route-controller is automatically enabled for local clusters, detected by
+          image.registry being "local" or starting with "localhost:". Set to true to
+          force-enable or false to force-disable regardless of registry.
+        anyOf:
+          - type: "null"
+          - type: boolean
+      image:
+        type: object
+        additionalProperties: false
+        properties:
+          name:
+            description: The name of the route-controller image
+            type: string
+          pullPolicy:
+            description: Pull policy for the route-controller image. Empty string inherits from image.pullPolicy.
+            anyOf:
+              - type: string
+                const: ""
+              - $ref: "#/$defs/pullPolicy"
+          registry:
+            description: The registry for the route-controller image
+            type: string
+      logLevel:
+        description: Log level for the route-controller. Empty string inherits from logLevel.
+        anyOf:
+          - type: string
+            const: ""
+          - $ref: "#/$defs/logLevel"
+      serviceCIDRs:
+        description: >-
+          Service CIDRs for which subnet-level blackhole routes are installed at startup.
+          If empty, the controller queries the ServiceCIDR API (k8s >= 1.33) automatically.
+          For older clusters, set this explicitly (e.g. ["10.96.0.0/12"]).
+        type: array
+        items:
+          type: string
+
   resources:
     description: Define resource requests and limits for the Traffic Manger
     $ref: "#/$defs/resourceRequirements"

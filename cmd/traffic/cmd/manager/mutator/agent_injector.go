@@ -206,7 +206,7 @@ func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod
 		if clog.Enabled(ctx, clog.LevelTrace) {
 			cns := strings.Builder{}
 			for i, cn := range pod.Spec.Containers {
-				cns.WriteString(fmt.Sprintf("%d %s\n", i, cn.Name))
+				fmt.Fprintf(&cns, "%d %s\n", i, cn.Name)
 			}
 			clog.Tracef(ctx, "Containers \n%s", cns.String())
 			if pj, err := json.Marshal(patches, jsontext.WithIndent("  ")); err == nil {

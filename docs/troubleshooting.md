@@ -156,6 +156,21 @@ GKE and EKS require a plugin that utilizes their resepective IAM providers.
 You will need to install the [gke](install/cloud#gke-authentication-plugin) or [eks](install/cloud#eks-authentication-plugin) plugins 
 for Telepresence to connect to your cluster.
 
+## Routing loops when accessing deleted or non-existent service IPs on local clusters
+
+On local Kubernetes clusters (Kind, minikube, k3d, Docker Desktop), accessing a deleted or
+never-assigned service ClusterIP through the Telepresence TUN device can cause a routing loop.
+The packet is forwarded to the traffic-agent, which re-dials the same IP; with no kube-proxy
+rule in place the packet escapes the cluster via the node's default route, returns to the
+workstation, and the cycle repeats until the connection times out.
+
+Enable the **route-controller** DaemonSet to prevent this. It installs an iptables `FORWARD`
+chain `DROP` rule for the service CIDR on every node, ensuring that packets bound for
+non-existent ClusterIPs are silently dropped rather than escaping the cluster.
+
+See the [Route Controller reference](reference/route-controller.md) for installation and
+configuration instructions.
+
 ## `too many files open` error when running `telepresence connect` on Linux
 
 If `telepresence connect` on linux fails with a message in the logs `too many files open`, then check if `fs.inotify.max_user_instances` is set too low. Check the current settings with `sysctl fs.inotify.max_user_instances` and increase it temporarily with `sudo sysctl -w fs.inotify.max_user_instances=512`. For more information about permanently increasing it see [Kernel inotify watch limit reached](https://unix.stackexchange.com/a/13757/514457).

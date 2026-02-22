@@ -53,6 +53,15 @@ items:
           due to dependency constraints.
         docs: install/client
       - type: feature
+        title: Add route-controller DaemonSet to prevent routing loops on local clusters
+        body: >-
+          A new optional <code>route-controller</code> DaemonSet can be deployed alongside the traffic-manager
+          on local Kubernetes clusters (Kind, minikube, k3d, Docker Desktop) to prevent routing loops caused by
+          deleted or non-existent service ClusterIPs. It installs an iptables <code>FORWARD</code> chain
+          <code>DROP</code> rule for the service CIDR on every node, and adds per-IP kernel blackhole routes
+          when a Service is deleted. Enable it with <code>routeController.enabled=true</code> in the Helm chart.
+        docs: reference/route-controller
+      - type: feature
         title: Automatic cache cleanup on version change
         body: >-
           Telepresence now tracks its version in a version.json file in the cache directory. When the CLI detects
