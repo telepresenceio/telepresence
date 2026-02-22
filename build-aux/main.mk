@@ -326,8 +326,20 @@ save-tel2-image: tel2-image
 push-client-image: client-image ## (Build) Push the client container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(CLIENT_IMAGE_FQN)
 
+ROUTECONTROLLER_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/route-controller:$(TELEPRESENCE_SEMVER)
+
+.PHONY: routecontroller-image
+routecontroller-image: images-deps  ## (Build) Build the route-controller DaemonSet image
+	$(eval PLATFORM_ARG := $(if $(TELEPRESENCE_ROUTECONTROLLER_IMAGE_PLATFORM), --platform=$(TELEPRESENCE_ROUTECONTROLLER_IMAGE_PLATFORM),))
+	docker build $(PLATFORM_ARG) --target routecontroller --tag route-controller --tag $(ROUTECONTROLLER_IMAGE_FQN) \
+	    -f build-aux/docker/images/Dockerfile.routecontroller .
+
+.PHONY: push-routecontroller-image
+push-routecontroller-image: routecontroller-image ## (Build) Push the route-controller DaemonSet image to $(TELEPRESENCE_REGISTRY)
+	docker push $(ROUTECONTROLLER_IMAGE_FQN)
+
 .PHONY: push-images
-push-images: push-tel2-image push-client-image
+push-images: push-tel2-image push-client-image push-routecontroller-image
 
 .PHONY: helm-chart
 helm-chart: $(BUILDDIR)/telepresence-oss-chart.tgz

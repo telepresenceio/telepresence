@@ -20,6 +20,12 @@ New Linux package installers (.deb for Debian/Ubuntu and .rpm for Fedora/RHEL) a
 A new Windows installer (.exe) is now available that installs Telepresence with the root daemon configured as a Windows service. The installer bundles WinFSP and SSHFS-Win dependencies for volume mount support, adds Telepresence to the system PATH, and optionally installs the TelepresenceDaemon service. This eliminates the need for elevated privileges when using Telepresence. Currently available for amd64 architecture only due to dependency constraints.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Add route-controller DaemonSet to prevent routing loops on local clusters](reference/route-controller)</div></div>
+<div style="margin-left: 15px">
+
+A new optional <code>route-controller</code> DaemonSet can be deployed alongside the traffic-manager on local Kubernetes clusters (Kind, minikube, k3d, Docker Desktop) to prevent routing loops caused by deleted or non-existent service ClusterIPs. It installs an iptables <code>FORWARD</code> chain <code>DROP</code> rule for the service CIDR on every node, and adds per-IP kernel blackhole routes when a Service is deleted. Enable it with <code>routeController.enabled=true</code> in the Helm chart.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Automatic cache cleanup on version change</div></div>
 <div style="margin-left: 15px">
 

@@ -1,0 +1,43 @@
+{{- $localCluster := or (eq .Values.image.registry "local") (hasPrefix "localhost:" .Values.image.registry) }}
+{{- $rcEnabled := ternary $localCluster .Values.routeController.enabled (kindIs "invalid" .Values.routeController.enabled) }}
+{{- if and .Values.routeController $rcEnabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: route-controller
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{ include "telepresence.labels" $ | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: route-controller
+  template:
+    metadata:
+      labels:
+        app: route-controller
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: route-controller
+      containers:
+        - name: route-controller
+          image: "{{ coalesce .Values.routeController.image.registry .Values.image.registry }}/{{ .Values.routeController.image.name }}:{{ .Chart.AppVersion }}"
+          imagePullPolicy: {{ coalesce .Values.routeController.image.pullPolicy .Values.image.pullPolicy }}
+          env:
+            - name: LOG_LEVEL
+              value: {{ coalesce .Values.routeController.logLevel .Values.logLevel }}
+            {{- with .Values.routeController.serviceCIDRs }}
+            - name: SERVICE_CIDRS
+              value: {{ join "," . }}
+            {{- end }}
+          securityContext:
+            capabilities:
+              add: ["NET_ADMIN"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+{{- end }}

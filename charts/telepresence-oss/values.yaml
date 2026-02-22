@@ -198,3 +198,31 @@ intercept:
   # Once this timeout is exceeded, the intercept no longer blocks conflicting intercepts and may be
   # automatically removed when another client attempts to create a conflicting intercept.
   inactiveBlockTimeout: 10m
+
+################################################################################
+## Route Controller Configuration
+################################################################################
+# routeController installs a DaemonSet that watches for Service deletions and
+# adds temporary blackhole routes on each node for deleted ClusterIPs, preventing
+# routing loops on local clusters (Kind, minikube, k3d, Docker Desktop) where
+# deleted service IPs fall through to the node's default route.
+routeController:
+  # enabled controls the route-controller DaemonSet:
+  #   null (default) - auto-enable when image.registry is "local" or starts with "localhost:"
+  #   true           - always enable
+  #   false          - always disable, even on local clusters
+  enabled: ~
+  image:
+    # registry and pullPolicy default to the traffic-manager image settings when not set
+    registry: ""
+    name: route-controller
+    pullPolicy: ""
+  # logLevel defaults to the traffic-manager logLevel when not set
+  logLevel: ""
+  # serviceCIDRs is a list of service CIDRs (e.g. ["10.96.0.0/12"]) for which the
+  # route-controller installs subnet-level blackhole routes at startup. These are
+  # overridden by kube-proxy for active services and catch any non-existent IP in
+  # the range without waiting for a deletion event.
+  # If empty, the controller queries the ServiceCIDR API (k8s >= 1.33) and falls
+  # back to per-IP blackhole routes on deletion for older clusters.
+  serviceCIDRs: []

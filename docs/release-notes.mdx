@@ -27,6 +27,12 @@ A new Windows installer (.exe) is now available that installs Telepresence with 
   </Body>
 </Note>
 <Note>
+	<Title type="feature" docs="reference/route-controller">Add route-controller DaemonSet to prevent routing loops on local clusters</Title>
+	<Body>
+A new optional <code>route-controller</code> DaemonSet can be deployed alongside the traffic-manager on local Kubernetes clusters (Kind, minikube, k3d, Docker Desktop) to prevent routing loops caused by deleted or non-existent service ClusterIPs. It installs an iptables <code>FORWARD</code> chain <code>DROP</code> rule for the service CIDR on every node, and adds per-IP kernel blackhole routes when a Service is deleted. Enable it with <code>routeController.enabled=true</code> in the Helm chart.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Automatic cache cleanup on version change</Title>
 	<Body>
 Telepresence now tracks its version in a version.json file in the cache directory. When the CLI detects that the major.minor version differs from the running binary, it automatically quits running daemons and clears stale cache entries (preserving logs). This prevents issues caused by leftover cache files from a previous version. Patch and pre-release version changes do not trigger a cache cleanup.
