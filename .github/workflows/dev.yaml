@@ -59,11 +59,12 @@ jobs:
       - name: Build client
         run: make build
       - name: Build images
-        run: make client-image tel2-image
+        run: make client-image tel2-image routecontroller-image
       - name: Load images into minikube
         run: |
           minikube image load ${{env.TELEPRESENCE_REGISTRY}}/telepresence:${{env.TELEPRESENCE_SEMVER}}
           minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
+          minikube image load ${{env.TELEPRESENCE_REGISTRY}}/route-controller:${{env.TELEPRESENCE_SEMVER}}
       - name: Run integration tests
         if: github.event.label.name == 'ok to test'
         uses: nick-fields/retry/@v3
