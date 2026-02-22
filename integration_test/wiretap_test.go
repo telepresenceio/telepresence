@@ -17,7 +17,6 @@ import (
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type wiretapSuite struct {
@@ -106,9 +105,7 @@ func (s *wiretapSuite) startWiretapHandler(ctx context.Context, name, addr strin
 }
 
 func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
-	ctx := itest.WithConfig(s.Context(), func(config client.Config) {
-		config.Routing().RecursionBlockDuration = 0
-	})
+	ctx := s.Context()
 	s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceQuitOk(ctx)
 

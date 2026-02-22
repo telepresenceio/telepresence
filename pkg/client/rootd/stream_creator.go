@@ -6,8 +6,6 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/puzpuzpuz/xsync/v4"
-
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -30,21 +28,7 @@ func checkRecursion(p types.Proto, ip netip.Addr, sn netip.Prefix) (err error) {
 	return err
 }
 
-type recursiveBlock struct {
-	start time.Time
-	count int
-	timer *time.Timer
-}
-
 func (s *session) streamCreator() tunnel.StreamCreator {
-	var recursionBlockMap *xsync.Map[netip.AddrPort, recursiveBlock]
-	routing := client.GetConfig(s).Routing()
-	recursionBlockDuration := routing.RecursionBlockDuration
-	recursionBlockThreads := routing.RecursionBlockTreads
-	if recursionBlockDuration != 0 {
-		recursionBlockMap = xsync.NewMap[netip.AddrPort, recursiveBlock]()
-	}
-
 	return func(c context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
 		p := id.Protocol()
 		srcIp := id.SourceAddr()
@@ -70,34 +54,6 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 			Proto:    id.Protocol(),
 		}); ok {
 			id = tunnel.NewConnID(id.Protocol(), id.Source(), netip.AddrPortFrom(destAddr, mp))
-		}
-
-		if recursionBlockDuration > 0 {
-			dst := netip.AddrPortFrom(destAddr, id.DestinationPort())
-			block := false
-			recursionBlockMap.Compute(dst, func(v recursiveBlock, loaded bool) (recursiveBlock, xsync.ComputeOp) {
-				if loaded {
-					if time.Since(v.start) < recursionBlockDuration {
-						v.count++
-						if v.count < recursionBlockThreads {
-							return v, xsync.UpdateOp
-						}
-						block = true
-					}
-					v.timer.Stop()
-					return v, xsync.DeleteOp
-				}
-
-				// Ensure deletion in case it's only called once
-				v.timer = time.AfterFunc(recursionBlockDuration*3, func() {
-					recursionBlockMap.Delete(dst)
-				})
-				v.start = time.Now()
-				return v, xsync.UpdateOp
-			})
-			if block {
-				return nil, fmt.Errorf("refusing recursive dispatch to %s", dst)
-			}
 		}
 
 		var err error

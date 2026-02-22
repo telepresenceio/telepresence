@@ -14,7 +14,6 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
 type multipleServicesSuite struct {
@@ -36,12 +35,8 @@ func (s *multipleServicesSuite) Test_LargeRequest() {
 	if !(s.ManagerIsVersion(">2.21.x") && s.ClientIsVersion(">2.21.x")) {
 		s.T().Skip("Not part of compatibility tests. TUN-device isn't stable enough in versions <2.22.0")
 	}
-	// This particular cannot run with recursion detection, because it will trigger on the very high concurrency.
 	ctx := s.Context()
 	itest.TelepresenceQuitOk(ctx)
-	ctx = itest.WithConfig(ctx, func(config client.Config) {
-		config.Routing().RecursionBlockDuration = 0
-	})
 	s.TelepresenceConnect(ctx)
 	defer func() {
 		// Restore the connection to what it was before the test.

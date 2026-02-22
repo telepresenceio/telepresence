@@ -197,10 +197,6 @@ func (s *largeFilesSuite) Test_LargeFileIntercepts_sshfs() {
 }
 
 func (s *largeFilesSuite) largeFileIntercepts(ctx context.Context) {
-	ctx = itest.WithConfig(ctx, func(config client.Config) {
-		config.Routing().RecursionBlockDuration = 0
-	})
-
 	s.createIntercepts(ctx)
 	wg := sync.WaitGroup{}
 
