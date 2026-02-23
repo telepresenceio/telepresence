@@ -92,7 +92,7 @@ protoc: protoc-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-g
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean
-generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION | awk '{print $$1}').src.tar.gz
+generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION | grep -oE '^go[0-9]+\.[0-9]+\.[0-9]+').src.tar.gz
 	cd ./rpc && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./pkg/vif/testdata/router && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 	cd ./tools/src/test-report && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
