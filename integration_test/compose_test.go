@@ -94,3 +94,314 @@ func (s *composeSuite) Test_ComposeDNS() {
 		return false
 	}, 30*time.Second, 3*time.Second, "nslookup of %s in compose container should succeed", svc)
 }
+
+func (s *composeSuite) Test_ComposeConnect() {
+	ctx := s.Context()
+	require := s.Require()
+
+	const svc = "echo-easy"
+	s.ApplyEchoService(ctx, svc, 80)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+
+	composeDir := itest.TempDir(ctx)
+	composeFile := filepath.Join(composeDir, "docker-compose.yml")
+	ns := s.AppNamespace()
+	composeContent := strings.Join([]string{
+		"x-tele:",
+		"  connections:",
+		"    - namespace: " + ns,
+		"      manager-namespace: " + s.ManagerNamespace(),
+		"services:",
+		"  tester:",
+		"    x-tele:",
+		"      type: connect",
+		"    image: busybox",
+		"    command: sleep infinity",
+	}, "\n")
+	require.NoError(os.WriteFile(composeFile, []byte(composeContent), 0o644))
+
+	_, _, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "up", "-d")
+	require.NoError(err, "compose up failed")
+	defer func() {
+		_, _, _ = itest.Telepresence(ctx, "compose", "-f", composeFile, "down")
+	}()
+
+	// Verify HTTP access to a cluster service from the connect container using its single-label name.
+	// The tel2-search DNS search domain causes the resolver to first try "echo-easy.tel2-search",
+	// which Docker's embedded DNS forwards to the Telepresence daemon DNS. The daemon strips the
+	// tel2-search suffix and resolves the bare name against the cluster.
+	s.Assert().EventuallyContext(ctx, func() bool {
+		so, se, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "exec", "tester", "wget", "-qO-", "http://"+svc)
+		if err == nil && len(so) > 0 {
+			return true
+		}
+		clog.Info(ctx, "wget", "stdout", so, "stderr", se, "err", err)
+		return false
+	}, 30*time.Second, 3*time.Second, "wget of %s from connect container should succeed", svc)
+}
+
+func (s *composeSuite) Test_ComposeProxy() {
+	ctx := s.Context()
+	require := s.Require()
+
+	const svc = "echo-easy"
+	s.ApplyEchoService(ctx, svc, 80)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+
+	composeDir := itest.TempDir(ctx)
+	composeFile := filepath.Join(composeDir, "docker-compose.yml")
+	ns := s.AppNamespace()
+	composeContent := strings.Join([]string{
+		"x-tele:",
+		"  connections:",
+		"    - namespace: " + ns,
+		"      manager-namespace: " + s.ManagerNamespace(),
+		"services:",
+		"  " + svc + ":",
+		"    x-tele:",
+		"      type: proxy",
+		"  tester:",
+		"    x-tele:",
+		"      type: connect",
+		"    image: busybox",
+		"    command: sleep infinity",
+	}, "\n")
+	require.NoError(os.WriteFile(composeFile, []byte(composeContent), 0o644))
+
+	_, _, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "up", "-d")
+	require.NoError(err, "compose up failed")
+	defer func() {
+		_, _, _ = itest.Telepresence(ctx, "compose", "-f", composeFile, "down")
+	}()
+
+	// Verify that HTTP requests are routed through the proxy to the cluster service.
+	s.Assert().EventuallyContext(ctx, func() bool {
+		so, se, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "exec", "tester", "wget", "-qO-", "http://"+svc)
+		if err == nil && len(so) > 0 {
+			return true
+		}
+		clog.Info(ctx, "wget via proxy", "stdout", so, "stderr", se, "err", err)
+		return false
+	}, 30*time.Second, 3*time.Second, "wget of %s through proxy should succeed", svc)
+}
+
+func (s *composeSuite) Test_ComposeIngest() {
+	ctx := s.Context()
+	require := s.Require()
+
+	const ingestSvc = "ingest-app"
+	itest.ApplyAppTemplate(ctx, s.AppNamespace(), &itest.AppData{
+		AppName: ingestSvc,
+		Image:   "ghcr.io/telepresenceio/echo-server:0.3.1",
+		Ports: []itest.AppPort{
+			{ServicePortNumber: 80, TargetPortNumber: 8080},
+		},
+		Env: map[string]string{
+			"INGEST_TEST_VAR": "hello-from-cluster",
+		},
+	})
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", ingestSvc)
+
+	composeDir := itest.TempDir(ctx)
+	composeFile := filepath.Join(composeDir, "docker-compose.yml")
+	ns := s.AppNamespace()
+	composeContent := strings.Join([]string{
+		"x-tele:",
+		"  connections:",
+		"    - namespace: " + ns,
+		"      manager-namespace: " + s.ManagerNamespace(),
+		"services:",
+		"  " + ingestSvc + ":",
+		"    x-tele:",
+		"      type: ingest",
+		"    image: busybox",
+		"    command: sleep infinity",
+	}, "\n")
+	require.NoError(os.WriteFile(composeFile, []byte(composeContent), 0o644))
+
+	_, _, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "up", "-d")
+	require.NoError(err, "compose up failed")
+	defer func() {
+		_, _, _ = itest.Telepresence(ctx, "compose", "-f", composeFile, "down")
+	}()
+
+	// Verify that the ingest container inherits the environment variable from the cluster workload.
+	s.Assert().EventuallyContext(ctx, func() bool {
+		so, se, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "exec", ingestSvc, "env")
+		if err == nil && strings.Contains(so, "INGEST_TEST_VAR=hello-from-cluster") {
+			return true
+		}
+		clog.Info(ctx, "env check", "stdout", so, "stderr", se, "err", err)
+		return false
+	}, 60*time.Second, 5*time.Second, "ingest container should inherit INGEST_TEST_VAR from cluster workload")
+}
+
+func (s *composeSuite) Test_ComposeIntercept() {
+	ctx := s.Context()
+	require := s.Require()
+
+	const svc = "echo-easy"
+	s.ApplyEchoService(ctx, svc, 80)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+
+	composeDir := itest.TempDir(ctx)
+	composeFile := filepath.Join(composeDir, "docker-compose.yml")
+	ns := s.AppNamespace()
+	composeContent := strings.Join([]string{
+		"x-tele:",
+		"  connections:",
+		"    - namespace: " + ns,
+		"      manager-namespace: " + s.ManagerNamespace(),
+		"services:",
+		"  " + svc + ":",
+		"    x-tele:",
+		"      type: intercept",
+		"      ports:",
+		`        - "80:80"`,
+		"    image: hashicorp/http-echo",
+		`    command: ["-text=hello-from-compose", "-listen=:80"]`,
+		"  tester:",
+		"    x-tele:",
+		"      type: connect",
+		"    image: busybox",
+		"    command: sleep infinity",
+	}, "\n")
+	require.NoError(os.WriteFile(composeFile, []byte(composeContent), 0o644))
+
+	_, _, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "up", "-d")
+	require.NoError(err, "compose up failed")
+	defer func() {
+		_, _, _ = itest.Telepresence(ctx, "compose", "-f", composeFile, "down")
+	}()
+
+	// Verify that cluster traffic is intercepted and served by the local compose container.
+	s.Assert().EventuallyContext(ctx, func() bool {
+		so, se, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "exec", "tester", "wget", "-qO-", "http://"+svc)
+		if err == nil && strings.Contains(so, "hello-from-compose") {
+			return true
+		}
+		clog.Info(ctx, "wget intercept", "stdout", so, "stderr", se, "err", err)
+		return false
+	}, 60*time.Second, 5*time.Second, "intercept should redirect cluster traffic to the compose container")
+}
+
+func (s *composeSuite) Test_ComposeReplace() {
+	ctx := s.Context()
+	require := s.Require()
+
+	const svc = "echo-easy"
+	s.ApplyEchoService(ctx, svc, 80)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+
+	composeDir := itest.TempDir(ctx)
+	composeFile := filepath.Join(composeDir, "docker-compose.yml")
+	ns := s.AppNamespace()
+	composeContent := strings.Join([]string{
+		"x-tele:",
+		"  connections:",
+		"    - namespace: " + ns,
+		"      manager-namespace: " + s.ManagerNamespace(),
+		"services:",
+		"  " + svc + ":",
+		"    x-tele:",
+		"      type: replace",
+		"      ports:",
+		`        - "80:8080"`, // local port 80 -> cluster container port 8080 (echo-server listens on 8080)
+		"    image: hashicorp/http-echo",
+		`    command: ["-text=hello-from-compose", "-listen=:80"]`,
+		"  tester:",
+		"    x-tele:",
+		"      type: connect",
+		"    image: busybox",
+		"    command: sleep infinity",
+	}, "\n")
+	require.NoError(os.WriteFile(composeFile, []byte(composeContent), 0o644))
+
+	_, _, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "up", "-d")
+	require.NoError(err, "compose up failed")
+	defer func() {
+		_, _, _ = itest.Telepresence(ctx, "compose", "-f", composeFile, "down")
+	}()
+
+	// Verify that the local compose container serves traffic in place of the cluster pod.
+	s.Assert().EventuallyContext(ctx, func() bool {
+		so, se, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "exec", "tester", "wget", "-qO-", "http://"+svc)
+		if err == nil && strings.Contains(so, "hello-from-compose") {
+			return true
+		}
+		clog.Info(ctx, "wget replace", "stdout", so, "stderr", se, "err", err)
+		return false
+	}, 60*time.Second, 5*time.Second, "replace should serve traffic from the compose container instead of the cluster pod")
+}
+
+func (s *composeSuite) Test_ComposeWiretap() {
+	ctx := s.Context()
+	require := s.Require()
+
+	const svc = "echo-easy"
+	s.ApplyEchoService(ctx, svc, 80)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+
+	composeDir := itest.TempDir(ctx)
+	composeFile := filepath.Join(composeDir, "docker-compose.yml")
+	ns := s.AppNamespace()
+	composeContent := strings.Join([]string{
+		"x-tele:",
+		"  connections:",
+		"    - namespace: " + ns,
+		"      manager-namespace: " + s.ManagerNamespace(),
+		"services:",
+		"  " + svc + ":",
+		"    x-tele:",
+		"      type: wiretap",
+		"      ports:",
+		`        - "80:80"`,
+		"    image: hashicorp/http-echo",
+		`    command: ["-text=hello-from-compose", "-listen=:80"]`,
+		"  tester:",
+		"    x-tele:",
+		"      type: connect",
+		"    image: busybox",
+		"    command: sleep infinity",
+	}, "\n")
+	require.NoError(os.WriteFile(composeFile, []byte(composeContent), 0o644))
+
+	_, _, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "up", "-d")
+	require.NoError(err, "compose up failed")
+	defer func() {
+		_, _, _ = itest.Telepresence(ctx, "compose", "-f", composeFile, "down")
+	}()
+
+	// Use the namespace-qualified name to reach the cluster service rather than the local compose
+	// container. Docker's embedded DNS resolves bare "echo-easy" to the local wiretap-receiver
+	// container, which would bypass the cluster and never trigger the traffic-agent. A
+	// namespace-qualified name is not known to Docker's embedded DNS, so it is forwarded to the
+	// Telepresence daemon DNS which routes it to the cluster.
+	clusterSvcName := svc + "." + ns
+
+	// Verify that the cluster service still serves the original traffic (not the local container).
+	s.Assert().EventuallyContext(ctx, func() bool {
+		so, se, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "exec", "tester", "wget", "-qO-", "http://"+clusterSvcName)
+		if err == nil && len(so) > 0 && !strings.Contains(so, "hello-from-compose") {
+			return true
+		}
+		clog.Info(ctx, "wget wiretap cluster check", "stdout", so, "stderr", se, "err", err)
+		return false
+	}, 60*time.Second, 5*time.Second, "cluster service should still serve original traffic during wiretap")
+
+	// Make several requests via the namespace-qualified name so the traffic-agent wiretap fires
+	// and sends copies to the local container.
+	for range 3 {
+		_, _, _ = itest.Telepresence(ctx, "compose", "-f", composeFile, "exec", "tester", "wget", "-qO-", "http://"+clusterSvcName)
+	}
+
+	// Verify that the wiretap container received copies of the traffic via its logs.
+	s.Assert().EventuallyContext(ctx, func() bool {
+		so, se, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "logs", svc)
+		if err == nil && strings.Contains(so, "GET") {
+			return true
+		}
+		clog.Info(ctx, "compose logs wiretap", "stdout", so, "stderr", se, "err", err)
+		return false
+	}, 30*time.Second, 3*time.Second, "wiretap container should receive copies of traffic")
+}
