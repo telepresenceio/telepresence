@@ -261,6 +261,8 @@
       link: reference/tun-device
     - title: Connection Routing
       link: reference/routing
+    - title: Route Controller
+      link: reference/route-controller
     - title: Monitoring
       link: reference/monitoring
 - title: Comparisons
