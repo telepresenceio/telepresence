@@ -1,3 +1,2 @@
-github:com/cyphar/filepath-securejoin:
-  - BSD-3-Clause
-  - MPL-2.0
+# Packages whose licenses cannot be auto-detected by go-mkopensource.
+# Format: package-import-path: [list of SPDX license identifiers]

@@ -6,7 +6,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/alexflint/go-filemutex v1.3.0
 	github.com/blang/semver/v4 v4.0.0
-	github.com/caarlos0/env/v11 v11.3.2-0.20251222100307-7b10cf56e20f
+	github.com/caarlos0/env/v11 v11.4.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/compose-spec/compose-go/v2 v2.10.1
 	github.com/containerd/errdefs v1.0.0
@@ -25,7 +25,7 @@ require (
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/moby/term v0.5.2
 	github.com/morikuni/aec v1.1.0
-	github.com/njayp/ophis v1.1.2
+	github.com/njayp/ophis v1.1.4
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/pkg/sftp v1.13.10
 	github.com/prometheus/client_golang v1.23.2
@@ -40,10 +40,10 @@ require (
 	github.com/telepresenceio/go-ftpserver v1.2.1
 	github.com/telepresenceio/go-fuseftp v1.0.1
 	github.com/telepresenceio/go-fuseftp/rpc v1.0.1
-	github.com/telepresenceio/telepresence/cmd/cobraparser/v2 v2.0.0-20260209025653-93f96f1a660a
-	github.com/telepresenceio/telepresence/rpc/v2 v2.27.0-rc.0
+	github.com/telepresenceio/telepresence/cmd/cobraparser/v2 v2.0.0-20260228142840-e19ac5d889d5
+	github.com/telepresenceio/telepresence/rpc/v2 v2.27.0-test.20
 	github.com/vishvananda/netlink v1.3.1
-	golang.org/x/net v0.50.0
+	golang.org/x/net v0.51.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/sys v0.41.0
 	golang.org/x/term v0.40.0
@@ -51,13 +51,13 @@ require (
 	golang.zx2c4.com/wireguard/windows v0.5.3
 	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11
-	gvisor.dev/gvisor v0.0.0-20260213200628-444f74c20034
+	gvisor.dev/gvisor v0.0.0-20260224225140-573d5e7127a8
 	helm.sh/helm/v3 v3.20.0
-	k8s.io/api v0.35.1
-	k8s.io/apimachinery v0.35.1
-	k8s.io/cli-runtime v0.35.1
-	k8s.io/client-go v0.35.1
-	k8s.io/kubectl v0.35.1
+	k8s.io/api v0.35.2
+	k8s.io/apimachinery v0.35.2
+	k8s.io/cli-runtime v0.35.2
+	k8s.io/client-go v0.35.2
+	k8s.io/kubectl v0.35.2
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -74,7 +74,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chai2010/gettext-go v1.0.3 // indirect
-	github.com/clipperhouse/uax29/v2 v2.6.0 // indirect
+	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/containerd/containerd v1.7.30 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
@@ -133,14 +133,14 @@ require (
 	github.com/liggitt/tabwriter v0.0.0-20181228230101-89fcab3d43de // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-runewidth v0.0.19 // indirect
+	github.com/mattn/go-runewidth v0.0.20 // indirect
 	github.com/mattn/go-shellwords v1.0.12 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/spdystream v0.5.0 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
-	github.com/modelcontextprotocol/go-sdk v1.3.0 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.4.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
@@ -153,10 +153,12 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
-	github.com/prometheus/procfs v0.19.2 // indirect
+	github.com/prometheus/procfs v0.20.0 // indirect
 	github.com/rubenv/sql-migrate v1.8.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
+	github.com/segmentio/asm v1.2.1 // indirect
+	github.com/segmentio/encoding v0.5.3 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
@@ -175,21 +177,21 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.4 // indirect
 	golang.org/x/crypto v0.48.0 // indirect
-	golang.org/x/exp v0.0.0-20260212183809-81e46e3db34a // indirect
+	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa // indirect
 	golang.org/x/mod v0.33.0 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
 	golang.org/x/text v0.34.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.42.0 // indirect
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.35.1 // indirect
-	k8s.io/apiserver v0.35.1 // indirect
-	k8s.io/component-base v0.35.1 // indirect
-	k8s.io/component-helpers v0.35.1 // indirect
+	k8s.io/apiextensions-apiserver v0.35.2 // indirect
+	k8s.io/apiserver v0.35.2 // indirect
+	k8s.io/component-base v0.35.2 // indirect
+	k8s.io/component-helpers v0.35.2 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20260127142750-a19766b6e2d4 // indirect
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2 // indirect
