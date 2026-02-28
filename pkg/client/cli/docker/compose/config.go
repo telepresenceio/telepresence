@@ -155,6 +155,10 @@ func (c *config) subCommand(subCmd *types.CommandInfo) *cobra.Command {
 		ioutil.Printf(os.Stderr, "internal error: %v\n", err)
 		os.Exit(1)
 	}
+	// Stop parsing flags at the first non-flag argument (the service name). This mirrors how
+	// docker compose works, so that e.g. `telepresence compose exec svc wget -qO- <url>`
+	// doesn't try to interpret `-qO-` as flags for `exec`.
+	cmdFlags.SetInterspersed(false)
 	uf := cmd.UsageFunc()
 	cmd.SetUsageFunc(func(*cobra.Command) error {
 		cmd.SetContext(flags.WithFlagSets(cmd.Context(), c.commandFlags, c.subCommandFlags))
@@ -325,7 +329,12 @@ func (c *config) connect(ctx context.Context, es map[string]serviceExtension, co
 }
 
 func (c *config) loadProject(ctx context.Context) (*transformer, error) {
-	options, err := c.toProjectOptions()
+	// Skip compose-go's built-in validation so that services without a local image (e.g. proxy
+	// services) can be loaded. Those services are removed or transformed before the final
+	// compose file is written to disk, at which point docker compose performs its own validation.
+	options, err := c.toProjectOptions(cli.WithLoadOptions(loader.WithSkipValidation, func(o *loader.Options) {
+		o.SkipConsistencyCheck = true
+	}))
 	if err != nil {
 		return nil, err
 	}
