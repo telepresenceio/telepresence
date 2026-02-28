@@ -30,11 +30,13 @@ cluster and redirect it to your local workstation:
 
 telepresence intercept <name of service>
 
-Telepresence uses background processes to manage the cluster session. One of
-the processes runs with superuser privileges because it modifies the network.
-Unless the daemons are already started, an attempt will be made to start them.
-This will involve a call to sudo unless this command is run as root (not
-recommended) which in turn may result in a password prompt.`
+Telepresence uses a background process, the user daemon, to manage the cluster
+session, and a system service, the root daemon, to modify the workstation's
+network and DNS so that the cluster's services become available locally.
+
+If Telepresence was installed as a standalone binary, the system service will
+not be present. A root daemon must then be started using sudo, which may
+result in a password prompt.`
 
 	helpMarkdown = `Telepresence can connect to a cluster and route all outbound traffic from your
 workstation to that cluster so that software running locally can communicate
@@ -51,11 +53,13 @@ cluster and redirect it to your local workstation:
 telepresence intercept <name of service>
 ` + "```" + `
 
-Telepresence uses background processes to manage the cluster session. One of
-the processes runs with superuser privileges because it modifies the network.
-Unless the daemons are already started, an attempt will be made to start them.
-This will involve a call to sudo unless this command is run as root (not
-recommended) which in turn may result in a password prompt.`
+Telepresence uses a background process, the user daemon, to manage the cluster
+session, and a system service, the root daemon, to modify the workstation's
+network and DNS so that the cluster's services become available locally.
+
+If Telepresence was installed as a standalone binary, the system service will
+not be present. A root daemon must then be started using sudo, which may
+result in a password prompt.`
 
 	usagePlain = `Usage:
 {{- if .HasAvailableSubCommands}}

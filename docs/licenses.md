@@ -4,5 +4,6 @@ Telepresence CLI incorporates Free and Open Source software under the following 
 * [3-clause BSD license](https://opensource.org/licenses/BSD-3-Clause)
 * [Apache License 2.0](https://opensource.org/licenses/Apache-2.0)
 * [ISC license](https://opensource.org/licenses/ISC)
+* [MIT No Attribution license](https://spdx.org/licenses/MIT-0.html)
 * [MIT license](https://opensource.org/licenses/MIT)
 * [Mozilla Public License 2.0](https://opensource.org/licenses/MPL-2.0)

@@ -81,8 +81,9 @@ and that you can run a copy of that application on your laptop.
 ## Replace Your Container
 
 This approach offers the benefit of direct cluster connectivity from your workstation, simplifying debugging and
-modification of your application within its familiar environment. However, it requires root access to configure
-network telepresence, and remote mounts must be made relative to a specific mount point, which can add complexity.
+modification of your application within its familiar environment. Note that if Telepresence was installed using a
+standalone binary rather than a [package installer](../install/client.md), it will require root access to configure the
+network interface. Remote mounts must be made relative to a specific mount point, which can add complexity.
 
 1. Connect to your cluster with `telepresence connect` and try to curl to the Kubernetes API server. A 401 or 403 response code is expected and indicates that the service could be reached:
 
@@ -257,8 +258,8 @@ You can now:
 
 ### Running Everything Using Docker
 
-This approach eliminates the need for root access and confines the Telepresence network interface and remote mounts
-to a container.  Additionally, it allows for precise replication of the target container's volume mounts, using identical 
+This approach confines the Telepresence network interface and remote mounts to a container, and like the
+[package installer](../install/client.md) approach, eliminates the need for root access.  Additionally, it allows for precise replication of the target container's volume mounts, using identical 
 mount points. However, this method will require docker to get cluster connectivity, and the containerized environment can
 present challenges in terms of toolchain integration, debugging, and the overall development workflow.
 

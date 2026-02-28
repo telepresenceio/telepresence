@@ -62,9 +62,14 @@ Yes, but it doesn't need to have a publicly accessible IP address.
 
 The cluster must also have access to an external registry to be able to download the traffic-manager and traffic-agent images that are deployed when connecting with Telepresence.
 
-#### Why does running Telepresence require sudo access for the local daemon unless it runs in a Docker container?
+#### Why does running Telepresence sometimes require sudo access for the local daemon?
 
-The local daemon needs sudo to create a VIF (Virtual Network Interface) for outbound routing and DNS. Root access is needed to do that unless the daemon runs in a Docker container.
+The local daemon needs to create a VIF (Virtual Network Interface) for outbound routing and DNS, which is a privileged operation. However, sudo is **not** required when:
+
+- Telepresence was installed using a [package installer](install/client.md) (`.pkg` on macOS, `.deb`/`.rpm` on Linux, or the Windows setup installer), which configures the root daemon as a system service.
+- Telepresence runs in [Docker mode](howtos/docker.md) (`telepresence connect --docker`).
+
+Sudo is only needed when using a standalone binary installation without a system service.
 
 #### What components get installed in the cluster when running Telepresence?
 

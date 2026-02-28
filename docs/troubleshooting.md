@@ -63,6 +63,17 @@ A command that should always work is:
 $ dscacheutil -q host -a name <name to resolve>
 ```
 
+## DNS does not resolve in GitLab pipeline
+
+If services are not resolving after running `telepresence connect` in a GitLab pipeline, this may be because the `resolv.conf` file is bind-mounted, which prevents it from being copied, deleted, or moved. However, you can still replace its contents.
+```yaml
+job:
+  ...
+  script:
+    - telepresence connect
+    - echo "nameserver 127.0.0.1" > /etc/resolv.conf # Telepresence runs a DNS server on port 53 but cannot update the bind-mounted resolv.conf file
+```
+
 ## Helm install failes with "uncomparable type" error
 
 An attempt to install the traffic-manager using the `helm` command ends with an error similar to: 

@@ -6,17 +6,18 @@ hide_table_of_contents: true
 
 ## Why?
 
-It can be tedious to adopt Telepresence across your organization, since in its handiest form, it requires admin access,
-and needs to get along with any exotic networking setup that your company may have.
+It can be tedious to adopt Telepresence across your organization, since the [package installer](../install/client.md)
+requires organizational approval, and Telepresence needs to get along with any exotic networking setup that your
+company may have.
 
-If Docker is already approved in your organization, this Golden path should be considered.
+If Docker is already approved in your organization, this approach should be considered.
 
 ## How?
 
-When using Telepresence in Docker mode, users can eliminate the need for admin access on their machines, address several networking challenges, and forego the need for third-party applications to enable volume mounts.
+When using Telepresence in Docker mode, users don't need organizational approval of a package installer, can address several networking challenges, and forego the need for third-party applications to enable volume mounts.
 
-You can simply add the docker flag to any Telepresence command, and it will start your daemon in a container.
-Thus removing the need for root access, making it easier to adopt as an organization
+You can simply add the docker flag to any Telepresence command, and it will start your daemon in a container,
+making it easier to adopt as an organization.
 
 Let's illustrate with a quick demo, assuming a default Kubernetes context named default, and a simple HTTP service:
 
@@ -116,7 +117,7 @@ $ telepresence replace echo-easy --use alpha --docker-run -- ghcr.io/telepresenc
 
 ## Key learnings
 
-* Using the Docker mode of telepresence **does not require root access**, and makes it **easier** to adopt it across your organization.
+* Using the Docker mode of telepresence **does not require organizational approval of a package installer**, and makes it **easier** to adopt across your organization.
 * It **limits the potential networking issues** you can encounter.
 * It **limits the potential mount issues** you can encounter.
 * It **enables simultaneous engagements in multiple namespaces**.
