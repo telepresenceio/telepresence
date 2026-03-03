@@ -213,34 +213,46 @@ func (s *session) getCurrentIngests() []*rpc.IngestInfo {
 	return ingests
 }
 
-func (s *session) getIngest(rq *rpc.IngestIdentifier) (ig *ingest, err error) {
-	if rq.ContainerName == "" {
+func (s *session) findIngest(workloadName, containerName string) (ig *ingest, err error) {
+	if containerName == "" {
 		// Valid if there's only one ingest for the given workload.
+		var foundIngest *ingest
+		var err error
+
 		s.currentIngests.Range(func(key ingestKey, value *ingest) bool {
-			if key.workload == rq.WorkloadName {
-				if rq.ContainerName != "" {
-					err = status.Error(codes.NotFound, fmt.Sprintf("workload %s has multiple ingests. Please specify which one to use", rq.WorkloadName))
+			if key.workload == workloadName {
+				if foundIngest != nil {
+					err = status.Error(codes.NotFound, fmt.Sprintf("workload %s has multiple ingests. Please specify which one to use", workloadName))
 					return false
 				}
-				rq.ContainerName = key.container
+				foundIngest = value
+				containerName = key.container
 			}
 			return true
 		})
 		if err != nil {
 			return nil, err
 		}
-		if rq.ContainerName == "" {
-			return nil, status.Error(codes.NotFound, fmt.Sprintf("no ingest found for workload %s", rq.WorkloadName))
+
+		if foundIngest == nil {
+			return nil, status.Error(codes.NotFound, fmt.Sprintf("no ingest found for workload %s", workloadName))
 		}
+
+		return foundIngest, nil
 	}
+
 	ik := ingestKey{
-		workload:  rq.WorkloadName,
-		container: rq.ContainerName,
+		workload:  workloadName,
+		container: containerName,
 	}
 	if ig, ok := s.currentIngests.Load(ik); ok {
 		return ig, nil
 	}
 	return nil, status.Error(codes.NotFound, fmt.Sprintf("ingest %s doesn't exist", ik))
+}
+
+func (s *session) getIngest(rq *rpc.IngestIdentifier) (ig *ingest, err error) {
+	return s.findIngest(rq.WorkloadName, rq.ContainerName)
 }
 
 func (s *session) GetIngest(rq *rpc.IngestIdentifier) (ii *rpc.IngestInfo, err error) {
