@@ -302,19 +302,52 @@ func (s *ingestSuite) Test_IngestProxyVia() {
 	}))
 }
 
-// Test_IngestWithCommand tests that running a command with ingest works correctly
-// when no container name is specified. This is a regression test for issue #4067
-// where AddInterceptor would fail to find the ingest because the container name
-// was empty, causing the command to be killed immediately.
 func (s *ingestSuite) Test_IngestWithCommand() {
 	ctx := s.Context()
 	s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceDisconnectOk(ctx)
 
 	mountPoint := s.mountPoint()
-
-	// Run ingest with a command without specifying container name
-	// The command should complete successfully without being killed
 	stdout := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo", "--", "echo", "test-output")
 	s.Contains(stdout, "test-output")
+}
+
+func (s *ingestSuite) Test_IngestWithContainerAndCommand() {
+	ctx := s.Context()
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	mountPoint := s.mountPoint()
+	stdout := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "--container", "echo-server", "echo", "--", "echo", "explicit-container")
+	s.Contains(stdout, "explicit-container")
+}
+
+func (s *ingestSuite) Test_LeaveIngestWithoutContainer() {
+	ctx := s.Context()
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	mountPoint := s.mountPoint()
+
+	itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo")
+
+	itest.TelepresenceOk(ctx, "leave", "echo")
+
+	stdout := itest.TelepresenceOk(ctx, "list", "--ingests")
+	s.NotContains(stdout, "echo")
+}
+
+func (s *ingestSuite) Test_IngestListFormat() {
+	ctx := s.Context()
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	mountPoint := s.mountPoint()
+
+	itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo-env")
+
+	stdout := itest.TelepresenceOk(ctx, "list", "--ingests")
+	s.Contains(stdout, "echo-env")
+
+	itest.TelepresenceOk(ctx, "leave", "echo-env")
 }
