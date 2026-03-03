@@ -301,3 +301,20 @@ func (s *ingestSuite) Test_IngestProxyVia() {
 		rq.NoError(err)
 	}))
 }
+
+// Test_IngestWithCommand tests that running a command with ingest works correctly
+// when no container name is specified. This is a regression test for issue #4067
+// where AddInterceptor would fail to find the ingest because the container name
+// was empty, causing the command to be killed immediately.
+func (s *ingestSuite) Test_IngestWithCommand() {
+	ctx := s.Context()
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	mountPoint := s.mountPoint()
+
+	// Run ingest with a command without specifying container name
+	// The command should complete successfully without being killed
+	stdout := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo", "--", "echo", "test-output")
+	s.Contains(stdout, "test-output")
+}
