@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.27.1
-    date: 2026-03-04
+    date: (TBD)
     notes:
       - type: bugfix
         title: Fix ingest command lookup when container name is not specified
