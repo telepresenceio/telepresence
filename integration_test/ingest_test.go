@@ -318,7 +318,7 @@ func (s *ingestSuite) Test_IngestWithContainerAndCommand() {
 	defer itest.TelepresenceDisconnectOk(ctx)
 
 	mountPoint := s.mountPoint()
-	stdout := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "--container", "echo-server", "echo", "--", "echo", "explicit-container")
+	stdout := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "--container", "echo", "echo", "--", "echo", "explicit-container")
 	s.Contains(stdout, "explicit-container")
 }
 
