@@ -24,6 +24,19 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.27.1
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Fix ingest command lookup when container name is not specified
+        body: >-
+          The traffic manager now properly handles ingest lookups when using
+          <code>telepresence ingest &lt;workload&gt; -- command</code> without specifying
+          a container name. Previously, this would fail for workloads because the lookup
+          couldn't find ingests with empty container names. The traffic manager now provides
+          clearer error messages when a container name is required but not specified, and
+          correctly resolves ingests for single-container workloads automatically.
+        docs: https://github.com/telepresenceio/telepresence/issues/4067
   - version: 2.27.0
     date: 2026-02-28
     notes:

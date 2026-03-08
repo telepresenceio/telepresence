@@ -301,3 +301,53 @@ func (s *ingestSuite) Test_IngestProxyVia() {
 		rq.NoError(err)
 	}))
 }
+
+func (s *ingestSuite) Test_IngestWithCommand() {
+	ctx := s.Context()
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	mountPoint := s.mountPoint()
+	stdout := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo", "--", "echo", "test-output")
+	s.Contains(stdout, "test-output")
+}
+
+func (s *ingestSuite) Test_IngestWithContainerAndCommand() {
+	ctx := s.Context()
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	mountPoint := s.mountPoint()
+	stdout := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "--container", "echo", "echo", "--", "echo", "explicit-container")
+	s.Contains(stdout, "explicit-container")
+}
+
+func (s *ingestSuite) Test_LeaveIngestWithoutContainer() {
+	ctx := s.Context()
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	mountPoint := s.mountPoint()
+
+	itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo")
+
+	itest.TelepresenceOk(ctx, "leave", "echo")
+
+	stdout := itest.TelepresenceOk(ctx, "list", "--ingests")
+	s.NotContains(stdout, "echo")
+}
+
+func (s *ingestSuite) Test_IngestListFormat() {
+	ctx := s.Context()
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	mountPoint := s.mountPoint()
+
+	itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo-env")
+
+	stdout := itest.TelepresenceOk(ctx, "list", "--ingests")
+	s.Contains(stdout, "echo-env")
+
+	itest.TelepresenceOk(ctx, "leave", "echo-env")
+}

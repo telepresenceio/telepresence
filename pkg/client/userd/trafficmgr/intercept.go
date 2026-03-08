@@ -788,7 +788,7 @@ func (s *session) AddInterceptor(id string, ih *rpc.Interceptor) error {
 		added = true
 	} else {
 		if parts := strings.Split(id, "/"); len(parts) == 2 {
-			if cg, ok := s.currentIngests.Load(ingestKey{workload: parts[0], container: parts[1]}); ok {
+			if cg, err := s.findIngest(parts[0], parts[1]); err == nil {
 				clog.Debugf(s, "Adding ingest handler for id %s, %v", id, ih)
 				cg.pid = int(ih.Pid)
 				cg.handlerContainer = ih.ContainerName
@@ -810,7 +810,7 @@ func (s *session) RemoveInterceptor(id string) error {
 		ci.handlerContainer = ""
 	} else {
 		if parts := strings.Split(id, "/"); len(parts) == 2 {
-			if cg, ok := s.currentIngests.Load(ingestKey{workload: parts[0], container: parts[1]}); ok {
+			if cg, err := s.findIngest(parts[0], parts[1]); err == nil {
 				cg.pid = 0
 				cg.handlerContainer = ""
 			}

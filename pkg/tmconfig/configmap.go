@@ -39,7 +39,7 @@ func AddCommand(ctx context.Context, namespace string, command AdminCommand) err
 			return err
 		}
 		data := []byte(cm.Data[AdminCommandsFileName])
-		var commands AdminCommandList
+		commands := make(AdminCommandList, 0, 1+len(data))
 		if len(data) > 0 {
 			err = commands.UnmarshalYAML(data)
 			if err != nil {
