@@ -68,5 +68,4 @@ rpm:
 # Deb-specific settings
 deb:
   fields:
-    Priority: optional
     Section: net

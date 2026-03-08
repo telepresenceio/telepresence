@@ -28,6 +28,14 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Fix duplicate Priority field in .deb package causing dpkg install failure
+        body: >-
+          The <code>.deb</code> package control file contained a duplicate <code>Priority</code> field,
+          which caused <code>dpkg -i</code> to fail with a parsing error. This was caused by
+          <code>nfpm</code> adding <code>Priority: optional</code> by default while the build
+          configuration also specified it explicitly under <code>deb.fields</code>.
+        docs: https://github.com/telepresenceio/telepresence/issues/4070
+      - type: bugfix
         title: Fix ingest command lookup when container name is not specified
         body: >-
           The traffic manager now properly handles ingest lookups when using
