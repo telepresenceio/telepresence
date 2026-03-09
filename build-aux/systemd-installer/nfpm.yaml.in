@@ -14,6 +14,7 @@ description: |
 vendor: Telepresence.io
 homepage: https://telepresence.io/
 license: Apache-2.0
+section: net
 
 # Package dependencies
 depends:
@@ -64,8 +65,3 @@ scripts:
 rpm:
   group: Applications/Internet
   summary: Fast, local development for Kubernetes
-
-# Deb-specific settings
-deb:
-  fields:
-    Section: net

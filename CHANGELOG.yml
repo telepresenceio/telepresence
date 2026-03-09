@@ -24,6 +24,18 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.27.2
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Fix duplicate Section field in .deb package causing dpkg install failure
+        body: >-
+          The <code>.deb</code> package control file contained a duplicate <code>Section</code> field,
+          which caused <code>dpkg -i</code> to fail with a parsing error. The <code>Section</code>
+          field was specified both as a top-level <code>nfpm</code> default and explicitly under
+          <code>deb.fields</code>. Moved to the top-level <code>section</code> key and removed the
+          <code>deb.fields</code> block entirely.
+        docs: https://github.com/telepresenceio/telepresence/issues/4073
   - version: 2.27.1
     date: 2026-03-08
     notes:
