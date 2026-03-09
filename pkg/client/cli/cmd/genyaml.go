@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-json-experiment/json"
@@ -252,7 +253,7 @@ func genConfigMapSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 		"Name of the workload. If given, the workload will be retrieved from the cluster, mutually exclusive to --input")
 	fs.Uint16Var(&info.AgentPort, "agent-port", 9900,
 		"The port number you wish the agent to listen on.")
-	fs.StringVar(&info.QualifiedAgentImage, "agent-image", "ghcr.io/telepresenceio/tel2:"+client.Semver().FinalizeVersion(),
+	fs.StringVar(&info.QualifiedAgentImage, "agent-image", "ghcr.io/telepresenceio/tel2:<current version>",
 		`The qualified name of the agent image`)
 	fs.Uint16Var(&info.ManagerPort, "manager-port", 8081,
 		`The traffic-manager API port`)
@@ -274,6 +275,8 @@ func (g *genConfigMap) generateConfigMap(ctx context.Context, wl k8sapi.Workload
 }
 
 func (g *genConfigMap) run(cmd *cobra.Command, kubeFlags map[string]string) error {
+	// Resolve the placeholder in the default agent image with the actual version.
+	g.QualifiedAgentImage = strings.ReplaceAll(g.QualifiedAgentImage, "<current version>", client.Semver().FinalizeVersion())
 	ctx, err := g.WithJoinedClientSetInterface(cmd.Context(), kubeFlags)
 	if err != nil {
 		return err
