@@ -24,6 +24,18 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.27.3
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Fix Docker teleroute network subnet conflicts with Kubernetes cluster CIDRs
+        body: >-
+          When using <code>telepresence connect --docker</code> or <code>telepresence compose</code>,
+          Docker's default IPAM could assign a subnet that overlaps with the Kubernetes cluster's
+          service CIDR (e.g., <code>172.20.0.0/16</code> on EKS), causing network creation to fail.
+          Telepresence now pre-computes a non-conflicting RFC 1918 subnet by checking both existing
+          Docker networks and the cluster's routing CIDRs before creating the teleroute network.
+        docs: https://github.com/telepresenceio/telepresence/issues/4005
   - version: 2.27.2
     date: 2026-03-09
     notes:
