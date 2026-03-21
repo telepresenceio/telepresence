@@ -5,11 +5,15 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
 	"path/filepath"
 	goRuntime "runtime"
 	"slices"
 	"strings"
+
+	"github.com/docker/docker/api/types/network"
+	dockerClient "github.com/docker/docker/client"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -169,4 +173,61 @@ func (s *dockerDaemonSuite) Test_GatherLogsTrafficManager() {
 	foundManager, _, _, fileNames := getZipData(s.Require(), outputFile, s.AppNamespace(), s.ManagerNamespace(), "echo-easy")
 	s.Require().True(foundManager)
 	s.Require().True(slices.ContainsFunc(fileNames, func(name string) bool { return strings.HasPrefix(name, "traffic-manager") }))
+}
+
+func (s *dockerDaemonSuite) Test_DockerDaemon_networkNoSubnetConflict() {
+	ctx := s.Context()
+	rq := s.Require()
+
+	const numDaemons = 3
+	names := make([]string, numDaemons)
+	for i := range numDaemons {
+		names[i] = fmt.Sprintf("subnet-test-%d", i)
+	}
+
+	// Connect multiple Docker daemons, each creating its own teleroute network.
+	for _, name := range names {
+		s.TelepresenceConnect(ctx, "--docker", "--name", name)
+	}
+	defer func() {
+		for _, name := range names {
+			itest.TelepresenceDisconnectOk(ctx, "--use", name)
+		}
+	}()
+
+	cli, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
+	rq.NoError(err)
+	defer cli.Close()
+
+	// Collect the cluster CIDRs from the first daemon's status.
+	status := itest.TelepresenceStatusOk(ctx, "--use", names[0])
+	rq.NotNil(status.UserDaemon)
+	clusterSubnets := status.RootDaemon.RoutingSnake.Subnets
+	alsoProxy := status.RootDaemon.RoutingSnake.AlsoProxy
+	allClusterCIDRs := append(append([]netip.Prefix{}, clusterSubnets...), alsoProxy...)
+	rq.NotEmpty(allClusterCIDRs, "expected at least one cluster subnet in status")
+
+	// Verify that every daemon's teleroute network got a subnet that doesn't
+	// overlap with any cluster CIDR.
+	for _, name := range names {
+		st := itest.TelepresenceStatusOk(ctx, "--use", name)
+		rq.NotNil(st.UserDaemon)
+		networkName := st.UserDaemon.ContainerNetwork
+		rq.NotEmpty(networkName, "expected a container network name for daemon %s", name)
+
+		ni, err := cli.NetworkInspect(ctx, networkName, network.InspectOptions{})
+		rq.NoError(err)
+		rq.NotEmpty(ni.IPAM.Config, "expected at least one IPAM config on teleroute network %s", networkName)
+
+		for _, cfg := range ni.IPAM.Config {
+			subnet, err := netip.ParsePrefix(cfg.Subnet)
+			if err != nil {
+				continue // skip non-IPv4 or unparseable entries
+			}
+			for _, clusterCIDR := range allClusterCIDRs {
+				s.Falsef(subnet.Overlaps(clusterCIDR),
+					"teleroute network %s subnet %s overlaps with cluster CIDR %s", networkName, subnet, clusterCIDR)
+			}
+		}
+	}
 }
