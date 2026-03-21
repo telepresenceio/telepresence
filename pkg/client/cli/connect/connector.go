@@ -195,8 +195,12 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 		if err != nil {
 			return ctx, err
 		}
-		if len(rootCfg.Routing().Subnets) > 0 {
-			err = createTelerouteNetwork(ctx, s.DaemonInfo())
+		routing := rootCfg.Routing()
+		if len(routing.Subnets) > 0 {
+			clusterSubnets := make([]netip.Prefix, 0, len(routing.Subnets)+len(routing.AlsoProxy))
+			clusterSubnets = append(clusterSubnets, routing.Subnets...)
+			clusterSubnets = append(clusterSubnets, routing.AlsoProxy...)
+			err = createTelerouteNetwork(ctx, s.DaemonInfo(), clusterSubnets)
 			if err != nil {
 				return ctx, err
 			}
@@ -656,7 +660,7 @@ func connectSession(ctx context.Context, useLine string, request *daemon.Request
 	return connectResult(ctx, ci, true), nil
 }
 
-func createTelerouteNetwork(ctx context.Context, info *daemon.Info) error {
+func createTelerouteNetwork(ctx context.Context, info *daemon.Info, clusterSubnets []netip.Prefix) error {
 	// Make an attempt to create the network with IPv6 enabled. This will fail unless the user has enabled
 	// IPv6 in /etc/docker/daemon.json.
 	cn := info.Name
@@ -667,12 +671,12 @@ func createTelerouteNetwork(ctx context.Context, info *daemon.Info) error {
 
 	teleroutePlugin := docker.NetworkPluginName(ctx)
 	teleroutePort := client.GetConfig(ctx).Grpc().TeleroutePort
-	err = teleroute.CreateNetwork(ctx, info, cli, teleroutePlugin, teleroutePort)
+	err = teleroute.CreateNetwork(ctx, info, cli, teleroutePlugin, teleroutePort, clusterSubnets)
 	if err != nil && strings.Contains(err.Error(), fmt.Sprintf("%s already exists", cn)) && teleroute.IsTelerouteNetwork(ctx, cli, cn) {
 		var disconnected []string
 		disconnected, err = teleroute.RemoveNetwork(ctx, cli, cn)
 		if err == nil {
-			err = teleroute.CreateNetwork(ctx, info, cli, teleroutePlugin, teleroutePort)
+			err = teleroute.CreateNetwork(ctx, info, cli, teleroutePlugin, teleroutePort, clusterSubnets)
 			if err == nil {
 				teleroute.ReconnectNetwork(ctx, cli, cn, disconnected)
 			}
