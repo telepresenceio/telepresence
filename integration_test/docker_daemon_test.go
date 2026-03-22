@@ -202,8 +202,8 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_networkNoSubnetConflict() {
 	// Collect the cluster CIDRs from the first daemon's status.
 	status := itest.TelepresenceStatusOk(ctx, "--use", names[0])
 	rq.NotNil(status.UserDaemon)
-	clusterSubnets := status.RootDaemon.RoutingSnake.Subnets
-	alsoProxy := status.RootDaemon.RoutingSnake.AlsoProxy
+	clusterSubnets := status.RootDaemon.Subnets
+	alsoProxy := status.RootDaemon.AlsoProxy
 	allClusterCIDRs := append(append([]netip.Prefix{}, clusterSubnets...), alsoProxy...)
 	rq.NotEmpty(allClusterCIDRs, "expected at least one cluster subnet in status")
 
