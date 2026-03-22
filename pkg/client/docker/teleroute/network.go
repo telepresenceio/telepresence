@@ -2,6 +2,8 @@ package teleroute
 
 import (
 	"context"
+	"encoding/binary"
+	"errors"
 	"net/netip"
 	"strconv"
 	"strings"
@@ -20,7 +22,10 @@ import (
 
 const daemonLabel = "telepresence.io/teleroute/daemon"
 
-func CreateNetwork(ctx context.Context, info *daemon.Info, cli *dockerClient.Client, teleroutePlugin string, teleroutePort uint16) error {
+func CreateNetwork(
+	ctx context.Context, info *daemon.Info, cli *dockerClient.Client,
+	teleroutePlugin string, teleroutePort uint16, clusterSubnets []netip.Prefix,
+) error {
 	cn := info.Name
 	dockerCfg := client.GetConfig(ctx).Docker()
 	ipv4 := dockerCfg.EnableIPv4
@@ -35,8 +40,7 @@ func CreateNetwork(ctx context.Context, info *daemon.Info, cli *dockerClient.Cli
 	if !ipv4 && !ipv6 {
 		return errcat.User.New("unable to create teleroute network because both the IPv4 and IPv6 families are disabled")
 	}
-	clog.Debugf(ctx, "Creating teleroute network %s", cn)
-	rsp, err := cli.NetworkCreate(ctx, cn, network.CreateOptions{
+	opts := network.CreateOptions{
 		Driver:     teleroutePlugin,
 		Scope:      "local",
 		Internal:   true,
@@ -49,7 +53,22 @@ func CreateNetwork(ctx context.Context, info *daemon.Info, cli *dockerClient.Cli
 		Labels: map[string]string{
 			daemonLabel: info.ContainerID,
 		},
-	})
+	}
+	if len(clusterSubnets) > 0 {
+		subnet, findErr := findNonConflictingSubnet(ctx, cli, clusterSubnets)
+		if findErr != nil {
+			clog.Warnf(ctx, "Unable to pre-compute a non-conflicting subnet: %v. Falling back to Docker default IPAM", findErr)
+		} else {
+			clog.Debugf(ctx, "Using pre-computed subnet %s for teleroute network %s", subnet, cn)
+			opts.IPAM = &network.IPAM{
+				Config: []network.IPAMConfig{{
+					Subnet: subnet.String(),
+				}},
+			}
+		}
+	}
+	clog.Debugf(ctx, "Creating teleroute network %s", cn)
+	rsp, err := cli.NetworkCreate(ctx, cn, opts)
 	if err != nil {
 		return err
 	}
@@ -143,4 +162,80 @@ func ReconnectNetwork(ctx context.Context, cli *dockerClient.Client, name string
 			}
 		}
 	}
+}
+
+// findNonConflictingSubnet finds a subnet that doesn't overlap with any existing
+// Docker network or the given cluster CIDRs.
+func findNonConflictingSubnet(ctx context.Context, cli *dockerClient.Client, clusterSubnets []netip.Prefix) (netip.Prefix, error) {
+	avoid := append([]netip.Prefix{}, clusterSubnets...)
+	nets, err := cli.NetworkList(ctx, network.ListOptions{})
+	if err != nil {
+		return netip.Prefix{}, err
+	}
+	for _, n := range nets {
+		for _, cfg := range n.IPAM.Config {
+			if p, err := netip.ParsePrefix(cfg.Subnet); err == nil {
+				avoid = append(avoid, p)
+			}
+		}
+	}
+	return findFreeSubnet(avoid)
+}
+
+// findFreeSubnet returns the first RFC 1918 subnet that doesn't overlap with any prefix in avoid.
+// It tries progressively smaller subnets across all three RFC 1918 ranges.
+func findFreeSubnet(avoid []netip.Prefix) (netip.Prefix, error) {
+	type pool struct {
+		start netip.Addr
+		bits  int
+		count int
+	}
+	pools := []pool{
+		{netip.MustParseAddr("172.16.0.0"), 16, 16},   // 172.16–31.0.0/16
+		{netip.MustParseAddr("10.0.0.0"), 20, 4096},   // 10.0.0.0/8 as /20s
+		{netip.MustParseAddr("10.0.0.0"), 24, 65536},  // 10.0.0.0/8 as /24s
+		{netip.MustParseAddr("192.168.0.0"), 24, 256}, // 192.168.0.0/16 as /24s
+	}
+	for _, pl := range pools {
+		p := netip.PrefixFrom(pl.start, pl.bits)
+		for range pl.count {
+			if !overlapsAny(p, avoid) {
+				return p, nil
+			}
+			p = nextPrefix(p)
+		}
+	}
+	return netip.Prefix{}, errors.New("no non-conflicting RFC 1918 subnet found")
+}
+
+// overlapsAny returns true if subnet overlaps with any prefix in cidrs.
+func overlapsAny(subnet netip.Prefix, cidrs []netip.Prefix) bool {
+	for _, c := range cidrs {
+		if subnet.Overlaps(c) {
+			return true
+		}
+	}
+	return false
+}
+
+// nextPrefix returns the prefix of the same size immediately following p.
+// For example, nextPrefix("172.16.0.0/16") returns "172.17.0.0/16".
+func nextPrefix(p netip.Prefix) netip.Prefix {
+	// Convert the 4-byte IP address to a single integer so we can do arithmetic on it.
+	b := p.Addr().As4()
+	ip := binary.BigEndian.Uint32(b[:])
+
+	// A /16 has 65536 addresses, a /20 has 4096, a /24 has 256, etc.
+	subnetSize := uint32(1) << (32 - p.Bits())
+
+	next := ip + subnetSize
+	if next < ip {
+		// Wrapped past 255.255.255.255.
+		return netip.Prefix{}
+	}
+
+	// Convert back from integer to 4-byte IP address.
+	var nb [4]byte
+	binary.BigEndian.PutUint32(nb[:], next)
+	return netip.PrefixFrom(netip.AddrFrom4(nb), p.Bits())
 }
