@@ -85,6 +85,7 @@ func (c *containerState) HandleContainer(ctx context.Context, iis []*manager.Int
 					SftpPort:    int32(c.SftpPort()),
 					FtpPort:     int32(c.FtpPort()),
 					MountPoint:  c.MountPoint(),
+					Mounts:      c.Mounts().ToRPC(),
 					Environment: c.Env(),
 				})
 			}
