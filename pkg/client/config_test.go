@@ -34,6 +34,7 @@ images:
 intercept:
   defaultPort: 9080
   useFtp: true
+  useMacosFsKit: true
 routing:
   virtualSubnet: 192.169.0.0/16
 `
@@ -64,6 +65,7 @@ routing:
 	assert.Equal(t, "ambassador-telepresence-image:0.0.2", cfg.Images().PrivateClientImage)      // from user
 	assert.Equal(t, 9080, cfg.Intercept().DefaultPort)                                           // from user
 	assert.True(t, cfg.Intercept().UseFtp)                                                       // from user
+	assert.True(t, cfg.Intercept().UseMacosFsKit)                                                // from user
 	assert.True(t, cfg.DNS().RecursionCheck)                                                     // from user
 	assert.Equal(t, cfg.Routing().VirtualSubnet, netip.MustParsePrefix("192.169.0.0/16"))        // from user
 }

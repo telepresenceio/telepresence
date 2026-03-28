@@ -766,6 +766,7 @@ type DockerImage struct {
 type Intercept struct {
 	DefaultPort          int           `json:"defaultPort"`
 	UseFtp               bool          `json:"useFtp"`
+	UseMacosFsKit        bool          `json:"useMacosFsKit"`
 	MountsRoot           string        `json:"mountsRoot"`
 	MountCompletionDelay time.Duration `json:"mountCompletionDelay,format:units"`
 }
