@@ -405,11 +405,20 @@ func (s *service) RemoteMountAvailability(ctx context.Context, ex *empty.Empty) 
 		return ex, errcat.User.New("sshfs is not installed on your local machine")
 	}
 
+	if runtime.GOOS == "darwin" && client.GetConfig(ctx).Intercept().UseMacosFsKit {
+		ver, verErr := parseMacFUSEMajorVersion(out)
+		if verErr != nil {
+			return ex, errcat.User.Newf("useMacosFsKit is enabled but %v", verErr)
+		}
+		if ver < 5 {
+			return ex, errcat.User.Newf("useMacosFsKit requires macFUSE 5.0 or higher, but macFUSE %d.x is installed", ver)
+		}
+		return ex, nil
+	}
+
 	// OSXFUSE changed to macFUSE, and we've noticed that older versions of OSXFUSE
 	// can cause browsers to hang + kernel crashes, so we add an error to prevent
 	// our users from running into this problem.
-	// OSXFUSE isn't included in the output of sshfs -V in versions of 4.0.0 so
-	// we check for that as a proxy for if they have the right version or not.
 	if bytes.Contains(out, []byte("OSXFUSE")) {
 		return ex, errcat.User.New(`macFUSE 4.0.5 or higher is required on your local machine`)
 	}
