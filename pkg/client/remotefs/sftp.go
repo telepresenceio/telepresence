@@ -13,6 +13,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dpipe"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -76,8 +77,16 @@ func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMoun
 
 				// mount directives
 				"-o", "follow_symlinks",
-				"-o", "allow_root", // needed to make --docker-run work as docker runs as root
 			}
+
+			useFsKit := runtime.GOOS == "darwin" && client.GetConfig(ctx).Intercept().UseMacosFsKit
+			if !useFsKit {
+				// allow_root is a kernel mount option not supported by the FSKit backend
+				sshfsArgs = append(sshfsArgs, "-o", "allow_root")
+			} else {
+				sshfsArgs = append(sshfsArgs, "-o", "backend=fskit")
+			}
+
 			if ro {
 				sshfsArgs = append(sshfsArgs, "-o", "ro")
 			}
