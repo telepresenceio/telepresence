@@ -55,7 +55,7 @@ func CreateNetwork(
 		},
 	}
 	if len(clusterSubnets) > 0 {
-		subnet, findErr := findNonConflictingSubnet(ctx, cli, clusterSubnets)
+		subnet, findErr := FindNonConflictingSubnet(ctx, cli, clusterSubnets)
 		if findErr != nil {
 			clog.Warnf(ctx, "Unable to pre-compute a non-conflicting subnet: %v. Falling back to Docker default IPAM", findErr)
 		} else {
@@ -164,9 +164,9 @@ func ReconnectNetwork(ctx context.Context, cli *dockerClient.Client, name string
 	}
 }
 
-// findNonConflictingSubnet finds a subnet that doesn't overlap with any existing
+// FindNonConflictingSubnet finds a subnet that doesn't overlap with any existing
 // Docker network or the given cluster CIDRs.
-func findNonConflictingSubnet(ctx context.Context, cli *dockerClient.Client, clusterSubnets []netip.Prefix) (netip.Prefix, error) {
+func FindNonConflictingSubnet(ctx context.Context, cli *dockerClient.Client, clusterSubnets []netip.Prefix) (netip.Prefix, error) {
 	avoid := append([]netip.Prefix{}, clusterSubnets...)
 	nets, err := cli.NetworkList(ctx, network.ListOptions{})
 	if err != nil {

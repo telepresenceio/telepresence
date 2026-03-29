@@ -36,6 +36,13 @@ items:
           Telepresence now pre-computes a non-conflicting RFC 1918 subnet by checking both existing
           Docker networks and the cluster's routing CIDRs before creating the teleroute network.
         docs: https://github.com/telepresenceio/telepresence/issues/4005
+      - type: bugfix
+        title: Fix Docker Compose default network subnet conflicts with Kubernetes cluster CIDRs
+        body: >-
+          When using <code>telepresence compose</code>, Docker Compose auto-creates a default network
+          whose subnet could overlap with Kubernetes cluster CIDRs, causing cluster traffic to be
+          misrouted. Telepresence now configures the default network with an explicit non-conflicting
+          subnet in the rendered compose file.
   - version: 2.27.2
     date: 2026-03-09
     notes:

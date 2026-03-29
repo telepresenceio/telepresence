@@ -3,6 +3,7 @@ package compose
 import (
 	"context"
 	"fmt"
+	"net/netip"
 	"os"
 	"os/exec"
 	"slices"
@@ -16,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/json"
@@ -252,7 +254,7 @@ func (t *transformer) withProfiles(profiles []string) error {
 }
 
 // ApplyEngagements ensures that the compose-spec is modified in accordance with the engagements.
-func (t *transformer) applyEngagements() error {
+func (t *transformer) applyEngagements(ctx context.Context) error {
 	if len(t.engagements) == 0 {
 		return nil
 	}
@@ -283,6 +285,8 @@ func (t *transformer) applyEngagements() error {
 	for _, e := range t.engagements {
 		e.engageProject(p)
 	}
+
+	t.configureDefaultNetwork(ctx, p)
 
 	if t.tpVolumes != nil {
 		t.tpVolumes.Range(func(k string, v *compose.VolumeConfig) bool {
@@ -323,6 +327,46 @@ func (t *transformer) ensureTopLevelExtension(p *compose.Project) error {
 	return nil
 }
 
+// configureDefaultNetwork sets an explicit IPAM subnet on the compose project's default network
+// to prevent Docker from assigning a CIDR that conflicts with Kubernetes cluster subnets.
+func (t *transformer) configureDefaultNetwork(ctx context.Context, p *compose.Project) {
+	// Don't override if the user explicitly configured the default network with IPAM.
+	if existing, ok := p.Networks["default"]; ok && len(existing.Ipam.Config) > 0 {
+		return
+	}
+
+	// Aggregate cluster subnets from all connections.
+	var allSubnets []netip.Prefix
+	for _, c := range t.connections() {
+		allSubnets = append(allSubnets, c.subnets...)
+	}
+	if len(allSubnets) == 0 {
+		return
+	}
+
+	cli, err := docker.GetClient(ctx)
+	if err != nil {
+		clog.Warnf(ctx, "Unable to get Docker client for default network IPAM configuration: %v", err)
+		return
+	}
+	subnet, err := teleroute.FindNonConflictingSubnet(ctx, cli, allSubnets)
+	if err != nil {
+		clog.Warnf(ctx, "Unable to pre-compute a non-conflicting subnet for the compose default network: %v. Falling back to Docker default IPAM", err)
+		return
+	}
+	clog.Debugf(ctx, "Using pre-computed subnet %s for compose default network", subnet)
+	if p.Networks == nil {
+		p.Networks = make(compose.Networks)
+	}
+	p.Networks["default"] = compose.NetworkConfig{
+		Ipam: compose.IPAMConfig{
+			Config: []*compose.IPAMPool{{
+				Subnet: subnet.String(),
+			}},
+		},
+	}
+}
+
 func (t *transformer) connections() []*connection {
 	ccs := t.config.Connections
 	cs := make([]*connection, 0, len(ccs))
@@ -358,7 +402,7 @@ func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecr
 		clog.Debugf(ctx, "Recreating existing compose file %q", composeFile)
 	}
 
-	err = t.applyEngagements()
+	err = t.applyEngagements(ctx)
 	if err != nil {
 		return "", err
 	}

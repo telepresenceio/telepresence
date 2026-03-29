@@ -14,6 +14,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 When using <code>telepresence connect --docker</code> or <code>telepresence compose</code>, Docker's default IPAM could assign a subnet that overlaps with the Kubernetes cluster's service CIDR (e.g., <code>172.20.0.0/16</code> on EKS), causing network creation to fail. Telepresence now pre-computes a non-conflicting RFC 1918 subnet by checking both existing Docker networks and the cluster's routing CIDRs before creating the teleroute network.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix">Fix Docker Compose default network subnet conflicts with Kubernetes cluster CIDRs</Title>
+	<Body>
+When using <code>telepresence compose</code>, Docker Compose auto-creates a default network whose subnet could overlap with Kubernetes cluster CIDRs, causing cluster traffic to be misrouted. Telepresence now configures the default network with an explicit non-conflicting subnet in the rendered compose file.
+  </Body>
+</Note>
 ## Version 2.27.2 <span style={{fontSize:'16px'}}>(March  9)</span>
 <Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/4073">Fix duplicate Section field in .deb package causing dpkg install failure</Title>

@@ -123,7 +123,11 @@ func (cc *connectionConfig) Connect(ctx context.Context, es map[string]serviceEx
 	if err != nil {
 		return nil, err
 	}
-	return &connection{Context: ctx, connectionConfig: cc, dnsIP: dns, proxies: proxies, subnets: rootCfg.Routing().Subnets}, nil
+	routing := rootCfg.Routing()
+	clusterSubnets := make([]netip.Prefix, 0, len(routing.Subnets)+len(routing.AlsoProxy))
+	clusterSubnets = append(clusterSubnets, routing.Subnets...)
+	clusterSubnets = append(clusterSubnets, routing.AlsoProxy...)
+	return &connection{Context: ctx, connectionConfig: cc, dnsIP: dns, proxies: proxies, subnets: clusterSubnets}, nil
 }
 
 // resolveProxies resolves the name of the proxy definition into its remote service IP. This IP will then be
