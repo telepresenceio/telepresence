@@ -2,11 +2,15 @@ package integration_test
 
 import (
 	"context"
+	"net/netip"
 	"os"
 	"path/filepath"
 	goRuntime "runtime"
 	"strings"
 	"time"
+
+	"github.com/docker/docker/api/types/network"
+	dockerClient "github.com/docker/docker/client"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -404,4 +408,102 @@ func (s *composeSuite) Test_ComposeWiretap() {
 		clog.Info(ctx, "compose logs wiretap", "stdout", so, "stderr", se, "err", err)
 		return false
 	}, 30*time.Second, 3*time.Second, "wiretap container should receive copies of traffic")
+}
+
+func (s *composeSuite) Test_ComposeDefaultNetworkNoSubnetConflict() {
+	ctx := s.Context()
+	rq := s.Require()
+
+	const svc = "echo-easy"
+	s.ApplyEchoService(ctx, svc, 80)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+
+	// Use multiple named connections to the same namespace. Each connection creates a separate
+	// daemon container with its own teleroute network, consuming Docker network address space.
+	// Combined with existing Docker networks (bridge, kind, etc.), this pushes Docker's sequential
+	// IPAM allocation toward the cluster's service CIDR (e.g. 172.20.0.0/16). Without the fix,
+	// the compose default network would get a conflicting subnet.
+	const projectName = "tp-subnet-test"
+	composeDir := itest.TempDir(ctx)
+	composeFile := filepath.Join(composeDir, "docker-compose.yml")
+	ns := s.AppNamespace()
+	mgrNs := s.ManagerNamespace()
+	composeContent := strings.Join([]string{
+		"x-tele:",
+		"  connections:",
+		"    - name: conn-1",
+		"      namespace: " + ns,
+		"      manager-namespace: " + mgrNs,
+		"    - name: conn-2",
+		"      namespace: " + ns,
+		"      manager-namespace: " + mgrNs,
+		"    - name: conn-3",
+		"      namespace: " + ns,
+		"      manager-namespace: " + mgrNs,
+		"services:",
+		"  tester-1:",
+		"    x-tele:",
+		"      type: connect",
+		"      connection: conn-1",
+		"    image: busybox",
+		"    command: sleep infinity",
+		"  tester-2:",
+		"    x-tele:",
+		"      type: connect",
+		"      connection: conn-2",
+		"    image: busybox",
+		"    command: sleep infinity",
+		"  tester-3:",
+		"    x-tele:",
+		"      type: connect",
+		"      connection: conn-3",
+		"    image: busybox",
+		"    command: sleep infinity",
+	}, "\n")
+	rq.NoError(os.WriteFile(composeFile, []byte(composeContent), 0o644))
+
+	_, _, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "--project-name", projectName, "up", "-d")
+	rq.NoError(err, "compose up failed")
+	defer func() {
+		_, _, _ = itest.Telepresence(ctx, "compose", "-f", composeFile, "--project-name", projectName, "down")
+	}()
+
+	// Collect cluster CIDRs from the first connection's status.
+	status := itest.TelepresenceStatusOk(ctx, "--use", "conn-1")
+	rq.NotNil(status.RootDaemon)
+	clusterSubnets := status.RootDaemon.RoutingSnake.Subnets
+	alsoProxy := status.RootDaemon.RoutingSnake.AlsoProxy
+	allClusterCIDRs := append(append([]netip.Prefix{}, clusterSubnets...), alsoProxy...)
+	rq.NotEmpty(allClusterCIDRs, "expected at least one cluster subnet in status")
+
+	// Inspect the compose default network and verify its subnet doesn't overlap with any cluster CIDR.
+	cli, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
+	rq.NoError(err)
+	defer cli.Close()
+
+	defaultNetworkName := projectName + "_default"
+	ni, err := cli.NetworkInspect(ctx, defaultNetworkName, network.InspectOptions{})
+	rq.NoError(err, "failed to inspect network %s", defaultNetworkName)
+	rq.NotEmpty(ni.IPAM.Config, "expected at least one IPAM config on default network %s", defaultNetworkName)
+
+	for _, cfg := range ni.IPAM.Config {
+		subnet, err := netip.ParsePrefix(cfg.Subnet)
+		if err != nil {
+			continue // skip non-IPv4 or unparseable entries
+		}
+		for _, clusterCIDR := range allClusterCIDRs {
+			s.Falsef(subnet.Overlaps(clusterCIDR),
+				"compose default network %s subnet %s overlaps with cluster CIDR %s", defaultNetworkName, subnet, clusterCIDR)
+		}
+	}
+
+	// Verify that cluster connectivity works from one of the connect containers.
+	s.Assert().EventuallyContext(ctx, func() bool {
+		so, se, err := itest.Telepresence(ctx, "compose", "-f", composeFile, "--project-name", projectName, "exec", "tester-1", "wget", "-qO-", "http://"+svc)
+		if err == nil && len(so) > 0 {
+			return true
+		}
+		clog.Info(ctx, "wget", "stdout", so, "stderr", se, "err", err)
+		return false
+	}, 30*time.Second, 3*time.Second, "wget of %s from connect container should succeed", svc)
 }
