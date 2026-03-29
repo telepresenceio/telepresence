@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.27.3
-    date: (TBD)
+    date: 2026-03-29
     notes:
       - type: bugfix
         title: Fix Docker teleroute network subnet conflicts with Kubernetes cluster CIDRs
