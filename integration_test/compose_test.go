@@ -471,8 +471,8 @@ func (s *composeSuite) Test_ComposeDefaultNetworkNoSubnetConflict() {
 	// Collect cluster CIDRs from the first connection's status.
 	status := itest.TelepresenceStatusOk(ctx, "--use", "conn-1")
 	rq.NotNil(status.RootDaemon)
-	clusterSubnets := status.RootDaemon.RoutingSnake.Subnets
-	alsoProxy := status.RootDaemon.RoutingSnake.AlsoProxy
+	clusterSubnets := status.RootDaemon.Subnets
+	alsoProxy := status.RootDaemon.AlsoProxy
 	allClusterCIDRs := append(append([]netip.Prefix{}, clusterSubnets...), alsoProxy...)
 	rq.NotEmpty(allClusterCIDRs, "expected at least one cluster subnet in status")
 
