@@ -34,7 +34,7 @@ The telepresence cli can install the traffic manager for you. The basic install 
 
 ### Customizing the Traffic Manager.
 
-For details on what the Helm chart installs and what can be configured, see the Helm chart [configuration on artifacthub](https://artifacthub.io/packages/helm/datawire/telepresence).
+For details on what the Helm chart installs and what can be configured, see the Helm chart [configuration on artifacthub](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss).
 
 1. Create a values.yaml file with your config values.
 
@@ -54,7 +54,7 @@ The Helm chart supports being installed into any namespace, not necessarily `amb
 `telepresence helm install`.  For example, if you wanted to deploy the traffic manager to the `staging` namespace:
 
 ```shell
-telepresence helm install traffic-manager --namespace staging datawire/telepresence
+telepresence helm install --namespace staging
 ```
 
 > [!NOTE]
