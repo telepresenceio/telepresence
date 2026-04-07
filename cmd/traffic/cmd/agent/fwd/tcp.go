@@ -2,6 +2,7 @@ package fwd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -16,6 +17,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
+
+var errClientStream = errors.New("failed to create client stream")
 
 type tcp struct {
 	*interceptor
@@ -190,7 +193,7 @@ func (f *tcp) createStream(ctx context.Context, src netip.AddrPort, ii *manager.
 	f.mu.Unlock()
 	s, err := sp.CreateClientStream(ctx, tunnel.AgentToClient, clientSession, id, latency, timeout)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client stream: %w", err)
+		return nil, fmt.Errorf("%w: %w", errClientStream, err)
 	}
 	return s, nil
 }

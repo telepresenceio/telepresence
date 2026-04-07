@@ -491,17 +491,37 @@ func (s *State) CountTunnelEgress() uint64 {
 	return atomic.LoadUint64(&s.tunnelEgressCounter)
 }
 
-func (s *State) IsInterceptedBy(agentPodIP netip.Addr, client tunnel.SessionID) (found bool) {
+func (s *State) IsInterceptedBy(agentPodIP netip.Addr, agentName, namespace string, client tunnel.SessionID) (found bool) {
 	clientSessionID := string(client)
 	podIPStr := agentPodIP.String()
 	s.intercepts.Range(func(id string, ii *Intercept) bool {
-		if ii.PodIp == podIPStr && ii.ClientSession.SessionId == clientSessionID {
+		if ii.ClientSession.SessionId != clientSessionID || ii.Disposition != rpc.InterceptDispositionType_ACTIVE {
+			return true
+		}
+		if ii.Spec.Namespace != namespace || ii.Spec.Agent != agentName {
+			return true
+		}
+		if ii.PodIp == podIPStr {
 			found = true
 			return false
 		}
-		return true
+		if !interceptNeedsDialWatcherOnAllPods(ii.Spec) {
+			return true
+		}
+		found = true
+		return false
 	})
 	return found
+}
+
+func interceptNeedsDialWatcherOnAllPods(spec *rpc.InterceptSpec) bool {
+	if spec == nil || IsChildIntercept(spec) || spec.Replace {
+		return false
+	}
+	if spec.Mechanism == "http" {
+		return true
+	}
+	return len(spec.HeaderFilters) > 0 || len(spec.PathFilters) > 0
 }
 
 // Sessions: Agents ////////////////////////////////////////////////////////////////////////////////

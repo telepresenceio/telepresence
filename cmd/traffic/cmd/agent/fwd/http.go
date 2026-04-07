@@ -3,6 +3,7 @@ package fwd
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -155,7 +156,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
 				clog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with header-based intercept %s",
 					req.Method, req.URL.Path, ic.Id)
-				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
+				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo, defaultHandler)
 				return
 			}
 		}
@@ -168,7 +169,7 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 			if shouldInterceptRequest(req, spec.HeaderFilters, spec.PathFilters) {
 				clog.Debugf(f.lCtx, "Intercepting HTTP request %s %s with path-based intercept %s",
 					req.Method, req.URL.Path, ic.Id)
-				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo)
+				f.serveHTTPIntercept(ic.ctx, src, writer, req, ic.InterceptInfo, defaultHandler)
 				return
 			}
 		}
@@ -202,7 +203,14 @@ func (f *tcp) configureUpstreamTransport(ctx context.Context, plaintext bool) *h
 	return trn
 }
 
-func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer http.ResponseWriter, request *http.Request, ii *manager.InterceptInfo) {
+func (f *tcp) serveHTTPIntercept(
+	ctx context.Context,
+	src netip.AddrPort,
+	writer http.ResponseWriter,
+	request *http.Request,
+	ii *manager.InterceptInfo,
+	defaultHandler http.Handler,
+) {
 	spec := ii.Spec
 	f.mu.Lock()
 	sp := f.streamProvider
@@ -243,7 +251,14 @@ func (f *tcp) serveHTTPIntercept(ctx context.Context, src netip.AddrPort, writer
 		clog.Debugf(ctx, "No TLS config used when connecting to %s", trg)
 	}
 	targetProxy := httputil.NewSingleHostReverseProxy(trg)
-	targetProxy.ErrorHandler = proxyErrorHandler
+	targetProxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
+		if errors.Is(err, errClientStream) {
+			clog.Warnf(ctx, "Intercept tunnel unavailable for %s %s; failing open to app container: %v", req.Method, req.URL.Path, err)
+			defaultHandler.ServeHTTP(rw, req)
+			return
+		}
+		proxyErrorHandler(rw, req, err)
+	}
 	targetProxy.Transport = trn
 	targetProxy.ServeHTTP(writer, request)
 
