@@ -473,7 +473,7 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream grpc.ServerStr
 				Namespace:    a.Namespace,
 				PodIp:        aip.AsSlice(),
 				ApiPort:      a.ApiPort,
-				Intercepted:  s.state.IsInterceptedBy(aip, clientSessionID),
+				Intercepted:  s.state.IsInterceptedBy(aip, a.Name, a.Namespace, clientSessionID),
 			}
 			agents = append(agents, ap)
 			return true
@@ -527,7 +527,7 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 						Namespace:    a.Namespace,
 						PodIp:        aip.AsSlice(),
 						ApiPort:      a.ApiPort,
-						Intercepted:  s.state.IsInterceptedBy(aip, clientSessionID),
+						Intercepted:  s.state.IsInterceptedBy(aip, a.Name, a.Namespace, clientSessionID),
 					}
 					agentPodInfos.Store(string(k), ap)
 				}
@@ -544,7 +544,7 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 				return true
 			}
 			aip, _ := netip.AddrFromSlice(a.PodIp)
-			intercepted := s.state.IsInterceptedBy(aip, clientSessionID)
+			intercepted := s.state.IsInterceptedBy(aip, a.WorkloadName, a.Namespace, clientSessionID)
 			agentPodInfos.Compute(k, func(a *rpc.AgentPodInfo, loaded bool) (*rpc.AgentPodInfo, xsync.ComputeOp) {
 				if loaded && a.Intercepted != intercepted {
 					a := proto.Clone(a).(*rpc.AgentPodInfo)

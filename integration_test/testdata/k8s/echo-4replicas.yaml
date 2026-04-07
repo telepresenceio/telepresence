@@ -1,0 +1,41 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "echo-4replicas"
+spec:
+  type: ClusterIP
+  selector:
+    app: echo-4replicas
+  ports:
+    - name: proxied
+      port: 80
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "echo-4replicas"
+  labels:
+    app: echo-4replicas
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: echo-4replicas
+  template:
+    metadata:
+      labels:
+        app: echo-4replicas
+    spec:
+      containers:
+        - name: echo-4replicas
+          image: ghcr.io/telepresenceio/echo-server:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            limits:
+              cpu: 50m
+              memory: 128Mi

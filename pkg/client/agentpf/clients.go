@@ -191,6 +191,12 @@ func (ac *client) refresh(ai *manager.AgentPodInfo) {
 	oldStatus := ac.info.Intercepted
 	ac.info = ai
 	if ai.Intercepted == oldStatus {
+		if ai.Intercepted && ac.cancelDialWatch == nil {
+			clog.Debugf(ac, "Agent %s(%s) is intercepted but has no dial watcher; ensuring connection", ai.PodName, net.IP(ai.PodIp))
+			if _, err := ac.ensureConnectLocked(ac); err != nil {
+				clog.Errorf(ac, "failed to ensure client watcher for %s(%s): %v", ai.PodName, net.IP(ai.PodIp), err)
+			}
+		}
 		return
 	}
 	if ai.Intercepted {
@@ -577,7 +583,7 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 	}
 
 	addClient := func(k string, ai *manager.AgentPodInfo) {
-		_, _ = s.clients.LoadOrCompute(k, func() (*client, bool) {
+		ac, loaded := s.clients.LoadOrCompute(k, func() (*client, bool) {
 			ac := &client{
 				Cluster: s.Cluster,
 				session: s.session,
@@ -589,6 +595,12 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 			clog.Debugf(s, "Adding agent pod %s (%s)", k, net.IP(ai.PodIp))
 			return ac, false
 		})
+		if !loaded && ai.Intercepted {
+			clog.Debugf(s, "Newly discovered intercepted agent pod %s (%s); eagerly starting dial watcher", k, net.IP(ai.PodIp))
+			if _, err := ac.ensureConnect(s); err != nil {
+				clog.Errorf(s, "failed to eagerly start client watcher for %s (%s): %v", k, net.IP(ai.PodIp), err)
+			}
+		}
 	}
 
 	// Add clients for newly arrived agents.

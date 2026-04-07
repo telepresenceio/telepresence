@@ -3,6 +3,7 @@ package state
 import (
 	"context"
 	"log/slog"
+	"net/netip"
 	"testing"
 	"time"
 
@@ -178,6 +179,60 @@ func (s *suiteState) TestRemoveSession() {
 	s.state.RemoveSession(s.ctx, s2) // won't fail trying to delete consumption.
 
 	assert.Equal(s.T(), s.state.CountSessions(), 0)
+}
+
+func TestIsInterceptedBy(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.NewContext(t, false)
+	st := &State{
+		backgroundCtx:    ctx,
+		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, 5*time.Millisecond),
+		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, 5*time.Millisecond),
+		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
+		workloadWatchers: xsync.NewMap[string, Watcher](),
+		timedLogLevel:    log.NewTimedLevel(slog.LevelDebug, clog.SetTreeLevel),
+		llSubs:           newLoglevelSubscribers(),
+	}
+
+	clientID := tunnel.SessionID("client")
+
+	st.intercepts.Store("http", &Intercept{InterceptInfo: &manager.InterceptInfo{
+		Id:          "http",
+		Disposition: manager.InterceptDispositionType_ACTIVE,
+		PodIp:       "10.0.0.1",
+		ClientSession: &manager.SessionInfo{
+			SessionId: string(clientID),
+		},
+		Spec: &manager.InterceptSpec{
+			Agent:     "demo",
+			Namespace: "default",
+			Mechanism: "http",
+			Client:    "alice",
+		},
+	}})
+
+	st.intercepts.Store("tcp", &Intercept{InterceptInfo: &manager.InterceptInfo{
+		Id:          "tcp",
+		Disposition: manager.InterceptDispositionType_ACTIVE,
+		PodIp:       "10.0.0.3",
+		ClientSession: &manager.SessionInfo{
+			SessionId: string(clientID),
+		},
+		Spec: &manager.InterceptSpec{
+			Agent:     "api",
+			Namespace: "default",
+			Mechanism: "tcp",
+			Client:    "alice",
+		},
+	}})
+
+	require.True(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.1"), "demo", "default", clientID))
+	require.True(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.2"), "demo", "default", clientID))
+	require.True(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.3"), "api", "default", clientID))
+	require.False(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.4"), "api", "default", clientID))
+	require.False(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.2"), "other", "default", clientID))
+	require.False(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.2"), "demo", "other", clientID))
 }
 
 func TestSuiteState(testing *testing.T) {
