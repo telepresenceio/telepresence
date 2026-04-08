@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.27.4
-    date: (TBD)
+    date: 2026-04-08
     notes:
       - type: bugfix
         title: Fix HTTP intercept routing across replicas
