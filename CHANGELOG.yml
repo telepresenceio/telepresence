@@ -24,6 +24,21 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.27.4
+    date: 2026-04-08
+    notes:
+      - type: bugfix
+        title: Fix HTTP intercept routing across replicas
+        body: >-
+          Personal intercepts (header-based or path-based) on workloads with multiple replicas
+          could fail to route traffic correctly because the traffic-manager only marked the pod
+          that originally accepted the intercept as intercepted. The client therefore opened a
+          dial watcher on a single pod, and requests that reached any other replica had no
+          tunnel back to the developer's workstation. The traffic-manager now reports every pod
+          of the intercepted workload as intercepted for HTTP and filter-based intercepts, the
+          client eagerly establishes dial watchers on all those pods, and the traffic-agent
+          fails open to the local app container if the intercept tunnel is momentarily
+          unavailable.
   - version: 2.27.3
     date: 2026-03-29
     notes:
