@@ -777,11 +777,6 @@ service Manager {
   // allowed.
   rpc WatchAgentPodsDelta(SessionInfo) returns (stream AgentPodInfoDelta);
 
-  // WatchAgentPodsInNamespaces notifies a client of the set of known Agents from
-  // the requested namespaces that the client can connect to when port-forwards
-  // are allowed.
-  rpc WatchAgentPodsInNamespaces(AgentsRequest) returns (stream AgentPodInfoSnapshot);
-
   // WatchAgentPodsInNamespacesDelta notifies a client of changes to the set of
   // known Agents from the requested namespaces that the client can connect to
   // when port-forwards are allowed.

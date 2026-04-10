@@ -410,7 +410,8 @@ func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
 // GetWorkloadClient returns tunnel.Provider that opens a tunnel to a traffic-agent that
 // belongs to a pod created for the given workload.
 //
-// The function returns nil when there are no agents for the given workload in the connected namespace.
+// Proxy-via routing remains scoped to the connected namespace. The function returns nil
+// when there are no agents for the given workload in that namespace.
 func (s *clients) GetWorkloadClient(workload string) (pvd tunnel.Provider) {
 	s.clients.Range(func(_ string, ac *client) bool {
 		if ac.info.WorkloadName == workload && ac.info.Namespace == s.Namespace {
@@ -474,22 +475,9 @@ func (s *clients) WatchAgentPods(rmc manager.ManagerClient) error {
 		return err
 	}
 
-	clog.Warnf(s, "WatchAgentPodsInNamespacesDelta is not implemented by the traffic-manager, falling back to WatchAgentPodsInNamespaces and full snapshots")
-	err = watcher.WatchWithRetry(s, "WatchAgentPodsInNamespaces", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
-		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoSnapshot], error) {
-			clog.Debugf(ctx, "No delta support in traffic-manager, starting WatchAgentPodsInNamespaces instead")
-			return rmc.WatchAgentPodsInNamespaces(ctx, s.agentsRequest())
-		},
-		func(snapshot *manager.AgentPodInfoSnapshot) error {
-			return s.updateClients(snapshot.Agents)
-		}, nil)
-	if err == nil || status.Code(err) != codes.Unimplemented {
-		return err
-	}
-
 	// Older traffic-manager. Fall back to watching agents in the connected namespace.
 	s.setNamespaces([]string{s.Namespace})
-	clog.Warnf(s, "WatchAgentPodsInNamespaces is not implemented by the traffic-manager, falling back to WatchAgentPodsDelta in namespace %s", s.Namespace)
+	clog.Warnf(s, "WatchAgentPodsInNamespacesDelta is not implemented by the traffic-manager, falling back to WatchAgentPodsDelta in namespace %s", s.Namespace)
 	err = watcher.WatchWithRetry(s, "WatchAgentPodsDelta", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoDelta], error) {
 			clog.Debugf(ctx, "WatchAgentPodsDelta starting")

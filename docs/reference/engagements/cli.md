@@ -15,13 +15,16 @@ telepresence connect --namespace myns
 telepresence replace/ingest/intercept/wiretap hello
 ```
 
-To intercept a workload in another mapped namespace without reconnecting, pass `--namespace`
+To engage a workload in another mapped namespace without reconnecting, pass `--namespace`
 to the engagement command:
 
 ```shell
 telepresence connect --namespace alpha --mapped-namespaces alpha,beta
 telepresence intercept beta-local --workload hello --namespace beta --http-header x-user=susan --port 8080:80
 ```
+
+Single-label DNS names continue to resolve in the connected namespace. When an engagement
+targets another namespace, use a namespace-qualified name such as `hello.beta`.
 
 ## Importing environment variables
 

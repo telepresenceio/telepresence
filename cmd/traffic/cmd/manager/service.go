@@ -454,15 +454,13 @@ func (f *AgentStateFile) UnmarshalJSON(data []byte) error {
 
 func (s *service) agentPodNamespaces(ctx context.Context, clientInfo *state.ClientSession, namespaces []string) ([]string, error) {
 	if len(namespaces) == 0 {
-		namespaces = []string{clientInfo.Namespace}
+		namespaces = []string{""}
 	}
 	nss := make([]string, 0, len(namespaces))
 	for _, namespace := range namespaces {
-		if namespace == "" {
-			namespace = clientInfo.Namespace
-		}
-		if !s.State().ManagesNamespace(ctx, namespace) {
-			return nil, status.Errorf(codes.FailedPrecondition, "namespace %s is not managed by this traffic-manager", namespace)
+		namespace, err := s.managedTargetNamespace(ctx, clientInfo, namespace)
+		if err != nil {
+			return nil, err
 		}
 		nss = append(nss, namespace)
 	}
@@ -498,18 +496,6 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream grpc.ServerStr
 		return err
 	}
 	namespaces, err := s.agentPodNamespaces(ctx, clientInfo, nil)
-	if err != nil {
-		return err
-	}
-	return s.watchAgentPods(ctx, namespaces, stream)
-}
-
-func (s *service) WatchAgentPodsInNamespaces(request *rpc.AgentsRequest, stream grpc.ServerStreamingServer[rpc.AgentPodInfoSnapshot]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), request.Session)
-	if err != nil {
-		return err
-	}
-	namespaces, err := s.agentPodNamespaces(ctx, clientInfo, request.Namespaces)
 	if err != nil {
 		return err
 	}
