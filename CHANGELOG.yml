@@ -38,6 +38,20 @@ items:
           different namespaces, while preserving the connected namespace as the default
           when no engagement namespace is specified.
         docs: reference/engagements/cli
+  - version: 2.27.5
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Clear agent intercept snapshot on reconnect to prevent stale intercepts
+        body: >-
+          When the traffic-manager pod restarts, the traffic-agent reconnects but its
+          local intercept snapshot (<code>snapMap</code>) retains entries from the old
+          manager. Because the new manager sends an empty initial delta, the stale entries
+          persist, causing tunnel failures and silently dropped connections. The connector
+          side already cleared its snapshot on reconnect, but the agent was missed. The
+          agent's repair function now clears the snapshot before reconnecting, matching the
+          connector's behavior.
+        docs: https://github.com/telepresenceio/telepresence/issues/4095
   - version: 2.27.4
     date: 2026-04-08
     notes:

@@ -159,15 +159,16 @@ func interceptWatchLoop(
 	snapshots chan<- []*rpc.InterceptInfo,
 	retryInterval time.Duration,
 ) error {
+	// Call WatchIntercepts and publish the snapshots on the channel
+	snapMap := make(map[string]*rpc.InterceptInfo)
 	reconnectAgent := func() error {
+		clear(snapMap)
 		_, err := manager.ReconnectAgent(ctx, &rpc.ReconnectAgentRequest{
 			Session: session,
 			Agent:   info,
 		})
 		return err
 	}
-	// Call WatchIntercepts and publish the snapshots on the channel
-	snapMap := make(map[string]*rpc.InterceptInfo)
 	err := watcher.WatchWithRetry(ctx, "WatchInterceptsDelta", retryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.InterceptInfoDelta], error) {
 			return manager.WatchInterceptsDelta(ctx, session)
