@@ -6,11 +6,21 @@ title: Configure workload engagements using CLI
 
 ## Specifying a namespace for an engagement
 
-The namespace of the engaged workload is specified during connect using the `--namespace` option.
+By default, an engagement targets the namespace selected by `telepresence connect --namespace`.
+The `intercept`, `wiretap`, and `replace` commands also accept `--namespace` when the workload
+to engage is in a different mapped namespace. `ingest` continues to use the connected namespace.
 
 ```shell
 telepresence connect --namespace myns
 telepresence replace/ingest/intercept/wiretap hello
+```
+
+To intercept a workload in another mapped namespace without reconnecting, pass `--namespace`
+to the engagement command:
+
+```shell
+telepresence connect --namespace alpha --mapped-namespaces alpha,beta
+telepresence intercept beta-local --workload hello --namespace beta --http-header x-user=susan --port 8080:80
 ```
 
 ## Importing environment variables
