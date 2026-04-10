@@ -27,6 +27,7 @@ Replace a container
   -h, --help                           help for replace
       --local-mount-port uint16        Do not mount remote directories. Instead, expose this port on localhost to an external mounter
       --mount string                   The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use &quot;true&quot; to have Telepresence pick a random mount point (default). Use &quot;false&quot; to disable filesystem mounting entirely. Append &quot;:ro&quot; to mount everything read-only. (default &quot;true&quot;)
+  -n, --namespace string               Namespace containing the workload to replace. Defaults to the connected namespace
   -p, --port strings                   Local ports to forward to. Use &lt;local port&gt;:&lt;identifier&gt; to uniquely identify container ports, where the &lt;identifier&gt; is the port name or number. Use &quot;all&quot; (the default) to forward all ports declared in the replaced container to their corresponding local port.  (default [all])
       --to-pod strings                 Additional ports to forward to the pod containing the replaced container, will available for connections to localhost:PORT. Use this to, for example, access proxy/helper sidecars in the pod. The default protocol is TCP. Use &lt;port&gt;/UDP for UDP ports
       --wait-message string            Message to print when replace handler has started

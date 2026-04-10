@@ -145,7 +145,11 @@ func (s *service) GetAgentConfig(ctx context.Context, request *rpc.AgentConfigRe
 	if err != nil {
 		return nil, err
 	}
-	scs, err := s.State().GetOrGenerateAgentConfig(ctx, request.Name, clientInfo.Namespace)
+	namespace, err := s.managedTargetNamespace(ctx, clientInfo, request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	scs, err := s.State().GetOrGenerateAgentConfig(ctx, request.Name, namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -155,6 +159,16 @@ func (s *service) GetAgentConfig(ctx context.Context, request *rpc.AgentConfigRe
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 	return &r, nil
+}
+
+func (s *service) managedTargetNamespace(ctx context.Context, clientInfo *state.ClientSession, namespace string) (string, error) {
+	if namespace == "" {
+		namespace = clientInfo.Namespace
+	}
+	if !s.State().ManagesNamespace(ctx, namespace) {
+		return "", status.Errorf(codes.FailedPrecondition, "namespace %s is not managed by this traffic-manager", namespace)
+	}
+	return namespace, nil
 }
 
 // GetTelepresenceAPI returns information about the TelepresenceAPI server.
@@ -205,8 +219,23 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	}
 	now := time.Now()
 	st.RestoreClient(sessionID, client, now)
-	st.RestoreAgents(info.Agents, now)
-	st.RestoreIntercepts(ctx, info.Intercepts, now)
+	agents := slices.DeleteFunc(slices.Clone(info.Agents), func(agent *rpc.AgentInfo) bool {
+		if st.ManagesNamespace(ctx, agent.Namespace) {
+			return false
+		}
+		clog.Debugf(ctx, "Not restoring agent %s.%s because its namespace is not managed", agent.Name, agent.Namespace)
+		return true
+	})
+	intercepts := slices.DeleteFunc(slices.Clone(info.Intercepts), func(intercept *rpc.InterceptInfo) bool {
+		spec := intercept.GetSpec()
+		if spec != nil && st.ManagesNamespace(ctx, spec.Namespace) {
+			return false
+		}
+		clog.Debugf(ctx, "Not restoring intercept %s because its namespace is not managed", intercept.GetId())
+		return true
+	})
+	st.RestoreAgents(agents, now)
+	st.RestoreIntercepts(ctx, intercepts, now)
 	return &empty.Empty{}, nil
 }
 
@@ -423,13 +452,36 @@ func (f *AgentStateFile) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (s *service) createAgentPodWatchers(ctx context.Context, ns string) (
+func (s *service) agentPodNamespaces(ctx context.Context, clientInfo *state.ClientSession, namespaces []string) ([]string, error) {
+	if len(namespaces) == 0 {
+		namespaces = []string{clientInfo.Namespace}
+	}
+	nss := make([]string, 0, len(namespaces))
+	for _, namespace := range namespaces {
+		if namespace == "" {
+			namespace = clientInfo.Namespace
+		}
+		if !s.State().ManagesNamespace(ctx, namespace) {
+			return nil, status.Errorf(codes.FailedPrecondition, "namespace %s is not managed by this traffic-manager", namespace)
+		}
+		nss = append(nss, namespace)
+	}
+	sort.Strings(nss)
+	return slices.Compact(nss), nil
+}
+
+func (s *service) createAgentPodWatchers(ctx context.Context, namespaces []string) (
 	<-chan cache.Delta[tunnel.SessionID, *state.AgentSession],
 	<-chan cache.Delta[string, *state.Intercept],
 	<-chan struct{},
 ) {
+	nsSet := make(map[string]struct{}, len(namespaces))
+	for _, ns := range namespaces {
+		nsSet[ns] = struct{}{}
+	}
 	agentsCh := s.state.WatchAgents(ctx, func(_ tunnel.SessionID, info *state.AgentSession) bool {
-		return info.Namespace == ns
+		_, ok := nsSet[info.Namespace]
+		return ok
 	})
 	sessionID := managerutil.GetSessionID(ctx)
 	interceptsCh := s.state.WatchIntercepts(ctx, func(_ string, info *state.Intercept) bool {
@@ -445,8 +497,28 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream grpc.ServerStr
 	if err != nil {
 		return err
 	}
+	namespaces, err := s.agentPodNamespaces(ctx, clientInfo, nil)
+	if err != nil {
+		return err
+	}
+	return s.watchAgentPods(ctx, namespaces, stream)
+}
+
+func (s *service) WatchAgentPodsInNamespaces(request *rpc.AgentsRequest, stream grpc.ServerStreamingServer[rpc.AgentPodInfoSnapshot]) error {
+	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), request.Session)
+	if err != nil {
+		return err
+	}
+	namespaces, err := s.agentPodNamespaces(ctx, clientInfo, request.Namespaces)
+	if err != nil {
+		return err
+	}
+	return s.watchAgentPods(ctx, namespaces, stream)
+}
+
+func (s *service) watchAgentPods(ctx context.Context, namespaces []string, stream grpc.ServerStreamingServer[rpc.AgentPodInfoSnapshot]) error {
 	clientSessionID := managerutil.GetSessionID(ctx)
-	agentsCh, interceptsCh, sessionDone := s.createAgentPodWatchers(ctx, clientInfo.Namespace)
+	agentsCh, interceptsCh, sessionDone := s.createAgentPodWatchers(ctx, namespaces)
 	agentSessions := cache.NewClientMap[tunnel.SessionID, *state.AgentSession]()
 
 	interceptInfos := cache.NewClientMap[string, *state.Intercept]()
@@ -496,8 +568,28 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 	if err != nil {
 		return err
 	}
+	namespaces, err := s.agentPodNamespaces(ctx, clientInfo, nil)
+	if err != nil {
+		return err
+	}
+	return s.watchAgentPodsDelta(ctx, namespaces, stream)
+}
+
+func (s *service) WatchAgentPodsInNamespacesDelta(request *rpc.AgentsRequest, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
+	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), request.Session)
+	if err != nil {
+		return err
+	}
+	namespaces, err := s.agentPodNamespaces(ctx, clientInfo, request.Namespaces)
+	if err != nil {
+		return err
+	}
+	return s.watchAgentPodsDelta(ctx, namespaces, stream)
+}
+
+func (s *service) watchAgentPodsDelta(ctx context.Context, namespaces []string, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
 	clientSessionID := managerutil.GetSessionID(ctx)
-	agentsCh, interceptsCh, sessionDone := s.createAgentPodWatchers(ctx, clientInfo.Namespace)
+	agentsCh, interceptsCh, sessionDone := s.createAgentPodWatchers(ctx, namespaces)
 	agentPodInfos := cache.NewMap[string, *rpc.AgentPodInfo](func(a *rpc.AgentPodInfo, b *rpc.AgentPodInfo) bool {
 		return proto.Equal(a, b)
 	}, time.Millisecond)
@@ -567,8 +659,7 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 		case <-interceptsCh:
 			refreshIntercepted()
 		case delta := <-agentPodInfosCh:
-			err = stream.Send(&rpc.AgentPodInfoDelta{Upserts: delta.Upserts, Removals: maps2.KeySlice(delta.Removals)})
-			if err != nil {
+			if err := stream.Send(&rpc.AgentPodInfoDelta{Upserts: delta.Upserts, Removals: maps2.KeySlice(delta.Removals)}); err != nil {
 				return err
 			}
 		}
@@ -795,6 +886,11 @@ func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	if err != nil {
 		return nil, err
 	}
+	namespace, err := s.managedTargetNamespace(ctx, client, request.InterceptSpec.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	request.InterceptSpec.Namespace = namespace
 	return s.state.PrepareIntercept(ctx, request, client)
 }
 
@@ -839,6 +935,16 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	ctx = managerutil.WithSessionInfo(ctx, ciReq.GetSession())
 	spec := ciReq.InterceptSpec
 	clog.Debugf(ctx, "Intercept name %s", ciReq.InterceptSpec.Name)
+
+	ctx, client, err := s.ensureClientSession(ctx, ciReq.GetSession())
+	if err != nil {
+		return nil, err
+	}
+	namespace, err := s.managedTargetNamespace(ctx, client, spec.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	spec.Namespace = namespace
 
 	if val := validateIntercept(spec); val != "" {
 		return nil, status.Error(codes.InvalidArgument, val)

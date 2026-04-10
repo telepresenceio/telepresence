@@ -9,8 +9,46 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
+
+type createRequestUserClient struct {
+	daemon.UserClient
+}
+
+func (createRequestUserClient) Containerized() bool {
+	return false
+}
+
+func TestStateCreateRequestNamespace(t *testing.T) {
+	ctx := daemon.WithUserClient(context.Background(), createRequestUserClient{})
+
+	t.Run("omitted namespace remains empty for userd defaulting", func(t *testing.T) {
+		st := NewState(&Command{
+			Name:      "local",
+			AgentName: "echo",
+			Mechanism: "tcp",
+		}, nil)
+
+		req, err := st.CreateRequest(ctx)
+		require.NoError(t, err)
+		assert.Empty(t, req.Spec.Namespace)
+	})
+
+	t.Run("explicit namespace is carried in intercept spec", func(t *testing.T) {
+		st := NewState(&Command{
+			Name:      "local",
+			AgentName: "echo",
+			Namespace: "beta",
+			Mechanism: "tcp",
+		}, nil)
+
+		req, err := st.CreateRequest(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, "beta", req.Spec.Namespace)
+	})
+}
 
 func TestCommand_Validate_HTTPIntercepts(t *testing.T) {
 	t.Skip("Skipping tests that require full telepresence config setup")

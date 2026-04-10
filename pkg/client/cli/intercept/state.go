@@ -88,6 +88,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		Plaintext:     s.Plaintext,
 		Wiretap:       s.Wiretap,
 		Agent:         s.AgentName,
+		Namespace:     s.Namespace,
 		NoDefaultPort: s.NoDefaultPort,
 		PathFilters:   BuildPathFilters(s.HTTPPathEqualFilters, s.HTTPPathPrefixFilters, s.HTTPPathRegexFilters),
 	}

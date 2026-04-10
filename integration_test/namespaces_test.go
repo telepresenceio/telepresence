@@ -3,7 +3,9 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -329,4 +331,79 @@ func (s *nsSuite) Test_NamespacesStatic() {
 	st = itest.TelepresenceStatusOk(ctx)
 	rq.Len(st.UserDaemon.MappedNamespaces, 2)
 	itest.TelepresenceDisconnectOk(ctx)
+}
+
+func (s *nsSuite) Test_MultiNamespaceHTTPIntercepts() {
+	if !(s.ManagerIsVersion(">2.24.x") && s.ClientIsVersion(">2.24.x")) {
+		s.T().Skip("HTTP intercepts require Telepresence 2.25.0 or later")
+	}
+	ctx := itest.WithNamespaces(s.Context(), &itest.Namespaces{
+		Namespace: s.managerNamespace(),
+		Selector: &labels.Selector{
+			MatchExpressions: []*labels.Requirement{{
+				Key:      labels.NameLabelKey,
+				Operator: labels.OperatorIn,
+				Values:   []string{"alpha", "beta"},
+			}},
+		},
+	})
+	s.TelepresenceHelmInstallOK(ctx, false)
+	defer s.UninstallTrafficManager(ctx, "manager")
+
+	itest.TelepresenceOk(ctx, "connect",
+		"--manager-namespace", s.managerNamespace(),
+		"--namespace", "alpha",
+		"--mapped-namespaces", "alpha,beta")
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	localPortA, cancelA := itest.StartLocalHttpEchoServer(ctx, "tp-alpha-local")
+	defer cancelA()
+	localPortB, cancelB := itest.StartLocalHttpEchoServer(ctx, "tp-beta-local")
+	defer cancelB()
+
+	itest.TelepresenceOk(ctx, "intercept", "tp-alpha-local",
+		"--workload", "echo",
+		"--namespace", "alpha",
+		"--http-header", "x-tp-ns=a",
+		"--port", fmt.Sprintf("%d:80", localPortA),
+		"--mount=false")
+	defer itest.TelepresenceOk(ctx, "leave", "tp-alpha-local")
+
+	itest.TelepresenceOk(ctx, "intercept", "tp-beta-local",
+		"--workload", "echo",
+		"--namespace", "beta",
+		"--http-header", "x-tp-ns=b",
+		"--port", fmt.Sprintf("%d:80", localPortB),
+		"--mount=false")
+	defer itest.TelepresenceOk(ctx, "leave", "tp-beta-local")
+
+	rq := s.Require()
+	curl := func(host, header string) (string, error) {
+		args := []string{"curl", "--silent", "--max-time", "2"}
+		if header != "" {
+			args = append(args, "-H", header)
+		}
+		args = append(args, "http://"+host)
+		stdout, stderr, err := itest.Telepresence(ctx, args...)
+		if err != nil {
+			return stderr, err
+		}
+		return strings.TrimSpace(stdout), nil
+	}
+	expectCurl := func(host, header, expected string) {
+		rq.Eventually(func() bool {
+			out, err := curl(host, header)
+			return err == nil && out == expected
+		}, time.Minute, 5*time.Second)
+	}
+
+	expectCurl("echo.alpha", "x-tp-ns: a", "tp-alpha-local from intercept at /")
+	expectCurl("echo.beta", "x-tp-ns: b", "tp-beta-local from intercept at /")
+
+	alphaOut, err := curl("echo.alpha", "")
+	rq.NoError(err)
+	rq.NotContains(alphaOut, "tp-alpha-local from intercept")
+	betaOut, err := curl("echo.beta", "")
+	rq.NoError(err)
+	rq.NotContains(betaOut, "tp-beta-local from intercept")
 }

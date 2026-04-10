@@ -24,40 +24,42 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Manager_Version_FullMethodName               = "/telepresence.manager.Manager/Version"
-	Manager_GetAgentImageFQN_FullMethodName      = "/telepresence.manager.Manager/GetAgentImageFQN"
-	Manager_GetAgentConfig_FullMethodName        = "/telepresence.manager.Manager/GetAgentConfig"
-	Manager_GetClientConfig_FullMethodName       = "/telepresence.manager.Manager/GetClientConfig"
-	Manager_GetTelepresenceAPI_FullMethodName    = "/telepresence.manager.Manager/GetTelepresenceAPI"
-	Manager_ArriveAsClient_FullMethodName        = "/telepresence.manager.Manager/ArriveAsClient"
-	Manager_ReconnectAgent_FullMethodName        = "/telepresence.manager.Manager/ReconnectAgent"
-	Manager_ReconnectClient_FullMethodName       = "/telepresence.manager.Manager/ReconnectClient"
-	Manager_ArriveAsAgent_FullMethodName         = "/telepresence.manager.Manager/ArriveAsAgent"
-	Manager_Remain_FullMethodName                = "/telepresence.manager.Manager/Remain"
-	Manager_Depart_FullMethodName                = "/telepresence.manager.Manager/Depart"
-	Manager_SetLogLevel_FullMethodName           = "/telepresence.manager.Manager/SetLogLevel"
-	Manager_GetLogs_FullMethodName               = "/telepresence.manager.Manager/GetLogs"
-	Manager_WatchAgentPods_FullMethodName        = "/telepresence.manager.Manager/WatchAgentPods"
-	Manager_WatchAgentPodsDelta_FullMethodName   = "/telepresence.manager.Manager/WatchAgentPodsDelta"
-	Manager_WatchAgents_FullMethodName           = "/telepresence.manager.Manager/WatchAgents"
-	Manager_WatchAgentsDelta_FullMethodName      = "/telepresence.manager.Manager/WatchAgentsDelta"
-	Manager_WatchIntercepts_FullMethodName       = "/telepresence.manager.Manager/WatchIntercepts"
-	Manager_WatchInterceptsDelta_FullMethodName  = "/telepresence.manager.Manager/WatchInterceptsDelta"
-	Manager_WatchWorkloads_FullMethodName        = "/telepresence.manager.Manager/WatchWorkloads"
-	Manager_WatchClusterInfo_FullMethodName      = "/telepresence.manager.Manager/WatchClusterInfo"
-	Manager_EnsureAgent_FullMethodName           = "/telepresence.manager.Manager/EnsureAgent"
-	Manager_PrepareIntercept_FullMethodName      = "/telepresence.manager.Manager/PrepareIntercept"
-	Manager_CreateIntercept_FullMethodName       = "/telepresence.manager.Manager/CreateIntercept"
-	Manager_RemoveIntercept_FullMethodName       = "/telepresence.manager.Manager/RemoveIntercept"
-	Manager_GetIntercept_FullMethodName          = "/telepresence.manager.Manager/GetIntercept"
-	Manager_ReviewIntercept_FullMethodName       = "/telepresence.manager.Manager/ReviewIntercept"
-	Manager_GetKnownWorkloadKinds_FullMethodName = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
-	Manager_Lookup_FullMethodName                = "/telepresence.manager.Manager/Lookup"
-	Manager_LookupDNS_FullMethodName             = "/telepresence.manager.Manager/LookupDNS"
-	Manager_WatchLogLevel_FullMethodName         = "/telepresence.manager.Manager/WatchLogLevel"
-	Manager_Tunnel_FullMethodName                = "/telepresence.manager.Manager/Tunnel"
-	Manager_ReportMetrics_FullMethodName         = "/telepresence.manager.Manager/ReportMetrics"
-	Manager_UninstallAgents_FullMethodName       = "/telepresence.manager.Manager/UninstallAgents"
+	Manager_Version_FullMethodName                         = "/telepresence.manager.Manager/Version"
+	Manager_GetAgentImageFQN_FullMethodName                = "/telepresence.manager.Manager/GetAgentImageFQN"
+	Manager_GetAgentConfig_FullMethodName                  = "/telepresence.manager.Manager/GetAgentConfig"
+	Manager_GetClientConfig_FullMethodName                 = "/telepresence.manager.Manager/GetClientConfig"
+	Manager_GetTelepresenceAPI_FullMethodName              = "/telepresence.manager.Manager/GetTelepresenceAPI"
+	Manager_ArriveAsClient_FullMethodName                  = "/telepresence.manager.Manager/ArriveAsClient"
+	Manager_ReconnectAgent_FullMethodName                  = "/telepresence.manager.Manager/ReconnectAgent"
+	Manager_ReconnectClient_FullMethodName                 = "/telepresence.manager.Manager/ReconnectClient"
+	Manager_ArriveAsAgent_FullMethodName                   = "/telepresence.manager.Manager/ArriveAsAgent"
+	Manager_Remain_FullMethodName                          = "/telepresence.manager.Manager/Remain"
+	Manager_Depart_FullMethodName                          = "/telepresence.manager.Manager/Depart"
+	Manager_SetLogLevel_FullMethodName                     = "/telepresence.manager.Manager/SetLogLevel"
+	Manager_GetLogs_FullMethodName                         = "/telepresence.manager.Manager/GetLogs"
+	Manager_WatchAgentPods_FullMethodName                  = "/telepresence.manager.Manager/WatchAgentPods"
+	Manager_WatchAgentPodsDelta_FullMethodName             = "/telepresence.manager.Manager/WatchAgentPodsDelta"
+	Manager_WatchAgentPodsInNamespaces_FullMethodName      = "/telepresence.manager.Manager/WatchAgentPodsInNamespaces"
+	Manager_WatchAgentPodsInNamespacesDelta_FullMethodName = "/telepresence.manager.Manager/WatchAgentPodsInNamespacesDelta"
+	Manager_WatchAgents_FullMethodName                     = "/telepresence.manager.Manager/WatchAgents"
+	Manager_WatchAgentsDelta_FullMethodName                = "/telepresence.manager.Manager/WatchAgentsDelta"
+	Manager_WatchIntercepts_FullMethodName                 = "/telepresence.manager.Manager/WatchIntercepts"
+	Manager_WatchInterceptsDelta_FullMethodName            = "/telepresence.manager.Manager/WatchInterceptsDelta"
+	Manager_WatchWorkloads_FullMethodName                  = "/telepresence.manager.Manager/WatchWorkloads"
+	Manager_WatchClusterInfo_FullMethodName                = "/telepresence.manager.Manager/WatchClusterInfo"
+	Manager_EnsureAgent_FullMethodName                     = "/telepresence.manager.Manager/EnsureAgent"
+	Manager_PrepareIntercept_FullMethodName                = "/telepresence.manager.Manager/PrepareIntercept"
+	Manager_CreateIntercept_FullMethodName                 = "/telepresence.manager.Manager/CreateIntercept"
+	Manager_RemoveIntercept_FullMethodName                 = "/telepresence.manager.Manager/RemoveIntercept"
+	Manager_GetIntercept_FullMethodName                    = "/telepresence.manager.Manager/GetIntercept"
+	Manager_ReviewIntercept_FullMethodName                 = "/telepresence.manager.Manager/ReviewIntercept"
+	Manager_GetKnownWorkloadKinds_FullMethodName           = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
+	Manager_Lookup_FullMethodName                          = "/telepresence.manager.Manager/Lookup"
+	Manager_LookupDNS_FullMethodName                       = "/telepresence.manager.Manager/LookupDNS"
+	Manager_WatchLogLevel_FullMethodName                   = "/telepresence.manager.Manager/WatchLogLevel"
+	Manager_Tunnel_FullMethodName                          = "/telepresence.manager.Manager/Tunnel"
+	Manager_ReportMetrics_FullMethodName                   = "/telepresence.manager.Manager/ReportMetrics"
+	Manager_UninstallAgents_FullMethodName                 = "/telepresence.manager.Manager/UninstallAgents"
 )
 
 // ManagerClient is the client API for Manager service.
@@ -102,6 +104,14 @@ type ManagerClient interface {
 	// connections namespace that the client can connect to when port-forwards are
 	// allowed.
 	WatchAgentPodsDelta(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPodInfoDelta], error)
+	// WatchAgentPodsInNamespaces notifies a client of the set of known Agents from
+	// the requested namespaces that the client can connect to when port-forwards
+	// are allowed.
+	WatchAgentPodsInNamespaces(ctx context.Context, in *AgentsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPodInfoSnapshot], error)
+	// WatchAgentPodsInNamespacesDelta notifies a client of changes to the set of
+	// known Agents from the requested namespaces that the client can connect to
+	// when port-forwards are allowed.
+	WatchAgentPodsInNamespacesDelta(ctx context.Context, in *AgentsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPodInfoDelta], error)
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -347,9 +357,47 @@ func (c *managerClient) WatchAgentPodsDelta(ctx context.Context, in *SessionInfo
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchAgentPodsDeltaClient = grpc.ServerStreamingClient[AgentPodInfoDelta]
 
+func (c *managerClient) WatchAgentPodsInNamespaces(ctx context.Context, in *AgentsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPodInfoSnapshot], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], Manager_WatchAgentPodsInNamespaces_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AgentsRequest, AgentPodInfoSnapshot]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchAgentPodsInNamespacesClient = grpc.ServerStreamingClient[AgentPodInfoSnapshot]
+
+func (c *managerClient) WatchAgentPodsInNamespacesDelta(ctx context.Context, in *AgentsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentPodInfoDelta], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], Manager_WatchAgentPodsInNamespacesDelta_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AgentsRequest, AgentPodInfoDelta]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchAgentPodsInNamespacesDeltaClient = grpc.ServerStreamingClient[AgentPodInfoDelta]
+
 func (c *managerClient) WatchAgents(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentInfoSnapshot], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[2], Manager_WatchAgents_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_WatchAgents_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -368,7 +416,7 @@ type Manager_WatchAgentsClient = grpc.ServerStreamingClient[AgentInfoSnapshot]
 
 func (c *managerClient) WatchAgentsDelta(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AgentInfoDelta], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[3], Manager_WatchAgentsDelta_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_WatchAgentsDelta_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +435,7 @@ type Manager_WatchAgentsDeltaClient = grpc.ServerStreamingClient[AgentInfoDelta]
 
 func (c *managerClient) WatchIntercepts(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InterceptInfoSnapshot], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[4], Manager_WatchIntercepts_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_WatchIntercepts_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +454,7 @@ type Manager_WatchInterceptsClient = grpc.ServerStreamingClient[InterceptInfoSna
 
 func (c *managerClient) WatchInterceptsDelta(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[InterceptInfoDelta], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[5], Manager_WatchInterceptsDelta_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], Manager_WatchInterceptsDelta_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +473,7 @@ type Manager_WatchInterceptsDeltaClient = grpc.ServerStreamingClient[InterceptIn
 
 func (c *managerClient) WatchWorkloads(ctx context.Context, in *WorkloadEventsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[WorkloadEventsDelta], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[6], Manager_WatchWorkloads_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], Manager_WatchWorkloads_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -444,7 +492,7 @@ type Manager_WatchWorkloadsClient = grpc.ServerStreamingClient[WorkloadEventsDel
 
 func (c *managerClient) WatchClusterInfo(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ClusterInfo], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[7], Manager_WatchClusterInfo_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], Manager_WatchClusterInfo_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -553,7 +601,7 @@ func (c *managerClient) LookupDNS(ctx context.Context, in *DNSRequest, opts ...g
 
 func (c *managerClient) WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLevelRequest], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[8], Manager_WatchLogLevel_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[10], Manager_WatchLogLevel_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -572,7 +620,7 @@ type Manager_WatchLogLevelClient = grpc.ServerStreamingClient[LogLevelRequest]
 
 func (c *managerClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TunnelMessage, TunnelMessage], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[9], Manager_Tunnel_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[11], Manager_Tunnel_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -645,6 +693,14 @@ type ManagerServer interface {
 	// connections namespace that the client can connect to when port-forwards are
 	// allowed.
 	WatchAgentPodsDelta(*SessionInfo, grpc.ServerStreamingServer[AgentPodInfoDelta]) error
+	// WatchAgentPodsInNamespaces notifies a client of the set of known Agents from
+	// the requested namespaces that the client can connect to when port-forwards
+	// are allowed.
+	WatchAgentPodsInNamespaces(*AgentsRequest, grpc.ServerStreamingServer[AgentPodInfoSnapshot]) error
+	// WatchAgentPodsInNamespacesDelta notifies a client of changes to the set of
+	// known Agents from the requested namespaces that the client can connect to
+	// when port-forwards are allowed.
+	WatchAgentPodsInNamespacesDelta(*AgentsRequest, grpc.ServerStreamingServer[AgentPodInfoDelta]) error
 	// WatchAgents notifies a client of the set of known Agents.
 	//
 	// A session ID is required; if no session ID is given then the call
@@ -766,6 +822,12 @@ func (UnimplementedManagerServer) WatchAgentPods(*SessionInfo, grpc.ServerStream
 }
 func (UnimplementedManagerServer) WatchAgentPodsDelta(*SessionInfo, grpc.ServerStreamingServer[AgentPodInfoDelta]) error {
 	return status.Error(codes.Unimplemented, "method WatchAgentPodsDelta not implemented")
+}
+func (UnimplementedManagerServer) WatchAgentPodsInNamespaces(*AgentsRequest, grpc.ServerStreamingServer[AgentPodInfoSnapshot]) error {
+	return status.Error(codes.Unimplemented, "method WatchAgentPodsInNamespaces not implemented")
+}
+func (UnimplementedManagerServer) WatchAgentPodsInNamespacesDelta(*AgentsRequest, grpc.ServerStreamingServer[AgentPodInfoDelta]) error {
+	return status.Error(codes.Unimplemented, "method WatchAgentPodsInNamespacesDelta not implemented")
 }
 func (UnimplementedManagerServer) WatchAgents(*SessionInfo, grpc.ServerStreamingServer[AgentInfoSnapshot]) error {
 	return status.Error(codes.Unimplemented, "method WatchAgents not implemented")
@@ -1100,6 +1162,28 @@ func _Manager_WatchAgentPodsDelta_Handler(srv interface{}, stream grpc.ServerStr
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_WatchAgentPodsDeltaServer = grpc.ServerStreamingServer[AgentPodInfoDelta]
+
+func _Manager_WatchAgentPodsInNamespaces_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(AgentsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchAgentPodsInNamespaces(m, &grpc.GenericServerStream[AgentsRequest, AgentPodInfoSnapshot]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchAgentPodsInNamespacesServer = grpc.ServerStreamingServer[AgentPodInfoSnapshot]
+
+func _Manager_WatchAgentPodsInNamespacesDelta_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(AgentsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchAgentPodsInNamespacesDelta(m, &grpc.GenericServerStream[AgentsRequest, AgentPodInfoDelta]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchAgentPodsInNamespacesDeltaServer = grpc.ServerStreamingServer[AgentPodInfoDelta]
 
 func _Manager_WatchAgents_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(SessionInfo)
@@ -1496,6 +1580,16 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchAgentPodsDelta",
 			Handler:       _Manager_WatchAgentPodsDelta_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchAgentPodsInNamespaces",
+			Handler:       _Manager_WatchAgentPodsInNamespaces_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchAgentPodsInNamespacesDelta",
+			Handler:       _Manager_WatchAgentPodsInNamespacesDelta_Handler,
 			ServerStreams: true,
 		},
 		{

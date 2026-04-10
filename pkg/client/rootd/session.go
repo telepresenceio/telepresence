@@ -94,7 +94,7 @@ type session struct {
 	// managerConn is the connection to the traffic-manager.
 	managerConn *grpc.ClientConn
 
-	// agentClients provides the gRPC tunnel to traffic-agents in the connected namespace
+	// agentClients provides direct gRPC tunnels to traffic-agents in namespaces where the client can port-forward.
 	agentClients agentpf.Clients
 
 	// managerVersion is the version of the connected traffic-manager
@@ -1162,13 +1162,16 @@ func (s *session) run(initErrs chan<- error) {
 func (s *session) Start(g log.Group, teleroutePort uint16) error {
 	clusterCfg := client.GetConfig(s).Cluster()
 	if clusterCfg.AgentPortForward {
-		if k8s.CanPortForward(s, s.Namespace) {
-			s.agentClients = agentpf.NewClients(s.Cluster, s.session)
+		agentNamespaces := slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
+			return !k8s.CanPortForward(s, ns)
+		})
+		if len(agentNamespaces) > 0 {
+			s.agentClients = agentpf.NewClients(s.Cluster, s.session, agentNamespaces)
 			g.Go("agentPods", func(ctx context.Context) error {
 				return s.agentClients.WatchAgentPods(s.managerClient())
 			})
 		} else {
-			clog.Infof(s, "Agent port-forwards are disabled. Client is not permitted to do port-forward to namespace %s", s.Namespace)
+			clog.Infof(s, "Agent port-forwards are disabled. Client is not permitted to do port-forward to any mapped namespace")
 		}
 	}
 	if err := s.activateProxyViaWorkloads(); err != nil {
@@ -1442,7 +1445,11 @@ func (s *session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentI
 	if !ok {
 		return nil, status.Error(codes.InvalidArgument, "")
 	}
-	err := s.agentClients.WaitForIP(ctx, request.Timeout.AsDuration(), ip)
+	namespace := request.Namespace
+	if namespace == "" {
+		namespace = s.Namespace
+	}
+	err := s.agentClients.WaitForIP(ctx, request.Timeout.AsDuration(), namespace, ip)
 	if err != nil {
 		return nil, grpcErrors.FromError(err, codes.Internal, err.Error())
 	}

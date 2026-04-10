@@ -1,12 +1,29 @@
 package daemon
 
 import (
+	"context"
 	"net/netip"
 	"reflect"
 	"testing"
 
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
+
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 )
+
+func TestWithDefaultRequestIgnoresLocalNamespace(t *testing.T) {
+	cmd := &cobra.Command{Use: "intercept"}
+	cmd.SetContext(context.Background())
+	cmd.Flags().StringP("namespace", "n", "", "local namespace")
+	require.NoError(t, cmd.Flags().Set("namespace", "beta"))
+
+	ctx, err := WithDefaultRequest(cmd)
+	require.NoError(t, err)
+	req := MustGetRequest(ctx)
+	_, ok := req.KubeFlags["namespace"]
+	require.False(t, ok, "local engagement namespace must not become an implicit connect namespace")
+}
 
 func Test_parseSubnetViaWorkload(t *testing.T) {
 	tests := []struct {

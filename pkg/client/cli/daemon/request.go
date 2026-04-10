@@ -387,9 +387,11 @@ func WithDefaultRequest(cmd *cobra.Command) (context.Context, error) {
 	// Handle deprecated namespace flag, but allow it in the list command.
 	if cmd.Name() != "list" {
 		if nsFlag := cmd.Flag("namespace"); nsFlag != nil && nsFlag.Changed {
-			ns := nsFlag.Value.String()
-			*cr.kubeConfig.Namespace = ns
-			cr.KubeFlags["namespace"] = ns
+			if localNsFlag := cmd.LocalFlags().Lookup("namespace"); localNsFlag == nil || localNsFlag != nsFlag {
+				ns := nsFlag.Value.String()
+				*cr.kubeConfig.Namespace = ns
+				cr.KubeFlags["namespace"] = ns
+			}
 		}
 	}
 	ctx := cmd.Context()

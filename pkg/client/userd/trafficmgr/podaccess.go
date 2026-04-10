@@ -30,6 +30,7 @@ type podAccess struct {
 
 	localPorts       []string
 	workload         string
+	namespace        string
 	container        string
 	podIP            string
 	sftpPort         int32
@@ -52,6 +53,7 @@ type podAccess struct {
 // pods, the user daemon will always choose exactly one pod with an active ingest or intercept to
 // do port forwards and remote mounts.
 type podAccessKey struct {
+	namespace string
 	container string
 	podIP     string
 }
@@ -107,14 +109,15 @@ func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) e
 	if cc.Cluster().AgentPortForward {
 		// An agent port-forward to the pod with a designated to the podIP is necessary to
 		// mount or port-forward to localhost.
-		clog.Debugf(ctx, "Waiting for root-daemon to receive agent IP %s", pa.podIP)
+		clog.Debugf(ctx, "Waiting for root-daemon to receive agent IP %s in namespace %s", pa.podIP, pa.namespace)
 		ip, err := netip.ParseAddr(pa.podIP)
 		if err != nil {
 			return err
 		}
 		rsp, err := rd.WaitForAgentIP(ctx, &daemon.WaitForAgentIPRequest{
-			Ip:      ip.AsSlice(),
-			Timeout: durationpb.New(cc.Timeouts().Get(client.TimeoutIntercept)),
+			Ip:        ip.AsSlice(),
+			Namespace: pa.namespace,
+			Timeout:   durationpb.New(cc.Timeouts().Get(client.TimeoutIntercept)),
 		})
 		switch status.Code(err) {
 		case codes.Unavailable: // Unavailable means that the feature disabled. This is OK, the traffic-manager will do the forwarding
@@ -123,9 +126,9 @@ func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) e
 				pa.podIP = lip.String()
 			}
 		case codes.DeadlineExceeded:
-			return fmt.Errorf("timeout waiting for port-forward to traffic-agent with pod-ip %s", pa.podIP)
+			return fmt.Errorf("timeout waiting for port-forward to traffic-agent with pod-ip %s in namespace %s", pa.podIP, pa.namespace)
 		default:
-			return fmt.Errorf("unexpected error for port-forward to traffic-agent with pod-ip %s: %v", pa.podIP, err)
+			return fmt.Errorf("unexpected error for port-forward to traffic-agent with pod-ip %s in namespace %s: %v", pa.podIP, pa.namespace, err)
 		}
 	}
 	return nil
@@ -163,6 +166,7 @@ func (lpf *podAccessTracker) start(pa *podAccess) {
 	// time.
 	lpf.Lock()
 	fk := podAccessKey{
+		namespace: pa.namespace,
 		container: pa.container,
 		podIP:     pa.podIP,
 	}
@@ -196,6 +200,7 @@ func (lpf *podAccessTracker) privateStart(pa *podAccess) {
 
 	// Already started?
 	fk := podAccessKey{
+		namespace: pa.namespace,
 		container: pa.container,
 		podIP:     pa.podIP,
 	}
@@ -226,6 +231,7 @@ func (lpf *podAccessTracker) initSnapshot() {
 
 func (lpf *podAccessTracker) getOrCreateMountsDone(pa *podAccess) <-chan struct{} {
 	fk := podAccessKey{
+		namespace: pa.namespace,
 		container: pa.container,
 		podIP:     pa.podIP,
 	}
