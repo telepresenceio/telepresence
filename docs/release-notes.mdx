@@ -12,6 +12,8 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 	<Title type="feature" docs="reference/engagements/cli">Intercept workloads in mapped namespaces</Title>
 	<Body>
 The <code>intercept</code>, <code>wiretap</code>, and <code>replace</code> commands now accept <code>--namespace</code> to select the workload namespace for that engagement without changing the namespace used by <code>telepresence connect</code>. This allows a single connection with multiple mapped namespaces to run simultaneous personal HTTP intercepts in different namespaces, while preserving the connected namespace as the default when no engagement namespace is specified.
+  </Body>
+</Note>
 ## Version 2.27.5
 <Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/4095">Clear agent intercept snapshot on reconnect to prevent stale intercepts</Title>

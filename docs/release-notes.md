@@ -6,6 +6,8 @@
 <div style="margin-left: 15px">
 
 The <code>intercept</code>, <code>wiretap</code>, and <code>replace</code> commands now accept <code>--namespace</code> to select the workload namespace for that engagement without changing the namespace used by <code>telepresence connect</code>. This allows a single connection with multiple mapped namespaces to run simultaneous personal HTTP intercepts in different namespaces, while preserving the connected namespace as the default when no engagement namespace is specified.
+</div>
+
 ## Version 2.27.5
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Clear agent intercept snapshot on reconnect to prevent stale intercepts](https://github.com/telepresenceio/telepresence/issues/4095)</div></div>
 <div style="margin-left: 15px">

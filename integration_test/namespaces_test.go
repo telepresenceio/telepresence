@@ -334,8 +334,8 @@ func (s *nsSuite) Test_NamespacesStatic() {
 }
 
 func (s *nsSuite) Test_MultiNamespaceHTTPIntercepts() {
-	if !(s.ManagerIsVersion(">2.24.x") && s.ClientIsVersion(">2.24.x")) {
-		s.T().Skip("HTTP intercepts require Telepresence 2.25.0 or later")
+	if !(s.ManagerIsVersion(">2.27.x") && s.ClientIsVersion(">2.27.x")) {
+		s.T().Skip("Multi-namespace intercepts require Telepresence 2.28.0 or later")
 	}
 	ctx := itest.WithNamespaces(s.Context(), &itest.Namespaces{
 		Namespace: s.managerNamespace(),
