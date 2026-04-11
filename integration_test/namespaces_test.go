@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net"
+	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -379,22 +382,43 @@ func (s *nsSuite) Test_MultiNamespaceHTTPIntercepts() {
 
 	rq := s.Require()
 	curl := func(host, header string) (string, error) {
-		args := []string{"curl", "--silent", "--max-time", "2"}
-		if header != "" {
-			args = append(args, "-H", header)
-		}
-		args = append(args, "http://"+host)
-		stdout, stderr, err := itest.Telepresence(ctx, args...)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+host, nil)
 		if err != nil {
-			return stderr, err
+			return "", err
 		}
-		return strings.TrimSpace(stdout), nil
+		if header != "" {
+			k, v, ok := strings.Cut(header, ":")
+			if !ok {
+				k, v, ok = strings.Cut(header, "=")
+			}
+			if ok {
+				req.Header.Set(strings.TrimSpace(k), strings.TrimSpace(v))
+			}
+		}
+		client := http.Client{
+			Timeout: 2 * time.Second,
+			Transport: &http.Transport{
+				DialContext: (&net.Dialer{Timeout: 2 * time.Second}).DialContext,
+			},
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(string(body)), nil
 	}
 	expectCurl := func(host, header, expected string) {
+		var out string
+		var err error
 		rq.Eventually(func() bool {
-			out, err := curl(host, header)
+			out, err = curl(host, header)
 			return err == nil && out == expected
-		}, time.Minute, 5*time.Second)
+		}, time.Minute, 5*time.Second, "curl %s with %q: got %q, error %v, expected %q", host, header, out, err, expected)
 	}
 
 	expectCurl("echo.alpha", "x-tp-ns: a", "tp-alpha-local from intercept at /")
