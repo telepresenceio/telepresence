@@ -578,6 +578,7 @@ type WaitForAgentIPRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ip            []byte                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
 	Timeout       *durationpb.Duration   `protobuf:"bytes,2,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -624,6 +625,13 @@ func (x *WaitForAgentIPRequest) GetTimeout() *durationpb.Duration {
 		return x.Timeout
 	}
 	return nil
+}
+
+func (x *WaitForAgentIPRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 type WaitForAgentIPResponse struct {
@@ -1096,10 +1104,11 @@ const file_daemon_daemon_proto_rawDesc = "" +
 	"\x15SetDNSExcludesRequest\x12\x1a\n" +
 	"\bexcludes\x18\x01 \x03(\tR\bexcludes\"T\n" +
 	"\x15SetDNSMappingsRequest\x12;\n" +
-	"\bmappings\x18\x01 \x03(\v2\x1f.telepresence.daemon.DNSMappingR\bmappings\"\\\n" +
+	"\bmappings\x18\x01 \x03(\v2\x1f.telepresence.daemon.DNSMappingR\bmappings\"z\n" +
 	"\x15WaitForAgentIPRequest\x12\x0e\n" +
 	"\x02ip\x18\x01 \x01(\fR\x02ip\x123\n" +
-	"\atimeout\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\atimeout\"3\n" +
+	"\atimeout\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\atimeout\x12\x1c\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"3\n" +
 	"\x16WaitForAgentIPResponse\x12\x19\n" +
 	"\blocal_ip\x18\x01 \x01(\fR\alocalIp\"%\n" +
 	"\x0fLookupIPRequest\x12\x12\n" +

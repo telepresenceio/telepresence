@@ -37,6 +37,7 @@ type Command struct {
 	MountFlags    mount.Flags
 	Name          string   // Command[0] || `${Command[0]}-${--namespace}` // which depends on a combinationof --workload and --namespace
 	AgentName     string   // --workload || Command[0] // only valid if !localOnly
+	Namespace     string   // --namespace
 	Ports         []string // --port
 	ServiceName   string   // --service
 	ContainerName string   // --container
@@ -125,6 +126,7 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 	}
 	flagSet := cmd.Flags()
 	flagSet.StringVarP(&c.AgentName, "workload", "w", "", fmt.Sprintf("Name of workload (Deployment, ReplicaSet, StatefulSet, Rollout) to %s, if different from <name>", what))
+	flagSet.StringVarP(&c.Namespace, "namespace", "n", "", fmt.Sprintf("Namespace containing the workload to %s. Defaults to the connected namespace", what))
 	flagSet.StringSliceVarP(&c.Ports, "port", "p", nil, ``+
 		`Local ports to forward to. Use <local port>:<identifier> to uniquely identify service ports, where the <identifier> is the port name or number. `+
 		`With --docker-run and a daemon that doesn't run in docker', use <local port>:<container port> or `+
@@ -192,6 +194,7 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 
 func (c *Command) AddReplaceFlags(cmd *cobra.Command) {
 	flagSet := cmd.Flags()
+	flagSet.StringVarP(&c.Namespace, "namespace", "n", "", "Namespace containing the workload to replace. Defaults to the connected namespace")
 	flagSet.StringSliceVarP(&c.Ports, "port", "p", []string{"all"}, ``+
 		`Local ports to forward to. Use <local port>:<identifier> to uniquely identify container ports, where the <identifier> is the port name or number. `+
 		`Use "all" (the default) to forward all ports declared in the replaced container to their corresponding local port. `,
@@ -366,11 +369,12 @@ func autocompleteService(cmd *cobra.Command, args []string, toComplete string) (
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
+		namespace := completionNamespace(cmd, kc.Namespace)
 		ki, err := kubernetes.NewForConfig(kc.RestConfig)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
-		svcs, err := k8sapi.Services(k8sapi.WithK8sInterface(kc, ki), kc.Namespace, nil)
+		svcs, err := k8sapi.Services(k8sapi.WithK8sInterface(kc, ki), namespace, nil)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveError
 		}
@@ -382,7 +386,7 @@ func autocompleteService(cmd *cobra.Command, args []string, toComplete string) (
 		}
 		return serviceNames, cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
 	}
-	sc, err := s.GetAgentConfig(ctx, args[0])
+	sc, err := s.GetAgentConfig(ctx, args[0], completionNamespace(cmd, ""))
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveError
 	}
@@ -400,6 +404,15 @@ func autocompleteService(cmd *cobra.Command, args []string, toComplete string) (
 	}
 	sort.Strings(serviceNames)
 	return slices.Compact(serviceNames), cobra.ShellCompDirectiveNoFileComp | cobra.ShellCompDirectiveNoSpace
+}
+
+func completionNamespace(cmd *cobra.Command, defaultNamespace string) string {
+	if nf := cmd.Flag("namespace"); nf != nil {
+		if ns := nf.Value.String(); ns != "" {
+			return ns
+		}
+	}
+	return defaultNamespace
 }
 
 func ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
@@ -423,7 +436,10 @@ func ValidArgs(cmd *cobra.Command, args []string, toComplete string) ([]string, 
 	}
 	ctx := cmd.Context()
 
-	r, err := daemon.MustGetUserClient(ctx).List(ctx, &connector.ListRequest{Filter: connector.ListRequest_UNSPECIFIED})
+	r, err := daemon.MustGetUserClient(ctx).List(ctx, &connector.ListRequest{
+		Filter:    connector.ListRequest_UNSPECIFIED,
+		Namespace: completionNamespace(cmd, ""),
+	})
 	if err != nil {
 		clog.Debugf(ctx, "unable to get list of interceptable workloads: %v", err)
 		return nil, cobra.ShellCompDirectiveError

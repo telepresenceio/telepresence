@@ -166,6 +166,7 @@ message SetDNSMappingsRequest {
 message WaitForAgentIPRequest {
   bytes ip = 1;
   google.protobuf.Duration timeout = 2;
+  string namespace = 3;
 }
 
 message WaitForAgentIPResponse {

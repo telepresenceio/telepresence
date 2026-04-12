@@ -118,6 +118,7 @@ func (ic *intercept) podAccess() *podAccess {
 		ctx:              ic.ctx,
 		localPorts:       ic.localPorts(),
 		workload:         ic.Spec.Agent,
+		namespace:        ic.Spec.Namespace,
 		podIP:            ic.PodIp,
 		container:        ic.Spec.ContainerName,
 		sftpPort:         ic.SftpPort,
@@ -187,12 +188,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 		pa := ic.podAccess()
 		var err error
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
-			ns := ii.Spec.Namespace
-			if s.Namespace != ns {
-				err = errcat.User.Newf("active intercepts in both namespace %s and %s", ns, s.Namespace)
-			} else {
-				err = pa.ensureAccess(ic.ctx, s.rootDaemon)
-			}
+			err = pa.ensureAccess(ic.ctx, s.rootDaemon)
 		} else {
 			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
 		}
@@ -482,8 +478,14 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	spec := ir.Spec
 	if spec.Namespace == "" {
 		spec.Namespace = s.Namespace
-	} else if s.Namespace != spec.Namespace {
-		return nil, errcat.User.Newf("attempt to intercept in namespace %q. Only the connected %q namespace can be intercepted", spec.Namespace, s.Namespace)
+	} else if ns := s.ActualNamespace(spec.Namespace); ns == "" {
+		return nil, errcat.User.Newf(
+			"namespace %q is not mapped or is not accessible. Reconnect with --mapped-namespaces including %q, and verify your access to that namespace",
+			spec.Namespace,
+			spec.Namespace,
+		)
+	} else {
+		spec.Namespace = ns
 	}
 
 	if er := s.ensureNoInterceptConflict(ir); er != nil {

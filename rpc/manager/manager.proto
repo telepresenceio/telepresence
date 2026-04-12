@@ -602,6 +602,7 @@ message AgentPodInfoDelta {
 message AgentConfigRequest {
   SessionInfo session = 1;
   string name = 2;
+  string namespace = 3;
 }
 
 message AgentConfigResponse {
@@ -775,6 +776,11 @@ service Manager {
   // connections namespace that the client can connect to when port-forwards are
   // allowed.
   rpc WatchAgentPodsDelta(SessionInfo) returns (stream AgentPodInfoDelta);
+
+  // WatchAgentPodsInNamespacesDelta notifies a client of changes to the set of
+  // known Agents from the requested namespaces that the client can connect to
+  // when port-forwards are allowed.
+  rpc WatchAgentPodsInNamespacesDelta(AgentsRequest) returns (stream AgentPodInfoDelta);
 
   // WatchAgents notifies a client of the set of known Agents.
   //

@@ -45,6 +45,7 @@ func (ig *ingest) podAccess(rd daemon.DaemonClient) *podAccess {
 		ctx:              ig.ctx,
 		localPorts:       ig.localPorts,
 		workload:         ig.workload,
+		namespace:        ig.Namespace,
 		container:        ig.container,
 		podIP:            ig.PodIp,
 		sftpPort:         ig.SftpPort,

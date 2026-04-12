@@ -192,8 +192,12 @@ func (u *userClient) AddHandler(ctx context.Context, id string, cmd *exec.Cmd, c
 	return nil
 }
 
-func (s *Session) GetAgentConfig(ctx context.Context, workload string) (*agentconfig.Sidecar, error) {
-	agc, err := s.UserClient.GetAgentConfig(ctx, &manager.AgentConfigRequest{Name: workload})
+func (s *Session) GetAgentConfig(ctx context.Context, workload string, namespace ...string) (*agentconfig.Sidecar, error) {
+	req := &manager.AgentConfigRequest{Name: workload}
+	if len(namespace) > 0 {
+		req.Namespace = namespace[0]
+	}
+	agc, err := s.UserClient.GetAgentConfig(ctx, req)
 	if err != nil {
 		return nil, tpGrpc.FromGRPC(err)
 	}

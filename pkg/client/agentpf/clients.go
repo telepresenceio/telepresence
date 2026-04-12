@@ -95,7 +95,7 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		defer dialCancel()
 
 		ai := ac.info
-		conn, cli, _, err := ac.ConnectToAgent(dialCtx, ai.PodName, uint16(ai.ApiPort), types.UID(ai.PodId))
+		conn, cli, _, err := ac.ConnectToAgent(dialCtx, ai.Namespace, ai.PodName, uint16(ai.ApiPort), types.UID(ai.PodId))
 		if err != nil {
 			ac.connectErr = err
 
@@ -256,30 +256,81 @@ type Clients interface {
 	GetRandomAgent(context.Context) agent.AgentClient
 	GetClient(netip.Addr) tunnel.Provider
 	WatchAgentPods(rmc manager.ManagerClient) error
-	WaitForIP(ctx context.Context, timeout time.Duration, ip netip.Addr) error
+	WaitForIP(ctx context.Context, timeout time.Duration, namespace string, ip netip.Addr) error
 	WaitForWorkload(timeout time.Duration, name string) error
 	GetWorkloadClient(workload string) (ag tunnel.Provider)
 	SetProxyVia(workload string)
 }
 
-type clients struct {
-	*k8s.Cluster
-	session   *manager.SessionInfo
-	clients   *xsync.Map[string, *client]
-	ipWaiters *xsync.Map[netip.Addr, chan struct{}]
-	wlWaiters *xsync.Map[string, chan struct{}]
-	proxyVias *xsync.Map[string, struct{}]
-	disabled  atomic.Bool
+type ipWaitKey struct {
+	namespace string
+	ip        netip.Addr
 }
 
-func NewClients(cl *k8s.Cluster, session *manager.SessionInfo) Clients {
-	return &clients{
+type clients struct {
+	*k8s.Cluster
+	session      *manager.SessionInfo
+	clients      *xsync.Map[string, *client]
+	ipWaiters    *xsync.Map[ipWaitKey, chan struct{}]
+	wlWaiters    *xsync.Map[string, chan struct{}]
+	proxyVias    *xsync.Map[string, struct{}]
+	namespacesMu sync.RWMutex
+	namespaces   map[string]struct{}
+	disabled     atomic.Bool
+}
+
+func NewClients(cl *k8s.Cluster, session *manager.SessionInfo, namespaces []string) Clients {
+	if len(namespaces) == 0 {
+		namespaces = []string{cl.Namespace}
+	}
+	cs := &clients{
 		Cluster:   cl,
 		session:   session,
 		clients:   xsync.NewMap[string, *client](),
-		ipWaiters: xsync.NewMap[netip.Addr, chan struct{}](),
+		ipWaiters: xsync.NewMap[ipWaitKey, chan struct{}](),
 		wlWaiters: xsync.NewMap[string, chan struct{}](),
 		proxyVias: xsync.NewMap[string, struct{}](),
+	}
+	cs.setNamespaces(namespaces)
+	return cs
+}
+
+func (s *clients) setNamespaces(namespaces []string) {
+	nsSet := make(map[string]struct{}, len(namespaces))
+	for _, namespace := range namespaces {
+		if namespace != "" {
+			nsSet[namespace] = struct{}{}
+		}
+	}
+	s.namespacesMu.Lock()
+	s.namespaces = nsSet
+	s.namespacesMu.Unlock()
+}
+
+func (s *clients) namespaceList() []string {
+	s.namespacesMu.RLock()
+	namespaces := make([]string, 0, len(s.namespaces))
+	for namespace := range s.namespaces {
+		namespaces = append(namespaces, namespace)
+	}
+	s.namespacesMu.RUnlock()
+	return namespaces
+}
+
+func (s *clients) watchesNamespace(namespace string) bool {
+	if namespace == "" {
+		namespace = s.Namespace
+	}
+	s.namespacesMu.RLock()
+	_, ok := s.namespaces[namespace]
+	s.namespacesMu.RUnlock()
+	return ok
+}
+
+func (s *clients) agentsRequest() *manager.AgentsRequest {
+	return &manager.AgentsRequest{
+		Session:    s.session,
+		Namespaces: s.namespaceList(),
 	}
 }
 
@@ -359,10 +410,11 @@ func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
 // GetWorkloadClient returns tunnel.Provider that opens a tunnel to a traffic-agent that
 // belongs to a pod created for the given workload.
 //
-// The function returns nil when there are no agents for the given workload in the connected namespace.
+// Proxy-via routing remains scoped to the connected namespace. The function returns nil
+// when there are no agents for the given workload in that namespace.
 func (s *clients) GetWorkloadClient(workload string) (pvd tunnel.Provider) {
 	s.clients.Range(func(_ string, ac *client) bool {
-		if ac.info.WorkloadName == workload {
+		if ac.info.WorkloadName == workload && ac.info.Namespace == s.Namespace {
 			pvd = ac
 			return false
 		}
@@ -382,7 +434,7 @@ func (s *clients) isProxyVIA(info *manager.AgentPodInfo) bool {
 
 func (s *clients) hasWaiterFor(info *manager.AgentPodInfo) bool {
 	if podIP, ok := netip.AddrFromSlice(info.PodIp); ok {
-		if _, isW := s.ipWaiters.Load(podIP); isW {
+		if _, isW := s.ipWaiters.Load(ipWaitKey{namespace: info.Namespace, ip: podIP}); isW {
 			return true
 		}
 	}
@@ -406,7 +458,27 @@ func (s *clients) WatchAgentPods(rmc manager.ManagerClient) error {
 	}()
 
 	snapMap := make(map[string]*manager.AgentPodInfo)
-	err := watcher.WatchWithRetry(s, "WatchAgentPodsDelta", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
+	err := watcher.WatchWithRetry(s, "WatchAgentPodsInNamespacesDelta", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
+		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoDelta], error) {
+			clog.Debugf(ctx, "WatchAgentPodsInNamespacesDelta starting")
+			return rmc.WatchAgentPodsInNamespacesDelta(ctx, s.agentsRequest())
+		},
+		func(delta *manager.AgentPodInfoDelta) error {
+			clog.Debugf(s, "WatchAgentPodsInNamespacesDelta received %d upserts, %d removals", len(delta.Upserts), len(delta.Removals))
+			maps.DeltaUpdate(snapMap, delta.Upserts, delta.Removals)
+			return s.updateClients(maps.Values(snapMap))
+		}, func() error {
+			clear(snapMap)
+			return nil
+		})
+	if err == nil || status.Code(err) != codes.Unimplemented {
+		return err
+	}
+
+	// Older traffic-manager. Fall back to watching agents in the connected namespace.
+	s.setNamespaces([]string{s.Namespace})
+	clog.Warnf(s, "WatchAgentPodsInNamespacesDelta is not implemented by the traffic-manager, falling back to WatchAgentPodsDelta in namespace %s", s.Namespace)
+	err = watcher.WatchWithRetry(s, "WatchAgentPodsDelta", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoDelta], error) {
 			clog.Debugf(ctx, "WatchAgentPodsDelta starting")
 			return rmc.WatchAgentPodsDelta(ctx, s.session)
@@ -423,7 +495,6 @@ func (s *clients) WatchAgentPods(rmc manager.ManagerClient) error {
 		return err
 	}
 
-	// Older traffic-manager. Fall back to watching all agents.
 	clog.Warnf(s, "WatchAgentPodsDelta is not implemented by the traffic-manager, falling back to WatchAgentPods and full snapshots")
 	return watcher.WatchWithRetry(s, "WatchAgentPods", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoSnapshot], error) {
@@ -446,7 +517,7 @@ func (ac *client) notify(waiter chan struct{}) {
 func (s *clients) notifyWaiters() {
 	s.clients.Range(func(name string, ac *client) bool {
 		if podIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok {
-			if waiter, ok := s.ipWaiters.LoadAndDelete(podIP); ok {
+			if waiter, ok := s.ipWaiters.LoadAndDelete(ipWaitKey{namespace: ac.info.Namespace, ip: podIP}); ok {
 				ac.notify(waiter)
 			}
 		}
@@ -469,14 +540,21 @@ func (s *clients) waitWithTimeout(timeout time.Duration, waitOn <-chan struct{})
 	}
 }
 
-func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip netip.Addr) error {
+func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, namespace string, ip netip.Addr) error {
 	if s.disabled.Load() {
-		return nil
+		return status.Error(codes.Unavailable, "")
+	}
+	if namespace == "" {
+		namespace = s.Namespace
+	}
+	if !s.watchesNamespace(namespace) {
+		return status.Error(codes.Unavailable, "")
 	}
 	var cl *client
-	waitOn, _ := s.ipWaiters.LoadOrCompute(ip, func() (chan struct{}, bool) {
+	key := ipWaitKey{namespace: namespace, ip: ip}
+	waitOn, _ := s.ipWaiters.LoadOrCompute(key, func() (chan struct{}, bool) {
 		s.clients.Range(func(k string, ac *client) bool {
-			if podIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ip == podIP {
+			if podIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ac.info.Namespace == namespace && ip == podIP {
 				cl = ac
 				return false
 			}
@@ -497,7 +575,7 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, ip netip
 
 	// Ensure that the client we're waiting for is ready.
 	s.clients.Range(func(k string, ac *client) bool {
-		if acIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ip == acIP {
+		if acIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ac.info.Namespace == namespace && ip == acIP {
 			cl = ac
 			return false
 		}

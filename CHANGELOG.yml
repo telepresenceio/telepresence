@@ -24,6 +24,20 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.28.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Intercept workloads in mapped namespaces
+        body: >-
+          The <code>intercept</code>, <code>wiretap</code>, and <code>replace</code>
+          commands now accept <code>--namespace</code> to select the workload namespace
+          for that engagement without changing the namespace used by
+          <code>telepresence connect</code>. This allows a single connection with
+          multiple mapped namespaces to run simultaneous personal HTTP intercepts in
+          different namespaces, while preserving the connected namespace as the default
+          when no engagement namespace is specified.
+        docs: reference/engagements/cli
   - version: 2.27.5
     date: (TBD)
     notes:

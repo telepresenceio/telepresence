@@ -75,15 +75,16 @@ type versionAPI interface {
 
 func (kc *Cluster) ConnectToAgent(
 	dialCtx context.Context,
+	namespace string,
 	podName string,
 	port uint16,
 	podID types.UID,
 ) (*grpc.ClientConn, agent.AgentClient, *manager.VersionInfo2, error) {
 	var grpcAddr string
 	if podID == "" {
-		grpcAddr = fmt.Sprintf("pod/%s.%s:%d", podName, kc.Namespace, port)
+		grpcAddr = fmt.Sprintf("pod/%s.%s:%d", podName, namespace, port)
 	} else {
-		grpcAddr = fmt.Sprintf("pod/%s.%s:%d#%s", podName, kc.Namespace, port, podID)
+		grpcAddr = fmt.Sprintf("pod/%s.%s:%d#%s", podName, namespace, port, podID)
 	}
 	conn, err := kc.dialGRPC(dialCtx, grpcAddr, nil)
 	if err != nil {
