@@ -73,9 +73,6 @@ items:
           determined. This avoids relying on workload DNS search paths to resolve
           the manager service from another namespace, while preserving the
           existing short name fallback.
-  - version: 2.27.5
-    date: (TBD)
-    notes:
       - type: bugfix
         title: Clear agent intercept snapshot on reconnect to prevent stale intercepts
         body: >-
