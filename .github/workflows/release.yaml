@@ -179,10 +179,10 @@ jobs:
 
             | Platform | Architecture | Package |
             |----------|--------------|---------|
-            | Linux (Debian/Ubuntu) | amd64 | [telepresence-linux-amd64.deb](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-${{ steps.semver_check.outputs.semver }}-linux-amd64.deb) |
-            | Linux (Debian/Ubuntu) | arm64 | [telepresence-linux-arm64.deb](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-${{ steps.semver_check.outputs.semver }}-linux-arm64.deb) |
-            | Linux (Fedora/RHEL) | amd64 | [telepresence-linux-amd64.rpm](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-${{ steps.semver_check.outputs.semver }}-linux-amd64.rpm) |
-            | Linux (Fedora/RHEL) | arm64 | [telepresence-linux-arm64.rpm](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-${{ steps.semver_check.outputs.semver }}-linux-arm64.rpm) |
+            | Linux (Debian/Ubuntu) | amd64 | [telepresence-linux-amd64.deb](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-amd64.deb) |
+            | Linux (Debian/Ubuntu) | arm64 | [telepresence-linux-arm64.deb](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-arm64.deb) |
+            | Linux (Fedora/RHEL) | amd64 | [telepresence-linux-amd64.rpm](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-amd64.rpm) |
+            | Linux (Fedora/RHEL) | arm64 | [telepresence-linux-arm64.rpm](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-linux-arm64.rpm) |
             | macOS | amd64 | [telepresence-darwin-amd64.pkg](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64.pkg) |
             | macOS | arm64 | [telepresence-darwin-arm64.pkg](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64.pkg) |
             | Windows | amd64 | [telepresence-windows-amd64-setup.exe](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64-setup.exe) |
