@@ -14,6 +14,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 The <code>intercept</code>, <code>wiretap</code>, and <code>replace</code> commands now accept <code>--namespace</code> to select the workload namespace for that engagement without changing the namespace used by <code>telepresence connect</code>. This allows a single connection with multiple mapped namespaces to run simultaneous personal HTTP intercepts in different namespaces, while preserving the connected namespace as the default when no engagement namespace is specified.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix">Preserve the default gateway for never-proxy routes</Title>
+	<Body>
+Static routes installed for <code>--never-proxy</code> and <code>client.routing.neverProxySubnets</code> now preserve the matching default route gateway and source address. This prevents routed client environments, such as VMs that reach cluster networks through a default gateway, from receiving unusable on-link routes for never-proxied destinations.
+  </Body>
+</Note>
 ## Version 2.27.5
 <Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/4095">Clear agent intercept snapshot on reconnect to prevent stale intercepts</Title>
