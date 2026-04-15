@@ -183,9 +183,9 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	}
 
 	// All subnets in neverProxy have been verified as being routed by the TUN-device, so we
-	// route them to the default device.
+	// route them through the same interface and next hop as the default route.
 	for _, sn := range dontProxy {
-		staticRoutes = append(staticRoutes, routing.NewRoute(sn, dr.InterfaceIndex, dr.InterfaceName))
+		staticRoutes = append(staticRoutes, routeViaDefault(sn, dr))
 	}
 
 	// ... except for the never proxy overrides, which will be routed to our device.
@@ -208,6 +208,21 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	}
 	rt.staticOverrides = staticRoutes
 	return nil
+}
+
+func routeViaDefault(sn netip.Prefix, dr *routing.Route) routing.Route {
+	r := routing.NewRoute(sn, dr.InterfaceIndex, dr.InterfaceName)
+	if sameAddrFamily(sn.Addr(), dr.Gateway) {
+		r.Gateway = dr.Gateway
+	}
+	if sameAddrFamily(sn.Addr(), dr.LocalIP) {
+		r.LocalIP = dr.LocalIP
+	}
+	return r
+}
+
+func sameAddrFamily(addr, candidate netip.Addr) bool {
+	return candidate.IsValid() && addr.Is4() == candidate.Is4()
 }
 
 func (rt *Router) createRoutesDelta(rs []routing.Route) (added, removed []routing.Route) {

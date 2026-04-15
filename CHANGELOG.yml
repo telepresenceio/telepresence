@@ -38,6 +38,15 @@ items:
           different namespaces, while preserving the connected namespace as the default
           when no engagement namespace is specified.
         docs: reference/engagements/cli
+      - type: bugfix
+        title: Preserve the default gateway for never-proxy routes
+        body: >-
+          Static routes installed for <code>--never-proxy</code> and
+          <code>client.routing.neverProxySubnets</code> now preserve the matching
+          default route gateway and source address. This prevents routed client
+          environments, such as VMs that reach cluster networks through a default
+          gateway, from receiving unusable on-link routes for never-proxied
+          destinations.
   - version: 2.27.5
     date: (TBD)
     notes:
