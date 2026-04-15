@@ -47,9 +47,6 @@ items:
           environments, such as VMs that reach cluster networks through a default
           gateway, from receiving unusable on-link routes for never-proxied
           destinations.
-  - version: 2.27.5
-    date: (TBD)
-    notes:
       - type: bugfix
         title: Clear agent intercept snapshot on reconnect to prevent stale intercepts
         body: >-
