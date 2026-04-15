@@ -111,9 +111,6 @@ items:
           tunnels. VIF open failures also return a plain nil device and tolerate
           partially initialized Linux devices during cleanup, making failed setup
           paths safer.
-  - version: 2.27.5
-    date: (TBD)
-    notes:
       - type: bugfix
         title: Clear agent intercept snapshot on reconnect to prevent stale intercepts
         body: >-

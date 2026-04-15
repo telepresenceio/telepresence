@@ -62,7 +62,6 @@ Injected init containers now route pod IP output traffic through the same traffi
 Selected-intercept dial responders are now capped so bursty workloads cannot make the client daemon fan out unbounded goroutines and gRPC tunnels. VIF open failures also return a plain nil device and tolerate partially initialized Linux devices during cleanup, making failed setup paths safer.
 </div>
 
-## Version 2.27.5
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Clear agent intercept snapshot on reconnect to prevent stale intercepts](https://github.com/telepresenceio/telepresence/issues/4095)</div></div>
 <div style="margin-left: 15px">
 
@@ -2063,4 +2062,3 @@ The helm chart now correctly handles custom agentInjector.webhook.port that was 
 
 Params .intercept.disableGlobal and .timeouts.agentArrival are now correctly honored.
 </div>
-
