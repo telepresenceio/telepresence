@@ -388,7 +388,7 @@ func (g *genInitContainerInfo) run(*cobra.Command, map[string]string) error {
 	for _, cc := range cm.Containers {
 		for _, ic := range cc.Intercepts {
 			if ic.Headless || ic.TargetPortNumeric {
-				return g.writeObjToOutput(agentconfig.InitContainer(cm))
+				return g.writeObjToOutput(agentconfig.InitContainer(cm, cm.SecurityContext))
 			}
 		}
 	}

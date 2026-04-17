@@ -2,13 +2,14 @@ package agentconfig
 
 import (
 	"fmt"
+	"strconv"
 
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 )
 
-func InitContainer(config *Sidecar) *core.Container {
+func InitContainer(config *Sidecar, agentSecurityContext *core.SecurityContext) *core.Container {
 	ic := &core.Container{
 		Name:  InitContainerName,
 		Image: config.AgentImage,
@@ -42,6 +43,12 @@ func InitContainer(config *Sidecar) *core.Container {
 				Add: []core.Capability{"NET_ADMIN"},
 			},
 		},
+	}
+	if agentSecurityContext != nil && agentSecurityContext.RunAsUser != nil {
+		ic.Env = append(ic.Env, core.EnvVar{
+			Name:  EnvAgentUID,
+			Value: strconv.FormatInt(*agentSecurityContext.RunAsUser, 10),
+		})
 	}
 	if r := config.InitResources; r != nil {
 		ic.Resources = *r

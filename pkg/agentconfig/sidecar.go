@@ -38,6 +38,9 @@ const (
 	// EnvAgentConfig is the environment variable where the traffic-agent finds its own config.
 	EnvAgentConfig = "AGENT_CONFIG"
 
+	// EnvAgentUID is the user ID that the traffic-agent runs as.
+	EnvAgentUID = "AGENT_UID"
+
 	// EnvInterceptContainer intercepted container propagated to client during intercept.
 	EnvInterceptContainer = "TELEPRESENCE_CONTAINER"
 
