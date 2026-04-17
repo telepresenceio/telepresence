@@ -47,6 +47,16 @@ items:
           environments, such as VMs that reach cluster networks through a default
           gateway, from receiving unusable on-link routes for never-proxied
           destinations.
+      - type: bugfix
+        title: Route also-proxy traffic through the traffic-manager
+        body: >-
+          Connections to addresses covered by <code>--also-proxy</code> or
+          <code>client.routing.alsoProxySubnets</code> now use the traffic-manager
+          tunnel unless the destination was explicitly translated by
+          <code>--proxy-via</code>. This prevents arbitrary also-proxy traffic
+          from being sent through an unrelated traffic-agent when mapped namespaces
+          or active intercepts make an agent available.
+        docs: reference/config#alsoproxysubnets
   - version: 2.27.5
     date: (TBD)
     notes:
