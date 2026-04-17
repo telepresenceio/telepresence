@@ -57,6 +57,22 @@ items:
           from being sent through an unrelated traffic-agent when mapped namespaces
           or active intercepts make an agent available.
         docs: reference/config#alsoproxysubnets
+      - type: bugfix
+        title: Use traffic-agent UID for init-container iptables rules
+        body: >-
+          Injected init containers now program owner-based iptables exclusions
+          from the traffic-agent container's configured <code>runAsUser</code>
+          when available, rather than the init process UID. This prevents pods
+          that run application containers as the same user as the init container
+          from accidentally bypassing mesh or agent routing rules.
+      - type: bugfix
+        title: Use fully-qualified traffic-manager hostnames for injected agents
+        body: >-
+          Injected traffic-agent configs now use a fully-qualified
+          traffic-manager service DNS name when the cluster domain can be
+          determined. This avoids relying on workload DNS search paths to resolve
+          the manager service from another namespace, while preserving the
+          existing short name fallback.
   - version: 2.27.5
     date: (TBD)
     notes:
