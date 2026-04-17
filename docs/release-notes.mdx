@@ -20,6 +20,12 @@ The <code>intercept</code>, <code>wiretap</code>, and <code>replace</code> comma
 Static routes installed for <code>--never-proxy</code> and <code>client.routing.neverProxySubnets</code> now preserve the matching default route gateway and source address. This prevents routed client environments, such as VMs that reach cluster networks through a default gateway, from receiving unusable on-link routes for never-proxied destinations.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix" docs="reference/config#alsoproxysubnets">Route also-proxy traffic through the traffic-manager</Title>
+	<Body>
+Connections to addresses covered by <code>--also-proxy</code> or <code>client.routing.alsoProxySubnets</code> now use the traffic-manager tunnel unless the destination was explicitly translated by <code>--proxy-via</code>. This prevents arbitrary also-proxy traffic from being sent through an unrelated traffic-agent when mapped namespaces or active intercepts make an agent available.
+  </Body>
+</Note>
 ## Version 2.27.5
 <Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/4095">Clear agent intercept snapshot on reconnect to prevent stale intercepts</Title>

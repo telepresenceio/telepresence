@@ -77,8 +77,10 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 		}
 
 		if tp == nil {
-			tp = s.getAgentClient(destAddr)
-			if tp != nil {
+			if s.isAlsoProxyDestination(destAddr) {
+				tp = tunnel.ManagerProvider(s.managerClient())
+				clog.Debugf(c, "Opening traffic-manager tunnel for also-proxy id %s", id)
+			} else if tp = s.getAgentClient(destAddr); tp != nil {
 				clog.Debugf(c, "Opening traffic-agent tunnel for id %s using agent %s", id, tp)
 			} else {
 				tp = tunnel.ManagerProvider(s.managerClient())
@@ -97,6 +99,15 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 		return tunnel.NewClientStream(
 			c, tunnel.TunToClient, ct, id, tunnel.SessionID(s.session.SessionId), tc.Get(client.TimeoutRoundtripLatency), tc.Get(client.TimeoutEndpointDial))
 	}
+}
+
+func (s *session) isAlsoProxyDestination(ip netip.Addr) bool {
+	for _, sn := range s.alsoProxySubnets {
+		if sn.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *session) getAgentVIP(dest netip.Addr) (a agentVIP, ok bool) {
