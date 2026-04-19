@@ -69,6 +69,12 @@ Selected-intercept dial responders are now capped so bursty workloads cannot mak
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/4107">Use loopback address for kubeauth exec stub</Title>
+	<Body>
+The patched kubeconfig that the root daemon uses embeds the user daemon's gRPC address for the <code>telepresence kubeauth</code> exec stub. When the user daemon listens on an unspecified address (for example <code>[::]:PORT</code> on a dual-stack host), that literal address was embedded as the dial target, which fails on macOS and causes exec-based authenticators such as kubelogin to return a broken pipe. The embedded address now normalizes an unspecified listener address to the matching loopback (<code>127.0.0.1</code> or <code>::1</code>) so the stub can always reach the user daemon.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/4095">Clear agent intercept snapshot on reconnect to prevent stale intercepts</Title>
 	<Body>
 When the traffic-manager pod restarts, the traffic-agent reconnects but its local intercept snapshot (<code>snapMap</code>) retains entries from the old manager. Because the new manager sends an empty initial delta, the stale entries persist, causing tunnel failures and silently dropped connections. The connector side already cleared its snapshot on reconnect, but the agent was missed. The agent's repair function now clears the snapshot before reconnecting, matching the connector's behavior.
