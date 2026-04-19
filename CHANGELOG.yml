@@ -74,6 +74,18 @@ items:
           the manager service from another namespace, while preserving the
           existing short name fallback.
       - type: bugfix
+        title: Use loopback address for kubeauth exec stub
+        body: >-
+          The patched kubeconfig that the root daemon uses embeds the user daemon's
+          gRPC address for the <code>telepresence kubeauth</code> exec stub. When the
+          user daemon listens on an unspecified address (for example <code>[::]:PORT</code>
+          on a dual-stack host), that literal address was embedded as the dial target,
+          which fails on macOS and causes exec-based authenticators such as kubelogin
+          to return a broken pipe. The embedded address now normalizes an unspecified
+          listener address to the matching loopback (<code>127.0.0.1</code> or
+          <code>::1</code>) so the stub can always reach the user daemon.
+        docs: https://github.com/telepresenceio/telepresence/issues/4107
+      - type: bugfix
         title: Clear agent intercept snapshot on reconnect to prevent stale intercepts
         body: >-
           When the traffic-manager pod restarts, the traffic-agent reconnects but its
