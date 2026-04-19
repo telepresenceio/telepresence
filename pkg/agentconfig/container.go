@@ -182,17 +182,21 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 		ac.Resources = *r
 	}
 
-	appSc := a.Config.SecurityContext
-	if appSc == nil {
-		// Assign the security context of the first container to the traffic agent.
-		appSc, err = a.firstAppSecurityContext()
-		if err != nil {
-			return nil, nil, err
-		}
+	appSc, err := a.AgentSecurityContext()
+	if err != nil {
+		return nil, nil, err
 	}
 	ac.SecurityContext = appSc
 
 	return ac, anns, nil
+}
+
+func (a *ContainerBuilder) AgentSecurityContext() (*core.SecurityContext, error) {
+	if appSc := a.Config.SecurityContext; appSc != nil {
+		return appSc, nil
+	}
+	// Assign the security context of the first container to the traffic agent.
+	return a.firstAppSecurityContext()
 }
 
 func (a *ContainerBuilder) mountSecrets(annotation, certPath string, anns map[string]string, mounts []core.VolumeMount) ([]core.VolumeMount, error) {

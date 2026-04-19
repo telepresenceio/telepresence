@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -95,6 +96,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		ManagerPort:         e.ServerPort,
 		QualifiedAgentImage: qualifiedAgentImage,
 		ManagerNamespace:    e.ManagerNamespace,
+		ClusterDomain:       e.clusterDomain(),
 		LogLevel:            e.AgentLogLevel,
 		InitResources:       e.AgentInitResources,
 		Resources:           e.AgentResources,
@@ -107,6 +109,29 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		EnableMetrics:       e.AgentConsumptionMetrics && e.PrometheusPort != 0,
 		WatchRetryInterval:  e.AgentWatchRetryInterval,
 	}, nil
+}
+
+func (e *Env) clusterDomain() string {
+	conf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
+	if err != nil || len(conf.Search) < 3 {
+		return ""
+	}
+	nsSvc := e.ManagerNamespace + ".svc."
+	if !strings.HasPrefix(conf.Search[0], nsSvc) || !strings.HasPrefix(conf.Search[1], "svc.") {
+		return ""
+	}
+	domain := strings.TrimPrefix(conf.Search[1], "svc.")
+	third := conf.Search[2]
+	if !strings.HasSuffix(domain, ".") {
+		domain += "."
+	}
+	if !strings.HasSuffix(third, ".") {
+		third += "."
+	}
+	if !strings.EqualFold(third, domain) {
+		return ""
+	}
+	return strings.TrimSuffix(domain, ".")
 }
 
 func (e *Env) QualifiedAgentImage() string {

@@ -20,6 +20,18 @@ Static routes installed for <code>--never-proxy</code> and <code>client.routing.
 Connections to addresses covered by <code>--also-proxy</code> or <code>client.routing.alsoProxySubnets</code> now use the traffic-manager tunnel unless the destination was explicitly translated by <code>--proxy-via</code>. This prevents arbitrary also-proxy traffic from being sent through an unrelated traffic-agent when mapped namespaces or active intercepts make an agent available.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Use traffic-agent UID for init-container iptables rules</div></div>
+<div style="margin-left: 15px">
+
+Injected init containers now program owner-based iptables exclusions from the traffic-agent container's configured <code>runAsUser</code> when available, rather than the init process UID. This prevents pods that run application containers as the same user as the init container from accidentally bypassing mesh or agent routing rules.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Use fully-qualified traffic-manager hostnames for injected agents</div></div>
+<div style="margin-left: 15px">
+
+Injected traffic-agent configs now use a fully-qualified traffic-manager service DNS name when the cluster domain can be determined. This avoids relying on workload DNS search paths to resolve the manager service from another namespace, while preserving the existing short name fallback.
+</div>
+
 ## Version 2.27.5
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Clear agent intercept snapshot on reconnect to prevent stale intercepts](https://github.com/telepresenceio/telepresence/issues/4095)</div></div>
 <div style="margin-left: 15px">

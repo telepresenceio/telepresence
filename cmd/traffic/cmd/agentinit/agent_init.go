@@ -44,14 +44,28 @@ func loadConfig() (*config, error) {
 	return &c, nil
 }
 
+func trafficAgentUID() (string, error) {
+	if uid, ok := os.LookupEnv(agentconfig.EnvAgentUID); ok && uid != "" {
+		parsed, err := strconv.ParseUint(uid, 10, 32)
+		if err != nil {
+			return "", fmt.Errorf("invalid %s %q: %w", agentconfig.EnvAgentUID, uid, err)
+		}
+		return strconv.FormatUint(parsed, 10), nil
+	}
+	return strconv.Itoa(os.Getuid()), nil
+}
+
 func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTables, loopback string, localHostCIDR netip.Prefix, podIP netip.Addr) error {
 	// These iptables rules implement routing such that a packet directed to the appPort will hit the agentPort instead.
 	// If there's no mesh this is simply request -> agent -> app (or intercept)
 	// However, if there's a service mesh we want to make sure we don't bypass the mesh, so the traffic
 	// will flow request -> mesh -> agent -> app
 
-	// A service mesh will typically use an UID different from the one used by this process
-	agentUID := strconv.Itoa(os.Getuid())
+	// A service mesh will typically use a UID different from the traffic-agent.
+	agentUID, err := trafficAgentUID()
+	if err != nil {
+		return err
+	}
 
 	outputInsertCount := 0
 	for _, proto := range []types.Proto{types.ProtoTCP, types.ProtoUDP} {
@@ -166,7 +180,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 	// Finally, any other traffic heading out of the traffic agent should pass by unperturbed -- it should obviously not be
 	// redirected back into the agent, but it also should not pass through a mesh proxy.
 	// This will include not just agent->manager traffic but also the agent requesting 127.0.0.1:appPort to serve the application
-	err := iptables.Insert(nat, "OUTPUT", 1+outputInsertCount,
+	err = iptables.Insert(nat, "OUTPUT", 1+outputInsertCount,
 		"-m", "owner", "--uid-owner", agentUID,
 		"-j", "RETURN")
 	if err != nil {

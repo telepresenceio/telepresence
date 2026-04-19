@@ -31,6 +31,7 @@ type GeneratorConfig struct {
 	APIPort             uint16
 	QualifiedAgentImage string
 	ManagerNamespace    string
+	ClusterDomain       string
 	LogLevel            slog.Level
 	InitResources       *core.ResourceRequirements
 	Resources           *core.ResourceRequirements
@@ -175,7 +176,7 @@ func (cfg *GeneratorConfig) Generate(
 		Namespace:           wl.GetNamespace(),
 		WorkloadName:        wl.GetName(),
 		WorkloadKind:        wl.GetKind(),
-		ManagerHost:         agentconfig.ManagerAppName + "." + cfg.ManagerNamespace,
+		ManagerHost:         ManagerHost(cfg.ManagerNamespace, cfg.ClusterDomain),
 		ManagerPort:         cfg.ManagerPort,
 		APIPort:             cfg.APIPort,
 		ClientConnectionTTL: cfg.ClientConnectionTTL,
@@ -191,6 +192,15 @@ func (cfg *GeneratorConfig) Generate(
 		EnableMetrics:       cfg.EnableMetrics,
 		WatchRetryInterval:  cfg.WatchRetryInterval,
 	}, nil
+}
+
+func ManagerHost(managerNamespace, clusterDomain string) string {
+	host := agentconfig.ManagerAppName + "." + managerNamespace
+	clusterDomain = strings.Trim(clusterDomain, ".")
+	if clusterDomain == "" || strings.Contains(managerNamespace, ".") {
+		return host
+	}
+	return host + ".svc." + clusterDomain
 }
 
 func (cfg *GeneratorConfig) appendAgentContainerConfigs(

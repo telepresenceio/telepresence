@@ -177,7 +177,10 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 
 func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod, wlTpl *core.PodTemplateSpec) (patches PatchOps, err error) {
 	var anns map[string]string
-	patches = addInitContainer(ctx, pod, config, patches)
+	patches, err = addInitContainer(ctx, pod, wlTpl, config, patches)
+	if err != nil {
+		return nil, err
+	}
 	patches, anns, err = addAgentContainer(ctx, pod, wlTpl, config, patches)
 	if err != nil {
 		return nil, err
@@ -259,27 +262,35 @@ func maybeRemoveAppContainer(pod *core.Pod, config *agentconfig.Sidecar, patches
 	return patches
 }
 
-func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {
+func addInitContainer(ctx context.Context, pod *core.Pod, wlTpl *core.PodTemplateSpec, config *agentconfig.Sidecar, patches PatchOps) (PatchOps, error) {
 	if !needInitContainer(ctx, config) {
 		for i, oc := range pod.Spec.InitContainers {
 			if agentconfig.InitContainerName == oc.Name {
 				return append(patches, PatchOperation{
 					Op:   "remove",
 					Path: fmt.Sprintf("/spec/initContainers/%d", i),
-				})
+				}), nil
 			}
 		}
-		return patches
+		return patches, nil
 	}
 
 	pis := pod.Spec.InitContainers
-	ic := agentconfig.InitContainer(config)
+	ab := agentconfig.ContainerBuilder{
+		Pod:    wlTpl,
+		Config: config,
+	}
+	agentSecurityContext, err := ab.AgentSecurityContext()
+	if err != nil {
+		return nil, err
+	}
+	ic := agentconfig.InitContainer(config, agentSecurityContext)
 	if len(pis) == 0 {
 		return append(patches, PatchOperation{
 			Op:    "replace",
 			Path:  "/spec/initContainers",
 			Value: []core.Container{*ic},
-		})
+		}), nil
 	}
 
 	for i := range pis {
@@ -287,15 +298,16 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 		if ic.Name == oc.Name {
 			if ic.Image == oc.Image &&
 				slices.Equal(ic.Args, oc.Args) &&
+				compareAgentUIDEnv(ic.Env, oc.Env) &&
 				compareVolumeMounts(ic.VolumeMounts, oc.VolumeMounts) &&
 				compareCapabilities(ic.SecurityContext, oc.SecurityContext) {
-				return patches
+				return patches, nil
 			}
 			return append(patches, PatchOperation{
 				Op:    "replace",
 				Path:  fmt.Sprintf("/spec/initContainers/%d", i),
 				Value: ic,
-			})
+			}), nil
 		}
 	}
 
@@ -303,7 +315,7 @@ func addInitContainer(ctx context.Context, pod *core.Pod, config *agentconfig.Si
 		Op:    "add",
 		Path:  "/spec/initContainers/-",
 		Value: ic,
-	})
+	}), nil
 }
 
 func addAgentVolumes(agentName string, pod *core.Pod, patches PatchOps) (PatchOps, error) {
@@ -392,6 +404,20 @@ func compareVolumeMounts(a, b []core.VolumeMount) bool {
 	}
 	eq := cmp.Equal(stripKubeAPI(a), stripKubeAPI(b))
 	return eq
+}
+
+func compareAgentUIDEnv(a, b []core.EnvVar) bool {
+	agentUID := func(evs []core.EnvVar) (string, bool) {
+		for _, ev := range evs {
+			if ev.Name == agentconfig.EnvAgentUID {
+				return ev.Value, true
+			}
+		}
+		return "", false
+	}
+	av, aok := agentUID(a)
+	bv, bok := agentUID(b)
+	return aok == bok && av == bv
 }
 
 func containerEqual(ctx context.Context, a, b *core.Container) bool {
