@@ -29,6 +29,12 @@ type config struct {
 	*agentconfig.Sidecar
 }
 
+type iptablesConfigurer interface {
+	ClearChain(table, chain string) error
+	AppendUnique(table, chain string, rulespec ...string) error
+	Insert(table, chain string, pos int, rulespec ...string) error
+}
+
 func loadConfig() (*config, error) {
 	cfgTight, ok := os.LookupEnv(agentconfig.EnvAgentConfig)
 	if !ok {
@@ -55,7 +61,7 @@ func trafficAgentUID() (string, error) {
 	return strconv.Itoa(os.Getuid()), nil
 }
 
-func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTables, loopback string, localHostCIDR netip.Prefix, podIP netip.Addr) error {
+func (c *config) configureIptables(ctx context.Context, ipt iptablesConfigurer, loopback string, localHostCIDR netip.Prefix, podIP netip.Addr) error {
 	// These iptables rules implement routing such that a packet directed to the appPort will hit the agentPort instead.
 	// If there's no mesh this is simply request -> agent -> app (or intercept)
 	// However, if there's a service mesh we want to make sure we don't bypass the mesh, so the traffic
@@ -87,12 +93,12 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		// Clearing the chains will create them if they don't exist or clear them out if they do.
 		protoStr := proto.String()
 		preRoutingChain := "TEL_PREROUTING_" + protoStr
-		err := iptables.ClearChain(nat, preRoutingChain)
+		err := ipt.ClearChain(nat, preRoutingChain)
 		if err != nil {
 			return fmt.Errorf("failed to clear chain %s: %w", preRoutingChain, err)
 		}
 		outputChain := "TEL_OUTPUT_" + protoStr
-		err = iptables.ClearChain(nat, outputChain)
+		err = ipt.ClearChain(nat, outputChain)
 		if err != nil {
 			return fmt.Errorf("failed to clear chain %s: %w", outputChain, err)
 		}
@@ -105,14 +111,14 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 					// Add REDIRECT to both PREROUTING and OUTPUT, because we want connections that
 					// originate from the agent to be subjected to this rule.
 					clog.Debugf(ctx, "preroute redirect %d -> %d", ic.ContainerPort, ic.AgentPort)
-					err = iptables.AppendUnique(nat, preRoutingChain,
+					err = ipt.AppendUnique(nat, preRoutingChain,
 						"-p", lcProto, "--dport", strconv.Itoa(int(ic.ContainerPort)),
 						"-j", "REDIRECT", "--to-ports", strconv.Itoa(int(ic.AgentPort)))
 					if err != nil {
 						return fmt.Errorf("failed to append rule to %s: %w", preRoutingChain, err)
 					}
 					clog.Debugf(ctx, "output redirect %d -> %d", ic.ContainerPort, ic.AgentPort)
-					err = iptables.AppendUnique(nat, outputChain,
+					err = ipt.AppendUnique(nat, outputChain,
 						"-p", lcProto, "--dport", strconv.Itoa(int(ic.ContainerPort)),
 						"-j", "REDIRECT", "--to-ports", strconv.Itoa(int(ic.AgentPort)))
 					if err != nil {
@@ -126,7 +132,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 						// prevent an endless loop that would otherwise occur here when the previous rule would
 						// loop it back into the agent.
 						clog.Debugf(ctx, "output DNAT %s:%d -> %s:%d", podIP, c.ProxyPort(ic.AgentPort), podIP, ic.ContainerPort)
-						err = iptables.AppendUnique(nat, outputChain,
+						err = ipt.AppendUnique(nat, outputChain,
 							"-p", lcProto, "-d", podIP.String(), "--dport", strconv.Itoa(int(c.ProxyPort(ic.AgentPort))),
 							"-j", "DNAT", "--to-destination", netip.AddrPortFrom(podIP, ic.ContainerPort).String())
 						if err != nil {
@@ -141,7 +147,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		// We do this as an append instead of an insert because this will prevent us from interfering with a service mesh
 		// if one exists. If a service mesh exists, its PREROUTING rules will kick in before ours, ensuring traffic
 		// coming into the pod does not bypass the mesh.
-		err = iptables.AppendUnique(nat, "PREROUTING",
+		err = ipt.AppendUnique(nat, "PREROUTING",
 			"-p", lcProto,
 			"-j", preRoutingChain)
 		if err != nil {
@@ -151,7 +157,7 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		// Any traffic heading out of the loopback and into the app port (other than traffic from the agent) needs to
 		// be redirected to the agent. This will ensure that if there's a service mesh, when the mesh's proxy goes to
 		// request the application, it will get a response via the traffic agent.
-		err = iptables.Insert(nat, "OUTPUT", 1,
+		err = ipt.Insert(nat, "OUTPUT", 1,
 			"-o", loopback,
 			"-p", lcProto,
 			"-m", "owner", "!", "--uid-owner", agentUID,
@@ -161,11 +167,23 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 		}
 		outputInsertCount++
 
+		// Some service meshes connect back to the app through the pod IP rather than a loopback
+		// address. Route those connections through the same output chain.
+		err = ipt.Insert(nat, "OUTPUT", 1,
+			"-p", lcProto,
+			"-d", podIP.String(),
+			"-m", "owner", "!", "--uid-owner", agentUID,
+			"-j", outputChain)
+		if err != nil {
+			return fmt.Errorf("failed to insert pod IP ! --uid-owner rule in OUTPUT: %w", err)
+		}
+		outputInsertCount++
+
 		// Any agent traffic heading out on the loopback but NOT towards localhost needs to be processed in case
 		// it needs to be redirected. This is so that if the traffic agent requests its own IP, it doesn't just
 		// serve the app but actually goes through the agent, and thus through any intercepts.
 		// This is needed to support requesting an intercepted pod by IP (or to intercept a headless service).
-		err = iptables.Insert(nat, "OUTPUT", 1,
+		err = ipt.Insert(nat, "OUTPUT", 1,
 			"-o", loopback,
 			"-p", lcProto,
 			"!", "-d", localHostCIDR.String(),
@@ -175,12 +193,25 @@ func (c *config) configureIptables(ctx context.Context, iptables *iptables.IPTab
 			return fmt.Errorf("failed to insert --uid-owner rule in OUTPUT: %w", err)
 		}
 		outputInsertCount++
+
+		// The traffic agent also uses the pod IP proxy port when forwarding to the
+		// inactive app container. Ensure that path works even when the pod IP does
+		// not route over the loopback interface.
+		err = ipt.Insert(nat, "OUTPUT", 1,
+			"-p", lcProto,
+			"-d", podIP.String(),
+			"-m", "owner", "--uid-owner", agentUID,
+			"-j", outputChain)
+		if err != nil {
+			return fmt.Errorf("failed to insert pod IP --uid-owner rule in OUTPUT: %w", err)
+		}
+		outputInsertCount++
 	}
 
 	// Finally, any other traffic heading out of the traffic agent should pass by unperturbed -- it should obviously not be
 	// redirected back into the agent, but it also should not pass through a mesh proxy.
 	// This will include not just agent->manager traffic but also the agent requesting 127.0.0.1:appPort to serve the application
-	err = iptables.Insert(nat, "OUTPUT", 1+outputInsertCount,
+	err = ipt.Insert(nat, "OUTPUT", 1+outputInsertCount,
 		"-m", "owner", "--uid-owner", agentUID,
 		"-j", "RETURN")
 	if err != nil {
