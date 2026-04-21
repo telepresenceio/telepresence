@@ -32,6 +32,12 @@ Injected init containers now program owner-based iptables exclusions from the tr
 Injected traffic-agent configs now use a fully-qualified traffic-manager service DNS name when the cluster domain can be determined. This avoids relying on workload DNS search paths to resolve the manager service from another namespace, while preserving the existing short name fallback.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Avoid probing cleartext HTTP app protocols</div></div>
+<div style="margin-left: 15px">
+
+Traffic-agents now recognize common cleartext HTTP/1 Kubernetes Service <code>appProtocol</code> values such as <code>http</code> and <code>kubernetes.io/http</code>. This skips unnecessary TLS and HTTP/2 probing for known HTTP/1 services, avoiding request latency when those probes cannot connect through the inactive proxy port.
+</div>
+
 ## Version 2.27.5
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Clear agent intercept snapshot on reconnect to prevent stale intercepts](https://github.com/telepresenceio/telepresence/issues/4095)</div></div>
 <div style="margin-left: 15px">
