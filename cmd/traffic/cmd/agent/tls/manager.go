@@ -222,7 +222,11 @@ func (m *manager) UseHTTP2(ctx context.Context, proxyPort uint16) bool {
 func (m *manager) configuredHTTP2(containerPort uint16) ValueState {
 	_, it := m.sidecarConfig.InterceptTarget(containerPort, types.ProtoTCP)
 	for _, ic := range it {
-		switch strings.ToLower(ic.AppProtocol) {
+		appProtocol := strings.ToLower(ic.AppProtocol)
+		if isCleartextHTTP1(appProtocol) {
+			return ValueNotSupported
+		}
+		switch appProtocol {
 		case "tcp", "udp": // No app-layer sniffing
 			return ValueNotSupported
 		case "h2c", "kubernetes.io/h2c": // HTTP/2 over cleartext
@@ -237,7 +241,11 @@ func (m *manager) configuredHTTP2(containerPort uint16) ValueState {
 func (m *manager) configuredTLS(containerPort uint16) ValueState {
 	_, it := m.sidecarConfig.InterceptTarget(containerPort, types.ProtoTCP)
 	for _, ic := range it {
-		switch strings.ToLower(ic.AppProtocol) {
+		appProtocol := strings.ToLower(ic.AppProtocol)
+		if isCleartextHTTP1(appProtocol) {
+			return ValueNotSupported
+		}
+		switch appProtocol {
 		case "tcp", "udp": // No app-layer sniffing
 			return ValueNotSupported
 		case "kubernetes.io/ws": // WebSocket over cleartext
@@ -256,4 +264,13 @@ func (m *manager) configuredTLS(containerPort uint16) ValueState {
 		}
 	}
 	return ValueUnknown
+}
+
+func isCleartextHTTP1(appProtocol string) bool {
+	switch appProtocol {
+	case "http", "kubernetes.io/http", "http1", "http1.0", "http1.1", "http/1.0", "http/1.1":
+		return true
+	default:
+		return false
+	}
 }

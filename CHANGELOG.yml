@@ -73,6 +73,14 @@ items:
           determined. This avoids relying on workload DNS search paths to resolve
           the manager service from another namespace, while preserving the
           existing short name fallback.
+      - type: bugfix
+        title: Avoid probing cleartext HTTP app protocols
+        body: >-
+          Traffic-agents now recognize common cleartext HTTP/1 Kubernetes Service
+          <code>appProtocol</code> values such as <code>http</code> and
+          <code>kubernetes.io/http</code>. This skips unnecessary TLS and HTTP/2
+          probing for known HTTP/1 services, avoiding request latency when those
+          probes cannot connect through the inactive proxy port.
   - version: 2.27.5
     date: (TBD)
     notes:
