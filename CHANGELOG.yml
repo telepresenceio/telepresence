@@ -81,6 +81,11 @@ items:
           <code>kubernetes.io/http</code>. This skips unnecessary TLS and HTTP/2
           probing for known HTTP/1 services, avoiding request latency when those
           probes cannot connect through the inactive proxy port.
+      - type: bugfix
+        title: Add /usr/sbin to systemd root daemon path
+        body: >-
+          Ensures /usr/sbin is in the PATH used by the root daemon when it is run
+          by systemd.  This ensures iptables can be found by the daemon.
   - version: 2.27.5
     date: (TBD)
     notes:
