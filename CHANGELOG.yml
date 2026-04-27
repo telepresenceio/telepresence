@@ -82,6 +82,11 @@ items:
           probing for known HTTP/1 services, avoiding request latency when those
           probes cannot connect through the inactive proxy port.
       - type: bugfix
+        title: Add /usr/sbin to systemd root daemon path
+        body: >-
+          Ensures /usr/sbin is in the PATH used by the root daemon when it is run
+          by systemd.  This ensures iptables can be found by the daemon.
+      - type: bugfix
         title: Handle pod IP output traffic in agent init
         body: >-
           Injected init containers now route pod IP output traffic through the

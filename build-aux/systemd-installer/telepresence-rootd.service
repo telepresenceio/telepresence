@@ -30,7 +30,7 @@ StandardOutput=journal
 StandardError=journal
 
 # Environment
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/usr/sbin:/usr/local/bin:/usr/bin:/bin
 # Telepresence sometimes expects a writable HOME
 Environment=HOME=/var/root
 
