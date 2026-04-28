@@ -455,6 +455,17 @@ items:
     date: 2025-10-16
     notes:
       - type: feature
+        title: Rollout mode for agent injection to prevent pod termination downtime
+        body: |-
+          Telepresence now supports a rollout mode for agent injection that prevents the issue where all pods are
+          terminated before new pods with traffic-agents are ready. When enabled via the AGENT_ROLLOUT_INSTEAD_OF_EVICT
+          flag or agent.rolloutInsteadOfEvict.enabled Helm value, Telepresence uses Kubernetes rolling update
+          mechanisms instead of direct pod eviction. This ensures pods are replaced gradually as new ones become
+          ready, respecting the deployment's maxSurge and maxUnavailable settings. The gradual rollout mode also
+          includes a 2-second delay to ensure ConfigMap changes are propagated to all admission webhook instances
+          before triggering the rolling update, preventing race conditions where pods might be created without
+          the agent configuration.
+      - type: feature
         title: HTTP Intercepts with HTTP header and path filtering
         body: |-
           Telepresence now supports HTTP Intercepts, enabling fine-grained HTTP traffic filtering for intercepts.

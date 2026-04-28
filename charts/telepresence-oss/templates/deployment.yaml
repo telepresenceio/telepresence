@@ -166,6 +166,10 @@ spec:
           - name: AGENT_INIT_CONTAINER_ENABLED
             value: {{ .enabled | quote  }}
           {{- end }}
+          {{- with .rolloutInsteadOfEvict }}
+          - name: AGENT_ROLLOUT_INSTEAD_OF_EVICT
+            value: {{ .enabled | quote }}
+          {{- end }}
           {{- with .image }}
           {{- if .name }}
           - name: AGENT_IMAGE_NAME

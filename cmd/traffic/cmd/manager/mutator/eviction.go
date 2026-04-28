@@ -134,6 +134,30 @@ func (e disruptionBudgetError) Error() string {
 }
 
 func evictOrRollout(ctx context.Context, wl k8sapi.Workload, pod *core.Pod, counter int) (didRollout bool, err error) {
+	// Check if rollout mode is enabled via environment variable
+	if managerutil.GetEnv(ctx).AgentRolloutInsteadOfEvict {
+		clog.Debugf(ctx, "Using rollout mode for %s (AGENT_ROLLOUT_INSTEAD_OF_EVICT=true)", wl)
+		// Add a small delay to ensure ConfigMap changes are propagated to admission webhook before rollout
+		select {
+		case <-time.After(2 * time.Second):
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+		switch wl.GetKind() {
+		case k8sapi.StatefulSetKind, k8sapi.ReplicaSetKind:
+			return false, triggerScalingEviction(ctx, wl, pod)
+		default:
+			clog.Debugf(ctx, "Patching %s to trigger pod recreation", wl)
+			restartAnnotation := generateRestartAnnotationPatch(wl.GetPodTemplate().Annotations)
+			if err = wl.Patch(ctx, types.JSONPatchType, []byte(restartAnnotation)); err != nil {
+				return false, fmt.Errorf("unable to patch %s: %v", wl, err)
+			}
+			clog.Debugf(ctx, "Successfully patched %s", wl)
+		}
+		return true, nil
+	}
+
+	// Original behavior: try direct eviction first
 	err = evictPod(ctx, pod)
 	if err == nil {
 		return false, nil

@@ -71,6 +71,7 @@ type Env struct {
 	AgentInitContainerEnabled  bool `default:"true"`
 	AgentMaxIdleTime           time.Duration
 	AgentWatchRetryInterval    time.Duration `default:"10s"`
+	AgentRolloutInsteadOfEvict bool          `default:"false"`
 
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `envSeparator:" "`
 	ClientRoutingNeverProxySubnets       []netip.Prefix `envSeparator:" "`

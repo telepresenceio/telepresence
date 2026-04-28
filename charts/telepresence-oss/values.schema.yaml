@@ -78,6 +78,13 @@ properties:
       resources:
         description: Resource requirements for the agent
         $ref: "#/$defs/resourceRequirements"
+      rolloutInsteadOfEvict:
+        description: Configuration for using rollout instead of direct eviction when updating pods with agent configuration changes
+        properties:
+          enabled:
+            description: When true, use Kubernetes rolling update instead of direct pod eviction
+            type: boolean
+        type: object
       securityContext:
         description: Security context for the agent
         $ref: "#/$defs/securityContext"

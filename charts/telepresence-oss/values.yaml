@@ -137,6 +137,8 @@ agent:
     pullPolicy: IfNotPresent
   initContainer:
     enabled: true
+  rolloutInsteadOfEvict:
+    enabled: false
 
 ################################################################################
 ## Telepresence API Server Configuration
