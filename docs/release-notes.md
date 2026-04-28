@@ -44,6 +44,12 @@ Traffic-agents now recognize common cleartext HTTP/1 Kubernetes Service <code>ap
 Ensures /usr/sbin is in the PATH used by the root daemon when it is run by systemd.  This ensures iptables can be found by the daemon.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Reconnect the root daemon when its activity watcher fails</div></div>
+<div style="margin-left: 15px">
+
+The user daemon now reconnects to the root daemon when the root daemon's activity watcher fails, instead of leaving the session stuck until the user manually reconnects. Telepresence reuses the saved network configuration, clears stale DNS routing state before reconnecting, swaps in the new root daemon client, and re-posts DNS domains after reconnecting.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Handle pod IP output traffic in agent init</div></div>
 <div style="margin-left: 15px">
 

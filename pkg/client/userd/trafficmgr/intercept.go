@@ -188,7 +188,9 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 		pa := ic.podAccess()
 		var err error
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
-			err = pa.ensureAccess(ic.ctx, s.rootDaemon)
+			err = s.WithRootClient(ic.ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+				return pa.ensureAccess(ctx, rd)
+			})
 		} else {
 			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
 		}
@@ -691,7 +693,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 			case <-wr.mountsDone:
 			}
 			err := s.WithRootClient(ctx, func(ctx context.Context, rd daemon.DaemonClient) (err error) {
-				env, err := s.rootDaemon.TranslateEnvIPs(c, &daemon.Environment{Env: ii.Environment})
+				env, err := rd.TranslateEnvIPs(c, &daemon.Environment{Env: ii.Environment})
 				if err == nil {
 					ii.Environment = env.Env
 				}

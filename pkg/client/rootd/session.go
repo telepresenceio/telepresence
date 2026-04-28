@@ -203,8 +203,14 @@ type session struct {
 }
 
 // createSession will establish a connection to the traffic-manager and return a new properly initialized session object.
-func createSession(sessionCtx, dialCtx context.Context, mi *rpc.NetworkConfig, activity chan<- time.Time) (s *session, err error) {
+func createSession(
+	sessionCtx, dialCtx context.Context,
+	mi *rpc.NetworkConfig,
+	activity chan<- time.Time,
+	cleanupDNSRouting func(context.Context),
+) (s *session, err error) {
 	clog.Info(sessionCtx, "-- Starting new session")
+	cleanupDNSRouting(sessionCtx)
 	kc, err := k8s.NewKubeconfig(sessionCtx, true, mi.KubeFlags, mi.ManagerNamespace, mi.KubeconfigData)
 	if err != nil {
 		return nil, err

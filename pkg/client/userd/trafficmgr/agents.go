@@ -76,7 +76,7 @@ func (s *session) handleAgentSnapshot(ctx context.Context, infos []*manager.Agen
 				}
 				ig.AgentInfo = ai
 			}
-			s.ingestTracker.start(ig.podAccess(s.rootDaemon))
+			s.startIngestPodAccess(ctx, ig, false)
 		}
 		return true
 	})
