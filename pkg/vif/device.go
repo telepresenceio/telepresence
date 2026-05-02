@@ -22,7 +22,14 @@ var _ Device = (*device)(nil)
 
 // OpenTun creates a new TUN device and ensures that it is up and running.
 func OpenTun(ctx context.Context) (Device, error) {
-	return openTun(ctx)
+	return deviceResult(openTun(ctx))
+}
+
+func deviceResult(dev *device, err error) (Device, error) {
+	if err != nil {
+		return nil, err
+	}
+	return dev, nil
 }
 
 // AddSubnet adds a subnet to this TUN device and creates a route for that subnet which

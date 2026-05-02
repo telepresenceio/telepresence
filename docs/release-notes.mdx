@@ -45,9 +45,21 @@ Traffic-agents now recognize common cleartext HTTP/1 Kubernetes Service <code>ap
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix">Add /usr/sbin to systemd root daemon path</Title>
+	<Body>
+Ensures /usr/sbin is in the PATH used by the root daemon when it is run by systemd.  This ensures iptables can be found by the daemon.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Handle pod IP output traffic in agent init</Title>
 	<Body>
 Injected init containers now route pod IP output traffic through the same traffic-agent iptables chains used for loopback traffic. This lets service mesh sidecars and traffic-agent forwarding paths that connect to the application through the pod IP reach the expected redirect and DNAT rules, avoiding missed routing when the pod IP does not use the loopback interface.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix">Bound selected-intercept dial responders</Title>
+	<Body>
+Selected-intercept dial responders are now capped so bursty workloads cannot make the client daemon fan out unbounded goroutines and gRPC tunnels. VIF open failures also return a plain nil device and tolerate partially initialized Linux devices during cleanup, making failed setup paths safer.
   </Body>
 </Note>
 ## Version 2.27.5

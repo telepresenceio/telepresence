@@ -38,10 +38,22 @@ Injected traffic-agent configs now use a fully-qualified traffic-manager service
 Traffic-agents now recognize common cleartext HTTP/1 Kubernetes Service <code>appProtocol</code> values such as <code>http</code> and <code>kubernetes.io/http</code>. This skips unnecessary TLS and HTTP/2 probing for known HTTP/1 services, avoiding request latency when those probes cannot connect through the inactive proxy port.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add /usr/sbin to systemd root daemon path</div></div>
+<div style="margin-left: 15px">
+
+Ensures /usr/sbin is in the PATH used by the root daemon when it is run by systemd.  This ensures iptables can be found by the daemon.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Handle pod IP output traffic in agent init</div></div>
 <div style="margin-left: 15px">
 
 Injected init containers now route pod IP output traffic through the same traffic-agent iptables chains used for loopback traffic. This lets service mesh sidecars and traffic-agent forwarding paths that connect to the application through the pod IP reach the expected redirect and DNAT rules, avoiding missed routing when the pod IP does not use the loopback interface.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Bound selected-intercept dial responders</div></div>
+<div style="margin-left: 15px">
+
+Selected-intercept dial responders are now capped so bursty workloads cannot make the client daemon fan out unbounded goroutines and gRPC tunnels. VIF open failures also return a plain nil device and tolerate partially initialized Linux devices during cleanup, making failed setup paths safer.
 </div>
 
 ## Version 2.27.5

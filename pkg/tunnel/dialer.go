@@ -32,6 +32,10 @@ const (
 	localDialTimeout = 2 * time.Second
 )
 
+// Limit selected-intercept dial responders so bursty workloads cannot create
+// unbounded goroutines and gRPC tunnels in the client daemon.
+const maxConcurrentDialResponders = 256
+
 const (
 	notConnected = int32(iota)
 	connecting
@@ -439,10 +443,22 @@ func DialWaitLoop(
 	// create ctx to clean up leftover dialRespond if waitloop dies
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	dialResponders := make(chan struct{}, maxConcurrentDialResponders)
 	for ctx.Err() == nil {
 		dr, err := dialStream.Recv()
 		if err == nil {
-			go dialRespond(ctx, tag, tunnelProvider, dr, sessionID)
+			select {
+			case dialResponders <- struct{}{}:
+			case <-ctx.Done():
+				return nil
+			}
+			dr := dr
+			go func() {
+				defer func() {
+					<-dialResponders
+				}()
+				dialRespond(ctx, tag, tunnelProvider, dr, sessionID)
+			}()
 			continue
 		}
 		if ctx.Err() != nil {
