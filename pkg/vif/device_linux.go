@@ -138,8 +138,12 @@ func (d *device) createLinkEndpoint() (stack.LinkEndpoint, error) {
 }
 
 func (d *device) Close() {
-	d.endPoint.Close()
-	_ = unix.Close(d.fd)
+	if d.endPoint != nil {
+		d.endPoint.Close()
+	}
+	if d.fd >= 0 {
+		_ = unix.Close(d.fd)
+	}
 }
 
 func (d *device) WaitForDevice() {

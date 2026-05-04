@@ -95,6 +95,14 @@ items:
           connect to the application through the pod IP reach the expected
           redirect and DNAT rules, avoiding missed routing when the pod IP does
           not use the loopback interface.
+      - type: bugfix
+        title: Bound selected-intercept dial responders
+        body: >-
+          Selected-intercept dial responders are now capped so bursty workloads
+          cannot make the client daemon fan out unbounded goroutines and gRPC
+          tunnels. VIF open failures also return a plain nil device and tolerate
+          partially initialized Linux devices during cleanup, making failed setup
+          paths safer.
   - version: 2.27.5
     date: (TBD)
     notes:
