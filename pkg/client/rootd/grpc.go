@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -90,7 +91,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 
 	sessionCtx, sessionCancel := context.WithCancel(s)
 	var sn *session
-	sn, err = createSession(client.WithConfig(sessionCtx, cfg), ctx, info, s.activity)
+	sn, err = createSession(client.WithConfig(sessionCtx, cfg), ctx, info, s.activity, dns.CleanupRouting)
 	if err != nil {
 		sessionCancel()
 		return nil, err

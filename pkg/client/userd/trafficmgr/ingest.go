@@ -186,9 +186,23 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 		}, false
 	})
 	if !loaded {
-		s.ingestTracker.initialStart(ig.podAccess(s.rootDaemon))
+		s.startIngestPodAccess(ctx, ig, true)
 	}
 	return ig.response(), nil
+}
+
+func (s *session) startIngestPodAccess(ctx context.Context, ig *ingest, initial bool) {
+	err := s.WithRootClient(ctx, func(_ context.Context, rd daemon.DaemonClient) error {
+		if initial {
+			s.ingestTracker.initialStart(ig.podAccess(rd))
+		} else {
+			s.ingestTracker.start(ig.podAccess(rd))
+		}
+		return nil
+	})
+	if err != nil {
+		clog.Errorf(ctx, "failed to start ingest pod access: %v", err)
+	}
 }
 
 func (s *session) translateContainerEnv(ctx context.Context, ai *manager.AgentInfo, container string) error {
@@ -197,7 +211,7 @@ func (s *session) translateContainerEnv(ctx context.Context, ai *manager.AgentIn
 		return fmt.Errorf("workload %s has no container named %s", ai.Name, container)
 	}
 	return s.WithRootClient(ctx, func(ctx context.Context, rd daemon.DaemonClient) (err error) {
-		env, err := s.rootDaemon.TranslateEnvIPs(s, &daemon.Environment{Env: cn.Environment})
+		env, err := rd.TranslateEnvIPs(ctx, &daemon.Environment{Env: cn.Environment})
 		if err == nil {
 			cn.Environment = env.Env
 		}

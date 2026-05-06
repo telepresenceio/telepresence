@@ -80,8 +80,16 @@ type workloadInfo struct {
 type session struct {
 	*k8s.Cluster
 	service            userd.Service
-	rootDaemon         rootdRpc.DaemonClient
 	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
+
+	rootDaemonLock          sync.RWMutex
+	rootDaemon              rootdRpc.DaemonClient
+	rootDaemonConn          *grpc.ClientConn
+	rootDaemonConfig        *rootdRpc.NetworkConfig
+	rootDaemonIsPodDaemon   bool
+	rootDaemonGeneration    uint64
+	rootDaemonReconnectLock sync.Mutex
+	dialRootDaemon          func(context.Context, bool) (*grpc.ClientConn, error)
 
 	// local information
 	installID string // telepresence's install ID
@@ -213,8 +221,7 @@ func NewSession(
 
 	tmgr.Context = tunnel.WithSyntheticIPResolver(tmgr.Context, tmgr)
 
-	tmgr.rootDaemon, err = tmgr.connectRootDaemon(ctx, oi, wg, cr.IsPodDaemon)
-	if err != nil {
+	if err = tmgr.connectRootDaemon(ctx, oi, wg, cr.IsPodDaemon); err != nil {
 		tmgr.managerConn.Close()
 		return nil, nil, err
 	}
@@ -245,6 +252,7 @@ func (s *session) Run() {
 			_, _ = rd.Disconnect(ctx, &empty.Empty{})
 			return nil
 		})
+		s.closeRootDaemon()
 		clog.Info(s, "-- session ended")
 	}()
 	s.startServices(g)
@@ -255,7 +263,11 @@ func (s *session) Run() {
 }
 
 func (s *session) WithRootClient(ctx context.Context, f func(context.Context, rootdRpc.DaemonClient) error) error {
-	return f(ctx, s.rootDaemon)
+	rd, _ := s.getRootDaemon()
+	if rd == nil {
+		return status.Error(codes.FailedPrecondition, "root daemon is reconnecting")
+	}
+	return f(ctx, rd)
 }
 
 func (s *session) ManagerClient() manager.ManagerClient {
@@ -446,6 +458,88 @@ func (s *session) updateDaemonNamespaces() {
 		clog.Errorf(s, "error posting domains %v to root daemon: %v", domains, err)
 	}
 	clog.Debug(s, "domains posted successfully")
+}
+
+func cloneNetworkConfig(nc *rootdRpc.NetworkConfig) *rootdRpc.NetworkConfig {
+	if nc == nil {
+		return nil
+	}
+	return proto.Clone(nc).(*rootdRpc.NetworkConfig)
+}
+
+func (s *session) getRootDaemon() (rootdRpc.DaemonClient, uint64) {
+	s.rootDaemonLock.RLock()
+	defer s.rootDaemonLock.RUnlock()
+	return s.rootDaemon, s.rootDaemonGeneration
+}
+
+func (s *session) setRootDaemon(rd rootdRpc.DaemonClient, conn *grpc.ClientConn, nc *rootdRpc.NetworkConfig, isPodDaemon bool) uint64 {
+	s.rootDaemonLock.Lock()
+	oldConn := s.rootDaemonConn
+	s.rootDaemon = rd
+	s.rootDaemonConn = conn
+	if nc != nil {
+		s.rootDaemonConfig = cloneNetworkConfig(nc)
+	}
+	s.rootDaemonIsPodDaemon = isPodDaemon
+	s.rootDaemonGeneration++
+	generation := s.rootDaemonGeneration
+	s.rootDaemonLock.Unlock()
+
+	if oldConn != nil && oldConn != conn {
+		go oldConn.Close()
+	}
+	return generation
+}
+
+func (s *session) clearRootDaemonIfGeneration(generation uint64) bool {
+	s.rootDaemonLock.Lock()
+	if s.rootDaemonGeneration != generation {
+		s.rootDaemonLock.Unlock()
+		return false
+	}
+	oldConn := s.rootDaemonConn
+	s.rootDaemon = nil
+	s.rootDaemonConn = nil
+	s.rootDaemonGeneration++
+	s.rootDaemonLock.Unlock()
+
+	if oldConn != nil {
+		go oldConn.Close()
+	}
+	return true
+}
+
+func (s *session) closeRootDaemon() {
+	s.rootDaemonLock.Lock()
+	oldConn := s.rootDaemonConn
+	s.rootDaemon = nil
+	s.rootDaemonConn = nil
+	s.rootDaemonConfig = nil
+	s.rootDaemonGeneration++
+	s.rootDaemonLock.Unlock()
+
+	if oldConn != nil {
+		oldConn.Close()
+	}
+}
+
+func (s *session) rootDaemonReconnectConfig() (*rootdRpc.NetworkConfig, bool) {
+	s.rootDaemonLock.RLock()
+	nc := cloneNetworkConfig(s.rootDaemonConfig)
+	isPodDaemon := s.rootDaemonIsPodDaemon
+	s.rootDaemonLock.RUnlock()
+	if nc == nil {
+		return nil, isPodDaemon
+	}
+
+	nc.Namespace = s.Namespace
+	nc.ManagerNamespace = k8s.GetManagerNamespace(s)
+	nc.MappedNamespaces = s.GetCurrentNamespaces(true)
+	nc.Session = s.sessionInfo
+	nc.SubnetViaWorkloads = s.subnetViaWorkloads
+	nc.ClientConfig, _ = json.Marshal(client.GetConfig(s))
+	return nc, isPodDaemon
 }
 
 func (s *session) startServices(g log.Group) {
@@ -864,17 +958,19 @@ func (s *session) getNetworkInfo(cr *rpc.ConnectRequest) *rootdRpc.NetworkConfig
 	}
 }
 
-func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.NetworkConfig, wg *sync.WaitGroup, isPodDaemon bool) (rd rootdRpc.DaemonClient, err error) {
+func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.NetworkConfig, wg *sync.WaitGroup, isPodDaemon bool) (err error) {
 	// establish a connection to the root daemon gRPC grpcService
 	clog.Info(s, "Connecting to root daemon...")
 	svc := s.GetService()
+	var rd rootdRpc.DaemonClient
+	var conn *grpc.ClientConn
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
 		activity := make(chan time.Time)
 		rootSession, err := rootd.NewInProcSession(s.Cluster, nc, s.managerConn, s.managerVersion, activity, isPodDaemon)
 		if err != nil {
 			close(activity)
-			return nil, err
+			return err
 		}
 		go func() {
 			for {
@@ -894,22 +990,27 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 
 		g := log.NewGroup(rootSession)
 		if err = rootSession.Start(g, svc.TeleroutePort()); err != nil {
-			return nil, err
+			return err
 		}
 		rd = rootSession
 
 		// Give in-proc root session services a chance to clean up.
-		wg.Go(func() {
-			err := g.Wait()
-			if err != nil && !errors.Is(err, context.Canceled) {
-				clog.Errorf(s, "root session exited with error: %v", err)
-			}
-		})
+		if wg != nil {
+			wg.Go(func() {
+				err := g.Wait()
+				if err != nil && !errors.Is(err, context.Canceled) {
+					clog.Errorf(s, "root session exited with error: %v", err)
+				}
+			})
+		}
 	} else {
-		var conn *grpc.ClientConn
-		conn, err = daemon.DialRootDaemon(timeoutCtx, true)
+		dialRootDaemon := s.dialRootDaemon
+		if dialRootDaemon == nil {
+			dialRootDaemon = daemon.DialRootDaemon
+		}
+		conn, err = dialRootDaemon(timeoutCtx, true)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		defer func() {
 			if err != nil {
@@ -922,12 +1023,12 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 			var rootStatus *rootdRpc.DaemonStatus
 			rootStatus, err = rd.Connect(timeoutCtx, nc)
 			if err != nil {
-				return nil, fmt.Errorf("failed to connect to root daemon: %w", err)
+				return fmt.Errorf("failed to connect to root daemon: %w", err)
 			}
 			oc := rootStatus.OutboundConfig
 			if oc == nil || oc.Session == nil {
 				// This is an internal error. Something is wrong with the root daemon.
-				return nil, errors.New("root daemon's OutboundConfig has no session")
+				return errors.New("root daemon's OutboundConfig has no session")
 			}
 			if oc.Session.SessionId == nc.Session.SessionId {
 				break
@@ -937,30 +1038,12 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 			// crashed without disconnecting. So let's do that now, and then reconnect...
 			if attempt == 2 {
 				// ...or not, since we've already done it.
-				return nil, errors.New("unable to reconnect to root daemon")
+				return errors.New("unable to reconnect to root daemon")
 			}
 			if _, err = rd.Disconnect(s, &empty.Empty{}); err != nil {
-				return nil, fmt.Errorf("failed to disconnect from the root daemon: %w", err)
+				return fmt.Errorf("failed to disconnect from the root daemon: %w", err)
 			}
 		}
-		aw, err := rd.ActivityWatcher(s, &empty.Empty{})
-		if err != nil {
-			return nil, fmt.Errorf("failed to get activity watcher: %w", err)
-		}
-		go func() {
-			for {
-				at, err := aw.Recv()
-				if err != nil {
-					if !errors.Is(err, context.Canceled) {
-						clog.Errorf(s, "activity watcher failed: %v", err)
-					}
-					return
-				}
-				ats := at.Activity.AsTime()
-				clog.Debugf(s, "root session last activity: %v", ats)
-				atomic.StoreInt64(&s.lastActivity, ats.UnixNano())
-			}
-		}()
 	}
 
 	// The root daemon needs time to set up the TUN-device and DNS, which involves interacting
@@ -969,10 +1052,85 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 		if se, ok := status.FromError(err); ok {
 			err = se.Err()
 		}
-		return nil, fmt.Errorf("failed to connect to root daemon: %v", err)
+		return fmt.Errorf("failed to connect to root daemon: %v", err)
+	}
+	generation := s.setRootDaemon(rd, conn, nc, isPodDaemon)
+	if !svc.RootSessionInProcess() {
+		s.startRootDaemonActivityWatcher(rd, generation)
 	}
 	clog.Debug(s, "Connected to root daemon")
-	return rd, nil
+	return nil
+}
+
+func (s *session) startRootDaemonActivityWatcher(rd rootdRpc.DaemonClient, generation uint64) {
+	go func() {
+		aw, err := rd.ActivityWatcher(s, &empty.Empty{})
+		if err != nil {
+			if !errors.Is(err, context.Canceled) && s.Err() == nil {
+				clog.Errorf(s, "activity watcher failed: %v", err)
+				s.reconnectRootDaemon(generation, err)
+			}
+			return
+		}
+		for {
+			at, err := aw.Recv()
+			if err != nil {
+				if !errors.Is(err, context.Canceled) && s.Err() == nil {
+					clog.Errorf(s, "activity watcher failed: %v", err)
+					s.reconnectRootDaemon(generation, err)
+				}
+				return
+			}
+			ats := at.Activity.AsTime()
+			clog.Debugf(s, "root session last activity: %v", ats)
+			atomic.StoreInt64(&s.lastActivity, ats.UnixNano())
+		}
+	}()
+}
+
+func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
+	s.rootDaemonReconnectLock.Lock()
+	defer s.rootDaemonReconnectLock.Unlock()
+
+	_, generation := s.getRootDaemon()
+	if generation != failedGeneration {
+		return
+	}
+	if !s.clearRootDaemonIfGeneration(failedGeneration) {
+		return
+	}
+	clog.Warnf(s, "root daemon connection lost: %v; reconnecting", cause)
+
+	backoff := 200 * time.Millisecond
+	for attempt := 1; s.Err() == nil; attempt++ {
+		nc, isPodDaemon := s.rootDaemonReconnectConfig()
+		if nc == nil {
+			clog.Error(s, "unable to reconnect root daemon: missing network configuration")
+			return
+		}
+
+		timeoutCtx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerConnect)
+		err := s.connectRootDaemon(timeoutCtx, nc, nil, isPodDaemon)
+		cancel()
+		if err == nil {
+			clog.Info(s, "Reconnected to root daemon")
+			s.updateDaemonNamespaces()
+			return
+		}
+		clog.Errorf(s, "failed to reconnect to root daemon (attempt %d): %v", attempt, err)
+
+		select {
+		case <-s.Done():
+			return
+		case <-time.After(backoff):
+		}
+		if backoff < 5*time.Second {
+			backoff *= 2
+			if backoff > 5*time.Second {
+				backoff = 5 * time.Second
+			}
+		}
+	}
 }
 
 func (s *session) eachWorkload(namespaces []string, do func(kind manager.WorkloadInfo_Kind, name, namespace string, info workloadInfo)) {

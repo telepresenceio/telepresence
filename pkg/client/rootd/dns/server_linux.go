@@ -232,6 +232,12 @@ func runNatTableCmd(c context.Context, args ...string) error {
 
 const tpDNSChain = "TELEPRESENCE_DNS"
 
+// CleanupRouting removes DNS routing state that might have been left behind by
+// a previous root daemon process.
+func CleanupRouting(c context.Context) {
+	unrouteDNS(c)
+}
+
 // routeDNS creates a new chain in the "nat" table with two rules in it. One rule ensures
 // that all packets sent to the currently configured DNS service are rerouted to our local
 // DNS service. Another rule ensures that when our local DNS service cannot resolve and
