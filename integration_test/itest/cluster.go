@@ -478,6 +478,7 @@ func (s *cluster) GlobalEnv(ctx context.Context) dos.MapEnv {
 	}
 	yes := struct{}{}
 	includeEnv := map[string]struct{}{
+		"GOEXPERIMENT":              yes,
 		"HOME":                      yes,
 		"PATH":                      yes,
 		"LOGNAME":                   yes,
