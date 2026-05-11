@@ -2068,3 +2068,4 @@ The helm chart now correctly handles custom agentInjector.webhook.port that was 
 
 Params .intercept.disableGlobal and .timeouts.agentArrival are now correctly honored.
 </div>
+
