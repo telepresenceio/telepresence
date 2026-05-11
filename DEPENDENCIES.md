@@ -47,7 +47,6 @@ following Free and Open Source software:
     github.com/fxamacker/cbor/v2                                              v2.9.1                                MIT license
     github.com/go-errors/errors                                               v1.5.1                                MIT license
     github.com/go-gorp/gorp/v3                                                v3.1.0                                MIT license
-    github.com/go-json-experiment/json                                        v0.0.0-20260214004413-d219187c3433    3-clause BSD license
     github.com/go-logr/logr                                                   v1.4.3                                Apache License 2.0
     github.com/go-logr/stdr                                                   v1.2.2                                Apache License 2.0
     github.com/go-openapi/jsonpointer                                         v0.22.5                               Apache License 2.0

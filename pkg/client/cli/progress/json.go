@@ -18,10 +18,9 @@ package progress
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"io"
-
-	"github.com/go-json-experiment/json"
 )
 
 type jsonWriter struct {

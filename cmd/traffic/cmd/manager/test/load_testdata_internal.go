@@ -1,13 +1,13 @@
 package test
 
 import (
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
-	"github.com/go-json-experiment/json"
 	"sigs.k8s.io/yaml"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"

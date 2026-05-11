@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"context"
+	"encoding/json/v2"
 	"io"
 	"log/slog"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	apps "k8s.io/api/apps/v1"

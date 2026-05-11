@@ -1,7 +1,8 @@
 package tmconfig
 
 import (
-	"github.com/go-json-experiment/json"
+	"encoding/json/v2"
+
 	"sigs.k8s.io/yaml"
 )
 

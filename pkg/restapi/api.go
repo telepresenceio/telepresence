@@ -2,14 +2,13 @@ package restapi
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"strconv"
 	"time"
-
-	"github.com/go-json-experiment/json"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"

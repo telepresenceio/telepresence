@@ -2,12 +2,12 @@ package manager
 
 import (
 	"context"
+	"encoding/json/v2"
 	"net"
 	"net/netip"
 	"testing"
 	"time"
 
-	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

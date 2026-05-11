@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"embed"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"github.com/go-json-experiment/json"
 	"github.com/spf13/afero"
 	"helm.sh/helm/v3/pkg/chart"
 	"sigs.k8s.io/yaml"

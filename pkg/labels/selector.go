@@ -1,10 +1,10 @@
 package labels
 
 import (
+	"encoding/json/v2"
 	"slices"
 	"strings"
 
-	"github.com/go-json-experiment/json"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"sigs.k8s.io/yaml"

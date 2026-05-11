@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -11,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-json-experiment/json"
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/telepresenceio/clog"

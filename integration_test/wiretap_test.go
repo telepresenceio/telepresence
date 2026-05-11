@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"math/rand"
 	"net"
@@ -11,8 +12,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/go-json-experiment/json"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"

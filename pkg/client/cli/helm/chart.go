@@ -3,13 +3,13 @@ package helm
 import (
 	"bytes"
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
 
 	"github.com/blang/semver/v4"
-	"github.com/go-json-experiment/json"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"

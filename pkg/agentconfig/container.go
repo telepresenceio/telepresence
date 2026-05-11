@@ -2,12 +2,12 @@ package agentconfig
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
-	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/clog"
