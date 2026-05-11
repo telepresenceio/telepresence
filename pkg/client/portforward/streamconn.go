@@ -14,10 +14,10 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
+	"k8s.io/streaming/pkg/httpstream"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -117,15 +117,15 @@ func newStreamDialer(ctx context.Context, config *rest.Config, podName, namespac
 	if err != nil {
 		return nil, err
 	}
-	dialer := spdy.NewDialer(upgrader, &http.Client{Transport: transport}, "POST", url)
+	dialer := spdy.NewDialerForStreaming(upgrader, &http.Client{Transport: transport}, "POST", url)
 	if !forceSPDY {
 		clog.Debugf(ctx, "Using WebSocket based port-forward to pod %s.%s", podName, namespace)
-		tunnelingDialer, err := portforward.NewSPDYOverWebsocketDialer(url, config)
+		tunnelingDialer, err := portforward.NewSPDYOverWebsocketDialerForStreaming(url, config)
 		if err != nil {
 			return nil, err
 		}
 		// First attempt tunneling (websocket) dialer, then fallback to spdy dialer.
-		dialer = portforward.NewFallbackDialer(tunnelingDialer, dialer, func(err error) bool {
+		dialer = portforward.NewFallbackDialerForStreaming(tunnelingDialer, dialer, func(err error) bool {
 			return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
 		})
 	} else {
