@@ -11,6 +11,9 @@ import (
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/go-json-experiment/json"
 	"golang.org/x/net/http2"
@@ -21,6 +24,71 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
+
+const (
+	httpInterceptSlowAfter = 2 * time.Second
+	httpInterceptVerySlow  = 10 * time.Second
+
+	httpInterceptMaxIdleConns        = 512
+	httpInterceptMaxIdleConnsPerHost = 128
+	httpInterceptMaxConnsPerHost     = 128
+)
+
+type observedResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	bytes      int64
+}
+
+func (w *observedResponseWriter) Header() http.Header {
+	return w.ResponseWriter.Header()
+}
+
+func (w *observedResponseWriter) WriteHeader(statusCode int) {
+	if w.statusCode == 0 {
+		w.statusCode = statusCode
+	}
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *observedResponseWriter) Write(p []byte) (int, error) {
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+	n, err := w.ResponseWriter.Write(p)
+	w.bytes += int64(n)
+	return n, err
+}
+
+func (w *observedResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+type httpInterceptDialContextKey struct{}
+
+type httpInterceptDialContext struct {
+	src       netip.AddrPort
+	ii        *manager.InterceptInfo
+	requestID uint64
+}
+
+type httpInterceptTransport struct {
+	key       string
+	targetURL *url.URL
+	transport *http.Transport
+}
+
+type metricsReportingConn struct {
+	net.Conn
+	once   sync.Once
+	report func()
+}
+
+func (c *metricsReportingConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.report)
+	return err
+}
 
 func (f *tcp) protocols(ctx context.Context, plainText bool) *http.Protocols {
 	pr := new(http.Protocols)
@@ -185,6 +253,9 @@ func (f *tcp) configureUpstreamTransport(ctx context.Context, plaintext bool) *h
 	tm := f.tlsManager
 	tp := f.Target().Port()
 	trn := f.configureTransport(ctx, plaintext)
+	trn.MaxIdleConns = max(trn.MaxIdleConns, httpInterceptMaxIdleConns)
+	trn.MaxIdleConnsPerHost = max(trn.MaxIdleConnsPerHost, httpInterceptMaxIdleConnsPerHost)
+	trn.MaxConnsPerHost = max(trn.MaxConnsPerHost, httpInterceptMaxConnsPerHost)
 	if plaintext {
 		return trn
 	}
@@ -203,6 +274,107 @@ func (f *tcp) configureUpstreamTransport(ctx context.Context, plaintext bool) *h
 	return trn
 }
 
+func httpInterceptTransportKey(ii *manager.InterceptInfo) string {
+	if ii == nil || ii.Spec == nil || ii.ClientSession == nil {
+		return ""
+	}
+	spec := ii.Spec
+	return fmt.Sprintf("%s|%s|%s|%d|%t", ii.Id, ii.ClientSession.SessionId, spec.TargetHost, spec.TargetPort, spec.Plaintext)
+}
+
+func (f *tcp) getHTTPInterceptTransport(ctx context.Context, ii *manager.InterceptInfo) *httpInterceptTransport {
+	key := httpInterceptTransportKey(ii)
+	if cached, ok := f.httpTransportCache.Load(key); ok {
+		return cached.(*httpInterceptTransport)
+	}
+
+	spec := ii.Spec
+	trn := f.configureUpstreamTransport(ctx, spec.Plaintext)
+	trn.DialContext = func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+		di, ok := dialCtx.Value(httpInterceptDialContextKey{}).(*httpInterceptDialContext)
+		if !ok {
+			return nil, fmt.Errorf("missing HTTP selected intercept dial context for intercept %s", ii.Id)
+		}
+
+		f.mu.Lock()
+		sp := f.streamProvider
+		f.mu.Unlock()
+
+		metricsEnabled := sp != nil && sp.MetricsEnabled()
+		var ingressBytes, egressBytes *tunnel.CounterProbe
+		if metricsEnabled {
+			ingressBytes = tunnel.NewCounterProbe("FromClientBytes")
+			egressBytes = tunnel.NewCounterProbe("ToClientBytes")
+		}
+
+		s, err := f.createStream(dialCtx, di.src, di.ii)
+		if err != nil {
+			return nil, err
+		}
+		// Ingress and egress swap places here because this is a connection where the stream is attached to a connection *to* the client, not *from* the client.
+		conn := tunnel.NewStreamConn(dialCtx, s, egressBytes, ingressBytes)
+		if !metricsEnabled {
+			return conn, nil
+		}
+		return &metricsReportingConn{
+			Conn: conn,
+			report: func() {
+				sp.ReportMetrics(f.lCtx, &manager.TunnelMetrics{
+					ClientSessionId: di.ii.ClientSession.SessionId,
+					IngressBytes:    ingressBytes.GetValue(),
+					EgressBytes:     egressBytes.GetValue(),
+				})
+			},
+		}, nil
+	}
+
+	scheme := "http"
+	if trn.Protocols.HTTP2() {
+		scheme = "https"
+	}
+	hit := &httpInterceptTransport{
+		key:       key,
+		targetURL: &url.URL{Scheme: scheme, Host: iputil.JoinHostPort(spec.TargetHost, uint16(spec.TargetPort))},
+		transport: trn,
+	}
+	actual, loaded := f.httpTransportCache.LoadOrStore(key, hit)
+	if loaded {
+		trn.CloseIdleConnections()
+		return actual.(*httpInterceptTransport)
+	}
+	return hit
+}
+
+func (f *tcp) pruneHTTPInterceptTransports(intercepts []*manager.InterceptInfo) {
+	if len(intercepts) == 0 {
+		f.httpTransportCache.Range(func(key, value any) bool {
+			if hit, ok := value.(*httpInterceptTransport); ok {
+				hit.transport.CloseIdleConnections()
+			}
+			f.httpTransportCache.Delete(key)
+			return true
+		})
+		return
+	}
+
+	active := make(map[string]struct{}, len(intercepts))
+	for _, ii := range intercepts {
+		if key := httpInterceptTransportKey(ii); key != "" {
+			active[key] = struct{}{}
+		}
+	}
+	f.httpTransportCache.Range(func(key, value any) bool {
+		if _, ok := active[key.(string)]; ok {
+			return true
+		}
+		if hit, ok := value.(*httpInterceptTransport); ok {
+			hit.transport.CloseIdleConnections()
+		}
+		f.httpTransportCache.Delete(key)
+		return true
+	})
+}
+
 func (f *tcp) serveHTTPIntercept(
 	ctx context.Context,
 	src netip.AddrPort,
@@ -212,66 +384,93 @@ func (f *tcp) serveHTTPIntercept(
 	defaultHandler http.Handler,
 ) {
 	spec := ii.Spec
-	f.mu.Lock()
-	sp := f.streamProvider
-	f.mu.Unlock()
-
-	metricsEnabled := sp != nil && sp.MetricsEnabled()
-	var ingressBytes, egressBytes *tunnel.CounterProbe
-	if metricsEnabled {
-		ingressBytes = tunnel.NewCounterProbe("FromClientBytes")
-		egressBytes = tunnel.NewCounterProbe("ToClientBytes")
+	requestID := f.httpRequestID.Add(1)
+	requestStart := time.Now()
+	method := request.Method
+	path := request.URL.RequestURI()
+	if path == "" {
+		path = request.URL.Path
 	}
-	trn := f.configureUpstreamTransport(ctx, spec.Plaintext)
-	trn.DialContext = func(context.Context, string, string) (net.Conn, error) {
-		s, err := f.createStream(ctx, src, ii)
-		if err != nil {
-			return nil, err
-		}
-		// Ingress and egress swap places here because this is a connection where the stream is attached to a connection *to* the client, not *from* the client.
-		return tunnel.NewStreamConn(ctx, s, egressBytes, ingressBytes), nil
-	}
+	host := request.Host
+	var slowLogged atomic.Bool
+	slowTimer := time.AfterFunc(httpInterceptSlowAfter, func() {
+		slowLogged.Store(true)
+		clog.Warnf(
+			ctx,
+			"HTTP selected intercept request still active after %s: request=%d intercept=%s clientSession=%s method=%s host=%q path=%q src=%s target=%s:%d",
+			time.Since(requestStart).Round(time.Millisecond),
+			requestID,
+			ii.Id,
+			ii.ClientSession.SessionId,
+			method,
+			host,
+			path,
+			src,
+			spec.TargetHost,
+			spec.TargetPort,
+		)
+	})
+	defer slowTimer.Stop()
 
-	scheme := "http"
-	if trn.Protocols.HTTP2() {
-		scheme = "https"
-	}
-	trg := &url.URL{Scheme: scheme, Host: iputil.JoinHostPort(spec.TargetHost, uint16(spec.TargetPort))}
-
-	if tlsConfig := trn.TLSClientConfig; tlsConfig != nil {
+	hit := f.getHTTPInterceptTransport(ctx, ii)
+	if tlsConfig := hit.transport.TLSClientConfig; tlsConfig != nil {
 		if len(tlsConfig.Certificates) > 0 {
-			clog.Debugf(ctx, "Using a client certificate when connecting to %s", trg)
+			clog.Debugf(ctx, "Using a client certificate when connecting to %s", hit.targetURL)
 		} else {
-			clog.Debugf(ctx, "Not using a client certificate when connecting to %s", trg)
+			clog.Debugf(ctx, "Not using a client certificate when connecting to %s", hit.targetURL)
 		}
 		if tlsConfig.InsecureSkipVerify {
-			clog.Warnf(ctx, "Skipping verification of server's certificate chain and host name when connecting to %s", trg)
+			clog.Warnf(ctx, "Skipping verification of server's certificate chain and host name when connecting to %s", hit.targetURL)
 		}
 	} else {
-		clog.Debugf(ctx, "No TLS config used when connecting to %s", trg)
+		clog.Debugf(ctx, "No TLS config used when connecting to %s", hit.targetURL)
 	}
-	targetProxy := httputil.NewSingleHostReverseProxy(trg)
+	targetProxy := httputil.NewSingleHostReverseProxy(hit.targetURL)
 	targetProxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
 		if errors.Is(err, errClientStream) {
-			clog.Warnf(ctx, "Intercept tunnel unavailable for %s %s; failing open to app container: %v", req.Method, req.URL.Path, err)
+			clog.Warnf(ctx, "HTTP selected intercept tunnel unavailable for request=%d %s %s; failing open to app container: %v", requestID, req.Method, req.URL.Path, err)
 			defaultHandler.ServeHTTP(rw, req)
 			return
 		}
+		clog.Warnf(ctx, "HTTP selected intercept proxy error for request=%d %s %s: %v", requestID, req.Method, req.URL.Path, err)
 		proxyErrorHandler(rw, req, err)
 	}
-	targetProxy.Transport = trn
-	targetProxy.ServeHTTP(writer, request)
+	targetProxy.Transport = hit.transport
+	observedWriter := &observedResponseWriter{ResponseWriter: writer}
+	request = request.WithContext(context.WithValue(request.Context(), httpInterceptDialContextKey{}, &httpInterceptDialContext{
+		src:       src,
+		ii:        ii,
+		requestID: requestID,
+	}))
+	targetProxy.ServeHTTP(observedWriter, request)
 
-	if metricsEnabled {
-		clog.Debugf(ctx, "Connection to %s ended. IngressBytes: %d, egressBytes: %d", trg, ingressBytes.GetValue(), egressBytes.GetValue())
-		sp.ReportMetrics(f.lCtx, &manager.TunnelMetrics{
-			ClientSessionId: ii.ClientSession.SessionId,
-			IngressBytes:    ingressBytes.GetValue(),
-			EgressBytes:     egressBytes.GetValue(),
-		})
-	} else {
-		clog.Debugf(ctx, "Connection to %s ended", trg)
+	duration := time.Since(requestStart)
+	statusCode := observedWriter.statusCode
+	if statusCode == 0 {
+		statusCode = -1
 	}
+	if slowLogged.Load() || duration > httpInterceptSlowAfter || statusCode == -1 {
+		logFn := clog.Infof
+		if duration > httpInterceptVerySlow || statusCode == -1 {
+			logFn = clog.Warnf
+		}
+		logFn(
+			ctx,
+			"HTTP selected intercept request finished after %s: request=%d intercept=%s clientSession=%s method=%s host=%q path=%q src=%s target=%s status=%d responseBytes=%d",
+			duration.Round(time.Millisecond),
+			requestID,
+			ii.Id,
+			ii.ClientSession.SessionId,
+			method,
+			host,
+			path,
+			src,
+			hit.targetURL,
+			statusCode,
+			observedWriter.bytes,
+		)
+	}
+	clog.Debugf(ctx, "Request to %s ended", hit.targetURL)
 }
 
 func proxyErrorHandler(rw http.ResponseWriter, _ *http.Request, err error) {

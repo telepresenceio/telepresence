@@ -1149,6 +1149,7 @@ func (s *session) hasPodConnectivity(info *manager.ClusterInfo) bool {
 }
 
 func (s *session) run(initErrs chan<- error) {
+	started := time.Now()
 	defer func() {
 		clog.Info(s, "-- session ended")
 	}()
@@ -1160,8 +1161,14 @@ func (s *session) run(initErrs chan<- error) {
 	}
 	close(initErrs)
 	err := g.Wait()
-	if err != nil {
-		clog.Errorf(s, "session ended with error: %v", err)
+	elapsed := time.Since(started).Round(time.Millisecond)
+	switch {
+	case err != nil:
+		clog.Errorf(s, "session ended after %s with error: %v context=%v cause=%v", elapsed, err, s.Err(), context.Cause(s))
+	case s.Err() != nil:
+		clog.Infof(s, "session context ended after %s: context=%v cause=%v", elapsed, s.Err(), context.Cause(s))
+	default:
+		clog.Infof(s, "session services stopped cleanly after %s", elapsed)
 	}
 }
 

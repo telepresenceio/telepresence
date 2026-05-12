@@ -111,6 +111,15 @@ items:
           tunnels. VIF open failures also return a plain nil device and tolerate
           partially initialized Linux devices during cleanup, making failed setup
           paths safer.
+      - type: bugfix
+        title: Improve selected-intercept tunnel stability
+        body: >-
+          Selected-intercept tunnels now reconnect agent dial watchers with
+          backoff, clean up pending forward state more carefully, and use
+          dedicated timeouts for traffic-agent connects and intercepted endpoint
+          dials. Telepresence also rejects queued dial requests when responder
+          capacity is saturated, giving busy intercepts a clearer failure mode
+          instead of letting work grow without limit.
   - version: 2.27.5
     date: (TBD)
     notes:

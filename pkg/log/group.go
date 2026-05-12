@@ -2,6 +2,7 @@ package log
 
 import (
 	"context"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -35,5 +36,22 @@ func NewGroup(ctx context.Context) Group {
 
 // Go runs the given function in a goroutine where the context logger uses the given name as a group prefix.
 func (g group) Go(name string, f func(context.Context) error) {
-	g.Group.Go(func() error { return f(clog.WithGroup(g.Context, name)) })
+	g.Group.Go(func() (err error) {
+		ctx := clog.WithGroup(g.Context, name)
+		started := time.Now()
+		defer func() {
+			elapsed := time.Since(started).Round(time.Millisecond)
+			ctxErr := ctx.Err()
+			cause := context.Cause(ctx)
+			switch {
+			case err != nil:
+				clog.Errorf(ctx, "service goroutine ended after %s: err=%v context=%v cause=%v", elapsed, err, ctxErr, cause)
+			case ctxErr != nil:
+				clog.Debugf(ctx, "service goroutine stopped after %s: context=%v cause=%v", elapsed, ctxErr, cause)
+			default:
+				clog.Debugf(ctx, "service goroutine completed after %s", elapsed)
+			}
+		}()
+		return f(ctx)
+	})
 }

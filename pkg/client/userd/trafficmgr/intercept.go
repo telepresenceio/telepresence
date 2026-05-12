@@ -630,7 +630,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	clog.Debugf(s, "creating intercept %s", spec.Name)
 	tos := client.GetConfig(ctx).Timeouts()
 	spec.RoundtripLatency = int64(tos.Get(client.TimeoutRoundtripLatency)) * 2 // Account for extra hop
-	spec.DialTimeout = int64(tos.Get(client.TimeoutEndpointDial))
+	spec.DialTimeout = int64(tos.Get(client.TimeoutInterceptEndpointDial))
 	c, cancel := tos.TimeoutContext(ctx, client.TimeoutIntercept)
 	defer cancel()
 

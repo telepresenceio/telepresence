@@ -704,10 +704,14 @@ func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 }
 
 func (s *State) clientTunnel(ctx context.Context, client *ClientSession, stream tunnel.Stream) error {
+	start := time.Now()
 	scm := client.ConsumptionMetrics()
 	endPoint := tunnel.NewDialer(stream, func() {}, scm.FromClientBytes, scm.ToClientBytes)
 	endPoint.Start(ctx)
 	<-endPoint.Done()
+	if elapsed := time.Since(start); elapsed > time.Second {
+		clog.Debugf(ctx, "manager client tunnel stayed open for %s: session=%s conn=%s", elapsed.Round(time.Millisecond), stream.SessionID(), stream.ID())
+	}
 	return nil
 }
 

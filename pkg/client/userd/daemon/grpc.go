@@ -93,10 +93,10 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	// Obtain the kubeconfig from the request parameters so that we can determine
 	// what kubernetes context that will be used.
 	var kubeConfig *k8s.Kubeconfig
-	sessionCtx, sessionCancel := context.WithCancel(s.Context)
+	sessionCtx, sessionCancel := context.WithCancelCause(s.Context)
 	kubeConfig, err = k8s.DaemonKubeconfig(client.WithConfig(sessionCtx, cfg), cr)
 	if err != nil {
-		sessionCancel()
+		sessionCancel(fmt.Errorf("failed to obtain kubeconfig: %w", err))
 		if s.rootSessionInProc {
 			s.quit(true)
 		}
@@ -124,7 +124,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	var session userd.Session
 	session, result, err = trafficmgr.NewSession(s, server.NewCombinedContext(s, ctx), cr, kubeConfig, wg)
 	if err != nil {
-		sessionCancel()
+		sessionCancel(fmt.Errorf("failed to create user daemon session: %w", err))
 		if s.rootSessionInProc {
 			// Simplified session management. The daemon handles one session, then exits.
 			s.quit(true)
@@ -132,11 +132,15 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		return nil, err
 	}
 	client.ReloadLogLevel(session)
-	s.sessionCancel = func() {
+	s.sessionCancel = func(cause error) {
+		if cause == nil {
+			cause = context.Canceled
+		}
+		clog.Infof(session, "canceling user daemon session: %v", cause)
 		if err := session.ClearIngestsAndIntercepts(); err != nil {
 			clog.Errorf(ctx, "failed to clear intercepts: %v", err)
 		}
-		sessionCancel()
+		sessionCancel(cause)
 	}
 	sessionRunning := make(chan struct{})
 	s.session = session
@@ -155,7 +159,10 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		s.clearSession(session)
 	}()
 	if s.rootSessionInProc {
-		go runAliveAndCancellationSession(session, s.sessionCancel, daemonID, wg)
+		cancelUserSession := s.sessionCancel
+		go runAliveAndCancellationSession(session, func() {
+			cancelUserSession(errors.New("session daemon info file disappeared"))
+		}, daemonID, wg)
 	}
 	return result, err
 }
@@ -169,7 +176,7 @@ func (s *service) cancelSession(ctx context.Context, disconnectRoot bool) {
 	var oldSession userd.Session
 	err := s.withSession(ctx, func(_ context.Context, session userd.Session) error {
 		oldSession = session
-		s.sessionCancel()
+		s.sessionCancel(errors.New("connector Disconnect request"))
 		return nil
 	})
 	if err == nil && s.clearSession(oldSession) && disconnectRoot {
