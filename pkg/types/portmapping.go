@@ -1,12 +1,12 @@
 package types
 
 import (
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/go-json-experiment/json"
-	"github.com/go-json-experiment/json/jsontext"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 

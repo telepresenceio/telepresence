@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -14,7 +15,6 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/containerd/errdefs"
 	dockerTypes "github.com/docker/docker/api/types"
-	"github.com/go-json-experiment/json"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"

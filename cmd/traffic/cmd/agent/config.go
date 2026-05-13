@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-json-experiment/json"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/telepresenceio/clog"

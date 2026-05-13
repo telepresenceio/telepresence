@@ -2,12 +2,12 @@ package restapi_test
 
 import (
 	"context"
+	"encoding/json/v2"
 	"net"
 	"net/http"
 	"sync"
 	"testing"
 
-	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

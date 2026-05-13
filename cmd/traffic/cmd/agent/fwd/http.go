@@ -3,6 +3,7 @@ package fwd
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -12,7 +13,6 @@ import (
 	"net/netip"
 	"net/url"
 
-	"github.com/go-json-experiment/json"
 	"golang.org/x/net/http2"
 
 	"github.com/telepresenceio/clog"

@@ -1,5 +1,6 @@
-FROM golang:1.19.4
+FROM golang:1.26.3
 
+ENV GOEXPERIMENT=jsonv2
 
 RUN apt-get update && \
     apt-get install -y \

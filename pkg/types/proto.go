@@ -1,11 +1,11 @@
 package types
 
 import (
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 
-	"github.com/go-json-experiment/json"
-	"github.com/go-json-experiment/json/jsontext"
 	core "k8s.io/api/core/v1"
 )
 

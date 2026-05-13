@@ -2,13 +2,13 @@ package server
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"log/slog"
 	"net"
 	"runtime"
 	"time"
 
-	"github.com/go-json-experiment/json"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"

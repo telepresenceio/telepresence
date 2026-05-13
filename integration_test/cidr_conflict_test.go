@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"encoding/json/v2"
 	"fmt"
 	"net"
 	"net/netip"
@@ -8,7 +9,6 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"

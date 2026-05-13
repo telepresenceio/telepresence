@@ -1,6 +1,7 @@
 package integration_test
 
 import (
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-json-experiment/json"
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"

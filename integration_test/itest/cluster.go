@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -27,7 +28,6 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/cenkalti/backoff/v4"
-	"github.com/go-json-experiment/json"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	core "k8s.io/api/core/v1"
@@ -478,6 +478,7 @@ func (s *cluster) GlobalEnv(ctx context.Context) dos.MapEnv {
 	}
 	yes := struct{}{}
 	includeEnv := map[string]struct{}{
+		"GOEXPERIMENT":              yes,
 		"HOME":                      yes,
 		"PATH":                      yes,
 		"LOGNAME":                   yes,

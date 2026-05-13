@@ -2,13 +2,13 @@ package cmd
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
 	"net/netip"
 	"strings"
 
-	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 

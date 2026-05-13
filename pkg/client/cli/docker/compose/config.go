@@ -3,6 +3,7 @@ package compose
 import (
 	"context"
 	_ "embed"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -13,7 +14,6 @@ import (
 	"github.com/compose-spec/compose-go/v2/cli"
 	"github.com/compose-spec/compose-go/v2/loader"
 	compose "github.com/compose-spec/compose-go/v2/types"
-	"github.com/go-json-experiment/json"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 

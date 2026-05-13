@@ -1,10 +1,9 @@
 package json
 
 import (
+	"encoding/json/v2"
 	"log/slog"
 	"time"
-
-	"github.com/go-json-experiment/json"
 
 	"github.com/telepresenceio/clog"
 )

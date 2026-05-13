@@ -2,6 +2,7 @@ package managerutil
 
 import (
 	"context"
+	"encoding/json/v2"
 	"log/slog"
 	"net/netip"
 	"reflect"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/caarlos0/env/v11"
-	"github.com/go-json-experiment/json"
 	core "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
