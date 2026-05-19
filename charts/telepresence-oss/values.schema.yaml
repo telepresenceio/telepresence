@@ -215,6 +215,7 @@ properties:
     properties:
       connectionTTL:
         description: Deprecated use grpc.connectionTTL
+        deprecated: true
         type: string
         $ref: "#/$defs/duration"
       dns:
