@@ -9,7 +9,6 @@ require less permissions in clientRbac.yaml
 {{- $namespaces := fromJsonArray (include "traffic-manager.namespaces" $)}}
 {{- if $namespaces }}
 {{- $interceptEnabled := .Values.agentInjector.enabled}}
-{{- $argoRolloutsEnabled := .Values.workloads.argoRollouts.enabled}}
 {{- $allNamespaces := uniq (append $namespaces $managerNamespace)}}
 
 {{- range $allNamespaces }}
@@ -63,32 +62,7 @@ rules:
 {{- if eq . $managerNamespace }}
   - {{ include "traffic-manager.name" $ }}
 {{- end }}
-- apiGroups:
-  - "apps"
-  resources:
-  - deployments
-  - replicasets
-  - statefulsets
-  verbs:
-  - get
-  - list
-  - watch
-{{- if $interceptEnabled }}
-  - patch
-{{- end }}
-{{- if $argoRolloutsEnabled }}
-- apiGroups:
-  - "argoproj.io"
-  resources:
-  - rollouts
-  verbs:
-  - get
-  - list
-  - watch
-{{- if $interceptEnabled }}
-  - patch
-{{- end }}
-{{- end }}
+{{ include "telepresence.managerWorkloadRules" $ }}
 - apiGroups:
     - "events.k8s.io"
   resources:

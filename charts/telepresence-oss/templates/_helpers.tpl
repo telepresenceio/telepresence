@@ -190,6 +190,33 @@ Client RBAC name suffix
 {{- end -}}
 
 {{- /*
+RBAC rules for workload kinds enabled via values.workloads.*.enabled
+*/}}
+{{- define "telepresence.managerWorkloadRules" -}}
+{{- $workloadKinds := list
+  (dict "key" "deployments" "resource" "deployments" "apiGroup" "apps" "defaultEnabled" true)
+  (dict "key" "replicaSets" "resource" "replicasets" "apiGroup" "apps" "defaultEnabled" true)
+  (dict "key" "statefulSets" "resource" "statefulsets" "apiGroup" "apps" "defaultEnabled" true)
+  (dict "key" "argoRollouts" "resource" "rollouts" "apiGroup" "argoproj.io" "defaultEnabled" false)
+}}
+{{- range $workloadKinds }}
+{{- if dig .key "enabled" .defaultEnabled $.Values.workloads }}
+- apiGroups:
+  - {{ .apiGroup | quote }}
+  resources:
+  - {{ .resource }}
+  verbs:
+  - get
+  - list
+  - watch
+{{- if $.Values.agentInjector.enabled }}
+  - patch
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{- /*
 RBAC rules required to create an intercept in a namespace; excludes any rules that are always cluster wide.
 */}}
 {{- define "telepresence.clientRbacInterceptRules" -}}
