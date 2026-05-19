@@ -124,6 +124,8 @@ agentInjector:
     reinvocationPolicy: IfNeeded
     sideEffects: None
     timeoutSeconds: 5
+    # Optional objectSelector to limit which pods the mutating webhook applies to.
+    # objectSelector: {}
 
 ################################################################################
 ## Telepresence traffic-agent configuration

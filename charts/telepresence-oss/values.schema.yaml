@@ -179,6 +179,9 @@ properties:
           name:
             description: The name of the agent-injector webhook
             type: string
+          objectSelector:
+            description: Optional label selector to limit which pods the mutating webhook applies to
+            $ref: "#/$defs/labelSelector"
           port:
             description: Port for the service that provides the admission webhook
             type: integer

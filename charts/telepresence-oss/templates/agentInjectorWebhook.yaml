@@ -121,6 +121,10 @@ webhooks:
   timeoutSeconds: {{ .Values.agentInjector.webhook.timeoutSeconds }}
   namespaceSelector:
 {{- toYaml $namespaceSelector | nindent 4 }}
+{{- with .Values.agentInjector.webhook.objectSelector }}
+  objectSelector:
+{{- toYaml . | nindent 4 }}
+{{- end }}
 {{- if not (or (eq .Values.agentInjector.certificate.method "certmanager") (eq .Values.agentInjector.certificate.method "supplied")) }}
 ---
 apiVersion: v1
