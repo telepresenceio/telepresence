@@ -7,6 +7,9 @@
 
 replicaCount: 1
 
+# Common labels applied to all resources created by this chart (Deployment, Service, RBAC, etc.)
+labels: {}
+
 # The Telepresence client will try to ensure that the Traffic Manager image is
 # up to date and from the right registry. If you are changing the value below,
 # ensure that the tag is the same as the client version and that the

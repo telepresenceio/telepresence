@@ -400,6 +400,12 @@ properties:
     description: isCI can be set to force the traffic-manager namespace to be "ambassador"
     type: boolean
 
+  labels:
+    description: Common labels applied to all resources created by this chart
+    type: object
+    additionalProperties:
+      type: string
+
   livenessProbe:
     description: Define livenessProbe for the traffic-manager
     $ref: "#/$defs/probe"

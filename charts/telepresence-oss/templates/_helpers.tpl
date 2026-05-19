@@ -169,6 +169,9 @@ app.kubernetes.io/created-by: {{ .Values.createdBy }}
 {{- else }}
 app.kubernetes.io/created-by: {{ .Release.Service }}
 {{- end }}
+{{- with .Values.labels }}
+{{ toYaml . }}
+{{- end }}
 {{- end }}
 
 {{- /*
