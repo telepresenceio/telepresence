@@ -24,7 +24,8 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
-  - notes:
+  - version: 2.28.1
+    notes:
       - type: bugfix
         title: Do not watch namespaces when only list is allowed
         body: >-
