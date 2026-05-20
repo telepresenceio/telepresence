@@ -157,21 +157,22 @@ Create chart name and version as used by the chart label.
 Common labels
 */}}
 {{- define "telepresence.labels" -}}
-{{ include "telepresence.selectorLabels" $ }}
-helm.sh/chart: {{ include "telepresence.chart" $ }}
+{{- $chartLabels := fromYaml (include "telepresence.selectorLabels" $) }}
+{{- $chartLabels = merge $chartLabels (dict
+  "helm.sh/chart" (include "telepresence.chart" $)
+  "app.kubernetes.io/managed-by" .Release.Service
+) }}
 {{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- $chartLabels = merge $chartLabels (dict "app.kubernetes.io/version" (.Chart.AppVersion | quote)) }}
 {{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- /* This value is intentionally undocumented -- it's used by the telepresence binary to determine ownership of the release */}}
 {{- if .Values.createdBy }}
-app.kubernetes.io/created-by: {{ .Values.createdBy }}
+{{- $chartLabels = merge $chartLabels (dict "app.kubernetes.io/created-by" .Values.createdBy) }}
 {{- else }}
-app.kubernetes.io/created-by: {{ .Release.Service }}
+{{- $chartLabels = merge $chartLabels (dict "app.kubernetes.io/created-by" .Release.Service) }}
 {{- end }}
-{{- with .Values.labels }}
-{{ toYaml . }}
-{{- end }}
+{{- $labels := merge (.Values.labels | default dict) $chartLabels }}
+{{- toYaml $labels }}
 {{- end }}
 
 {{- /*
