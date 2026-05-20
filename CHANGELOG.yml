@@ -24,6 +24,18 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - notes:
+      - type: bugfix
+        title: Do not watch namespaces when only list is allowed
+        body: >-
+          The traffic-manager now checks both <code>list</code> and <code>watch</code>
+          permissions on cluster-scoped <code>namespaces</code> before enabling dynamic
+          namespace selection. Installations where the manager can list namespaces but
+          not watch them (for example namespace-scoped RBAC while broader
+          <code>list namespaces</code> is granted to other principals) no longer start a
+          cluster-wide namespace informer and instead use the configured static namespace
+          set, avoiding repeated <code>cannot watch resource "namespaces" at the cluster
+          scope</code> errors in the logs.
   - version: 2.28.0
     date: 2026-05-11
     notes:
