@@ -181,6 +181,15 @@ func (h *namesspacesHandle) computeNamesStatic(ctx context.Context) error {
 }
 
 func (h *namesspacesHandle) computeNames(ctx context.Context) (bool, error) {
+	if !k8sapi.CanWatchNamespaces(ctx) {
+		clog.Debug(ctx, "Watching namespaces is not permitted")
+		if err := h.computeNamesStatic(ctx); err != nil {
+			clog.Error(ctx, err)
+			return false, err
+		}
+		return false, nil
+	}
+
 	sel, err := h.selector.LabelsSelector()
 	if err != nil {
 		return false, err
