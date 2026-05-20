@@ -220,6 +220,7 @@ func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 			},
 		},
 	})
+	k8sapi.InstallFakeSelfSubjectAccessReviews(fakeClient, nil)
 	fakeClient.Discovery().(*fakeDiscovery.FakeDiscovery).FakedServerVersion = &k8sVersion.Info{
 		GitVersion: "v1.30.5",
 	}
