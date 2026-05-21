@@ -47,8 +47,8 @@ github.com/clipperhouse/uax29/v2 v2.7.0 h1:+gs4oBZ2gPfVrKPthwbMzWZDaAFPGYK72F0NJ
 github.com/clipperhouse/uax29/v2 v2.7.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
 github.com/compose-spec/compose-go/v2 v2.10.2 h1:USa1NUbDcl/cjb8T9iwnuFsnO79H+2ho2L5SjFKz3uI=
 github.com/compose-spec/compose-go/v2 v2.10.2/go.mod h1:ZU6zlcweCZKyiB7BVfCizQT9XmkEIMFE+PRZydVcsZg=
-github.com/containerd/containerd v1.7.31 h1:jn3IMuTV4Bb1Uwb0MFPW2ASJAD3W1lh6QqqZHIZwDh4=
-github.com/containerd/containerd v1.7.31/go.mod h1:jdwD6s/BhV4XVJGrvtziNPVA+83n66TwptVaPKprq4E=
+github.com/containerd/containerd v1.7.32 h1:S54xuVcPxeLaYgaRABtpJ2VyVUVsy0IGf7qHBs+sbY8=
+github.com/containerd/containerd v1.7.32/go.mod h1:jdwD6s/BhV4XVJGrvtziNPVA+83n66TwptVaPKprq4E=
 github.com/containerd/errdefs v1.0.0 h1:tg5yIfIlQIrxYtu9ajqY42W3lpS19XqdxRQeEwYG8PI=
 github.com/containerd/errdefs v1.0.0/go.mod h1:+YBYIdtsnF4Iw6nWZhJcqGSg/dwvV7tyJ/kCkyJ2k+M=
 github.com/containerd/errdefs/pkg v0.3.0 h1:9IKJ06FvyNlexW690DXuQNx2KA2cUJXx151Xdx3ZPPE=
