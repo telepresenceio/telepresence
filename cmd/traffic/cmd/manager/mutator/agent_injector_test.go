@@ -2080,6 +2080,7 @@ func generateForPod(t *testing.T, ctx context.Context, pod *core.Pod, gc *agentm
 }
 
 func setupAgentInjector(t *testing.T, ctx context.Context, ci kubernetes.Interface) context.Context {
+	k8sapi.InstallFakeSelfSubjectAccessReviews(ci, nil)
 	ctx = k8sapi.WithJoinedClientSetInterface(ctx, ci, argorolloutsfake.NewSimpleClientset())
 	ctx = informer.WithFactory(ctx, "")
 	ctx, err := managerutil.WithAgentImageRetriever(ctx, func(context.Context, string) error { return nil })
