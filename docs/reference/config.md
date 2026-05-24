@@ -13,7 +13,7 @@ One important exception is the configuration of the of the traffic manager names
 Global configuration is set at the Traffic Manager level and applies to any user connecting to that Traffic Manager.
 To set it, simply pass in a `client` dictionary to the `telepresence helm install` command, with any config values you wish to set.
 
-The `client` config supports values for [cluster](#cluster), [dns](#dns), [docker](#docker), [grpc](#grpc), [helm](#helm), [intercept](#intercept), [images](#images), [logLevels](#log-levels), [routing](#routing), and [timeouts](#timeouts).
+The `client` config supports values for [cluster](#cluster), [dns](#dns), [docker](#docker), [grpc](#grpc), [helm](#helm), [intercept](#intercept), [images](#images), [logLevels](#log-levels), [routing](#routing), [timeouts](#timeouts), and [usage](#usage).
 
 Here is an example configuration to show you the conventions of how Telepresence is configured:
 **note: This config shouldn't be used verbatim, since the registry `privateRepo` used doesn't exist**
@@ -291,6 +291,79 @@ These are the valid fields for the `timeouts` key:
 | `trafficManagerConnect` | Waiting for the Traffic Manager API to connect for port forwards                   | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 60 seconds      |
 | `trafficManagerAPI`     | Waiting for connection to the gPRC API after `trafficManagerConnect` is successful | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 15 seconds      |
 | `helm`                  | Waiting for Helm operations (e.g. `install`) on the Traffic Manager                | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 30 seconds      |
+
+### Usage
+
+Telepresence is an open-source project without conventional customers, so
+anonymous usage data is the only signal we have for what to prioritize —
+without it the community is flying blind. Reports are emitted from the
+CLI/user-daemon and the traffic-manager.
+
+**What a report contains.** Exactly five pieces of information:
+
+  1. An installation UUID generated locally — on the client this is the same
+     UUID Telepresence has used in its diagnostics directory for years; in
+     the traffic-manager it is a fresh UUID kept in a `traffic-manager-install`
+     ConfigMap so the value is stable across pod restarts.
+  2. The host OS and CPU architecture (e.g. `darwin/arm64`).
+  3. The Telepresence binary version (e.g. `v2.29.0`).
+  4. A code-defined topic such as `cmd.connect`, `cmd.list`, `manager.boot`,
+     or `session.end`.
+  5. A small key/value map of safe-listed entries — flag names that were
+     passed to the command, session duration, and rootd-side counters
+     (outbound tunnels / outbound tunnel errors / incoming dials / incoming
+     dial errors).
+
+Reports **never** contain cluster, namespace, workload, hostname, IP address,
+intercept header, or any user-provided string. The full set of keys the
+collector can ever receive is enumerated in the source under
+`pkg/usg/cobra.go` and the `Add*` methods of `pkg/usg/report.go`.
+
+**Where it goes.** The default `collectorAddress` is `usg.tada.se:443`, run by
+the Telepresence maintainers. The traffic-manager dials the same collector
+unless the chart's `usage.collectorAddress` overrides it. Reports are
+aggregated for prioritization of future development and not redistributed.
+
+**How to opt out.** Three independent mechanisms, any one of which is enough:
+
+  1. **Marker file** — drop an empty `usage-opt-out` file alongside the
+     system-wide `config.yml`. The platform installers manage this file
+     from their UI; admins can drop it by hand (`sudo touch
+     /etc/telepresence/usage-opt-out` on Linux, `sudo touch "/Library/Application
+     Support/telepresence/usage-opt-out"` on macOS, or
+     `New-Item C:\ProgramData\Telepresence\usage-opt-out` on Windows). The
+     marker, when present, unconditionally overrides `usage.enabled`.
+  2. **`usage.enabled: false` in `config.yml`** — set at the per-user level
+     (in `$XDG_CONFIG_HOME/telepresence/config.yml` or equivalent) or
+     machine-wide (next to the marker file location). When disabled, no
+     report is constructed and nothing is buffered or sent.
+  3. **Empty `collectorAddress`** — useful for air-gapped environments.
+     Reports are still constructed but never dialed out; the FIFO ages them
+     out silently. This is the only opt-out that's also valid in the Helm
+     chart for the traffic-manager (`--set usage.collectorAddress=`).
+
+| Field              | Description                                                                                                                                                                                            | Type                 | Default            |
+|--------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------|--------------------|
+| `enabled`          | Whether the CLI/user-daemon produces and sends anonymous reports.                                                                                                                                      | [boolean][yaml-bool] | `true`             |
+| `collectorAddress` | `host:port` of the gRPC collector to dial. Must be a DNS name (not an IP literal) when `insecure` is `false`, since TLS verification relies on SNI. Set to an empty string to drop reports on the floor. | [string][yaml-str]   | `usg.tada.se:443`  |
+| `insecure`         | Dial the collector without TLS. Intended for local testing against a self-hosted collector; leave at the default for any real deployment.                                                              | [boolean][yaml-bool] | `false`            |
+
+Example: disable reporting for every user of a given Traffic Manager by
+setting it globally:
+
+```yaml
+client:
+  usage:
+    enabled: false
+```
+
+Or disable it for the local user only by adding the same block (without the
+top-level `client` key) to the workstation's `config.yml`:
+
+```yaml
+usage:
+  enabled: false
+```
 
 ## Local Overrides
 
