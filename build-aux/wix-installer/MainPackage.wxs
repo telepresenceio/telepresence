@@ -10,6 +10,38 @@
     <Property Id="PORT" Secure="yes" Value="4037"/>
     <Property Id="PPROFPORT" Secure="yes" Value="0"/>
     <Property Id="LOGLEVEL" Secure="yes" Value="info"/>
+    <!-- USAGE_REPORTING is bound to the "Share anonymous usage data"
+         checkbox on UsageReportingDlg (a dedicated dialog so the choice is
+         reachable even when the user has unticked the Network Service
+         feature). "1" = opt in; "0" = opt out, which causes the
+         Cmp_UsageOptOut component below to deliver the machine-wide
+         usage-opt-out marker file. No default value: the AppSearch below
+         seeds it from the marker's existence so the dialog reflects the
+         user's existing preference on upgrade/reinstall. A silent install
+         can override either way by passing USAGE_REPORTING=0 or =1 on the
+         command line — the SetProperty rules below skip when it's already
+         set. -->
+    <Property Id="USAGE_REPORTING" Secure="yes"/>
+
+    <!-- Probe: looks for the opt-out marker on the existing install.
+         USAGE_OPTED_OUT is set to the marker's full path when present
+         (truthy), and empty otherwise. -->
+    <Property Id="USAGE_OPTED_OUT" Secure="yes">
+      <DirectorySearch Id="UsgConfigDirSearch" Path="[CommonAppDataFolder]Telepresence">
+        <FileSearch Id="UsgOptOutMarkerSearch" Name="usage-opt-out"/>
+      </DirectorySearch>
+    </Property>
+
+    <!-- Seed USAGE_REPORTING from the probe when it wasn't passed on the
+         command line. Both sequences so silent installs reach the same
+         conclusion as interactive ones. The Action attribute disambiguates
+         the two custom actions WiX generates for the same target property. -->
+    <SetProperty Action="SetUsageReportingFromMarker" Id="USAGE_REPORTING"
+        Value="0" After="AppSearch" Sequence="both"
+        Condition="NOT USAGE_REPORTING AND USAGE_OPTED_OUT"/>
+    <SetProperty Action="SetUsageReportingDefault" Id="USAGE_REPORTING"
+        Value="1" After="AppSearch" Sequence="both"
+        Condition="NOT USAGE_REPORTING AND NOT USAGE_OPTED_OUT"/>
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLDIR" Name="Telepresence"/>
@@ -73,6 +105,28 @@
       </Component>
     </ComponentGroup>
 
+    <!-- Anonymous usage opt-out: only installed when the user unchecks the
+         "Help improve Telepresence" box. The component ships an empty
+         marker file (usage-opt-out) whose presence the daemon honors as an
+         unconditional opt-out — config.yml is never touched by the
+         installer. On a reinstall where USAGE_REPORTING flips to "1", MSI's
+         component reference counting removes the marker. -->
+    <ComponentGroup Id="UsageOptOut">
+      <!-- Opt-out covers three property states: "0" (probe set it that
+           way because the marker already existed, or admin passed
+           USAGE_REPORTING=0 on the command line), "" (the dialog
+           checkbox sets the property to empty when unchecked — MSI's
+           CheckBox control does not write CheckBoxValue's "off" value,
+           it just clears the property), and any other non-"1" value an
+           admin might pass. Only USAGE_REPORTING = "1" opts in. -->
+      <Component Id="Cmp_UsageOptOut"
+          Guid="a4fe6cba-3f23-4d8a-9b34-2c9c0adfbdba"
+          Directory="CONFIGDIR"
+          Condition="USAGE_REPORTING &lt;&gt; &quot;1&quot;">
+        <File Id="UsageOptOutMarker" Source="usage-opt-out" KeyPath="yes"/>
+      </Component>
+    </ComponentGroup>
+
     <Feature Id="Main"
         Level="1"
         AllowAbsent="no"
@@ -82,6 +136,7 @@
         Display="expand"
         ConfigurableDirectory="INSTALLDIR">
       <ComponentGroupRef Id="TelepresenceFiles"/>
+      <ComponentGroupRef Id="UsageOptOut"/>
       <Feature Id="Service"
           Level="2"
           AllowAbsent="yes"
@@ -112,10 +167,10 @@
         <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes"
             Text="Configure the Telepresence Service Daemon"/>
 
-        <!-- Navigation -->
+        <!-- Navigation. Back always returns to UsageReportingDlg, which is
+             unconditionally shown immediately before PortDlg. -->
         <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="Back">
-          <Publish Event="NewDialog" Value="CustomizeDlg" Condition="WixUI_InstallMode = &quot;InstallCustom&quot;"/>
-          <Publish Event="NewDialog" Value="SetupTypeDlg" Condition="WixUI_InstallMode = &quot;InstallComplete&quot;"/>
+          <Publish Event="NewDialog" Value="UsageReportingDlg"/>
         </Control>
         <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next">
           <Publish Event="EndDialog" Value="Return"/>
@@ -145,6 +200,54 @@
             <ListItem Value="debug" Text="Debug"/>
           </ListView>
         </Control>
+
+      </Dialog>
+
+      <!-- Anonymous usage reporting opt-in, on a dedicated dialog so the
+           choice is always presented regardless of whether the user keeps
+           the Network Service feature (PortDlg, which used to host this
+           checkbox, is only reached when &Service = 3). The AppSearch
+           above seeds USAGE_REPORTING from any existing opt-out marker, so
+           the box starts in the user's previous state on upgrade. -->
+      <Dialog Id="UsageReportingDlg" Width="370" Height="270" Title="Telepresence Core Setup">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no"
+            Text="WixUI_Bmp_Banner"/>
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0"/>
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0"/>
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="280" Height="15" Transparent="yes" NoPrefix="yes"
+            Text="{\WixUI_Font_Title}Anonymous Usage Reporting"/>
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes"
+            Text="Help improve Telepresence by sharing anonymous usage data."/>
+
+        <Control Id="UsageReportingCheckbox" Type="CheckBox" X="15" Y="70" Width="340" Height="15"
+            Property="USAGE_REPORTING" CheckBoxValue="1"
+            Text="Share anonymous usage data"/>
+        <Control Id="UsageReportingHelp" Type="Text" X="15" Y="90" Width="340" Height="120" Transparent="yes" NoPrefix="yes"
+            Text="Telepresence is an open-source project without conventional customers, so usage data is the only signal we have for what to prioritize — without it the community is flying blind.&#10;&#10;Reports contain only an installation UUID, OS/architecture, version, and command topics such as &quot;cmd.connect&quot;; never cluster, namespace, workload, or address data.&#10;&#10;You can opt out later by creating the file C:\ProgramData\Telepresence\usage-opt-out."/>
+
+        <!-- Navigation -->
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="Back">
+          <Publish Event="NewDialog" Value="CustomizeDlg" Condition="WixUI_InstallMode = &quot;InstallCustom&quot;"/>
+          <Publish Event="NewDialog" Value="SetupTypeDlg" Condition="WixUI_InstallMode = &quot;InstallComplete&quot;"/>
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next">
+          <!-- MSI's CheckBox clears the bound property when the user
+               unchecks the box (it does not write CheckBoxValue's "off"
+               value, it writes null). Without this Publish, an unchecked
+               box would leave USAGE_REPORTING empty, the Execute
+               sequence's SetUsageReportingDefault rule would then fire on
+               the empty value and reset it to "1", and the opt-out
+               marker would never be installed. Normalize empty → "0"
+               here so post-dialog the property is always exactly "0" or
+               "1". Order=10 ensures this runs before the navigation
+               publishes below. -->
+          <Publish Property="USAGE_REPORTING" Value="0" Order="10" Condition="NOT USAGE_REPORTING"/>
+          <Publish Event="NewDialog" Value="PortDlg" Order="20" Condition="&amp;Service = 3"/>
+          <Publish Event="NewDialog" Value="VerifyReadyDlg" Order="20" Condition="NOT (&amp;Service = 3)"/>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg"/>
+        </Control>
       </Dialog>
 
       <Dialog Id="ErrorInvalidPort" Width="260" Height="85" Title="Error">
@@ -159,16 +262,21 @@
       <Publish Dialog="WelcomeDlg" Control="Next" Event="NewDialog" Value="SetupTypeDlg" Order="10"/>
       <Publish Dialog="SetupTypeDlg" Control="Back" Event="NewDialog" Value="WelcomeDlg" Order="10"/>
 
-      <!-- Let SetupTypeDlg jump to PortDlg if the Service feature is enabled -->
-      <Publish Dialog="SetupTypeDlg" Control="CompleteButton" Event="NewDialog" Value="PortDlg" Order="10"/>
-      <Publish Dialog="CustomizeDlg" Control="Next" Event="NewDialog" Value="PortDlg" Order="10"
-          Condition="&amp;Service = 3"/>
+      <!-- Always route through UsageReportingDlg so the opt-in choice is
+           reachable even when the user has unticked the Network Service
+           feature on CustomizeDlg. UsageReportingDlg's Next button then
+           jumps to PortDlg when &Service = 3 or to VerifyReadyDlg when
+           the daemon-as-a-service isn't being installed. -->
+      <Publish Dialog="SetupTypeDlg" Control="CompleteButton" Event="NewDialog" Value="UsageReportingDlg" Order="10"/>
+      <Publish Dialog="CustomizeDlg" Control="Next" Event="NewDialog" Value="UsageReportingDlg" Order="10"/>
       <Publish Dialog="PortDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="10"
           Condition="PORT &gt;= 0 AND PORT &lt;= 65535 AND PPROFPORT &gt;= 0 AND PPROFPORT &lt;= 65535"/>
       <Publish Dialog="PortDlg" Control="Next" Event="SpawnDialog" Value="ErrorInvalidPort" Order="10"
           Condition="NOT (PORT &gt;= 0 AND PORT &lt;= 65535 AND PPROFPORT &gt;= 0 AND PPROFPORT &lt;= 65535)"/>
       <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="PortDlg" Order="10"
           Condition="&amp;Service = 3"/>
+      <Publish Dialog="VerifyReadyDlg" Control="Back" Event="NewDialog" Value="UsageReportingDlg" Order="20"
+          Condition="NOT (&amp;Service = 3)"/>
     </UI>
   </Package>
 </Wix>

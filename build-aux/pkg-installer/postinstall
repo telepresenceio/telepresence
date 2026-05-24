@@ -1,17 +1,13 @@
 #!/bin/bash
 set -e
 
-mkdir -p "/Library/Application Support/telepresence"
+# Rootd-only setup. The CLI postinstall owns the machine-wide config
+# directory; this script just ensures the cache directory exists and
+# loads the launchd job.
+
 mkdir -p "/Library/Caches/telepresence"
-touch "/Library/Application Support/telepresence/config.yml"
-
-chown -R root:wheel \
-    "/Library/Application Support/telepresence" \
-    "/Library/Caches/telepresence"
-
-chmod 755 "/Library/Application Support/telepresence"
+chown -R root:wheel "/Library/Caches/telepresence"
 chmod 755 "/Library/Caches/telepresence"
-chmod 644 "/Library/Application Support/telepresence/config.yml"
 
 echo "Starting Telepresence Root Daemon..."
 /bin/launchctl load -w /Library/LaunchDaemons/io.telepresence.rootd.plist
