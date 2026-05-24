@@ -113,6 +113,11 @@ sign_binary "$cli_payload/usr/local/bin/telepresence"
 cp uninstall "$cli_payload/usr/local/bin/telepresence-uninstall"
 chmod +x "$cli_payload/usr/local/bin/telepresence-uninstall"
 
+cli_scripts="$build_output/cli/Scripts"
+mkdir -p "$cli_scripts"
+cp cli-postinstall "$cli_scripts/postinstall"
+chmod +x "$cli_scripts/postinstall"
+
 product="$build_output/product"
 mkdir -p "$product"
 sed "s|__VERSION__|$VERSION|g" Distribution.xml > "$product/Distribution.xml"
@@ -120,6 +125,7 @@ sed "s|__VERSION__|$VERSION|g" Distribution.xml > "$product/Distribution.xml"
 pkgbuild --identifier io.telepresence.cli \
          --version "$VERSION" \
          --root "$cli_payload" \
+         --scripts "$cli_scripts" \
          --install-location / \
          "$product/cli.pkg"
 
@@ -147,6 +153,24 @@ pkgbuild --identifier io.telepresence.rootd \
          --install-location / \
          "$product/rootd.pkg"
 
+# === Build Usage opt-out package ===
+# Empty-payload package whose postinstall writes the machine-wide opt-out
+# config. The installer UI conditionally selects this package only when the
+# user unchecks "Help improve Telepresence by sharing anonymous usage data".
+usg_payload="$build_output/usg-optout/Payload"
+mkdir -p "$usg_payload"
+
+usg_scripts="$build_output/usg-optout/Scripts"
+mkdir -p "$usg_scripts"
+cp usg-optout-postinstall "$usg_scripts/postinstall"
+chmod +x "$usg_scripts/postinstall"
+
+pkgbuild --identifier io.telepresence.usg-optout \
+         --version "$VERSION" \
+         --nopayload \
+         --scripts "$usg_scripts" \
+         "$product/usg-optout.pkg"
+
 resources="$build_output/resources"
 mkdir -p "$resources"
 cp welcome.rtf "$resources/welcome.rtf"
@@ -164,4 +188,4 @@ sign_package "$build_output/Telepresence-unsigned.pkg" "$build_output/Telepresen
 # Notarize the signed package (if credentials are provided)
 notarize_package "$build_output/Telepresence.pkg"
 
-rm -rf cli rootd resources product
+rm -rf cli rootd usg-optout resources product

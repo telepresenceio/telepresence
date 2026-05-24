@@ -200,6 +200,48 @@ The `--managed` flag indicates the daemon is running as a system service.
 
 ---
 
+## Anonymous Usage Reporting
+
+All three installers offer the user an opt-in/opt-out choice for anonymous
+usage reporting. The default is **opt in** ("Help improve Telepresence by
+sharing anonymous usage data"). Reports contain only an installation UUID,
+host OS/architecture, the binary version, and code-defined topics such as
+`cmd.connect`. They never contain cluster, namespace, workload, or address
+data.
+
+The choice is persisted as an empty marker file in the machine-wide config
+directory `filelocation.AppSystemConfigDir`. The CLI/user-daemon treat the
+marker's presence as an unconditional opt-out, overriding whatever
+`usage.enabled` says in `config.yml`. The installers never touch
+`config.yml`, so admin-edited configuration is preserved across upgrades.
+
+| Platform | Surface                                                       | Opt-out marker                                                    |
+|----------|---------------------------------------------------------------|-------------------------------------------------------------------|
+| Linux    | postinstall prints notice; admin runs `touch` or sets env var | `/etc/telepresence/usage-opt-out`                                 |
+| macOS    | Checkbox on the installer's customize page                    | `/Library/Application Support/telepresence/usage-opt-out`         |
+| Windows  | Checkbox on the daemon-configuration dialog                   | `C:\ProgramData\Telepresence\usage-opt-out`                       |
+
+On macOS the visible "Help improve Telepresence" choice has no payload; an
+inverse hidden choice carries a payload-less `io.telepresence.usg-optout`
+package whose postinstall drops the marker file. The mandatory CLI package
+always runs first and removes any stale marker, so re-checking the box
+during a reinstall opts back in. `Distribution.xml` probes the marker via
+`system.files.fileExistsAtPath` to pre-fill the checkbox with the user's
+prior preference.
+
+On Windows the `Cmp_UsageOptOut` component carries the marker file and is
+conditioned on `USAGE_REPORTING = "0"`. The checkbox on `PortDlg` is bound
+to that property. An `AppSearch`-time `FileSearch` for the marker, combined
+with two `SetProperty` actions, seeds `USAGE_REPORTING` from the existing
+marker on upgrade — admins can override either way by passing
+`USAGE_REPORTING=0` or `USAGE_REPORTING=1` to `msiexec`. MSI component
+reference counting removes the marker on uninstall and on a reinstall that
+flips the property back to `1`.
+
+On Linux the postinstall script honors `TELEPRESENCE_USAGE_OPT_OUT=1` in
+the install environment for scripted deploys and prints a manual
+`sudo touch /etc/telepresence/usage-opt-out` instruction otherwise.
+
 ## Release Notes Structure
 
 The GitHub release body separates installer types:
