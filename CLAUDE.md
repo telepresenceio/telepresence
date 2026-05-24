@@ -10,6 +10,7 @@ Telepresence is a Kubernetes development tool that enables fast local developmen
 
 - Never commit directly to the `release/v2` branch. Always create a feature branch with a name following the pattern `username/topic` (e.g., `thallgren/fix-dns-resolution`).
 - All commits must be signed and signed-off (`git commit -s -S`).
+- **Always run `make lint` and fix every reported issue before pushing.** This is non-negotiable — CI runs the same linters and a push with lint errors wastes a CI cycle. If `make lint` finds problems, fix them in the appropriate commit (use `git commit --fixup=<sha>` followed by `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash --gpg-sign <base>` to fold them in) before pushing.
 - Push the branch and create a pull request for review.
 - Always merge PRs with a merge commit (never squash or rebase).
 
@@ -108,6 +109,8 @@ Config:
   docker:
     addHostGateway: false
 ```
+
+**Important:** Environment values in `itest.yml` win over shell environment variables (the test harness merges the file's `Env` map *on top of* the process env). When you build/push tel2 or client images at a new version, update `TELEPRESENCE_VERSION` (or the per-component `DEV_*_VERSION`) in `itest.yml` before running the tests — exporting the var in your shell has no effect.
 
 ### Using Docker Desktop with Kubernetes
 
