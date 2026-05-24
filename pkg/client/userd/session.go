@@ -77,4 +77,9 @@ type Session interface {
 	WatchWorkloads(*rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
 	WorkloadInfoSnapshot([]string, rpc.ListRequest_Filter) (*rpc.WorkloadInfoSnapshot, error)
 	RevokeIntercept(ctx context.Context, interceptID string) error
+
+	// RootSessionEndMetrics returns and clears the latest terminal Activity
+	// message received from the root daemon. nil if none has arrived yet.
+	// Used by the usage reporter at session shutdown.
+	RootSessionEndMetrics() *rootdRpc.Activity
 }

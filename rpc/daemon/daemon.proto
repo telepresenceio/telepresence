@@ -215,4 +215,32 @@ message QuitResponse {
 
 message Activity {
   google.protobuf.Timestamp activity = 1;
+
+  // session_end is true when this is the final Activity message emitted
+  // before the root daemon's session terminates. The metrics fields below
+  // are only meaningful on such terminal messages; intermediate liveness
+  // pings leave them at zero.
+  bool session_end = 2;
+
+  // session_duration is how long the session was active, set on the
+  // terminal message only.
+  google.protobuf.Duration session_duration = 3;
+
+  // outbound_tunnels counts the number of outbound tunnels the root daemon
+  // established during the session (one per accepted local connection that
+  // was streamed to the cluster). DNS pipes are not counted.
+  int64 outbound_tunnels = 4;
+
+  // outbound_tunnel_errors counts attempts that failed to establish an
+  // outbound tunnel (manager dial failure, agent unreachable, recursive
+  // VIF dispatch, etc).
+  int64 outbound_tunnel_errors = 5;
+
+  // incoming_dials counts dial requests received by the dial watchers from
+  // traffic-agents during intercepts (one per WatchDial frame).
+  int64 incoming_dials = 6;
+
+  // incoming_dial_errors counts incoming dials that could not be served
+  // (manager tunnel open failure, stream creation failure, etc).
+  int64 incoming_dial_errors = 7;
 }

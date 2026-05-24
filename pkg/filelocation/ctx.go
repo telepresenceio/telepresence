@@ -33,3 +33,12 @@ type cacheCtxKey struct{}
 func WithAppUserCacheDir(ctx context.Context, cacheDir string) context.Context {
 	return context.WithValue(ctx, cacheCtxKey{}, cacheDir)
 }
+
+type systemConfigCtxKey struct{}
+
+// WithAppSystemConfigDir spoofs the AppSystemConfigDir. Useful in tests that
+// need to point the loader at a writable temp dir rather than the real
+// machine-wide location.
+func WithAppSystemConfigDir(ctx context.Context, dir string) context.Context {
+	return context.WithValue(ctx, systemConfigCtxKey{}, dir)
+}

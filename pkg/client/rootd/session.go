@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -196,6 +197,17 @@ type session struct {
 	// Timestamps sent on this channel are propagated to the user daemon.
 	activity chan<- time.Time
 
+	// sessionStart is when this session was constructed. Used to compute
+	// the duration reported in the session-end Activity message.
+	sessionStart time.Time
+
+	// Telemetry counters reported to the user daemon at session end via the
+	// final daemon.Activity message. Touched from multiple goroutines.
+	outboundTunnels      atomic.Int64
+	outboundTunnelErrors atomic.Int64
+	incomingDials        atomic.Int64
+	incomingDialErrors   atomic.Int64
+
 	// Maps one UDP or TCP AddrPort to another
 	l4PortMap *xsync.Map[types.AddrPortProto, uint16]
 
@@ -255,6 +267,7 @@ func newSession(
 		localTranslationTable: xsync.NewMap[netip.Addr, netip.Addr](),
 		virtualIPs:            xsync.NewMap[netip.Addr, agentVIP](),
 		l4PortMap:             xsync.NewMap[types.AddrPortProto, uint16](),
+		sessionStart:          time.Now(),
 	}
 	cfg := client.GetConfig(s)
 
@@ -1173,6 +1186,10 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 		})
 		if len(agentNamespaces) > 0 {
 			s.agentClients = agentpf.NewClients(s.Cluster, s.session, agentNamespaces)
+			// Receive a callback per dial accepted from the dial watchers,
+			// so we can report incoming-dial counters to the user daemon
+			// at session end (see daemon.Activity).
+			s.agentClients.SetDialMetrics(s)
 			g.Go("agentPods", func(ctx context.Context) error {
 				return s.agentClients.WatchAgentPods(s.managerClient())
 			})
@@ -1497,12 +1514,29 @@ func (s *session) MarkActivity() {
 	}
 }
 
+// IncomingDial is the tunnel.DialMetrics callback for each dial request
+// successfully read by the agentpf dial watchers.
+func (s *session) IncomingDial() {
+	s.incomingDials.Add(1)
+}
+
+// IncomingDialError is the tunnel.DialMetrics callback for each accepted
+// dial that failed to produce a usable tunnel.
+func (s *session) IncomingDialError() {
+	s.incomingDialErrors.Add(1)
+}
+
 func (s *service) ActivityWatcher(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.Activity]) error {
 	for {
 		select {
 		case <-stream.Context().Done():
 			return nil
 		case <-s.session.Done():
+			// Emit one terminal Activity carrying the session totals so
+			// the user daemon can report them before the session goes
+			// away. Best-effort: a send failure here just means the
+			// client already gave up listening.
+			_ = stream.Send(s.session.sessionEndActivity())
 			return nil
 		case at := <-s.activity:
 			err := stream.Send(&rpc.Activity{Activity: timestamppb.New(at)})
@@ -1510,5 +1544,21 @@ func (s *service) ActivityWatcher(_ *empty.Empty, stream grpc.ServerStreamingSer
 				return err
 			}
 		}
+	}
+}
+
+// sessionEndActivity returns the final Activity message for this session,
+// carrying the session duration and the telemetry counters accumulated
+// since session start.
+func (s *session) sessionEndActivity() *rpc.Activity {
+	now := time.Now()
+	return &rpc.Activity{
+		Activity:             timestamppb.New(now),
+		SessionEnd:           true,
+		SessionDuration:      durationpb.New(now.Sub(s.sessionStart)),
+		OutboundTunnels:      s.outboundTunnels.Load(),
+		OutboundTunnelErrors: s.outboundTunnelErrors.Load(),
+		IncomingDials:        s.incomingDials.Load(),
+		IncomingDialErrors:   s.incomingDialErrors.Load(),
 	}
 }

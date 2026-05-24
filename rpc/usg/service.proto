@@ -1,0 +1,56 @@
+syntax = "proto3";
+package telepresence.usg;
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/telepresenceio/telepresence/rpc/v2/usg";
+
+// Usg accepts anonymous usage reports from Telepresence clients and traffic-managers.
+//
+// The server must accept unauthenticated, anonymous connections. Reports contain only
+// an installation ID, a topic, a timestamp, and a map of safe-listed string entries.
+// They never contain cluster, namespace, workload, or address data.
+service Usg {
+  // Report submits a single usage report. Returns immediately; the server should
+  // never block the caller. Errors must not surface to the user.
+  rpc Report(UsageReport) returns (google.protobuf.Empty);
+
+  // ReportBatch submits up to N buffered reports at once. Used by the on-disk
+  // and in-memory FIFO buffers to flush their backlog.
+  rpc ReportBatch(UsageReportBatch) returns (google.protobuf.Empty);
+}
+
+// UsageReport is a single anonymous usage event.
+message UsageReport {
+  // installation_id is the only identifier carried in a report. For clients it
+  // is the value stored in $config/id; for traffic-managers it is the UUID held
+  // in the traffic-manager-install-id ConfigMap.
+  string installation_id = 1;
+
+  // source is the kind of process that produced the report ("client" or "manager").
+  // It is not an identifier; it just disambiguates topics that exist on both sides.
+  string source = 2;
+
+  // topic is a short, code-defined string identifying what happened, e.g.
+  // "cmd.connect" or "manager.intercept.created". It must never be derived
+  // from user-supplied data.
+  string topic = 3;
+
+  // version of the producing binary (e.g. "v2.27.0"). Not an identifier.
+  string version = 4;
+
+  // os and arch describe the producing host. "linux"/"amd64" etc. Not identifying.
+  string os = 5;
+  string arch = 6;
+
+  // timestamp is when the event was produced on the originating host.
+  google.protobuf.Timestamp timestamp = 7;
+
+  // entries are arbitrary safe-listed key/value pairs. The producing code is
+  // responsible for ensuring no sensitive data ends up here.
+  map<string, string> entries = 8;
+}
+
+message UsageReportBatch {
+  repeated UsageReport reports = 1;
+}

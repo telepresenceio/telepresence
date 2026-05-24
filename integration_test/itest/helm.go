@@ -135,6 +135,11 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 	type xTimeouts struct {
 		AgentArrival string `json:"agentArrival,omitempty"`
 	}
+	type xUsage struct {
+		Enabled          bool   `json:"enabled"`
+		CollectorAddress string `json:"collectorAddress,omitempty"`
+		Insecure         bool   `json:"insecure,omitempty"`
+	}
 	managerRbac := xRbac{
 		Create: true,
 	}
@@ -152,6 +157,7 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 		Timeouts          xTimeouts        `json:"timeouts,omitempty"`
 		Namespaces        []string         `json:"namespaces,omitempty"`
 		NamespaceSelector *labels.Selector `json:"namespaceSelector,omitempty"`
+		Usage             xUsage           `json:"usage"`
 	}{
 		LogLevel:    "debug",
 		Agent:       agent,
@@ -161,6 +167,10 @@ func (s *cluster) TelepresenceHelmInstall(ctx context.Context, upgrade bool, set
 			Routing: map[string][]string{},
 		},
 		Timeouts: xTimeouts{AgentArrival: "60s"},
+		// Integration tests must not phone home from the traffic-manager
+		// either. Tests that need usage reports must override this via the
+		// extra settings argument (--set-json).
+		Usage: xUsage{Enabled: false},
 	}
 	if managedNamespaces := nss.Selector.StaticNames(); len(managedNamespaces) > 0 {
 		if s.ManagerIsVersion(">2.21.x") {
