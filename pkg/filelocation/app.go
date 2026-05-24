@@ -52,3 +52,21 @@ func AppUserConfigDir(ctx context.Context) string {
 	}
 	return filepath.Join(UserConfigDir(ctx), appName)
 }
+
+// AppSystemConfigDir returns the machine-wide configuration directory used by
+// the platform installers. Values placed here are read by the client and
+// merged underneath the per-user configuration, so e.g. an administrator can
+// pre-seed defaults at install time and individual users can still override
+// them in AppUserConfigDir.
+//
+// Platform-specific locations:
+//
+//   - Linux:   /etc/telepresence
+//   - macOS:   /Library/Application Support/telepresence
+//   - Windows: C:\ProgramData\Telepresence
+func AppSystemConfigDir(ctx context.Context) string {
+	if dir, ok := ctx.Value(systemConfigCtxKey{}).(string); ok && dir != "" {
+		return dir
+	}
+	return RootConfigDir
+}

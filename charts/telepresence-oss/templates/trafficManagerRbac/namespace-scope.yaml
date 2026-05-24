@@ -62,6 +62,28 @@ rules:
   resourceNames:
 {{- if eq . $managerNamespace }}
   - {{ include "traffic-manager.name" $ }}
+  - traffic-manager-install
+{{- end }}
+{{- if eq . $managerNamespace }}
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - patch
+  - update
+  resourceNames:
+  - traffic-manager-install
+{{- /*
+Kubernetes ignores resourceNames on create, so this rule is namespace-scoped
+but cannot be tightened further by name.
+*/}}
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  verbs:
+  - create
 {{- end }}
 - apiGroups:
   - "apps"
@@ -196,6 +218,17 @@ rules:
     - update
   resourceNames:
     - {{ include "traffic-manager.name" $ }}
+    - traffic-manager-install
+{{- /*
+Kubernetes ignores resourceNames on create, so this rule is namespace-scoped
+but cannot be tightened further by name.
+*/}}
+- apiGroups:
+    - ""
+  resources:
+    - configmaps
+  verbs:
+    - create
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

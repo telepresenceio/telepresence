@@ -372,6 +372,21 @@ properties:
         description: Overrides the image tag whose default is the chart appVersion
         type: string
 
+  usage:
+    type: object
+    additionalProperties: false
+    description: Anonymous usage reporting configuration.
+    properties:
+      enabled:
+        description: Enable anonymous usage reporting from the traffic-manager.
+        type: boolean
+      collectorAddress:
+        description: The host:port of the gRPC collector. When empty, produced reports are silently discarded.
+        type: string
+      insecure:
+        description: Dial the collector without TLS. Leave false for any real deployment.
+        type: boolean
+
   intercept:
     type: object
     additionalProperties: false

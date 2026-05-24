@@ -456,6 +456,9 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 	config.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("10Mi")
 	config.Intercept().UseFtp = true
+	// Integration tests must never phone home with usage data unless they
+	// explicitly opt in (see usage_reporting_test.go).
+	config.Usage().Enabled = false
 	if s.ClientIsVersion(">=2.23.0") {
 		config.Intercept().MountsRoot = TempDir(c)
 	}
@@ -467,6 +470,10 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 
 	configDir := TempDir(c)
 	c = filelocation.WithAppUserConfigDir(c, configDir)
+	// Pin the system config dir to an empty location so the tests can't
+	// accidentally pick up an installer-written /etc/telepresence/config.yml
+	// on the developer's host.
+	c = filelocation.WithAppSystemConfigDir(c, filepath.Join(configDir, "system"))
 	c, err = SetConfig(c, configDir, configYamlStr)
 	require.NoError(t, err)
 	return c

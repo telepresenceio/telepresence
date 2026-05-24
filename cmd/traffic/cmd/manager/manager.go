@@ -32,12 +32,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
+	mgrusg "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/usg"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -146,6 +148,22 @@ func MainWithEnv(ctx context.Context) (err error) {
 			ctx, err = managerutil.WithAgentImageRetriever(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
 			if err != nil {
 				clog.Errorf(ctx, "unable to initialize agent injector: %v", err)
+			}
+		}
+
+		// Wire anonymous usage reporting. Failure here is non-fatal: the
+		// manager still serves traffic with reporting disabled.
+		if env.UsageReportingEnabled {
+			if id, idErr := mgrusg.LoadOrCreateInstallID(ctx, env.ManagerNamespace); idErr != nil {
+				clog.Infof(ctx, "usg: installation id unavailable, reporting disabled: %v", idErr)
+			} else {
+				var sink usg.Sink
+				ctx, sink = usg.InstallManager(ctx, id)
+				go usg.RunSender(ctx, sink, usg.SenderConfig{
+					Address:  env.UsageCollectorAddress,
+					Insecure: env.UsageCollectorInsecure,
+				})
+				usg.Quick(ctx, "manager.boot")
 			}
 		}
 

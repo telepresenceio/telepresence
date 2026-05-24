@@ -84,6 +84,15 @@ type Env struct {
 	InterceptAllowGlobal          bool `default:"true"`
 	InterceptInactiveBlockTimeout time.Duration
 
+	// Anonymous usage reporting. The manager produces reports whose only
+	// identifier is the UUID stored in the traffic-manager-install-id
+	// ConfigMap. UsageReportingEnabled is opt-out (default true). An empty
+	// UsageCollectorAddress means produced reports never leave the process —
+	// they age out of the FIFO.
+	UsageReportingEnabled  bool `default:"true"`
+	UsageCollectorAddress  string
+	UsageCollectorInsecure bool
+
 	// For testing only
 	CompatibilityVersion *semver.Version
 }

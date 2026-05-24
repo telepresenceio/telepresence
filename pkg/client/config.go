@@ -94,6 +94,14 @@ func isDefault[T DefaultsAware](sourceStruct T) bool {
 
 const ConfigFile = "config.yml"
 
+// UsageOptOutFile is the name of an empty marker file placed in
+// AppSystemConfigDir by the platform installers (or by an administrator) to
+// disable anonymous usage reporting machine-wide. Its presence overrides any
+// usage.enabled setting in config.yml. The CLI/user daemon does not write to
+// it; it is purely an out-of-band switch the installers can manage
+// declaratively without parsing or rewriting YAML.
+const UsageOptOutFile = "usage-opt-out"
+
 type Config interface {
 	fmt.Stringer
 	Base() *config
@@ -107,6 +115,7 @@ type Config interface {
 	LogLevels() *LogLevels
 	Routing() *Routing
 	Timeouts() *Timeouts
+	Usage() *Usage
 
 	MarshalYAML() ([]byte, error)
 	OSSpecific() *OSSpecificConfig
@@ -127,6 +136,7 @@ type config struct {
 	LogLevelsV       LogLevels `json:"logLevels,omitzero"`
 	RoutingV         Routing   `json:"routing,omitzero"`
 	TimeoutsV        Timeouts  `json:"timeouts,omitzero"`
+	UsageV           Usage     `json:"usage,omitzero"`
 }
 
 func (c *config) OSSpecific() *OSSpecificConfig {
@@ -175,6 +185,10 @@ func (c *config) Routing() *Routing {
 
 func (c *config) Helm() *Helm {
 	return &c.HelmV
+}
+
+func (c *config) Usage() *Usage {
+	return &c.UsageV
 }
 
 func (c *config) MarshalYAML() ([]byte, error) {
@@ -249,6 +263,7 @@ func (c *config) DestructiveMerge(lc Config) {
 	c.DNSV.merge(lc.DNS())
 	c.RoutingV.merge(lc.Routing())
 	c.HelmV.merge(lc.Helm())
+	c.UsageV.merge(lc.Usage())
 }
 
 func (c *config) Merge(lc Config) Config {
@@ -611,6 +626,43 @@ func (ll *LogLevels) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
 	type logLevels LogLevels
 	wp := (*logLevels)(ll)
+	return json.UnmarshalDecode(in, &wp)
+}
+
+// Usage controls anonymous usage reporting. Reporting is opt-out: enabled by
+// default. Disabling it short-circuits report construction, so no information
+// is buffered or sent. The collector address has no built-in default; an empty
+// address means reports are produced but never sent (they age out of the FIFO).
+type Usage struct {
+	Enabled          bool   `json:"enabled"`
+	CollectorAddress string `json:"collectorAddress"`
+	Insecure         bool   `json:"insecure"`
+}
+
+var defaultUsage = Usage{ //nolint:gochecknoglobals // constant
+	Enabled:          true,
+	CollectorAddress: "usg.tada.se:443",
+}
+
+func (u *Usage) defaults() DefaultsAware {
+	return &defaultUsage
+}
+
+func (u *Usage) merge(o *Usage) {
+	mergeNonDefaults(u, o)
+}
+
+func (u *Usage) IsZero() bool {
+	return u == nil || *u == defaultUsage
+}
+
+func (u *Usage) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(u))
+}
+
+func (u *Usage) UnmarshalJSONFrom(in *jsontext.Decoder) error {
+	type usage Usage
+	wp := (*usage)(u)
 	return json.UnmarshalDecode(in, &wp)
 }
 
@@ -1196,6 +1248,7 @@ var defaultConfig = config{ //nolint:gochecknoglobals // constant
 	DNSV:             defaultDNS,
 	RoutingV:         defaultRouting,
 	HelmV:            defaultHelm,
+	UsageV:           defaultUsage,
 }
 
 // getDefaultConfig returns the default configuration settings.
@@ -1205,24 +1258,66 @@ func getDefaultConfig() *config {
 	return c
 }
 
-// LoadConfig loads and returns the Telepresence configuration as stored in filelocation.AppUserConfigDir
-// or filelocation.AppSystemConfigDirs.
+// LoadConfig loads and returns the Telepresence configuration.
+//
+// Two files are consulted, in order:
+//
+//  1. The machine-wide config under filelocation.AppSystemConfigDir
+//     (e.g. /etc/telepresence/config.yml on Linux). Written by the platform
+//     installers to pre-seed defaults such as the usage-reporting opt-out.
+//  2. The per-user config under filelocation.AppUserConfigDir, or whatever
+//     was set via WithConfigFile.
+//
+// Both files are parsed with ParseConfigYAML and combined with
+// DestructiveMerge: the user file overrides the system file on every key
+// it sets to a non-default value. An administrator's non-default setting
+// therefore wins over a user who hasn't explicitly chosen something
+// different from the default — relevant e.g. for usage.enabled=false in
+// the system file. If a file does not exist it is silently skipped; an
+// unreadable or malformed file is a hard error.
 func LoadConfig(c context.Context) (cfg Config, err error) {
-	fileName := GetConfigFile(c)
+	// Pinning via WithConfigFile (used by the rootd, which receives its
+	// path on the command line) means: read exactly the named file.
 	cfg = GetDefaultConfig()
+	sysDir := filelocation.AppSystemConfigDir(c)
+	if file, pinned := c.Value(configFileKey{}).(string); pinned {
+		err = mergeConfigFile(c, cfg, file)
+	} else {
+		if err := mergeConfigFile(c, cfg, filepath.Join(sysDir, ConfigFile)); err != nil {
+			return nil, err
+		}
+		err = mergeConfigFile(c, cfg, GetConfigFile(c))
+	}
+	if err != nil {
+		return cfg, err
+	}
+	// The opt-out marker file is the canonical machine-wide kill switch for
+	// usage reporting. Installers (and admins) manage it as an empty file
+	// rather than rewriting YAML, so the YAML stays untouched by installer
+	// upgrades. The marker overrides whatever the config files said.
+	if _, statErr := os.Stat(filepath.Join(sysDir, UsageOptOutFile)); statErr == nil {
+		cfg.Usage().Enabled = false
+	}
+	return cfg, nil
+}
+
+// mergeConfigFile reads fileName, parses it as YAML, and DestructiveMerges
+// it onto cfg. A missing file is a no-op; any other I/O or parse error is
+// returned wrapped as an errcat.Config error.
+func mergeConfigFile(c context.Context, cfg Config, fileName string) error {
 	bs, err := os.ReadFile(fileName)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return cfg, nil
+			return nil
 		}
-		return nil, errcat.Config.New(err)
+		return errcat.Config.New(err)
 	}
-	fileConfig, err := ParseConfigYAML(c, fileName, bs)
+	parsed, err := ParseConfigYAML(c, fileName, bs)
 	if err != nil {
-		return nil, errcat.Config.New(err)
+		return errcat.Config.New(err)
 	}
-	cfg.DestructiveMerge(fileConfig)
-	return cfg, nil
+	cfg.DestructiveMerge(parsed)
+	return nil
 }
 
 // RoutingSnake is the same as Routing but with snake_case json/yaml names.

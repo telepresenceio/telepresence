@@ -3,8 +3,6 @@ package global
 import (
 	"context"
 	"path/filepath"
-	"runtime"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -26,14 +24,6 @@ const (
 
 var FlagNames = []string{FlagContext, FlagDocker, FlagNoReport, FlagOutput, FlagProgress, FlagUse} //nolint:gochecknoglobals // constant names
 
-func replaceHomeDir(ctx context.Context, dir string) string {
-	homeEnv := "$HOME"
-	if runtime.GOOS == "windows" {
-		homeEnv = "%USERPROFILE%"
-	}
-	return strings.Replace(dir, filelocation.UserHomeDir(ctx), homeEnv, 1)
-}
-
 func Flags(ctx context.Context, hasKubeFlags, markdown bool) *pflag.FlagSet {
 	flags := pflag.NewFlagSet("", 0)
 	if !hasKubeFlags {
@@ -50,11 +40,11 @@ func Flags(ctx context.Context, hasKubeFlags, markdown bool) *pflag.FlagSet {
 	flags.String(FlagUse, "", "Match expression that uniquely identifies the daemon container")
 	flags.String(FlagOutput, "default", "Set the output format, supported values are 'json', 'yaml', and 'default'")
 	flags.String(FlagProgress, "auto", `Set type of progress output (auto, tty, plain, json, quiet)`)
-	appDir := filelocation.AppUserConfigDir(ctx)
-	if markdown {
-		appDir = replaceHomeDir(ctx, appDir)
-	}
-	flags.String(FlagConfig, filepath.Join(appDir, client.ConfigFile), `Path to the Telepresence configuration file`)
+	// FlagConfig has no built-in default value so the generated help/markdown
+	// is identical across OSes. When the flag is left empty, InitConfig falls
+	// back to filepath.Join(filelocation.AppUserConfigDir(ctx), client.ConfigFile)
+	// via client.GetConfigFile.
+	flags.String(FlagConfig, "", `Path to the Telepresence configuration file`)
 	return flags
 }
 

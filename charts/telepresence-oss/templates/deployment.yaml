@@ -116,6 +116,23 @@ spec:
           - name: INTERCEPT_INACTIVE_BLOCK_TIMEOUT
             value: {{ .inactiveBlockTimeout }}
           {{- end }}
+          {{- with .usage }}
+          {{- /*
+          values.yaml supplies enabled=true by default; quote the value directly
+          so that an explicit enabled=false isn't coerced back to true by Helm's
+          `default` helper (which treats Go's zero false as "unset").
+          */}}
+          - name: USAGE_REPORTING_ENABLED
+            value: {{ .enabled | quote }}
+          {{- if .collectorAddress }}
+          - name: USAGE_COLLECTOR_ADDRESS
+            value: {{ .collectorAddress | quote }}
+          {{- end }}
+          {{- if .insecure }}
+          - name: USAGE_COLLECTOR_INSECURE
+            value: {{ .insecure | quote }}
+          {{- end }}
+          {{- end }}
       {{- if .agentInjector.enabled }}
         {{- /*
         Traffic agent injector configuration
