@@ -10,6 +10,36 @@
     <Property Id="PORT" Secure="yes" Value="4037"/>
     <Property Id="PPROFPORT" Secure="yes" Value="0"/>
     <Property Id="LOGLEVEL" Secure="yes" Value="info"/>
+    <!-- USAGE_REPORTING is bound to the "Help improve Telepresence" checkbox
+         on PortDlg. "1" = opt in; "0" = opt out, which causes the
+         Cmp_UsageOptOut component below to deliver the machine-wide
+         usage-opt-out marker file. No default value: the AppSearch below
+         seeds it from the marker's existence so the dialog reflects the
+         user's existing preference on upgrade/reinstall. A silent install
+         can override either way by passing USAGE_REPORTING=0 or =1 on the
+         command line — the SetProperty rules below skip when it's already
+         set. -->
+    <Property Id="USAGE_REPORTING" Secure="yes"/>
+
+    <!-- Probe: looks for the opt-out marker on the existing install.
+         USAGE_OPTED_OUT is set to the marker's full path when present
+         (truthy), and empty otherwise. -->
+    <Property Id="USAGE_OPTED_OUT" Secure="yes">
+      <DirectorySearch Id="UsgConfigDirSearch" Path="[CommonAppDataFolder]Telepresence">
+        <FileSearch Id="UsgOptOutMarkerSearch" Name="usage-opt-out"/>
+      </DirectorySearch>
+    </Property>
+
+    <!-- Seed USAGE_REPORTING from the probe when it wasn't passed on the
+         command line. Both sequences so silent installs reach the same
+         conclusion as interactive ones. The Action attribute disambiguates
+         the two custom actions WiX generates for the same target property. -->
+    <SetProperty Action="SetUsageReportingFromMarker" Id="USAGE_REPORTING"
+        Value="0" After="AppSearch" Sequence="both"
+        Condition="NOT USAGE_REPORTING AND USAGE_OPTED_OUT"/>
+    <SetProperty Action="SetUsageReportingDefault" Id="USAGE_REPORTING"
+        Value="1" After="AppSearch" Sequence="both"
+        Condition="NOT USAGE_REPORTING AND NOT USAGE_OPTED_OUT"/>
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLDIR" Name="Telepresence"/>
@@ -73,6 +103,19 @@
       </Component>
     </ComponentGroup>
 
+    <!-- Anonymous usage opt-out: only installed when the user unchecks the
+         "Help improve Telepresence" box. The component ships an empty
+         marker file (usage-opt-out) whose presence the daemon honors as an
+         unconditional opt-out — config.yml is never touched by the
+         installer. On a reinstall where USAGE_REPORTING flips to "1", MSI's
+         component reference counting removes the marker. -->
+    <ComponentGroup Id="UsageOptOut">
+      <Component Id="Cmp_UsageOptOut" Guid="a4fe6cba-3f23-4d8a-9b34-2c9c0adfbdba" Directory="CONFIGDIR">
+        <Condition>USAGE_REPORTING = "0"</Condition>
+        <File Id="UsageOptOutMarker" Source="usage-opt-out" KeyPath="yes"/>
+      </Component>
+    </ComponentGroup>
+
     <Feature Id="Main"
         Level="1"
         AllowAbsent="no"
@@ -82,6 +125,7 @@
         Display="expand"
         ConfigurableDirectory="INSTALLDIR">
       <ComponentGroupRef Id="TelepresenceFiles"/>
+      <ComponentGroupRef Id="UsageOptOut"/>
       <Feature Id="Service"
           Level="2"
           AllowAbsent="yes"
@@ -145,6 +189,17 @@
             <ListItem Value="debug" Text="Debug"/>
           </ListView>
         </Control>
+
+        <!-- Anonymous usage reporting opt-in. The AppSearch above seeds
+             USAGE_REPORTING from any existing opt-out marker, so the box
+             starts in the user's previous state on upgrade. Unticking it
+             sets the property to "0", which causes Cmp_UsageOptOut to
+             deliver the machine-wide usage-opt-out marker file. -->
+        <Control Id="UsageReportingCheckbox" Type="CheckBox" X="15" Y="190" Width="340" Height="15"
+            Property="USAGE_REPORTING" CheckBoxValue="1"
+            Text="Help improve Telepresence by sharing anonymous usage data"/>
+        <Control Id="UsageReportingHelp" Type="Text" X="15" Y="205" Width="340" Height="30" Transparent="yes" NoPrefix="yes"
+            Text="Telepresence has no conventional customers — without this data we can't tell which features matter or what to fix. Reports contain only an installation UUID, OS/arch, version, and command topics; never cluster, namespace, workload, or address data."/>
       </Dialog>
 
       <Dialog Id="ErrorInvalidPort" Width="260" Height="85" Title="Error">
