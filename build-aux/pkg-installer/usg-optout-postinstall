@@ -1,0 +1,18 @@
+#!/bin/bash
+set -e
+
+# Installed only when the user unchecks the "Help improve Telepresence by
+# sharing anonymous usage data" option in the installer UI. Drops an empty
+# marker file in the machine-wide config directory; the CLI/user daemon
+# treat its presence as an unconditional opt-out, overriding whatever
+# usage.enabled says in config.yml. The YAML config is left untouched.
+
+CONFIG_DIR="/Library/Application Support/telepresence"
+MARKER_FILE="$CONFIG_DIR/usage-opt-out"
+
+mkdir -p "$CONFIG_DIR"
+: > "$MARKER_FILE"
+chown root:wheel "$MARKER_FILE"
+chmod 644 "$MARKER_FILE"
+
+echo "Anonymous usage reporting disabled via $MARKER_FILE"
