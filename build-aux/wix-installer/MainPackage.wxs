@@ -1,12 +1,33 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-    xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+    xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+    xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package Id="MainPackage"
       Name="Telepresence Components"
       Manufacturer="TelepresenceIO"
       Version="$(var.BundleVersion)">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed."/>
+
+    <!-- Issue #4079: on Windows, an upgrade can find the previous
+         telepresence.exe still locked (held by a user-launched CLI, by the
+         user daemon, or by the TelepresenceDaemon service's spawned rootd
+         child). Windows Restart Manager does not reliably walk service-owned
+         process trees, so MSI silently leaves the old binary in place and
+         then hangs on service start with an unknown-flag error
+         from the stale executable. CloseApplication sends WM_CLOSE to every
+         running telepresence.exe before file replacement and falls through
+         to TerminateProcess after 10 seconds, so a stuck process can never
+         block the install. ServiceControl Stop="both" still runs first, so
+         the daemon's child is gone before this fires under normal
+         conditions; this is the belt-and-suspenders pass. -->
+    <util:CloseApplication
+        Id="CloseTelepresence"
+        Target="telepresence.exe"
+        CloseMessage="yes"
+        EndSessionMessage="no"
+        TerminateProcess="10"
+        RebootPrompt="no"/>
     <Property Id="PORT" Secure="yes" Value="4037"/>
     <Property Id="PPROFPORT" Secure="yes" Value="0"/>
     <Property Id="LOGLEVEL" Secure="yes" Value="info"/>
