@@ -9,7 +9,12 @@ mkdir -p "/Library/Caches/telepresence"
 chown -R root:wheel "/Library/Caches/telepresence"
 chmod 755 "/Library/Caches/telepresence"
 
-echo "Starting Telepresence Root Daemon..."
+# On upgrade an instance of the daemon is still loaded with the previous
+# binary; `launchctl load` is a no-op in that case, so the new binary
+# would never start. Unload first (best-effort — fails harmlessly on a
+# fresh install where nothing is loaded yet), then load.
+echo "Restarting Telepresence Root Daemon..."
+/bin/launchctl unload /Library/LaunchDaemons/io.telepresence.rootd.plist 2>/dev/null || true
 /bin/launchctl load -w /Library/LaunchDaemons/io.telepresence.rootd.plist
 
 echo "Telepresence Root Daemon is running."
