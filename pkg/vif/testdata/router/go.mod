@@ -21,7 +21,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.5.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/telepresenceio/telepresence/rpc/v2 v2.28.0 // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.29.0-test.1 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
