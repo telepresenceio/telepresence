@@ -3,7 +3,7 @@ description: "Install dependencies required by the runner"
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@v5
+    - uses: actions/setup-go@v6
       with:
         go-version: stable
     - name: enable JSON v2
@@ -50,7 +50,7 @@ runs:
         echo "C:\Program Files\Git\usr\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
     - if: runner.os == 'Windows'
       name: download winfsp
-      uses: nick-fields/retry/@v3
+      uses: nick-fields/retry/@v4
       with:
         max_attempts: 3
         timeout_minutes: 1
@@ -58,7 +58,7 @@ runs:
         command: make winfsp.msi
     - if: runner.os == 'Windows'
       name: download sshfs
-      uses: nick-fields/retry/@v3
+      uses: nick-fields/retry/@v4
       with:
         max_attempts: 3
         timeout_minutes: 1
@@ -66,7 +66,7 @@ runs:
         command: make sshfs-win.msi
     - if: runner.os == 'Windows'
       name: download sshfs
-      uses: nick-fields/retry/@v3
+      uses: nick-fields/retry/@v4
       with:
         max_attempts: 3
         timeout_minutes: 1

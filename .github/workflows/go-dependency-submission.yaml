@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 'Checkout Repository'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
       # we need fuseftp.bits
@@ -24,7 +24,7 @@ jobs:
         run: make build-deps
 
       - name: Run snapshot action
-        uses: actions/go-dependency-submission@v1
+        uses: actions/go-dependency-submission@v2
         with:
           go-mod-path: go.mod
           go-build-target: cmd/telepresence/main.go

@@ -14,7 +14,7 @@ jobs:
           - windows-latest
     runs-on: ${{ matrix.runners }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
@@ -24,18 +24,18 @@ jobs:
         run: make build-deps
       - name: Lint
         if: ${{ runner.os != 'Windows' }}
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           args: --timeout 8m ./...
       - name: Lint (limited on windows)
         if: ${{ runner.os == 'Windows' }}
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v9
         with:
           args: --timeout 8m ./cmd/telepresence/... ./integration_test/... ./pkg/...
       - name: Build
         run: make build
       - name: Run tests
-        uses: nick-fields/retry/@v3
+        uses: nick-fields/retry/@v4
         with:
           max_attempts: 3
           timeout_minutes: 12

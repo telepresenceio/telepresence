@@ -39,7 +39,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           labels: compatibility test
           type: remove
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
@@ -67,7 +67,7 @@ jobs:
           minikube image load ${{env.TELEPRESENCE_REGISTRY}}/route-controller:${{env.TELEPRESENCE_SEMVER}}
       - name: Run integration tests
         if: github.event.label.name == 'ok to test'
-        uses: nick-fields/retry/@v3
+        uses: nick-fields/retry/@v4
         with:
           max_attempts: 3
           shell: bash
@@ -83,7 +83,7 @@ jobs:
         env:
           DEV_MANAGER_VERSION: "2.24.1"
           DEV_MANAGER_REGISTRY: ghcr.io/telepresenceio
-        uses: nick-fields/retry/@v3
+        uses: nick-fields/retry/@v4
         with:
           max_attempts: 3
           shell: bash
@@ -99,7 +99,7 @@ jobs:
         env:
           DEV_CLIENT_VERSION: "2.24.1"
           DEV_CLIENT_REGISTRY: ghcr.io/telepresenceio
-        uses: nick-fields/retry/@v3
+        uses: nick-fields/retry/@v4
         with:
           max_attempts: 3
           shell: bash
