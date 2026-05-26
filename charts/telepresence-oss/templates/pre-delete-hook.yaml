@@ -17,7 +17,9 @@ spec:
     metadata:
       name: uninstall-agents
       labels:
-        {{- include "telepresence.labels" $ | nindent 8 }}
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
       securityContext:
         {{- toYaml .Values.hooks.podSecurityContext | nindent 8 }}

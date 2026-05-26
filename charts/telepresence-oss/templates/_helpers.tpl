@@ -163,7 +163,7 @@ Common labels
   "app.kubernetes.io/managed-by" .Release.Service
 ) }}
 {{- if .Chart.AppVersion }}
-{{- $chartLabels = merge $chartLabels (dict "app.kubernetes.io/version" (.Chart.AppVersion | quote)) }}
+{{- $chartLabels = merge $chartLabels (dict "app.kubernetes.io/version" .Chart.AppVersion) }}
 {{- end }}
 {{- /* This value is intentionally undocumented -- it's used by the telepresence binary to determine ownership of the release */}}
 {{- if .Values.createdBy }}
