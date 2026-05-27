@@ -25,20 +25,19 @@ jobs:
           # - windows-latest
     runs-on: ${{ matrix.runners }}
     steps:
-      - name: Remove ok to test label
-        if: github.event.label.name == 'ok to test'
-        uses: buildsville/add-remove-label@v2.0.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          labels: ok to test
-          type: remove
-      - name: Remove compatibility test label
-        if: github.event.label.name == 'compatibility test'
-        uses: buildsville/add-remove-label@v2.0.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          labels: compatibility test
-          type: remove
+      # Remove the label that triggered this run so a maintainer can re-add
+      # it to re-trigger. The job-level `if` guarantees the triggering label
+      # is exactly "ok to test" or "compatibility test". Done with the gh CLI
+      # rather than a third-party action: buildsville/add-remove-label silently
+      # reported success without actually removing the label. The label name
+      # and PR number are passed via env (not interpolated into the script) to
+      # avoid command injection.
+      - name: Remove triggering label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          LABEL: ${{ github.event.label.name }}
+        run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
