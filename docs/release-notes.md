@@ -3,6 +3,12 @@
 # <img src="images/logo.png" height="64px"/> Telepresence Release Notes
 ## Version 2.28.1
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Ingest workloads in mapped namespaces](reference/engagements/cli)</div></div>
+<div style="margin-left: 15px">
+
+The <code>ingest</code> command now accepts <code>--namespace</code> to select the workload namespace for that engagement without changing the namespace used by <code>telepresence connect</code>. This allows a single connection with multiple mapped namespaces to run simultaneous ingests in different namespaces, while preserving the connected namespace as the default when no engagement namespace is specified. Mirrors the multi-namespace support added for <code>intercept</code>, <code>wiretap</code>, and <code>replace</code> in 2.28.0. The <code>leave</code> command also accepts <code>--namespace</code> to disambiguate ingests with the same workload name across mapped namespaces.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Do not watch namespaces when only list is allowed</div></div>
 <div style="margin-left: 15px">
 
