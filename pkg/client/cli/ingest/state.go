@@ -60,6 +60,7 @@ func (s *state) CreateRequest() (*rpc.IngestRequest, error) {
 		Identifier: &rpc.IngestIdentifier{
 			WorkloadName:  s.WorkloadName,
 			ContainerName: s.ContainerName,
+			Namespace:     s.Namespace,
 		},
 		LocalMountPort: int32(s.MountFlags.LocalMountPort),
 		MountPoint:     s.MountFlags.Mount,
@@ -174,6 +175,7 @@ func (s *state) leave(ctx context.Context) error {
 	_, err := ud.LeaveIngest(ctx, &rpc.IngestIdentifier{
 		WorkloadName:  s.WorkloadName,
 		ContainerName: s.ContainerName,
+		Namespace:     s.info.GetNamespace(),
 	})
 	if err != nil && grpcStatus.Code(err) == grpcCodes.Canceled {
 		// Deactivation was caused by a disconnect
@@ -201,7 +203,7 @@ func (s *state) runCommand(ctx context.Context) error {
 			clog.Errorf(ctx, "error interceptor starting process: %v", err)
 			return errcat.NoDaemonLogs.New(err)
 		}
-		if err = ud.AddHandler(ctx, fmt.Sprintf("%s/%s", s.WorkloadName, s.handlerContainer), cmd, ""); err != nil {
+		if err = ud.AddHandler(ctx, fmt.Sprintf("%s/%s/%s", s.WorkloadName, s.handlerContainer, s.info.GetNamespace()), cmd, ""); err != nil {
 			return err
 		}
 		// The external command will not output anything to the logs. An error here

@@ -257,6 +257,9 @@ message IngestIdentifier {
   // The name of the desired container. Must be set when the workload contains more
   // than one container candidate.
   string container_name = 2;
+
+  // Namespace containing the workload. Defaults to the connected namespace when empty.
+  string namespace = 3;
 }
 
 message IngestRequest {
@@ -305,6 +308,9 @@ message IngestInfo {
 
   // Map of mount path -> MountPolicy
   map<string, int32> mounts = 10;
+
+  // Namespace of the ingested workload.
+  string namespace = 11;
 }
 
 message WatchWorkloadsRequest {

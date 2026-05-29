@@ -23,6 +23,7 @@ type Command struct {
 	MountFlags      mount.Flags
 	WorkloadName    string // --workload || Command[0] // only valid if !localOnly
 	ContainerName   string // --container
+	Namespace       string // --namespace
 	WaitMessage     string
 	ToPod           []string // --to-pod
 	Cmdline         []string
@@ -32,6 +33,7 @@ type Command struct {
 func (c *Command) AddFlags(cmd *cobra.Command) {
 	flagSet := cmd.Flags()
 	flagSet.StringVarP(&c.ContainerName, "container", "c", "", "Name of container that provides the environment and mounts for the ingest")
+	flagSet.StringVarP(&c.Namespace, "namespace", "n", "", "Namespace containing the workload to ingest. Defaults to the connected namespace")
 
 	flagSet.StringSliceVar(&c.ToPod, "to-pod", []string{}, ``+
 		`An additional port to forward from the ingested pod, will be made available at localhost:PORT `+

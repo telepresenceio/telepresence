@@ -898,7 +898,11 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 	if err != nil {
 		return nil, err
 	}
-	as, err := s.state.EnsureAgent(ctx, request.Name, client.Namespace)
+	ns, err := s.managedTargetNamespace(ctx, client, request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	as, err := s.state.EnsureAgent(ctx, request.Name, ns)
 	if err != nil {
 		return nil, status.Convert(err).Err()
 	}

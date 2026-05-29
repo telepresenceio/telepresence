@@ -23,6 +23,7 @@ import (
 
 func leaveCmd() *cobra.Command {
 	var containerName string
+	var namespace string
 	cmd := &cobra.Command{
 		Use:  "leave [flags] <intercept_name>",
 		Args: cobra.ExactArgs(1),
@@ -36,7 +37,7 @@ func leaveCmd() *cobra.Command {
 				return err
 			}
 			defer progress.Stop(cmd.Context())
-			return disengage(cmd.Context(), strings.TrimSpace(args[0]), containerName)
+			return disengage(cmd.Context(), strings.TrimSpace(args[0]), containerName, namespace)
 		},
 		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 			shellCompDir := cobra.ShellCompDirectiveNoFileComp
@@ -77,10 +78,11 @@ func leaveCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&containerName, "container", "c", "", "Container name")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Namespace of the ingest. Required to disambiguate ingests with the same workload name across mapped namespaces")
 	return cmd
 }
 
-func disengage(ctx context.Context, name, container string) error {
+func disengage(ctx context.Context, name, container, namespace string) error {
 	userD := daemon.MustGetUserClient(ctx)
 
 	var ic *manager.InterceptInfo
@@ -100,6 +102,7 @@ func disengage(ctx context.Context, name, container string) error {
 		ig, err = userD.GetIngest(ctx, &connector.IngestIdentifier{
 			WorkloadName:  name,
 			ContainerName: container,
+			Namespace:     namespace,
 		})
 		if err != nil {
 			if status.Code(err) != codes.NotFound {
@@ -136,6 +139,7 @@ func disengage(ctx context.Context, name, container string) error {
 		_, err = userD.LeaveIngest(ctx, &connector.IngestIdentifier{
 			WorkloadName:  ig.Workload,
 			ContainerName: ig.Container,
+			Namespace:     ig.Namespace,
 		})
 	}
 	return grpc.FromGRPC(err)
