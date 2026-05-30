@@ -2,13 +2,10 @@ package usg
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
 	usgrpc "github.com/telepresenceio/telepresence/rpc/v2/usg"
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 // withTestProducer returns a context with a producer attached, mirroring what
@@ -195,30 +192,6 @@ func TestEnvelopeTruncation(t *testing.T) {
 	}
 	if len(got[0].Topic) != MaxTopicLen {
 		t.Errorf("Topic len=%d, want %d", len(got[0].Topic), MaxTopicLen)
-	}
-}
-
-func TestFormatError(t *testing.T) {
-	plain := errors.New("plain failure")
-	userErr := errcat.User.New(plain)
-	wrapped := fmt.Errorf("context: %w", userErr)
-
-	cases := []struct {
-		name string
-		err  error
-		want string
-	}{
-		{"uncategorized", plain, "unknown:*errors.errorString"},
-		{"categorized", userErr, "user:*errors.errorString"},
-		{"wrapped categorized", wrapped, "user:*errors.errorString"},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			got := formatError(c.err)
-			if got != c.want {
-				t.Errorf("formatError(%v): want %q, got %q", c.err, c.want, got)
-			}
-		})
 	}
 }
 

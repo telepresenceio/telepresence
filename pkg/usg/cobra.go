@@ -2,15 +2,11 @@ package usg
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 // Cobra annotation keys used to opt commands in to anonymous usage reporting.
@@ -34,8 +30,9 @@ type reportCtxKey struct{}
 // for any descendant carrying AnnTrack, constructs a Report at Pre time,
 // binds it to the command's context, captures the set of flag names the user
 // supplied, and wraps the command's RunE so the report is sent on completion
-// — including on failure, with an "error" entry recording the errcat category
-// and Go type of the failure.
+// — including on failure, with "error.*" entries recording the errcat category,
+// the chain of Go error types, and any gRPC or HTTP status code of the failure
+// (see analyzeError). No error message text is ever recorded.
 //
 // Cobra's PersistentPostRunE is intentionally not used: cobra skips PostRun
 // when RunE returns a non-nil error, which would lose all failure reports.
@@ -80,7 +77,7 @@ func AttachToRoot(root *cobra.Command) {
 			cmd.RunE = func(cmd *cobra.Command, args []string) error {
 				err := orig(cmd, args)
 				if err != nil {
-					r.Add("error", formatError(err))
+					analyzeError(err).addTo(r)
 				}
 				r.Send()
 				return err
@@ -105,22 +102,6 @@ func AttachToRoot(root *cobra.Command) {
 func ReportFromContext(ctx context.Context) *Report {
 	r, _ := ctx.Value(reportCtxKey{}).(*Report)
 	return r
-}
-
-// formatError renders an error as "{errcat}:{go-type}", e.g. "user:*errors.errorString"
-// or "config:*fmt.wrapError". The Go type is taken from the innermost unwrapped
-// error so the report carries the originating type rather than the categorized
-// wrapper that errcat.New produces.
-func formatError(err error) string {
-	inner := err
-	for {
-		next := errors.Unwrap(inner)
-		if next == nil {
-			break
-		}
-		inner = next
-	}
-	return fmt.Sprintf("%s:%T", errcat.GetCategory(err), inner)
 }
 
 func isTracked(cmd *cobra.Command) bool {
