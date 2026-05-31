@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
-	"github.com/docker/docker/api/types/container"
+	dockerClient "github.com/moby/moby/client"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -51,7 +51,7 @@ func Start(ctx context.Context, daemonInContainer bool, args ...string) (cni *Co
 	}
 
 	if nwName != "" {
-		if err = cli.NetworkConnect(ctx, nwName, containerID, nil); err != nil {
+		if _, err = cli.NetworkConnect(ctx, nwName, dockerClient.NetworkConnectOptions{Container: containerID}); err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
 				clog.Debugf(ctx, "failed to connect network %s to container %s: %v", nwName, containerID, err)
 			}
@@ -87,7 +87,7 @@ func StopContainer(ctx context.Context, nameOrID string) error {
 	if err != nil {
 		return err
 	}
-	opts := container.StopOptions{}
+	opts := dockerClient.ContainerStopOptions{}
 	timeout := client.GetConfig(ctx).Timeouts().Get(client.TimeoutContainerShutdown)
 	if timeout > 0 {
 		secs := int(timeout / time.Second)
@@ -96,7 +96,7 @@ func StopContainer(ctx context.Context, nameOrID string) error {
 	} else {
 		clog.Debugf(ctx, "Stopping container %s with default grace period", nameOrID)
 	}
-	_, err = cli.ContainerInspect(ctx, nameOrID)
+	_, err = cli.ContainerInspect(ctx, nameOrID, dockerClient.ContainerInspectOptions{})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
 			err = nil
@@ -105,7 +105,7 @@ func StopContainer(ctx context.Context, nameOrID string) error {
 		}
 		return err
 	}
-	err = cli.ContainerStop(ctx, nameOrID, opts)
+	_, err = cli.ContainerStop(ctx, nameOrID, opts)
 	if err != nil {
 		err = fmt.Errorf("failed to stop container %s: %v", nameOrID, err)
 		clog.Error(ctx, err)

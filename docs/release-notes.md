@@ -169,7 +169,7 @@ Telepresence now tracks its version in a version.json file in the cache director
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Cluster DNS not injected into containers started by telepresence compose](https://github.com/telepresenceio/telepresence/issues/4053)</div></div>
 <div style="margin-left: 15px">
 
-When using <code>telepresence compose up</code>, cluster hostnames did not resolve inside the compose  container because the daemon DNS IP and the tel2-search DNS search domain were not being added to the generated compose spec. DNS and dns_search are now correctly set for all engaged compose services.
+When using <code>telepresence compose up</code>, cluster hostnames did not resolve inside the compose container because the daemon DNS IP and the tel2-search DNS search domain were not being added to the generated compose spec. DNS and dns_search are now correctly set for all engaged compose services.
 </div>
 
 ## Version 2.26.2 <span style="font-size: 16px;">(February 14)</span>

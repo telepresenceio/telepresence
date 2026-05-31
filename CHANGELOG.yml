@@ -295,7 +295,7 @@ items:
       - type: bugfix
         title: Cluster DNS not injected into containers started by telepresence compose
         body: >-
-          When using <code>telepresence compose up</code>, cluster hostnames did not resolve inside the compose 
+          When using <code>telepresence compose up</code>, cluster hostnames did not resolve inside the compose
           container because the daemon DNS IP and the tel2-search DNS search domain were not being added to the
           generated compose spec. DNS and dns_search are now correctly set for all engaged compose services.
         docs: https://github.com/telepresenceio/telepresence/issues/4053
@@ -385,12 +385,12 @@ items:
         body: |-
           The Traffic Manager deployment now includes a `startupProbe` that accurately detects when the service is fully initialized and
           ready to handle traffic. This enhancement brings the following benefits:
-          
+
           - **Prevents Premature Traffic Routing**: The manager only reports itself as ready after all configurations are loaded,
           eliminating potential race conditions
           - **Smoother Upgrades and Rollouts**: Deployment orchestration tools can reliably determine when the Traffic Manager is
           operational, improving overall installation stability
-          
+
           This change is particularly beneficial in large clusters or complex networking environments where initialization may take longer
           than expected.
       - type: feature
@@ -450,7 +450,7 @@ items:
         body: |-
           The `--docker` flag is not allowed when the client is configured with `intercept.useFtp=true` and an error is now generated
           instantly by the `telepresence connect --docker` command.
-          
+
           The docker volume plugin cannot use FTP because it requires two ports: a fixed control port that Telepresence can proxy, and a
           dynamic data port (randomly chosen during connection) that Telepresence cannot proxy on-demand. The port-forwarder only forwards
           pre-configured ports and doesn't understand FTP's protocol. Consequently, FTP isn't allowed in this scenario. If it was, then when
@@ -469,7 +469,7 @@ items:
           - connector-foreground =&gt; userd
           - daemon-foreground =&gt; rootd
           - kubeauth-foreground =&gt; kubeauthd
-          
+
           This also affects the Telepresence hidden CLI commands `telepresence daemon-foreground` and `telepresence connector-foreground`.
       - type: bugfix
         title: Add retry logic for tunnel connection attempts
