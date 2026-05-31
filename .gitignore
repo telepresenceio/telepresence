@@ -37,9 +37,6 @@ mcp-tools.json
 # But don't include this one
 /charts/telepresence-oss/k8s-defs.json
 
-# Downloaded fuseftp bits
-fuseftp.bits
-
 # Needed to build on windows
 .wintools
 .gocache
