@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "path=$(jq -r '.tool_input.file_path // empty'); case \"$path\" in */docs/reference/cli/*|*/DEPENDENCIES.md|*/DEPENDENCY_LICENSES.md|*/docs/release-notes.md|*/docs/release-notes.mdx|*/docs/variables.yml) echo \"Refusing to edit generated file: $path. Modify the source (CHANGELOG.yml, Go source under pkg/client/cli/cmd/, or run 'make generate') instead.\" >&2; exit 2 ;; esac"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "path=$(jq -r '.tool_input.file_path // empty'); case \"$path\" in */CHANGELOG.yml) echo 'CHANGELOG.yml changed; regenerating docs...' >&2; make docs-files >&2 ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
