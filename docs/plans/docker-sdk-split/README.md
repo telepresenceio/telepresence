@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed — awaiting review. No code changed yet.
+Implemented in this PR — the migration described below has been carried out.
 
 ## Motivation
 
