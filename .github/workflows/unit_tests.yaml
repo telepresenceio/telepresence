@@ -29,6 +29,11 @@ jobs:
           args: --timeout 8m ./...
       - name: Lint (limited on windows)
         if: ${{ runner.os == 'Windows' }}
+        # Windows builds cgofuse without CGO (it drives winfsp through its DLL),
+        # so lint with CGO disabled too; otherwise the type-checker pulls in
+        # cgofuse's host_cgo.go, which needs winfsp's fuse_common.h header.
+        env:
+          CGO_ENABLED: "0"
         uses: golangci/golangci-lint-action@v9
         with:
           args: --timeout 8m ./cmd/telepresence/... ./integration_test/... ./pkg/...

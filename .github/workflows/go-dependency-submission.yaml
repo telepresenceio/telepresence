@@ -19,7 +19,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: stable
-      # we need fuseftp.bits
+      # generates the embedded dc-cli.json that the build target imports
       - name: "Build dependencies"
         run: make build-deps
 
