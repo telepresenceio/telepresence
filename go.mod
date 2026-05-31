@@ -12,7 +12,6 @@ require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/coreos/go-iptables v0.8.0
 	github.com/datawire/argo-rollouts-go-client v0.0.0-20241216133646-cb1073556c99
-	github.com/docker/docker v28.5.2+incompatible
 	github.com/docker/go-units v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/godbus/dbus/v5 v5.2.2
@@ -22,6 +21,8 @@ require (
 	github.com/hectane/go-acl v0.0.0-20230122075934-ca0b05cb1adb
 	github.com/miekg/dns v1.1.72
 	github.com/mitchellh/go-wordwrap v1.0.1
+	github.com/moby/moby/api v1.54.2
+	github.com/moby/moby/client v0.4.1
 	github.com/moby/term v0.5.2
 	github.com/morikuni/aec v1.1.0
 	github.com/njayp/ophis v1.1.4
@@ -138,7 +139,6 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/spdystream v0.5.1 // indirect
-	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/modelcontextprotocol/go-sdk v1.6.1 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee // indirect

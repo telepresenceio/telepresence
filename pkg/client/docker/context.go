@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/docker/docker/client"
+	"github.com/moby/moby/client"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
@@ -24,14 +24,14 @@ func (h *clientHandle) getClient(ctx context.Context) (*client.Client, error) {
 	if h.cli == nil {
 		cmd := proc.CommandContext(ctx, Exe, "context", "inspect", "--format", "{{.Endpoints.docker.Host}}")
 		stdout, err := proc.CaptureErr(cmd)
-		opts := []client.Opt{client.FromEnv, client.WithAPIVersionNegotiation()}
+		opts := []client.Opt{client.FromEnv}
 		if err != nil {
 			return nil, fmt.Errorf("unable to retrieve docker context: %v", err)
 		}
 		if host := strings.TrimSpace(string(stdout)); host != "" {
 			opts = append(opts, client.WithHost(host))
 		}
-		cli, err := client.NewClientWithOpts(opts...)
+		cli, err := client.New(opts...)
 		if err != nil {
 			return nil, err
 		}

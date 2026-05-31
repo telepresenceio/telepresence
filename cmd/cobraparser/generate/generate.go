@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/opts"
 	"github.com/spf13/pflag"
 
 	"github.com/telepresenceio/telepresence/cmd/cobraparser/v2/types"
@@ -107,11 +106,11 @@ func FlagSet(setName string, ci *types.CommandInfo) *pflag.FlagSet {
 				flags.Float64Slice(flag.Name, nil, flag.Description)
 			}
 		case flag.Type == "bytes":
-			flags.Var(new(opts.MemBytes), flag.Name, flag.Description)
+			flags.Var(new(MemBytes), flag.Name, flag.Description)
 		case flag.Type == "filter":
 			flags.String(flag.Name, flag.Default, flag.Description)
 		case flag.Type == "list":
-			flags.Var(opts.NewListOptsRef(new([]string), nil), flag.Name, flag.Description)
+			flags.Var(NewListOptsRef(new([]string), nil), flag.Name, flag.Description)
 		case flag.Type == "scale":
 			flags.Uint32(flag.Name, 0, flag.Description)
 		default:

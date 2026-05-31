@@ -33,7 +33,6 @@ following Free and Open Source software:
     github.com/datawire/argo-rollouts-go-client                               v0.0.0-20241216133646-cb1073556c99      Apache License 2.0
     github.com/davecgh/go-spew                                                v1.1.2-0.20180830191138-d8f796af33cc    ISC license
     github.com/distribution/reference                                         v0.6.0                                  Apache License 2.0
-    github.com/docker/docker                                                  v28.5.2+incompatible                    Apache License 2.0
     github.com/docker/go-connections                                          v0.7.0                                  Apache License 2.0
     github.com/docker/go-units                                                v0.5.0                                  Apache License 2.0
     github.com/emicklei/go-restful/v3                                         v3.13.0                                 MIT license
@@ -98,6 +97,8 @@ following Free and Open Source software:
     github.com/mitchellh/go-wordwrap                                          v1.0.1                                  MIT license
     github.com/mitchellh/reflectwalk                                          v1.0.2                                  MIT license
     github.com/moby/docker-image-spec                                         v1.3.1                                  Apache License 2.0
+    github.com/moby/moby/api                                                  v1.54.2                                 Apache License 2.0
+    github.com/moby/moby/client                                               v0.4.1                                  Apache License 2.0
     github.com/moby/spdystream                                                v0.5.1                                  3-clause BSD license, Apache License 2.0
     github.com/moby/term                                                      v0.5.2                                  Apache License 2.0
     github.com/modelcontextprotocol/go-sdk                                    v1.6.1                                  Apache License 2.0, MIT license

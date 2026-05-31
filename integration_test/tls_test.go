@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	dockerClient "github.com/moby/moby/client"
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/clog"
@@ -193,8 +194,8 @@ func (s *dockerDaemonSuite) Test_TLSAnnotations() {
 			}()
 
 			rq.EventuallyContext(ctx, func() bool {
-				ir, err := dockerCli.ContainerInspect(ctx, ttSvc+".local")
-				return err == nil && ir.State.Running
+				ir, err := dockerCli.ContainerInspect(ctx, ttSvc+".local", dockerClient.ContainerInspectOptions{})
+				return err == nil && ir.Container.State.Running
 			}, 30*time.Second, 3*time.Second, "expected intercepted status never arrived")
 			s.CapturePodLogs(ctx, ttSvc, "traffic-agent", s.AppNamespace())
 
