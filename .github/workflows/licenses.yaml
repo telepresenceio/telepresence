@@ -10,7 +10,7 @@ jobs:
       is-up-to-date: ${{ steps.check.outputs.up-to-date }}
       diff: ${{ steps.check.outputs.diff }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"

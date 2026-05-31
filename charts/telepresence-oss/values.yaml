@@ -200,6 +200,25 @@ intercept:
   inactiveBlockTimeout: 10m
 
 ################################################################################
+## Anonymous Usage Reporting
+################################################################################
+# Controls anonymous usage reporting from the traffic-manager. Reports carry
+# only an installation UUID (stored in the traffic-manager-install ConfigMap),
+# never cluster, namespace, workload, or address data.
+usage:
+  # enabled controls whether the traffic-manager produces usage reports.
+  # When false, the producer is not installed and nothing is buffered or sent.
+  enabled: true
+
+  # collectorAddress is the host:port of the gRPC collector. When empty,
+  # produced reports are silently discarded — useful for air-gapped clusters.
+  collectorAddress: "usg.tada.se:443"
+
+  # insecure controls whether the collector is dialed without TLS. Leave false
+  # for any real deployment.
+  insecure: false
+
+################################################################################
 ## Route Controller Configuration
 ################################################################################
 # routeController installs a DaemonSet that watches for Service deletions and

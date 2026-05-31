@@ -3,14 +3,29 @@
   <title>Telepresence __VERSION__</title>
   <welcome file="welcome.rtf"/>
   <license file="license.rtf"/>
+
+  <!-- Reflects the machine-wide opt-out state so the dialog checkbox starts
+       in the user's previous choice on reinstall/upgrade. We check existence
+       of the opt-out marker file via fileExistsAtPath — the only filesystem
+       primitive Installer.app's JS exposes reliably. -->
+  <script><![CDATA[
+  function usgCurrentlyEnabled() {
+      return !system.files.fileExistsAtPath(
+          '/Library/Application Support/telepresence/usage-opt-out');
+  }
+  ]]></script>
   <!-- === Always install CLI === -->
   <pkg-ref id="io.telepresence.cli"/>
   <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
 
-  <!-- === Optional: Root Daemon === -->
   <choices-outline>
      <line choice="choice-cli"/>
      <line choice="choice-rootd"/>
+     <line choice="choice-usg"/>
+     <!-- choice-usg-off is visible="false" but must still be in the
+          choices-outline; otherwise Installer.app skips it entirely and
+          its inverse selection never installs the opt-out package. -->
+     <line choice="choice-usg-off"/>
   </choices-outline>
 
   <choice id="choice-cli"
@@ -22,6 +37,7 @@
         <pkg-ref id="io.telepresence.cli"/>
   </choice>
 
+  <!-- === Optional: Root Daemon === -->
   <choice id="choice-rootd"
             title="Enable Root Daemon"
             description="Run telepresence rootd as a system service."
@@ -30,7 +46,24 @@
         <pkg-ref id="io.telepresence.rootd"/>
   </choice>
 
+  <!-- === Anonymous usage reporting (default ON) ===
+       The visible choice has no payload; ticking it means "opt in", which
+       is the default. The hidden inverse choice tracks the opposite state
+       and, when its package installs, writes a system-wide opt-out config.
+  -->
+  <choice id="choice-usg"
+            title="Help improve Telepresence by sharing anonymous usage data"
+            description="Telepresence is an open-source project without conventional customers, so usage data is the only signal we have for what to prioritize — without it the community is flying blind. Reports contain only an installation UUID, OS/architecture, version, and command topics such as &quot;cmd.connect&quot;; never cluster, namespace, workload, or address data. You can opt out later by creating the file /Library/Application Support/telepresence/usage-opt-out."
+            start_selected="usgCurrentlyEnabled()"/>
+
+  <choice id="choice-usg-off"
+            visible="false"
+            selected="!choices['choice-usg'].selected">
+        <pkg-ref id="io.telepresence.usg-optout"/>
+  </choice>
+
   <!-- === Packages === -->
   <pkg-ref id="io.telepresence.cli" auth="Root">cli.pkg</pkg-ref>
   <pkg-ref id="io.telepresence.rootd" auth="Root">rootd.pkg</pkg-ref>
+  <pkg-ref id="io.telepresence.usg-optout" auth="Root">usg-optout.pkg</pkg-ref>
 </installer-script>

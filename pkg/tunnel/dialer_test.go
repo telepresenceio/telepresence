@@ -72,7 +72,7 @@ func TestDialWaitLoopLimitsConcurrentDialResponders(t *testing.T) {
 	provider := newBlockingTunnelProvider()
 	done := make(chan error, 1)
 	go func() {
-		done <- DialWaitLoop(ctx, AgentToClient, provider, stream, "session")
+		done <- DialWaitLoop(ctx, AgentToClient, provider, stream, "session", nil)
 	}()
 
 	select {

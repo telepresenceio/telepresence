@@ -1011,10 +1011,32 @@ func (x *QuitResponse) GetRootDaemonWillContinue() bool {
 }
 
 type Activity struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Activity      *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=activity,proto3" json:"activity,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Activity *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=activity,proto3" json:"activity,omitempty"`
+	// session_end is true when this is the final Activity message emitted
+	// before the root daemon's session terminates. The metrics fields below
+	// are only meaningful on such terminal messages; intermediate liveness
+	// pings leave them at zero.
+	SessionEnd bool `protobuf:"varint,2,opt,name=session_end,json=sessionEnd,proto3" json:"session_end,omitempty"`
+	// session_duration is how long the session was active, set on the
+	// terminal message only.
+	SessionDuration *durationpb.Duration `protobuf:"bytes,3,opt,name=session_duration,json=sessionDuration,proto3" json:"session_duration,omitempty"`
+	// outbound_tunnels counts the number of outbound tunnels the root daemon
+	// established during the session (one per accepted local connection that
+	// was streamed to the cluster). DNS pipes are not counted.
+	OutboundTunnels int64 `protobuf:"varint,4,opt,name=outbound_tunnels,json=outboundTunnels,proto3" json:"outbound_tunnels,omitempty"`
+	// outbound_tunnel_errors counts attempts that failed to establish an
+	// outbound tunnel (manager dial failure, agent unreachable, recursive
+	// VIF dispatch, etc).
+	OutboundTunnelErrors int64 `protobuf:"varint,5,opt,name=outbound_tunnel_errors,json=outboundTunnelErrors,proto3" json:"outbound_tunnel_errors,omitempty"`
+	// incoming_dials counts dial requests received by the dial watchers from
+	// traffic-agents during intercepts (one per WatchDial frame).
+	IncomingDials int64 `protobuf:"varint,6,opt,name=incoming_dials,json=incomingDials,proto3" json:"incoming_dials,omitempty"`
+	// incoming_dial_errors counts incoming dials that could not be served
+	// (manager tunnel open failure, stream creation failure, etc).
+	IncomingDialErrors int64 `protobuf:"varint,7,opt,name=incoming_dial_errors,json=incomingDialErrors,proto3" json:"incoming_dial_errors,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Activity) Reset() {
@@ -1052,6 +1074,48 @@ func (x *Activity) GetActivity() *timestamppb.Timestamp {
 		return x.Activity
 	}
 	return nil
+}
+
+func (x *Activity) GetSessionEnd() bool {
+	if x != nil {
+		return x.SessionEnd
+	}
+	return false
+}
+
+func (x *Activity) GetSessionDuration() *durationpb.Duration {
+	if x != nil {
+		return x.SessionDuration
+	}
+	return nil
+}
+
+func (x *Activity) GetOutboundTunnels() int64 {
+	if x != nil {
+		return x.OutboundTunnels
+	}
+	return 0
+}
+
+func (x *Activity) GetOutboundTunnelErrors() int64 {
+	if x != nil {
+		return x.OutboundTunnelErrors
+	}
+	return 0
+}
+
+func (x *Activity) GetIncomingDials() int64 {
+	if x != nil {
+		return x.IncomingDials
+	}
+	return 0
+}
+
+func (x *Activity) GetIncomingDialErrors() int64 {
+	if x != nil {
+		return x.IncomingDialErrors
+	}
+	return 0
 }
 
 var File_daemon_daemon_proto protoreflect.FileDescriptor
@@ -1129,9 +1193,16 @@ const file_daemon_daemon_proto_rawDesc = "" +
 	"\rdst_host_port\x18\x01 \x01(\fR\vdstHostPort\x12\x19\n" +
 	"\bsrc_port\x18\x02 \x01(\rR\asrcPort\"I\n" +
 	"\fQuitResponse\x129\n" +
-	"\x19root_daemon_will_continue\x18\x01 \x01(\bR\x16rootDaemonWillContinue\"B\n" +
+	"\x19root_daemon_will_continue\x18\x01 \x01(\bR\x16rootDaemonWillContinue\"\xe3\x02\n" +
 	"\bActivity\x126\n" +
-	"\bactivity\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bactivity2\xdf\n" +
+	"\bactivity\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\bactivity\x12\x1f\n" +
+	"\vsession_end\x18\x02 \x01(\bR\n" +
+	"sessionEnd\x12D\n" +
+	"\x10session_duration\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\x0fsessionDuration\x12)\n" +
+	"\x10outbound_tunnels\x18\x04 \x01(\x03R\x0foutboundTunnels\x124\n" +
+	"\x16outbound_tunnel_errors\x18\x05 \x01(\x03R\x14outboundTunnelErrors\x12%\n" +
+	"\x0eincoming_dials\x18\x06 \x01(\x03R\rincomingDials\x120\n" +
+	"\x14incoming_dial_errors\x18\a \x01(\x03R\x12incomingDialErrors2\xdf\n" +
 	"\n" +
 	"\x06Daemon\x12C\n" +
 	"\aVersion\x12\x16.google.protobuf.Empty\x1a .telepresence.common.VersionInfo\x12C\n" +
@@ -1206,45 +1277,46 @@ var file_daemon_daemon_proto_depIdxs = []int32{
 	21, // 8: telepresence.daemon.WaitForAgentIPRequest.timeout:type_name -> google.protobuf.Duration
 	19, // 9: telepresence.daemon.Environment.env:type_name -> telepresence.daemon.Environment.EnvEntry
 	23, // 10: telepresence.daemon.Activity.activity:type_name -> google.protobuf.Timestamp
-	24, // 11: telepresence.daemon.Daemon.Version:input_type -> google.protobuf.Empty
-	24, // 12: telepresence.daemon.Daemon.Status:input_type -> google.protobuf.Empty
-	24, // 13: telepresence.daemon.Daemon.Quit:input_type -> google.protobuf.Empty
-	5,  // 14: telepresence.daemon.Daemon.Connect:input_type -> telepresence.daemon.NetworkConfig
-	24, // 15: telepresence.daemon.Daemon.Disconnect:input_type -> google.protobuf.Empty
-	24, // 16: telepresence.daemon.Daemon.GetNetworkConfig:input_type -> google.protobuf.Empty
-	1,  // 17: telepresence.daemon.Daemon.SetDNSTopLevelDomains:input_type -> telepresence.daemon.Domains
-	6,  // 18: telepresence.daemon.Daemon.SetDNSExcludes:input_type -> telepresence.daemon.SetDNSExcludesRequest
-	7,  // 19: telepresence.daemon.Daemon.SetDNSMappings:input_type -> telepresence.daemon.SetDNSMappingsRequest
-	25, // 20: telepresence.daemon.Daemon.SetLogLevel:input_type -> telepresence.manager.LogLevelRequest
-	12, // 21: telepresence.daemon.Daemon.TranslateEnvIPs:input_type -> telepresence.daemon.Environment
-	24, // 22: telepresence.daemon.Daemon.WaitForNetwork:input_type -> google.protobuf.Empty
-	8,  // 23: telepresence.daemon.Daemon.WaitForAgentIP:input_type -> telepresence.daemon.WaitForAgentIPRequest
-	10, // 24: telepresence.daemon.Daemon.LookupIP:input_type -> telepresence.daemon.LookupIPRequest
-	13, // 25: telepresence.daemon.Daemon.ResolvePort:input_type -> telepresence.daemon.ResolvePortRequest
-	15, // 26: telepresence.daemon.Daemon.RerouteRemotePort:input_type -> telepresence.daemon.ReroutePortRequest
-	24, // 27: telepresence.daemon.Daemon.ActivityWatcher:input_type -> google.protobuf.Empty
-	20, // 28: telepresence.daemon.Daemon.Version:output_type -> telepresence.common.VersionInfo
-	0,  // 29: telepresence.daemon.Daemon.Status:output_type -> telepresence.daemon.DaemonStatus
-	16, // 30: telepresence.daemon.Daemon.Quit:output_type -> telepresence.daemon.QuitResponse
-	0,  // 31: telepresence.daemon.Daemon.Connect:output_type -> telepresence.daemon.DaemonStatus
-	24, // 32: telepresence.daemon.Daemon.Disconnect:output_type -> google.protobuf.Empty
-	5,  // 33: telepresence.daemon.Daemon.GetNetworkConfig:output_type -> telepresence.daemon.NetworkConfig
-	24, // 34: telepresence.daemon.Daemon.SetDNSTopLevelDomains:output_type -> google.protobuf.Empty
-	24, // 35: telepresence.daemon.Daemon.SetDNSExcludes:output_type -> google.protobuf.Empty
-	24, // 36: telepresence.daemon.Daemon.SetDNSMappings:output_type -> google.protobuf.Empty
-	24, // 37: telepresence.daemon.Daemon.SetLogLevel:output_type -> google.protobuf.Empty
-	12, // 38: telepresence.daemon.Daemon.TranslateEnvIPs:output_type -> telepresence.daemon.Environment
-	24, // 39: telepresence.daemon.Daemon.WaitForNetwork:output_type -> google.protobuf.Empty
-	9,  // 40: telepresence.daemon.Daemon.WaitForAgentIP:output_type -> telepresence.daemon.WaitForAgentIPResponse
-	11, // 41: telepresence.daemon.Daemon.LookupIP:output_type -> telepresence.daemon.LookupIPResponse
-	14, // 42: telepresence.daemon.Daemon.ResolvePort:output_type -> telepresence.daemon.ResolvePortResponse
-	24, // 43: telepresence.daemon.Daemon.RerouteRemotePort:output_type -> google.protobuf.Empty
-	17, // 44: telepresence.daemon.Daemon.ActivityWatcher:output_type -> telepresence.daemon.Activity
-	28, // [28:45] is the sub-list for method output_type
-	11, // [11:28] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	21, // 11: telepresence.daemon.Activity.session_duration:type_name -> google.protobuf.Duration
+	24, // 12: telepresence.daemon.Daemon.Version:input_type -> google.protobuf.Empty
+	24, // 13: telepresence.daemon.Daemon.Status:input_type -> google.protobuf.Empty
+	24, // 14: telepresence.daemon.Daemon.Quit:input_type -> google.protobuf.Empty
+	5,  // 15: telepresence.daemon.Daemon.Connect:input_type -> telepresence.daemon.NetworkConfig
+	24, // 16: telepresence.daemon.Daemon.Disconnect:input_type -> google.protobuf.Empty
+	24, // 17: telepresence.daemon.Daemon.GetNetworkConfig:input_type -> google.protobuf.Empty
+	1,  // 18: telepresence.daemon.Daemon.SetDNSTopLevelDomains:input_type -> telepresence.daemon.Domains
+	6,  // 19: telepresence.daemon.Daemon.SetDNSExcludes:input_type -> telepresence.daemon.SetDNSExcludesRequest
+	7,  // 20: telepresence.daemon.Daemon.SetDNSMappings:input_type -> telepresence.daemon.SetDNSMappingsRequest
+	25, // 21: telepresence.daemon.Daemon.SetLogLevel:input_type -> telepresence.manager.LogLevelRequest
+	12, // 22: telepresence.daemon.Daemon.TranslateEnvIPs:input_type -> telepresence.daemon.Environment
+	24, // 23: telepresence.daemon.Daemon.WaitForNetwork:input_type -> google.protobuf.Empty
+	8,  // 24: telepresence.daemon.Daemon.WaitForAgentIP:input_type -> telepresence.daemon.WaitForAgentIPRequest
+	10, // 25: telepresence.daemon.Daemon.LookupIP:input_type -> telepresence.daemon.LookupIPRequest
+	13, // 26: telepresence.daemon.Daemon.ResolvePort:input_type -> telepresence.daemon.ResolvePortRequest
+	15, // 27: telepresence.daemon.Daemon.RerouteRemotePort:input_type -> telepresence.daemon.ReroutePortRequest
+	24, // 28: telepresence.daemon.Daemon.ActivityWatcher:input_type -> google.protobuf.Empty
+	20, // 29: telepresence.daemon.Daemon.Version:output_type -> telepresence.common.VersionInfo
+	0,  // 30: telepresence.daemon.Daemon.Status:output_type -> telepresence.daemon.DaemonStatus
+	16, // 31: telepresence.daemon.Daemon.Quit:output_type -> telepresence.daemon.QuitResponse
+	0,  // 32: telepresence.daemon.Daemon.Connect:output_type -> telepresence.daemon.DaemonStatus
+	24, // 33: telepresence.daemon.Daemon.Disconnect:output_type -> google.protobuf.Empty
+	5,  // 34: telepresence.daemon.Daemon.GetNetworkConfig:output_type -> telepresence.daemon.NetworkConfig
+	24, // 35: telepresence.daemon.Daemon.SetDNSTopLevelDomains:output_type -> google.protobuf.Empty
+	24, // 36: telepresence.daemon.Daemon.SetDNSExcludes:output_type -> google.protobuf.Empty
+	24, // 37: telepresence.daemon.Daemon.SetDNSMappings:output_type -> google.protobuf.Empty
+	24, // 38: telepresence.daemon.Daemon.SetLogLevel:output_type -> google.protobuf.Empty
+	12, // 39: telepresence.daemon.Daemon.TranslateEnvIPs:output_type -> telepresence.daemon.Environment
+	24, // 40: telepresence.daemon.Daemon.WaitForNetwork:output_type -> google.protobuf.Empty
+	9,  // 41: telepresence.daemon.Daemon.WaitForAgentIP:output_type -> telepresence.daemon.WaitForAgentIPResponse
+	11, // 42: telepresence.daemon.Daemon.LookupIP:output_type -> telepresence.daemon.LookupIPResponse
+	14, // 43: telepresence.daemon.Daemon.ResolvePort:output_type -> telepresence.daemon.ResolvePortResponse
+	24, // 44: telepresence.daemon.Daemon.RerouteRemotePort:output_type -> google.protobuf.Empty
+	17, // 45: telepresence.daemon.Daemon.ActivityWatcher:output_type -> telepresence.daemon.Activity
+	29, // [29:46] is the sub-list for method output_type
+	12, // [12:29] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_daemon_daemon_proto_init() }

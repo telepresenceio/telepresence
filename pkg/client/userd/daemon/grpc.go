@@ -172,11 +172,18 @@ func (s *service) cancelSession(ctx context.Context, disconnectRoot bool) {
 		s.sessionCancel()
 		return nil
 	})
-	if err == nil && s.clearSession(oldSession) && disconnectRoot {
-		_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
-			_, _ = rd.Disconnect(ctx, &empty.Empty{})
-			return nil
-		})
+	if err == nil && s.clearSession(oldSession) {
+		if disconnectRoot {
+			_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+				_, _ = rd.Disconnect(ctx, &empty.Empty{})
+				return nil
+			})
+		}
+		// Use s (which embeds the daemon's main context) rather than the
+		// gRPC handler ctx: only the daemon context carries the usage
+		// producer installed by internalRun. Without this, usg.New would
+		// find no producer and silently drop the session.end report.
+		reportSessionEnd(s, oldSession)
 	}
 }
 
