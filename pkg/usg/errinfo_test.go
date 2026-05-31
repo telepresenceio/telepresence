@@ -147,11 +147,11 @@ func TestErrInfo_AddTo(t *testing.T) {
 // errors is rendered outer->inner with structural wrappers removed.
 func TestAnalyzeError_Chain(t *testing.T) {
 	leaf := errors.New("leaf")
-	mid := &wrapperErr{msg: "mid", wrapped: leaf}
+	mid := &wrapperError{msg: "mid", wrapped: leaf}
 	outer := fmt.Errorf("outer: %w", mid)
 
 	got := analyzeError(outer).chain
-	want := "*usg.wrapperErr>*errors.errorString"
+	want := "*usg.wrapperError>*errors.errorString"
 	if got != want {
 		t.Errorf("chain: want %q, got %q", want, got)
 	}
@@ -160,22 +160,22 @@ func TestAnalyzeError_Chain(t *testing.T) {
 // TestAnalyzeError_JoinBranches verifies that a joined (multi-) error renders
 // its branches as "|"-separated alternatives.
 func TestAnalyzeError_JoinBranches(t *testing.T) {
-	joined := errors.Join(errors.New("a"), &wrapperErr{msg: "b"})
+	joined := errors.Join(errors.New("a"), &wrapperError{msg: "b"})
 	got := analyzeError(joined).chain
-	want := "*errors.errorString|*usg.wrapperErr"
+	want := "*errors.errorString|*usg.wrapperError"
 	if got != want {
 		t.Errorf("chain: want %q, got %q", want, got)
 	}
 }
 
-// wrapperErr is a typed error used to exercise chain rendering; unlike
+// wrapperError is a typed error used to exercise chain rendering; unlike
 // fmt.wrapError it is not on the skip list, so it contributes its own token.
-type wrapperErr struct {
+type wrapperError struct {
 	msg     string
 	wrapped error
 }
 
-func (e *wrapperErr) Error() string { return e.msg }
-func (e *wrapperErr) Unwrap() error { return e.wrapped }
+func (e *wrapperError) Error() string { return e.msg }
+func (e *wrapperError) Unwrap() error { return e.wrapped }
 
 func typeName(v any) string { return fmt.Sprintf("%T", v) }

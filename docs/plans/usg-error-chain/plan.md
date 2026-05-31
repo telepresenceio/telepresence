@@ -138,9 +138,31 @@ field, so the collector schema is unaffected.
 
 ## Out of scope (call out, do not implement unless requested)
 
-- Reporting errors from the traffic-manager side (it currently reports no command errors).
 - Sending any error message text or stack traces.
 - Changing the collector / proto schema.
+
+## Follow-up: traffic-manager side (implemented)
+
+The manager had no per-operation error reporting (only `manager.boot`). Its analog to the
+client's per-command failure is a failed gRPC call, so reporting hangs off the gRPC server's
+error interceptor — the single chokepoint that still sees the **raw** error chain before
+`jsonError` flattens it for the wire.
+
+- `pkg/usg/server.go` (new) — `ReportServerError(ctx, method, err)` plus `isBenignCode`.
+  Sends a report with topic `manager.rpc`, a `method` entry (the code-defined
+  `info.FullMethod`, safe), and the `analyzeError` entries. No-op unless a producer is
+  installed **and** its `Source == manager` — the user daemon shares the gRPC server code,
+  and its failures are already reported per-command by the CLI, so gating on source prevents
+  double-counting. `InstallManager` is only called by the traffic-manager, confirming the
+  gate is sufficient.
+- `pkg/grpc/server/server.go` — the unary and stream error interceptors call
+  `usg.ReportServerError` with the raw error before `jsonError`. No import cycle:
+  `pkg/usg`'s dependency tree does not include `pkg/grpc/server`.
+- **Benign-code filter** (confirmed with user): skip `OK`, `Canceled`, `DeadlineExceeded`,
+  `NotFound`, `AlreadyExists`, `Unimplemented`. `status.Code` maps nil→OK and the context
+  errors to Canceled/DeadlineExceeded, so raw client disconnects are filtered too.
+- `pkg/usg/server_test.go` (new) — manager-reports / benign-skipped / client-no-report /
+  nil-noop / no-producer-noop, plus an `isBenignCode` table.
 
 ## Decisions (confirmed)
 
