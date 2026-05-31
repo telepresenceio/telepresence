@@ -12,10 +12,6 @@ permissions:
 # experiment; without it `go list -deps` excludes those files and fails.
 env:
   GOEXPERIMENT: jsonv2
-  # actions/go-dependency-submission@v2 still declares Node.js 20, which the
-  # runner deprecates. There is no Node.js 24 release of it yet, so opt its
-  # JavaScript into the runner's Node.js 24 to silence the warning.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   go-action-detection:
