@@ -171,7 +171,7 @@ Common labels
 {{- else }}
 {{- $chartLabels = merge $chartLabels (dict "app.kubernetes.io/created-by" .Release.Service) }}
 {{- end }}
-{{- $labels := merge (.Values.labels | default dict) $chartLabels }}
+{{- $labels := merge (deepCopy (.Values.labels | default dict)) $chartLabels }}
 {{- toYaml $labels }}
 {{- end }}
 
