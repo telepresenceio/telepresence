@@ -26,13 +26,13 @@ jobs:
     runs-on: ${{ matrix.runners }}
     steps:
       # Remove the label that triggered this run so a maintainer can re-add
-      # it to re-trigger. The job-level `if` guarantees the triggering label
-      # is exactly "ok to test" or "compatibility test". Done with the gh CLI
-      # rather than a third-party action: buildsville/add-remove-label silently
-      # reported success without actually removing the label. The label name
-      # and PR number are passed via env (not interpolated into the script) to
-      # avoid command injection.
+      # it to re-trigger. For PRs from a fork the GITHUB_TOKEN is read-only and
+      # this call fails; continue-on-error keeps that from aborting the job so
+      # the tests still run (the maintainer removes the label by hand instead).
+      # The label name and PR number are passed via env (not interpolated into
+      # the script) to avoid command injection.
       - name: Remove triggering label
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
