@@ -9,8 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types/network"
-	dockerClient "github.com/docker/docker/client"
+	dockerClient "github.com/moby/moby/client"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -477,18 +476,18 @@ func (s *composeSuite) Test_ComposeDefaultNetworkNoSubnetConflict() {
 	rq.NotEmpty(allClusterCIDRs, "expected at least one cluster subnet in status")
 
 	// Inspect the compose default network and verify its subnet doesn't overlap with any cluster CIDR.
-	cli, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
+	cli, err := dockerClient.New(dockerClient.FromEnv)
 	rq.NoError(err)
 	defer cli.Close()
 
 	defaultNetworkName := projectName + "_default"
-	ni, err := cli.NetworkInspect(ctx, defaultNetworkName, network.InspectOptions{})
+	ni, err := cli.NetworkInspect(ctx, defaultNetworkName, dockerClient.NetworkInspectOptions{})
 	rq.NoError(err, "failed to inspect network %s", defaultNetworkName)
-	rq.NotEmpty(ni.IPAM.Config, "expected at least one IPAM config on default network %s", defaultNetworkName)
+	rq.NotEmpty(ni.Network.IPAM.Config, "expected at least one IPAM config on default network %s", defaultNetworkName)
 
-	for _, cfg := range ni.IPAM.Config {
-		subnet, err := netip.ParsePrefix(cfg.Subnet)
-		if err != nil {
+	for _, cfg := range ni.Network.IPAM.Config {
+		subnet := cfg.Subnet
+		if !subnet.IsValid() {
 			continue // skip non-IPv4 or unparseable entries
 		}
 		for _, clusterCIDR := range allClusterCIDRs {

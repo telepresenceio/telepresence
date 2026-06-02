@@ -65,6 +65,7 @@ func TestEnvconfig(t *testing.T) {
 		InterceptAllowGlobal:         true,
 		AgentWatchRetryInterval:      10 * time.Second,
 		AgentConsumptionMetrics:      true,
+		UsageReportingEnabled:        true,
 	}
 
 	testcases := map[string]struct {

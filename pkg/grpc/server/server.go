@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
 type mergedCtx struct {
@@ -81,10 +82,19 @@ func New(valCtx context.Context, options ...grpc.ServerOption) *grpc.Server {
 
 	unaryErrorInterceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		v, err := handler(ctx, req)
+		if err != nil {
+			// Report before jsonError, while the raw error chain is intact.
+			// No-op unless a manager-side usage producer is installed.
+			usg.ReportServerError(ctx, info.FullMethod, err)
+		}
 		return v, jsonError(err)
 	}
 	streamErrorInterceptor := func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		return jsonError(handler(srv, ss))
+		err := handler(srv, ss)
+		if err != nil {
+			usg.ReportServerError(ss.Context(), info.FullMethod, err)
+		}
+		return jsonError(err)
 	}
 
 	if clog.Enabled(valCtx, slog.LevelDebug) {

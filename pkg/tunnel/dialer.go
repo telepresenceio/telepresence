@@ -430,15 +430,30 @@ func readLoop(ctx context.Context, tag Tag, h streamReader, trafficProbe *Counte
 	}
 }
 
+// DialMetrics receives per-dial counters from DialWaitLoop and dialRespond.
+// A nil DialMetrics is treated as a no-op; pass an implementation when the
+// caller wants to surface dial throughput / failures (the root daemon does,
+// to forward them to the user daemon at session end).
+type DialMetrics interface {
+	// IncomingDial is invoked once for each dial request successfully read
+	// from the watch-dial stream, before the responder goroutine starts.
+	IncomingDial()
+	// IncomingDialError is invoked when an accepted dial fails to produce a
+	// usable tunnel (manager Tunnel call failed, stream construction failed).
+	IncomingDialError()
+}
+
 // DialWaitLoop reads from the given dialStream. A new goroutine that creates a Tunnel to the manager and then
 // attaches a dialer Endpoint to that tunnel is spawned for each request that arrives. The method blocks until
-// the dialStream is closed.
+// the dialStream is closed. If metrics is non-nil it receives one IncomingDial call per accepted request, and
+// IncomingDialError when the request cannot be served.
 func DialWaitLoop(
 	ctx context.Context,
 	tag Tag,
 	tunnelProvider Provider,
 	dialStream agent.Agent_WatchDialClient,
 	sessionID SessionID,
+	metrics DialMetrics,
 ) error {
 	// create ctx to clean up leftover dialRespond if waitloop dies
 	ctx, cancel := context.WithCancel(ctx)
@@ -452,12 +467,15 @@ func DialWaitLoop(
 			case <-ctx.Done():
 				return nil
 			}
+			if metrics != nil {
+				metrics.IncomingDial()
+			}
 			dr := dr
 			go func() {
 				defer func() {
 					<-dialResponders
 				}()
-				dialRespond(ctx, tag, tunnelProvider, dr, sessionID)
+				dialRespond(ctx, tag, tunnelProvider, dr, sessionID, metrics)
 			}()
 			continue
 		}
@@ -476,18 +494,24 @@ func DialWaitLoop(
 	return nil
 }
 
-func dialRespond(ctx context.Context, tag Tag, tunnelProvider Provider, dr *rpc.DialRequest, sessionID SessionID) {
+func dialRespond(ctx context.Context, tag Tag, tunnelProvider Provider, dr *rpc.DialRequest, sessionID SessionID, metrics DialMetrics) {
 	id := ConnID(dr.ConnId)
 	ctx, cancel := context.WithCancel(ctx)
 	mt, err := tunnelProvider.Tunnel(ctx)
 	if err != nil {
 		clog.Errorf(ctx, "!! %s %s, call to manager Tunnel failed: %v", tag, id, err)
+		if metrics != nil {
+			metrics.IncomingDialError()
+		}
 		cancel()
 		return
 	}
 	s, err := NewClientStream(ctx, tag, mt, id, sessionID, time.Duration(dr.RoundtripLatency), time.Duration(dr.DialTimeout))
 	if err != nil {
 		clog.Error(ctx, err)
+		if metrics != nil {
+			metrics.IncomingDialError()
+		}
 		cancel()
 		return
 	}

@@ -12,8 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/docker/docker/api/types/network"
-	dockerClient "github.com/docker/docker/client"
+	dockerClient "github.com/moby/moby/client"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -195,7 +194,7 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_networkNoSubnetConflict() {
 		}
 	}()
 
-	cli, err := dockerClient.NewClientWithOpts(dockerClient.FromEnv, dockerClient.WithAPIVersionNegotiation())
+	cli, err := dockerClient.New(dockerClient.FromEnv)
 	rq.NoError(err)
 	defer cli.Close()
 
@@ -215,13 +214,13 @@ func (s *dockerDaemonSuite) Test_DockerDaemon_networkNoSubnetConflict() {
 		networkName := st.UserDaemon.ContainerNetwork
 		rq.NotEmpty(networkName, "expected a container network name for daemon %s", name)
 
-		ni, err := cli.NetworkInspect(ctx, networkName, network.InspectOptions{})
+		ni, err := cli.NetworkInspect(ctx, networkName, dockerClient.NetworkInspectOptions{})
 		rq.NoError(err)
-		rq.NotEmpty(ni.IPAM.Config, "expected at least one IPAM config on teleroute network %s", networkName)
+		rq.NotEmpty(ni.Network.IPAM.Config, "expected at least one IPAM config on teleroute network %s", networkName)
 
-		for _, cfg := range ni.IPAM.Config {
-			subnet, err := netip.ParsePrefix(cfg.Subnet)
-			if err != nil {
+		for _, cfg := range ni.Network.IPAM.Config {
+			subnet := cfg.Subnet
+			if !subnet.IsValid() {
 				continue // skip non-IPv4 or unparseable entries
 			}
 			for _, clusterCIDR := range allClusterCIDRs {

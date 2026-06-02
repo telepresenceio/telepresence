@@ -27,7 +27,7 @@ jobs:
     env:
       GOARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: ./.github/actions/install-dependencies
@@ -68,7 +68,7 @@ jobs:
           cd build-aux/systemd-installer
           VERSION="${TELEPRESENCE_VERSION#v}" ARCH=${{ matrix.arch }} ./build-packages.sh
       - name: Upload binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: binaries-${{ matrix.runner }}-${{ matrix.arch }}
           path: build-output/release
@@ -77,7 +77,7 @@ jobs:
   push-images:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: ./.github/actions/install-dependencies
@@ -89,7 +89,7 @@ jobs:
           echo "TELEPRESENCE_VERSION=$v" >> "$GITHUB_ENV"
           echo "TELEPRESENCE_SEMVER=${v#v}" >> "$GITHUB_ENV"
       - name: Setup docker buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
         with:
           platforms: linux/amd64,linux/arm64
       - name: Build image dependencies
@@ -126,7 +126,7 @@ jobs:
       semver: ${{ steps.semver_check.outputs.semver }}
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
       - name: Display structure of downloaded files
         run: ls -R
       - name: Determine if version is RC, TEST, or GA
@@ -204,7 +204,7 @@ jobs:
                - 📦 [Telepresence Helm Chart](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss/${{ steps.semver_check.outputs.semver }})
 
             For more information, visit our [installation docs](https://www.telepresence.io/docs/quick-start).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         if: ${{ steps.semver_check.outputs.make_latest == 'true' }}
       - name: Update Homebrew
         if: ${{ steps.semver_check.outputs.make_latest == 'true' }}
@@ -248,7 +248,7 @@ jobs:
     env:
       GOARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: ./.github/actions/install-dependencies

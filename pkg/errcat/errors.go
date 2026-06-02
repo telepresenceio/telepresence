@@ -33,6 +33,26 @@ const (
 	Unknown      // Something else. Consult the logs
 )
 
+// String returns a short lowercase name for the category, suitable for use in
+// log lines, telemetry, and any other context that needs a stable textual key.
+// Categories that aren't recognized render as "unknown".
+func (c Category) String() string {
+	switch c {
+	case OK:
+		return "ok"
+	case User:
+		return "user"
+	case Config:
+		return "config"
+	case NoDaemonLogs:
+		return "nodaemonlogs"
+	case Silent:
+		return "silent"
+	default:
+		return "unknown"
+	}
+}
+
 // New creates a new categorized error based in its argument. The argument
 // can be an error or a string. If it isn't, it will be converted to a string
 // using its '%v' formatter.

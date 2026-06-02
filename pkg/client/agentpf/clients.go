@@ -38,6 +38,7 @@ type client struct {
 	session         *manager.SessionInfo
 	info            *manager.AgentPodInfo
 	remove          func()
+	owner           *clients
 	cancelClient    context.CancelFunc
 	cancelDialWatch context.CancelFunc
 	connectErr      error
@@ -235,7 +236,11 @@ func (ac *client) startDialWatcherLocked() error {
 	}
 
 	go func() {
-		err := tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(ac.cli), dialStream, tunnel.SessionID(ac.session.SessionId))
+		var metrics tunnel.DialMetrics
+		if ac.owner != nil {
+			metrics = ac.owner.loadDialMetrics()
+		}
+		err := tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(ac.cli), dialStream, tunnel.SessionID(ac.session.SessionId), metrics)
 		if err != nil {
 			// The traffic-agent closed the dial wait loop, which means that it's terminating.
 			clog.Error(ctx, err)
@@ -260,6 +265,11 @@ type Clients interface {
 	WaitForWorkload(timeout time.Duration, name string) error
 	GetWorkloadClient(workload string) (ag tunnel.Provider)
 	SetProxyVia(workload string)
+
+	// SetDialMetrics installs a DialMetrics implementation that receives a
+	// callback for every dial request the dial watchers accept. Passing nil
+	// disables the callback. Safe to call at any time.
+	SetDialMetrics(m tunnel.DialMetrics)
 }
 
 type ipWaitKey struct {
@@ -277,6 +287,13 @@ type clients struct {
 	namespacesMu sync.RWMutex
 	namespaces   map[string]struct{}
 	disabled     atomic.Bool
+
+	// dialMetrics, when non-nil, receives a callback for every dial
+	// request accepted (or rejected) by a started dial watcher. Guarded
+	// by dialMetricsMu so SetDialMetrics can race safely with watcher
+	// creation.
+	dialMetricsMu sync.RWMutex
+	dialMetrics   tunnel.DialMetrics
 }
 
 func NewClients(cl *k8s.Cluster, session *manager.SessionInfo, namespaces []string) Clients {
@@ -425,6 +442,19 @@ func (s *clients) GetWorkloadClient(workload string) (pvd tunnel.Provider) {
 
 func (s *clients) SetProxyVia(workload string) {
 	s.proxyVias.Store(workload, struct{}{})
+}
+
+func (s *clients) SetDialMetrics(m tunnel.DialMetrics) {
+	s.dialMetricsMu.Lock()
+	s.dialMetrics = m
+	s.dialMetricsMu.Unlock()
+}
+
+func (s *clients) loadDialMetrics() tunnel.DialMetrics {
+	s.dialMetricsMu.RLock()
+	m := s.dialMetrics
+	s.dialMetricsMu.RUnlock()
+	return m
 }
 
 func (s *clients) isProxyVIA(info *manager.AgentPodInfo) bool {
@@ -668,7 +698,8 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 				remove: func() {
 					s.clients.Delete(k)
 				},
-				info: ai,
+				owner: s,
+				info:  ai,
 			}
 			clog.Debugf(s, "Adding agent pod %s (%s)", k, net.IP(ai.PodIp))
 			return ac, false

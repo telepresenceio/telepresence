@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/pprof"
 	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
 func help() string {
@@ -235,6 +236,16 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 	}
 	c = client.WithConfig(c, cfg)
 
+	// Install the usage producer on the daemon's main context, so every
+	// context derived from c (including the one held by the gRPC service,
+	// which is what cancelSession passes to reportSessionEnd) carries the
+	// producer. The sink is handed to startUsageSender below so the
+	// producer and the sender share a single DiskSink instance against the
+	// on-disk FIFO. If reporting is disabled or the disk queue can't be
+	// opened, usgSink is nil and the sender is not started.
+	var usgSink usg.Sink
+	c, usgSink = usg.InstallClient(c)
+
 	// Listen on domain unix domain socket or windows named pipe. The listener must be opened
 	// before other tasks because the CLI client will only wait for a short period of time for
 	// the connection/socket/pipe to appear before it gives up.
@@ -330,6 +341,10 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 		// User daemon process survives multiple sessions.
 		runAliveAndCancellation(g, svcCancel, daemon.InfoFileName, "")
 	}
+
+	// Start the anonymous usage sender. The user daemon is the long-lived
+	// process that drains the on-disk FIFO populated by CLI invocations.
+	startUsageSender(g, cfg, usgSink)
 
 	err = g.Wait()
 	if err != nil {

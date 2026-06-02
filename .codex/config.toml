@@ -1,0 +1,15 @@
+[features]
+hooks = true
+codex_hooks = true
+
+[agents]
+max_threads = 6
+max_depth = 1
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+
+[mcp_servers.kubernetes]
+command = "npx"
+args = ["-y", "mcp-server-kubernetes"]

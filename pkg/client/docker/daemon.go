@@ -19,10 +19,9 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/containerd/errdefs"
-	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/network"
-	dockerClient "github.com/docker/docker/client"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	dockerClient "github.com/moby/moby/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -207,11 +206,12 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 	bo.MaxElapsedTime = time.Second
 	var info *ContainerInfo
 	err = backoff.Retry(func() error {
-		ci, err := cli.ContainerInspect(ctx, cid)
+		ir, err := cli.ContainerInspect(ctx, cid, dockerClient.ContainerInspectOptions{})
 		if err != nil {
 			// The container in question no longer exists
 			return backoff.Permanent(err)
 		}
+		ci := ir.Container
 		var iPv4, iPv6 netip.Addr
 		if network != "" {
 			ns := ci.NetworkSettings
@@ -220,18 +220,12 @@ func GetContainerInfo(ctx context.Context, cid string, network string) (*Contain
 			}
 			tn, ok := ns.Networks[network]
 			if ok {
-				if dcfg.EnableIPv4 && tn.IPAddress != "" {
-					iPv4, err = netip.ParseAddr(tn.IPAddress)
-					if err != nil {
-						return backoff.Permanent(fmt.Errorf("failed to parse IPAddress of network %q: %w", network, err))
-					}
+				if dcfg.EnableIPv4 && tn.IPAddress.IsValid() {
+					iPv4 = tn.IPAddress
 					clog.Debugf(ctx, "container %q has IPv4 address %s in network %q", ci.Name, iPv4, network)
 				}
-				if dcfg.EnableIPv6 && tn.GlobalIPv6Address != "" {
-					iPv6, err = netip.ParseAddr(tn.GlobalIPv6Address)
-					if err != nil {
-						return backoff.Permanent(fmt.Errorf("failed to parse GlobalIPv6Address of network %q: %w", network, err))
-					}
+				if dcfg.EnableIPv6 && tn.GlobalIPv6Address.IsValid() {
+					iPv6 = tn.GlobalIPv6Address
 					clog.Debugf(ctx, "container %q has IPv6 address %s in network %q", ci.Name, iPv6, network)
 				}
 			}
@@ -255,11 +249,11 @@ func UseIPv6(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	ci, err := cli.NetworkInspect(ctx, "bridge", network.InspectOptions{})
+	ni, err := cli.NetworkInspect(ctx, "bridge", dockerClient.NetworkInspectOptions{})
 	if err != nil {
 		return false, err
 	}
-	return ci.EnableIPv6, nil
+	return ni.Network.EnableIPv6, nil
 }
 
 func readPortFile(ctx context.Context, portFile string, configFiles []string) (uint16, error) {
@@ -434,7 +428,7 @@ func handleLocalK8s(ctx context.Context, daemonID *daemon.Identifier, config *ap
 	if nw != "" {
 		dcName := daemonID.ContainerName()
 		clog.Debugf(ctx, "Connecting network %s to container %s", nw, dcName)
-		if err = cli.NetworkConnect(ctx, nw, dcName, nil); err != nil {
+		if _, err = cli.NetworkConnect(ctx, nw, dockerClient.NetworkConnectOptions{Container: dcName}); err != nil {
 			if !strings.Contains(err.Error(), "already exists") {
 				clog.Debugf(ctx, "failed to connect network %s to container %s: %v", nw, dcName, err)
 			}
@@ -513,12 +507,12 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 func containerPort(addrPort netip.AddrPort, ns *container.NetworkSettings) (port uint16, isIPv6 bool) {
 	// If the port mapping exists where the source address is the host's address, then use the destination port.
 	for portDef, bindings := range ns.Ports {
-		if portDef.Proto() != "tcp" {
+		if portDef.Proto() != network.TCP {
 			continue
 		}
 		for _, binding := range bindings {
-			addr, err := netip.ParseAddr(binding.HostIP)
-			if err != nil {
+			addr := binding.HostIP
+			if !addr.IsValid() {
 				continue
 			}
 			pn, err := strconv.ParseUint(binding.HostPort, 10, 16)
@@ -526,7 +520,7 @@ func containerPort(addrPort netip.AddrPort, ns *container.NetworkSettings) (port
 				continue
 			}
 			if netip.AddrPortFrom(addr, uint16(pn)) == addrPort {
-				return uint16(portDef.Int()), addr.Is6()
+				return portDef.Num(), addr.Is6()
 			}
 		}
 	}
@@ -535,17 +529,11 @@ func containerPort(addrPort netip.AddrPort, ns *container.NetworkSettings) (port
 	addr := addrPort.Addr()
 	for _, nw := range ns.Networks {
 		if ic := nw.IPAMConfig; ic != nil {
-			if addr.Is4() && ic.IPv4Address != "" {
-				na, err := netip.ParseAddr(ic.IPv4Address)
-				if err == nil && addr == na {
-					return addrPort.Port(), false
-				}
+			if addr.Is4() && ic.IPv4Address.IsValid() && addr == ic.IPv4Address {
+				return addrPort.Port(), false
 			}
-			if addr.Is6() && ic.IPv6Address != "" {
-				na, err := netip.ParseAddr(ic.IPv6Address)
-				if err == nil && addr == na {
-					return addrPort.Port(), false
-				}
+			if addr.Is6() && ic.IPv6Address.IsValid() && addr == ic.IPv6Address {
+				return addrPort.Port(), false
 			}
 		}
 	}
@@ -554,19 +542,20 @@ func containerPort(addrPort netip.AddrPort, ns *container.NetworkSettings) (port
 
 // runningContainers returns the inspect data for all containers with status=running.
 func runningContainers(ctx context.Context, cli dockerClient.APIClient) []*container.InspectResponse {
-	cl, err := cli.ContainerList(ctx, container.ListOptions{
-		Filters: filters.NewArgs(filters.KeyValuePair{Key: "status", Value: "running"}),
+	cl, err := cli.ContainerList(ctx, dockerClient.ContainerListOptions{
+		Filters: dockerClient.Filters{}.Add("status", "running"),
 	})
 	if err != nil {
 		clog.Errorf(ctx, "failed to list containers: %v", err)
 		return nil
 	}
-	cjs := make([]*container.InspectResponse, 0, len(cl))
-	for _, cn := range cl {
-		cj, err := cli.ContainerInspect(ctx, cn.ID)
+	cjs := make([]*container.InspectResponse, 0, len(cl.Items))
+	for _, cn := range cl.Items {
+		ir, err := cli.ContainerInspect(ctx, cn.ID, dockerClient.ContainerInspectOptions{})
 		if err != nil {
 			clog.Errorf(ctx, "container inspect on %v failed: %v", cn.Names, err)
 		} else {
+			cj := ir.Container
 			cjs = append(cjs, &cj)
 		}
 	}
@@ -574,27 +563,22 @@ func runningContainers(ctx context.Context, cli dockerClient.APIClient) []*conta
 }
 
 func endpointAddr(cn *network.EndpointResource, isIPv6 bool) (addr netip.Addr, _ error) {
-	// These aren't IP-addresses at all. They are prefixes!
-	var prefix string
+	prefix := cn.IPv4Address
 	if isIPv6 {
 		prefix = cn.IPv6Address
-	} else {
-		prefix = cn.IPv4Address
 	}
-	ap, err := netip.ParsePrefix(prefix)
-	if err == nil {
-		addr = ap.Addr()
+	if !prefix.IsValid() {
+		return addr, errors.New("endpoint has no IP address")
 	}
-	return addr, err
+	return prefix.Addr(), nil
 }
 
 func localAddr(ctx context.Context, cli dockerClient.APIClient, cnID, nwID string, isIPv6 bool) (addr netip.Addr, err error) {
-	nw, err := cli.NetworkInspect(ctx, nwID, network.InspectOptions{})
+	ni, err := cli.NetworkInspect(ctx, nwID, dockerClient.NetworkInspectOptions{})
 	if err != nil {
 		return addr, err
 	}
-	if cn, ok := nw.Containers[cnID]; ok {
-		// These aren't IP-addresses at all. They are prefixes!
+	if cn, ok := ni.Network.Containers[cnID]; ok {
 		return endpointAddr(&cn, isIPv6)
 	}
 	return addr, errors.New("no such container")
@@ -729,12 +713,12 @@ func WaitForExit(ctx context.Context, cli *dockerClient.Client, id string, maxTi
 	case <-time.After(exitPollInterval):
 	}
 	stillRunning := fmt.Errorf("container %s is still running", id)
-	opts := container.ListOptions{Filters: filters.NewArgs(filters.Arg("id", id))}
+	opts := dockerClient.ContainerListOptions{Filters: dockerClient.Filters{}.Add("id", id)}
 	return backoff.Retry(func() error {
 		lst, err := cli.ContainerList(ctx, opts)
 		if err != nil {
 			err = backoff.Permanent(err)
-		} else if len(lst) > 0 {
+		} else if len(lst.Items) > 0 {
 			err = stillRunning
 		}
 		return err

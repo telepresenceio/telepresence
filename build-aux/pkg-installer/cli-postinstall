@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+# Runs unconditionally because the CLI package is mandatory. Removes any
+# stale opt-out marker so a reinstall/upgrade where the user has left the
+# "share anonymous usage data" box checked goes back to the daemon default
+# of enabled=true. If the user opted out, usg-optout-postinstall runs after
+# this and writes the marker back.
+
+CONFIG_DIR="/Library/Application Support/telepresence"
+MARKER_FILE="$CONFIG_DIR/usage-opt-out"
+
+mkdir -p "$CONFIG_DIR"
+chown root:wheel "$CONFIG_DIR"
+chmod 755 "$CONFIG_DIR"
+
+rm -f "$MARKER_FILE"

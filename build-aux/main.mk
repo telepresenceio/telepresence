@@ -35,19 +35,17 @@ export GOEXPERIMENT := jsonv2
 .PHONY: FORCE
 FORCE:
 
-EXTERNAL_FUSEFTP ?= 0
-LINKED_FUSEFTP ?= 1
-
 # Build with CGO_ENABLED=0 on all platforms to ensure that the binary is as
-# portable as possible, but we must make an exception for darwin, because
-# the Go implementation of the DNS resolver doesn't work properly there unless
-# it's using clib
+# portable as possible, but we must make an exception for darwin and linux,
+# because the fuseftp file system is linked into the binary and requires CGO
+# (libfuse) there. On darwin CGO is also needed because the Go implementation
+# of the DNS resolver doesn't work properly unless it's using clib. The fuse
+# module on Windows uses winfsp through its DLL and builds without CGO.
 ifeq ($(GOOS),darwin)
 CGO_ENABLED ?= 1
 else
 ifeq ($(GOOS),linux)
-# The winfsp module requires CGO on Linux.
-CGO_ENABLED ?= $(LINKED_FUSEFTP)
+CGO_ENABLED ?= 1
 else
 CGO_ENABLED ?= 0
 endif
@@ -194,29 +192,7 @@ build-deps:
 
 ifeq ($(DOCKER_BUILD),1)
 BUILD_TAGS=-tags docker
-else
-ifeq ($(EXTERNAL_FUSEFTP),1)
-BUILD_TAGS=-tags external_fuseftp
-pkg/client/remotefs/fuseftp.bits:
-	touch $@
-else
-ifeq ($(LINKED_FUSEFTP),1)
-BUILD_TAGS=-tags linked_fuseftp
-pkg/client/remotefs/fuseftp.bits:
-	touch $@
-else
-FUSEFTP_VERSION=$(shell go list -m -f {{.Version}} github.com/telepresenceio/go-fuseftp/rpc)
-
-$(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE): go.mod
-	mkdir -p $(BUILDDIR)
-	curl --fail -L https://github.com/telepresenceio/go-fuseftp/releases/download/$(FUSEFTP_VERSION)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) -o $@
-
-pkg/client/remotefs/fuseftp.bits: $(BUILDDIR)/fuseftp-$(GOOS)-$(GOARCH)$(BEXE) FORCE
-	cp $< $@
 endif
-endif
-endif
-build-deps: pkg/client/remotefs/fuseftp.bits
 
 pkg/client/cli/docker/compose/dc-cli.json: go.mod go.mod cmd/cobraparser/main.go
 	go mod tidy
@@ -454,9 +430,11 @@ ifeq ($(GOOS),windows)
 	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
 	run --timeout 8m ./cmd/cobraparser/... ./cmd/telepresence/... ./integration_test/... ./pkg/...
 else
+	# libfuse-dev provides fuse.h, which cgofuse needs to typecheck the linked
+	# fuseftp file system on Linux.
 	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
-	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
-	run --timeout 8m ./...
+	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app --entrypoint bash golangci/golangci-lint:$$ver \
+	-c "apt-get update -qq && apt-get install -y -qq libfuse-dev && golangci-lint run --timeout 8m ./..."
 endif
 
 lint-rpc: lint-deps ## (QA) Run rpc linter

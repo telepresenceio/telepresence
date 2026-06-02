@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/blang/semver/v4"
-	"github.com/docker/docker/api/types/volume"
+	dockerClient "github.com/moby/moby/client"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
@@ -106,7 +106,7 @@ func createVolume(ctx context.Context, pluginName string, hostPort netip.AddrPor
 	opts := VolumeDriverOpts(ctx, pluginName, hostPort, volumeName, container, dir, ro)
 
 	clog.Debugf(ctx, "VolumeCreate(%s, %s, %s)", pluginName, opts, volumeName)
-	_, err = cli.VolumeCreate(ctx, volume.CreateOptions{
+	_, err = cli.VolumeCreate(ctx, dockerClient.VolumeCreateOptions{
 		Driver:     pluginName,
 		DriverOpts: opts,
 		Name:       volumeName,
@@ -122,7 +122,7 @@ func removeVolume(ctx context.Context, volume string) error {
 	if err != nil {
 		return err
 	}
-	err = cli.VolumeRemove(ctx, volume, false)
+	_, err = cli.VolumeRemove(ctx, volume, dockerClient.VolumeRemoveOptions{})
 	if err != nil {
 		err = fmt.Errorf("docker volume rm %s: %w", volume, err)
 	}
