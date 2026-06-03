@@ -3,6 +3,11 @@ apiVersion: cert-manager.io/v1
 kind: {{ .Values.agentInjector.certificate.certmanager.issuerRef.kind }}
 metadata:
   name: {{ .Values.agentInjector.certificate.certmanager.issuerRef.name }}
+  {{- if eq .Values.agentInjector.certificate.certmanager.issuerRef.kind "Issuer" }}
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  {{- end }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
 spec:
   selfSigned: {}
 {{- end }}

@@ -157,18 +157,22 @@ Create chart name and version as used by the chart label.
 Common labels
 */}}
 {{- define "telepresence.labels" -}}
-{{ include "telepresence.selectorLabels" $ }}
-helm.sh/chart: {{ include "telepresence.chart" $ }}
+{{- $chartLabels := fromYaml (include "telepresence.selectorLabels" $) }}
+{{- $chartLabels = merge $chartLabels (dict
+  "helm.sh/chart" (include "telepresence.chart" $)
+  "app.kubernetes.io/managed-by" .Release.Service
+) }}
 {{- if .Chart.AppVersion }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- $chartLabels = merge $chartLabels (dict "app.kubernetes.io/version" .Chart.AppVersion) }}
 {{- end }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- /* This value is intentionally undocumented -- it's used by the telepresence binary to determine ownership of the release */}}
 {{- if .Values.createdBy }}
-app.kubernetes.io/created-by: {{ .Values.createdBy }}
+{{- $chartLabels = merge $chartLabels (dict "app.kubernetes.io/created-by" .Values.createdBy) }}
 {{- else }}
-app.kubernetes.io/created-by: {{ .Release.Service }}
+{{- $chartLabels = merge $chartLabels (dict "app.kubernetes.io/created-by" .Release.Service) }}
 {{- end }}
+{{- $labels := merge (deepCopy (.Values.labels | default dict)) $chartLabels }}
+{{- toYaml $labels }}
 {{- end }}
 
 {{- /*
@@ -185,6 +189,33 @@ Client RBAC name suffix
 {{- define "telepresence.clientRbacName" -}}
 {{ printf "%s-%s" (include "telepresence.name" $) (include "traffic-manager.namespace" $) }}
 {{- end -}}
+
+{{- /*
+RBAC rules for workload kinds enabled via values.workloads.*.enabled
+*/}}
+{{- define "telepresence.managerWorkloadRules" -}}
+{{- $workloadKinds := list
+  (dict "key" "deployments" "resource" "deployments" "apiGroup" "apps" "defaultEnabled" true)
+  (dict "key" "replicaSets" "resource" "replicasets" "apiGroup" "apps" "defaultEnabled" true)
+  (dict "key" "statefulSets" "resource" "statefulsets" "apiGroup" "apps" "defaultEnabled" true)
+  (dict "key" "argoRollouts" "resource" "rollouts" "apiGroup" "argoproj.io" "defaultEnabled" false)
+}}
+{{- range $workloadKinds }}
+{{- if dig .key "enabled" .defaultEnabled $.Values.workloads }}
+- apiGroups:
+  - {{ .apiGroup | quote }}
+  resources:
+  - {{ .resource }}
+  verbs:
+  - get
+  - list
+  - watch
+{{- if $.Values.agentInjector.enabled }}
+  - patch
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
 
 {{- /*
 RBAC rules required to create an intercept in a namespace; excludes any rules that are always cluster wide.

@@ -46,32 +46,7 @@ rules:
   - pods/log
   verbs:
   - get
-- apiGroups:
-  - "apps"
-  resources:
-  - deployments
-  - replicasets
-  - statefulsets
-  verbs:
-  - get
-  - list
-  - watch
-{{- if .agentInjector.enabled }}
-  - patch
-{{- end }}
-{{- if .workloads.argoRollouts.enabled }}
-- apiGroups:
-  - "argoproj.io"
-  resources:
-  - rollouts
-  verbs:
-  - get
-  - list
-  - watch
-{{- if .agentInjector.enabled }}
-  - patch
-{{- end }}
-{{- end }}
+{{ include "telepresence.managerWorkloadRules" $ }}
 - apiGroups:
     - "events.k8s.io"
   resources:
