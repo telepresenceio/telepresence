@@ -25,6 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -59,6 +60,7 @@ func Telepresence(ctx context.Context, args []string) *cobra.Command {
 	rootCmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return errcat.User.New(err)
 	})
+	usg.AttachToRoot(rootCmd)
 	return rootCmd
 }
 

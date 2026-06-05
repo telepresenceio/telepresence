@@ -24,8 +24,41 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.29.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Anonymous usage data collection
+        body: >-
+          Telepresence now emits anonymous usage reports from the CLI/user
+          daemon and from the traffic-manager. Each report carries only an
+          installation UUID, OS/architecture, the binary version, a
+          code-defined topic such as <code>cmd.connect</code>, and a small
+          map of safe-listed entries; it never carries cluster, namespace,
+          workload, or address data. Reporting is enabled by default — the
+          project has no conventional customers, so this data is the only
+          signal we have for which features matter and what to fix. To opt
+          out for one workstation set <code>usage.enabled: false</code> in
+          <code>config.yml</code>, or drop an empty
+          <code>usage-opt-out</code> marker file alongside the machine-wide
+          config; the platform installers (macOS, Windows, Linux) manage
+          that marker from a checkbox/env-var at install time. To opt out
+          for an entire cluster, install the chart with
+          <code>--set usage.enabled=false</code>.
+        docs: reference/config/#usage
+      - type: bugfix
+        title: macOS installer restarts the root daemon on upgrade
+        body: >-
+          On macOS, the <code>.pkg</code> installer's postinstall called
+          <code>launchctl load -w</code>, which is a no-op when the daemon
+          is already loaded. As a result, upgrading Telepresence wrote the
+          new binary to disk but left the previous version of the root
+          daemon running, so users had to restart the service (or reboot)
+          to pick up the upgrade. The postinstall now unloads any existing
+          instance before loading the new one, mirroring the symmetric
+          stop+start the Windows installer already performs.
   - version: 2.28.1
-  - date: (TBA)
+    date: (TBD)
     notes:
       - type: feature
         title: Ingest workloads in mapped namespaces
@@ -51,6 +84,27 @@ items:
           cluster-wide namespace informer and instead use the configured static namespace
           set, avoiding repeated <code>cannot watch resource "namespaces" at the cluster
           scope</code> errors in the logs.
+      - type: feature
+        title: Apply common labels to all Helm chart resources
+        body: >-
+          A new top-level <code>labels</code> Helm chart value merges custom labels into
+          every resource created by the chart, including the traffic-manager Deployment,
+          Services, RBAC, cert-manager Certificate and Issuer objects, and lifecycle
+          hooks, while preserving the standard Telepresence label set.
+      - type: feature
+        title: Configure agent-injector webhook objectSelector
+        body: >-
+          The <code>agentInjector.webhook.objectSelector</code> Helm chart value accepts
+          an optional Kubernetes label selector so the mutating admission webhook applies
+          only to matching pods. This helps clusters that need to exclude system or
+          third-party workloads from agent injection.
+      - type: change
+        title: Align traffic-manager RBAC with workloads Helm chart values
+        body: >-
+          Traffic-manager cluster- and namespace-scoped RBAC rules for Deployments,
+          ReplicaSets, StatefulSets, and Argo Rollouts are now generated from the
+          corresponding <code>workloads.*.enabled</code> settings. Disabling a workload
+          kind no longer grants get, list, watch, or patch permissions for that kind.
   - version: 2.28.0
     date: 2026-05-11
     notes:
@@ -275,7 +329,7 @@ items:
       - type: bugfix
         title: Cluster DNS not injected into containers started by telepresence compose
         body: >-
-          When using <code>telepresence compose up</code>, cluster hostnames did not resolve inside the compose 
+          When using <code>telepresence compose up</code>, cluster hostnames did not resolve inside the compose
           container because the daemon DNS IP and the tel2-search DNS search domain were not being added to the
           generated compose spec. DNS and dns_search are now correctly set for all engaged compose services.
         docs: https://github.com/telepresenceio/telepresence/issues/4053
@@ -365,12 +419,12 @@ items:
         body: |-
           The Traffic Manager deployment now includes a `startupProbe` that accurately detects when the service is fully initialized and
           ready to handle traffic. This enhancement brings the following benefits:
-          
+
           - **Prevents Premature Traffic Routing**: The manager only reports itself as ready after all configurations are loaded,
           eliminating potential race conditions
           - **Smoother Upgrades and Rollouts**: Deployment orchestration tools can reliably determine when the Traffic Manager is
           operational, improving overall installation stability
-          
+
           This change is particularly beneficial in large clusters or complex networking environments where initialization may take longer
           than expected.
       - type: feature
@@ -430,7 +484,7 @@ items:
         body: |-
           The `--docker` flag is not allowed when the client is configured with `intercept.useFtp=true` and an error is now generated
           instantly by the `telepresence connect --docker` command.
-          
+
           The docker volume plugin cannot use FTP because it requires two ports: a fixed control port that Telepresence can proxy, and a
           dynamic data port (randomly chosen during connection) that Telepresence cannot proxy on-demand. The port-forwarder only forwards
           pre-configured ports and doesn't understand FTP's protocol. Consequently, FTP isn't allowed in this scenario. If it was, then when
@@ -449,7 +503,7 @@ items:
           - connector-foreground =&gt; userd
           - daemon-foreground =&gt; rootd
           - kubeauth-foreground =&gt; kubeauthd
-          
+
           This also affects the Telepresence hidden CLI commands `telepresence daemon-foreground` and `telepresence connector-foreground`.
       - type: bugfix
         title: Add retry logic for tunnel connection attempts

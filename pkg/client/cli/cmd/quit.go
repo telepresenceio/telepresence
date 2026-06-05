@@ -5,6 +5,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
 func quit() *cobra.Command {
@@ -13,6 +14,10 @@ func quit() *cobra.Command {
 		Use:   "quit",
 		Args:  cobra.NoArgs,
 		Short: "Tell telepresence daemons to quit",
+		Annotations: map[string]string{
+			usg.AnnTrack:     "true",
+			usg.AnnSafeFlags: "stop-daemons",
+		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if quitDaemons {
 				connect.InitProgressWriter(cmd)

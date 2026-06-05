@@ -42,7 +42,7 @@ metadata:
   name: telepresence-prometheus
   namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
-    name: telepresence-prometheus
+    {{- include "telepresence.labels" $ | fromYaml | merge (dict "name" "telepresence-prometheus") | toYaml | nindent 4 }}
 spec:
   type: {{ .service.type }}
   ports:

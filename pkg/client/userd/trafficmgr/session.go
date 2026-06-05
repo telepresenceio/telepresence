@@ -158,6 +158,13 @@ type session struct {
 	// calls because they often arrive sporadically due to activity that isn't related to
 	// Telepresence at all.
 	lastActivity int64
+
+	// rootEndMetricsMu protects rootEndMetrics.
+	rootEndMetricsMu sync.Mutex
+	// rootEndMetrics is the last terminal Activity message received from the
+	// root daemon. Captured here so the usage reporter can read it when the
+	// session itself shuts down.
+	rootEndMetrics *rootdRpc.Activity
 }
 
 func (s *session) RevokeIntercept(ctx context.Context, interceptID string) error {
@@ -1092,8 +1099,30 @@ func (s *session) startRootDaemonActivityWatcher(rd rootdRpc.DaemonClient, gener
 			ats := at.Activity.AsTime()
 			clog.Debugf(s, "root session last activity: %v", ats)
 			atomic.StoreInt64(&s.lastActivity, ats.UnixNano())
+			if at.SessionEnd {
+				// Stash the terminal counters; the session's own
+				// shutdown path is responsible for emitting the usg
+				// report.
+				clog.Debugf(s, "root session end metrics: duration=%s outbound=%d/%d incoming=%d/%d",
+					at.SessionDuration.AsDuration(),
+					at.OutboundTunnels, at.OutboundTunnelErrors,
+					at.IncomingDials, at.IncomingDialErrors)
+				s.rootEndMetricsMu.Lock()
+				s.rootEndMetrics = at
+				s.rootEndMetricsMu.Unlock()
+			}
 		}
 	}()
+}
+
+// RootSessionEndMetrics returns and clears the latest terminal Activity
+// message received from the root daemon. nil if none has been received yet.
+func (s *session) RootSessionEndMetrics() *rootdRpc.Activity {
+	s.rootEndMetricsMu.Lock()
+	defer s.rootEndMetricsMu.Unlock()
+	a := s.rootEndMetrics
+	s.rootEndMetrics = nil
+	return a
 }
 
 func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {

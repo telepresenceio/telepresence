@@ -9,9 +9,8 @@ import (
 	"strings"
 
 	"github.com/containerd/errdefs"
-	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/network"
-	dockerClient "github.com/docker/docker/client"
+	"github.com/moby/moby/api/types/network"
+	dockerClient "github.com/moby/moby/client"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -40,7 +39,7 @@ func CreateNetwork(
 	if !ipv4 && !ipv6 {
 		return errcat.User.New("unable to create teleroute network because both the IPv4 and IPv6 families are disabled")
 	}
-	opts := network.CreateOptions{
+	opts := dockerClient.NetworkCreateOptions{
 		Driver:     teleroutePlugin,
 		Scope:      "local",
 		Internal:   true,
@@ -62,7 +61,7 @@ func CreateNetwork(
 			clog.Debugf(ctx, "Using pre-computed subnet %s for teleroute network %s", subnet, cn)
 			opts.IPAM = &network.IPAM{
 				Config: []network.IPAMConfig{{
-					Subnet: subnet.String(),
+					Subnet: subnet,
 				}},
 			}
 		}
@@ -72,17 +71,20 @@ func CreateNetwork(
 	if err != nil {
 		return err
 	}
-	if rsp.Warning != "" {
-		clog.Warn(ctx, rsp.Warning)
+	if len(rsp.Warning) > 0 {
+		clog.Warn(ctx, strings.Join(rsp.Warning, "; "))
 	} else {
 		clog.Debugf(ctx, "Network %s created", cn)
 
 		// The daemon must be the first container to join the network. This join is special in that
 		// it will not receive the routes that the daemon makes available. The connect is necessary
 		// to open up for the daemon to communicate with other connected containers.
-		err = cli.NetworkConnect(ctx, rsp.ID, info.ContainerID, &network.EndpointSettings{
-			DriverOpts: map[string]string{
-				"daemon": "true",
+		_, err = cli.NetworkConnect(ctx, rsp.ID, dockerClient.NetworkConnectOptions{
+			Container: info.ContainerID,
+			EndpointConfig: &network.EndpointSettings{
+				DriverOpts: map[string]string{
+					"daemon": "true",
+				},
 			},
 		})
 	}
@@ -91,11 +93,11 @@ func CreateNetwork(
 
 // IsTelerouteNetwork returns true if the network was created by the teleroute driver.
 func IsTelerouteNetwork(ctx context.Context, cli *dockerClient.Client, name string) bool {
-	ni, err := cli.NetworkInspect(ctx, name, network.InspectOptions{})
+	ni, err := cli.NetworkInspect(ctx, name, dockerClient.NetworkInspectOptions{})
 	if err != nil {
 		return false
 	}
-	_, ok := ni.Labels[daemonLabel]
+	_, ok := ni.Network.Labels[daemonLabel]
 	return ok
 }
 
@@ -104,19 +106,16 @@ func IsTelerouteNetwork(ctx context.Context, cli *dockerClient.Client, name stri
 //  1. It is not connected to a Telepresence daemon
 //  2. No container is currently connected to it.
 func NetworkGC(ctx context.Context, cli *dockerClient.Client) error {
-	ns, err := cli.NetworkList(ctx, network.ListOptions{Filters: filters.NewArgs(filters.KeyValuePair{
-		Key:   "label",
-		Value: daemonLabel,
-	})})
+	ns, err := cli.NetworkList(ctx, dockerClient.NetworkListOptions{Filters: dockerClient.Filters{}.Add("label", daemonLabel)})
 	if err != nil {
 		return err
 	}
 
-	for _, n := range ns {
-		_, err := cli.ContainerInspect(ctx, n.Labels[daemonLabel])
+	for _, n := range ns.Items {
+		_, err := cli.ContainerInspect(ctx, n.Labels[daemonLabel], dockerClient.ContainerInspectOptions{})
 		if errdefs.IsNotFound(err) {
 			clog.Debugf(ctx, "Garbage collecting network %s", n.Name)
-			err = cli.NetworkRemove(ctx, n.ID)
+			_, err = cli.NetworkRemove(ctx, n.ID, dockerClient.NetworkRemoveOptions{})
 			if err != nil {
 				ee := err.Error()
 				if ix := strings.Index(ee, "has active endpoints"); ix > 0 {
@@ -130,16 +129,16 @@ func NetworkGC(ctx context.Context, cli *dockerClient.Client) error {
 
 // RemoveNetwork disconnects all containers that are connected to the network then removes the network.
 func RemoveNetwork(ctx context.Context, cli *dockerClient.Client, name string) (disconnected []string, err error) {
-	ni, err := cli.NetworkInspect(ctx, name, network.InspectOptions{})
+	ni, err := cli.NetworkInspect(ctx, name, dockerClient.NetworkInspectOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	if nc := len(ni.Containers); nc > 0 {
+	if nc := len(ni.Network.Containers); nc > 0 {
 		clog.Debugf(ctx, "Disconnecting %d containers from network %s", nc, name)
 		disconnected = make([]string, 0, nc)
-		for cid := range ni.Containers {
-			err = cli.NetworkDisconnect(ctx, name, cid, true)
+		for cid := range ni.Network.Containers {
+			_, err = cli.NetworkDisconnect(ctx, name, dockerClient.NetworkDisconnectOptions{Container: cid, Force: true})
 			if err != nil {
 				clog.Error(ctx, err)
 			} else {
@@ -149,14 +148,18 @@ func RemoveNetwork(ctx context.Context, cli *dockerClient.Client, name string) (
 	}
 
 	clog.Debugf(ctx, "Removing network %s", name)
-	return disconnected, cli.NetworkRemove(ctx, name)
+	_, err = cli.NetworkRemove(ctx, name, dockerClient.NetworkRemoveOptions{})
+	return disconnected, err
 }
 
 func ReconnectNetwork(ctx context.Context, cli *dockerClient.Client, name string, disconnected []string) {
 	if nc := len(disconnected); nc > 0 {
 		clog.Debugf(ctx, "Reconnecting %d containers to network %s", nc, name)
 		for _, cid := range disconnected {
-			err := cli.NetworkConnect(ctx, name, cid, &network.EndpointSettings{})
+			_, err := cli.NetworkConnect(ctx, name, dockerClient.NetworkConnectOptions{
+				Container:      cid,
+				EndpointConfig: &network.EndpointSettings{},
+			})
 			if err != nil {
 				clog.Error(ctx, err)
 			}
@@ -168,14 +171,14 @@ func ReconnectNetwork(ctx context.Context, cli *dockerClient.Client, name string
 // Docker network or the given cluster CIDRs.
 func FindNonConflictingSubnet(ctx context.Context, cli *dockerClient.Client, clusterSubnets []netip.Prefix) (netip.Prefix, error) {
 	avoid := append([]netip.Prefix{}, clusterSubnets...)
-	nets, err := cli.NetworkList(ctx, network.ListOptions{})
+	nets, err := cli.NetworkList(ctx, dockerClient.NetworkListOptions{})
 	if err != nil {
 		return netip.Prefix{}, err
 	}
-	for _, n := range nets {
+	for _, n := range nets.Items {
 		for _, cfg := range n.IPAM.Config {
-			if p, err := netip.ParsePrefix(cfg.Subnet); err == nil {
-				avoid = append(avoid, p)
+			if cfg.Subnet.IsValid() {
+				avoid = append(avoid, cfg.Subnet)
 			}
 		}
 	}

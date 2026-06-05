@@ -9,7 +9,6 @@ require less permissions in clientRbac.yaml
 {{- $namespaces := fromJsonArray (include "traffic-manager.namespaces" $)}}
 {{- if $namespaces }}
 {{- $interceptEnabled := .Values.agentInjector.enabled}}
-{{- $argoRolloutsEnabled := .Values.workloads.argoRollouts.enabled}}
 {{- $allNamespaces := uniq (append $namespaces $managerNamespace)}}
 
 {{- range $allNamespaces }}
@@ -62,33 +61,30 @@ rules:
   resourceNames:
 {{- if eq . $managerNamespace }}
   - {{ include "traffic-manager.name" $ }}
+  - traffic-manager-install
 {{- end }}
+{{- if eq . $managerNamespace }}
 - apiGroups:
-  - "apps"
+  - ""
   resources:
-  - deployments
-  - replicasets
-  - statefulsets
+  - configmaps
   verbs:
-  - get
-  - list
-  - watch
-{{- if $interceptEnabled }}
   - patch
-{{- end }}
-{{- if $argoRolloutsEnabled }}
+  - update
+  resourceNames:
+  - traffic-manager-install
+{{- /*
+Kubernetes ignores resourceNames on create, so this rule is namespace-scoped
+but cannot be tightened further by name.
+*/}}
 - apiGroups:
-  - "argoproj.io"
+  - ""
   resources:
-  - rollouts
+  - configmaps
   verbs:
-  - get
-  - list
-  - watch
-{{- if $interceptEnabled }}
-  - patch
+  - create
 {{- end }}
-{{- end }}
+{{ include "telepresence.managerWorkloadRules" $ }}
 - apiGroups:
     - "events.k8s.io"
   resources:
@@ -196,6 +192,17 @@ rules:
     - update
   resourceNames:
     - {{ include "traffic-manager.name" $ }}
+    - traffic-manager-install
+{{- /*
+Kubernetes ignores resourceNames on create, so this rule is namespace-scoped
+but cannot be tightened further by name.
+*/}}
+- apiGroups:
+    - ""
+  resources:
+    - configmaps
+  verbs:
+    - create
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

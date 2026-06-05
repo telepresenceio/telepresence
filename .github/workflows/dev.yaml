@@ -25,21 +25,20 @@ jobs:
           # - windows-latest
     runs-on: ${{ matrix.runners }}
     steps:
-      - name: Remove ok to test label
-        if: github.event.label.name == 'ok to test'
-        uses: buildsville/add-remove-label@v2.0.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          labels: ok to test
-          type: remove
-      - name: Remove compatibility test label
-        if: github.event.label.name == 'compatibility test'
-        uses: buildsville/add-remove-label@v2.0.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          labels: compatibility test
-          type: remove
-      - uses: actions/checkout@v4
+      # Remove the label that triggered this run so a maintainer can re-add
+      # it to re-trigger. For PRs from a fork the GITHUB_TOKEN is read-only and
+      # this call fails; continue-on-error keeps that from aborting the job so
+      # the tests still run (the maintainer removes the label by hand instead).
+      # The label name and PR number are passed via env (not interpolated into
+      # the script) to avoid command injection.
+      - name: Remove triggering label
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          LABEL: ${{ github.event.label.name }}
+        run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
@@ -67,7 +66,7 @@ jobs:
           minikube image load ${{env.TELEPRESENCE_REGISTRY}}/route-controller:${{env.TELEPRESENCE_SEMVER}}
       - name: Run integration tests
         if: github.event.label.name == 'ok to test'
-        uses: nick-fields/retry/@v3
+        uses: nick-fields/retry/@v4
         with:
           max_attempts: 3
           shell: bash
@@ -83,7 +82,7 @@ jobs:
         env:
           DEV_MANAGER_VERSION: "2.24.1"
           DEV_MANAGER_REGISTRY: ghcr.io/telepresenceio
-        uses: nick-fields/retry/@v3
+        uses: nick-fields/retry/@v4
         with:
           max_attempts: 3
           shell: bash
@@ -99,7 +98,7 @@ jobs:
         env:
           DEV_CLIENT_VERSION: "2.24.1"
           DEV_CLIENT_REGISTRY: ghcr.io/telepresenceio
-        uses: nick-fields/retry/@v3
+        uses: nick-fields/retry/@v4
         with:
           max_attempts: 3
           shell: bash

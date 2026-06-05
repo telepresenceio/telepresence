@@ -1,4 +1,4 @@
-//go:build linked_fuseftp && !docker
+//go:build !docker
 
 package remotefs
 
@@ -17,10 +17,8 @@ import (
 )
 
 type ftpMounter struct {
-	mountPoint string
-	cancel     context.CancelFunc
-	ftpClient  fs.FTPClient
-	iceptWG    *sync.WaitGroup
+	ftpClient fs.FTPClient
+	iceptWG   *sync.WaitGroup
 }
 
 type fuseFtpMgr struct{}

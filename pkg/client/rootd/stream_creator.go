@@ -29,11 +29,29 @@ func checkRecursion(p types.Proto, ip netip.Addr, sn netip.Prefix) (err error) {
 }
 
 func (s *session) streamCreator() tunnel.StreamCreator {
-	return func(c context.Context, id tunnel.ConnID) (tunnel.Stream, error) {
+	return func(c context.Context, id tunnel.ConnID) (stream tunnel.Stream, err error) {
+		// Telemetry: count every attempt as either a success or an error,
+		// except DNS pipes (handled below) which are not real outbound
+		// tunnels to the cluster.
+		var countAsOutbound bool
+		defer func() {
+			if !countAsOutbound {
+				return
+			}
+			if err != nil {
+				s.outboundTunnelErrors.Add(1)
+			} else {
+				s.outboundTunnels.Add(1)
+			}
+		}()
+
 		p := id.Protocol()
 		srcIp := id.SourceAddr()
 		for _, podSn := range s.podSubnets {
 			if err := checkRecursion(p, srcIp, podSn); err != nil {
+				// Recursive dispatch is a tunnel-creation attempt that
+				// failed; count it.
+				countAsOutbound = true
 				return nil, err
 			}
 		}
@@ -48,6 +66,9 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 				return from, nil
 			}
 		}
+		// Past the DNS short-circuit, every outcome counts as an outbound
+		// tunnel attempt.
+		countAsOutbound = true
 
 		if mp, ok := s.l4PortMap.Load(types.AddrPortProto{
 			AddrPort: netip.AddrPortFrom(destAddr, id.DestinationPort()),
@@ -56,7 +77,6 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 			id = tunnel.NewConnID(id.Protocol(), id.Source(), netip.AddrPortFrom(destAddr, mp))
 		}
 
-		var err error
 		var tp tunnel.Provider
 		if a, ok := s.getAgentVIP(destAddr); ok {
 			// s.agentClients is never nil when agentVIPs are used.

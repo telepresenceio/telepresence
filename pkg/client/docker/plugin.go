@@ -14,7 +14,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/containerd/errdefs"
-	dockerTypes "github.com/docker/docker/api/types"
+	dockerClient "github.com/moby/moby/client"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
@@ -52,15 +52,15 @@ func ensurePlugin(ctx context.Context, pluginType string, cfg *client.DockerImag
 		return "", err
 	}
 	pn := latestPluginName(ctx, cfg, pluginType)
-	pi, _, err := cli.PluginInspectWithRaw(ctx, pn)
+	pi, err := cli.PluginInspect(ctx, pn, dockerClient.PluginInspectOptions{})
 	if err != nil {
 		if !errdefs.IsNotFound(err) {
 			clog.Errorf(ctx, "docker plugin inspect: %v", err)
 		}
 		return pn, installPlugin(ctx, pn)
 	}
-	if !pi.Enabled {
-		err = cli.PluginEnable(ctx, pn, dockerTypes.PluginEnableOptions{Timeout: 5})
+	if !pi.Plugin.Enabled {
+		_, err = cli.PluginEnable(ctx, pn, dockerClient.PluginEnableOptions{Timeout: 5})
 	}
 	clog.Debugf(ctx, "using %s plugin: %s", pluginType, pn)
 	return pn, err

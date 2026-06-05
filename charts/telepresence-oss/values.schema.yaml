@@ -179,6 +179,9 @@ properties:
           name:
             description: The name of the agent-injector webhook
             type: string
+          objectSelector:
+            description: Optional label selector to limit which pods the mutating webhook applies to
+            $ref: "#/$defs/labelSelector"
           port:
             description: Port for the service that provides the admission webhook
             type: integer
@@ -212,6 +215,7 @@ properties:
     properties:
       connectionTTL:
         description: Deprecated use grpc.connectionTTL
+        deprecated: true
         type: string
         $ref: "#/$defs/duration"
       dns:
@@ -372,6 +376,21 @@ properties:
         description: Overrides the image tag whose default is the chart appVersion
         type: string
 
+  usage:
+    type: object
+    additionalProperties: false
+    description: Anonymous usage reporting configuration.
+    properties:
+      enabled:
+        description: Enable anonymous usage reporting from the traffic-manager.
+        type: boolean
+      collectorAddress:
+        description: The host:port of the gRPC collector. When empty, produced reports are silently discarded.
+        type: string
+      insecure:
+        description: Dial the collector without TLS. Leave false for any real deployment.
+        type: boolean
+
   intercept:
     type: object
     additionalProperties: false
@@ -396,6 +415,12 @@ properties:
   isCI:
     description: isCI can be set to force the traffic-manager namespace to be "ambassador"
     type: boolean
+
+  labels:
+    description: Common labels applied to all resources created by this chart
+    type: object
+    additionalProperties:
+      type: string
 
   livenessProbe:
     description: Define livenessProbe for the traffic-manager

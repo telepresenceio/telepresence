@@ -45,6 +45,9 @@ routing:
 
 	c := testutil.NewContext(t, false)
 	c = filelocation.WithAppUserConfigDir(c, user)
+	// Pin the system config dir to an empty temp dir so the test never picks
+	// up an installer-written config on the developer's host.
+	c = filelocation.WithAppSystemConfigDir(c, filepath.Join(tmp, "system"))
 	env, err := LoadEnv()
 	require.NoError(t, err)
 	c = WithEnv(c, &env)
@@ -66,6 +69,86 @@ routing:
 	assert.True(t, cfg.Intercept().UseFtp)                                                       // from user
 	assert.True(t, cfg.DNS().RecursionCheck)                                                     // from user
 	assert.Equal(t, cfg.Routing().VirtualSubnet, netip.MustParsePrefix("192.169.0.0/16"))        // from user
+}
+
+// TestLoadConfig_SystemAndUserMerge verifies that LoadConfig reads the
+// machine-wide config first and then DestructiveMerges the per-user config
+// on top: a user's non-default value overrides the system's, while the
+// system's non-default values survive when the user doesn't override them.
+func TestLoadConfig_SystemAndUserMerge(t *testing.T) {
+	tmp := t.TempDir()
+	sys := filepath.Join(tmp, "system")
+	user := filepath.Join(tmp, "user")
+	require.NoError(t, os.MkdirAll(sys, 0o755))
+	require.NoError(t, os.MkdirAll(user, 0o700))
+
+	// System config disables usage (the admin policy), sets a non-default
+	// DNS recursion-check, and seeds an intercept port. The user does not
+	// override the first two, so they must survive the merge.
+	const sysYaml = `
+usage:
+  enabled: false
+dns:
+  recursionCheck: true
+intercept:
+  defaultPort: 9080
+`
+	require.NoError(t, os.WriteFile(filepath.Join(sys, ConfigFile), []byte(sysYaml), 0o644))
+
+	// User config sets a non-default intercept port (overriding the system)
+	// and a timeout the system did not set.
+	const userYaml = `
+intercept:
+  defaultPort: 9090
+timeouts:
+  clusterConnect: 30s
+`
+	require.NoError(t, os.WriteFile(filepath.Join(user, ConfigFile), []byte(userYaml), 0o600))
+
+	c := testutil.NewContext(t, false)
+	c = filelocation.WithAppSystemConfigDir(c, sys)
+	c = filelocation.WithAppUserConfigDir(c, user)
+	env, err := LoadEnv()
+	require.NoError(t, err)
+	c = WithEnv(c, &env)
+
+	cfg, err := LoadConfig(c)
+	require.NoError(t, err)
+
+	// System non-default values survive when the user did not override:
+	assert.False(t, cfg.Usage().Enabled, "system opt-out must survive when user didn't override")
+	assert.True(t, cfg.DNS().RecursionCheck)
+	// User non-default overrides the system's non-default:
+	assert.Equal(t, 9090, cfg.Intercept().DefaultPort)
+	// User-only value lands:
+	assert.Equal(t, 30*time.Second, cfg.Timeouts().PrivateClusterConnect)
+}
+
+// TestLoadConfig_PinnedFileSkipsSystemConfig verifies that a caller that
+// pinned a specific config path via WithConfigFile (the rootd does this)
+// reads ONLY that file and does not silently merge anything from the
+// machine-wide location.
+func TestLoadConfig_PinnedFileSkipsSystemConfig(t *testing.T) {
+	tmp := t.TempDir()
+	sys := filepath.Join(tmp, "system")
+	require.NoError(t, os.MkdirAll(sys, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(sys, ConfigFile),
+		[]byte("usage:\n  enabled: false\n"), 0o644))
+
+	pinned := filepath.Join(tmp, "rootd.yml")
+	require.NoError(t, os.WriteFile(pinned, []byte("timeouts:\n  clusterConnect: 45s\n"), 0o600))
+
+	c := testutil.NewContext(t, false)
+	c = filelocation.WithAppSystemConfigDir(c, sys)
+	c = WithConfigFile(c, pinned)
+	env, err := LoadEnv()
+	require.NoError(t, err)
+	c = WithEnv(c, &env)
+
+	cfg, err := LoadConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, 45*time.Second, cfg.Timeouts().PrivateClusterConnect)
+	assert.True(t, cfg.Usage().Enabled, "pinned file must not pick up system opt-out")
 }
 
 func Test_ConfigMarshalYAML(t *testing.T) {
