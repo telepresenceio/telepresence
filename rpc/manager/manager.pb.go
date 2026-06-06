@@ -1578,11 +1578,10 @@ func (x *CreateInterceptRequest) GetInterceptSpec() *InterceptSpec {
 }
 
 type EnsureAgentRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Session *SessionInfo           `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
-	Name    string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// Namespace of the workload. Defaults to the client's connected namespace when empty.
-	Namespace     string `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Session       *SessionInfo           `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
