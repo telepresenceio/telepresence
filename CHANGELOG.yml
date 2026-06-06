@@ -28,6 +28,16 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Reliably inject agents into simultaneously created workloads
+        body: >-
+          The agent-injector resolved a pod's owner workload from the
+          traffic-manager's informer cache. When many workloads were created
+          at once, that cache could lag behind the API server, and pods whose
+          owner had not yet been observed were admitted without a traffic-agent
+          and never reconciled. The injector now confirms a cache miss with a
+          direct API call, so bursts of simultaneously created workloads all
+          receive their agent.
+      - type: bugfix
         title: Pick the correct control-plane when connecting with --docker
         body: >-
           When connecting with <code>--docker</code>, Telepresence rewrites
