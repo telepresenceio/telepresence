@@ -170,9 +170,13 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 		EnvFrom:      efs,
 		VolumeMounts: mounts,
 		ReadinessProbe: &core.Probe{
+			TimeoutSeconds: 6,
 			ProbeHandler: core.ProbeHandler{
 				Exec: &core.ExecAction{
-					Command: []string{"/bin/stat", "/tmp/agent/ready"},
+					Command: []string{
+						"/usr/local/bin/traffic",
+						"agent-ready",
+					},
 				},
 			},
 		},
