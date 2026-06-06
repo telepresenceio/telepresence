@@ -26,7 +26,12 @@ Telepresence now emits anonymous usage reports from the CLI/user daemon and from
 On macOS, the <code>.pkg</code> installer's postinstall called <code>launchctl load -w</code>, which is a no-op when the daemon is already loaded. As a result, upgrading Telepresence wrote the new binary to disk but left the previous version of the root daemon running, so users had to restart the service (or reboot) to pick up the upgrade. The postinstall now unloads any existing instance before loading the new one, mirroring the symmetric stop+start the Windows installer already performs.
   </Body>
 </Note>
-## Version 2.28.1
+<Note>
+	<Title type="bugfix">Ignore non-interface Linux routes</Title>
+	<Body>
+Linux routing table scans now ignore blackhole, unreachable, prohibit, throw, and other routes that do not point to an interface before converting kernel routes into Telepresence routes. This prevents <code>telepresence connect</code> from failing with <code>routing table is inconsistent</code> on systems that have null routes, such as MicroK8s blackhole entries.
+  </Body>
+</Note>
 <Note>
 	<Title type="bugfix">Do not watch namespaces when only list is allowed</Title>
 	<Body>
