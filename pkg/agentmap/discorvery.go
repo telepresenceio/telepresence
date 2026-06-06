@@ -80,7 +80,17 @@ func GetWorkload(ctx context.Context, name, namespace string, workloadKind k8sap
 		return k8sapi.GetWorkload(ctx, name, namespace, workloadKind)
 	}
 	ai, ri := i.GetK8sInformerFactory().Apps().V1(), i.GetArgoRolloutsInformerFactory().Argoproj().V1alpha1().Rollouts()
-	return getWorkload(ai, ri, name, namespace, workloadKind)
+	obj, err = getWorkload(ai, ri, name, namespace, workloadKind)
+	if err != nil && k8sErrors.IsNotFound(err) {
+		// The informer cache lags the API server, in particular right after a burst of workload
+		// creations. A NotFound from the cache is therefore not authoritative; the agent-injector
+		// webhook may be resolving the owner of a pod whose workload the cache hasn't observed yet.
+		// Confirm with a direct API call before concluding that the workload doesn't exist.
+		if wl, apiErr := k8sapi.GetWorkload(ctx, name, namespace, workloadKind); apiErr == nil {
+			return wl, nil
+		}
+	}
+	return obj, err
 }
 
 func getWorkload(ai apps.Interface, ri argorollouts.RolloutInformer, name, namespace string, kind k8sapi.Kind) (obj k8sapi.Workload, err error) {

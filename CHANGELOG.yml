@@ -27,6 +27,34 @@ items:
   - version: 2.29.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Reliably inject agents into simultaneously created workloads
+        body: >-
+          The agent-injector resolved a pod's owner workload from the
+          traffic-manager's informer cache. When many workloads were created
+          at once, that cache could lag behind the API server, and pods whose
+          owner had not yet been observed were admitted without a traffic-agent
+          and never reconciled. The injector now confirms a cache miss with a
+          direct API call, so bursts of simultaneously created workloads all
+          receive their agent.
+      - type: bugfix
+        title: Pick the correct control-plane when connecting with --docker
+        body: >-
+          When connecting with <code>--docker</code>, Telepresence rewrites
+          the kubeconfig server address to one reachable from the daemon
+          container. If several Kubernetes control-planes shared a Docker
+          network (for example, multiple kind clusters all attached to the
+          <code>kind</code> network), it could pick the wrong one and fail
+          the cluster check with a certificate error. It now prefers the
+          container that actually publishes the kubeconfig's API port.
+      - type: bugfix
+        title: Avoid transient traffic-agent readiness probe warnings
+        body: >-
+          The injected traffic-agent readiness probe now invokes a small
+          traffic-agent readiness command instead of running <code>/bin/stat</code>
+          directly. The command waits briefly for the readiness marker file,
+          avoiding transient kubelet warnings when the agent startup creates
+          the marker just after the probe executes.
       - type: feature
         title: Anonymous usage data collection
         body: >-
@@ -73,6 +101,15 @@ items:
           The <code>leave</code> command also accepts <code>--namespace</code> to
           disambiguate ingests with the same workload name across mapped namespaces.
         docs: reference/engagements/cli
+      - type: bugfix
+        title: Ignore non-interface Linux routes
+        body: >-
+          Linux routing table scans now ignore blackhole, unreachable,
+          prohibit, throw, and other routes that do not point to an
+          interface before converting kernel routes into Telepresence routes.
+          This prevents <code>telepresence connect</code> from failing with
+          <code>routing table is inconsistent</code> on systems that have
+          null routes, such as MicroK8s blackhole entries.
       - type: bugfix
         title: Do not watch namespaces when only list is allowed
         body: >-

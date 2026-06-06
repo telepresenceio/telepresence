@@ -9,6 +9,24 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.29.0
 <Note>
+	<Title type="bugfix">Reliably inject agents into simultaneously created workloads</Title>
+	<Body>
+The agent-injector resolved a pod's owner workload from the traffic-manager's informer cache. When many workloads were created at once, that cache could lag behind the API server, and pods whose owner had not yet been observed were admitted without a traffic-agent and never reconciled. The injector now confirms a cache miss with a direct API call, so bursts of simultaneously created workloads all receive their agent.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix">Pick the correct control-plane when connecting with --docker</Title>
+	<Body>
+When connecting with <code>--docker</code>, Telepresence rewrites the kubeconfig server address to one reachable from the daemon container. If several Kubernetes control-planes shared a Docker network (for example, multiple kind clusters all attached to the <code>kind</code> network), it could pick the wrong one and fail the cluster check with a certificate error. It now prefers the container that actually publishes the kubeconfig's API port.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix">Avoid transient traffic-agent readiness probe warnings</Title>
+	<Body>
+The injected traffic-agent readiness probe now invokes a small traffic-agent readiness command instead of running <code>/bin/stat</code> directly. The command waits briefly for the readiness marker file, avoiding transient kubelet warnings when the agent startup creates the marker just after the probe executes.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="reference/config/#usage">Anonymous usage data collection</Title>
 	<Body>
 Telepresence now emits anonymous usage reports from the CLI/user daemon and from the traffic-manager. Each report carries only an installation UUID, OS/architecture, the binary version, a code-defined topic such as <code>cmd.connect</code>, and a small map of safe-listed entries; it never carries cluster, namespace, workload, or address data. Reporting is enabled by default — the project has no conventional customers, so this data is the only signal we have for which features matter and what to fix. To opt out for one workstation set <code>usage.enabled: false</code> in <code>config.yml</code>, or drop an empty <code>usage-opt-out</code> marker file alongside the machine-wide config; the platform installers (macOS, Windows, Linux) manage that marker from a checkbox/env-var at install time. To opt out for an entire cluster, install the chart with <code>--set usage.enabled=false</code>.
@@ -25,6 +43,12 @@ On macOS, the <code>.pkg</code> installer's postinstall called <code>launchctl l
 	<Title type="feature" docs="reference/engagements/cli">Ingest workloads in mapped namespaces</Title>
 	<Body>
 The <code>ingest</code> command now accepts <code>--namespace</code> to select the workload namespace for that engagement without changing the namespace used by <code>telepresence connect</code>. This allows a single connection with multiple mapped namespaces to run simultaneous ingests in different namespaces, while preserving the connected namespace as the default when no engagement namespace is specified. Mirrors the multi-namespace support added for <code>intercept</code>, <code>wiretap</code>, and <code>replace</code> in 2.28.0. The <code>leave</code> command also accepts <code>--namespace</code> to disambiguate ingests with the same workload name across mapped namespaces.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix">Ignore non-interface Linux routes</Title>
+	<Body>
+Linux routing table scans now ignore blackhole, unreachable, prohibit, throw, and other routes that do not point to an interface before converting kernel routes into Telepresence routes. This prevents <code>telepresence connect</code> from failing with <code>routing table is inconsistent</code> on systems that have null routes, such as MicroK8s blackhole entries.
   </Body>
 </Note>
 <Note>

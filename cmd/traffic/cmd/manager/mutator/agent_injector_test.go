@@ -1175,8 +1175,9 @@ matchExpressions:
     readinessProbe:
       exec:
         command:
-        - /bin/stat
-        - /tmp/agent/ready
+        - /usr/local/bin/traffic
+        - agent-ready
+      timeoutSeconds: 6
     resources: {}
     volumeMounts:
     - mountPath: /etc/podinfo
@@ -1268,8 +1269,9 @@ matchExpressions:
     readinessProbe:
       exec:
         command:
-        - /bin/stat
-        - /tmp/agent/ready
+        - /usr/local/bin/traffic
+        - agent-ready
+      timeoutSeconds: 6
     resources: {}
     volumeMounts:
     - mountPath: /etc/podinfo
@@ -1416,8 +1418,9 @@ matchExpressions:
     readinessProbe:
       exec:
         command:
-        - /bin/stat
-        - /tmp/agent/ready
+        - /usr/local/bin/traffic
+        - agent-ready
+      timeoutSeconds: 6
     resources: {}
     volumeMounts:
     - mountPath: /etc/podinfo
@@ -1528,8 +1531,9 @@ matchExpressions:
     readinessProbe:
       exec:
         command:
-        - /bin/stat
-        - /tmp/agent/ready
+        - /usr/local/bin/traffic
+        - agent-ready
+      timeoutSeconds: 6
     resources: {}
     volumeMounts:
     - mountPath: /etc/podinfo
@@ -1640,8 +1644,9 @@ matchExpressions:
     readinessProbe:
       exec:
         command:
-        - /bin/stat
-        - /tmp/agent/ready
+        - /usr/local/bin/traffic
+        - agent-ready
+      timeoutSeconds: 6
     resources: {}
     volumeMounts:
     - mountPath: /etc/podinfo
@@ -1800,8 +1805,12 @@ matchExpressions:
 								},
 							},
 							ReadinessProbe: &core.Probe{
+								TimeoutSeconds: 6,
 								ProbeHandler: core.ProbeHandler{
-									Exec: &core.ExecAction{Command: []string{"/bin/stat", "/tmp/agent/ready"}},
+									Exec: &core.ExecAction{Command: []string{
+										"/usr/local/bin/traffic",
+										"agent-ready",
+									}},
 								},
 							},
 						},
@@ -1910,8 +1919,9 @@ matchExpressions:
     readinessProbe:
       exec:
         command:
-        - /bin/stat
-        - /tmp/agent/ready
+        - /usr/local/bin/traffic
+        - agent-ready
+      timeoutSeconds: 6
     resources: {}
     volumeMounts:
     - mountPath: /tel_app_mounts/some-container/var/run/secrets/kubernetes.io/serviceaccount
