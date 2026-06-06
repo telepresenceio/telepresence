@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.29.0
 <Note>
+	<Title type="bugfix">Pick the correct control-plane when connecting with --docker</Title>
+	<Body>
+When connecting with <code>--docker</code>, Telepresence rewrites the kubeconfig server address to one reachable from the daemon container. If several Kubernetes control-planes shared a Docker network (for example, multiple kind clusters all attached to the <code>kind</code> network), it could pick the wrong one and fail the cluster check with a certificate error. It now prefers the container that actually publishes the kubeconfig's API port.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Avoid transient traffic-agent readiness probe warnings</Title>
 	<Body>
 The injected traffic-agent readiness probe now invokes a small traffic-agent readiness command instead of running <code>/bin/stat</code> directly. The command waits briefly for the readiness marker file, avoiding transient kubelet warnings when the agent startup creates the marker just after the probe executes.

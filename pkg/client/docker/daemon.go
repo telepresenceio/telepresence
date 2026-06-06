@@ -610,6 +610,52 @@ var knownFilters = map[string]containerFilter{
 	},
 }
 
+func matchesKnownFilter(cn *container.InspectResponse) bool {
+	for _, filter := range knownFilters {
+		if filter(cn) {
+			return true
+		}
+	}
+	return false
+}
+
+// cpCandidate is a container reachable on a network shared with the container that publishes the
+// kubeconfig's API host port, together with the address at which it can be reached on that network.
+type cpCandidate struct {
+	container   *container.InspectResponse
+	networkName string
+	localAddr   netip.AddrPort
+}
+
+// selectControlPlane chooses the candidate whose address should be used to reach the cluster's API
+// server. ncnID is the ID of the container that actually publishes the kubeconfig's host port.
+//
+// With a single candidate there is no ambiguity. With several (multiple cluster nodes, or unrelated
+// clusters, sharing a Docker network) the publisher is preferred when it is itself a recognized
+// control-plane node: it is the container the kubeconfig already points at, so its address is the
+// unambiguous match. Only when the publisher is something else (for example a k3d/HA load-balancer
+// that fronts the real nodes) do we fall back to discriminating the candidates by the known filters.
+func selectControlPlane(candidates []cpCandidate, ncnID string) (cpCandidate, bool) {
+	switch len(candidates) {
+	case 0:
+		return cpCandidate{}, false
+	case 1:
+		return candidates[0], true
+	default:
+		for _, c := range candidates {
+			if c.container.ID == ncnID && matchesKnownFilter(c.container) {
+				return c, true
+			}
+		}
+		for _, c := range candidates {
+			if matchesKnownFilter(c.container) {
+				return c, true
+			}
+		}
+		return cpCandidate{}, false
+	}
+}
+
 func detectControlPlane(ctx context.Context, cli dockerClient.APIClient, cns []*container.InspectResponse, hostAddr netip.AddrPort) (ap netip.AddrPort, nn string) {
 	ncn, port, isIPv6 := findNetworkSettingsForHostPort(cns, hostAddr)
 	if ncn == nil {
@@ -617,19 +663,13 @@ func detectControlPlane(ctx context.Context, cli dockerClient.APIClient, cns []*
 		return ap, nn
 	}
 
-	type candidate struct {
-		container   *container.InspectResponse
-		networkName string
-		localAddr   netip.AddrPort
-	}
-
 	ns := ncn.NetworkSettings
-	candidates := make([]candidate, 0)
+	candidates := make([]cpCandidate, 0)
 	for _, cn := range cns {
 		for networkName, nw := range ns.Networks {
 			addr, err := localAddr(ctx, cli, cn.ID, nw.NetworkID, isIPv6)
 			if err == nil {
-				candidates = append(candidates, candidate{
+				candidates = append(candidates, cpCandidate{
 					container:   cn,
 					networkName: networkName,
 					localAddr:   netip.AddrPortFrom(addr, port),
@@ -638,24 +678,10 @@ func detectControlPlane(ctx context.Context, cli dockerClient.APIClient, cns []*
 		}
 	}
 
-	switch len(candidates) {
-	case 0:
-		break
-	case 1:
-		c := candidates[0]
-		clog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q", c.container.Name, c.localAddr, hostAddr, c.networkName)
+	if c, ok := selectControlPlane(candidates, ncn.ID); ok {
+		clog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q",
+			c.container.Name, c.localAddr, hostAddr, c.networkName)
 		return c.localAddr, c.networkName
-	default:
-		// We have multiple candidates. Let's try and discriminate using the known filters.'
-		for _, c := range candidates {
-			for filterName, filter := range knownFilters {
-				if filter(c.container) {
-					clog.Debugf(ctx, "found control-plane %s(%s) for host address %s on network %q using filter %q",
-						c.container.Name, c.localAddr, hostAddr, c.networkName, filterName)
-					return c.localAddr, c.networkName
-				}
-			}
-		}
 	}
 	clog.Debugf(ctx, "found no control-plane for host address %s, container %s, container port %d", hostAddr, ncn.Name, port)
 	return ap, nn
