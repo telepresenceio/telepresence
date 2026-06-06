@@ -2,9 +2,7 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
 	"strings"
@@ -81,11 +79,8 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	// Create the /tmp/agent directory if it doesn't exist
 	// We use this to place a file which conveys 'readiness'
 	// The presence of this file is used in the readiness check.
-	dir := "/tmp/agent"
-	if _, err := dos.Stat(ctx, dir); errors.Is(err, fs.ErrNotExist) {
-		if err := dos.Mkdir(ctx, "/tmp/agent", 0o777); err != nil {
-			return err
-		}
+	if err := dos.MkdirAll(ctx, readyDir, 0o777); err != nil {
+		return err
 	}
 	defer func() {
 		// The ctx might well be cancelled at this point but is used as parent during
@@ -121,7 +116,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return remainLoop(ctx, manager, session)
 	})
 
-	file, err := dos.OpenFile(ctx, "/tmp/agent/ready", os.O_CREATE|os.O_WRONLY, 0o666)
+	file, err := dos.OpenFile(ctx, readyFile, os.O_CREATE|os.O_WRONLY, 0o666)
 	if err != nil {
 		return err
 	}
