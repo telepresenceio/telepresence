@@ -2,9 +2,11 @@ package k8s
 
 import (
 	"context"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"math"
+	"net"
 	"net/http"
 	"net/netip"
 	"slices"
@@ -81,7 +83,7 @@ func (kc *Cluster) check(c context.Context) error {
 		return err
 	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(400*time.Millisecond), 4), c))
 	if err != nil {
-		return fmt.Errorf("initial cluster check failed: %w", client.RunError(err))
+		return kc.unreachableError(c, err)
 	}
 	// Validate that the kubernetes server version is supported
 	clog.Infof(c, "Server version %s", info.GitVersion)
@@ -97,6 +99,66 @@ func (kc *Cluster) check(c context.Context) error {
 		return fmt.Errorf("kubernetes server versions older than %s are not supported, using %s", supportedKubeAPIVersion, info.GitVersion)
 	}
 	return nil
+}
+
+// unreachableError converts a failed cluster discovery call into a message that names the kubeconfig
+// context and server and explains, in plain language, why the cluster could not be reached. It is
+// categorized as a Config error so that the user is pointed at their kubeconfig rather than at the
+// daemon logs. The original error is logged for support purposes.
+func (kc *Cluster) unreachableError(c context.Context, err error) error {
+	clog.Debugf(c, "cluster check failed: %v", err)
+	target := "the Kubernetes cluster"
+	switch {
+	case kc.KubeContext != "" && kc.Server != "":
+		target = fmt.Sprintf("%s for context %q at %s", target, kc.KubeContext, kc.Server)
+	case kc.Server != "":
+		target = fmt.Sprintf("%s at %s", target, kc.Server)
+	case kc.KubeContext != "":
+		target = fmt.Sprintf("%s for context %q", target, kc.KubeContext)
+	}
+	hint := "Verify that the cluster still exists and that your current kubeconfig context points at it (try `kubectl cluster-info`)."
+	if kc.KubeContext != "" {
+		hint = fmt.Sprintf("Verify that the cluster still exists and that your kubeconfig context %q points at it (try `kubectl --context %s cluster-info`).",
+			kc.KubeContext, kc.KubeContext)
+	}
+	return errcat.Config.Newf("unable to reach %s: %s. %s", target, classifyUnreachable(err), hint)
+}
+
+// classifyUnreachable returns a plain-language reason for a failed connection to the cluster's API
+// server. It falls back to the raw error text for causes it doesn't recognize.
+func classifyUnreachable(err error) string {
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		return "the API server host could not be resolved; the cluster may have been deleted, or you may be offline or not connected to the required network or VPN"
+	}
+	var (
+		x509Unknown  x509.UnknownAuthorityError
+		x509Hostname x509.HostnameError
+		x509Invalid  x509.CertificateInvalidError
+	)
+	if errors.As(err, &x509Unknown) || errors.As(err, &x509Hostname) || errors.As(err, &x509Invalid) {
+		return "the API server's TLS certificate could not be verified"
+	}
+	switch {
+	case k8serrors.IsUnauthorized(err):
+		return "authentication was rejected; your cluster credentials may have expired"
+	case k8serrors.IsForbidden(err):
+		return "access was forbidden; your cluster credentials may lack the necessary permissions"
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "connection refused"):
+		return "the API server refused the connection"
+	case strings.Contains(msg, "i/o timeout"),
+		strings.Contains(msg, "context deadline exceeded"),
+		strings.Contains(msg, "Client.Timeout"),
+		strings.Contains(msg, "TLS handshake timeout"):
+		return "the connection to the API server timed out"
+	case strings.Contains(msg, "no route to host"):
+		return "there is no network route to the API server"
+	default:
+		return msg
+	}
 }
 
 func (kc *Cluster) CheckTrafficManagerService(ctx context.Context, namespace string) error {

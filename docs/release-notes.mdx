@@ -51,6 +51,12 @@ Tearing down a Compose project that engaged a service with replace or intercept 
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix">Clearer error when the cluster cannot be reached</Title>
+	<Body>
+When the initial cluster check fails, Telepresence now reports, in plain language, that it could not reach the cluster — naming the kubeconfig context and API server, classifying the cause (host could not be resolved, connection refused, timed out, TLS or authentication failure), and suggesting to verify the kubeconfig context with <code>kubectl cluster-info</code> instead of surfacing a raw networking error.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Reliably inject agents into simultaneously created workloads</Title>
 	<Body>
 The agent-injector resolved a pod's owner workload from the traffic-manager's informer cache. When many workloads were created at once, that cache could lag behind the API server, and pods whose owner had not yet been observed were admitted without a traffic-agent and never reconciled. The injector now confirms a cache miss with a direct API call, so bursts of simultaneously created workloads all receive their agent.
