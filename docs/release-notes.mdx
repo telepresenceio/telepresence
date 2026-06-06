@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.29.0
 <Note>
+	<Title type="bugfix">Reliably inject agents into simultaneously created workloads</Title>
+	<Body>
+The agent-injector resolved a pod's owner workload from the traffic-manager's informer cache. When many workloads were created at once, that cache could lag behind the API server, and pods whose owner had not yet been observed were admitted without a traffic-agent and never reconciled. The injector now confirms a cache miss with a direct API call, so bursts of simultaneously created workloads all receive their agent.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Pick the correct control-plane when connecting with --docker</Title>
 	<Body>
 When connecting with <code>--docker</code>, Telepresence rewrites the kubeconfig server address to one reachable from the daemon container. If several Kubernetes control-planes shared a Docker network (for example, multiple kind clusters all attached to the <code>kind</code> network), it could pick the wrong one and fail the cluster check with a certificate error. It now prefers the container that actually publishes the kubeconfig's API port.
