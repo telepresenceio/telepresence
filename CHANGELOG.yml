@@ -28,6 +28,16 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Pick the correct control-plane when connecting with --docker
+        body: >-
+          When connecting with <code>--docker</code>, Telepresence rewrites
+          the kubeconfig server address to one reachable from the daemon
+          container. If several Kubernetes control-planes shared a Docker
+          network (for example, multiple kind clusters all attached to the
+          <code>kind</code> network), it could pick the wrong one and fail
+          the cluster check with a certificate error. It now prefers the
+          container that actually publishes the kubeconfig's API port.
+      - type: bugfix
         title: Avoid transient traffic-agent readiness probe warnings
         body: >-
           The injected traffic-agent readiness probe now invokes a small
