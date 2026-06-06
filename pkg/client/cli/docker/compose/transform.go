@@ -430,21 +430,29 @@ func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecr
 		if err != nil {
 			return "", err
 		}
-
-		// Save the name of the docker compose file in the daemon info. This ensures that a `docker compose down` is
-		// issued if one of the connections is removed. This is necessary because the network represented by the
-		// daemon will no longer be available.
-		for _, c := range cs {
-			ud := daemon.MustGetUserClient(c)
-			info := ud.DaemonInfo()
-			info.ComposeFile = composeFile
-			err = daemon.NewUserInfoLoader(ctx).SaveInfo(info, ud.DaemonID().InfoFileName())
-		}
 	} else {
 		err = os.WriteFile(composeFile, yml, 0o644)
 		if err != nil {
 			return "", err
 		}
+	}
+
+	// Save the name of the docker compose file in the daemon info. This ensures that a `docker compose down` is
+	// issued if one of the connections is removed. This is necessary because the network represented by the
+	// daemon will no longer be available. The telemount-managed volumes are saved too, so that they (and only
+	// they) can be removed when the connection closes. This must happen on both the create and the rewrite path,
+	// because a rewrite (e.g. `compose up --force-recreate`) can change the set of telemount volumes.
+	var volNames []string
+	t.tpVolumes.Range(func(_ string, v *compose.VolumeConfig) bool {
+		volNames = append(volNames, v.Name)
+		return true
+	})
+	for _, c := range cs {
+		ud := daemon.MustGetUserClient(c)
+		info := ud.DaemonInfo()
+		info.ComposeFile = composeFile
+		info.ComposeVolumes = volNames
+		err = daemon.NewUserInfoLoader(ctx).SaveInfo(info, ud.DaemonID().InfoFileName())
 	}
 	return composeFile, nil
 }
