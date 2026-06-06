@@ -45,6 +45,10 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 		}
 		switch nrt.Family {
 		case syscall.AF_INET, syscall.AF_INET6:
+			if shouldSkipNetlinkRoute(nrt) {
+				clog.Tracef(ctx, "Skipping non-interface route %+v", nrt)
+				continue
+			}
 			rt, err := routeFromNetlinkRoute(nrt)
 			if err != nil {
 				return nil, errInconsistentRT
@@ -54,6 +58,14 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 		}
 	}
 	return routes, nil
+}
+
+func shouldSkipNetlinkRoute(rt *netlink.Route) bool {
+	switch rt.Type {
+	case syscall.RTN_BLACKHOLE, syscall.RTN_UNREACHABLE, syscall.RTN_PROHIBIT, syscall.RTN_THROW:
+		return true
+	}
+	return rt.LinkIndex == 0
 }
 
 func routeFromNetlinkRoute(rt *netlink.Route) (*Route, error) {

@@ -1,6 +1,5 @@
 [features]
 hooks = true
-codex_hooks = true
 
 [agents]
 max_threads = 6
