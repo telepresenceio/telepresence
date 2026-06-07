@@ -343,6 +343,7 @@ message CreateInterceptRequest {
 message EnsureAgentRequest {
   SessionInfo session = 1;
   string name = 2;
+  string namespace = 3;
 }
 
 message PreparedIntercept {

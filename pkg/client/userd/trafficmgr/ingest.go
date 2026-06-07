@@ -14,15 +14,17 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 type ingestKey struct {
 	workload  string
 	container string
+	namespace string
 }
 
 func (ik ingestKey) String() string {
-	return fmt.Sprintf("%s[%s]", ik.workload, ik.container)
+	return fmt.Sprintf("%s.%s[%s]", ik.workload, ik.namespace, ik.container)
 }
 
 type ingest struct {
@@ -69,6 +71,7 @@ func (ig *ingest) response() *rpc.IngestInfo {
 		Workload:         ig.workload,
 		WorkloadKind:     ig.Kind,
 		Container:        ig.container,
+		Namespace:        ig.namespace,
 		PodIp:            ig.PodIp,
 		SftpPort:         ig.SftpPort,
 		FtpPort:          ig.FtpPort,
@@ -105,9 +108,13 @@ func (s *session) validateAgentForIngest(ai *manager.AgentInfo) error {
 	return nil
 }
 
-func (s *session) getCurrentAgent(name string) *manager.AgentInfo {
+// getCurrentAgent returns the locally-cached agent matching the workload name in the
+// given namespace, or nil when no such agent is cached. The cache only contains agents
+// from the connected namespace, so cross-namespace lookups always fall through to
+// EnsureAgent on the traffic-manager.
+func (s *session) getCurrentAgent(name, namespace string) *manager.AgentInfo {
 	for _, ai := range s.getCurrentAgents() {
-		if ai.Name == name {
+		if ai.Name == name && ai.Namespace == namespace {
 			return ai
 		}
 	}
@@ -116,11 +123,22 @@ func (s *session) getCurrentAgent(name string) *manager.AgentInfo {
 
 func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) {
 	id := rq.Identifier
+	ns := id.Namespace
+	if ns == "" {
+		ns = s.Namespace
+	} else if validated := s.ActualNamespace(ns); validated == "" {
+		return nil, errcat.User.Newf(
+			"namespace %q is not mapped or is not accessible. Reconnect with --mapped-namespaces including %q, and verify your access to that namespace",
+			ns, ns)
+	} else {
+		ns = validated
+	}
 	ik := ingestKey{
 		workload:  id.WorkloadName,
 		container: id.ContainerName,
+		namespace: ns,
 	}
-	ai := s.getCurrentAgent(ik.workload)
+	ai := s.getCurrentAgent(ik.workload, ik.namespace)
 
 	if ai != nil {
 		if ik.container == "" {
@@ -143,7 +161,11 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 		var as *manager.AgentInfoSnapshot
 		timeoutCtx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutIntercept)
 		defer cancel()
-		as, err = s.ManagerClient().EnsureAgent(timeoutCtx, &manager.EnsureAgentRequest{Session: s.sessionInfo, Name: ik.workload})
+		as, err = s.ManagerClient().EnsureAgent(timeoutCtx, &manager.EnsureAgentRequest{
+			Session:   s.sessionInfo,
+			Name:      ik.workload,
+			Namespace: ik.namespace,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -228,21 +250,29 @@ func (s *session) getCurrentIngests() []*rpc.IngestInfo {
 	return ingests
 }
 
-func (s *session) findIngest(workloadName, containerName string) (ig *ingest, err error) {
-	if containerName == "" {
-		// Valid if there's only one ingest for the given workload.
+// findIngest returns the ingest matching the given (workload, container, namespace) tuple.
+// Empty containerName or namespace is treated as "any" — the ingest is resolved by scanning
+// currentIngests, and an error is returned if the remaining filters match more than one ingest.
+func (s *session) findIngest(workloadName, containerName, namespace string) (ig *ingest, err error) {
+	if containerName == "" || namespace == "" {
 		var foundIngest *ingest
 		var err error
 
 		s.currentIngests.Range(func(key ingestKey, value *ingest) bool {
-			if key.workload == workloadName {
-				if foundIngest != nil {
-					err = status.Error(codes.NotFound, fmt.Sprintf("workload %s has multiple ingests. Please specify which one to use", workloadName))
-					return false
-				}
-				foundIngest = value
-				containerName = key.container
+			if key.workload != workloadName {
+				return true
 			}
+			if containerName != "" && key.container != containerName {
+				return true
+			}
+			if namespace != "" && key.namespace != namespace {
+				return true
+			}
+			if foundIngest != nil {
+				err = status.Error(codes.NotFound, fmt.Sprintf("workload %s has multiple ingests. Please specify which one to use", workloadName))
+				return false
+			}
+			foundIngest = value
 			return true
 		})
 		if err != nil {
@@ -259,6 +289,7 @@ func (s *session) findIngest(workloadName, containerName string) (ig *ingest, er
 	ik := ingestKey{
 		workload:  workloadName,
 		container: containerName,
+		namespace: namespace,
 	}
 	if ig, ok := s.currentIngests.Load(ik); ok {
 		return ig, nil
@@ -267,7 +298,7 @@ func (s *session) findIngest(workloadName, containerName string) (ig *ingest, er
 }
 
 func (s *session) getIngest(rq *rpc.IngestIdentifier) (ig *ingest, err error) {
-	return s.findIngest(rq.WorkloadName, rq.ContainerName)
+	return s.findIngest(rq.WorkloadName, rq.ContainerName, rq.Namespace)
 }
 
 func (s *session) GetIngest(rq *rpc.IngestIdentifier) (ii *rpc.IngestInfo, err error) {
@@ -283,7 +314,7 @@ func (s *session) LeaveIngest(rq *rpc.IngestIdentifier) (ii *rpc.IngestInfo, err
 	if err != nil {
 		return nil, err
 	}
-	s.stopHandler(fmt.Sprintf("%s/%s", ig.workload, ig.container), ig.handlerContainer, ig.pid)
+	s.stopHandler(fmt.Sprintf("%s/%s/%s", ig.workload, ig.container, ig.namespace), ig.handlerContainer, ig.pid)
 	ig.cancel()
 	ig.wg.Wait()
 	return ig.response(), nil

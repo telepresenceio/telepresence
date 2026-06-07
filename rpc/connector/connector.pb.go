@@ -769,6 +769,8 @@ type IngestIdentifier struct {
 	// The name of the desired container. Must be set when the workload contains more
 	// than one container candidate.
 	ContainerName string `protobuf:"bytes,2,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
+	// Namespace containing the workload. Defaults to the connected namespace when empty.
+	Namespace     string `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -813,6 +815,13 @@ func (x *IngestIdentifier) GetWorkloadName() string {
 func (x *IngestIdentifier) GetContainerName() string {
 	if x != nil {
 		return x.ContainerName
+	}
+	return ""
+}
+
+func (x *IngestIdentifier) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -912,7 +921,9 @@ type IngestInfo struct {
 	// The directory where the client mounts the remote mount_point.
 	ClientMountPoint string `protobuf:"bytes,9,opt,name=client_mount_point,json=clientMountPoint,proto3" json:"client_mount_point,omitempty"`
 	// Map of mount path -> MountPolicy
-	Mounts        map[string]int32 `protobuf:"bytes,10,rep,name=mounts,proto3" json:"mounts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	Mounts map[string]int32 `protobuf:"bytes,10,rep,name=mounts,proto3" json:"mounts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	// Namespace of the ingested workload.
+	Namespace     string `protobuf:"bytes,11,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1015,6 +1026,13 @@ func (x *IngestInfo) GetMounts() map[string]int32 {
 		return x.Mounts
 	}
 	return nil
+}
+
+func (x *IngestInfo) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
 }
 
 type WatchWorkloadsRequest struct {
@@ -1843,10 +1861,11 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\bWIRETAPS\x10\b\x12\x14\n" +
 	"\x10INSTALLED_AGENTS\x10\x10\x12\x0e\n" +
 	"\n" +
-	"EVERYTHING\x10\x1f\"^\n" +
+	"EVERYTHING\x10\x1f\"|\n" +
 	"\x10IngestIdentifier\x12#\n" +
 	"\rworkload_name\x18\x01 \x01(\tR\fworkloadName\x12%\n" +
-	"\x0econtainer_name\x18\x02 \x01(\tR\rcontainerName\"\xc5\x01\n" +
+	"\x0econtainer_name\x18\x02 \x01(\tR\rcontainerName\x12\x1c\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\xc5\x01\n" +
 	"\rIngestRequest\x12H\n" +
 	"\n" +
 	"identifier\x18\x01 \x01(\v2(.telepresence.connector.IngestIdentifierR\n" +
@@ -1855,7 +1874,7 @@ const file_connector_connector_proto_rawDesc = "" +
 	"mountPoint\x12(\n" +
 	"\x10local_mount_port\x18\x03 \x01(\x05R\x0elocalMountPort\x12\x1f\n" +
 	"\vlocal_ports\x18\x04 \x03(\tR\n" +
-	"localPorts\"\xa3\x04\n" +
+	"localPorts\"\xc1\x04\n" +
 	"\n" +
 	"IngestInfo\x12\x1a\n" +
 	"\bworkload\x18\x01 \x01(\tR\bworkload\x12#\n" +
@@ -1869,7 +1888,8 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\venvironment\x18\b \x03(\v23.telepresence.connector.IngestInfo.EnvironmentEntryR\venvironment\x12,\n" +
 	"\x12client_mount_point\x18\t \x01(\tR\x10clientMountPoint\x12F\n" +
 	"\x06mounts\x18\n" +
-	" \x03(\v2..telepresence.connector.IngestInfo.MountsEntryR\x06mounts\x1a>\n" +
+	" \x03(\v2..telepresence.connector.IngestInfo.MountsEntryR\x06mounts\x12\x1c\n" +
+	"\tnamespace\x18\v \x01(\tR\tnamespace\x1a>\n" +
 	"\x10EnvironmentEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a9\n" +

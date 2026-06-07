@@ -1581,6 +1581,7 @@ type EnsureAgentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Session       *SessionInfo           `protobuf:"bytes,1,opt,name=session,proto3" json:"session,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1625,6 +1626,13 @@ func (x *EnsureAgentRequest) GetSession() *SessionInfo {
 func (x *EnsureAgentRequest) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *EnsureAgentRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
 	}
 	return ""
 }
@@ -4190,10 +4198,11 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2#.telepresence.manager.InterceptInfoR\x05value:\x028\x01\"\xa7\x01\n" +
 	"\x16CreateInterceptRequest\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12J\n" +
-	"\x0eintercept_spec\x18\x02 \x01(\v2#.telepresence.manager.InterceptSpecR\rinterceptSpecJ\x04\b\x03\x10\x04\"e\n" +
+	"\x0eintercept_spec\x18\x02 \x01(\v2#.telepresence.manager.InterceptSpecR\rinterceptSpecJ\x04\b\x03\x10\x04\"\x83\x01\n" +
 	"\x12EnsureAgentRequest\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\xce\x03\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\xce\x03\n" +
 	"\x11PreparedIntercept\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\x12%\n" +
 	"\x0eerror_category\x18\x02 \x01(\x05R\rerrorCategory\x12\x1c\n" +

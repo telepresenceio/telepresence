@@ -18,6 +18,7 @@ func TestSession_findIngest(t *testing.T) {
 		setup         func(*session)
 		workloadName  string
 		containerName string
+		namespace     string
 		wantErr       bool
 		wantErrCode   codes.Code
 		wantErrMsg    string
@@ -113,6 +114,7 @@ func TestSession_findIngest(t *testing.T) {
 			name:          "errors when ingest doesn't exist",
 			workloadName:  "nonexistent",
 			containerName: "container",
+			namespace:     "default",
 			setup:         func(s *session) {},
 			wantErr:       true,
 			wantErrCode:   codes.NotFound,
@@ -127,6 +129,76 @@ func TestSession_findIngest(t *testing.T) {
 			wantErrCode:   codes.NotFound,
 			wantErrMsg:    "no ingest found for workload",
 		},
+		{
+			name:          "finds the right ingest when same workload+container exist in different namespaces",
+			workloadName:  "my-workload",
+			containerName: "my-container",
+			namespace:     "beta",
+			setup: func(s *session) {
+				igAlpha := &ingest{
+					ingestKey: ingestKey{workload: "my-workload", container: "my-container", namespace: "alpha"},
+					AgentInfo: &manager.AgentInfo{
+						Name:      "my-workload",
+						Namespace: "alpha",
+						Containers: map[string]*manager.AgentInfo_ContainerInfo{
+							"my-container": {},
+						},
+					},
+				}
+				igBeta := &ingest{
+					ingestKey: ingestKey{workload: "my-workload", container: "my-container", namespace: "beta"},
+					AgentInfo: &manager.AgentInfo{
+						Name:      "my-workload",
+						Namespace: "beta",
+						Containers: map[string]*manager.AgentInfo_ContainerInfo{
+							"my-container": {},
+						},
+					},
+				}
+				s.currentIngests.Store(igAlpha.ingestKey, igAlpha)
+				s.currentIngests.Store(igBeta.ingestKey, igBeta)
+			},
+			wantErr: false,
+			validate: func(t *testing.T, ig *ingest) {
+				assert.Equal(t, "my-workload", ig.workload)
+				assert.Equal(t, "my-container", ig.container)
+				assert.Equal(t, "beta", ig.namespace)
+				assert.Equal(t, "beta", ig.Namespace)
+			},
+		},
+		{
+			name:          "errors when ambiguous across namespaces and no namespace specified",
+			workloadName:  "my-workload",
+			containerName: "my-container",
+			namespace:     "",
+			setup: func(s *session) {
+				igAlpha := &ingest{
+					ingestKey: ingestKey{workload: "my-workload", container: "my-container", namespace: "alpha"},
+					AgentInfo: &manager.AgentInfo{
+						Name:      "my-workload",
+						Namespace: "alpha",
+						Containers: map[string]*manager.AgentInfo_ContainerInfo{
+							"my-container": {},
+						},
+					},
+				}
+				igBeta := &ingest{
+					ingestKey: ingestKey{workload: "my-workload", container: "my-container", namespace: "beta"},
+					AgentInfo: &manager.AgentInfo{
+						Name:      "my-workload",
+						Namespace: "beta",
+						Containers: map[string]*manager.AgentInfo_ContainerInfo{
+							"my-container": {},
+						},
+					},
+				}
+				s.currentIngests.Store(igAlpha.ingestKey, igAlpha)
+				s.currentIngests.Store(igBeta.ingestKey, igBeta)
+			},
+			wantErr:     true,
+			wantErrCode: codes.NotFound,
+			wantErrMsg:  "workload my-workload has multiple ingests",
+		},
 	}
 
 	for _, tt := range tests {
@@ -139,7 +211,7 @@ func TestSession_findIngest(t *testing.T) {
 				tt.setup(s)
 			}
 
-			ig, err := s.findIngest(tt.workloadName, tt.containerName)
+			ig, err := s.findIngest(tt.workloadName, tt.containerName, tt.namespace)
 
 			if tt.wantErr {
 				require.Error(t, err)

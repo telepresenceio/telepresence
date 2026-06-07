@@ -15,6 +15,7 @@ Remove existing intercept
 ```
   -c, --container string   Container name
   -h, --help               help for leave
+  -n, --namespace string   Namespace of the ingest. Required to disambiguate ingests with the same workload name across mapped namespaces
 ```
 
 ### Global Flags:

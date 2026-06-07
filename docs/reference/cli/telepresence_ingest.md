@@ -25,6 +25,7 @@ Ingest a container
   -h, --help                           help for ingest
       --local-mount-port uint16        Do not mount remote directories. Instead, expose this port on localhost to an external mounter
       --mount string                   The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use &quot;true&quot; to have Telepresence pick a random mount point (default). Use &quot;false&quot; to disable filesystem mounting entirely. (default &quot;true&quot;)
+  -n, --namespace string               Namespace containing the workload to ingest. Defaults to the connected namespace
       --to-pod strings                 An additional port to forward from the ingested pod, will be made available at localhost:PORT Use this to, for example, access proxy/helper sidecars in the ingested pod. The default protocol is TCP. Use &lt;port&gt;/UDP for UDP ports
       --wait-message string            Message to print when ingest handler has started
 ```

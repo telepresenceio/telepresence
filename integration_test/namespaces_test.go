@@ -3,6 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ingest"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 )
@@ -430,4 +432,49 @@ func (s *nsSuite) Test_MultiNamespaceHTTPIntercepts() {
 	betaOut, err := curl("echo.beta", "")
 	rq.NoError(err)
 	rq.NotContains(betaOut, "tp-beta-local from intercept")
+}
+
+func (s *nsSuite) Test_MultiNamespaceIngests() {
+	if !(s.ManagerIsVersion(">2.28.0") && s.ClientIsVersion(">2.28.0")) {
+		s.T().Skip("Multi-namespace ingest requires Telepresence later than 2.28.0")
+	}
+	ctx := itest.WithNamespaces(s.Context(), &itest.Namespaces{
+		Namespace: s.managerNamespace(),
+		Selector: &labels.Selector{
+			MatchExpressions: []*labels.Requirement{{
+				Key:      labels.NameLabelKey,
+				Operator: labels.OperatorIn,
+				Values:   []string{"alpha", "beta"},
+			}},
+		},
+	})
+	s.TelepresenceHelmInstallOK(ctx, false)
+	defer s.UninstallTrafficManager(ctx, "manager")
+
+	itest.TelepresenceOk(ctx, "connect",
+		"--manager-namespace", s.managerNamespace(),
+		"--namespace", "alpha",
+		"--mapped-namespaces", "alpha,beta")
+	defer itest.TelepresenceDisconnectOk(ctx)
+
+	rq := s.Require()
+
+	alphaJSON := itest.TelepresenceOk(ctx, "ingest", "echo", "--namespace", "alpha", "--mount=false", "--output", "json")
+	var alphaInfo ingest.Info
+	rq.NoError(json.Unmarshal([]byte(alphaJSON), &alphaInfo))
+	rq.Equal("alpha", alphaInfo.Namespace)
+	rq.Equal("echo", alphaInfo.WorkloadName)
+	defer itest.TelepresenceOk(ctx, "leave", "echo", "--namespace", "alpha")
+
+	betaJSON := itest.TelepresenceOk(ctx, "ingest", "echo", "--namespace", "beta", "--mount=false", "--output", "json")
+	var betaInfo ingest.Info
+	rq.NoError(json.Unmarshal([]byte(betaJSON), &betaInfo))
+	rq.Equal("beta", betaInfo.Namespace)
+	rq.Equal("echo", betaInfo.WorkloadName)
+	defer itest.TelepresenceOk(ctx, "leave", "echo", "--namespace", "beta")
+
+	// Both ingests should resolve to different pods. Pod IPs are namespace-specific.
+	rq.NotEmpty(alphaInfo.PodIP)
+	rq.NotEmpty(betaInfo.PodIP)
+	rq.NotEqual(alphaInfo.PodIP, betaInfo.PodIP, "ingests in different namespaces must resolve to different pods")
 }

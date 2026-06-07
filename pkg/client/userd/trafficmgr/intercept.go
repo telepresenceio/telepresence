@@ -791,8 +791,12 @@ func (s *session) AddInterceptor(id string, ih *rpc.Interceptor) error {
 		ci.handlerContainer = ih.ContainerName
 		added = true
 	} else {
-		if parts := strings.Split(id, "/"); len(parts) == 2 {
-			if cg, err := s.findIngest(parts[0], parts[1]); err == nil {
+		if parts := strings.Split(id, "/"); len(parts) >= 2 {
+			ns := ""
+			if len(parts) >= 3 {
+				ns = parts[2]
+			}
+			if cg, err := s.findIngest(parts[0], parts[1], ns); err == nil {
 				clog.Debugf(s, "Adding ingest handler for id %s, %v", id, ih)
 				cg.pid = int(ih.Pid)
 				cg.handlerContainer = ih.ContainerName
@@ -813,8 +817,12 @@ func (s *session) RemoveInterceptor(id string) error {
 		ci.pid = 0
 		ci.handlerContainer = ""
 	} else {
-		if parts := strings.Split(id, "/"); len(parts) == 2 {
-			if cg, err := s.findIngest(parts[0], parts[1]); err == nil {
+		if parts := strings.Split(id, "/"); len(parts) >= 2 {
+			ns := ""
+			if len(parts) >= 3 {
+				ns = parts[2]
+			}
+			if cg, err := s.findIngest(parts[0], parts[1], ns); err == nil {
 				cg.pid = 0
 				cg.handlerContainer = ""
 			}

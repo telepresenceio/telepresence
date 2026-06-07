@@ -402,6 +402,7 @@ func (e *ingestExtension) deactivate() error {
 	_, err = ud.LeaveIngest(ctx, &connector.IngestIdentifier{
 		WorkloadName:  ig.Workload,
 		ContainerName: ig.Container,
+		Namespace:     ig.Namespace,
 	})
 	return grpc.FromGRPC(err)
 }
