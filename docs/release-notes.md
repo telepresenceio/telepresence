@@ -8,6 +8,12 @@
 The root daemon caches cluster DNS resolutions for up to a minute. If a workload and its Service were deleted and recreated, the Service could get a new ClusterIP while the daemon kept resolving the name to the old, now-defunct address, so traffic to it was silently dropped until the cache entry expired. The daemon now flushes the DNS cache whenever the set of traffic-agents changes, so a recreated workload's new ClusterIP is picked up immediately.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">A failed agent injection no longer blocks pod creation</div></div>
+<div style="margin-left: 15px">
+
+When the agent-injector webhook returned an error, it denied the pod's creation. For an unfixable error, such as an invalid <code>telepresence.getambassador.io/inject-traffic-agent</code> annotation value, the ReplicaSet controller then retried the creation indefinitely and the workload's rollout stalled. Such errors now admit the pod without an agent and surface the reason as an admission warning, while transient errors still deny the request so the injection is retried.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Ingest workloads in mapped namespaces](reference/engagements/cli)</div></div>
 <div style="margin-left: 15px">
 

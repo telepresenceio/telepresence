@@ -16,6 +16,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -78,7 +79,8 @@ func portsFromAnnotationValue(wl k8sapi.Workload, annotation, value string) (por
 	for i, cp := range cps {
 		pi := types.PortIdentifier(cp)
 		if err = pi.Validate(); err != nil {
-			return nil, fmt.Errorf("unable to parse annotation %s of %s: %w", annotation, wl, err)
+			// A malformed annotation value won't be fixed by retrying.
+			return nil, errcat.User.Newf("unable to parse annotation %s of %s: %w", annotation, wl, err)
 		}
 		ports[i] = pi
 	}
@@ -91,7 +93,7 @@ func (cfg *GeneratorConfig) Generate(
 	existingConfig *agentconfig.Sidecar,
 ) (*agentconfig.Sidecar, error) {
 	if TrafficManagerSelector.Matches(labels.Set(wl.GetLabels())) {
-		return nil, fmt.Errorf("%s is the Telepresence Traffic Manager. It can not have a traffic-agent", wl)
+		return nil, errcat.User.Newf("%s is the Telepresence Traffic Manager. It can not have a traffic-agent", wl)
 	}
 
 	pod := wl.GetPodTemplate()
@@ -105,7 +107,7 @@ func (cfg *GeneratorConfig) Generate(
 		ports := cn.Ports
 		for pi := range ports {
 			if ports[pi].ContainerPort == int32(cfg.AgentPort) {
-				return nil, fmt.Errorf(
+				return nil, errcat.User.Newf(
 					"the %s.%s pod container %s is exposing the same port (%d) as the %s sidecar",
 					pod.Name, pod.Namespace, cn.Name, cfg.AgentPort, agentconfig.ContainerName)
 			}
@@ -139,7 +141,8 @@ func (cfg *GeneratorConfig) Generate(
 	}
 	cfg.MountPolicies, err = cfg.MountPolicies.AddAnnotations(ctx, pod.Annotations)
 	if err != nil {
-		return nil, err
+		// An invalid mount-policy annotation value won't be fixed by retrying.
+		return nil, errcat.User.New(err)
 	}
 	var ccs []*agentconfig.Container
 	for _, svc := range svcs {
@@ -325,8 +328,9 @@ nextContainerPort:
 			// The port is not explicitly declared as a container port, so if possible, we synthesize one.
 			proto, name, num := p.ProtoAndNameOrNumber()
 			if name != "" {
-				// We can only synthesize given a numeric port.
-				return nil, fmt.Errorf("found no container port that matches port annotation %s", p)
+				// We can only synthesize given a numeric port. A named port that matches no container
+				// port is a configuration error that won't be fixed by retrying.
+				return nil, errcat.User.Newf("found no container port that matches port annotation %s", p)
 			}
 			appPort = &core.ContainerPort{
 				Name:          fmt.Sprintf("port-%s", Base26(anonNameIndex)),
