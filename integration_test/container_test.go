@@ -5,7 +5,6 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -131,7 +130,10 @@ func (s *connectedSuite) Test_InterceptsContainerAndReplace() {
 	require.NoErrorf(err, "unable to read %s", dataFile)
 	s.Equal("Hello from echo\n", string(content))
 
-	// Verify that the container is replaced.
+	// Verify that the container is replaced. The --replace intercept triggers a rollout, so wait
+	// for it to complete before inspecting the pods; otherwise the pod from the previous
+	// ReplicaSet, which still carries the original "echo" container, may still be present.
+	require.NoError(s.RolloutStatusWait(ctx, "deploy/"+svc))
 	stdout, err = s.KubectlOut(ctx, "get", "pod", "-l", "app="+svc, "-o", "json")
 	require.NoError(err)
 	items := struct {
@@ -139,25 +141,17 @@ func (s *connectedSuite) Test_InterceptsContainerAndReplace() {
 		Items      []core.Pod `json:"items"`
 	}{}
 	require.NoError(json.Unmarshal([]byte(stdout), &items))
-	pods := items.Items
 	var echoContainer *core.Container
-	for pi := range pods {
-		cns := pods[pi].Spec.Containers
+	for pi := range items.Items {
+		cns := items.Items[pi].Spec.Containers
 		for ci := range cns {
-			container := &cns[ci]
-			if container.Name == "echo" {
-				echoContainer = container
+			if cns[ci].Name == "echo" {
+				echoContainer = &cns[ci]
 				break
 			}
 		}
 	}
-	if s.ManagerIsVersion(">2.21.x") {
-		require.Nil(echoContainer)
-	} else {
-		require.NotNil(echoContainer)
-		require.Equal(echoContainer.Image, "alpine:latest")
-		require.True(slices.Equal(echoContainer.Args, []string{"sleep", "infinity"}))
-	}
+	require.Nil(echoContainer)
 
 	// Intercept again, this time without the --container flag
 	itest.TelepresenceOk(ctx, "leave", svc)
