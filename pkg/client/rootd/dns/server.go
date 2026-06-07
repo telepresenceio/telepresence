@@ -544,6 +544,14 @@ func (s *Server) flushDNS() {
 	s.cache.Clear()
 }
 
+// Flush discards all cached DNS resolutions, forcing subsequent queries to be resolved anew. It is
+// called when the agent set changes, because a workload - and therefore its Service's ClusterIP -
+// may have been recreated, which would otherwise leave a stale name-to-address mapping in the cache
+// for up to cacheTTL.
+func (s *Server) Flush() {
+	s.flushDNS()
+}
+
 // splitToUDPAddr splits the given address into an address and port. It's
 // an error if the address is based on a hostname rather than an IP.
 func splitToUDPAddr(netAddr net.Addr) (netip.AddrPort, error) {

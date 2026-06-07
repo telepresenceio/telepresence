@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.29.0
 <Note>
+	<Title type="bugfix">Flush the DNS cache when the agent set changes</Title>
+	<Body>
+The root daemon caches cluster DNS resolutions for up to a minute. If a workload and its Service were deleted and recreated, the Service could get a new ClusterIP while the daemon kept resolving the name to the old, now-defunct address, so traffic to it was silently dropped until the cache entry expired. The daemon now flushes the DNS cache whenever the set of traffic-agents changes, so a recreated workload's new ClusterIP is picked up immediately.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="reference/engagements/cli">Ingest workloads in mapped namespaces</Title>
 	<Body>
 The <code>ingest</code> command now accepts <code>--namespace</code> to select the workload namespace for that engagement without changing the namespace used by <code>telepresence connect</code>. This allows a single connection with multiple mapped namespaces to run simultaneous ingests in different namespaces, while preserving the connected namespace as the default when no engagement namespace is specified. Mirrors the multi-namespace support added for <code>intercept</code>, <code>wiretap</code>, and <code>replace</code> in 2.28.0. The <code>leave</code> command also accepts <code>--namespace</code> to disambiguate ingests with the same workload name across mapped namespaces.
