@@ -14,6 +14,12 @@ The Helm chart can now expose the agent-injector mutating webhook to an API serv
 When an intercept times out waiting for the traffic-agent to arrive and the pods were created without a sidecar, the traffic-manager now explains that the Kubernetes API server is likely unable to reach the agent-injector webhook and points to the EKS/Calico remedies (<code>hostNetwork=true</code> or an externally exposed webhook). The troubleshooting guide gained a full decision path covering host networking, NodePort/LoadBalancer exposure, access restriction, TLS SAN requirements, and <code>failurePolicy</code> tradeoffs.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Reliably re-establish intercept mounts after a pod restart</div></div>
+<div style="margin-left: 15px">
+
+When an intercepted pod was restarted, the user daemon waits for the root daemon to learn the new pod's IP before remounting its volumes. If the first connection attempt to the freshly started agent lost a race and failed, the daemon gave up instead of retrying, leaving the intercept's volume mounts permanently unavailable until the intercept was recreated. The daemon now keeps retrying until the agent becomes reachable, so the mounts come back on their own.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Flush the DNS cache when the agent set changes</div></div>
 <div style="margin-left: 15px">
 

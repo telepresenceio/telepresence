@@ -55,6 +55,16 @@ items:
           SAN requirements, and <code>failurePolicy</code> tradeoffs.
         docs: troubleshooting#eks-calico-and-traffic-agent-injection-timeouts
       - type: bugfix
+        title: Reliably re-establish intercept mounts after a pod restart
+        body: >-
+          When an intercepted pod was restarted, the user daemon waits for the
+          root daemon to learn the new pod's IP before remounting its volumes.
+          If the first connection attempt to the freshly started agent lost a
+          race and failed, the daemon gave up instead of retrying, leaving the
+          intercept's volume mounts permanently unavailable until the intercept
+          was recreated. The daemon now keeps retrying until the agent becomes
+          reachable, so the mounts come back on their own.
+      - type: bugfix
         title: Flush the DNS cache when the agent set changes
         body: >-
           The root daemon caches cluster DNS resolutions for up to a minute. If

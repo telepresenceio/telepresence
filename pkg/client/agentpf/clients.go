@@ -48,6 +48,10 @@ type client struct {
 
 const dormantLingerTime = 5 * time.Second
 
+// connectRetryInterval is how long WaitForIP waits between attempts to reach an agent that the
+// watch reports as present but that isn't dialable yet.
+const connectRetryInterval = 200 * time.Millisecond
+
 func (ac *client) String() string {
 	if ac == nil {
 		return "<nil>"
@@ -292,6 +296,13 @@ type clients struct {
 	namespacesMu sync.RWMutex
 	namespaces   map[string]struct{}
 	disabled     atomic.Bool
+
+	// snapshot is the set of agent pods most recently reported by the watch, keyed by
+	// "<podName>.<namespace>". Unlike the live clients map, it is not mutated by failed dial
+	// attempts, so WaitForIP can consult it to tell whether an agent still exists and should be
+	// retried. Guarded by snapshotMu.
+	snapshotMu sync.RWMutex
+	snapshot   map[string]*manager.AgentPodInfo
 
 	// dialMetrics, when non-nil, receives a callback for every dial
 	// request accepted (or rejected) by a started dial watcher. Guarded
@@ -597,6 +608,37 @@ func (s *clients) waitWithTimeout(timeout time.Duration, waitOn <-chan struct{})
 	}
 }
 
+// snapshotInfoForIP returns the AgentPodInfo for the given namespace and pod IP from the latest
+// watch snapshot, or nil if the watch doesn't (currently) know of such an agent.
+func (s *clients) snapshotInfoForIP(namespace string, ip netip.Addr) *manager.AgentPodInfo {
+	s.snapshotMu.RLock()
+	defer s.snapshotMu.RUnlock()
+	for _, ai := range s.snapshot {
+		if podIP, ok := netip.AddrFromSlice(ai.PodIp); ok && ai.Namespace == namespace && ip == podIP {
+			return ai
+		}
+	}
+	return nil
+}
+
+// loadOrAddClient returns the live client for the given agent pod, adding it if the (delta-based)
+// agent watch has not (re)added it. A failed dial removes a client from the live set, and because
+// the watch only emits on change it may not re-add it; this lets WaitForIP retry the dial for an
+// agent that still exists in the watch snapshot.
+func (s *clients) loadOrAddClient(ai *manager.AgentPodInfo) *client {
+	k := ai.PodName + "." + ai.Namespace
+	ac, _ := s.clients.LoadOrCompute(k, func() (*client, bool) {
+		return &client{
+			Cluster: s.Cluster,
+			session: s.session,
+			remove:  func() { s.clients.Delete(k) },
+			owner:   s,
+			info:    ai,
+		}, false
+	})
+	return ac
+}
+
 func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, namespace string, ip netip.Addr) error {
 	if s.disabled.Load() {
 		return status.Error(codes.Unavailable, "")
@@ -607,42 +649,48 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, namespac
 	if !s.watchesNamespace(namespace) {
 		return status.Error(codes.Unavailable, "")
 	}
-	var cl *client
+
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// Register an IP waiter so the agent watch wakes us promptly when the pod is reported, and so a
+	// dormant client for this IP isn't reaped while we wait (see hasWaiterFor).
 	key := ipWaitKey{namespace: namespace, ip: ip}
 	waitOn, _ := s.ipWaiters.LoadOrCompute(key, func() (chan struct{}, bool) {
-		s.clients.Range(func(k string, ac *client) bool {
-			if podIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ac.info.Namespace == namespace && ip == podIP {
-				cl = ac
-				return false
-			}
-			return true
-		})
-		if cl != nil {
-			return nil, true
-		}
 		return make(chan struct{}), false
 	})
-	if cl != nil {
-		_, err := cl.ensureConnect(ctx)
-		return err
-	}
-	if err := s.waitWithTimeout(timeout, waitOn); err != nil {
-		return err
-	}
+	defer s.ipWaiters.Delete(key)
 
-	// Ensure that the client we're waiting for is ready.
-	s.clients.Range(func(k string, ac *client) bool {
-		if acIP, ok := netip.AddrFromSlice(ac.info.PodIp); ok && ac.info.Namespace == namespace && ip == acIP {
-			cl = ac
-			return false
+	// Retry until the agent is actually reachable or the deadline expires. The first dial to a
+	// just-restarted pod can lose a race (e.g. the route to its new IP isn't ready yet); on failure
+	// ensureConnect removes the client, and because the watch is delta-based it won't necessarily
+	// re-add it. We therefore drive retries off the watch snapshot - which a failed dial does not
+	// mutate - re-adding the live client ourselves as needed.
+	for {
+		if ai := s.snapshotInfoForIP(namespace, ip); ai != nil {
+			if _, err := s.loadOrAddClient(ai).ensureConnect(ctx); err == nil {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(connectRetryInterval):
+			}
+			continue
 		}
-		return true
-	})
-	if cl == nil {
-		return status.Error(codes.NotFound, "no client available")
+		// The agent isn't in the snapshot yet. Wait to be woken by the watch; the timer is a
+		// fallback in case the wakeup is missed.
+		select {
+		case <-waitOn:
+			// notifyWaiters closes and deletes the waiter, so re-arm it for any subsequent round.
+			waitOn, _ = s.ipWaiters.LoadOrCompute(key, func() (chan struct{}, bool) {
+				return make(chan struct{}), false
+			})
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(connectRetryInterval):
+		}
 	}
-	_, err := cl.ensureConnect(ctx)
-	return err
 }
 
 func (s *clients) WaitForWorkload(timeout time.Duration, name string) error {
@@ -690,6 +738,13 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 			return nil
 		}
 	}
+
+	// Record the watch's view of existing agents. WaitForIP consults this rather than the live
+	// clients map, because a failed dial removes a client from the live map but the agent still
+	// exists here until the watch reports it gone.
+	s.snapshotMu.Lock()
+	s.snapshot = aim
+	s.snapshotMu.Unlock()
 
 	// changed is set when the membership of the watched agent set changes, so the DNS cache can be
 	// flushed - a recreated workload may have a recreated Service with a new ClusterIP.
