@@ -48,7 +48,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
-	"github.com/telepresenceio/telepresence/v2/pkg/slice"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -617,19 +616,7 @@ func (s *cluster) UseLocalPathProvisioner() bool {
 func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string) string {
 	var pods []string
 	for i := 0; ; i++ {
-		runningPods := RunningPodNames(ctx, app, ns)
-		if len(runningPods) > 0 {
-			if container == "" {
-				pods = runningPods
-			} else {
-				for _, pod := range runningPods {
-					cns, err := KubectlOut(ctx, ns, "get", "pods", pod, "-o", "jsonpath={.spec.containers[*].name}")
-					if err == nil && slice.Contains(strings.Split(cns, " "), container) {
-						pods = append(pods, pod)
-					}
-				}
-			}
-		}
+		pods = matchingPods(ctx, app, container, ns)
 		if len(pods) > 0 || i == 5 {
 			break
 		}
@@ -644,20 +631,64 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 		}
 		return ""
 	}
-	present := struct{}{}
-
-	var pod string
-	for i, key := range pods {
-		if container != "" {
-			key += "/" + container
-		}
-		if _, ok := s.logCapturingPods.LoadOrStore(key, present); !ok {
-			pod = pods[i]
-			break
+	// Capture logs from every matching pod that isn't already being captured. A workload can have
+	// more than one pod - replicas, or a transient pair while a rollout or a --replace eviction swaps
+	// one pod for another - and capturing only the first would miss the pod that actually matters,
+	// such as the survivor of a replace eviction. The first captured log file is returned to preserve
+	// the previous single-pod contract for callers that read it.
+	var firstFile string
+	for _, pod := range pods {
+		if file := s.capturePodLog(ctx, pod, container, ns); file != "" && firstFile == "" {
+			firstFile = file
 		}
 	}
-	if pod == "" {
-		return "" // All pods already captured
+
+	// Keep capturing pods that appear after this call - for example the replacement created during a
+	// rollout or a --replace eviction - until the context is done. Without this, a pod that did not
+	// exist yet at the time of the call (often the one that ends up serving, or failing to serve, the
+	// intercept) would never have its logs captured.
+	go func() {
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				for _, pod := range matchingPods(ctx, app, container, ns) {
+					s.capturePodLog(ctx, pod, container, ns)
+				}
+			}
+		}
+	}()
+	return firstFile
+}
+
+// matchingPods returns the names of the running pods for the given app, optionally restricted to
+// those that have a container with the given name.
+func matchingPods(ctx context.Context, app, container, ns string) []string {
+	var names []string
+	for _, pod := range RunningPods(ctx, app, ns) {
+		if container != "" && !slices.ContainsFunc(pod.Spec.Containers, func(c core.Container) bool {
+			return c.Name == container
+		}) {
+			continue
+		}
+		names = append(names, pod.Name)
+	}
+	return names
+}
+
+// capturePodLog streams the logs of a single pod (optionally a specific container) to a file in the
+// log directory and returns that file's name. It returns an empty string when the pod is already
+// being captured or when the capture could not be started.
+func (s *cluster) capturePodLog(ctx context.Context, pod, container, ns string) string {
+	key := pod
+	if container != "" {
+		key += "/" + container
+	}
+	if _, loaded := s.logCapturingPods.LoadOrStore(key, struct{}{}); loaded {
+		return "" // Already capturing this pod.
 	}
 
 	// Use another logger to avoid errors due to logs arriving after the tests complete.
@@ -669,7 +700,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	logFile, err := os.Create(
 		filepath.Join(filelocation.AppUserLogDir(ctx), fmt.Sprintf("%s-%s.log", time.Now().Format("20060102T150405"), logName)))
 	if err != nil {
-		s.logCapturingPods.Delete(pod)
+		s.logCapturingPods.Delete(key)
 		clog.Errorf(ctx, "unable to create pod logfile %s: %v", logFile.Name(), err)
 		return ""
 	}
@@ -687,7 +718,7 @@ func (s *cluster) CapturePodLogs(ctx context.Context, app, container, ns string)
 	go func() {
 		defer func() {
 			_ = logFile.Close()
-			s.logCapturingPods.Delete(pod)
+			s.logCapturingPods.Delete(key)
 		}()
 		err := cmd.Start()
 		if err == nil {

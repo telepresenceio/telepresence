@@ -21,6 +21,12 @@ When an intercept times out waiting for the traffic-agent to arrive and the pods
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix">Reliably re-establish intercept mounts after a pod restart</Title>
+	<Body>
+When an intercepted pod was restarted, the user daemon waits for the root daemon to learn the new pod's IP before remounting its volumes. If the first connection attempt to the freshly started agent lost a race and failed, the daemon gave up instead of retrying, leaving the intercept's volume mounts permanently unavailable until the intercept was recreated. The daemon now keeps retrying until the agent becomes reachable, so the mounts come back on their own.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Flush the DNS cache when the agent set changes</Title>
 	<Body>
 The root daemon caches cluster DNS resolutions for up to a minute. If a workload and its Service were deleted and recreated, the Service could get a new ClusterIP while the daemon kept resolving the name to the old, now-defunct address, so traffic to it was silently dropped until the cache entry expired. The daemon now flushes the DNS cache whenever the set of traffic-agents changes, so a recreated workload's new ClusterIP is picked up immediately.
