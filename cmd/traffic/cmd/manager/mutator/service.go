@@ -27,6 +27,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
@@ -318,13 +319,8 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 	}
 
 	if err != nil {
-		// If the handler returned an error, still allow the object creation, and incorporate
-		// the error message into the response
 		clog.Errorf(ctx, "mutating function error: %v", err)
-		response.Allowed = false
-		response.Result = &meta.Status{
-			Message: err.Error(),
-		}
+		applyMutatorError(&response, err)
 	} else if patchOps != nil {
 		// Otherwise, encode the patch operations to JSON and return a positive response.
 		patchBytes, err := json.Marshal(patchOps, jsonv1.OmitEmptyWithLegacySemantics(true), json.FormatNilSliceAsNull(true))
@@ -342,4 +338,25 @@ func serveMutatingFunc(ctx context.Context, r *http.Request, mf mutatorFunc) ([]
 		return nil, http.StatusInternalServerError, fmt.Errorf("marshaling response: %v", err)
 	}
 	return b, http.StatusOK, nil
+}
+
+// applyMutatorError records a failed mutation on the admission response. The handling depends on
+// whether the error is terminal:
+//
+//   - A User error is the caller's mistake (for example an invalid annotation value) that retrying
+//     cannot fix. Denying the request would make the ReplicaSet controller retry the pod creation
+//     indefinitely and wedge the workload's rollout. The pod is therefore admitted (without an
+//     agent) and the reason is surfaced as a warning.
+//   - Any other error is treated as transient (for example the agent config could not be generated
+//     yet because the traffic-manager just started). The request is denied so that the pod creation
+//     is retried and the agent is injected once the condition clears.
+func applyMutatorError(response *admission.AdmissionResponse, err error) {
+	if errcat.GetCategory(err) == errcat.User {
+		response.Warnings = append(response.Warnings, err.Error())
+		return
+	}
+	response.Allowed = false
+	response.Result = &meta.Status{
+		Message: err.Error(),
+	}
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -163,7 +164,10 @@ func (a *agentInjector) Inject(ctx context.Context, req *admission.AdmissionRequ
 			return nil, nil
 		}
 	default:
-		return nil, fmt.Errorf("invalid value %q for annotation %s", ia, annotation.InjectTrafficAgent)
+		// A bad annotation value is a user error that retrying cannot fix, so categorize it as such.
+		// The webhook admits the pod (without an agent) and surfaces this as a warning rather than
+		// denying the pod and wedging the workload's rollout indefinitely.
+		return nil, errcat.User.Newf("invalid value %q for annotation %s", ia, annotation.InjectTrafficAgent)
 	}
 
 	podTpl := &core.PodTemplateSpec{ObjectMeta: pod.ObjectMeta}
