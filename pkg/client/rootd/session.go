@@ -1190,6 +1190,9 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 			// so we can report incoming-dial counters to the user daemon
 			// at session end (see daemon.Activity).
 			s.agentClients.SetDialMetrics(s)
+			// Flush the DNS cache whenever the agent set changes. A workload may have been recreated
+			// with a new Service ClusterIP, which would otherwise be masked by a stale cache entry.
+			s.agentClients.SetChangeListener(s.dnsServer.Flush)
 			g.Go("agentPods", func(ctx context.Context) error {
 				return s.agentClients.WatchAgentPods(s.managerClient())
 			})

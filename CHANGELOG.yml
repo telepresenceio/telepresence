@@ -27,6 +27,16 @@ items:
   - version: 2.29.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Flush the DNS cache when the agent set changes
+        body: >-
+          The root daemon caches cluster DNS resolutions for up to a minute. If
+          a workload and its Service were deleted and recreated, the Service
+          could get a new ClusterIP while the daemon kept resolving the name to
+          the old, now-defunct address, so traffic to it was silently dropped
+          until the cache entry expired. The daemon now flushes the DNS cache
+          whenever the set of traffic-agents changes, so a recreated workload's
+          new ClusterIP is picked up immediately.
       - type: feature
         title: Ingest workloads in mapped namespaces
         body: >-

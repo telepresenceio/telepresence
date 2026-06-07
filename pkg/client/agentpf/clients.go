@@ -270,6 +270,11 @@ type Clients interface {
 	// callback for every dial request the dial watchers accept. Passing nil
 	// disables the callback. Safe to call at any time.
 	SetDialMetrics(m tunnel.DialMetrics)
+
+	// SetChangeListener installs a callback that is invoked whenever an agent
+	// pod is added to or removed from the watched set. Passing nil disables the
+	// callback. Safe to call at any time.
+	SetChangeListener(func())
 }
 
 type ipWaitKey struct {
@@ -294,6 +299,11 @@ type clients struct {
 	// creation.
 	dialMetricsMu sync.RWMutex
 	dialMetrics   tunnel.DialMetrics
+
+	// changeListener, when non-nil, is invoked whenever an agent pod is added
+	// to or removed from the watched set. Guarded by changeListenerMu.
+	changeListenerMu sync.RWMutex
+	changeListener   func()
 }
 
 func NewClients(cl *k8s.Cluster, session *manager.SessionInfo, namespaces []string) Clients {
@@ -455,6 +465,23 @@ func (s *clients) loadDialMetrics() tunnel.DialMetrics {
 	m := s.dialMetrics
 	s.dialMetricsMu.RUnlock()
 	return m
+}
+
+func (s *clients) SetChangeListener(f func()) {
+	s.changeListenerMu.Lock()
+	s.changeListener = f
+	s.changeListenerMu.Unlock()
+}
+
+// notifyChanged invokes the change listener, if one is installed. It is called when an agent pod is
+// added to or removed from the watched set.
+func (s *clients) notifyChanged() {
+	s.changeListenerMu.RLock()
+	f := s.changeListener
+	s.changeListenerMu.RUnlock()
+	if f != nil {
+		f()
+	}
 }
 
 func (s *clients) isProxyVIA(info *manager.AgentPodInfo) bool {
@@ -664,11 +691,15 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 		}
 	}
 
+	// changed is set when the membership of the watched agent set changes, so the DNS cache can be
+	// flushed - a recreated workload may have a recreated Service with a new ClusterIP.
+	changed := false
 	deleteClient := func(k string) {
 		s.clients.Compute(k, func(oldValue *client, loaded bool) (*client, xsync.ComputeOp) {
 			if loaded {
 				clog.Debugf(s, "Deleting agent %s", k)
 				oldValue.cancel()
+				changed = true
 				return nil, xsync.DeleteOp
 			}
 			return nil, xsync.CancelOp
@@ -704,6 +735,9 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 			clog.Debugf(s, "Adding agent pod %s (%s)", k, net.IP(ai.PodIp))
 			return ac, false
 		})
+		if !loaded {
+			changed = true
+		}
 		if !loaded && ai.Intercepted {
 			clog.Debugf(s, "Newly discovered intercepted agent pod %s (%s); eagerly starting dial watcher", k, net.IP(ai.PodIp))
 			if _, err := ac.ensureConnect(s); err != nil {
@@ -731,6 +765,9 @@ func (s *clients) updateClients(ais []*manager.AgentPodInfo) error {
 	})
 	if dormantCount > 1 {
 		clog.Debugf(s, "Cancelled %d dormant clients", dormantCount-1)
+	}
+	if changed {
+		s.notifyChanged()
 	}
 	return nil
 }
