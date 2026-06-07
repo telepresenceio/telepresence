@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -75,13 +76,16 @@ func (s *mountsSuite) Test_IgnoredMounts() {
 			require.NoError(json.Unmarshal([]byte(stdout), &iInfo))
 			s.CapturePodLogs(ctx, "hello", "traffic-agent", s.AppNamespace())
 			mountPoint := iInfo.Mount.LocalDir
+			// The intercept command returns before the FUSE/sftp mount is necessarily populated, so
+			// wait for each expected path to appear rather than stat-ing it immediately.
 			for _, desired := range tt.expected {
-				st, err := os.Stat(filepath.Join(mountPoint, desired))
-				if !s.NoErrorf(err, "mount of %s should be successful", desired) {
-					s.T().FailNow()
-				}
-				require.True(st.IsDir())
+				require.Eventuallyf(func() bool {
+					st, err := os.Stat(filepath.Join(mountPoint, desired))
+					return err == nil && st.IsDir()
+				}, 30*time.Second, 2*time.Second, "mount of %s should be successful", desired)
 			}
+			// The expected mounts are present, so the mount is established and the ignored volumes,
+			// which are never mounted, must be absent.
 			for _, notDesired := range tt.notExpected {
 				st, err := os.Stat(filepath.Join(mountPoint, notDesired))
 				if !s.Errorf(err, "mount of %s should not be successful", notDesired) {
