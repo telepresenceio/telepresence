@@ -47,6 +47,10 @@ func (s *argoRolloutsSuite) SetupSuite() {
 	rq.NoError(err)
 	clog.Info(ctx, out)
 	rq.NoError(itest.Kubectl(ctx, "argo-rollouts", "apply", "-f", "https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml"))
+	// Wait until the Rollout CRD is established and served by the API server. Without this, a test
+	// that applies a Rollout right after the install can fail with "no matches for kind Rollout ...
+	// ensure CRDs are installed first" because the API group isn't registered in discovery yet.
+	rq.NoError(itest.Kubectl(ctx, "", "wait", "--for=condition=established", "--timeout=60s", "crd/rollouts.argoproj.io"))
 }
 
 func (s *argoRolloutsSuite) TearDownSuite() {
