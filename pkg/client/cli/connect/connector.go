@@ -63,9 +63,15 @@ func maybeComposeDown(ctx context.Context, info *daemon.Info) {
 		}
 	}()
 	progress.Stop(ctx)
-	err := proc.StdCommand(ctx, docker.Exe, "compose", "--file", info.ComposeFile, "down", "--remove-orphans", "--volumes").Run()
-	if err != nil {
+	if err := proc.StdCommand(ctx, docker.Exe, "compose", "--file", info.ComposeFile, "down", "--remove-orphans").Run(); err != nil {
 		clog.Error(ctx, err)
+	}
+	// Remove only the telemount-managed volumes. Using `down --volumes` would also delete the user's
+	// named volumes, which is not what `docker compose down` does without an explicit `-v`.
+	for _, vn := range info.ComposeVolumes {
+		if err := proc.StdCommand(ctx, docker.Exe, "volume", "rm", "--force", vn).Run(); err != nil {
+			clog.Error(ctx, err)
+		}
 	}
 	progress.Start(ctx, "Quitting")
 }

@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.29.0
 <Note>
+	<Title type="bugfix">Compose down no longer removes user-defined named volumes</Title>
+	<Body>
+Tearing down a Compose project that engaged a service with replace or intercept previously removed named volumes even when <code>-v</code>/<code>--volumes</code> was not given, because the connection teardown ran <code>docker compose down --volumes</code>. Only Telepresence's own telemount-managed volumes are now removed, matching the behavior of <code>docker compose down</code>.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Reliably inject agents into simultaneously created workloads</Title>
 	<Body>
 The agent-injector resolved a pod's owner workload from the traffic-manager's informer cache. When many workloads were created at once, that cache could lag behind the API server, and pods whose owner had not yet been observed were admitted without a traffic-agent and never reconciled. The injector now confirms a cache miss with a direct API call, so bursts of simultaneously created workloads all receive their agent.

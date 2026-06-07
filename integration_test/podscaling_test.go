@@ -76,12 +76,15 @@ func (s *interceptMountSuite) Test_RestartInterceptedPod() {
 		return false
 	}, 30*time.Second, 3*time.Second)
 
-	// Verify that volume mount is restored
-	time.Sleep(time.Second) // avoid a stat just when the intercept became active as it sometimes causes a hang
+	// Verify that volume mount is restored. The intercept reports ACTIVE as soon as traffic routing
+	// resumes, but re-establishing the FUSE/sftp mount to the restarted agent can take a bit longer,
+	// so allow the same grace period used by the other waits in this test. Eventually doesn't run its
+	// first check until a tick has elapsed, so the 2s tick also avoids a stat right at activation
+	// (which sometimes causes a hang).
 	assert.Eventually(func() bool {
 		st, err := os.Stat(filepath.Join(s.mountPoint, "var", "run"))
 		return err == nil && st.IsDir()
-	}, 5*time.Second, time.Second)
+	}, 30*time.Second, 2*time.Second)
 }
 
 // Test_StopInterceptedPodOfMany build belongs to the interceptMountSuite because we want to

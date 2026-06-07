@@ -41,6 +41,9 @@ type Info struct {
 	ContainerIP  netip.Addr `json:"container_ip,omitempty"`
 	ContainerID  string     `json:"container_id,omitempty"`
 	ComposeFile  string     `json:"compose_file,omitempty"`
+	// ComposeVolumes are the telemount-managed volumes created for remote mounts. They are removed
+	// when the connection closes; user-defined named volumes are left untouched.
+	ComposeVolumes []string `json:"compose_volumes,omitempty"`
 }
 
 type TCPInfo interface {

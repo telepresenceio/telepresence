@@ -409,6 +409,73 @@ func (s *composeSuite) Test_ComposeWiretap() {
 	}, 30*time.Second, 3*time.Second, "wiretap container should receive copies of traffic")
 }
 
+func (s *composeSuite) Test_ComposeDownPreservesNamedVolumes() {
+	ctx := s.Context()
+	require := s.Require()
+
+	const svc = "echo-easy"
+	s.ApplyEchoService(ctx, svc, 80)
+	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
+
+	cli, err := dockerClient.New(dockerClient.FromEnv)
+	require.NoError(err)
+	defer cli.Close()
+
+	const volName = "tp-compose-named-volume"
+	volumeExists := func() bool {
+		_, err := cli.VolumeInspect(ctx, volName, dockerClient.VolumeInspectOptions{})
+		return err == nil
+	}
+	// Make sure no volume lingers from a previous run, and clean up afterwards regardless of outcome.
+	_, _ = cli.VolumeRemove(ctx, volName, dockerClient.VolumeRemoveOptions{Force: true})
+	defer func() { _, _ = cli.VolumeRemove(ctx, volName, dockerClient.VolumeRemoveOptions{Force: true}) }()
+
+	composeDir := itest.TempDir(ctx)
+	composeFile := filepath.Join(composeDir, "docker-compose.yml")
+	ns := s.AppNamespace()
+	// A replace engagement with a user-defined named volume. The connection teardown must not remove
+	// the named volume unless the user explicitly asks for it with -v.
+	composeContent := strings.Join([]string{
+		"x-tele:",
+		"  connections:",
+		"    - namespace: " + ns,
+		"      manager-namespace: " + s.ManagerNamespace(),
+		"services:",
+		"  " + svc + ":",
+		"    x-tele:",
+		"      type: replace",
+		"      ports:",
+		`        - "80:8080"`,
+		"    image: hashicorp/http-echo",
+		`    command: ["-text=hello-from-compose", "-listen=:80"]`,
+		"    volumes:",
+		"      - bundle:/data",
+		"volumes:",
+		"  bundle:",
+		"    name: " + volName,
+	}, "\n")
+	require.NoError(os.WriteFile(composeFile, []byte(composeContent), 0o644))
+
+	_, _, err = itest.Telepresence(ctx, "compose", "-f", composeFile, "up", "-d")
+	require.NoError(err, "compose up failed")
+	require.Eventually(volumeExists, 30*time.Second, 2*time.Second, "named volume %s should be created by compose up", volName)
+
+	// `compose down` without -v must preserve the named volume.
+	_, _, err = itest.Telepresence(ctx, "compose", "-f", composeFile, "down")
+	require.NoError(err, "compose down failed")
+	require.True(volumeExists(), "named volume %s must survive 'compose down' without -v", volName)
+
+	// `compose down -v` must remove it. Bring the project back up first.
+	_, _, err = itest.Telepresence(ctx, "compose", "-f", composeFile, "up", "-d")
+	require.NoError(err, "second compose up failed")
+	require.Eventually(volumeExists, 30*time.Second, 2*time.Second, "named volume %s should be recreated", volName)
+
+	_, _, err = itest.Telepresence(ctx, "compose", "-f", composeFile, "down", "-v")
+	require.NoError(err, "compose down -v failed")
+	require.Eventually(func() bool { return !volumeExists() }, 30*time.Second, 2*time.Second,
+		"named volume %s must be removed by 'compose down -v'", volName)
+}
+
 func (s *composeSuite) Test_ComposeDefaultNetworkNoSubnetConflict() {
 	ctx := s.Context()
 	rq := s.Require()
