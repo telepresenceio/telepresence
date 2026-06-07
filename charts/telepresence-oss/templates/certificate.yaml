@@ -11,6 +11,18 @@ spec:
   dnsNames:
   - {{ (printf "%s.%s" .Values.agentInjector.name .Release.Namespace ) }}
   - {{ (printf "%s.%s.svc" .Values.agentInjector.name .Release.Namespace ) }}
+  {{- $ipAddrs := list }}
+  {{- range .Values.agentInjector.certificate.altNames }}
+  {{- if or (regexMatch "^[0-9.]+$" .) (contains ":" .) }}
+  {{- $ipAddrs = append $ipAddrs . }}
+  {{- else }}
+  - {{ . }}
+  {{- end }}
+  {{- end }}
+  {{- with $ipAddrs }}
+  ipAddresses:
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
   {{- with .Values.agentInjector.certificate.certmanager }}
   {{- toYaml . | nindent 2 }}
   {{- end }}

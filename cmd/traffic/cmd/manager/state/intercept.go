@@ -856,6 +856,15 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 			if len(fes) > 0 {
 				bf.WriteString(": Events that may be relevant:\n")
 				writeEventList(bf, fes)
+			} else if ctx.Err() == context.DeadlineExceeded {
+				// No injection failures were observed, yet no agent arrived. This is the typical
+				// signature of the API server being unable to reach the agent-injector webhook
+				// (the pods are admitted unmodified because the webhook's failurePolicy is Ignore).
+				bf.WriteString(
+					"\nThe pods were created without a traffic-agent. This usually means the Kubernetes API server " +
+						"cannot reach the agent-injector webhook. On EKS with the Calico CNI, install or upgrade the " +
+						"traffic-manager with hostNetwork=true, or expose the webhook externally (agentInjector.webhook.url). " +
+						"See https://telepresence.io/docs/troubleshooting#eks-calico-and-traffic-agent-injection-timeouts")
 			}
 			return nil, errcat.User.New(bf.String())
 		}

@@ -155,11 +155,133 @@ Kubernetes takes care of the rest and will now associate the service's `targetPo
 
 ## EKS, Calico, and Traffic Agent injection timeouts
 
-When using EKS with Calico CNI, the Kubernetes API server cannot reach the mutating webhook
-used for triggering the traffic agent injection. To solve this problem, try providing the
-Helm chart value `"hostNetwork=true"` when installing or upgrading the traffic-manager.
+When using EKS with the Calico CNI, the Kubernetes API server often cannot reach the
+agent-injector mutating webhook that triggers traffic-agent injection. The API server runs in
+the AWS-managed control plane, outside the Calico-managed pod network, so it has no route to the
+webhook's `ClusterIP` Service. Because the webhook uses `failurePolicy: Ignore`, the API server
+admits pods *unmodified* when it can't reach it: your workload rolls out normally, but no
+traffic-agent sidecar is injected. An intercept then fails with a message like
+"request timed out while waiting for agent ... to arrive", and the pods you see have no
+`traffic-agent` container.
 
-More information can be found in this [blog post](https://medium.com/@denisstortisilva/kubernetes-eks-calico-and-custom-admission-webhooks-a2956b49bd0d).
+The blog post [Kubernetes, EKS, Calico, and custom admission webhooks](https://medium.com/@denisstortisilva/kubernetes-eks-calico-and-custom-admission-webhooks-a2956b49bd0d)
+describes the underlying problem in detail.
+
+### Decision path
+
+Work through these options in order; the first that is acceptable for your environment is the
+one to use.
+
+1. **Try `hostNetwork=true` first.** Installing or upgrading the traffic-manager with the Helm
+   value `hostNetwork=true` places the agent-injector on the node's host network, which the API
+   server can reach the same way it reaches the kubelet. This is the simplest fix and requires no
+   external exposure.
+
+   ```console
+   $ telepresence helm upgrade --set hostNetwork=true
+   ```
+
+   If your security posture forbids host networking for the traffic-manager, move to the next
+   option.
+
+2. **Expose the webhook with a NodePort or LoadBalancer and point the webhook at it by URL.**
+   Instead of having the API server resolve the in-cluster Service, you give the
+   `MutatingWebhookConfiguration` an explicit `url`, backed by a Service the control plane *can*
+   reach.
+
+   - **NodePort** — exposes the webhook on every node's IP at a fixed port:
+
+     ```yaml
+     agentInjector:
+       service:
+         type: NodePort
+         nodePort: 30443
+       webhook:
+         # Reachable from the control plane; e.g. a node IP or an internal DNS name.
+         url: "https://<node-host-or-ip>:30443/traffic-agent"
+       certificate:
+         altNames:
+           - "<node-host-or-ip>"
+     ```
+
+   - **LoadBalancer** — exposes the webhook behind a (preferably internal) AWS load balancer.
+     Use `agentInjector.service.port` to front the standard `443` while the traffic-manager
+     container keeps binding the unprivileged `webhook.port` (`8443`):
+
+     ```yaml
+     agentInjector:
+       service:
+         type: LoadBalancer
+         port: 443
+       webhook:
+         url: "https://<lb-hostname>:443/traffic-agent"
+       certificate:
+         altNames:
+           - "<lb-hostname>"
+     ```
+
+   The `webhook.url` path must match `agentInjector.webhook.servicePath` (default
+   `/traffic-agent`). The port in the URL must match the exposed port: the NodePort you pinned,
+   or `agentInjector.service.port` for a LoadBalancer. Do **not** set `agentInjector.webhook.port`
+   to a privileged port such as `443` — that is the port the non-root traffic-manager container
+   binds, and it cannot bind ports below 1024. Use `agentInjector.service.port` instead, which
+   only affects the Service and still targets the container's `8443` port.
+
+### Restrict access to the exposed webhook
+
+Exposing the webhook outside the cluster widens its attack surface, so lock it down with the
+network so that **only the EKS control plane** can reach it:
+
+- For a **NodePort**, add an inbound rule to the worker nodes' security group that allows the
+  chosen node port only from the **EKS cluster security group** (the security group associated
+  with the control plane / the cluster's ENIs). Deny it from everywhere else.
+- For an **internal LoadBalancer**, scope its security group / source ranges the same way and
+  keep the load balancer internal (`service.beta.kubernetes.io/aws-load-balancer-internal`) so
+  it is never reachable from the public internet.
+
+### TLS hostname and SAN requirements
+
+The API server validates the webhook's serving certificate against the host it connects to.
+Whatever host you put in `agentInjector.webhook.url` (node IP/DNS name or load-balancer
+hostname) **must** appear as a Subject Alternative Name on the certificate, or the TLS handshake
+fails and injection silently stops again. Add every such host to
+`agentInjector.certificate.altNames` (shown above); this works for both the Helm-generated
+certificate and the `cert-manager` path. Entries are classified automatically: bare IPv4/IPv6
+addresses become IP SANs and everything else becomes a DNS SAN, so both
+`https://<node-ip>:30443/...` and `https://<hostname>:443/...` URLs validate correctly. The
+default in-cluster Service DNS names (`agent-injector.<namespace>` and
+`agent-injector.<namespace>.svc`) are always included automatically.
+
+> [!IMPORTANT]
+> Exposing the webhook externally is usually an *upgrade* of an existing traffic-manager. When
+> the certificate was generated by Helm (`agentInjector.certificate.method=helm`, the default),
+> adding `altNames` on an upgrade does **not** rotate the already-stored serving certificate, so
+> the new SANs never take effect. Set `agentInjector.certificate.regenerate=true` on the upgrade
+> that introduces the `altNames`:
+>
+> ```console
+> $ telepresence helm upgrade --values external-webhook.yaml --set agentInjector.certificate.regenerate=true
+> ```
+>
+> This does not apply to the `cert-manager` method, which reissues the certificate automatically
+> when its `dnsNames`/`ipAddresses` change.
+
+### `failurePolicy` tradeoffs
+
+The webhook ships with `failurePolicy: Ignore` (`agentInjector.webhook.failurePolicy`). The
+tradeoff:
+
+- **`Ignore` (default)** — if the API server can't reach the webhook, pods are admitted without
+  a sidecar. Your application keeps running, but intercepts silently fail to inject (the symptom
+  this page describes). Safer for cluster availability.
+- **`Fail`** — pod creation is *rejected* when the webhook is unreachable. This turns a silent
+  injection failure into a loud, immediate error, which makes the misconfiguration obvious, but
+  it also means **any** workload creation in a managed namespace breaks while the webhook is
+  unreachable. Only choose `Fail` if you accept that blast radius.
+
+If you keep the default `Ignore`, the absence of a `traffic-agent` container in freshly created
+pods (combined with an intercept timeout) is your signal that the API server isn't reaching the
+webhook — return to the decision path above.
 
 ## Error connecting to GKE or EKS cluster
 

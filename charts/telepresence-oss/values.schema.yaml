@@ -133,6 +133,11 @@ properties:
           regenerate:
             description: Whether the certificate used for the mutating webhook should be regenerated
             type: boolean
+          altNames:
+            description: Additional Subject Alternative Names (DNS names or IP addresses) to add to the webhook certificate
+            type: array
+            items:
+              type: string
       enabled:
         description: Enable/Disable the agent-injector and its webhook
         type: boolean
@@ -161,6 +166,18 @@ properties:
           type:
             description: Type of service for the agent-injector.
             type: string
+          port:
+            description: Port the agent-injector Service listens on. Empty inherits agentInjector.webhook.port.
+            anyOf:
+              - type: string
+                const: ""
+              - type: integer
+          nodePort:
+            description: The node port to expose the agent-injector on. Requires type to be NodePort. Empty lets Kubernetes allocate one.
+            anyOf:
+              - type: string
+                const: ""
+              - type: integer
       webhook:
         type: object
         additionalProperties: false
@@ -205,6 +222,9 @@ properties:
           timeoutSeconds:
             description: Timeout of the admission webhook
             type: integer
+          url:
+            description: External URL the API server uses to reach the webhook, instead of the in-cluster service
+            type: string
 
   apiPort:
     description: The port used by the Traffic Manager gRPC API

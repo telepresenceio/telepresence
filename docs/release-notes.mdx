@@ -9,6 +9,18 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.29.0
 <Note>
+	<Title type="feature" docs="troubleshooting#eks-calico-and-traffic-agent-injection-timeouts">Make the agent-injector webhook reachable from outside the cluster</Title>
+	<Body>
+The Helm chart can now expose the agent-injector mutating webhook to an API server that cannot reach an in-cluster Service, such as Amazon EKS with Calico where the control plane is outside the pod network. <code>agentInjector.service.type</code> and <code>agentInjector.service.nodePort</code> expose the injector Service (for example as a <code>NodePort</code>) independently of the chart-wide service type, <code>agentInjector.certificate.altNames</code> adds Subject Alternative Names to the webhook certificate, and <code>agentInjector.webhook.url</code> points the webhook at an external URL instead of the in-cluster Service.
+  </Body>
+</Note>
+<Note>
+	<Title type="change" docs="troubleshooting#eks-calico-and-traffic-agent-injection-timeouts">Clearer diagnostics when the agent-injector webhook is unreachable</Title>
+	<Body>
+When an intercept times out waiting for the traffic-agent to arrive and the pods were created without a sidecar, the traffic-manager now explains that the Kubernetes API server is likely unable to reach the agent-injector webhook and points to the EKS/Calico remedies (<code>hostNetwork=true</code> or an externally exposed webhook). The troubleshooting guide gained a full decision path covering host networking, NodePort/LoadBalancer exposure, access restriction, TLS SAN requirements, and <code>failurePolicy</code> tradeoffs.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Flush the DNS cache when the agent set changes</Title>
 	<Body>
 The root daemon caches cluster DNS resolutions for up to a minute. If a workload and its Service were deleted and recreated, the Service could get a new ClusterIP while the daemon kept resolving the name to the old, now-defunct address, so traffic to it was silently dropped until the cache entry expired. The daemon now flushes the DNS cache whenever the set of traffic-agents changes, so a recreated workload's new ClusterIP is picked up immediately.

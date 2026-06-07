@@ -43,11 +43,14 @@ The following tables lists the configurable parameters of the Telepresence chart
 | agentInjector.certificate.certmanager.issuerRef.name | The Issuer name to use to generate the self signed certificate.                                                                                                     | `telepresence`                                                              |
 | agentInjector.certificate.method                     | Method used when generating the certificate used for mutating webhook (helm, supplied, or certmanager).                                                             | `helm`                                                                      |
 | agentInjector.certificate.regenerate                 | Whether the certificate used for the mutating webhook should be regenerated.                                                                                        | `false`                                                                     |
+| agentInjector.certificate.altNames                   | Extra Subject Alternative Names added to the webhook certificate, in addition to the default in-cluster Service names. Needed when reaching the webhook by URL.       | `[]`                                                                        |
 | agentInjector.enabled                                | Enable/Disable the agent-injector and its webhook.                                                                                                                  | `true`                                                                      |
 | agentInjector.name                                   | Name to use with objects associated with the agent-injector.                                                                                                        | `agent-injector`                                                            |
 | agentInjector.injectPolicy                           | Determines when an agent is injected, possible values are `OnDemand` and `WhenEnabled`                                                                              | `OnDemand`                                                                  |
 | agentInjector.secret.name                            | The name of the secret the agent-injector webhook uses for authorization with the kubernetes api will expose.                                                       | `mutator-webhook-tls`                                                       |
-| agentInjector.service.type                           | Type of service for the agent-injector.                                                                                                                             | `ClusterIP`                                                                 |
+| agentInjector.service.type                           | Type of the agent-injector Service. Empty inherits the chart-wide `service.type`. Set to `NodePort` to expose the webhook to an API server outside the pod network. | `""`                                                                        |
+| agentInjector.service.port                           | Port the agent-injector Service listens on. Empty inherits `agentInjector.webhook.port`. Set (e.g. `443`) to front the webhook on a different external port via a LoadBalancer; the Service still targets the container's `https` port. | `""`                                                  |
+| agentInjector.service.nodePort                       | Fixed node port for the agent-injector Service when `agentInjector.service.type` is `NodePort`. Empty lets Kubernetes allocate one.                                  | `""`                                                                        |
 | agentInjector.webhook.admissionReviewVersions:       | List of supported admissionReviewVersions.                                                                                                                          | `["v1"]`                                                                    |
 | agentInjector.webhook.failurePolicy:                 | Action to take on unexpected failure or timeout of webhook.                                                                                                         | `Ignore`                                                                    |
 | agentInjector.webhook.name                           | The name of the agent-injector webhook                                                                                                                              | `agent-injector-webhook`                                                    |
@@ -56,6 +59,7 @@ The following tables lists the configurable parameters of the Telepresence chart
 | agentInjector.webhook.port:                          | Port for the service that provides the admission webhook                                                                                                            | `8443`                                                                      |
 | agentInjector.webhook.reinvocationPolicy:            | Specify if the webhook may be called again after the initial webhook call. Possible values are `Never` and `IfNeeded`.                                              | `IfNeeded`                                                                  |
 | agentInjector.webhook.servicePath:                   | Path to the service that provides the admission webhook                                                                                                             | `/traffic-agent`                                                            |
+| agentInjector.webhook.url                            | Reach the webhook at this URL instead of the in-cluster Service. Use with `agentInjector.service` (NodePort) and `agentInjector.certificate.altNames`.               | `""`                                                                        |
 | agentInjector.webhook.sideEffects:                   | Any side effects the admission webhook makes outside of AdmissionReview.                                                                                            | `None`                                                                      |
 | agentInjector.webhook.timeoutSeconds:                | Timeout of the admission webhook                                                                                                                                    | `5`                                                                         |
 | apiPort                                              | The port used by the Traffic Manager gRPC API                                                                                                                       | 8081                                                                        |
@@ -176,3 +180,48 @@ using the `podCIDRStrategy`.
 | `coverPodIPs`  | Obtain all IPs from the `podIP` and `podIPs` of all `Pod` resource statuses and calculate the CIDRs needed to cover them. |
 | `environment`  | Pick the CIDRs from the traffic manager's `POD_CIDRS` environment variable. Use `podCIDRs` to set that variable.          |
 | `nodePodCIDRs` | Obtain the CIDRs from the`podCIDR` and `podCIDRs` of all `Node` resource specifications.                                  |
+
+### Reaching the agent-injector webhook from outside the cluster
+
+Telepresence injects the traffic-agent through a `MutatingWebhookConfiguration`. The Kubernetes API
+server calls that webhook when a pod is created. By default the webhook is reached through the
+in-cluster `agent-injector` Service. On some clusters the API server runs outside the pod network and
+cannot reach that Service - a well known example is Amazon EKS with Calico, where the control plane is
+not part of the cluster's virtual network. There, pods are created but never get a traffic-agent, and
+intercepts silently fail.
+
+When that happens you can expose the webhook directly and point the API server at it:
+
+```yaml
+agentInjector:
+  service:
+    type: NodePort
+    nodePort: 32666
+  certificate:
+    # The hostname the API server will use to reach the webhook must be present in the
+    # certificate's Subject Alternative Names.
+    altNames:
+      - my-node.example.com
+  webhook:
+    url: "https://my-node.example.com:32666/traffic-agent"
+```
+
+This exposes the `agent-injector` Service on a node port, adds the external hostname to the generated
+certificate, and renders the webhook's `clientConfig` with `url` instead of `service`. The `url` host
+must resolve to a node (or load balancer) that forwards to the node port, and must match one of the
+`altNames`. Both DNS names and bare IP addresses are accepted in `altNames`; IP addresses become IP
+SANs so a `url` such as `https://10.0.0.5:32666/traffic-agent` validates correctly.
+
+To front the webhook on a standard port such as `443` (for example behind a `LoadBalancer`), set
+`agentInjector.service.port: 443` and use a matching `webhook.url`. Do not set
+`agentInjector.webhook.port` to a privileged port - that is the port the non-root traffic-manager
+container binds, and it cannot bind ports below 1024. `agentInjector.service.port` only changes the
+Service port; the Service still targets the container's unprivileged `https` port.
+
+When the certificate is generated by Helm (the default `agentInjector.certificate.method=helm`) and you
+add `altNames` while upgrading an existing release, also set `agentInjector.certificate.regenerate=true`
+so the stored serving certificate is reissued with the new SANs; otherwise the old certificate (without
+the external SAN) is kept and the TLS handshake fails. The `cert-manager` method reissues automatically.
+
+Note that this makes the webhook reachable from outside the cluster. Restrict access to it
+accordingly (for example with security groups or network policies).

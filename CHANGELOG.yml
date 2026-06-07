@@ -27,6 +27,33 @@ items:
   - version: 2.29.0
     date: (TBD)
     notes:
+      - type: feature
+        title: Make the agent-injector webhook reachable from outside the cluster
+        body: >-
+          The Helm chart can now expose the agent-injector mutating webhook to
+          an API server that cannot reach an in-cluster Service, such as Amazon
+          EKS with Calico where the control plane is outside the pod network.
+          <code>agentInjector.service.type</code> and
+          <code>agentInjector.service.nodePort</code> expose the injector
+          Service (for example as a <code>NodePort</code>) independently of the
+          chart-wide service type,
+          <code>agentInjector.certificate.altNames</code> adds Subject
+          Alternative Names to the webhook certificate, and
+          <code>agentInjector.webhook.url</code> points the webhook at an
+          external URL instead of the in-cluster Service.
+        docs: troubleshooting#eks-calico-and-traffic-agent-injection-timeouts
+      - type: change
+        title: Clearer diagnostics when the agent-injector webhook is unreachable
+        body: >-
+          When an intercept times out waiting for the traffic-agent to arrive
+          and the pods were created without a sidecar, the traffic-manager now
+          explains that the Kubernetes API server is likely unable to reach the
+          agent-injector webhook and points to the EKS/Calico remedies
+          (<code>hostNetwork=true</code> or an externally exposed webhook). The
+          troubleshooting guide gained a full decision path covering host
+          networking, NodePort/LoadBalancer exposure, access restriction, TLS
+          SAN requirements, and <code>failurePolicy</code> tradeoffs.
+        docs: troubleshooting#eks-calico-and-traffic-agent-injection-timeouts
       - type: bugfix
         title: Flush the DNS cache when the agent set changes
         body: >-
