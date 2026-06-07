@@ -116,6 +116,29 @@ agentInjector:
         name: telepresence
         kind: Issuer
 
+    # altNames adds extra Subject Alternative Names to the webhook certificate, in addition to the
+    # default in-cluster Service names. Set this when the API server reaches the webhook by a custom
+    # hostname or URL (see agentInjector.webhook.url), such as a node's DNS name. Applies to both the
+    # helm-generated and the cert-manager certificate.
+    altNames: []
+
+  # service configures the Service that fronts the agent-injector webhook. By default it inherits the
+  # chart-wide service.type (ClusterIP). On clusters where the API server cannot reach an in-cluster
+  # Service - for example EKS with Calico, where the control plane is outside the pod network - set
+  # type to NodePort (and optionally pin nodePort) and point the webhook at it with
+  # agentInjector.webhook.url.
+  service:
+    # type overrides the chart-wide service.type for the agent-injector Service only. Empty inherits
+    # service.type.
+    type: ""
+    # port is the port the Service listens on. Empty inherits agentInjector.webhook.port. Set this
+    # to expose the webhook on a different external port (e.g. 443 for a LoadBalancer) while the
+    # traffic-manager container keeps binding the unprivileged webhook.port. The Service always
+    # targets the manager's https container port regardless of this value.
+    port: ""
+    # nodePort pins the node port when type is NodePort. Empty lets Kubernetes allocate one.
+    nodePort: ""
+
   injectPolicy: OnDemand
   mutationAware: true
   webhook:
@@ -127,6 +150,11 @@ agentInjector:
     reinvocationPolicy: IfNeeded
     sideEffects: None
     timeoutSeconds: 5
+    # url, when set, makes the API server reach the webhook at this URL instead of through the
+    # in-cluster Service. Use together with agentInjector.service (NodePort/LoadBalancer) and
+    # agentInjector.certificate.altNames when the API server cannot reach the cluster Service.
+    # Example: https://<node-dns-name>:32666/traffic-agent
+    url: ""
     # Optional objectSelector to limit which pods the mutating webhook applies to.
     # objectSelector: {}
 

@@ -67,8 +67,16 @@ already managed by some other traffic-manager.
   {{- end }}
 {{- end }}
 {{- $altNames := list ( printf "agent-injector.%s" (include "traffic-manager.namespace" $)) ( printf "agent-injector.%s.svc" (include "traffic-manager.namespace" $)) -}}
+{{- $altIPs := list -}}
+{{- range .Values.agentInjector.certificate.altNames }}
+{{- if or (regexMatch "^[0-9.]+$" .) (contains ":" .) }}
+{{- $altIPs = append $altIPs . -}}
+{{- else }}
+{{- $altNames = append $altNames . -}}
+{{- end }}
+{{- end }}
 {{- $genCA := genCA "agent-injector-ca" 365 -}}
-{{- $genCert := genSignedCert "agent-injector" nil $altNames 365 $genCA -}}
+{{- $genCert := genSignedCert "agent-injector" $altIPs $altNames 365 $genCA -}}
 {{- $secretData := (lookup "v1" "Secret" (include "traffic-manager.namespace" $) .Values.agentInjector.secret.name).data -}}
 {{- $reinvocationPolicy := .Values.agentInjector.webhook.reinvocationPolicy }}
 {{- if (and .Values.agentInjector.mutationAware (not (eq $reinvocationPolicy "IfNeeded"))) }}
@@ -98,11 +106,15 @@ webhooks:
     caBundle: {{ $genCA.Cert | b64enc }}
 {{- end }}
 {{- end }}
+{{- if .Values.agentInjector.webhook.url }}
+    url: {{ .Values.agentInjector.webhook.url | quote }}
+{{- else }}
     service:
       name: {{ .Values.agentInjector.name }}
       namespace: {{ include "traffic-manager.namespace" $ }}
       path: {{ .Values.agentInjector.webhook.servicePath }}
-      port: {{ .Values.agentInjector.webhook.port }}
+      port: {{ .Values.agentInjector.service.port | default .Values.agentInjector.webhook.port }}
+{{- end }}
   rules:
   - apiGroups:
     - ""

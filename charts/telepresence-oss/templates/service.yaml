@@ -26,11 +26,18 @@ metadata:
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 spec:
-  type: {{ .service.type }}
+{{- $injectorSvcType := .agentInjector.service.type | default .service.type }}
+{{- if and .agentInjector.service.nodePort (ne ($injectorSvcType | toString) "NodePort") }}
+{{- fail "agentInjector.service.nodePort requires agentInjector.service.type to be NodePort" }}
+{{- end }}
+  type: {{ $injectorSvcType }}
   ports:
   - name: https
-    port: {{ .agentInjector.webhook.port }}
+    port: {{ .agentInjector.service.port | default .agentInjector.webhook.port }}
     targetPort: https
+    {{- with .agentInjector.service.nodePort }}
+    nodePort: {{ . }}
+    {{- end }}
   selector:
     {{- include "telepresence.selectorLabels" $ | nindent 4 }}
 {{- end }}
