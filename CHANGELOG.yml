@@ -45,8 +45,11 @@ items:
           <code>telepresence.getambassador.io/inject-traffic-agent</code> annotation
           value, the ReplicaSet controller then retried the creation indefinitely
           and the workload's rollout stalled. Such errors now admit the pod without
-          an agent and surface the reason as an admission warning, while transient
-          errors still deny the request so the injection is retried.
+          an agent and surface the reason as an admission warning. Transient errors,
+          such as the agent configuration not being generatable yet because the
+          traffic-manager just started, are now retried within the admission call so
+          the agent is injected without denying the pod, and the config generation no
+          longer holds a per-namespace lock that serialized simultaneous injections.
       - type: feature
         title: Ingest workloads in mapped namespaces
         body: >-

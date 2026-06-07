@@ -11,7 +11,7 @@ The root daemon caches cluster DNS resolutions for up to a minute. If a workload
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">A failed agent injection no longer blocks pod creation</div></div>
 <div style="margin-left: 15px">
 
-When the agent-injector webhook returned an error, it denied the pod's creation. For an unfixable error, such as an invalid <code>telepresence.getambassador.io/inject-traffic-agent</code> annotation value, the ReplicaSet controller then retried the creation indefinitely and the workload's rollout stalled. Such errors now admit the pod without an agent and surface the reason as an admission warning, while transient errors still deny the request so the injection is retried.
+When the agent-injector webhook returned an error, it denied the pod's creation. For an unfixable error, such as an invalid <code>telepresence.getambassador.io/inject-traffic-agent</code> annotation value, the ReplicaSet controller then retried the creation indefinitely and the workload's rollout stalled. Such errors now admit the pod without an agent and surface the reason as an admission warning. Transient errors, such as the agent configuration not being generatable yet because the traffic-manager just started, are now retried within the admission call so the agent is injected without denying the pod, and the config generation no longer holds a per-namespace lock that serialized simultaneous injections.
 </div>
 
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Ingest workloads in mapped namespaces](reference/engagements/cli)</div></div>

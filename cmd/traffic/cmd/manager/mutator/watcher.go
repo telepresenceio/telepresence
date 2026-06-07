@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/google/go-cmp/cmp"
 	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -21,6 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -341,32 +343,57 @@ func (c *configWatcher) Get(key, ns string) (ac *agentconfig.Sidecar) {
 	return ac
 }
 
-// GetOrGenerate returns the Sidecar configuration for the given workload. If no configuration is found, it blocks the entry from access while
-// it generates a new one using the given generator.
-func (c *configWatcher) GetOrGenerate(ctx context.Context, wl k8sapi.Workload) (ac *agentconfig.Sidecar, err error) {
+// GetOrGenerate returns the Sidecar configuration for the given workload, generating and caching a
+// new one if none exists yet.
+//
+// Generation runs outside the per-namespace lock so that simultaneous injections of different
+// workloads in the same namespace don't serialize on one another, and it is retried for a short
+// while on transient errors. The traffic-manager's informer caches can briefly lag the API server,
+// in particular right after startup or a burst of workload creations; retrying lets the config be
+// produced within this single admission call instead of denying the pod, which would otherwise
+// trigger ReplicaSet back-off and stall the workload's rollout.
+//
+// Only errors categorized as User errors (such as a malformed annotation) are terminal and skipped
+// by the retry. Service-discovery failures are deliberately left retryable: a manifest may apply a
+// referenced Service together with the workload, so a Service that is missing at admission time may
+// simply not have been created yet and is expected to appear within the retry window.
+func (c *configWatcher) GetOrGenerate(ctx context.Context, wl k8sapi.Workload) (*agentconfig.Sidecar, error) {
+	if ac := c.Get(wl.GetName(), wl.GetNamespace()); ac != nil {
+		return ac, nil
+	}
+
+	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
+	if err != nil {
+		return nil, err
+	}
+
+	clog.Debugf(ctx, "GetOrGenerate generates config for workload %s.%s", wl.GetName(), wl.GetNamespace())
+	var ac *agentconfig.Sidecar
+	err = backoff.Retry(func() error {
+		var genErr error
+		ac, genErr = gc.Generate(ctx, wl, nil)
+		if genErr != nil && errcat.GetCategory(genErr) == errcat.User {
+			return backoff.Permanent(genErr)
+		}
+		return genErr
+	}, backoff.WithContext(backoff.WithMaxRetries(backoff.NewConstantBackOff(200*time.Millisecond), 10), ctx))
+	if err != nil {
+		return nil, err
+	}
+
+	// Store the generated config, unless another goroutine generated it concurrently.
 	c.agentConfigs.Compute(wl.GetNamespace(), func(scMap map[string]*agentconfig.Sidecar, loaded bool) (map[string]*agentconfig.Sidecar, xsync.ComputeOp) {
-		if loaded {
-			ac = scMap[wl.GetName()]
+		if !loaded {
+			return map[string]*agentconfig.Sidecar{wl.GetName(): ac}, xsync.UpdateOp
 		}
-		op := xsync.CancelOp
-		if ac == nil {
-			var gc *agentmap.GeneratorConfig
-			gc, err = managerutil.GetEnv(ctx).GeneratorConfig(managerutil.GetAgentImage(ctx))
-			if err == nil {
-				clog.Debugf(ctx, "GetOrGenerate generates config for workload %s.%s", wl.GetName(), wl.GetNamespace())
-				ac, err = gc.Generate(ctx, wl, nil)
-				if err == nil {
-					if scMap == nil {
-						scMap = make(map[string]*agentconfig.Sidecar)
-						op = xsync.UpdateOp
-					}
-					scMap[wl.GetName()] = ac
-				}
-			}
+		if existing := scMap[wl.GetName()]; existing != nil {
+			ac = existing
+			return scMap, xsync.CancelOp
 		}
-		return scMap, op
+		scMap[wl.GetName()] = ac
+		return scMap, xsync.UpdateOp
 	})
-	return ac, err
+	return ac, nil
 }
 
 func whereWeWatch(ns string) string {
