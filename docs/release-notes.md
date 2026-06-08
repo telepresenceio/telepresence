@@ -44,6 +44,12 @@ The <code>ingest</code> command now accepts <code>--namespace</code> to select t
 Tearing down a Compose project that engaged a service with replace or intercept previously removed named volumes even when <code>-v</code>/<code>--volumes</code> was not given, because the connection teardown ran <code>docker compose down --volumes</code>. Only Telepresence's own telemount-managed volumes are now removed, matching the behavior of <code>docker compose down</code>.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Clearer error when the cluster cannot be reached</div></div>
+<div style="margin-left: 15px">
+
+When the initial cluster check fails, Telepresence now reports, in plain language, that it could not reach the cluster — naming the kubeconfig context and API server, classifying the cause (host could not be resolved, connection refused, timed out, TLS or authentication failure), and suggesting to verify the kubeconfig context with <code>kubectl cluster-info</code> instead of surfacing a raw networking error.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Reliably inject agents into simultaneously created workloads</div></div>
 <div style="margin-left: 15px">
 

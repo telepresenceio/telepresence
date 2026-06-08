@@ -110,6 +110,16 @@ items:
           Only Telepresence's own telemount-managed volumes are now removed,
           matching the behavior of <code>docker compose down</code>.
       - type: bugfix
+        title: Clearer error when the cluster cannot be reached
+        body: >-
+          When the initial cluster check fails, Telepresence now reports, in
+          plain language, that it could not reach the cluster — naming the
+          kubeconfig context and API server, classifying the cause (host
+          could not be resolved, connection refused, timed out, TLS or
+          authentication failure), and suggesting to verify the kubeconfig
+          context with <code>kubectl cluster-info</code> instead of surfacing
+          a raw networking error.
+      - type: bugfix
         title: Reliably inject agents into simultaneously created workloads
         body: >-
           The agent-injector resolved a pod's owner workload from the
