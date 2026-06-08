@@ -301,6 +301,14 @@ func (s *nsSuite) Test_NamespacesStatic() {
 	rq.Error(err)
 	rq.Contains(se, "beta is not managed")
 
+	_, se, err = itest.Telepresence(ctx,
+		"connect",
+		"--manager-namespace", s.managerNamespace(),
+		"--namespace", "alpha",
+		"--mapped-namespaces", "alpha,beta")
+	rq.Error(err)
+	rq.Contains(se, `mapped namespaces ["beta"] are not managed by this traffic-manager`)
+
 	// Switch to just using both alpha and beta
 	ctx = itest.WithNamespaces(s.Context(), &itest.Namespaces{
 		Namespace: s.managerNamespace(),

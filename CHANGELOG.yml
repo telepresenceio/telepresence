@@ -208,6 +208,15 @@ items:
           ReplicaSets, StatefulSets, and Argo Rollouts are now generated from the
           corresponding <code>workloads.*.enabled</code> settings. Disabling a workload
           kind no longer grants get, list, watch, or patch permissions for that kind.
+      - type: bugfix
+        title: Reject unmanaged mapped namespaces
+        body: >-
+          Clients now reject <code>--mapped-namespaces</code> values that are outside
+          the namespace set managed by a namespace-limited traffic-manager. Invalid
+          mapped namespace requests now fail during connect with a helpful error
+          instead of leaving the client connected with namespaces that cannot be
+          handled by the in-cluster manager or traffic-agents.
+        docs: reference/engagements/cli
   - version: 2.28.0
     date: 2026-05-11
     notes:

@@ -104,6 +104,12 @@ The <code>agentInjector.webhook.objectSelector</code> Helm chart value accepts a
 Traffic-manager cluster- and namespace-scoped RBAC rules for Deployments, ReplicaSets, StatefulSets, and Argo Rollouts are now generated from the corresponding <code>workloads.*.enabled</code> settings. Disabling a workload kind no longer grants get, list, watch, or patch permissions for that kind.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Reject unmanaged mapped namespaces](reference/engagements/cli)</div></div>
+<div style="margin-left: 15px">
+
+Clients now reject <code>--mapped-namespaces</code> values that are outside the namespace set managed by a namespace-limited traffic-manager. Invalid mapped namespace requests now fail during connect with a helpful error instead of leaving the client connected with namespaces that cannot be handled by the in-cluster manager or traffic-agents.
+</div>
+
 ## Version 2.28.0 <span style="font-size: 16px;">(May 11)</span>
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept workloads in mapped namespaces](reference/engagements/cli)</div></div>
 <div style="margin-left: 15px">
