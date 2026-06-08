@@ -27,6 +27,15 @@ items:
   - version: 2.29.0
     date: (TBD)
     notes:
+      - type: change
+        title: Fail engagements when agent port-forwarding is disabled
+        body: >-
+          Setting <code>cluster.agentPortForward=false</code> disables all
+          direct communication between the client and traffic-agents, so the
+          cluster can only be used as a VPN. An attempt to intercept, replace,
+          or ingest now fails immediately with an explanatory error instead of
+          appearing to start and then never delivering traffic.
+        docs: reference/config
       - type: feature
         title: Make the agent-injector webhook reachable from outside the cluster
         body: >-

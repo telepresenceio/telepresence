@@ -52,6 +52,15 @@ Values for `client.cluster` controls aspects on how client's connection to the t
 | `connectFromRootDaeamon`  | Make connections to the cluster directly from the root daemon.                        | [boolean][yaml-bool]                        | `true`          |
 | `agentPortForward`        | Let telepresence-client use port-forwards directly to agents                          | [boolean][yaml-bool]                        | `true`          |
 
+> [!CAUTION]
+> Setting `agentPortForward` to `false` disables all direct communication between the client and
+> the traffic-agents. This is the only channel used both for routing intercepted traffic back to
+> the workstation and for serving volume mounts, so with it disabled **every type of engagement
+> (intercept, replace, and ingest) is unavailable**; attempting one fails immediately with an
+> explanatory error. Only plain cluster access (DNS resolution and outbound connections to cluster
+> services) keeps working, which makes `false` meaningful only when Telepresence is used purely as
+> a VPN.
+
 ### Docker
 Values for the `client.docker` provides docker specific options.
 
