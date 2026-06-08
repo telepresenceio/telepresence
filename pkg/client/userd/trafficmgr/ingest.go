@@ -122,6 +122,9 @@ func (s *session) getCurrentAgent(name, namespace string) *manager.AgentInfo {
 }
 
 func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.IngestInfo, err error) {
+	if err = requireAgentPortForward(ctx, "ingest"); err != nil {
+		return nil, err
+	}
 	id := rq.Identifier
 	ns := id.Namespace
 	if ns == "" {

@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.29.0
 <Note>
+	<Title type="change" docs="reference/config">Fail engagements when agent port-forwarding is disabled</Title>
+	<Body>
+Setting <code>cluster.agentPortForward=false</code> disables all direct communication between the client and traffic-agents, so the cluster can only be used as a VPN. An attempt to intercept, replace, or ingest now fails immediately with an explanatory error instead of appearing to start and then never delivering traffic.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="troubleshooting#eks-calico-and-traffic-agent-injection-timeouts">Make the agent-injector webhook reachable from outside the cluster</Title>
 	<Body>
 The Helm chart can now expose the agent-injector mutating webhook to an API server that cannot reach an in-cluster Service, such as Amazon EKS with Calico where the control plane is outside the pod network. <code>agentInjector.service.type</code> and <code>agentInjector.service.nodePort</code> expose the injector Service (for example as a <code>NodePort</code>) independently of the chart-wide service type, <code>agentInjector.certificate.altNames</code> adds Subject Alternative Names to the webhook certificate, and <code>agentInjector.webhook.url</code> points the webhook at an external URL instead of the in-cluster Service.

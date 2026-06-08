@@ -476,8 +476,29 @@ func (s *session) compareFinalizedManagerVersion(major, minor, patch uint64) int
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
+// requireAgentPortForward fails an engagement (intercept, replace, ingest) early when
+// cluster.agentPortForward is disabled. In that mode the client has no channel to traffic-agents,
+// so neither intercepted-traffic routing nor volume mounts can work; creating the engagement
+// anyway would leave its traffic with nowhere to go.
+func requireAgentPortForward(ctx context.Context, kind string) error {
+	if !client.GetConfig(ctx).Cluster().AgentPortForward {
+		return errcat.User.Newf(
+			"%s requires communication with a traffic-agent, but cluster.agentPortForward is disabled. "+
+				"This is intended for VPN-only mode, in which case intercept, replace, and ingest are unavailable.",
+			kind)
+	}
+	return nil
+}
+
 func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, error) {
 	spec := ir.Spec
+	kind := "intercept"
+	if spec.Replace {
+		kind = "replace"
+	}
+	if err := requireAgentPortForward(ctx, kind); err != nil {
+		return nil, err
+	}
 	if spec.Namespace == "" {
 		spec.Namespace = s.Namespace
 	} else if ns := s.ActualNamespace(spec.Namespace); ns == "" {
