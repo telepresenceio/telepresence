@@ -176,3 +176,40 @@ func (s *cidrConflictSuite) Test_AllowConflictResolution() {
 	rq.NoError(err)
 	rq.Contains(out, "dev tel0") // tel0 is OK, we only run this on linux
 }
+
+// Test_LocalDNSStaysReachable verifies that a local DNS server whose address falls
+// inside a routed (here: allow-conflicting) subnet is kept reachable on its original
+// interface instead of being tunnelled into the cluster. See issue #2429.
+func (s *cidrConflictSuite) Test_LocalDNSStaysReachable() {
+	rq := s.Require()
+
+	dnsIP := net.IP(s.subnets[0].Addr().AsSlice())
+	dnsIP[len(dnsIP)-1] = 53
+	dnsAddr, ok := netip.AddrFromSlice(dnsIP)
+	rq.True(ok)
+	dnsHostRoute := netip.PrefixFrom(dnsAddr, dnsAddr.BitLen())
+
+	ctx := itest.WithConfig(s.Context(), func(cfg client.Config) {
+		cfg.Routing().AutoResolveConflicts = false
+		cfg.Routing().AllowConflicting = s.subnets
+		cfg.DNS().LocalAddresses = []netip.AddrPort{netip.AddrPortFrom(dnsAddr, 53)}
+	})
+
+	// Before connecting, the DNS server is reachable via the conflicting veth interface.
+	out, err := itest.Output(ctx, "ip", "route", "get", dnsAddr.String())
+	rq.NoError(err)
+	rq.Contains(out, "dev brm")
+
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceQuitOk(ctx)
+
+	// The conflicting DNS server must be added to never-proxy automatically.
+	st := itest.TelepresenceStatusOk(ctx)
+	rq.Contains(st.RootDaemon.NeverProxy, dnsHostRoute,
+		"local DNS server %s should be added to never-proxy", dnsAddr)
+
+	// And it must remain reachable on its original interface, not via tel0.
+	out, err = itest.Output(ctx, "ip", "route", "get", dnsAddr.String())
+	rq.NoError(err)
+	rq.Contains(out, "dev brm")
+}

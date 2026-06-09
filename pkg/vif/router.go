@@ -26,6 +26,11 @@ type Router struct {
 	routedSubnets []netip.Prefix
 	// The subnets that are allowed to be routed even in the presence of conflicting routes
 	whitelistedSubnets []netip.Prefix
+	// Host routes for local DNS servers that fall inside a routed subnet. These must
+	// follow their real path (e.g. a second NIC or VPN) instead of the default route,
+	// so they are routed via the existing best path. Every other never-proxy subnet
+	// keeps the historical default-route behavior. See issue #2429.
+	localDNSRoutes []netip.Prefix
 }
 
 func NewRouter(device Device, table routing.Table) *Router {
@@ -42,6 +47,15 @@ func (rt *Router) GetRoutedSubnets() []netip.Prefix {
 func (rt *Router) UpdateWhitelist(whitelist []netip.Prefix) {
 	rt.Lock()
 	rt.whitelistedSubnets = whitelist
+	rt.Unlock()
+}
+
+// SetLocalDNSRoutes records the never-proxy host routes that target a local DNS
+// server inside a routed subnet. Only these are routed via their existing best
+// path; all other never-proxy subnets continue to use the default route.
+func (rt *Router) SetLocalDNSRoutes(routes []netip.Prefix) {
+	rt.Lock()
+	rt.localDNSRoutes = routes
 	rt.Unlock()
 }
 
@@ -182,10 +196,19 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 		return err
 	}
 
-	// All subnets in neverProxy have been verified as being routed by the TUN-device, so we
-	// route them through the same interface and next hop as the default route.
+	// All subnets in neverProxy have been verified as being routed by the TUN-device.
+	// Local DNS server host routes must follow their real path — the resolver may be
+	// reachable through a more specific route on another interface (a second NIC, a
+	// VPN, or the integration test's veth pair) — so they are routed via the existing
+	// best path. Every other never-proxy subnet keeps the historical behavior of being
+	// routed via the default route, to avoid changing how established never-proxy
+	// entries are routed.
 	for _, sn := range dontProxy {
-		staticRoutes = append(staticRoutes, routeViaDefault(sn, dr))
+		if slices.Contains(rt.localDNSRoutes, sn) {
+			staticRoutes = append(staticRoutes, rt.routeViaExisting(ctx, sn, dr, ourIdx, ourName))
+		} else {
+			staticRoutes = append(staticRoutes, routeViaDefault(sn, dr))
+		}
 	}
 
 	// ... except for the never proxy overrides, which will be routed to our device.
@@ -210,13 +233,79 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	return nil
 }
 
-func routeViaDefault(sn netip.Prefix, dr *routing.Route) routing.Route {
-	r := routing.NewRoute(sn, dr.InterfaceIndex, dr.InterfaceName)
-	if sameAddrFamily(sn.Addr(), dr.Gateway) {
-		r.Gateway = dr.Gateway
+// routeViaExisting builds a never-proxy route for sn that follows the
+// destination's real path. It first asks the OS which route would be used. If
+// that route points at our own device, then Telepresence has already made the
+// destination look routed and we fall back to scanning the routing table for the
+// best non-Telepresence match. The second table scan is intentional: GetRoute
+// answers "what wins now", while existingRoute finds the route we are trying to
+// preserve beneath our own route.
+func (rt *Router) routeViaExisting(ctx context.Context, sn netip.Prefix, dr *routing.Route, ourIdx int, ourName string) routing.Route {
+	if existing := rt.osRoute(ctx, sn, ourIdx, ourName); existing != nil {
+		return routeVia(sn, existing)
 	}
-	if sameAddrFamily(sn.Addr(), dr.LocalIP) {
-		r.LocalIP = dr.LocalIP
+	if existing := rt.existingRoute(ctx, sn.Addr(), ourName); existing != nil {
+		return routeVia(sn, existing)
+	}
+	return routeViaDefault(sn, dr)
+}
+
+func (rt *Router) osRoute(ctx context.Context, sn netip.Prefix, ourIdx int, ourName string) *routing.Route {
+	existing, err := routing.GetRoute(ctx, sn)
+	if err != nil {
+		clog.Debugf(ctx, "unable to discover current route for never-proxy %s: %v", sn, err)
+		return nil
+	}
+	if existing.InterfaceIndex == ourIdx || existing.InterfaceName == ourName {
+		return nil
+	}
+	return existing
+}
+
+// existingRoute returns the most specific non-default route to addr that isn't on
+// our own device, or nil if no such route exists (in which case the default route
+// should be used).
+func (rt *Router) existingRoute(ctx context.Context, addr netip.Addr, ourName string) *routing.Route {
+	table, err := routing.GetRoutingTable(ctx)
+	if err != nil {
+		clog.Errorf(ctx, "failed to read routing table while resolving never-proxy route for %s: %v", addr, err)
+		return nil
+	}
+	return mostSpecificRoute(table, addr, ourName)
+}
+
+// mostSpecificRoute returns the most specific route in table that contains addr,
+// ignoring the default route, the OpenVPN half-of-default routes, and any route on
+// the ourName interface. Routes on our own device are ignored because they are
+// exactly the ones we're trying to bypass for never-proxy destinations. It returns
+// nil when no such route exists, signalling that the default route should be used.
+func mostSpecificRoute(table []*routing.Route, addr netip.Addr, ourName string) *routing.Route {
+	var best *routing.Route
+	for _, r := range table {
+		if r.Default || subnet.IsHalfOfDefault(r.RoutedNet) || r.InterfaceName == ourName {
+			continue
+		}
+		if !r.RoutedNet.Contains(addr) {
+			continue
+		}
+		if best == nil || r.RoutedNet.Bits() > best.RoutedNet.Bits() {
+			best = r
+		}
+	}
+	return best
+}
+
+func routeViaDefault(sn netip.Prefix, dr *routing.Route) routing.Route {
+	return routeVia(sn, dr)
+}
+
+func routeVia(sn netip.Prefix, base *routing.Route) routing.Route {
+	r := routing.NewRoute(sn, base.InterfaceIndex, base.InterfaceName)
+	if sameAddrFamily(sn.Addr(), base.Gateway) {
+		r.Gateway = base.Gateway
+	}
+	if sameAddrFamily(sn.Addr(), base.LocalIP) {
+		r.LocalIP = base.LocalIP
 	}
 	return r
 }

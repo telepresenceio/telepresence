@@ -8,6 +8,12 @@
 Setting <code>cluster.agentPortForward=false</code> disables all direct communication between the client and traffic-agents, so the cluster can only be used as a VPN. An attempt to intercept, replace, or ingest now fails immediately with an explanatory error instead of appearing to start and then never delivering traffic.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Keep a local DNS server reachable when its IP is in a routed subnet](reference/vpn)</div></div>
+<div style="margin-left: 15px">
+
+When a cluster subnet routed through Telepresence covers the workstation's DNS server address (for example an EKS node whose resolver lives at <code>172.31.0.2</code> while the pod subnet is <code>172.31.0.0/18</code>), queries to that server were captured by the TUN-device and tunnelled into the cluster, breaking name resolution for everything that isn't a cluster name. Telepresence now detects such DNS servers and adds a host route for them to the never-proxy set, keeping them reachable on their original interface.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Make the agent-injector webhook reachable from outside the cluster](troubleshooting#eks-calico-and-traffic-agent-injection-timeouts)</div></div>
 <div style="margin-left: 15px">
 

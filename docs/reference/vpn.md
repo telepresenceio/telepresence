@@ -215,6 +215,19 @@ The end result of this (assuming an allowlist of `/9`) will be a configuration l
 
 ![VPN Telepresence](../images/vpn-with-tele.jpg)
 
+### Local DNS servers inside a routed subnet
+
+When a routed subnet covers the IP address of the workstation's own DNS server
+(a common situation on cloud VMs, such as an EKS node whose resolver lives at
+`172.31.0.2` while the pod subnet is `172.31.0.0/18`), Telepresence would
+otherwise tunnel DNS queries to that server into the cluster and break name
+resolution for everything that isn't a cluster name. Telepresence detects this
+automatically and adds a host route for the DNS server to the never-proxy set,
+keeping it reachable on its original interface. No extra configuration is
+required, but you can still list the address explicitly under
+`routing.neverProxySubnets` if you prefer to make it visible in your
+configuration.
+
 ### Using docker
 
 Use `telepresence connect --docker` to make the Telepresence daemon containerized, which means that it has its own
