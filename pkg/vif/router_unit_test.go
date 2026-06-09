@@ -51,3 +51,69 @@ func TestRouteViaDefaultDoesNotMixAddressFamilies(t *testing.T) {
 		t.Fatalf("LocalIP = %s, want %s", r.LocalIP, netip.IPv6Unspecified())
 	}
 }
+
+func TestRouteViaPreservesNonDefaultRoute(t *testing.T) {
+	sn := netip.MustParsePrefix("10.96.0.37/32")
+	br := routing.NewRoute(netip.MustParsePrefix("10.96.0.0/16"), 11, "brm")
+	br.LocalIP = netip.MustParseAddr("10.96.0.1")
+
+	r := routeVia(sn, &br)
+
+	if r.RoutedNet != sn {
+		t.Fatalf("RoutedNet = %s, want %s", r.RoutedNet, sn)
+	}
+	if r.InterfaceIndex != br.InterfaceIndex {
+		t.Fatalf("InterfaceIndex = %d, want %d", r.InterfaceIndex, br.InterfaceIndex)
+	}
+	if r.InterfaceName != br.InterfaceName {
+		t.Fatalf("InterfaceName = %q, want %q", r.InterfaceName, br.InterfaceName)
+	}
+	if r.LocalIP != br.LocalIP {
+		t.Fatalf("LocalIP = %s, want %s", r.LocalIP, br.LocalIP)
+	}
+}
+
+func TestMostSpecificRoute(t *testing.T) {
+	defaultRoute := routing.NewRoute(netip.MustParsePrefix("0.0.0.0/0"), 2, "enp1s0")
+	defaultRoute.Default = true
+	tunRoute := routing.NewRoute(netip.MustParsePrefix("172.31.0.0/18"), 5, "tel0")
+	vethRoute := routing.NewRoute(netip.MustParsePrefix("172.31.0.0/18"), 7, "brm")
+	narrowRoute := routing.NewRoute(netip.MustParsePrefix("172.31.0.0/24"), 8, "brm")
+
+	addr := netip.MustParseAddr("172.31.0.2")
+
+	tests := []struct {
+		name  string
+		table []*routing.Route
+		want  *routing.Route
+	}{
+		{
+			name:  "prefers a non-tunnel route over the default route",
+			table: []*routing.Route{&defaultRoute, &tunRoute, &vethRoute},
+			want:  &vethRoute,
+		},
+		{
+			name:  "ignores routes on our own device",
+			table: []*routing.Route{&defaultRoute, &tunRoute},
+			want:  nil,
+		},
+		{
+			name:  "picks the most specific matching route",
+			table: []*routing.Route{&defaultRoute, &vethRoute, &narrowRoute},
+			want:  &narrowRoute,
+		},
+		{
+			name:  "returns nil when only the default route matches",
+			table: []*routing.Route{&defaultRoute},
+			want:  nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mostSpecificRoute(tt.table, addr, "tel0")
+			if got != tt.want {
+				t.Fatalf("mostSpecificRoute() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

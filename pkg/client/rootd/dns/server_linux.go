@@ -47,36 +47,38 @@ func (s *Server) Worker(c context.Context, dev vif.Device, configureDNS func(net
 	return err
 }
 
-func addressFromResolvConf(c context.Context) (ap netip.AddrPort, err error) {
-	var rf *dnsproxy.ResolveFile
-	rf, err = dnsproxy.ReadResolveFile("/etc/resolv.conf")
+func nameserversFromResolvConf(c context.Context) ([]netip.AddrPort, error) {
+	rf, err := dnsproxy.ReadResolveFile("/etc/resolv.conf")
 	if err != nil {
-		return ap, err
+		return nil, err
 	}
 	clog.Debug(c, rf.String())
-	if len(rf.Nameservers) > 0 {
-		nsAddr := rf.Nameservers[0]
-		addr, err := netip.ParseAddr(nsAddr)
-		if err != nil {
-			return ap, fmt.Errorf("nameserver IP %q in /etc/resolv.conf is invalid: %v", nsAddr, err)
-		}
-		p := rf.Port
-		if p == 0 {
-			p = 53
-		}
-		ap = netip.AddrPortFrom(addr, uint16(p))
+	if len(rf.Nameservers) == 0 {
+		return nil, nil
 	}
-	return ap, nil
+	aps := make([]netip.AddrPort, len(rf.Nameservers))
+	for i, ns := range rf.Nameservers {
+		addr, err := netip.ParseAddr(ns)
+		if err != nil {
+			return nil, fmt.Errorf("nameserver IP %q in /etc/resolv.conf is invalid: %v", ns, err)
+		}
+		port := uint16(rf.Port)
+		if port == 0 {
+			port = 53
+		}
+		aps[i] = netip.AddrPortFrom(addr, port)
+	}
+	return aps, nil
 }
 
 func (s *Server) runOverridingServer(c context.Context, dev vif.Device, configureDNS func(netip.AddrPort, netip.AddrPort)) error {
 	if len(s.LocalAddresses) == 0 {
-		ap, err := addressFromResolvConf(c)
+		aps, err := nameserversFromResolvConf(c)
 		if err != nil {
 			return err
 		}
-		s.LocalAddresses = []netip.AddrPort{ap}
-		clog.Infof(c, "Automatically set dns=%s", ap)
+		s.LocalAddresses = aps
+		clog.Infof(c, "Automatically set dns=%s", aps)
 	}
 	if len(s.LocalAddresses) == 0 {
 		return errors.New("couldn't determine dns ip from /etc/resolv.conf")
@@ -178,10 +180,11 @@ func (s *Server) runContainerServer(c context.Context, dev vif.Device, configure
 	}
 	clog.Debugf(c, "Bootstrapping local DNS server on port %d", dnsResolverAddr.Port())
 
-	ap, err := addressFromResolvConf(c)
-	if err != nil {
+	aps, err := nameserversFromResolvConf(c)
+	if err != nil || len(aps) == 0 {
 		return err
 	}
+	ap := aps[0]
 	clog.Debugf(c, "Using DNS fallback=%s", ap)
 	pool, err := NewConnPool(ap, 10)
 	if err != nil {

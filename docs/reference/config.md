@@ -92,11 +92,11 @@ does not support this for anonymous users, hence the default tags.
 
 The `client.dns` configuration offers options for configuring the DNS resolution behavior in a client application or system. Here is a summary of the available fields:
 
-The fields for `client.dns` are: `localIP`, `excludeSuffixes`, `includeSuffixes`, and `lookupTimeout`.
+The fields for `client.dns` are: `localAddresses`, `excludeSuffixes`, `includeSuffixes`, and `lookupTimeout`.
 
 | Field              | Description                                                                                                                                                         | Type                                        | Default                                            |
 |--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------|----------------------------------------------------|
-| `localIP`          | The address of the local DNS server.  This entry is only used on Linux systems that are not configured to use systemd-resolved.                                     | IP address [string][yaml-str]               | first `nameserver` mentioned in `/etc/resolv.conf` |
+| `localAddresses`   | Addresses of local DNS servers. This entry is only used on Linux systems that are not configured to use systemd-resolved.                                          | [sequence][yaml-seq] of address:port values | first `nameserver` mentioned in `/etc/resolv.conf` |
 | `excludeSuffixes`  | Suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver). Can be globally configured in the Helm chart.                | [sequence][yaml-seq] of [strings][yaml-str] | `[".arpa", ".com", ".io", ".net", ".org", ".ru"]`  |
 | `includeSuffixes`  | Suffixes for which the DNS resolver will always attempt to do a lookup.  Includes have higher priority than excludes. Can be globally configured in the Helm chart. | [sequence][yaml-seq] of [strings][yaml-str] | `[]`                                               |
 | `excludes`         | Names to be excluded by the DNS resolver                                                                                                                            | `[]`                                        |                                                    |
@@ -111,7 +111,7 @@ client:
   dns:
     includeSuffixes: [.private]
     excludeSuffixes: [.se, .com, .io, .net, .org, .ru]
-    localAddress: 172.12.0.53
+    localAddresses: [172.12.0.53:53]
     lookupTimeout: 30s
 ```
 
@@ -234,6 +234,10 @@ client:
 When using `neverProxySubnets` you provide a list of subnets. These will never be routed via the TUN device,
 even if they fall within the subnets (pod or service) for the cluster. Instead, whatever route they have before
 telepresence connects is the route they will keep.
+
+Telepresence also adds runtime never-proxy routes for local DNS server IPs when they fall inside a subnet that
+Telepresence is about to route. This prevents excluded DNS lookups from being sent into the cluster when the
+workstation's resolver is on a network that overlaps with a pod, service, or also-proxied subnet.
 
 Here is an example kubeconfig for the subnet `1.2.3.4/32`:
 

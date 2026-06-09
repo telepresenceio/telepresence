@@ -918,7 +918,8 @@ func (s *session) reconcileSubnets(mgrInfo *manager.ClusterInfo, subnets []netip
 		}
 	}
 
-	proxy, neverProxy, neverProxyOverrides := computeNeverProxyOverrides(s, subnets, s.neverProxySubnets)
+	neverProxySubnets, localDNSRoutes := s.neverProxyWithLocalDNS(subnets)
+	proxy, neverProxy, neverProxyOverrides := computeNeverProxyOverrides(s, subnets, neverProxySubnets)
 	s.effectiveNeverProxy = neverProxy
 	if s.tunVif == nil {
 		return nil
@@ -926,6 +927,7 @@ func (s *session) reconcileSubnets(mgrInfo *manager.ClusterInfo, subnets []netip
 	rt := s.tunVif.Router
 	clog.Debugf(s, "allowConflicting is set to %v", s.allowConflictingSubnets)
 	rt.UpdateWhitelist(s.allowConflictingSubnets)
+	rt.SetLocalDNSRoutes(localDNSRoutes)
 
 	err := rt.ValidateRoutes(s, proxy)
 	if err != nil {
@@ -996,6 +998,59 @@ func computeNeverProxyOverrides(ctx context.Context, subnets, nvp []netip.Prefix
 		return true
 	})
 	return subnet.Unique(proxy), neverProxy, neverProxyOverrides
+}
+
+// neverProxyWithLocalDNS returns the configured never-proxy subnets extended with
+// host routes for any local DNS server whose address is covered by one of the
+// subnets that we are about to route. Without this, DNS queries sent to such a
+// server would be captured by the TUN-device and tunnelled into the cluster
+// instead of reaching the real resolver, breaking name resolution for everything
+// that isn't a cluster name. See issue #2429.
+func (s *session) neverProxyWithLocalDNS(subnets []netip.Prefix) (neverProxy, dnsRoutes []netip.Prefix) {
+	cfg := client.GetConfig(s).DNS()
+
+	// Collect the DNS server addresses from every source we know of: the user
+	// configuration, the addresses the DNS server actually settled on at runtime
+	// (e.g. resolved from /etc/resolv.conf), and the host's system resolvers.
+	dnsServers := make([]netip.Addr, 0, len(cfg.LocalAddresses)+len(s.dnsServer.LocalAddresses))
+	for _, ap := range cfg.LocalAddresses {
+		dnsServers = append(dnsServers, ap.Addr())
+	}
+	for _, ap := range s.dnsServer.LocalAddresses {
+		dnsServers = append(dnsServers, ap.Addr())
+	}
+	for _, ap := range dns.SystemResolvers(s) {
+		dnsServers = append(dnsServers, ap.Addr())
+	}
+
+	return appendLocalDNSNeverProxy(s, s.neverProxySubnets, subnets, dnsServers)
+}
+
+// appendLocalDNSNeverProxy adds a host route (/32 or /128) to neverProxy for each
+// DNS server address that is covered by one of the routed subnets and not already
+// covered by a never-proxy entry. It also returns the host routes for those DNS
+// servers (dnsRoutes), so the router can route just these via their real path
+// while leaving every other never-proxy entry on the default route.
+func appendLocalDNSNeverProxy(ctx context.Context, neverProxy, subnets []netip.Prefix, dnsServers []netip.Addr) (allNeverProxy, dnsRoutes []netip.Prefix) {
+	nvp := slices.Clone(neverProxy)
+	for _, dnsIP := range slice.AppendUnique([]netip.Addr{}, dnsServers...) {
+		if !dnsIP.IsValid() || dnsIP.IsLoopback() || dnsIP.IsUnspecified() {
+			continue
+		}
+		for _, sn := range subnets {
+			if !sn.Contains(dnsIP) {
+				continue
+			}
+			hostRoute := netip.PrefixFrom(dnsIP, dnsIP.BitLen())
+			dnsRoutes = append(dnsRoutes, hostRoute)
+			if !slices.Contains(nvp, hostRoute) {
+				clog.Infof(ctx, "Adding local DNS server %s to never-proxy because it is covered by routed subnet %s", dnsIP, sn)
+				nvp = append(nvp, hostRoute)
+			}
+			break
+		}
+	}
+	return subnet.Unique(nvp), dnsRoutes
 }
 
 func validateSubnets(name string, ns []netip.Prefix, allowLoopback func() bool) ([]netip.Prefix, error) {

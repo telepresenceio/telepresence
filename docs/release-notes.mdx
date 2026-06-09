@@ -15,6 +15,12 @@ Setting <code>cluster.agentPortForward=false</code> disables all direct communic
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix" docs="reference/vpn">Keep a local DNS server reachable when its IP is in a routed subnet</Title>
+	<Body>
+When a cluster subnet routed through Telepresence covers the workstation's DNS server address (for example an EKS node whose resolver lives at <code>172.31.0.2</code> while the pod subnet is <code>172.31.0.0/18</code>), queries to that server were captured by the TUN-device and tunnelled into the cluster, breaking name resolution for everything that isn't a cluster name. Telepresence now detects such DNS servers and adds a host route for them to the never-proxy set, keeping them reachable on their original interface.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="troubleshooting#eks-calico-and-traffic-agent-injection-timeouts">Make the agent-injector webhook reachable from outside the cluster</Title>
 	<Body>
 The Helm chart can now expose the agent-injector mutating webhook to an API server that cannot reach an in-cluster Service, such as Amazon EKS with Calico where the control plane is outside the pod network. <code>agentInjector.service.type</code> and <code>agentInjector.service.nodePort</code> expose the injector Service (for example as a <code>NodePort</code>) independently of the chart-wide service type, <code>agentInjector.certificate.altNames</code> adds Subject Alternative Names to the webhook certificate, and <code>agentInjector.webhook.url</code> points the webhook at an external URL instead of the in-cluster Service.

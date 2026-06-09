@@ -36,6 +36,18 @@ items:
           or ingest now fails immediately with an explanatory error instead of
           appearing to start and then never delivering traffic.
         docs: reference/config
+      - type: bugfix
+        title: Keep a local DNS server reachable when its IP is in a routed subnet
+        body: >-
+          When a cluster subnet routed through Telepresence covers the
+          workstation's DNS server address (for example an EKS node whose
+          resolver lives at <code>172.31.0.2</code> while the pod subnet is
+          <code>172.31.0.0/18</code>), queries to that server were captured by
+          the TUN-device and tunnelled into the cluster, breaking name
+          resolution for everything that isn't a cluster name. Telepresence now
+          detects such DNS servers and adds a host route for them to the
+          never-proxy set, keeping them reachable on their original interface.
+        docs: reference/vpn
       - type: feature
         title: Make the agent-injector webhook reachable from outside the cluster
         body: >-
