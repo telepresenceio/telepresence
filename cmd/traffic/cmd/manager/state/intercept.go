@@ -17,8 +17,6 @@ import (
 	core "k8s.io/api/core/v1"
 	events "k8s.io/api/events/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
-	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
 
@@ -30,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/eventwatch"
 	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/icept"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -514,7 +513,7 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
 	defer cancel()
 
-	failedCreateCh, err := watchFailedInjectionEvents(ctx, wl.GetName(), wl.GetNamespace())
+	failedCreateCh, err := eventwatch.WatchWarnings(ctx, k8sapi.GetK8sInterface(ctx), wl.GetNamespace(), wl.GetName())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -720,47 +719,6 @@ func checkInterceptAnnotations(ctx context.Context, wl k8sapi.Workload) (bool, e
 	return true, nil
 }
 
-func watchFailedInjectionEvents(ctx context.Context, name, namespace string) (<-chan *events.Event, error) {
-	// A timestamp with second granularity is needed here, because that's what the event creation time uses.
-	// Finer granularity will result in relevant events seemingly being created before this timestamp because
-	// they have the fraction of seconds trimmed off (which is odd, given that the type used is a MicroTime).
-	start := time.Unix(time.Now().Unix(), 0)
-
-	ei := k8sapi.GetK8sInterface(ctx).EventsV1().Events(namespace)
-	w, err := ei.Watch(ctx, meta.ListOptions{
-		FieldSelector: fields.OneTermNotEqualSelector("type", "Normal").String(),
-	})
-	if err != nil {
-		return nil, err
-	}
-	nd := name + "-"
-	ec := make(chan *events.Event)
-	go func() {
-		defer w.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case eo, ok := <-w.ResultChan():
-				if !ok {
-					return
-				}
-				// Using negated Before when comparing the timestamps here is relevant. They will often be equal and still relevant
-				if e, ok := eo.Object.(*events.Event); ok &&
-					!e.CreationTimestamp.Time.Before(start) &&
-					!strings.HasPrefix(e.Note, "(combined from similar events):") {
-					n := e.Regarding.Name
-					if strings.HasPrefix(n, nd) || n == name {
-						clog.Infof(ctx, "%s %s %s", e.Type, e.Reason, e.Note)
-						ec <- e
-					}
-				}
-			}
-		}
-	}()
-	return ec, nil
-}
-
 func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, failedCreateCh <-chan *events.Event) ([]*AgentSession, error) {
 	name := ac.AgentName
 	namespace := ac.Namespace
@@ -780,9 +738,16 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 			if !ok {
 				return nil, errors.New("failed create channel closed")
 			}
+			if !eventwatch.IsTerminal(fe) {
+				// Something went wrong, but it might not be fatal. There are several events logged that are
+				// just warnings where the action will be retried and eventually succeed. Collect them for
+				// the timeout message and keep waiting.
+				fes = append(fes, fe)
+				continue
+			}
+			// A terminal event was encountered. Surface it now with agent-specific context, rather than
+			// making the user wait for a timeout.
 			msg := fe.Note
-			// Terminate directly on known fatal events. No need for the user to wait for a timeout
-			// when one of those is encountered.
 			switch fe.Reason {
 			case "BackOff":
 				// The traffic-agent container was injected, but it fails to start
@@ -806,22 +771,9 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 				msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
 			case "Failed", "FailedCreate", "FailedScheduling":
 				// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
-				if fe.Type == "Warning" && (strings.Contains(msg, "waiting for ephemeral volume") ||
-					strings.Contains(msg, "unbound immediate PersistentVolumeClaims") ||
-					strings.Contains(msg, "skip schedule deleting pod") ||
-					strings.Contains(msg, "nodes are available")) {
-					// This isn't fatal.
-					fes = append(fes, fe)
-					continue
-				}
 				msg = fmt.Sprintf(
 					"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
 					msg)
-			default:
-				// Something went wrong, but it might not be fatal. There are several events logged that are just
-				// warnings where the action will be retried and eventually succeed.
-				fes = append(fes, fe)
-				continue
 			}
 			return nil, errcat.User.New(msg)
 		case delta, ok := <-deltaCh:
@@ -855,7 +807,7 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 			ioutil.Printf(bf, "request %s while waiting for agent %s.%s to arrive", v, name, namespace)
 			if len(fes) > 0 {
 				bf.WriteString(": Events that may be relevant:\n")
-				writeEventList(bf, fes)
+				eventwatch.WriteList(bf, fes)
 			} else if ctx.Err() == context.DeadlineExceeded {
 				// No injection failures were observed, yet no agent arrived. This is the typical
 				// signature of the API server being unable to reach the agent-injector webhook
@@ -868,39 +820,5 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 			}
 			return nil, errcat.User.New(bf.String())
 		}
-	}
-}
-
-func writeEventList(bf *strings.Builder, es []*events.Event) {
-	now := time.Now()
-	age := func(e *events.Event) string {
-		return now.Sub(e.CreationTimestamp.Time).Truncate(time.Second).String()
-	}
-	object := func(e *events.Event) string {
-		or := e.Regarding
-		return strings.ToLower(or.Kind) + "/" + or.Name
-	}
-	ageLen, typeLen, reasonLen, objectLen := len("AGE"), len("TYPE"), len("REASON"), len("OBJECT")
-	for _, e := range es {
-		if l := len(age(e)); l > ageLen {
-			ageLen = l
-		}
-		if l := len(e.Type); l > typeLen {
-			typeLen = l
-		}
-		if l := len(e.Reason); l > reasonLen {
-			reasonLen = l
-		}
-		if l := len(object(e)); l > objectLen {
-			objectLen = l
-		}
-	}
-	ageLen += 3
-	typeLen += 3
-	reasonLen += 3
-	objectLen += 3
-	ioutil.Printf(bf, "%-*s%-*s%-*s%-*s%s\n", ageLen, "AGE", typeLen, "TYPE", reasonLen, "REASON", objectLen, "OBJECT", "MESSAGE")
-	for _, e := range es {
-		ioutil.Printf(bf, "%-*s%-*s%-*s%-*s%s\n", ageLen, age(e), typeLen, e.Type, reasonLen, e.Reason, objectLen, object(e), e.Note)
 	}
 }

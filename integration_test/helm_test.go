@@ -154,3 +154,35 @@ func (s *helmSuite) Test_CollidingInstalls() {
 	_, err := s.TelepresenceHelmInstall(ctx, false)
 	s.Error(err)
 }
+
+// Test_HelmInstallReportsPodFailureReason verifies that when the traffic-manager
+// pod cannot become ready (here: an image that can't be pulled), the install
+// error names the pod's not-ready reason instead of the opaque Helm rollback
+// error. See issue #2305.
+func (s *helmSuite) Test_HelmInstallReportsPodFailureReason() {
+	ctx := s.Context()
+	rq := s.Require()
+	mgrNs := s.ManagerNamespace() + "-badimg"
+	// With a local registry images are pulled (Always); when loaded directly they are not (Never).
+	pullPolicy := "Always"
+	if s.ManagerRegistry() == "local" {
+		pullPolicy = "Never"
+	}
+	defer func() {
+		_, _, _ = itest.Telepresence(ctx, "helm", "uninstall", "--manager-namespace", mgrNs) //nolint:dogsled // best-effort cleanup
+		itest.DeleteNamespaces(ctx, mgrNs)
+	}()
+
+	_, stderr, err := itest.Telepresence(ctx, "helm", "install",
+		"--manager-namespace", mgrNs,
+		"--create-namespace",
+		// Scope to its own namespace so it doesn't collide with the suite's manager.
+		"--set", "namespaces={"+mgrNs+"}",
+		"--set", "image.registry="+s.ManagerRegistry(),
+		"--set", "image.tag=9.9.9", // a valid version that does not exist as an image
+		"--set", "image.pullPolicy="+pullPolicy,
+	)
+	rq.Error(err)
+	rq.Contains(stderr, "traffic-manager pod is not ready",
+		"the install error should name the pod failure reason; got: %s", stderr)
+}
