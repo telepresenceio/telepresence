@@ -40,8 +40,16 @@ func (s *state) Lookup(ctx context.Context, request *rpc.LookupRequest) (*rpc.Lo
 	}
 	var ips []netip.Addr
 	response := &rpc.LookupResponse{}
-	ctx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
-	defer cancel()
+	// The caller's gRPC deadline (the client bounds every cluster lookup with its
+	// dns.lookupTimeout) governs the lookup. A resolution that needs search-path
+	// expansion, or that passes through a service-mesh DNS proxy such as Istio's,
+	// can easily take longer than a fraction of a second, so no shorter timeout is
+	// imposed here. The fallback only guards against a caller without a deadline.
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 4*time.Second)
+		defer cancel()
+	}
 	ips, err := net.DefaultResolver.LookupNetIP(ctx, "ip", name[:nl-1])
 	if err != nil {
 		_, err = dnsproxy.MakeDNSError(err)
