@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/blang/semver/v4"
@@ -16,7 +17,9 @@ import (
 	"helm.sh/helm/v3/pkg/cli/values"
 	"helm.sh/helm/v3/pkg/getter"
 	"helm.sh/helm/v3/pkg/release"
+	events "k8s.io/api/events/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -25,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/eventwatch"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -211,6 +215,7 @@ func timedRun(ctx context.Context, run func(time.Duration) error) error {
 
 func installNew(
 	ctx context.Context,
+	ki kubernetes.Interface,
 	chrt *chart.Chart,
 	helmConfig *action.Configuration,
 	releaseName, namespace string,
@@ -227,15 +232,16 @@ func installNew(
 	install.DisableHooks = req.NoHooks
 	install.KubeVersion = req.KubeVersion
 	install.Version = chrt.Metadata.Version
-	return timedRun(ctx, func(timeout time.Duration) error {
+	return runManagerHelm(ctx, ki, namespace, releaseName, func(c context.Context, timeout time.Duration) error {
 		install.Timeout = timeout
-		_, err := install.Run(chrt, values)
+		_, err := install.RunWithContext(c, chrt, values)
 		return err
 	})
 }
 
 func upgradeExisting(
 	ctx context.Context,
+	ki kubernetes.Interface,
 	existingVer string,
 	chrt *chart.Chart,
 	helmConfig *action.Configuration,
@@ -252,11 +258,85 @@ func upgradeExisting(
 	upgrade.ReuseValues = req.ReuseValues
 	upgrade.DisableHooks = req.NoHooks
 	upgrade.Version = chrt.Metadata.Version
-	return timedRun(ctx, func(timeout time.Duration) error {
+	return runManagerHelm(ctx, ki, ns, releaseName, func(c context.Context, timeout time.Duration) error {
 		upgrade.Timeout = timeout
-		_, err := upgrade.Run(releaseName, chrt, values)
+		_, err := upgrade.RunWithContext(c, releaseName, chrt, values)
 		return err
 	})
+}
+
+// runManagerHelm runs a traffic-manager install/upgrade under a TimeoutHelm
+// context while watching the manager namespace for Warning events. If the
+// traffic-manager pod hits a terminal failure (ImagePullBackOff,
+// FailedScheduling, ...), the operation is canceled — so Helm aborts the wait and
+// rolls back immediately instead of waiting out the timeout — and the returned
+// error names that reason rather than the opaque rollback error. If ki is nil
+// (no usable cluster client) the watch is skipped and the raw error is returned.
+func runManagerHelm(
+	ctx context.Context,
+	ki kubernetes.Interface,
+	namespace, releaseName string,
+	run func(context.Context, time.Duration) error,
+) error {
+	timeouts := client.GetConfig(ctx).Timeouts()
+	ctx, cancel := timeouts.TimeoutContext(ctx, client.TimeoutHelm)
+	defer cancel()
+
+	var (
+		mu       sync.Mutex
+		fes      []*events.Event
+		terminal *events.Event
+	)
+	if ki != nil {
+		if ec, err := eventwatch.WatchWarnings(ctx, ki, namespace, releaseName); err != nil {
+			clog.Debugf(ctx, "unable to watch %s events in %s: %v", releaseName, namespace, err)
+		} else {
+			go func() {
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case e, ok := <-ec:
+						if !ok {
+							return
+						}
+						mu.Lock()
+						fes = append(fes, e)
+						abort := terminal == nil && eventwatch.IsTerminal(e)
+						if abort {
+							terminal = e
+						}
+						mu.Unlock()
+						if abort {
+							clog.Infof(ctx, "Aborting helm operation; traffic-manager pod %s: %s", e.Reason, e.Note)
+							cancel()
+						}
+					}
+				}
+			}()
+		}
+	}
+
+	err := run(ctx, timeouts.Get(client.TimeoutHelm))
+	if err == nil {
+		return nil
+	}
+	err = client.CheckTimeout(ctx, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if terminal != nil {
+		return errcat.User.Newf(
+			"traffic-manager pod is not ready: %s: %s\nFor more detail, run: kubectl describe pod -n %s -l app=traffic-manager",
+			terminal.Reason, terminal.Note, namespace)
+	}
+	if len(fes) > 0 {
+		bf := &strings.Builder{}
+		fmt.Fprintf(bf, "%s\nEvents that may be relevant:\n", err.Error())
+		eventwatch.WriteList(bf, fes)
+		return errcat.User.New(bf.String())
+	}
+	return err
 }
 
 func uninstallExisting(ctx context.Context, helmConfig *action.Configuration, releaseName, namespace string, req *Request) error {
@@ -372,16 +452,29 @@ func ensureIsInstalled(
 		return err
 	}
 
+	// Build a cluster client so that, if the traffic-manager pod fails to become ready, we can report
+	// the Kubernetes reason (ImagePullBackOff, FailedScheduling, ...) instead of an opaque Helm timeout.
+	// Best-effort: a failure here just disables that diagnostic.
+	var ki kubernetes.Interface
+	if cfg, cErr := clientGetter.ToRESTConfig(); cErr == nil {
+		if ki, cErr = kubernetes.NewForConfig(cfg); cErr != nil {
+			clog.Debugf(ctx, "traffic-manager event diagnostics disabled: %v", cErr)
+			ki = nil
+		}
+	} else {
+		clog.Debugf(ctx, "traffic-manager event diagnostics disabled: %v", cErr)
+	}
+
 	switch {
 	case existing == nil && req.Type == Upgrade: // fresh install
 		err = fmt.Errorf("%s is not installed, use 'telepresence helm install' to install it", releaseName)
 	case existing == nil:
 		clog.Infof(ctx, "ensureIsInstalled(namespace=%q): performing fresh install...", namespace)
-		err = installNew(ctx, chrt, helmConfig, releaseName, namespace, req, vals)
+		err = installNew(ctx, ki, chrt, helmConfig, releaseName, namespace, req, vals)
 	case req.Type == Upgrade: // replace existing install
 		clog.Infof(ctx, "ensureIsInstalled(namespace=%q): replacing %s from %q to %q...",
 			namespace, releaseName, releaseVer(existing), chrt.Metadata.AppVersion)
-		err = upgradeExisting(ctx, releaseVer(existing), chrt, helmConfig, releaseName, namespace, req, vals)
+		err = upgradeExisting(ctx, ki, releaseVer(existing), chrt, helmConfig, releaseName, namespace, req, vals)
 	default:
 		err = fmt.Errorf(
 			"%s version %q is already installed, use 'telepresence helm upgrade' instead to replace it",

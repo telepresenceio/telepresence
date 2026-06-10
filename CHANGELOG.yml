@@ -248,6 +248,17 @@ items:
           instead of leaving the client connected with namespaces that cannot be
           handled by the in-cluster manager or traffic-agents.
         docs: reference/engagements/cli
+      - type: feature
+        title: Report why the traffic-manager pod isn't ready during helm install
+        body: >-
+          When <code>telepresence helm install</code> or
+          <code>telepresence helm upgrade</code> waits for the traffic-manager and
+          its pod cannot become ready (a bad image, insufficient resources, or an
+          unschedulable pod), the command now reports the underlying Kubernetes
+          reason (for example <code>ImagePullBackOff</code>) and points at
+          <code>kubectl describe pod</code>, instead of a confusing Helm rollback
+          error. It also aborts as soon as a terminal failure is detected rather
+          than waiting for the timeout.
   - version: 2.28.0
     date: 2026-05-11
     notes:

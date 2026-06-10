@@ -128,6 +128,12 @@ Traffic-manager cluster- and namespace-scoped RBAC rules for Deployments, Replic
 Clients now reject <code>--mapped-namespaces</code> values that are outside the namespace set managed by a namespace-limited traffic-manager. Invalid mapped namespace requests now fail during connect with a helpful error instead of leaving the client connected with namespaces that cannot be handled by the in-cluster manager or traffic-agents.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Report why the traffic-manager pod isn't ready during helm install</div></div>
+<div style="margin-left: 15px">
+
+When <code>telepresence helm install</code> or <code>telepresence helm upgrade</code> waits for the traffic-manager and its pod cannot become ready (a bad image, insufficient resources, or an unschedulable pod), the command now reports the underlying Kubernetes reason (for example <code>ImagePullBackOff</code>) and points at <code>kubectl describe pod</code>, instead of a confusing Helm rollback error. It also aborts as soon as a terminal failure is detected rather than waiting for the timeout.
+</div>
+
 ## Version 2.28.0 <span style="font-size: 16px;">(May 11)</span>
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept workloads in mapped namespaces](reference/engagements/cli)</div></div>
 <div style="margin-left: 15px">
