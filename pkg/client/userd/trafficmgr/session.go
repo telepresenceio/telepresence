@@ -685,21 +685,55 @@ func cloneServiceAssociations(services []*manager.ServiceAssociation) []*manager
 	return cloned
 }
 
-func (s *session) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
+// subscribeWorkloadsChange returns a channel that is signaled every time the
+// workloads map is updated, and a function that cancels the subscription. The
+// channel is buffered, so a signal arriving when the subscriber isn't actively
+// receiving is never lost; consecutive signals are coalesced into one.
+func (s *session) subscribeWorkloadsChange() (<-chan struct{}, func()) {
 	id := uuid.New()
-	ch := make(chan struct{})
+	ch := make(chan struct{}, 1)
 	s.workloadsLock.Lock()
 	if s.workloadSubscribers == nil {
 		s.workloadSubscribers = make(map[uuid.UUID]chan struct{})
 	}
 	s.workloadSubscribers[id] = ch
 	s.workloadsLock.Unlock()
-
-	defer func() {
+	return ch, func() {
 		s.workloadsLock.Lock()
 		delete(s.workloadSubscribers, id)
 		s.workloadsLock.Unlock()
-	}()
+	}
+}
+
+// waitForWorkloadUpdate waits until the workload info for the named workload in
+// the given namespace satisfies the given predicate. It returns false if the
+// context is done before that happens.
+func (s *session) waitForWorkloadUpdate(ctx context.Context, namespace, name string, predicate func(workloadInfo) bool) bool {
+	ch, unsubscribe := s.subscribeWorkloadsChange()
+	defer unsubscribe()
+	check := func() bool {
+		s.workloadsLock.Lock()
+		defer s.workloadsLock.Unlock()
+		for key, info := range s.workloads[namespace] {
+			if key.name == name && predicate(info) {
+				return true
+			}
+		}
+		return false
+	}
+	for !check() {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-ch:
+		}
+	}
+	return true
+}
+
+func (s *session) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
+	ch, unsubscribe := s.subscribeWorkloadsChange()
+	defer unsubscribe()
 
 	send := func() error {
 		ws, err := s.WorkloadInfoSnapshot(wr.Namespaces, rpc.ListRequest_UNSPECIFIED)

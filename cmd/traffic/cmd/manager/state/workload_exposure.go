@@ -211,17 +211,39 @@ func attachRoutesForIngress(ingress *netv1.Ingress, services map[string]*rpc.Ser
 		}
 	}
 
+	addresses := ingressAddresses(ingress)
 	for key, aggregate := range aggregates {
 		key.service.Routes = append(key.service.Routes, &rpc.RouteAssociation{
-			Type:     "Ingress",
-			Name:     ingress.Name,
-			Hosts:    sortedKeys(aggregate.hosts),
-			Paths:    sortedKeys(aggregate.paths),
-			Tls:      ingressUsesTLS(ingress),
-			PortName: key.portName,
-			Port:     key.port,
+			Type:      "Ingress",
+			Name:      ingress.Name,
+			Hosts:     sortedKeys(aggregate.hosts),
+			Paths:     sortedKeys(aggregate.paths),
+			Tls:       ingressUsesTLS(ingress),
+			PortName:  key.portName,
+			Port:      key.port,
+			Addresses: addresses,
 		})
 	}
+}
+
+// ingressAddresses returns the load-balancer addresses of the given ingress,
+// preferring hostnames over IPs.
+func ingressAddresses(ingress *netv1.Ingress) []string {
+	lbs := ingress.Status.LoadBalancer.Ingress
+	if len(lbs) == 0 {
+		return nil
+	}
+	addresses := make([]string, 0, len(lbs))
+	for _, lb := range lbs {
+		switch {
+		case lb.Hostname != "":
+			addresses = append(addresses, lb.Hostname)
+		case lb.IP != "":
+			addresses = append(addresses, lb.IP)
+		}
+	}
+	sort.Strings(addresses)
+	return addresses
 }
 
 func ingressBackendMatch(

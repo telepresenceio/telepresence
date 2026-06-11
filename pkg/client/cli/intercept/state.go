@@ -260,6 +260,13 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	}
 
 	s.info = NewInfo(ctx, intercept, s.MountFlags.ReadOnly, s.mountError)
+	if spec := intercept.Spec; spec.ServiceName != "" {
+		if r, err := ud.List(ctx, &connector.ListRequest{Namespace: spec.Namespace}); err != nil {
+			clog.Debugf(ctx, "failed to list workloads for route discovery: %v", err)
+		} else {
+			s.info.AccessURLs = routeURLs(routesForSpec(spec, r.Workloads))
+		}
+	}
 	detailedOutput := s.DetailedOutput && s.FormattedOutput
 	if detailedOutput {
 		output.Object(ctx, s.info, true)

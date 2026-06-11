@@ -363,6 +363,16 @@ items:
           the owner matches are group-based, so application traffic always
           traverses the mesh.
         docs: howtos/istio
+      - type: feature
+        title: Show ingress URLs for intercepted service ports
+        body: >-
+          The output of <code>telepresence intercept</code> and
+          <code>telepresence list</code> now shows the ingress URLs through
+          which an intercepted service port can be reached. When the intercept
+          uses HTTP header filters, a ready-to-paste <code>curl</code> example
+          with the matching <code>-H</code> flags is included, making it easy
+          to send a request that is routed to the intercept handler on the
+          workstation.
   - version: 2.28.0
     date: 2026-05-11
     notes:

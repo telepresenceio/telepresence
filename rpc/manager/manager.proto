@@ -650,6 +650,10 @@ message RouteAssociation {
   // The service port that this route targets.
   string port_name = 6;
   int32 port = 7;
+
+  // Load-balancer addresses (IPs or hostnames) of the route object, used
+  // to reach the route when it declares no hosts.
+  repeated string addresses = 8;
 }
 
 // ServiceAssociation describes a service in the workload's namespace whose

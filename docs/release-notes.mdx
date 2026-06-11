@@ -188,6 +188,12 @@ When a subnet was routed through the virtual network interface, the kernel deriv
 The traffic-agent's own traffic is exempted from service-mesh processing using an iptables owner match, but the match was based on the agent's UID, which is inherited from the app container's securityContext (or defaults to root). An application sharing that UID had its outbound traffic silently bypass the mesh sidecar — no mTLS, telemetry, or policy enforcement. The agent container is now assigned a distinct primary group (default <code>7439</code>, overridable with <code>agent.securityContext.runAsGroup</code>) and the owner matches are group-based, so application traffic always traverses the mesh.
   </Body>
 </Note>
+<Note>
+	<Title type="feature">Show ingress URLs for intercepted service ports</Title>
+	<Body>
+The output of <code>telepresence intercept</code> and <code>telepresence list</code> now shows the ingress URLs through which an intercepted service port can be reached. When the intercept uses HTTP header filters, a ready-to-paste <code>curl</code> example with the matching <code>-H</code> flags is included, making it easy to send a request that is routed to the intercept handler on the workstation.
+  </Body>
+</Note>
 ## Version 2.28.0 <span style={{fontSize:'16px'}}>(May 11)</span>
 <Note>
 	<Title type="feature" docs="reference/engagements/cli">Intercept workloads in mapped namespaces</Title>

@@ -616,6 +616,10 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		spec.Mechanism = "tcp"
 	}
 
+	// Start the workload info watcher early so that the workload snapshot is up to
+	// date with this intercept's workload by the time this call returns.
+	go s.ensureWatchers([]string{spec.Namespace})
+
 	mgrClient := s.ManagerClient()
 
 	// iInfo.preparedIntercept == nil means that we're using an older traffic-manager, incapable
@@ -646,6 +650,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		spec.TargetPort = pi.ContainerPort
 	}
 
+	spec.ServiceName = pi.ServiceName
 	spec.ServiceUid = pi.ServiceUid
 	spec.ServiceName = pi.ServiceName
 	spec.ServiceIps = pi.ServiceIps
@@ -727,6 +732,17 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 				return nil, client.CheckTimeout(c, err)
 			}
 			success = true // Prevent removal in deferred function
+
+			// Wait for the workload info update that reflects this intercept, so
+			// that a subsequent fetch of the workload snapshot includes the service
+			// and route associations of this intercept's workload.
+			wc, cancelWait := context.WithTimeout(c, 5*time.Second)
+			defer cancelWait()
+			if !s.waitForWorkloadUpdate(wc, spec.Namespace, spec.Agent, func(wi workloadInfo) bool {
+				return wi.agentState == manager.WorkloadInfo_INTERCEPTED
+			}) {
+				clog.Debugf(c, "timed out waiting for workload info update of %s.%s", spec.Agent, spec.Namespace)
+			}
 			return ii, nil
 		}
 	}

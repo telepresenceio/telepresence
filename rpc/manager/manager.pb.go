@@ -3621,8 +3621,11 @@ type RouteAssociation struct {
 	Paths []string               `protobuf:"bytes,4,rep,name=paths,proto3" json:"paths,omitempty"`
 	Tls   bool                   `protobuf:"varint,5,opt,name=tls,proto3" json:"tls,omitempty"`
 	// The service port that this route targets.
-	PortName      string `protobuf:"bytes,6,opt,name=port_name,json=portName,proto3" json:"port_name,omitempty"`
-	Port          int32  `protobuf:"varint,7,opt,name=port,proto3" json:"port,omitempty"`
+	PortName string `protobuf:"bytes,6,opt,name=port_name,json=portName,proto3" json:"port_name,omitempty"`
+	Port     int32  `protobuf:"varint,7,opt,name=port,proto3" json:"port,omitempty"`
+	// Load-balancer addresses (IPs or hostnames) of the route object, used
+	// to reach the route when it declares no hosts.
+	Addresses     []string `protobuf:"bytes,8,rep,name=addresses,proto3" json:"addresses,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3704,6 +3707,13 @@ func (x *RouteAssociation) GetPort() int32 {
 		return x.Port
 	}
 	return 0
+}
+
+func (x *RouteAssociation) GetAddresses() []string {
+	if x != nil {
+		return x.Addresses
+	}
+	return nil
 }
 
 // ServiceAssociation describes a service in the workload's namespace whose
@@ -4624,7 +4634,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1f\n" +
 	"\vtarget_port\x18\x03 \x01(\tR\n" +
-	"targetPort\"\xa9\x01\n" +
+	"targetPort\"\xc7\x01\n" +
 	"\x10RouteAssociation\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -4632,7 +4642,8 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x05paths\x18\x04 \x03(\tR\x05paths\x12\x10\n" +
 	"\x03tls\x18\x05 \x01(\bR\x03tls\x12\x1b\n" +
 	"\tport_name\x18\x06 \x01(\tR\bportName\x12\x12\n" +
-	"\x04port\x18\a \x01(\x05R\x04port\"\xa1\x01\n" +
+	"\x04port\x18\a \x01(\x05R\x04port\x12\x1c\n" +
+	"\taddresses\x18\b \x03(\tR\taddresses\"\xa1\x01\n" +
 	"\x12ServiceAssociation\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
 	"\x05ports\x18\x02 \x03(\v2!.telepresence.manager.ServicePortR\x05ports\x12>\n" +
