@@ -141,6 +141,12 @@ When <code>telepresence helm install</code> or <code>telepresence helm upgrade</
   </Body>
 </Note>
 <Note>
+	<Title type="feature" docs="howtos/istio">Resolve and reach Istio ServiceEntry hosts from the workstation</Title>
+	<Body>
+Names that only a service mesh can resolve — such as Istio <code>ServiceEntry</code> hosts when Istio's DNS proxying is enabled — can now be used from the workstation. The traffic-agent's DNS lookups are subjected to the mesh's DNS interception, and the new Helm chart value <code>agent.serviceMesh.dialSubnets</code> lists address ranges (for example Istio's ServiceEntry auto-allocation range <code>240.240.0.0/16</code>) that the agent must dial through the mesh proxy. Engage a meshed workload, or connect with <code>--proxy-via</code> through one, and the ServiceEntry host resolves and routes via the mesh.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Traffic-agent DNS lookups honor the client's DNS lookup timeout</Title>
 	<Body>
 The traffic-agent imposed a hard-coded 250 millisecond timeout on the DNS lookups it performs on behalf of a connected client. A resolution that needs search-path expansion, or that passes through a service-mesh DNS proxy such as Istio's, can easily take longer, causing spurious <code>NXDOMAIN</code> answers on the workstation. The agent now honors the deadline of the calling client, which is governed by the <code>dns.lookupTimeout</code> client setting.

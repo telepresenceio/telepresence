@@ -3,6 +3,7 @@ package agentconfig
 import (
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"time"
 
 	core "k8s.io/api/core/v1"
@@ -193,6 +194,13 @@ type Sidecar struct {
 	// MountPolicies controls how the agent will handle new mounts that might arrive when
 	// the pod is created.
 	MountPolicies types.MountPolicies `json:"mountPolicies,omitzero"`
+
+	// MeshDialSubnets are subnets for which outbound connections made by the traffic-agent
+	// (such as dials performed on behalf of a connected client) must pass through a
+	// service-mesh proxy instead of bypassing it. Typically the mesh's virtual address
+	// range for external services, e.g. Istio's ServiceEntry auto-allocation range
+	// 240.240.0.0/16.
+	MeshDialSubnets []netip.Prefix `json:"meshDialSubnets,omitempty"`
 
 	// The intercepts managed by the agent.
 	Containers []*Container `json:"containers,omitempty"`
