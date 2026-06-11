@@ -18,7 +18,8 @@ import (
 type istioSuite struct {
 	itest.Suite
 	itest.TrafficManager
-	svc string
+	svc    string
+	target string
 }
 
 func (s *istioSuite) SuiteName() string {
@@ -27,7 +28,7 @@ func (s *istioSuite) SuiteName() string {
 
 func init() {
 	itest.AddTrafficManagerSuite("", func(h itest.TrafficManager) itest.TestingSuite {
-		return &istioSuite{Suite: itest.Suite{Harness: h}, TrafficManager: h, svc: "echo-mesh"}
+		return &istioSuite{Suite: itest.Suite{Harness: h}, TrafficManager: h, svc: "echo-mesh", target: "echo-target"}
 	})
 }
 
@@ -56,6 +57,7 @@ func (s *istioSuite) SetupSuite() {
 	rq.NoError(itest.Run(ctx, "kubectl", "label", "namespace", s.AppNamespace(), "istio-injection=enabled"))
 	rq.NoError(s.writeServiceEntry(ctx))
 	itest.ApplyEchoService(ctx, s.svc, s.AppNamespace(), 80)
+	itest.ApplyEchoService(ctx, s.target, s.AppNamespace(), 80)
 
 	// The traffic-agent must dial the ServiceEntry subnet through the mesh, and
 	// the client must route the ServiceEntry suffix to cluster DNS.
@@ -69,6 +71,7 @@ func (s *istioSuite) TearDownSuite() {
 	ctx := s.Context()
 	s.RollbackTM(ctx)
 	s.DeleteSvcAndWorkload(ctx, "deploy", s.svc)
+	s.DeleteSvcAndWorkload(ctx, "deploy", s.target)
 	_ = itest.Run(ctx, "kubectl", "delete", "serviceentry", "--namespace", s.AppNamespace(), s.svc)
 	_ = itest.Run(ctx, "kubectl", "label", "namespace", s.AppNamespace(), "istio-injection-")
 }
@@ -95,6 +98,45 @@ spec:
 		return err
 	}
 	return itest.Run(ctx, "kubectl", "apply", "-f", f)
+}
+
+// Test_AppTrafficTraversesMeshWhileEngaged is a regression test for #4156: the
+// traffic-agent's mesh bypass used a UID-based iptables owner match, and since
+// the agent's UID is inherited from the app container (or defaults to root),
+// the application's own traffic often matched the bypass and skipped the mesh.
+// A request between meshed pods is made over mTLS, which the target's inbound
+// sidecar records in an X-Forwarded-Client-Cert header. That header must still
+// be present when the app container of an engaged workload requests a meshed
+// service.
+func (s *istioSuite) Test_AppTrafficTraversesMeshWhileEngaged() {
+	rq := s.Require()
+	ctx := s.Context()
+
+	// The app container is named after the image, not the deployment.
+	appRequestIsMeshed := func() bool {
+		out, err := itest.KubectlOut(ctx, s.AppNamespace(), "exec", "deploy/"+s.svc, "-c", "echo-server", "--",
+			"wget", "-qO-", "-T", "5", "http://"+s.target)
+		return err == nil && strings.Contains(strings.ToLower(out), "x-forwarded-client-cert")
+	}
+
+	// Sanity check that requests to the target service carry the mesh's mark
+	// before the traffic-agent is injected.
+	rq.Eventually(appRequestIsMeshed, 60*time.Second, 5*time.Second,
+		"meshed app request does not carry X-Forwarded-Client-Cert")
+
+	// Engage the workload so that the traffic-agent and its init container are
+	// injected and the agent-discriminating iptables rules are installed.
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceQuitOk(ctx)
+	itest.TelepresenceOk(ctx, "intercept", s.svc, "--port", "9094:80", "--mount=false")
+	defer func() {
+		_, _, _ = itest.Telepresence(ctx, "leave", s.svc)
+	}()
+	rq.NoError(itest.RolloutStatusWait(ctx, s.AppNamespace(), "deploy/"+s.svc))
+
+	// The app container's outbound traffic must still traverse the mesh.
+	rq.Eventually(appRequestIsMeshed, 60*time.Second, 5*time.Second,
+		"app request from engaged workload does not carry X-Forwarded-Client-Cert")
 }
 
 // Test_ResolveAndDialServiceEntry engages the meshed workload with a proxy-via
