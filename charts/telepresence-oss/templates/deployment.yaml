@@ -175,6 +175,12 @@ spec:
           - name: AGENT_MOUNT_POLICIES
             value: '{{ toJson .mountPolicies }}'
           {{- end }}
+          {{- with .serviceMesh }}
+          {{- if .dialSubnets }}
+          - name: AGENT_MESH_DIAL_SUBNETS
+            value: {{ join " " .dialSubnets | quote }}
+          {{- end }}
+          {{- end }}
           {{- if .maxIdleTime }}
           - name: AGENT_MAX_IDLE_TIME
             value: {{ .maxIdleTime }}

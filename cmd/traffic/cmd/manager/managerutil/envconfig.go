@@ -62,6 +62,7 @@ type Env struct {
 	AgentConsumptionMetrics    bool `default:"true"`
 	AgentResources             *core.ResourceRequirements
 	AgentMountPolicies         types.MountPolicies
+	AgentMeshDialSubnets       []netip.Prefix `envSeparator:" "`
 	AgentInitResources         *core.ResourceRequirements
 	AgentInjectorName          string
 	AgentInjectorSecret        string
@@ -114,6 +115,7 @@ func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorCo
 		SecurityContext:     e.AgentSecurityContext,
 		InitSecurityContext: e.AgentInitSecurityContext,
 		MountPolicies:       e.AgentMountPolicies,
+		MeshDialSubnets:     e.AgentMeshDialSubnets,
 		EnableH2cProbing:    e.AgentEnableH2cProbing,
 		EnableMetrics:       e.AgentConsumptionMetrics && e.PrometheusPort != 0,
 		WatchRetryInterval:  e.AgentWatchRetryInterval,

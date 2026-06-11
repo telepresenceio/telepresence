@@ -140,14 +140,112 @@ func TestConfigureIptablesCatchesPodIPOutputTraffic(t *testing.T) {
 			"-j", "TEL_OUTPUT_TCP",
 		},
 	})
+	// The agent-UID mesh bypass must not match DNS traffic, so that the agent's
+	// lookups are subjected to a service mesh's DNS interception when present.
 	requireCall(t, ipt.calls, iptablesCall{
 		op:       "insert",
 		table:    nat,
 		chain:    "OUTPUT",
 		position: 5,
 		rulespec: []string{
+			"-p", "tcp",
 			"-m", "owner", "--uid-owner", "1000",
+			"-m", "tcp", "!", "--dport", "53",
 			"-j", "RETURN",
+		},
+	})
+	requireCall(t, ipt.calls, iptablesCall{
+		op:       "insert",
+		table:    nat,
+		chain:    "OUTPUT",
+		position: 6,
+		rulespec: []string{
+			"-p", "udp",
+			"-m", "owner", "--uid-owner", "1000",
+			"-m", "udp", "!", "--dport", "53",
+			"-j", "RETURN",
+		},
+	})
+}
+
+func TestConfigureIptablesMeshDialSubnets(t *testing.T) {
+	t.Setenv(agentconfig.EnvAgentUID, "1000")
+	podIP := netip.MustParseAddr("10.129.70.53")
+	ipt := &fakeIPTables{}
+	cfg := &config{Sidecar: &agentconfig.Sidecar{
+		MeshDialSubnets: []netip.Prefix{
+			netip.MustParsePrefix("240.240.0.0/16"),
+			netip.MustParsePrefix("fd00:240::/32"), // wrong family, must be skipped
+		},
+		Containers: []*agentconfig.Container{
+			{
+				Name: "app",
+				Intercepts: []*agentconfig.Intercept{
+					{
+						Protocol:      types.ProtoTCP,
+						ContainerPort: 8000,
+						AgentPort:     9900,
+					},
+				},
+			},
+		},
+	}}
+
+	err := cfg.configureIptables(context.Background(), ipt, "lo", netip.MustParsePrefix("127.0.0.1/32"), podIP)
+	require.NoError(t, err)
+
+	// The configured subnets (of the pod's address family) are exempted from the
+	// mesh bypass so connections to them are made through the mesh proxy.
+	requireCall(t, ipt.calls, iptablesCall{
+		op:    "clear",
+		table: nat,
+		chain: "TEL_MESH_BYPASS",
+	})
+	requireCall(t, ipt.calls, iptablesCall{
+		op:    "append",
+		table: nat,
+		chain: "TEL_MESH_BYPASS",
+		rulespec: []string{
+			"-d", "240.240.0.0/16",
+			"-j", "RETURN",
+		},
+	})
+	requireCall(t, ipt.calls, iptablesCall{
+		op:    "append",
+		table: nat,
+		chain: "TEL_MESH_BYPASS",
+		rulespec: []string{
+			"-j", "ACCEPT",
+		},
+	})
+	for _, call := range ipt.calls {
+		if call.chain == "TEL_MESH_BYPASS" && len(call.rulespec) > 1 && call.rulespec[1] == "fd00:240::/32" {
+			t.Fatalf("subnet of the wrong address family must not be added: %#v", call)
+		}
+	}
+	// The bypass rules target the exemption chain instead of RETURN.
+	requireCall(t, ipt.calls, iptablesCall{
+		op:       "insert",
+		table:    nat,
+		chain:    "OUTPUT",
+		position: 5,
+		rulespec: []string{
+			"-p", "tcp",
+			"-m", "owner", "--uid-owner", "1000",
+			"-m", "tcp", "!", "--dport", "53",
+			"-j", "TEL_MESH_BYPASS",
+		},
+	})
+	requireCall(t, ipt.calls, iptablesCall{
+		op:       "insert",
+		table:    nat,
+		chain:    "OUTPUT",
+		position: 6,
+		rulespec: []string{
+			"-p", "udp",
+			"-m", "owner", "--uid-owner", "1000",
+			"-m", "udp", "!", "--dport", "53",
+			"-j", "TEL_MESH_BYPASS",
 		},
 	})
 }

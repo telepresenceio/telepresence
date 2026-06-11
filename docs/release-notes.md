@@ -134,6 +134,12 @@ Clients now reject <code>--mapped-namespaces</code> values that are outside the 
 When <code>telepresence helm install</code> or <code>telepresence helm upgrade</code> waits for the traffic-manager and its pod cannot become ready (a bad image, insufficient resources, or an unschedulable pod), the command now reports the underlying Kubernetes reason (for example <code>ImagePullBackOff</code>) and points at <code>kubectl describe pod</code>, instead of a confusing Helm rollback error. It also aborts as soon as a terminal failure is detected rather than waiting for the timeout.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Resolve and reach Istio ServiceEntry hosts from the workstation](howtos/istio)</div></div>
+<div style="margin-left: 15px">
+
+Names that only a service mesh can resolve — such as Istio <code>ServiceEntry</code> hosts when Istio's DNS proxying is enabled — can now be used from the workstation. The traffic-agent's DNS lookups are subjected to the mesh's DNS interception, and the new Helm chart value <code>agent.serviceMesh.dialSubnets</code> lists address ranges (for example Istio's ServiceEntry auto-allocation range <code>240.240.0.0/16</code>) that the agent must dial through the mesh proxy. Engage a meshed workload, or connect with <code>--proxy-via</code> through one, and the ServiceEntry host resolves and routes via the mesh.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Traffic-agent DNS lookups honor the client's DNS lookup timeout</div></div>
 <div style="margin-left: 15px">
 

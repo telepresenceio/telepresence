@@ -210,14 +210,76 @@ func (c *config) configureIptables(ctx context.Context, ipt iptablesConfigurer, 
 
 	// Finally, any other traffic heading out of the traffic agent should pass by unperturbed -- it should obviously not be
 	// redirected back into the agent, but it also should not pass through a mesh proxy.
-	// This will include not just agent->manager traffic but also the agent requesting 127.0.0.1:appPort to serve the application
-	err = ipt.Insert(nat, "OUTPUT", 1+outputInsertCount,
-		"-m", "owner", "--uid-owner", agentUID,
-		"-j", "RETURN")
+	// This will include not just agent->manager traffic but also the agent requesting 127.0.0.1:appPort to serve the application.
+	//
+	// DNS is the exception: the agent performs DNS lookups on behalf of connected clients, and those must be
+	// subjected to the mesh's DNS interception (e.g. Istio's DNS proxy) so that names that only the mesh can
+	// resolve are resolved for the client too. Port 53 is therefore excluded from the bypass; without a mesh,
+	// that traffic just continues through the chain's default and is unaffected.
+	//
+	// Destinations in MeshDialSubnets are also excluded: connections to those (typically the mesh's virtual
+	// address range for external services, where only the mesh proxy knows how to route them) must be made
+	// through the mesh. When such subnets are configured, the bypass goes through a chain that exempts them
+	// with a RETURN, and terminates nat OUTPUT traversal with an ACCEPT for everything else, which is
+	// equivalent to the plain RETURN bypass in the built-in chain.
+	return c.insertMeshBypassRules(ipt, agentUID, 1+outputInsertCount, podIP.Is4())
+}
+
+// insertMeshBypassRules installs the rules that exempt the traffic-agent's own traffic
+// from service-mesh processing, except for DNS and for destinations in MeshDialSubnets.
+func (c *config) insertMeshBypassRules(ipt iptablesConfigurer, agentUID string, pos int, v4 bool) error {
+	bypassTarget, err := c.meshBypassTarget(ipt, v4)
 	if err != nil {
-		return fmt.Errorf("failed to insert --uid-owner rule in OUTPUT: %w", err)
+		return err
+	}
+	for _, lcProto := range []string{"tcp", "udp"} {
+		err = ipt.Insert(nat, "OUTPUT", pos,
+			"-p", lcProto,
+			"-m", "owner", "--uid-owner", agentUID,
+			"-m", lcProto, "!", "--dport", "53",
+			"-j", bypassTarget)
+		if err != nil {
+			return fmt.Errorf("failed to insert --uid-owner rule in OUTPUT: %w", err)
+		}
+		pos++
 	}
 	return nil
+}
+
+// familySubnets returns the subnets that match the given address family.
+func familySubnets(subnets []netip.Prefix, v4 bool) []netip.Prefix {
+	var sns []netip.Prefix
+	for _, sn := range subnets {
+		if sn.Addr().Is4() == v4 {
+			sns = append(sns, sn)
+		}
+	}
+	return sns
+}
+
+// meshBypassTarget returns the target for the agent-UID mesh-bypass rules. When mesh-dial
+// subnets of the given address family are configured, it creates a chain that exempts those
+// destinations from the bypass with a RETURN, terminates nat OUTPUT traversal with an ACCEPT
+// for everything else (equivalent to a plain RETURN in the built-in chain), and returns the
+// chain's name. Otherwise it returns "RETURN".
+func (c *config) meshBypassTarget(ipt iptablesConfigurer, v4 bool) (string, error) {
+	meshSubnets := familySubnets(c.MeshDialSubnets, v4)
+	if len(meshSubnets) == 0 {
+		return "RETURN", nil
+	}
+	const meshBypassChain = "TEL_MESH_BYPASS"
+	if err := ipt.ClearChain(nat, meshBypassChain); err != nil {
+		return "", fmt.Errorf("failed to clear chain %s: %w", meshBypassChain, err)
+	}
+	for _, sn := range meshSubnets {
+		if err := ipt.AppendUnique(nat, meshBypassChain, "-d", sn.String(), "-j", "RETURN"); err != nil {
+			return "", fmt.Errorf("failed to append rule to %s: %w", meshBypassChain, err)
+		}
+	}
+	if err := ipt.AppendUnique(nat, meshBypassChain, "-j", "ACCEPT"); err != nil {
+		return "", fmt.Errorf("failed to append rule to %s: %w", meshBypassChain, err)
+	}
+	return meshBypassChain, nil
 }
 
 func findLoopback() (string, error) {

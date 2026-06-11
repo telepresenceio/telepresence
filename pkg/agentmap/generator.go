@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"slices"
 	"sort"
 	"strconv"
@@ -41,6 +42,7 @@ type GeneratorConfig struct {
 	SecurityContext     *core.SecurityContext
 	InitSecurityContext *core.SecurityContext
 	MountPolicies       types.MountPolicies
+	MeshDialSubnets     []netip.Prefix
 	ClientConnectionTTL time.Duration
 	WatchRetryInterval  time.Duration
 	EnableH2cProbing    bool
@@ -184,6 +186,7 @@ func (cfg *GeneratorConfig) Generate(
 		APIPort:             cfg.APIPort,
 		ClientConnectionTTL: cfg.ClientConnectionTTL,
 		MountPolicies:       cfg.MountPolicies,
+		MeshDialSubnets:     cfg.MeshDialSubnets,
 		Containers:          ccs,
 		InitResources:       cfg.InitResources,
 		Resources:           cfg.Resources,

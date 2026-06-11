@@ -81,6 +81,16 @@ properties:
       securityContext:
         description: Security context for the agent
         $ref: "#/$defs/securityContext"
+      serviceMesh:
+        description: Settings for cooperating with a service mesh present in the pod
+        type: object
+        additionalProperties: false
+        properties:
+          dialSubnets:
+            description: Subnets for which outbound connections made by the traffic-agent must pass through the service-mesh proxy instead of bypassing it, e.g. Istio's ServiceEntry auto-allocation range 240.240.0.0/16
+            type: array
+            items:
+              type: string
       watchRetryInterval:
         description: The interval between retries that a watcher uses when the gRPC connection to the traffic manager is lost
         $ref: "#/$defs/duration"

@@ -170,6 +170,14 @@ agent:
     pullPolicy: IfNotPresent
   initContainer:
     enabled: true
+  # Settings for cooperating with a service mesh present in the pod.
+  # serviceMesh:
+  #   # Subnets for which outbound connections made by the traffic-agent must pass
+  #   # through the service-mesh proxy instead of bypassing it. Set this to the
+  #   # mesh's virtual address range for external services, e.g. Istio's
+  #   # ServiceEntry auto-allocation range:
+  #   dialSubnets:
+  #     - 240.240.0.0/16
 
 ################################################################################
 ## Telepresence API Server Configuration
