@@ -172,12 +172,17 @@ func rpcWorkloadState(s workload.State) (state rpc.WorkloadInfo_State) {
 	return state
 }
 
-func rpcWorkload(wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []*rpc.WorkloadInfo_Intercept) *rpc.WorkloadInfo {
+func rpcWorkload(ctx context.Context, wl k8sapi.Workload, as rpc.WorkloadInfo_AgentState, iClients []*rpc.WorkloadInfo_Intercept) *rpc.WorkloadInfo {
+	exposure := describeWorkloadExposure(ctx, wl)
 	return &rpc.WorkloadInfo{
 		Kind:             workload.RpcKind(wl.GetKind()),
 		Name:             wl.GetName(),
 		Namespace:        wl.GetNamespace(),
 		Uid:              string(wl.GetUID()),
+		DesiredReplicas:  exposure.desiredReplicas,
+		ReadyReplicas:    exposure.readyReplicas,
+		Services:         exposure.services,
+		Routes:           exposure.routes,
 		State:            rpcWorkloadState(workload.GetWorkloadState(wl)),
 		AgentState:       as,
 		InterceptClients: iClients,
@@ -220,7 +225,7 @@ func (wf *workloadInfoWatcher) handleWorkloadEvents(ctx context.Context, wes []E
 				}
 				w = &rpc.WorkloadEvent{
 					Type:     rpc.WorkloadEvent_Type(we.Type),
-					Workload: rpcWorkload(wl, as, iClients),
+					Workload: rpcWorkload(ctx, wl, as, iClients),
 				}
 			}
 			clog.Tracef(ctx, "WorkloadInfoEvent: Workload %s %s %s %s", we.Type, wl, as, w.Workload.State)
@@ -256,7 +261,7 @@ func (wf *workloadInfoWatcher) handleAgentDelta(ctx context.Context, delta cache
 				}
 				w = &rpc.WorkloadEvent{
 					Type:     rpc.WorkloadEvent_MODIFIED,
-					Workload: rpcWorkload(wl, as, nil),
+					Workload: rpcWorkload(ctx, wl, as, nil),
 				}
 			}
 			clog.Tracef(ctx, "WorkloadInfoEvent: AgentInfo %s(%s).%s %s %s", a.PodName, a.PodIp, a.Namespace, as, w.Workload.State)
@@ -300,7 +305,7 @@ func (wf *workloadInfoWatcher) handleAgentDelta(ctx context.Context, delta cache
 				}
 				w = &rpc.WorkloadEvent{
 					Type:     rpc.WorkloadEvent_ADDED_UNSPECIFIED,
-					Workload: rpcWorkload(wl, as, iClients),
+					Workload: rpcWorkload(ctx, wl, as, iClients),
 				}
 			}
 			clog.Tracef(ctx, "WorkloadInfoEvent: AgentInfo %s(%s).%s %s %s", a.PodName, a.PodIp, a.Namespace, as, w.Workload.State)
@@ -363,7 +368,7 @@ func (wf *workloadInfoWatcher) handleInterceptDelta(ctx context.Context, delta c
 				}
 				w = &rpc.WorkloadEvent{
 					Type:     rpc.WorkloadEvent_Type(EventTypeUpdate),
-					Workload: rpcWorkload(wl, as, iClients),
+					Workload: rpcWorkload(ctx, wl, as, iClients),
 				}
 			}
 			clog.Tracef(ctx, "WorkloadInfoEvent: InterceptInfo %s %s %s", name, as, w.Workload.State)
@@ -400,7 +405,7 @@ func (wf *workloadInfoWatcher) handleInterceptDelta(ctx context.Context, delta c
 				}
 				w = &rpc.WorkloadEvent{
 					Type:     rpc.WorkloadEvent_Type(EventTypeUpdate),
-					Workload: rpcWorkload(wl, as, iClients),
+					Workload: rpcWorkload(ctx, wl, as, iClients),
 				}
 			}
 			clog.Tracef(ctx, "WorkloadInfoEvent: InterceptInfo %s.%s %s %s", w.Workload.Name, w.Workload.Namespace, as, w.Workload.State)

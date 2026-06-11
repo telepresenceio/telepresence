@@ -75,6 +75,10 @@ type workloadInfo struct {
 	state            workload.State
 	agentState       manager.WorkloadInfo_AgentState
 	interceptClients []string
+	desiredReplicas  int32
+	readyReplicas    int32
+	services         []*manager.ServiceAssociation
+	routes           []*manager.RouteAssociation
 }
 
 type session struct {
@@ -486,11 +490,16 @@ func (s *session) getInfosForWorkloads(
 	wiMap := make(map[string]*rpc.WorkloadInfo)
 	s.eachWorkload(namespaces, func(wlKind manager.WorkloadInfo_Kind, name, namespace string, info workloadInfo) {
 		kind := wlKind.String()
+		clog.Debugf(s, "snapshot workload %s/%s.%s services=%d routes=%d", wlKind, name, namespace, len(info.services), len(info.routes))
 		wlInfo := &rpc.WorkloadInfo{
 			Name:                 name,
 			Namespace:            namespace,
 			WorkloadResourceType: kind,
 			Uid:                  string(info.uid),
+			DesiredReplicas:      info.desiredReplicas,
+			ReadyReplicas:        info.readyReplicas,
+			Services:             cloneServiceAssociations(info.services),
+			Routes:               cloneRouteAssociations(info.routes),
 		}
 		if info.state != workload.StateAvailable {
 			wlInfo.NotInterceptableReason = info.state.String()
@@ -540,6 +549,62 @@ func (s *session) getInfosForWorkloads(
 	}
 	sort.Slice(wiz, func(i, j int) bool { return wiz[i].Name < wiz[j].Name })
 	return wiz
+}
+
+func cloneServiceAssociations(services []*manager.ServiceAssociation) []*manager.ServiceAssociation {
+	if len(services) == 0 {
+		return nil
+	}
+
+	cloned := make([]*manager.ServiceAssociation, 0, len(services))
+	for _, service := range services {
+		if service == nil {
+			continue
+		}
+		ports := make([]*manager.ServicePort, 0, len(service.Ports))
+		for _, port := range service.Ports {
+			if port == nil {
+				continue
+			}
+			ports = append(ports, &manager.ServicePort{
+				Name:       port.Name,
+				Port:       port.Port,
+				TargetPort: port.TargetPort,
+			})
+		}
+		cloned = append(cloned, &manager.ServiceAssociation{
+			Name:      service.Name,
+			Namespace: service.Namespace,
+			Ports:     ports,
+		})
+	}
+	return cloned
+}
+
+func cloneRouteAssociations(routes []*manager.RouteAssociation) []*manager.RouteAssociation {
+	if len(routes) == 0 {
+		return nil
+	}
+
+	cloned := make([]*manager.RouteAssociation, 0, len(routes))
+	for _, route := range routes {
+		if route == nil {
+			continue
+		}
+		cloned = append(cloned, &manager.RouteAssociation{
+			Type:             route.Type,
+			Name:             route.Name,
+			Namespace:        route.Namespace,
+			Hosts:            append([]string(nil), route.Hosts...),
+			Paths:            append([]string(nil), route.Paths...),
+			Tls:              route.Tls,
+			ServiceName:      route.ServiceName,
+			ServiceNamespace: route.ServiceNamespace,
+			ServicePortName:  route.ServicePortName,
+			ServicePort:      route.ServicePort,
+		})
+	}
+	return cloned
 }
 
 func (s *session) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
@@ -1036,11 +1101,16 @@ func (s *session) workloadsWatcher(namespace string, synced *sync.WaitGroup) err
 					}
 					state := workload.StateFromRPC(w.State)
 					clog.Debugf(s, "Adding workload %s/%s.%s %s %s %s", key.kind, key.name, namespace, state, w.AgentState, clients)
+					clog.Debugf(s, "workload event payload %s/%s.%s services=%d routes=%d", key.kind, key.name, namespace, len(w.Services), len(w.Routes))
 					workloads[key] = workloadInfo{
 						uid:              k8sTypes.UID(w.Uid),
 						state:            state,
 						agentState:       w.AgentState,
 						interceptClients: clients,
+						desiredReplicas:  w.DesiredReplicas,
+						readyReplicas:    w.ReadyReplicas,
+						services:         cloneServiceAssociations(w.Services),
+						routes:           cloneRouteAssociations(w.Routes),
 					}
 				}
 			}

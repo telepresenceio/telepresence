@@ -622,6 +622,31 @@ message KnownWorkloadKinds {
   repeated WorkloadInfo.Kind kinds = 1;
 }
 
+message ServicePort {
+  string name = 1;
+  int32 port = 2;
+  string target_port = 3;
+}
+
+message ServiceAssociation {
+  string name = 1;
+  string namespace = 2;
+  repeated ServicePort ports = 3;
+}
+
+message RouteAssociation {
+  string type = 1;
+  string name = 2;
+  string namespace = 3;
+  repeated string hosts = 4;
+  repeated string paths = 5;
+  bool tls = 6;
+  string service_name = 7;
+  string service_namespace = 8;
+  string service_port_name = 9;
+  int32 service_port = 10;
+}
+
 // WorkloadInfo contains information about a workload (typically a
 // Deployment).
 message WorkloadInfo {
@@ -671,6 +696,10 @@ message WorkloadInfo {
   string name = 2;
   string namespace = 3;
   string uid = 7;
+  int32 desired_replicas = 8;
+  int32 ready_replicas = 9;
+  repeated ServiceAssociation services = 10;
+  repeated RouteAssociation routes = 11;
   AgentState agent_state = 4;
 
   repeated Intercept intercept_clients = 5;
