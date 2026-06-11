@@ -9,6 +9,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/go-fuseftp/pkg/fs"
 	"github.com/telepresenceio/go-fuseftp/rpc"
@@ -53,12 +55,27 @@ func (m *ftpMounter) Start(ctx context.Context, workload, container, clientMount
 		clog.Infof(ctx, "Mounting FTP file system for container %s[%s] (address %s)%s at %q", workload, container, podAddrPort, roTxt, clientMountPoint)
 		// FTPs remote mount is already relative to the agentconfig.ExportsMountPoint
 		rmp := strings.TrimPrefix(mountPoint, agentconfig.ExportsMountPoint)
-		ftpClient, err := fs.NewFTPClient(ctx.Done(), podAddrPort, rmp, ro, cfg.Timeouts().Get(client.TimeoutFtpReadWrite))
+
+		// The dial may lose a race against the routing of a just-created pod's IP, so
+		// dial errors are retried until the intercept timeout expires.
+		var ftpClient fs.FTPClient
+		bc := backoff.NewExponentialBackOff()
+		bc.InitialInterval = 100 * time.Millisecond
+		bc.MaxInterval = 3 * time.Second
+		bc.MaxElapsedTime = cfg.Timeouts().Get(client.TimeoutIntercept)
+		err := backoff.Retry(func() error {
+			var err error
+			ftpClient, err = fs.NewFTPClient(ctx.Done(), podAddrPort, rmp, ro, cfg.Timeouts().Get(client.TimeoutFtpReadWrite))
+			if err != nil {
+				clog.Debugf(ctx, "FTP connection to %s failed (%v), retrying", podAddrPort, err)
+			}
+			return err
+		}, backoff.WithContext(bc, ctx))
 		if err != nil {
 			return err
 		}
 		host := fs.NewHost(ftpClient, clientMountPoint)
-		if err = host.Start(ctx, 5*time.Second); err != nil {
+		if err := host.Start(ctx, 5*time.Second); err != nil {
 			return err
 		}
 
