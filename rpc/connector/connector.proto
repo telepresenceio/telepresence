@@ -348,8 +348,6 @@ message WorkloadInfo {
   int32 ready_replicas = 10;
 
   repeated manager.ServiceAssociation services = 11;
-
-  repeated manager.RouteAssociation routes = 12;
 }
 
 message WorkloadInfoSnapshot {

@@ -2,8 +2,8 @@ package state
 
 import (
 	"context"
-	"maps"
 	"sort"
+	"strconv"
 
 	netv1 "k8s.io/api/networking/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,7 +11,8 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -20,127 +21,122 @@ type workloadExposure struct {
 	desiredReplicas int32
 	readyReplicas   int32
 	services        []*rpc.ServiceAssociation
-	routes          []*rpc.RouteAssociation
-}
-
-type serviceRouteKey struct {
-	name      string
-	namespace string
-	portName  string
-	port      int32
 }
 
 func describeWorkloadExposure(ctx context.Context, wl k8sapi.Workload) workloadExposure {
-	services := serviceAssociationsForWorkload(ctx, wl)
-	return workloadExposure{
+	exposure := workloadExposure{
 		desiredReplicas: k8sapi.DesiredReplicas(wl),
 		readyReplicas:   k8sapi.ReadyReplicas(wl),
-		services:        services,
-		routes:          routeAssociationsForServices(ctx, wl.GetNamespace(), serviceRouteIndex(services)),
 	}
+	if sc := mutator.GetMap(ctx).Get(wl.GetName(), wl.GetNamespace()); sc != nil {
+		exposure.services = serviceAssociationsForSidecar(sc)
+		attachRouteAssociations(ctx, sc.Namespace, exposure.services)
+	}
+	return exposure
 }
 
-func serviceAssociationsForWorkload(ctx context.Context, wl k8sapi.Workload) []*rpc.ServiceAssociation {
-	podTemplate := wl.GetPodTemplate().DeepCopy()
-	if podTemplate.Namespace == "" {
-		podTemplate.Namespace = wl.GetNamespace()
+func serviceAssociationsForSidecar(sc *agentconfig.Sidecar) []*rpc.ServiceAssociation {
+	type servicePortKey struct {
+		name     string
+		portName string
+		port     int32
 	}
+	svcMap := map[string]*rpc.ServiceAssociation{}
+	seen := map[servicePortKey]struct{}{}
+	for _, cn := range sc.Containers {
+		for _, ic := range cn.Intercepts {
+			if ic.ServiceName == "" {
+				continue
+			}
+			key := servicePortKey{
+				name:     ic.ServiceName,
+				portName: ic.ServicePortName,
+				port:     int32(ic.ServicePort),
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
 
-	objects, err := agentmap.FindServicesForPod(ctx, podTemplate, "")
-	if err != nil {
-		clog.Warnf(ctx, "unable to discover services for %s %s.%s: %v", wl.GetKind(), wl.GetName(), wl.GetNamespace(), err)
+			targetPort := ic.ContainerPortName
+			if ic.TargetPortNumeric {
+				targetPort = strconv.Itoa(int(ic.ContainerPort))
+			}
+			service := svcMap[ic.ServiceName]
+			if service == nil {
+				service = &rpc.ServiceAssociation{
+					Name: ic.ServiceName,
+				}
+				svcMap[ic.ServiceName] = service
+			}
+			service.Ports = append(service.Ports, &rpc.ServicePort{
+				Name:       ic.ServicePortName,
+				Port:       int32(ic.ServicePort),
+				TargetPort: targetPort,
+			})
+		}
+	}
+	if len(svcMap) == 0 {
 		return nil
 	}
 
-	services := make([]*rpc.ServiceAssociation, 0, len(objects))
-	for _, object := range objects {
-		service, ok := k8sapi.ServiceImpl(object)
-		if !ok {
-			continue
-		}
-
-		ports := make([]*rpc.ServicePort, 0, len(service.Spec.Ports))
-		for _, port := range service.Spec.Ports {
-			ports = append(ports, &rpc.ServicePort{
-				Name:       port.Name,
-				Port:       port.Port,
-				TargetPort: port.TargetPort.String(),
-			})
-		}
-		sort.Slice(ports, func(i, j int) bool {
-			if ports[i].GetPort() != ports[j].GetPort() {
-				return ports[i].GetPort() < ports[j].GetPort()
+	services := make([]*rpc.ServiceAssociation, 0, len(svcMap))
+	for _, service := range svcMap {
+		sort.Slice(service.Ports, func(i, j int) bool {
+			if service.Ports[i].GetPort() != service.Ports[j].GetPort() {
+				return service.Ports[i].GetPort() < service.Ports[j].GetPort()
 			}
-			return ports[i].GetName() < ports[j].GetName()
+			return service.Ports[i].GetName() < service.Ports[j].GetName()
 		})
-
-		services = append(services, &rpc.ServiceAssociation{
-			Name:      service.Name,
-			Namespace: service.Namespace,
-			Ports:     ports,
-		})
+		services = append(services, service)
 	}
-
 	sort.Slice(services, func(i, j int) bool {
-		if services[i].GetNamespace() != services[j].GetNamespace() {
-			return services[i].GetNamespace() < services[j].GetNamespace()
-		}
 		return services[i].GetName() < services[j].GetName()
 	})
-	clog.Debugf(ctx, "discovered %d services for %s %s.%s using pod labels %v", len(services), wl.GetKind(), wl.GetName(), wl.GetNamespace(), podTemplate.Labels)
 	return services
 }
 
-func routeAssociationsForServices(ctx context.Context, namespace string, services map[string]*rpc.ServiceAssociation) []*rpc.RouteAssociation {
+// attachRouteAssociations finds all routes in the given namespace that target one of
+// the given services and attaches them to the service they target.
+func attachRouteAssociations(ctx context.Context, namespace string, services []*rpc.ServiceAssociation) {
 	if len(services) == 0 {
-		clog.Debugf(ctx, "discovered 0 routes in namespace %s because no matching services were found", namespace)
-		return nil
+		return
 	}
 
 	ingresses, err := listIngresses(ctx, namespace)
 	if err != nil {
 		clog.Warnf(ctx, "unable to discover ingresses in namespace %s: %v", namespace, err)
-		return nil
+		return
 	}
 
-	routes := make([]*rpc.RouteAssociation, 0, len(ingresses))
+	index := serviceIndex(services)
 	for _, ingress := range ingresses {
-		routes = append(routes, routeAssociationsForIngress(ingress, services)...)
+		attachRoutesForIngress(ingress, index)
 	}
 
-	sort.Slice(routes, func(i, j int) bool {
-		if routes[i].GetNamespace() != routes[j].GetNamespace() {
-			return routes[i].GetNamespace() < routes[j].GetNamespace()
-		}
-		if routes[i].GetServiceNamespace() != routes[j].GetServiceNamespace() {
-			return routes[i].GetServiceNamespace() < routes[j].GetServiceNamespace()
-		}
-		if routes[i].GetServiceName() != routes[j].GetServiceName() {
-			return routes[i].GetServiceName() < routes[j].GetServiceName()
-		}
-		if routes[i].GetServicePort() != routes[j].GetServicePort() {
-			return routes[i].GetServicePort() < routes[j].GetServicePort()
-		}
-		if routes[i].GetServicePortName() != routes[j].GetServicePortName() {
-			return routes[i].GetServicePortName() < routes[j].GetServicePortName()
-		}
-		return routes[i].GetName() < routes[j].GetName()
-	})
-	clog.Debugf(ctx, "discovered %d routes in namespace %s for services %v", len(routes), namespace, maps.Keys(services))
-	return routes
+	count := 0
+	for _, service := range services {
+		sort.Slice(service.Routes, func(i, j int) bool {
+			if service.Routes[i].GetName() != service.Routes[j].GetName() {
+				return service.Routes[i].GetName() < service.Routes[j].GetName()
+			}
+			if service.Routes[i].GetPort() != service.Routes[j].GetPort() {
+				return service.Routes[i].GetPort() < service.Routes[j].GetPort()
+			}
+			return service.Routes[i].GetPortName() < service.Routes[j].GetPortName()
+		})
+		count += len(service.Routes)
+	}
+	clog.Debugf(ctx, "discovered %d routes in namespace %s for %d services", count, namespace, len(services))
 }
 
 func listIngresses(ctx context.Context, namespace string) ([]*netv1.Ingress, error) {
 	if factory := informer.GetK8sFactory(ctx, namespace); factory != nil {
-		ingresses, err := factory.Networking().V1().Ingresses().Lister().Ingresses(namespace).List(labels.Everything())
-		if err == nil && len(ingresses) > 0 {
-			return ingresses, nil
-		}
-		if err != nil {
-			clog.Debugf(ctx, "namespace ingress lister lookup failed for %s, falling back to direct client: %v", namespace, err)
-		}
+		return factory.Networking().V1().Ingresses().Lister().Ingresses(namespace).List(labels.Everything())
 	}
 
+	// This shouldn't happen really.
+	clog.Debugf(ctx, "listing ingresses in namespace %s using direct API call", namespace)
 	list, err := k8sapi.GetK8sInterface(ctx).NetworkingV1().Ingresses(namespace).List(ctx, meta.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -153,33 +149,38 @@ func listIngresses(ctx context.Context, namespace string) ([]*netv1.Ingress, err
 	return ingresses, nil
 }
 
-func routeAssociationsForIngress(ingress *netv1.Ingress, services map[string]*rpc.ServiceAssociation) []*rpc.RouteAssociation {
+// attachRoutesForIngress appends a route to each service port that the given ingress
+// routes traffic to. The hosts and paths of all ingress rules targeting the same
+// service port are aggregated into one single route.
+func attachRoutesForIngress(ingress *netv1.Ingress, services map[string]*rpc.ServiceAssociation) {
 	if ingress == nil {
-		return nil
+		return
 	}
 
+	type routeKey struct {
+		service  *rpc.ServiceAssociation
+		portName string
+		port     int32
+	}
 	type routeAggregate struct {
-		key   serviceRouteKey
 		hosts map[string]struct{}
 		paths map[string]struct{}
 	}
 
-	aggregates := map[serviceRouteKey]*routeAggregate{}
+	aggregates := map[routeKey]*routeAggregate{}
 
 	appendMatch := func(service *rpc.ServiceAssociation, portName string, port int32, host string, path string) {
 		if service == nil || service.GetName() == "" {
 			return
 		}
-		key := serviceRouteKey{
-			name:      service.GetName(),
-			namespace: service.GetNamespace(),
-			portName:  portName,
-			port:      port,
+		key := routeKey{
+			service:  service,
+			portName: portName,
+			port:     port,
 		}
 		aggregate := aggregates[key]
 		if aggregate == nil {
 			aggregate = &routeAggregate{
-				key:   key,
 				hosts: map[string]struct{}{},
 				paths: map[string]struct{}{},
 			}
@@ -210,26 +211,17 @@ func routeAssociationsForIngress(ingress *netv1.Ingress, services map[string]*rp
 		}
 	}
 
-	if len(aggregates) == 0 {
-		return nil
-	}
-
-	routes := make([]*rpc.RouteAssociation, 0, len(aggregates))
-	for _, aggregate := range aggregates {
-		routes = append(routes, &rpc.RouteAssociation{
-			Type:             "Ingress",
-			Name:             ingress.Name,
-			Namespace:        ingress.Namespace,
-			Hosts:            sortedKeys(aggregate.hosts),
-			Paths:            sortedKeys(aggregate.paths),
-			Tls:              ingressUsesTLS(ingress),
-			ServiceName:      aggregate.key.name,
-			ServiceNamespace: aggregate.key.namespace,
-			ServicePortName:  aggregate.key.portName,
-			ServicePort:      aggregate.key.port,
+	for key, aggregate := range aggregates {
+		key.service.Routes = append(key.service.Routes, &rpc.RouteAssociation{
+			Type:     "Ingress",
+			Name:     ingress.Name,
+			Hosts:    sortedKeys(aggregate.hosts),
+			Paths:    sortedKeys(aggregate.paths),
+			Tls:      ingressUsesTLS(ingress),
+			PortName: key.portName,
+			Port:     key.port,
 		})
 	}
-	return routes
 }
 
 func ingressBackendMatch(
@@ -294,10 +286,7 @@ func ingressUsesTLS(ingress *netv1.Ingress) bool {
 	return false
 }
 
-func serviceRouteIndex(services []*rpc.ServiceAssociation) map[string]*rpc.ServiceAssociation {
-	if len(services) == 0 {
-		return nil
-	}
+func serviceIndex(services []*rpc.ServiceAssociation) map[string]*rpc.ServiceAssociation {
 	index := make(map[string]*rpc.ServiceAssociation, len(services))
 	for _, service := range services {
 		if service == nil || service.GetName() == "" {

@@ -13,6 +13,7 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 	"google.golang.org/protobuf/types/known/durationpb"
 	core "k8s.io/api/core/v1"
+	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 
@@ -275,6 +276,7 @@ func (c *configWatcher) startInformers(ctx context.Context, ns string) (iwc *inf
 		}
 	}
 	c.startPods(ctx, ns)
+	c.startIngresses(ctx, ns)
 	kf := informer.GetK8sFactory(ctx, ns)
 	kf.Start(ctx.Done())
 	kf.WaitForCacheSync(ctx.Done())
@@ -437,6 +439,22 @@ func (c *configWatcher) startPods(ctx context.Context, ns string) cache.SharedIn
 		clog.Errorf(ctx, "Watcher for pods %s: %v", whereWeWatch(ns), err)
 	})
 	return ix
+}
+
+func (c *configWatcher) startIngresses(ctx context.Context, ns string) {
+	f := informer.GetK8sFactory(ctx, ns)
+	ix := f.Networking().V1().Ingresses().Informer()
+	_ = ix.SetTransform(func(o any) (any, error) {
+		if ing, ok := o.(*netv1.Ingress); ok {
+			ing.ManagedFields = nil
+			ing.Finalizers = nil
+			ing.OwnerReferences = nil
+		}
+		return o, nil
+	})
+	_ = ix.SetWatchErrorHandler(func(_ *cache.Reflector, err error) {
+		clog.Errorf(ctx, "Watcher for ingresses %s: %v", whereWeWatch(ns), err)
+	})
 }
 
 func (c *configWatcher) Start(ctx context.Context) {

@@ -182,7 +182,6 @@ func rpcWorkload(ctx context.Context, wl k8sapi.Workload, as rpc.WorkloadInfo_Ag
 		DesiredReplicas:  exposure.desiredReplicas,
 		ReadyReplicas:    exposure.readyReplicas,
 		Services:         exposure.services,
-		Routes:           exposure.routes,
 		State:            rpcWorkloadState(workload.GetWorkloadState(wl)),
 		AgentState:       as,
 		InterceptClients: iClients,

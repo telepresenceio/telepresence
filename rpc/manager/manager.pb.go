@@ -3610,85 +3610,26 @@ func (x *ServicePort) GetTargetPort() string {
 	return ""
 }
 
-type ServiceAssociation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Ports         []*ServicePort         `protobuf:"bytes,3,rep,name=ports,proto3" json:"ports,omitempty"`
+// RouteAssociation describes a route object (currently always an Ingress
+// in the service's own namespace) that routes traffic to one of the ports
+// of the service it is associated with.
+type RouteAssociation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Type  string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Hosts []string               `protobuf:"bytes,3,rep,name=hosts,proto3" json:"hosts,omitempty"`
+	Paths []string               `protobuf:"bytes,4,rep,name=paths,proto3" json:"paths,omitempty"`
+	Tls   bool                   `protobuf:"varint,5,opt,name=tls,proto3" json:"tls,omitempty"`
+	// The service port that this route targets.
+	PortName      string `protobuf:"bytes,6,opt,name=port_name,json=portName,proto3" json:"port_name,omitempty"`
+	Port          int32  `protobuf:"varint,7,opt,name=port,proto3" json:"port,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ServiceAssociation) Reset() {
-	*x = ServiceAssociation{}
-	mi := &file_manager_manager_proto_msgTypes[46]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ServiceAssociation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ServiceAssociation) ProtoMessage() {}
-
-func (x *ServiceAssociation) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[46]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ServiceAssociation.ProtoReflect.Descriptor instead.
-func (*ServiceAssociation) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{46}
-}
-
-func (x *ServiceAssociation) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ServiceAssociation) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
-	}
-	return ""
-}
-
-func (x *ServiceAssociation) GetPorts() []*ServicePort {
-	if x != nil {
-		return x.Ports
-	}
-	return nil
-}
-
-type RouteAssociation struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Type             string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	Name             string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Namespace        string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Hosts            []string               `protobuf:"bytes,4,rep,name=hosts,proto3" json:"hosts,omitempty"`
-	Paths            []string               `protobuf:"bytes,5,rep,name=paths,proto3" json:"paths,omitempty"`
-	Tls              bool                   `protobuf:"varint,6,opt,name=tls,proto3" json:"tls,omitempty"`
-	ServiceName      string                 `protobuf:"bytes,7,opt,name=service_name,json=serviceName,proto3" json:"service_name,omitempty"`
-	ServiceNamespace string                 `protobuf:"bytes,8,opt,name=service_namespace,json=serviceNamespace,proto3" json:"service_namespace,omitempty"`
-	ServicePortName  string                 `protobuf:"bytes,9,opt,name=service_port_name,json=servicePortName,proto3" json:"service_port_name,omitempty"`
-	ServicePort      int32                  `protobuf:"varint,10,opt,name=service_port,json=servicePort,proto3" json:"service_port,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
 func (x *RouteAssociation) Reset() {
 	*x = RouteAssociation{}
-	mi := &file_manager_manager_proto_msgTypes[47]
+	mi := &file_manager_manager_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3700,7 +3641,7 @@ func (x *RouteAssociation) String() string {
 func (*RouteAssociation) ProtoMessage() {}
 
 func (x *RouteAssociation) ProtoReflect() protoreflect.Message {
-	mi := &file_manager_manager_proto_msgTypes[47]
+	mi := &file_manager_manager_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3713,7 +3654,7 @@ func (x *RouteAssociation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RouteAssociation.ProtoReflect.Descriptor instead.
 func (*RouteAssociation) Descriptor() ([]byte, []int) {
-	return file_manager_manager_proto_rawDescGZIP(), []int{47}
+	return file_manager_manager_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *RouteAssociation) GetType() string {
@@ -3726,13 +3667,6 @@ func (x *RouteAssociation) GetType() string {
 func (x *RouteAssociation) GetName() string {
 	if x != nil {
 		return x.Name
-	}
-	return ""
-}
-
-func (x *RouteAssociation) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
 	}
 	return ""
 }
@@ -3758,32 +3692,81 @@ func (x *RouteAssociation) GetTls() bool {
 	return false
 }
 
-func (x *RouteAssociation) GetServiceName() string {
+func (x *RouteAssociation) GetPortName() string {
 	if x != nil {
-		return x.ServiceName
+		return x.PortName
 	}
 	return ""
 }
 
-func (x *RouteAssociation) GetServiceNamespace() string {
+func (x *RouteAssociation) GetPort() int32 {
 	if x != nil {
-		return x.ServiceNamespace
-	}
-	return ""
-}
-
-func (x *RouteAssociation) GetServicePortName() string {
-	if x != nil {
-		return x.ServicePortName
-	}
-	return ""
-}
-
-func (x *RouteAssociation) GetServicePort() int32 {
-	if x != nil {
-		return x.ServicePort
+		return x.Port
 	}
 	return 0
+}
+
+// ServiceAssociation describes a service in the workload's namespace whose
+// selector matches the workload's pods, together with the routes that
+// target that service.
+type ServiceAssociation struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Ports         []*ServicePort         `protobuf:"bytes,2,rep,name=ports,proto3" json:"ports,omitempty"`
+	Routes        []*RouteAssociation    `protobuf:"bytes,3,rep,name=routes,proto3" json:"routes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceAssociation) Reset() {
+	*x = ServiceAssociation{}
+	mi := &file_manager_manager_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceAssociation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceAssociation) ProtoMessage() {}
+
+func (x *ServiceAssociation) ProtoReflect() protoreflect.Message {
+	mi := &file_manager_manager_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceAssociation.ProtoReflect.Descriptor instead.
+func (*ServiceAssociation) Descriptor() ([]byte, []int) {
+	return file_manager_manager_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *ServiceAssociation) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ServiceAssociation) GetPorts() []*ServicePort {
+	if x != nil {
+		return x.Ports
+	}
+	return nil
+}
+
+func (x *ServiceAssociation) GetRoutes() []*RouteAssociation {
+	if x != nil {
+		return x.Routes
+	}
+	return nil
 }
 
 // WorkloadInfo contains information about a workload (typically a
@@ -3797,7 +3780,6 @@ type WorkloadInfo struct {
 	DesiredReplicas  int32                     `protobuf:"varint,8,opt,name=desired_replicas,json=desiredReplicas,proto3" json:"desired_replicas,omitempty"`
 	ReadyReplicas    int32                     `protobuf:"varint,9,opt,name=ready_replicas,json=readyReplicas,proto3" json:"ready_replicas,omitempty"`
 	Services         []*ServiceAssociation     `protobuf:"bytes,10,rep,name=services,proto3" json:"services,omitempty"`
-	Routes           []*RouteAssociation       `protobuf:"bytes,11,rep,name=routes,proto3" json:"routes,omitempty"`
 	AgentState       WorkloadInfo_AgentState   `protobuf:"varint,4,opt,name=agent_state,json=agentState,proto3,enum=telepresence.manager.WorkloadInfo_AgentState" json:"agent_state,omitempty"`
 	InterceptClients []*WorkloadInfo_Intercept `protobuf:"bytes,5,rep,name=intercept_clients,json=interceptClients,proto3" json:"intercept_clients,omitempty"`
 	State            WorkloadInfo_State        `protobuf:"varint,6,opt,name=state,proto3,enum=telepresence.manager.WorkloadInfo_State" json:"state,omitempty"`
@@ -3880,13 +3862,6 @@ func (x *WorkloadInfo) GetReadyReplicas() int32 {
 func (x *WorkloadInfo) GetServices() []*ServiceAssociation {
 	if x != nil {
 		return x.Services
-	}
-	return nil
-}
-
-func (x *WorkloadInfo) GetRoutes() []*RouteAssociation {
-	if x != nil {
-		return x.Routes
 	}
 	return nil
 }
@@ -4649,23 +4624,19 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1f\n" +
 	"\vtarget_port\x18\x03 \x01(\tR\n" +
-	"targetPort\"\x7f\n" +
-	"\x12ServiceAssociation\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
-	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x127\n" +
-	"\x05ports\x18\x03 \x03(\v2!.telepresence.manager.ServicePortR\x05ports\"\xb5\x02\n" +
+	"targetPort\"\xa9\x01\n" +
 	"\x10RouteAssociation\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
-	"\tnamespace\x18\x03 \x01(\tR\tnamespace\x12\x14\n" +
-	"\x05hosts\x18\x04 \x03(\tR\x05hosts\x12\x14\n" +
-	"\x05paths\x18\x05 \x03(\tR\x05paths\x12\x10\n" +
-	"\x03tls\x18\x06 \x01(\bR\x03tls\x12!\n" +
-	"\fservice_name\x18\a \x01(\tR\vserviceName\x12+\n" +
-	"\x11service_namespace\x18\b \x01(\tR\x10serviceNamespace\x12*\n" +
-	"\x11service_port_name\x18\t \x01(\tR\x0fservicePortName\x12!\n" +
-	"\fservice_port\x18\n" +
-	" \x01(\x05R\vservicePort\"\xe5\x06\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
+	"\x05hosts\x18\x03 \x03(\tR\x05hosts\x12\x14\n" +
+	"\x05paths\x18\x04 \x03(\tR\x05paths\x12\x10\n" +
+	"\x03tls\x18\x05 \x01(\bR\x03tls\x12\x1b\n" +
+	"\tport_name\x18\x06 \x01(\tR\bportName\x12\x12\n" +
+	"\x04port\x18\a \x01(\x05R\x04port\"\xa1\x01\n" +
+	"\x12ServiceAssociation\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
+	"\x05ports\x18\x02 \x03(\v2!.telepresence.manager.ServicePortR\x05ports\x12>\n" +
+	"\x06routes\x18\x03 \x03(\v2&.telepresence.manager.RouteAssociationR\x06routes\"\xa5\x06\n" +
 	"\fWorkloadInfo\x12;\n" +
 	"\x04kind\x18\x01 \x01(\x0e2'.telepresence.manager.WorkloadInfo.KindR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
@@ -4674,8 +4645,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x10desired_replicas\x18\b \x01(\x05R\x0fdesiredReplicas\x12%\n" +
 	"\x0eready_replicas\x18\t \x01(\x05R\rreadyReplicas\x12D\n" +
 	"\bservices\x18\n" +
-	" \x03(\v2(.telepresence.manager.ServiceAssociationR\bservices\x12>\n" +
-	"\x06routes\x18\v \x03(\v2&.telepresence.manager.RouteAssociationR\x06routes\x12N\n" +
+	" \x03(\v2(.telepresence.manager.ServiceAssociationR\bservices\x12N\n" +
 	"\vagent_state\x18\x04 \x01(\x0e2-.telepresence.manager.WorkloadInfo.AgentStateR\n" +
 	"agentState\x12Y\n" +
 	"\x11intercept_clients\x18\x05 \x03(\v2,.telepresence.manager.WorkloadInfo.InterceptR\x10interceptClients\x12>\n" +
@@ -4832,8 +4802,8 @@ var file_manager_manager_proto_goTypes = []any{
 	(*TunnelMetrics)(nil),           // 48: telepresence.manager.TunnelMetrics
 	(*KnownWorkloadKinds)(nil),      // 49: telepresence.manager.KnownWorkloadKinds
 	(*ServicePort)(nil),             // 50: telepresence.manager.ServicePort
-	(*ServiceAssociation)(nil),      // 51: telepresence.manager.ServiceAssociation
-	(*RouteAssociation)(nil),        // 52: telepresence.manager.RouteAssociation
+	(*RouteAssociation)(nil),        // 51: telepresence.manager.RouteAssociation
+	(*ServiceAssociation)(nil),      // 52: telepresence.manager.ServiceAssociation
 	(*WorkloadInfo)(nil),            // 53: telepresence.manager.WorkloadInfo
 	(*WorkloadEvent)(nil),           // 54: telepresence.manager.WorkloadEvent
 	(*WorkloadEventsDelta)(nil),     // 55: telepresence.manager.WorkloadEventsDelta
@@ -4913,9 +4883,9 @@ var file_manager_manager_proto_depIdxs = []int32{
 	12,  // 49: telepresence.manager.AgentConfigRequest.session:type_name -> telepresence.manager.SessionInfo
 	1,   // 50: telepresence.manager.KnownWorkloadKinds.kinds:type_name -> telepresence.manager.WorkloadInfo.Kind
 	50,  // 51: telepresence.manager.ServiceAssociation.ports:type_name -> telepresence.manager.ServicePort
-	1,   // 52: telepresence.manager.WorkloadInfo.kind:type_name -> telepresence.manager.WorkloadInfo.Kind
-	51,  // 53: telepresence.manager.WorkloadInfo.services:type_name -> telepresence.manager.ServiceAssociation
-	52,  // 54: telepresence.manager.WorkloadInfo.routes:type_name -> telepresence.manager.RouteAssociation
+	51,  // 52: telepresence.manager.ServiceAssociation.routes:type_name -> telepresence.manager.RouteAssociation
+	1,   // 53: telepresence.manager.WorkloadInfo.kind:type_name -> telepresence.manager.WorkloadInfo.Kind
+	52,  // 54: telepresence.manager.WorkloadInfo.services:type_name -> telepresence.manager.ServiceAssociation
 	3,   // 55: telepresence.manager.WorkloadInfo.agent_state:type_name -> telepresence.manager.WorkloadInfo.AgentState
 	74,  // 56: telepresence.manager.WorkloadInfo.intercept_clients:type_name -> telepresence.manager.WorkloadInfo.Intercept
 	2,   // 57: telepresence.manager.WorkloadInfo.state:type_name -> telepresence.manager.WorkloadInfo.State
