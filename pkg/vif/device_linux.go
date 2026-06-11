@@ -3,6 +3,8 @@ package vif
 import (
 	"context"
 	cryptoRand "crypto/rand"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -98,7 +100,36 @@ func (d *device) addSubnet(_ context.Context, pfx netip.Prefix) error {
 	if err := netlink.AddrAdd(link, addr); err != nil {
 		return fmt.Errorf("failed to add address %s to interface %s: %w", pfx, d.name, err)
 	}
+	// The kernel derives a broadcast entry for the subnet's highest address from the
+	// address assignment and refuses unicast connects to that address, but the address
+	// is a perfectly valid pod IP. Link-level broadcast has no meaning on an L3 TUN
+	// device, so the entry is removed.
+	if bc, ok := subnetBroadcast(pfx); ok {
+		err := netlink.RouteDel(&netlink.Route{
+			LinkIndex: link.Attrs().Index,
+			Table:     unix.RT_TABLE_LOCAL,
+			Type:      unix.RTN_BROADCAST,
+			Scope:     netlink.SCOPE_LINK,
+			Dst:       subnet.PrefixToIPNet(netip.PrefixFrom(bc, bc.BitLen())),
+		})
+		if err != nil && !errors.Is(err, unix.ESRCH) {
+			return fmt.Errorf("failed to remove broadcast entry %s from interface %s: %w", bc, d.name, err)
+		}
+	}
 	return nil
+}
+
+// subnetBroadcast returns the broadcast address that the kernel derives when the given
+// prefix is assigned to an interface. The second return value is false when no broadcast
+// entry is created for the prefix.
+func subnetBroadcast(pfx netip.Prefix) (netip.Addr, bool) {
+	if !pfx.Addr().Is4() || pfx.Bits() >= 31 {
+		return netip.Addr{}, false
+	}
+	bc := pfx.Masked().Addr().As4()
+	v := binary.BigEndian.Uint32(bc[:]) | (uint32(1)<<(32-pfx.Bits()) - 1)
+	binary.BigEndian.PutUint32(bc[:], v)
+	return netip.AddrFrom4(bc), true
 }
 
 func (d *device) removeSubnet(_ context.Context, pfx netip.Prefix) error {
