@@ -284,6 +284,24 @@ items:
           the deadline of the calling client, which is governed by the
           <code>dns.lookupTimeout</code> client setting.
       - type: bugfix
+        title: Remote mounts retry their initial connection to the traffic-agent
+        body: >-
+          When a remote mount was initiated immediately after its pod was
+          created, the first connection to the traffic-agent could lose a race
+          against the routing of the pod's new IP address. The failure was
+          treated as permanent, leaving the local mount directory empty for the
+          remainder of the engagement. The connection is now retried until the
+          intercept timeout expires.
+      - type: bugfix
+        title: Pods using the highest address of a routed subnet are now reachable
+        body: >-
+          When a subnet was routed through the virtual network interface, the
+          kernel derived a broadcast entry for the subnet's highest address and
+          refused unicast connections to it. A CNI will happily assign that
+          address to a pod, rendering the pod unreachable from the workstation.
+          Link-level broadcast has no meaning on the L3 interface, so the entry
+          is now removed, making every address in a routed subnet reachable.
+      - type: bugfix
         title: Application traffic no longer bypasses the service mesh in engaged pods
         body: >-
           The traffic-agent's own traffic is exempted from service-mesh

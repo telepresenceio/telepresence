@@ -146,6 +146,18 @@ Names that only a service mesh can resolve — such as Istio <code>ServiceEntry<
 The traffic-agent imposed a hard-coded 250 millisecond timeout on the DNS lookups it performs on behalf of a connected client. A resolution that needs search-path expansion, or that passes through a service-mesh DNS proxy such as Istio's, can easily take longer, causing spurious <code>NXDOMAIN</code> answers on the workstation. The agent now honors the deadline of the calling client, which is governed by the <code>dns.lookupTimeout</code> client setting.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remote mounts retry their initial connection to the traffic-agent</div></div>
+<div style="margin-left: 15px">
+
+When a remote mount was initiated immediately after its pod was created, the first connection to the traffic-agent could lose a race against the routing of the pod's new IP address. The failure was treated as permanent, leaving the local mount directory empty for the remainder of the engagement. The connection is now retried until the intercept timeout expires.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Pods using the highest address of a routed subnet are now reachable</div></div>
+<div style="margin-left: 15px">
+
+When a subnet was routed through the virtual network interface, the kernel derived a broadcast entry for the subnet's highest address and refused unicast connections to it. A CNI will happily assign that address to a pod, rendering the pod unreachable from the workstation. Link-level broadcast has no meaning on the L3 interface, so the entry is now removed, making every address in a routed subnet reachable.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Application traffic no longer bypasses the service mesh in engaged pods](howtos/istio)</div></div>
 <div style="margin-left: 15px">
 
