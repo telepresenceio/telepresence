@@ -146,6 +146,12 @@ Names that only a service mesh can resolve — such as Istio <code>ServiceEntry<
 The traffic-agent imposed a hard-coded 250 millisecond timeout on the DNS lookups it performs on behalf of a connected client. A resolution that needs search-path expansion, or that passes through a service-mesh DNS proxy such as Istio's, can easily take longer, causing spurious <code>NXDOMAIN</code> answers on the workstation. The agent now honors the deadline of the calling client, which is governed by the <code>dns.lookupTimeout</code> client setting.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Application traffic no longer bypasses the service mesh in engaged pods](howtos/istio)</div></div>
+<div style="margin-left: 15px">
+
+The traffic-agent's own traffic is exempted from service-mesh processing using an iptables owner match, but the match was based on the agent's UID, which is inherited from the app container's securityContext (or defaults to root). An application sharing that UID had its outbound traffic silently bypass the mesh sidecar — no mTLS, telemetry, or policy enforcement. The agent container is now assigned a distinct primary group (default <code>7439</code>, overridable with <code>agent.securityContext.runAsGroup</code>) and the owner matches are group-based, so application traffic always traverses the mesh.
+</div>
+
 ## Version 2.28.0 <span style="font-size: 16px;">(May 11)</span>
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept workloads in mapped namespaces](reference/engagements/cli)</div></div>
 <div style="margin-left: 15px">

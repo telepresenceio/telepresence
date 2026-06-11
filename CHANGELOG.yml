@@ -283,6 +283,20 @@ items:
           <code>NXDOMAIN</code> answers on the workstation. The agent now honors
           the deadline of the calling client, which is governed by the
           <code>dns.lookupTimeout</code> client setting.
+      - type: bugfix
+        title: Application traffic no longer bypasses the service mesh in engaged pods
+        body: >-
+          The traffic-agent's own traffic is exempted from service-mesh
+          processing using an iptables owner match, but the match was based on
+          the agent's UID, which is inherited from the app container's
+          securityContext (or defaults to root). An application sharing that
+          UID had its outbound traffic silently bypass the mesh sidecar — no
+          mTLS, telemetry, or policy enforcement. The agent container is now
+          assigned a distinct primary group (default <code>7439</code>,
+          overridable with <code>agent.securityContext.runAsGroup</code>) and
+          the owner matches are group-based, so application traffic always
+          traverses the mesh.
+        docs: howtos/istio
   - version: 2.28.0
     date: 2026-05-11
     notes:
