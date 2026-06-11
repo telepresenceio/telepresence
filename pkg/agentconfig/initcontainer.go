@@ -44,11 +44,19 @@ func InitContainer(config *Sidecar, agentSecurityContext *core.SecurityContext) 
 			},
 		},
 	}
-	if agentSecurityContext != nil && agentSecurityContext.RunAsUser != nil {
-		ic.Env = append(ic.Env, core.EnvVar{
-			Name:  EnvAgentUID,
-			Value: strconv.FormatInt(*agentSecurityContext.RunAsUser, 10),
-		})
+	if agentSecurityContext != nil {
+		if uid := agentSecurityContext.RunAsUser; uid != nil {
+			ic.Env = append(ic.Env, core.EnvVar{
+				Name:  EnvAgentUID,
+				Value: strconv.FormatInt(*uid, 10),
+			})
+		}
+		if gid := agentSecurityContext.RunAsGroup; gid != nil {
+			ic.Env = append(ic.Env, core.EnvVar{
+				Name:  EnvAgentGID,
+				Value: strconv.FormatInt(*gid, 10),
+			})
+		}
 	}
 	if r := config.InitResources; r != nil {
 		ic.Resources = *r

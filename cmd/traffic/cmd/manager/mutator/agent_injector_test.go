@@ -1179,6 +1179,8 @@ matchExpressions:
         - agent-ready
       timeoutSeconds: 6
     resources: {}
+    securityContext:
+      runAsGroup: 7439
     volumeMounts:
     - mountPath: /etc/podinfo
       name: pod-info
@@ -1273,6 +1275,8 @@ matchExpressions:
         - agent-ready
       timeoutSeconds: 6
     resources: {}
+    securityContext:
+      runAsGroup: 7439
     volumeMounts:
     - mountPath: /etc/podinfo
       name: pod-info
@@ -1422,6 +1426,8 @@ matchExpressions:
         - agent-ready
       timeoutSeconds: 6
     resources: {}
+    securityContext:
+      runAsGroup: 7439
     volumeMounts:
     - mountPath: /etc/podinfo
       name: pod-info
@@ -1495,6 +1501,8 @@ matchExpressions:
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
+    - name: AGENT_GID
+      value: "7439"
     image: ghcr.io/telepresenceio/tel2:2.13.3
     name: tel-agent-init
     resources: {}
@@ -1535,6 +1543,8 @@ matchExpressions:
         - agent-ready
       timeoutSeconds: 6
     resources: {}
+    securityContext:
+      runAsGroup: 7439
     volumeMounts:
     - mountPath: /etc/podinfo
       name: pod-info
@@ -1608,6 +1618,8 @@ matchExpressions:
         fieldRef:
           apiVersion: v1
           fieldPath: status.podIP
+    - name: AGENT_GID
+      value: "7439"
     image: ghcr.io/telepresenceio/tel2:2.13.3
     name: tel-agent-init
     resources: {}
@@ -1648,6 +1660,8 @@ matchExpressions:
         - agent-ready
       timeoutSeconds: 6
     resources: {}
+    securityContext:
+      runAsGroup: 7439
     volumeMounts:
     - mountPath: /etc/podinfo
       name: pod-info
@@ -1735,6 +1749,10 @@ matchExpressions:
 									},
 								},
 							},
+							{
+								Name:  agentconfig.EnvAgentGID,
+								Value: "7439",
+							},
 						},
 						SecurityContext: &core.SecurityContext{
 							Capabilities: &core.Capabilities{
@@ -1753,6 +1771,9 @@ matchExpressions:
 							Image:           "ghcr.io/telepresenceio/tel2:2.13.3",
 							ImagePullPolicy: "IfNotPresent",
 							Args:            []string{"agent"},
+							SecurityContext: &core.SecurityContext{
+								RunAsGroup: new(agentconfig.DefaultAgentGID),
+							},
 							Ports: []core.ContainerPort{{
 								ContainerPort: 9900,
 								Protocol:      "TCP",
@@ -1923,6 +1944,8 @@ matchExpressions:
         - agent-ready
       timeoutSeconds: 6
     resources: {}
+    securityContext:
+      runAsGroup: 7439
     volumeMounts:
     - mountPath: /tel_app_mounts/some-container/var/run/secrets/kubernetes.io/serviceaccount
       name: $(_TEL_APP_A_TOKEN_VOLUME)

@@ -102,13 +102,13 @@ Why this works:
   injected. This fails today when uid collides, passes with the gid fix.
 - Existing no-mesh suites stay green (gid match is a no-op without a mesh).
 
-## Open questions
+## Decisions
 
-1. Default gid value: `7777`? (Istio reserves 1337; avoid that.)
-2. Should the uid-based matches be kept *in addition* to gid (`--uid-owner X
-   --gid-owner Y` ANDed) for defense in depth, or replaced outright? Replacing
-   is simpler; ANDing protects against an app that shares the gid through an
-   image default.
+1. Default gid value: `7439`. (Istio reserves 1337; avoid that.)
+2. The uid-based matches are replaced outright by gid-based ones (no ANDing).
+   The injector guarantees the gid is unique among declared securityContexts;
+   image-default gid collisions are improbable and the value is overridable
+   via `agent.securityContext.runAsGroup`.
 
 ## Rollout
 
