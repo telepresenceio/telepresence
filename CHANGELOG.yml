@@ -259,6 +259,16 @@ items:
           <code>kubectl describe pod</code>, instead of a confusing Helm rollback
           error. It also aborts as soon as a terminal failure is detected rather
           than waiting for the timeout.
+      - type: bugfix
+        title: Traffic-agent DNS lookups honor the client's DNS lookup timeout
+        body: >-
+          The traffic-agent imposed a hard-coded 250 millisecond timeout on the
+          DNS lookups it performs on behalf of a connected client. A resolution
+          that needs search-path expansion, or that passes through a service-mesh
+          DNS proxy such as Istio's, can easily take longer, causing spurious
+          <code>NXDOMAIN</code> answers on the workstation. The agent now honors
+          the deadline of the calling client, which is governed by the
+          <code>dns.lookupTimeout</code> client setting.
   - version: 2.28.0
     date: 2026-05-11
     notes:
