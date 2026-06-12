@@ -68,6 +68,17 @@ func shouldSkipNetlinkRoute(rt *netlink.Route) bool {
 	return rt.LinkIndex == 0
 }
 
+// isOwnershipEntry returns true for local-table entries that describe address
+// ownership and link-level delivery for addresses assigned to an interface, as
+// opposed to forwarding routes.
+func isOwnershipEntry(rt *netlink.Route) bool {
+	switch rt.Type {
+	case syscall.RTN_LOCAL, syscall.RTN_BROADCAST, syscall.RTN_ANYCAST:
+		return true
+	}
+	return false
+}
+
 func routeFromNetlinkRoute(rt *netlink.Route) (*Route, error) {
 	lnk, err := netlink.LinkByIndex(rt.LinkIndex)
 	if err != nil {
@@ -84,6 +95,7 @@ func routeFromNetlinkRoute(rt *netlink.Route) (*Route, error) {
 		RoutedNet:      iputil.PrefixFromIPNet(rt.Dst),
 		Gateway:        gw,
 		Default:        dfltGw,
+		Local:          isOwnershipEntry(rt),
 	}, nil
 }
 

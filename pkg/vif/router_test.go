@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
@@ -113,6 +114,7 @@ func (s *RoutingSuite) Test_RouteIsBlackListed() {
 func (s *RoutingSuite) Test_RoutingTable() {
 	ctx := context.Background()
 	cidr := getCidr(2, 0, 24)
+	vipSubnet := client.GetDefaultConfig().Routing().VirtualSubnet
 
 	device, routerCancel, err := s.runRouter(ctx, cidr.String())
 	s.Require().NoError(err)
@@ -127,6 +129,14 @@ func (s *RoutingSuite) Test_RoutingTable() {
 			deviceFound = true
 			s.Require().False(route.Default, fmt.Sprintf("Route %s is default", route.String()))
 			s.Require().False(route.RoutedNet.Bits() == 0, fmt.Sprintf("Route %s has zero mask", route.String()))
+			// The device claims the virtual subnet's network address as an anchor — the
+			// local side of routed subnets, and on Windows a host address whose on-link
+			// /32 route shows up here. That is not a routed cluster subnet, so skip routes
+			// that fall within the virtual subnet. On Linux these are additionally flagged
+			// as address-ownership (Local) entries; Windows exposes no such classifier.
+			if route.Local || vipSubnet.Contains(route.RoutedNet.Addr()) {
+				continue
+			}
 			// Linux and Windows will automatically add a bunch of multicast routes, which we can ignore as they're not actually for routing through the device.
 			if !route.RoutedNet.Addr().IsMulticast() {
 				if !route.RoutedNet.Addr().Is4() {
@@ -259,7 +269,11 @@ func (s *RoutingSuite) Test_GetRoute() {
 	s.Require().Equal(cidr, route.RoutedNet)
 	s.Require().False(route.Default)
 	// s.Require().NotNil(route.Gateway) there's no gateway when scope == link, and that's OK.
-	s.Require().Equal(cidr.Addr(), route.LocalIP)
+	// A subnet that is identified by its network address is anchored to the network
+	// address of the virtual subnet, so that the subnet's own network address
+	// remains reachable.
+	localIP := client.GetDefaultConfig().Routing().VirtualSubnet.Masked().Addr()
+	s.Require().Equal(localIP, route.LocalIP)
 }
 
 func (s *RoutingSuite) printRoutingTable(ctx context.Context) { //nolint:unused // Useful for debugging

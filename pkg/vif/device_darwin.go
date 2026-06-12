@@ -87,21 +87,32 @@ func (d *device) Close() {
 	_ = d.file.Close()
 }
 
-func (d *device) addSubnet(_ context.Context, subnet netip.Prefix) error {
+// subnetAddrPair returns the local and destination addresses of the point-to-point
+// pair that assigns the given subnet to the device. The local side is the subnet's
+// anchor when it has one, so that the subnet's own network address isn't claimed by
+// the device.
+func subnetAddrPair(ctx context.Context, subnet netip.Prefix) (local, dest netip.Addr) {
 	to := subnet.Addr().AsSlice()
 	to[len(to)-1] = 1
-	dest, _ := netip.AddrFromSlice(to)
-	if err := d.setAddr(subnet, dest); err != nil {
+	dest, _ = netip.AddrFromSlice(to)
+	local = subnet.Addr()
+	if anchor, ok := subnetAnchor(ctx, subnet); ok {
+		local = anchor
+	}
+	return local, dest
+}
+
+func (d *device) addSubnet(ctx context.Context, subnet netip.Prefix) error {
+	local, dest := subnetAddrPair(ctx, subnet)
+	if err := d.setAddr(subnet, local, dest); err != nil {
 		return err
 	}
 	return routing.Add(1, subnet, dest)
 }
 
-func (d *device) removeSubnet(_ context.Context, subnet netip.Prefix) error {
-	to := subnet.Addr().AsSlice()
-	to[len(to)-1] = 1
-	dest, _ := netip.AddrFromSlice(to)
-	if err := d.removeAddr(subnet, dest); err != nil {
+func (d *device) removeSubnet(ctx context.Context, subnet netip.Prefix) error {
+	local, dest := subnetAddrPair(ctx, subnet)
+	if err := d.removeAddr(subnet, local, dest); err != nil {
 		return err
 	}
 	return routing.Clear(1, subnet, dest)
@@ -194,8 +205,8 @@ const (
 // SIOCDIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCDIFADDR adjusted with size of addrIfReq6.
 const SIOCDIFADDR_IN6 = (unix.SIOCDIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
 
-func (d *device) setAddr(subnet netip.Prefix, to netip.Addr) error {
-	if to.Is4() && subnet.Addr().Is4() {
+func (d *device) setAddr(subnet netip.Prefix, addr, to netip.Addr) error {
+	if to.Is4() && addr.Is4() {
 		return withSocket(unix.AF_INET, func(fd int) error {
 			ifreq := &addrIfReq{
 				addr: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet4, Family: unix.AF_INET},
@@ -204,7 +215,7 @@ func (d *device) setAddr(subnet netip.Prefix, to netip.Addr) error {
 			}
 			copy(ifreq.name[:], d.name)
 			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 32))
-			ifreq.addr.Addr = subnet.Addr().As4()
+			ifreq.addr.Addr = addr.As4()
 			ifreq.dest.Addr = to.As4()
 			err := ioctl(fd, unix.SIOCAIFADDR, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
@@ -222,7 +233,7 @@ func (d *device) setAddr(subnet netip.Prefix, to netip.Addr) error {
 
 			copy(ifreq.name[:], d.name)
 			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 128))
-			ifreq.addr.Addr = subnet.Addr().As16()
+			ifreq.addr.Addr = addr.As16()
 			err := ioctl(fd, SIOCAIFADDR_IN6, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err
@@ -230,8 +241,8 @@ func (d *device) setAddr(subnet netip.Prefix, to netip.Addr) error {
 	}
 }
 
-func (d *device) removeAddr(subnet netip.Prefix, to netip.Addr) error {
-	if to.Is4() && subnet.Addr().Is4() {
+func (d *device) removeAddr(subnet netip.Prefix, addr, to netip.Addr) error {
+	if to.Is4() && addr.Is4() {
 		return withSocket(unix.AF_INET, func(fd int) error {
 			ifreq := &addrIfReq{
 				addr: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET},
@@ -240,7 +251,7 @@ func (d *device) removeAddr(subnet netip.Prefix, to netip.Addr) error {
 			}
 			copy(ifreq.name[:], d.name)
 			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 32))
-			ifreq.addr.Addr = subnet.Addr().As4()
+			ifreq.addr.Addr = addr.As4()
 			ifreq.dest.Addr = to.As4()
 			err := ioctl(fd, unix.SIOCDIFADDR, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
@@ -258,7 +269,7 @@ func (d *device) removeAddr(subnet netip.Prefix, to netip.Addr) error {
 
 			copy(ifreq.name[:], d.name)
 			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 128))
-			ifreq.addr.Addr = subnet.Addr().As16()
+			ifreq.addr.Addr = addr.As16()
 			err := ioctl(fd, SIOCDIFADDR_IN6, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err

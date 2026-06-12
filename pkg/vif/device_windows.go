@@ -3,6 +3,7 @@ package vif
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -123,12 +124,34 @@ func (d *device) getLUID() winipcfg.LUID {
 	return winipcfg.LUID(d.dev.(*tun.NativeTun).LUID())
 }
 
-func (d *device) addSubnet(_ context.Context, subnet netip.Prefix) error {
+func (d *device) addSubnet(ctx context.Context, subnet netip.Prefix) error {
+	if anchor, ok := subnetAnchor(ctx, subnet); ok {
+		// Assign the anchor instead of the subnet's network address, and route the
+		// subnet explicitly. The anchor is shared by all anchored subnets, so an
+		// assignment may already exist. It is intentionally left in place when
+		// subnets are removed; it disappears with the device.
+		err := d.getLUID().AddIPAddress(netip.PrefixFrom(anchor, anchor.BitLen()))
+		if err != nil && !errors.Is(err, windows.ERROR_OBJECT_ALREADY_EXISTS) {
+			return err
+		}
+		return d.getLUID().AddRoute(subnet, unspecified(subnet.Addr()), 0)
+	}
 	return d.getLUID().AddIPAddress(subnet)
 }
 
-func (d *device) removeSubnet(_ context.Context, subnet netip.Prefix) error {
+func (d *device) removeSubnet(ctx context.Context, subnet netip.Prefix) error {
+	if _, ok := subnetAnchor(ctx, subnet); ok {
+		return d.getLUID().DeleteRoute(subnet, unspecified(subnet.Addr()))
+	}
 	return d.getLUID().DeleteIPAddress(subnet)
+}
+
+// unspecified returns the unspecified address of the same family as the given address.
+func unspecified(addr netip.Addr) netip.Addr {
+	if addr.Is4() {
+		return netip.IPv4Unspecified()
+	}
+	return netip.IPv6Unspecified()
 }
 
 func (d *device) setDNS(ctx context.Context, clusterDomain string, server netip.AddrPort, searchList []string) (err error) {

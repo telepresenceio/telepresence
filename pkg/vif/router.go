@@ -90,6 +90,7 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 		clog.Tracef(ctx, "checking for overlap with route %q", tr)
 		if (tr.RoutedNet.Bits() == 0 || tr.Default) || // Default route, overlapped if needed
 			subnet.IsHalfOfDefault(tr.RoutedNet) || // OpenVPN covers half the address space with a /1 route and the other half with another. This is its way of doing a default route.
+			tr.Local || // Address ownership entry, not a forwarding route. The corresponding connected route is what conflicts.
 			tr.InterfaceName == rt.device.Name() { // This is the interface we're routing through, so we can overlap it
 			continue
 		}

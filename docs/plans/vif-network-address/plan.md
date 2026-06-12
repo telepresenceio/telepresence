@@ -19,23 +19,36 @@ removed a derived route entry; the network-address case is structural — the
 VIF must own *some* local address, and it currently owns the subnet's network
 address.
 
-## Approach: peer-scoped address assignment
+## Approach: anchored address assignment
 
-Assign cluster subnets as **peer addresses**: a single anchor address as the
-local side, with the subnet as the peer prefix
-(`ip addr add 246.246.0.0 peer 10.244.3.0/24 dev tel0`, i.e.
-`netlink.Addr{IPNet: anchor/32, Peer: subnet}`).
+Stop claiming the subnet's network address; claim a single **anchor** address
+instead, on all platforms:
 
-Verified on a dummy interface, this:
+- **Linux**: assign cluster subnets as peer addresses — the anchor as the
+  local side, the subnet as the peer prefix (`ip addr add <anchor> peer
+  <subnet> dev tel0`). Verified on a dummy interface: only the anchor lands in
+  the local routing table, the kernel still derives the (`proto kernel`)
+  connected route — preserving the insert-before-conflicting-routes property
+  that makes `allowConflictingSubnets` win (the reason a plain-route approach
+  was rejected in #4160) — and the peer prefix's derived broadcast entry is
+  deleted by the existing #4160 removal. The library's own broadcast
+  derivation (anchor | ~peer-mask, which would claim an address inside the
+  virtual subnet) is suppressed.
+- **macOS**: the device already assigns each subnet as a point-to-point pair
+  with an explicit route; the local side of the pair becomes the anchor
+  instead of the subnet's network address.
+- **Windows**: the device assigned the subnet itself as the interface address;
+  it now assigns the anchor as a host address (shared by all anchored subnets,
+  tolerating the already-exists error, left in place until the device goes
+  away) and adds an explicit on-link route for the subnet.
 
-- claims only the anchor in the local routing table — the subnet's network
-  address routes like any other address,
-- still creates the kernel-derived (`proto kernel`) connected route for the
-  subnet, preserving the insert-before-conflicting-routes property that makes
-  `allowConflictingSubnets` win (the reason a plain-route approach was
-  rejected in #4160),
-- still derives a broadcast entry for the peer prefix, which the existing
-  #4160 removal deletes.
+The conflict check needed one refinement: the anchor's address-ownership entry
+surfaces in the routing table listing and would be flagged as a conflicting
+route during a fast reconnect while a previous device lingers.
+`routing.Route` therefore gained a `Local` classification (route type on
+Linux, RTF flags on macOS; Windows offers no classifier) that the VPN
+conflict check skips — the corresponding connected routes carry the real
+conflict signal.
 
 ### The anchor address
 
@@ -71,18 +84,17 @@ Peer-scoping applies only when the prefix's address *is* its network address
 
 ### Out of scope
 
-- macOS/Windows use different plumbing (darwin already assigns a
-  point-to-point pair). Whether they have an analogous problem is a separate
-  investigation.
 - Tightening the recursion-check exemption in `stream_creator.go`
   (`ip != sn.Masked().Addr()`), which existed because the VIF's own address
-  was the network address. It becomes obsolete for peer-scoped subnets but is
-  harmless; removing it can follow once all platforms stop claiming network
-  addresses.
+  was the network address. It becomes obsolete for anchored subnets but is
+  harmless.
 
 ## Affected files (anticipated)
 
-- `pkg/vif/device_linux.go` — peer-scoped `addSubnet`/`removeSubnet`.
+- `pkg/vif/device.go` — shared anchor selection.
+- `pkg/vif/device_linux.go`, `device_darwin.go`, `device_windows.go` —
+  anchored `addSubnet`/`removeSubnet`.
+- `pkg/routing/` — the `Local` route classification.
 - `CHANGELOG.yml`, docs regen.
 
 ## Testing

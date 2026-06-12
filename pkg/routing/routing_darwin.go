@@ -42,6 +42,9 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 		if rm.Flags&unix.RTF_UP == 0 {
 			continue
 		}
+		// Entries that describe address ownership and link-level delivery for
+		// addresses assigned to an interface, as opposed to forwarding routes.
+		local := rm.Flags&(unix.RTF_LOCAL|unix.RTF_BROADCAST) != 0
 		dst, gw, mask := rm.Addrs[unix.RTAX_DST], rm.Addrs[unix.RTAX_GATEWAY], rm.Addrs[unix.RTAX_NETMASK]
 		if dst == nil || gw == nil || mask == nil {
 			continue
@@ -79,6 +82,7 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 				LocalIP:        localIP,
 				RoutedNet:      routedNet,
 				Default:        ones == 0,
+				Local:          local,
 			})
 		case *route.Inet6Addr:
 			localIP, err := interfaceLocalIP(iface, false)
@@ -102,6 +106,7 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 				LocalIP:        localIP,
 				RoutedNet:      routedNet,
 				Default:        bits == 0,
+				Local:          local,
 			})
 		}
 	}

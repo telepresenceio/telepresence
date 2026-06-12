@@ -91,13 +91,31 @@ func openTun(ctx context.Context) (*device, error) {
 	return &device{fd: fd, name: name, interfaceIndex: uint32(attrs.Index), isTAP: useTAP}, nil
 }
 
-func (d *device) addSubnet(_ context.Context, pfx netip.Prefix) error {
+// vifAddr returns the netlink address that assigns the given prefix to the device.
+// A prefix that has an anchor is assigned as the peer prefix of the anchor address.
+// The kernel then derives the same connected route for the prefix, but the device
+// claims only the anchor in the local routing table.
+func vifAddr(ctx context.Context, pfx netip.Prefix) *netlink.Addr {
+	if anchor, ok := subnetAnchor(ctx, pfx); ok {
+		return &netlink.Addr{
+			IPNet: subnet.PrefixToIPNet(netip.PrefixFrom(anchor, anchor.BitLen())),
+			Peer:  subnet.PrefixToIPNet(pfx),
+			// Suppress the broadcast address that AddrAdd would otherwise derive
+			// from the anchor and the peer prefix mask, which would claim an
+			// address inside the virtual subnet. Without it, the kernel derives
+			// the peer prefix's own broadcast entry, which addSubnet removes.
+			Broadcast: net.IPv4zero,
+		}
+	}
+	return &netlink.Addr{IPNet: subnet.PrefixToIPNet(pfx)}
+}
+
+func (d *device) addSubnet(ctx context.Context, pfx netip.Prefix) error {
 	link, err := netlink.LinkByIndex(int(d.interfaceIndex))
 	if err != nil {
 		return fmt.Errorf("failed to find link for interface %s: %w", d.name, err)
 	}
-	addr := &netlink.Addr{IPNet: subnet.PrefixToIPNet(pfx)}
-	if err := netlink.AddrAdd(link, addr); err != nil {
+	if err := netlink.AddrAdd(link, vifAddr(ctx, pfx)); err != nil {
 		return fmt.Errorf("failed to add address %s to interface %s: %w", pfx, d.name, err)
 	}
 	// The kernel derives a broadcast entry for the subnet's highest address from the
@@ -132,13 +150,12 @@ func subnetBroadcast(pfx netip.Prefix) (netip.Addr, bool) {
 	return netip.AddrFrom4(bc), true
 }
 
-func (d *device) removeSubnet(_ context.Context, pfx netip.Prefix) error {
+func (d *device) removeSubnet(ctx context.Context, pfx netip.Prefix) error {
 	link, err := netlink.LinkByIndex(int(d.interfaceIndex))
 	if err != nil {
 		return err
 	}
-	addr := &netlink.Addr{IPNet: subnet.PrefixToIPNet(pfx)}
-	return netlink.AddrDel(link, addr)
+	return netlink.AddrDel(link, vifAddr(ctx, pfx))
 }
 
 func (d *device) getMTU() (mtu uint32, err error) {

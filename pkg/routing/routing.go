@@ -17,6 +17,13 @@ type Route struct {
 	RoutedNet      netip.Prefix
 	Gateway        netip.Addr
 	Default        bool
+
+	// Local is true for entries that describe address ownership and link-level
+	// delivery for addresses assigned to an interface, as opposed to forwarding
+	// routes: local, broadcast, and anycast entries on Linux, and RTF_LOCAL or
+	// RTF_BROADCAST flagged entries on macOS. Windows reports such entries
+	// without a usable classifier, so they are never marked there.
+	Local bool
 }
 
 type Table interface {
