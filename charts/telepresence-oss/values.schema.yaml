@@ -265,6 +265,22 @@ properties:
             type: array
             items:
               type: string
+      intercept:
+        type: object
+        properties:
+          localShortcut:
+            description: >-
+              Connect local traffic to destinations covered by the client's own intercepts directly to the
+              local intercept handler instead of tunneling to the cluster. Defaults to true
+            type: boolean
+          localShortcutIsGlobal:
+            description: >-
+              Apply the local shortcut to all intercepts, including those with header or path filters. The
+              shortcut is connection based and cannot evaluate filters, so when this is false, traffic to
+              filtered intercepts takes the round trip through the cluster so that the filters are honored
+              exactly. Defaults to true, on the assumption that filters exist to limit how the intercept
+              impacts others, not the developer's own traffic
+            type: boolean
       routing:
         type: object
         properties:

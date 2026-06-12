@@ -211,6 +211,10 @@ type session struct {
 	// Maps one UDP or TCP AddrPort to another
 	l4PortMap *xsync.Map[types.AddrPortProto, uint16]
 
+	// Cluster-side destinations that are connected directly to local intercept
+	// handlers instead of being tunneled to the cluster. Nil when there are none.
+	interceptShortcuts atomic.Pointer[shortcutTable]
+
 	lookupSequencer *xsync.Map[string, clusterLookupResult]
 }
 

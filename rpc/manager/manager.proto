@@ -191,6 +191,10 @@ message InterceptSpec {
   // Plaintext instructs the traffic-agent to use plain text when communicating with the client.
   bool plaintext = 30;
 
+  // The cluster IPs of the service that the intercept is made on, each in
+  // netip.Addr binary form.
+  repeated bytes service_ips = 31;
+
   reserved 9; // used to be former mechanism_args
 
   // Used to be mount_point and only utilized when passing the spec between
@@ -361,6 +365,9 @@ message PreparedIntercept {
   string container_name = 11;
   int32 container_port = 12;
   repeated string pod_ports = 13;
+
+  // The cluster IPs of the service, each in netip.Addr binary form.
+  repeated bytes service_ips = 14;
 }
 
 message RemoveInterceptRequest2 {

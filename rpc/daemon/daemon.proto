@@ -60,6 +60,11 @@ service Daemon {
   // RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
   rpc RerouteRemotePort(ReroutePortRequest) returns (google.protobuf.Empty);
 
+  // SetInterceptShortcuts declares cluster-side destinations that the root daemon
+  // connects directly to local intercept handlers instead of tunneling to the cluster.
+  // Each call replaces the previously declared set.
+  rpc SetInterceptShortcuts(SetInterceptShortcutsRequest) returns (google.protobuf.Empty);
+
   rpc ActivityWatcher(google.protobuf.Empty) returns (stream Activity);
 }
 
@@ -206,6 +211,33 @@ message ReroutePortRequest {
 
   // port is will be rerouted to the host_port.
   uint32 src_port = 2;
+}
+
+// InterceptShortcut declares that connections to the cluster-side destinations of an
+// intercepted workload can be served directly by the local intercept handler.
+message InterceptShortcut {
+  // The namespace of the intercepted workload.
+  string namespace = 1;
+
+  // The name of the intercepted workload.
+  string workload = 2;
+
+  // The protocol, "TCP" or "UDP".
+  string protocol = 3;
+
+  // Cluster-side service addresses, each in netip.AddrPort binary form.
+  repeated bytes service_addrs = 4;
+
+  // The container port that the intercept covers. Matched against the pod IPs
+  // of the workload's traffic-agent pods.
+  uint32 container_port = 5;
+
+  // The local intercept handler, in netip.AddrPort binary form.
+  bytes target = 6;
+}
+
+message SetInterceptShortcutsRequest {
+  repeated InterceptShortcut shortcuts = 1;
 }
 
 message QuitResponse {

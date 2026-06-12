@@ -189,7 +189,28 @@ The `intercept` controls applies to how Telepresence will intercept the communic
 |---------------|-----------------------------------------------------------------------------------------------------------------------|----------------------|------------|
 | `defaultPort` | controls which port is selected when no `--port` flag is given to the `telepresence intercept` command                | [int][yaml-int]      | 8080       |
 | `useFtp`      | Use fuseftp instead of sshfs when mounting remote file systems                                                        | [boolean][yaml-bool] | false      |
+| `localShortcut` | Connect local traffic to destinations covered by the client's own intercepts directly to the local intercept handler instead of tunneling to the cluster | [boolean][yaml-bool] | true       |
+| `localShortcutIsGlobal` | Apply the local shortcut to all intercepts, including those with header or path filters                      | [boolean][yaml-bool] | true       |
 | `mountsRoot`  | Directory that will be used as the root for all automatically generated mount directories (not applicable on windows) | [string][yaml-str]   | env:TMPDIR |
+
+#### Local shortcut
+
+The `localShortcut` setting controls a shortcut for the client's own intercepts: when a
+locally running process dials a cluster destination that is covered by one of the client's
+active intercepts, the root daemon connects directly to that intercept's local handler
+instead of sending the traffic to the cluster only to have it arrive back at the
+workstation. This is particularly useful when several services that call each other are
+intercepted on the same workstation.
+
+The shortcut is made when a TCP or UDP connection is established, so it cannot take HTTP
+header or path filters into account. This poses a dilemma for filtered intercepts: either
+the shortcut serves _all_ local traffic to the intercepted destination, including requests
+that the filters would have kept in the cluster, or no shortcut is made at all and traffic
+to filtered intercepts always takes the round trip through the cluster. The
+`localShortcutIsGlobal` setting resolves this dilemma. It defaults to `true` on the
+assumption that filters exist to limit how an intercept impacts other users of the
+cluster, not the developer's own traffic. Set it to `false` when local traffic must honor
+the filters exactly.
 
 ### Log Levels
 

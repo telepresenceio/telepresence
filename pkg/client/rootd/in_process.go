@@ -66,6 +66,11 @@ func (rd *InProcSession) SetDNSMappings(_ context.Context, in *rpc.SetDNSMapping
 	return &empty.Empty{}, nil
 }
 
+func (rd *InProcSession) SetInterceptShortcuts(ctx context.Context, in *rpc.SetInterceptShortcutsRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	rd.session.SetInterceptShortcuts(ctx, in.Shortcuts)
+	return &empty.Empty{}, nil
+}
+
 func (rd *InProcSession) SetLogLevel(context.Context, *manager.LogLevelRequest, ...grpc.CallOption) (*empty.Empty, error) {
 	// No loglevel when session runs in the same process as the user daemon.
 	return &empty.Empty{}, nil
