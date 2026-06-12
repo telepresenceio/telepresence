@@ -171,7 +171,16 @@ func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
 		}(i)
 	}
 	wg.Wait()
-	time.Sleep(7 * time.Second)
+
+	// The intercept command returns when the remote mount has been initiated, not when it
+	// is established, so wait until the mounted directories materialize.
+	for i := 0; i < s.ServiceCount(); i++ {
+		dir := filepath.Join(s.mountPoint[i], "home", "scratch")
+		s.Require().Eventually(func() bool {
+			_, err := os.Stat(dir)
+			return err == nil
+		}, 30*time.Second, time.Second, "mount %s did not materialize", dir)
+	}
 }
 
 func (s *largeFilesSuite) leaveIntercepts(ctx context.Context) {

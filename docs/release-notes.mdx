@@ -153,6 +153,18 @@ The traffic-agent imposed a hard-coded 250 millisecond timeout on the DNS lookup
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix">Remote mounts retry their initial connection to the traffic-agent</Title>
+	<Body>
+When a remote mount was initiated immediately after its pod was created, the first connection to the traffic-agent could lose a race against the routing of the pod's new IP address. The failure was treated as permanent, leaving the local mount directory empty for the remainder of the engagement. The connection is now retried until the intercept timeout expires.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix">Pods using the highest address of a routed subnet are now reachable</Title>
+	<Body>
+When a subnet was routed through the virtual network interface, the kernel derived a broadcast entry for the subnet's highest address and refused unicast connections to it. A CNI will happily assign that address to a pod, rendering the pod unreachable from the workstation. Link-level broadcast has no meaning on the L3 interface, so the entry is now removed, making every address in a routed subnet reachable.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix" docs="howtos/istio">Application traffic no longer bypasses the service mesh in engaged pods</Title>
 	<Body>
 The traffic-agent's own traffic is exempted from service-mesh processing using an iptables owner match, but the match was based on the agent's UID, which is inherited from the app container's securityContext (or defaults to root). An application sharing that UID had its outbound traffic silently bypass the mesh sidecar — no mTLS, telemetry, or policy enforcement. The agent container is now assigned a distinct primary group (default <code>7439</code>, overridable with <code>agent.securityContext.runAsGroup</code>) and the owner matches are group-based, so application traffic always traverses the mesh.
