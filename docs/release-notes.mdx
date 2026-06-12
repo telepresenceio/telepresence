@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.29.0
 <Note>
+	<Title type="feature" docs="reference/config">Local traffic to intercepted destinations no longer round-trips through the cluster</Title>
+	<Body>
+When the handler of one intercept dials a cluster destination that is covered by another of the client's active intercepts, the connection used to travel to the cluster only to arrive back at a local intercept handler. The root daemon now connects such traffic directly to the handler, both for the intercepted service's ClusterIP and for the pod IPs of all the intercepted workload's pods. The behavior is enabled by default and controlled with the new client configuration setting <code>intercept.localShortcut</code>. The shortcut is connection based and cannot evaluate header or path filters, so by default it applies to all intercepts, on the assumption that filters exist to limit how an intercept impacts others, not the developer's own traffic. Set <code>intercept.localShortcutIsGlobal</code> to false when local traffic must honor the filters exactly, at the cost of the round trip through the cluster. By default it applies to all intercepts, including those with header or path filters, on the assumption that the filters exist to limit how the intercept impacts others; set <code>intercept.localShortcutIsGlobal</code> to false to exempt filtered intercepts. Wiretaps are never shortcut, since they receive a copy of the traffic rather than the traffic itself.
+  </Body>
+</Note>
+<Note>
 	<Title type="change" docs="reference/config">Fail engagements when agent port-forwarding is disabled</Title>
 	<Body>
 Setting <code>cluster.agentPortForward=false</code> disables all direct communication between the client and traffic-agents, so the cluster can only be used as a VPN. An attempt to intercept, replace, or ingest now fails immediately with an explanatory error instead of appearing to start and then never delivering traffic.
