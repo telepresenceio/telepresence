@@ -195,12 +195,67 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 	return ac, anns, nil
 }
 
+// AgentSecurityContext returns the security context for the traffic-agent container. It is
+// the configured agent securityContext if there is one, or else a copy of the security
+// context of the first intercepted app container. In either case, unless the configured
+// securityContext sets it explicitly, RunAsGroup is assigned a primary group that no other
+// container in the pod declares, so that the agent's traffic can be told apart from the
+// application's by an iptables owner match on the group.
 func (a *ContainerBuilder) AgentSecurityContext() (*core.SecurityContext, error) {
-	if appSc := a.Config.SecurityContext; appSc != nil {
-		return appSc, nil
+	var sc *core.SecurityContext
+	if cfgSc := a.Config.SecurityContext; cfgSc != nil {
+		if cfgSc.RunAsGroup != nil {
+			return cfgSc, nil
+		}
+		sc = cfgSc.DeepCopy()
+	} else {
+		// Assign the security context of the first container to the traffic agent.
+		var err error
+		sc, err = a.firstAppSecurityContext()
+		if err != nil {
+			return nil, err
+		}
+		if sc == nil {
+			sc = &core.SecurityContext{}
+		}
 	}
-	// Assign the security context of the first container to the traffic agent.
-	return a.firstAppSecurityContext()
+	gid := a.distinctAgentGID()
+	sc.RunAsGroup = &gid
+	return sc, nil
+}
+
+// distinctAgentGID returns DefaultAgentGID, bumped to the first subsequent value when the
+// pod or one of its containers (other than the agent's own) declares the default as its
+// runAsGroup.
+func (a *ContainerBuilder) distinctAgentGID() int64 {
+	used := make(map[int64]struct{})
+	addGID := func(sc *core.SecurityContext) {
+		if sc != nil && sc.RunAsGroup != nil {
+			used[*sc.RunAsGroup] = struct{}{}
+		}
+	}
+	spec := &a.Pod.Spec
+	if ps := spec.SecurityContext; ps != nil && ps.RunAsGroup != nil {
+		used[*ps.RunAsGroup] = struct{}{}
+	}
+	eachContainer := func(cns []core.Container) {
+		for i := range cns {
+			cn := &cns[i]
+			// The pod may already contain the agent's own containers from an earlier injection.
+			if cn.Name != ContainerName && cn.Name != InitContainerName {
+				addGID(cn.SecurityContext)
+			}
+		}
+	}
+	eachContainer(spec.Containers)
+	eachContainer(spec.InitContainers)
+	gid := DefaultAgentGID
+	for {
+		if _, ok := used[gid]; !ok {
+			return gid
+		}
+		gid++
+	}
 }
 
 func (a *ContainerBuilder) mountSecrets(annotation, certPath string, anns map[string]string, mounts []core.VolumeMount) ([]core.VolumeMount, error) {

@@ -42,6 +42,14 @@ const (
 	// EnvAgentUID is the user ID that the traffic-agent runs as.
 	EnvAgentUID = "AGENT_UID"
 
+	// EnvAgentGID is the primary group ID that the traffic-agent runs as.
+	EnvAgentGID = "AGENT_GID"
+
+	// DefaultAgentGID is the default primary group ID for the traffic-agent container. The
+	// group is what distinguishes the agent's traffic from the application's in the iptables
+	// owner matches, so it must not be shared with an application container.
+	DefaultAgentGID int64 = 7439
+
 	// EnvInterceptContainer intercepted container propagated to client during intercept.
 	EnvInterceptContainer = "TELEPRESENCE_CONTAINER"
 

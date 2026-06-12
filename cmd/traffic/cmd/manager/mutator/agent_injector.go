@@ -302,7 +302,7 @@ func addInitContainer(ctx context.Context, pod *core.Pod, wlTpl *core.PodTemplat
 		if ic.Name == oc.Name {
 			if ic.Image == oc.Image &&
 				slices.Equal(ic.Args, oc.Args) &&
-				compareAgentUIDEnv(ic.Env, oc.Env) &&
+				compareAgentOwnerEnv(ic.Env, oc.Env) &&
 				compareVolumeMounts(ic.VolumeMounts, oc.VolumeMounts) &&
 				compareCapabilities(ic.SecurityContext, oc.SecurityContext) {
 				return patches, nil
@@ -410,18 +410,23 @@ func compareVolumeMounts(a, b []core.VolumeMount) bool {
 	return eq
 }
 
-func compareAgentUIDEnv(a, b []core.EnvVar) bool {
-	agentUID := func(evs []core.EnvVar) (string, bool) {
+func compareAgentOwnerEnv(a, b []core.EnvVar) bool {
+	envValue := func(evs []core.EnvVar, name string) (string, bool) {
 		for _, ev := range evs {
-			if ev.Name == agentconfig.EnvAgentUID {
+			if ev.Name == name {
 				return ev.Value, true
 			}
 		}
 		return "", false
 	}
-	av, aok := agentUID(a)
-	bv, bok := agentUID(b)
-	return aok == bok && av == bv
+	for _, name := range []string{agentconfig.EnvAgentUID, agentconfig.EnvAgentGID} {
+		av, aok := envValue(a, name)
+		bv, bok := envValue(b, name)
+		if aok != bok || av != bv {
+			return false
+		}
+	}
+	return true
 }
 
 func containerEqual(ctx context.Context, a, b *core.Container) bool {
