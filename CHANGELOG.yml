@@ -27,6 +27,19 @@ items:
   - version: 2.29.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Pods using the network address of a routed subnet are now reachable
+        body: >-
+          The subnets that a client routes are derived from observed pod IPs, so
+          their boundary addresses are ordinary, allocatable pod IPs. The network
+          address of each subnet was claimed by the client's virtual network
+          interface, making a pod with that IP unreachable from the workstation.
+          When that pod was the traffic-manager, whose pod IP doubles as the DNS
+          address on Linux, name resolution silently fell back to a mode in which
+          cluster names didn't resolve at all. The interface now claims a single
+          anchor address — the network address of the virtual subnet allocated
+          for VIPs, which is never assigned to anything — and routes every
+          address of the cluster's subnets, on all platforms.
       - type: change
         title: Fail engagements when agent port-forwarding is disabled
         body: >-
