@@ -20,6 +20,12 @@ Setting <code>cluster.agentPortForward=false</code> disables all direct communic
 When a cluster subnet routed through Telepresence covers the workstation's DNS server address (for example an EKS node whose resolver lives at <code>172.31.0.2</code> while the pod subnet is <code>172.31.0.0/18</code>), queries to that server were captured by the TUN-device and tunnelled into the cluster, breaking name resolution for everything that isn't a cluster name. Telepresence now detects such DNS servers and adds a host route for them to the never-proxy set, keeping them reachable on their original interface.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Map IPv6 cluster addresses to IPv6 virtual IPs](reference/vpn)</div></div>
+<div style="margin-left: 15px">
+
+When proxy-via or automatic conflict resolution mapped a cluster IP to a virtual IP, an IPv6 address was forced into the IPv4 virtual subnet, producing a malformed virtual IP (such as <code>246.246.0.1313</code>) that broke the connection on IPv6-only and dual-stack clusters. Telepresence now allocates IPv6 virtual IPs from a dedicated IPv6 range, so IPv6 services and pods are reachable through a virtual IP just like their IPv4 counterparts.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Make the agent-injector webhook reachable from outside the cluster](troubleshooting#eks-calico-and-traffic-agent-injection-timeouts)</div></div>
 <div style="margin-left: 15px">
 

@@ -3,6 +3,7 @@ package vip
 import (
 	"fmt"
 	"net/netip"
+	"sync"
 	"sync/atomic"
 )
 
@@ -11,32 +12,108 @@ type Generator interface {
 	Subnet() netip.Prefix
 }
 
+// Generators allocates virtual IPs from a separate subnet per address family. A
+// cluster address is always mapped to a virtual IP of its own family, so an IPv4
+// destination draws from the IPv4 virtual subnet and an IPv6 destination from the
+// IPv6 range. A single IPv4 generator can never represent an IPv6 address, so the
+// two families must be kept apart.
+type Generators struct {
+	mu                 sync.Mutex
+	v4, v6             Generator
+	v4Subnet, v6Subnet netip.Prefix
+}
+
+// NewGenerators returns generators that draw IPv4 virtual IPs from v4Subnet and
+// IPv6 virtual IPs from v6Subnet. The actual per-family generator is created
+// lazily by EnsureFamily, since the families that will be translated are not
+// always known when the proxy-via workloads are activated.
+func NewGenerators(v4Subnet, v6Subnet netip.Prefix) *Generators {
+	return &Generators{v4Subnet: v4Subnet, v6Subnet: v6Subnet}
+}
+
+// EnsureFamily makes sure a generator exists for the family of addr, creating it
+// from the configured subnet for that family. An existing generator is never
+// replaced, so virtual IPs already handed out remain valid across repeated calls.
+func (g *Generators) EnsureFamily(addr netip.Addr) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	switch {
+	case addr.Is4():
+		if g.v4 == nil && g.v4Subnet.IsValid() {
+			g.v4 = NewGenerator(g.v4Subnet)
+		}
+	default:
+		if g.v6 == nil && g.v6Subnet.IsValid() {
+			g.v6 = NewGenerator(g.v6Subnet)
+		}
+	}
+}
+
+// Next returns the next virtual IP from the generator matching forAddr's family.
+// It returns an error if no generator has been created for that family.
+func (g *Generators) Next(forAddr netip.Addr) (netip.Addr, error) {
+	g.mu.Lock()
+	gen := g.v6
+	if forAddr.Is4() {
+		gen = g.v4
+	}
+	g.mu.Unlock()
+	if gen == nil {
+		return netip.Addr{}, fmt.Errorf("no virtual subnet is configured for %s", forAddr)
+	}
+	return gen.Next()
+}
+
+// Subnets returns the subnet of each generator that has been created.
+func (g *Generators) Subnets() []netip.Prefix {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	sns := make([]netip.Prefix, 0, 2)
+	if g.v4 != nil {
+		sns = append(sns, g.v4.Subnet())
+	}
+	if g.v6 != nil {
+		sns = append(sns, g.v6.Subnet())
+	}
+	return sns
+}
+
 // NewGenerator creates a generator for virtual IPs with in the given subnet.
 func NewGenerator(sn netip.Prefix) Generator {
 	lo := sn.Masked().Addr()
+	// Allocate from the lower half of the subnet, reserving the upper half for the
+	// device's owned source addresses, which count down from the top of the same
+	// range (see pkg/vif ownedAddress). This guarantees a virtual IP can never
+	// collide with an owned address. A subnet too small to split is used whole.
+	alloc := sn
+	if sn.Bits() < sn.Addr().BitLen() {
+		alloc = netip.PrefixFrom(lo, sn.Bits()+1)
+	}
 	if lo.Is4() {
 		return &ip4Generator{
 			subnet:        sn,
+			alloc:         alloc,
 			nextVirtualIP: intFromIPV4(lo),
 		}
-	} else {
-		fixed, lo := intsFromIPV6(lo)
-		return &vip6Provider{
-			subnet:  sn,
-			fixedHi: fixed,
-			nextLo:  lo,
-		}
+	}
+	fixed, loInt := intsFromIPV6(lo)
+	return &vip6Provider{
+		subnet:  sn,
+		alloc:   alloc,
+		fixedHi: fixed,
+		nextLo:  loInt,
 	}
 }
 
 type ip4Generator struct {
 	subnet        netip.Prefix
+	alloc         netip.Prefix
 	nextVirtualIP uint32
 }
 
 func (v *ip4Generator) Next() (netip.Addr, error) {
 	nxt := ipV4FromInt(atomic.AddUint32(&v.nextVirtualIP, 1))
-	if !v.subnet.Contains(nxt) {
+	if !v.alloc.Contains(nxt) {
 		return netip.Addr{}, fmt.Errorf("virtual subnet CIDR %s is exhausted", v.Subnet())
 	}
 	return nxt, nil
@@ -62,13 +139,14 @@ func intFromIPV4(a netip.Addr) uint32 {
 
 type vip6Provider struct {
 	subnet  netip.Prefix
+	alloc   netip.Prefix
 	fixedHi uint64
 	nextLo  uint64
 }
 
 func (v *vip6Provider) Next() (netip.Addr, error) {
 	nxt := ipV6FromInts(v.fixedHi, atomic.AddUint64(&v.nextLo, 1))
-	if !v.subnet.Contains(nxt) {
+	if !v.alloc.Contains(nxt) {
 		return netip.Addr{}, fmt.Errorf("virtual subnet CIDR %s is exhausted", v.Subnet())
 	}
 	return nxt, nil

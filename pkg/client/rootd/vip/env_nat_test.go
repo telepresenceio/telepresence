@@ -99,6 +99,30 @@ func Test_translateEnvironmentIPs(t *testing.T) {
 			"2.10.110.210.8",
 			"2.10.110.210.8",
 		},
+		{
+			// A native IPv6 service address must be matched in full and mapped to
+			// an IPv6 virtual IP. Before the regex fix the trailing hextet was left
+			// behind, producing a malformed address such as 246.246.0.1313.
+			"IPV6 native",
+			"fd00:10:96::/112",
+			"fd00:0:0:246::/64",
+			"fd00:10:96::313",
+			"fd00:0:0:246::1",
+		},
+		{
+			"IPV6 native URI",
+			"fd00:10:96::/112",
+			"fd00:0:0:246::/64",
+			"tcp://[fd00:10:96::a]:53",
+			"tcp://[fd00:0:0:246::1]:53",
+		},
+		{
+			"IPV6 native list",
+			"fd00:10:96::/112",
+			"fd00:0:0:246::/64",
+			`["fd00:10:96::a", "fd00:10:96::ff", "fd00:10:96::a"]`,
+			`["fd00:0:0:246::1", "fd00:0:0:246::2", "fd00:0:0:246::1"]`,
+		},
 	}
 
 	ctx := testutil.NewContext(t, false)

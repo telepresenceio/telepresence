@@ -37,7 +37,17 @@ func ownedAddress(ctx context.Context, ipv4 bool, ifaceIndex uint32) (netip.Addr
 	}
 	// Count down from the top of the range (the last host address below the broadcast
 	// address), leaving the network and broadcast addresses untouched.
-	return addrMinus(broadcastAddr(rng), uint64(ifaceIndex)+1), true
+	owned := addrMinus(broadcastAddr(rng), uint64(ifaceIndex)+1)
+	// Owned addresses occupy the upper half of the range; the lower half is reserved
+	// for virtual IPs, which count up from the bottom (see pkg/client/rootd/vip
+	// NewGenerator). Reject an offset that would fall into the VIP half so a virtual
+	// IP and an owned address can never collide.
+	if rng.Bits() < rng.Addr().BitLen() {
+		if lowerHalf := netip.PrefixFrom(rng.Masked().Addr(), rng.Bits()+1); lowerHalf.Contains(owned) {
+			return netip.Addr{}, false
+		}
+	}
+	return owned, true
 }
 
 // broadcastAddr returns the all-host-bits-set address of the prefix (its IPv4

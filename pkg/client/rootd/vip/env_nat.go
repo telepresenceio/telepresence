@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	ipV4Rx = regexp.MustCompile(`(?:\d{1,3}\.){3}\d{1,3}`)                                                              //nolint:gochecknoglobals // constant
-	ipV6Rx = regexp.MustCompile(`(?:[0-9a-fA-F]{0,4}:){1,7}(?:[0-9a-fA-F]{0,4}%[0-9a-zA-Z]+|(?:\d{1,3}\.){3}\d{1,3}|)`) //nolint:gochecknoglobals // constant
+	ipV4Rx = regexp.MustCompile(`(?:\d{1,3}\.){3}\d{1,3}`)                                                                               //nolint:gochecknoglobals // constant
+	ipV6Rx = regexp.MustCompile(`(?:[0-9a-fA-F]{0,4}:){1,7}(?:[0-9a-fA-F]{0,4}%[0-9a-zA-Z]+|(?:\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F]{1,4}|)`) //nolint:gochecknoglobals // constant
 )
 
 type LocalIPProvider interface {

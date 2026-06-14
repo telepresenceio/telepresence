@@ -15,6 +15,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/slice"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 type cidrConflictSuite struct {
@@ -97,11 +98,29 @@ func (s *cidrConflictSuite) Test_AutoConflictResolution() {
 	defer itest.TelepresenceQuit(ctx)
 	sns := st.RootDaemon.Subnets
 	rq := s.Require()
-	rq.Less(len(sns), len(s.subnets), "pod and service subnets should be combined into one virtual subnet")
 
-	// The first subnet must now be virtual.
-	viSn := sns[0]
-	rq.Equalf(s.vipSubnet, viSn, "expected %s to be a virtual CIDR", viSn)
+	// virtualSubnetFor returns the Telepresence-owned virtual subnet that a cluster
+	// address of the given family is translated into: the configured (IPv4) virtual
+	// subnet, or the fixed IPv6 ULA.
+	virtualSubnetFor := func(a netip.Addr) netip.Prefix {
+		if a.Is6() {
+			return vif.TelepresenceULA6
+		}
+		return s.vipSubnet
+	}
+	isVirtual := func(a netip.Addr) bool {
+		return s.vipSubnet.Contains(a) || vif.TelepresenceULA6.Contains(a)
+	}
+
+	// Each conflicting subnet must have been replaced by the virtual subnet of its
+	// own address family. On a dual-stack cluster the two conflicts belong to
+	// different families and therefore map to two different virtual subnets, so the
+	// subnet count need not shrink; what matters is that the conflicts are gone and
+	// the matching virtual subnets are routed.
+	for _, c := range []netip.Prefix{s.subnets[0], s.subnets[1]} {
+		rq.NotContains(sns, c, "conflicting subnet %s should have been replaced by a virtual subnet", c)
+		rq.Contains(sns, virtualSubnetFor(c.Addr()), "virtual subnet for the family of %s should be routed", c)
+	}
 
 	// Ingest to get a container environment.
 	envFile := filepath.Join(s.T().TempDir(), "echo.env")
@@ -113,13 +132,21 @@ func (s *cidrConflictSuite) Test_AutoConflictResolution() {
 	err = json.Unmarshal(envData, &env)
 	rq.NoError(err)
 
-	// Verify that these IPs in the environment have been translated into virtual IPs.
+	// The service address lies in a conflicting subnet, so it must have been
+	// translated into a virtual IP. Any environment address that became virtual must
+	// be in its own family's virtual subnet (an IPv6 address must not land in the
+	// IPv4 virtual subnet, and vice versa).
 	for _, key := range []string{"LISTEN_ADDRESS", "ECHO_SERVICE_HOST"} {
 		addrVal, ok := env[key]
 		rq.True(ok)
 		addr, err := netip.ParseAddr(addrVal)
 		rq.NoError(err)
-		rq.Truef(viSn.Contains(addr), "virtual subnet %s does not contain %s %s", viSn, key, addr)
+		if key == "ECHO_SERVICE_HOST" {
+			rq.Truef(isVirtual(addr), "ECHO_SERVICE_HOST %s should have been translated to a virtual IP", addr)
+		}
+		if isVirtual(addr) {
+			rq.Truef(virtualSubnetFor(addr).Contains(addr), "%s %s is not in its own family's virtual subnet %s", key, addr, virtualSubnetFor(addr))
+		}
 	}
 }
 
