@@ -43,12 +43,9 @@ items:
           limit how an intercept impacts others, not the developer's own
           traffic. Set <code>intercept.localShortcutIsGlobal</code> to false
           when local traffic must honor the filters exactly, at the cost of
-          the round trip through the cluster. By default it applies to all
-          intercepts, including those with header or path filters, on the
-          assumption that the filters exist to limit how the intercept impacts
-          others; set <code>intercept.localShortcutIsGlobal</code> to false to
-          exempt filtered intercepts. Wiretaps are never shortcut, since they
-          receive a copy of the traffic rather than the traffic itself.
+          the round trip through the cluster. Wiretaps are never shortcut,
+          since they receive a copy of the traffic rather than the traffic
+          itself.
         docs: reference/config
       - type: change
         title: Fail engagements when agent port-forwarding is disabled

@@ -42,11 +42,15 @@ func (s *session) pushInterceptShortcuts(intercepts []*manager.InterceptInfo) {
 }
 
 // shortcutEligible returns true when the given spec describes an intercept whose
-// cluster-side destinations can be served by the local intercept handler. Filtered
-// intercepts only receive matching requests, so they qualify only when isGlobal is
-// set, on the assumption that the filters exist to limit how the intercept impacts
-// others, not the developer's own traffic.
+// cluster-side destinations can be served by the local intercept handler. A wiretap
+// receives a copy of the traffic rather than the traffic itself, so it is never
+// shortcut. Filtered intercepts only receive matching requests, so they qualify only
+// when isGlobal is set, on the assumption that the filters exist to limit how the
+// intercept impacts others, not the developer's own traffic.
 func shortcutEligible(spec *manager.InterceptSpec, isGlobal bool) bool {
+	if spec.Wiretap {
+		return false
+	}
 	if isGlobal {
 		return true
 	}
