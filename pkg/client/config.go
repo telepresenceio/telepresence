@@ -944,7 +944,7 @@ var defaultTeleroute = Teleroute{ //nolint:gochecknoglobals // constant
 	Registry:    "ghcr.io",
 	Namespace:   "telepresenceio",
 	Repository:  "teleroute",
-	Tag:         "0.4.0",
+	Tag:         "0.5.0",
 }
 
 func (tr *Teleroute) defaults() DefaultsAware {

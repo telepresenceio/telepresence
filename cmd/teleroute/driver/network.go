@@ -206,29 +206,9 @@ func (n *networkState) join(r *network.JoinRequest) (response *network.JoinRespo
 		return nil, err
 	}
 
-	routeType := 1
-	var viaStr string
-	if len(rsp.Via) > 0 {
-		var nxt netip.Addr
-		err = nxt.UnmarshalBinary(rsp.Via)
-		if err != nil {
-			return nil, fmt.Errorf("unable to unmarshal via with length %d: %w", len(rsp.Via), err)
-		}
-		viaStr = nxt.String()
-		routeType = 0
-	}
-	srs := make([]*network.StaticRoute, len(rsp.Routes))
-	for i, r := range rsp.Routes {
-		var pfx netip.Prefix
-		err = pfx.UnmarshalBinary(r)
-		if err != nil {
-			return nil, fmt.Errorf("unable to unmarshal route with length %d: %w", len(r), err)
-		}
-		srs[i] = &network.StaticRoute{
-			Destination: pfx.String(),
-			RouteType:   routeType,
-			NextHop:     viaStr,
-		}
+	srs, err := staticRoutesFromResponse(rsp)
+	if err != nil {
+		return nil, err
 	}
 	response = &network.JoinResponse{
 		InterfaceName: network.InterfaceName{
@@ -256,6 +236,60 @@ func (n *networkState) join(r *network.JoinRequest) (response *network.JoinRespo
 	}
 	clog.Debugf(n.ctx, "Join response %v", response)
 	return response, nil
+}
+
+// staticRoutesFromResponse turns the daemon's routes into libnetwork static routes,
+// giving each route a next-hop of its own address family. A mixed-family route set (a
+// dual-stack cluster) therefore gets the daemon's IPv4 address as the next-hop for IPv4
+// routes and its IPv6 address for IPv6 routes; a single shared next-hop would leave the
+// wrong-family routes unusable. A route whose family has no next-hop is emitted as a
+// connected route (RouteType 1) rather than via a next-hop (RouteType 0).
+func staticRoutesFromResponse(rsp *teleroute.JoinResponse) ([]*network.StaticRoute, error) {
+	var viaV4, viaV6, viaLegacy netip.Addr
+	if len(rsp.ViaIpV4) > 0 {
+		if err := viaV4.UnmarshalBinary(rsp.ViaIpV4); err != nil {
+			return nil, fmt.Errorf("unable to unmarshal via_ip_v4 with length %d: %w", len(rsp.ViaIpV4), err)
+		}
+	}
+	if len(rsp.ViaIpV6) > 0 {
+		if err := viaV6.UnmarshalBinary(rsp.ViaIpV6); err != nil {
+			return nil, fmt.Errorf("unable to unmarshal via_ip_v6 with length %d: %w", len(rsp.ViaIpV6), err)
+		}
+	}
+	// viaLegacy is the deprecated single next-hop. A daemon that predates the
+	// per-family fields sends only this, so it is used when the family-specific
+	// next-hop is absent.
+	if len(rsp.Via) > 0 {
+		if err := viaLegacy.UnmarshalBinary(rsp.Via); err != nil {
+			return nil, fmt.Errorf("unable to unmarshal via with length %d: %w", len(rsp.Via), err)
+		}
+	}
+	srs := make([]*network.StaticRoute, len(rsp.Routes))
+	for i, r := range rsp.Routes {
+		var pfx netip.Prefix
+		if err := pfx.UnmarshalBinary(r); err != nil {
+			return nil, fmt.Errorf("unable to unmarshal route with length %d: %w", len(r), err)
+		}
+		via := viaV4
+		if pfx.Addr().Is6() {
+			via = viaV6
+		}
+		if !via.IsValid() {
+			via = viaLegacy
+		}
+		routeType := 1
+		var viaStr string
+		if via.IsValid() {
+			viaStr = via.String()
+			routeType = 0
+		}
+		srs[i] = &network.StaticRoute{
+			Destination: pfx.String(),
+			RouteType:   routeType,
+			NextHop:     viaStr,
+		}
+	}
+	return srs, nil
 }
 
 func (n *networkState) leaveEndpoint(endpointID string) error {

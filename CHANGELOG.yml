@@ -79,6 +79,16 @@ items:
           from a dedicated IPv6 range, so IPv6 services and pods are reachable
           through a virtual IP just like their IPv4 counterparts.
         docs: reference/vpn
+      - type: bugfix
+        title: Route dual-stack clusters correctly with telepresence connect --docker
+        body: >-
+          In <code>--docker</code> mode the teleroute network gave every cluster
+          route a single next-hop of one address family, so on a dual-stack
+          cluster the IPv4 routes received an IPv6 next-hop (or the reverse) and
+          became unusable. Each route is now given a next-hop of its own address
+          family, so IPv4 and IPv6 cluster traffic is routed to the daemon
+          correctly.
+        docs: reference/vpn
       - type: feature
         title: Make the agent-injector webhook reachable from outside the cluster
         body: >-

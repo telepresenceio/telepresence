@@ -26,6 +26,12 @@ When a cluster subnet routed through Telepresence covers the workstation's DNS s
 When proxy-via or automatic conflict resolution mapped a cluster IP to a virtual IP, an IPv6 address was forced into the IPv4 virtual subnet, producing a malformed virtual IP (such as <code>246.246.0.1313</code>) that broke the connection on IPv6-only and dual-stack clusters. Telepresence now allocates IPv6 virtual IPs from a dedicated IPv6 range, so IPv6 services and pods are reachable through a virtual IP just like their IPv4 counterparts.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Route dual-stack clusters correctly with telepresence connect --docker](reference/vpn)</div></div>
+<div style="margin-left: 15px">
+
+In <code>--docker</code> mode the teleroute network gave every cluster route a single next-hop of one address family, so on a dual-stack cluster the IPv4 routes received an IPv6 next-hop (or the reverse) and became unusable. Each route is now given a next-hop of its own address family, so IPv4 and IPv6 cluster traffic is routed to the daemon correctly.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Make the agent-injector webhook reachable from outside the cluster](troubleshooting#eks-calico-and-traffic-agent-injection-timeouts)</div></div>
 <div style="margin-left: 15px">
 

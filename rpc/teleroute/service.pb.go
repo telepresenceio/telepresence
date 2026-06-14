@@ -200,12 +200,22 @@ type JoinResponse struct {
 	// The prefix to use when the container interface is renamed.
 	InterfaceDstPrefix string   `protobuf:"bytes,2,opt,name=interface_dst_prefix,json=interfaceDstPrefix,proto3" json:"interface_dst_prefix,omitempty"`
 	Routes             [][]byte `protobuf:"bytes,3,rep,name=routes,proto3" json:"routes,omitempty"`
-	Via                []byte   `protobuf:"bytes,4,opt,name=via,proto3" json:"via,omitempty"`
-	GwIpV4             []byte   `protobuf:"bytes,5,opt,name=gw_ip_v4,json=gwIpV4,proto3" json:"gw_ip_v4,omitempty"`
-	GwIpV6             []byte   `protobuf:"bytes,6,opt,name=gw_ip_v6,json=gwIpV6,proto3" json:"gw_ip_v6,omitempty"`
-	DisableGw          bool     `protobuf:"varint,7,opt,name=disable_gw,json=disableGw,proto3" json:"disable_gw,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Deprecated single next-hop shared by all routes. It cannot describe a
+	// mixed-family (dual-stack) route set, so it is superseded by the per-family
+	// via_ip_v4 / via_ip_v6 below. It is still populated and honored so that a
+	// daemon and a plugin of mismatched versions keep routing single-family
+	// clusters: a plugin that does not understand the per-family fields reads
+	// this, and a plugin that does falls back to it when a family field is absent.
+	Via       []byte `protobuf:"bytes,4,opt,name=via,proto3" json:"via,omitempty"`
+	GwIpV4    []byte `protobuf:"bytes,5,opt,name=gw_ip_v4,json=gwIpV4,proto3" json:"gw_ip_v4,omitempty"`
+	GwIpV6    []byte `protobuf:"bytes,6,opt,name=gw_ip_v6,json=gwIpV6,proto3" json:"gw_ip_v6,omitempty"`
+	DisableGw bool   `protobuf:"varint,7,opt,name=disable_gw,json=disableGw,proto3" json:"disable_gw,omitempty"`
+	// The next-hop for IPv4 routes; the daemon's IPv4 address in the teleroute network.
+	ViaIpV4 []byte `protobuf:"bytes,8,opt,name=via_ip_v4,json=viaIpV4,proto3" json:"via_ip_v4,omitempty"`
+	// The next-hop for IPv6 routes; the daemon's IPv6 address in the teleroute network.
+	ViaIpV6       []byte `protobuf:"bytes,9,opt,name=via_ip_v6,json=viaIpV6,proto3" json:"via_ip_v6,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *JoinResponse) Reset() {
@@ -287,6 +297,20 @@ func (x *JoinResponse) GetDisableGw() bool {
 	return false
 }
 
+func (x *JoinResponse) GetViaIpV4() []byte {
+	if x != nil {
+		return x.ViaIpV4
+	}
+	return nil
+}
+
+func (x *JoinResponse) GetViaIpV6() []byte {
+	if x != nil {
+		return x.ViaIpV6
+	}
+	return nil
+}
+
 type Info struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Info          map[string]string      `protobuf:"bytes,1,rep,name=info,proto3" json:"info,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -345,7 +369,7 @@ const file_teleroute_service_proto_rawDesc = "" +
 	"\taddr_ipv6\x18\x04 \x01(\fR\baddrIpv6\x12\x16\n" +
 	"\x06daemon\x18\x03 \x01(\bR\x06daemon\"$\n" +
 	"\x12EndpointIdentifier\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\xeb\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xa3\x02\n" +
 	"\fJoinResponse\x12,\n" +
 	"\x12interface_src_name\x18\x01 \x01(\tR\x10interfaceSrcName\x120\n" +
 	"\x14interface_dst_prefix\x18\x02 \x01(\tR\x12interfaceDstPrefix\x12\x16\n" +
@@ -354,7 +378,9 @@ const file_teleroute_service_proto_rawDesc = "" +
 	"\bgw_ip_v4\x18\x05 \x01(\fR\x06gwIpV4\x12\x18\n" +
 	"\bgw_ip_v6\x18\x06 \x01(\fR\x06gwIpV6\x12\x1d\n" +
 	"\n" +
-	"disable_gw\x18\a \x01(\bR\tdisableGw\"{\n" +
+	"disable_gw\x18\a \x01(\bR\tdisableGw\x12\x1a\n" +
+	"\tvia_ip_v4\x18\b \x01(\fR\aviaIpV4\x12\x1a\n" +
+	"\tvia_ip_v6\x18\t \x01(\fR\aviaIpV6\"{\n" +
 	"\x04Info\x12:\n" +
 	"\x04info\x18\x01 \x03(\v2&.telepresence.teleroute.Info.InfoEntryR\x04info\x1a7\n" +
 	"\tInfoEntry\x12\x10\n" +
