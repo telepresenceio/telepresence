@@ -32,6 +32,8 @@ const (
 	TunToClient     = Tag("TUN⇄CLI")
 	TunToDNS        = Tag("TUN⇄DNS")
 	DnsToTun        = Tag("DNS⇄TUN")
+	TunToLocal      = Tag("TUN⇄LCL")
+	LocalToTun      = Tag("LCL⇄TUN")
 	ClientToAgent   = Tag("CLI⇄AGN")
 	ClientToDNS     = Tag("CLI⇄DNS")
 	AgentToClient   = Tag("AGN⇄CLI")

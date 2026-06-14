@@ -804,7 +804,9 @@ func (g *Grpc) MaxReceiveSize() int64 {
 }
 
 var defaultIntercept = Intercept{ //nolint:gochecknoglobals // constant
-	MountCompletionDelay: 300 * time.Millisecond,
+	LocalShortcut:         true,
+	LocalShortcutIsGlobal: true,
+	MountCompletionDelay:  300 * time.Millisecond,
 }
 
 type DockerImage struct {
@@ -816,10 +818,12 @@ type DockerImage struct {
 }
 
 type Intercept struct {
-	DefaultPort          int           `json:"defaultPort"`
-	UseFtp               bool          `json:"useFtp"`
-	MountsRoot           string        `json:"mountsRoot"`
-	MountCompletionDelay time.Duration `json:"mountCompletionDelay,format:units"`
+	DefaultPort           int           `json:"defaultPort"`
+	UseFtp                bool          `json:"useFtp"`
+	LocalShortcut         bool          `json:"localShortcut"`
+	LocalShortcutIsGlobal bool          `json:"localShortcutIsGlobal"`
+	MountsRoot            string        `json:"mountsRoot"`
+	MountCompletionDelay  time.Duration `json:"mountCompletionDelay,format:units"`
 }
 
 func (ic *Intercept) defaults() DefaultsAware {

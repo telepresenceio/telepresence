@@ -270,6 +270,11 @@ type Clients interface {
 	GetWorkloadClient(workload string) (ag tunnel.Provider)
 	SetProxyVia(workload string)
 
+	// WorkloadForIP returns the name and namespace of the workload whose traffic-agent
+	// runs in the pod with the given IP, as reported by the most recent agent-pod
+	// snapshot.
+	WorkloadForIP(ip netip.Addr) (workload, namespace string, ok bool)
+
 	// SetDialMetrics installs a DialMetrics implementation that receives a
 	// callback for every dial request the dial watchers accept. Passing nil
 	// disables the callback. Safe to call at any time.
@@ -619,6 +624,19 @@ func (s *clients) snapshotInfoForIP(namespace string, ip netip.Addr) *manager.Ag
 		}
 	}
 	return nil
+}
+
+// WorkloadForIP returns the name and namespace of the workload whose traffic-agent
+// runs in the pod with the given IP, as reported by the most recent agent-pod snapshot.
+func (s *clients) WorkloadForIP(ip netip.Addr) (workload, namespace string, ok bool) {
+	s.snapshotMu.RLock()
+	defer s.snapshotMu.RUnlock()
+	for _, ai := range s.snapshot {
+		if podIP, aok := netip.AddrFromSlice(ai.PodIp); aok && podIP == ip {
+			return ai.WorkloadName, ai.Namespace, true
+		}
+	}
+	return "", "", false
 }
 
 // loadOrAddClient returns the live client for the given agent pod, adding it if the (delta-based)

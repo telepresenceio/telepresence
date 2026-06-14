@@ -34,6 +34,8 @@ images:
 intercept:
   defaultPort: 9080
   useFtp: true
+  localShortcut: false
+  localShortcutIsGlobal: false
 routing:
   virtualSubnet: 192.169.0.0/16
 `
@@ -67,8 +69,17 @@ routing:
 	assert.Equal(t, "ambassador-telepresence-image:0.0.2", cfg.Images().PrivateClientImage)      // from user
 	assert.Equal(t, 9080, cfg.Intercept().DefaultPort)                                           // from user
 	assert.True(t, cfg.Intercept().UseFtp)                                                       // from user
+	assert.False(t, cfg.Intercept().LocalShortcut)                                               // from user
+	assert.False(t, cfg.Intercept().LocalShortcutIsGlobal)                                       // from user
 	assert.True(t, cfg.DNS().RecursionCheck)                                                     // from user
 	assert.Equal(t, cfg.Routing().VirtualSubnet, netip.MustParsePrefix("192.169.0.0/16"))        // from user
+}
+
+// TestInterceptLocalShortcutDefault verifies that intercept shortcuts are enabled
+// unless explicitly disabled.
+func TestInterceptLocalShortcutDefault(t *testing.T) {
+	assert.True(t, GetDefaultConfig().Intercept().LocalShortcut)
+	assert.True(t, GetDefaultConfig().Intercept().LocalShortcutIsGlobal)
 }
 
 // TestLoadConfig_SystemAndUserMerge verifies that LoadConfig reads the

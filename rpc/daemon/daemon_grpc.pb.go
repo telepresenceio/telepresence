@@ -38,6 +38,7 @@ const (
 	Daemon_LookupIP_FullMethodName              = "/telepresence.daemon.Daemon/LookupIP"
 	Daemon_ResolvePort_FullMethodName           = "/telepresence.daemon.Daemon/ResolvePort"
 	Daemon_RerouteRemotePort_FullMethodName     = "/telepresence.daemon.Daemon/RerouteRemotePort"
+	Daemon_SetInterceptShortcuts_FullMethodName = "/telepresence.daemon.Daemon/SetInterceptShortcuts"
 	Daemon_ActivityWatcher_FullMethodName       = "/telepresence.daemon.Daemon/ActivityWatcher"
 )
 
@@ -80,6 +81,10 @@ type DaemonClient interface {
 	ResolvePort(ctx context.Context, in *ResolvePortRequest, opts ...grpc.CallOption) (*ResolvePortResponse, error)
 	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
 	RerouteRemotePort(ctx context.Context, in *ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// SetInterceptShortcuts declares cluster-side destinations that the root daemon
+	// connects directly to local intercept handlers instead of tunneling to the cluster.
+	// Each call replaces the previously declared set.
+	SetInterceptShortcuts(ctx context.Context, in *SetInterceptShortcutsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ActivityWatcher(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Activity], error)
 }
 
@@ -251,6 +256,16 @@ func (c *daemonClient) RerouteRemotePort(ctx context.Context, in *ReroutePortReq
 	return out, nil
 }
 
+func (c *daemonClient) SetInterceptShortcuts(ctx context.Context, in *SetInterceptShortcutsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Daemon_SetInterceptShortcuts_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *daemonClient) ActivityWatcher(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Activity], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Daemon_ServiceDesc.Streams[0], Daemon_ActivityWatcher_FullMethodName, cOpts...)
@@ -309,6 +324,10 @@ type DaemonServer interface {
 	ResolvePort(context.Context, *ResolvePortRequest) (*ResolvePortResponse, error)
 	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
 	RerouteRemotePort(context.Context, *ReroutePortRequest) (*emptypb.Empty, error)
+	// SetInterceptShortcuts declares cluster-side destinations that the root daemon
+	// connects directly to local intercept handlers instead of tunneling to the cluster.
+	// Each call replaces the previously declared set.
+	SetInterceptShortcuts(context.Context, *SetInterceptShortcutsRequest) (*emptypb.Empty, error)
 	ActivityWatcher(*emptypb.Empty, grpc.ServerStreamingServer[Activity]) error
 	mustEmbedUnimplementedDaemonServer()
 }
@@ -367,6 +386,9 @@ func (UnimplementedDaemonServer) ResolvePort(context.Context, *ResolvePortReques
 }
 func (UnimplementedDaemonServer) RerouteRemotePort(context.Context, *ReroutePortRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method RerouteRemotePort not implemented")
+}
+func (UnimplementedDaemonServer) SetInterceptShortcuts(context.Context, *SetInterceptShortcutsRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetInterceptShortcuts not implemented")
 }
 func (UnimplementedDaemonServer) ActivityWatcher(*emptypb.Empty, grpc.ServerStreamingServer[Activity]) error {
 	return status.Error(codes.Unimplemented, "method ActivityWatcher not implemented")
@@ -680,6 +702,24 @@ func _Daemon_RerouteRemotePort_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Daemon_SetInterceptShortcuts_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetInterceptShortcutsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaemonServer).SetInterceptShortcuts(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Daemon_SetInterceptShortcuts_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaemonServer).SetInterceptShortcuts(ctx, req.(*SetInterceptShortcutsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Daemon_ActivityWatcher_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(emptypb.Empty)
 	if err := stream.RecvMsg(m); err != nil {
@@ -761,6 +801,10 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RerouteRemotePort",
 			Handler:    _Daemon_RerouteRemotePort_Handler,
+		},
+		{
+			MethodName: "SetInterceptShortcuts",
+			Handler:    _Daemon_SetInterceptShortcuts_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

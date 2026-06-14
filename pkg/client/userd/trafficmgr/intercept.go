@@ -233,6 +233,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 		pat.start(pa)
 	}
 	pat.cancelUnwanted(s)
+	s.pushInterceptShortcuts(intercepts)
 }
 
 // getCurrentIntercepts returns a copy of the current intercept snapshot. This snapshot does
@@ -646,6 +647,8 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	}
 
 	spec.ServiceUid = pi.ServiceUid
+	spec.ServiceName = pi.ServiceName
+	spec.ServiceIps = pi.ServiceIps
 	spec.WorkloadKind = pi.WorkloadKind
 
 	clog.Debugf(s, "creating intercept %s", spec.Name)

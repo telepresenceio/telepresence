@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/netip"
 	"regexp"
 	"sort"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/eventwatch"
 	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/icept"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -135,11 +137,43 @@ func (s *State) PrepareIntercept(
 	if err != nil {
 		return interceptError(errcat.User.New(err))
 	}
+	pi.ServiceIps = serviceIPs(ctx, pi.ServiceName, ac.Namespace)
 	lastActivity := time.Now()
 	if client.Mark(lastActivity) {
 		clog.Tracef(ctx, "Last activity %s", lastActivity)
 	}
 	return pi, nil
+}
+
+// serviceIPs returns the cluster IPs of the named service, each in netip.Addr
+// binary form.
+func serviceIPs(ctx context.Context, serviceName, namespace string) (ips [][]byte) {
+	if serviceName == "" {
+		return nil
+	}
+	f := informer.GetK8sFactory(ctx, namespace)
+	if f == nil {
+		clog.Debugf(ctx, "no informer factory for namespace %s", namespace)
+		return nil
+	}
+	svc, err := f.Core().V1().Services().Lister().Services(namespace).Get(serviceName)
+	if err != nil {
+		clog.Debugf(ctx, "unable to get service %s.%s: %v", serviceName, namespace, err)
+		return nil
+	}
+	sips := svc.Spec.ClusterIPs
+	if len(sips) == 0 {
+		sips = []string{svc.Spec.ClusterIP}
+	}
+	for _, is := range sips {
+		// Headless services have the IP "None", which doesn't parse.
+		if ip, err := netip.ParseAddr(is); err == nil {
+			if b, err := ip.MarshalBinary(); err == nil {
+				ips = append(ips, b)
+			}
+		}
+	}
+	return ips
 }
 
 func prepareAllContainerPorts(cn *agentconfig.Container, pi *rpc.PreparedIntercept) {
@@ -201,6 +235,7 @@ func (s *State) checkInterceptConsistency(
 		return err
 	}
 	pi.ServiceUid = string(ic.ServiceUID)
+	pi.ServiceName = ic.ServiceName
 	pi.ServicePortName = ic.ServicePortName
 	pi.Protocol = ic.Protocol.String()
 	pi.ContainerPort = int32(ic.ContainerPort)

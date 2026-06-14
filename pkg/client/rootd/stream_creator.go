@@ -96,6 +96,21 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 			}
 		}
 
+		// A destination that one of the client's own intercepts covers is served by
+		// the local intercept handler, so the connection is piped directly to it
+		// instead of round-tripping through the cluster.
+		if lt, ok := s.shortcutTarget(p, id.Destination()); ok {
+			countAsOutbound = false
+			pipeId := tunnel.NewConnID(p, id.Source(), lt)
+			clog.Debugf(c, "Shortcutting %s to local intercept handler %s", id, lt)
+			from, to := tunnel.NewPipe(pipeId, tunnel.SessionID(s.session.SessionId), tunnel.LocalToTun, tunnel.TunToLocal)
+			tunnel.NewDialer(to, func() {}, nil, nil).Start(c)
+			if p == types.ProtoTCP {
+				s.MarkActivity()
+			}
+			return from, nil
+		}
+
 		if tp == nil {
 			if s.isAlsoProxyDestination(destAddr) {
 				tp = tunnel.ManagerProvider(s.managerClient())

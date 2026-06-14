@@ -430,6 +430,12 @@ func (s *cluster) withBasicConfig(c context.Context, t *testing.T) context.Conte
 	logLevels.RootDaemon = slog.LevelDebug
 	logLevels.KubeAuthDaemon = slog.LevelDebug
 
+	// Most tests verify the behavior of the cluster path (agent routing, header
+	// filters, TLS termination), which the local intercept shortcut bypasses. The
+	// shortcut is therefore disabled by default and enabled explicitly by the
+	// tests that target it.
+	config.Intercept().LocalShortcut = false
+
 	to := config.Timeouts()
 	to.PrivateClusterConnect = 60 * time.Second
 	to.PrivateEndpointDial = 10 * time.Second

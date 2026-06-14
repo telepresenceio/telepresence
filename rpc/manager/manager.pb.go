@@ -691,7 +691,10 @@ type InterceptSpec struct {
 	// Metadata to associate with the intercept. Retrievable using the API server.
 	Metadata map[string]string `protobuf:"bytes,29,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Plaintext instructs the traffic-agent to use plain text when communicating with the client.
-	Plaintext     bool `protobuf:"varint,30,opt,name=plaintext,proto3" json:"plaintext,omitempty"`
+	Plaintext bool `protobuf:"varint,30,opt,name=plaintext,proto3" json:"plaintext,omitempty"`
+	// The cluster IPs of the service that the intercept is made on, each in
+	// netip.Addr binary form.
+	ServiceIps    [][]byte `protobuf:"bytes,31,rep,name=service_ips,json=serviceIps,proto3" json:"service_ips,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -920,6 +923,13 @@ func (x *InterceptSpec) GetPlaintext() bool {
 		return x.Plaintext
 	}
 	return false
+}
+
+func (x *InterceptSpec) GetServiceIps() [][]byte {
+	if x != nil {
+		return x.ServiceIps
+	}
+	return nil
 }
 
 // InterceptInfo contains information about a live intercept in an agent
@@ -1652,8 +1662,10 @@ type PreparedIntercept struct {
 	ContainerName   string                 `protobuf:"bytes,11,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
 	ContainerPort   int32                  `protobuf:"varint,12,opt,name=container_port,json=containerPort,proto3" json:"container_port,omitempty"`
 	PodPorts        []string               `protobuf:"bytes,13,rep,name=pod_ports,json=podPorts,proto3" json:"pod_ports,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The cluster IPs of the service, each in netip.Addr binary form.
+	ServiceIps    [][]byte `protobuf:"bytes,14,rep,name=service_ips,json=serviceIps,proto3" json:"service_ips,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreparedIntercept) Reset() {
@@ -1773,6 +1785,13 @@ func (x *PreparedIntercept) GetContainerPort() int32 {
 func (x *PreparedIntercept) GetPodPorts() []string {
 	if x != nil {
 		return x.PodPorts
+	}
+	return nil
+}
+
+func (x *PreparedIntercept) GetServiceIps() [][]byte {
+	if x != nil {
+		return x.ServiceIps
 	}
 	return nil
 }
@@ -4086,7 +4105,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2-.telepresence.manager.AgentInfo.ContainerInfoR\x05value:\x028\x01J\x04\b\x06\x10\a\"1\n" +
 	"\vPortMapping\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\x05R\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\x05R\x02to\"\x9f\t\n" +
+	"\x02to\x18\x02 \x01(\x05R\x02to\"\xc0\t\n" +
 	"\rInterceptSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06client\x18\x02 \x01(\tR\x06client\x12\x14\n" +
@@ -4121,7 +4140,9 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x0eheader_filters\x18\x1b \x03(\v26.telepresence.manager.InterceptSpec.HeaderFiltersEntryR\rheaderFilters\x12!\n" +
 	"\fpath_filters\x18\x1c \x03(\tR\vpathFilters\x12M\n" +
 	"\bmetadata\x18\x1d \x03(\v21.telepresence.manager.InterceptSpec.MetadataEntryR\bmetadata\x12\x1c\n" +
-	"\tplaintext\x18\x1e \x01(\bR\tplaintext\x1a@\n" +
+	"\tplaintext\x18\x1e \x01(\bR\tplaintext\x12\x1f\n" +
+	"\vservice_ips\x18\x1f \x03(\fR\n" +
+	"serviceIps\x1a@\n" +
 	"\x12HeaderFiltersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a;\n" +
@@ -4202,7 +4223,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x12EnsureAgentRequest\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
-	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\xce\x03\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\xef\x03\n" +
 	"\x11PreparedIntercept\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\x12%\n" +
 	"\x0eerror_category\x18\x02 \x01(\x05R\rerrorCategory\x12\x1c\n" +
@@ -4219,7 +4240,9 @@ const file_manager_manager_proto_rawDesc = "" +
 	" \x01(\tR\bprotocol\x12%\n" +
 	"\x0econtainer_name\x18\v \x01(\tR\rcontainerName\x12%\n" +
 	"\x0econtainer_port\x18\f \x01(\x05R\rcontainerPort\x12\x1b\n" +
-	"\tpod_ports\x18\r \x03(\tR\bpodPorts\"j\n" +
+	"\tpod_ports\x18\r \x03(\tR\bpodPorts\x12\x1f\n" +
+	"\vservice_ips\x18\x0e \x03(\fR\n" +
+	"serviceIps\"j\n" +
 	"\x17RemoveInterceptRequest2\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"f\n" +
