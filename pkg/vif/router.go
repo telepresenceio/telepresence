@@ -6,9 +6,11 @@ import (
 	"net/netip"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
@@ -83,14 +85,24 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 	})
 	rt.RUnlock()
 
+	// A route inside a Telepresence-owned range — the virtual subnet or the IPv6 ULA —
+	// is the device's own source address or, under proxy-via, the virtual subnet itself.
+	// Such a route can linger on a not-yet-torn-down tel device across a reconnect, so it
+	// is skipped, but only when it sits on one of our own devices (identified by a shared
+	// interface-name prefix such as tel0/tel1). A route in those ranges on a foreign
+	// interface is a genuine conflict and is still reported.
+	vipSubnet := client.GetConfig(ctx).Routing().VirtualSubnet
+
 	// Slightly awkward nested loops, since they can both continue (i.e., there are probably wasted iterations), but it's
 	// okay, there's not going to be hundreds of routes.
 	// In any case, we really wanna run over the table as the outer loop, since it's bigger.
 	for _, tr := range table {
 		clog.Tracef(ctx, "checking for overlap with route %q", tr)
+		ownedRange := (vipSubnet.IsValid() && vipSubnet.Overlaps(tr.RoutedNet)) || TelepresenceULA6.Overlaps(tr.RoutedNet)
 		if (tr.RoutedNet.Bits() == 0 || tr.Default) || // Default route, overlapped if needed
 			subnet.IsHalfOfDefault(tr.RoutedNet) || // OpenVPN covers half the address space with a /1 route and the other half with another. This is its way of doing a default route.
-			tr.InterfaceName == rt.device.Name() { // This is the interface we're routing through, so we can overlap it
+			tr.InterfaceName == rt.device.Name() || // This is the interface we're routing through, so we can overlap it
+			(ownedRange && sameDevicePrefix(tr.InterfaceName, rt.device.Name())) { // stale owned/virtual route on one of our own devices
 			continue
 		}
 		for _, r := range nonWhitelisted {
@@ -103,6 +115,18 @@ func (rt *Router) ValidateRoutes(ctx context.Context, routes []netip.Prefix) err
 		}
 	}
 	return nil
+}
+
+// sameDevicePrefix reports whether two interface names share the same non-numeric
+// prefix (for example "tel0" and "tel1", or "utun4" and "utun5"). It identifies
+// different incarnations of the same kind of device, used to recognize a route left
+// on an earlier Telepresence device rather than on a foreign interface.
+func sameDevicePrefix(a, b string) bool {
+	return devicePrefix(a) == devicePrefix(b)
+}
+
+func devicePrefix(name string) string {
+	return strings.TrimRightFunc(name, func(r rune) bool { return r >= '0' && r <= '9' })
 }
 
 func (rt *Router) Routes(addr netip.Addr) bool {
@@ -159,8 +183,14 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	// Add pleaseProxy subnets to the currently routed subnets
 	rt.routedSubnets = append(rt.routedSubnets, added...)
 
+	const linux = runtime.GOOS == "linux"
 	for _, sn := range removed {
-		if err := rt.device.RemoveSubnet(ctx, sn); err != nil {
+		if linux {
+			r := rt.subnetRoute(ctx, sn)
+			if err := rt.routingTable.Remove(ctx, &r); err != nil {
+				clog.Errorf(ctx, "failed to remove route for subnet %s: %v", sn, err)
+			}
+		} else if err := rt.device.RemoveSubnet(ctx, sn); err != nil {
 			clog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
 		}
 	}
@@ -169,26 +199,20 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	ourName := rt.device.Name()
 
 	var staticRoutes []routing.Route
-	const linux = runtime.GOOS == "linux"
 	for _, sn := range added {
-		if linux && sn.IsSingleIP() {
-			staticRoutes = append(staticRoutes, routing.NewRoute(sn, ourIdx, ourName))
+		if linux {
+			// Plain router: every cluster subnet is a route through our device in the
+			// policy table, sourced from the device's owned address. The table's rule
+			// priority gives it precedence over conflicting routes, so single IPs and
+			// override subnets need no special-casing here.
+			r := rt.subnetRoute(ctx, sn)
+			if err := rt.routingTable.Add(ctx, &r); err != nil {
+				clog.Errorf(ctx, "failed to add route for subnet %s: %v", sn, err)
+			}
 			continue
 		}
-
-		// On linux, this adds a link, so it's still relevant after adding a static route.
 		if err := rt.device.AddSubnet(ctx, sn); err != nil {
 			clog.Errorf(ctx, "failed to add subnet %s: %v", sn, err)
-			continue
-		}
-
-		if linux {
-			// On linux, we use static routes for conflicting subnets, because those subnets will then belong
-			// to our own routing table.
-			if slices.ContainsFunc(rt.whitelistedSubnets, func(r netip.Prefix) bool { return r.Overlaps(sn) }) {
-				clog.Debugf(ctx, "Using static route for %s because it is an override", sn)
-				staticRoutes = append(staticRoutes, routing.NewRoute(sn, ourIdx, ourName))
-			}
 		}
 	}
 	dr, err := routing.DefaultRoute(ctx)
@@ -231,6 +255,18 @@ func (rt *Router) UpdateRoutes(ctx context.Context, pleaseProxy, dontProxy, dont
 	}
 	rt.staticOverrides = staticRoutes
 	return nil
+}
+
+// subnetRoute builds the route that sends a cluster subnet through our device, sourced
+// from the device's owned address of the matching family. It is used on platforms where
+// the routing table carries cluster subnets directly (Linux's policy table) rather than
+// the device claiming them as interface addresses.
+func (rt *Router) subnetRoute(ctx context.Context, sn netip.Prefix) routing.Route {
+	r := routing.NewRoute(sn, int(rt.device.Index()), rt.device.Name())
+	if owned, ok := ownedAddress(ctx, sn.Addr().Is4(), rt.device.Index()); ok {
+		r.LocalIP = owned
+	}
+	return r
 }
 
 // routeViaExisting builds a never-proxy route for sn that follows the
@@ -342,8 +378,14 @@ func (rt *Router) dropStaticOverrides(ctx context.Context) {
 
 func (rt *Router) Close(ctx context.Context) {
 	rt.RLock()
+	const linux = runtime.GOOS == "linux"
 	for _, sn := range rt.routedSubnets {
-		if err := rt.device.RemoveSubnet(ctx, sn); err != nil {
+		if linux {
+			r := rt.subnetRoute(ctx, sn)
+			if err := rt.routingTable.Remove(ctx, &r); err != nil {
+				clog.Errorf(ctx, "failed to remove route for subnet %s: %v", sn, err)
+			}
+		} else if err := rt.device.RemoveSubnet(ctx, sn); err != nil {
 			clog.Errorf(ctx, "failed to remove subnet %s: %v", sn, err)
 		}
 	}

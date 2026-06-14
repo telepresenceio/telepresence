@@ -18,6 +18,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/link/channel"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
 
@@ -71,13 +72,17 @@ func openTun(ctx context.Context) (*device, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &device{
+	d := &device{
 		file:           os.NewFile(uintptr(fd), ""),
 		ctx:            ctx,
 		name:           name,
 		interfaceIndex: uint32(iface.Index),
 		Endpoint:       channel.New(defaultDevOutQueueLen, uint32(iface.MTU), ""),
-	}, nil
+	}
+	if err = d.assignOwnedAddresses(ctx); err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 // Close closes both the tun-device and the Endpoint. This function overrides the LinkEndpoint.Close so
@@ -87,24 +92,40 @@ func (d *device) Close() {
 	_ = d.file.Close()
 }
 
-func (d *device) addSubnet(_ context.Context, subnet netip.Prefix) error {
-	to := subnet.Addr().AsSlice()
-	to[len(to)-1] = 1
-	dest, _ := netip.AddrFromSlice(to)
-	if err := d.setAddr(subnet, dest); err != nil {
-		return err
+// assignOwnedAddresses gives the device a single source address per family from a
+// Telepresence-owned range. macOS is strong-host, so the address must be unique to this
+// device — ownedAddress guarantees that. The device routes cluster subnets as a router
+// rather than claiming them as interface addresses, so it needs one address of its own to
+// source locally-originated traffic and to receive the replies. The address is assigned as
+// a point-to-point pair to itself (a /32 or /128), which a utun interface requires.
+func (d *device) assignOwnedAddresses(ctx context.Context) error {
+	for _, ipv4 := range []bool{true, false} {
+		owned, ok := ownedAddress(ctx, ipv4, d.interfaceIndex)
+		if !ok {
+			continue
+		}
+		if err := d.setAddr(netip.PrefixFrom(owned, owned.BitLen()), owned); err != nil {
+			if ipv4 {
+				return fmt.Errorf("failed to add owned address %s to %s: %w", owned, d.name, err)
+			}
+			// IPv6 may be disabled on the interface; the owned IPv6 address is only needed
+			// when IPv6 subnets are routed, so a failure here is not fatal.
+			clog.Warnf(ctx, "failed to add owned IPv6 address %s to %s: %v", owned, d.name, err)
+		}
 	}
-	return routing.Add(1, subnet, dest)
+	return nil
+}
+
+// addSubnet routes a cluster subnet through the device interface. The device owns a single
+// source address (assigned at bring-up), so the subnet is added as an interface route
+// rather than the device claiming it as a point-to-point address. macOS then selects the
+// owned address as the source for traffic to the subnet.
+func (d *device) addSubnet(_ context.Context, subnet netip.Prefix) error {
+	return routing.AddViaInterface(1, subnet, int(d.interfaceIndex))
 }
 
 func (d *device) removeSubnet(_ context.Context, subnet netip.Prefix) error {
-	to := subnet.Addr().AsSlice()
-	to[len(to)-1] = 1
-	dest, _ := netip.AddrFromSlice(to)
-	if err := d.removeAddr(subnet, dest); err != nil {
-		return err
-	}
-	return routing.Clear(1, subnet, dest)
+	return routing.ClearViaInterface(1, subnet, int(d.interfaceIndex))
 }
 
 func (d *device) readPacket(buf []byte) (int, error) {
@@ -191,9 +212,6 @@ const (
 	IN6_IFF_SECURED       = 0x0400
 )
 
-// SIOCDIFADDR_IN6 is the same ioctlHandle identifier as unix.SIOCDIFADDR adjusted with size of addrIfReq6.
-const SIOCDIFADDR_IN6 = (unix.SIOCDIFADDR & 0xe000ffff) | (uint(unsafe.Sizeof(addrIfReq6{})) << 16)
-
 func (d *device) setAddr(subnet netip.Prefix, to netip.Addr) error {
 	if to.Is4() && subnet.Addr().Is4() {
 		return withSocket(unix.AF_INET, func(fd int) error {
@@ -224,42 +242,6 @@ func (d *device) setAddr(subnet netip.Prefix, to netip.Addr) error {
 			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 128))
 			ifreq.addr.Addr = subnet.Addr().As16()
 			err := ioctl(fd, SIOCAIFADDR_IN6, unsafe.Pointer(ifreq))
-			runtime.KeepAlive(ifreq)
-			return err
-		})
-	}
-}
-
-func (d *device) removeAddr(subnet netip.Prefix, to netip.Addr) error {
-	if to.Is4() && subnet.Addr().Is4() {
-		return withSocket(unix.AF_INET, func(fd int) error {
-			ifreq := &addrIfReq{
-				addr: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET},
-				dest: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET},
-				mask: unix.RawSockaddrInet4{Len: unix.SizeofSockaddrInet6, Family: unix.AF_INET},
-			}
-			copy(ifreq.name[:], d.name)
-			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 32))
-			ifreq.addr.Addr = subnet.Addr().As4()
-			ifreq.dest.Addr = to.As4()
-			err := ioctl(fd, unix.SIOCDIFADDR, unsafe.Pointer(ifreq))
-			runtime.KeepAlive(ifreq)
-			return err
-		})
-	} else {
-		return withSocket(unix.AF_INET6, func(fd int) error {
-			ifreq := &addrIfReq6{
-				addr: unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
-				dest: unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
-				mask: unix.RawSockaddrInet6{Len: 28, Family: unix.AF_INET6},
-			}
-			ifreq.addrLifetime.validLifeTime = ND6_INFINITE_LIFETIME
-			ifreq.addrLifetime.prefixLifeTime = ND6_INFINITE_LIFETIME
-
-			copy(ifreq.name[:], d.name)
-			copy(ifreq.mask.Addr[:], net.CIDRMask(subnet.Bits(), 128))
-			ifreq.addr.Addr = subnet.Addr().As16()
-			err := ioctl(fd, SIOCDIFADDR_IN6, unsafe.Pointer(ifreq))
 			runtime.KeepAlive(ifreq)
 			return err
 		})

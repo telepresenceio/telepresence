@@ -3,6 +3,7 @@ package vif
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -76,14 +77,50 @@ func openTun(ctx context.Context) (td *device, err error) {
 		mtu = 1500
 	}
 	clog.Debugf(ctx, "using MTU = %d", mtu)
-	return &device{
+	d := &device{
 		Endpoint:       channel.New(defaultDevOutQueueLen, uint32(mtu), ""),
 		dev:            dev,
 		ctx:            ctx,
 		name:           name,
 		interfaceIndex: iface.InterfaceIndex,
 		luid:           luid,
-	}, nil
+	}
+	if err = d.assignOwnedAddresses(ctx); err != nil {
+		return nil, err
+	}
+	return d, nil
+}
+
+// assignOwnedAddresses gives the device a single source address per family from a
+// Telepresence-owned range. Windows is strong-host, so the address must be unique to
+// this device — ownedAddress guarantees that. The device routes cluster subnets as a
+// router rather than claiming them as interface addresses, so it needs one address of
+// its own to source locally-originated traffic and to receive the replies.
+func (d *device) assignOwnedAddresses(ctx context.Context) error {
+	for _, ipv4 := range []bool{true, false} {
+		owned, ok := ownedAddress(ctx, ipv4, d.interfaceIndex)
+		if !ok {
+			continue
+		}
+		err := d.getLUID().AddIPAddress(netip.PrefixFrom(owned, owned.BitLen()))
+		if err != nil && !errors.Is(err, windows.ERROR_OBJECT_ALREADY_EXISTS) {
+			if ipv4 {
+				return fmt.Errorf("failed to add owned address %s: %w", owned, err)
+			}
+			// IPv6 may be disabled on the interface; the owned IPv6 address is only
+			// needed when IPv6 subnets are routed, so a failure here is not fatal.
+			clog.Warnf(ctx, "failed to add owned IPv6 address %s: %v", owned, err)
+		}
+	}
+	return nil
+}
+
+// unspecified returns the unspecified address of the same family as the given address.
+func unspecified(addr netip.Addr) netip.Addr {
+	if addr.Is4() {
+		return netip.IPv4Unspecified()
+	}
+	return netip.IPv6Unspecified()
 }
 
 // Close closes both the Device and the Endpoint. This function overrides the LinkEndpoint.Close so
@@ -123,12 +160,16 @@ func (d *device) getLUID() winipcfg.LUID {
 	return winipcfg.LUID(d.dev.(*tun.NativeTun).LUID())
 }
 
+// addSubnet routes a cluster subnet through the device. The device owns a single source
+// address (assigned at bring-up), so the subnet is added as a plain on-link route with a
+// low metric rather than being claimed as an interface address. Windows then selects the
+// owned address as the source for traffic to the subnet.
 func (d *device) addSubnet(_ context.Context, subnet netip.Prefix) error {
-	return d.getLUID().AddIPAddress(subnet)
+	return d.getLUID().AddRoute(subnet, unspecified(subnet.Addr()), 0)
 }
 
 func (d *device) removeSubnet(_ context.Context, subnet netip.Prefix) error {
-	return d.getLUID().DeleteIPAddress(subnet)
+	return d.getLUID().DeleteRoute(subnet, unspecified(subnet.Addr()))
 }
 
 func (d *device) setDNS(ctx context.Context, clusterDomain string, server netip.AddrPort, searchList []string) (err error) {
