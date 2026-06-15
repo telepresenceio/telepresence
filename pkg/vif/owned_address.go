@@ -22,31 +22,36 @@ var TelepresenceULA6 = netip.MustParsePrefix("fd00:0:0:246::/64") //nolint:goche
 // ULA for IPv6) and offset down from the top of that range by the interface index.
 // The offset makes the address unique across every concurrent device on the host,
 // including those owned by separate telepresence processes. The second return value
-// is false when the range is too small to carry an address at the given offset.
+// is false only when the range is too small to carry an owned address above the
+// virtual-IP half.
 func ownedAddress(ctx context.Context, ipv4 bool, ifaceIndex uint32) (netip.Addr, bool) {
 	rng := TelepresenceULA6
 	if ipv4 {
-		rng = client.GetConfig(ctx).Routing().VirtualSubnet
+		// The configured VirtualSubnet may be IPv6 (or unset); the IPv4 device still
+		// needs an owned address, so default to the platform IPv4 virtual subnet and
+		// only use the configured subnet when it is itself IPv4. Mirrors the VIP
+		// generator setup in pkg/client/rootd/session.go.
+		rng = client.DefaultVirtualSubnet()
+		if vs := client.GetConfig(ctx).Routing().VirtualSubnet; vs.IsValid() && vs.Addr().Is4() {
+			rng = vs
+		}
 	}
 	if !rng.IsValid() || rng.Addr().Is4() != ipv4 {
 		return netip.Addr{}, false
 	}
 	hostBits := rng.Addr().BitLen() - rng.Bits()
-	if hostBits < 2 || uint64(ifaceIndex)+2 >= uint64(1)<<min(hostBits, 62) {
+	if hostBits < 2 {
+		// Too small to carry an owned address above the VIP (lower) half.
 		return netip.Addr{}, false
 	}
-	// Count down from the top of the range (the last host address below the broadcast
-	// address), leaving the network and broadcast addresses untouched.
-	owned := addrMinus(broadcastAddr(rng), uint64(ifaceIndex)+1)
 	// Owned addresses occupy the upper half of the range; the lower half is reserved
 	// for virtual IPs, which count up from the bottom (see pkg/client/rootd/vip
-	// NewGenerator). Reject an offset that would fall into the VIP half so a virtual
-	// IP and an owned address can never collide.
-	if rng.Bits() < rng.Addr().BitLen() {
-		if lowerHalf := netip.PrefixFrom(rng.Masked().Addr(), rng.Bits()+1); lowerHalf.Contains(owned) {
-			return netip.Addr{}, false
-		}
-	}
+	// NewGenerator). Offsets 1..upperHalf-1 counted down from the broadcast address
+	// stay within the upper half. Wrap the interface index into that range so a high
+	// host interface index (common on Docker/CI hosts) never spills into the VIP half
+	// and silently leaves the device without an owned address.
+	upperHalf := uint64(1) << min(hostBits-1, 62)
+	owned := addrMinus(broadcastAddr(rng), uint64(ifaceIndex)%(upperHalf-1)+1)
 	return owned, true
 }
 
