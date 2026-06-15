@@ -44,10 +44,10 @@ The Helm chart can now expose the agent-injector mutating webhook to an API serv
 When an intercept times out waiting for the traffic-agent to arrive and the pods were created without a sidecar, the traffic-manager now explains that the Kubernetes API server is likely unable to reach the agent-injector webhook and points to the EKS/Calico remedies (<code>hostNetwork=true</code> or an externally exposed webhook). The troubleshooting guide gained a full decision path covering host networking, NodePort/LoadBalancer exposure, access restriction, TLS SAN requirements, and <code>failurePolicy</code> tradeoffs.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Reliably re-establish intercept mounts after a pod restart</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remote mounts retry their initial connection to the traffic-agent</div></div>
 <div style="margin-left: 15px">
 
-When an intercepted pod was restarted, the user daemon waits for the root daemon to learn the new pod's IP before remounting its volumes. If the first connection attempt to the freshly started agent lost a race and failed, the daemon gave up instead of retrying, leaving the intercept's volume mounts permanently unavailable until the intercept was recreated. The daemon now keeps retrying until the agent becomes reachable, so the mounts come back on their own.
+When a remote mount was established right after its pod was created or restarted, the first connection to the freshly started traffic-agent could lose a race against the routing of the pod's new IP and fail. The failure was treated as permanent, so the daemon gave up and left the mount directory empty for the rest of the engagement. The daemon now retries the initial connection until the agent becomes reachable, bounded by the intercept timeout, so the mounts come back on their own.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Flush the DNS cache when the agent set changes</div></div>
@@ -164,10 +164,10 @@ Names that only a service mesh can resolve — such as Istio <code>ServiceEntry<
 The traffic-agent imposed a hard-coded 250 millisecond timeout on the DNS lookups it performs on behalf of a connected client. A resolution that needs search-path expansion, or that passes through a service-mesh DNS proxy such as Istio's, can easily take longer, causing spurious <code>NXDOMAIN</code> answers on the workstation. The agent now honors the deadline of the calling client, which is governed by the <code>dns.lookupTimeout</code> client setting.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remote mounts retry their initial connection to the traffic-agent</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Pods using the network address of a routed subnet are now reachable](reference/vpn)</div></div>
 <div style="margin-left: 15px">
 
-When a remote mount was initiated immediately after its pod was created, the first connection to the traffic-agent could lose a race against the routing of the pod's new IP address. The failure was treated as permanent, leaving the local mount directory empty for the remainder of the engagement. The connection is now retried until the intercept timeout expires.
+A subnet routed through Telepresence was assigned to the virtual network interface as an interface address whose address part was the subnet's network address, so unicast traffic to it was delivered to the local host instead of entering the device. A CNI can assign that address to a pod — including the traffic-manager, which then black-holed the connect-time DNS check — making the pod unreachable from the workstation. The interface now owns a single address from the virtual subnet and routes cluster subnets as plain routes, so every address in a routed subnet, the network address included, is reachable. This is the network-address counterpart of the highest-address fix below.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Pods using the highest address of a routed subnet are now reachable</div></div>

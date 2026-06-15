@@ -51,9 +51,9 @@ When an intercept times out waiting for the traffic-agent to arrive and the pods
   </Body>
 </Note>
 <Note>
-	<Title type="bugfix">Reliably re-establish intercept mounts after a pod restart</Title>
+	<Title type="bugfix">Remote mounts retry their initial connection to the traffic-agent</Title>
 	<Body>
-When an intercepted pod was restarted, the user daemon waits for the root daemon to learn the new pod's IP before remounting its volumes. If the first connection attempt to the freshly started agent lost a race and failed, the daemon gave up instead of retrying, leaving the intercept's volume mounts permanently unavailable until the intercept was recreated. The daemon now keeps retrying until the agent becomes reachable, so the mounts come back on their own.
+When a remote mount was established right after its pod was created or restarted, the first connection to the freshly started traffic-agent could lose a race against the routing of the pod's new IP and fail. The failure was treated as permanent, so the daemon gave up and left the mount directory empty for the rest of the engagement. The daemon now retries the initial connection until the agent becomes reachable, bounded by the intercept timeout, so the mounts come back on their own.
   </Body>
 </Note>
 <Note>
@@ -171,9 +171,9 @@ The traffic-agent imposed a hard-coded 250 millisecond timeout on the DNS lookup
   </Body>
 </Note>
 <Note>
-	<Title type="bugfix">Remote mounts retry their initial connection to the traffic-agent</Title>
+	<Title type="bugfix" docs="reference/vpn">Pods using the network address of a routed subnet are now reachable</Title>
 	<Body>
-When a remote mount was initiated immediately after its pod was created, the first connection to the traffic-agent could lose a race against the routing of the pod's new IP address. The failure was treated as permanent, leaving the local mount directory empty for the remainder of the engagement. The connection is now retried until the intercept timeout expires.
+A subnet routed through Telepresence was assigned to the virtual network interface as an interface address whose address part was the subnet's network address, so unicast traffic to it was delivered to the local host instead of entering the device. A CNI can assign that address to a pod — including the traffic-manager, which then black-holed the connect-time DNS check — making the pod unreachable from the workstation. The interface now owns a single address from the virtual subnet and routes cluster subnets as plain routes, so every address in a routed subnet, the network address included, is reachable. This is the network-address counterpart of the highest-address fix below.
   </Body>
 </Note>
 <Note>
