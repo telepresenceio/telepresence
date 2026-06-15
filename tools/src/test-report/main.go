@@ -8,7 +8,8 @@ import (
 	"os"
 )
 
-const logsFileName = "tests.log"
+// defaultLogsFileName is used when the TEST_LOG_OUTPUT environment variable is unset.
+const defaultLogsFileName = "tests.log"
 
 type TestID struct {
 	Package string `json:"Package,omitempty"`
@@ -26,6 +27,10 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	_, isCi := os.LookupEnv("GITHUB_SHA")
 	progressBar := newProgressBar(ctx, isCi)
+	logsFileName := defaultLogsFileName
+	if out := os.Getenv("TEST_LOG_OUTPUT"); out != "" {
+		logsFileName = out
+	}
 	logger, err := NewLogger(ctx, logsFileName)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create logger: %s\n", err)

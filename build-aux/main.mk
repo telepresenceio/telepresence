@@ -477,9 +477,14 @@ endif
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
+	#
+	# Scope the run with TEST_SUITE (a regexp matched against suite names) and/or
+	# TEST_NAME (a regexp matched against test-method names), e.g.
+	#   TEST_SUITE='^WorkloadConfiguration$$' make check-integration
+	#   TEST_NAME='^Test_InterceptDetailedOutput$$' make check-integration
 	set -o pipefail
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test $(BUILD_TAGS) \
- 		-count=1 -failfast -json -timeout=80m ./integration_test/... | $(tools/test-report)
+ 		-count=1 -failfast -json -timeout=80m ./integration_test/... $(if $(TEST_NAME),-testify.m='$(TEST_NAME)') | $(tools/test-report)
 
 .PHONY: _login
 _login:
