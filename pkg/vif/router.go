@@ -377,7 +377,7 @@ func (rt *Router) dropStaticOverrides(ctx context.Context) {
 }
 
 func (rt *Router) Close(ctx context.Context) {
-	rt.RLock()
+	rt.Lock()
 	const linux = runtime.GOOS == "linux"
 	for _, sn := range rt.routedSubnets {
 		if linux {
@@ -390,7 +390,7 @@ func (rt *Router) Close(ctx context.Context) {
 		}
 	}
 	rt.dropStaticOverrides(ctx)
-	rt.RUnlock()
+	rt.Unlock()
 }
 
 func (rt *Router) Table() routing.Table {
