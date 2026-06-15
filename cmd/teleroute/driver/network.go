@@ -67,7 +67,7 @@ func (n *networkState) initialize(r *network.CreateNetworkRequest) (err error) {
 		if ia.Gateway != "" {
 			gw, err := netip.ParsePrefix(ia.Gateway)
 			if err != nil {
-				return fmt.Errorf("invalid IPv4 gateway address: %s", ia.Gateway)
+				return fmt.Errorf("invalid IPv6 gateway address: %s", ia.Gateway)
 			}
 			gws = append(gws, gw)
 		}
