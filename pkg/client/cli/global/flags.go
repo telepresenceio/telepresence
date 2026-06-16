@@ -16,13 +16,14 @@ const (
 	FlagConfig   = "config"
 	FlagContext  = "context"
 	FlagDocker   = "docker"
+	FlagFormat   = "format"
 	FlagNoReport = "no-report"
 	FlagOutput   = "output"
 	FlagProgress = "progress"
 	FlagUse      = "use"
 )
 
-var FlagNames = []string{FlagContext, FlagDocker, FlagNoReport, FlagOutput, FlagProgress, FlagUse} //nolint:gochecknoglobals // constant names
+var FlagNames = []string{FlagContext, FlagDocker, FlagFormat, FlagNoReport, FlagOutput, FlagProgress, FlagUse} //nolint:gochecknoglobals // constant names
 
 func Flags(ctx context.Context, hasKubeFlags, markdown bool) *pflag.FlagSet {
 	flags := pflag.NewFlagSet("", 0)
@@ -38,7 +39,11 @@ func Flags(ctx context.Context, hasKubeFlags, markdown bool) *pflag.FlagSet {
 	f.Hidden = true
 	f.Deprecated = "not used"
 	flags.String(FlagUse, "", "Match expression that uniquely identifies the daemon container")
-	flags.String(FlagOutput, "default", "Set the output format, supported values are 'json', 'yaml', and 'default'")
+	flags.String(FlagFormat, "default", "Set the output format, supported values are 'json', 'yaml', 'json-stream', and 'default'")
+	// FlagOutput is the deprecated predecessor of FlagFormat. It still works (see
+	// the output package), but is hidden so only --format is advertised.
+	flags.String(FlagOutput, "default", "")
+	flags.Lookup(FlagOutput).Hidden = true
 	flags.String(FlagProgress, "auto", `Set type of progress output (auto, tty, plain, json, quiet)`)
 	// FlagConfig has no built-in default value so the generated help/markdown
 	// is identical across OSes. When the flag is left empty, InitConfig falls

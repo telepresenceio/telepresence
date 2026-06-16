@@ -165,7 +165,7 @@ func (s *notConnectedSuite) Test_CloudAllowConflicting() {
 }
 
 func (s *notConnectedSuite) configView() (*client.SessionConfig, error) {
-	stdout, _, err := itest.Telepresence(s.Context(), "config", "view", "--output", "json")
+	stdout, _, err := itest.Telepresence(s.Context(), "config", "view", "--format", "json")
 	if err != nil {
 		return nil, err
 	}

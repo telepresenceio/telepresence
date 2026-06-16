@@ -141,7 +141,7 @@ func (s *singleServiceSuite) Test_InterceptDetailedOutput() {
 	stdout := itest.TelepresenceOk(ctx, "intercept",
 		"--port", strconv.Itoa(port),
 		"--detailed-output",
-		"--output", "json",
+		"--format", "json",
 		s.ServiceName())
 	defer func() {
 		itest.TelepresenceOk(ctx, "leave", s.ServiceName())

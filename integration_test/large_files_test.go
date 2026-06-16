@@ -156,7 +156,7 @@ func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
 			svc := fmt.Sprintf("%s-%d", s.Name(), i)
 			stdout := itest.TelepresenceOk(ctx, "intercept",
 				"--detailed-output",
-				"--output", "json",
+				"--format", "json",
 				"--port", strconv.Itoa(8080+i),
 				svc,
 			)

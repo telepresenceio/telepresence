@@ -23,11 +23,11 @@ type StatusResponse struct {
 		TrafficManager      *cmd.TrafficManagerStatus      `json:"traffic_manager,omitempty"`
 		ContainerizedDaemon *cmd.ContainerizedDaemonStatus `json:"daemon,omitempty"`
 	} `json:"connections,omitempty"`
-	Error string `json:"err,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 func TelepresenceStatus(ctx context.Context, args ...string) (*StatusResponse, error) {
-	stdout, stderr, err := Telepresence(ctx, append([]string{"status", "--output", "json"}, args...)...)
+	stdout, stderr, err := Telepresence(ctx, append([]string{"status", "--format", "json"}, args...)...)
 	var status StatusResponse
 	jErr := json.Unmarshal([]byte(stdout), &status)
 	if err != nil {

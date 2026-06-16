@@ -467,14 +467,14 @@ func (s *nsSuite) Test_MultiNamespaceIngests() {
 
 	rq := s.Require()
 
-	alphaJSON := itest.TelepresenceOk(ctx, "ingest", "echo", "--namespace", "alpha", "--mount=false", "--output", "json")
+	alphaJSON := itest.TelepresenceOk(ctx, "ingest", "echo", "--namespace", "alpha", "--mount=false", "--format", "json")
 	var alphaInfo ingest.Info
 	rq.NoError(json.Unmarshal([]byte(alphaJSON), &alphaInfo))
 	rq.Equal("alpha", alphaInfo.Namespace)
 	rq.Equal("echo", alphaInfo.WorkloadName)
 	defer itest.TelepresenceOk(ctx, "leave", "echo", "--namespace", "alpha")
 
-	betaJSON := itest.TelepresenceOk(ctx, "ingest", "echo", "--namespace", "beta", "--mount=false", "--output", "json")
+	betaJSON := itest.TelepresenceOk(ctx, "ingest", "echo", "--namespace", "beta", "--mount=false", "--format", "json")
 	var betaInfo ingest.Info
 	rq.NoError(json.Unmarshal([]byte(betaJSON), &betaInfo))
 	rq.Equal("beta", betaInfo.Namespace)

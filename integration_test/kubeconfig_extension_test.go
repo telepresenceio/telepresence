@@ -440,7 +440,7 @@ func (s *notConnectedSuite) Test_DNSSuffixRules() {
 
 			// Check that config view -c includes the includeSuffixes
 			var cfg client.SessionConfig
-			stdout := itest.TelepresenceOk(ctx, "config", "view", "--client-only", "--output", "json")
+			stdout := itest.TelepresenceOk(ctx, "config", "view", "--client-only", "--format", "json")
 			require.NoError(json.Unmarshal([]byte(stdout), &cfg, false))
 			require.Equal(tt.expectedExcludeSuffixes, cfg.DNS().ExcludeSuffixes)
 			require.Equal(tt.expectedIncludeSuffixes, cfg.DNS().IncludeSuffixes)

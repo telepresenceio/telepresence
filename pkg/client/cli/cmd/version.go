@@ -17,6 +17,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -40,7 +41,45 @@ func versionCmd() *cobra.Command {
 	}
 }
 
-func addDaemonVersions(ctx context.Context, kvf *ioutil.KeyValueFormatter) {
+// versionInfo is the structured (--format) representation of `telepresence
+// version`. Its keys mirror those used by `telepresence status` (snake_case
+// component names) rather than the human-readable display names.
+type versionInfo struct {
+	Client         string                  `json:"client,omitempty"`
+	RootDaemon     string                  `json:"root_daemon,omitempty"`
+	UserDaemon     string                  `json:"user_daemon,omitempty"`
+	TrafficManager string                  `json:"traffic_manager,omitempty"`
+	TrafficAgent   string                  `json:"traffic_agent,omitempty"`
+	Connections    map[string]*versionInfo `json:"connections,omitempty"`
+}
+
+// versionCollector records each component version into both the human-readable
+// KeyValueFormatter (using display names) and the structured versionInfo (using
+// status-style snake_case keys) in a single traversal.
+type versionCollector struct {
+	kvf *ioutil.KeyValueFormatter
+	vi  *versionInfo
+}
+
+func newVersionCollector() *versionCollector {
+	return &versionCollector{kvf: ioutil.DefaultKeyValueFormatter(), vi: &versionInfo{}}
+}
+
+func newSubVersionCollector(parent *versionCollector) *versionCollector {
+	return &versionCollector{
+		kvf: &ioutil.KeyValueFormatter{Indent: parent.kvf.Indent, Separator: parent.kvf.Separator},
+		vi:  &versionInfo{},
+	}
+}
+
+// set records value under displayName for the text output and into the given
+// structured field for the JSON/YAML output.
+func (c *versionCollector) set(field *string, displayName, value string) {
+	c.kvf.Add(displayName, value)
+	*field = value
+}
+
+func addDaemonVersions(ctx context.Context, c *versionCollector) {
 	hasRootDaemon := true
 	userD := daemon.GetUserClient(ctx)
 	if userD != nil {
@@ -51,44 +90,44 @@ func addDaemonVersions(ctx context.Context, kvf *ioutil.KeyValueFormatter) {
 		version, err := daemonVersion(ctx)
 		switch {
 		case err == nil:
-			kvf.Add(version.Name, version.Version)
+			c.set(&c.vi.RootDaemon, version.Name, version.Version)
 		case errors.Is(err, daemon.ErrNoRootDaemon):
-			kvf.Add("Root Daemon", "not running")
+			c.set(&c.vi.RootDaemon, "Root Daemon", "not running")
 		default:
-			kvf.Add("Root Daemon", fmt.Sprintf("error: %v", err))
+			c.set(&c.vi.RootDaemon, "Root Daemon", fmt.Sprintf("error: %v", err))
 		}
 	}
 
 	if userD != nil {
-		kvf.Add(userD.Name(), "v"+userD.Semver().String())
+		c.set(&c.vi.UserDaemon, userD.Name(), "v"+userD.Semver().String())
 		vi, err := managerVersion(ctx)
 		switch {
 		case err == nil:
-			kvf.Add(vi.Name, vi.Version)
+			c.set(&c.vi.TrafficManager, vi.Name, vi.Version)
 			af, err := trafficAgentFQN(ctx)
 			switch status.Code(err) {
 			case codes.OK:
-				kvf.Add("Traffic Agent", af.FQN)
+				c.set(&c.vi.TrafficAgent, "Traffic Agent", af.FQN)
 			case codes.Unimplemented:
-				kvf.Add("Traffic Agent", "not reported by traffic-manager")
+				c.set(&c.vi.TrafficAgent, "Traffic Agent", "not reported by traffic-manager")
 			case codes.Unavailable:
-				kvf.Add("Traffic Agent", "not currently available")
+				c.set(&c.vi.TrafficAgent, "Traffic Agent", "not currently available")
 			default:
-				kvf.Add("Traffic Agent", fmt.Sprintf("error: %v", err))
+				c.set(&c.vi.TrafficAgent, "Traffic Agent", fmt.Sprintf("error: %v", err))
 			}
 		case status.Code(err) == codes.Unavailable:
-			kvf.Add("Traffic Manager", "not connected")
+			c.set(&c.vi.TrafficManager, "Traffic Manager", "not connected")
 		default:
-			kvf.Add("Traffic Manager", fmt.Sprintf("error: %v", err))
+			c.set(&c.vi.TrafficManager, "Traffic Manager", fmt.Sprintf("error: %v", err))
 		}
 	} else {
-		kvf.Add("User Daemon", "not running")
+		c.set(&c.vi.UserDaemon, "User Daemon", "not running")
 	}
 }
 
 func printVersion(cmd *cobra.Command, _ []string) error {
-	kvf := ioutil.DefaultKeyValueFormatter()
-	kvf.Add(client.DisplayName, client.Version())
+	c := newVersionCollector()
+	c.set(&c.vi.Client, client.DisplayName, client.Version())
 
 	var mdErr daemon.MultipleDaemonsError
 	err := connect.InitCommand(cmd)
@@ -101,25 +140,31 @@ func printVersion(cmd *cobra.Command, _ []string) error {
 	ctx := cmd.Context()
 
 	if len(mdErr) > 0 {
+		c.vi.Connections = make(map[string]*versionInfo, len(mdErr))
 		for _, info := range mdErr {
-			subKvf := &ioutil.KeyValueFormatter{
-				Indent:    kvf.Indent,
-				Separator: kvf.Separator,
-			}
+			sub := newSubVersionCollector(c)
 			udCtx, err := connect.ExistingDaemon(ctx, info)
 			if err != nil {
-				subKvf.Add("User Daemon", fmt.Sprintf("error: %v", err))
+				sub.set(&sub.vi.UserDaemon, "User Daemon", fmt.Sprintf("error: %v", err))
 			}
-			addDaemonVersions(udCtx, subKvf)
+			addDaemonVersions(udCtx, sub)
 			ud := daemon.MustGetUserClient(udCtx)
-			kvf.Add("Connection "+ud.DaemonID().Name, "\n"+subKvf.String())
+			name := ud.DaemonID().Name
+			c.kvf.Add("Connection "+name, "\n"+sub.kvf.String())
+			c.vi.Connections[name] = sub.vi
 			_ = ud.Close()
 		}
 	} else {
-		addDaemonVersions(ctx, kvf)
+		addDaemonVersions(ctx, c)
 	}
 
-	kvf.Println(cmd.OutOrStdout())
+	if output.WantsClean(cmd) {
+		// --format: emit the structured object. The deprecated --output keeps the
+		// historical {cmd, stdout: "<text>"} shape via the text path below.
+		output.Object(ctx, c.vi, true)
+	} else {
+		c.kvf.Println(cmd.OutOrStdout())
+	}
 	return nil
 }
 

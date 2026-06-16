@@ -74,6 +74,9 @@ var transientNotes = []string{ //nolint:gochecknoglobals // effectively a consta
 	"unbound immediate PersistentVolumeClaims",
 	"skip schedule deleting pod",
 	"nodes are available",
+	// Scheduler race: a pod was queued for binding but deleted (replaced during rollout)
+	// before the bind completed. The scheduler retries automatically.
+	"running Bind plugin",
 }
 
 // IsTerminal reports whether a Warning event names a failure that will not

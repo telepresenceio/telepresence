@@ -245,7 +245,18 @@ func commandLink(cmd *cobra.Command) string {
 
 func addUsageTemplate(cmd *cobra.Command, markdown bool) {
 	cobra.AddTemplateFunc("globalFlags", func(cmd *cobra.Command) *pflag.FlagSet {
-		return global.Flags(cmd.Context(), hasKubeFlags(cmd), markdown)
+		gf := global.Flags(cmd.Context(), hasKubeFlags(cmd), markdown)
+		// A command may override a global flag with a non-global flag of the same
+		// name (e.g. the docker compose passthrough --format). Such a flag is listed
+		// among the command's own flags, so it must not also appear as a global flag.
+		filtered := pflag.NewFlagSet("Global Flags", pflag.ContinueOnError)
+		gf.VisitAll(func(f *pflag.Flag) {
+			if lf := cmd.Flags().Lookup(f.Name); lf != nil && !flagEqual(lf, f) {
+				return
+			}
+			filtered.AddFlag(f)
+		})
+		return filtered
 	})
 	cobra.AddTemplateFunc("flags", func(cmd *cobra.Command) []*pflag.FlagSet {
 		return localFlags(cmd, kubeFlags(), global.Flags(cmd.Context(), hasKubeFlags(cmd), markdown))
