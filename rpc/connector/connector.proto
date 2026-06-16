@@ -342,6 +342,12 @@ message WorkloadInfo {
   string uid = 7;
 
   string agent_version = 8;
+
+  int32 desired_replicas = 9;
+
+  int32 ready_replicas = 10;
+
+  repeated manager.ServiceAssociation services = 11;
 }
 
 message WorkloadInfoSnapshot {

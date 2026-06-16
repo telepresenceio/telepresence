@@ -631,6 +631,40 @@ message KnownWorkloadKinds {
   repeated WorkloadInfo.Kind kinds = 1;
 }
 
+message ServicePort {
+  string name = 1;
+  int32 port = 2;
+  string target_port = 3;
+}
+
+// RouteAssociation describes a route object (currently always an Ingress
+// in the service's own namespace) that routes traffic to one of the ports
+// of the service it is associated with.
+message RouteAssociation {
+  string type = 1;
+  string name = 2;
+  repeated string hosts = 3;
+  repeated string paths = 4;
+  bool tls = 5;
+
+  // The service port that this route targets.
+  string port_name = 6;
+  int32 port = 7;
+
+  // Load-balancer addresses (IPs or hostnames) of the route object, used
+  // to reach the route when it declares no hosts.
+  repeated string addresses = 8;
+}
+
+// ServiceAssociation describes a service in the workload's namespace whose
+// selector matches the workload's pods, together with the routes that
+// target that service.
+message ServiceAssociation {
+  string name = 1;
+  repeated ServicePort ports = 2;
+  repeated RouteAssociation routes = 3;
+}
+
 // WorkloadInfo contains information about a workload (typically a
 // Deployment).
 message WorkloadInfo {
@@ -680,6 +714,9 @@ message WorkloadInfo {
   string name = 2;
   string namespace = 3;
   string uid = 7;
+  int32 desired_replicas = 8;
+  int32 ready_replicas = 9;
+  repeated ServiceAssociation services = 10;
   AgentState agent_state = 4;
 
   repeated Intercept intercept_clients = 5;

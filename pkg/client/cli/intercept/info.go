@@ -19,13 +19,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-type Ingress struct {
-	Host   string `json:"host,omitempty"    yaml:"host,omitempty"`
-	Port   int32  `json:"port,omitempty"    yaml:"port,omitempty"`
-	UseTLS bool   `json:"use_tls,omitempty" yaml:"use_tls,omitempty"`
-	L5Host string `json:"l5host,omitempty"  yaml:"l5host,omitempty"`
-}
-
 type Info struct {
 	ID            string            `json:"id,omitempty"              yaml:"id,omitempty"`
 	Name          string            `json:"name,omitempty"            yaml:"name,omitempty"`
@@ -47,6 +40,7 @@ type Info struct {
 	Metadata      map[string]string `json:"metadata,omitempty"        yaml:"metadata,omitempty"`
 	HeaderFilters map[string]string `json:"header_filters,omitempty"  yaml:"header_filters,omitempty"`
 	PathFilters   []string          `json:"path_filters,omitempty"    yaml:"path_filters,omitempty"`
+	AccessURLs    []string          `json:"access_urls,omitempty"     yaml:"access_urls,omitempty"`
 	Global        bool              `json:"global,omitempty"          yaml:"global,omitempty"`
 	Replace       bool              `json:"replace,omitempty"         yaml:"replace,omitempty"`
 	Wiretap       bool              `json:"wiretap,omitempty"         yaml:"wiretap,omitempty"`
@@ -168,6 +162,16 @@ func (ii *Info) WriteTo(w io.Writer) (int64, error) {
 			}
 			return matcher.NewRequest(ii.PathFilters, ii.HeaderFilters).String()
 		}())
+	}
+
+	if len(ii.AccessURLs) > 0 {
+		v := strings.Join(ii.AccessURLs, "\n")
+		if len(ii.HeaderFilters) > 0 {
+			if ce := curlExample(ii.AccessURLs[0], ii.HeaderFilters); ce != "" {
+				v += "\n  " + ce
+			}
+		}
+		kvf.Add("Reachable via", v)
 	}
 
 	if m := ii.Mount; m != nil {

@@ -193,7 +193,7 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 
 	state := func(workload *connector.WorkloadInfo) string {
 		if iis, igs := workload.InterceptInfo, workload.IngestInfo; len(iis)+len(igs) > 0 {
-			return intercept.DescribeIntercepts(ctx, iis, igs, nil, s.debug)
+			return intercept.DescribeIntercepts(ctx, iis, igs, workload.Services, nil, s.debug)
 		}
 		if workload.NotInterceptableReason == "Progressing" {
 			return "progressing..."

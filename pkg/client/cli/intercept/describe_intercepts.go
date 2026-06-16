@@ -9,7 +9,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ingest"
 )
 
-func DescribeIntercepts(ctx context.Context, iis []*manager.InterceptInfo, igs []*rpc.IngestInfo, volumeMountsPrevented error, debug bool) string {
+func DescribeIntercepts(
+	ctx context.Context,
+	iis []*manager.InterceptInfo,
+	igs []*rpc.IngestInfo,
+	services []*manager.ServiceAssociation,
+	volumeMountsPrevented error,
+	debug bool,
+) string {
 	sb := strings.Builder{}
 	if len(iis) > 0 {
 		var nis, ris, wts []*manager.InterceptInfo
@@ -27,21 +34,21 @@ func DescribeIntercepts(ctx context.Context, iis []*manager.InterceptInfo, igs [
 			sb.WriteString("replaced")
 			for _, ii := range ris {
 				sb.WriteByte('\n')
-				describeIntercept(ctx, ii, volumeMountsPrevented, debug, &sb)
+				describeIntercept(ctx, ii, services, volumeMountsPrevented, debug, &sb)
 			}
 		}
 		if len(nis) > 0 {
 			sb.WriteString("intercepted")
 			for _, ii := range nis {
 				sb.WriteByte('\n')
-				describeIntercept(ctx, ii, volumeMountsPrevented, debug, &sb)
+				describeIntercept(ctx, ii, services, volumeMountsPrevented, debug, &sb)
 			}
 		}
 		if len(wts) > 0 {
 			sb.WriteString("wiretapped")
 			for _, ii := range wts {
 				sb.WriteByte('\n')
-				describeIntercept(ctx, ii, volumeMountsPrevented, debug, &sb)
+				describeIntercept(ctx, ii, services, volumeMountsPrevented, debug, &sb)
 			}
 		}
 	}
@@ -55,9 +62,17 @@ func DescribeIntercepts(ctx context.Context, iis []*manager.InterceptInfo, igs [
 	return sb.String()
 }
 
-func describeIntercept(ctx context.Context, ii *manager.InterceptInfo, volumeMountsPrevented error, debug bool, sb *strings.Builder) {
+func describeIntercept(
+	ctx context.Context,
+	ii *manager.InterceptInfo,
+	services []*manager.ServiceAssociation,
+	volumeMountsPrevented error,
+	debug bool,
+	sb *strings.Builder,
+) {
 	info := NewInfo(ctx, ii, false, volumeMountsPrevented)
 	info.debug = debug
+	info.AccessURLs = routeURLs(routesForService(ii.Spec, services))
 	_, _ = info.WriteTo(sb)
 }
 

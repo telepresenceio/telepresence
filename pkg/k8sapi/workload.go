@@ -32,6 +32,48 @@ func (u UnsupportedWorkloadKindError) Error() string {
 	return fmt.Sprintf("unsupported workload kind: %q", string(u))
 }
 
+func DesiredReplicas(w Workload) int32 {
+	switch w := w.(type) {
+	case *deployment:
+		if w.Spec.Replicas != nil {
+			return *w.Spec.Replicas
+		}
+		return w.Status.Replicas
+	case *rollout:
+		if w.Spec.Replicas != nil {
+			return *w.Spec.Replicas
+		}
+		return w.Status.Replicas
+	case *replicaSet:
+		if w.Spec.Replicas != nil {
+			return *w.Spec.Replicas
+		}
+		return w.Status.Replicas
+	case *statefulSet:
+		if w.Spec.Replicas != nil {
+			return *w.Spec.Replicas
+		}
+		return w.Status.Replicas
+	default:
+		return int32(w.Replicas())
+	}
+}
+
+func ReadyReplicas(w Workload) int32 {
+	switch w := w.(type) {
+	case *deployment:
+		return w.Status.ReadyReplicas
+	case *rollout:
+		return w.Status.ReadyReplicas
+	case *replicaSet:
+		return w.Status.ReadyReplicas
+	case *statefulSet:
+		return w.Status.ReadyReplicas
+	default:
+		return 0
+	}
+}
+
 // GetWorkload returns a workload for the given name, namespace, and workloadKind. The workloadKind
 // is optional. A search is performed in the following order if it is empty:
 //
