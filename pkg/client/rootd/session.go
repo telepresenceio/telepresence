@@ -145,8 +145,9 @@ type session struct {
 	// virtualIPs maps a virtual IP to an agent tunnel.
 	virtualIPs *xsync.Map[netip.Addr, agentVIP]
 
-	// vipGenerator generates virtual IPs for a given range.
-	vipGenerator vip.Generator
+	// vipGenerator allocates virtual IPs per address family for proxy-via and
+	// conflict resolution.
+	vipGenerator *vip.Generators
 
 	// closing is set during shutdown and can have the values:
 	//   0 = running
@@ -571,7 +572,7 @@ func (s *session) GetLocalIP(destinationIP netip.Addr) (netip.Addr, error) {
 }
 
 func (s *session) nextVirtualIP(workload string, destinationIP netip.Addr) (netip.Addr, error) {
-	va, err := s.vipGenerator.Next()
+	va, err := s.vipGenerator.Next(destinationIP)
 	if err != nil {
 		return va, err
 	}
@@ -862,9 +863,16 @@ func (s *session) onClusterInfo(mgrInfo *manager.ClusterInfo) (err error) {
 	}
 
 	if s.vipGenerator != nil {
-		subnets = append(subnets, s.vipGenerator.Subnet())
-		clog.Debugf(s, "Adding VIP subnet %q to TUN-device", s.vipGenerator.Subnet().String())
+		// Re-resolve the translated subnets now that pod and service subnets are
+		// known, then make sure a generator exists for every family among them.
 		s.consolidateProxyViaWorkloads()
+		for _, sn := range s.localTranslationSubnets {
+			s.vipGenerator.EnsureFamily(sn.Addr())
+		}
+		for _, vsn := range s.vipGenerator.Subnets() {
+			subnets = append(subnets, vsn)
+			clog.Debugf(s, "Adding VIP subnet %q to TUN-device", vsn)
+		}
 	}
 
 	if !s.alsoProxyVia() {
@@ -1373,12 +1381,30 @@ func (s *session) activateProxyViaWorkloads() error {
 	if sl == 0 {
 		return nil
 	}
-	vipSubnet := client.GetConfig(s).Routing().VirtualSubnet
-	clog.Debugf(s, "ProxyVIA using subnet %s", vipSubnet)
+	wlNames := s.consolidateProxyViaWorkloads()
 
-	s.vipGenerator = vip.NewGenerator(vipSubnet)
-	s.localTranslationSubnets = make([]agentSubnet, sl)
-	for _, wlName := range s.consolidateProxyViaWorkloads() {
+	// Virtual IPs are drawn per address family: from the configured VirtualSubnet
+	// for its own family, and from the platform default (IPv4) or the fixed
+	// Telepresence ULA (IPv6) for the other. This honors a user-configured IPv6
+	// VirtualSubnet while still giving a dual-stack cluster both families.
+	// EnsureFamily creates the per-family generator only for the families that
+	// actually appear among the translated subnets.
+	v4Subnet := client.DefaultVirtualSubnet()
+	v6Subnet := vif.TelepresenceULA6
+	if vs := client.GetConfig(s).Routing().VirtualSubnet; vs.IsValid() {
+		if vs.Addr().Is6() {
+			v6Subnet = vs
+		} else {
+			v4Subnet = vs
+		}
+	}
+	s.vipGenerator = vip.NewGenerators(v4Subnet, v6Subnet)
+	for _, sn := range s.localTranslationSubnets {
+		s.vipGenerator.EnsureFamily(sn.Addr())
+	}
+	clog.Debugf(s, "ProxyVIA using subnets %v", s.vipGenerator.Subnets())
+
+	for _, wlName := range wlNames {
 		if s.agentClients == nil {
 			return errcat.User.Newf("Agent port-forwards are disabled. Client is not permitted to do proxy-via %s", wlName)
 		}

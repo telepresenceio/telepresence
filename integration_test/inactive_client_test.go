@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"time"
 
 	"github.com/telepresenceio/clog"
@@ -133,6 +134,15 @@ func (s *inactiveClientSuite) Test_ConflictOverrideInactive() {
 }
 
 func (s *inactiveClientSuite) Test_ConflictOverrideSleeping() {
+	if runtime.GOOS == "darwin" {
+		// On macOS, Docker Desktop shares bind mounts through a VM file-sharing layer that
+		// caches file metadata. While the --docker client container is paused (see
+		// withSleepingClient), host-side os.Chtimes updates to the daemon-info file don't
+		// propagate, so its mtime appears frozen and it is reaped as stale (maxNoSignOfLife)
+		// before the client is unpaused. The test passes on Linux/Windows where bind mounts
+		// are coherent.
+		s.T().Skip("docker pause + bind-mount mtime caching on macOS Docker Desktop reaps the daemon-info file")
+	}
 	ctx := s.Context()
 
 	s.TelepresenceConnect(ctx, "--docker", "--name", "conflict-one")

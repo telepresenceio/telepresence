@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
@@ -43,9 +44,10 @@ func (s *RoutingSuite) SetupSuite() {
 		// Run "make wintun.dll" in the ../../ directory
 		err := exec.CommandContext(context.Background(), "make", "-C", "../../", "build-output/bin/wintun.dll").Run()
 		s.Require().NoError(err)
-		// That'll place the DLL in ../../build-output/bin/wintun.dll so copy it to testdata/router
-		err = exec.CommandContext(context.Background(), "cp", "../../build-output/bin/wintun.dll", "testdata/router/wintun.dll").Run()
+		// That'll place the DLL in ../../build-output/bin/wintun.dll so copy it to testdata/router.
+		dll, err := os.ReadFile("../../build-output/bin/wintun.dll")
 		s.Require().NoError(err)
+		s.Require().NoError(os.WriteFile("testdata/router/wintun.dll", dll, 0o644))
 		err = exec.CommandContext(context.Background(), "go", "build", "-o", "testdata\\router\\router.exe", "testdata\\router\\main.go").Run()
 		s.Require().NoError(err)
 	} else {
@@ -113,6 +115,7 @@ func (s *RoutingSuite) Test_RouteIsBlackListed() {
 func (s *RoutingSuite) Test_RoutingTable() {
 	ctx := context.Background()
 	cidr := getCidr(2, 0, 24)
+	vipSubnet := client.GetDefaultConfig().Routing().VirtualSubnet
 
 	device, routerCancel, err := s.runRouter(ctx, cidr.String())
 	s.Require().NoError(err)
@@ -127,17 +130,19 @@ func (s *RoutingSuite) Test_RoutingTable() {
 			deviceFound = true
 			s.Require().False(route.Default, fmt.Sprintf("Route %s is default", route.String()))
 			s.Require().False(route.RoutedNet.Bits() == 0, fmt.Sprintf("Route %s has zero mask", route.String()))
-			// Linux and Windows will automatically add a bunch of multicast routes, which we can ignore as they're not actually for routing through the device.
-			if !route.RoutedNet.Addr().IsMulticast() {
-				if !route.RoutedNet.Addr().Is4() {
-					s.Require().Contains([]int{128, 64}, route.RoutedNet.Bits(), fmt.Sprintf("Route %s is not a /128 or /64 mask", route.String()))
+			// The device's own source address sits inside the virtual subnet, and the kernel
+			// adds multicast routes; neither is a routed cluster subnet, so skip them.
+			if route.RoutedNet.Addr().IsMulticast() || vipSubnet.Contains(route.RoutedNet.Addr()) {
+				continue
+			}
+			if !route.RoutedNet.Addr().Is4() {
+				s.Require().Contains([]int{128, 64}, route.RoutedNet.Bits(), fmt.Sprintf("Route %s is not a /128 or /64 mask", route.String()))
+			} else {
+				// 255.255.255.255/32 is a special broadcast address that won't actually be used for routing
+				if route.RoutedNet.Addr() != netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
+					s.Require().True(cidr.Contains(route.RoutedNet.Addr()), fmt.Sprintf("Route %s is not contained in %s", route.String(), cidr))
 				} else {
-					// 255.255.255.255/32 is a special broadcast address that won't actually be used for routing
-					if route.RoutedNet.Addr() != netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
-						s.Require().True(cidr.Contains(route.RoutedNet.Addr()), fmt.Sprintf("Route %s is not contained in %s", route.String(), cidr))
-					} else {
-						s.Require().Equal(32, route.RoutedNet.Bits(), fmt.Sprintf("Route %s is not a /32 mask", route.String()))
-					}
+					s.Require().Equal(32, route.RoutedNet.Bits(), fmt.Sprintf("Route %s is not a /32 mask", route.String()))
 				}
 			}
 			if route.RoutedNet.String() == cidr.String() {
@@ -259,7 +264,10 @@ func (s *RoutingSuite) Test_GetRoute() {
 	s.Require().Equal(cidr, route.RoutedNet)
 	s.Require().False(route.Default)
 	// s.Require().NotNil(route.Gateway) there's no gateway when scope == link, and that's OK.
-	s.Require().Equal(cidr.Addr(), route.LocalIP)
+	// The device routes cluster subnets as a router, sourced from a single address it owns
+	// within the virtual subnet, rather than claiming the subnet's own network address.
+	vipSubnet := client.GetDefaultConfig().Routing().VirtualSubnet
+	s.Require().True(vipSubnet.Contains(route.LocalIP), "LocalIP %s is not within the virtual subnet %s", route.LocalIP, vipSubnet)
 }
 
 func (s *RoutingSuite) printRoutingTable(ctx context.Context) { //nolint:unused // Useful for debugging

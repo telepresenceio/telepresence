@@ -279,6 +279,63 @@ func Clear(seq int, r netip.Prefix, gw netip.Addr) error {
 	})
 }
 
+// newInterfaceRouteMessage builds a route message for an "interface route" — the
+// equivalent of `route add -net <subnet> -interface <iface>`. The gateway is the
+// interface's link address rather than a next-hop IP, so traffic to the subnet egresses
+// the interface directly and the kernel selects the interface's own address as the source.
+func newInterfaceRouteMessage(rtm, seq int, subnet netip.Prefix, ifaceIndex int) *route.RouteMessage {
+	var mask route.Addr
+	if subnet.Addr().Is4() {
+		mask = toRoute4Mask(subnet.Bits())
+	} else {
+		mask = toRoute6Mask(subnet.Bits())
+	}
+	return &route.RouteMessage{
+		Version: unix.RTM_VERSION,
+		ID:      uintptr(os.Getpid()),
+		Seq:     seq,
+		Type:    rtm,
+		Flags:   unix.RTF_UP | unix.RTF_STATIC,
+		Addrs: []route.Addr{
+			unix.RTAX_DST:     toRouteAddr(subnet.Addr()),
+			unix.RTAX_GATEWAY: &route.LinkAddr{Index: ifaceIndex},
+			unix.RTAX_NETMASK: mask,
+		},
+	}
+}
+
+// AddViaInterface routes the given subnet through the interface with the given index.
+func AddViaInterface(seq int, subnet netip.Prefix, ifaceIndex int) error {
+	return withRouteSocket(func(routeSocket int) error {
+		m := newInterfaceRouteMessage(unix.RTM_ADD, seq, subnet, ifaceIndex)
+		wb, err := m.Marshal()
+		if err != nil {
+			return err
+		}
+		_, err = unix.Write(routeSocket, wb)
+		if err == unix.EEXIST {
+			err = nil
+		}
+		return err
+	})
+}
+
+// ClearViaInterface removes a route added by AddViaInterface.
+func ClearViaInterface(seq int, subnet netip.Prefix, ifaceIndex int) error {
+	return withRouteSocket(func(routeSocket int) error {
+		m := newInterfaceRouteMessage(unix.RTM_DELETE, seq, subnet, ifaceIndex)
+		wb, err := m.Marshal()
+		if err != nil {
+			return err
+		}
+		_, err = unix.Write(routeSocket, wb)
+		if err == unix.ESRCH {
+			err = nil
+		}
+		return err
+	})
+}
+
 func (r *Route) addStatic(ctx context.Context) error {
 	return Add(1, r.RoutedNet, r.Gateway)
 }

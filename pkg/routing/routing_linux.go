@@ -22,7 +22,7 @@ type LinuxTable interface {
 
 type table struct {
 	index int
-	rule  *netlink.Rule
+	rules []*netlink.Rule
 }
 
 func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
@@ -39,10 +39,6 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 	var routes []*Route
 	for i := range rts {
 		nrt := &rts[i]
-		if nrt.Table > 255 {
-			// We only care about routes in the "local", "main", and "default" tables
-			continue
-		}
 		switch nrt.Family {
 		case syscall.AF_INET, syscall.AF_INET6:
 			if shouldSkipNetlinkRoute(nrt) {
@@ -51,7 +47,13 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 			}
 			rt, err := routeFromNetlinkRoute(nrt)
 			if err != nil {
-				return nil, errInconsistentRT
+				// The route references an interface that no longer exists — a device that
+				// vanished mid-iteration, or a stale entry in a leaked policy table. Skip
+				// it rather than discarding the whole snapshot. Telepresence routes cluster
+				// subnets through its own policy table (index >= 775), so unlike before we
+				// must include tables above the system range rather than skipping them.
+				clog.Tracef(ctx, "Skipping unresolvable route %+v: %v", nrt, err)
+				continue
 			}
 			clog.Tracef(ctx, "Found route %s", rt)
 			routes = append(routes, rt)
@@ -120,32 +122,55 @@ func openTable(ctx context.Context) (Table, error) {
 		}
 	}
 	clog.Infof(ctx, "Creating routing table with index %d and priority %d", index, priority)
-	rule := netlink.NewRule()
-	rule.Table = index
-	rule.Priority = priority
-	rule.Family = netlink.FAMILY_V4
-	if err := netlink.RuleAdd(rule); err != nil {
-		return nil, fmt.Errorf("netlink.RuleAdd: %w", err)
+	t := &table{index: index}
+	// Add a policy rule per family so that both IPv4 and IPv6 cluster traffic consults
+	// this table before the main table, giving Telepresence's routes deterministic
+	// precedence over conflicting routes from other software (e.g. a VPN).
+	for _, family := range []int{netlink.FAMILY_V4, netlink.FAMILY_V6} {
+		rule := netlink.NewRule()
+		rule.Table = index
+		rule.Priority = priority
+		rule.Family = family
+		if err := netlink.RuleAdd(rule); err != nil {
+			if family == netlink.FAMILY_V6 {
+				// IPv6 may be disabled on the host; IPv4 routing still works without it.
+				clog.Warnf(ctx, "failed to add IPv6 policy rule for table %d: %v", index, err)
+				continue
+			}
+			return nil, fmt.Errorf("netlink.RuleAdd: %w", err)
+		}
+		t.rules = append(t.rules, rule)
 	}
-	return &table{
-		index: index,
-		rule:  rule,
-	}, nil
+	return t, nil
 }
 
 func (t *table) RouteToNetlink(route *Route) *netlink.Route {
-	rn := route.RoutedNet
-	return &netlink.Route{
-		Dst:       subnet.PrefixToIPNet(rn),
+	nr := &netlink.Route{
+		Dst:       subnet.PrefixToIPNet(route.RoutedNet),
 		Table:     t.index,
 		LinkIndex: route.InterfaceIndex,
-		Gw:        route.Gateway.AsSlice(),
-		Src:       route.LocalIP.AsSlice(),
 	}
+	// Only set the gateway and preferred source when they are actual addresses. An
+	// unspecified gateway (the on-link case for our subnet routes) must be left nil:
+	// passing an all-zero address is tolerated for IPv4 but rejected by the kernel with
+	// EINVAL for IPv6. The same is done for the source for symmetry.
+	if route.Gateway.IsValid() && !route.Gateway.IsUnspecified() {
+		nr.Gw = route.Gateway.AsSlice()
+	}
+	if route.LocalIP.IsValid() && !route.LocalIP.IsUnspecified() {
+		nr.Src = route.LocalIP.AsSlice()
+	}
+	return nr
 }
 
 func (t *table) Close(ctx context.Context) error {
-	return netlink.RuleDel(t.rule)
+	var err error
+	for _, rule := range t.rules {
+		if e := netlink.RuleDel(rule); e != nil && err == nil {
+			err = e
+		}
+	}
+	return err
 }
 
 func (t *table) Add(ctx context.Context, r *Route) error {

@@ -3,7 +3,6 @@ package vif
 import (
 	"context"
 	cryptoRand "crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -17,6 +16,7 @@ import (
 	"gvisor.dev/gvisor/pkg/tcpip/link/fdbased"
 	"gvisor.dev/gvisor/pkg/tcpip/stack"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
@@ -88,57 +88,48 @@ func openTun(ctx context.Context) (*device, error) {
 		return nil, fmt.Errorf("failed to set link UP: %w", err)
 	}
 	attrs := link.Attrs()
-	return &device{fd: fd, name: name, interfaceIndex: uint32(attrs.Index), isTAP: useTAP}, nil
+	d := &device{fd: fd, name: name, interfaceIndex: uint32(attrs.Index), isTAP: useTAP}
+	if err = d.assignOwnedAddresses(ctx, link); err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
-func (d *device) addSubnet(_ context.Context, pfx netip.Prefix) error {
-	link, err := netlink.LinkByIndex(int(d.interfaceIndex))
-	if err != nil {
-		return fmt.Errorf("failed to find link for interface %s: %w", d.name, err)
-	}
-	addr := &netlink.Addr{IPNet: subnet.PrefixToIPNet(pfx)}
-	if err := netlink.AddrAdd(link, addr); err != nil {
-		return fmt.Errorf("failed to add address %s to interface %s: %w", pfx, d.name, err)
-	}
-	// The kernel derives a broadcast entry for the subnet's highest address from the
-	// address assignment and refuses unicast connects to that address, but the address
-	// is a perfectly valid pod IP. Link-level broadcast has no meaning on an L3 TUN
-	// device, so the entry is removed.
-	if bc, ok := subnetBroadcast(pfx); ok {
-		err := netlink.RouteDel(&netlink.Route{
-			LinkIndex: link.Attrs().Index,
-			Table:     unix.RT_TABLE_LOCAL,
-			Type:      unix.RTN_BROADCAST,
-			Scope:     netlink.SCOPE_LINK,
-			Dst:       subnet.PrefixToIPNet(netip.PrefixFrom(bc, bc.BitLen())),
-		})
-		if err != nil && !errors.Is(err, unix.ESRCH) {
-			return fmt.Errorf("failed to remove broadcast entry %s from interface %s: %w", bc, d.name, err)
+// assignOwnedAddresses gives the device a single source address per family from a
+// Telepresence-owned range. The device routes cluster subnets as a router rather than
+// claiming them as interface addresses, so it needs one address of its own to source
+// locally-originated traffic toward the cluster and to receive the replies.
+func (d *device) assignOwnedAddresses(ctx context.Context, link netlink.Link) error {
+	for _, ipv4 := range []bool{true, false} {
+		owned, ok := ownedAddress(ctx, ipv4, d.interfaceIndex)
+		if !ok {
+			continue
+		}
+		addr := &netlink.Addr{IPNet: subnet.PrefixToIPNet(netip.PrefixFrom(owned, owned.BitLen()))}
+		if err := netlink.AddrAdd(link, addr); err != nil && !errors.Is(err, unix.EEXIST) {
+			if ipv4 {
+				return fmt.Errorf("failed to add owned address %s to interface %s: %w", owned, d.name, err)
+			}
+			// IPv6 may be disabled on the interface. The owned IPv6 address is only
+			// needed when IPv6 subnets are routed, so a failure here is not fatal.
+			clog.Warnf(ctx, "failed to add owned IPv6 address %s to interface %s: %v", owned, d.name, err)
 		}
 	}
 	return nil
 }
 
-// subnetBroadcast returns the broadcast address that the kernel derives when the given
-// prefix is assigned to an interface. The second return value is false when no broadcast
-// entry is created for the prefix.
-func subnetBroadcast(pfx netip.Prefix) (netip.Addr, bool) {
-	if !pfx.Addr().Is4() || pfx.Bits() >= 31 {
-		return netip.Addr{}, false
-	}
-	bc := pfx.Masked().Addr().As4()
-	v := binary.BigEndian.Uint32(bc[:]) | (uint32(1)<<(32-pfx.Bits()) - 1)
-	binary.BigEndian.PutUint32(bc[:], v)
-	return netip.AddrFrom4(bc), true
+// addSubnet is a no-op on Linux. The device owns a single source address per family
+// (assigned at bring-up); cluster subnets are routed by the Router through its policy
+// table rather than claimed as interface addresses, so there is nothing to do per
+// subnet here.
+func (d *device) addSubnet(_ context.Context, _ netip.Prefix) error {
+	return nil
 }
 
-func (d *device) removeSubnet(_ context.Context, pfx netip.Prefix) error {
-	link, err := netlink.LinkByIndex(int(d.interfaceIndex))
-	if err != nil {
-		return err
-	}
-	addr := &netlink.Addr{IPNet: subnet.PrefixToIPNet(pfx)}
-	return netlink.AddrDel(link, addr)
+// removeSubnet is a no-op on Linux; see addSubnet. The Router removes the subnet's
+// route from its policy table.
+func (d *device) removeSubnet(_ context.Context, _ netip.Prefix) error {
+	return nil
 }
 
 func (d *device) getMTU() (mtu uint32, err error) {

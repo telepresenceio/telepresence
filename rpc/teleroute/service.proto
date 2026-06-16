@@ -52,6 +52,12 @@ message JoinResponse {
 
   repeated bytes routes = 3;
 
+  // Deprecated single next-hop shared by all routes. It cannot describe a
+  // mixed-family (dual-stack) route set, so it is superseded by the per-family
+  // via_ip_v4 / via_ip_v6 below. It is still populated and honored so that a
+  // daemon and a plugin of mismatched versions keep routing single-family
+  // clusters: a plugin that does not understand the per-family fields reads
+  // this, and a plugin that does falls back to it when a family field is absent.
   bytes via = 4;
 
   bytes gw_ip_v4 = 5;
@@ -59,6 +65,12 @@ message JoinResponse {
   bytes gw_ip_v6 = 6;
 
   bool disable_gw = 7;
+
+  // The next-hop for IPv4 routes; the daemon's IPv4 address in the teleroute network.
+  bytes via_ip_v4 = 8;
+
+  // The next-hop for IPv6 routes; the daemon's IPv6 address in the teleroute network.
+  bytes via_ip_v6 = 9;
 }
 
 message Info {

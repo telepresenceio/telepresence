@@ -102,6 +102,13 @@ const ConfigFile = "config.yml"
 // declaratively without parsing or rewriting YAML.
 const UsageOptOutFile = "usage-opt-out"
 
+// DefaultVirtualSubnet returns the platform default IPv4 virtual subnet. It is the
+// value that Routing().VirtualSubnet defaults to, and serves as the IPv4 source for
+// proxy-via virtual IPs when the configured VirtualSubnet is an IPv6 prefix.
+func DefaultVirtualSubnet() netip.Prefix {
+	return defaultVirtualSubnet
+}
+
 type Config interface {
 	fmt.Stringer
 	Base() *config
@@ -937,7 +944,7 @@ var defaultTeleroute = Teleroute{ //nolint:gochecknoglobals // constant
 	Registry:    "ghcr.io",
 	Namespace:   "telepresenceio",
 	Repository:  "teleroute",
-	Tag:         "0.4.0",
+	Tag:         "0.5.0",
 }
 
 func (tr *Teleroute) defaults() DefaultsAware {

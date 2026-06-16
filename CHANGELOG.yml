@@ -68,6 +68,27 @@ items:
           detects such DNS servers and adds a host route for them to the
           never-proxy set, keeping them reachable on their original interface.
         docs: reference/vpn
+      - type: bugfix
+        title: Map IPv6 cluster addresses to IPv6 virtual IPs
+        body: >-
+          When proxy-via or automatic conflict resolution mapped a cluster IP to
+          a virtual IP, an IPv6 address was forced into the IPv4 virtual subnet,
+          producing a malformed virtual IP (such as
+          <code>246.246.0.1313</code>) that broke the connection on IPv6-only
+          and dual-stack clusters. Telepresence now allocates IPv6 virtual IPs
+          from a dedicated IPv6 range, so IPv6 services and pods are reachable
+          through a virtual IP just like their IPv4 counterparts.
+        docs: reference/vpn
+      - type: bugfix
+        title: Route dual-stack clusters correctly with telepresence connect --docker
+        body: >-
+          In <code>--docker</code> mode the teleroute network gave every cluster
+          route a single next-hop of one address family, so on a dual-stack
+          cluster the IPv4 routes received an IPv6 next-hop (or the reverse) and
+          became unusable. Each route is now given a next-hop of its own address
+          family, so IPv4 and IPv6 cluster traffic is routed to the daemon
+          correctly.
+        docs: reference/vpn
       - type: feature
         title: Make the agent-injector webhook reachable from outside the cluster
         body: >-
@@ -96,15 +117,16 @@ items:
           SAN requirements, and <code>failurePolicy</code> tradeoffs.
         docs: troubleshooting#eks-calico-and-traffic-agent-injection-timeouts
       - type: bugfix
-        title: Reliably re-establish intercept mounts after a pod restart
+        title: Remote mounts retry their initial connection to the traffic-agent
         body: >-
-          When an intercepted pod was restarted, the user daemon waits for the
-          root daemon to learn the new pod's IP before remounting its volumes.
-          If the first connection attempt to the freshly started agent lost a
-          race and failed, the daemon gave up instead of retrying, leaving the
-          intercept's volume mounts permanently unavailable until the intercept
-          was recreated. The daemon now keeps retrying until the agent becomes
-          reachable, so the mounts come back on their own.
+          When a remote mount was established right after its pod was created or
+          restarted, the first connection to the freshly started traffic-agent
+          could lose a race against the routing of the pod's new IP and fail.
+          The failure was treated as permanent, so the daemon gave up and left
+          the mount directory empty for the rest of the engagement. The daemon
+          now retries the initial connection until the agent becomes reachable,
+          bounded by the intercept timeout, so the mounts come back on their
+          own.
       - type: bugfix
         title: Flush the DNS cache when the agent set changes
         body: >-
@@ -304,14 +326,20 @@ items:
           the deadline of the calling client, which is governed by the
           <code>dns.lookupTimeout</code> client setting.
       - type: bugfix
-        title: Remote mounts retry their initial connection to the traffic-agent
+        title: Pods using the network address of a routed subnet are now reachable
         body: >-
-          When a remote mount was initiated immediately after its pod was
-          created, the first connection to the traffic-agent could lose a race
-          against the routing of the pod's new IP address. The failure was
-          treated as permanent, leaving the local mount directory empty for the
-          remainder of the engagement. The connection is now retried until the
-          intercept timeout expires.
+          A subnet routed through Telepresence was assigned to the virtual
+          network interface as an interface address whose address part was the
+          subnet's network address, so unicast traffic to it was delivered to
+          the local host instead of entering the device. A CNI can assign that
+          address to a pod — including the traffic-manager, which then
+          black-holed the connect-time DNS check — making the pod unreachable
+          from the workstation. The interface now owns a single address from the
+          virtual subnet and routes cluster subnets as plain routes, so every
+          address in a routed subnet, the network address included, is
+          reachable. This is the network-address counterpart of the
+          highest-address fix below.
+        docs: reference/vpn
       - type: bugfix
         title: Pods using the highest address of a routed subnet are now reachable
         body: >-
@@ -851,7 +879,7 @@ items:
           to false in the Helm chart, or by using the corresponding settings `docker.enableIPv4` or `docker.enableIPv6`
           the client configuration file.
 
-          The new dual-stack support requires the teleroute network plugin 0.4.0 or later. The client will install this
+          The new dual-stack support requires the teleroute network plugin 0.5.0 or later. The client will install this
           version automatically unless you work in an air-gapped environment.
       - type: feature
         title: RESTful API Service Reintroduced with HTTP Filtering Support

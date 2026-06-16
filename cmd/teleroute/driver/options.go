@@ -18,7 +18,7 @@ type options struct {
 type errRequiredOption string
 
 func (e errRequiredOption) Error() string {
-	return fmt.Sprintf("option %q is required", e)
+	return fmt.Sprintf("option %q is required", string(e))
 }
 
 func (o *options) parse(gos map[string]any) error {

@@ -30,10 +30,10 @@ func main() {
 	}
 	defer lf.Close()
 
-	level := clog.LevelInfo
+	level := slog.LevelInfo
 	if debug, ok := os.LookupEnv("DEBUG"); ok {
 		if ok, _ = strconv.ParseBool(debug); ok {
-			level = clog.LevelDebug
+			level = slog.LevelDebug
 		}
 	}
 	ctx := clog.WithLogger(context.Background(), slog.New(handler.NewText(handler.Output(lf), handler.TimeFormat("15:04:05.0000"), handler.EnabledLevel(level))))

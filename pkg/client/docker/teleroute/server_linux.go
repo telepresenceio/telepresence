@@ -258,22 +258,12 @@ func (r responseStringer) String() string {
 		}
 		writeRawPrefix(r, bld)
 	}
-	bld.WriteString("], via: ")
-	writeRawIP(r.Via, bld)
+	bld.WriteString("], viaIpV4: ")
+	writeRawIP(r.ViaIpV4, bld)
+	bld.WriteString(", viaIpV6: ")
+	writeRawIP(r.ViaIpV6, bld)
 	bld.WriteString("}")
 	return bld.String()
-}
-
-func (ts *server) isIPv6() bool {
-	ts.watchersMutex.Lock()
-	rs := ts.currentRoutes
-	ts.watchersMutex.Unlock()
-	for _, r := range rs {
-		if r.Addr().Is6() {
-			return true
-		}
-	}
-	return false
 }
 
 func (ts *server) join(ctx context.Context, request *rpc.EndpointIdentifier) (*rpc.JoinResponse, error) {
@@ -296,23 +286,40 @@ func (ts *server) join(ctx context.Context, request *rpc.EndpointIdentifier) (*r
 		rs := ts.currentRoutes
 		ts.watchersMutex.Unlock()
 		rsb := make([][]byte, len(rs))
+		needV4, needV6 := false, false
 		for i, r := range rs {
 			rsb[i], err = r.MarshalBinary()
 			if err != nil {
 				return nil, err
 			}
+			if r.Addr().Is6() {
+				needV6 = true
+			} else {
+				needV4 = true
+			}
 		}
 		rsp.Routes = rsb
-		if ts.isIPv6() {
-			if !ts.daemonAddrIPv6.IsValid() {
-				return nil, status.Error(codes.Internal, "IPv6 is not enabled for the teleroute network")
-			}
-			rsp.Via, _ = ts.daemonAddrIPv6.MarshalBinary()
-		} else {
+		// Each route is forwarded to the daemon's address of its own family, so a
+		// mixed-family route set (a dual-stack cluster) must carry both next-hops.
+		if needV4 {
 			if !ts.daemonAddrIPv4.IsValid() {
 				return nil, status.Error(codes.Internal, "IPv4 is not enabled for the teleroute network")
 			}
-			rsp.Via, _ = ts.daemonAddrIPv4.MarshalBinary()
+			rsp.ViaIpV4, _ = ts.daemonAddrIPv4.MarshalBinary()
+		}
+		if needV6 {
+			if !ts.daemonAddrIPv6.IsValid() {
+				return nil, status.Error(codes.Internal, "IPv6 is not enabled for the teleroute network")
+			}
+			rsp.ViaIpV6, _ = ts.daemonAddrIPv6.MarshalBinary()
+		}
+		// Populate the deprecated single via for plugins that predate the per-family
+		// fields, preferring IPv6 when present to match the historic behavior. Such
+		// a plugin can only route a single-family cluster, but keeps working.
+		if rsp.ViaIpV6 != nil {
+			rsp.Via = rsp.ViaIpV6
+		} else {
+			rsp.Via = rsp.ViaIpV4
 		}
 	}
 	for _, gw := range ts.gateways {

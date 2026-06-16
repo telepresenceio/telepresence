@@ -17,11 +17,33 @@ import (
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
+	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
 type proxyViaSuite struct {
 	itest.Suite
 	itest.TrafficManager
+}
+
+// assertVirtualSubnets verifies that every routed subnet is the Telepresence virtual
+// subnet of its own address family. proxy-via "all" maps each cluster subnet to a
+// virtual subnet per family, so a dual-stack cluster yields one per family (the IPv4
+// virtual subnet and the IPv6 ULA) rather than a single combined subnet.
+func (s *proxyViaSuite) assertVirtualSubnets(sns []netip.Prefix, vs netip.Prefix) {
+	rq := s.Require()
+	rq.NotEmpty(sns)
+	for _, sn := range sns {
+		exp := client.DefaultVirtualSubnet()
+		switch {
+		case sn.Addr().Is6() && vs.Addr().Is6():
+			exp = vs
+		case sn.Addr().Is6():
+			exp = vif.TelepresenceULA6
+		case vs.Addr().Is4():
+			exp = vs
+		}
+		rq.Equalf(exp, sn, "routed subnet %s should be the virtual subnet for its family", sn)
+	}
 }
 
 func (s *proxyViaSuite) SuiteName() string {
@@ -156,7 +178,7 @@ func (s *proxyViaSuite) Test_ProxyViaEverything() {
 	defer itest.TelepresenceDisconnectOk(ctx)
 	rq := s.Require()
 	rq.NotNil(st.RootDaemon)
-	rq.Len(st.RootDaemon.Subnets, 1) // Virtual subnet
+	s.assertVirtualSubnets(st.RootDaemon.Subnets, client.GetConfig(ctx).Routing().VirtualSubnet)
 	rq.Eventually(func() bool {
 		out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", "echo")
 		clog.Infof(ctx, "Output from echo service %s", out)
@@ -177,7 +199,7 @@ func (s *proxyViaSuite) Test_ProxyViaAll() {
 	st := itest.TelepresenceStatusOk(ctx)
 	defer itest.TelepresenceDisconnectOk(ctx)
 	rq.NotNil(st.RootDaemon)
-	rq.Len(st.RootDaemon.Subnets, 1) // Virtual subnet
+	s.assertVirtualSubnets(st.RootDaemon.Subnets, client.GetConfig(ctx).Routing().VirtualSubnet)
 	rq.Eventually(func() bool {
 		out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", "echo")
 		clog.Infof(ctx, "Output from echo service %s", out)
@@ -201,7 +223,7 @@ func (s *proxyViaSuite) Test_ProxyViaAllAndMounts() {
 	st := itest.TelepresenceStatusOk(ctx)
 	defer itest.TelepresenceDisconnectOk(ctx)
 	rq.NotNil(st.RootDaemon)
-	rq.Len(st.RootDaemon.Subnets, 1)
+	s.assertVirtualSubnets(st.RootDaemon.Subnets, client.GetConfig(ctx).Routing().VirtualSubnet)
 
 	var mountPoint string
 	if runtime.GOOS == "windows" {
