@@ -289,9 +289,22 @@ tel2-image: images-deps
 client-image: images-deps
 	docker build --target telepresence --tag telepresence --tag $(CLIENT_IMAGE_FQN) -f build-aux/docker/images/Dockerfile.client .
 
+# load-image loads a locally-built image into the running local cluster instead
+# of pushing it to a registry. The loader is chosen from the current kubectl
+# context: a kind-* context uses "kind load docker-image" and a minikube context
+# uses "minikube image load". Any other context is an error, since only kind and
+# minikube can load images straight into the cluster.
+define load-image
+@ctx=$$(kubectl config current-context 2>/dev/null); case "$$ctx" in kind-*) echo "kind load docker-image $(1)"; kind load docker-image --name "$${ctx#kind-}" $(1) ;; minikube) echo "minikube image load $(1)"; minikube image load $(1) ;; *) echo "load-* targets require a kind or minikube kubectl context (current: $${ctx:-<none>})" >&2; exit 1 ;; esac
+endef
+
 .PHONY: push-tel2-image
 push-tel2-image: tel2-image ## (Build) Push the manager/agent container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(TEL2_IMAGE_FQN)
+
+.PHONY: load-tel2-image
+load-tel2-image: tel2-image ## (Build) Load the manager/agent container image into the local cluster (kind/minikube)
+	$(call load-image,$(TEL2_IMAGE_FQN))
 
 .PHONY: save-tel2-image
 save-tel2-image: tel2-image
@@ -300,6 +313,10 @@ save-tel2-image: tel2-image
 .PHONY: push-client-image
 push-client-image: client-image ## (Build) Push the client container image to $(TELEPRESENCE_REGISTRY)
 	docker push $(CLIENT_IMAGE_FQN)
+
+.PHONY: load-client-image
+load-client-image: client-image ## (Build) Load the client container image into the local cluster (kind/minikube)
+	$(call load-image,$(CLIENT_IMAGE_FQN))
 
 ROUTECONTROLLER_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/route-controller:$(TELEPRESENCE_SEMVER)
 
@@ -313,8 +330,15 @@ routecontroller-image: images-deps  ## (Build) Build the route-controller Daemon
 push-routecontroller-image: routecontroller-image ## (Build) Push the route-controller DaemonSet image to $(TELEPRESENCE_REGISTRY)
 	docker push $(ROUTECONTROLLER_IMAGE_FQN)
 
+.PHONY: load-routecontroller-image
+load-routecontroller-image: routecontroller-image ## (Build) Load the route-controller DaemonSet image into the local cluster (kind/minikube)
+	$(call load-image,$(ROUTECONTROLLER_IMAGE_FQN))
+
 .PHONY: push-images
 push-images: push-tel2-image push-client-image push-routecontroller-image
+
+.PHONY: load-images
+load-images: load-tel2-image load-client-image load-routecontroller-image ## (Build) Load all images into the local cluster (kind/minikube)
 
 .PHONY: helm-chart
 helm-chart: $(BUILDDIR)/telepresence-oss-chart.tgz
@@ -469,11 +493,7 @@ else
 endif
 
 .PHONY: check-integration
-ifeq ($(GOHOSTOS), linux)
-check-integration: client-image $(tools/test-report) $(tools/helm) ## (QA) Run the test suite
-else
 check-integration: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the test suite
-endif
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
 	# is only used for extensions. Therefore, we want to validate that our tests, and
 	# telepresence, run without requiring any outside dependencies.
