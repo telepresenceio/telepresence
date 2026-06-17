@@ -26,6 +26,8 @@ runs:
       run: |
         brew untap homebrew/core || :
         brew untap homebrew/cask || :
+        # Untrusted runner taps we don't use; drop them to silence brew tap-trust warnings.
+        brew untap aws/tap azure/bicep hashicorp/tap || :
 
         # Remove Python3 symlinks in /usr/local/bin as workaround to brew update issues
         # https://github.com/actions/setup-python/issues/577
@@ -36,6 +38,9 @@ runs:
 
         brew update
         brew install --cask macfuse
+        # Trust the fuse tap so brew installs sshfs-mac instead of skipping it as untrusted.
+        brew tap gromgit/fuse
+        brew trust gromgit/fuse
         brew install gromgit/fuse/sshfs-mac
         brew link --overwrite sshfs-mac
 
