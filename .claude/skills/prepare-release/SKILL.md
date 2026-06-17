@@ -45,7 +45,7 @@ git tag --points-at HEAD
 
 ## Next: hand off to `ship-release`
 
-This skill stops here, with the local commit and the two annotated tags. **Do not push anything.** To carry the release through CI, the docs PR, the Releases workflow, and the PR merges, invoke `/ship-release` (after pushing the branch and opening a PR on it — that's a manual handoff step the user does between the two skills).
+This skill stops here, with the local commit and the two annotated tags. **Do not push anything.** To carry the release through CI, the docs PR, the Releases workflow, and the PR merges, invoke the `ship-release` skill (after pushing the branch and opening a PR on it — that's a manual handoff step the user does between the two skills).
 
 ## Refuse to
 
