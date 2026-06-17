@@ -8,16 +8,112 @@
 When the handler of one intercept dials a cluster destination that is covered by another of the client's active intercepts, the connection used to travel to the cluster only to arrive back at a local intercept handler. The root daemon now connects such traffic directly to the handler, both for the intercepted service's ClusterIP and for the pod IPs of all the intercepted workload's pods. The behavior is enabled by default and controlled with the new client configuration setting <code>intercept.localShortcut</code>. The shortcut is connection based and cannot evaluate header or path filters, so by default it applies to all intercepts, on the assumption that filters exist to limit how an intercept impacts others, not the developer's own traffic. Set <code>intercept.localShortcutIsGlobal</code> to false when local traffic must honor the filters exactly, at the cost of the round trip through the cluster. Wiretaps are never shortcut, since they receive a copy of the traffic rather than the traffic itself.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Add a --format flag for consistent structured output</div></div>
+<div style="margin-left: 15px">
+
+A new global <code>--format=json|yaml|json-stream</code> flag produces clean, envelope-free structured output for every command, emitting the command's object directly instead of wrapping it in the <code>{cmd, stdout, stderr, err}</code> envelope that <code>--output</code> uses for some commands. On error it emits a plain <code>{"error": "..."}</code> object on stdout and exits non-zero. <code>version</code>, <code>list</code>, <code>list-contexts</code>, and <code>list-namespaces</code> now produce script-friendly structured output under <code>--format</code>. The older <code>--output</code> flag keeps its exact previous behavior but is deprecated, and the two flags are mutually exclusive.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Make the agent-injector webhook reachable from outside the cluster](troubleshooting#eks-calico-and-traffic-agent-injection-timeouts)</div></div>
+<div style="margin-left: 15px">
+
+The Helm chart can now expose the agent-injector mutating webhook to an API server that cannot reach an in-cluster Service, such as Amazon EKS with Calico where the control plane is outside the pod network. <code>agentInjector.service.type</code> and <code>agentInjector.service.nodePort</code> expose the injector Service (for example as a <code>NodePort</code>) independently of the chart-wide service type, <code>agentInjector.certificate.altNames</code> adds Subject Alternative Names to the webhook certificate, and <code>agentInjector.webhook.url</code> points the webhook at an external URL instead of the in-cluster Service.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Configure agent-injector webhook objectSelector</div></div>
+<div style="margin-left: 15px">
+
+The <code>agentInjector.webhook.objectSelector</code> Helm chart value accepts an optional Kubernetes label selector so the mutating admission webhook applies only to matching pods. This helps clusters that need to exclude system or third-party workloads from agent injection.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Resolve and reach Istio ServiceEntry hosts from the workstation](howtos/istio)</div></div>
+<div style="margin-left: 15px">
+
+Names that only a service mesh can resolve — such as Istio <code>ServiceEntry</code> hosts when Istio's DNS proxying is enabled — can now be used from the workstation. The traffic-agent's DNS lookups are subjected to the mesh's DNS interception, and the new Helm chart value <code>agent.serviceMesh.dialSubnets</code> lists address ranges (for example Istio's ServiceEntry auto-allocation range <code>240.240.0.0/16</code>) that the agent must dial through the mesh proxy. Engage a meshed workload, or connect with <code>--proxy-via</code> through one, and the ServiceEntry host resolves and routes via the mesh.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Show ingress URLs for intercepted service ports</div></div>
+<div style="margin-left: 15px">
+
+The output of <code>telepresence intercept</code> and <code>telepresence list</code> now shows the ingress URLs through which an intercepted service port can be reached. When the intercept uses HTTP header filters, a ready-to-paste <code>curl</code> example with the matching <code>-H</code> flags is included, making it easy to send a request that is routed to the intercept handler on the workstation.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Report why the traffic-manager pod isn't ready during helm install</div></div>
+<div style="margin-left: 15px">
+
+When <code>telepresence helm install</code> or <code>telepresence helm upgrade</code> waits for the traffic-manager and its pod cannot become ready (a bad image, insufficient resources, or an unschedulable pod), the command now reports the underlying Kubernetes reason (for example <code>ImagePullBackOff</code>) and points at <code>kubectl describe pod</code>, instead of a confusing Helm rollback error. It also aborts as soon as a terminal failure is detected rather than waiting for the timeout.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Apply common labels to all Helm chart resources</div></div>
+<div style="margin-left: 15px">
+
+A new top-level <code>labels</code> Helm chart value merges custom labels into every resource created by the chart, including the traffic-manager Deployment, Services, RBAC, cert-manager Certificate and Issuer objects, and lifecycle hooks, while preserving the standard Telepresence label set.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Anonymous usage data collection](reference/config/#usage)</div></div>
+<div style="margin-left: 15px">
+
+Telepresence now emits anonymous usage reports from the CLI/user daemon and from the traffic-manager. Each report carries only an installation UUID, OS/architecture, the binary version, a code-defined topic such as <code>cmd.connect</code>, and a small map of safe-listed entries; it never carries cluster, namespace, workload, or address data. Reporting is enabled by default — the project has no conventional customers, so this data is the only signal we have for which features matter and what to fix. To opt out for one workstation set <code>usage.enabled: false</code> in <code>config.yml</code>, or drop an empty <code>usage-opt-out</code> marker file alongside the machine-wide config; the platform installers (macOS, Windows, Linux) manage that marker from a checkbox/env-var at install time. To opt out for an entire cluster, install the chart with <code>--set usage.enabled=false</code>.
+</div>
+
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Fail engagements when agent port-forwarding is disabled](reference/config)</div></div>
 <div style="margin-left: 15px">
 
 Setting <code>cluster.agentPortForward=false</code> disables all direct communication between the client and traffic-agents, so the cluster can only be used as a VPN. An attempt to intercept, replace, or ingest now fails immediately with an explanatory error instead of appearing to start and then never delivering traffic.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Clearer diagnostics when the agent-injector webhook is unreachable](troubleshooting#eks-calico-and-traffic-agent-injection-timeouts)</div></div>
+<div style="margin-left: 15px">
+
+When an intercept times out waiting for the traffic-agent to arrive and the pods were created without a sidecar, the traffic-manager now explains that the Kubernetes API server is likely unable to reach the agent-injector webhook and points to the EKS/Calico remedies (<code>hostNetwork=true</code> or an externally exposed webhook). The troubleshooting guide gained a full decision path covering host networking, NodePort/LoadBalancer exposure, access restriction, TLS SAN requirements, and <code>failurePolicy</code> tradeoffs.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Align traffic-manager RBAC with workloads Helm chart values</div></div>
+<div style="margin-left: 15px">
+
+Traffic-manager cluster- and namespace-scoped RBAC rules for Deployments, ReplicaSets, StatefulSets, and Argo Rollouts are now generated from the corresponding <code>workloads.*.enabled</code> settings. Disabling a workload kind no longer grants get, list, watch, or patch permissions for that kind.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Compose down no longer removes user-defined named volumes</div></div>
+<div style="margin-left: 15px">
+
+Tearing down a Compose project that engaged a service with replace or intercept previously removed named volumes even when <code>-v</code>/<code>--volumes</code> was not given, because the connection teardown ran <code>docker compose down --volumes</code>. Only Telepresence's own telemount-managed volumes are now removed, matching the behavior of <code>docker compose down</code>.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">A failed agent injection no longer blocks pod creation</div></div>
+<div style="margin-left: 15px">
+
+When the agent-injector webhook returned an error, it denied the pod's creation. For an unfixable error, such as an invalid <code>telepresence.getambassador.io/inject-traffic-agent</code> annotation value, the ReplicaSet controller then retried the creation indefinitely and the workload's rollout stalled. Such errors now admit the pod without an agent and surface the reason as an admission warning. Transient errors, such as the agent configuration not being generatable yet because the traffic-manager just started, are now retried within the admission call so the agent is injected without denying the pod, and the config generation no longer holds a per-namespace lock that serialized simultaneous injections.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Application traffic no longer bypasses the service mesh in engaged pods](howtos/istio)</div></div>
+<div style="margin-left: 15px">
+
+The traffic-agent's own traffic is exempted from service-mesh processing using an iptables owner match, but the match was based on the agent's UID, which is inherited from the app container's securityContext (or defaults to root). An application sharing that UID had its outbound traffic silently bypass the mesh sidecar — no mTLS, telemetry, or policy enforcement. The agent container is now assigned a distinct primary group (default <code>7439</code>, overridable with <code>agent.securityContext.runAsGroup</code>) and the owner matches are group-based, so application traffic always traverses the mesh.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Flush the DNS cache when the agent set changes</div></div>
+<div style="margin-left: 15px">
+
+The root daemon caches cluster DNS resolutions for up to a minute. If a workload and its Service were deleted and recreated, the Service could get a new ClusterIP while the daemon kept resolving the name to the old, now-defunct address, so traffic to it was silently dropped until the cache entry expired. The daemon now flushes the DNS cache whenever the set of traffic-agents changes, so a recreated workload's new ClusterIP is picked up immediately.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Keep a local DNS server reachable when its IP is in a routed subnet](reference/vpn)</div></div>
 <div style="margin-left: 15px">
 
 When a cluster subnet routed through Telepresence covers the workstation's DNS server address (for example an EKS node whose resolver lives at <code>172.31.0.2</code> while the pod subnet is <code>172.31.0.0/18</code>), queries to that server were captured by the TUN-device and tunnelled into the cluster, breaking name resolution for everything that isn't a cluster name. Telepresence now detects such DNS servers and adds a host route for them to the never-proxy set, keeping them reachable on their original interface.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Pods using the network or highest address of a routed subnet are now reachable](reference/vpn)</div></div>
+<div style="margin-left: 15px">
+
+A subnet routed through Telepresence used to be assigned to the virtual network interface as an interface address. That made the subnet's network address resolve to the local host instead of entering the device, and made the kernel derive a broadcast entry for the subnet's highest address that refused unicast connections, so neither address could be reached. A CNI can assign either address to a pod — the traffic-manager landing on the network address even black-holed the connect-time DNS check — rendering that pod unreachable from the workstation. The interface now owns a single address from the virtual subnet and routes cluster subnets as plain routes, so every address in a routed subnet, its network and highest addresses included, is reachable.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remote mounts retry their initial connection to the traffic-agent</div></div>
+<div style="margin-left: 15px">
+
+When a remote mount was established right after its pod was created or restarted, the first connection to the freshly started traffic-agent could lose a race against the routing of the pod's new IP and fail. The failure was treated as permanent, so the daemon gave up and left the mount directory empty for the rest of the engagement. The daemon now retries the initial connection until the agent becomes reachable, bounded by the intercept timeout, so the mounts come back on their own.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Map IPv6 cluster addresses to IPv6 virtual IPs](reference/vpn)</div></div>
@@ -32,82 +128,10 @@ When proxy-via or automatic conflict resolution mapped a cluster IP to a virtual
 In <code>--docker</code> mode the teleroute network gave every cluster route a single next-hop of one address family, so on a dual-stack cluster the IPv4 routes received an IPv6 next-hop (or the reverse) and became unusable. Each route is now given a next-hop of its own address family, so IPv4 and IPv6 cluster traffic is routed to the daemon correctly.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Make the agent-injector webhook reachable from outside the cluster](troubleshooting#eks-calico-and-traffic-agent-injection-timeouts)</div></div>
-<div style="margin-left: 15px">
-
-The Helm chart can now expose the agent-injector mutating webhook to an API server that cannot reach an in-cluster Service, such as Amazon EKS with Calico where the control plane is outside the pod network. <code>agentInjector.service.type</code> and <code>agentInjector.service.nodePort</code> expose the injector Service (for example as a <code>NodePort</code>) independently of the chart-wide service type, <code>agentInjector.certificate.altNames</code> adds Subject Alternative Names to the webhook certificate, and <code>agentInjector.webhook.url</code> points the webhook at an external URL instead of the in-cluster Service.
-</div>
-
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Clearer diagnostics when the agent-injector webhook is unreachable](troubleshooting#eks-calico-and-traffic-agent-injection-timeouts)</div></div>
-<div style="margin-left: 15px">
-
-When an intercept times out waiting for the traffic-agent to arrive and the pods were created without a sidecar, the traffic-manager now explains that the Kubernetes API server is likely unable to reach the agent-injector webhook and points to the EKS/Calico remedies (<code>hostNetwork=true</code> or an externally exposed webhook). The troubleshooting guide gained a full decision path covering host networking, NodePort/LoadBalancer exposure, access restriction, TLS SAN requirements, and <code>failurePolicy</code> tradeoffs.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Remote mounts retry their initial connection to the traffic-agent</div></div>
-<div style="margin-left: 15px">
-
-When a remote mount was established right after its pod was created or restarted, the first connection to the freshly started traffic-agent could lose a race against the routing of the pod's new IP and fail. The failure was treated as permanent, so the daemon gave up and left the mount directory empty for the rest of the engagement. The daemon now retries the initial connection until the agent becomes reachable, bounded by the intercept timeout, so the mounts come back on their own.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Flush the DNS cache when the agent set changes</div></div>
-<div style="margin-left: 15px">
-
-The root daemon caches cluster DNS resolutions for up to a minute. If a workload and its Service were deleted and recreated, the Service could get a new ClusterIP while the daemon kept resolving the name to the old, now-defunct address, so traffic to it was silently dropped until the cache entry expired. The daemon now flushes the DNS cache whenever the set of traffic-agents changes, so a recreated workload's new ClusterIP is picked up immediately.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">A failed agent injection no longer blocks pod creation</div></div>
-<div style="margin-left: 15px">
-
-When the agent-injector webhook returned an error, it denied the pod's creation. For an unfixable error, such as an invalid <code>telepresence.getambassador.io/inject-traffic-agent</code> annotation value, the ReplicaSet controller then retried the creation indefinitely and the workload's rollout stalled. Such errors now admit the pod without an agent and surface the reason as an admission warning. Transient errors, such as the agent configuration not being generatable yet because the traffic-manager just started, are now retried within the admission call so the agent is injected without denying the pod, and the config generation no longer holds a per-namespace lock that serialized simultaneous injections.
-</div>
-
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Ingest workloads in mapped namespaces](reference/engagements/cli)</div></div>
-<div style="margin-left: 15px">
-
-The <code>ingest</code> command now accepts <code>--namespace</code> to select the workload namespace for that engagement without changing the namespace used by <code>telepresence connect</code>. This allows a single connection with multiple mapped namespaces to run simultaneous ingests in different namespaces, while preserving the connected namespace as the default when no engagement namespace is specified. Mirrors the multi-namespace support added for <code>intercept</code>, <code>wiretap</code>, and <code>replace</code> in 2.28.0. The <code>leave</code> command also accepts <code>--namespace</code> to disambiguate ingests with the same workload name across mapped namespaces.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Compose down no longer removes user-defined named volumes</div></div>
-<div style="margin-left: 15px">
-
-Tearing down a Compose project that engaged a service with replace or intercept previously removed named volumes even when <code>-v</code>/<code>--volumes</code> was not given, because the connection teardown ran <code>docker compose down --volumes</code>. Only Telepresence's own telemount-managed volumes are now removed, matching the behavior of <code>docker compose down</code>.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Clearer error when the cluster cannot be reached</div></div>
-<div style="margin-left: 15px">
-
-When the initial cluster check fails, Telepresence now reports, in plain language, that it could not reach the cluster — naming the kubeconfig context and API server, classifying the cause (host could not be resolved, connection refused, timed out, TLS or authentication failure), and suggesting to verify the kubeconfig context with <code>kubectl cluster-info</code> instead of surfacing a raw networking error.
-</div>
-
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Reliably inject agents into simultaneously created workloads</div></div>
 <div style="margin-left: 15px">
 
 The agent-injector resolved a pod's owner workload from the traffic-manager's informer cache. When many workloads were created at once, that cache could lag behind the API server, and pods whose owner had not yet been observed were admitted without a traffic-agent and never reconciled. The injector now confirms a cache miss with a direct API call, so bursts of simultaneously created workloads all receive their agent.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Pick the correct control-plane when connecting with --docker</div></div>
-<div style="margin-left: 15px">
-
-When connecting with <code>--docker</code>, Telepresence rewrites the kubeconfig server address to one reachable from the daemon container. If several Kubernetes control-planes shared a Docker network (for example, multiple kind clusters all attached to the <code>kind</code> network), it could pick the wrong one and fail the cluster check with a certificate error. It now prefers the container that actually publishes the kubeconfig's API port.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Avoid transient traffic-agent readiness probe warnings</div></div>
-<div style="margin-left: 15px">
-
-The injected traffic-agent readiness probe now invokes a small traffic-agent readiness command instead of running <code>/bin/stat</code> directly. The command waits briefly for the readiness marker file, avoiding transient kubelet warnings when the agent startup creates the marker just after the probe executes.
-</div>
-
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Anonymous usage data collection](reference/config/#usage)</div></div>
-<div style="margin-left: 15px">
-
-Telepresence now emits anonymous usage reports from the CLI/user daemon and from the traffic-manager. Each report carries only an installation UUID, OS/architecture, the binary version, a code-defined topic such as <code>cmd.connect</code>, and a small map of safe-listed entries; it never carries cluster, namespace, workload, or address data. Reporting is enabled by default — the project has no conventional customers, so this data is the only signal we have for which features matter and what to fix. To opt out for one workstation set <code>usage.enabled: false</code> in <code>config.yml</code>, or drop an empty <code>usage-opt-out</code> marker file alongside the machine-wide config; the platform installers (macOS, Windows, Linux) manage that marker from a checkbox/env-var at install time. To opt out for an entire cluster, install the chart with <code>--set usage.enabled=false</code>.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">macOS installer restarts the root daemon on upgrade</div></div>
-<div style="margin-left: 15px">
-
-On macOS, the <code>.pkg</code> installer's postinstall called <code>launchctl load -w</code>, which is a no-op when the daemon is already loaded. As a result, upgrading Telepresence wrote the new binary to disk but left the previous version of the root daemon running, so users had to restart the service (or reboot) to pick up the upgrade. The postinstall now unloads any existing instance before loading the new one, mirroring the symmetric stop+start the Windows installer already performs.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ignore non-interface Linux routes</div></div>
@@ -116,46 +140,10 @@ On macOS, the <code>.pkg</code> installer's postinstall called <code>launchctl l
 Linux routing table scans now ignore blackhole, unreachable, prohibit, throw, and other routes that do not point to an interface before converting kernel routes into Telepresence routes. This prevents <code>telepresence connect</code> from failing with <code>routing table is inconsistent</code> on systems that have null routes, such as MicroK8s blackhole entries.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Do not watch namespaces when only list is allowed</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Pick the correct control-plane when connecting with --docker</div></div>
 <div style="margin-left: 15px">
 
-The traffic-manager now checks both <code>list</code> and <code>watch</code> permissions on cluster-scoped <code>namespaces</code> before enabling dynamic namespace selection. Installations where the manager can list namespaces but not watch them (for example namespace-scoped RBAC while broader <code>list namespaces</code> is granted to other principals) no longer start a cluster-wide namespace informer and instead use the configured static namespace set, avoiding repeated <code>cannot watch resource "namespaces" at the cluster scope</code> errors in the logs.
-</div>
-
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Apply common labels to all Helm chart resources</div></div>
-<div style="margin-left: 15px">
-
-A new top-level <code>labels</code> Helm chart value merges custom labels into every resource created by the chart, including the traffic-manager Deployment, Services, RBAC, cert-manager Certificate and Issuer objects, and lifecycle hooks, while preserving the standard Telepresence label set.
-</div>
-
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Configure agent-injector webhook objectSelector</div></div>
-<div style="margin-left: 15px">
-
-The <code>agentInjector.webhook.objectSelector</code> Helm chart value accepts an optional Kubernetes label selector so the mutating admission webhook applies only to matching pods. This helps clusters that need to exclude system or third-party workloads from agent injection.
-</div>
-
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Align traffic-manager RBAC with workloads Helm chart values</div></div>
-<div style="margin-left: 15px">
-
-Traffic-manager cluster- and namespace-scoped RBAC rules for Deployments, ReplicaSets, StatefulSets, and Argo Rollouts are now generated from the corresponding <code>workloads.*.enabled</code> settings. Disabling a workload kind no longer grants get, list, watch, or patch permissions for that kind.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Reject unmanaged mapped namespaces](reference/engagements/cli)</div></div>
-<div style="margin-left: 15px">
-
-Clients now reject <code>--mapped-namespaces</code> values that are outside the namespace set managed by a namespace-limited traffic-manager. Invalid mapped namespace requests now fail during connect with a helpful error instead of leaving the client connected with namespaces that cannot be handled by the in-cluster manager or traffic-agents.
-</div>
-
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Report why the traffic-manager pod isn't ready during helm install</div></div>
-<div style="margin-left: 15px">
-
-When <code>telepresence helm install</code> or <code>telepresence helm upgrade</code> waits for the traffic-manager and its pod cannot become ready (a bad image, insufficient resources, or an unschedulable pod), the command now reports the underlying Kubernetes reason (for example <code>ImagePullBackOff</code>) and points at <code>kubectl describe pod</code>, instead of a confusing Helm rollback error. It also aborts as soon as a terminal failure is detected rather than waiting for the timeout.
-</div>
-
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Resolve and reach Istio ServiceEntry hosts from the workstation](howtos/istio)</div></div>
-<div style="margin-left: 15px">
-
-Names that only a service mesh can resolve — such as Istio <code>ServiceEntry</code> hosts when Istio's DNS proxying is enabled — can now be used from the workstation. The traffic-agent's DNS lookups are subjected to the mesh's DNS interception, and the new Helm chart value <code>agent.serviceMesh.dialSubnets</code> lists address ranges (for example Istio's ServiceEntry auto-allocation range <code>240.240.0.0/16</code>) that the agent must dial through the mesh proxy. Engage a meshed workload, or connect with <code>--proxy-via</code> through one, and the ServiceEntry host resolves and routes via the mesh.
+When connecting with <code>--docker</code>, Telepresence rewrites the kubeconfig server address to one reachable from the daemon container. If several Kubernetes control-planes shared a Docker network (for example, multiple kind clusters all attached to the <code>kind</code> network), it could pick the wrong one and fail the cluster check with a certificate error. It now prefers the container that actually publishes the kubeconfig's API port.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Traffic-agent DNS lookups honor the client's DNS lookup timeout</div></div>
@@ -164,22 +152,40 @@ Names that only a service mesh can resolve — such as Istio <code>ServiceEntry<
 The traffic-agent imposed a hard-coded 250 millisecond timeout on the DNS lookups it performs on behalf of a connected client. A resolution that needs search-path expansion, or that passes through a service-mesh DNS proxy such as Istio's, can easily take longer, causing spurious <code>NXDOMAIN</code> answers on the workstation. The agent now honors the deadline of the calling client, which is governed by the <code>dns.lookupTimeout</code> client setting.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Pods using the network or highest address of a routed subnet are now reachable](reference/vpn)</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">macOS installer restarts the root daemon on upgrade</div></div>
 <div style="margin-left: 15px">
 
-A subnet routed through Telepresence used to be assigned to the virtual network interface as an interface address. That made the subnet's network address resolve to the local host instead of entering the device, and made the kernel derive a broadcast entry for the subnet's highest address that refused unicast connections, so neither address could be reached. A CNI can assign either address to a pod — the traffic-manager landing on the network address even black-holed the connect-time DNS check — rendering that pod unreachable from the workstation. The interface now owns a single address from the virtual subnet and routes cluster subnets as plain routes, so every address in a routed subnet, its network and highest addresses included, is reachable.
+On macOS, the <code>.pkg</code> installer's postinstall called <code>launchctl load -w</code>, which is a no-op when the daemon is already loaded. As a result, upgrading Telepresence wrote the new binary to disk but left the previous version of the root daemon running, so users had to restart the service (or reboot) to pick up the upgrade. The postinstall now unloads any existing instance before loading the new one, mirroring the symmetric stop+start the Windows installer already performs.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Application traffic no longer bypasses the service mesh in engaged pods](howtos/istio)</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Clearer error when the cluster cannot be reached</div></div>
 <div style="margin-left: 15px">
 
-The traffic-agent's own traffic is exempted from service-mesh processing using an iptables owner match, but the match was based on the agent's UID, which is inherited from the app container's securityContext (or defaults to root). An application sharing that UID had its outbound traffic silently bypass the mesh sidecar — no mTLS, telemetry, or policy enforcement. The agent container is now assigned a distinct primary group (default <code>7439</code>, overridable with <code>agent.securityContext.runAsGroup</code>) and the owner matches are group-based, so application traffic always traverses the mesh.
+When the initial cluster check fails, Telepresence now reports, in plain language, that it could not reach the cluster — naming the kubeconfig context and API server, classifying the cause (host could not be resolved, connection refused, timed out, TLS or authentication failure), and suggesting to verify the kubeconfig context with <code>kubectl cluster-info</code> instead of surfacing a raw networking error.
 </div>
 
-## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Show ingress URLs for intercepted service ports</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Ingest workloads in mapped namespaces](reference/engagements/cli)</div></div>
 <div style="margin-left: 15px">
 
-The output of <code>telepresence intercept</code> and <code>telepresence list</code> now shows the ingress URLs through which an intercepted service port can be reached. When the intercept uses HTTP header filters, a ready-to-paste <code>curl</code> example with the matching <code>-H</code> flags is included, making it easy to send a request that is routed to the intercept handler on the workstation.
+The <code>ingest</code> command now accepts <code>--namespace</code> to select the workload namespace for that engagement without changing the namespace used by <code>telepresence connect</code>. This allows a single connection with multiple mapped namespaces to run simultaneous ingests in different namespaces, while preserving the connected namespace as the default when no engagement namespace is specified. Mirrors the multi-namespace support added for <code>intercept</code>, <code>wiretap</code>, and <code>replace</code> in 2.28.0. The <code>leave</code> command also accepts <code>--namespace</code> to disambiguate ingests with the same workload name across mapped namespaces.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Reject unmanaged mapped namespaces](reference/engagements/cli)</div></div>
+<div style="margin-left: 15px">
+
+Clients now reject <code>--mapped-namespaces</code> values that are outside the namespace set managed by a namespace-limited traffic-manager. Invalid mapped namespace requests now fail during connect with a helpful error instead of leaving the client connected with namespaces that cannot be handled by the in-cluster manager or traffic-agents.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Do not watch namespaces when only list is allowed</div></div>
+<div style="margin-left: 15px">
+
+The traffic-manager now checks both <code>list</code> and <code>watch</code> permissions on cluster-scoped <code>namespaces</code> before enabling dynamic namespace selection. Installations where the manager can list namespaces but not watch them (for example namespace-scoped RBAC while broader <code>list namespaces</code> is granted to other principals) no longer start a cluster-wide namespace informer and instead use the configured static namespace set, avoiding repeated <code>cannot watch resource "namespaces" at the cluster scope</code> errors in the logs.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Avoid transient traffic-agent readiness probe warnings</div></div>
+<div style="margin-left: 15px">
+
+The injected traffic-agent readiness probe now invokes a small traffic-agent readiness command instead of running <code>/bin/stat</code> directly. The command waits briefly for the readiness marker file, avoiding transient kubelet warnings when the agent startup creates the marker just after the probe executes.
 </div>
 
 ## Version 2.28.0 <span style="font-size: 16px;">(May 11)</span>
