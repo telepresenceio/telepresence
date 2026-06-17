@@ -33,7 +33,7 @@ func (s *connectedSuite) Test_InterceptsContainer() {
 	dir := s.T().TempDir()
 	envFile := filepath.Join(dir, "env.json")
 	stdout := itest.TelepresenceOk(ctx, "intercept", svc,
-		"--output", "json",
+		"--format", "json",
 		"--detailed-output",
 		"--container", "echo",
 		"--env-json", envFile,
@@ -70,7 +70,7 @@ func (s *connectedSuite) Test_InterceptsContainer() {
 	// Intercept again, this time without the --container flag
 	itest.TelepresenceOk(ctx, "leave", svc)
 	stdout = itest.TelepresenceOk(ctx, "intercept", svc,
-		"--output", "json",
+		"--format", "json",
 		"--detailed-output",
 		"--env-json", envFile,
 		"--port", strconv.Itoa(svcPort))
@@ -105,7 +105,7 @@ func (s *connectedSuite) Test_InterceptsContainerAndReplace() {
 	dir := s.T().TempDir()
 	envFile := filepath.Join(dir, "env.json")
 	stdout := itest.TelepresenceOk(ctx, "intercept", svc,
-		"--output", "json",
+		"--format", "json",
 		"--detailed-output",
 		"--container", "echo",
 		"--replace",
@@ -156,7 +156,7 @@ func (s *connectedSuite) Test_InterceptsContainerAndReplace() {
 	// Intercept again, this time without the --container flag
 	itest.TelepresenceOk(ctx, "leave", svc)
 	stdout = itest.TelepresenceOk(ctx, "intercept", svc,
-		"--output", "json",
+		"--format", "json",
 		"--detailed-output",
 		"--env-json", envFile,
 		"--port", strconv.Itoa(svcPort))

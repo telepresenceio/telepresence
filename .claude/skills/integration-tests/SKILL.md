@@ -10,10 +10,11 @@ former `integration-test-runner` subagent: kept in the main thread so the env
 vars and scoping are set here, where this harness's shell-env quirks are known.)
 
 ## Background to assume
-
 - Tests live under `integration_test/` (testify suites) and need a working k8s
-  cluster (kind / Docker Desktop) plus built images (`tel2`, `telepresence`, and
-  `route-controller` for `--docker`).
+  cluster (kind / minikube / Docker Desktop) plus images it can reach. For a
+  local cluster, set `TELEPRESENCE_REGISTRY=local` and LOAD images into it
+  (`make load-tel2-image`, plus `make client-image` for `--docker`) rather than
+  pushing to a registry — see Workflow step 2.
 - Harness is in `integration_test/itest/`. Env vars are documented in CLAUDE.md
   under "Integration Test Environment Variables".
 - `itest.yml` (next to the telepresence `config.yml`) pins
@@ -35,9 +36,7 @@ recipe's environment, so they reach the `go test` / `test-report` process:
 ```
 make check-integration \
   TEST_SUITE='^MySuite$$' \
-  TEST_LOG_OUTPUT=/tmp/itest-mysuite.log \
-  TELEPRESENCE_VERSION=<match itest.yml> \
-  TELEPRESENCE_REGISTRY=<match itest.yml>
+  TEST_LOG_OUTPUT=/tmp/itest-mysuite.log
 ```
 
 - `TEST_SUITE` / `TEST_NAME` are regexps. **Double the trailing `$` anchor** —
@@ -46,8 +45,10 @@ make check-integration \
   `-testify.m`. Combine them to pin one test in one suite.
 - `TEST_LOG_OUTPUT` → a FRESH, run-specific path; `rm -f` it first (it is opened
   append-mode). `test-report` writes the rendered log here, NOT to stdout.
-- Pass `TELEPRESENCE_VERSION`/`TELEPRESENCE_REGISTRY` matching `itest.yml` so the
-  compiled client binary matches the images already pushed to the registry.
+- `check-integration` builds **no image** (the `client-image` prereq was removed),
+  so it does NOT need `TELEPRESENCE_VERSION`/`TELEPRESENCE_REGISTRY` — the test
+  harness reads version/registry from `itest.yml`. Pass those vars only to the
+  build/load commands (step 2), matching `itest.yml`.
 
 ## Keep heavy output out of context
 
@@ -77,10 +78,24 @@ If a prior run was killed, before re-running:
 
 1. **Identify** the suite/test: Grep `integration_test/` to map a feature to a
    suite (`<feature>_test.go`, `SuiteName()`) and/or a `Test_` method.
-2. **Decide rebuild:** if Go code under `pkg/`/`cmd/`/`rpc/`/`charts/` changed
-   since the images were built, rebuild+push
-   (`make push-images TELEPRESENCE_VERSION=... TELEPRESENCE_REGISTRY=...`);
-   otherwise skip.
+2. **Decide rebuild.** The harness runs the prebuilt host binary plus the
+   cluster-side images, so rebuild whatever changed. These build/load commands
+   need `TELEPRESENCE_VERSION` matching `itest.yml` (the image tag is
+   `registry/name:version`) and, for a local cluster (kind / minikube / Docker Desktop),
+   `TELEPRESENCE_REGISTRY=local` — then LOAD images into the cluster instead of
+   pushing to a registry:
+   - client-side Go (`pkg/`, `cmd/cli`):
+     `make build TELEPRESENCE_VERSION=<itest.yml>` — else the harness runs a
+     stale binary (e.g. missing a newly added flag).
+   - manager/agent (`cmd/traffic`, `charts/`):
+     `make load-tel2-image TELEPRESENCE_VERSION=<itest.yml> TELEPRESENCE_REGISTRY=local`.
+   - `--docker` tests only:
+     `make client-image TELEPRESENCE_VERSION=<itest.yml> TELEPRESENCE_REGISTRY=local`
+     (the daemon container runs on the workstation via docker, so it only needs
+     to exist locally — no cluster load).
+   `local` makes the harness use `pullPolicy=Never`. Reserve `make push-images`
+   (and a real `TELEPRESENCE_REGISTRY`) for a remote cluster that cannot load
+   local images.
 3. **Run** scoped (background, fresh `TEST_LOG_OUTPUT`).
 4. **Summarize:** command run, pass/fail/skip counts, failing test names, the
    smallest log excerpt explaining each failure, and the next concrete action.
@@ -92,10 +107,3 @@ If a prior run was killed, before re-running:
 - Don't `make clobber` or destroy local images without asking.
 - Don't edit generated files: `docs/reference/cli/**`, `DEPENDENCIES.md`,
   `DEPENDENCY_LICENSES.md`, `docs/release-notes*`.
-
-## macOS notes
-
-- `Test_ConflictOverrideSleeping` (InactiveClient suite) is skipped on darwin:
-  Docker Desktop's bind-mount mtime caching under `docker pause` reaps the
-  daemon-info file before the client is unpaused. `--docker` tests that pause a
-  client can be flaky on macOS; treat CI (Linux/Windows) as the source of truth.

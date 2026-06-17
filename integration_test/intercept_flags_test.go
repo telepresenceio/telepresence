@@ -123,7 +123,7 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 			if tt.replace {
 				args = append(args, "--replace")
 			}
-			args = append(args, "--port", fmt.Sprintf("%d:%d", tt.localPort, tt.port), "--output", "json", "--detailed-output", "--workload", s.serviceName, tt.iceptName)
+			args = append(args, "--port", fmt.Sprintf("%d:%d", tt.localPort, tt.port), "--format", "json", "--detailed-output", "--workload", s.serviceName, tt.iceptName)
 			jsOut := itest.TelepresenceOk(ctx, args...)
 			agentCaptureCtx, agentCaptureCancel := context.WithCancel(ctx)
 			s.CapturePodLogs(agentCaptureCtx, s.serviceName, "traffic-agent", s.AppNamespace())

@@ -29,6 +29,7 @@ func TestIsTerminal(t *testing.T) {
 		{"nodes are available is transient", "FailedScheduling", "Warning", "0/3 nodes are available", false},
 		{"unknown reason is not terminal", "SomethingElse", "Warning", "whatever", false},
 		{"non-warning transient note is still terminal", "Failed", "Normal", "nodes are available", true},
+		{"bind plugin race during rollout is transient", "FailedScheduling", "Warning", `running Bind plugin "DefaultBinder": pods "hello-abc123" not found`, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

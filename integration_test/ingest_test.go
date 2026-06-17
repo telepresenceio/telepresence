@@ -131,7 +131,7 @@ func (s *ingestSuite) Test_IngestCLI() {
 	defer itest.TelepresenceDisconnectOk(ctx)
 
 	mountPoint := s.mountPoint()
-	js := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo-env", "--output", "json")
+	js := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo-env", "--format", "json")
 	clog.Info(ctx, js)
 	var rsp ingest.Info
 	s.Require().NoError(json.Unmarshal([]byte(js), &rsp))
@@ -204,8 +204,8 @@ func (s *ingestSuite) Test_IngestRepeat() {
 	s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceDisconnectOk(ctx)
 
-	i1 := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo-env", "--output", "json")
-	i2 := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo-env", "--output", "json")
+	i1 := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo-env", "--format", "json")
+	i2 := itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo-env", "--format", "json")
 	s.Equal(i1, i2)
 }
 

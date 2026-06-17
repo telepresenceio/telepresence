@@ -1,6 +1,6 @@
 ---
 name: ship-release
-description: Drive a Telepresence release from a prepared branch all the way through CI, docs, the Releases workflow, and PR merges. Assumes `make prepare-release` has already been run locally and the branch with that commit was pushed and a PR opened. Use when the user says "ship the release", "complete the release", or "/ship-release". User-only.
+description: Drive a Telepresence release from a prepared branch all the way through CI, docs, the Releases workflow, and PR merges. Assumes `make prepare-release` has already been run locally and the branch with that commit was pushed and a PR opened. Use when the user says "ship the release", or "complete the release". User-only.
 disable-model-invocation: true
 ---
 

@@ -164,16 +164,10 @@ Names that only a service mesh can resolve — such as Istio <code>ServiceEntry<
 The traffic-agent imposed a hard-coded 250 millisecond timeout on the DNS lookups it performs on behalf of a connected client. A resolution that needs search-path expansion, or that passes through a service-mesh DNS proxy such as Istio's, can easily take longer, causing spurious <code>NXDOMAIN</code> answers on the workstation. The agent now honors the deadline of the calling client, which is governed by the <code>dns.lookupTimeout</code> client setting.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Pods using the network address of a routed subnet are now reachable](reference/vpn)</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Pods using the network or highest address of a routed subnet are now reachable](reference/vpn)</div></div>
 <div style="margin-left: 15px">
 
-A subnet routed through Telepresence was assigned to the virtual network interface as an interface address whose address part was the subnet's network address, so unicast traffic to it was delivered to the local host instead of entering the device. A CNI can assign that address to a pod — including the traffic-manager, which then black-holed the connect-time DNS check — making the pod unreachable from the workstation. The interface now owns a single address from the virtual subnet and routes cluster subnets as plain routes, so every address in a routed subnet, the network address included, is reachable. This is the network-address counterpart of the highest-address fix below.
-</div>
-
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Pods using the highest address of a routed subnet are now reachable</div></div>
-<div style="margin-left: 15px">
-
-When a subnet was routed through the virtual network interface, the kernel derived a broadcast entry for the subnet's highest address and refused unicast connections to it. A CNI will happily assign that address to a pod, rendering the pod unreachable from the workstation. Link-level broadcast has no meaning on the L3 interface, so the entry is now removed, making every address in a routed subnet reachable.
+A subnet routed through Telepresence used to be assigned to the virtual network interface as an interface address. That made the subnet's network address resolve to the local host instead of entering the device, and made the kernel derive a broadcast entry for the subnet's highest address that refused unicast connections, so neither address could be reached. A CNI can assign either address to a pod — the traffic-manager landing on the network address even black-holed the connect-time DNS check — rendering that pod unreachable from the workstation. The interface now owns a single address from the virtual subnet and routes cluster subnets as plain routes, so every address in a routed subnet, its network and highest addresses included, is reachable.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Application traffic no longer bypasses the service mesh in engaged pods](howtos/istio)</div></div>

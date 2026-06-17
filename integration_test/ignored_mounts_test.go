@@ -70,7 +70,7 @@ func (s *mountsSuite) Test_IgnoredMounts() {
 			defer s.DeleteSvcAndWorkload(ctx, "deploy", "hello")
 
 			require := s.Require()
-			stdout := itest.TelepresenceOk(ctx, "intercept", "hello", "--output", "json", "--detailed-output", "--port", fmt.Sprintf("%d:%d", localPort, tt.svcPort))
+			stdout := itest.TelepresenceOk(ctx, "intercept", "hello", "--format", "json", "--detailed-output", "--port", fmt.Sprintf("%d:%d", localPort, tt.svcPort))
 			defer itest.TelepresenceOk(ctx, "leave", "hello")
 			var iInfo intercept.Info
 			require.NoError(json.Unmarshal([]byte(stdout), &iInfo))

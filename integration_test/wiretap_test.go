@@ -140,10 +140,6 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 		}, 30*time.Second, 3*time.Second)
 	})
 
-	type listOut struct {
-		Cmd    string                   `json:"cmd"`
-		Stdout []connector.WorkloadInfo `json:"stdout"`
-	}
 	s.Run("Place wiretap 2", func() {
 		so := itest.TelepresenceOk(s.Context(), "wiretap", "--workload", s.svc, "--mount=false", "--port", fmt.Sprintf("%d:80", localPort2), "wt2")
 		s.Contains(so, "Using Deployment "+s.svc)
@@ -184,21 +180,21 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 			return ok1 && ok2
 		}, 30*time.Second, 3*time.Second)
 
-		so := itest.TelepresenceOk(ctx, "list", "--wiretaps", "--output", "json")
-		var soj listOut
+		so := itest.TelepresenceOk(ctx, "list", "--wiretaps", "--format", "json")
+		var soj []connector.WorkloadInfo
 		s.Require().NoError(json.Unmarshal([]byte(so), &soj))
-		if s.Len(soj.Stdout, 1) {
-			iis := soj.Stdout[0].InterceptInfo
+		if s.Len(soj, 1) {
+			iis := soj[0].InterceptInfo
 			if s.Len(iis, 2) {
 				s.True(iis[0].Spec.Wiretap)
 				s.True(iis[1].Spec.Wiretap)
 			}
 		}
 
-		so = itest.TelepresenceOk(ctx, "list", "--intercepts", "--output", "json")
-		soj.Stdout = nil
+		so = itest.TelepresenceOk(ctx, "list", "--intercepts", "--format", "json")
+		soj = nil
 		s.Require().NoError(json.Unmarshal([]byte(so), &soj))
-		s.Len(soj.Stdout, 0)
+		s.Len(soj, 0)
 	})
 
 	s.Run("Verify tap concurrency", func() {
@@ -253,22 +249,22 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 			return ok1 && ok2
 		}, 5*time.Second, 3*time.Second)
 
-		so = itest.TelepresenceOk(ctx, "list", "--wiretaps", "--output", "json")
-		var soj listOut
+		so = itest.TelepresenceOk(ctx, "list", "--wiretaps", "--format", "json")
+		var soj []connector.WorkloadInfo
 		s.Require().NoError(json.Unmarshal([]byte(so), &soj))
-		if s.Len(soj.Stdout, 1) {
-			iis := soj.Stdout[0].InterceptInfo
+		if s.Len(soj, 1) {
+			iis := soj[0].InterceptInfo
 			if s.Len(iis, 2) {
 				s.True(iis[0].Spec.Wiretap)
 				s.True(iis[1].Spec.Wiretap)
 			}
 		}
 
-		so = itest.TelepresenceOk(ctx, "list", "--intercepts", "--output", "json")
-		soj.Stdout = nil
+		so = itest.TelepresenceOk(ctx, "list", "--intercepts", "--format", "json")
+		soj = nil
 		s.Require().NoError(json.Unmarshal([]byte(so), &soj))
-		if s.Len(soj.Stdout, 1) {
-			iis := soj.Stdout[0].InterceptInfo
+		if s.Len(soj, 1) {
+			iis := soj[0].InterceptInfo
 			if s.Len(iis, 1) {
 				s.False(iis[0].Spec.Wiretap)
 			}

@@ -1,5 +1,17 @@
 // Package output provides structured output for *cobra.Command.
-// Formatted output is enabled by setting the --output=[json|yaml] flag.
+//
+// Two global flags request formatted output:
+//
+//   - --format=[json|yaml|json-stream] (preferred) produces a clean structured
+//     object with no "cmd"/"stdout"/"stderr"/"err" envelope.
+//   - --output=[json|yaml] (deprecated) is retained for backward compatibility.
+//     It wraps text-producing commands in a {cmd, stdout, stderr, err} object.
+//
+// The two flags are mutually exclusive. Only the global flags participate; a
+// command that defines its own local flag of the same name (for example the
+// docker compose passthrough --format, or genyaml's --output file flag) shadows
+// the global flag, and is left untouched. The global flags are recognized by
+// their default value "default".
 package output
 
 import (
@@ -10,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
@@ -53,10 +66,11 @@ func Info(ctx context.Context) io.Writer {
 }
 
 // Object sets the object to be marshalled and printed on stdout when formatted output
-// is requested using the `--output=<fmt>` flag. Otherwise, this function does nothing.
+// is requested using the `--format` or `--output` flag. Otherwise, this function does nothing.
 //
-// If override is set to true, then the formatted output will consist solely of the given
-// object. There will be no "cmd", "stdout", or "stderr" tags.
+// If override is set to true, then formatted output produced for the deprecated `--output`
+// flag will consist solely of the given object. There will be no "cmd", "stdout", or "stderr"
+// tags. The `--format` flag always produces such clean output, regardless of override.
 //
 // The function will panic if data already has been written to the stdout of the command
 // or if an Object already has been called.
@@ -90,7 +104,7 @@ func Object(ctx context.Context, obj any, override bool) {
 // DefaultYAML is a PersistentPRERunE function that will change the default output
 // format to "yaml" for the command that invokes it.
 func DefaultYAML(cmd *cobra.Command, _ []string) error {
-	fmt, err := validateFlag(cmd)
+	fmt, _, err := resolveFormat(cmd)
 	if err != nil {
 		return err
 	}
@@ -103,7 +117,7 @@ func DefaultYAML(cmd *cobra.Command, _ []string) error {
 		rootCmd = p
 	}
 	if fmt == formatDefault {
-		if err = rootCmd.PersistentFlags().Set(global.FlagOutput, "yaml"); err != nil {
+		if err = rootCmd.PersistentFlags().Set(global.FlagFormat, "yaml"); err != nil {
 			return err
 		}
 	}
@@ -121,9 +135,24 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 	}
 
 	var obj any
-	if err == nil && o.override {
+	switch {
+	case o.cleanEnvelope:
+		// --format: never wrap in the {cmd, stdout, stderr, err} envelope.
+		switch {
+		case err != nil:
+			obj = errObject{Error: err.Error()}
+		case o.obj != nil:
+			obj = o.obj
+		case o.Len() > 0:
+			// Fallback for commands that still only emit text; their output is
+			// returned as a bare JSON string rather than wrapped.
+			obj = o.String()
+		default:
+			return cmd, true, err
+		}
+	case err == nil && o.override:
 		obj = o.obj
-	} else {
+	default:
 		response := &object{
 			Cmd: cmd.Name(),
 		}
@@ -144,6 +173,7 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 		}
 		obj = response
 	}
+
 	switch o.format {
 	case formatJSON:
 		data, encErr := json.Marshal(obj)
@@ -165,6 +195,17 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 			panic(encErr)
 		}
 	case formatJSONStream:
+		// Success objects are streamed immediately by Object. Only a clean
+		// error object (or a text fallback) under --format remains to emit.
+		if o.cleanEnvelope {
+			data, encErr := json.Marshal(obj)
+			if encErr == nil {
+				_, encErr = o.originalStdout.Write(data)
+			}
+			if encErr != nil {
+				panic(encErr)
+			}
+		}
 	default:
 		fmt.Fprintf(o.originalStdout, "%+v", obj)
 	}
@@ -172,20 +213,27 @@ func Execute(cmd *cobra.Command) (*cobra.Command, bool, error) {
 }
 
 // SetFormat assigns a cobra.Command.PersistentPreRunE function that all sub commands will inherit. This
-// function checks if the global `--output` flag was used, and if so, ensures that formatted output is
-// initialized.
+// function checks if the global `--format` or `--output` flag was used, and if so, ensures that formatted
+// output is initialized.
 func SetFormat(cmd *cobra.Command, _ []string) error {
 	err := global.InitConfig(cmd)
 	if err != nil {
 		return err
 	}
-	fmt, err := validateFlag(cmd)
+	fmt, cleanEnvelope, err := resolveFormat(cmd)
 	if err != nil {
 		return err
+	}
+	// Warn (on the real stderr, so it never corrupts structured stdout) when the
+	// deprecated global --output flag is used.
+	if of := globalFlag(cmd, global.FlagOutput); of != nil && of.Changed {
+		_, _ = io.WriteString(dos.Stderr(cmd.Context()),
+			"Flag --output has been deprecated, use --format instead\n")
 	}
 	if fmt != formatDefault {
 		o := output{
 			format:         fmt,
+			cleanEnvelope:  cleanEnvelope,
 			originalStdout: cmd.OutOrStdout(),
 		}
 		cmd.SetOut(&o)
@@ -197,36 +245,75 @@ func SetFormat(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// WantsFormatted returns true if the value of the global `--output` flag is set to a valid
-// format different from "default".
+// WantsFormatted returns true if a valid format different from "default" was requested
+// through either the `--format` or the `--output` flag.
 func WantsFormatted(cmd *cobra.Command) bool {
-	f, _ := validateFlag(cmd)
+	f, _, _ := resolveFormat(cmd)
 	return f != formatDefault
 }
 
-// WantsStream returns true if the value of the global `--output` flag is set to "json-stream".
+// WantsStream returns true if the requested format is "json-stream".
 func WantsStream(cmd *cobra.Command) bool {
-	f, _ := validateFlag(cmd)
+	f, _, _ := resolveFormat(cmd)
 	return f == formatJSONStream
 }
 
-func validateFlag(cmd *cobra.Command) (format, error) {
-	if of := cmd.Flags().Lookup(global.FlagOutput); of != nil && of.DefValue == "default" {
-		fmt := strings.ToLower(of.Value.String())
-		switch fmt {
-		case "yaml":
-			return formatYAML, nil
-		case "json":
-			return formatJSON, nil
-		case "json-stream":
-			return formatJSONStream, nil
-		case "default":
-			return formatDefault, nil
-		default:
-			return formatDefault, errcat.User.Newf("invalid output format %q", fmt)
-		}
+// WantsClean returns true if envelope-free structured output was requested through the
+// `--format` flag (as opposed to the deprecated `--output` flag, which wraps text-producing
+// commands in a {cmd, stdout, ...} object). Commands that historically only emitted text
+// should use this to decide whether to produce a structured object via Object: emit the
+// object only when WantsClean is true so that their `--output` shape stays unchanged.
+func WantsClean(cmd *cobra.Command) bool {
+	f, clean, _ := resolveFormat(cmd)
+	return clean && f != formatDefault
+}
+
+// globalFlag returns the named flag only when it is the global flag, recognized by its
+// "default" default value. A command that defines its own local flag of the same name
+// (which shadows the inherited global flag) is thereby left untouched.
+func globalFlag(cmd *cobra.Command, name string) *pflag.Flag {
+	if f := cmd.Flags().Lookup(name); f != nil && f.DefValue == "default" {
+		return f
 	}
-	return formatDefault, nil
+	return nil
+}
+
+// resolveFormat determines the effective output format and whether it was requested through
+// the `--format` flag (cleanEnvelope == true) rather than the deprecated `--output` flag.
+// It is an error to set both flags.
+func resolveFormat(cmd *cobra.Command) (format, bool, error) {
+	ff := globalFlag(cmd, global.FlagFormat)
+	of := globalFlag(cmd, global.FlagOutput)
+	fSet := ff != nil && ff.Changed
+	oSet := of != nil && of.Changed
+	if fSet && oSet {
+		return formatDefault, false, errcat.User.New(
+			"--output and --format cannot be used together; --output is deprecated, use --format instead")
+	}
+	if fSet {
+		f, err := parseFormat(ff.Value.String())
+		return f, true, err
+	}
+	if oSet {
+		f, err := parseFormat(of.Value.String())
+		return f, false, err
+	}
+	return formatDefault, false, nil
+}
+
+func parseFormat(s string) (format, error) {
+	switch strings.ToLower(s) {
+	case "yaml":
+		return formatYAML, nil
+	case "json":
+		return formatJSON, nil
+	case "json-stream":
+		return formatJSONStream, nil
+	case "default":
+		return formatDefault, nil
+	default:
+		return formatDefault, errcat.User.Newf("invalid output format %q", s)
+	}
 }
 
 type (
@@ -237,6 +324,7 @@ type (
 		format         format
 		obj            any
 		override       bool
+		cleanEnvelope  bool
 		originalStdout io.Writer
 	}
 	object struct {
@@ -244,6 +332,9 @@ type (
 		Stdout any    `json:"stdout,omitempty"`
 		Stderr any    `json:"stderr,omitempty"`
 		Err    string `json:"err,omitempty"`
+	}
+	errObject struct {
+		Error string `json:"error"`
 	}
 )
 
