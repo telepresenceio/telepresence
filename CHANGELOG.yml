@@ -53,10 +53,10 @@ items:
           A new global <code>--format=json|yaml|json-stream</code> flag
           produces clean, envelope-free structured output for every command,
           emitting the command's object directly instead of wrapping it in the
-          <code>{cmd, stdout, stderr, err}</code> envelope that
-          <code>--output</code> uses for some commands. On error it emits a
-          plain <code>{"error": "..."}</code> object on stdout and exits
-          non-zero. <code>version</code>, <code>list</code>,
+          <code>cmd</code>/<code>stdout</code>/<code>stderr</code>/<code>err</code>
+          envelope that <code>--output</code> uses for some commands. On error
+          it emits a clean object carrying a single <code>error</code> field on
+          stdout and exits non-zero. <code>version</code>, <code>list</code>,
           <code>list-contexts</code>, and <code>list-namespaces</code> now
           produce script-friendly structured output under
           <code>--format</code>. The older <code>--output</code> flag keeps its
