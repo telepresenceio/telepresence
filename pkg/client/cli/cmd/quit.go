@@ -15,7 +15,6 @@ func quit() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Short: "Tell telepresence daemons to quit",
 		Annotations: map[string]string{
-			usg.AnnTrack:     "true",
 			usg.AnnSafeFlags: "stop-daemons",
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {

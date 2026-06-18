@@ -21,7 +21,6 @@ func connectCmd() *cobra.Command {
 		Short: "Connect to a cluster",
 		Annotations: map[string]string{
 			ann.Session:      ann.Required,
-			usg.AnnTrack:     "true",
 			usg.AnnSafeFlags: "docker",
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {

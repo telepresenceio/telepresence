@@ -22,7 +22,6 @@ import (
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
-	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
 func versionCmd() *cobra.Command {
@@ -35,7 +34,6 @@ func versionCmd() *cobra.Command {
 		Annotations: map[string]string{
 			ann.UserDaemon:        ann.Optional,
 			ann.UpdateCheckFormat: ann.Tel2,
-			usg.AnnTrack:          "true",
 		},
 		ValidArgsFunction: cobra.NoFileCompletions,
 	}
