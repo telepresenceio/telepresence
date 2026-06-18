@@ -53,8 +53,9 @@ func mcp() *cobra.Command {
 				),
 
 				// allow local flags
-				// allow global output flag for `--detailed-output` and `--output json` combo
-				InheritedFlagSelector: ophis.AllowFlags("output"),
+				// allow the global output/format flags for the `--detailed-output`
+				// plus `--output json` / `--format json` combo
+				InheritedFlagSelector: ophis.AllowFlags("output", "format"),
 			},
 		},
 	})
