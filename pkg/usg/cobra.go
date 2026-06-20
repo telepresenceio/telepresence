@@ -9,11 +9,12 @@ import (
 	"github.com/spf13/pflag"
 )
 
-// Cobra annotation keys used to opt commands in to anonymous usage reporting.
+// Cobra annotation keys controlling anonymous usage reporting.
 //
-// A command participates in reporting if it carries AnnTrack with any value
-// other than "false". The reported topic defaults to "cmd." + cmd.Name(),
-// or AnnTopic if explicitly set.
+// Reporting is on by default for every command. A command opts out by setting
+// AnnTrack to "false"; commands in the untracked set are off by default
+// without needing the annotation. The reported topic defaults to
+// "cmd." + cmd.Name(), or AnnTopic if explicitly set.
 //
 // AnnSafeFlags is a comma-separated list of flag names whose *values* are
 // safe to report. The flag *names* the user passed are always reported as
@@ -27,7 +28,8 @@ const (
 type reportCtxKey struct{}
 
 // AttachToRoot installs a PersistentPreRunE hook on the root command that,
-// for any descendant carrying AnnTrack, constructs a Report at Pre time,
+// for any tracked descendant (reporting is on by default; see isTracked),
+// constructs a Report at Pre time,
 // binds it to the command's context, captures the set of flag names the user
 // supplied, and wraps the command's RunE so the report is sent on completion
 // — including on failure, with "error.*" entries recording the errcat category,
@@ -104,12 +106,36 @@ func ReportFromContext(ctx context.Context) *Report {
 	return r
 }
 
+// untracked names the leaf commands that do not participate in usage reporting
+// even though reporting is on by default: cobra's built-in help and completion,
+// and the diagnostic or local-only commands. A command may also opt out
+// explicitly with the AnnTrack="false" annotation.
+var untracked = map[string]struct{}{ //nolint:gochecknoglobals // effectively a constant
+	"completion":      {},
+	"gather-logs":     {},
+	"help":            {},
+	"list":            {},
+	"list-contexts":   {},
+	"list-namespaces": {},
+	"loglevel":        {},
+	"status":          {},
+	"version":         {},
+}
+
+// isTracked reports whether cmd participates in usage reporting. Reporting is on
+// by default; a command is excluded when it carries AnnTrack="false", when it is
+// the root command (the bare entry point only dispatches to subcommands), when
+// it is hidden (internal helpers such as kubeauth are invoked programmatically,
+// not by users), or when its name is in the untracked set.
 func isTracked(cmd *cobra.Command) bool {
-	if cmd.Annotations == nil {
+	if v, ok := cmd.Annotations[AnnTrack]; ok {
+		return v != "false"
+	}
+	if cmd.Parent() == nil || cmd.Hidden {
 		return false
 	}
-	v, ok := cmd.Annotations[AnnTrack]
-	return ok && v != "false"
+	_, off := untracked[cmd.Name()]
+	return !off
 }
 
 func topicFor(cmd *cobra.Command) string {
@@ -139,7 +165,7 @@ func parseSafeFlags(s string) map[string]struct{} {
 		return nil
 	}
 	out := make(map[string]struct{})
-	for _, p := range strings.Split(s, ",") {
+	for p := range strings.SplitSeq(s, ",") {
 		p = strings.TrimSpace(p)
 		if p != "" {
 			out[p] = struct{}{}

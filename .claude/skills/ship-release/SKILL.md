@@ -126,7 +126,38 @@ Expectations:
 
 If `versioned_docs/version-$DOCS_VERSION` is absent or `git status` shows no changes, **stop and report** — `make generate-version` did not do anything useful.
 
-### 2.7 Create the PR
+### 2.7 Build the site locally before pushing
+
+Netlify (the `deploy/netlify`, `Pages changed`, `Header rules`, `Redirect rules`
+checks) and the `Check`/`Lint` GitHub jobs all run `yarn build` (docusaurus
+build). Run it locally first so a broken build is caught here, not after a
+push-and-wait CI cycle:
+
+```
+# If node_modules is absent: yarn install --frozen-lockfile
+yarn build
+```
+
+- Exit 0 → the production build (including the new `version-$DOCS_VERSION`)
+  compiled. Proceed to the PR.
+- Non-zero → **stop and do not push.** Read the error; it names the offending
+  file and line.
+
+**Most common failure: MDX parse error in `release-notes.mdx`.** A `.mdx` file
+is JSX, so literal `{` / `}` **inside an HTML element** like
+`<code>{cmd, stdout}</code>` are parsed as JS expressions and fail with
+`Could not parse expression with acorn`. (Braces inside Markdown backtick
+spans — `` `{tcp|udp}` `` — are safe.) These release-notes files are generated,
+so fix the **source**, not the generated copy:
+
+1. In the telepresence repo, edit the offending `CHANGELOG.yml` entry to remove
+   the literal braces (rephrase, e.g. `<code>cmd</code>/<code>stdout</code>`, or
+   move the snippet into a backtick span), then `make docs-files`.
+2. Commit + push that fix to the release branch (it belongs in the release PR).
+3. Back in the docs repo, re-run `make generate-version` to re-pull the fixed
+   docs, then `yarn build` again before continuing.
+
+### 2.8 Create the PR
 
 ```
 git add versioned_docs/version-"$DOCS_VERSION" versioned_sidebars docusaurus.config.js versions.json
@@ -143,7 +174,7 @@ Capture `docs_pr_number` from the `gh pr create` output URL.
 
 Do not include "Co-Authored-By" or "Generated with" trailers in the commit message or the PR body (per global preferences).
 
-### 2.8 Monitor the docs PR checks
+### 2.9 Monitor the docs PR checks
 
 ```
 gh pr checks "$tp_branch" --json name,state,conclusion

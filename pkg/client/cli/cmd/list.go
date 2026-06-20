@@ -20,7 +20,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
-	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
 const (
@@ -47,9 +46,7 @@ func list() *cobra.Command {
 		Short: "List current intercepts",
 		RunE:  s.list,
 		Annotations: map[string]string{
-			ann.Session:      ann.Required,
-			usg.AnnTrack:     "true",
-			usg.AnnSafeFlags: "only-agents,debug,watch,intercepts,ingests,replacements,wiretaps",
+			ann.Session: ann.Required,
 		},
 		ValidArgsFunction: cobra.NoFileCompletions,
 	}
