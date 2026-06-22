@@ -20,7 +20,22 @@ import (
 
 type table struct{}
 
-func rowAsRoute(row *winipcfg.MibIPforwardRow2, localIP netip.Addr) (*Route, error) {
+// each call to `net.InterfaceByIndex(idx)` calls `net.Interfaces()` and takes ~10ms.
+// on systems with thousands of routes (for example due to enterprise vpn), doing this for every route
+// costs ~20s. Instead, we call `net.Interfaces()` once and create a map ourselves.
+func interfacesByIndex() (map[int]net.Interface, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	byIndex := make(map[int]net.Interface, len(ifaces))
+	for _, iface := range ifaces {
+		byIndex[iface.Index] = iface
+	}
+	return byIndex, nil
+}
+
+func rowAsRoute(row *winipcfg.MibIPforwardRow2, localIP netip.Addr, ifaces map[int]net.Interface) (*Route, error) {
 	dst := row.DestinationPrefix.Prefix()
 	if !dst.IsValid() {
 		return nil, nil
@@ -29,9 +44,8 @@ func rowAsRoute(row *winipcfg.MibIPforwardRow2, localIP netip.Addr) (*Route, err
 	if !gw.IsValid() {
 		return nil, nil
 	}
-	ifaceIdx := int(row.InterfaceIndex)
-	iface, err := net.InterfaceByIndex(ifaceIdx)
-	if err != nil {
+	iface, ok := ifaces[int(row.InterfaceIndex)]
+	if !ok {
 		return nil, errInconsistentRT
 	}
 	return &Route{
@@ -49,9 +63,13 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to get routing table: %w", err)
 	}
+	ifaces, err := interfacesByIndex()
+	if err != nil {
+		return nil, fmt.Errorf("unable to enumerate network interfaces: %w", err)
+	}
 	routes := make([]*Route, 0, len(table))
 	for _, row := range table {
-		r, err := rowAsRoute(&row, netip.Addr{})
+		r, err := rowAsRoute(&row, netip.Addr{}, ifaces)
 		if err != nil {
 			return nil, err
 		}
@@ -63,35 +81,45 @@ func getConsistentRoutingTable(ctx context.Context) ([]*Route, error) {
 }
 
 func getRouteForIP(localIP netip.Addr) (*Route, error) {
-retryInconsistent:
-	for i := 0; i < maxInconsistentRetries; i++ {
-		table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
-		if err != nil {
-			return nil, fmt.Errorf("unable to get routing table: %w", err)
+	table, err := winipcfg.GetIPForwardTable2(windows.AF_UNSPEC)
+	if err != nil {
+		return nil, fmt.Errorf("unable to get routing table: %w", err)
+	}
+	ifaces, err := interfacesByIndex()
+	if err != nil {
+		return nil, fmt.Errorf("unable to enumerate network interfaces: %w", err)
+	}
+
+	// Determine which interface indices own localIP by enumerating each
+	// interface's addresses once, rather than re-doing it for every route.
+	owners := make(map[int]bool)
+	for idx, iface := range ifaces {
+		if iface.Flags&net.FlagUp != net.FlagUp {
+			continue
 		}
-		for _, row := range table {
-			ifaceIdx := int(row.InterfaceIndex)
-			if iface, err := net.InterfaceByIndex(ifaceIdx); err == nil && iface.Flags&net.FlagUp == net.FlagUp {
-				if addrs, err := iface.Addrs(); err == nil {
-					for _, addr := range addrs {
-						if pfx, err := netip.ParsePrefix(addr.String()); err == nil && pfx.Addr() == localIP {
-							r, err := rowAsRoute(&row, pfx.Addr())
-							if err != nil {
-								if err == errInconsistentRT {
-									time.Sleep(inconsistentRetryDelay)
-									continue retryInconsistent
-								}
-								return nil, err
-							}
-							if r != nil {
-								return r, nil
-							}
-						}
-					}
-				}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			if pfx, err := netip.ParsePrefix(addr.String()); err == nil && pfx.Addr() == localIP {
+				owners[idx] = true
+				break
 			}
 		}
-		break
+	}
+
+	for _, row := range table {
+		if !owners[int(row.InterfaceIndex)] {
+			continue
+		}
+		r, err := rowAsRoute(&row, localIP, ifaces)
+		if err != nil {
+			return nil, err
+		}
+		if r != nil {
+			return r, nil
+		}
 	}
 	return nil, fmt.Errorf("unable to get interface index for IP %s", localIP.String())
 }

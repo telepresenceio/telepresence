@@ -24,6 +24,15 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.29.1
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Fix slow windows connection time with warp
+        body: >-
+          When running telepresence connect, we list all interfaces and use
+          <code>net.InterfaceByIndex(idx)</code> on each of them. This function
+          takes ~10ms so when you have LOTS of interfaces it takes a while.
   - version: 2.29.0
     date: 2026-06-20
     notes:
