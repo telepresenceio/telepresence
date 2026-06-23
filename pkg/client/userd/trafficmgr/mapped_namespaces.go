@@ -3,8 +3,6 @@ package trafficmgr
 import (
 	"slices"
 	"sort"
-
-	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
 func normalizeMappedNamespaces(namespaces []string) ([]string, bool) {
@@ -20,53 +18,27 @@ func mappedNamespacesAll(namespaces []string) bool {
 	return len(namespaces) == 1 && namespaces[0] == "all"
 }
 
-func effectiveMappedNamespaces(requestedNamespaces, clientNamespaces, managerNamespaces []string) ([]string, error) {
+// effectiveMappedNamespaces resolves the namespaces the client creates top-level
+// DNS for, by precedence: an explicit --mapped-namespaces request, then the
+// client config, then the traffic-manager's set. "all" (and an empty result)
+// means every namespace. A mapped namespace need not be managed by the
+// traffic-manager; DNS for any namespace is resolved server-side, so mapping an
+// unmanaged namespace is valid.
+func effectiveMappedNamespaces(requestedNamespaces, clientNamespaces, managerNamespaces []string) []string {
 	requestedNamespaces, requestedAll := normalizeMappedNamespaces(requestedNamespaces)
 	clientNamespaces, clientAll := normalizeMappedNamespaces(clientNamespaces)
 	managerNamespaces, _ = normalizeMappedNamespaces(managerNamespaces)
 
-	var namespaces []string
 	switch {
 	case requestedAll:
-		return managerNamespaces, nil
+		return managerNamespaces
 	case len(requestedNamespaces) > 0:
-		namespaces = requestedNamespaces
+		return requestedNamespaces
 	case clientAll:
-		return managerNamespaces, nil
+		return managerNamespaces
 	case len(clientNamespaces) > 0:
-		namespaces = clientNamespaces
-	case len(managerNamespaces) > 0:
-		return managerNamespaces, nil
+		return clientNamespaces
+	default:
+		return managerNamespaces
 	}
-	if err := ensureMappedNamespacesManaged(namespaces, managerNamespaces); err != nil {
-		return nil, err
-	}
-	return namespaces, nil
-}
-
-func ensureMappedNamespacesManaged(requestedNamespaces, managerNamespaces []string) error {
-	if len(requestedNamespaces) == 0 || len(managerNamespaces) == 0 {
-		return nil
-	}
-
-	managed := make(map[string]struct{}, len(managerNamespaces))
-	for _, namespace := range managerNamespaces {
-		managed[namespace] = struct{}{}
-	}
-
-	var unmanaged []string
-	for _, namespace := range requestedNamespaces {
-		if _, ok := managed[namespace]; !ok {
-			unmanaged = append(unmanaged, namespace)
-		}
-	}
-	if len(unmanaged) == 0 {
-		return nil
-	}
-
-	return errcat.User.Newf(
-		"mapped namespaces %q are not managed by this traffic-manager; managed namespaces are %q. "+
-			"Reconnect with --mapped-namespaces limited to managed namespaces, or reconfigure the traffic-manager to also manage %q",
-		unmanaged, managerNamespaces, unmanaged,
-	)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -19,6 +20,9 @@ import (
 // Errors returned by the handler will be treated as permanent and returned as-is.
 //
 // Errors returned by the stream provider and the repair will be treated as transient and retried. The backup.Permanent wrapper can be used to override this behavior.
+//
+// A gRPC status code listed in permanentCodes is treated as permanent (not retried) for errors from both the stream
+// provider and Recv. Use this for codes that retrying cannot resolve, such as FailedPrecondition.
 func WatchWithRetry[T any](
 	ctx context.Context,
 	name string,
@@ -26,6 +30,7 @@ func WatchWithRetry[T any](
 	streamProvider func(context.Context) (grpc.ServerStreamingClient[T], error),
 	handler func(*T) error,
 	repair func() error,
+	permanentCodes ...codes.Code,
 ) error {
 	retryCount := 0
 	err := backoff.Retry(func() error {
@@ -36,11 +41,14 @@ func WatchWithRetry[T any](
 		}
 		retryCount++
 		stream, err := streamProvider(ctx)
-		switch status.Code(err) {
+		switch c := status.Code(err); c {
 		case codes.OK:
 		case codes.Unimplemented:
 			return backoff.Permanent(err)
 		default:
+			if slices.Contains(permanentCodes, c) {
+				return backoff.Permanent(err)
+			}
 			return fmt.Errorf("error when calling stream provider for %s: %w", name, err)
 		}
 		defer func() {
@@ -52,7 +60,7 @@ func WatchWithRetry[T any](
 				return nil
 			default:
 				value, err := stream.Recv()
-				switch status.Code(err) {
+				switch c := status.Code(err); c {
 				case codes.OK:
 					err = handler(value)
 					if err != nil {
@@ -61,6 +69,9 @@ func WatchWithRetry[T any](
 				case codes.Unimplemented:
 					return backoff.Permanent(err)
 				default:
+					if slices.Contains(permanentCodes, c) {
+						return backoff.Permanent(err)
+					}
 					return fmt.Errorf("error when calling Recv for %s: %w", name, err)
 				}
 			}

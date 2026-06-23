@@ -118,29 +118,21 @@ func (s *multipleServicesSuite) Test_List() {
 	}
 }
 
-func (s *multipleServicesSuite) Test_RejectsUnmanagedMappedNamespace() {
-	ctx := itest.WithUser(s.Context(), "default")
+func (s *multipleServicesSuite) Test_AllowsUnmanagedMappedNamespace() {
+	ctx := s.Context()
 	require := s.Require()
-	itest.TelepresenceDisconnectOk(ctx)
+	itest.TelepresenceQuitOk(ctx)
 	defer func() {
-		ctx := s.Context()
-		itest.TelepresenceDisconnectOk(ctx)
-		itest.TelepresenceOk(s.Context(), "connect", "--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace())
+		itest.TelepresenceQuitOk(ctx)
+		s.TelepresenceConnect(s.Context())
 	}()
 
-	// This suite's traffic-manager only manages the app namespace. Mapping a namespace that it does
-	// not manage (here "default") must be rejected during connect, rather than leaving the client
-	// connected to namespaces that the manager and its traffic-agents cannot serve.
-	stdout, stderr, err := itest.Telepresence(ctx, "connect",
-		"--namespace", s.AppNamespace(), "--manager-namespace", s.ManagerNamespace(),
-		"--mapped-namespaces", "default")
-	require.Error(err)
-	require.Contains(stdout+stderr, "are not managed by this traffic-manager")
-
-	// "all" resolves to the managed namespaces, so the connection succeeds and the workloads in the
-	// managed namespace are listed.
-	s.TelepresenceConnect(ctx, "--mapped-namespaces", "all")
-	stdout = itest.TelepresenceOk(ctx, "list")
+	// This suite's traffic-manager only manages the app namespace. Mapping a namespace it does not
+	// manage (here "default") is allowed: mapping only sets up the client's short DNS, and names are
+	// resolved by the traffic-manager/agent regardless of management. connect therefore succeeds
+	// instead of being rejected, and the managed app namespace remains operational.
+	s.TelepresenceConnect(ctx, "--mapped-namespaces", s.AppNamespace()+",default")
+	stdout := itest.TelepresenceOk(ctx, "list")
 	require.NotContains(stdout, "No Workloads")
 }
 
