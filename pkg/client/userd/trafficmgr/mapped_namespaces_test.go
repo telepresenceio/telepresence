@@ -6,49 +6,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestEffectiveMappedNamespacesRejectsUnmanagedRequestedNamespace(t *testing.T) {
-	namespaces, err := effectiveMappedNamespaces(
+func TestEffectiveMappedNamespacesAllowsUnmanagedRequestedNamespace(t *testing.T) {
+	// A requested namespace the traffic-manager does not manage is still mapped
+	// for DNS; mapping does not require management.
+	namespaces := effectiveMappedNamespaces(
 		[]string{"alpha", "beta"},
 		nil,
 		[]string{"alpha"},
 	)
-
-	require.Error(t, err)
-	require.Nil(t, namespaces)
-	require.Contains(t, err.Error(), `mapped namespaces ["beta"] are not managed by this traffic-manager`)
-	require.Contains(t, err.Error(), `managed namespaces are ["alpha"]`)
+	require.Equal(t, []string{"alpha", "beta"}, namespaces)
 }
 
-func TestEffectiveMappedNamespacesRejectsUnmanagedClientConfigNamespace(t *testing.T) {
-	namespaces, err := effectiveMappedNamespaces(
+func TestEffectiveMappedNamespacesAllowsUnmanagedClientConfigNamespace(t *testing.T) {
+	namespaces := effectiveMappedNamespaces(
 		nil,
 		[]string{"beta"},
 		[]string{"alpha"},
 	)
-
-	require.Error(t, err)
-	require.Nil(t, namespaces)
-	require.Contains(t, err.Error(), `mapped namespaces ["beta"] are not managed by this traffic-manager`)
+	require.Equal(t, []string{"beta"}, namespaces)
 }
 
 func TestEffectiveMappedNamespacesUsesManagerNamespacesWhenAllRequested(t *testing.T) {
-	namespaces, err := effectiveMappedNamespaces(
+	namespaces := effectiveMappedNamespaces(
 		[]string{"all"},
 		[]string{"beta"},
 		[]string{"alpha", "gamma"},
 	)
-
-	require.NoError(t, err)
 	require.Equal(t, []string{"alpha", "gamma"}, namespaces)
 }
 
 func TestEffectiveMappedNamespacesAllowsGlobalManager(t *testing.T) {
-	namespaces, err := effectiveMappedNamespaces(
+	namespaces := effectiveMappedNamespaces(
 		[]string{"beta"},
 		nil,
 		nil,
 	)
-
-	require.NoError(t, err)
 	require.Equal(t, []string{"beta"}, namespaces)
 }

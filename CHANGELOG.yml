@@ -33,6 +33,17 @@ items:
           When running telepresence connect, we list all interfaces and use
           <code>net.InterfaceByIndex(idx)</code> on each of them. This function
           takes ~10ms so when you have LOTS of interfaces it takes a while.
+      - type: bugfix
+        title: Allow mapping namespaces that the traffic-manager does not manage
+        body: >-
+          Restores the ability to pass namespaces that the traffic-manager does
+          not manage to <code>--mapped-namespaces</code>, so short DNS names
+          (such as <code>svc.ns</code>) resolve for them again. A 2.29.0
+          regression rejected such namespaces at connect. Mapping only affects
+          the client's DNS — names are resolved by the traffic-manager or a
+          traffic-agent, so management is not required. Targeting an unmanaged
+          namespace for an engagement remains an error, and listing one now
+          fails fast with that error instead of hanging until a timeout.
   - version: 2.29.0
     date: 2026-06-20
     notes:
