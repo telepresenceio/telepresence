@@ -215,11 +215,7 @@ func NewSession(
 		return nil, nil,
 			fmt.Errorf("traffic manager version %s is too old. Minimum supported version is 2.21.0, please upgrade", tmgr.managerVersion)
 	}
-	if err = tmgr.updateClientConfig(ctx, cr.MappedNamespaces); err != nil {
-		tmgr.depart(ctx)
-		tmgr.managerConn.Close()
-		return nil, nil, err
-	}
+	tmgr.updateClientConfig(ctx, cr.MappedNamespaces)
 
 	oi := tmgr.getNetworkInfo(cr)
 	if !service.RootSessionInProcess() {
@@ -591,16 +587,6 @@ func (s *session) SessionInfo() *manager.SessionInfo {
 	return s.sessionInfo
 }
 
-func (s *session) depart(ctx context.Context) {
-	c, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
-	defer cancel()
-	if _, err := s.ManagerClient().Depart(c, s.SessionInfo()); err != nil {
-		clog.Debugf(c, "failed to depart from manager after connect error: %v", err)
-	} else if err = deleteSessionInfoFromUserCache(c, s.daemonID); err != nil {
-		clog.Debugf(c, "failed to delete session from user cache after connect error: %v", err)
-	}
-}
-
 // getInfosForWorkloads returns a list of workloads found in the given namespace that fulfils the given filter criteria.
 func (s *session) getInfosForWorkloads(
 	namespaces []string,
@@ -912,9 +898,7 @@ func (s *session) UpdateStatus(ctx context.Context, cr *rpc.ConnectRequest) (*rp
 	if err != nil {
 		return nil, err
 	}
-	if err := s.updateClientConfig(ctx, cr.MappedNamespaces); err != nil {
-		return nil, err
-	}
+	s.updateClientConfig(ctx, cr.MappedNamespaces)
 	return s.Status(ctx)
 }
 
@@ -922,7 +906,7 @@ func (s *session) Status(ctx context.Context) (*rpc.ConnectInfo, error) {
 	return s.status(ctx, false)
 }
 
-func (s *session) updateClientConfig(ctx context.Context, namespaces []string) error {
+func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 	var tmCfg client.Config
 	cliCfg, err := s.ManagerClient().GetClientConfig(ctx, &empty.Empty{})
 	if err != nil {
@@ -945,10 +929,7 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) e
 
 		// We do not want to override the local config with the traffic-manager's config even if the local config is empty.
 		cfg.Cluster().MappedNamespaces = clientMappedNamespaces
-		namespaces, err = effectiveMappedNamespaces(namespaces, clientMappedNamespaces, tmMappedNamespaces)
-		if err != nil {
-			return err
-		}
+		namespaces = effectiveMappedNamespaces(namespaces, clientMappedNamespaces, tmMappedNamespaces)
 		if s.SetMappedNamespaces(namespaces) {
 			if len(namespaces) == 0 {
 				if k8sapi.CanWatchNamespaces(s) {
@@ -974,7 +955,6 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) e
 			clog.Debug(s, sc.Text())
 		}
 	}
-	return nil
 }
 
 func (s *session) status(ctx context.Context, initial bool) (*rpc.ConnectInfo, error) {
@@ -1319,5 +1299,8 @@ func (s *session) workloadsWatcher(namespace string, synced *sync.WaitGroup) err
 				synced = nil
 			}
 			return nil
-		}, nil)
+			// A namespace that the traffic-manager does not manage yields FailedPrecondition;
+			// retrying cannot change that, so treat it as permanent and surface the error instead
+			// of spinning (which manifests as a hang when listing an unmanaged namespace).
+		}, nil, codes.FailedPrecondition)
 }

@@ -8,6 +8,12 @@
 When running telepresence connect, we list all interfaces and use <code>net.InterfaceByIndex(idx)</code> on each of them. This function takes ~10ms so when you have LOTS of interfaces it takes a while.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Allow mapping namespaces that the traffic-manager does not manage</div></div>
+<div style="margin-left: 15px">
+
+Restores the ability to pass namespaces that the traffic-manager does not manage to <code>--mapped-namespaces</code>, so short DNS names (such as <code>svc.ns</code>) resolve for them again. A 2.29.0 regression rejected such namespaces at connect. Mapping only affects the client's DNS — names are resolved by the traffic-manager or a traffic-agent, so management is not required. Targeting an unmanaged namespace for an engagement remains an error, and listing one now fails fast with that error instead of hanging until a timeout.
+</div>
+
 ## Version 2.29.0 <span style="font-size: 16px;">(June 20)</span>
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Local traffic to intercepted destinations no longer round-trips through the cluster](reference/config)</div></div>
 <div style="margin-left: 15px">

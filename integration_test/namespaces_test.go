@@ -301,13 +301,17 @@ func (s *nsSuite) Test_NamespacesStatic() {
 	rq.Error(err)
 	rq.Contains(se, "beta is not managed")
 
-	_, se, err = itest.Telepresence(ctx,
+	// Mapping an unmanaged namespace (beta) is allowed: the default namespace
+	// (alpha) is managed, so connect succeeds instead of being rejected (the
+	// 2.29.0 regression). beta is mapped for short DNS even though it is not
+	// managed; it does not show up in the status, which lists only the
+	// namespaces the client can access.
+	itest.TelepresenceOk(ctx,
 		"connect",
 		"--manager-namespace", s.managerNamespace(),
 		"--namespace", "alpha",
 		"--mapped-namespaces", "alpha,beta")
-	rq.Error(err)
-	rq.Contains(se, `mapped namespaces ["beta"] are not managed by this traffic-manager`)
+	itest.TelepresenceDisconnectOk(ctx)
 
 	// Switch to just using both alpha and beta
 	ctx = itest.WithNamespaces(s.Context(), &itest.Namespaces{
