@@ -164,10 +164,10 @@ The `client.helm` object contains options for the `telepresence helm` commands
 
 All traffic to and from the cluster is tunneled via gRPC over a kubernetes port-forward connection.
 
-| Field             | Description                                                                                   | Type                                      | Default  |
-|-------------------|-----------------------------------------------------------------------------------------------|-------------------------------------------|----------|
-| `connectionTTL`   | Max time that the traffic-manager or traffic-agent will keep an idle client connection alive  | [duration][go-duration]                   | `24h`    |
-| `maxReceiveSize`  | Max size of a gRCP message.                                                                   | Docker registry name [quantity][quantity] | `4Mi`    |
+| Field             | Description                                                                                  | Type                                      | Default  |
+|-------------------|----------------------------------------------------------------------------------------------|-------------------------------------------|----------|
+| `connectionTTL`   | Max time that the traffic-manager or traffic-agent will keep an idle client connection alive | [duration][go-duration]                   | `24h`    |
+| `maxReceiveSize`  | Max size of a gRPC message.                                                                  | Docker registry name [quantity][quantity] | `4Mi`    |
 
 ### Images
 Values for `client.images` are strings. These values affect the objects that are deployed in the cluster,
