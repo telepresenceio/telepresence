@@ -81,7 +81,7 @@ Oftentimes, there's a 1-to-1 relationship between a service and a
 workload, so telepresence is able to auto-detect which service it
 should intercept based on the workload you are trying to intercept.
 But if you use something like
-[Argo](https://www.getambassador.io/docs/argo/latest/), there may be
+[Argo Rollouts](https://argoproj.github.io/argo-rollouts/), there may be
 two services (that use the same labels) to manage traffic between a
 canary and a stable service.
 
