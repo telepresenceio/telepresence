@@ -25,7 +25,7 @@ type SenderConfig struct {
 // It returns only when ctx is cancelled. If the address is empty, the function
 // drains the sink to discard any backlog but never dials a server.
 //
-// Per the design rules, all transient failures are logged at info level only;
+// Per the design rules, all transient failures are logged at trace level only;
 // the function never returns an error to its caller and never surfaces a
 // warning. Reports lost to a transient failure are re-enqueued and may be
 // dropped if the sink is at cap.
@@ -52,7 +52,7 @@ func RunSender(ctx context.Context, sink Sink, cfg SenderConfig) {
 		var err error
 		conn, err = dialCollector(cfg.Address, cfg.Insecure)
 		if err != nil {
-			clog.Infof(ctx, "usg: collector unreachable, reports will be dropped: %v", err)
+			clog.Tracef(ctx, "usg: collector unreachable, reports will be dropped: %v", err)
 		} else {
 			client = usgrpc.NewUsgClient(conn)
 		}
@@ -91,7 +91,7 @@ func flush(ctx context.Context, sink Sink, client usgrpc.UsgClient, batch int) {
 	defer cancel()
 	_, err := client.ReportBatch(sendCtx, &usgrpc.UsageReportBatch{Reports: reports})
 	if err != nil {
-		clog.Infof(ctx, "usg: batch of %d reports could not be sent: %v", len(reports), err)
+		clog.Tracef(ctx, "usg: batch of %d reports could not be sent: %v", len(reports), err)
 		// Re-enqueue best-effort; overflow drops silently as required.
 		for _, r := range reports {
 			sink.Enqueue(r)

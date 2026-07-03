@@ -20,7 +20,7 @@
 //   - Reporting can be disabled via config. When disabled, no producer is
 //     installed on the context, New() returns nil, and methods on a nil
 //     Report are no-ops, so nothing is buffered or sent.
-//   - Problems are logged at info level only, never warning or error.
+//   - Problems are logged at trace level only, never warning or error.
 //
 // Sensitive data is the caller's responsibility. This package performs no
 // scrubbing or validation of entry values — anything passed to Add is sent
