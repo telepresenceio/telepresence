@@ -173,6 +173,14 @@ func TestEnvconfig(t *testing.T) {
 				e.InterceptAllowGlobal = false
 			},
 		},
+		"pod-host-ip": {
+			Input: map[string]string{
+				"POD_HOST_IP": "192.168.56.2",
+			},
+			Output: func(e *managerutil.Env) {
+				e.PodHostIp = netip.AddrFrom4([4]byte{192, 168, 56, 2})
+			},
+		},
 	}
 
 	for tcName, tc := range testcases {
@@ -188,6 +196,36 @@ func TestEnvconfig(t *testing.T) {
 			actual := managerutil.GetEnv(ctx)
 			assert.Equal(t, &expected, actual)
 			assert.Equal(t, "", actual.QualifiedAgentImage())
+		})
+	}
+}
+
+func TestEnvHostNetwork(t *testing.T) {
+	podIP := netip.MustParseAddr("203.0.113.18")
+	tests := []struct {
+		name string
+		env  managerutil.Env
+		want bool
+	}{
+		{
+			name: "pod IP equals host IP",
+			env:  managerutil.Env{PodIp: podIP, PodHostIp: podIP},
+			want: true,
+		},
+		{
+			name: "pod IP differs from host IP",
+			env:  managerutil.Env{PodIp: podIP, PodHostIp: netip.MustParseAddr("192.168.56.2")},
+			want: false,
+		},
+		{
+			name: "host IP unknown",
+			env:  managerutil.Env{PodIp: podIP},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.env.HostNetwork())
 		})
 	}
 }

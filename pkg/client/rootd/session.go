@@ -1168,6 +1168,24 @@ func (s *session) hasSvcConnectivity(info *manager.ClusterInfo) bool {
 	return true
 }
 
+// managerIPInPodSubnets reports whether the manager's pod IP is covered by one
+// of the announced pod subnets. A traffic-manager that runs on the host network
+// reports a node address as its pod IP, and such an address cannot serve as a
+// probe target for pod connectivity.
+func managerIPInPodSubnets(info *manager.ClusterInfo) bool {
+	ip, ok := netip.AddrFromSlice(info.ManagerPodIp)
+	if !ok {
+		return false
+	}
+	ip = ip.Unmap()
+	for _, sn := range info.PodSubnets {
+		if iputil.RPCToPrefix(sn).Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // hasPodConnectivity verifies connectivity to the traffic-manager in the cluster and returns true if connectivity is successful; false otherwise.
 func (s *session) hasPodConnectivity(info *manager.ClusterInfo) bool {
 	if info.ManagerPodIp == nil {
@@ -1176,6 +1194,11 @@ func (s *session) hasPodConnectivity(info *manager.ClusterInfo) bool {
 	ct := client.GetConfig(s).Timeouts().Get(client.TimeoutConnectivityCheck)
 	if ct == 0 {
 		clog.Info(s, "Connectivity check for pods disabled")
+		return false
+	}
+	if !managerIPInPodSubnets(info) {
+		clog.Infof(s, "Will proxy pods. Manager pod IP %s is not within a pod subnet, so it cannot be used for a connectivity check",
+			net.IP(info.ManagerPodIp))
 		return false
 	}
 	ip := net.IP(info.ManagerPodIp).String()
