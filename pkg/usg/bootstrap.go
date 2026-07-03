@@ -30,12 +30,12 @@ func InstallClient(ctx context.Context) (context.Context, Sink) {
 	}
 	id, err := client.InstallID(ctx)
 	if err != nil {
-		clog.Infof(ctx, "usg: installation id unavailable, reporting disabled: %v", err)
+		clog.Tracef(ctx, "usg: installation id unavailable, reporting disabled: %v", err)
 		return ctx, nil
 	}
 	sink, err := NewDiskSink(ClientQueueDir(ctx))
 	if err != nil {
-		clog.Infof(ctx, "usg: disk queue unavailable, reporting disabled: %v", err)
+		clog.Tracef(ctx, "usg: disk queue unavailable, reporting disabled: %v", err)
 		return ctx, nil
 	}
 	return WithProducer(ctx, newProducer(SourceClient, id, version.Version, sink)), sink
