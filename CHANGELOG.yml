@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.29.2
-    date: (TBD)
+    date: 2026-07-04
     notes:
       - type: bugfix
         title: Pod subnets are now routed when the traffic-manager runs with hostNetwork
@@ -40,6 +40,14 @@ items:
           now excluded from pod-subnet derivation, and the connectivity check is
           skipped when the manager's pod IP isn't covered by an announced pod
           subnet.
+      - type: bugfix
+        title: Usage-reporting problems no longer clutter the logs
+        body: >-
+          When the anonymous usage collector was unreachable, the user daemon
+          and the traffic-manager logged a message at info level for every
+          failed send attempt, flooding their logs every thirty seconds. All
+          logging from the usage-reporting subsystem is now done at trace
+          level.
   - version: 2.29.1
     date: 2026-06-23
     notes:
