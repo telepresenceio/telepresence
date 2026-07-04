@@ -49,6 +49,7 @@ type Env struct {
 	PodCidrStrategy string
 	PodCidrs        []netip.Prefix `default:"" envSeparator:" "`
 	PodIp           netip.Addr
+	PodHostIp       netip.Addr
 
 	AgentRegistry              string
 	AgentImageName             string
@@ -96,6 +97,15 @@ type Env struct {
 
 	// For testing only
 	CompatibilityVersion *semver.Version
+}
+
+// HostNetwork reports whether the traffic-manager pod runs on the host
+// network, in which case its pod IP is a node address rather than an address
+// in the cluster's pod CIDR. Detection requires the POD_HOST_IP environment
+// variable; when that is absent the manager is assumed to be on the pod
+// network.
+func (e *Env) HostNetwork() bool {
+	return e.PodHostIp.IsValid() && e.PodHostIp == e.PodIp
 }
 
 func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorConfig, error) {

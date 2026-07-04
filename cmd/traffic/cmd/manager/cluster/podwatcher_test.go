@@ -144,6 +144,18 @@ func Test_podIPs(t *testing.T) {
 			want: []netip.Addr{oneIP, nodeIP},
 		},
 		{
+			name: "host-network pod",
+			pod: &corev1.Pod{
+				Spec: corev1.PodSpec{
+					HostNetwork: true,
+				},
+				Status: corev1.PodStatus{
+					PodIP: "192.168.0.2",
+				},
+			},
+			want: nil,
+		},
+		{
 			name: "pod with podIP and podIPs",
 			pod: &corev1.Pod{
 				Status: corev1.PodStatus{

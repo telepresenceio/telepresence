@@ -383,7 +383,12 @@ func getInjectorSvcIP(ctx context.Context, env *managerutil.Env, client typedCor
 }
 
 func (oi *info) watchPodSubnets(ctx context.Context) {
-	podIP, _ := netip.AddrFromSlice(oi.ManagerPodIp)
+	// The manager's own pod IP seeds the derivation, but only when it actually
+	// is a pod-CIDR address. With hostNetwork it is a node address.
+	var podIP netip.Addr
+	if !managerutil.GetEnv(ctx).HostNetwork() {
+		podIP, _ = netip.AddrFromSlice(oi.ManagerPodIp)
+	}
 	retriever := newPodWatcher(ctx, podIP)
 	if !retriever.viable(ctx) {
 		clog.Errorf(ctx, "Unable to derive subnets from IPs of pods")
@@ -394,10 +399,13 @@ func (oi *info) watchPodSubnets(ctx context.Context) {
 }
 
 func (oi *info) setSubnetsFromEnv(ctx context.Context) bool {
-	subnets := managerutil.GetEnv(ctx).PodCidrs
+	env := managerutil.GetEnv(ctx)
+	subnets := env.PodCidrs
 	if len(subnets) > 0 {
 		mgrIp, _ := netip.AddrFromSlice(oi.ManagerPodIp)
-		if !slices.ContainsFunc(subnets, func(s netip.Prefix) bool { return s.Contains(mgrIp) }) {
+		// The manager's own pod IP must be covered, but only when it actually
+		// is a pod-CIDR address. With hostNetwork it is a node address.
+		if !env.HostNetwork() && !slices.ContainsFunc(subnets, func(s netip.Prefix) bool { return s.Contains(mgrIp) }) {
 			sn := netip.PrefixFrom(mgrIp, mgrIp.BitLen())
 			clog.Infof(ctx, "Adding %s for the traffic-manager pod, because it was not included in POD_CIDRS environment", sn)
 			subnets = append(subnets, sn)

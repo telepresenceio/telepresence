@@ -33,7 +33,9 @@ func newPodWatcher(ctx context.Context, managerIP netip.Addr) *podWatcher {
 		notifyCh:  make(chan subnet.Set),
 		informers: xsync.NewMap[string, cache.ResourceEventHandlerRegistration](),
 	}
-	w.ipsMap[managerIP] = struct{}{}
+	if managerIP.IsValid() {
+		w.ipsMap[managerIP] = struct{}{}
+	}
 
 	var oldSubnets subnet.Set
 	sendIfChanged := func() {
@@ -288,6 +290,11 @@ func podIPs(ctx context.Context, pod *corev1.Pod) []netip.Addr {
 	if pod.Namespace == "kube-system" {
 		// If the user wants the pod subnet of this namespace mapped, they'll need to add it manually.
 		// Auto-generating it here will often cause problems. Especially when running Kubernetes locally.
+		return nil
+	}
+	if pod.Spec.HostNetwork {
+		// The IPs of a host-network pod are node addresses, not addresses in the
+		// cluster's pod CIDR.
 		return nil
 	}
 	status := pod.Status
