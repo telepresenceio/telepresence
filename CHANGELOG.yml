@@ -40,14 +40,6 @@ items:
           now excluded from pod-subnet derivation, and the connectivity check is
           skipped when the manager's pod IP isn't covered by an announced pod
           subnet.
-      - type: bugfix
-        title: Usage-reporting problems no longer clutter the logs
-        body: >-
-          When the anonymous usage collector was unreachable, the user daemon
-          and the traffic-manager logged a message at info level for every
-          failed send attempt, flooding their logs every thirty seconds. All
-          logging from the usage-reporting subsystem is now done at trace
-          level.
   - version: 2.29.1
     date: 2026-06-23
     notes:

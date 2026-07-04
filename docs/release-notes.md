@@ -8,12 +8,6 @@
 A traffic-manager that runs with <code>hostNetwork: true</code> reports a node IP as its pod IP. This polluted the pod subnets that the <code>coverPodIPs</code> strategy derives with node subnets, and it made the client's pod connectivity check conclude that the workstation was already connected to the cluster network whenever the node IP happened to be directly reachable, leaving the real pod subnets unrouted so that all pod traffic (such as volume mounts) stalled. Host-network pods are now excluded from pod-subnet derivation, and the connectivity check is skipped when the manager's pod IP isn't covered by an announced pod subnet.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Usage-reporting problems no longer clutter the logs</div></div>
-<div style="margin-left: 15px">
-
-When the anonymous usage collector was unreachable, the user daemon and the traffic-manager logged a message at info level for every failed send attempt, flooding their logs every thirty seconds. All logging from the usage-reporting subsystem is now done at trace level.
-</div>
-
 ## Version 2.29.1 <span style="font-size: 16px;">(June 23)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Fix slow windows connection time with warp</div></div>
 <div style="margin-left: 15px">
