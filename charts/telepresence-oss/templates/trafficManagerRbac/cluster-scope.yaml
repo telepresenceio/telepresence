@@ -57,6 +57,7 @@ rules:
   - watch
   - create
   - delete
+  - deletecollection
 {{- end }}
 {{ include "telepresence.managerWorkloadRules" $ }}
 - apiGroups:

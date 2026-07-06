@@ -103,10 +103,6 @@ func (s *State) PrepareIntercept(
 		if err = nodeAgentGateErr(managerutil.GetEnv(ctx)); err != nil {
 			return interceptError(err)
 		}
-		if pi, err = s.ensureNodeAgent(ctx, wl, spec, client); err != nil {
-			return interceptError(err)
-		}
-		return pi, nil
 	}
 
 	var rp agentconfig.ReplacePolicy
@@ -151,6 +147,17 @@ func (s *State) PrepareIntercept(
 	lastActivity := time.Now()
 	if client.Mark(lastActivity) {
 		clog.Tracef(ctx, "Last activity %s", lastActivity)
+	}
+
+	if spec.NodeAgent {
+		// ac was generated with dryRun=true above, so no sidecar was injected
+		// and the workload's pods were not restarted. A node-agent Job is a
+		// standalone pod, not a sidecar, so it's provisioned here instead of
+		// via the injecting ensureAgent(dryRun=false) that AddIntercept would
+		// otherwise call.
+		if err = s.ensureNodeAgent(ctx, wl, ac); err != nil {
+			return interceptError(err)
+		}
 	}
 	return pi, nil
 }
@@ -375,9 +382,19 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 	if spec.Replace {
 		rp = agentconfig.ReplacePolicyContainer
 	}
-	_, _, err = s.ensureAgent(ctx, wl, s.isExtended(spec), false, spec, rp)
-	if err != nil {
-		return nil, nil, err
+	if spec.NodeAgent {
+		// PrepareIntercept already provisioned the node-agent Job. Running
+		// the injecting ensureAgent here would inject a sidecar and restart
+		// the target pod, invalidating the container ID the Job was given.
+		// Wait for its agent to register instead.
+		if err = s.waitForNodeAgent(ctx, wl, spec, rp); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		_, _, err = s.ensureAgent(ctx, wl, s.isExtended(spec), false, spec, rp)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	is, err := s.addIntercept(interceptID, cir)
@@ -589,6 +606,28 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 	}
 	sortAgents(as)
 	return sc, as, nil
+}
+
+// waitForNodeAgent waits for the node-agent Job (created during
+// PrepareIntercept) to register itself as an agent for wl, without injecting
+// a sidecar. It mirrors the wait ensureAgent performs for the sidecar path,
+// but skips config persistence and pod eviction, since a node-agent is a
+// standalone Job rather than an injected container.
+func (s *State) waitForNodeAgent(parentCtx context.Context, wl k8sapi.Workload, spec *rpc.InterceptSpec, rp agentconfig.ReplacePolicy) error {
+	// dryRun: generate (do not persist) the config just to learn the agent
+	// name/namespace to wait for.
+	cfg, err := s.getOrCreateAgentConfig(parentCtx, wl, s.isExtended(spec), true, spec, rp)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
+	defer cancel()
+	// No workload-event watch: a node-agent's failures surface on its Job pod
+	// in the node-agent namespace, not on the target workload. A nil
+	// failedCreateCh is safe here: a nil channel is never ready in a select,
+	// so that case simply never fires and the ctx timeout governs instead.
+	_, err = s.waitForAgents(ctx, cfg, nil)
+	return err
 }
 
 func (s *State) isExtended(spec *rpc.InterceptSpec) bool {

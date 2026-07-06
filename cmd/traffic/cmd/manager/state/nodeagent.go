@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
@@ -15,7 +14,6 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/telepresenceio/clog"
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -107,34 +105,22 @@ func reapNodeAgentJobs(ctx context.Context, agentName string) error {
 }
 
 // ensureNodeAgent provisions a node-hosted traffic-agent (a manager-created
-// Job that enters the target pod's namespaces) for the workload and returns
-// the PreparedIntercept describing it.
+// Job that enters the target pod's namespaces) for the workload, using the
+// agent config that the caller already generated via a dryRun ensureAgent
+// call. It creates only the Job; it never touches the workload's pod
+// template, so no sidecar is injected and no pod is restarted.
 func (s *State) ensureNodeAgent(
 	ctx context.Context,
 	wl k8sapi.Workload,
-	spec *rpc.InterceptSpec,
-	client *ClientSession,
-) (*rpc.PreparedIntercept, error) {
-	rp := agentconfig.ReplacePolicyIntercept
-	if spec.Replace {
-		rp = agentconfig.ReplacePolicyContainer
-	}
-
-	// dryRun: true. This generates (or retrieves) the agent config without
-	// mutating the workload; a node-agent Job is a standalone pod, not a
-	// sidecar, so there's nothing in the workload's pod template to patch.
-	cfg, err := s.getOrCreateAgentConfig(ctx, wl, s.isExtended(spec), true, spec, rp)
-	if err != nil {
-		return nil, err
-	}
-
+	cfg *agentconfig.Sidecar,
+) error {
 	nodeName, containerIDs, podName, podIP, err := nodeAgentTarget(ctx, wl)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	for _, cn := range cfg.Containers {
 		if _, ok := containerIDs[cn.Name]; !ok {
-			return nil, errcat.User.Newf("unable to resolve a container ID for container %q in pod %s.%s", cn.Name, podName, wl.GetNamespace())
+			return errcat.User.Newf("unable to resolve a container ID for container %q in pod %s.%s", cn.Name, podName, wl.GetNamespace())
 		}
 	}
 
@@ -150,33 +136,18 @@ func (s *State) ensureNodeAgent(
 		podIP:        podIP,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if _, err = k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(namespace).Create(ctx, job, meta.CreateOptions{}); err != nil {
 		if !k8sErrors.IsAlreadyExists(err) {
-			return nil, fmt.Errorf("unable to create node-agent job %s.%s: %w", job.Name, namespace, err)
+			return fmt.Errorf("unable to create node-agent job %s.%s: %w", job.Name, namespace, err)
 		}
 		// A Job with this deterministic name already exists for this agent
 		// and target pod; treat a re-request as idempotent.
 		clog.Debugf(ctx, "node-agent job %s.%s already exists", job.Name, namespace)
 	}
-
-	// The node-agent branch of PrepareIntercept returns immediately once this
-	// call completes, bypassing the client-activity mark that the sidecar
-	// path performs, so it's done here instead.
-	lastActivity := time.Now()
-	if client.Mark(lastActivity) {
-		clog.Tracef(ctx, "Last activity %s", lastActivity)
-	}
-
-	return &rpc.PreparedIntercept{
-		Namespace:     cfg.Namespace,
-		AgentImage:    cfg.AgentImage,
-		WorkloadKind:  string(cfg.WorkloadKind),
-		ContainerName: spec.ContainerName,
-		ServiceName:   spec.ServiceName,
-	}, nil
+	return nil
 }
 
 // nodeAgentTarget selects a single Running & Ready pod of wl (a node-agent

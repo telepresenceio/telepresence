@@ -43,8 +43,9 @@ type Command struct {
 	ContainerName string   // --container
 	Address       string   // --address
 
-	Replace bool // whether --replace was passed
-	Wiretap bool // wiretap subcommand used
+	Replace   bool // whether --replace was passed
+	Wiretap   bool // wiretap subcommand used
+	NodeAgent bool // --node-agent
 
 	ToPod []string // --to-pod
 
@@ -187,6 +188,10 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 		fmt.Sprintf(`HTTP path regex filters. Only requests with paths matching the regex will be %s.`, how))
 
 	flagSet.BoolVar(&c.Plaintext, "plaintext", false, "Use plaintext instead of TLS when communicating with the intercept handler")
+
+	flagSet.BoolVar(&c.NodeAgent, "node-agent", false,
+		"Serve this intercept with a node-hosted traffic-agent (a manager-created Job that enters the target pod's namespaces) instead of injecting a sidecar. "+
+			"Requires the traffic-manager to have node-agent mode enabled.")
 
 	_ = cmd.RegisterFlagCompletionFunc("container", ingest.AutocompleteContainer)
 	_ = cmd.RegisterFlagCompletionFunc("service", autocompleteService)

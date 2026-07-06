@@ -90,6 +90,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		Agent:         s.AgentName,
 		Namespace:     s.Namespace,
 		NoDefaultPort: s.NoDefaultPort,
+		NodeAgent:     s.NodeAgent,
 		PathFilters:   BuildPathFilters(s.HTTPPathEqualFilters, s.HTTPPathPrefixFilters, s.HTTPPathRegexFilters),
 	}
 	ir := &connector.CreateInterceptRequest{
