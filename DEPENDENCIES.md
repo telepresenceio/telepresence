@@ -28,7 +28,6 @@ following Free and Open Source software:
     github.com/containerd/errdefs/pkg                                         v0.3.0                                  Apache License 2.0
     github.com/containerd/log                                                 v0.1.0                                  Apache License 2.0
     github.com/containerd/platforms                                           v0.2.1                                  Apache License 2.0
-    github.com/coreos/go-iptables                                             v0.8.0                                  Apache License 2.0
     github.com/cyphar/filepath-securejoin                                     v0.7.0                                  3-clause BSD license, Mozilla Public License 2.0
     github.com/datawire/argo-rollouts-go-client                               v0.0.0-20241216133646-cb1073556c99      Apache License 2.0
     github.com/davecgh/go-spew                                                v1.1.2-0.20180830191138-d8f796af33cc    ISC license

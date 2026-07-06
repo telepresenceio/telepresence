@@ -1,6 +1,6 @@
 ---
 title: Route Controller
-description: Prevent routing loops on local clusters by installing iptables FORWARD DROP rules for the service CIDR.
+description: Prevent routing loops on local clusters by blackholing the service CIDR in an nftables FORWARD chain.
 ---
 
 # Route Controller
@@ -22,20 +22,37 @@ external network.
 
 The **route-controller** is a DaemonSet that prevents these loops. It runs on every node
 with host networking and `NET_ADMIN` privileges. At startup it discovers the cluster's service
-CIDRs and inserts a `DROP` rule into the iptables `FORWARD` chain for each CIDR. Any forwarded
-packet (i.e. pod traffic flowing through the host's network stack) destined for an IP that has no
-active kube-proxy DNAT rule is dropped rather than escaping via the default route.
+CIDRs and programs a dedicated `telepresence` nftables table (one per address family in use) with
+a `forward`-hook chain whose single rule drops any forwarded packet destined for an address in a
+named set of the service CIDRs. The rule is applied natively over netlink
+(`github.com/google/nftables`); no `iptables` or `nft` binary is involved. Any forwarded packet
+(i.e. pod traffic flowing through the host's network stack) destined for an IP that has no active
+kube-proxy DNAT rule is dropped rather than escaping via the default route.
 
-### Why iptables FORWARD and not a kernel blackhole route?
+### Why an nftables FORWARD drop and not a kernel blackhole route?
 
 A kernel `RTN_BLACKHOLE` route for the service subnet would cause `connect()` and `sendmsg()` to
-fail at the socket level before any iptables hook can fire. This would break locally-generated
+fail at the socket level before any netfilter hook can fire. This would break locally-generated
 traffic such as the kube-apiserver calling the mutating webhook, or the route-controller itself
 reaching the Kubernetes API server.
 
-An iptables `FORWARD` rule is only evaluated for traffic that has already been accepted into the
-host's forwarding path. kube-proxy's PREROUTING DNAT rewrites the destination to a pod IP *before*
-the FORWARD chain is reached, so rules for active services are completely unaffected.
+The `forward` hook is only evaluated for traffic that has already been accepted into the host's
+forwarding path. kube-proxy's `prerouting` DNAT rewrites the destination to a pod IP *before* the
+`forward` hook is reached, so rules for active services are completely unaffected.
+
+### Ruleset
+
+For each address family with at least one discovered service CIDR, the route-controller programs:
+
+- A table named `telepresence` (`ip telepresence` for IPv4, `ip6 telepresence` for IPv6).
+- A `forward` chain in that table: type `filter`, hook `forward`, at the standard filter priority.
+- A named interval set, `service_cidrs`, holding the discovered CIDRs for that family.
+- A single rule in the `forward` chain: `ip daddr @service_cidrs drop` (or the `ip6` equivalent).
+
+Because the CIDRs live in a set rather than as one rule per CIDR, adding or removing a service CIDR
+is a set-element change, not a rule change. On each start (or restart) the route-controller applies
+the whole table as a single atomic, idempotent replacement, so it always converges to exactly the
+currently discovered CIDRs regardless of what a previous run programmed.
 
 ## Enabling the route controller
 
@@ -66,14 +83,14 @@ helm upgrade --install traffic-manager charts/telepresence-oss \
 
 ## Service CIDR discovery
 
-The route-controller needs to know the cluster's service CIDRs to install the iptables rules.
+The route-controller needs to know the cluster's service CIDRs to populate the `service_cidrs` set.
 It discovers them in priority order:
 
 1. **`SERVICE_CIDRS` environment variable** — set via `routeController.serviceCIDRs` in Helm values
    (comma-separated list, e.g. `10.96.0.0/12`). This takes priority over all other methods.
 2. **Kubernetes ServiceCIDR API** (`networking.k8s.io/v1`, available in Kubernetes 1.33+) — the
    controller lists `ServiceCIDR` objects from the cluster automatically.
-3. **Fallback** — if neither source is available the controller logs a warning and no iptables
+3. **Fallback** — if neither source is available the controller logs a warning and no nftables
    rules are installed. Set `routeController.serviceCIDRs` explicitly in that case.
 
 For clusters older than Kubernetes 1.33, set the service CIDR explicitly:
@@ -102,8 +119,8 @@ kubectl -n ambassador get daemonset route-controller
 # View logs from one node
 kubectl -n ambassador logs -l app=route-controller --tail=50
 
-# On a Kind node: inspect iptables FORWARD rules
-docker exec kind-control-plane iptables -L FORWARD -n | grep DROP
+# On a Kind node: inspect the telepresence table's forward chain and service_cidrs set
+docker exec kind-control-plane nft list table ip telepresence
 ```
 
 ## RBAC

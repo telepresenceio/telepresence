@@ -34,7 +34,7 @@ RUN \
 
 FROM alpine AS routecontroller
 
-RUN apk add --no-cache ca-certificates iptables ip6tables
+RUN apk add --no-cache ca-certificates
 
 COPY --from=routecontroller-build /usr/local/bin/route-controller /usr/local/bin/route-controller
 

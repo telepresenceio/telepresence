@@ -591,7 +591,7 @@ func hidePorts(pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) Pat
 		if cc.Replace == agentconfig.ReplacePolicyIntercept {
 			for _, ic := range agentconfig.PortUniqueIntercepts(cc) {
 				if ic.Headless || ic.TargetPortNumeric {
-					// Rely on iptables mapping instead of port renames
+					// Rely on the agent's nftables mapping instead of port renames
 					continue
 				}
 				patches = hideContainerPorts(pod, app, ic.ContainerPortName, patches)
