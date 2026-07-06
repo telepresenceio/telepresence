@@ -43,6 +43,7 @@ require (
 	github.com/telepresenceio/telepresence/cmd/cobraparser/v2 v2.0.0-20260623110129-2888ce1c36e3
 	github.com/telepresenceio/telepresence/rpc/v2 v2.29.3
 	github.com/vishvananda/netlink v1.3.1
+	github.com/vishvananda/netns v0.0.5
 	golang.org/x/net v0.56.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.46.0
@@ -163,7 +164,6 @@ require (
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/winfsp/cgofuse v1.6.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xhit/go-str2duration/v2 v2.1.0 // indirect
