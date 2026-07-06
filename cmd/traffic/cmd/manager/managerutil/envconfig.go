@@ -79,6 +79,16 @@ type Env struct {
 	// pod's namespaces) when requested by a client. Defaults to false.
 	NodeAgentEnabled bool
 
+	// NodeAgentNamespace is the namespace that node-agent Jobs are created
+	// in. When empty, ManagerNamespace is used instead.
+	NodeAgentNamespace string
+
+	// NodeAgentCRISocket is the path of the container-runtime socket that is
+	// mounted into node-agent Jobs so that they can resolve a target
+	// container's process ID. When empty, the node-agent falls back to
+	// cri.DetectSocket.
+	NodeAgentCRISocket string
+
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `envSeparator:" "`
 	ClientRoutingNeverProxySubnets       []netip.Prefix `envSeparator:" "`
 	ClientRoutingAllowConflictingSubnets []netip.Prefix `envSeparator:" "`
