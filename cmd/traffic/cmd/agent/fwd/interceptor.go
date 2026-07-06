@@ -38,20 +38,20 @@ type interceptor struct {
 	intercepts     interceptControllerMap
 }
 
-func NewInterceptor(ctx context.Context, from types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) Interceptor {
+func NewInterceptor(ctx context.Context, from types.PortAndProto, tag tunnel.Tag, target netip.AddrPort, opts ...forwarder.Option) Interceptor {
 	switch from.Proto {
 	case types.ProtoTCP:
-		return NewTCPInterceptor(ctx, from, tag, nil, target)
+		return NewTCPInterceptor(ctx, from, tag, nil, target, opts...)
 	case types.ProtoUDP:
-		return newUDP(ctx, from, tag, target)
+		return newUDP(ctx, from, tag, target, opts...)
 	default:
 		panic(fmt.Errorf("unsupported protocol %s", from.Proto))
 	}
 }
 
-func newInterceptor(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) *interceptor {
+func newInterceptor(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, target netip.AddrPort, opts ...forwarder.Option) *interceptor {
 	fx := &interceptor{
-		Forwarder:  forwarder.New(listenPort, tag, target),
+		Forwarder:  forwarder.New(listenPort, tag, target, opts...),
 		lCtx:       ctx,
 		intercepts: make(interceptControllerMap),
 		wiretaps:   make(interceptControllerMap),

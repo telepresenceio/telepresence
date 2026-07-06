@@ -18,6 +18,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -29,6 +30,11 @@ type Config interface {
 	PodName() string
 	PodIP() netip.Addr
 	PodUID() k8sTypes.UID
+
+	// ListenerFactory returns the factory a container's forwarders should use to
+	// create their listen sockets, or nil to listen in the agent's own network
+	// namespace (the sidecar case).
+	ListenerFactory() forwarder.ListenerFactory
 }
 
 type config struct {
@@ -147,6 +153,12 @@ func (c *config) PodName() string {
 
 func (c *config) PodIP() netip.Addr {
 	return c.podIP
+}
+
+// ListenerFactory returns nil: the sidecar agent's forwarders listen in its own
+// network namespace, which is already the target pod's namespace.
+func (c *config) ListenerFactory() forwarder.ListenerFactory {
+	return nil
 }
 
 // addAppMounts adds each of the mounts present under the containers MountPoint as a

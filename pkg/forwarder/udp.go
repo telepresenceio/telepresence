@@ -15,12 +15,17 @@ import (
 type udp struct{ basic }
 
 // NewUDP creates a new UDP forwarder that will forward connections from the given port to the given target.
-func NewUDP(from uint16, tag tunnel.Tag, target netip.AddrPort) Forwarder {
-	return &udp{basic{
+func NewUDP(from uint16, tag tunnel.Tag, target netip.AddrPort, opts ...Option) Forwarder {
+	f := &udp{basic{
 		tag:        tag,
 		target:     target,
 		listenPort: int32(from),
+		listener:   defaultListenerFactory{},
 	}}
+	for _, opt := range opts {
+		opt(&f.basic)
+	}
+	return f
 }
 
 func (f *udp) Listen(ctx context.Context) (net.Listener, error) {
@@ -60,8 +65,7 @@ func (f *udp) ServeTo(ctx context.Context, initCh chan<- netip.AddrPort, fw func
 			return nil
 		default:
 		}
-		lc := net.ListenConfig{}
-		pc, err := lc.ListenPacket(ctx, "udp", fmt.Sprintf(":%d", lp))
+		pc, err := f.listener.ListenPacket(ctx, "udp", fmt.Sprintf(":%d", lp))
 		if err != nil {
 			return err
 		}

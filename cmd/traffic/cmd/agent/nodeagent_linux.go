@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentnft"
 	"github.com/telepresenceio/telepresence/v2/pkg/cri"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	tpnetns "github.com/telepresenceio/telepresence/v2/pkg/netns"
 	"github.com/telepresenceio/telepresence/v2/pkg/nftutil"
@@ -70,6 +72,33 @@ func (c *nodeConfig) AppEnviron(_ context.Context, cn *agentconfig.Container) (m
 		return nil, err
 	}
 	return appEnvironment(dos.MapEnv(env).Environ(), cn), nil
+}
+
+// nsListenerFactory creates listen sockets inside the network namespace at
+// nsPath, so a node-agent forwarder binds its port in the target pod's
+// namespace rather than the node-agent's own.
+type nsListenerFactory struct{ nsPath string }
+
+func (f nsListenerFactory) Listen(ctx context.Context, network, address string) (net.Listener, error) {
+	return tpnetns.Listen(ctx, f.nsPath, network, address)
+}
+
+func (f nsListenerFactory) ListenPacket(ctx context.Context, network, address string) (net.PacketConn, error) {
+	return tpnetns.ListenPacket(ctx, f.nsPath, network, address)
+}
+
+// ListenerFactory returns a factory that binds a container's forwarders inside the
+// target pod's network namespace. All of a pod's containers share one network
+// namespace, so a single factory serves them all. If no PID has been resolved for
+// the target pod (which should never happen for a running node-agent), nil is
+// returned and the caller falls back to listening in the node-agent's own
+// namespace.
+func (c *nodeConfig) ListenerFactory() forwarder.ListenerFactory {
+	pid, err := targetPID(c.pids)
+	if err != nil {
+		return nil
+	}
+	return nsListenerFactory{nsPath: tpnetns.PathForPID(pid)}
 }
 
 // parseContainerIDs decodes the JSON object mapping container name to CRI container ID.
@@ -308,9 +337,9 @@ func NodeAgentMain(ctx context.Context, _ ...string) error {
 		}
 
 		// Program the target pod's packet-routing rules before starting any
-		// services. The forwarders that would receive the redirected traffic are
-		// not started yet (that is the next slice), so node-agent mode is not
-		// reachable end-to-end from a cluster at this point.
+		// services. NodeAgentSidecar starts the forwarders that receive the
+		// redirected traffic, binding their listen sockets in the target pod's
+		// network namespace via the Config's ListenerFactory.
 		teardown, err := applyNodeAgentRules(ctx, cfg)
 		if err != nil {
 			return fmt.Errorf("unable to program packet-routing rules: %w", err)
@@ -344,15 +373,19 @@ func NodeAgentMain(ctx context.Context, _ ...string) error {
 	})
 }
 
-// NodeAgentSidecar registers each container's env and mount info like Sidecar, but installs
-// no port handlers: forwarders must bind in the target network namespace, which requires a
-// setns layer that is deferred to the netns/interception milestone.
+// NodeAgentSidecar registers each container's env and mount info and starts its port
+// handlers, mirroring Sidecar. The forwarders bind their listen sockets in the target
+// pod's network namespace rather than the node-agent's own, via the ListenerFactory
+// that Config supplies (see nodeConfig.ListenerFactory).
 func NodeAgentSidecar(g log.Group, s State, info *rpc.AgentInfo) error {
 	ac := s.AgentConfig()
 	for _, cn := range ac.Containers {
 		ci := info.Containers[cn.Name]
 		cs := s.NewContainerState(s, cn, ci.MountPoint, ci.Environment)
 		s.AddContainerState(cn.Name, cs)
+		for pp, ics := range MakeInterceptStates(cn) {
+			cs.AddPortHandler(g, pp, ics)
+		}
 	}
 	TalkToManagerLoop(g, s, info)
 	return nil
