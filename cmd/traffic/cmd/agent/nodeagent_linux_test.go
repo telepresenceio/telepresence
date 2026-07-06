@@ -65,7 +65,7 @@ func Test_exportProcMounts(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, exportProcMounts(context.Background(), exportsRoot, pid, cn))
+	require.NoError(t, exportProcMounts(context.Background(), exportsRoot, pid, cn, nil))
 
 	link := filepath.Join(exportsRoot, "app", markerFile)
 	target, err := os.Readlink(link)
@@ -95,8 +95,8 @@ func Test_exportProcMounts_restart(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, exportProcMounts(context.Background(), exportsRoot, pid, cn))
-	require.NoError(t, exportProcMounts(context.Background(), exportsRoot, pid, cn))
+	require.NoError(t, exportProcMounts(context.Background(), exportsRoot, pid, cn, nil))
+	require.NoError(t, exportProcMounts(context.Background(), exportsRoot, pid, cn, nil))
 
 	link := filepath.Join(exportsRoot, "app", markerFile)
 	data, err := os.ReadFile(link)

@@ -207,7 +207,7 @@ func addAppMounts(ctx context.Context, mps types.MountPolicies, ag *agentconfig.
 			}
 		}
 	}
-	if err := mountVRS(ctx, mps, ag, cnMountPoint); err != nil {
+	if err := mountVRS(ctx, mps, ag, cnMountPoint, "/"); err != nil {
 		return err
 	}
 
@@ -225,10 +225,14 @@ func addAppMounts(ctx context.Context, mps types.MountPolicies, ag *agentconfig.
 	return nil
 }
 
-func mountVRS(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Container, cnMountPoint string) error {
+// mountVRS captures /var/run/secrets subdirectories that have been injected but not added by
+// the injector, symlinking each one whose policy allows a remote mount under cnMountPoint and
+// recording it in ag.Mounts. root is prepended to every path read from or symlinked to, so the
+// same directory can be captured from a filesystem reached through a resolved path as well as
+// from the filesystem root itself ("/").
+func mountVRS(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Container, cnMountPoint, root string) error {
 	const vrsDir = "/var/run/secrets"
-	// Capture /var/run/secrets subdirs that has been injected but not added by the injector.
-	vrs, err := dos.ReadDir(ctx, vrsDir)
+	vrs, err := dos.ReadDir(ctx, filepath.Join(root, vrsDir))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			err = nil
@@ -258,9 +262,10 @@ func mountVRS(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Cont
 				}
 				hasVrsExportDir = true
 			}
+			src := filepath.Join(root, subDir)
 			newName := filepath.Join(vrsExportDir, vr.Name())
-			if err = dos.Symlink(ctx, subDir, newName); err != nil {
-				return fmt.Errorf("can't symlink %s to %s: %v", subDir, newName, err)
+			if err = dos.Symlink(ctx, src, newName); err != nil {
+				return fmt.Errorf("can't symlink %s to %s: %v", src, newName, err)
 			}
 		}
 		found := false
