@@ -70,6 +70,7 @@ following Free and Open Source software:
     github.com/google/gnostic-models                                          v0.7.1                                  Apache License 2.0
     github.com/google/go-cmp                                                  v0.7.0                                  3-clause BSD license
     github.com/google/jsonschema-go                                           v0.4.3                                  MIT license
+    github.com/google/nftables                                                v0.3.0                                  Apache License 2.0
     github.com/google/uuid                                                    v1.6.0                                  3-clause BSD license
     github.com/gorilla/websocket                                              v1.5.4-0.20250319132907-e064f32e3674    2-clause BSD license
     github.com/gosuri/uitable                                                 v0.0.4                                  MIT license
@@ -92,6 +93,8 @@ following Free and Open Source software:
     github.com/mattn/go-isatty                                                v0.0.22                                 MIT license
     github.com/mattn/go-runewidth                                             v0.0.24                                 MIT license
     github.com/mattn/go-shellwords                                            v1.0.13                                 MIT license
+    github.com/mdlayher/netlink                                               v1.7.3-0.20250113171957-fbb4dce95f42    MIT license
+    github.com/mdlayher/socket                                                v0.5.1                                  MIT license
     github.com/miekg/dns                                                      v1.1.72                                 3-clause BSD license
     github.com/mitchellh/copystructure                                        v1.2.0                                  MIT license
     github.com/mitchellh/go-wordwrap                                          v1.0.1                                  MIT license
