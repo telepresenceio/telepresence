@@ -5,17 +5,26 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strconv"
+
+	"github.com/google/nftables"
+	"github.com/vishvananda/netns"
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentnft"
 	"github.com/telepresenceio/telepresence/v2/pkg/cri"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	tpnetns "github.com/telepresenceio/telepresence/v2/pkg/netns"
+	"github.com/telepresenceio/telepresence/v2/pkg/nftutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/procfs"
 	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -29,6 +38,15 @@ const (
 
 	// envNodeAgentCRISocket is the CRI unix socket path. When unset, cri.DetectSocket is used.
 	envNodeAgentCRISocket = "_TEL_NODE_AGENT_CRI_SOCKET"
+
+	// envNodeAgentPodIP carries the target pod's IP (set by the traffic-manager);
+	// it is the PodIP of the netfilter ruleset programmed into the target netns.
+	envNodeAgentPodIP = "_TEL_NODE_AGENT_POD_IP"
+
+	// nodeAgentPacketMark is the firewall mark the node-agent sets on its own
+	// sockets (SO_MARK, wired in a later change) and matches in the mesh-bypass
+	// rule for user-namespaced targets, where a socket-owner match cannot be used.
+	nodeAgentPacketMark = 0x2374
 )
 
 // nodeConfig is the sidecar Config, augmented with the host PID that each configured
@@ -149,6 +167,133 @@ func exportProcMounts(ctx context.Context, exportsRoot string, pid int, cn *agen
 	return nil
 }
 
+// targetPID returns a host PID that resolves into the target pod's network namespace. A
+// pod's containers all share the same network namespace, so any resolved PID works; the
+// smallest is picked to make the choice deterministic.
+func targetPID(pids map[string]int) (int, error) {
+	if len(pids) == 0 {
+		return 0, errors.New("no resolved PID for the target pod")
+	}
+	pid := 0
+	for _, p := range pids {
+		if pid == 0 || p < pid {
+			pid = p
+		}
+	}
+	return pid, nil
+}
+
+// nodeAgentGID returns the primary group the node-agent's own sockets carry, mirroring
+// agentinit's trafficAgentOwner: AGENT_GID when the sidecar config set one, otherwise the
+// group the node-agent's own container runs as (see buildNodeAgentJob's RunAsGroup).
+func nodeAgentGID() (uint32, error) {
+	if gid, ok := os.LookupEnv(agentconfig.EnvAgentGID); ok && gid != "" {
+		parsed, err := strconv.ParseUint(gid, 10, 32)
+		if err != nil {
+			return 0, fmt.Errorf("invalid %s %q: %w", agentconfig.EnvAgentGID, gid, err)
+		}
+		return uint32(parsed), nil
+	}
+	return uint32(agentconfig.DefaultAgentGID), nil
+}
+
+// buildNodeAgentNftConfig translates cfg into the agentnft ruleset config for the target
+// pod, mirroring agentinit's buildNftConfig. It is reimplemented here rather than shared
+// with agentinit because pkg/agentconfig is cross-platform and must not import the
+// linux-only pkg/agentnft.
+func buildNodeAgentNftConfig(cfg *nodeConfig, podIP netip.Addr, owner agentnft.OwnerMatch) agentnft.Config {
+	sc := cfg.AgentConfig()
+	var intercepts []agentnft.Intercept
+	for _, cn := range sc.Containers {
+		for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
+			nic := agentnft.Intercept{
+				Protocol:      ic.Protocol,
+				ContainerPort: ic.ContainerPort,
+				AgentPort:     ic.AgentPort,
+			}
+			if ic.TargetPortNumeric {
+				nic.ProxyPort = sc.ProxyPort(ic.AgentPort)
+			}
+			intercepts = append(intercepts, nic)
+		}
+	}
+	return agentnft.Config{
+		PodIP:           podIP,
+		Loopback:        "lo",
+		Owner:           owner,
+		Intercepts:      intercepts,
+		MeshDialSubnets: sc.MeshDialSubnets,
+	}
+}
+
+// applyNodeAgentRules programs the target pod's packet-routing rules into its network
+// namespace. The ruleset is the same one the sidecar's init container installs (see
+// agentinit.Main); here it is applied to another pod's namespace over netlink via
+// nftables.WithNetNSFd. Returns a teardown func that removes the table again.
+func applyNodeAgentRules(ctx context.Context, cfg *nodeConfig) (func(context.Context) error, error) {
+	pid, err := targetPID(cfg.pids)
+	if err != nil {
+		return nil, err
+	}
+
+	podIPStr, ok := dos.LookupEnv(ctx, envNodeAgentPodIP)
+	if !ok || podIPStr == "" {
+		return nil, fmt.Errorf("missing %s", envNodeAgentPodIP)
+	}
+	podIP, err := netip.ParseAddr(podIPStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s %q: %w", envNodeAgentPodIP, podIPStr, err)
+	}
+
+	// A socket-owner match cannot be installed into a network namespace owned by a
+	// non-init user namespace (the kernel rejects it with EINVAL), so such targets are
+	// told apart by firewall mark instead.
+	inUserNS, err := procfs.InUserNamespace(pid)
+	if err != nil {
+		return nil, fmt.Errorf("determine user namespace of pid %d: %w", pid, err)
+	}
+	var owner agentnft.OwnerMatch
+	discriminator := "mark"
+	if inUserNS {
+		owner = agentnft.OwnerMatch{Mark: nodeAgentPacketMark}
+	} else {
+		discriminator = "skgid"
+		gid, gidErr := nodeAgentGID()
+		if gidErr != nil {
+			return nil, gidErr
+		}
+		owner = agentnft.OwnerMatch{UseGID: true, ID: gid}
+	}
+
+	rs, err := agentnft.Build(buildNodeAgentNftConfig(cfg, podIP, owner))
+	if err != nil {
+		return nil, err
+	}
+
+	nsPath := tpnetns.PathForPID(pid)
+	h, err := netns.GetFromPath(nsPath)
+	if err != nil {
+		return nil, fmt.Errorf("open network namespace %q: %w", nsPath, err)
+	}
+	defer h.Close()
+
+	if err := nftutil.Apply(ctx, &rs.Ruleset, nftables.WithNetNSFd(int(h))); err != nil {
+		return nil, fmt.Errorf("apply packet-routing rules to pid %d's network namespace: %w", pid, err)
+	}
+	clog.Infof(ctx, "Programmed packet-routing rules into pid %d's network namespace (family %d, discriminator %s)",
+		pid, rs.Table.Family, discriminator)
+
+	teardown := func(ctx context.Context) error {
+		h2, err := netns.GetFromPath(nsPath)
+		if err != nil {
+			return fmt.Errorf("open network namespace %q: %w", nsPath, err)
+		}
+		defer h2.Close()
+		return nftutil.Teardown(ctx, agentnft.TableName, rs.Table.Family, nftables.WithNetNSFd(int(h2)))
+	}
+	return teardown, nil
+}
+
 // NodeAgentMain is the entrypoint for the node-agent Job pod. It mirrors Main, but loads its
 // config from procfs/CRI-resolved target identity instead of its own process environment and
 // filesystem, and runs NodeAgentSidecar instead of Sidecar.
@@ -161,6 +306,20 @@ func NodeAgentMain(ctx context.Context, _ ...string) error {
 		if err != nil {
 			return fmt.Errorf("unable to load config: %w", err)
 		}
+
+		// Program the target pod's packet-routing rules before starting any
+		// services. The forwarders that would receive the redirected traffic are
+		// not started yet (that is the next slice), so node-agent mode is not
+		// reachable end-to-end from a cluster at this point.
+		teardown, err := applyNodeAgentRules(ctx, cfg)
+		if err != nil {
+			return fmt.Errorf("unable to program packet-routing rules: %w", err)
+		}
+		defer func() {
+			if err := teardown(ctx); err != nil {
+				clog.Error(ctx, err)
+			}
+		}()
 
 		g := log.NewGroup(ctx)
 		s, err := NewState(ctx, cfg)

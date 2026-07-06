@@ -164,6 +164,7 @@ func testOpts() nodeAgentJobOpts {
 		nodeName:     "node-1",
 		containerIDs: map[string]string{"app": "containerd://abc123"},
 		podName:      "test-agent-abc123",
+		podIP:        "10.42.0.5",
 	}
 }
 
@@ -256,6 +257,11 @@ func TestBuildNodeAgentJob_Env(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(idsEnv.Value), &decoded))
 	assert.Equal(t, opts.containerIDs, decoded)
 
+	podIPEnv, ok := findEnv(env, envNodeAgentPodIP)
+	require.True(t, ok, "%s env var not found", envNodeAgentPodIP)
+	assert.Equal(t, opts.podIP, podIPEnv.Value)
+	assert.Nil(t, podIPEnv.ValueFrom)
+
 	criEnv, ok := findEnv(env, envNodeAgentCRISocket)
 	require.True(t, ok)
 	assert.Equal(t, "/run/containerd/containerd.sock", criEnv.Value)
@@ -301,6 +307,25 @@ func TestBuildNodeAgentJob_Capabilities(t *testing.T) {
 	}
 	require.NotNil(t, cn.SecurityContext.Capabilities)
 	assert.ElementsMatch(t, []core.Capability{"SYS_ADMIN", "SYS_PTRACE", "NET_ADMIN", "NET_RAW"}, cn.SecurityContext.Capabilities.Add)
+}
+
+// TestBuildNodeAgentJob_RunAsUserGroup verifies that the node-agent container
+// runs as root (RunAsUser 0, required for the capabilities above) but with
+// the traffic-agent's distinguishing primary group, so its own sockets in the
+// target's network namespace carry the skgid the owner-match rule
+// (agentnft.OwnerMatch) keys on.
+func TestBuildNodeAgentJob_RunAsUserGroup(t *testing.T) {
+	t.Parallel()
+
+	job, err := buildNodeAgentJob(testSidecar(), testOpts())
+	require.NoError(t, err)
+
+	cn := job.Spec.Template.Spec.Containers[0]
+	require.NotNil(t, cn.SecurityContext)
+	require.NotNil(t, cn.SecurityContext.RunAsUser)
+	assert.Equal(t, int64(0), *cn.SecurityContext.RunAsUser)
+	require.NotNil(t, cn.SecurityContext.RunAsGroup)
+	assert.Equal(t, agentconfig.DefaultAgentGID, *cn.SecurityContext.RunAsGroup)
 }
 
 // TestBuildNodeAgentJob_ExportsVolume verifies that the node-agent gets an
@@ -431,6 +456,18 @@ func TestBuildNodeAgentJob_EmptyContainerIDs(t *testing.T) {
 
 	opts := testOpts()
 	opts.containerIDs = nil
+	_, err := buildNodeAgentJob(testSidecar(), opts)
+	require.Error(t, err)
+}
+
+// TestBuildNodeAgentJob_EmptyPodIP verifies that an impossible input (no
+// target pod IP resolved) is rejected, since the node-agent needs it as the
+// PodIP of the netfilter ruleset it programs.
+func TestBuildNodeAgentJob_EmptyPodIP(t *testing.T) {
+	t.Parallel()
+
+	opts := testOpts()
+	opts.podIP = ""
 	_, err := buildNodeAgentJob(testSidecar(), opts)
 	require.Error(t, err)
 }

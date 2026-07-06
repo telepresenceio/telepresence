@@ -33,6 +33,10 @@ const (
 	// cmd/traffic/cmd/agent/nodeagent_linux.go.
 	envNodeAgentCRISocket = "_TEL_NODE_AGENT_CRI_SOCKET"
 
+	// envNodeAgentPodIP mirrors the constant of the same name declared in
+	// cmd/traffic/cmd/agent/nodeagent_linux.go.
+	envNodeAgentPodIP = "_TEL_NODE_AGENT_POD_IP"
+
 	// nodeAgentContainerName is the name of the sole container in a
 	// node-agent Job's pod template.
 	nodeAgentContainerName = "traffic-node-agent"
@@ -124,7 +128,7 @@ func (s *State) ensureNodeAgent(
 		return nil, err
 	}
 
-	nodeName, containerIDs, podName, err := nodeAgentTarget(ctx, wl)
+	nodeName, containerIDs, podName, podIP, err := nodeAgentTarget(ctx, wl)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +147,7 @@ func (s *State) ensureNodeAgent(
 		containerIDs: containerIDs,
 		criSocket:    env.NodeAgentCRISocket,
 		podName:      podName,
+		podIP:        podIP,
 	})
 	if err != nil {
 		return nil, err
@@ -178,18 +183,19 @@ func (s *State) ensureNodeAgent(
 // targets one pod, unlike the sidecar which is injected into every replica)
 // and returns the node it is scheduled on, a map of container name to CRI
 // container ID (as reported by the kubelet, including the runtime scheme
-// prefix, e.g. "containerd://abc123"; pkg/cri strips that prefix), and the
-// pod's name.
-func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, containerIDs map[string]string, podName string, err error) {
+// prefix, e.g. "containerd://abc123"; pkg/cri strips that prefix), the pod's
+// name, and the pod's IP (which the node-agent needs as the PodIP of the
+// netfilter ruleset it programs into the target's network namespace).
+func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, containerIDs map[string]string, podName, podIP string, err error) {
 	selector, err := wl.Selector()
 	if err != nil {
-		return "", nil, "", err
+		return "", nil, "", "", err
 	}
 	pods, err := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(wl.GetNamespace()).List(ctx, meta.ListOptions{
 		LabelSelector: selector.String(),
 	})
 	if err != nil {
-		return "", nil, "", fmt.Errorf("unable to list pods for %s: %w", wl, err)
+		return "", nil, "", "", fmt.Errorf("unable to list pods for %s: %w", wl, err)
 	}
 
 	var target *core.Pod
@@ -200,7 +206,10 @@ func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, 
 		}
 	}
 	if target == nil {
-		return "", nil, "", errcat.User.Newf("%s has no running and ready pod available to host a node-agent", wl)
+		return "", nil, "", "", errcat.User.Newf("%s has no running and ready pod available to host a node-agent", wl)
+	}
+	if target.Status.PodIP == "" {
+		return "", nil, "", "", fmt.Errorf("pod %s.%s has no PodIP despite being running and ready", target.Name, target.Namespace)
 	}
 
 	ids := make(map[string]string, len(target.Status.ContainerStatuses))
@@ -209,7 +218,7 @@ func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, 
 			ids[cs.Name] = cs.ContainerID
 		}
 	}
-	return target.Spec.NodeName, ids, target.Name, nil
+	return target.Spec.NodeName, ids, target.Name, target.Status.PodIP, nil
 }
 
 // podRunningAndReady reports whether pod is in the Running phase and its
@@ -249,6 +258,11 @@ type nodeAgentJobOpts struct {
 
 	// podName is the name of the target pod.
 	podName string
+
+	// podIP is the IP address of the target pod. The node-agent programs its
+	// netfilter ruleset with this as the PodIP, into the target's own network
+	// namespace.
+	podIP string
 }
 
 // buildNodeAgentJob returns a Job that runs a node-hosted traffic-agent
@@ -263,6 +277,9 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 	}
 	if len(opts.containerIDs) == 0 {
 		return nil, errors.New("buildNodeAgentJob: no container IDs given")
+	}
+	if opts.podIP == "" {
+		return nil, errors.New("buildNodeAgentJob: no target pod IP given")
 	}
 
 	cfgJSON, err := agentconfig.MarshalTight(cfg)
@@ -309,6 +326,10 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 		{
 			Name:  envNodeAgentContainerIDs,
 			Value: string(idsJSON),
+		},
+		{
+			Name:  envNodeAgentPodIP,
+			Value: opts.podIP,
 		},
 	}
 	if opts.criSocket != "" {
@@ -382,6 +403,14 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 							Args:  []string{"node-agent"},
 							Env:   env,
 							SecurityContext: &core.SecurityContext{
+								// The node-agent needs root (uid 0) for the
+								// capabilities below, but runs with the
+								// traffic-agent's distinguishing group so its
+								// own sockets in a target's network namespace
+								// carry the skgid the owner-match rule keys
+								// on (see agentnft.OwnerMatch).
+								RunAsUser:  new(int64(0)),
+								RunAsGroup: new(agentconfig.DefaultAgentGID),
 								Capabilities: &core.Capabilities{
 									Add: []core.Capability{"SYS_ADMIN", "SYS_PTRACE", "NET_ADMIN", "NET_RAW"},
 								},

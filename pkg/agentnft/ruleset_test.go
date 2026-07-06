@@ -521,6 +521,66 @@ func TestBuildOutputPrecedence(t *testing.T) {
 	}
 }
 
+// TestBuildOwnerMarkDiscriminator verifies that a non-zero OwnerMatch.Mark
+// switches every owner-matching rule to `meta mark`, never skgid/skuid --
+// the discriminator a node-agent must use for a target whose network
+// namespace is owned by a non-init user namespace.
+func TestBuildOwnerMarkDiscriminator(t *testing.T) {
+	cfg := basicConfig()
+	cfg.Owner = OwnerMatch{Mark: 0x2374}
+	rs, err := Build(cfg)
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+
+	var sawMark bool
+	for _, r := range rs.Rules {
+		for i, e := range r.Exprs {
+			m, ok := e.(*expr.Meta)
+			if !ok {
+				continue
+			}
+			switch m.Key {
+			case expr.MetaKeySKGID, expr.MetaKeySKUID:
+				t.Errorf("found socket-owner match %v, want meta mark only", m.Key)
+			case expr.MetaKeyMARK:
+				sawMark = true
+				cmp, ok := r.Exprs[i+1].(*expr.Cmp)
+				if !ok {
+					t.Fatalf("meta mark not followed by *expr.Cmp")
+				}
+				if !bytes.Equal(cmp.Data, binaryutil.NativeEndian.PutUint32(0x2374)) {
+					t.Errorf("mark Cmp.Data = %x, want native-endian encoding %x", cmp.Data, binaryutil.NativeEndian.PutUint32(0x2374))
+				}
+			}
+		}
+	}
+	if !sawMark {
+		t.Error("no meta mark match found in ruleset")
+	}
+}
+
+// TestMatchOwnerMarkTakesPrecedence verifies that matchOwner emits a mark
+// match (and no skgid/skuid expressions) whenever owner.Mark is non-zero,
+// regardless of UseGID/ID.
+func TestMatchOwnerMarkTakesPrecedence(t *testing.T) {
+	exprs := matchOwner(OwnerMatch{UseGID: true, ID: 7439, Mark: 0x2374}, false)
+	if len(exprs) != 2 {
+		t.Fatalf("matchOwner returned %d exprs, want 2", len(exprs))
+	}
+	m, ok := exprs[0].(*expr.Meta)
+	if !ok || m.Key != expr.MetaKeyMARK {
+		t.Fatalf("exprs[0] = %#v, want *expr.Meta{Key: MetaKeyMARK}", exprs[0])
+	}
+	cmp, ok := exprs[1].(*expr.Cmp)
+	if !ok {
+		t.Fatalf("exprs[1] is %T, want *expr.Cmp", exprs[1])
+	}
+	if !bytes.Equal(cmp.Data, binaryutil.NativeEndian.PutUint32(0x2374)) {
+		t.Errorf("mark Cmp.Data = %x, want native-endian encoding %x", cmp.Data, binaryutil.NativeEndian.PutUint32(0x2374))
+	}
+}
+
 func TestBuildSkgidByteOrderIsNative(t *testing.T) {
 	// meta skgid/skuid, like meta mark, are host-endian nft datatypes: the Cmp
 	// data must be produced with NativeEndian, not BigEndian, or the comparison
