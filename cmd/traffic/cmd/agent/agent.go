@@ -39,7 +39,12 @@ var DisplayName = "OSS Traffic Agent" //nolint:gochecknoglobals // extension poi
 // explicitly declared for the app container and minus the environment variables provided by this
 // config.
 func AppEnvironment(ctx context.Context, ag *agentconfig.Container) (map[string]string, error) {
-	osEnv := dos.Environ(ctx)
+	return appEnvironment(dos.Environ(ctx), ag), nil
+}
+
+// appEnvironment applies the app-prefix, skip-key, and mount-derived transformations to osEnv
+// (each entry in "KEY=VALUE" form) for the container described by ag.
+func appEnvironment(osEnv []string, ag *agentconfig.Container) map[string]string {
 	prefix := agentconfig.EnvPrefixApp + ag.EnvPrefix
 	fullEnv := make(map[string]string, len(osEnv))
 
@@ -95,7 +100,7 @@ func AppEnvironment(ctx context.Context, ag *agentconfig.Container) (map[string]
 			fullEnv[agentconfig.EnvInterceptMounts] = strings.Join(remoteMounts, ":")
 		}
 	}
-	return fullEnv, nil
+	return fullEnv
 }
 
 // sftpServer creates a listener on the next available port, writes that port on the
@@ -303,7 +308,7 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 	containers := make(map[string]*rpc.AgentInfo_ContainerInfo, len(ac.Containers))
 	for _, cn := range ac.Containers {
 		appMounts := cn.Mounts
-		env, err := AppEnvironment(g, cn)
+		env, err := config.AppEnviron(g, cn)
 		if err != nil {
 			return nil, err
 		}

@@ -24,6 +24,7 @@ import (
 type Config interface {
 	AgentConfig() *agentconfig.Sidecar
 	Annotations() map[string]string
+	AppEnviron(ctx context.Context, cn *agentconfig.Container) (map[string]string, error)
 	HasRemoteMounts() bool
 	PodName() string
 	PodIP() netip.Addr
@@ -39,6 +40,24 @@ type config struct {
 }
 
 func LoadConfig(ctx context.Context) (Config, error) {
+	c, err := loadBaseConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sc := c.AgentConfig()
+	for _, cn := range sc.Containers {
+		if err := addAppMounts(ctx, sc.MountPolicies, cn); err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
+}
+
+// loadBaseConfig parses AGENT_CONFIG/annotations into a Sidecar config, applies
+// ManagerPort/ClientConnectionTTL defaults and the log level, and reads this pod's
+// identity from the _TEL_AGENT_* environment variables. It does not set up the
+// sidecar-only app-mount symlinks; see addAppMounts.
+func loadBaseConfig(ctx context.Context) (*config, error) {
 	var cfgTight string
 	var ok bool
 	c := config{}
@@ -91,17 +110,16 @@ func LoadConfig(ctx context.Context) (Config, error) {
 		return nil, errors.New("missing POD_UID")
 	}
 	c.podUID = k8sTypes.UID(podUID)
-	for _, cn := range sc.Containers {
-		err = addAppMounts(ctx, sc.MountPolicies, cn)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return &c, nil
 }
 
 func (c *config) PodUID() k8sTypes.UID {
 	return c.podUID
+}
+
+// AppEnviron returns the sidecar's own process environment, transformed for cn.
+func (c *config) AppEnviron(ctx context.Context, cn *agentconfig.Container) (map[string]string, error) {
+	return AppEnvironment(ctx, cn)
 }
 
 func (c *config) HasRemoteMounts() bool {

@@ -20,6 +20,7 @@ func main() {
 		"agent-init":  agentinit.Main,
 		"agent-ready": agent.ReadyMain,
 		"manager":     manager.Main,
+		"node-agent":  agent.NodeAgentMain,
 	}
 
 	var name string
