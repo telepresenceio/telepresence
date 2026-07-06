@@ -694,7 +694,12 @@ type InterceptSpec struct {
 	Plaintext bool `protobuf:"varint,30,opt,name=plaintext,proto3" json:"plaintext,omitempty"`
 	// The cluster IPs of the service that the intercept is made on, each in
 	// netip.Addr binary form.
-	ServiceIps    [][]byte `protobuf:"bytes,31,rep,name=service_ips,json=serviceIps,proto3" json:"service_ips,omitempty"`
+	ServiceIps [][]byte `protobuf:"bytes,31,rep,name=service_ips,json=serviceIps,proto3" json:"service_ips,omitempty"`
+	// Request that this intercept be served by a node-hosted traffic-agent
+	// (a manager-created Job that enters the target pod's namespaces) rather
+	// than by a sidecar injected into the workload. Requires the
+	// traffic-manager to have node-agent mode enabled.
+	NodeAgent     bool `protobuf:"varint,32,opt,name=node_agent,json=nodeAgent,proto3" json:"node_agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -930,6 +935,13 @@ func (x *InterceptSpec) GetServiceIps() [][]byte {
 		return x.ServiceIps
 	}
 	return nil
+}
+
+func (x *InterceptSpec) GetNodeAgent() bool {
+	if x != nil {
+		return x.NodeAgent
+	}
+	return false
 }
 
 // InterceptInfo contains information about a live intercept in an agent
@@ -4358,7 +4370,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2-.telepresence.manager.AgentInfo.ContainerInfoR\x05value:\x028\x01J\x04\b\x06\x10\a\"1\n" +
 	"\vPortMapping\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\x05R\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\x05R\x02to\"\xc0\t\n" +
+	"\x02to\x18\x02 \x01(\x05R\x02to\"\xdf\t\n" +
 	"\rInterceptSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06client\x18\x02 \x01(\tR\x06client\x12\x14\n" +
@@ -4395,7 +4407,9 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\bmetadata\x18\x1d \x03(\v21.telepresence.manager.InterceptSpec.MetadataEntryR\bmetadata\x12\x1c\n" +
 	"\tplaintext\x18\x1e \x01(\bR\tplaintext\x12\x1f\n" +
 	"\vservice_ips\x18\x1f \x03(\fR\n" +
-	"serviceIps\x1a@\n" +
+	"serviceIps\x12\x1d\n" +
+	"\n" +
+	"node_agent\x18  \x01(\bR\tnodeAgent\x1a@\n" +
 	"\x12HeaderFiltersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a;\n" +

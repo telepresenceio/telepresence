@@ -195,6 +195,12 @@ message InterceptSpec {
   // netip.Addr binary form.
   repeated bytes service_ips = 31;
 
+  // Request that this intercept be served by a node-hosted traffic-agent
+  // (a manager-created Job that enters the target pod's namespaces) rather
+  // than by a sidecar injected into the workload. Requires the
+  // traffic-manager to have node-agent mode enabled.
+  bool node_agent = 32;
+
   reserved 9; // used to be former mechanism_args
 
   // Used to be mount_point and only utilized when passing the spec between

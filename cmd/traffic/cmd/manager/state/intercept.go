@@ -99,6 +99,16 @@ func (s *State) PrepareIntercept(
 		}
 	}
 
+	if spec.NodeAgent {
+		if err = nodeAgentGateErr(managerutil.GetEnv(ctx)); err != nil {
+			return interceptError(err)
+		}
+		if pi, err = s.ensureNodeAgent(ctx, wl, spec, client); err != nil {
+			return interceptError(err)
+		}
+		return pi, nil
+	}
+
 	var rp agentconfig.ReplacePolicy
 	if spec.Replace {
 		rp = agentconfig.ReplacePolicyContainer
