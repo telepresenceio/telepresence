@@ -286,3 +286,23 @@ routeController:
   # If empty, the controller queries the ServiceCIDR API (k8s >= 1.33) and falls
   # back to per-IP blackhole routes on deletion for older clusters.
   serviceCIDRs: []
+
+################################################################################
+## Node Agent Configuration
+################################################################################
+# nodeAgent controls node-hosted traffic-agent mode: the traffic-manager may
+# create node-pinned Jobs that serve intercepts by entering an existing pod's
+# namespaces instead of injecting a sidecar.
+nodeAgent:
+  # enabled turns on node-hosted traffic-agent mode: the traffic-manager may
+  # create node-pinned Jobs that serve intercepts by entering an existing
+  # pod's namespaces instead of injecting a sidecar. Off by default; it
+  # requires a namespace that permits the privileged Pod Security Standard.
+  enabled: false
+  # namespace is where node-agent Jobs run. It must permit the privileged
+  # PodSecurity profile. When empty, the traffic-manager's own namespace is
+  # used.
+  namespace: ""
+  # criSocket is the container-runtime socket path mounted into node-agent
+  # pods. When empty, the node-agent probes the well-known socket paths.
+  criSocket: ""

@@ -430,6 +430,14 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 	if err != nil {
 		clog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptID, err)
 	}
+	if spec.NodeAgent {
+		err = s.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+			return reapNodeAgentJobs(ctx, interceptInfo.Spec.GetAgent())
+		})
+		if err != nil {
+			clog.Errorf(ctx, "Failed to add node-agent reap finalizer for %s: %v", interceptID, err)
+		}
+	}
 	return client, is.InterceptInfo, nil
 }
 

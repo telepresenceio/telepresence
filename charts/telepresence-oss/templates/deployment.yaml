@@ -261,6 +261,14 @@ spec:
               fieldRef:
                 apiVersion: v1
                 fieldPath: status.hostIP
+          {{- if .nodeAgent.enabled }}
+          - name: NODE_AGENT_ENABLED
+            value: "true"
+          - name: NODE_AGENT_NAMESPACE
+            value: {{ .nodeAgent.namespace | quote }}
+          - name: NODE_AGENT_CRI_SOCKET
+            value: {{ .nodeAgent.criSocket | quote }}
+          {{- end }}
          {{- /*
         Client configuration
         */}}

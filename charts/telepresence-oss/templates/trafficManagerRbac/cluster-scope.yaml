@@ -46,6 +46,18 @@ rules:
   - pods/log
   verbs:
   - get
+{{- if .nodeAgent.enabled }}
+- apiGroups:
+  - "batch"
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - delete
+{{- end }}
 {{ include "telepresence.managerWorkloadRules" $ }}
 - apiGroups:
     - "events.k8s.io"

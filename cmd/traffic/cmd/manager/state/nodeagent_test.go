@@ -1,16 +1,25 @@
 package state
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	batchv1 "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 // TestNodeAgentGateErr_Disabled verifies that requesting node-agent mode
@@ -34,6 +43,108 @@ func TestNodeAgentGateErr_Enabled(t *testing.T) {
 
 	env := &managerutil.Env{NodeAgentEnabled: true}
 	assert.NoError(t, nodeAgentGateErr(env))
+}
+
+// TestNodeAgentNamespace_Explicit verifies that an explicitly configured
+// NodeAgentNamespace wins over the traffic-manager's own namespace.
+func TestNodeAgentNamespace_Explicit(t *testing.T) {
+	t.Parallel()
+
+	env := &managerutil.Env{NodeAgentNamespace: "tp-node-agents", ManagerNamespace: "ambassador"}
+	assert.Equal(t, "tp-node-agents", nodeAgentNamespace(env))
+}
+
+// TestNodeAgentNamespace_FallsBackToManagerNamespace verifies that an empty
+// NodeAgentNamespace falls back to the traffic-manager's own namespace.
+func TestNodeAgentNamespace_FallsBackToManagerNamespace(t *testing.T) {
+	t.Parallel()
+
+	env := &managerutil.Env{ManagerNamespace: "ambassador"}
+	assert.Equal(t, "ambassador", nodeAgentNamespace(env))
+}
+
+// TestReapNodeAgentJobs verifies that reaping deletes only the Job(s)
+// matching the app + agentName labels in the node-agent namespace, leaving
+// unrelated Jobs (different agent, or missing the app label) untouched.
+func TestReapNodeAgentJobs(t *testing.T) {
+	t.Parallel()
+
+	const ns = "ambassador"
+	matching := &batchv1.Job{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "tel-node-agent-match",
+			Namespace: ns,
+			Labels: map[string]string{
+				nodeAgentAppLabel:  nodeAgentAppLabelValue,
+				nodeAgentNameLabel: "test-agent",
+			},
+		},
+	}
+	other := &batchv1.Job{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "tel-node-agent-other",
+			Namespace: ns,
+			Labels: map[string]string{
+				nodeAgentAppLabel:  nodeAgentAppLabelValue,
+				nodeAgentNameLabel: "other-agent",
+			},
+		},
+	}
+	unrelated := &batchv1.Job{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "some-other-job",
+			Namespace: ns,
+		},
+	}
+
+	ci := fake.NewSimpleClientset(matching, other, unrelated)
+	// The fake clientset's generic object-tracker reactor does not implement
+	// the "delete-collection" verb (it silently no-ops), so a reactor that
+	// emulates a real API server's behavior — list with the given selector,
+	// then delete each match — is installed here. It operates on the tracker
+	// directly (rather than calling back through ci.BatchV1()...), because
+	// that call path re-enters ci's non-reentrant lock, which is already
+	// held by the Invokes call that dispatches to this reactor.
+	ci.PrependReactor("delete-collection", "jobs", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		dc, ok := action.(k8stesting.DeleteCollectionActionImpl)
+		if !ok {
+			return false, nil, nil
+		}
+		gvr := dc.GetResource()
+		tracker := ci.Tracker()
+		obj, err := tracker.List(gvr, batchv1.SchemeGroupVersion.WithKind("Job"), dc.GetNamespace())
+		if err != nil {
+			return true, nil, err
+		}
+		jobList, ok := obj.(*batchv1.JobList)
+		if !ok {
+			return true, nil, fmt.Errorf("unexpected list type %T", obj)
+		}
+		sel := dc.GetListRestrictions().Labels
+		for _, job := range jobList.Items {
+			if sel == nil || sel.Matches(labels.Set(job.Labels)) {
+				if err := tracker.Delete(gvr, dc.GetNamespace(), job.Name); err != nil {
+					return true, nil, err
+				}
+			}
+		}
+		return true, nil, nil
+	})
+
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: ns})
+
+	require.NoError(t, reapNodeAgentJobs(ctx, "test-agent"))
+
+	jobs, err := ci.BatchV1().Jobs(ns).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	names := make([]string, len(jobs.Items))
+	for i, j := range jobs.Items {
+		names[i] = j.Name
+	}
+	assert.NotContains(t, names, matching.Name)
+	assert.Contains(t, names, other.Name)
+	assert.Contains(t, names, unrelated.Name)
 }
 
 func testSidecar() *agentconfig.Sidecar {
