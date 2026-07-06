@@ -101,6 +101,12 @@ func (c *nodeConfig) ListenerFactory() forwarder.ListenerFactory {
 	return nsListenerFactory{nsPath: tpnetns.PathForPID(pid)}
 }
 
+// NodeAgent reports true: this agent is a Job in the traffic-manager's
+// namespace that enters the target pod's namespaces.
+func (c *nodeConfig) NodeAgent() bool {
+	return true
+}
+
 // parseContainerIDs decodes the JSON object mapping container name to CRI container ID.
 func parseContainerIDs(raw string) (map[string]string, error) {
 	var ids map[string]string

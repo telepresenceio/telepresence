@@ -429,8 +429,12 @@ type AgentInfo struct {
 	Version   string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
 	// This is a list of the mechanisms that the Agent advertises that
 	// it supports.
-	Mechanisms    []*AgentInfo_Mechanism              `protobuf:"bytes,5,rep,name=mechanisms,proto3" json:"mechanisms,omitempty"`
-	Containers    map[string]*AgentInfo_ContainerInfo `protobuf:"bytes,12,rep,name=containers,proto3" json:"containers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Mechanisms []*AgentInfo_Mechanism              `protobuf:"bytes,5,rep,name=mechanisms,proto3" json:"mechanisms,omitempty"`
+	Containers map[string]*AgentInfo_ContainerInfo `protobuf:"bytes,12,rep,name=containers,proto3" json:"containers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// True when the agent is node-hosted: a Job in the traffic-manager's
+	// namespace that enters the target pod's namespaces, rather than a
+	// sidecar running in the workload's own pods.
+	NodeAgent     bool `protobuf:"varint,15,opt,name=node_agent,json=nodeAgent,proto3" json:"node_agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -554,6 +558,13 @@ func (x *AgentInfo) GetContainers() map[string]*AgentInfo_ContainerInfo {
 		return x.Containers
 	}
 	return nil
+}
+
+func (x *AgentInfo) GetNodeAgent() bool {
+	if x != nil {
+		return x.NodeAgent
+	}
+	return false
 }
 
 // PortMapping describes a mapping from a port number in the intercepted container to
@@ -3165,14 +3176,18 @@ func (x *AgentImageFQN) GetFQN() string {
 }
 
 type AgentPodInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PodId         string                 `protobuf:"bytes,7,opt,name=pod_id,json=podId,proto3" json:"pod_id,omitempty"`
-	PodName       string                 `protobuf:"bytes,1,opt,name=pod_name,json=podName,proto3" json:"pod_name,omitempty"`
-	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	PodIp         []byte                 `protobuf:"bytes,3,opt,name=pod_ip,json=podIp,proto3" json:"pod_ip,omitempty"`
-	ApiPort       int32                  `protobuf:"varint,4,opt,name=api_port,json=apiPort,proto3" json:"api_port,omitempty"`
-	Intercepted   bool                   `protobuf:"varint,5,opt,name=intercepted,proto3" json:"intercepted,omitempty"`
-	WorkloadName  string                 `protobuf:"bytes,6,opt,name=workload_name,json=workloadName,proto3" json:"workload_name,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	PodId        string                 `protobuf:"bytes,7,opt,name=pod_id,json=podId,proto3" json:"pod_id,omitempty"`
+	PodName      string                 `protobuf:"bytes,1,opt,name=pod_name,json=podName,proto3" json:"pod_name,omitempty"`
+	Namespace    string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	PodIp        []byte                 `protobuf:"bytes,3,opt,name=pod_ip,json=podIp,proto3" json:"pod_ip,omitempty"`
+	ApiPort      int32                  `protobuf:"varint,4,opt,name=api_port,json=apiPort,proto3" json:"api_port,omitempty"`
+	Intercepted  bool                   `protobuf:"varint,5,opt,name=intercepted,proto3" json:"intercepted,omitempty"`
+	WorkloadName string                 `protobuf:"bytes,6,opt,name=workload_name,json=workloadName,proto3" json:"workload_name,omitempty"`
+	// True when the agent is node-hosted: a Job in the traffic-manager's
+	// namespace that enters the target pod's namespaces, rather than a
+	// sidecar running in the workload's own pods.
+	NodeAgent     bool `protobuf:"varint,8,opt,name=node_agent,json=nodeAgent,proto3" json:"node_agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3254,6 +3269,13 @@ func (x *AgentPodInfo) GetWorkloadName() string {
 		return x.WorkloadName
 	}
 	return ""
+}
+
+func (x *AgentPodInfo) GetNodeAgent() bool {
+	if x != nil {
+		return x.NodeAgent
+	}
+	return false
 }
 
 type AgentPodInfoSnapshot struct {
@@ -4330,7 +4352,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\n" +
 	"install_id\x18\x02 \x01(\tR\tinstallId\x12\x18\n" +
 	"\aproduct\x18\x03 \x01(\tR\aproduct\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\tR\aversionJ\x04\b\x05\x10\x06\"\xeb\a\n" +
+	"\aversion\x18\x04 \x01(\tR\aversionJ\x04\b\x05\x10\x06\"\x8a\b\n" +
 	"\tAgentInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04kind\x18\r \x01(\tR\x04kind\x12\x1c\n" +
@@ -4349,7 +4371,9 @@ const file_manager_manager_proto_rawDesc = "" +
 	"mechanisms\x12O\n" +
 	"\n" +
 	"containers\x18\f \x03(\v2/.telepresence.manager.AgentInfo.ContainersEntryR\n" +
-	"containers\x1aS\n" +
+	"containers\x12\x1d\n" +
+	"\n" +
+	"node_agent\x18\x0f \x01(\bR\tnodeAgent\x1aS\n" +
 	"\tMechanism\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aproduct\x18\x02 \x01(\tR\aproduct\x12\x18\n" +
@@ -4615,7 +4639,7 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\vconfig_yaml\x18\x01 \x01(\fR\n" +
 	"configYaml\"#\n" +
 	"\rAgentImageFQN\x12\x12\n" +
-	"\x05f_q_n\x18\x01 \x01(\tR\x03fQN\"\xd7\x01\n" +
+	"\x05f_q_n\x18\x01 \x01(\tR\x03fQN\"\xf6\x01\n" +
 	"\fAgentPodInfo\x12\x15\n" +
 	"\x06pod_id\x18\a \x01(\tR\x05podId\x12\x19\n" +
 	"\bpod_name\x18\x01 \x01(\tR\apodName\x12\x1c\n" +
@@ -4623,7 +4647,9 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x06pod_ip\x18\x03 \x01(\fR\x05podIp\x12\x19\n" +
 	"\bapi_port\x18\x04 \x01(\x05R\aapiPort\x12 \n" +
 	"\vintercepted\x18\x05 \x01(\bR\vintercepted\x12#\n" +
-	"\rworkload_name\x18\x06 \x01(\tR\fworkloadName\"R\n" +
+	"\rworkload_name\x18\x06 \x01(\tR\fworkloadName\x12\x1d\n" +
+	"\n" +
+	"node_agent\x18\b \x01(\bR\tnodeAgent\"R\n" +
 	"\x14AgentPodInfoSnapshot\x12:\n" +
 	"\x06agents\x18\x01 \x03(\v2\".telepresence.manager.AgentPodInfoR\x06agents\"\xdf\x01\n" +
 	"\x11AgentPodInfoDelta\x12N\n" +

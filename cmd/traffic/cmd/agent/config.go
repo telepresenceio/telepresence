@@ -30,6 +30,7 @@ type Config interface {
 	PodName() string
 	PodIP() netip.Addr
 	PodUID() k8sTypes.UID
+	NodeAgent() bool
 
 	// ListenerFactory returns the factory a container's forwarders should use to
 	// create their listen sockets, or nil to listen in the agent's own network
@@ -153,6 +154,11 @@ func (c *config) PodName() string {
 
 func (c *config) PodIP() netip.Addr {
 	return c.podIP
+}
+
+// NodeAgent reports false: the sidecar agent runs in the workload's own pod.
+func (c *config) NodeAgent() bool {
+	return false
 }
 
 // ListenerFactory returns nil: the sidecar agent's forwarders listen in its own

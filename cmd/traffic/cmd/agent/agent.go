@@ -326,6 +326,7 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 		PodName:   config.PodName(),
 		PodIp:     config.PodIP().String(),
 		PodUid:    string(config.PodUID()),
+		NodeAgent: config.NodeAgent(),
 		ApiPort:   int32(grpcPort),
 		FtpPort:   int32(ftpPort),
 		SftpPort:  int32(sftpPort),

@@ -532,6 +532,7 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 				PodIp:        aip.AsSlice(),
 				ApiPort:      a.ApiPort,
 				Intercepted:  s.state.IsInterceptedBy(a.Name, a.Namespace, clientSessionID),
+				NodeAgent:    a.NodeAgent,
 			}
 			agents = append(agents, ap)
 			return true
@@ -606,6 +607,7 @@ func (s *service) watchAgentPodsDelta(ctx context.Context, namespaces []string, 
 						PodIp:        aip.AsSlice(),
 						ApiPort:      a.ApiPort,
 						Intercepted:  s.state.IsInterceptedBy(a.Name, a.Namespace, clientSessionID),
+						NodeAgent:    a.NodeAgent,
 					}
 					agentPodInfos.Store(string(k), ap)
 				}

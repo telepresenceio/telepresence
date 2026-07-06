@@ -100,7 +100,11 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		defer dialCancel()
 
 		ai := ac.info
-		conn, cli, _, err := ac.ConnectToAgent(dialCtx, ai.Namespace, ai.PodName, uint16(ai.ApiPort), types.UID(ai.PodId))
+		ns := ai.Namespace
+		if ai.NodeAgent {
+			ns = k8s.GetManagerNamespace(ctx)
+		}
+		conn, cli, _, err := ac.ConnectToAgent(dialCtx, ns, ai.PodName, uint16(ai.ApiPort), types.UID(ai.PodId))
 		if err != nil {
 			ac.connectErr = err
 

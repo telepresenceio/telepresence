@@ -72,6 +72,11 @@ message AgentInfo {
   }
   map<string,ContainerInfo> containers = 12;
 
+  // True when the agent is node-hosted: a Job in the traffic-manager's
+  // namespace that enters the target pod's namespaces, rather than a
+  // sidecar running in the workload's own pods.
+  bool node_agent = 15;
+
   reserved 6;
 }
 
@@ -602,6 +607,11 @@ message AgentPodInfo {
   int32 api_port = 4;
   bool intercepted = 5;
   string workload_name = 6;
+
+  // True when the agent is node-hosted: a Job in the traffic-manager's
+  // namespace that enters the target pod's namespaces, rather than a
+  // sidecar running in the workload's own pods.
+  bool node_agent = 8;
 }
 
 message AgentPodInfoSnapshot {
