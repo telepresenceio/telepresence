@@ -71,19 +71,10 @@ func nodeAgentGateErr(env *managerutil.Env) error {
 	return nil
 }
 
-// nodeAgentNamespace returns the namespace that node-agent Jobs are created
-// in: env.NodeAgentNamespace when set, otherwise the traffic-manager's own
-// namespace.
-func nodeAgentNamespace(env *managerutil.Env) string {
-	if env.NodeAgentNamespace != "" {
-		return env.NodeAgentNamespace
-	}
-	return env.ManagerNamespace
-}
-
 // reapNodeAgentJobs deletes the node-agent Job(s) created for agentName in
-// the node-agent namespace. It is invoked as an intercept finalizer, so it
-// runs both on explicit intercept removal and on client-session drop.
+// the traffic-manager's own namespace. It is invoked as an intercept
+// finalizer, so it runs both on explicit intercept removal and on
+// client-session drop.
 //
 // NOTE: this deletes by the agentName label, so it reaps the Job for every
 // node-agent intercept of that agent at once. That is correct while
@@ -91,7 +82,7 @@ func nodeAgentNamespace(env *managerutil.Env) string {
 // concurrent node-agent intercepts sharing one Job is future work.
 func reapNodeAgentJobs(ctx context.Context, agentName string) error {
 	env := managerutil.GetEnv(ctx)
-	ns := nodeAgentNamespace(env)
+	ns := env.ManagerNamespace
 	sel := fmt.Sprintf("%s=%s,%s=%s", nodeAgentAppLabel, nodeAgentAppLabelValue, nodeAgentNameLabel, agentName)
 	propagation := meta.DeletePropagationBackground
 	err := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(ns).DeleteCollection(ctx,
@@ -125,7 +116,7 @@ func (s *State) ensureNodeAgent(
 	}
 
 	env := managerutil.GetEnv(ctx)
-	namespace := nodeAgentNamespace(env)
+	namespace := env.ManagerNamespace
 
 	job, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
 		namespace:    namespace,
@@ -210,8 +201,8 @@ func podRunningAndReady(pod *core.Pod) bool {
 // node-agent Job. cfg (the agentconfig.Sidecar) supplies the values that are
 // shared with the sidecar traffic-agent.
 type nodeAgentJobOpts struct {
-	// namespace is where the Job is created. This is the traffic-manager's
-	// node-agent namespace, not necessarily the target pod's namespace.
+	// namespace is where the Job is created: the traffic-manager's own
+	// namespace, not necessarily the target pod's namespace.
 	namespace string
 
 	// nodeName is the node that the target pod is scheduled on. The Job's

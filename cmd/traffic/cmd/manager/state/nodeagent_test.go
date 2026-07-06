@@ -45,27 +45,10 @@ func TestNodeAgentGateErr_Enabled(t *testing.T) {
 	assert.NoError(t, nodeAgentGateErr(env))
 }
 
-// TestNodeAgentNamespace_Explicit verifies that an explicitly configured
-// NodeAgentNamespace wins over the traffic-manager's own namespace.
-func TestNodeAgentNamespace_Explicit(t *testing.T) {
-	t.Parallel()
-
-	env := &managerutil.Env{NodeAgentNamespace: "tp-node-agents", ManagerNamespace: "ambassador"}
-	assert.Equal(t, "tp-node-agents", nodeAgentNamespace(env))
-}
-
-// TestNodeAgentNamespace_FallsBackToManagerNamespace verifies that an empty
-// NodeAgentNamespace falls back to the traffic-manager's own namespace.
-func TestNodeAgentNamespace_FallsBackToManagerNamespace(t *testing.T) {
-	t.Parallel()
-
-	env := &managerutil.Env{ManagerNamespace: "ambassador"}
-	assert.Equal(t, "ambassador", nodeAgentNamespace(env))
-}
-
 // TestReapNodeAgentJobs verifies that reaping deletes only the Job(s)
-// matching the app + agentName labels in the node-agent namespace, leaving
-// unrelated Jobs (different agent, or missing the app label) untouched.
+// matching the app + agentName labels in the traffic-manager's namespace,
+// leaving unrelated Jobs (different agent, or missing the app label)
+// untouched.
 func TestReapNodeAgentJobs(t *testing.T) {
 	t.Parallel()
 

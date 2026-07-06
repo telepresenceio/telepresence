@@ -7,7 +7,6 @@ require less permissions in clientRbac.yaml
 */}}
 {{- $managerNamespace := include "traffic-manager.namespace" $}}
 {{- $namespaces := fromJsonArray (include "traffic-manager.namespaces" $)}}
-{{- $nodeAgentEnabled := .Values.nodeAgent.enabled}}
 {{- if $namespaces }}
 {{- $interceptEnabled := .Values.agentInjector.enabled}}
 {{- $allNamespaces := uniq (append $namespaces $managerNamespace)}}
@@ -51,19 +50,6 @@ rules:
   - pods/log
   verbs:
   - get
-{{- if $nodeAgentEnabled }}
-- apiGroups:
-  - "batch"
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - delete
-  - deletecollection
-{{- end }}
 - apiGroups:
   - ""
   resources:
@@ -220,19 +206,6 @@ but cannot be tightened further by name.
     - configmaps
   verbs:
     - create
-{{- if $nodeAgentEnabled }}
-- apiGroups:
-  - "batch"
-  resources:
-  - jobs
-  verbs:
-  - get
-  - list
-  - watch
-  - create
-  - delete
-  - deletecollection
-{{- end }}
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1

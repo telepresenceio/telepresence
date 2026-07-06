@@ -297,12 +297,9 @@ nodeAgent:
   # enabled turns on node-hosted traffic-agent mode: the traffic-manager may
   # create node-pinned Jobs that serve intercepts by entering an existing
   # pod's namespaces instead of injecting a sidecar. Off by default; it
-  # requires a namespace that permits the privileged Pod Security Standard.
+  # requires that the traffic-manager's own namespace permits the privileged
+  # Pod Security Standard, since node-agent Jobs are created there.
   enabled: false
-  # namespace is where node-agent Jobs run. It must permit the privileged
-  # PodSecurity profile. When empty, the traffic-manager's own namespace is
-  # used.
-  namespace: ""
   # criSocket is the container-runtime socket path mounted into node-agent
   # pods. When empty, the node-agent probes the well-known socket paths.
   criSocket: ""

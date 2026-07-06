@@ -521,14 +521,9 @@ properties:
     properties:
       enabled:
         description: >-
-          Enable node-hosted traffic-agent mode. Off by default; it requires a namespace that permits the
-          privileged Pod Security Standard.
+          Enable node-hosted traffic-agent mode. Off by default; it requires that the traffic-manager's own
+          namespace permits the privileged Pod Security Standard, since node-agent Jobs are created there.
         type: boolean
-      namespace:
-        description: >-
-          The namespace that node-agent Jobs run in. It must permit the privileged PodSecurity profile. When
-          empty, the traffic-manager's own namespace is used.
-        type: string
       criSocket:
         description: >-
           The container-runtime socket path mounted into node-agent pods. When empty, the node-agent probes the
