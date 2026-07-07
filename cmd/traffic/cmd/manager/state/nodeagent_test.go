@@ -171,6 +171,21 @@ func TestCheckNodeAgentTarget(t *testing.T) {
 			},
 			wantErr: "already has an injected traffic-agent",
 		},
+		{
+			name: "user namespace is rejected",
+			pod: &core.Pod{
+				ObjectMeta: meta.ObjectMeta{Name: "app-1", Namespace: "ns"},
+				Spec:       core.PodSpec{HostUsers: new(false), Containers: []core.Container{{Name: "app"}}},
+			},
+			wantErr: "user namespace",
+		},
+		{
+			name: "explicit host users is accepted",
+			pod: &core.Pod{
+				ObjectMeta: meta.ObjectMeta{Name: "app-1", Namespace: "ns"},
+				Spec:       core.PodSpec{HostUsers: new(true), Containers: []core.Container{{Name: "app"}}},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

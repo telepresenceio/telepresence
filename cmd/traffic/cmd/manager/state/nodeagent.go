@@ -270,13 +270,20 @@ func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, 
 }
 
 // checkNodeAgentTarget rejects a target pod that cannot host a node-agent: one
-// on the host network (whose namespace the route controller also programs) and
-// one that already has an injected traffic-agent sidecar (whose network
-// namespace and agent ports the node-agent would collide with).
+// on the host network (whose namespace the route controller also programs), one
+// that already has an injected traffic-agent sidecar (whose network namespace
+// and agent ports the node-agent would collide with), and one in its own user
+// namespace (hostUsers:false), whose loop-prevention discriminator needs a
+// packet mark that is not wired yet.
 func checkNodeAgentTarget(pod *core.Pod) error {
 	if pod.Spec.HostNetwork {
 		return errcat.User.Newf(
 			"pod %s.%s uses host networking, which node-agent mode does not support", pod.Name, pod.Namespace)
+	}
+	if pod.Spec.HostUsers != nil && !*pod.Spec.HostUsers {
+		return errcat.User.Newf(
+			"pod %s.%s runs in its own user namespace (hostUsers:false), which node-agent mode does not support yet",
+			pod.Name, pod.Namespace)
 	}
 	for i := range pod.Spec.Containers {
 		if pod.Spec.Containers[i].Name == agentconfig.ContainerName {

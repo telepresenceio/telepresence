@@ -103,6 +103,12 @@ func (s *State) PrepareIntercept(
 		if err = nodeAgentGateErr(managerutil.GetEnv(ctx)); err != nil {
 			return interceptError(err)
 		}
+		if spec.Replace {
+			// Replace is implemented by the sidecar machinery, which
+			// node-agent mode never runs, so the app container would keep
+			// running and the replace would be silently ignored.
+			return interceptError(errcat.User.New("node-agent mode does not support --replace"))
+		}
 	}
 
 	var rp agentconfig.ReplacePolicy
