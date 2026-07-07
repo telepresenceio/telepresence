@@ -463,6 +463,7 @@ func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.
 	return nil
 }
 
+//nolint:unparam // keep the full (major, minor, patch) form so version gates read uniformly
 func (s *session) compareFinalizedManagerVersion(major, minor, patch uint64) int {
 	mv := s.managerVersion
 	n := mv.Major - major

@@ -23,7 +23,7 @@ linters:
     - gocyclo
     - godot
     - goheader
-    - gomodguard
+    - gomodguard_v2
     - goprintffuncname
     - grouper
     - importas
@@ -104,21 +104,20 @@ linters:
       min-complexity: 60
     gocyclo:
       min-complexity: 35
-    gomodguard:
+    gomodguard_v2:
       blocked:
-        modules:
-          - gotest.tools:
-              recommendations:
-                - github.com/stretchr/testify
-                - github.com/google/go-cmp/cmp
-          - gotest.tools/v2:
-              recommendations:
-                - github.com/stretchr/testify
-                - github.com/google/go-cmp/cmp
-          - gotest.tools/v3:
-              recommendations:
-                - github.com/stretchr/testify
-                - github.com/google/go-cmp/cmp
+        - module: gotest.tools
+          recommendations:
+            - github.com/stretchr/testify
+            - github.com/google/go-cmp/cmp
+        - module: gotest.tools/v2
+          recommendations:
+            - github.com/stretchr/testify
+            - github.com/google/go-cmp/cmp
+        - module: gotest.tools/v3
+          recommendations:
+            - github.com/stretchr/testify
+            - github.com/google/go-cmp/cmp
     lll:
       line-length: 180
       tab-width: 2
