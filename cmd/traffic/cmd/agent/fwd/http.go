@@ -44,6 +44,13 @@ func (f *tcp) configureTransport(ctx context.Context, plainText bool) *http.Tran
 	if trn.Protocols.UnencryptedHTTP2() {
 		trn.Protocols.SetHTTP1(false)
 	}
+	// A node-agent forwarder dials its pass-through target inside the target
+	// pod's network namespace; without this the reverse proxy would dial the
+	// target pod IP from the node-agent's own namespace and never traverse the
+	// proxy-port DNAT.
+	if d := f.Dialer(); d != nil {
+		trn.DialContext = d.DialContext
+	}
 	return trn
 }
 

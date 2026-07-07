@@ -36,11 +36,14 @@ func (c *containerState) newPortHandler(ctx context.Context, pp types.PortAndPro
 	if lf := c.ListenerFactory(); lf != nil {
 		opts = append(opts, forwarder.WithListener(lf))
 	}
+	if d := c.DialerFactory(); d != nil {
+		opts = append(opts, forwarder.WithDialer(d))
+	}
 	if pp.Proto == types.ProtoTCP && c.container.Replace == agentconfig.ReplacePolicyIntercept {
 		// Redirect non-intercepted traffic to the pod so that injected sidecars that hijack the ports for
 		// incoming connections will continue to work.
 		cp := c.AgentConfig().InterceptorInactivePort(ic.ContainerPort, pp.Proto)
-		defaultTarget := netip.AddrPortFrom(c.PodIP(), cp)
+		defaultTarget := netip.AddrPortFrom(c.AppPodIP(), cp)
 		return fwd.NewTCPInterceptor(ctx, pp, tunnel.AgentToClient, c.TLSManager(), defaultTarget, opts...)
 	}
 	// The agent will intercept all traffic intended for this container.

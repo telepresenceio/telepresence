@@ -39,6 +39,10 @@ type Forwarder interface {
 
 	// Target returns the target host:port that this forwarder forwards to.
 	Target() netip.AddrPort
+
+	// Dialer returns the Dialer injected via WithDialer, or nil when the
+	// forwarder dials in its own network namespace.
+	Dialer() Dialer
 }
 
 type basic struct {
@@ -46,6 +50,7 @@ type basic struct {
 	target     netip.AddrPort
 	listenPort int32
 	listener   ListenerFactory
+	dialer     Dialer
 }
 
 // ListenerFactory creates the listen sockets a forwarder uses. The default
@@ -71,6 +76,14 @@ func (defaultListenerFactory) ListenPacket(ctx context.Context, network, address
 	return lc.ListenPacket(ctx, network, address)
 }
 
+// Dialer establishes the outbound connection a forwarder makes to its target.
+// When a forwarder has no Dialer it dials in its own network namespace; an
+// alternative (e.g. one that enters another namespace) can be injected via
+// WithDialer so a forwarder's pass-through traffic originates elsewhere.
+type Dialer interface {
+	DialContext(ctx context.Context, network, address string) (net.Conn, error)
+}
+
 // Option configures a Forwarder at construction time.
 type Option func(*basic)
 
@@ -79,6 +92,14 @@ type Option func(*basic)
 func WithListener(lf ListenerFactory) Option {
 	return func(b *basic) {
 		b.listener = lf
+	}
+}
+
+// WithDialer injects the Dialer a forwarder uses for its outbound connection.
+// Without this option, a forwarder dials in its own network namespace.
+func WithDialer(d Dialer) Option {
+	return func(b *basic) {
+		b.dialer = d
 	}
 }
 
@@ -96,4 +117,8 @@ func (f *basic) Tag() tunnel.Tag {
 
 func (f *basic) Target() netip.AddrPort {
 	return f.target
+}
+
+func (f *basic) Dialer() Dialer {
+	return f.dialer
 }

@@ -32,10 +32,21 @@ type Config interface {
 	PodUID() k8sTypes.UID
 	NodeAgent() bool
 
+	// AppPodIP returns the IP of the pod that hosts the application containers.
+	// For the sidecar that is the agent's own pod (PodIP); the node-agent's
+	// application runs in a separate pod, so it returns that pod's IP. It is the
+	// address a forwarder dials for non-intercepted (pass-through) traffic.
+	AppPodIP() netip.Addr
+
 	// ListenerFactory returns the factory a container's forwarders should use to
 	// create their listen sockets, or nil to listen in the agent's own network
 	// namespace (the sidecar case).
 	ListenerFactory() forwarder.ListenerFactory
+
+	// DialerFactory returns the dialer a container's forwarders should use for
+	// their outbound pass-through connections, or nil to dial in the agent's own
+	// network namespace (the sidecar case).
+	DialerFactory() forwarder.Dialer
 }
 
 type config struct {
@@ -156,6 +167,12 @@ func (c *config) PodIP() netip.Addr {
 	return c.podIP
 }
 
+// AppPodIP returns the agent's own pod IP: the sidecar shares its pod with the
+// application containers.
+func (c *config) AppPodIP() netip.Addr {
+	return c.podIP
+}
+
 // NodeAgent reports false: the sidecar agent runs in the workload's own pod.
 func (c *config) NodeAgent() bool {
 	return false
@@ -164,6 +181,12 @@ func (c *config) NodeAgent() bool {
 // ListenerFactory returns nil: the sidecar agent's forwarders listen in its own
 // network namespace, which is already the target pod's namespace.
 func (c *config) ListenerFactory() forwarder.ListenerFactory {
+	return nil
+}
+
+// DialerFactory returns nil: the sidecar agent's forwarders dial in its own
+// network namespace, which is already the target pod's namespace.
+func (c *config) DialerFactory() forwarder.Dialer {
 	return nil
 }
 

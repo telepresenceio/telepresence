@@ -91,6 +91,24 @@ func Listen(ctx context.Context, nsPath, network, address string) (net.Listener,
 	return l, lErr
 }
 
+// Dial establishes a connection to address from inside the network namespace at
+// nsPath and returns it. Only socket creation and connect happen in the target
+// namespace; the returned connection stays usable from the caller's own
+// namespace, because a socket's namespace is fixed when the socket is created.
+func Dial(ctx context.Context, nsPath, network, address string) (net.Conn, error) {
+	var (
+		conn net.Conn
+		dErr error
+	)
+	if err := Do(nsPath, func() error {
+		conn, dErr = new(net.Dialer).DialContext(ctx, network, address)
+		return dErr
+	}); err != nil {
+		return nil, err
+	}
+	return conn, dErr
+}
+
 // ListenPacket creates a packet connection bound to address inside the network
 // namespace at nsPath and returns it, with the same namespace semantics as
 // Listen.

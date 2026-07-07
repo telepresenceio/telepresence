@@ -58,6 +58,11 @@ const (
 type nodeConfig struct {
 	*config
 	pids map[string]int
+
+	// targetPodIP is the IP of the pod the node-agent targets. It is the PodIP
+	// of the netfilter ruleset programmed into the target's network namespace,
+	// and the address the forwarders dial for non-intercepted traffic.
+	targetPodIP netip.Addr
 }
 
 // AppEnviron reads the environment of the container's target process from procfs and applies
@@ -85,6 +90,33 @@ func (f nsListenerFactory) Listen(ctx context.Context, network, address string) 
 
 func (f nsListenerFactory) ListenPacket(ctx context.Context, network, address string) (net.PacketConn, error) {
 	return tpnetns.ListenPacket(ctx, f.nsPath, network, address)
+}
+
+// nsDialer dials from inside the network namespace at nsPath, so a node-agent
+// forwarder's non-intercepted (pass-through) connection originates in the target
+// pod's namespace and traverses that namespace's proxy-port DNAT.
+type nsDialer struct{ nsPath string }
+
+func (d nsDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	return tpnetns.Dial(ctx, d.nsPath, network, address)
+}
+
+// DialerFactory returns a dialer that dials inside the target pod's network
+// namespace, mirroring ListenerFactory on the outbound side. If no PID has been
+// resolved (which should never happen for a running node-agent), nil is returned
+// and the caller falls back to dialing in the node-agent's own namespace.
+func (c *nodeConfig) DialerFactory() forwarder.Dialer {
+	pid, err := targetPID(c.pids)
+	if err != nil {
+		return nil
+	}
+	return nsDialer{nsPath: tpnetns.PathForPID(pid)}
+}
+
+// AppPodIP returns the target pod's IP: the node-agent's application runs in a
+// separate pod from the agent, and pass-through traffic must be dialed there.
+func (c *nodeConfig) AppPodIP() netip.Addr {
+	return c.targetPodIP
 }
 
 // ListenerFactory returns a factory that binds a container's forwarders inside the
@@ -141,6 +173,15 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 		}
 	}
 
+	podIPStr, ok := dos.LookupEnv(ctx, envNodeAgentPodIP)
+	if !ok || podIPStr == "" {
+		return nil, fmt.Errorf("missing %s", envNodeAgentPodIP)
+	}
+	targetPodIP, err := netip.ParseAddr(podIPStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s %q: %w", envNodeAgentPodIP, podIPStr, err)
+	}
+
 	sc := base.AgentConfig()
 	pids := make(map[string]int, len(sc.Containers))
 	for _, cn := range sc.Containers {
@@ -161,7 +202,7 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 		}
 	}
 
-	return &nodeConfig{config: base, pids: pids}, nil
+	return &nodeConfig{config: base, pids: pids, targetPodIP: targetPodIP}, nil
 }
 
 // exportProcMounts populates exportsRoot/<base of cn.MountPoint> with symlinks into pid's
@@ -287,15 +328,7 @@ func applyNodeAgentRules(ctx context.Context, cfg *nodeConfig) (func(context.Con
 	if err != nil {
 		return nil, err
 	}
-
-	podIPStr, ok := dos.LookupEnv(ctx, envNodeAgentPodIP)
-	if !ok || podIPStr == "" {
-		return nil, fmt.Errorf("missing %s", envNodeAgentPodIP)
-	}
-	podIP, err := netip.ParseAddr(podIPStr)
-	if err != nil {
-		return nil, fmt.Errorf("invalid %s %q: %w", envNodeAgentPodIP, podIPStr, err)
-	}
+	podIP := cfg.targetPodIP
 
 	// A socket-owner match cannot be installed into a network namespace owned by a
 	// non-init user namespace (the kernel rejects it with EINVAL), so such targets are
