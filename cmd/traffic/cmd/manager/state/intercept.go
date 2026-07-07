@@ -109,6 +109,18 @@ func (s *State) PrepareIntercept(
 			// running and the replace would be silently ignored.
 			return interceptError(errcat.User.New("node-agent mode does not support --replace"))
 		}
+		// A node-agent Job is reaped (see reapNodeAgentJobs in nodeagent.go)
+		// whenever any node-agent intercept of the agent ends, because Jobs
+		// aren't shared across concurrent intercepts yet. A second concurrent
+		// node-agent intercept on the same workload must therefore be
+		// refused, or ending the first would tear down the Job the second
+		// one still depends on.
+		iid := fmt.Sprintf("%s:%s", client.id, spec.Name)
+		if existing := s.activeNodeAgentIntercept(spec, iid); existing != nil {
+			return interceptError(errcat.User.Newf(
+				"%s.%s already has a node-agent intercept named %q created by client %q; node-agent mode supports only one intercept per workload",
+				spec.Agent, spec.Namespace, existing.Spec.Name, existing.Spec.Client))
+		}
 	}
 
 	var rp agentconfig.ReplacePolicy
@@ -166,6 +178,27 @@ func (s *State) PrepareIntercept(
 		}
 	}
 	return pi, nil
+}
+
+// activeNodeAgentIntercept returns a live node-agent intercept for the same
+// agent and namespace as spec, other than the one identified by exceptID, or
+// nil if there is none. A child (pod-port) intercept shares its parent's
+// spec, so matching the parent is sufficient.
+func (s *State) activeNodeAgentIntercept(spec *rpc.InterceptSpec, exceptID string) (existing *Intercept) {
+	s.intercepts.Range(func(id string, ic *Intercept) bool {
+		if id == exceptID || !ic.Spec.GetNodeAgent() || IsChildIntercept(ic.Spec) {
+			return true
+		}
+		if ic.Spec.GetAgent() != spec.Agent || ic.Spec.GetNamespace() != spec.Namespace {
+			return true
+		}
+		if ic.Disposition == rpc.InterceptDispositionType_REMOVED {
+			return true
+		}
+		existing = ic
+		return false
+	})
+	return existing
 }
 
 // serviceIPs returns the cluster IPs of the named service, each in netip.Addr

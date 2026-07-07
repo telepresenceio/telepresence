@@ -313,3 +313,72 @@ func TestAgentSessionMatches(t *testing.T) {
 		})
 	}
 }
+
+// TestActiveNodeAgentIntercept verifies the scan PrepareIntercept uses to
+// reject a second concurrent node-agent intercept on the same workload: it
+// finds a live node-agent intercept for the same agent/namespace, ignores the
+// caller's own (retried) intercept id, ignores child (pod-port) intercepts,
+// ignores intercepts for a different agent or a removed disposition, and
+// ignores sidecar intercepts entirely.
+func TestActiveNodeAgentIntercept(t *testing.T) {
+	t.Parallel()
+
+	state := &State{
+		intercepts: cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+	}
+
+	spec := &rpc.InterceptSpec{Agent: "test-agent", Namespace: "test-namespace", NodeAgent: true}
+
+	// No intercepts yet.
+	assert.Nil(t, state.activeNodeAgentIntercept(spec, "other:ic"))
+
+	// A live node-agent intercept for the same agent is found.
+	state.intercepts.Store("c1:ic1", &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:          "c1:ic1",
+		Disposition: rpc.InterceptDispositionType_ACTIVE,
+		Spec:        &rpc.InterceptSpec{Name: "ic1", Client: "user@host1", Agent: "test-agent", Namespace: "test-namespace", NodeAgent: true},
+	}})
+	found := state.activeNodeAgentIntercept(spec, "other:ic")
+	require.NotNil(t, found)
+	assert.Equal(t, "c1:ic1", found.Id)
+
+	// The caller's own id (a retried prepare of the same intercept) is excluded.
+	assert.Nil(t, state.activeNodeAgentIntercept(spec, "c1:ic1"))
+
+	// A child intercept sharing the parent's spec is ignored.
+	state.intercepts.Store("c1:ic1-80-tcp", &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:          "c1:ic1-80-tcp",
+		Disposition: rpc.InterceptDispositionType_ACTIVE,
+		Spec: &rpc.InterceptSpec{
+			Name: "ic1-80-tcp", Client: "child 8080:80/tcp ic1 user@host1",
+			Agent: "test-agent", Namespace: "test-namespace", NodeAgent: true,
+		},
+	}})
+	found = state.activeNodeAgentIntercept(spec, "other:ic")
+	require.NotNil(t, found)
+	assert.Equal(t, "c1:ic1", found.Id, "child intercept must not be reported as the conflicting one")
+
+	// A removed intercept is ignored.
+	state.intercepts.Store("c1:ic1", &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:          "c1:ic1",
+		Disposition: rpc.InterceptDispositionType_REMOVED,
+		Spec:        &rpc.InterceptSpec{Name: "ic1", Client: "user@host1", Agent: "test-agent", Namespace: "test-namespace", NodeAgent: true},
+	}})
+	assert.Nil(t, state.activeNodeAgentIntercept(spec, "other:ic"))
+
+	// A sidecar intercept for the same agent is ignored.
+	state.intercepts.Store("c2:ic2", &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:          "c2:ic2",
+		Disposition: rpc.InterceptDispositionType_ACTIVE,
+		Spec:        &rpc.InterceptSpec{Name: "ic2", Client: "user@host2", Agent: "test-agent", Namespace: "test-namespace", NodeAgent: false},
+	}})
+	assert.Nil(t, state.activeNodeAgentIntercept(spec, "other:ic"))
+
+	// A node-agent intercept for a different agent is ignored.
+	state.intercepts.Store("c3:ic3", &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:          "c3:ic3",
+		Disposition: rpc.InterceptDispositionType_ACTIVE,
+		Spec:        &rpc.InterceptSpec{Name: "ic3", Client: "user@host3", Agent: "other-agent", Namespace: "test-namespace", NodeAgent: true},
+	}})
+	assert.Nil(t, state.activeNodeAgentIntercept(spec, "other:ic"))
+}
