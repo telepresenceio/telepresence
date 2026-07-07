@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
@@ -14,6 +15,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/telepresenceio/clog"
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -59,6 +61,20 @@ const (
 	// nodeAgentTTLSecondsAfterFinished is how long a completed or failed
 	// node-agent Job is kept around before being garbage collected.
 	nodeAgentTTLSecondsAfterFinished = int32(300)
+
+	// nodeAgentReconcileInterval is how often orphaned node-agent Jobs are
+	// swept.
+	nodeAgentReconcileInterval = time.Minute
+
+	// nodeAgentReconcileStartupDelay lets clients reconnect and restore their
+	// intercepts after a manager restart before the first sweep, so a Job whose
+	// intercept is about to be restored is not reaped prematurely.
+	nodeAgentReconcileStartupDelay = 2 * time.Minute
+
+	// nodeAgentOrphanGracePeriod is the minimum age a Job must reach before the
+	// sweep may reap it, covering the window between PrepareIntercept (which
+	// creates the Job) and AddIntercept (which registers the reap finalizer).
+	nodeAgentOrphanGracePeriod = 90 * time.Second
 )
 
 // nodeAgentGateErr returns a user error when node-agent mode has been
@@ -92,6 +108,73 @@ func reapNodeAgentJobs(ctx context.Context, agentName string) error {
 		return fmt.Errorf("unable to reap node-agent job(s) for agent %s.%s: %w", agentName, ns, err)
 	}
 	clog.Debugf(ctx, "reaped node-agent job(s) for agent %s.%s", agentName, ns)
+	return nil
+}
+
+// reconcileNodeAgentJobsLoop periodically reaps node-agent Jobs that have no
+// matching live intercept. It is the safety net for the two cases the
+// per-intercept reap finalizer cannot cover: a client that creates a Job in
+// PrepareIntercept but never reaches AddIntercept (so no finalizer is ever
+// registered), and a manager restart that loses the in-memory finalizers. A
+// node-agent Job never completes on its own, so ttlSecondsAfterFinished cannot
+// substitute for this sweep.
+func (s *State) reconcileNodeAgentJobsLoop(ctx context.Context) error {
+	if !managerutil.GetEnv(ctx).NodeAgentEnabled {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-time.After(nodeAgentReconcileStartupDelay):
+	}
+	ticker := time.NewTicker(nodeAgentReconcileInterval)
+	defer ticker.Stop()
+	for {
+		if err := s.reconcileNodeAgentJobs(ctx); err != nil {
+			clog.Errorf(ctx, "node-agent job reconcile failed: %v", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
+// reconcileNodeAgentJobs reaps every node-agent Job whose agent has no live
+// node-agent intercept, skipping Jobs younger than nodeAgentOrphanGracePeriod.
+func (s *State) reconcileNodeAgentJobs(ctx context.Context) error {
+	ns := managerutil.GetEnv(ctx).ManagerNamespace
+	sel := fmt.Sprintf("%s=%s", nodeAgentAppLabel, nodeAgentAppLabelValue)
+	jobs, err := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(ns).List(ctx, meta.ListOptions{LabelSelector: sel})
+	if err != nil {
+		return fmt.Errorf("unable to list node-agent jobs in %s: %w", ns, err)
+	}
+
+	wanted := make(map[string]struct{})
+	s.intercepts.Range(func(_ string, i *Intercept) bool {
+		if i.Spec.GetNodeAgent() && i.Disposition != rpc.InterceptDispositionType_REMOVED {
+			wanted[i.Spec.GetAgent()] = struct{}{}
+		}
+		return true
+	})
+
+	propagation := meta.DeletePropagationBackground
+	now := time.Now()
+	for i := range jobs.Items {
+		job := &jobs.Items[i]
+		if _, ok := wanted[job.Labels[nodeAgentNameLabel]]; ok {
+			continue
+		}
+		if now.Sub(job.CreationTimestamp.Time) < nodeAgentOrphanGracePeriod {
+			continue
+		}
+		clog.Infof(ctx, "reaping orphaned node-agent job %s.%s (no live intercept)", job.Name, ns)
+		if err := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(ns).Delete(ctx, job.Name,
+			meta.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !k8sErrors.IsNotFound(err) {
+			clog.Errorf(ctx, "unable to reap orphaned node-agent job %s.%s: %v", job.Name, ns, err)
+		}
+	}
 	return nil
 }
 
@@ -173,6 +256,9 @@ func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, 
 	if target.Status.PodIP == "" {
 		return "", nil, "", "", fmt.Errorf("pod %s.%s has no PodIP despite being running and ready", target.Name, target.Namespace)
 	}
+	if err := checkNodeAgentTarget(target); err != nil {
+		return "", nil, "", "", err
+	}
 
 	ids := make(map[string]string, len(target.Status.ContainerStatuses))
 	for _, cs := range target.Status.ContainerStatuses {
@@ -181,6 +267,25 @@ func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, 
 		}
 	}
 	return target.Spec.NodeName, ids, target.Name, target.Status.PodIP, nil
+}
+
+// checkNodeAgentTarget rejects a target pod that cannot host a node-agent: one
+// on the host network (whose namespace the route controller also programs) and
+// one that already has an injected traffic-agent sidecar (whose network
+// namespace and agent ports the node-agent would collide with).
+func checkNodeAgentTarget(pod *core.Pod) error {
+	if pod.Spec.HostNetwork {
+		return errcat.User.Newf(
+			"pod %s.%s uses host networking, which node-agent mode does not support", pod.Name, pod.Namespace)
+	}
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Name == agentconfig.ContainerName {
+			return errcat.User.Newf(
+				"pod %s.%s already has an injected traffic-agent; node-agent mode cannot be used with a sidecar agent",
+				pod.Name, pod.Namespace)
+		}
+	}
+	return nil
 }
 
 // podRunningAndReady reports whether pod is in the Running phase and its

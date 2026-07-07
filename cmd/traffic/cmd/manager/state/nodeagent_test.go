@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,8 +17,10 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -128,6 +131,112 @@ func TestReapNodeAgentJobs(t *testing.T) {
 	assert.NotContains(t, names, matching.Name)
 	assert.Contains(t, names, other.Name)
 	assert.Contains(t, names, unrelated.Name)
+}
+
+// TestCheckNodeAgentTarget verifies that a target pod which cannot host a
+// node-agent -- one on the host network, or one that already carries an
+// injected traffic-agent sidecar -- is rejected with a User error, while an
+// ordinary pod is accepted.
+func TestCheckNodeAgentTarget(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		pod     *core.Pod
+		wantErr string
+	}{
+		{
+			name: "ordinary pod is accepted",
+			pod: &core.Pod{
+				ObjectMeta: meta.ObjectMeta{Name: "app-1", Namespace: "ns"},
+				Spec:       core.PodSpec{Containers: []core.Container{{Name: "app"}}},
+			},
+		},
+		{
+			name: "host network is rejected",
+			pod: &core.Pod{
+				ObjectMeta: meta.ObjectMeta{Name: "app-1", Namespace: "ns"},
+				Spec:       core.PodSpec{HostNetwork: true, Containers: []core.Container{{Name: "app"}}},
+			},
+			wantErr: "host networking",
+		},
+		{
+			name: "injected sidecar is rejected",
+			pod: &core.Pod{
+				ObjectMeta: meta.ObjectMeta{Name: "app-1", Namespace: "ns"},
+				Spec: core.PodSpec{Containers: []core.Container{
+					{Name: "app"},
+					{Name: agentconfig.ContainerName},
+				}},
+			},
+			wantErr: "already has an injected traffic-agent",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := checkNodeAgentTarget(tt.pod)
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			assert.Equal(t, errcat.User, errcat.GetCategory(err))
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
+}
+
+// TestReconcileNodeAgentJobs verifies the orphan sweep: a Job whose agent has a
+// live node-agent intercept is kept; a Job younger than the grace period is
+// kept even with no intercept; and only an old Job with no matching intercept
+// is reaped.
+func TestReconcileNodeAgentJobs(t *testing.T) {
+	t.Parallel()
+
+	const ns = "ambassador"
+	naJob := func(name, agentName string, age time.Duration) *batchv1.Job {
+		return &batchv1.Job{
+			ObjectMeta: meta.ObjectMeta{
+				Name:              name,
+				Namespace:         ns,
+				CreationTimestamp: meta.NewTime(time.Now().Add(-age)),
+				Labels: map[string]string{
+					nodeAgentAppLabel:  nodeAgentAppLabelValue,
+					nodeAgentNameLabel: agentName,
+				},
+			},
+		}
+	}
+
+	wanted := naJob("tel-node-agent-wanted", "live-agent", 10*time.Minute)
+	youngOrphan := naJob("tel-node-agent-young", "gone-agent", nodeAgentOrphanGracePeriod/2)
+	oldOrphan := naJob("tel-node-agent-old", "gone-agent", 10*time.Minute)
+
+	ci := fake.NewSimpleClientset(wanted, youngOrphan, oldOrphan)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: ns})
+
+	s := &State{
+		backgroundCtx: ctx,
+		intercepts:    cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+	}
+	s.intercepts.Store("s:live-agent", &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Disposition: rpc.InterceptDispositionType_ACTIVE,
+		Spec:        &rpc.InterceptSpec{Agent: "live-agent", NodeAgent: true},
+	}})
+
+	require.NoError(t, s.reconcileNodeAgentJobs(ctx))
+
+	jobs, err := ci.BatchV1().Jobs(ns).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	names := make([]string, len(jobs.Items))
+	for i, j := range jobs.Items {
+		names[i] = j.Name
+	}
+	assert.Contains(t, names, wanted.Name, "Job with a live intercept must be kept")
+	assert.Contains(t, names, youngOrphan.Name, "Job younger than the grace period must be kept")
+	assert.NotContains(t, names, oldOrphan.Name, "old orphaned Job must be reaped")
 }
 
 func testSidecar() *agentconfig.Sidecar {

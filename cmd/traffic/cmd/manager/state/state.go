@@ -121,6 +121,7 @@ func NewState(ctx context.Context, g log.Group, adminCommandCh <-chan tmconfig.A
 	}
 	g.Go("namespace-GC", s.pruneSessionGCLoop)
 	g.Go("expired-GC", s.runSessionGCLoop)
+	g.Go("node-agent-GC", s.reconcileNodeAgentJobsLoop)
 	g.Go("admin-commands", func(ctx context.Context) error {
 		for {
 			select {
@@ -428,6 +429,11 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 				if err == nil {
 					is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
 						return s.restoreAppContainer(ctx, interceptInfo, wl)
+					})
+				}
+				if spec.NodeAgent {
+					is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+						return reapNodeAgentJobs(ctx, interceptInfo.Spec.GetAgent())
 					})
 				}
 			}
