@@ -65,9 +65,6 @@ func TestIntervalSet(t *testing.T) {
 			if !sd.Set.Interval {
 				t.Error("interval set must set Interval")
 			}
-			if !sd.Set.AutoMerge {
-				t.Error("interval set must set AutoMerge")
-			}
 			if sd.Set.IsMap {
 				t.Error("interval set must not be a map (membership only, no verdict data)")
 			}

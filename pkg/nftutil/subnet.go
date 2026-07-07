@@ -11,32 +11,49 @@ import (
 )
 
 // IntervalElements converts subnets into the element pairs an nftables
-// interval set expects: one element at the network address (the start of the
-// range) and, unless the range extends to the top of the address space, one
-// at the address immediately following the last address in the range,
-// flagged as the interval's end (SetElement.IntervalEnd). Overlapping or
-// adjacent subnets are left to the kernel's auto-merge (Set.AutoMerge) to
-// coalesce; this function only needs to hand it correctly ordered boundaries.
+// interval set expects: for each maximal contiguous range, one element at the
+// range's first address and, unless the range reaches the top of the address
+// space, one at the address immediately following its last address, flagged as
+// the interval's end (SetElement.IntervalEnd). Overlapping or adjacent subnets
+// are coalesced into a single range first, because the kernel rejects a batch
+// that inserts overlapping intervals -- Set.AutoMerge only records a userspace
+// hint (NFTNL_UDATA_SET_MERGE_ELEMENTS) and performs no merging itself.
 func IntervalElements(prefixes []netip.Prefix) ([]nftables.SetElement, error) {
-	type bound struct {
-		addr netip.Addr
-		end  bool
-	}
-	bounds := make([]bound, 0, len(prefixes)*2)
+	type rng struct{ start, end netip.Addr }
+	ranges := make([]rng, 0, len(prefixes))
 	for _, p := range prefixes {
 		if !p.IsValid() {
 			return nil, fmt.Errorf("nftutil: invalid subnet %s", p)
 		}
-		bounds = append(bounds, bound{addr: p.Masked().Addr()})
-		if end := lastAddr(p).Next(); end.IsValid() {
-			bounds = append(bounds, bound{addr: end, end: true})
-		}
+		ranges = append(ranges, rng{start: p.Masked().Addr(), end: lastAddr(p)})
 	}
-	sort.Slice(bounds, func(i, j int) bool { return bounds[i].addr.Less(bounds[j].addr) })
+	sort.Slice(ranges, func(i, j int) bool { return ranges[i].start.Less(ranges[j].start) })
 
-	elems := make([]nftables.SetElement, len(bounds))
-	for i, b := range bounds {
-		elems[i] = nftables.SetElement{Key: b.addr.AsSlice(), IntervalEnd: b.end}
+	// Coalesce overlapping and adjacent ranges. The input is sorted by start, so
+	// a range merges into the previous one when it begins at or before the
+	// previous range's end, or immediately after it. Different address families
+	// never merge: an address of another family never falls at or before
+	// cur.end.Next().
+	merged := make([]rng, 0, len(ranges))
+	for _, r := range ranges {
+		if n := len(merged); n > 0 {
+			cur := &merged[n-1]
+			if !cur.end.Less(r.start) || cur.end.Next() == r.start {
+				if cur.end.Less(r.end) {
+					cur.end = r.end
+				}
+				continue
+			}
+		}
+		merged = append(merged, r)
+	}
+
+	elems := make([]nftables.SetElement, 0, len(merged)*2)
+	for _, r := range merged {
+		elems = append(elems, nftables.SetElement{Key: r.start.AsSlice()})
+		if end := r.end.Next(); end.IsValid() {
+			elems = append(elems, nftables.SetElement{Key: end.AsSlice(), IntervalEnd: true})
+		}
 	}
 	return elems, nil
 }

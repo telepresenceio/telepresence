@@ -19,8 +19,9 @@ func AddrLayout(family nftables.TableFamily) (offset, length uint32) {
 
 // IntervalSet builds an interval set of prefixes: named name in table, with a
 // key type chosen from table.Family (ipv6_addr for TableFamilyIPv6, ipv4_addr
-// otherwise) and AutoMerge set so overlapping or adjacent entries coalesce in
-// the kernel.
+// otherwise). Overlapping and adjacent prefixes are coalesced by
+// IntervalElements before they reach the kernel, which rejects a batch that
+// inserts overlapping intervals.
 func IntervalSet(table *nftables.Table, name string, prefixes []netip.Prefix) (*SetData, error) {
 	elems, err := IntervalElements(prefixes)
 	if err != nil {
@@ -32,11 +33,10 @@ func IntervalSet(table *nftables.Table, name string, prefixes []netip.Prefix) (*
 	}
 	return &SetData{
 		Set: &nftables.Set{
-			Table:     table,
-			Name:      name,
-			KeyType:   keyType,
-			Interval:  true,
-			AutoMerge: true,
+			Table:    table,
+			Name:     name,
+			KeyType:  keyType,
+			Interval: true,
 		},
 		Elements: elems,
 	}, nil
