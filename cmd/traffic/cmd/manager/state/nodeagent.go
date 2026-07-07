@@ -500,6 +500,24 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 	return job, nil
 }
 
+// nodeAgentJobNamePrefix returns the deterministic, DNS-1123-compliant
+// prefix shared by every Job created for agentName (truncated, like
+// nodeAgentJobName, to leave room for the per-pod suffix). Every node-agent
+// Job's name begins with this prefix, so it can be used to scope a watch (or
+// other lookup) to the Jobs -- and, since a pod name is generated from its
+// Job name, the pods -- created for that agent, without knowing the target
+// pod in advance.
+func nodeAgentJobNamePrefix(agentName string) string {
+	const prefix = "tel-node-agent-"
+	const suffixLen = 8                            // len(hex.EncodeToString(sha256 sum)[:8])
+	maxBaseLen := 63 - len(prefix) - suffixLen - 1 // -1 for the separating hyphen
+	if len(agentName) > maxBaseLen {
+		agentName = agentName[:maxBaseLen]
+	}
+	agentName = trimTrailingDash(agentName)
+	return prefix + agentName
+}
+
 // nodeAgentJobName returns a deterministic, DNS-1123-compliant Job name (at
 // most 63 characters) derived from the agent name and the target pod name.
 // Determinism makes a retried request idempotent: it resolves to the Job
@@ -507,14 +525,7 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 func nodeAgentJobName(agentName, podName string) string {
 	sum := sha256.Sum256([]byte(podName))
 	suffix := hex.EncodeToString(sum[:])[:8]
-
-	const prefix = "tel-node-agent-"
-	maxBaseLen := 63 - len(prefix) - len(suffix) - 1 // -1 for the separating hyphen
-	if len(agentName) > maxBaseLen {
-		agentName = agentName[:maxBaseLen]
-	}
-	agentName = trimTrailingDash(agentName)
-	return prefix + agentName + "-" + suffix
+	return nodeAgentJobNamePrefix(agentName) + "-" + suffix
 }
 
 // trimTrailingDash removes any trailing "-" characters left behind by

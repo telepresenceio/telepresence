@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -577,4 +578,38 @@ func TestBuildNodeAgentJob_EmptyPodIP(t *testing.T) {
 	opts.podIP = ""
 	_, err := buildNodeAgentJob(testSidecar(), opts)
 	require.Error(t, err)
+}
+
+// TestNodeAgentJobNamePrefix_MatchesJobName verifies that
+// nodeAgentJobNamePrefix produces exactly the base that nodeAgentJobName
+// appends its hash suffix to, both for an ordinary agent name and for one
+// long enough to require truncation. A caller (such as the failure-event
+// watch scoped to a Job's Jobs/pods) relies on this to recognize every Job
+// and pod created for an agent without knowing the target pod name.
+func TestNodeAgentJobNamePrefix_MatchesJobName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		agentName string
+		podName   string
+	}{
+		{name: "short agent name", agentName: "test-agent", podName: "test-agent-abc123"},
+		{
+			name:      "long agent name is truncated",
+			agentName: "a-very-long-agent-name-that-is-longer-than-sixty-three-characters-in-total",
+			podName:   "some-pod",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			jobName := nodeAgentJobName(tt.agentName, tt.podName)
+			prefix := nodeAgentJobNamePrefix(tt.agentName)
+			suffix := jobName[len(jobName)-8:]
+			assert.Equal(t, prefix+"-"+suffix, jobName)
+			assert.True(t, strings.HasPrefix(jobName, prefix+"-"))
+		})
+	}
 }

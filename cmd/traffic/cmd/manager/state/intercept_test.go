@@ -281,3 +281,35 @@ func TestAllowGlobalIntercepts_DefaultBehavior(t *testing.T) {
 			"Default behavior should allow global intercepts and replaces")
 	}
 }
+
+// TestAgentSessionMatches verifies that waitForAgents' predicate distinguishes
+// a node-agent session from a sidecar session for the same workload: a live
+// sidecar agent must not satisfy a node-agent wait, and vice versa, even
+// though both carry the same name and namespace.
+func TestAgentSessionMatches(t *testing.T) {
+	t.Parallel()
+
+	const name, namespace = "test-agent", "test-namespace"
+	tests := []struct {
+		testName      string
+		sessionIsNode bool
+		wantNode      bool
+		want          bool
+	}{
+		{testName: "sidecar session, sidecar wait", sessionIsNode: false, wantNode: false, want: true},
+		{testName: "sidecar session, node-agent wait", sessionIsNode: false, wantNode: true, want: false},
+		{testName: "node-agent session, sidecar wait", sessionIsNode: true, wantNode: false, want: false},
+		{testName: "node-agent session, node-agent wait", sessionIsNode: true, wantNode: true, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			t.Parallel()
+			agent := &AgentSession{AgentInfo: &rpc.AgentInfo{
+				Name:      name,
+				Namespace: namespace,
+				NodeAgent: tt.sessionIsNode,
+			}}
+			assert.Equal(t, tt.want, agentSessionMatches(agent, name, namespace, tt.wantNode))
+		})
+	}
+}
