@@ -488,7 +488,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 	}
 	if spec.NodeAgent {
 		err = s.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-			return reapNodeAgentJobs(ctx, interceptInfo.Spec.GetAgent())
+			return reapNodeAgentJobs(ctx, interceptInfo.Spec.GetAgent(), interceptInfo.Spec.GetNamespace())
 		})
 		if err != nil {
 			clog.Errorf(ctx, "Failed to add node-agent reap finalizer for %s: %v", interceptID, err)

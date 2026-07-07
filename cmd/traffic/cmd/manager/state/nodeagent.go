@@ -54,6 +54,10 @@ const (
 	// (agentconfig.Sidecar.AgentName) that the Job was created for.
 	nodeAgentNameLabel = "telepresence.io/agentName"
 
+	// nodeAgentNamespaceLabel carries the namespace of the workload
+	// (agentconfig.Sidecar.Namespace) that the Job was created for.
+	nodeAgentNamespaceLabel = "telepresence.io/workloadNamespace"
+
 	// nodeAgentTargetPodLabel carries the name of the pod that the node-agent
 	// Job targets.
 	nodeAgentTargetPodLabel = "telepresence.io/targetPod"
@@ -87,27 +91,31 @@ func nodeAgentGateErr(env *managerutil.Env) error {
 	return nil
 }
 
-// reapNodeAgentJobs deletes the node-agent Job(s) created for agentName in
-// the traffic-manager's own namespace. It is invoked as an intercept
-// finalizer, so it runs both on explicit intercept removal and on
-// client-session drop.
+// reapNodeAgentJobs deletes the node-agent Job(s) created for the agent named
+// agentName and the workload in namespace, in the traffic-manager's own
+// namespace. It is invoked as an intercept finalizer, so it runs both on
+// explicit intercept removal and on client-session drop.
 //
-// NOTE: this deletes by the agentName label, so it reaps the Job for every
-// node-agent intercept of that agent at once. That is correct while
-// node-agent intercepts are 1:1 with the agent; supporting multiple
-// concurrent node-agent intercepts sharing one Job is future work.
-func reapNodeAgentJobs(ctx context.Context, agentName string) error {
+// NOTE: this deletes by the agentName and workloadNamespace labels, so it
+// reaps the Job for every node-agent intercept of that agent in that
+// namespace at once. That is correct while node-agent intercepts are 1:1
+// with the agent; supporting multiple concurrent node-agent intercepts
+// sharing one Job is future work.
+func reapNodeAgentJobs(ctx context.Context, agentName, namespace string) error {
 	env := managerutil.GetEnv(ctx)
 	ns := env.ManagerNamespace
-	sel := fmt.Sprintf("%s=%s,%s=%s", nodeAgentAppLabel, nodeAgentAppLabelValue, nodeAgentNameLabel, agentName)
+	sel := fmt.Sprintf("%s=%s,%s=%s,%s=%s",
+		nodeAgentAppLabel, nodeAgentAppLabelValue,
+		nodeAgentNameLabel, agentName,
+		nodeAgentNamespaceLabel, namespace)
 	propagation := meta.DeletePropagationBackground
 	err := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(ns).DeleteCollection(ctx,
 		meta.DeleteOptions{PropagationPolicy: &propagation},
 		meta.ListOptions{LabelSelector: sel})
 	if err != nil && !k8sErrors.IsNotFound(err) {
-		return fmt.Errorf("unable to reap node-agent job(s) for agent %s.%s: %w", agentName, ns, err)
+		return fmt.Errorf("unable to reap node-agent job(s) for agent %s.%s: %w", agentName, namespace, err)
 	}
-	clog.Debugf(ctx, "reaped node-agent job(s) for agent %s.%s", agentName, ns)
+	clog.Debugf(ctx, "reaped node-agent job(s) for agent %s.%s", agentName, namespace)
 	return nil
 }
 
@@ -151,10 +159,14 @@ func (s *State) reconcileNodeAgentJobs(ctx context.Context) error {
 		return fmt.Errorf("unable to list node-agent jobs in %s: %w", ns, err)
 	}
 
-	wanted := make(map[string]struct{})
+	type wantedKey struct {
+		name      string
+		namespace string
+	}
+	wanted := make(map[wantedKey]struct{})
 	s.intercepts.Range(func(_ string, i *Intercept) bool {
 		if i.Spec.GetNodeAgent() && i.Disposition != rpc.InterceptDispositionType_REMOVED {
-			wanted[i.Spec.GetAgent()] = struct{}{}
+			wanted[wantedKey{name: i.Spec.GetAgent(), namespace: i.Spec.GetNamespace()}] = struct{}{}
 		}
 		return true
 	})
@@ -163,7 +175,11 @@ func (s *State) reconcileNodeAgentJobs(ctx context.Context) error {
 	now := time.Now()
 	for i := range jobs.Items {
 		job := &jobs.Items[i]
-		if _, ok := wanted[job.Labels[nodeAgentNameLabel]]; ok {
+		// A Job created by an older build lacks the workloadNamespace label,
+		// so its key's namespace is "" and never matches a wanted key; such a
+		// Job is reaped once it passes the grace period below.
+		key := wantedKey{name: job.Labels[nodeAgentNameLabel], namespace: job.Labels[nodeAgentNamespaceLabel]}
+		if _, ok := wanted[key]; ok {
 			continue
 		}
 		if now.Sub(job.CreationTimestamp.Time) < nodeAgentOrphanGracePeriod {
@@ -450,12 +466,13 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 	labels := map[string]string{
 		nodeAgentAppLabel:       nodeAgentAppLabelValue,
 		nodeAgentNameLabel:      cfg.AgentName,
+		nodeAgentNamespaceLabel: cfg.Namespace,
 		nodeAgentTargetPodLabel: opts.podName,
 	}
 
 	job := &batchv1.Job{
 		ObjectMeta: meta.ObjectMeta{
-			Name:      nodeAgentJobName(cfg.AgentName, opts.podName),
+			Name:      nodeAgentJobName(cfg.AgentName, cfg.Namespace, opts.podName),
 			Namespace: opts.namespace,
 			Labels:    labels,
 		},
@@ -519,11 +536,14 @@ func nodeAgentJobNamePrefix(agentName string) string {
 }
 
 // nodeAgentJobName returns a deterministic, DNS-1123-compliant Job name (at
-// most 63 characters) derived from the agent name and the target pod name.
-// Determinism makes a retried request idempotent: it resolves to the Job
-// already created for the same agent and target pod.
-func nodeAgentJobName(agentName, podName string) string {
-	sum := sha256.Sum256([]byte(podName))
+// most 63 characters) derived from the agent name and the target's namespace
+// and pod name. Determinism makes a retried request idempotent: it resolves
+// to the Job already created for the same agent and target pod. The
+// namespace participates in the hash so that two workloads with the same
+// name and the same generated pod name, in different namespaces, never
+// collide on a single Job name.
+func nodeAgentJobName(agentName, namespace, podName string) string {
+	sum := sha256.Sum256([]byte(namespace + "/" + podName))
 	suffix := hex.EncodeToString(sum[:])[:8]
 	return nodeAgentJobNamePrefix(agentName) + "-" + suffix
 }

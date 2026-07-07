@@ -433,7 +433,7 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 				}
 				if spec.NodeAgent {
 					is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-						return reapNodeAgentJobs(ctx, interceptInfo.Spec.GetAgent())
+						return reapNodeAgentJobs(ctx, interceptInfo.Spec.GetAgent(), interceptInfo.Spec.GetNamespace())
 					})
 				}
 			}

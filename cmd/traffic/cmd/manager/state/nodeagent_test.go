@@ -50,9 +50,9 @@ func TestNodeAgentGateErr_Enabled(t *testing.T) {
 }
 
 // TestReapNodeAgentJobs verifies that reaping deletes only the Job(s)
-// matching the app + agentName labels in the traffic-manager's namespace,
-// leaving unrelated Jobs (different agent, or missing the app label)
-// untouched.
+// matching the app + agentName + workloadNamespace labels in the
+// traffic-manager's namespace, leaving unrelated Jobs (different agent,
+// different workload namespace, or missing the app label) untouched.
 func TestReapNodeAgentJobs(t *testing.T) {
 	t.Parallel()
 
@@ -62,8 +62,9 @@ func TestReapNodeAgentJobs(t *testing.T) {
 			Name:      "tel-node-agent-match",
 			Namespace: ns,
 			Labels: map[string]string{
-				nodeAgentAppLabel:  nodeAgentAppLabelValue,
-				nodeAgentNameLabel: "test-agent",
+				nodeAgentAppLabel:       nodeAgentAppLabelValue,
+				nodeAgentNameLabel:      "test-agent",
+				nodeAgentNamespaceLabel: "ns1",
 			},
 		},
 	}
@@ -72,8 +73,20 @@ func TestReapNodeAgentJobs(t *testing.T) {
 			Name:      "tel-node-agent-other",
 			Namespace: ns,
 			Labels: map[string]string{
-				nodeAgentAppLabel:  nodeAgentAppLabelValue,
-				nodeAgentNameLabel: "other-agent",
+				nodeAgentAppLabel:       nodeAgentAppLabelValue,
+				nodeAgentNameLabel:      "other-agent",
+				nodeAgentNamespaceLabel: "ns1",
+			},
+		},
+	}
+	sameNameOtherNamespace := &batchv1.Job{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "tel-node-agent-ns2",
+			Namespace: ns,
+			Labels: map[string]string{
+				nodeAgentAppLabel:       nodeAgentAppLabelValue,
+				nodeAgentNameLabel:      "test-agent",
+				nodeAgentNamespaceLabel: "ns2",
 			},
 		},
 	}
@@ -84,7 +97,7 @@ func TestReapNodeAgentJobs(t *testing.T) {
 		},
 	}
 
-	ci := fake.NewSimpleClientset(matching, other, unrelated)
+	ci := fake.NewSimpleClientset(matching, other, sameNameOtherNamespace, unrelated)
 	// The fake clientset's generic object-tracker reactor does not implement
 	// the "delete-collection" verb (it silently no-ops), so a reactor that
 	// emulates a real API server's behavior — list with the given selector,
@@ -121,7 +134,7 @@ func TestReapNodeAgentJobs(t *testing.T) {
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: ns})
 
-	require.NoError(t, reapNodeAgentJobs(ctx, "test-agent"))
+	require.NoError(t, reapNodeAgentJobs(ctx, "test-agent", "ns1"))
 
 	jobs, err := ci.BatchV1().Jobs(ns).List(context.Background(), meta.ListOptions{})
 	require.NoError(t, err)
@@ -131,6 +144,7 @@ func TestReapNodeAgentJobs(t *testing.T) {
 	}
 	assert.NotContains(t, names, matching.Name)
 	assert.Contains(t, names, other.Name)
+	assert.Contains(t, names, sameNameOtherNamespace.Name, "reaping agent in ns1 must not delete the same agent's Job in ns2")
 	assert.Contains(t, names, unrelated.Name)
 }
 
@@ -204,32 +218,35 @@ func TestCheckNodeAgentTarget(t *testing.T) {
 }
 
 // TestReconcileNodeAgentJobs verifies the orphan sweep: a Job whose agent has a
-// live node-agent intercept is kept; a Job younger than the grace period is
-// kept even with no intercept; and only an old Job with no matching intercept
-// is reaped.
+// live node-agent intercept in the same workload namespace is kept; a Job
+// younger than the grace period is kept even with no intercept; a Job for the
+// same agent name but a different workload namespace than any live intercept
+// is reaped; and only an old Job with no matching intercept is reaped.
 func TestReconcileNodeAgentJobs(t *testing.T) {
 	t.Parallel()
 
 	const ns = "ambassador"
-	naJob := func(name, agentName string, age time.Duration) *batchv1.Job {
+	naJob := func(name, agentName, workloadNs string, age time.Duration) *batchv1.Job {
 		return &batchv1.Job{
 			ObjectMeta: meta.ObjectMeta{
 				Name:              name,
 				Namespace:         ns,
 				CreationTimestamp: meta.NewTime(time.Now().Add(-age)),
 				Labels: map[string]string{
-					nodeAgentAppLabel:  nodeAgentAppLabelValue,
-					nodeAgentNameLabel: agentName,
+					nodeAgentAppLabel:       nodeAgentAppLabelValue,
+					nodeAgentNameLabel:      agentName,
+					nodeAgentNamespaceLabel: workloadNs,
 				},
 			},
 		}
 	}
 
-	wanted := naJob("tel-node-agent-wanted", "live-agent", 10*time.Minute)
-	youngOrphan := naJob("tel-node-agent-young", "gone-agent", nodeAgentOrphanGracePeriod/2)
-	oldOrphan := naJob("tel-node-agent-old", "gone-agent", 10*time.Minute)
+	wanted := naJob("tel-node-agent-wanted", "live-agent", "ns1", 10*time.Minute)
+	youngOrphan := naJob("tel-node-agent-young", "gone-agent", "ns1", nodeAgentOrphanGracePeriod/2)
+	oldOrphan := naJob("tel-node-agent-old", "gone-agent", "ns1", 10*time.Minute)
+	otherNamespace := naJob("tel-node-agent-ns2", "live-agent", "ns2", 10*time.Minute)
 
-	ci := fake.NewSimpleClientset(wanted, youngOrphan, oldOrphan)
+	ci := fake.NewSimpleClientset(wanted, youngOrphan, oldOrphan, otherNamespace)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: ns})
 
@@ -239,7 +256,7 @@ func TestReconcileNodeAgentJobs(t *testing.T) {
 	}
 	s.intercepts.Store("s:live-agent", &Intercept{InterceptInfo: &rpc.InterceptInfo{
 		Disposition: rpc.InterceptDispositionType_ACTIVE,
-		Spec:        &rpc.InterceptSpec{Agent: "live-agent", NodeAgent: true},
+		Spec:        &rpc.InterceptSpec{Agent: "live-agent", Namespace: "ns1", NodeAgent: true},
 	}})
 
 	require.NoError(t, s.reconcileNodeAgentJobs(ctx))
@@ -253,6 +270,8 @@ func TestReconcileNodeAgentJobs(t *testing.T) {
 	assert.Contains(t, names, wanted.Name, "Job with a live intercept must be kept")
 	assert.Contains(t, names, youngOrphan.Name, "Job younger than the grace period must be kept")
 	assert.NotContains(t, names, oldOrphan.Name, "old orphaned Job must be reaped")
+	assert.NotContains(t, names, otherNamespace.Name,
+		"a live intercept for agent X in ns1 must not protect a Job labeled agent X in ns2")
 }
 
 func testSidecar() *agentconfig.Sidecar {
@@ -516,6 +535,7 @@ func TestBuildNodeAgentJob_Labels(t *testing.T) {
 
 	assert.Equal(t, "traffic-node-agent", job.Labels[nodeAgentAppLabel])
 	assert.Equal(t, "test-agent", job.Labels[nodeAgentNameLabel])
+	assert.Equal(t, "test-namespace", job.Labels[nodeAgentNamespaceLabel])
 	assert.Equal(t, "test-agent-abc123", job.Labels[nodeAgentTargetPodLabel])
 }
 
@@ -592,12 +612,14 @@ func TestNodeAgentJobNamePrefix_MatchesJobName(t *testing.T) {
 	tests := []struct {
 		name      string
 		agentName string
+		namespace string
 		podName   string
 	}{
-		{name: "short agent name", agentName: "test-agent", podName: "test-agent-abc123"},
+		{name: "short agent name", agentName: "test-agent", namespace: "ns1", podName: "test-agent-abc123"},
 		{
 			name:      "long agent name is truncated",
 			agentName: "a-very-long-agent-name-that-is-longer-than-sixty-three-characters-in-total",
+			namespace: "ns1",
 			podName:   "some-pod",
 		},
 	}
@@ -605,11 +627,22 @@ func TestNodeAgentJobNamePrefix_MatchesJobName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			jobName := nodeAgentJobName(tt.agentName, tt.podName)
+			jobName := nodeAgentJobName(tt.agentName, tt.namespace, tt.podName)
 			prefix := nodeAgentJobNamePrefix(tt.agentName)
 			suffix := jobName[len(jobName)-8:]
 			assert.Equal(t, prefix+"-"+suffix, jobName)
 			assert.True(t, strings.HasPrefix(jobName, prefix+"-"))
 		})
 	}
+}
+
+// TestNodeAgentJobName_NamespaceCollision verifies that a workload with the
+// same name (and therefore the same generated pod name) in two different
+// namespaces yields two different Job names, so the Jobs never collide.
+func TestNodeAgentJobName_NamespaceCollision(t *testing.T) {
+	t.Parallel()
+
+	name1 := nodeAgentJobName("web", "ns1", "web-0")
+	name2 := nodeAgentJobName("web", "ns2", "web-0")
+	assert.NotEqual(t, name1, name2)
 }
