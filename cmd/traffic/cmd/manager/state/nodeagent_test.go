@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apps "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -634,6 +635,292 @@ func TestNodeAgentJobNamePrefix_MatchesJobName(t *testing.T) {
 			assert.True(t, strings.HasPrefix(jobName, prefix+"-"))
 		})
 	}
+}
+
+// TestNodeAgentJobStale verifies each condition that marks an existing
+// node-agent Job as stale (so ensureNodeAgent replaces it instead of reusing
+// it), and that a difference confined to the marshaled agent config -- which
+// does not identify the target -- does not.
+func TestNodeAgentJobStale(t *testing.T) {
+	t.Parallel()
+
+	desired, err := buildNodeAgentJob(testSidecar(), testOpts())
+	require.NoError(t, err)
+
+	t.Run("identical job is not stale", func(t *testing.T) {
+		t.Parallel()
+		existing := desired.DeepCopy()
+		stale, reason := nodeAgentJobStale(existing, desired)
+		assert.False(t, stale, reason)
+	})
+
+	t.Run("agent config differs is not stale", func(t *testing.T) {
+		t.Parallel()
+		cfg := testSidecar()
+		cfg.ManagerPort = 9999 // changes the marshaled AGENT_CONFIG, nothing else
+		existing, err := buildNodeAgentJob(cfg, testOpts())
+		require.NoError(t, err)
+		stale, reason := nodeAgentJobStale(existing, desired)
+		assert.False(t, stale, reason)
+	})
+
+	t.Run("terminating job is stale", func(t *testing.T) {
+		t.Parallel()
+		existing := desired.DeepCopy()
+		now := meta.Now()
+		existing.DeletionTimestamp = &now
+		stale, reason := nodeAgentJobStale(existing, desired)
+		assert.True(t, stale)
+		assert.Contains(t, reason, "terminating")
+	})
+
+	t.Run("failed job is stale", func(t *testing.T) {
+		t.Parallel()
+		existing := desired.DeepCopy()
+		existing.Status.Conditions = []batchv1.JobCondition{
+			{Type: batchv1.JobFailed, Status: core.ConditionTrue},
+		}
+		stale, reason := nodeAgentJobStale(existing, desired)
+		assert.True(t, stale)
+		assert.Contains(t, reason, "failed")
+	})
+
+	t.Run("image differs is stale", func(t *testing.T) {
+		t.Parallel()
+		cfg := testSidecar()
+		cfg.AgentImage = "ghcr.io/telepresenceio/tel2:2.100.0"
+		existing, err := buildNodeAgentJob(cfg, testOpts())
+		require.NoError(t, err)
+		stale, reason := nodeAgentJobStale(existing, desired)
+		assert.True(t, stale)
+		assert.Contains(t, reason, "image")
+	})
+
+	t.Run("container IDs differ is stale", func(t *testing.T) {
+		t.Parallel()
+		opts := testOpts()
+		opts.containerIDs = map[string]string{"app": "containerd://different"}
+		existing, err := buildNodeAgentJob(testSidecar(), opts)
+		require.NoError(t, err)
+		stale, reason := nodeAgentJobStale(existing, desired)
+		assert.True(t, stale)
+		assert.Contains(t, reason, envNodeAgentContainerIDs)
+	})
+
+	t.Run("pod IP differs is stale", func(t *testing.T) {
+		t.Parallel()
+		opts := testOpts()
+		opts.podIP = "10.42.0.99"
+		existing, err := buildNodeAgentJob(testSidecar(), opts)
+		require.NoError(t, err)
+		stale, reason := nodeAgentJobStale(existing, desired)
+		assert.True(t, stale)
+		assert.Contains(t, reason, envNodeAgentPodIP)
+	})
+}
+
+// nodeAgentTestPod returns a Running & Ready pod that nodeAgentTarget will
+// select: it carries the labels nodeAgentTestWorkload's Deployment selects
+// on, a resolved container ID for its sole "app" container, and a PodIP.
+func nodeAgentTestPod(ns, podName string) *core.Pod {
+	return &core.Pod{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      podName,
+			Namespace: ns,
+			Labels:    map[string]string{"app": "test-agent"},
+		},
+		Spec: core.PodSpec{NodeName: "node-1"},
+		Status: core.PodStatus{
+			Phase: core.PodRunning,
+			PodIP: "10.42.0.5",
+			Conditions: []core.PodCondition{
+				{Type: core.PodReady, Status: core.ConditionTrue},
+			},
+			ContainerStatuses: []core.ContainerStatus{
+				{Name: "app", ContainerID: "containerd://abc123"},
+			},
+		},
+	}
+}
+
+// nodeAgentTestWorkload returns a Workload whose selector matches the pod
+// that nodeAgentTestPod returns.
+func nodeAgentTestWorkload(ns string) k8sapi.Workload {
+	d := &apps.Deployment{
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: apps.DeploymentSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+		},
+	}
+	return k8sapi.Deployment(d)
+}
+
+// nodeAgentJobActionCounts tallies the create and delete actions ensureNodeAgent
+// took against the Jobs resource, so a test can assert on them without
+// depending on the fake clientset's exact Action type.
+func nodeAgentJobActionCounts(actions []k8stesting.Action) (created, deleted int) {
+	for _, a := range actions {
+		if a.GetResource().Resource != "jobs" {
+			continue
+		}
+		switch a.GetVerb() {
+		case "create":
+			created++
+		case "delete":
+			deleted++
+		}
+	}
+	return created, deleted
+}
+
+// TestEnsureNodeAgent_ReusesHealthyExistingJob verifies that ensureNodeAgent
+// treats a re-request for a still-healthy, identical Job as idempotent: it
+// is neither deleted nor recreated.
+func TestEnsureNodeAgent_ReusesHealthyExistingJob(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	cfg := testSidecar()
+	pod := nodeAgentTestPod(cfg.Namespace, "test-agent-abc123")
+	wl := nodeAgentTestWorkload(cfg.Namespace)
+
+	existing, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
+		namespace:    mgrNs,
+		nodeName:     "node-1",
+		containerIDs: map[string]string{"app": "containerd://abc123"},
+		podName:      pod.Name,
+		podIP:        pod.Status.PodIP,
+	})
+	require.NoError(t, err)
+
+	ci := fake.NewSimpleClientset(pod, existing)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+
+	s := &State{}
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
+
+	created, deleted := nodeAgentJobActionCounts(ci.Actions())
+	assert.Zero(t, deleted, "a healthy existing job must not be deleted")
+	assert.Equal(t, 1, created, "only the initial (AlreadyExists) create should have been attempted")
+}
+
+// TestEnsureNodeAgent_ReplacesFailedJob verifies that ensureNodeAgent deletes
+// and recreates an existing Job that has a JobFailed condition.
+func TestEnsureNodeAgent_ReplacesFailedJob(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	cfg := testSidecar()
+	pod := nodeAgentTestPod(cfg.Namespace, "test-agent-abc123")
+	wl := nodeAgentTestWorkload(cfg.Namespace)
+
+	existing, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
+		namespace:    mgrNs,
+		nodeName:     "node-1",
+		containerIDs: map[string]string{"app": "containerd://abc123"},
+		podName:      pod.Name,
+		podIP:        pod.Status.PodIP,
+	})
+	require.NoError(t, err)
+	existing.Status.Conditions = []batchv1.JobCondition{
+		{Type: batchv1.JobFailed, Status: core.ConditionTrue},
+	}
+
+	ci := fake.NewSimpleClientset(pod, existing)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+
+	s := &State{}
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
+
+	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, jobs.Items, 1)
+	assert.Empty(t, jobs.Items[0].Status.Conditions, "the replacement must be a freshly created job, not the failed one")
+
+	created, deleted := nodeAgentJobActionCounts(ci.Actions())
+	assert.Equal(t, 1, deleted)
+	assert.Equal(t, 2, created)
+}
+
+// TestEnsureNodeAgent_ReplacesTerminatingJob verifies that ensureNodeAgent
+// replaces an existing Job that already has a DeletionTimestamp, waiting for
+// it to disappear before creating the replacement.
+func TestEnsureNodeAgent_ReplacesTerminatingJob(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	cfg := testSidecar()
+	pod := nodeAgentTestPod(cfg.Namespace, "test-agent-abc123")
+	wl := nodeAgentTestWorkload(cfg.Namespace)
+
+	existing, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
+		namespace:    mgrNs,
+		nodeName:     "node-1",
+		containerIDs: map[string]string{"app": "containerd://abc123"},
+		podName:      pod.Name,
+		podIP:        pod.Status.PodIP,
+	})
+	require.NoError(t, err)
+	now := meta.Now()
+	existing.DeletionTimestamp = &now
+
+	ci := fake.NewSimpleClientset(pod, existing)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+
+	s := &State{}
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
+
+	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, jobs.Items, 1)
+	assert.Nil(t, jobs.Items[0].DeletionTimestamp, "the replacement must be a freshly created job")
+
+	created, deleted := nodeAgentJobActionCounts(ci.Actions())
+	assert.Equal(t, 1, deleted)
+	assert.Equal(t, 2, created)
+}
+
+// TestEnsureNodeAgent_ReplacesJobWithDifferentContainerIDs verifies that
+// ensureNodeAgent replaces an existing Job whose _TEL_NODE_AGENT_CONTAINER_IDS
+// no longer matches the target, e.g. after a container restart invalidated
+// the IDs the Job was built with.
+func TestEnsureNodeAgent_ReplacesJobWithDifferentContainerIDs(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	cfg := testSidecar()
+	pod := nodeAgentTestPod(cfg.Namespace, "test-agent-abc123")
+	wl := nodeAgentTestWorkload(cfg.Namespace)
+
+	existing, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
+		namespace:    mgrNs,
+		nodeName:     "node-1",
+		containerIDs: map[string]string{"app": "containerd://stale999"},
+		podName:      pod.Name,
+		podIP:        pod.Status.PodIP,
+	})
+	require.NoError(t, err)
+
+	ci := fake.NewSimpleClientset(pod, existing)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+
+	s := &State{}
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
+
+	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, jobs.Items, 1)
+	idsEnv, ok := findEnv(jobs.Items[0].Spec.Template.Spec.Containers[0].Env, envNodeAgentContainerIDs)
+	require.True(t, ok)
+	assert.JSONEq(t, `{"app":"containerd://abc123"}`, idsEnv.Value)
+
+	created, deleted := nodeAgentJobActionCounts(ci.Actions())
+	assert.Equal(t, 1, deleted)
+	assert.Equal(t, 2, created)
 }
 
 // TestNodeAgentJobName_NamespaceCollision verifies that a workload with the

@@ -13,6 +13,7 @@ import (
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	batchClientV1 "k8s.io/client-go/kubernetes/typed/batch/v1"
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -229,13 +230,121 @@ func (s *State) ensureNodeAgent(
 		return err
 	}
 
-	if _, err = k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(namespace).Create(ctx, job, meta.CreateOptions{}); err != nil {
+	jobs := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(namespace)
+	if _, err = jobs.Create(ctx, job, meta.CreateOptions{}); err != nil {
 		if !k8sErrors.IsAlreadyExists(err) {
 			return fmt.Errorf("unable to create node-agent job %s.%s: %w", job.Name, namespace, err)
 		}
+		existing, getErr := jobs.Get(ctx, job.Name, meta.GetOptions{})
+		if getErr != nil {
+			if !k8sErrors.IsNotFound(getErr) {
+				return fmt.Errorf("unable to get existing node-agent job %s.%s: %w", job.Name, namespace, getErr)
+			}
+			// The Job vanished between the Create and this Get; retry the
+			// Create once.
+			if _, err = jobs.Create(ctx, job, meta.CreateOptions{}); err != nil {
+				return fmt.Errorf("unable to create node-agent job %s.%s: %w", job.Name, namespace, err)
+			}
+			return nil
+		}
+		if stale, reason := nodeAgentJobStale(existing, job); stale {
+			clog.Infof(ctx, "replacing stale node-agent job %s.%s: %s", job.Name, namespace, reason)
+			if err = replaceNodeAgentJob(ctx, jobs, job); err != nil {
+				return err
+			}
+			return nil
+		}
 		// A Job with this deterministic name already exists for this agent
-		// and target pod; treat a re-request as idempotent.
-		clog.Debugf(ctx, "node-agent job %s.%s already exists", job.Name, namespace)
+		// and target pod, and still reflects the same target; treat a
+		// re-request as idempotent.
+		clog.Debugf(ctx, "reusing existing node-agent job %s.%s", job.Name, namespace)
+	}
+	return nil
+}
+
+// nodeAgentJobStale reports whether existing no longer reflects the target
+// that desired was built for, and if so, a short reason for logging.
+// existing is replaced rather than reused when it is already terminating,
+// when it has failed, or when its container image or target-identifying
+// environment (the container IDs or pod IP the node-agent was given) differs
+// from desired. Any other difference -- such as the marshaled agent config
+// -- does not force a replace, so that a re-request for the same live target
+// stays idempotent.
+func nodeAgentJobStale(existing, desired *batchv1.Job) (bool, string) {
+	if existing.DeletionTimestamp != nil {
+		return true, "existing job is terminating"
+	}
+	for _, cond := range existing.Status.Conditions {
+		if cond.Type == batchv1.JobFailed && cond.Status == core.ConditionTrue {
+			return true, "existing job failed"
+		}
+	}
+	existingContainer, ok := soleContainer(existing)
+	if !ok {
+		return true, "existing job has no container"
+	}
+	desiredContainer, ok := soleContainer(desired)
+	if !ok {
+		return true, "desired job has no container"
+	}
+	if existingContainer.Image != desiredContainer.Image {
+		return true, fmt.Sprintf("image changed from %q to %q", existingContainer.Image, desiredContainer.Image)
+	}
+	for _, name := range []string{envNodeAgentContainerIDs, envNodeAgentPodIP} {
+		if envVarValue(existingContainer.Env, name) != envVarValue(desiredContainer.Env, name) {
+			return true, fmt.Sprintf("%s changed", name)
+		}
+	}
+	return false, ""
+}
+
+// soleContainer returns the single container of job's pod template.
+func soleContainer(job *batchv1.Job) (core.Container, bool) {
+	cs := job.Spec.Template.Spec.Containers
+	if len(cs) != 1 {
+		return core.Container{}, false
+	}
+	return cs[0], true
+}
+
+// envVarValue returns the literal value of the named environment variable,
+// or "" if it is absent or its value comes from a ValueFrom source.
+func envVarValue(env []core.EnvVar, name string) string {
+	for _, e := range env {
+		if e.Name == name {
+			return e.Value
+		}
+	}
+	return ""
+}
+
+// replaceNodeAgentJob deletes the stale Job named job.Name with foreground
+// propagation, so its pod is gone before the Job object disappears -- the
+// new Job's agent must not race the old agent for the same listen ports
+// inside the target pod's network namespace -- waits for it to vanish, and
+// then creates job in its place.
+func replaceNodeAgentJob(ctx context.Context, jobs batchClientV1.JobInterface, job *batchv1.Job) error {
+	propagation := meta.DeletePropagationForeground
+	if err := jobs.Delete(ctx, job.Name, meta.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !k8sErrors.IsNotFound(err) {
+		return fmt.Errorf("unable to delete stale node-agent job %s: %w", job.Name, err)
+	}
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		if _, err := jobs.Get(ctx, job.Name, meta.GetOptions{}); err != nil {
+			if k8sErrors.IsNotFound(err) {
+				break
+			}
+			return fmt.Errorf("unable to get node-agent job %s: %w", job.Name, err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+	if _, err := jobs.Create(ctx, job, meta.CreateOptions{}); err != nil {
+		return fmt.Errorf("unable to create node-agent job %s: %w", job.Name, err)
 	}
 	return nil
 }
