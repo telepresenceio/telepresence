@@ -44,7 +44,7 @@ func (f *udp) Serve(ctx context.Context, initCh chan<- netip.AddrPort) error {
 
 func (f *udp) Forward(ctx context.Context, conn net.Conn) error {
 	if udpConn, ok := conn.(*net.UDPConn); ok {
-		return ForwardUDP(ctx, f.tag, udpConn, f.target)
+		return forwardUDP(ctx, f.tag, udpConn, f.target, f.dialer)
 	}
 	return fmt.Errorf("not a UDP connection")
 }
@@ -90,8 +90,17 @@ func (f *udp) ServeTo(ctx context.Context, initCh chan<- netip.AddrPort, fw func
 
 // ForwardUDP reads packets from the given connection and writes the packages to the
 // target host:port of this forwarder using a connection that will use the reply address
-// from the read as the destination for packages going in the other direction.
+// from the read as the destination for packages going in the other direction. It dials
+// in the caller's own network namespace; forwarders with an injected Dialer dial through
+// it instead.
 func ForwardUDP(ctx context.Context, tag tunnel.Tag, conn *net.UDPConn, targetAddr netip.AddrPort) error {
+	return forwardUDP(ctx, tag, conn, targetAddr, nil)
+}
+
+// forwardUDP is the shared implementation behind ForwardUDP and the udp forwarder's
+// Forward method. When dialer is nil, the outbound connection to the target is dialed
+// in the caller's own network namespace; otherwise it is dialed through the given Dialer.
+func forwardUDP(ctx context.Context, tag tunnel.Tag, conn *net.UDPConn, targetAddr netip.AddrPort, dialer Dialer) error {
 	targets := tunnel.NewPool()
 	la := conn.LocalAddr()
 	clog.Infof(ctx, "Forwarding udp from %s to %s", la, targetAddr)
@@ -118,9 +127,24 @@ func ForwardUDP(ctx context.Context, tag tunnel.Tag, conn *net.UDPConn, targetAd
 			id := tunnel.ConnIDFromUDP(rr.Address, targetAddr)
 			clog.Tracef(ctx, "<- %s udp %s, len %d", tag, id, len(rr.Payload))
 			h, _, err := targets.GetOrCreate(ctx, id, func(ctx context.Context, release func()) (tunnel.Handler, error) {
-				tc, err := net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(id.Destination()))
-				if err != nil {
-					return nil, err
+				var tc *net.UDPConn
+				if dialer != nil {
+					dc, err := dialer.DialContext(ctx, "udp", id.Destination().String())
+					if err != nil {
+						return nil, err
+					}
+					uc, ok := dc.(*net.UDPConn)
+					if !ok {
+						_ = dc.Close()
+						return nil, fmt.Errorf("dialer produced a %T, not a *net.UDPConn", dc)
+					}
+					tc = uc
+				} else {
+					dc, err := net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(id.Destination()))
+					if err != nil {
+						return nil, err
+					}
+					tc = dc
 				}
 				return &udpHandler{
 					tag:       tag,
