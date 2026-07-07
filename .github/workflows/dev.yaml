@@ -55,6 +55,11 @@ jobs:
         uses: medyagh/setup-minikube@latest
         with:
           kubernetes-version: v1.33.5
+          # The node-agent resolves container PIDs through the node's CRI
+          # socket and defaults to containerd's path. Minikube still defaults
+          # to the docker runtime (until v1.39), where kubelet containers are
+          # not visible through that socket.
+          container-runtime: containerd
       - name: Build client
         run: make build
       - name: Build images
