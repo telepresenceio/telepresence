@@ -315,11 +315,13 @@ func TestAgentSessionMatches(t *testing.T) {
 }
 
 // TestActiveNodeAgentIntercept verifies the scan PrepareIntercept uses to
-// reject a second concurrent node-agent intercept on the same workload: it
-// finds a live node-agent intercept for the same agent/namespace, ignores the
-// caller's own (retried) intercept id, ignores child (pod-port) intercepts,
-// ignores intercepts for a different agent or a removed disposition, and
-// ignores sidecar intercepts entirely.
+// reject a second concurrent node-agent intercept on the same workload, and
+// (in the same direction) to reject a sidecar intercept request against a
+// workload that already has a live node-agent intercept: it finds a live
+// node-agent intercept for the same agent/namespace, ignores the caller's own
+// (retried) intercept id, ignores child (pod-port) intercepts, ignores
+// intercepts for a different agent or a removed disposition, and ignores
+// sidecar intercepts entirely.
 func TestActiveNodeAgentIntercept(t *testing.T) {
 	t.Parallel()
 
@@ -381,4 +383,19 @@ func TestActiveNodeAgentIntercept(t *testing.T) {
 		Spec:        &rpc.InterceptSpec{Name: "ic3", Client: "user@host3", Agent: "other-agent", Namespace: "test-namespace", NodeAgent: true},
 	}})
 	assert.Nil(t, state.activeNodeAgentIntercept(spec, "other:ic"))
+
+	// A sidecar-request spec (NodeAgent: false) for the same agent also finds
+	// a live node-agent intercept: PrepareIntercept uses this same helper to
+	// reject a sidecar intercept that would otherwise inject a traffic-agent
+	// and restart the pod the node-agent intercept depends on. c1:ic1 was
+	// marked REMOVED above, so re-activate a live node-agent intercept first.
+	state.intercepts.Store("c4:ic4", &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:          "c4:ic4",
+		Disposition: rpc.InterceptDispositionType_ACTIVE,
+		Spec:        &rpc.InterceptSpec{Name: "ic4", Client: "user@host4", Agent: "test-agent", Namespace: "test-namespace", NodeAgent: true},
+	}})
+	sidecarSpec := &rpc.InterceptSpec{Agent: "test-agent", Namespace: "test-namespace", NodeAgent: false}
+	found = state.activeNodeAgentIntercept(sidecarSpec, "other:ic")
+	require.NotNil(t, found)
+	assert.Equal(t, "c4:ic4", found.Id)
 }

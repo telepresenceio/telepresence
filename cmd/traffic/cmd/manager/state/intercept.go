@@ -121,6 +121,23 @@ func (s *State) PrepareIntercept(
 				"%s.%s already has a node-agent intercept named %q created by client %q; node-agent mode supports only one intercept per workload",
 				spec.Agent, spec.Namespace, existing.Spec.Name, existing.Spec.Client))
 		}
+	} else {
+		// Provisioning a sidecar intercept injects a traffic-agent into the
+		// workload's pod template and restarts its pods. A live node-agent
+		// intercept depends on the specific pod (and its CRI container IDs)
+		// that is currently running, so serving this request would break it
+		// out from under its client. exceptID is irrelevant for a non-
+		// node-agent spec (it can never equal a node-agent intercept's id),
+		// but it's passed for uniformity with the branch above.
+		iid := fmt.Sprintf("%s:%s", client.id, spec.Name)
+		if existing := s.activeNodeAgentIntercept(spec, iid); existing != nil {
+			return interceptError(errcat.User.Newf(
+				"%s.%s has a live node-agent intercept named %q created by client %q; "+
+					"starting this intercept would inject a traffic-agent sidecar and restart the "+
+					"workload's pods, breaking that node-agent intercept. Remove it first, or create "+
+					"this intercept with --node-agent instead",
+				spec.Agent, spec.Namespace, existing.Spec.Name, existing.Spec.Client))
+		}
 	}
 
 	var rp agentconfig.ReplacePolicy
@@ -182,8 +199,11 @@ func (s *State) PrepareIntercept(
 
 // activeNodeAgentIntercept returns a live node-agent intercept for the same
 // agent and namespace as spec, other than the one identified by exceptID, or
-// nil if there is none. A child (pod-port) intercept shares its parent's
-// spec, so matching the parent is sufficient.
+// nil if there is none. spec's own NodeAgent flag is irrelevant: the search
+// is keyed only by agent and namespace, so this also finds a node-agent
+// intercept that a proposed sidecar intercept (spec.NodeAgent == false) would
+// conflict with. A child (pod-port) intercept shares its parent's spec, so
+// matching the parent is sufficient.
 func (s *State) activeNodeAgentIntercept(spec *rpc.InterceptSpec, exceptID string) (existing *Intercept) {
 	s.intercepts.Range(func(id string, ic *Intercept) bool {
 		if id == exceptID || !ic.Spec.GetNodeAgent() || IsChildIntercept(ic.Spec) {
