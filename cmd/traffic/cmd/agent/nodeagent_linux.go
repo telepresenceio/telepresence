@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"os"
 	"path/filepath"
 	"runtime/debug"
 
@@ -202,16 +201,8 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 func exportProcMounts(ctx context.Context, exportsRoot string, pid int, cn *agentconfig.Container, mps types.MountPolicies) error {
 	clog.Infof(ctx, "Exporting procfs mounts for container %s", cn.Name)
 	cnMountPoint := filepath.Join(exportsRoot, filepath.Base(cn.MountPoint))
-	if err := dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
-		if !os.IsExist(err) {
-			return err
-		}
-		if err := dos.RemoveAll(ctx, cnMountPoint); err != nil {
-			return err
-		}
-		if err := dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
-			return err
-		}
+	if err := ensureFreshMountPointDir(ctx, cnMountPoint, false); err != nil {
+		return err
 	}
 
 	for path, policy := range cn.Mounts {
@@ -233,17 +224,7 @@ func exportProcMounts(ctx context.Context, exportsRoot string, pid int, cn *agen
 		return err
 	}
 
-	// Verify that all mounts exists, so that the client doesn't attempt to mount nonexistent paths
-	for path, policy := range cn.Mounts {
-		mp := filepath.Join(cnMountPoint, path)
-		if policy == types.MountPolicyRemote || policy == types.MountPolicyRemoteReadOnly {
-			_, err := dos.Stat(ctx, mp)
-			if err != nil {
-				clog.Infof(ctx, "Failed to stat %q. It will not be exported: %v", mp, err)
-				delete(cn.Mounts, path)
-			}
-		}
-	}
+	pruneMissingMounts(ctx, cn, cnMountPoint)
 	return nil
 }
 

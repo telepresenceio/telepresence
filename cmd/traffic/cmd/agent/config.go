@@ -190,23 +190,51 @@ func (c *config) DialerFactory() forwarder.Dialer {
 	return nil
 }
 
+// ensureFreshMountPointDir creates dir, or, if it already exists, removes its contents and
+// recreates it empty. logOnExists controls whether an info message announcing the removal is
+// logged before it happens.
+func ensureFreshMountPointDir(ctx context.Context, dir string, logOnExists bool) error {
+	if err := dos.Mkdir(ctx, dir, 0o700); err != nil {
+		if !os.IsExist(err) {
+			return err
+		}
+		if logOnExists {
+			clog.Infof(ctx, "The directory %q already exists. Container restarted?", dir)
+		}
+		if err := dos.RemoveAll(ctx, dir); err != nil {
+			return err
+		}
+		if err := dos.Mkdir(ctx, dir, 0o700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pruneMissingMounts stats each remote or remote-read-only mount declared in cn.Mounts under
+// cnMountPoint, and deletes from cn.Mounts any entry whose mount is missing, so that the
+// client doesn't attempt to mount nonexistent paths.
+func pruneMissingMounts(ctx context.Context, cn *agentconfig.Container, cnMountPoint string) {
+	for path, policy := range cn.Mounts {
+		mp := filepath.Join(cnMountPoint, path)
+		if policy == types.MountPolicyRemote || policy == types.MountPolicyRemoteReadOnly {
+			_, err := dos.Stat(ctx, mp)
+			if err != nil {
+				clog.Infof(ctx, "Failed to stat %q. It will not be exported: %v", mp, err)
+				delete(cn.Mounts, path)
+			}
+		}
+	}
+}
+
 // addAppMounts adds each of the mounts present under the containers MountPoint as a
 // symlink under the agentconfig.ExportsMountPoint/<container mount>/.
 // Returns MountPolicies keyed by the full path of each mount.
 func addAppMounts(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Container) error {
 	clog.Infof(ctx, "Adding exported mounts for container %s", ag.Name)
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
-	if err := dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
-		if !os.IsExist(err) {
-			return err
-		}
-		clog.Infof(ctx, "The directory %q already exists. Container restarted?", cnMountPoint)
-		if err = dos.RemoveAll(ctx, cnMountPoint); err != nil {
-			return err
-		}
-		if err = dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
-			return err
-		}
+	if err := ensureFreshMountPointDir(ctx, cnMountPoint, true); err != nil {
+		return err
 	}
 
 	if appMountsDir, err := dos.Open(ctx, ag.MountPoint); err != nil {
@@ -234,17 +262,7 @@ func addAppMounts(ctx context.Context, mps types.MountPolicies, ag *agentconfig.
 		return err
 	}
 
-	// Verify that all mounts exists, so that the client doesn't attempt to mount nonexistent paths
-	for path, policy := range ag.Mounts {
-		mp := filepath.Join(cnMountPoint, path)
-		if policy == types.MountPolicyRemote || policy == types.MountPolicyRemoteReadOnly {
-			_, err := dos.Stat(ctx, mp)
-			if err != nil {
-				clog.Infof(ctx, "Failed to stat %q. It will not be exported: %v", mp, err)
-				delete(ag.Mounts, path)
-			}
-		}
-	}
+	pruneMissingMounts(ctx, ag, cnMountPoint)
 	return nil
 }
 
