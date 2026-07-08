@@ -526,8 +526,9 @@ properties:
         type: boolean
       criSocket:
         description: >-
-          The container-runtime socket path mounted into node-agent pods. When empty, the node-agent probes the
-          well-known socket paths.
+          The container-runtime socket path mounted read-only into node-agent pods. Defaults to containerd's
+          socket, the default runtime on most Kubernetes distributions. Set it to the node's actual
+          container-runtime socket when running another runtime, e.g. /var/run/crio/crio.sock for CRI-O.
         type: string
 
   nodeSelector:

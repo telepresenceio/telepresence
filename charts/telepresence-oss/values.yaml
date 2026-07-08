@@ -300,6 +300,9 @@ nodeAgent:
   # requires that the traffic-manager's own namespace permits the privileged
   # Pod Security Standard, since node-agent Jobs are created there.
   enabled: false
-  # criSocket is the container-runtime socket path mounted into node-agent
-  # pods. When empty, the node-agent probes the well-known socket paths.
-  criSocket: ""
+  # criSocket is the container-runtime socket path mounted read-only into
+  # node-agent pods. Defaults to containerd's socket, the default runtime on
+  # most Kubernetes distributions. Set it to the node's actual
+  # container-runtime socket when running another runtime, e.g.
+  # /var/run/crio/crio.sock for CRI-O.
+  criSocket: /run/containerd/containerd.sock

@@ -81,8 +81,9 @@ type Env struct {
 
 	// NodeAgentCRISocket is the path of the container-runtime socket that is
 	// mounted into node-agent Jobs so that they can resolve a target
-	// container's process ID. When empty, the node-agent falls back to
-	// cri.DetectSocket.
+	// container's process ID. Node-agent mode requires this to be set (Helm
+	// value nodeAgent.criSocket); ensureNodeAgent refuses to provision a
+	// node-agent Job when it is empty.
 	NodeAgentCRISocket string
 
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `envSeparator:" "`

@@ -291,6 +291,7 @@ func testOpts() nodeAgentJobOpts {
 		namespace:    "ambassador",
 		nodeName:     "node-1",
 		containerIDs: map[string]string{"app": "containerd://abc123"},
+		criSocket:    "/run/containerd/containerd.sock",
 		podName:      "test-agent-abc123",
 		podIP:        "10.42.0.5",
 	}
@@ -395,27 +396,17 @@ func TestBuildNodeAgentJob_Env(t *testing.T) {
 	assert.Equal(t, "/run/containerd/containerd.sock", criEnv.Value)
 }
 
-// TestBuildNodeAgentJob_NoCRISocket verifies that the CRI socket env var and
-// its hostPath volume/mount are omitted when no socket path is configured,
-// leaving the node-agent to fall back to cri.DetectSocket.
+// TestBuildNodeAgentJob_NoCRISocket verifies that an empty criSocket is
+// rejected: the traffic-manager only mounts the CRI socket hostPath when it
+// is non-empty, so building a Job without one would leave the node-agent
+// unable to resolve container IDs and crash on startup.
 func TestBuildNodeAgentJob_NoCRISocket(t *testing.T) {
 	t.Parallel()
 
 	opts := testOpts()
 	opts.criSocket = ""
-	job, err := buildNodeAgentJob(testSidecar(), opts)
-	require.NoError(t, err)
-
-	env := job.Spec.Template.Spec.Containers[0].Env
-	_, ok := findEnv(env, envNodeAgentCRISocket)
-	assert.False(t, ok, "CRI socket env var should be absent when criSocket is empty")
-
-	for _, v := range job.Spec.Template.Spec.Volumes {
-		assert.NotEqual(t, nodeAgentCRIVolumeName, v.Name, "CRI socket volume should be absent when criSocket is empty")
-	}
-	for _, m := range job.Spec.Template.Spec.Containers[0].VolumeMounts {
-		assert.NotEqual(t, nodeAgentCRIVolumeName, m.Name, "CRI socket mount should be absent when criSocket is empty")
-	}
+	_, err := buildNodeAgentJob(testSidecar(), opts)
+	require.Error(t, err)
 }
 
 // TestBuildNodeAgentJob_Capabilities verifies the exact set of Linux
@@ -773,6 +764,33 @@ func nodeAgentJobActionCounts(actions []k8stesting.Action) (created, deleted int
 	return created, deleted
 }
 
+// TestEnsureNodeAgent_NoCRISocket verifies that ensureNodeAgent refuses to
+// provision a node-agent Job, with a User-categorized error, when the
+// traffic-manager has no container-runtime socket path configured (Helm
+// value nodeAgent.criSocket unset). Building the Job in that case would
+// produce one with no CRI socket mounted, which crashes on startup.
+func TestEnsureNodeAgent_NoCRISocket(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	cfg := testSidecar()
+	pod := nodeAgentTestPod(cfg.Namespace, "test-agent-abc123")
+	wl := nodeAgentTestWorkload(cfg.Namespace)
+
+	ci := fake.NewSimpleClientset(pod)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+
+	s := &State{}
+	err := s.ensureNodeAgent(ctx, wl, cfg)
+	require.Error(t, err)
+	assert.Equal(t, errcat.User, errcat.GetCategory(err))
+	assert.Contains(t, err.Error(), "nodeAgent.criSocket")
+
+	created, _ := nodeAgentJobActionCounts(ci.Actions())
+	assert.Zero(t, created, "no job should be created when the CRI socket is unset")
+}
+
 // TestEnsureNodeAgent_ReusesHealthyExistingJob verifies that ensureNodeAgent
 // treats a re-request for a still-healthy, identical Job as idempotent: it
 // is neither deleted nor recreated.
@@ -788,6 +806,7 @@ func TestEnsureNodeAgent_ReusesHealthyExistingJob(t *testing.T) {
 		namespace:    mgrNs,
 		nodeName:     "node-1",
 		containerIDs: map[string]string{"app": "containerd://abc123"},
+		criSocket:    "/run/containerd/containerd.sock",
 		podName:      pod.Name,
 		podIP:        pod.Status.PodIP,
 	})
@@ -795,7 +814,7 @@ func TestEnsureNodeAgent_ReusesHealthyExistingJob(t *testing.T) {
 
 	ci := fake.NewSimpleClientset(pod, existing)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
-	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
 	s := &State{}
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
@@ -819,6 +838,7 @@ func TestEnsureNodeAgent_ReplacesFailedJob(t *testing.T) {
 		namespace:    mgrNs,
 		nodeName:     "node-1",
 		containerIDs: map[string]string{"app": "containerd://abc123"},
+		criSocket:    "/run/containerd/containerd.sock",
 		podName:      pod.Name,
 		podIP:        pod.Status.PodIP,
 	})
@@ -829,7 +849,7 @@ func TestEnsureNodeAgent_ReplacesFailedJob(t *testing.T) {
 
 	ci := fake.NewSimpleClientset(pod, existing)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
-	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
 	s := &State{}
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
@@ -859,6 +879,7 @@ func TestEnsureNodeAgent_ReplacesTerminatingJob(t *testing.T) {
 		namespace:    mgrNs,
 		nodeName:     "node-1",
 		containerIDs: map[string]string{"app": "containerd://abc123"},
+		criSocket:    "/run/containerd/containerd.sock",
 		podName:      pod.Name,
 		podIP:        pod.Status.PodIP,
 	})
@@ -868,7 +889,7 @@ func TestEnsureNodeAgent_ReplacesTerminatingJob(t *testing.T) {
 
 	ci := fake.NewSimpleClientset(pod, existing)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
-	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
 	s := &State{}
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
@@ -899,6 +920,7 @@ func TestEnsureNodeAgent_ReplacesJobWithDifferentContainerIDs(t *testing.T) {
 		namespace:    mgrNs,
 		nodeName:     "node-1",
 		containerIDs: map[string]string{"app": "containerd://stale999"},
+		criSocket:    "/run/containerd/containerd.sock",
 		podName:      pod.Name,
 		podIP:        pod.Status.PodIP,
 	})
@@ -906,7 +928,7 @@ func TestEnsureNodeAgent_ReplacesJobWithDifferentContainerIDs(t *testing.T) {
 
 	ci := fake.NewSimpleClientset(pod, existing)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
-	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
 	s := &State{}
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))

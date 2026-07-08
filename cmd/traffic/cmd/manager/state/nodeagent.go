@@ -205,6 +205,13 @@ func (s *State) ensureNodeAgent(
 	wl k8sapi.Workload,
 	cfg *agentconfig.Sidecar,
 ) error {
+	env := managerutil.GetEnv(ctx)
+	if env.NodeAgentCRISocket == "" {
+		return errcat.User.New(
+			"node-agent mode requires the container-runtime socket path (Helm value nodeAgent.criSocket), " +
+				"which is unset on this traffic-manager")
+	}
+
 	nodeName, containerIDs, podName, podIP, err := nodeAgentTarget(ctx, wl)
 	if err != nil {
 		return err
@@ -215,7 +222,6 @@ func (s *State) ensureNodeAgent(
 		}
 	}
 
-	env := managerutil.GetEnv(ctx)
 	namespace := env.ManagerNamespace
 
 	job, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
@@ -451,8 +457,9 @@ type nodeAgentJobOpts struct {
 	containerIDs map[string]string
 
 	// criSocket is the container-runtime socket path to mount into the
-	// node-agent container. When empty, no hostPath volume is added and the
-	// node-agent falls back to cri.DetectSocket.
+	// node-agent container. It must be non-empty; buildNodeAgentJob rejects
+	// an empty value the same way it rejects the other required fields
+	// below.
 	criSocket string
 
 	// podName is the name of the target pod.
@@ -479,6 +486,9 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 	}
 	if opts.podIP == "" {
 		return nil, errors.New("buildNodeAgentJob: no target pod IP given")
+	}
+	if opts.criSocket == "" {
+		return nil, errors.New("buildNodeAgentJob: no CRI socket path given")
 	}
 
 	cfgJSON, err := agentconfig.MarshalTight(cfg)
@@ -530,19 +540,27 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 			Name:  envNodeAgentPodIP,
 			Value: opts.podIP,
 		},
-	}
-	if opts.criSocket != "" {
-		env = append(env, core.EnvVar{
+		{
 			Name:  envNodeAgentCRISocket,
 			Value: opts.criSocket,
-		})
+		},
 	}
 
+	hostPathSocket := core.HostPathSocket
 	volumes := []core.Volume{
 		{
 			Name: agentconfig.ExportsVolumeName,
 			VolumeSource: core.VolumeSource{
 				EmptyDir: &core.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: nodeAgentCRIVolumeName,
+			VolumeSource: core.VolumeSource{
+				HostPath: &core.HostPathVolumeSource{
+					Path: opts.criSocket,
+					Type: &hostPathSocket,
+				},
 			},
 		},
 	}
@@ -551,23 +569,11 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 			Name:      agentconfig.ExportsVolumeName,
 			MountPath: agentconfig.ExportsMountPoint,
 		},
-	}
-	if opts.criSocket != "" {
-		hostPathSocket := core.HostPathSocket
-		volumes = append(volumes, core.Volume{
-			Name: nodeAgentCRIVolumeName,
-			VolumeSource: core.VolumeSource{
-				HostPath: &core.HostPathVolumeSource{
-					Path: opts.criSocket,
-					Type: &hostPathSocket,
-				},
-			},
-		})
-		mounts = append(mounts, core.VolumeMount{
+		{
 			Name:      nodeAgentCRIVolumeName,
 			MountPath: opts.criSocket,
 			ReadOnly:  true,
-		})
+		},
 	}
 
 	backoffLimit := int32(0)
