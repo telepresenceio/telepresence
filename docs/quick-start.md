@@ -162,7 +162,8 @@ turn reach everything the replaced container could. Telepresence can also hand
 you the container's environment variables and volumes; see
 [Code and debug an application locally](howtos/attach.md).
 
-Replace is one of four ways to attach to a workload. The others are *intercept*
+Replace is one of four ways to [attach to a workload](concepts/attachments.md).
+The others are *intercept*
 (reroute traffic to a specific service port while the remote container keeps
 running), *wiretap* (receive a copy of the traffic without disturbing the
 workload), and *ingest* (get the container's environment and volumes, no traffic
@@ -199,4 +200,4 @@ The traffic-manager can stay installed for next time; remove it with
   modes in depth, with environment variables and volume mounts.
 - [Use Telepresence with Docker](howtos/docker.md) — run the Telepresence daemon
   itself in a container, no root access needed.
-- [Architecture](reference/architecture.md) — how the pieces fit together.
+- [Architecture](concepts/architecture.md) — how the pieces fit together.

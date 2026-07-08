@@ -12,12 +12,12 @@
       link: install/cloud
 - title: Core concepts
   items:
-    - title: The developer experience and the inner dev loop
-      link: concepts/devloop
-    - title: "Making the remote local: Faster feedback, collaboration and debugging"
-      link: concepts/faster
-    - title: Intercepts
-      link: concepts/intercepts
+    - title: Architecture
+      link: concepts/architecture
+    - title: Attachments
+      link: concepts/attachments
+    - title: Glossary
+      link: concepts/glossary
 - title: How do I...
   items:
     - title: Code and debug an application locally
@@ -40,8 +40,6 @@
       link: https://learn.microsoft.com/en-us/azure/aks/use-telepresence-aks
 - title: Technical reference
   items:
-    - title: Architecture
-      link: reference/architecture
     - title: Telepresence CLI
       link: reference/cli/telepresence
       items:

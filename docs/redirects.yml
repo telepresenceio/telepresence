@@ -5,3 +5,7 @@
 - {from: "reference/engagements/conflicts", to: "reference/attachments/conflicts"}
 - {from: "howtos/engage", to: "howtos/attach"}
 - {from: "reference/cli/telepresence_leave", to: "reference/cli/telepresence_detach"}
+- {from: "concepts/devloop", to: "quick-start"}
+- {from: "concepts/faster", to: "quick-start"}
+- {from: "concepts/intercepts", to: "concepts/attachments"}
+- {from: "reference/architecture", to: "concepts/architecture"}

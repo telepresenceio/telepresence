@@ -23,13 +23,13 @@ All requests from and to the cluster go through this Daemon.
 
 ### Root-Daemon
 The Root-Daemon manages the networking necessary to handle traffic between the local workstation and the cluster by setting up a
-[Virtual Network Device](tun-device.md) (VIF).
+[Virtual Network Device](../reference/tun-device.md) (VIF).
 
 ## Traffic Manager
 
 The Traffic Manager is the central point of communication between Traffic Agents in the cluster and Telepresence Daemons
 on developer workstations. It is responsible for injecting the Traffic Agent sidecar into attached pods (or, when a
-client requests it, creating a [node-hosted agent](node-agent.md) instead), proxying all relevant inbound and outbound
+client requests it, creating a [node-hosted agent](../reference/node-agent.md) instead), proxying all relevant inbound and outbound
 traffic, and tracking active attachments.
 
 The Traffic-Manager is installed by a cluster administrator. It can either be installed using the Helm chart embedded
@@ -48,4 +48,4 @@ to your workstation, or it will pass it along to the container in the pod usuall
 
 When a `wiretap` is active, the Traffic Agent will send a copy of the incoming requests to your workstation.
 
-Please see [Traffic Agent Sidecar](attachments/sidecar.md) and [Node-hosted traffic-agent](node-agent.md) for details.
+Please see [Traffic Agent Sidecar](../reference/attachments/sidecar.md) and [Node-hosted traffic-agent](../reference/node-agent.md) for details.

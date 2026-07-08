@@ -8,7 +8,7 @@ hide_table_of_contents: true
 
 ### Why Telepresence
 
-Modern microservices-based applications that are deployed into Kubernetes often consist of tens or hundreds of services. The resource constraints and number of these services means that it is often difficult to impossible to run all of this on a local development machine, which makes fast development and debugging very challenging. The fast [inner development loop](concepts/devloop.md) from previous software projects is often a distant memory for cloud developers.
+Modern microservices-based applications that are deployed into Kubernetes often consist of tens or hundreds of services. The resource constraints and number of these services means that it is often difficult to impossible to run all of this on a local development machine, which makes fast development and debugging very challenging. The fast inner development loop from previous software projects is often a distant memory for cloud developers.
 
 Telepresence enables you to connect your local development machine seamlessly to the cluster via a two-way proxying mechanism. This enables you to code locally and run the majority of your services within a remote Kubernetes cluster — which in the cloud means you have access to effectively unlimited resources.
 

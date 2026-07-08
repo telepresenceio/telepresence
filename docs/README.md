@@ -11,9 +11,9 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Install Traffic Manager](install/manager.md)
   - [Cloud Provider Prerequisites](install/cloud.md)
 - Core concepts
-  - [The developer experience and the inner dev loop](concepts/devloop.md)
-  - [Making the remote local: Faster feedback, collaboration and debugging](concepts/faster.md)
-  - [Intercepts](concepts/intercepts.md)
+  - [Architecture](concepts/architecture.md)
+  - [Attachments](concepts/attachments.md)
+  - [Glossary](concepts/glossary.md)
 - How do I...
   - [Code and debug an application locally](howtos/attach.md)
   - [Choose between the sidecar and the node-agent](howtos/agent-modes.md)
@@ -25,7 +25,6 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Resolve Istio ServiceEntry Hosts](howtos/istio.md)
   - [Use Telepresence with Azure (Microsoft Learn)](https://learn.microsoft.com/en-us/azure/aks/use-telepresence-aks.md)
 - Technical reference
-  - [Architecture](reference/architecture.md)
   - [Telepresence CLI](reference/cli/telepresence.md)
     - [telepresence completion](reference/cli/telepresence_completion.md)
     - [telepresence compose](reference/cli/telepresence_compose.md)

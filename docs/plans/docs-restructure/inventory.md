@@ -29,7 +29,7 @@ release-notes (historical), generated files (regenerated instead).
 | 2. Terminology sweep (attachment; detach command) | Done |
 | 3. Quick-start tutorial rewrite | Done |
 | 3b. Reframe compare/mirrord.md as an architecture trade-off (added to scope) | Done |
-| 4. Concept pages (replace devloop/faster, engagement-modes page, glossary) | Not started |
+| 4. Concept pages (architecture moved, attachments page, glossary; devloop/faster/intercepts removed) | Done |
 | 5. Reference re-sort per verdicts below | Not started |
 | 6. Vale + link checking in CI | Not started |
 
@@ -109,9 +109,9 @@ doc-links.yml would silently drop the page. Fix doc-links.yml first.
 
 | Page | Lines | Intended -> actual | Notes | Verdict |
 |------|-------|--------------------|-------|---------|
-| concepts/devloop.md | 55 | explanation -> marketing essay | Inner/outer dev loop generality, not Telepresence-specific; Ambassador-blog era | delete (salvage one intro paragraph) |
-| concepts/faster.md | 29 | explanation -> marketing essay | Same era and style; "What is Telepresence?" belongs on quick-start | delete |
-| concepts/intercepts.md | 147 | explanation -> partial | Animated intercept demo (MDX components); covers only intercept, not replace/ingest/wiretap; title uses old terminology | rewrite (as "Engagement modes" concept page) |
+| concepts/devloop.md | 55 | explanation -> marketing essay | Deleted; redirect to quick-start (step 4) | done |
+| concepts/faster.md | 29 | explanation -> marketing essay | Deleted; redirect to quick-start (step 4) | done |
+| concepts/intercepts.md | 147 | explanation -> partial | Replaced by concepts/attachments.md covering all four modes; redirect added (step 4) | done |
 
 Missing concept pages the restructure should create (plan step 4):
 
@@ -157,7 +157,7 @@ should stay small):
 
 | Page | Lines | Notes | Verdict |
 |------|-------|-------|---------|
-| reference/architecture.md | 50 | Pure explanation of components; belongs in concepts/ | move (concepts/) |
+| reference/architecture.md | 50 | Moved to concepts/architecture.md with redirect (step 4) | done |
 | reference/routing.md | 57 | How connections/DNS are routed; explanation | keep or move (decide with dns.md merge) |
 | reference/tun-device.md | 32 | Explains VIF gains "vs SSH" - Telepresence 1-era framing, stale | merge (fold surviving facts into routing/architecture) |
 | reference/vpn.md | 329 | Explanation of VNAT conflict resolution + troubleshooting; content is current and valuable | keep (location debatable) |

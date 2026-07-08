@@ -45,7 +45,7 @@ After creating `config.yaml` in your current directory, export the file's locati
 
 ## Administrating Telepresence
 
-Telepresence administration requires permissions for creating the `traffic-manager` [deployment](architecture.md#traffic-manager) which is typically
+Telepresence administration requires permissions for creating the `traffic-manager` [deployment](../concepts/architecture.md#traffic-manager) which is typically
 done by a full cluster administrator.
 
 Once installed, the Telepresence Traffic Manager will run using the `traffic-manager` ServiceAccount. This account is
