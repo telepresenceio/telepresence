@@ -258,35 +258,6 @@ func nodeAgentGID() (uint32, error) {
 	return uint32(agentconfig.DefaultAgentGID), nil
 }
 
-// buildNodeAgentNftConfig translates cfg into the agentnft ruleset config for the target
-// pod, mirroring agentinit's buildNftConfig. It is reimplemented here rather than shared
-// with agentinit because pkg/agentconfig is cross-platform and must not import the
-// linux-only pkg/agentnft.
-func buildNodeAgentNftConfig(cfg *nodeConfig, podIP netip.Addr, owner agentnft.OwnerMatch) agentnft.Config {
-	sc := cfg.AgentConfig()
-	var intercepts []agentnft.Intercept
-	for _, cn := range sc.Containers {
-		for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
-			nic := agentnft.Intercept{
-				Protocol:      ic.Protocol,
-				ContainerPort: ic.ContainerPort,
-				AgentPort:     ic.AgentPort,
-			}
-			if ic.TargetPortNumeric {
-				nic.ProxyPort = sc.ProxyPort(ic.AgentPort)
-			}
-			intercepts = append(intercepts, nic)
-		}
-	}
-	return agentnft.Config{
-		PodIP:           podIP,
-		Loopback:        "lo",
-		Owner:           owner,
-		Intercepts:      intercepts,
-		MeshDialSubnets: sc.MeshDialSubnets,
-	}
-}
-
 // applyNodeAgentRules programs the target pod's packet-routing rules into its network
 // namespace. The ruleset is the same one the sidecar's init container installs (see
 // agentinit.Main); here it is applied to another pod's namespace over netlink via
@@ -318,7 +289,7 @@ func applyNodeAgentRules(ctx context.Context, cfg *nodeConfig) (func(context.Con
 		owner = agentnft.OwnerMatch{UseGID: true, ID: gid}
 	}
 
-	rs, err := agentnft.Build(buildNodeAgentNftConfig(cfg, podIP, owner))
+	rs, err := agentnft.Build(agentnft.ConfigFor(cfg.AgentConfig(), "lo", podIP, owner))
 	if err != nil {
 		return nil, err
 	}

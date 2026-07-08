@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/nftables"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -66,6 +67,36 @@ type Config struct {
 	// services, which only the mesh proxy knows how to route. Entries whose
 	// address family differs from PodIP's are ignored.
 	MeshDialSubnets []netip.Prefix
+}
+
+// ConfigFor translates a sidecar agent config into the ruleset Config
+// for the pod it serves: every container's port-unique intercepts are
+// flattened into one list, numeric target ports record the proxy port
+// that pass-through dials use, and the mesh dial subnets are carried
+// over.
+func ConfigFor(sc *agentconfig.Sidecar, loopback string, podIP netip.Addr, owner OwnerMatch) Config {
+	var intercepts []Intercept
+	for _, cn := range sc.Containers {
+		for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
+			nic := Intercept{
+				Protocol:      ic.Protocol,
+				ContainerPort: ic.ContainerPort,
+				AgentPort:     ic.AgentPort,
+			}
+			if ic.TargetPortNumeric {
+				nic.ProxyPort = sc.ProxyPort(ic.AgentPort)
+			}
+			intercepts = append(intercepts, nic)
+		}
+	}
+
+	return Config{
+		PodIP:           podIP,
+		Loopback:        loopback,
+		Owner:           owner,
+		Intercepts:      intercepts,
+		MeshDialSubnets: sc.MeshDialSubnets,
+	}
 }
 
 const (
