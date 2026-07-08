@@ -17,7 +17,7 @@ services:
       ...
 ```
 
-Those extensions are recognized by the `telepresence compose`, which acts as an extended `docker compose` command. Telepresence will create connections, attachments, and proxies based on the extensions and then modify the docker compose file with the necessary networks, mounts, and environment variables to make the extended services work.
+Those extensions are recognized by the `telepresence compose` command, which acts as an extended `docker compose` command. Telepresence will create connections, attachments, and proxies based on the extensions and then modify the docker compose file with the necessary networks, mounts, and environment variables to make the extended services work.
 
 ## States
 
@@ -59,12 +59,14 @@ The `mounts` field is a list of mount configurations that controls how the servi
 |---------------|----------------------------------------------------------------------------------------------------------|--------|---------------------------------|
 | volume        | Name of a Docker Compose volume. Mutually exclusive to volumePattern.                                    | string | empty                           |
 | volumePattern | Regular expression pattern matching one or several Docker Compose volumes. Mutually exclusive to volume. | string | empty                           |
-| policy        | "local", "remote", or "remoteReadOnly"                                                                   | string | determined by the traffic-agent |
+| policy        | "local", "ignore", "remote", or "remoteReadOnly"                                                         | string | determined by the traffic-agent |
 
 The mount policy determines how the volume is mounted by Docker Compose.
 <dl>
 <dt>local</dt>
 <dd>The Docker Compose volume is not modified.</dd>
+<dt>ignore</dt>
+<dd>The Docker Compose volume is not modified, and the corresponding remote volume is not shared by the traffic-agent.</dd>
 <dt>remote</dt>
 <dd>The Docker Compose volume is modified to mount a remote volume without a read-only restriction. It might still be restricted by the remote volume's permissions.</dd>
 <dt>remoteReadOnly</dt>
