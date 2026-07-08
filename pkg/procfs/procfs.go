@@ -10,24 +10,23 @@ import (
 	"strings"
 )
 
-// Environ returns the environment of pid, read from /proc/<pid>/environ.
-// Kernel threads and processes that have exited their exec have an empty
-// environ; Environ returns an empty, non-nil map for those, not an error.
-func Environ(pid int) (map[string]string, error) {
+// Environ returns the environment of pid, read from /proc/<pid>/environ, as
+// "KEY=VALUE" entries in their original order. Duplicate keys and entries
+// without a value are preserved verbatim, matching what a process's real
+// environment can technically contain. Kernel threads and processes that
+// have exited their exec have an empty environ; Environ returns an empty,
+// non-nil slice for those, not an error.
+func Environ(pid int) ([]string, error) {
 	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
 	if err != nil {
 		return nil, fmt.Errorf("read environ of pid %d: %w", pid, err)
 	}
-	env := make(map[string]string)
+	env := make([]string, 0, strings.Count(string(raw), "\x00"))
 	for entry := range strings.SplitSeq(string(raw), "\x00") {
 		if entry == "" {
 			continue
 		}
-		key, value, ok := strings.Cut(entry, "=")
-		if !ok {
-			continue
-		}
-		env[key] = value
+		env = append(env, entry)
 	}
 	return env, nil
 }

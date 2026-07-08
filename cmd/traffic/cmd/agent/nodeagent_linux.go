@@ -63,7 +63,7 @@ func (c *nodeConfig) AppEnviron(_ context.Context, cn *agentconfig.Container) (m
 	if err != nil {
 		return nil, err
 	}
-	return appEnvironment(dos.MapEnv(env).Environ(), cn), nil
+	return appEnvironment(env, cn), nil
 }
 
 // nsListenerFactory creates listen sockets inside the network namespace at

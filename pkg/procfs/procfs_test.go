@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -35,8 +36,45 @@ func TestEnviron_ChildProcess(t *testing.T) {
 	// until the exec has completed.
 	require.Eventually(t, func() bool {
 		env, err := Environ(cmd.Process.Pid)
-		return err == nil && env["PROCFS_TEST_MARKER"] == "x"
+		return err == nil && slices.Contains(env, "PROCFS_TEST_MARKER=x")
 	}, time.Second, 5*time.Millisecond)
+}
+
+// TestEnviron_OrderAndNoEquals verifies that Environ preserves the raw
+// entries of /proc/<pid>/environ in their original order, and passes
+// through an entry that has no '=' rather than dropping it. (os/exec itself
+// collapses duplicate keys in Cmd.Env down to the last value before
+// exec'ing, so the kernel's copy of the child's environment block never
+// actually contains duplicates to exercise here -- but nothing about
+// Environ's parsing depends on keys being unique.)
+func TestEnviron_OrderAndNoEquals(t *testing.T) {
+	cmd := exec.Command("sleep", "30")
+	cmd.Env = append(os.Environ(),
+		"PROCFS_TEST_FIRST=1",
+		"PROCFS_TEST_NOEQUALS",
+		"PROCFS_TEST_MARKER=last")
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+
+	var env []string
+	require.Eventually(t, func() bool {
+		var err error
+		env, err = Environ(cmd.Process.Pid)
+		return err == nil && slices.Contains(env, "PROCFS_TEST_MARKER=last")
+	}, time.Second, 5*time.Millisecond)
+
+	first := slices.Index(env, "PROCFS_TEST_FIRST=1")
+	noEquals := slices.Index(env, "PROCFS_TEST_NOEQUALS")
+	marker := slices.Index(env, "PROCFS_TEST_MARKER=last")
+
+	require.NotEqual(t, -1, first)
+	require.NotEqual(t, -1, noEquals, "entry without '=' not found")
+	require.NotEqual(t, -1, marker)
+	require.Less(t, first, noEquals, "entries must retain their original order")
+	require.Less(t, noEquals, marker)
 }
 
 func TestEnviron_NoSuchPid(t *testing.T) {
