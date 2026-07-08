@@ -101,15 +101,6 @@ func matchDaddr(off, ln uint32, addr netip.Addr, neq bool) []expr.Any {
 	}
 }
 
-// matchDaddrNotInSet returns expressions that only match destinations NOT in m
-// -- the nft equivalent of `ip daddr != @set`.
-func matchDaddrNotInSet(off, ln uint32, m *nftables.Set) []expr.Any {
-	return []expr.Any{
-		&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: off, Len: ln},
-		&expr.Lookup{SourceRegister: 1, SetName: m.Name, SetID: m.ID, Invert: true},
-	}
-}
-
 // redirectViaProtoPortMap returns expressions that look the packet's
 // (l4proto . dport) pair up in m (container-port -> agent-port) and, when
 // found, redirect the packet to that port on the local address

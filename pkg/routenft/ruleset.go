@@ -70,11 +70,7 @@ func Build(cfg Config) (*Ruleset, error) {
 // ip6 equivalent): drop any packet whose destination address is a member of
 // set.
 func matchDaddrInSetDrop(off, ln uint32, set *nftables.Set) []expr.Any {
-	return []expr.Any{
-		&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: off, Len: ln},
-		&expr.Lookup{SourceRegister: 1, SetName: set.Name, SetID: set.ID},
-		&expr.Verdict{Kind: expr.VerdictDrop},
-	}
+	return append(nftutil.MatchDaddrInSet(off, ln, set, false), &expr.Verdict{Kind: expr.VerdictDrop})
 }
 
 func validate(cfg Config) error {

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/nftables"
+	"github.com/google/nftables/expr"
 )
 
 func TestAddrLayout(t *testing.T) {
@@ -92,6 +93,32 @@ func TestIntervalSet(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestMatchDaddrInSet(t *testing.T) {
+	table := &nftables.Table{Name: "telepresence", Family: nftables.TableFamilyIPv4}
+	set := &nftables.Set{Table: table, Name: "test_set", ID: 42}
+
+	for _, invert := range []bool{false, true} {
+		exprs := MatchDaddrInSet(16, 4, set, invert)
+		if len(exprs) != 2 {
+			t.Fatalf("MatchDaddrInSet(invert=%v) returned %d expressions, want 2", invert, len(exprs))
+		}
+		p, ok := exprs[0].(*expr.Payload)
+		if !ok {
+			t.Fatalf("exprs[0] is %T, want *expr.Payload", exprs[0])
+		}
+		if p.DestRegister != 1 || p.Base != expr.PayloadBaseNetworkHeader || p.Offset != 16 || p.Len != 4 {
+			t.Errorf("Payload = %+v, want DestRegister=1 Base=NetworkHeader Offset=16 Len=4", p)
+		}
+		l, ok := exprs[1].(*expr.Lookup)
+		if !ok {
+			t.Fatalf("exprs[1] is %T, want *expr.Lookup", exprs[1])
+		}
+		if l.SourceRegister != 1 || l.SetName != set.Name || l.SetID != set.ID || l.Invert != invert {
+			t.Errorf("Lookup = %+v, want SourceRegister=1 SetName=%q SetID=%d Invert=%v", l, set.Name, set.ID, invert)
+		}
 	}
 }
 
