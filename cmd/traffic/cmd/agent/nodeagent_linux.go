@@ -168,6 +168,12 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 		return nil, fmt.Errorf("invalid %s %q: %w", agentconfig.EnvNodeAgentPodIP, podIPStr, err)
 	}
 
+	criClient, err := cri.Connect(socket)
+	if err != nil {
+		return nil, err
+	}
+	defer criClient.Close()
+
 	sc := base.AgentConfig()
 	pids := make(map[string]int, len(sc.Containers))
 	for _, cn := range sc.Containers {
@@ -175,7 +181,7 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 		if !ok {
 			return nil, fmt.Errorf("no container ID for container %q in %s", cn.Name, agentconfig.EnvNodeAgentContainerIDs)
 		}
-		pid, err := cri.ResolvePID(ctx, socket, id)
+		pid, err := criClient.ResolvePID(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("resolve PID for container %q: %w", cn.Name, err)
 		}

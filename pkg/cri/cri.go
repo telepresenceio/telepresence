@@ -34,22 +34,39 @@ func StripRuntimePrefix(containerID string) string {
 	return containerID
 }
 
-// ResolvePID dials the CRI runtime service at socketPath and returns the
-// host PID of containerID's init process.
+// Client is a connection to a CRI runtime service. It is reused across
+// calls to ResolvePID so that resolving the PIDs of several containers on
+// the same socket dials only once.
+type Client struct {
+	conn *grpc.ClientConn
+	rt   runtimeapi.RuntimeServiceClient
+}
+
+// Connect creates a Client for the CRI runtime service at socketPath.
+// grpc.NewClient does not dial eagerly, so no context is needed here;
+// connection errors surface from the first RPC made through the Client.
+func Connect(socketPath string) (*Client, error) {
+	conn, err := grpc.NewClient("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, fmt.Errorf("dial CRI socket %q: %w", socketPath, err)
+	}
+	return &Client{conn: conn, rt: runtimeapi.NewRuntimeServiceClient(conn)}, nil
+}
+
+// Close closes the underlying gRPC connection.
+func (c *Client) Close() error {
+	return c.conn.Close()
+}
+
+// ResolvePID returns the host PID of containerID's init process.
 //
 // The PID is not part of the typed ContainerStatus message; runtimes report
 // it in the verbose info map returned alongside the status, as a JSON
 // document with a top-level "pid" field. This shape is common to both
 // containerd and CRI-O.
-func ResolvePID(ctx context.Context, socketPath, containerID string) (int, error) {
-	conn, err := grpc.NewClient("unix://"+socketPath, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return 0, fmt.Errorf("dial CRI socket %q: %w", socketPath, err)
-	}
-	defer conn.Close()
-
+func (c *Client) ResolvePID(ctx context.Context, containerID string) (int, error) {
 	id := StripRuntimePrefix(containerID)
-	resp, err := runtimeapi.NewRuntimeServiceClient(conn).ContainerStatus(ctx, &runtimeapi.ContainerStatusRequest{
+	resp, err := c.rt.ContainerStatus(ctx, &runtimeapi.ContainerStatusRequest{
 		ContainerId: id,
 		Verbose:     true,
 	})

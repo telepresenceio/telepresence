@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,6 +26,24 @@ type fakeRuntimeService struct {
 
 	resp *runtimeapi.ContainerStatusResponse
 	err  error
+
+	// connCount counts accepted connections to the fake server's listener.
+	connCount atomic.Int32
+}
+
+// countingListener wraps a net.Listener and counts accepted connections, so
+// tests can observe whether a Client's calls share one connection.
+type countingListener struct {
+	net.Listener
+	count *atomic.Int32
+}
+
+func (l *countingListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err == nil {
+		l.count.Add(1)
+	}
+	return conn, err
 }
 
 func (f *fakeRuntimeService) ContainerStatus(
@@ -52,6 +71,7 @@ func startFakeCRI(t *testing.T, svc *fakeRuntimeService) string {
 	sockPath := filepath.Join(dir, "c.sock")
 	lis, err := net.Listen("unix", sockPath)
 	require.NoError(t, err)
+	lis = &countingListener{Listener: lis, count: &svc.connCount}
 
 	srv := grpc.NewServer()
 	runtimeapi.RegisterRuntimeServiceServer(srv, svc)
@@ -61,6 +81,16 @@ func startFakeCRI(t *testing.T, svc *fakeRuntimeService) string {
 	return sockPath
 }
 
+// connect dials sockPath and registers the returned Client's Close for
+// cleanup.
+func connect(t *testing.T, sockPath string) *Client {
+	t.Helper()
+	c, err := Connect(sockPath)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = c.Close() })
+	return c
+}
+
 func TestResolvePID_HappyPath(t *testing.T) {
 	svc := &fakeRuntimeService{
 		resp: &runtimeapi.ContainerStatusResponse{
@@ -68,8 +98,9 @@ func TestResolvePID_HappyPath(t *testing.T) {
 		},
 	}
 	sockPath := startFakeCRI(t, svc)
+	c := connect(t, sockPath)
 
-	pid, err := ResolvePID(context.Background(), sockPath, "abc123")
+	pid, err := c.ResolvePID(context.Background(), "abc123")
 	require.NoError(t, err)
 	require.Equal(t, 4242, pid)
 	require.True(t, svc.gotVerbose)
@@ -83,8 +114,9 @@ func TestResolvePID_StripsRuntimePrefix(t *testing.T) {
 		},
 	}
 	sockPath := startFakeCRI(t, svc)
+	c := connect(t, sockPath)
 
-	pid, err := ResolvePID(context.Background(), sockPath, "containerd://abc123")
+	pid, err := c.ResolvePID(context.Background(), "containerd://abc123")
 	require.NoError(t, err)
 	require.Equal(t, 99, pid)
 	require.Equal(t, "abc123", svc.gotContainerID)
@@ -97,8 +129,9 @@ func TestResolvePID_MissingInfoKey(t *testing.T) {
 		},
 	}
 	sockPath := startFakeCRI(t, svc)
+	c := connect(t, sockPath)
 
-	_, err := ResolvePID(context.Background(), sockPath, "abc123")
+	_, err := c.ResolvePID(context.Background(), "abc123")
 	require.ErrorContains(t, err, "abc123")
 	require.ErrorContains(t, err, "info")
 }
@@ -110,8 +143,9 @@ func TestResolvePID_InvalidJSON(t *testing.T) {
 		},
 	}
 	sockPath := startFakeCRI(t, svc)
+	c := connect(t, sockPath)
 
-	_, err := ResolvePID(context.Background(), sockPath, "abc123")
+	_, err := c.ResolvePID(context.Background(), "abc123")
 	require.ErrorContains(t, err, "abc123")
 }
 
@@ -122,8 +156,9 @@ func TestResolvePID_NoPid(t *testing.T) {
 		},
 	}
 	sockPath := startFakeCRI(t, svc)
+	c := connect(t, sockPath)
 
-	_, err := ResolvePID(context.Background(), sockPath, "abc123")
+	_, err := c.ResolvePID(context.Background(), "abc123")
 	require.ErrorContains(t, err, "abc123")
 }
 
@@ -134,15 +169,36 @@ func TestResolvePID_ZeroPid(t *testing.T) {
 		},
 	}
 	sockPath := startFakeCRI(t, svc)
+	c := connect(t, sockPath)
 
-	_, err := ResolvePID(context.Background(), sockPath, "abc123")
+	_, err := c.ResolvePID(context.Background(), "abc123")
 	require.ErrorContains(t, err, "abc123")
 }
 
 func TestResolvePID_NoSuchSocket(t *testing.T) {
 	dir := t.TempDir()
-	_, err := ResolvePID(context.Background(), filepath.Join(dir, "no.sock"), "abc123")
+	c := connect(t, filepath.Join(dir, "no.sock"))
+	_, err := c.ResolvePID(context.Background(), "abc123")
 	require.Error(t, err)
+}
+
+// TestResolvePID_ReusesConnection verifies that resolving several
+// containers' PIDs through the same Client dials the CRI socket once.
+func TestResolvePID_ReusesConnection(t *testing.T) {
+	svc := &fakeRuntimeService{
+		resp: &runtimeapi.ContainerStatusResponse{
+			Info: map[string]string{"info": `{"pid": 4242}`},
+		},
+	}
+	sockPath := startFakeCRI(t, svc)
+	c := connect(t, sockPath)
+
+	_, err := c.ResolvePID(context.Background(), "abc123")
+	require.NoError(t, err)
+	_, err = c.ResolvePID(context.Background(), "def456")
+	require.NoError(t, err)
+
+	require.Equal(t, int32(1), svc.connCount.Load())
 }
 
 func TestStripRuntimePrefix(t *testing.T) {
