@@ -32,7 +32,7 @@ release-notes (historical), generated files (regenerated instead).
 | 4. Concept pages (architecture moved, attachments page, glossary; devloop/faster/intercepts removed) | Done |
 | 5a. Reference re-sort: moves and merges (monitoring, inside-container, docker-run, tun-device, dns, upgrade slim) | Done |
 | 5b. Dedup rewrites (attachments/cli split, docker-compose vs compose, RBAC spread, mtls protocol section, faqs/troubleshooting pruning) | Done |
-| 6. Vale + link checking in CI | Not started |
+| 6. Vale + link checking, folded into make lint (docslint tool + Vale styles) | Done |
 
 Step 1 of the docs restructure: every page under `docs/`, classified by the
 Diataxis type it should serve (tutorial, how-to, reference, explanation) versus

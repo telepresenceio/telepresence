@@ -1,0 +1,6 @@
+extends: existence
+message: "'%s' is a stale reference to a discontinued product or the Telepresence 1 era."
+level: error
+ignorecase: true
+tokens:
+  - Ambassador Cloud

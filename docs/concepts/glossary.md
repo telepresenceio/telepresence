@@ -10,12 +10,15 @@ rewrites a workload's pod template to add the traffic-agent sidecar when an
 attachment requires one. See
 [Traffic Agent Sidecar](../reference/attachments/sidecar.md).
 
+<!-- The old term is mentioned on purpose. -->
+<!-- vale Telepresence.Terminology = NO -->
 **Attachment** — The coupling of your workstation to a container in a cluster
 workload, giving your locally running code the container's traffic,
 environment variables, and volumes. Created with one of the four mode
 commands — `replace`, `intercept`, `wiretap`, or `ingest` — and ended with
 `telepresence detach`. See [Attachments](attachments.md). Releases before
 2.30 called this an *engagement*.
+<!-- vale Telepresence.Terminology = YES -->
 
 **Connection** — The link between your workstation and a cluster established
 by `telepresence connect`. A connection makes the cluster's network reachable

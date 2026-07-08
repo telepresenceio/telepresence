@@ -139,6 +139,10 @@ make lint-go
 # Run protobuf linter only
 make lint-rpc
 
+# Run documentation linter only (link/nav consistency via tools/src/docslint,
+# terminology and stale references via Vale in Docker; config in .vale.ini)
+make lint-docs
+
 # Auto-fix lint issues
 make format
 ```
