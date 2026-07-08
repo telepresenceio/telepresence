@@ -18,7 +18,6 @@ import (
 	"github.com/vishvananda/netns"
 
 	"github.com/telepresenceio/clog"
-	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentnft"
 	"github.com/telepresenceio/telepresence/v2/pkg/cri"
@@ -370,7 +369,7 @@ func applyNodeAgentRules(ctx context.Context, cfg *nodeConfig) (func(context.Con
 
 // NodeAgentMain is the entrypoint for the node-agent Job pod. It mirrors Main, but loads its
 // config from procfs/CRI-resolved target identity instead of its own process environment and
-// filesystem, and runs NodeAgentSidecar instead of Sidecar.
+// filesystem.
 func NodeAgentMain(ctx context.Context, _ ...string) error {
 	debug.SetTraceback("single")
 	clog.Infof(ctx, "Traffic Agent (node) %s", version.Version)
@@ -382,9 +381,9 @@ func NodeAgentMain(ctx context.Context, _ ...string) error {
 		}
 
 		// Program the target pod's packet-routing rules before starting any
-		// services. NodeAgentSidecar starts the forwarders that receive the
-		// redirected traffic, binding their listen sockets in the target pod's
-		// network namespace via the Config's ListenerFactory.
+		// services. Sidecar starts the forwarders that receive the redirected
+		// traffic, binding their listen sockets in the target pod's network
+		// namespace via the Config's ListenerFactory (see nodeConfig.ListenerFactory).
 		teardown, err := applyNodeAgentRules(ctx, cfg)
 		if err != nil {
 			return fmt.Errorf("unable to program packet-routing rules: %w", err)
@@ -410,28 +409,10 @@ func NodeAgentMain(ctx context.Context, _ ...string) error {
 
 		g.Go("node-agent", func(ctx context.Context) error {
 			<-certsReadyCh
-			return NodeAgentSidecar(g, s, info)
+			return Sidecar(g, s, info)
 		})
 
 		// Wait for exit
 		return g.Wait()
 	})
-}
-
-// NodeAgentSidecar registers each container's env and mount info and starts its port
-// handlers, mirroring Sidecar. The forwarders bind their listen sockets in the target
-// pod's network namespace rather than the node-agent's own, via the ListenerFactory
-// that Config supplies (see nodeConfig.ListenerFactory).
-func NodeAgentSidecar(g log.Group, s State, info *rpc.AgentInfo) error {
-	ac := s.AgentConfig()
-	for _, cn := range ac.Containers {
-		ci := info.Containers[cn.Name]
-		cs := s.NewContainerState(s, cn, ci.MountPoint, ci.Environment)
-		s.AddContainerState(cn.Name, cs)
-		for pp, ics := range MakeInterceptStates(cn) {
-			cs.AddPortHandler(g, pp, ics)
-		}
-	}
-	TalkToManagerLoop(g, s, info)
-	return nil
 }
