@@ -3,82 +3,135 @@ title: "Telepresence vs mirrord"
 hide_table_of_contents: true
 ---
 
-## Telepresence
+# Telepresence vs mirrord
 
-Telepresence is a very feature rich tool, designed to handle a large majority of use-cases. You can use it as a cluster VPN only, or use one of its three different ways (replace, intercept, or ingest) to attach to the cluster's resources.
+Telepresence and mirrord solve the same problem: run one service on your
+workstation, with your own IDE and debugger, while it behaves as if it were
+running inside the cluster. They solve it with fundamentally different
+architectures, and nearly every practical difference between the two tools
+follows from that choice. Neither architecture is simply better — they
+distribute their costs differently, and which tool fits you depends on which
+costs you would rather pay.
 
-Telepresence is intended to be installed in the cluster by an administrator and then let clients connect with a very limited set of permissions. This model is generally required by larger companies.
+## Two architectures
 
-The client can be either completely contained in Docker or run directly on the workstation. The latter requires the creation of a virtual network device, but admin access is not needed when Telepresence is installed using a package installer that configures the root daemon as a system service.
+**Telepresence works at the network level.** A traffic-manager is installed in
+the cluster once, by an administrator. When you connect, a virtual network
+interface (VIF) and a DNS resolver make the cluster's subnets and service names
+reachable from your workstation, for every local tool. To attach to a workload —
+by [replace, intercept, wiretap, or ingest](../howtos/attach.md) — a
+traffic-agent relays traffic, environment, and volumes between the pod and your
+workstation.
 
-## mirrord
+**mirrord works at the process level.** Nothing is preinstalled in the cluster.
+The mirrord CLI links your local process with a shared library
+(`mirrord-layer`) that intercepts its system calls — network, file, and
+environment access — and reroutes them to an ephemeral `mirrord-agent` pod,
+created on demand next to the target and removed when the session ends. Only
+that one process sees the cluster; nothing else on your workstation changes.
 
-Mirrord was designed with simplicity in mind. You install the CLI tool, and that's it. It will do the rest automatically under the hood.
+## Where mirrord has the edge
 
-Mirrord solves the same problem as Telepresence, but in a different way. Instead of providing a proper network
-device and remotely mounted filesystems, mirrord will link the client application with a `mirrord-layer` shared library. This library will inject code that intercepts accesses to the network, file system, and environment variables, and reroute them to a corresponding process in the cluster (the `mirrord-agent`) which then interacts with the targeted pod.
+- **Nothing to install in the cluster.** The agent is created on demand and
+  gone when you're done. Trying mirrord against a cluster takes one command;
+  Telepresence always needs the traffic-manager installed first. The flip side:
+  every mirrord OSS user needs RBAC to create pods with capabilities such as
+  `CAP_SYS_ADMIN`, `CAP_SYS_PTRACE`, and `CAP_NET_ADMIN` — permissions many
+  organizations reserve for administrators. Telepresence concentrates the
+  privileged part in the one-time install and lets clients connect with next to
+  no RBAC.
+- **The effect is scoped to one process.** No virtual interface, no DNS
+  reconfiguration, no subnet conflicts with corporate VPNs, and concurrent
+  sessions against different clusters are trivial. Telepresence manages such
+  conflicts well (see [Telepresence and VPNs](../reference/vpn.md)), but it has
+  to manage them; mirrord sidesteps them by design.
+- **Remote files without mount software.** File access is intercepted at the
+  system-call layer, so remote files are visible to the process without FUSE.
+  Telepresence's volume mounts rely on `sshfs` (macFUSE on macOS, WinFSP on
+  Windows).
 
-### Limitations with Code Injection
+## Where Telepresence has the edge
 
-Telepresence 1.x used the [code injection approach](https://www.getambassador.io/blog/code-injection-on-linux-and-macos), but desided to abandon it due to several limitations:
+Code injection is a trade-off Telepresence knows well: Telepresence 1.x used
+the [same approach](https://www.getambassador.io/blog/code-injection-on-linux-and-macos)
+and abandoned it because injection only works for dynamically linked
+executables on platforms that permit it. This is where the network-level
+architecture pays off:
 
-1. It will only work on Linux and macOS platforms. There's no native support on Windows.
-2. It will only work with dynamically linked executables.
-3. It cannot be used with docker unless you rebuild the container and inject the `mirrord-layer` into it.
-4. `DYLD_INSERT_LIBRARIES` causes various problems on macOS (SIP prevents it from being used), especially on silicon-based machines where mirrord will require Rosetta.
-5. Should Apple decide to protect their intel-based platform the same way as the silicon-based one in a future release, then mirrord will likely be problematic to use on that platform.
+- **Runs natively on Windows.** Library injection has no native Windows
+  support.
+- **Works with any executable.** Statically linked binaries — the norm for Go —
+  cannot be reliably injected. macOS SIP blocks `DYLD_INSERT_LIBRARIES`,
+  forcing workarounds on Apple silicon.
+- **Runs unmodified containers.** A container image can be run locally as-is,
+  with the remote environment and volumes, via
+  [`telepresence docker-run`](../howtos/docker.md) or the
+  [Docker Compose integration](../howtos/docker-compose.md); injection would
+  require rebuilding the image with the layer inside.
+- **The whole workstation joins the cluster network.** Your browser, `curl`,
+  database GUIs, and test suites can all reach cluster services by name — not
+  just the one injected process. Telepresence can also be used as a plain
+  cluster VPN, with no attachment at all.
+- **Made for organization-wide rollout.** One audited, privileged install;
+  clients with minimal RBAC; centralized client configuration through the Helm
+  chart.
+- **More attachment modes.** Besides intercepting and mirroring traffic,
+  Telepresence can replace a container entirely (useful for queue consumers
+  that must not run twice) and ingest a container's environment and volumes
+  without touching traffic.
+- **Local routing between concurrent attachments.** When you run several
+  services of a call chain locally — multiple intercepts or replaces at once —
+  a request from one of them to another is connected directly on your
+  workstation instead of doing a round trip to the cluster just to be routed
+  back again (the [local shortcut](../reference/config.md#intercept)). With
+  per-process injection, every hop between the local services goes through
+  the cluster.
 
-### Cluster Permissions
+## Choosing between them
 
-Mirrord does not require a sidecar. Instead they install a the `mirror-agent` into the namespace of the pod that it impersonates. That agent requires several permissions that a cluster admin might consider a security risk:
+If you are an individual developer with broad permissions on the cluster and
+you want to be productive in the next five minutes, mirrord's zero-install
+onboarding is hard to beat. If you develop on Windows or in Go, run your
+services as containers, need more than one process to see the cluster, or are
+a platform team rolling a tool out to an organization with locked-down RBAC,
+Telepresence's trade-offs are the ones you want.
 
-* `CAP_NET_ADMIN` and `CAP_NET_RAW` - required for modifying routing tables
-* `CAP_SYS_PTRACE` - required for reading target pod environment
-* `CAP_SYS_ADMIN` - required for joining target pod network namespace
+## Feature comparison
 
-Unless using "mirrord for Teams" (proprietary), all users must have permissions to create the job running the `mirror-agent` in the cluster.
+This comparison applies to the Open Source editions of both products.
 
-Recent versions of Telepresence offer an equivalent, optional [node-agent](../reference/node-agent.md) mode: a
-node-hosted agent that runs with the same class of privileges, attaching to a workload without injecting a sidecar. A
-sidecar is therefore a choice, not a requirement. The sidecar remains the default attachment mode and needs none of
-these privileges.
+| Feature                                                              | Telepresence | mirrord |
+|----------------------------------------------------------------------|--------------|---------|
+| Requires nothing preinstalled in the cluster                         | ❌            | ✅       |
+| Client needs no elevated cluster permissions (RBAC)                  | ✅            | ❌       |
+| Does not need administrative permission on workstation               | ✅ [^1]       | ✅       |
+| Effect is limited to the targeted process                            | ❌ [^2]       | ✅       |
+| Remote volumes without extra mount software (FUSE)                   | ❌            | ✅       |
+| Cluster network available to all local tools (including browser)     | ✅            | ❌       |
+| Can act as a cluster VPN only                                        | ✅            | ❌       |
+| Runs natively on Windows                                             | ✅            | ❌       |
+| Works with statically linked binaries                                | ✅            | ❌       |
+| Can run unmodified Docker containers locally                         | ✅            | ❌       |
+| Integrates with Docker Compose                                       | ✅            | ❌       |
+| Can intercept traffic                                                | ✅            | ✅       |
+| Can filter intercepted traffic on HTTP headers and paths             | ✅            | ✅       |
+| Can mirror traffic                                                   | ✅            | ✅       |
+| Can intercept traffic to and from the pod's localhost                | ✅            | ❌       |
+| Can replace a container                                              | ✅            | ❌       |
+| Can ingest a container                                               | ✅            | ❌       |
+| Routes traffic between concurrent local attachments locally          | ✅            | ❌       |
+| Works without restarting the remote workload                         | ✅ [^3]       | ✅       |
+| Centralized client configuration through a Helm chart                | ✅            | ❌       |
 
-## Comparison Telepresence vs mirrord
+[^1]: Telepresence does not require root access on the workstation when
+installed using a package installer (which configures the root daemon as a
+system service) or when running in docker mode.
 
-This comparison chart applies to the Open Source editions of both products.
+[^2]: When connecting with `telepresence connect --docker`, the network access
+is confined to containers instead of affecting the whole workstation.
 
-| Feature                                                                      | Telepresence | mirrord |
-|------------------------------------------------------------------------------|--------------|---------|
-| Run or Debug your cluster containers locally                                 | ✅            | ✅       |
-| Does not need administrative permission on workstation                       | ✅ [^1]       | ✅       |
-| Can be used with very large clusters                                         | ✅            | ✅       |
-| Works without interrupting the remote service                                | ✅ [^2]       | ✅       |
-| Doesn't require injection of a sidecar                                       | ✅ [^3]       | ✅       |
-| Supports connecting to clusters over a corporate VPN                         | ✅            | ✅       |
-| Can intercept traffic                                                        | ✅            | ✅       |
-| Can filter traffic based on HTTP headers and paths                           | ✅            | ✅       |
-| Can mirror traffic                                                           | ✅            | ✅       |
-| Can ingest a container                                                       | ✅            | ❌       |
-| Can replace a container                                                      | ✅            | ❌       |
-| Can act as a cluster VPN only                                                | ✅            | ❌       |
-| Will work with statically linked binaries                                    | ✅            | ❌       |
-| Runs natively on windows                                                     | ✅            | ❌       |
-| Can intercept traffic to and from pod's localhost                            | ✅            | ❌       |
-| Remotely mounted file system available from all applications                 | ✅            | ❌       |
-| Cluster network available to all applications (including browser)            | ✅            | ❌       |
-| Can run the same docker container locally without rebuilding it              | ✅            | ❌       |
-| Integrates with Docker Compose                                               | ✅            | ❌       |
-| Provides an API server allowing introspection of replacements and intercepts | ✅            | ❌       |
-| Provides remote mounts as volumes in docker                                  | ✅            | ❌       |
-| Does not require special capabilities such as CAP_SYS_ADMIN in the cluster   | ✅ [^4]       | ❌       |
-| Centralized client configuration using Helm chart                            | ✅            | ❌       |
-| Installed using a JSON-schema validated Helm chart                           | ✅            | ❌       |
-| Client need no special RBAC permissions                                      | ✅            | ❌       |
-
-[^1]: Telepresence does not require root access on the workstation when installed using a package installer (which configures the root daemon as a system service) or when running in docker mode.
-
-[^2]: The remote service will only restart when a traffic-agent sidecar is installed. Pod disruption budgets or pre-installed agents can be used to avoid interruptions. Attaching with `--node-agent` never modifies or restarts the workload.
-
-[^3]: A traffic-agent is still necessary when attaching to a pod, but it no longer has to be an injected sidecar: [node-agent](../reference/node-agent.md) mode attaches a node-hosted agent without touching the workload. A traffic-agent is unnecessary when using Telepresence as a VPN.
-
-[^4]: This holds for the default sidecar mode, which needs no special capabilities. The optional [node-agent](../reference/node-agent.md) mode runs a privileged node-hosted agent comparable to mirrord's.
+[^3]: With the default sidecar, the pods restart once when the traffic-agent is
+injected (pre-installing the agent avoids this). Attaching with the optional
+[node-agent](../reference/node-agent.md) mode never modifies or restarts the
+workload; like mirrord's agent, it runs privileged, whereas the default sidecar
+needs no special capabilities.

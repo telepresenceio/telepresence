@@ -21,6 +21,18 @@ strings, internal Go identifiers (EngagementType and friends), the one
 proto comment in rpc/manager/manager.proto. Out of scope: CHANGELOG.yml and
 release-notes (historical), generated files (regenerated instead).
 
+## Progress
+
+| Step | Status |
+|------|--------|
+| 1. Inventory | Done |
+| 2. Terminology sweep (attachment; detach command) | Done |
+| 3. Quick-start tutorial rewrite | Done |
+| 3b. Reframe compare/mirrord.md as an architecture trade-off (added to scope) | Done |
+| 4. Concept pages (replace devloop/faster, engagement-modes page, glossary) | Not started |
+| 5. Reference re-sort per verdicts below | Not started |
+| 6. Vale + link checking in CI | Not started |
+
 Step 1 of the docs restructure: every page under `docs/`, classified by the
 Diataxis type it should serve (tutorial, how-to, reference, explanation) versus
 what its content actually is today, with a verdict. Later steps (terminology
@@ -78,11 +90,11 @@ doc-links.yml would silently drop the page. Fix doc-links.yml first.
 
 | Page | Lines | Intended -> actual | Notes | Verdict |
 |------|-------|--------------------|-------|---------|
-| quick-start.md | 25 | tutorial -> link stub | No hands-on content; points at install and howtos/engage. Highest-leverage rewrite (plan step 3): end-to-end sample-app tutorial | rewrite |
+| quick-start.md | 25 | tutorial -> link stub | Rewritten as an end-to-end echo-server tutorial (step 3) | done |
 | faqs.md | 106 | FAQ -> FAQ | Terminology skews "intercept"-era; several answers duplicate concept/reference content | keep (prune, re-term) |
 | troubleshooting.md | 313 | troubleshooting -> troubleshooting | Frontmatter description still mentions Ambassador Cloud; grab-bag ordering, no grouping by symptom area | keep (prune, group) |
 | community.md | 13 | meta -> meta | Fine | keep |
-| compare/mirrord.md | 84 | explanation -> comparison | Current (mentions replace/intercept/ingest). Section holds only one page | keep |
+| compare/mirrord.md | 84 | explanation -> comparison | Reframed as an architecture trade-off with a balanced table (step 3b) | done |
 
 ## install/ (how-to guides; location is correct)
 
