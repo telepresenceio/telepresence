@@ -102,11 +102,11 @@ network interface. Remote mounts must be made relative to a specific mount point
    ```console
    $ telepresence list
    ...
-   deolpoyment example-app: ready to attach (traffic-agent not yet installed)
+   deployment example-app: ready to attach (traffic-agent not yet installed)
    ...
    ```
 
-3. Get the name of the container you want to replace (output truncated for brewity)
+3. Get the name of the container you want to replace (output truncated for brevity)
     ```console
     $ kubectl describe deploy example-app
     Name:                   example-app
@@ -123,7 +123,7 @@ network interface. Remote mounts must be made relative to a specific mount point
       Labels:  app=example-app
       Containers:
        echo-server:
-        Image:      ghcr.io/telepresencio/echo-server
+        Image:      jmalloc/echo-server
         Port:       8080/TCP
     ```
 
