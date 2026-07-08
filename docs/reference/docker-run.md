@@ -1,11 +1,11 @@
 ---
-title: Using Docker for engagements
-description: How a Telepresence engagement can run a Docker container with configured environment and volume mounts.
+title: Using Docker for attachments
+description: How a Telepresence attachment can run a Docker container with configured environment and volume mounts.
 toc_min_heading_level: 2
 toc_max_heading_level: 2
 ---
 
-# Using Docker when engaging with workloads
+# Using Docker when attaching to workloads
 
 ## Using command flags
 
@@ -32,8 +32,8 @@ container.
 ### The replace/ingest/intercept/wiretap --docker-run flag
 
 You can use the `--docker-run` flag if you want your `replace`, `ingest`, `intercept`, or `wiretap` to use a local
-handler that runs in a container. It will establish the engagement, run your container in the foreground, and then
-automatically end the engagement when the container exits. It will also ensure that the container shares the network
+handler that runs in a container. It will establish the attachment, run your container in the foreground, and then
+automatically end the attachment when the container exits. It will also ensure that the container shares the network
 and DNS of the daemon container.
 
 Please note that there your flags are divided into three groups when using `--docker-run`
@@ -118,7 +118,7 @@ Telepresence will automatically pass some relevant flags to Docker to connect th
 
 When used with a container based daemon:
 - `--rm` Mandatory, because the volume mounts cannot be removed until the container is removed.
-- `-v <telemount volume>:<docker mount dir>` Volume mount specifications propagated from the engaged container
+- `-v <telemount volume>:<docker mount dir>` Volume mount specifications propagated from the attached container
 - `--network <name of containerized daemon>` Network is shared with the containerized daemon
 
 When used with a daemon that isn't container based:

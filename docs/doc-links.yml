@@ -21,7 +21,7 @@
 - title: How do I...
   items:
     - title: Code and debug an application locally
-      link: howtos/engage
+      link: howtos/attach
     - title: Choose between the sidecar and the node-agent
       link: howtos/agent-modes
     - title: Use Telepresence with Docker
@@ -231,7 +231,7 @@
       link: reference/config
     - title: Cluster-side configuration
       link: reference/cluster-config
-    - title: Using Docker for engagements
+    - title: Using Docker for attachments
       link: reference/docker-run
     - title: Telepresence Compose Extensions
       link: reference/compose
@@ -239,16 +239,16 @@
       link: reference/inside-container
     - title: Environment variables
       link: reference/environment
-    - title: Engagements
+    - title: Attachments
       items:
-        - title: Configure intercept using CLI
-          link: reference/engagements/cli
+        - title: Configure attachments using CLI
+          link: reference/attachments/cli
         - title: Traffic Agent Sidecar
-          link: reference/engagements/sidecar
+          link: reference/attachments/sidecar
         - title: Target a specific container
-          link: reference/engagements/container
-        - title: Dealing With Conflicting Engagements
-          link: reference/engagements/conflicts
+          link: reference/attachments/container
+        - title: Dealing With Conflicting Attachments
+          link: reference/attachments/conflicts
     - title: Telepresence Docker Plugins
       link: reference/plugins
     - title: Volume mounts

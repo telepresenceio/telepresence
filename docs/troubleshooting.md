@@ -36,7 +36,7 @@ fuse: no mount point
 7. Reboot your computer.
 
 ## Volume mounts are not working on Linux
-It's necessary to have `sshfs` installed in order for volume mounts to work correctly when Telepresence engages with remote containers.
+It's necessary to have `sshfs` installed in order for volume mounts to work correctly when Telepresence attaches to remote containers.
 
 After you've installed `sshfs`, if mounts still aren't working:
 1. Uncomment `user_allow_other` in `/etc/fuse.conf`
@@ -108,7 +108,7 @@ or change the port number that Telepresence is using for the agent injector by p
 using the Helm chart value `agentInjector.webhook.port`.
 Please refer to the [telepresence install instructions](install/cloud#gke) or the [GCP docs](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules) for information to resolve this.
 
-Engagements that use the [node-agent](reference/node-agent.md) (`--node-agent`, with `nodeAgent.enabled=true` on the
+Attachments that use the [node-agent](reference/node-agent.md) (`--node-agent`, with `nodeAgent.enabled=true` on the
 traffic-manager) do not involve the webhook at all and are unaffected by API-server-to-webhook connectivity problems
 like this one.
 

@@ -12,7 +12,7 @@ inside the pod, the agent runs as a node-pinned Job that enters the *existing*
 target pod's Linux namespaces from the outside.
 
 The mode is opt-in on both sides: the traffic-manager must be installed with
-`nodeAgent.enabled=true`, and the client requests it per engagement with the
+`nodeAgent.enabled=true`, and the client requests it per attachment with the
 `--node-agent` flag on `telepresence intercept`, `telepresence wiretap`, and
 `telepresence ingest`. The client-side default can also be set cluster-wide
 through the Helm chart's `client.nodeAgent.enabled` value, overridden by a
@@ -24,7 +24,7 @@ explicit `--node-agent` flag always winning.
 Use a node-agent when mutating or restarting the workload is undesirable or
 disallowed: pods with expensive startup, workloads whose spec is reconciled by
 an operator that fights the webhook, or clusters where the agent-injector is
-disabled entirely (`agentInjector.enabled=false` — node-agent engagements do
+disabled entirely (`agentInjector.enabled=false` — node-agent attachments do
 not need the webhook).
 
 The trade-off is privilege. A node-agent pod runs with `hostPID: true`, a
@@ -99,7 +99,7 @@ sequenceDiagram
    consults it — the intercept-removal finalizer, the `ReleaseAgent` call
    that ends an ingest, client-session expiry, and a periodic reconciler
    that sweeps orphans (covering manager restarts and clients that vanished
-   between preparing and creating an engagement). Jobs are always deleted
+   between preparing and creating an attachment). Jobs are always deleted
    with foreground propagation, so a successor Job for the same target can
    never program the shared nftables table while a predecessor's terminating
    pod could still tear it down. On `helm uninstall`, a pre-delete hook has
@@ -108,9 +108,9 @@ sequenceDiagram
 
 ### Replica churn
 
-While any engagement claims a workload, the manager keeps a live watch on its
+While any attachment claims a workload, the manager keeps a live watch on its
 pods and reconciles the Job set as replicas come and go, so coverage does not
-freeze at the set that existed when the engagement started. A new replica
+freeze at the set that existed when the attachment started. A new replica
 gets its own Job once it becomes Running and Ready; a removed replica's Job
 is reaped as soon as its pod is actually gone — a pod that merely turns
 un-Ready keeps its Job. A rolling restart falls out of the same mechanism:
@@ -162,12 +162,12 @@ the sidecar, all consequences of running outside the pod:
 
 Client DNS lookups are never delegated to a node-agent. A sidecar shares the
 workload's DNS view (same namespace search path, same mesh resolver), which is
-why the client normally prefers resolving through an engaged agent. A
+why the client normally prefers resolving through an attached agent. A
 node-agent's pod resolves with the *manager* namespace's search path, so the
 client falls back to the traffic-manager, which qualifies single-label names
 against the client's connected namespace itself. Names only resolvable inside
 a service mesh (e.g. Istio `ServiceEntry` hosts) are consequently not
-resolvable while engaging through a node-agent.
+resolvable while attaching through a node-agent.
 
 ## Coexistence rules
 
@@ -177,9 +177,9 @@ combinations that would break one of them:
 
 | Requested | Existing state | Result |
 |-----------|----------------|--------|
-| node-agent engagement | pod already has an injected sidecar | rejected — both would program the same nftables table and bind the same agent ports |
-| sidecar engagement | live node-agent intercept or ingest on the workload | rejected — injection would restart the pod the node-agent is attached to |
-| second node-agent intercept | live node-agent intercept on the same workload | allowed — engagements share the workload's Jobs; the same conflict rules as the sidecar apply (concurrent global intercepts of one port still conflict) |
+| node-agent attachment | pod already has an injected sidecar | rejected — both would program the same nftables table and bind the same agent ports |
+| sidecar attachment | live node-agent intercept or ingest on the workload | rejected — injection would restart the pod the node-agent is attached to |
+| second node-agent intercept | live node-agent intercept on the same workload | allowed — attachments share the workload's Jobs; the same conflict rules as the sidecar apply (concurrent global intercepts of one port still conflict) |
 | node-agent ingest | live node-agent intercept (or other ingest) on the workload | allowed — the Job is shared and reference-counted via leases |
 
 ## Limitations
@@ -196,5 +196,5 @@ combinations that would break one of them:
   of named target ports. A sidecar shares this requirement only when its pod
   carries the agent's nftables ruleset (some intercept has a numeric target
   port or is headless); the node-agent always programs the ruleset.
-- **Mesh-only DNS names** are not resolvable during a node-agent engagement
+- **Mesh-only DNS names** are not resolvable during a node-agent attachment
   (see [DNS](#dns)).

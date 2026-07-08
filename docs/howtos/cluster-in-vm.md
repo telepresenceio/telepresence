@@ -1,6 +1,6 @@
 ---
 title: Host a cluster in Docker or a VM
-description: Use Telepresence to engage with services in a cluster running in a hosted docker container or virtual
+description: Use Telepresence to attach to services in a cluster running in a hosted docker container or virtual
  machine.
 hide_table_of_contents: true
 ---

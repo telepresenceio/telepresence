@@ -1,35 +1,35 @@
 ---
-title: Configure workload engagements using CLI
+title: Configure workload attachments using CLI
 ---
 
-# Configuring workload engagements using CLI
+# Configuring workload attachments using CLI
 
-## Specifying a namespace for an engagement
+## Specifying a namespace for an attachment
 
-By default, an engagement targets the namespace selected by `telepresence connect --namespace`.
+By default, an attachment targets the namespace selected by `telepresence connect --namespace`.
 The `intercept`, `wiretap`, and `replace` commands also accept `--namespace` when the workload
-to engage is in a different mapped namespace. `ingest` continues to use the connected namespace.
+to attach to is in a different mapped namespace. `ingest` continues to use the connected namespace.
 
 ```shell
 telepresence connect --namespace myns
 telepresence replace/ingest/intercept/wiretap hello
 ```
 
-To engage a workload in another mapped namespace without reconnecting, pass `--namespace`
-to the engagement command:
+To attach to a workload in another mapped namespace without reconnecting, pass `--namespace`
+to the attachment command:
 
 ```shell
 telepresence connect --namespace alpha --mapped-namespaces alpha,beta
 telepresence intercept beta-local --workload hello --namespace beta --http-header x-user=susan --port 8080:80
 ```
 
-Single-label DNS names continue to resolve in the connected namespace. When an engagement
+Single-label DNS names continue to resolve in the connected namespace. When an attachment
 targets another namespace, use a namespace-qualified name such as `hello.beta`.
 
 ## Importing environment variables
 
 Telepresence can import the environment variables from the pod that is
-being engaged, see [this doc](../environment.md) for more details.
+attached to, see [this doc](../environment.md) for more details.
 
 ## Creating an intercept
 
@@ -69,7 +69,7 @@ $ curl http://<deployment name>/
 Reply from service running in your cluster
 ```
 
-Finally, run `telepresence leave <name of intercept>` to stop the intercept.
+Finally, run `telepresence detach <name of intercept>` to stop the intercept.
 
 If you want to change which port has been intercepted, you can create
 a new intercept the same way you did above, and it will change which
@@ -286,7 +286,7 @@ port, optionally suffixed with `/TCP` or `/UDP`
 
    ```console
    $ telepresence list
-   deployment echo-no-svc: ready to engage (traffic-agent not yet installed)
+   deployment echo-no-svc: ready to attach (traffic-agent not yet installed)
    ```
 
 4. Start an intercept handler locally that will receive the incoming traffic. Here's an example using a simple python http service:
@@ -323,7 +323,7 @@ curl the name "echo-no-svc". Since there's no service by that name, there's no D
 > A service-less intercept utilizes an `initContainer` that requires `NET_ADMIN` capabilities.
 > If your cluster administrator has disabled them, you will only be able to intercept services using symbolic target ports.
 
-## Specifying the engagement traffic target
+## Specifying the attachment traffic target
 
 By default, it's assumed that your local app is reachable on `127.0.0.1` or on the IP of the local container that is
 running that app, and intercepted traffic will be sent to that address at the port given by `--port`. If you wish to

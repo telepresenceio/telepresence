@@ -63,12 +63,12 @@ The `agent.resources` and `agent.initResources` will be used as the `resources` 
 ## Mutating Webhook
 
 Telepresence uses a Mutating Webhook to inject the [Traffic Agent](architecture.md#traffic-agent) sidecar container and update the
-port definitions. This means that an engaged workload (Deployment, StatefulSet, ReplicaSet, ArgoRollout) will remain untouched
+port definitions. This means that an attached workload (Deployment, StatefulSet, ReplicaSet, ArgoRollout) will remain untouched
 and in sync as far as GitOps workflows (such as ArgoCD) are concerned.
 
 The injection will happen on demand the first time an attempt is made to replace, ingest, intercept, or wiretap the workload.
 
-Engagements created with `--node-agent` never involve the webhook: the traffic-manager creates a
+Attachments created with `--node-agent` never involve the webhook: the traffic-manager creates a
 [node-hosted agent](node-agent.md) instead of injecting a sidecar. Clusters that only use node-agents
 can therefore disable the injector entirely with `agentInjector.enabled=false`.
 
@@ -115,9 +115,9 @@ Possible Mount Policies are:
 
 | Policy         | Meaning                                                                                              |
 |----------------|------------------------------------------------------------------------------------------------------|
-| Ignore         | Do not share this volume with engaging clients                                                       |
-| Local          | Do not share this volume with engaging clients, instead Mount it using the client's local filesystem |
-| Remote         | Share this volume, and give engaging clients read and write access to it                             |
+| Ignore         | Do not share this volume with attached clients                                                       |
+| Local          | Do not share this volume with attached clients, instead Mount it using the client's local filesystem |
+| Remote         | Share this volume, and give attached clients read and write access to it                             |
 | RemoteReadOnly | Like Remote, but with read-only access                                                               |
 
 Example Helm chart value:

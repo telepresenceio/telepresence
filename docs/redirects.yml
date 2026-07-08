@@ -1,1 +1,6 @@
 - {from: "", to: "quick-start"}
+- {from: "reference/engagements/cli", to: "reference/attachments/cli"}
+- {from: "reference/engagements/sidecar", to: "reference/attachments/sidecar"}
+- {from: "reference/engagements/container", to: "reference/attachments/container"}
+- {from: "reference/engagements/conflicts", to: "reference/attachments/conflicts"}
+- {from: "howtos/engage", to: "howtos/attach"}

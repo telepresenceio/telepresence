@@ -9,7 +9,7 @@ The injection is triggered by a Kubernetes Mutating Webhook and will
 only happen once. The Traffic Agent is responsible for making the environment and volumes available
 on the developer's workstation, and also for redirecting traffic to it.
 
-Sidecar injection is the default way to engage a workload. A workload can instead be engaged entirely
+Sidecar injection is the default way to attach to a workload. A workload can instead be attached to entirely
 without injection — and without any pod restart — by the node-hosted traffic-agent (see
 [Node-hosted traffic-agent](../node-agent.md)), at the cost of running a privileged agent pod. `replace`
 always requires the sidecar; it is not supported by the node-agent.
@@ -61,7 +61,7 @@ require a Traffic Agent.
 ### Disable workloads
 
 By default, traffic-manager will observe `Deployments`, `ReplicaSets` and `StatefulSets`.
-Each workload used today adds certain overhead. If you are not engaging a specific workload type, you can disable it to reduce that overhead.
+Each workload used today adds certain overhead. If you are not attaching to a specific workload type, you can disable it to reduce that overhead.
 That can be achieved by setting the Helm chart values `workloads.<workloadType>.enabled=false` when installing the traffic-manager.
 The following are the Helm chart values to disable the workload types:
 

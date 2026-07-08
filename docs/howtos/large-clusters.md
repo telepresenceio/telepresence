@@ -20,7 +20,7 @@ The `telepresence connect` command will accept the flag `--mapped-namespaces <co
 
 #### Limiting the traffic-manager
 
-It is possible to limit the namespaces that the traffic-manager will care about when it is installed or upgraded by passing the Helm chart value `namespaces` or `namespaceSelector`. This will tell the manager to only manage those namespaces with respect to connects and engagements. A namespace-limited manager creates an implicit `mapped-namespaces` set for all clients that connect to it.
+It is possible to limit the namespaces that the traffic-manager will care about when it is installed or upgraded by passing the Helm chart value `namespaces` or `namespaceSelector`. This will tell the manager to only manage those namespaces with respect to connects and attachments. A namespace-limited manager creates an implicit `mapped-namespaces` set for all clients that connect to it.
 
 ## Large number of pods
 

@@ -4,7 +4,7 @@ hide_table_of_contents: true
 ---
 # Running Telepresence inside a container
 
-## Run with the daemon and engagement handler in containers
+## Run with the daemon and attachment handler in containers
 
 The `telepresence connect` command now has the option `--docker`. This option tells telepresence to start the Telepresence daemon in a
 docker container.
@@ -13,7 +13,7 @@ Running the daemon in a container brings many advantages. The daemon will no lon
 it will not mount files in the host's filesystem. Consequently, it will not need admin privileges to run, nor will it need special software
 like macFUSE or WinFSP to mount the remote file systems.
 
-The engagement handler (the process that runs locally and optionally will receive intercepted traffic) must also be a docker container,
+The attachment handler (the process that runs locally and optionally will receive intercepted traffic) must also be a docker container,
 because that is the only way to access the cluster network that the daemon makes available, and to mount the docker volumes needed.
 
 ## Run everything in a container

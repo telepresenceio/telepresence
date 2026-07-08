@@ -6,18 +6,18 @@ hide_table_of_contents: true
 
 A Docker Compose file can contain extensions that Docker Compose ignores. The `telepresence compose` command functions similarly to `docker compose`, but will process any `x-tele` extensions present in the Docker Compose file or its overrides before passing the final Compose specification to Docker Compose.
 
-The `x-tele` extensions are particularly useful when you have a set of services defined in a Docker Compose file that mirrors services running in a cluster, and you want your local services to interact with remote services or vice versa. The `x-tele` extensions enable your Compose services to either act as handlers when telepresence engages a remote service, or to temporarily act as proxies for remotely running services.
+The `x-tele` extensions are particularly useful when you have a set of services defined in a Docker Compose file that mirrors services running in a cluster, and you want your local services to interact with remote services or vice versa. The `x-tele` extensions enable your Compose services to either act as handlers when telepresence attaches to a remote service, or to temporarily act as proxies for remotely running services.
 
 The extensions can be added directly to the `compose.yaml` file, or to a `compose.override.yaml` (merged automatically by Docker Compose).
 
 ## Supported `x-tele` Extensions
 
 ### Top-level Extension
-The `x-tele` [top-level extension](../reference/compose#top-level-extension) is used to define a connection to the cluster, and to override the default mount behavior when engaging with remote services.
+The `x-tele` [top-level extension](../reference/compose#top-level-extension) is used to define a connection to the cluster, and to override the default mount behavior when attaching to remote services.
 
 ### Service Extensions
 
-The `x-tele` [service extensions](../reference/compose#service-extensions) are used to define the behavior of a service when engaged with a remote service.
+The `x-tele` [service extensions](../reference/compose#service-extensions) are used to define the behavior of a service when attached to a remote service.
 
 Telepresence supports the following types:
 
@@ -317,7 +317,7 @@ services:
 ```console
 $ telepresence compose up
  ✔ Connected to context minikube, namespace emojivoto (https://192.168.49.2:8443)     2.8s 
-[+] Engaging 2/2
+[+] Attaching 2/2
  ✔ emoji  Replaced service emoji                                                      2.0s 
  ✔ voting Replaced service voting                                                     1.6s 
 [+] Running 4/4

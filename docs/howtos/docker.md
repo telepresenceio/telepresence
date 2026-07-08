@@ -120,4 +120,4 @@ $ telepresence replace echo-easy --use alpha --docker-run -- ghcr.io/telepresenc
 * Using the Docker mode of telepresence **does not require organizational approval of a package installer**, and makes it **easier** to adopt across your organization.
 * It **limits the potential networking issues** you can encounter.
 * It **limits the potential mount issues** you can encounter.
-* It **enables simultaneous engagements in multiple namespaces**.
+* It **enables simultaneous attachments in multiple namespaces**.

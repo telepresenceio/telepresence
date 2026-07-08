@@ -56,7 +56,7 @@ In essence, Telepresence makes the DNS of the connected namespace available loca
 
 You can connect to cloud-based data stores and services that are directly addressable within the cluster (e.g. when using an [ExternalName](https://kubernetes.io/docs/concepts/services-networking/service/#externalname) Service type), such as AWS RDS, Google pub-sub, or Azure SQL Database.
 
-#### Will Telepresence be able to engage with workloads running on a private cluster or cluster running within a virtual private cloud (VPC)?
+#### Will Telepresence be able to attach to workloads running on a private cluster or cluster running within a virtual private cloud (VPC)?
 
 Yes, but it doesn't need to have a publicly accessible IP address.
 
@@ -75,11 +75,11 @@ Sudo is only needed when using a standalone binary installation without a system
 
 A `traffic-manager` service is deployed in a namespace of your choice (default 'ambassador') within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
 
-A Traffic Agent container is injected per pod that is being engaged. The injection happens the first time a `replace`, an `ingest`, or an `intercept` is made on a workload, unless you choose to control the injection using an annotation, in which case the injection happens when the `traffic-manager` is installed. When engaging with `--node-agent` (requires `nodeAgent.enabled=true` on the traffic-manager), nothing is injected — a node-hosted agent instead attaches to the existing pod, which is neither modified nor restarted. See the [node-agent reference](reference/node-agent.md) for details.
+A Traffic Agent container is injected per pod involved in an attachment. The injection happens the first time a `replace`, an `ingest`, or an `intercept` is made on a workload, unless you choose to control the injection using an annotation, in which case the injection happens when the `traffic-manager` is installed. When attaching using `--node-agent` (requires `nodeAgent.enabled=true` on the traffic-manager), nothing is injected — a node-hosted agent instead attaches to the existing pod, which is neither modified nor restarted. See the [node-agent reference](reference/node-agent.md) for details.
 
 #### How can I remove all the Telepresence components installed within my cluster?
 
-You can run the command `telepresence helm uninstall` to remove everything from the cluster, including the `traffic-manager`, all the `traffic-agent` containers injected into each pod being engaged, and any node-hosted agent Jobs.
+You can run the command `telepresence helm uninstall` to remove everything from the cluster, including the `traffic-manager`, all the `traffic-agent` containers injected into each attached pod, and any node-hosted agent Jobs.
 
 You also can run the command `telepresence uninstall <workload>` to remove the injected `traffic-agent` containers injected into each pod for that workload.
 

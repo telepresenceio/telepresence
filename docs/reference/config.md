@@ -27,7 +27,7 @@ client:
     userDaemon: debug
   images:
     registry: privateRepo # This overrides the default docker.io/datawire repo
-    agentImage: tel2:$version$ # This overrides the agent image to inject when engaging with a workload
+    agentImage: tel2:$version$ # This overrides the agent image to inject when attaching to a workload
   grpc:
     maxReceiveSize: 10Mi
     connectionTTL: 48h
@@ -55,7 +55,7 @@ Values for `client.cluster` controls aspects on how client's connection to the t
 > [!CAUTION]
 > Setting `agentPortForward` to `false` disables all direct communication between the client and
 > the traffic-agents. This is the only channel used both for routing intercepted traffic back to
-> the workstation and for serving volume mounts, so with it disabled **every type of engagement
+> the workstation and for serving volume mounts, so with it disabled **every type of attachment
 > (intercept, replace, and ingest) is unavailable**; attempting one fails immediately with an
 > explanatory error. Only plain cluster access (DNS resolution and outbound connections to cluster
 > services) keeps working, which makes `false` meaningful only when Telepresence is used purely as
@@ -436,7 +436,7 @@ logLevels:
   userDaemon: debug
 images:
   registry: privateRepo # This overrides the default docker.io/datawire repo
-  agentImage: tel2:$version$ # This overrides the agent image to inject when engaging with a workload
+  agentImage: tel2:$version$ # This overrides the agent image to inject when attaching to a workload
 grpc:
   maxReceiveSize: 10Mi
 ```

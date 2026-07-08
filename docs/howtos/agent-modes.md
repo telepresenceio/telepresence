@@ -1,6 +1,6 @@
 ---
 title: Choose between the sidecar and the node-agent
-description: When to engage workloads with the injected traffic-agent sidecar and when to use the node-hosted traffic-agent, with configuration examples for both.
+description: When to attach to workloads with the injected traffic-agent sidecar and when to use the node-hosted traffic-agent, with configuration examples for both.
 hide_table_of_contents: true
 ---
 
@@ -13,7 +13,7 @@ reaches the workload, what privileges they need, and what they leave behind.
 
 - The **injected sidecar** (the default): a mutating webhook rewrites the
   workload's pod template, and the pods restart with the agent container
-  inside. See the [Traffic Agent Sidecar](../reference/engagements/sidecar.md)
+  inside. See the [Traffic Agent Sidecar](../reference/attachments/sidecar.md)
   reference.
 - The **node-agent**: the traffic-manager creates a node-pinned agent that
   attaches to the *existing* pod's Linux namespaces from the outside. The
@@ -24,13 +24,13 @@ reaches the workload, what privileges they need, and what they leave behind.
 
 | | Injected sidecar | Node-agent |
 |---|---|---|
-| Workload modification | Pod template is rewritten; pods restart once when the agent is first injected | None; the existing pod is engaged as-is |
+| Workload modification | Pod template is rewritten; pods restart once when the agent is first injected | None; the node-agent attaches to the existing pod as-is |
 | Privileges required | None beyond the webhook; works under restrictive Pod Security Standards and on clusters like GKE Autopilot | Privileged: `hostPID`, `SYS_ADMIN`/`SYS_PTRACE`/`NET_ADMIN`/`NET_RAW`, and a read-only mount of the node's container-runtime socket. The traffic-manager's namespace must permit the *privileged* Pod Security Standard |
 | Agent-injector webhook | Required (the API server must be able to reach it) | Not used; works with `agentInjector.enabled=false` |
-| Replicas | The agent is injected into every pod of the workload | One node-agent Job per replica; every replica is engaged, at the cost of one privileged Job per replica |
+| Replicas | The agent is injected into every pod of the workload | One node-agent Job per replica; every replica is attached, at the cost of one privileged Job per replica |
 | `replace` | Supported | Not supported |
-| Cleanup | The sidecar remains in the pods after the engagement ends (removed by `telepresence uninstall` or `helm uninstall`) | The agent Job is reaped as soon as nothing uses it, and on `helm uninstall` |
-| Service mesh | Full support, including names only resolvable inside the mesh | Traffic interception coexists with a mesh, but mesh-only DNS names (e.g. Istio `ServiceEntry` hosts) do not resolve during the engagement |
+| Cleanup | The sidecar remains in the pods after the attachment ends (removed by `telepresence uninstall` or `helm uninstall`) | The agent Job is reaped as soon as nothing uses it, and on `helm uninstall` |
+| Service mesh | Full support, including names only resolvable inside the mesh | Traffic interception coexists with a mesh, but mesh-only DNS names (e.g. Istio `ServiceEntry` hosts) do not resolve during the attachment |
 | User-namespaced pods (`hostUsers: false`) | Supported | Not supported yet |
 | Environment fidelity | The webhook copies the container's declared `Env`/`EnvFrom` | The *actual* runtime environment is read from the running process |
 
@@ -66,7 +66,7 @@ The administrator enables node-agent mode; the sidecar remains the default:
 $ telepresence helm install --set nodeAgent.enabled=true
 ```
 
-A developer picks the node-agent per engagement:
+A developer picks the node-agent per attachment:
 
 ```console
 $ telepresence intercept my-service --port 8080 --node-agent
@@ -99,8 +99,8 @@ client:
 $ telepresence helm install -f values.yaml
 ```
 
-Developers now engage through node-agents without passing any flag. A
-workstation can still opt out of a single engagement with
+Developers now attach through node-agents without passing any flag. A
+workstation can still opt out of a single attachment with
 `--node-agent=false` (falling back to the sidecar), but cannot opt out
 through its local `config.yml` — for booleans, an explicit `false` is
 indistinguishable from unset in the configuration merge.
@@ -122,7 +122,7 @@ agentInjector:
 ```
 
 With this configuration `replace` is unavailable (it requires the sidecar),
-and a per-engagement `--node-agent=false` fails with an
+and a per-attachment `--node-agent=false` fails with an
 "agent-injector is disabled" error instead of falling back.
 
 The node's container runtime is detected automatically: containerd, CRI-O,
@@ -144,7 +144,7 @@ From highest to lowest:
 
 - [Node-hosted Traffic Agent](../reference/node-agent.md) — technical
   reference: Job lifecycle, namespace entry, packet routing, limitations.
-- [Traffic Agent Sidecar](../reference/engagements/sidecar.md) — injection,
+- [Traffic Agent Sidecar](../reference/attachments/sidecar.md) — injection,
   annotations, and sidecar removal.
 - [Traffic-agent packet routing](../reference/agent-packet-routing.md) — the
   nftables ruleset both modes share.

@@ -18,9 +18,9 @@ $ telepresence connect --namespace default
 
 $ telepresence list
 
-  deployment web-app: ready to engage (traffic-agent not yet installed)
-  deployment emoji  : ready to engage (traffic-agent not yet installed)
-  deployment web    : ready to engage (traffic-agent not yet installed)
+  deployment web-app: ready to attach (traffic-agent not yet installed)
+  deployment emoji  : ready to attach (traffic-agent not yet installed)
+  deployment web    : ready to attach (traffic-agent not yet installed)
 
 $ curl web-app:80
 

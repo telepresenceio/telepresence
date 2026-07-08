@@ -18,7 +18,7 @@ Telepresence is an open source tool that enables you to set up remote developmen
 Follow [Install Client](install/client.md) and [Install Traffic Manager](install/manager.md) instructions to install the
 telepresence client on your workstation, and the traffic manager in your cluster.
 
-Checkout the [Howto](howtos/engage.md) to learn how Telepresence can engage with resources in your remote cluster,
+Checkout the [Howto](howtos/attach.md) to learn how Telepresence can attach to resources in your remote cluster,
 enabling you to run the code on your local workstation.
 
 ## What’s Next?

@@ -1,11 +1,11 @@
 ---
-title: Dealing With Conflicting Engagements
+title: Dealing With Conflicting Attachments
 ---
 
-# Dealing With Conflicting Engagements
+# Dealing With Conflicting Attachments
 
 ## The Problem
-An organization may have several developers working on the same project, which in turn means that they may be engaging with the same workloads at the same time. Intercepting with unique http-header filters is often a good way to deal with this, but in some cases it may be necessary to use a global intercept or even to replace the entire container. Also, in some cases, perhaps a user intercepts using an http-header filter that is too broad and therefore causes conflicts with other users.
+An organization may have several developers working on the same project, which in turn means that they may be attaching to the same workloads at the same time. Intercepting with unique http-header filters is often a good way to deal with this, but in some cases it may be necessary to use a global intercept or even to replace the entire container. Also, in some cases, perhaps a user intercepts using an http-header filter that is too broad and therefore causes conflicts with other users.
 
 Sometimes the conflict is unavoidable. The user owning the first intercept must simply finish their work in order for others to continue. However, in other cases, perhaps that user has gone home for the day or got distracted by other tasks, not realizing that their intercept is still active and might cause problems for others.
 

@@ -25,7 +25,7 @@ Three things are required:
 
 1. The traffic-agent must dial the ServiceEntry address range through the mesh.
 2. The client must route the ServiceEntry's DNS suffix to cluster lookup.
-3. The client must engage the meshed workload (or route via it with
+3. The client must attach to the meshed workload (or route via it with
    `--proxy-via`) so that an agent connection exists.
 
 ## Configuring the Traffic Manager
@@ -79,7 +79,7 @@ according to the ServiceEntry.
 ## Limitations
 
 - An agent connection is required. With a plain `telepresence connect` and no
-  engagement or `--proxy-via`, DNS lookups are answered by the traffic-manager,
+  attachment or `--proxy-via`, DNS lookups are answered by the traffic-manager,
   which runs without a sidecar and cannot resolve mesh-only names.
 - The traffic-agent's own communication with the traffic-manager always bypasses
   the mesh; only DNS and the subnets listed in `agent.serviceMesh.dialSubnets`
