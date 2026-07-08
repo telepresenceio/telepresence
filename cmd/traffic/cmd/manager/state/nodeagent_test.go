@@ -380,18 +380,18 @@ func TestBuildNodeAgentJob_Env(t *testing.T) {
 	require.NotNil(t, name.ValueFrom.FieldRef)
 	assert.Equal(t, "metadata.name", name.ValueFrom.FieldRef.FieldPath)
 
-	idsEnv, ok := findEnv(env, envNodeAgentContainerIDs)
+	idsEnv, ok := findEnv(env, agentconfig.EnvNodeAgentContainerIDs)
 	require.True(t, ok)
 	var decoded map[string]string
 	require.NoError(t, json.Unmarshal([]byte(idsEnv.Value), &decoded))
 	assert.Equal(t, opts.containerIDs, decoded)
 
-	podIPEnv, ok := findEnv(env, envNodeAgentPodIP)
-	require.True(t, ok, "%s env var not found", envNodeAgentPodIP)
+	podIPEnv, ok := findEnv(env, agentconfig.EnvNodeAgentPodIP)
+	require.True(t, ok, "%s env var not found", agentconfig.EnvNodeAgentPodIP)
 	assert.Equal(t, opts.podIP, podIPEnv.Value)
 	assert.Nil(t, podIPEnv.ValueFrom)
 
-	criEnv, ok := findEnv(env, envNodeAgentCRISocket)
+	criEnv, ok := findEnv(env, agentconfig.EnvNodeAgentCRISocket)
 	require.True(t, ok)
 	assert.Equal(t, "/run/containerd/containerd.sock", criEnv.Value)
 }
@@ -695,7 +695,7 @@ func TestNodeAgentJobStale(t *testing.T) {
 		require.NoError(t, err)
 		stale, reason := nodeAgentJobStale(existing, desired)
 		assert.True(t, stale)
-		assert.Contains(t, reason, envNodeAgentContainerIDs)
+		assert.Contains(t, reason, agentconfig.EnvNodeAgentContainerIDs)
 	})
 
 	t.Run("pod IP differs is stale", func(t *testing.T) {
@@ -706,7 +706,7 @@ func TestNodeAgentJobStale(t *testing.T) {
 		require.NoError(t, err)
 		stale, reason := nodeAgentJobStale(existing, desired)
 		assert.True(t, stale)
-		assert.Contains(t, reason, envNodeAgentPodIP)
+		assert.Contains(t, reason, agentconfig.EnvNodeAgentPodIP)
 	})
 }
 
@@ -936,7 +936,7 @@ func TestEnsureNodeAgent_ReplacesJobWithDifferentContainerIDs(t *testing.T) {
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, jobs.Items, 1)
-	idsEnv, ok := findEnv(jobs.Items[0].Spec.Template.Spec.Containers[0].Env, envNodeAgentContainerIDs)
+	idsEnv, ok := findEnv(jobs.Items[0].Spec.Template.Spec.Containers[0].Env, agentconfig.EnvNodeAgentContainerIDs)
 	require.True(t, ok)
 	assert.JSONEq(t, `{"app":"containerd://abc123"}`, idsEnv.Value)
 

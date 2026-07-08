@@ -24,20 +24,6 @@ import (
 )
 
 const (
-	// envNodeAgentContainerIDs mirrors the constant of the same name declared
-	// in cmd/traffic/cmd/agent/nodeagent_linux.go. It is redeclared here
-	// (rather than imported) because the traffic-manager must not import the
-	// agent command package.
-	envNodeAgentContainerIDs = "_TEL_NODE_AGENT_CONTAINER_IDS"
-
-	// envNodeAgentCRISocket mirrors the constant of the same name declared in
-	// cmd/traffic/cmd/agent/nodeagent_linux.go.
-	envNodeAgentCRISocket = "_TEL_NODE_AGENT_CRI_SOCKET"
-
-	// envNodeAgentPodIP mirrors the constant of the same name declared in
-	// cmd/traffic/cmd/agent/nodeagent_linux.go.
-	envNodeAgentPodIP = "_TEL_NODE_AGENT_POD_IP"
-
 	// nodeAgentContainerName is the name of the sole container in a
 	// node-agent Job's pod template.
 	nodeAgentContainerName = "traffic-node-agent"
@@ -296,7 +282,7 @@ func nodeAgentJobStale(existing, desired *batchv1.Job) (bool, string) {
 	if existingContainer.Image != desiredContainer.Image {
 		return true, fmt.Sprintf("image changed from %q to %q", existingContainer.Image, desiredContainer.Image)
 	}
-	for _, name := range []string{envNodeAgentContainerIDs, envNodeAgentPodIP} {
+	for _, name := range []string{agentconfig.EnvNodeAgentContainerIDs, agentconfig.EnvNodeAgentPodIP} {
 		if envVarValue(existingContainer.Env, name) != envVarValue(desiredContainer.Env, name) {
 			return true, fmt.Sprintf("%s changed", name)
 		}
@@ -533,15 +519,15 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 			Value: cfgJSON,
 		},
 		{
-			Name:  envNodeAgentContainerIDs,
+			Name:  agentconfig.EnvNodeAgentContainerIDs,
 			Value: string(idsJSON),
 		},
 		{
-			Name:  envNodeAgentPodIP,
+			Name:  agentconfig.EnvNodeAgentPodIP,
 			Value: opts.podIP,
 		},
 		{
-			Name:  envNodeAgentCRISocket,
+			Name:  agentconfig.EnvNodeAgentCRISocket,
 			Value: opts.criSocket,
 		},
 	}

@@ -65,6 +65,21 @@ const (
 	// EnvAPIPort is the port number of the Telepresence API server when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
+	// EnvNodeAgentContainerIDs holds a JSON object mapping agent container name to CRI
+	// container ID, e.g. {"app":"containerd://abc"}. The traffic-manager sets it when it
+	// creates a node-agent Job, and the node-agent reads it to resolve each configured
+	// container's host PID through the CRI socket.
+	EnvNodeAgentContainerIDs = "_TEL_NODE_AGENT_CONTAINER_IDS"
+
+	// EnvNodeAgentCRISocket is the CRI unix socket path that the traffic-manager sets on a
+	// node-agent Job. When unset or empty, the node-agent falls back to cri.DetectSocket.
+	EnvNodeAgentCRISocket = "_TEL_NODE_AGENT_CRI_SOCKET"
+
+	// EnvNodeAgentPodIP carries the target pod's IP, set by the traffic-manager on a
+	// node-agent Job. It is the PodIP of the netfilter ruleset the node-agent programs into
+	// the target pod's network namespace.
+	EnvNodeAgentPodIP = "_TEL_NODE_AGENT_POD_IP"
+
 	WorkloadNameLabel    = annotation.DomainPrefix + "workloadName"
 	WorkloadKindLabel    = annotation.DomainPrefix + "workloadKind"
 	WorkloadEnabledLabel = annotation.DomainPrefix + "workloadEnabled"

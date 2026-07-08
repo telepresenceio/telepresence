@@ -34,17 +34,6 @@ import (
 )
 
 const (
-	// envNodeAgentContainerIDs holds a JSON object mapping agent container name to CRI
-	// container ID, e.g. {"app":"containerd://abc"}. The traffic-manager populates it.
-	envNodeAgentContainerIDs = "_TEL_NODE_AGENT_CONTAINER_IDS"
-
-	// envNodeAgentCRISocket is the CRI unix socket path. When unset, cri.DetectSocket is used.
-	envNodeAgentCRISocket = "_TEL_NODE_AGENT_CRI_SOCKET"
-
-	// envNodeAgentPodIP carries the target pod's IP (set by the traffic-manager);
-	// it is the PodIP of the netfilter ruleset programmed into the target netns.
-	envNodeAgentPodIP = "_TEL_NODE_AGENT_POD_IP"
-
 	// nodeAgentPacketMark is the firewall mark the node-agent sets on its own
 	// sockets (SO_MARK, wired in a later change) and matches in the mesh-bypass
 	// rule for user-namespaced targets, where a socket-owner match cannot be used.
@@ -143,7 +132,7 @@ func (c *nodeConfig) NodeAgent() bool {
 func parseContainerIDs(raw string) (map[string]string, error) {
 	var ids map[string]string
 	if err := json.Unmarshal([]byte(raw), &ids); err != nil {
-		return nil, fmt.Errorf("invalid %s: %w", envNodeAgentContainerIDs, err)
+		return nil, fmt.Errorf("invalid %s: %w", agentconfig.EnvNodeAgentContainerIDs, err)
 	}
 	return ids, nil
 }
@@ -157,29 +146,29 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 		return nil, err
 	}
 
-	raw, ok := dos.LookupEnv(ctx, envNodeAgentContainerIDs)
+	raw, ok := dos.LookupEnv(ctx, agentconfig.EnvNodeAgentContainerIDs)
 	if !ok {
-		return nil, fmt.Errorf("missing %s", envNodeAgentContainerIDs)
+		return nil, fmt.Errorf("missing %s", agentconfig.EnvNodeAgentContainerIDs)
 	}
 	ids, err := parseContainerIDs(raw)
 	if err != nil {
 		return nil, err
 	}
 
-	socket, ok := dos.LookupEnv(ctx, envNodeAgentCRISocket)
+	socket, ok := dos.LookupEnv(ctx, agentconfig.EnvNodeAgentCRISocket)
 	if !ok || socket == "" {
 		if socket, err = cri.DetectSocket(); err != nil {
 			return nil, err
 		}
 	}
 
-	podIPStr, ok := dos.LookupEnv(ctx, envNodeAgentPodIP)
+	podIPStr, ok := dos.LookupEnv(ctx, agentconfig.EnvNodeAgentPodIP)
 	if !ok || podIPStr == "" {
-		return nil, fmt.Errorf("missing %s", envNodeAgentPodIP)
+		return nil, fmt.Errorf("missing %s", agentconfig.EnvNodeAgentPodIP)
 	}
 	targetPodIP, err := netip.ParseAddr(podIPStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid %s %q: %w", envNodeAgentPodIP, podIPStr, err)
+		return nil, fmt.Errorf("invalid %s %q: %w", agentconfig.EnvNodeAgentPodIP, podIPStr, err)
 	}
 
 	sc := base.AgentConfig()
@@ -187,7 +176,7 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 	for _, cn := range sc.Containers {
 		id, ok := ids[cn.Name]
 		if !ok {
-			return nil, fmt.Errorf("no container ID for container %q in %s", cn.Name, envNodeAgentContainerIDs)
+			return nil, fmt.Errorf("no container ID for container %q in %s", cn.Name, agentconfig.EnvNodeAgentContainerIDs)
 		}
 		pid, err := cri.ResolvePID(ctx, socket, id)
 		if err != nil {
