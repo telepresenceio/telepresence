@@ -31,7 +31,7 @@ release-notes (historical), generated files (regenerated instead).
 | 3b. Reframe compare/mirrord.md as an architecture trade-off (added to scope) | Done |
 | 4. Concept pages (architecture moved, attachments page, glossary; devloop/faster/intercepts removed) | Done |
 | 5a. Reference re-sort: moves and merges (monitoring, inside-container, docker-run, tun-device, dns, upgrade slim) | Done |
-| 5b. Dedup rewrites (attachments/cli split, docker-compose vs compose, RBAC spread, mtls protocol section, faqs/troubleshooting pruning) | Not started |
+| 5b. Dedup rewrites (attachments/cli split, docker-compose vs compose, RBAC spread, mtls protocol section, faqs/troubleshooting pruning) | Done |
 | 6. Vale + link checking in CI | Not started |
 
 Step 1 of the docs restructure: every page under `docs/`, classified by the
@@ -92,8 +92,8 @@ doc-links.yml would silently drop the page. Fix doc-links.yml first.
 | Page | Lines | Intended -> actual | Notes | Verdict |
 |------|-------|--------------------|-------|---------|
 | quick-start.md | 25 | tutorial -> link stub | Rewritten as an end-to-end echo-server tutorial (step 3) | done |
-| faqs.md | 106 | FAQ -> FAQ | Terminology skews "intercept"-era; several answers duplicate concept/reference content | keep (prune, re-term) |
-| troubleshooting.md | 313 | troubleshooting -> troubleshooting | Frontmatter description still mentions Ambassador Cloud; grab-bag ordering, no grouping by symptom area | keep (prune, group) |
+| faqs.md | 106 | FAQ -> FAQ | Modes answer now covers all four and defers to concepts/attachments.md; terminology fixed (step 5b) | done |
+| troubleshooting.md | 313 | troubleshooting -> troubleshooting | Description fixed, sections grouped by symptom area with anchors preserved (step 5b) | done |
 | community.md | 13 | meta -> meta | Fine | keep |
 | compare/mirrord.md | 84 | explanation -> comparison | Reframed as an architecture trade-off with a balanced table (step 3b) | done |
 
@@ -103,7 +103,7 @@ doc-links.yml would silently drop the page. Fix doc-links.yml first.
 |------|-------|--------------------|-------|---------|
 | install/client.md | 324 | how-to -> how-to | Per-platform install. Manual-download steps duplicated almost verbatim in upgrade.md | keep (dedupe) |
 | install/upgrade.md | 96 | how-to -> how-to | Slimmed to "reinstall via install page" plus the Apple-silicon caveat (step 5a) | done |
-| install/manager.md | 249 | how-to -> how-to + reference | Install/uninstall/upgrade is how-to; namespace-scope semantics and RBAC detail overlap reference/rbac.md and reference/cluster-config.md | keep (move RBAC depth to reference/rbac.md) |
+| install/manager.md | 249 | how-to -> how-to + reference | Overlap was smaller than feared: chart values (how-to) vs raw permissions (reference) are complementary; pages now cross-link (step 5b) | done |
 | install/cloud.md | 59 | how-to -> how-to | GKE/EKS prerequisites; current | keep |
 
 ## concepts/ (explanation; mostly legacy content)
@@ -127,14 +127,14 @@ Missing concept pages the restructure should create (plan step 4):
 
 | Page | Lines | Intended -> actual | Notes | Verdict |
 |------|-------|--------------------|-------|---------|
-| howtos/engage.md | 310 | how-to -> explanation + how-to | Opens with a long replace/intercept/ingest comparison (concept material), then task steps. Split: comparison to new concepts page, tasks stay | rewrite (split) |
+| howtos/engage.md | 310 | how-to -> explanation + how-to | Split done: comparison lives in concepts/attachments.md, tasks stay (steps 4/5b) | done |
 | howtos/agent-modes.md | 154 | how-to -> decision guide + how-to | Recent, good shape. Missing from doc-links.yml | keep (add to nav) |
 | howtos/docker.md | 123 | how-to -> how-to | Absorbed reference/docker-run.md (step 5a) | done |
-| howtos/docker-compose.md | 372 | how-to -> reference + walkthrough | Documents x-tele extensions (reference, duplicating reference/compose.md) plus a walkthrough. Keep walkthrough; point at reference/compose.md for the extension spec | rewrite (dedupe) |
+| howtos/docker-compose.md | 372 | how-to -> reference + walkthrough | Extension table replaced with a pointer to reference/compose.md (step 5b) | done |
 | howtos/cluster-in-vm.md | 198 | how-to -> how-to + explanation | Networking theory up front, then Vagrant/k3s example; acceptable for the audience | keep |
 | howtos/istio.md | 86 | how-to -> how-to | Orphaned: in neither doc-links.yml nor README | keep (add to nav) |
 | howtos/large-clusters.md | 50 | how-to -> how-to | Fine | keep |
-| howtos/mtls.md | 121 | how-to -> how-to + reference | "Protocol Selection" section (TLS/HTTP2 detection, probing) is reference material; move it to an engagements reference page | keep (move detection section) |
+| howtos/mtls.md | 121 | how-to -> how-to + reference | Protocol-selection section moved to reference/attachments/protocols.md (step 5b) | done |
 
 ## reference/ (the grab-bag; plan step 5)
 
@@ -178,7 +178,7 @@ reference/engagements/ subsection:
 
 | Page | Lines | Notes | Verdict |
 |------|-------|-------|---------|
-| reference/engagements/cli.md | 365 | Mostly how-to ("Creating an intercept", "Let's try it out!"); flag-level detail duplicates generated CLI pages. Split: tasks to howtos/engage.md, semantics stay | rewrite (split) |
+| reference/attachments/cli.md | 365 | Walkthroughs dropped (attach howto covers them), service-less tutorial condensed to the annotation contract, deprecated intercept --replace section rewritten (step 5b) | done |
 | reference/engagements/sidecar.md | 79 | Injection semantics, annotations; true reference | keep |
 | reference/engagements/container.md | 48 | --container targeting semantics | keep |
 | reference/engagements/conflicts.md | 24 | Active-client semantics | keep |

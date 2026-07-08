@@ -14,13 +14,7 @@ Telepresence enables you to connect your local development machine seamlessly to
 
 Ultimately, this empowers you to develop services locally and still test integrations with dependent services or data stores running in the remote cluster.
 
-Telepresence provides three different ways for you to code, debug, and test your service locally using your favourite local IDE and in-process debugger.
-
-First off, you can "replace" the service with your own local version. This means even though you run your service locally, you can see how it interacts with the rest of the services in the cluster. It's like swapping out a piece of a puzzle and seeing how the whole picture changes. Your local process will have access to the same network, environment, and volumes as the service that it replaces.
-
-You can also "intercept" any requests made to a service. This is similar to replacing the service, but the remote service will keep running, perform background tasks, and handle traffic that isn't intercepted.
-
-Finally, you can "ingest" a service. Again, similar to a "replace", but nothing changes in the cluster during an "ingest", and no traffic is routed to the workstation.
+Telepresence provides four different ways for you to code, debug, and test your service locally using your favourite local IDE and in-process debugger: you can **replace** a remote container entirely, **intercept** the requests made to a service, **wiretap** a copy of a service's traffic, or **ingest** a container's environment and volumes without touching traffic. See [Attachments](concepts/attachments.md) for how the four modes compare and when to use which.
 
 #### What operating systems does Telepresence work on?
 
@@ -58,7 +52,7 @@ You can connect to cloud-based data stores and services that are directly addres
 
 #### Will Telepresence be able to attach to workloads running on a private cluster or cluster running within a virtual private cloud (VPC)?
 
-Yes, but it doesn't need to have a publicly accessible IP address.
+Yes. The cluster does not need to have a publicly accessible IP address.
 
 The cluster must also have access to an external registry to be able to download the traffic-manager and traffic-agent images that are deployed when connecting with Telepresence.
 
@@ -73,7 +67,7 @@ Sudo is only needed when using a standalone binary installation without a system
 
 #### What components get installed in the cluster when running Telepresence?
 
-A `traffic-manager` service is deployed in a namespace of your choice (default 'ambassador') within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
+A `traffic-manager` service is deployed in a namespace of your choice (default 'ambassador') within your cluster, and this manages attachments and connections between your local machine and the cluster.
 
 A Traffic Agent container is injected per pod involved in an attachment. The injection happens the first time a `replace`, an `ingest`, or an `intercept` is made on a workload, unless you choose to control the injection using an annotation, in which case the injection happens when the `traffic-manager` is installed. When attaching using `--node-agent` (requires `nodeAgent.enabled=true` on the traffic-manager), nothing is injected — a node-hosted agent instead attaches to the existing pod, which is neither modified nor restarted. See the [node-agent reference](reference/node-agent.md) for details.
 
@@ -99,7 +93,7 @@ protocol over that connection.
 
 #### Is Telepresence OSS open source?
 
-Yes, it is! You'll find both source code and documentation in the [Telepresence GitHub repository](https://github.com/telepresenceio/telepresence), licensed using the [apache License Version 2.0](https://github.com/telepresenceio/telepresence?tab=License-1-ov-file#readme).
+Yes, it is! You'll find both source code and documentation in the [Telepresence GitHub repository](https://github.com/telepresenceio/telepresence), licensed using the [Apache License Version 2.0](https://github.com/telepresenceio/telepresence?tab=License-1-ov-file#readme).
 
 #### How do I share my feedback on Telepresence?
 
