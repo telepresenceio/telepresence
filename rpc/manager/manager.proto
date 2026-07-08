@@ -424,7 +424,7 @@ message ReviewInterceptRequest {
   // The environment of the intercepted container
   map<string, string> environment = 11;
 
-  // Map of mount path -> MountPolicy of the engaged container
+  // Map of mount path -> MountPolicy of the attached container
   map<string, int32> mounts = 13;
 
   reserved 8; // was headers used by the workstation API-server

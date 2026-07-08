@@ -30,10 +30,7 @@ func (s *webhookSuite) Test_AutoInjectedAgent() {
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", "echo-auto-inject")
 
 	require := s.Require()
-	verb := "engage"
-	if !s.ClientIsVersion(">2.21.x") {
-		verb = "intercept"
-	}
+	verb := s.AttachVerb()
 	require.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--agents")
 		return err == nil && strings.Contains(stdout, fmt.Sprintf("echo-auto-inject: ready to %s (traffic-agent already installed)", verb))
@@ -44,7 +41,7 @@ func (s *webhookSuite) Test_AutoInjectedAgent() {
 	)
 
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "echo-auto-inject", "--port", "9091")
-	defer itest.TelepresenceOk(ctx, "leave", "echo-auto-inject")
+	defer itest.TelepresenceOk(ctx, "detach", "echo-auto-inject")
 	require.Contains(stdout, "Using Deployment echo-auto-inject")
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.Contains(stdout, "echo-auto-inject: intercepted")

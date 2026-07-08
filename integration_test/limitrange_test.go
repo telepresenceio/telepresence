@@ -42,7 +42,7 @@ func (is *installSuite) limitedRangeTest() {
 		10*time.Second,
 		2*time.Second,
 	)
-	itest.TelepresenceOk(ctx, "leave", svc)
+	itest.TelepresenceOk(ctx, "detach", svc)
 
 	// Ensure that LimitRange is injected into traffic-agent
 	out, err := itest.KubectlOut(ctx, is.AppNamespace(), "get", "pods", "-l", "app="+svc, "-o",

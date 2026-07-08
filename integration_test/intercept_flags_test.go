@@ -138,7 +138,7 @@ func (s *interceptFlagSuite) Test_ContainerReplace() {
 
 			defer func() {
 				agentCaptureCancel()
-				itest.TelepresenceOk(ctx, "leave", tt.iceptName)
+				itest.TelepresenceOk(ctx, "detach", tt.iceptName)
 				s.CapturePodLogs(ctx, s.serviceName, tt.appContainer, s.AppNamespace())
 				s.Eventually(func() bool {
 					out, err := itest.Output(ctx, "curl", "--silent", "--max-time", "1", iputil.JoinHostPort(s.serviceName, tt.port))

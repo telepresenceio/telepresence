@@ -224,7 +224,7 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 		out2 = make(chan string, 5)
 		defer close(out2)
 		so := itest.TelepresenceOk(ctx, "intercept", "--mount=false", "--port", fmt.Sprintf("%d:80", localPort3), s.svc)
-		defer itest.TelepresenceOk(ctx, "leave", s.svc)
+		defer itest.TelepresenceOk(ctx, "detach", s.svc)
 
 		s.Contains(so, "Using Deployment "+s.svc)
 		itest.PingInterceptedEchoServer(ctx, s.svc, "80")
@@ -308,8 +308,8 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 		out2 = make(chan string, 5)
 		defer close(out2)
 
-		itest.TelepresenceOk(ctx, "leave", "wt1")
-		itest.TelepresenceOk(ctx, "leave", "wt2")
+		itest.TelepresenceOk(ctx, "detach", "wt1")
+		itest.TelepresenceOk(ctx, "detach", "wt2")
 
 		so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", s.svc)
 		s.NoError(err)
@@ -364,7 +364,7 @@ func (s *wiretapSuite) Test_HTTPFilteredWiretap() {
 	mustLeave := true
 	defer func() {
 		if mustLeave {
-			itest.TelepresenceOk(ctx, "leave", "wt-filtered")
+			itest.TelepresenceOk(ctx, "detach", "wt-filtered")
 		}
 	}()
 
@@ -432,6 +432,6 @@ drain:
 	case <-time.After(2 * time.Second):
 	}
 
-	itest.TelepresenceOk(ctx, "leave", "wt-filtered")
+	itest.TelepresenceOk(ctx, "detach", "wt-filtered")
 	mustLeave = false
 }

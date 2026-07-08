@@ -37,7 +37,7 @@ func (s *connectedSuite) Test_MultipleUnnamedServicePorts() {
 		localPort, cancel := itest.StartLocalHttpEchoServer(ctx, svc)
 		defer cancel()
 		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
-		defer itest.TelepresenceOk(ctx, "leave", dep)
+		defer itest.TelepresenceOk(ctx, "detach", dep)
 		itest.PingInterceptedEchoServer(ctx, svc, svcPort)
 	}
 	s.Run("port 80", func() {
@@ -81,7 +81,7 @@ func (s *connectedSuite) Test_NoContainerPort() {
 		localPort, cancel := itest.StartLocalHttpEchoServer(ctx, svc)
 		defer cancel()
 		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
-		defer itest.TelepresenceOk(ctx, "leave", dep)
+		defer itest.TelepresenceOk(ctx, "detach", dep)
 		itest.PingInterceptedEchoServer(ctx, svc, svcPort)
 	}
 	s.Run("port 80", func() {
@@ -111,7 +111,7 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 		defer cancel()
 		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--service", "echo-tcp", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
 		s.CapturePodLogs(ctx, dep, "traffic-agent", s.AppNamespace())
-		defer itest.TelepresenceOk(ctx, "leave", dep)
+		defer itest.TelepresenceOk(ctx, "detach", dep)
 		itest.PingInterceptedEchoServer(ctx, "echo-tcp", svcPort)
 	})
 
@@ -157,7 +157,7 @@ func (s *connectedSuite) Test_UnnamedUdpAndTcpPort() {
 		defer itest.TelepresenceOk(ctx, "loglevel", "debug")
 		itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--service", "echo-udp", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
 		s.CapturePodLogs(ctx, dep, "traffic-agent", s.AppNamespace())
-		defer itest.TelepresenceOk(ctx, "leave", dep)
+		defer itest.TelepresenceOk(ctx, "detach", dep)
 
 		pingPong := func(conn net.Conn, msg string) {
 			_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
@@ -205,7 +205,7 @@ func (s *connectedSuite) Test_SameContainerPort() {
 		localPort, cancel := itest.StartLocalHttpEchoServer(ctx, dep)
 		defer cancel()
 		itest.TelepresenceOk(ctx, "intercept", "--mount=false", "-p", fmt.Sprintf("%d:%s", localPort, svcPort), dep)
-		defer itest.TelepresenceOk(ctx, "leave", dep)
+		defer itest.TelepresenceOk(ctx, "detach", dep)
 
 		// Both ports are now intercepted because the intercept is on the container port
 		itest.PingInterceptedEchoServer(ctx, dep, "80")

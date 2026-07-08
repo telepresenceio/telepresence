@@ -308,9 +308,9 @@ func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 		Kind:      k8sapi.Kind(agent.Kind),
 	}
 
-	err := s.UpdateLastEngagementTime(ctx, workloadKey)
+	err := s.UpdateLastAttachmentTime(ctx, workloadKey)
 	if err != nil {
-		clog.Errorf(ctx, "error updating last engagement time: %v", err)
+		clog.Errorf(ctx, "error updating last attachment time: %v", err)
 	}
 	err = s.removeUnusedAgent(ctx, workloadKey)
 	if err != nil {
@@ -354,13 +354,13 @@ func (s *service) removeUnusedAgent(ctx context.Context, workloadKey *mutator.Wo
 	if !ok {
 		return fmt.Errorf("error in looking up workload key %s in agentStateFile, err: %w", workloadKey, err)
 	}
-	lastEngagementTime := agentState.LastEngagementTime
-	clog.Tracef(ctx, "Last engagement time for agent %s: %s", *workloadKey, lastEngagementTime)
-	if lastEngagementTime.IsZero() {
-		// means it was never engaged
+	lastAttachmentTime := agentState.lastAttachment()
+	clog.Tracef(ctx, "Last attachment time for agent %s: %s", *workloadKey, lastAttachmentTime)
+	if lastAttachmentTime.IsZero() {
+		// means it was never attached
 		return nil
 	}
-	idleTime := time.Since(lastEngagementTime)
+	idleTime := time.Since(lastAttachmentTime)
 	clog.Tracef(ctx, "Idle time for agent %s: %s", *workloadKey, idleTime)
 	if idleTime > maxIdleTime {
 		// construct uninstall agents request
@@ -379,9 +379,9 @@ func (s *service) removeUnusedAgent(ctx context.Context, workloadKey *mutator.Wo
 	return nil
 }
 
-func (s *service) UpdateLastEngagementTime(ctx context.Context, workloadKey *mutator.WorkloadKey) error {
-	// updates last engagement time IN MEMORY, this is persisted to the configmap by another goroutine that runs periodically
-	clog.Tracef(ctx, "Logging workloadKey for last engagement time: %s", *workloadKey)
+func (s *service) UpdateLastAttachmentTime(ctx context.Context, workloadKey *mutator.WorkloadKey) error {
+	// updates last attachment time IN MEMORY, this is persisted to the configmap by another goroutine that runs periodically
+	clog.Tracef(ctx, "Logging workloadKey for last attachment time: %s", *workloadKey)
 
 	agentStateFileYAML := s.configWatcher.GetAgentStateYaml(ctx)
 	clog.Tracef(ctx, "Logging agentStateFileYAML: %s", agentStateFileYAML)
@@ -393,15 +393,15 @@ func (s *service) UpdateLastEngagementTime(ctx context.Context, workloadKey *mut
 		if err != nil {
 			return fmt.Errorf("error unmarshalling agent states: %w", err)
 		}
-		if !agentStateFile.AgentStates[*workloadKey].LastEngagementTime.IsZero() && s.state.CountActiveInterceptsForWorkload(workloadKey) == 0 {
-			// don't update last engagement time if there are no active intercepts and it is not the first time
+		if !agentStateFile.AgentStates[*workloadKey].lastAttachment().IsZero() && s.state.CountActiveInterceptsForWorkload(workloadKey) == 0 {
+			// don't update last attachment time if there are no active intercepts and it is not the first time
 			return nil
 		}
 	} else {
 		agentStateFile = AgentStateFile{AgentStates: make(map[mutator.WorkloadKey]AgentState)}
 	}
 
-	agentStateFile.AgentStates[*workloadKey] = AgentState{LastEngagementTime: time.Now()}
+	agentStateFile.AgentStates[*workloadKey] = AgentState{LastAttachmentTime: time.Now()}
 
 	updatedAgentStateFileYAML, err := yaml.Marshal(agentStateFile)
 	if err != nil {
@@ -413,8 +413,22 @@ func (s *service) UpdateLastEngagementTime(ctx context.Context, workloadKey *mut
 }
 
 type AgentState struct {
-	LastEngagementTime time.Time `json:"lastEngagementTime"`
+	LastAttachmentTime time.Time `json:"lastAttachmentTime"`
+
+	// LegacyLastEngagementTime is the timestamp written by managers that predate
+	// the attachment terminology. It is only read, never written.
+	LegacyLastEngagementTime time.Time `json:"lastEngagementTime,omitempty"`
 }
+
+// lastAttachment returns LastAttachmentTime, falling back to the timestamp
+// written under the pre-attachment key.
+func (a AgentState) lastAttachment() time.Time {
+	if a.LastAttachmentTime.IsZero() {
+		return a.LegacyLastEngagementTime
+	}
+	return a.LastAttachmentTime
+}
+
 type AgentStateFile struct {
 	AgentStates map[mutator.WorkloadKey]AgentState `json:"agentStates"`
 }

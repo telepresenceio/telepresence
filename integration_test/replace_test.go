@@ -102,7 +102,7 @@ func (s *replaceSuite) Test_ReplaceWithMultiContainerPorts() {
 	mustLeave := true
 	defer func() {
 		if mustLeave {
-			itest.TelepresenceOk(ctx, "leave", s.svc)
+			itest.TelepresenceOk(ctx, "detach", s.svc)
 		}
 	}()
 
@@ -112,7 +112,7 @@ func (s *replaceSuite) Test_ReplaceWithMultiContainerPorts() {
 	itest.PingInterceptedEchoServer(ctx, fmt.Sprintf("%s/%s-http", s.svc, s.svc), "80")
 	itest.PingInterceptedEchoServer(ctx, fmt.Sprintf("%s/%s-extra", s.svc, s.svc), "81")
 
-	itest.TelepresenceOk(ctx, "leave", s.svc)
+	itest.TelepresenceOk(ctx, "detach", s.svc)
 	mustLeave = false
 
 	// Ensure that we now reach the original app again.

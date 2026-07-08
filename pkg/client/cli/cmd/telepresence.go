@@ -157,6 +157,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 		configCmd(),
 		connectCmd(),
 		curlCmd(),
+		detachCmd(),
 		dockerRunCmd(),
 		gatherLogs(),
 		genYAML(),

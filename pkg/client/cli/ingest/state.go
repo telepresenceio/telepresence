@@ -129,7 +129,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 
 	// Submit the request
 	ctx = progress.WithEventId(ctx, ud.DaemonID().Name)
-	progress.Working(ctx, types.EngagementTypeIngest.Working())
+	progress.Working(ctx, types.AttachmentTypeIngest.Working())
 	ii, err := ud.Ingest(ctx, ir)
 	if err != nil {
 		return false, progress.MaybeWriteError(ctx, grpc.FromGRPC(err))
@@ -147,7 +147,7 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	}
 	s.info = ii
 
-	progress.Done(ctx, types.EngagementTypeIngest.WorkDone())
+	progress.Done(ctx, types.AttachmentTypeIngest.WorkDone())
 	progress.Infof(ctx, "Using %s %s", ii.WorkloadKind, ii.Workload)
 
 	env := s.info.Environment

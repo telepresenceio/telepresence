@@ -1,20 +1,20 @@
 ---
-title: telepresence leave
-description: Remove existing intercept
+title: telepresence detach
+description: Remove existing attachment
 hide_table_of_contents: true
 ---
 
-Remove existing intercept
+Remove existing attachment
 
 ### Usage:
 ```
-  telepresence leave [flags] &lt;intercept_name&gt;
+  telepresence detach [flags] &lt;attachment_name&gt;
 ```
 
 ### Flags:
 ```
   -c, --container string   Container name
-  -h, --help               help for leave
+  -h, --help               help for detach
   -n, --namespace string   Namespace of the ingest. Required to disambiguate ingests with the same workload name across mapped namespaces
 ```
 

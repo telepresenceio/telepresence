@@ -150,7 +150,7 @@ func (s *connectedSuite) TestGatherLogs_OnlyMappedLogs() {
 		2*time.Second,
 	)
 	s.CapturePodLogs(ctx, svc, "traffic-agent", otherTwo)
-	itest.TelepresenceOk(ctx, "leave", svc)
+	itest.TelepresenceOk(ctx, "detach", svc)
 
 	bothNsRx := fmt.Sprintf("(?:%s|%s)", otherOne, otherTwo)
 	outputDir := s.T().TempDir()

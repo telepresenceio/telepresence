@@ -4,3 +4,4 @@
 - {from: "reference/engagements/container", to: "reference/attachments/container"}
 - {from: "reference/engagements/conflicts", to: "reference/attachments/conflicts"}
 - {from: "howtos/engage", to: "howtos/attach"}
+- {from: "reference/cli/telepresence_leave", to: "reference/cli/telepresence_detach"}

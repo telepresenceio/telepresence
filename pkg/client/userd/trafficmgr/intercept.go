@@ -478,9 +478,9 @@ func (s *session) compareFinalizedManagerVersion(major, minor, patch uint64) int
 // CanIntercept checks if it is possible to create an intercept for the given request. The intercept can proceed
 // only if the returned rpc.InterceptResult is nil. The returned runtime.Object is either nil, indicating a local
 // intercept, or the workload for the intercept.
-// requireAgentPortForward fails an engagement (intercept, replace, ingest) early when
+// requireAgentPortForward fails an attachment (intercept, replace, ingest) early when
 // cluster.agentPortForward is disabled. In that mode the client has no channel to traffic-agents,
-// so neither intercepted-traffic routing nor volume mounts can work; creating the engagement
+// so neither intercepted-traffic routing nor volume mounts can work; creating the attachment
 // anyway would leave its traffic with nowhere to go.
 func requireAgentPortForward(ctx context.Context, kind string) error {
 	if !client.GetConfig(ctx).Cluster().AgentPortForward {

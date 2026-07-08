@@ -185,7 +185,7 @@ func (s *largeFilesSuite) createIntercepts(ctx context.Context) {
 
 func (s *largeFilesSuite) leaveIntercepts(ctx context.Context) {
 	for i := 0; i < s.ServiceCount(); i++ {
-		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%d", s.Name(), i))
+		itest.TelepresenceOk(ctx, "detach", fmt.Sprintf("%s-%d", s.Name(), i))
 	}
 }
 

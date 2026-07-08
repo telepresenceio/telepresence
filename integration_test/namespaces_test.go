@@ -384,7 +384,7 @@ func (s *nsSuite) Test_MultiNamespaceHTTPIntercepts() {
 		"--http-header", "x-tp-ns=a",
 		"--port", fmt.Sprintf("%d:80", localPortA),
 		"--mount=false")
-	defer itest.TelepresenceOk(ctx, "leave", "tp-alpha-local")
+	defer itest.TelepresenceOk(ctx, "detach", "tp-alpha-local")
 
 	itest.TelepresenceOk(ctx, "intercept", "tp-beta-local",
 		"--workload", "echo",
@@ -392,7 +392,7 @@ func (s *nsSuite) Test_MultiNamespaceHTTPIntercepts() {
 		"--http-header", "x-tp-ns=b",
 		"--port", fmt.Sprintf("%d:80", localPortB),
 		"--mount=false")
-	defer itest.TelepresenceOk(ctx, "leave", "tp-beta-local")
+	defer itest.TelepresenceOk(ctx, "detach", "tp-beta-local")
 
 	rq := s.Require()
 	curl := func(host, header string) (string, error) {
@@ -476,14 +476,14 @@ func (s *nsSuite) Test_MultiNamespaceIngests() {
 	rq.NoError(json.Unmarshal([]byte(alphaJSON), &alphaInfo))
 	rq.Equal("alpha", alphaInfo.Namespace)
 	rq.Equal("echo", alphaInfo.WorkloadName)
-	defer itest.TelepresenceOk(ctx, "leave", "echo", "--namespace", "alpha")
+	defer itest.TelepresenceOk(ctx, "detach", "echo", "--namespace", "alpha")
 
 	betaJSON := itest.TelepresenceOk(ctx, "ingest", "echo", "--namespace", "beta", "--mount=false", "--format", "json")
 	var betaInfo ingest.Info
 	rq.NoError(json.Unmarshal([]byte(betaJSON), &betaInfo))
 	rq.Equal("beta", betaInfo.Namespace)
 	rq.Equal("echo", betaInfo.WorkloadName)
-	defer itest.TelepresenceOk(ctx, "leave", "echo", "--namespace", "beta")
+	defer itest.TelepresenceOk(ctx, "detach", "echo", "--namespace", "beta")
 
 	// Both ingests should resolve to different pods. Pod IPs are namespace-specific.
 	rq.NotEmpty(alphaInfo.PodIP)

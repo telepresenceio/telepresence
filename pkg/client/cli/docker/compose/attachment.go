@@ -22,7 +22,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-type engagement struct {
+type attachment struct {
 	serviceExtension
 	environment map[string]string
 	daemonID    *daemon.Identifier
@@ -30,17 +30,17 @@ type engagement struct {
 	daemonIP    netip.Addr
 }
 
-func createEngagement(ud daemon.UserClient, e serviceExtension, sftpPort uint16) (*engagement, error) {
-	ae := &engagement{
+func createAttachment(ud daemon.UserClient, e serviceExtension, sftpPort uint16) (*attachment, error) {
+	at := &attachment{
 		serviceExtension: e,
 		daemonID:         ud.DaemonID(),
 		daemonIP:         ud.DaemonInfo().ContainerIP,
 		sftpPort:         sftpPort,
 	}
-	return ae, nil
+	return at, nil
 }
 
-func (a *engagement) assignEnvAndCreateMounts(remoteEnv map[string]string, remoteMounts map[string]int32, t *transformer) {
+func (a *attachment) assignEnvAndCreateMounts(remoteEnv map[string]string, remoteMounts map[string]int32, t *transformer) {
 	env := make(map[string]string)
 	maps.Merge(env, remoteEnv)
 	a.environment = env
@@ -52,7 +52,7 @@ func (a *engagement) assignEnvAndCreateMounts(remoteEnv map[string]string, remot
 	if len(mounts) == 0 {
 		return
 	}
-	ro := a.engagementType() == types.EngagementTypeIngest || a.engagementType() == types.EngagementTypeWiretap
+	ro := a.attachmentType() == types.AttachmentTypeIngest || a.attachmentType() == types.AttachmentTypeWiretap
 	ctx := a.connection().Context
 	clog.Debugf(ctx, "mounts: %v, ro %t", mounts, ro)
 	createVolumes(ctx, netip.AddrPortFrom(a.daemonIP, a.sftpPort), a.environment["TELEPRESENCE_CONTAINER"], mounts, serviceVolumes, ro, t)
@@ -63,7 +63,7 @@ const (
 	mountPortAnnotation        = "telepresence.io/mount-port"
 )
 
-func (a *engagement) maybeAddConnection(s *compose.ServiceConfig) bool {
+func (a *attachment) maybeAddConnection(s *compose.ServiceConfig) bool {
 	conn := a.connection()
 	cn := conn.Name
 	if cn == "" {
@@ -101,7 +101,7 @@ func (a *engagement) maybeAddConnection(s *compose.ServiceConfig) bool {
 	return true
 }
 
-func (a *engagement) engageService(s *compose.ServiceConfig) {
+func (a *attachment) attachService(s *compose.ServiceConfig) {
 	a.maybeAddConnection(s)
 	dnsIP := a.connection().dnsIP
 	if ipS := dnsIP.String(); !slices.Contains(s.DNS, ipS) {
@@ -130,7 +130,7 @@ func (a *engagement) engageService(s *compose.ServiceConfig) {
 	}
 }
 
-func (a *engagement) engageProxyDependents(p *compose.Project, n string, dependents []string) {
+func (a *attachment) attachProxyDependents(p *compose.Project, n string, dependents []string) {
 	conn := a.connection()
 	sm := p.Services
 
@@ -165,7 +165,7 @@ func (a *engagement) engageProxyDependents(p *compose.Project, n string, depende
 	}
 }
 
-func (a *engagement) engageProject(p *compose.Project) {
+func (a *attachment) attachProject(p *compose.Project) {
 	if p.Networks == nil {
 		p.Networks = make(compose.Networks)
 	}
@@ -178,7 +178,7 @@ func (a *engagement) engageProject(p *compose.Project) {
 	}
 }
 
-// createVolumes creates the VolumeConfigs necessary when mounting volumes required by when engaging a remote container.
+// createVolumes creates the VolumeConfigs necessary when mounting volumes required when attaching to a remote container.
 // The hostPort is the <daemon ip>/<sftp port> where the access to the remote sftp-server is provided.
 // The mounts are provided as a map of mount policies keyed by paths.
 // Each volume is given the name of the remote container suffixed by a dash and a sequence number, starting at 1.

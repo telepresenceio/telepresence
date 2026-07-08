@@ -271,7 +271,7 @@ func (s *usageReportingSuite) Test_UsageReportedFromClientAndManager() {
 
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "echo-usg", "--port", "9090")
 	s.Contains(stdout, "Using Deployment echo-usg")
-	defer itest.TelepresenceOk(ctx, "leave", "echo-usg")
+	defer itest.TelepresenceOk(ctx, "detach", "echo-usg")
 
 	// The sender flushes every 30s; allow up to 90s before declaring failure.
 	// We need at least one client report (e.g. cmd.connect or cmd.intercept)

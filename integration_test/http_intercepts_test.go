@@ -41,7 +41,7 @@ func (s *httpInterceptsSuite) Test_HTTPHeaderFiltering() {
 	require.Contains(stdout, "Using Deployment")
 
 	// Clean up
-	_, _, err = itest.Telepresence(ctx, "leave", s.ServiceName())
+	_, _, err = itest.Telepresence(ctx, "detach", s.ServiceName())
 	require.NoError(err)
 }
 
@@ -55,7 +55,7 @@ func (s *httpInterceptsSuite) Test_HTTPHeaderFiltering_CurlFormat() {
 	require.Contains(stdout, "Using Deployment")
 
 	// Clean up
-	_, _, err = itest.Telepresence(ctx, "leave", s.ServiceName())
+	_, _, err = itest.Telepresence(ctx, "detach", s.ServiceName())
 	require.NoError(err)
 }
 
@@ -69,7 +69,7 @@ func (s *httpInterceptsSuite) Test_HTTPPathFiltering() {
 	require.Contains(stdout, "Using Deployment")
 
 	// Clean up
-	_, _, err = itest.Telepresence(ctx, "leave", s.ServiceName())
+	_, _, err = itest.Telepresence(ctx, "detach", s.ServiceName())
 	require.NoError(err)
 }
 
@@ -87,7 +87,7 @@ func (s *httpInterceptsSuite) Test_HTTPCombinedFiltering() {
 	require.Contains(stdout, "Using Deployment")
 
 	// Clean up
-	_, _, err = itest.Telepresence(ctx, "leave", s.ServiceName())
+	_, _, err = itest.Telepresence(ctx, "detach", s.ServiceName())
 	require.NoError(err)
 }
 
@@ -101,7 +101,7 @@ func (s *httpInterceptsSuite) Test_BackwardCompatibility() {
 	require.Contains(stdout, "Using Deployment")
 
 	// Clean up
-	_, _, err = itest.Telepresence(ctx, "leave", s.ServiceName())
+	_, _, err = itest.Telepresence(ctx, "detach", s.ServiceName())
 	require.NoError(err)
 }
 
@@ -137,10 +137,10 @@ func (s *httpInterceptsSuite) Test_HTTPInterceptCoexistence() {
 	require.Contains(listOutput, "Intercept name: echo-two")
 
 	// Clean up both intercepts
-	_, _, err3 := itest.Telepresence(ctx, "leave", "echo-one")
+	_, _, err3 := itest.Telepresence(ctx, "detach", "echo-one")
 	require.NoError(err3, "Failed to leave first intercept")
 
-	_, _, err4 := itest.Telepresence(ctx, "leave", "echo-two")
+	_, _, err4 := itest.Telepresence(ctx, "detach", "echo-two")
 	require.NoError(err4, "Failed to leave second intercept")
 }
 
@@ -179,7 +179,7 @@ func (s *httpInterceptsSuite) Test_TCPPortConflictDetection() {
 	require.NotContains(stderr2, "Conflicts with", "Should not be an agent intercept conflict")
 
 	// Clean up the successful intercept
-	_, _, err3 := itest.Telepresence(ctx, "leave", "tcp-conflict-one")
+	_, _, err3 := itest.Telepresence(ctx, "detach", "tcp-conflict-one")
 	require.NoError(err3, "Failed to leave first intercept")
 }
 
@@ -208,7 +208,7 @@ func (s *httpInterceptsSuite) Test_HTTPManySimultaneous() {
 
 	// Ensure that a traffic-agent is running on the workload and capture its log
 	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", s.ServiceName())
-	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 	s.CapturePodLogs(ctx, s.ServiceName(), "traffic-agent", s.AppNamespace())
 
 	for i := 0; i < interceptCount; i++ {
@@ -251,7 +251,7 @@ func (s *httpInterceptsSuite) Test_HTTPManySimultaneous() {
 
 	for i := 0; i < interceptCount; i++ {
 		id := strconv.Itoa(i)
-		_, _, err := itest.Telepresence(ctx, "leave", "echo-"+id)
+		_, _, err := itest.Telepresence(ctx, "detach", "echo-"+id)
 		require.NoError(err, "Failed to leave intercept echo-"+id)
 	}
 }

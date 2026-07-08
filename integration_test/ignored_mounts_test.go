@@ -78,7 +78,7 @@ func (s *mountsSuite) Test_IgnoredMounts() {
 			require.NoError(itest.RolloutStatusWait(ctx, s.AppNamespace(), "deploy/hello"))
 
 			stdout := itest.TelepresenceOk(ctx, "intercept", "hello", "--format", "json", "--detailed-output", "--port", fmt.Sprintf("%d:%d", localPort, tt.svcPort))
-			defer itest.TelepresenceOk(ctx, "leave", "hello")
+			defer itest.TelepresenceOk(ctx, "detach", "hello")
 			var iInfo intercept.Info
 			require.NoError(json.Unmarshal([]byte(stdout), &iInfo))
 			s.CapturePodLogs(ctx, "hello", "traffic-agent", s.AppNamespace())

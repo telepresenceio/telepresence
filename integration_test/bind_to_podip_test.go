@@ -56,7 +56,7 @@ func (s *connectedSuite) Test_BindToPodIP() {
 			rq.Contains(stdout, "Using Deployment "+svc)
 
 			itest.PingInterceptedEchoServer(ctx, svc, "80")
-			itest.TelepresenceOk(ctx, "leave", svc)
+			itest.TelepresenceOk(ctx, "detach", svc)
 
 			// Ensure that we now reach the original app again.
 			s.Eventually(func() bool {

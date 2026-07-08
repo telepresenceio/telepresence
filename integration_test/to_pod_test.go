@@ -18,7 +18,7 @@ func (s *connectedSuite) Test_ToPodPortForwarding() {
 
 	require := s.Require()
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc, "--port", "8080", "--to-pod", "8081", "--to-pod", "8082")
-	defer itest.TelepresenceOk(ctx, "leave", svc)
+	defer itest.TelepresenceOk(ctx, "detach", svc)
 	require.Contains(stdout, "Using Deployment "+svc)
 	s.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
@@ -58,7 +58,7 @@ func (s *connectedSuite) Test_ToPodUDPPortForwarding() {
 
 	require := s.Require()
 	stdout := itest.TelepresenceOk(ctx, "intercept", "--mount", "false", svc, "--port", "9080", "--to-pod", "8080/UDP")
-	defer itest.TelepresenceOk(ctx, "leave", svc)
+	defer itest.TelepresenceOk(ctx, "detach", svc)
 	require.Contains(stdout, "Using Deployment "+svc)
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.Contains(stdout, svc+": intercepted")

@@ -121,13 +121,13 @@ func (s *singleServiceSuite) Test_DockerRun_HostDaemon() {
 		assertNotIntercepted(ctx)
 	})
 
-	s.Run("leave", func() {
+	s.Run("detach", func() {
 		// End the intercept from another telepresence invocation
 		ctx := s.Context()
 		wch := make(chan struct{})
 		runDockerRun(ctx, "", svc, port, abs, tag, s.Require(), wch)
 		assertInterceptResponse(ctx)
-		itest.TelepresenceOk(ctx, "leave", svc)
+		itest.TelepresenceOk(ctx, "detach", svc)
 		select {
 		case <-wch:
 		case <-time.After(10 * time.Second):
@@ -239,14 +239,14 @@ func (s *dockerDaemonSuite) Test_DockerRun_DockerDaemon() {
 		assertNotIntercepted(ctx)
 	})
 
-	s.Run("leave", func() {
+	s.Run("detach", func() {
 		// End the intercept from another telepresence invocation
 		ctx := s.Context()
 		wch := make(chan struct{})
 		runDockerRun(ctx, "bruce", svc, "", abs, tag, s.Require(), wch)
 		s.CapturePodLogs(ctx, svc, "traffic-agent", s.AppNamespace())
 		assertInterceptResponse(ctx)
-		itest.TelepresenceOk(ctx, "leave", svc)
+		itest.TelepresenceOk(ctx, "detach", svc)
 		select {
 		case <-wch:
 		case <-time.After(10 * time.Second):

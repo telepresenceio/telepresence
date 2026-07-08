@@ -330,7 +330,7 @@ func (s *ingestSuite) Test_LeaveIngestWithoutContainer() {
 
 	itest.TelepresenceOk(ctx, "ingest", "--mount", mountPoint, "echo")
 
-	itest.TelepresenceOk(ctx, "leave", "echo")
+	itest.TelepresenceOk(ctx, "detach", "echo")
 
 	stdout := itest.TelepresenceOk(ctx, "list", "--ingests")
 	s.NotContains(stdout, "echo")
@@ -348,5 +348,5 @@ func (s *ingestSuite) Test_IngestListFormat() {
 	stdout := itest.TelepresenceOk(ctx, "list", "--ingests")
 	s.Contains(stdout, "echo-env")
 
-	itest.TelepresenceOk(ctx, "leave", "echo-env")
+	itest.TelepresenceOk(ctx, "detach", "echo-env")
 }

@@ -90,6 +90,11 @@ type Cluster interface {
 	// in the given version range.
 	ClientIsVersion(versionRange string) bool
 
+	// AttachVerb returns the verb that the client's list output uses for a workload
+	// that can be attached to: "intercept" up to 2.21, "engage" from 2.22, and
+	// "attach" from 2.30.
+	AttachVerb() string
+
 	ManagerImage() string
 	ManagerRegistry() string
 	ManagerVersion() semver.Version
@@ -579,6 +584,20 @@ func isFinalIncluded(vr string, v semver.Version) bool {
 // in the given version range.
 func (s *cluster) ClientIsVersion(vr string) bool {
 	return isFinalIncluded(vr, s.ClientVersion())
+}
+
+// AttachVerb returns the verb that the client's list output uses for a workload
+// that can be attached to: "intercept" up to 2.21, "engage" from 2.22, and
+// "attach" from 2.30.
+func (s *cluster) AttachVerb() string {
+	switch {
+	case s.ClientIsVersion(">2.29.x"):
+		return "attach"
+	case s.ClientIsVersion(">2.21.x"):
+		return "engage"
+	default:
+		return "intercept"
+	}
 }
 
 func (s *cluster) ManagerImage() string {

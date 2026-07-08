@@ -229,13 +229,13 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	}
 
 	// Submit the request
-	egType := types.EngagementTypeFromSpec(ir.Spec)
-	progress.Working(ctx, egType.Working())
+	atType := types.AttachmentTypeFromSpec(ir.Spec)
+	progress.Working(ctx, atType.Working())
 	intercept, err := ud.CreateIntercept(ctx, ir)
 	if err = grpc.FromGRPC(err); err != nil {
 		return false, progress.MaybeWriteError(ctx, fmt.Errorf("connector.CreateIntercept: %w", err))
 	}
-	progress.Done(ctx, egType.WorkDone())
+	progress.Done(ctx, atType.WorkDone())
 	progress.Infof(ctx, "Using %s %s", intercept.Spec.WorkloadKind, s.AgentName)
 
 	s.env = intercept.Environment

@@ -143,7 +143,7 @@ func evictOrRollout(ctx context.Context, wl k8sapi.Workload, pod *core.Pod, coun
 	}
 	clog.Debug(ctx, err.Error())
 	if counter > 0 {
-		// Other pod siblings were evicted successfully, which means that an engagement will be able to
+		// Other pod siblings were evicted successfully, which means that an attachment will be able to
 		// proceed, Wait for the previous eviction(s) to trigger pod recreation, so the disruption budget
 		// can be satisfied even though this pod is evicted.
 		go func() {

@@ -16,7 +16,7 @@ func TestMCP(t *testing.T) {
 		"telepresence_connect",
 		"telepresence_intercept",
 		"telepresence_ingest",
-		"telepresence_leave",
+		"telepresence_detach",
 		"telepresence_list",
 		"telepresence_wiretap",
 		"telepresence_replace",

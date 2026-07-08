@@ -27,7 +27,7 @@ func (s *connectedSuite) Test_SuccessfullyInterceptsHeadlessService() {
 	require.Contains(stdout, "Using StatefulSet echo-headless")
 	s.CapturePodLogs(ctx, "echo-headless", "traffic-agent", s.AppNamespace())
 
-	defer itest.TelepresenceOk(ctx, "leave", "echo-headless")
+	defer itest.TelepresenceOk(ctx, "detach", "echo-headless")
 
 	require.Eventually(
 		func() bool {

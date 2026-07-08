@@ -181,7 +181,7 @@ func (s *nodeAgentBase) assertNodeAgentIntercept(svc string) {
 	mustLeave := true
 	defer func() {
 		if mustLeave {
-			itest.TelepresenceOk(ctx, "leave", svc)
+			itest.TelepresenceOk(ctx, "detach", svc)
 		}
 	}()
 
@@ -200,7 +200,7 @@ func (s *nodeAgentBase) assertNodeAgentIntercept(svc string) {
 
 	s.assertNoAgentInjected(ctx, svc, []core.Pod{origPod})
 
-	itest.TelepresenceOk(ctx, "leave", svc)
+	itest.TelepresenceOk(ctx, "detach", svc)
 	mustLeave = false
 
 	// The node-agent Job is reaped asynchronously (background deletion).
@@ -232,7 +232,7 @@ func (s *nodeAgentBase) assertNodeAgentIngest(svc string) {
 	mustLeave := true
 	defer func() {
 		if mustLeave {
-			itest.TelepresenceOk(ctx, "leave", svc)
+			itest.TelepresenceOk(ctx, "detach", svc)
 		}
 	}()
 
@@ -247,7 +247,7 @@ func (s *nodeAgentBase) assertNodeAgentIngest(svc string) {
 
 	s.assertNoAgentInjected(ctx, svc, []core.Pod{origPod})
 
-	itest.TelepresenceOk(ctx, "leave", svc)
+	itest.TelepresenceOk(ctx, "detach", svc)
 	mustLeave = false
 
 	// ReleaseAgent reaps the Job when the last ingest of the workload ends,
@@ -294,7 +294,7 @@ func (s *nodeAgentSuite) SetupSuite() {
 	// prior-knowledge probes, which makes the agent speak h2c on the
 	// http-filtered delivery legs; the local echo helper is HTTP/1.1-only.
 	// Protocol parity for h2c applications has its own coverage
-	// (h2c_intercept_test.go); the tests in this suite target engagement
+	// (h2c_intercept_test.go); the tests in this suite target attachment
 	// and filter routing.
 	s.TelepresenceHelmInstallOK(ctx, false, "--set", "nodeAgent.enabled=true", "--set", "agent.enableH2cProbing=false")
 	s.ApplyApp(ctx, "echo-easy", "deploy/echo-easy")
@@ -376,7 +376,7 @@ func (s *nodeAgentSuite) Test_NodeAgentWiretap() {
 	mustLeave := true
 	defer func() {
 		if mustLeave {
-			itest.TelepresenceOk(ctx, "leave", "wt1")
+			itest.TelepresenceOk(ctx, "detach", "wt1")
 		}
 	}()
 
@@ -410,7 +410,7 @@ func (s *nodeAgentSuite) Test_NodeAgentWiretap() {
 		}
 	}, 30*time.Second, 3*time.Second, "wiretap tap did not receive a copy of the traffic")
 
-	itest.TelepresenceOk(ctx, "leave", "wt1")
+	itest.TelepresenceOk(ctx, "detach", "wt1")
 	mustLeave = false
 
 	rq.Eventually(func() bool {
@@ -448,7 +448,7 @@ func (s *nodeAgentSuite) Test_NodeAgentConfigDefault() {
 	mustLeave := true
 	defer func() {
 		if mustLeave {
-			itest.TelepresenceOk(cfgCtx, "leave", svc)
+			itest.TelepresenceOk(cfgCtx, "detach", svc)
 		}
 	}()
 
@@ -457,7 +457,7 @@ func (s *nodeAgentSuite) Test_NodeAgentConfigDefault() {
 	jobNames := s.nodeAgentJobNames(cfgCtx, svc)
 	rq.Len(jobNames, 1, "expected a node-agent Job when config.yml sets nodeAgent.enabled=true and --node-agent is not passed")
 
-	itest.TelepresenceOk(cfgCtx, "leave", svc)
+	itest.TelepresenceOk(cfgCtx, "detach", svc)
 	mustLeave = false
 
 	rq.Eventually(func() bool {
@@ -466,7 +466,7 @@ func (s *nodeAgentSuite) Test_NodeAgentConfigDefault() {
 }
 
 // Test_NodeAgentHTTPFilteredIntercept verifies that "telepresence intercept
-// --node-agent --http-header ..." engages the node-agent's HTTP-filtered
+// --node-agent --http-header ..." attaches to the node-agent's HTTP-filtered
 // path: the node-agent Job switches to its HTTP listener and reverse-proxy
 // transport, so requests carrying the configured header are routed to the
 // local process while requests without it keep reaching the real
@@ -500,7 +500,7 @@ func (s *nodeAgentSuite) Test_NodeAgentHTTPFilteredIntercept() {
 	mustLeave := true
 	defer func() {
 		if mustLeave {
-			itest.TelepresenceOk(ctx, "leave", svc)
+			itest.TelepresenceOk(ctx, "detach", svc)
 		}
 	}()
 
@@ -523,7 +523,7 @@ func (s *nodeAgentSuite) Test_NodeAgentHTTPFilteredIntercept() {
 
 	s.assertNoAgentInjected(ctx, svc, []core.Pod{origPod})
 
-	itest.TelepresenceOk(ctx, "leave", svc)
+	itest.TelepresenceOk(ctx, "detach", svc)
 	mustLeave = false
 
 	// The node-agent Job is reaped asynchronously (background deletion).
@@ -589,7 +589,7 @@ func (s *nodeAgentSuite) Test_NodeAgentHTTPFilteredWiretap() {
 	mustLeave := true
 	defer func() {
 		if mustLeave {
-			itest.TelepresenceOk(ctx, "leave", "wt2")
+			itest.TelepresenceOk(ctx, "detach", "wt2")
 		}
 	}()
 
@@ -662,7 +662,7 @@ drain:
 	case <-time.After(2 * time.Second):
 	}
 
-	itest.TelepresenceOk(ctx, "leave", "wt2")
+	itest.TelepresenceOk(ctx, "detach", "wt2")
 	mustLeave = false
 
 	rq.Eventually(func() bool {

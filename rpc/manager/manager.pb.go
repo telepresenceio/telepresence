@@ -2012,7 +2012,7 @@ type ReviewInterceptRequest struct {
 	MechanismArgsDesc string `protobuf:"bytes,7,opt,name=mechanism_args_desc,json=mechanismArgsDesc,proto3" json:"mechanism_args_desc,omitempty"`
 	// The environment of the intercepted container
 	Environment map[string]string `protobuf:"bytes,11,rep,name=environment,proto3" json:"environment,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Map of mount path -> MountPolicy of the engaged container
+	// Map of mount path -> MountPolicy of the attached container
 	Mounts        map[string]int32 `protobuf:"bytes,13,rep,name=mounts,proto3" json:"mounts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
