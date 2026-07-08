@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"os"
+	"strconv"
 	"time"
 
 	core "k8s.io/api/core/v1"
@@ -84,6 +86,21 @@ const (
 	WorkloadKindLabel    = annotation.DomainPrefix + "workloadKind"
 	WorkloadEnabledLabel = annotation.DomainPrefix + "workloadEnabled"
 )
+
+// AgentGIDFromEnv returns the traffic-agent group id configured through
+// EnvAgentGID. ok is false when the variable is unset or empty; err is
+// non-nil when it is set but does not parse as a 32-bit unsigned integer.
+func AgentGIDFromEnv() (gid uint32, ok bool, err error) {
+	v, set := os.LookupEnv(EnvAgentGID)
+	if !set || v == "" {
+		return 0, false, nil
+	}
+	parsed, err := strconv.ParseUint(v, 10, 32)
+	if err != nil {
+		return 0, true, fmt.Errorf("invalid %s %q: %w", EnvAgentGID, v, err)
+	}
+	return uint32(parsed), true, nil
+}
 
 type ReplacePolicy int
 

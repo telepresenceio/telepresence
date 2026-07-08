@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
-	"strconv"
 
 	"github.com/google/nftables"
 	"github.com/vishvananda/netns"
@@ -268,12 +267,12 @@ func targetPID(pids map[string]int) (int, error) {
 // agentinit's trafficAgentOwner: AGENT_GID when the sidecar config set one, otherwise the
 // group the node-agent's own container runs as (see buildNodeAgentJob's RunAsGroup).
 func nodeAgentGID() (uint32, error) {
-	if gid, ok := os.LookupEnv(agentconfig.EnvAgentGID); ok && gid != "" {
-		parsed, err := strconv.ParseUint(gid, 10, 32)
-		if err != nil {
-			return 0, fmt.Errorf("invalid %s %q: %w", agentconfig.EnvAgentGID, gid, err)
-		}
-		return uint32(parsed), nil
+	gid, ok, err := agentconfig.AgentGIDFromEnv()
+	if err != nil {
+		return 0, err
+	}
+	if ok {
+		return gid, nil
 	}
 	return uint32(agentconfig.DefaultAgentGID), nil
 }
