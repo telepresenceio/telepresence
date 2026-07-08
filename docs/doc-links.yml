@@ -247,6 +247,8 @@
           link: reference/attachments/container
         - title: Dealing With Conflicting Attachments
           link: reference/attachments/conflicts
+        - title: Protocol selection
+          link: reference/attachments/protocols
     - title: Telepresence Docker Plugins
       link: reference/plugins
     - title: Volume mounts

@@ -124,6 +124,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
     - [Traffic Agent Sidecar](reference/attachments/sidecar.md)
     - [Target a specific container](reference/attachments/container.md)
     - [Dealing With Conflicting Attachments](reference/attachments/conflicts.md)
+    - [Protocol selection](reference/attachments/protocols.md)
   - [Telepresence Docker Plugins](reference/plugins.md)
   - [Volume mounts](reference/volume.md)
   - [RESTful API service](reference/restapi.md)
