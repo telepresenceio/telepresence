@@ -78,7 +78,7 @@ Consequences for the restructure:
 | File | Role | Issues | Verdict |
 |------|------|--------|---------|
 | doc-links.yml | Nav source of truth (website + README) | Missing howtos/agent-modes and howtos/istio; label "Configure intercept using CLI" does not match page title "Configure workload engagements using CLI" | keep (fix entries) |
-| redirects.yml | URL redirects for the website | Will need entries for every move/delete below | keep |
+| redirects.yml | URL redirects for the website | NO CONSUMER: nothing in this repo or in telepresence.io reads this file. Real redirects are the hand-maintained Netlify static/_redirects in telepresence.io (entries for all restructure moves added there 2026-07-08). Decide: wire up a generator, or drop this file | decide |
 | CONTRIBUTING.md | How docs flow into the telepresenceio.io site | Not in nav (intentional) | keep |
 | common/quantity.md | Shared snippet included by config.md and cluster-config.md | Not a standalone page; fine | keep |
 
@@ -205,8 +205,10 @@ reference/engagements/ subsection:
 4. Stale-era content: concepts/devloop.md, concepts/faster.md,
    reference/tun-device.md (SSH-era comparisons), Ambassador Cloud mention in
    troubleshooting.md frontmatter.
-5. Every move/delete needs a redirects.yml entry; the website consumes these
-   docs versioned, so old URLs are live.
+5. Every move/delete needs a redirect. NOTE: redirects.yml turned out to have
+   no consumer; the effective redirects are Netlify static/_redirects in the
+   telepresence.io repo (unversioned /docs/ URLs only; versioned snapshots
+   keep their old trees and need none).
 
 ## Tally
 
