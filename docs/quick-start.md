@@ -64,7 +64,7 @@ spec:
     spec:
       containers:
         - name: echo-server
-          image: jmalloc/echo-server
+          image: ghcr.io/telepresenceio/echo-server:latest
           ports:
             - name: http
               containerPort: 8080
@@ -124,7 +124,7 @@ Start the same echo server on your workstation. The `--hostname` flag makes its
 responses recognizable:
 
 ```console
-$ docker run --rm --detach --name hello-local --hostname my-workstation -p 8080:8080 jmalloc/echo-server
+$ docker run --rm --detach --name hello-local --hostname my-workstation -p 8080:8080 ghcr.io/telepresenceio/echo-server:latest
 $ curl http://localhost:8080
 Request served by my-workstation
 ...

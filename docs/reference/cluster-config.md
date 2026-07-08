@@ -203,7 +203,7 @@ spec:
     spec:
       containers:
         - name: your-container
-          image: jmalloc/echo-server
+          image: ghcr.io/telepresenceio/echo-server:latest
           ports:
             - containerPort: 8080
 ```

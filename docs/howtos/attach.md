@@ -68,7 +68,7 @@ network interface. Remote mounts must be made relative to a specific mount point
       Labels:  app=example-app
       Containers:
        echo-server:
-        Image:      jmalloc/echo-server
+        Image:      ghcr.io/telepresenceio/echo-server
         Port:       8080/TCP
     ```
 
