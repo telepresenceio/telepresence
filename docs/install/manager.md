@@ -168,6 +168,9 @@ A selector is considered _static_ if it meets the following conditions:
   The `operator` of the match expression must be "In" (case sensitive).
   The `values` list of the match expression must contain at least one value.
 
+The exact permissions that the traffic-manager is granted in each mode are listed in
+[Telepresence RBAC](../reference/rbac.md#administrating-telepresence).
+
 ## Static Namespace Selection RBAC
 
 Optionally, you can also configure user rbac to be scoped to the same namespaces as the manager itself.

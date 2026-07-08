@@ -8,13 +8,19 @@ toc_max_heading_level: 2
 The intention of this document is to provide a template for securing and limiting the permissions of Telepresence.
 This documentation covers the full extent of permissions necessary to administrate Telepresence components in a cluster.
 
-There are two general categories for cluster permissions with respect to Telepresence.  There are RBAC settings for a User and for an Administrator described above.  The User is expected to only have the minimum cluster permissions necessary to create a Telepresence [attachment](../howtos/attach.md), and otherwise be unable to affect Kubernetes resources.
+There are two general categories for cluster permissions with respect to Telepresence.  There are RBAC settings for a User and for an Administrator, described below.  The User is expected to only have the minimum cluster permissions necessary to create a Telepresence [attachment](../howtos/attach.md), and otherwise be unable to affect Kubernetes resources.
 
 In addition to the above, there is also a consideration of how to manage Users and Groups in Kubernetes which is outside of the scope of the document.  This document will use Service Accounts to assign Roles and Bindings.  Other methods of RBAC administration and enforcement can be found on the [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/) page.
 
+The Telepresence Helm chart can create all of these objects for you: `managerRbac.create` and
+`clientRbac.create` toggle the manager and client subsets, and `rbac.only=true` installs the
+RBAC objects without the traffic-manager itself. See
+[Static Namespace Selection RBAC](../install/manager.md#static-namespace-selection-rbac) and
+[Installing RBAC only](../install/manager.md#installing-rbac-only). This page documents the
+permissions those objects grant, for administrators who audit them or manage RBAC themselves.
+
 ## Requirements
 
-- Kubernetes version 1.16+
 - Cluster admin privileges to apply RBAC
 
 ## Editing your kubeconfig
@@ -84,7 +90,7 @@ rules:
     verbs: ["get", "watch"]
   - apiGroups: [""]
     resources: ["pods"]
-    verbs: ["get", "list", "watch", "patch"] # patch not needed when agentInjector.enabled is set to false
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["servicecidrs"]
     verbs: ["list"]
@@ -118,7 +124,7 @@ metadata:
 subjects:
   - name: traffic-manager
     kind: ServiceAccount
-    namespace: default
+    namespace: ambassador
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   name: traffic-manager
@@ -235,7 +241,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-The corresponding configuration for a static namespace installation, for each namespaece that the client should be able
+The corresponding configuration for a static namespace installation, for each namespace that the client should be able
 to access:
 
 
