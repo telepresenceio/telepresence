@@ -34,6 +34,8 @@
       link: howtos/cluster-in-vm
     - title: Intercept TLS/mTLS Applications
       link: howtos/mtls
+    - title: Resolve Istio ServiceEntry Hosts
+      link: howtos/istio
     - title: Use Telepresence with Azure (Microsoft Learn)
       link: https://learn.microsoft.com/en-us/azure/aks/use-telepresence-aks
 - title: Technical reference
