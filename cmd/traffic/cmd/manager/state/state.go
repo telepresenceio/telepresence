@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/netip"
 	"os"
 	"slices"
 	"strings"
@@ -491,37 +490,26 @@ func (s *State) CountTunnelEgress() uint64 {
 	return atomic.LoadUint64(&s.tunnelEgressCounter)
 }
 
-func (s *State) IsInterceptedBy(agentPodIP netip.Addr, agentName, namespace string, client tunnel.SessionID) (found bool) {
+// IsInterceptedBy reports whether the client has an ACTIVE intercept of the
+// workload served by the agent named agentName in namespace. The answer
+// applies to every one of the workload's agent pods alike: each agent that
+// accepts an intercept redirects its own pod's traffic, regardless of
+// mechanism or filters, and can deliver a redirected connection only
+// through a dial watcher opened by the client -- so every agent pod needs
+// one, not just the pod recorded on the intercept.
+func (s *State) IsInterceptedBy(agentName, namespace string, client tunnel.SessionID) (found bool) {
 	clientSessionID := string(client)
-	podIPStr := agentPodIP.String()
 	s.intercepts.Range(func(id string, ii *Intercept) bool {
-		if ii.ClientSession.SessionId != clientSessionID || ii.Disposition != rpc.InterceptDispositionType_ACTIVE {
-			return true
-		}
-		if ii.Spec.Namespace != namespace || ii.Spec.Agent != agentName {
-			return true
-		}
-		if ii.PodIp == podIPStr {
+		if ii.ClientSession.SessionId == clientSessionID &&
+			ii.Disposition == rpc.InterceptDispositionType_ACTIVE &&
+			ii.Spec.Namespace == namespace &&
+			ii.Spec.Agent == agentName {
 			found = true
 			return false
 		}
-		if !interceptNeedsDialWatcherOnAllPods(ii.Spec) {
-			return true
-		}
-		found = true
-		return false
+		return true
 	})
 	return found
-}
-
-func interceptNeedsDialWatcherOnAllPods(spec *rpc.InterceptSpec) bool {
-	if spec == nil || IsChildIntercept(spec) || spec.Replace {
-		return false
-	}
-	if spec.Mechanism == "http" {
-		return true
-	}
-	return len(spec.HeaderFilters) > 0 || len(spec.PathFilters) > 0
 }
 
 // Sessions: Agents ////////////////////////////////////////////////////////////////////////////////

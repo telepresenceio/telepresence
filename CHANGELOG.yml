@@ -24,6 +24,21 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.29.3
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Intercepts of multi-replica workloads deliver traffic from every pod
+        body: >-
+          An intercept of a workload with several replicas only delivered the
+          traffic that reached the pod recorded on the intercept. The agents in
+          the other pods redirected their share of the requests but had no way
+          to hand them to the client, so those requests timed out. The
+          traffic-manager now tells the client to open a dial watcher to every
+          agent pod of an intercepted workload, regardless of the intercept's
+          mechanism and filters, so traffic is delivered no matter which
+          replica the service picks. Previously only intercepts with HTTP
+          filters received this treatment.
   - version: 2.29.2
     date: 2026-07-04
     notes:
