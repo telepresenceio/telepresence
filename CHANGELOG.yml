@@ -39,6 +39,17 @@ items:
           mechanism and filters, so traffic is delivered no matter which
           replica the service picks. Previously only intercepts with HTTP
           filters received this treatment.
+      - type: bugfix
+        title: HTTP-filtered wiretaps no longer block matching requests
+        body: >-
+          A wiretap with an HTTP filter (such as <code>--http-path-prefix</code>
+          or <code>--http-header</code>) copied each matching request to the
+          client but never forwarded the original to the application: the
+          traffic-agent served the tap synchronously and deadlocked on its own
+          copy of the request, so matching traffic was silently black-holed
+          and callers timed out. Taps are now served concurrently and the
+          request always proceeds to its real destination, whether that is the
+          application container or an intercepting client.
   - version: 2.29.2
     date: 2026-07-04
     notes:

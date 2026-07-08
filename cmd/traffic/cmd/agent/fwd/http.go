@@ -138,12 +138,27 @@ func (f *tcp) handleHTTPRequest(writer http.ResponseWriter, req *http.Request, d
 			}
 		}
 		if tapCount := len(wts); tapCount > 0 {
-			taps, err := addRequestTaps(f.lCtx, req, tapCount, 1024)
+			taps, tapReader, err := addRequestTaps(f.lCtx, req, tapCount, wiretapCacheSize)
 			if err != nil {
 				clog.Errorf(f.lCtx, "Failed to add request taps: %v", err)
 			} else {
+				// A wiretap is lossy and best-effort and must never block or
+				// delay the real request. Nothing guarantees the request body
+				// is ever read (a bodyless GET is never read by
+				// httputil.ReverseProxy), so closeTaps is called unconditionally
+				// once the request has been served, regardless of which return
+				// path was taken and regardless of whether the body was read.
+				// It is idempotent, so it is harmless if the body was already
+				// read to completion (which independently sends the taps a
+				// terminal EOF) or the server itself later closes the body.
+				// The tap goroutines below are intentionally not awaited: they
+				// finish shortly after the handler returns, bounded by the
+				// per-intercept context and the pipe closing.
+				defer tapReader.closeTaps()
 				for i, ii := range wts {
-					f.serveTap(ii.ctx, src, taps[i], ii.InterceptInfo)
+					go func(tap io.Reader, ii *interceptController) {
+						f.serveTap(ii.ctx, src, tap, ii.InterceptInfo)
+					}(taps[i], ii)
 				}
 			}
 		}
