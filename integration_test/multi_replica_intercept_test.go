@@ -5,6 +5,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -54,17 +55,39 @@ func (s *multiReplicaInterceptSuite) TearDownSuite() {
 // personal HTTP intercepts must route all requests through all N replicas,
 // not just the one pod whose IP was first written to InterceptInfo.
 func (s *multiReplicaInterceptSuite) Test_PersonalInterceptAllReplicasRouted() {
+	s.assertAllReplicasRouted("x-intercept-id=fix-4085")
+}
+
+// Test_GlobalInterceptAllReplicasRouted is a regression test for #4183: a
+// global (unfiltered) intercept must route all requests through all N
+// replicas too. Every agent redirects its own pod's traffic, so every agent
+// pod needs a WatchDial connection from the client -- with only the pod
+// recorded on the intercept getting one, traffic that the service
+// load-balanced to the other replicas was redirected but never delivered.
+func (s *multiReplicaInterceptSuite) Test_GlobalInterceptAllReplicasRouted() {
+	s.assertAllReplicasRouted("")
+}
+
+// assertAllReplicasRouted intercepts s.svc (filtered on header when it is
+// non-empty, globally otherwise) and requires that 100 concurrent requests,
+// each on its own connection so the service load-balances them independently
+// across the 4 replicas, all return the local server's response.
+func (s *multiReplicaInterceptSuite) assertAllReplicasRouted(header string) {
 	require := s.Require()
 	ctx := s.Context()
 
 	s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceQuitOk(ctx)
 
-	stdout, stderr, err := itest.Telepresence(ctx, "intercept", s.svc,
-		"--http-header", "x-intercept-id=fix-4085",
+	args := []string{
+		"intercept", s.svc,
 		"--port", fmt.Sprintf("%d:80", s.localPort),
 		"--mount=false",
-	)
+	}
+	if header != "" {
+		args = append(args, "--http-header", header)
+	}
+	stdout, stderr, err := itest.Telepresence(ctx, args...)
 	require.NoError(err, "stdout: %s\nstderr: %s", stdout, stderr)
 	defer func() {
 		_, _, _ = itest.Telepresence(ctx, "leave", s.svc)
@@ -94,12 +117,12 @@ func (s *multiReplicaInterceptSuite) Test_PersonalInterceptAllReplicasRouted() {
 	// Allow a short settling period for all agent pods to register with the intercept.
 	time.Sleep(5 * time.Second)
 
-	// Fire 100 concurrent requests with the intercept header. Each request opens a
-	// fresh TCP connection (keep-alives disabled) so it is independently
-	// load-balanced across the replicas. Before the fix, ~75% of requests would
-	// fail because agents on pods B/C/D lack a WatchDial connection back to the
-	// client. A small random jitter staggers the requests so they don't all hit
-	// the service in lock-step.
+	// Fire 100 concurrent requests. Each request opens a fresh TCP connection
+	// (keep-alives disabled) so it is independently load-balanced across the
+	// replicas. Without a WatchDial connection from the client, an agent on
+	// pods B/C/D redirects its share of the requests but cannot deliver them.
+	// A small random jitter staggers the requests so they don't all hit the
+	// service in lock-step.
 	expect := s.svc + " from intercept at /"
 	hc := http.Client{
 		Timeout:   5 * time.Second,
@@ -118,7 +141,10 @@ func (s *multiReplicaInterceptSuite) Test_PersonalInterceptAllReplicasRouted() {
 				failures.Add(1)
 				return
 			}
-			req.Header.Set("x-intercept-id", "fix-4085")
+			if header != "" {
+				kv := strings.SplitN(header, "=", 2)
+				req.Header.Set(kv[0], kv[1])
+			}
 			resp, err := hc.Do(req)
 			if err != nil {
 				clog.Infof(ctx, "request %d: error: %v", i, err)

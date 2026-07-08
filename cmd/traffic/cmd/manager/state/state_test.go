@@ -3,7 +3,6 @@ package state
 import (
 	"context"
 	"log/slog"
-	"net/netip"
 	"testing"
 	"time"
 
@@ -227,12 +226,31 @@ func TestIsInterceptedBy(t *testing.T) {
 		},
 	}})
 
-	require.True(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.1"), "demo", "default", clientID))
-	require.True(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.2"), "demo", "default", clientID))
-	require.True(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.3"), "api", "default", clientID))
-	require.False(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.4"), "api", "default", clientID))
-	require.False(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.2"), "other", "default", clientID))
-	require.False(t, st.IsInterceptedBy(netip.MustParseAddr("10.0.0.2"), "demo", "other", clientID))
+	st.intercepts.Store("waiting", &Intercept{InterceptInfo: &manager.InterceptInfo{
+		Id:          "waiting",
+		Disposition: manager.InterceptDispositionType_WAITING,
+		ClientSession: &manager.SessionInfo{
+			SessionId: string(clientID),
+		},
+		Spec: &manager.InterceptSpec{
+			Agent:     "queued",
+			Namespace: "default",
+			Mechanism: "tcp",
+			Client:    "alice",
+		},
+	}})
+
+	// Any ACTIVE intercept of the workload marks it intercepted by its
+	// client, regardless of mechanism or filters.
+	require.True(t, st.IsInterceptedBy("demo", "default", clientID))
+	require.True(t, st.IsInterceptedBy("api", "default", clientID))
+
+	// A different workload, a different namespace, a different client, or a
+	// non-ACTIVE disposition does not.
+	require.False(t, st.IsInterceptedBy("other", "default", clientID))
+	require.False(t, st.IsInterceptedBy("demo", "other", clientID))
+	require.False(t, st.IsInterceptedBy("demo", "default", tunnel.SessionID("other-client")))
+	require.False(t, st.IsInterceptedBy("queued", "default", clientID))
 }
 
 func TestSuiteState(testing *testing.T) {
