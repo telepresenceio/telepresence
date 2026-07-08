@@ -13,7 +13,6 @@ import (
 	"runtime/debug"
 
 	"github.com/google/nftables"
-	"github.com/vishvananda/netns"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -49,6 +48,12 @@ type nodeConfig struct {
 	// of the netfilter ruleset programmed into the target's network namespace,
 	// and the address the forwarders dial for non-intercepted traffic.
 	targetPodIP netip.Addr
+
+	// ns is an open handle to the target pod's network namespace, resolved
+	// once from targetPID at load time and reused by every listener/dialer
+	// the node-agent creates, and by applyNodeAgentRules. It is nil if no PID
+	// could be resolved (which should never happen for a running node-agent).
+	ns *tpnetns.NS
 }
 
 // AppEnviron reads the environment of the container's target process from procfs and applies
@@ -65,26 +70,26 @@ func (c *nodeConfig) AppEnviron(_ context.Context, cn *agentconfig.Container) (m
 	return appEnvironment(env, cn), nil
 }
 
-// nsListenerFactory creates listen sockets inside the network namespace at
-// nsPath, so a node-agent forwarder binds its port in the target pod's
-// namespace rather than the node-agent's own.
-type nsListenerFactory struct{ nsPath string }
+// nsListenerFactory creates listen sockets inside ns, so a node-agent
+// forwarder binds its port in the target pod's namespace rather than the
+// node-agent's own.
+type nsListenerFactory struct{ ns *tpnetns.NS }
 
 func (f nsListenerFactory) Listen(ctx context.Context, network, address string) (net.Listener, error) {
-	return tpnetns.Listen(ctx, f.nsPath, network, address)
+	return f.ns.Listen(ctx, network, address)
 }
 
 func (f nsListenerFactory) ListenPacket(ctx context.Context, network, address string) (net.PacketConn, error) {
-	return tpnetns.ListenPacket(ctx, f.nsPath, network, address)
+	return f.ns.ListenPacket(ctx, network, address)
 }
 
-// nsDialer dials from inside the network namespace at nsPath, so a node-agent
-// forwarder's non-intercepted (pass-through) connection originates in the target
-// pod's namespace and traverses that namespace's proxy-port DNAT.
-type nsDialer struct{ nsPath string }
+// nsDialer dials from inside ns, so a node-agent forwarder's non-intercepted
+// (pass-through) connection originates in the target pod's namespace and
+// traverses that namespace's proxy-port DNAT.
+type nsDialer struct{ ns *tpnetns.NS }
 
 func (d nsDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
-	return tpnetns.Dial(ctx, d.nsPath, network, address)
+	return d.ns.Dial(ctx, network, address)
 }
 
 // DialerFactory returns a dialer that dials inside the target pod's network
@@ -92,11 +97,10 @@ func (d nsDialer) DialContext(ctx context.Context, network, address string) (net
 // resolved (which should never happen for a running node-agent), nil is returned
 // and the caller falls back to dialing in the node-agent's own namespace.
 func (c *nodeConfig) DialerFactory() forwarder.Dialer {
-	pid, err := targetPID(c.pids)
-	if err != nil {
+	if c.ns == nil {
 		return nil
 	}
-	return nsDialer{nsPath: tpnetns.PathForPID(pid)}
+	return nsDialer{ns: c.ns}
 }
 
 // AppPodIP returns the target pod's IP: the node-agent's application runs in a
@@ -112,11 +116,10 @@ func (c *nodeConfig) AppPodIP() netip.Addr {
 // returned and the caller falls back to listening in the node-agent's own
 // namespace.
 func (c *nodeConfig) ListenerFactory() forwarder.ListenerFactory {
-	pid, err := targetPID(c.pids)
-	if err != nil {
+	if c.ns == nil {
 		return nil
 	}
-	return nsListenerFactory{nsPath: tpnetns.PathForPID(pid)}
+	return nsListenerFactory{ns: c.ns}
 }
 
 // NodeAgent reports true: this agent is a Job in the traffic-manager's
@@ -194,7 +197,14 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 		}
 	}
 
-	return &nodeConfig{config: base, pids: pids, targetPodIP: targetPodIP}, nil
+	var ns *tpnetns.NS
+	if pid, err := targetPID(pids); err == nil {
+		if ns, err = tpnetns.Open(tpnetns.PathForPID(pid)); err != nil {
+			return nil, fmt.Errorf("open target pod's network namespace: %w", err)
+		}
+	}
+
+	return &nodeConfig{config: base, pids: pids, targetPodIP: targetPodIP, ns: ns}, nil
 }
 
 // exportProcMounts populates exportsRoot/<base of cn.MountPoint> with symlinks into pid's
@@ -300,26 +310,17 @@ func applyNodeAgentRules(ctx context.Context, cfg *nodeConfig) (func(context.Con
 		return nil, err
 	}
 
-	nsPath := tpnetns.PathForPID(pid)
-	h, err := netns.GetFromPath(nsPath)
-	if err != nil {
-		return nil, fmt.Errorf("open network namespace %q: %w", nsPath, err)
-	}
-	defer h.Close()
-
-	if err := nftutil.Apply(ctx, &rs.Ruleset, nftables.WithNetNSFd(int(h))); err != nil {
+	// cfg.ns is an open handle to this same pid's network namespace (loadNodeConfig
+	// resolves it via the same targetPID), so it is reused here and in teardown
+	// instead of opening the namespace again.
+	if err := nftutil.Apply(ctx, &rs.Ruleset, nftables.WithNetNSFd(cfg.ns.Fd())); err != nil {
 		return nil, fmt.Errorf("apply packet-routing rules to pid %d's network namespace: %w", pid, err)
 	}
 	clog.Infof(ctx, "Programmed packet-routing rules into pid %d's network namespace (family %d, discriminator %s)",
 		pid, rs.Table.Family, discriminator)
 
 	teardown := func(ctx context.Context) error {
-		h2, err := netns.GetFromPath(nsPath)
-		if err != nil {
-			return fmt.Errorf("open network namespace %q: %w", nsPath, err)
-		}
-		defer h2.Close()
-		return nftutil.Teardown(ctx, agentnft.TableName, rs.Table.Family, nftables.WithNetNSFd(int(h2)))
+		return nftutil.Teardown(ctx, agentnft.TableName, rs.Table.Family, nftables.WithNetNSFd(cfg.ns.Fd()))
 	}
 	return teardown, nil
 }
@@ -335,6 +336,13 @@ func NodeAgentMain(ctx context.Context, _ ...string) error {
 		cfg, err := loadNodeConfig(ctx)
 		if err != nil {
 			return fmt.Errorf("unable to load config: %w", err)
+		}
+		if cfg.ns != nil {
+			defer func() {
+				if err := cfg.ns.Close(); err != nil {
+					clog.Error(ctx, err)
+				}
+			}()
 		}
 
 		// Program the target pod's packet-routing rules before starting any

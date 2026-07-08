@@ -64,6 +64,22 @@ func TestDo_OwnNamespace(t *testing.T) {
 	assert.True(t, before.Equal(after), "current namespace should be unchanged after Do returns")
 }
 
+// TestOpen_Close exercises opening and closing a handle to the caller's own
+// network namespace, which needs no extra privilege since it only opens the
+// namespace fd without entering it via setns.
+func TestOpen_Close(t *testing.T) {
+	n, err := Open(PathForPID(os.Getpid()))
+	require.NoError(t, err)
+	require.NoError(t, n.Close())
+}
+
+// TestOpen_BogusPath verifies that Open reports an error for a namespace
+// path that doesn't exist, without requiring any special privilege.
+func TestOpen_BogusPath(t *testing.T) {
+	_, err := Open("/proc/does-not-exist/ns/net")
+	assert.Error(t, err)
+}
+
 // TestListen_OwnNamespace exercises Listen against the caller's own network
 // namespace path, so it needs no extra privilege beyond what's required to
 // bind a port at all.
