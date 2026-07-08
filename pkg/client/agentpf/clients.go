@@ -420,10 +420,22 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 // GetRandomAgent returns an active agent.AgentClient and ensures that it is kept alive
 // for at least 5 seconds.
 //
+// Node-agent sessions are never returned. A node-agent's pod runs in the
+// traffic-manager's namespace rather than the workload's, so its resolv.conf
+// search path qualifies bare (single-label) names against the wrong
+// namespace and DNS lookups delegated to it would incorrectly fail. When no
+// eligible (non-node-agent) client remains, this function returns nil and
+// the caller falls back to querying the traffic-manager directly, which
+// qualifies single-label names against the client's connected namespace
+// itself.
+//
 // The function returns nil when there are no active agents.
 func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
 	var connected, waiting, other *client
 	s.clients.Range(func(_ string, ac *client) bool {
+		if ac.info.NodeAgent {
+			return true
+		}
 		if ac.connected() {
 			connected = ac
 			return false
