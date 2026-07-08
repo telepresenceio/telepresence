@@ -353,6 +353,11 @@ func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, 
 	if err != nil {
 		return "", nil, "", "", err
 	}
+	// This must be a live apiserver list. The manager's shared pod informer
+	// is not usable here: the mutator installs a transform on it (see
+	// mutator/watcher.go startPods) that strips Status.Conditions and
+	// reduces ContainerStatuses to their State, so a cached pod can never
+	// satisfy podRunningAndReady and carries no ContainerID to resolve.
 	pods, err := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(wl.GetNamespace()).List(ctx, meta.ListOptions{
 		LabelSelector: selector.String(),
 	})
