@@ -326,3 +326,112 @@ func (s *wiretapSuite) Test_MultipleTapsOnOnePort() { //nolint:gocognit
 		}
 	})
 }
+
+// Test_HTTPFilteredWiretap verifies that "telepresence wiretap --http-header
+// ..." taps only the traffic that matches the header filter, via the
+// traffic-agent's HTTP listener and reverse-proxy transport: a request
+// carrying the header keeps reaching the real application (a wiretap never
+// steals traffic) and a copy of it arrives at the local tap, while a
+// request without the header also keeps reaching the real application but
+// is never copied to the tap. Mirrors the node-agent variant,
+// Test_NodeAgentHTTPFilteredWiretap in node_agent_test.go.
+func (s *wiretapSuite) Test_HTTPFilteredWiretap() {
+	ctx := s.Context()
+	rq := s.Require()
+
+	s.TelepresenceConnect(ctx)
+	defer itest.TelepresenceQuitOk(ctx)
+
+	origPods := itest.RunningPods(ctx, s.svc, s.AppNamespace())
+	rq.Len(origPods, 1, "expected exactly one running %s pod before wiretapping", s.svc)
+
+	var tapOut chan string
+	tapPort, tapCancel := s.startWiretapHandler(ctx, s.svc+"-httpfilter", ":0", &tapOut)
+	defer tapCancel()
+
+	const headerName = "x-telepresence-test"
+	const headerValue = "http-filter-wiretap"
+	header := headerName + "=" + headerValue
+
+	stdout := itest.TelepresenceOk(ctx, "wiretap",
+		"--workload", s.svc,
+		"--mount=false",
+		"--port", fmt.Sprintf("%d:80", tapPort),
+		"--http-header", header,
+		"wt-filtered")
+	s.Contains(stdout, "Using Deployment "+s.svc)
+	s.CapturePodLogs(ctx, s.svc, "traffic-agent", s.AppNamespace())
+	mustLeave := true
+	defer func() {
+		if mustLeave {
+			itest.TelepresenceOk(ctx, "leave", "wt-filtered")
+		}
+	}()
+
+	curlWithHeader := func() (string, error) {
+		return itest.Output(ctx, "curl", "--silent", "--max-time", "2", "-H", headerName+": "+headerValue, s.svc)
+	}
+	curlNoHeader := func() (string, error) {
+		return itest.Output(ctx, "curl", "--silent", "--max-time", "2", s.svc)
+	}
+
+	// A request carrying the filter header must still reach the real
+	// application: a wiretap never steals traffic, it only copies it.
+	rq.Eventually(func() bool {
+		so, err := curlWithHeader()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(so, "Request served by ")
+	}, 30*time.Second, 3*time.Second, "application did not keep serving header-matching traffic through the wiretap pass-through")
+
+	// The tap must receive a copy of the header-matching traffic. Since tap
+	// delivery is asynchronous, issue a request in each iteration and then
+	// check if a tap hit arrives.
+	tapOut = make(chan string, 5)
+	rq.Eventually(func() bool {
+		_, _ = curlWithHeader() // curl output is ignored; we only care about tap delivery
+		select {
+		case <-tapOut:
+			return true
+		default:
+			return false
+		}
+	}, 30*time.Second, 3*time.Second, "wiretap tap did not receive a copy of the header-matching traffic")
+
+	// Drain any straggler hits left over from the positive phase above --
+	// tap delivery is asynchronous, so a copy of the last matched request
+	// could still be in flight -- before checking the negative case below.
+	drainDeadline := time.After(2 * time.Second)
+drain:
+	for {
+		select {
+		case <-tapOut:
+		case <-drainDeadline:
+			break drain
+		}
+	}
+
+	// A request without the header must keep reaching the real application.
+	rq.Eventually(func() bool {
+		so, err := curlNoHeader()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(so, "Request served by ")
+	}, 30*time.Second, 3*time.Second, "application did not keep serving non-matching traffic through the wiretap pass-through")
+
+	// ...but it must never reach the tap. Issue several non-matching
+	// requests, then assert no tap hit shows up within a modest window.
+	for i := 0; i < 5; i++ {
+		_, _ = curlNoHeader() // curl output is ignored; we only care about tap delivery
+	}
+	select {
+	case out := <-tapOut:
+		s.Failf("wiretap tap received a copy of traffic that did not match the header filter", "output: %q", out)
+	case <-time.After(2 * time.Second):
+	}
+
+	itest.TelepresenceOk(ctx, "leave", "wt-filtered")
+	mustLeave = false
+}

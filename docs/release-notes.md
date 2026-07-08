@@ -8,6 +8,12 @@
 An intercept of a workload with several replicas only delivered the traffic that reached the pod recorded on the intercept. The agents in the other pods redirected their share of the requests but had no way to hand them to the client, so those requests timed out. The traffic-manager now tells the client to open a dial watcher to every agent pod of an intercepted workload, regardless of the intercept's mechanism and filters, so traffic is delivered no matter which replica the service picks. Previously only intercepts with HTTP filters received this treatment.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">HTTP-filtered wiretaps no longer block matching requests</div></div>
+<div style="margin-left: 15px">
+
+A wiretap with an HTTP filter (such as <code>--http-path-prefix</code> or <code>--http-header</code>) copied each matching request to the client but never forwarded the original to the application: the traffic-agent served the tap synchronously and deadlocked on its own copy of the request, so matching traffic was silently black-holed and callers timed out. Taps are now served concurrently and the request always proceeds to its real destination, whether that is the application container or an intercepting client.
+</div>
+
 ## Version 2.29.2 <span style="font-size: 16px;">(July  4)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Pod subnets are now routed when the traffic-manager runs with hostNetwork</div></div>
 <div style="margin-left: 15px">

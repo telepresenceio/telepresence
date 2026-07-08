@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/telepresenceio/clog"
@@ -136,9 +137,17 @@ func (mw *teeConn) send(rr readResult) {
 // causing a block.
 // Any error encountered during Read will be propagated to the pipe-writers in a
 // CloseWithError call.
+//
+// A teeReader's taps must not be relied on to terminate solely by the wrapped body being
+// read to EOF: nothing guarantees the body is ever read at all (e.g. httputil.ReverseProxy
+// never reads the body of a bodyless GET). Callers that install a teeReader on a request must
+// therefore call closeTaps once the request has been fully served, regardless of whether the
+// body was read. closeTaps is idempotent, so it is safe to call it again if the body does end
+// up being read to completion or the server itself closes the body.
 type teeReader struct {
 	io.ReadCloser
-	cs []chan readResult
+	cs        []chan readResult
+	closeOnce sync.Once
 }
 
 func (mw *teeReader) Read(b []byte) (n int, err error) {
@@ -152,8 +161,16 @@ func (mw *teeReader) Read(b []byte) (n int, err error) {
 	return n, err
 }
 
+// closeTaps signals EOF to every tap pipe exactly once. It is safe to call multiple times and
+// from multiple goroutines.
+func (mw *teeReader) closeTaps() {
+	mw.closeOnce.Do(func() {
+		mw.send(readResult{err: io.EOF})
+	})
+}
+
 func (mw *teeReader) Close() error {
-	mw.send(readResult{err: io.EOF})
+	mw.closeTaps()
 	return mw.ReadCloser.Close()
 }
 
@@ -192,7 +209,8 @@ func writePump(ctx context.Context, ch <-chan readResult, w *io.PipeWriter) {
 	}
 }
 
-// addRequestTaps installs wiretaps on a request. The readers for the taps are returned.
+// addRequestTaps installs wiretaps on a request. The readers for the taps are returned, along
+// with the teeReader that was installed as the request's body.
 //
 // A wiretap will receive the request header and all data read from its body and has the following characteristics:
 //
@@ -207,10 +225,14 @@ func writePump(ctx context.Context, ch <-chan readResult, w *io.PipeWriter) {
 //   - A Read will return the same as a Read on the tapped request-body.
 //   - The reader is closed on error reading the tapped request-body, when the context is done, or when the
 //     tapped request-body is explicitly closed.
-
-func addRequestTaps(ctx context.Context, request *http.Request, count, cacheSize int) ([]io.Reader, error) {
+//
+// Nothing guarantees that the tapped request-body is ever read (e.g. the body of a bodyless GET
+// is never read by httputil.ReverseProxy), so the caller must call closeTaps on the returned
+// teeReader once the request has been fully served, regardless of whether the body was read, or
+// the taps will never see a terminating EOF.
+func addRequestTaps(ctx context.Context, request *http.Request, count, cacheSize int) ([]io.Reader, *teeReader, error) {
 	if count == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	body := request.Body
@@ -220,35 +242,45 @@ func addRequestTaps(ctx context.Context, request *http.Request, count, cacheSize
 	}
 	taps := make([]io.Reader, count)
 
-	// Write only the request header to the tap pipes. The body will be propagated by the teeReader.
-	headerBuf := new(bytes.Buffer)
-	request.Body = emptyReader{}
-	err := request.Write(headerBuf)
-	if err != nil {
-		// Restore the original body
-		request.Body = body
-		return nil, err
+	// Write only the request header to the tap pipes. The body will be propagated by the
+	// teeReader below.
+	//
+	// request.Write requires that the number of body bytes it writes matches a declared,
+	// known Content-Length, so an empty stand-in body only works when Content-Length is
+	// zero or unknown (chunked). When a positive length is declared, feed it that many
+	// zero bytes instead so the write succeeds; headerCaptureWriter stops retaining data
+	// once the header/body boundary is seen, so a large declared length is never buffered.
+	hw := &headerCaptureWriter{}
+	if cl := request.ContentLength; cl > 0 {
+		request.Body = io.NopCloser(io.LimitReader(zeroReader{}, cl))
+	} else {
+		request.Body = emptyReader{}
 	}
+	err := request.Write(hw)
+	// Restore the original body; it is only swapped for the teeReader below on success.
+	request.Body = body
+	if err != nil {
+		return nil, nil, err
+	}
+	headerData := hw.buf.Bytes()
 
 	// Replace the body with the teeReader.
 	request.Body = tc
 
-	headerData := headerBuf.Bytes()
 	for i := 0; i < count; i++ {
 		rd, wr := io.Pipe()
 		taps[i] = rd
 		c := make(chan readResult, cacheSize)
 		tc.cs[i] = c
 		go func() {
-			_, err = wr.Write(headerData)
-			if err != nil {
+			if _, err := wr.Write(headerData); err != nil {
 				clog.Errorf(ctx, "Failed to write request to tap: %v", err)
 			} else {
 				writePump(ctx, c, wr)
 			}
 		}()
 	}
-	return taps, nil
+	return taps, tc, nil
 }
 
 type emptyReader struct{}
@@ -259,4 +291,35 @@ func (emptyReader) Read([]byte) (int, error) {
 
 func (emptyReader) Close() error {
 	return nil
+}
+
+// zeroReader is an endless source of zero bytes, used to synthesize a stand-in request body
+// of a declared length without allocating it.
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
+// headerCaptureWriter retains everything written to it up to and including the first blank
+// line (the request-line/header block of an HTTP/1.x message), then silently discards
+// everything after it. This lets request.Write be fed a synthetic body of an arbitrary
+// declared length, for Content-Length validation purposes, without that body ending up
+// buffered in memory.
+type headerCaptureWriter struct {
+	buf       bytes.Buffer
+	sawHeader bool
+}
+
+func (w *headerCaptureWriter) Write(p []byte) (int, error) {
+	if w.sawHeader {
+		return len(p), nil
+	}
+	n, err := w.buf.Write(p)
+	if idx := bytes.Index(w.buf.Bytes(), []byte("\r\n\r\n")); idx >= 0 {
+		w.sawHeader = true
+		w.buf.Truncate(idx + 4)
+	}
+	return n, err
 }

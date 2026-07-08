@@ -66,10 +66,17 @@ func (s *mountsSuite) Test_IgnoredMounts() {
 				},
 			}
 			ctx := s.Context()
+			require := s.Require()
 			s.ApplyTemplate(ctx, filepath.Join("testdata", "k8s", "hello-w-volumes.goyaml"), &tpl)
 			defer s.DeleteSvcAndWorkload(ctx, "deploy", "hello")
 
-			require := s.Require()
+			// Wait for the rollout before intercepting. The nginx image may
+			// need to be pulled, and the intercept evicts the pod to inject
+			// the traffic-agent, so intercepting a deployment whose first pod
+			// is still starting puts two pod startups and an image pull
+			// inside the intercept timeout.
+			require.NoError(itest.RolloutStatusWait(ctx, s.AppNamespace(), "deploy/hello"))
+
 			stdout := itest.TelepresenceOk(ctx, "intercept", "hello", "--format", "json", "--detailed-output", "--port", fmt.Sprintf("%d:%d", localPort, tt.svcPort))
 			defer itest.TelepresenceOk(ctx, "leave", "hello")
 			var iInfo intercept.Info
