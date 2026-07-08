@@ -30,7 +30,8 @@ release-notes (historical), generated files (regenerated instead).
 | 3. Quick-start tutorial rewrite | Done |
 | 3b. Reframe compare/mirrord.md as an architecture trade-off (added to scope) | Done |
 | 4. Concept pages (architecture moved, attachments page, glossary; devloop/faster/intercepts removed) | Done |
-| 5. Reference re-sort per verdicts below | Not started |
+| 5a. Reference re-sort: moves and merges (monitoring, inside-container, docker-run, tun-device, dns, upgrade slim) | Done |
+| 5b. Dedup rewrites (attachments/cli split, docker-compose vs compose, RBAC spread, mtls protocol section, faqs/troubleshooting pruning) | Not started |
 | 6. Vale + link checking in CI | Not started |
 
 Step 1 of the docs restructure: every page under `docs/`, classified by the
@@ -101,7 +102,7 @@ doc-links.yml would silently drop the page. Fix doc-links.yml first.
 | Page | Lines | Intended -> actual | Notes | Verdict |
 |------|-------|--------------------|-------|---------|
 | install/client.md | 324 | how-to -> how-to | Per-platform install. Manual-download steps duplicated almost verbatim in upgrade.md | keep (dedupe) |
-| install/upgrade.md | 96 | how-to -> how-to | Repeats client.md download instructions; could shrink to "same as install, plus version pinning" | merge (into client.md or slim) |
+| install/upgrade.md | 96 | how-to -> how-to | Slimmed to "reinstall via install page" plus the Apple-silicon caveat (step 5a) | done |
 | install/manager.md | 249 | how-to -> how-to + reference | Install/uninstall/upgrade is how-to; namespace-scope semantics and RBAC detail overlap reference/rbac.md and reference/cluster-config.md | keep (move RBAC depth to reference/rbac.md) |
 | install/cloud.md | 59 | how-to -> how-to | GKE/EKS prerequisites; current | keep |
 
@@ -128,7 +129,7 @@ Missing concept pages the restructure should create (plan step 4):
 |------|-------|--------------------|-------|---------|
 | howtos/engage.md | 310 | how-to -> explanation + how-to | Opens with a long replace/intercept/ingest comparison (concept material), then task steps. Split: comparison to new concepts page, tasks stay | rewrite (split) |
 | howtos/agent-modes.md | 154 | how-to -> decision guide + how-to | Recent, good shape. Missing from doc-links.yml | keep (add to nav) |
-| howtos/docker.md | 123 | how-to -> how-to | Overlaps reference/docker-run.md heavily (same flags, same workflow) | keep (absorb docker-run.md) |
+| howtos/docker.md | 123 | how-to -> how-to | Absorbed reference/docker-run.md (step 5a) | done |
 | howtos/docker-compose.md | 372 | how-to -> reference + walkthrough | Documents x-tele extensions (reference, duplicating reference/compose.md) plus a walkthrough. Keep walkthrough; point at reference/compose.md for the extension spec | rewrite (dedupe) |
 | howtos/cluster-in-vm.md | 198 | how-to -> how-to + explanation | Networking theory up front, then Vagrant/k3s example; acceptable for the audience | keep |
 | howtos/istio.md | 86 | how-to -> how-to | Orphaned: in neither doc-links.yml nor README | keep (add to nav) |
@@ -149,7 +150,7 @@ True reference - correct as-is:
 | reference/restapi.md | 107 | API endpoints; no frontmatter (only page missing it) | keep (add frontmatter) |
 | reference/rbac.md | 280 | Roles/permissions; receives depth from install/manager.md | keep |
 | reference/plugins.md | 119 | Teleroute/telemount plugin reference | keep |
-| reference/dns.md | 43 | Query-type support; overlaps routing.md DNS sections - consider one DNS page | merge (with routing.md DNS material) |
+| reference/dns.md | 43 | Merged into routing.md DNS section; redirect added (step 5a) | done |
 
 Explanation pages parked in reference - move or fold (concepts/ is the
 natural home; a "networking internals" cluster is an option if concepts/
@@ -158,8 +159,8 @@ should stay small):
 | Page | Lines | Notes | Verdict |
 |------|-------|-------|---------|
 | reference/architecture.md | 50 | Moved to concepts/architecture.md with redirect (step 4) | done |
-| reference/routing.md | 57 | How connections/DNS are routed; explanation | keep or move (decide with dns.md merge) |
-| reference/tun-device.md | 32 | Explains VIF gains "vs SSH" - Telepresence 1-era framing, stale | merge (fold surviving facts into routing/architecture) |
+| reference/routing.md | 57 | Now the networking reference: absorbed the VIF material from tun-device.md and the DNS intro/query types from dns.md (step 5a) | done |
+| reference/tun-device.md | 32 | Folded into routing.md (VIF section) and volume.md (sshfs); SSH-era framing dropped; redirect added (step 5a) | done |
 | reference/vpn.md | 329 | Explanation of VNAT conflict resolution + troubleshooting; content is current and valuable | keep (location debatable) |
 | reference/agent-packet-routing.md | 220 | Recent, deep internals (nftables); good reference | keep |
 | reference/node-agent.md | 177 | Recent; node-agent internals and limitations | keep |
@@ -169,9 +170,9 @@ How-to pages parked in reference - move to howtos/:
 
 | Page | Lines | Notes | Verdict |
 |------|-------|-------|---------|
-| reference/docker-run.md | 126 | Task-oriented "use Docker for engagements"; overlaps howtos/docker.md | merge (into howtos/docker.md) |
-| reference/inside-container.md | 78 | Task-oriented; run Telepresence in a container/CI | move (howtos/) |
-| reference/monitoring.md | 432 | Prometheus/Grafana setup walkthrough; pure how-to | move (howtos/) |
+| reference/docker-run.md | 126 | Merged into howtos/docker.md; redirect added (step 5a) | done |
+| reference/inside-container.md | 78 | Moved to howtos/ with redirect (step 5a) | done |
+| reference/monitoring.md | 432 | Moved to howtos/ with redirect (step 5a) | done |
 
 reference/engagements/ subsection:
 

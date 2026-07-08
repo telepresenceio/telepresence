@@ -36,6 +36,10 @@
       link: howtos/mtls
     - title: Resolve Istio ServiceEntry Hosts
       link: howtos/istio
+    - title: Run Telepresence inside a container
+      link: howtos/inside-container
+    - title: Monitor with Prometheus and Grafana
+      link: howtos/monitoring
     - title: Use Telepresence with Azure (Microsoft Learn)
       link: https://learn.microsoft.com/en-us/azure/aks/use-telepresence-aks
 - title: Technical reference
@@ -229,12 +233,8 @@
       link: reference/config
     - title: Cluster-side configuration
       link: reference/cluster-config
-    - title: Using Docker for attachments
-      link: reference/docker-run
     - title: Telepresence Compose Extensions
       link: reference/compose
-    - title: Running Telepresence in a Docker container
-      link: reference/inside-container
     - title: Environment variables
       link: reference/environment
     - title: Attachments
@@ -253,14 +253,10 @@
       link: reference/volume
     - title: RESTful API service
       link: reference/restapi
-    - title: DNS resolution
-      link: reference/dns
     - title: RBAC
       link: reference/rbac
     - title: Telepresence and VPNs
       link: reference/vpn
-    - title: Networking through Virtual Network Interface
-      link: reference/tun-device
     - title: Connection Routing
       link: reference/routing
     - title: Traffic Agent Packet Routing
@@ -269,8 +265,6 @@
       link: reference/route-controller
     - title: Node-hosted Traffic Agent
       link: reference/node-agent
-    - title: Monitoring
-      link: reference/monitoring
 - title: Comparisons
   items:
     - title: Telepresence vs mirrord

@@ -23,7 +23,7 @@ All requests from and to the cluster go through this Daemon.
 
 ### Root-Daemon
 The Root-Daemon manages the networking necessary to handle traffic between the local workstation and the cluster by setting up a
-[Virtual Network Device](../reference/tun-device.md) (VIF).
+[Virtual Network Device](../reference/routing.md#the-virtual-network-interface) (VIF).
 
 ## Traffic Manager
 

@@ -9,3 +9,8 @@
 - {from: "concepts/faster", to: "quick-start"}
 - {from: "concepts/intercepts", to: "concepts/attachments"}
 - {from: "reference/architecture", to: "concepts/architecture"}
+- {from: "reference/monitoring", to: "howtos/monitoring"}
+- {from: "reference/inside-container", to: "howtos/inside-container"}
+- {from: "reference/docker-run", to: "howtos/docker"}
+- {from: "reference/tun-device", to: "reference/routing"}
+- {from: "reference/dns", to: "reference/routing"}

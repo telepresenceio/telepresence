@@ -61,7 +61,7 @@ the lifecycle of connections and attachments.
 **Virtual network interface (VIF)** — The network device that the root daemon
 creates on connect. It routes the cluster's subnets so that every local tool
 can reach cluster services. See
-[Networking through Virtual Network Interface](../reference/tun-device.md).
+[Connection Routing](../reference/routing.md#the-virtual-network-interface).
 
 **Wiretap** — The attachment mode that sends a copy of a service port's
 traffic to your workstation while the cluster serves all requests as usual.

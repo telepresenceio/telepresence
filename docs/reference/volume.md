@@ -40,3 +40,7 @@ For example, Kubernetes mounts secrets to `/var/run/secrets/kubernetes.io` (even
 
 > [!NOTE]
 > If using `--mount=true` without a command, you can use either [environment variable](environment.md) flag to retrieve the variable.
+
+## How the mounts work
+
+When the volumes of an attached POD are mounted on the local machine, the mount is performed by [sshfs](https://github.com/libfuse/sshfs). Telepresence runs `sshfs -o slave`, which means that instead of using `ssh` to establish an encrypted communication to an `sshd`, which in turn terminates the encryption and forwards to `sftp`, the `sshfs` will talk `sftp` directly on its `stdin/stdout` pair. Telepresence tunnels that directly to an `sftp` in the agent using its already encrypted gRPC API. As a result, no `sshd` is needed in the client nor in the traffic-agent, and the traffic-agent container can run as the default user.
