@@ -144,7 +144,13 @@ func MainWithEnv(ctx context.Context) (err error) {
 		}
 
 		var err error
-		if managerutil.AgentInjectorEnabled(ctx) {
+		// GetAgentImage panics without a retriever, and buildNodeAgentJob
+		// needs the image from the generated agent config, so the
+		// retriever is required whenever either the injector or node-agent
+		// is enabled. RegenerateAgentMaps only touches pods that already
+		// carry the sidecar config annotation, so it is safe to run even
+		// when the injector is disabled.
+		if managerutil.AgentInjectorEnabled(ctx) || managerutil.GetEnv(ctx).NodeAgentEnabled {
 			ctx, err = managerutil.WithAgentImageRetriever(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
 			if err != nil {
 				clog.Errorf(ctx, "unable to initialize agent injector: %v", err)

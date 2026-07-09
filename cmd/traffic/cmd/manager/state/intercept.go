@@ -500,11 +500,16 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 			return nil
 		})
 	}
-	err = s.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-		return s.restoreAppContainer(ctx, interceptInfo, wl)
-	})
-	if err != nil {
-		clog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptID, err)
+	if !spec.NodeAgent {
+		// A node-agent intercept never injects a sidecar or modifies the
+		// workload's pod template, so there is nothing for this finalizer
+		// to restore.
+		err = s.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+			return s.restoreAppContainer(ctx, interceptInfo, wl)
+		})
+		if err != nil {
+			clog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptID, err)
+		}
 	}
 	if spec.NodeAgent {
 		err = s.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
@@ -608,7 +613,10 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 		return nil, nil, status.Error(codes.FailedPrecondition, msg)
 	}
 
-	if !managerutil.AgentInjectorEnabled(parentCtx) {
+	// A node-agent request needs only the generated config, never
+	// injection: the webhook and the manual-annotation path below are both
+	// sidecar concepts that a node-agent spec must bypass entirely.
+	if !managerutil.AgentInjectorEnabled(parentCtx) && !spec.GetNodeAgent() {
 		cfgJSON, ok := wl.GetPodTemplate().Annotations[annotation.Config]
 		if !ok {
 			msg := fmt.Sprintf("agent-injector is disabled and no agent has been added manually for %s", wl)

@@ -9,13 +9,24 @@ import (
 	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	clientfeatures "k8s.io/client-go/features"
+	clientfeaturestesting "k8s.io/client-go/features/testing"
+	"k8s.io/client-go/kubernetes/fake"
 
+	argorolloutsfake "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned/fake"
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/clog/testutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -398,4 +409,82 @@ func TestActiveNodeAgentIntercept(t *testing.T) {
 	found = state.activeNodeAgentIntercept(sidecarSpec, "other:ic")
 	require.NotNil(t, found)
 	assert.Equal(t, "c4:ic4", found.Id)
+}
+
+// TestEnsureAgent_InjectorDisabled verifies that ensureAgent's injector gate
+// (the "agent-injector is disabled" rejection) is bypassed for a node-agent
+// request -- letting it through to generate an agent config -- while a
+// sidecar (non-node-agent) request against the same workload is still
+// rejected. This is the manager-side behavior that lets node-agent
+// intercepts and wiretaps work with agentInjector.enabled=false.
+func TestEnsureAgent_InjectorDisabled(t *testing.T) {
+	// The fake clientset doesn't support the WatchListClient feature (no
+	// bookmark events), which is enabled by default in client-go v0.35+.
+	// Disable it so the informer cache sync below can complete.
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+
+	const ns = "default"
+
+	dep := &apps.Deployment{
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: apps.DeploymentSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+			Template: core.PodTemplateSpec{
+				ObjectMeta: meta.ObjectMeta{Labels: map[string]string{"app": "test-agent"}},
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
+						Name:  "app",
+						Ports: []core.ContainerPort{{ContainerPort: 8080}},
+					}},
+				},
+			},
+		},
+	}
+	svc := &core.Service{
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: core.ServiceSpec{
+			Selector: map[string]string{"app": "test-agent"},
+			Ports: []core.ServicePort{{
+				Port:       80,
+				TargetPort: intstr.FromInt(8080),
+			}},
+		},
+	}
+
+	ci := fake.NewSimpleClientset(svc)
+	ctx := k8sapi.WithJoinedClientSetInterface(t.Context(), ci, argorolloutsfake.NewSimpleClientset())
+	ctx = informer.WithFactory(ctx, "")
+	f := informer.GetK8sFactory(ctx, "")
+	f.Core().V1().Services().Informer()
+	f.Start(ctx.Done())
+	f.WaitForCacheSync(ctx.Done())
+
+	env := &managerutil.Env{
+		ManagerNamespace:  "ambassador",
+		NodeAgentEnabled:  true,
+		AgentInjectPolicy: agentconfig.Never,
+	}
+	ctx = managerutil.WithEnv(ctx, env)
+	ctx = mutator.WithMap(ctx, mutator.NewWatcher())
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
+
+	require.False(t, managerutil.AgentInjectorEnabled(ctx), "test setup must disable the injector")
+
+	wl := k8sapi.Deployment(dep)
+	s := &State{}
+
+	t.Run("node-agent spec bypasses the injector gate", func(t *testing.T) {
+		spec := &rpc.InterceptSpec{Agent: "test-agent", Namespace: ns, NodeAgent: true}
+		sc, _, err := s.ensureAgent(ctx, wl, false, true, spec, agentconfig.ReplacePolicyIntercept)
+		require.NoError(t, err)
+		require.NotNil(t, sc)
+		assert.Equal(t, "ghcr.io/telepresenceio/tel2:2.99.0", sc.AgentImage)
+	})
+
+	t.Run("sidecar spec is still rejected", func(t *testing.T) {
+		spec := &rpc.InterceptSpec{Agent: "test-agent", Namespace: ns, NodeAgent: false}
+		_, _, err := s.ensureAgent(ctx, wl, false, true, spec, agentconfig.ReplacePolicyIntercept)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "agent-injector is disabled")
+	})
 }
