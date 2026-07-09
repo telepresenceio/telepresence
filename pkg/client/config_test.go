@@ -82,6 +82,51 @@ func TestInterceptLocalShortcutDefault(t *testing.T) {
 	assert.True(t, GetDefaultConfig().Intercept().LocalShortcutIsGlobal)
 }
 
+// TestNodeAgentDefault verifies that nodeAgent.enabled defaults to false and
+// that a user config setting it to true parses correctly.
+func TestNodeAgentDefault(t *testing.T) {
+	assert.False(t, GetDefaultConfig().NodeAgent().Enabled)
+
+	cfg, err := ParseConfigYAML(testutil.NewContext(t, true), "", []byte(`
+nodeAgent:
+  enabled: true
+`))
+	require.NoError(t, err)
+	assert.True(t, cfg.NodeAgent().Enabled)
+}
+
+// TestLoadConfig_NodeAgentMerge verifies that nodeAgent.enabled follows the
+// same system/user merge precedence as other sections: a system's non-default
+// value survives when the user doesn't override it. Like every other
+// boolean setting in this file whose default is false, an explicit "false"
+// in a user file is indistinguishable from omitting the key, so it cannot
+// be used to override an inherited "true" -- that is a pre-existing
+// property of mergeNonDefaults, not specific to nodeAgent.
+func TestLoadConfig_NodeAgentMerge(t *testing.T) {
+	tmp := t.TempDir()
+	sys := filepath.Join(tmp, "system")
+	user := filepath.Join(tmp, "user")
+	require.NoError(t, os.MkdirAll(sys, 0o755))
+	require.NoError(t, os.MkdirAll(user, 0o700))
+
+	require.NoError(t, os.WriteFile(filepath.Join(sys, ConfigFile), []byte("nodeAgent:\n  enabled: true\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(user, ConfigFile), []byte("timeouts:\n  clusterConnect: 30s\n"), 0o600))
+
+	c := testutil.NewContext(t, false)
+	c = filelocation.WithAppSystemConfigDir(c, sys)
+	c = filelocation.WithAppUserConfigDir(c, user)
+	env, err := LoadEnv()
+	require.NoError(t, err)
+	c = WithEnv(c, &env)
+
+	cfg, err := LoadConfig(c)
+	require.NoError(t, err)
+	// System non-default value survives when the user doesn't override it.
+	assert.True(t, cfg.NodeAgent().Enabled)
+	// Unrelated user-only value still lands.
+	assert.Equal(t, 30*time.Second, cfg.Timeouts().PrivateClusterConnect)
+}
+
 // TestLoadConfig_SystemAndUserMerge verifies that LoadConfig reads the
 // machine-wide config first and then DestructiveMerges the per-user config
 // on top: a user's non-default value overrides the system's, while the

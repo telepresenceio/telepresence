@@ -13,7 +13,7 @@ One important exception is the configuration of the of the traffic manager names
 Global configuration is set at the Traffic Manager level and applies to any user connecting to that Traffic Manager.
 To set it, simply pass in a `client` dictionary to the `telepresence helm install` command, with any config values you wish to set.
 
-The `client` config supports values for [cluster](#cluster), [dns](#dns), [docker](#docker), [grpc](#grpc), [helm](#helm), [intercept](#intercept), [images](#images), [logLevels](#log-levels), [routing](#routing), [timeouts](#timeouts), and [usage](#usage).
+The `client` config supports values for [cluster](#cluster), [dns](#dns), [docker](#docker), [grpc](#grpc), [helm](#helm), [intercept](#intercept), [images](#images), [logLevels](#log-levels), [nodeAgent](#node-agent), [routing](#routing), [timeouts](#timeouts), and [usage](#usage).
 
 Here is an example configuration to show you the conventions of how Telepresence is configured:
 **note: This config shouldn't be used verbatim, since the registry `privateRepo` used doesn't exist**
@@ -211,6 +211,14 @@ to filtered intercepts always takes the round trip through the cluster. The
 assumption that filters exist to limit how an intercept impacts other users of the
 cluster, not the developer's own traffic. Set it to `false` when local traffic must honor
 the filters exactly.
+
+### Node Agent
+
+The `nodeAgent` controls the client-side default for node-hosted traffic-agent mode, used by `telepresence intercept`, `telepresence wiretap`, and `telepresence ingest`.
+
+| Field     | Description                                                                                                                        | Type                 | Default |
+|-----------|-------------------------------------------------------------------------------------------------------------------------------------|----------------------|---------|
+| `enabled` | Makes `telepresence intercept`, `wiretap`, and `ingest` behave as if `--node-agent` was given, unless the flag is passed explicitly | [boolean][yaml-bool] | false   |
 
 ### Log Levels
 

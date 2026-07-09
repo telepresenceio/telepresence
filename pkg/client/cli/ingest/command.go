@@ -10,6 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/env"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
@@ -60,6 +61,10 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	c.WorkloadName = positional[0]
 	c.Cmdline = positional[1:]
 	c.FormattedOutput = output.WantsFormatted(cmd)
+	// --node-agent defaults to the client config's nodeAgent.enabled setting
+	// unless the flag was passed explicitly; an explicit --node-agent=false
+	// always overrides an enabled config default.
+	c.NodeAgent = flags.NodeAgentDefault(cmd, c.NodeAgent)
 	if err := c.MountFlags.Validate(cmd); err != nil {
 		return err
 	}

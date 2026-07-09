@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/env"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ingest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
@@ -274,6 +275,11 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 		// Auto-detect and set mechanism to "http"
 		c.Mechanism = "http"
 	}
+
+	// --node-agent defaults to the client config's nodeAgent.enabled setting
+	// unless the flag was passed explicitly; an explicit --node-agent=false
+	// always overrides an enabled config default.
+	c.NodeAgent = flags.NodeAgentDefault(cmd, c.NodeAgent)
 
 	// Actually intercepting something
 	if c.AgentName == "" {

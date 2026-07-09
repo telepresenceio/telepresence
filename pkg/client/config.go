@@ -120,6 +120,7 @@ type Config interface {
 	Intercept() *Intercept
 	Images() *Images
 	LogLevels() *LogLevels
+	NodeAgent() *NodeAgent
 	Routing() *Routing
 	Timeouts() *Timeouts
 	Usage() *Usage
@@ -141,6 +142,7 @@ type config struct {
 	ImagesV          Images    `json:"images,omitzero"`
 	InterceptV       Intercept `json:"intercept,omitzero"`
 	LogLevelsV       LogLevels `json:"logLevels,omitzero"`
+	NodeAgentV       NodeAgent `json:"nodeAgent,omitzero"`
 	RoutingV         Routing   `json:"routing,omitzero"`
 	TimeoutsV        Timeouts  `json:"timeouts,omitzero"`
 	UsageV           Usage     `json:"usage,omitzero"`
@@ -172,6 +174,10 @@ func (c *config) Grpc() *Grpc {
 
 func (c *config) Intercept() *Intercept {
 	return &c.InterceptV
+}
+
+func (c *config) NodeAgent() *NodeAgent {
+	return &c.NodeAgentV
 }
 
 func (c *config) Cluster() *Cluster {
@@ -265,6 +271,7 @@ func (c *config) DestructiveMerge(lc Config) {
 	c.ImagesV.merge(lc.Images())
 	c.GrpcV.merge(lc.Grpc())
 	c.InterceptV.merge(lc.Intercept())
+	c.NodeAgentV.merge(lc.NodeAgent())
 	c.ClusterV.merge(lc.Cluster())
 	c.DockerV.merge(lc.Docker())
 	c.DNSV.merge(lc.DNS())
@@ -860,6 +867,43 @@ func (ic *Intercept) UnmarshalJSONFrom(in *jsontext.Decoder) error {
 	return json.UnmarshalDecode(in, &wp)
 }
 
+var defaultNodeAgent = NodeAgent{} //nolint:gochecknoglobals // constant
+
+// NodeAgent controls the client-side default for node-hosted traffic-agent
+// mode.
+type NodeAgent struct {
+	// Enabled makes telepresence intercept, wiretap, and ingest behave as if
+	// --node-agent was given, unless the flag is passed explicitly.
+	Enabled bool `json:"enabled"`
+}
+
+func (na *NodeAgent) defaults() DefaultsAware {
+	return &defaultNodeAgent
+}
+
+// merge merges this instance with the non-zero values of the given argument. The argument values take priority.
+func (na *NodeAgent) merge(o *NodeAgent) {
+	mergeNonDefaults(na, o)
+}
+
+// IsZero controls whether this element will be included in marshalled output.
+func (na *NodeAgent) IsZero() bool {
+	return na == nil || *na == defaultNodeAgent
+}
+
+func (na *NodeAgent) MarshalJSONTo(out *jsontext.Encoder) error {
+	return json.MarshalEncode(out, mapWithoutDefaults(na))
+}
+
+func (na *NodeAgent) UnmarshalJSONFrom(in *jsontext.Decoder) error {
+	// Prevent that the original object is cleared when an empty object is decoded by passing the address
+	// of the pointer to the object. The unmarshal will then instead clear the pointer (wp becomes nil) and
+	// leave the underlying object intact. In other words, this code achieves "omitempty" during unmarshal.
+	type nodeAgent NodeAgent
+	wp := (*nodeAgent)(na)
+	return json.UnmarshalDecode(in, &wp)
+}
+
 type Cluster struct {
 	DefaultManagerNamespace string   `json:"defaultManagerNamespace"`
 	MappedNamespaces        []string `json:"mappedNamespaces"`
@@ -1254,6 +1298,7 @@ var defaultConfig = config{ //nolint:gochecknoglobals // constant
 	ImagesV:          defaultImages,
 	GrpcV:            defaultGrpc,
 	InterceptV:       defaultIntercept,
+	NodeAgentV:       defaultNodeAgent,
 	ClusterV:         defaultCluster,
 	DockerV:          defaultDocker,
 	DNSV:             defaultDNS,
