@@ -359,6 +359,18 @@ message EnsureAgentRequest {
   SessionInfo session = 1;
   string name = 2;
   string namespace = 3;
+
+  // Request that this agent be served by a node-hosted traffic-agent
+  // (a manager-created Job that enters the target pod's namespaces) rather
+  // than by a sidecar injected into the workload. Requires the
+  // traffic-manager to have node-agent mode enabled.
+  bool node_agent = 4;
+}
+
+message ReleaseAgentRequest {
+  SessionInfo session = 1;
+  string name = 2;
+  string namespace = 3;
 }
 
 message PreparedIntercept {
@@ -875,6 +887,12 @@ service Manager {
   // EnsureAgent ensures that an agent is injected to the pods of a workload and
   // returns the agents, sorted by pod name.
   rpc EnsureAgent(EnsureAgentRequest) returns (AgentInfoSnapshot);
+
+  // ReleaseAgent releases the caller's claim on a node-agent previously
+  // ensured with node_agent=true in EnsureAgentRequest. The manager reaps
+  // the node-agent Job once no live intercept or claim remains. For a
+  // sidecar agent (or an unknown claim) it is a no-op.
+  rpc ReleaseAgent(ReleaseAgentRequest) returns (google.protobuf.Empty);
 
   // Request that the traffic-manager makes the preparations necessary to
   // create the given intercept.

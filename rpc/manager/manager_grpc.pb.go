@@ -47,6 +47,7 @@ const (
 	Manager_WatchWorkloads_FullMethodName                  = "/telepresence.manager.Manager/WatchWorkloads"
 	Manager_WatchClusterInfo_FullMethodName                = "/telepresence.manager.Manager/WatchClusterInfo"
 	Manager_EnsureAgent_FullMethodName                     = "/telepresence.manager.Manager/EnsureAgent"
+	Manager_ReleaseAgent_FullMethodName                    = "/telepresence.manager.Manager/ReleaseAgent"
 	Manager_PrepareIntercept_FullMethodName                = "/telepresence.manager.Manager/PrepareIntercept"
 	Manager_CreateIntercept_FullMethodName                 = "/telepresence.manager.Manager/CreateIntercept"
 	Manager_RemoveIntercept_FullMethodName                 = "/telepresence.manager.Manager/RemoveIntercept"
@@ -133,6 +134,11 @@ type ManagerClient interface {
 	// EnsureAgent ensures that an agent is injected to the pods of a workload and
 	// returns the agents, sorted by pod name.
 	EnsureAgent(ctx context.Context, in *EnsureAgentRequest, opts ...grpc.CallOption) (*AgentInfoSnapshot, error)
+	// ReleaseAgent releases the caller's claim on a node-agent previously
+	// ensured with node_agent=true in EnsureAgentRequest. The manager reaps
+	// the node-agent Job once no live intercept or claim remains. For a
+	// sidecar agent (or an unknown claim) it is a no-op.
+	ReleaseAgent(ctx context.Context, in *ReleaseAgentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Request that the traffic-manager makes the preparations necessary to
 	// create the given intercept.
 	PrepareIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*PreparedIntercept, error)
@@ -495,6 +501,16 @@ func (c *managerClient) EnsureAgent(ctx context.Context, in *EnsureAgentRequest,
 	return out, nil
 }
 
+func (c *managerClient) ReleaseAgent(ctx context.Context, in *ReleaseAgentRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Manager_ReleaseAgent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) PrepareIntercept(ctx context.Context, in *CreateInterceptRequest, opts ...grpc.CallOption) (*PreparedIntercept, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PreparedIntercept)
@@ -699,6 +715,11 @@ type ManagerServer interface {
 	// EnsureAgent ensures that an agent is injected to the pods of a workload and
 	// returns the agents, sorted by pod name.
 	EnsureAgent(context.Context, *EnsureAgentRequest) (*AgentInfoSnapshot, error)
+	// ReleaseAgent releases the caller's claim on a node-agent previously
+	// ensured with node_agent=true in EnsureAgentRequest. The manager reaps
+	// the node-agent Job once no live intercept or claim remains. For a
+	// sidecar agent (or an unknown claim) it is a no-op.
+	ReleaseAgent(context.Context, *ReleaseAgentRequest) (*emptypb.Empty, error)
 	// Request that the traffic-manager makes the preparations necessary to
 	// create the given intercept.
 	PrepareIntercept(context.Context, *CreateInterceptRequest) (*PreparedIntercept, error)
@@ -818,6 +839,9 @@ func (UnimplementedManagerServer) WatchClusterInfo(*SessionInfo, grpc.ServerStre
 }
 func (UnimplementedManagerServer) EnsureAgent(context.Context, *EnsureAgentRequest) (*AgentInfoSnapshot, error) {
 	return nil, status.Error(codes.Unimplemented, "method EnsureAgent not implemented")
+}
+func (UnimplementedManagerServer) ReleaseAgent(context.Context, *ReleaseAgentRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method ReleaseAgent not implemented")
 }
 func (UnimplementedManagerServer) PrepareIntercept(context.Context, *CreateInterceptRequest) (*PreparedIntercept, error) {
 	return nil, status.Error(codes.Unimplemented, "method PrepareIntercept not implemented")
@@ -1227,6 +1251,24 @@ func _Manager_EnsureAgent_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_ReleaseAgent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ReleaseAgentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).ReleaseAgent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_ReleaseAgent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).ReleaseAgent(ctx, req.(*ReleaseAgentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_PrepareIntercept_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateInterceptRequest)
 	if err := dec(in); err != nil {
@@ -1487,6 +1529,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "EnsureAgent",
 			Handler:    _Manager_EnsureAgent_Handler,
+		},
+		{
+			MethodName: "ReleaseAgent",
+			Handler:    _Manager_ReleaseAgent_Handler,
 		},
 		{
 			MethodName: "PrepareIntercept",

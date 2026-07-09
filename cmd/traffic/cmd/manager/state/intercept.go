@@ -593,6 +593,14 @@ func (s *State) EnsureAgent(ctx context.Context, n, ns string) (as []*AgentSessi
 	return as, err
 }
 
+// ReleaseAgent releases sessionID's claim (taken by EnsureAgent when
+// node_agent is requested) on the node-agent for the workload identified by
+// name and namespace. The lease bookkeeping that makes this meaningful lands
+// with the lease registry; until then this is a no-op.
+func (s *State) ReleaseAgent(ctx context.Context, sessionID tunnel.SessionID, name, namespace string) error {
+	return nil
+}
+
 func (s *State) ValidateCreateAgent(context.Context, k8sapi.Workload, *agentconfig.Sidecar) error {
 	return nil
 }
