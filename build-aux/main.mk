@@ -444,6 +444,7 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./packaging/windows-package.sh
+shellscripts += ./build-aux/check-integration-retry.sh
 .PHONY: lint lint-rpc lint-go
 
 lint: lint-rpc lint-go
@@ -492,6 +493,11 @@ else
 	CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./pkg/... | $(tools/test-report)
 endif
 
+# TEST_FAILFAST=false lets check-integration run past a failing test instead
+# of aborting the suite; check-integration-ci uses this to collect the full
+# failure set on each attempt. Local `make check-integration` is unaffected.
+TEST_FAILFAST ?= true
+
 .PHONY: check-integration
 check-integration: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the test suite
 	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
@@ -504,7 +510,11 @@ check-integration: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the
 	#   TEST_NAME='^Test_InterceptDetailedOutput$$' make check-integration
 	set -o pipefail
 	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test $(BUILD_TAGS) \
- 		-count=1 -failfast -json -timeout=80m ./integration_test/... $(if $(TEST_NAME),-testify.m='$(TEST_NAME)') | $(tools/test-report)
+ 		-count=1 $(if $(filter true,$(TEST_FAILFAST)),-failfast) -json -timeout=80m ./integration_test/... $(if $(TEST_NAME),-testify.m='$(TEST_NAME)') | $(tools/test-report)
+
+.PHONY: check-integration-ci
+check-integration-ci: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the integration suite with up to 3 attempts, each retry scoped to the previous attempt's failures
+	build-aux/check-integration-retry.sh $(tools/test-report)
 
 .PHONY: _login
 _login:
