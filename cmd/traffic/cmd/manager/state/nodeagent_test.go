@@ -158,6 +158,77 @@ func TestReapNodeAgentJobs(t *testing.T) {
 	assert.Contains(t, names, unrelated.Name)
 }
 
+// TestReapAllNodeAgentJobs verifies that an uninstall-time reap deletes every
+// node-agent Job in the traffic-manager's namespace regardless of which
+// agent or workload namespace it was created for, while a Job that lacks
+// the app label (i.e. not a node-agent Job at all) survives.
+func TestReapAllNodeAgentJobs(t *testing.T) {
+	t.Parallel()
+
+	const ns = "ambassador"
+	first := &batchv1.Job{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "tel-node-agent-first",
+			Namespace: ns,
+			Labels: map[string]string{
+				nodeAgentAppLabel:       nodeAgentAppLabelValue,
+				nodeAgentNameLabel:      "test-agent",
+				nodeAgentNamespaceLabel: "ns1",
+			},
+		},
+	}
+	second := &batchv1.Job{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "tel-node-agent-second",
+			Namespace: ns,
+			Labels: map[string]string{
+				nodeAgentAppLabel:       nodeAgentAppLabelValue,
+				nodeAgentNameLabel:      "other-agent",
+				nodeAgentNamespaceLabel: "ns2",
+			},
+		},
+	}
+	unrelated := &batchv1.Job{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "some-other-job",
+			Namespace: ns,
+		},
+	}
+
+	ci := fake.NewSimpleClientset(first, second, unrelated)
+	installDeleteCollectionReactor(ci)
+
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: ns})
+
+	require.NoError(t, ReapAllNodeAgentJobs(ctx))
+
+	jobs, err := ci.BatchV1().Jobs(ns).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	names := make([]string, len(jobs.Items))
+	for i, j := range jobs.Items {
+		names[i] = j.Name
+	}
+	assert.NotContains(t, names, first.Name)
+	assert.NotContains(t, names, second.Name)
+	assert.Contains(t, names, unrelated.Name)
+}
+
+// TestReapAllNodeAgentJobs_None verifies that reaping succeeds when the
+// traffic-manager's namespace has no node-agent Jobs at all.
+func TestReapAllNodeAgentJobs_None(t *testing.T) {
+	t.Parallel()
+
+	const ns = "ambassador"
+	ci := fake.NewSimpleClientset()
+	installDeleteCollectionReactor(ci)
+
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: ns})
+
+	require.NoError(t, ReapAllNodeAgentJobs(ctx))
+}
+
 // TestCheckNodeAgentTarget verifies that a target pod which cannot host a
 // node-agent -- one on the host network, or one that already carries an
 // injected traffic-agent sidecar -- is rejected with a User error, while an

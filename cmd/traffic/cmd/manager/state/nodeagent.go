@@ -118,6 +118,32 @@ func reapNodeAgentJobs(ctx context.Context, agentName, namespace string) error {
 	return nil
 }
 
+// ReapAllNodeAgentJobs deletes every node-agent Job in the traffic-manager's
+// own namespace, unconditionally: unlike reapNodeAgentJobs and
+// reconcileNodeAgentJobs, it does not consult intercepts or leases, because
+// it is invoked only when the traffic-manager itself is being uninstalled
+// (via the pre-delete hook's /uninstall endpoint, the same trigger that
+// makes the agent injector roll back every injected sidecar). Uninstall
+// overrides every claim.
+func ReapAllNodeAgentJobs(ctx context.Context) error {
+	env := managerutil.GetEnv(ctx)
+	ns := env.ManagerNamespace
+	sel := fmt.Sprintf("%s=%s", nodeAgentAppLabel, nodeAgentAppLabelValue)
+	// Foreground propagation is used here for the same reason as in
+	// reapNodeAgentJobs: it keeps the ordering guarantee uniform even
+	// though, at uninstall, there is no successor Job that could race a
+	// predecessor's table teardown.
+	propagation := meta.DeletePropagationForeground
+	err := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(ns).DeleteCollection(ctx,
+		meta.DeleteOptions{PropagationPolicy: &propagation},
+		meta.ListOptions{LabelSelector: sel})
+	if err != nil && !k8sErrors.IsNotFound(err) {
+		return fmt.Errorf("unable to reap node-agent jobs in %s: %w", ns, err)
+	}
+	clog.Debugf(ctx, "reaped all node-agent jobs in %s", ns)
+	return nil
+}
+
 // reconcileNodeAgentJobsLoop periodically reaps node-agent Jobs that have no
 // matching live intercept. It is the safety net for the two cases the
 // per-intercept reap finalizer cannot cover: a client that creates a Job in

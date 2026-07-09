@@ -118,7 +118,52 @@ func (l *tlsListener) tlsConn(conn net.Conn) (net.Conn, error) {
 	return tls.Server(tcpConn, &tls.Config{Certificates: []tls.Certificate{cert}}), nil
 }
 
-func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorCertGetter) error {
+// NodeAgentReaper deletes every node-agent Job the traffic-manager created,
+// the same way AgentInjector.Uninstall rolls back every injected sidecar.
+// mutator must not import package state (state imports mutator), so
+// manager.go supplies this callback, bound to state.ReapAllNodeAgentJobs,
+// only when node-agent mode is enabled; a nil value skips the reap.
+type NodeAgentReaper func(ctx context.Context) error
+
+// uninstallHandler returns the /uninstall handler shared by ServeMutator's
+// TLS server and ServeNodeAgentUninstall's plain-HTTP server. It runs both
+// the injector's sidecar rollback (ai.Uninstall, skipped when ai is nil, as
+// it is for a node-agent-only install with no webhook) and the node-agent
+// Job reap (reap, skipped when nil, as it is when node-agent mode is
+// disabled). Either action's failure must not block the other: a failed Job
+// reap must not block sidecar rollback, and vice versa, so reap's error is
+// logged rather than surfaced to the caller -- the hook already treats the
+// request as best-effort (`|| exit 0`).
+func uninstallHandler(ai AgentInjector, reap NodeAgentReaper) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		clog.Debug(ctx, "Received uninstall request...")
+		statusCode, err := serveRequest(ctx, r, http.MethodDelete, func(ctx context.Context) {
+			if ai != nil {
+				ai.Uninstall(ctx)
+			}
+			if reap != nil {
+				if rErr := reap(ctx); rErr != nil {
+					clog.Errorf(ctx, "unable to reap node-agent jobs: %v", rErr)
+				}
+			}
+		})
+		if err != nil {
+			clog.Errorf(ctx, "error handling uninstall request: %v", err)
+			w.WriteHeader(statusCode)
+			_, _ = w.Write([]byte(err.Error()))
+		} else {
+			clog.Debug(ctx, "uninstall request handled successfully")
+			w.WriteHeader(http.StatusOK)
+		}
+	}
+}
+
+func healthzHandler(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
+func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorCertGetter, reapNodeAgentJobs NodeAgentReaper) error {
 	cw := GetMap(ctx)
 	ai := NewAgentInjectorFunc(ctx, cw)
 
@@ -139,22 +184,8 @@ func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorC
 			clog.Errorf(ctx, "could not write response: %v", err)
 		}
 	})
-	mux.HandleFunc("/uninstall", func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		clog.Debug(ctx, "Received uninstall request...")
-		statusCode, err := serveRequest(ctx, r, http.MethodDelete, ai.Uninstall)
-		if err != nil {
-			clog.Errorf(ctx, "error handling uninstall request: %v", err)
-			w.WriteHeader(statusCode)
-			_, _ = w.Write([]byte(err.Error()))
-		} else {
-			clog.Debug(ctx, "uninstall request handled successfully")
-			w.WriteHeader(http.StatusOK)
-		}
-	})
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
+	mux.HandleFunc("/uninstall", uninstallHandler(ai, reapNodeAgentJobs))
+	mux.HandleFunc("/healthz", healthzHandler)
 
 	port := managerutil.GetEnv(ctx).MutatorWebhookPort
 	lg := clog.StdLogger(ctx, slog.LevelInfo)
@@ -184,6 +215,48 @@ func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorC
 		return cw.Wait(ctx)
 	})
 	return serveAndWatchTLS(ctx, &server, fmt.Sprintf(":%d", port), injectorCertGetter, injectorReady)
+}
+
+// ServeNodeAgentUninstall serves only /uninstall and /healthz over plain
+// HTTP, for a node-agent-only install (nodeAgent.enabled=true,
+// agentInjector.enabled=false): the webhook server never runs in that mode,
+// so the pre-delete hook has nothing to reach for the node-agent Job reap
+// unless something else listens. It uses no TLS because the injector's
+// certificate secret does not exist on such an install. It listens on the
+// same port the webhook server would bind (managerutil.Env.MutatorWebhookPort,
+// which the chart's agent-injector Service always targets by name
+// regardless of which mode created the listening process).
+func ServeNodeAgentUninstall(ctx context.Context, reapNodeAgentJobs NodeAgentReaper) error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/uninstall", uninstallHandler(nil, reapNodeAgentJobs))
+	mux.HandleFunc("/healthz", healthzHandler)
+
+	port := managerutil.GetEnv(ctx).MutatorWebhookPort
+	lg := clog.StdLogger(ctx, slog.LevelInfo)
+	lg.SetPrefix(fmt.Sprintf("%d/", port))
+	server := &http.Server{
+		Handler:  mux,
+		ErrorLog: lg,
+		BaseContext: func(n net.Listener) context.Context {
+			return ctx
+		},
+	}
+
+	lc := net.ListenConfig{}
+	listener, err := lc.Listen(ctx, "tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return err
+	}
+	defer clog.Debug(ctx, "node-agent uninstall service stopped")
+	clog.Debug(ctx, "node-agent uninstall service started")
+
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			clog.Errorf(ctx, "failed to serve: %v", err)
+		}
+	}()
+	<-ctx.Done()
+	return server.Shutdown(ctx)
 }
 
 type logFilter struct {
