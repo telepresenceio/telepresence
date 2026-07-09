@@ -28,6 +28,7 @@ type Command struct {
 	ToPod           []string // --to-pod
 	Cmdline         []string
 	FormattedOutput bool
+	NodeAgent       bool // --node-agent
 }
 
 func (c *Command) AddFlags(cmd *cobra.Command) {
@@ -44,6 +45,10 @@ func (c *Command) AddFlags(cmd *cobra.Command) {
 	c.MountFlags.AddFlags(flagSet, true)
 	c.DockerFlags.AddFlags(flagSet, "ingested")
 	flagSet.StringVar(&c.WaitMessage, "wait-message", "", "Message to print when ingest handler has started")
+
+	flagSet.BoolVar(&c.NodeAgent, "node-agent", false,
+		"Serve this ingest with a node-hosted traffic-agent (a manager-created Job that enters the target pod's namespaces) instead of injecting a sidecar. "+
+			"Requires the traffic-manager to have node-agent mode enabled.")
 
 	_ = cmd.RegisterFlagCompletionFunc("container", AutocompleteContainer)
 }

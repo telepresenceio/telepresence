@@ -64,6 +64,7 @@ func (s *state) CreateRequest() (*rpc.IngestRequest, error) {
 		},
 		LocalMountPort: int32(s.MountFlags.LocalMountPort),
 		MountPoint:     s.MountFlags.Mount,
+		NodeAgent:      s.NodeAgent,
 	}
 
 	for _, toPod := range s.ToPod {

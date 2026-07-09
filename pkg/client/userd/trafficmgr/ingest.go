@@ -125,6 +125,9 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 	if err = requireAgentPortForward(ctx, "ingest"); err != nil {
 		return nil, err
 	}
+	if rq.NodeAgent && s.compareFinalizedManagerVersion(2, 30, 0) < 0 {
+		return nil, errcat.User.Newf("traffic-manager version %s has no support for node-agents", s.managerVersion)
+	}
 	id := rq.Identifier
 	ns := id.Namespace
 	if ns == "" {
@@ -144,6 +147,16 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 	ai := s.getCurrentAgent(ik.workload, ik.namespace)
 
 	if ai != nil {
+		if rq.NodeAgent && !ai.NodeAgent {
+			return nil, errcat.User.Newf(
+				"workload %s already has an injected traffic-agent, which a node-agent cannot replace; "+
+					"omit --node-agent, or uninstall the existing agent and retry",
+				ik.workload)
+		}
+		// A node-agent serves env and mounts identically to a sidecar, so a
+		// cached node-agent silently satisfies a plain (non-node-agent)
+		// ingest request too. Injecting a sidecar on top of it would break
+		// the live node-agent, so it is reused rather than rejected.
 		if ik.container == "" {
 			ik.container, err = s.getSingleContainerName(ai)
 			if err != nil {
@@ -168,11 +181,22 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 			Session:   s.sessionInfo,
 			Name:      ik.workload,
 			Namespace: ik.namespace,
+			NodeAgent: rq.NodeAgent,
 		})
 		if err != nil {
 			return nil, err
 		}
 		ai = as.Agents[0]
+		// A sidecar returned when a node-agent was explicitly requested must
+		// never be used silently: its env/mounts assume no sidecar was
+		// injected, so a mismatch here means the traffic-manager did not
+		// honor node-agent mode (e.g. the version gate above was bypassed by
+		// a manager that predates the node_agent field). Fail loudly instead
+		// of quietly falling back to sidecar semantics.
+		if rq.NodeAgent && !ai.NodeAgent {
+			return nil, errcat.User.Newf(
+				"traffic-manager did not honor node-agent mode for workload %s", ik.workload)
+		}
 	}
 	if err = s.validateAgentForIngest(ai); err != nil {
 		return nil, err
@@ -320,5 +344,44 @@ func (s *session) LeaveIngest(rq *rpc.IngestIdentifier) (ii *rpc.IngestInfo, err
 	s.stopHandler(fmt.Sprintf("%s/%s/%s", ig.workload, ig.container, ig.namespace), ig.handlerContainer, ig.pid)
 	ig.cancel()
 	ig.wg.Wait()
+	s.releaseNodeAgentIfLast(ig)
 	return ig.response(), nil
+}
+
+// releaseNodeAgentIfLast tells the traffic-manager to drop this session's claim on ig's
+// node-agent Job once ig was the last ingest referencing its {workload, namespace}. It is
+// called from LeaveIngest, the only path that explicitly ends a single ingest while the
+// session stays up; a full session teardown (ClearIngestsAndIntercepts) does not need this
+// call because the traffic-manager already drops every lease held by a session that
+// disconnects (session-end lease GC), so nothing would be gained by a per-ingest RPC that
+// might delay shutdown.
+//
+// ig.cancel() has already removed ig from s.currentIngests by the time this runs, so a Range
+// that finds no other entry for the same {workload, namespace} means ig was the last one.
+// The call is best-effort: the manager's reconciler reaps orphaned node-agent Jobs on its
+// own, so a failed or skipped release must never fail the leave.
+func (s *session) releaseNodeAgentIfLast(ig *ingest) {
+	if ig.AgentInfo == nil || !ig.NodeAgent {
+		return
+	}
+	stillClaimed := false
+	s.currentIngests.Range(func(_ ingestKey, other *ingest) bool {
+		if other.workload == ig.workload && other.namespace == ig.namespace {
+			stillClaimed = true
+			return false
+		}
+		return true
+	})
+	if stillClaimed {
+		return
+	}
+	ctx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerAPI)
+	defer cancel()
+	if _, err := s.ManagerClient().ReleaseAgent(ctx, &manager.ReleaseAgentRequest{
+		Session:   s.sessionInfo,
+		Name:      ig.workload,
+		Namespace: ig.namespace,
+	}); err != nil {
+		clog.Warnf(ctx, "failed to release node-agent for workload %s.%s: %v", ig.workload, ig.namespace, err)
+	}
 }
