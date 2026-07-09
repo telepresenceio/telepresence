@@ -903,7 +903,7 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 	if err != nil {
 		return nil, err
 	}
-	as, err := s.state.EnsureAgent(ctx, request.Name, ns)
+	as, err := s.state.EnsureAgent(ctx, managerutil.GetSessionID(ctx), request.Name, ns, request.NodeAgent)
 	if err != nil {
 		return nil, status.Convert(err).Err()
 	}

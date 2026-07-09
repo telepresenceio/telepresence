@@ -136,8 +136,10 @@ func (s *State) reconcileNodeAgentJobsLoop(ctx context.Context) error {
 	}
 }
 
-// reconcileNodeAgentJobs reaps every node-agent Job whose agent has no live
-// node-agent intercept, skipping Jobs younger than nodeAgentOrphanGracePeriod.
+// reconcileNodeAgentJobs reaps every node-agent Job that nothing wants: it
+// has neither a live node-agent intercept nor a lease (taken by
+// EnsureAgent(node_agent=true), e.g. for an ingest) whose session is still
+// alive. Jobs younger than nodeAgentOrphanGracePeriod are skipped.
 func (s *State) reconcileNodeAgentJobs(ctx context.Context) error {
 	ns := managerutil.GetEnv(ctx).ManagerNamespace
 	sel := fmt.Sprintf("%s=%s", nodeAgentAppLabel, nodeAgentAppLabelValue)
@@ -154,6 +156,12 @@ func (s *State) reconcileNodeAgentJobs(ctx context.Context) error {
 	s.intercepts.Range(func(_ string, i *Intercept) bool {
 		if i.Spec.GetNodeAgent() && i.Disposition != rpc.InterceptDispositionType_REMOVED {
 			wanted[wantedKey{name: i.Spec.GetAgent(), namespace: i.Spec.GetNamespace()}] = struct{}{}
+		}
+		return true
+	})
+	s.leases.Range(func(k leaseKey, _ struct{}) bool {
+		if _, ok := s.clients.Load(k.sessionID); ok {
+			wanted[wantedKey{name: k.name, namespace: k.namespace}] = struct{}{}
 		}
 		return true
 	})

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apps "k8s.io/api/apps/v1"
@@ -25,6 +26,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // TestNodeAgentGateErr_Disabled verifies that requesting node-agent mode
@@ -48,6 +50,44 @@ func TestNodeAgentGateErr_Enabled(t *testing.T) {
 
 	env := &managerutil.Env{NodeAgentEnabled: true}
 	assert.NoError(t, nodeAgentGateErr(env))
+}
+
+// installDeleteCollectionReactor installs a reactor that emulates a real API
+// server's "delete-collection" verb for Jobs: list with the given selector,
+// then delete each match. The fake clientset's generic object-tracker
+// reactor does not implement that verb (it silently no-ops), which is why
+// reapNodeAgentJobs -- and any test that exercises it, directly or via
+// ReleaseAgent/the intercept-removal finalizer -- needs this installed on
+// its clientset. It operates on the tracker directly (rather than calling
+// back through ci.BatchV1()...), because that call path re-enters ci's
+// non-reentrant lock, which is already held by the Invokes call that
+// dispatches to this reactor.
+func installDeleteCollectionReactor(ci *fake.Clientset) {
+	ci.PrependReactor("delete-collection", "jobs", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		dc, ok := action.(k8stesting.DeleteCollectionActionImpl)
+		if !ok {
+			return false, nil, nil
+		}
+		gvr := dc.GetResource()
+		tracker := ci.Tracker()
+		obj, err := tracker.List(gvr, batchv1.SchemeGroupVersion.WithKind("Job"), dc.GetNamespace())
+		if err != nil {
+			return true, nil, err
+		}
+		jobList, ok := obj.(*batchv1.JobList)
+		if !ok {
+			return true, nil, fmt.Errorf("unexpected list type %T", obj)
+		}
+		sel := dc.GetListRestrictions().Labels
+		for _, job := range jobList.Items {
+			if sel == nil || sel.Matches(labels.Set(job.Labels)) {
+				if err := tracker.Delete(gvr, dc.GetNamespace(), job.Name); err != nil {
+					return true, nil, err
+				}
+			}
+		}
+		return true, nil, nil
+	})
 }
 
 // TestReapNodeAgentJobs verifies that reaping deletes only the Job(s)
@@ -99,38 +139,7 @@ func TestReapNodeAgentJobs(t *testing.T) {
 	}
 
 	ci := fake.NewSimpleClientset(matching, other, sameNameOtherNamespace, unrelated)
-	// The fake clientset's generic object-tracker reactor does not implement
-	// the "delete-collection" verb (it silently no-ops), so a reactor that
-	// emulates a real API server's behavior — list with the given selector,
-	// then delete each match — is installed here. It operates on the tracker
-	// directly (rather than calling back through ci.BatchV1()...), because
-	// that call path re-enters ci's non-reentrant lock, which is already
-	// held by the Invokes call that dispatches to this reactor.
-	ci.PrependReactor("delete-collection", "jobs", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		dc, ok := action.(k8stesting.DeleteCollectionActionImpl)
-		if !ok {
-			return false, nil, nil
-		}
-		gvr := dc.GetResource()
-		tracker := ci.Tracker()
-		obj, err := tracker.List(gvr, batchv1.SchemeGroupVersion.WithKind("Job"), dc.GetNamespace())
-		if err != nil {
-			return true, nil, err
-		}
-		jobList, ok := obj.(*batchv1.JobList)
-		if !ok {
-			return true, nil, fmt.Errorf("unexpected list type %T", obj)
-		}
-		sel := dc.GetListRestrictions().Labels
-		for _, job := range jobList.Items {
-			if sel == nil || sel.Matches(labels.Set(job.Labels)) {
-				if err := tracker.Delete(gvr, dc.GetNamespace(), job.Name); err != nil {
-					return true, nil, err
-				}
-			}
-		}
-		return true, nil, nil
-	})
+	installDeleteCollectionReactor(ci)
 
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: ns})
@@ -254,6 +263,8 @@ func TestReconcileNodeAgentJobs(t *testing.T) {
 	s := &State{
 		backgroundCtx: ctx,
 		intercepts:    cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+		clients:       xsync.NewMap[tunnel.SessionID, *ClientSession](),
+		leases:        xsync.NewMap[leaseKey, struct{}](),
 	}
 	s.intercepts.Store("s:live-agent", &Intercept{InterceptInfo: &rpc.InterceptInfo{
 		Disposition: rpc.InterceptDispositionType_ACTIVE,
