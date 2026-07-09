@@ -1,4 +1,10 @@
-{{- if and (not (and .Values.rbac .Values.rbac.only)) .Values.agentInjector.enabled }}
+{{- /*
+This hook also runs for a node-agent-only install (agentInjector.enabled=
+false, nodeAgent.enabled=true): the traffic-manager still needs its
+node-agent Jobs reaped on uninstall, and serves /uninstall itself over
+plain HTTP in that mode (see the agent-injector Service in service.yaml).
+*/}}
+{{- if and (not (and .Values.rbac .Values.rbac.only)) (or .Values.agentInjector.enabled .Values.nodeAgent.enabled) }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -38,23 +44,32 @@ spec:
             {{- end }}
           image: "{{ .Values.hooks.curl.registry }}/{{ .Values.hooks.curl.image }}:{{ .Values.hooks.curl.tag }}"
           imagePullPolicy: {{ .Values.hooks.curl.pullPolicy }}
+          {{- if .Values.agentInjector.enabled }}
           volumeMounts:
             - name: secret-volume
               mountPath: /secret
           env:
             - name: CURL_CA_BUNDLE
               value: /secret/ca.crt
+          {{- end }}
           resources:
             {{- toYaml .Values.hooks.resources | nindent 12 }}
           command:
             - sh
             - -c
           args:
-            - 'curl --fail --connect-timeout 5 --max-time 60 --request DELETE https://{{ .Values.agentInjector.name }}.{{ include "traffic-manager.namespace" $ }}:{{ .Values.agentInjector.service.port | default .Values.agentInjector.webhook.port }}/uninstall || exit 0'
+            {{- /*
+            A node-agent-only install has no agent-injector certificate, so
+            its /uninstall server (see ServeNodeAgentUninstall) speaks plain
+            HTTP; the injector-enabled webhook server keeps using TLS.
+            */}}
+            - 'curl --fail --connect-timeout 5 --max-time 60 --request DELETE {{ if .Values.agentInjector.enabled }}https{{ else }}http{{ end }}://{{ .Values.agentInjector.name }}.{{ include "traffic-manager.namespace" $ }}:{{ .Values.agentInjector.service.port | default .Values.agentInjector.webhook.port }}/uninstall || exit 0'
+      {{- if .Values.agentInjector.enabled }}
       volumes:
         - name: secret-volume
           secret:
             secretName: {{ .Values.agentInjector.secret.name }}
+      {{- end }}
       {{- with .Values.schedulerName }}
       schedulerName: {{ . }}
       {{- end }}
