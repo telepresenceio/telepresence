@@ -95,7 +95,19 @@ func reapNodeAgentJobs(ctx context.Context, agentName, namespace string) error {
 		nodeAgentAppLabel, nodeAgentAppLabelValue,
 		nodeAgentNameLabel, agentName,
 		nodeAgentNamespaceLabel, namespace)
-	propagation := meta.DeletePropagationBackground
+	// Foreground propagation keeps the Job object present (with a
+	// DeletionTimestamp) until its pod is fully gone. A successor Job for
+	// the same target must never program the shared nft table while a
+	// predecessor's pod can still tear it down, and ensureNodeAgent's
+	// AlreadyExists/staleness handling relies on seeing that terminating
+	// Job -- and on replaceNodeAgentJob waiting for it to vanish entirely,
+	// pod included -- before creating the replacement. Background
+	// propagation would instead remove the Job object immediately while the
+	// pod (and its teardown of that table) lingers, letting a successor
+	// race ahead of it. This does not change how long the delete takes to
+	// complete -- DeleteCollection does not block on foreground propagation
+	// -- only the ordering guarantee it gives callers that observe the Job.
+	propagation := meta.DeletePropagationForeground
 	err := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(ns).DeleteCollection(ctx,
 		meta.DeleteOptions{PropagationPolicy: &propagation},
 		meta.ListOptions{LabelSelector: sel})
@@ -166,7 +178,9 @@ func (s *State) reconcileNodeAgentJobs(ctx context.Context) error {
 		return true
 	})
 
-	propagation := meta.DeletePropagationBackground
+	// See the comment on the propagation policy in reapNodeAgentJobs above:
+	// the same successor/teardown ordering guarantee applies here.
+	propagation := meta.DeletePropagationForeground
 	now := time.Now()
 	for i := range jobs.Items {
 		job := &jobs.Items[i]
