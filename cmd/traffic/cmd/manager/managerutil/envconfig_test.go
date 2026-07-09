@@ -200,6 +200,21 @@ func TestEnvconfig(t *testing.T) {
 	}
 }
 
+func TestEnvconfigAgentArrivalTimeoutDefault(t *testing.T) {
+	// AGENT_ARRIVAL_TIMEOUT must default to a positive value so that a
+	// traffic-manager installed without the chart supplying it (e.g. an
+	// agentInjector.enabled=false, nodeAgent.enabled=true install using an
+	// older chart) never ends up with a zero-duration wait for an agent to
+	// arrive.
+	ctx, err := managerutil.LoadEnv(context.Background(), map[string]string{
+		"REGISTRY":    "ghcr.io/telepresenceio",
+		"LOG_LEVEL":   "info",
+		"SERVER_PORT": "8081",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Second, managerutil.GetEnv(ctx).AgentArrivalTimeout)
+}
+
 func TestEnvHostNetwork(t *testing.T) {
 	podIP := netip.MustParseAddr("203.0.113.18")
 	tests := []struct {

@@ -133,63 +133,18 @@ spec:
             value: {{ .insecure | quote }}
           {{- end }}
           {{- end }}
-      {{- if .agentInjector.enabled }}
+      {{- if or .agentInjector.enabled .nodeAgent.enabled }}
         {{- /*
-        Traffic agent injector configuration
+        Agent arrival timeout, image resolution, and every setting that is
+        baked into the generated agentconfig.Sidecar (marshaled to
+        AGENT_CONFIG): needed whenever this traffic-manager may provision a
+        traffic-agent, whether via the injector's webhook or a node-agent
+        Job, since a node-agent Job's agent process is configured from the
+        same generated Sidecar as an injected one.
         */}}
           - name: AGENT_ARRIVAL_TIMEOUT
             value: {{ quote (default "30s" .timeouts.agentArrival) }}
-          {{- with .agentInjector }}
-          - name: AGENT_INJECT_POLICY
-            value: {{ .injectPolicy }}
-          - name: AGENT_INJECTOR_NAME
-            value:  {{ .name | quote }}
-          - name: AGENT_INJECTOR_MUTATION_AWARE
-            value: {{ (default false .mutationAware) | quote }}
-          {{- end }}
-        {{- /*
-        Traffic agent configuration
-        */}}
-          {{- with .agent }}
-          {{- if .logLevel }}
-          - name: AGENT_LOG_LEVEL
-            value: {{ .logLevel }}
-          {{- end }}
-          {{- if .port }}
-          - name: AGENT_PORT
-            value: {{ .port | quote }}
-          {{- end }}
-          - name: AGENT_ENABLE_H2C_PROBING
-            value: {{ (default false .enableH2cProbing) | quote }}
-          - name: AGENT_CONSUMPTION_METRICS
-            value: {{ (default true .enableConsumptionMetrics) | quote }}
-          {{- if .resources }}
-          - name: AGENT_RESOURCES
-            value: '{{ toJson .resources }}'
-          {{- end }}
-          {{- if .initResources }}
-          - name: AGENT_INIT_RESOURCES
-            value: '{{ toJson .initResources }}'
-          {{- end }}
-          {{- if .mountPolicies }}
-          - name: AGENT_MOUNT_POLICIES
-            value: '{{ toJson .mountPolicies }}'
-          {{- end }}
-          {{- with .serviceMesh }}
-          {{- if .dialSubnets }}
-          - name: AGENT_MESH_DIAL_SUBNETS
-            value: {{ join " " .dialSubnets | quote }}
-          {{- end }}
-          {{- end }}
-          {{- if .maxIdleTime }}
-          - name: AGENT_MAX_IDLE_TIME
-            value: {{ .maxIdleTime }}
-          {{- end }}
-          {{- with .initContainer }}
-          - name: AGENT_INIT_CONTAINER_ENABLED
-            value: {{ .enabled | quote  }}
-          {{- end }}
-          {{- with .image }}
+          {{- with .agent.image }}
           {{- if .name }}
           - name: AGENT_IMAGE_NAME
             value: {{ .name }}
@@ -209,6 +164,72 @@ spec:
           - name: AGENT_IMAGE_PULL_POLICY
             value: {{ .pullPolicy }}
           {{- end }}
+          {{- with .agent }}
+          {{- if .logLevel }}
+          - name: AGENT_LOG_LEVEL
+            value: {{ .logLevel }}
+          {{- end }}
+          {{- if .port }}
+          - name: AGENT_PORT
+            value: {{ .port | quote }}
+          {{- end }}
+          - name: AGENT_ENABLE_H2C_PROBING
+            value: {{ (default false .enableH2cProbing) | quote }}
+          - name: AGENT_CONSUMPTION_METRICS
+            value: {{ (default true .enableConsumptionMetrics) | quote }}
+          {{- if .mountPolicies }}
+          - name: AGENT_MOUNT_POLICIES
+            value: '{{ toJson .mountPolicies }}'
+          {{- end }}
+          {{- with .serviceMesh }}
+          {{- if .dialSubnets }}
+          - name: AGENT_MESH_DIAL_SUBNETS
+            value: {{ join " " .dialSubnets | quote }}
+          {{- end }}
+          {{- end }}
+          {{- if .watchRetryInterval }}
+          - name: AGENT_WATCH_RETRY_INTERVAL
+            value: {{ .watchRetryInterval }}
+          {{- end }}
+          {{- end }}
+      {{- end }}
+      {{- if .agentInjector.enabled }}
+        {{- /*
+        Traffic agent injector configuration
+        */}}
+          {{- with .agentInjector }}
+          - name: AGENT_INJECT_POLICY
+            value: {{ .injectPolicy }}
+          - name: AGENT_INJECTOR_NAME
+            value:  {{ .name | quote }}
+          - name: AGENT_INJECTOR_MUTATION_AWARE
+            value: {{ (default false .mutationAware) | quote }}
+          {{- end }}
+        {{- /*
+        Settings for the webhook-injected sidecar container (and its
+        mutator-managed lifecycle) that a node-agent Job has no use for: its
+        container spec, resources and security context are fixed by the
+        manager's node-agent Job builder, and idle-agent eviction goes
+        through the mutator's config-map/eviction path rather than the
+        node-agent session-lease lifecycle.
+        */}}
+          {{- with .agent }}
+          {{- if .resources }}
+          - name: AGENT_RESOURCES
+            value: '{{ toJson .resources }}'
+          {{- end }}
+          {{- if .initResources }}
+          - name: AGENT_INIT_RESOURCES
+            value: '{{ toJson .initResources }}'
+          {{- end }}
+          {{- if .maxIdleTime }}
+          - name: AGENT_MAX_IDLE_TIME
+            value: {{ .maxIdleTime }}
+          {{- end }}
+          {{- with .initContainer }}
+          - name: AGENT_INIT_CONTAINER_ENABLED
+            value: {{ .enabled | quote  }}
+          {{- end }}
           {{- /* must check against nil. An empty security context is a valid override */}}
           {{- if not (eq .securityContext nil) }}
           - name: AGENT_SECURITY_CONTEXT
@@ -218,10 +239,6 @@ spec:
           {{- if not (eq .initSecurityContext nil) }}
           - name: AGENT_INIT_SECURITY_CONTEXT
             value: '{{ toJson .initSecurityContext }}'
-          {{- end }}
-          {{- if .watchRetryInterval }}
-          - name: AGENT_WATCH_RETRY_INTERVAL
-            value: .watchRetryInterval
           {{- end }}
           {{- end }}
           {{- with fromJsonArray (include "traffic-manager.namespaces" $) }}

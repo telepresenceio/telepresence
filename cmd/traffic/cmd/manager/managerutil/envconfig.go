@@ -41,8 +41,8 @@ type Env struct {
 	MutatorWebhookPort           uint16
 	ManagerNamespace             string
 	AgentRestApiPort             uint16
-	AgentArrivalTimeout          time.Duration
-	MaxNamespaceSpecificWatchers int `default:"10"`
+	AgentArrivalTimeout          time.Duration `default:"30s"`
+	MaxNamespaceSpecificWatchers int           `default:"10"`
 
 	GrpcMaxReceiveSize resource.Quantity
 
