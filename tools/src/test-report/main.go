@@ -24,6 +24,10 @@ type Line struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "-scope" {
+		os.Exit(runScope(os.Args[2:]))
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	_, isCi := os.LookupEnv("GITHUB_SHA")
 	progressBar := newProgressBar(ctx, isCi)
@@ -36,6 +40,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to create logger: %s\n", err)
 		os.Exit(1)
 	}
+	collector := NewCollector()
 	go func() {
 		scanner := bufio.NewScanner(os.Stdin)
 		defer func() {
@@ -53,10 +58,41 @@ func main() {
 			}
 			progressBar.ReportCh <- line
 			logger.Report(line)
+			collector.Report(line)
 		}
 	}()
 	progressBar.Wait()
+	if failuresOut := os.Getenv("TEST_FAILURES_OUT"); failuresOut != "" {
+		if err := WriteFailuresFile(failuresOut, collector.Document()); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to write failures file: %s\n", err)
+		}
+	}
 	if logger.ReportFailures() {
 		os.Exit(1)
 	}
+}
+
+// runScope implements `test-report -scope <failures.json>`: it reads a
+// FailuresDocument and prints the KEY=VALUE lines a caller can eval to scope
+// a re-run, or nothing when the failure set is unscopeable. It returns the
+// process exit code; non-zero only for a missing or corrupt failures file.
+func runScope(args []string) int {
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: test-report -scope <failures.json>")
+		return 1
+	}
+	data, err := os.ReadFile(args[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to read failures file: %s\n", err)
+		return 1
+	}
+	var doc FailuresDocument
+	if err := json.Unmarshal(data, &doc); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to parse failures file: %s\n", err)
+		return 1
+	}
+	for _, line := range BuildScopeOutput(doc) {
+		fmt.Println(line)
+	}
+	return 0
 }

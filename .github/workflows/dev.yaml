@@ -66,49 +66,40 @@ jobs:
           minikube image load ${{env.TELEPRESENCE_REGISTRY}}/route-controller:${{env.TELEPRESENCE_SEMVER}}
       - name: Run integration tests
         if: github.event.label.name == 'ok to test'
-        uses: nick-fields/retry/@v4
-        with:
-          max_attempts: 3
-          shell: bash
-          timeout_minutes: 90
-          command: |
-            set -ex
-            if [[ ${RUNNER_OS} == "Windows" ]]; then
-              export PATH="$PATH:/C/Program Files/SSHFS-Win/bin:$HOME/kubectl-plugins"
-            fi
-            make check-integration
+        timeout-minutes: 150
+        shell: bash
+        run: |
+          set -ex
+          if [[ ${RUNNER_OS} == "Windows" ]]; then
+            export PATH="$PATH:/C/Program Files/SSHFS-Win/bin:$HOME/kubectl-plugins"
+          fi
+          make check-integration-ci
       - name: Compatibility with older manager and agent
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
           DEV_MANAGER_VERSION: "2.24.1"
           DEV_MANAGER_REGISTRY: ghcr.io/telepresenceio
-        uses: nick-fields/retry/@v4
-        with:
-          max_attempts: 3
-          shell: bash
-          timeout_minutes: 90
-          command: |
-            set -ex
-            if [[ ${RUNNER_OS} == "Windows" ]]; then
-              export PATH="$PATH:/C/Program Files/SSHFS-Win/bin:$HOME/kubectl-plugins"
-            fi
-            make check-integration
+        timeout-minutes: 150
+        shell: bash
+        run: |
+          set -ex
+          if [[ ${RUNNER_OS} == "Windows" ]]; then
+            export PATH="$PATH:/C/Program Files/SSHFS-Win/bin:$HOME/kubectl-plugins"
+          fi
+          make check-integration-ci
       - name: Compatibility with older client
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
           DEV_CLIENT_VERSION: "2.24.1"
           DEV_CLIENT_REGISTRY: ghcr.io/telepresenceio
-        uses: nick-fields/retry/@v4
-        with:
-          max_attempts: 3
-          shell: bash
-          timeout_minutes: 90
-          command: |
-            set -ex
-            if [[ ${RUNNER_OS} == "Windows" ]]; then
-              export PATH="$PATH:/C/Program Files/SSHFS-Win/bin:$HOME/kubectl-plugins"
-            fi
-            make check-integration
+        timeout-minutes: 150
+        shell: bash
+        run: |
+          set -ex
+          if [[ ${RUNNER_OS} == "Windows" ]]; then
+            export PATH="$PATH:/C/Program Files/SSHFS-Win/bin:$HOME/kubectl-plugins"
+          fi
+          make check-integration-ci
       - uses: ./.github/actions/upload-logs
         env:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
