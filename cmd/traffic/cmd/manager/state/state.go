@@ -82,6 +82,17 @@ type State struct {
 	timedLogLevel              log.TimedLevel
 	llSubs                     *loglevelSubscribers
 	workloadWatchers           *xsync.Map[string, Watcher] // workload watchers, created on demand and keyed by namespace
+
+	// nodeAgentPodWatchers tracks the running per-workload node-agent pod-set
+	// watchers (nodeAgentPodWatchLoop), one per name+namespace with at least
+	// one claim, so that starting one is idempotent and its own goroutine can
+	// remove its entry when it exits.
+	nodeAgentPodWatchers *xsync.Map[nodeAgentWatchKey, struct{}]
+
+	// nodeAgentWatchTimings overrides the pod-set watcher's intervals when
+	// non-zero; the zero value selects the production constants (see
+	// watchTimings).
+	nodeAgentWatchTimings      nodeAgentWatchTimings
 	tunnelCounter              int32
 	tunnelIngressCounter       uint64
 	tunnelEgressCounter        uint64
@@ -112,14 +123,15 @@ func NewState(ctx context.Context, g log.Group, adminCommandCh <-chan tmconfig.A
 		loglevel = slog.LevelInfo
 	}
 	s := &State{
-		backgroundCtx:    ctx,
-		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
-		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
-		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](xsync.WithGrowOnly()),
-		leases:           xsync.NewMap[leaseKey, struct{}](),
-		workloadWatchers: xsync.NewMap[string, Watcher](xsync.WithGrowOnly()),
-		timedLogLevel:    log.NewTimedLevel(loglevel, clog.SetTreeLevel),
-		llSubs:           newLoglevelSubscribers(),
+		backgroundCtx:        ctx,
+		intercepts:           cache.NewMap[string, *Intercept](interceptEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
+		agents:               cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
+		clients:              xsync.NewMap[tunnel.SessionID, *ClientSession](xsync.WithGrowOnly()),
+		leases:               xsync.NewMap[leaseKey, struct{}](),
+		workloadWatchers:     xsync.NewMap[string, Watcher](xsync.WithGrowOnly()),
+		nodeAgentPodWatchers: xsync.NewMap[nodeAgentWatchKey, struct{}](),
+		timedLogLevel:        log.NewTimedLevel(loglevel, clog.SetTreeLevel),
+		llSubs:               newLoglevelSubscribers(),
 	}
 	g.Go("namespace-GC", s.pruneSessionGCLoop)
 	g.Go("expired-GC", s.runSessionGCLoop)
@@ -444,6 +456,7 @@ func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
 
 func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) {
 	var addedChildren []*Intercept
+	nodeAgentWatches := make(map[nodeAgentWatchKey]struct{})
 	for _, intercept := range intercepts {
 		s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
 			spec := intercept.Spec
@@ -461,10 +474,17 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 				}
 				if spec.NodeAgent {
 					is.addFinalizer(s.nodeAgentReapFinalizer())
+					nodeAgentWatches[nodeAgentWatchKey{name: spec.Agent, namespace: spec.Namespace}] = struct{}{}
 				}
 			}
 			return is
 		})
+	}
+	// The watches are started only after the intercepts are stored: a watcher
+	// checks nodeAgentWanted as soon as it starts, and exits unless it can
+	// already observe the claim it was started for.
+	for key := range nodeAgentWatches {
+		s.startNodeAgentPodWatch(key.name, key.namespace)
 	}
 	for _, intercept := range addedChildren {
 		parent, ok := s.GetParentIntercept(tunnel.SessionID(intercept.ClientSession.SessionId), intercept.Spec)

@@ -184,7 +184,12 @@ func (s *State) reconcileNodeAgentJobsLoop(ctx context.Context) error {
 // reconcileNodeAgentJobs reaps every node-agent Job that nothing wants: it
 // has neither a live node-agent intercept nor a lease (taken by
 // EnsureAgent(node_agent=true), e.g. for an ingest) whose session is still
-// alive. Jobs younger than nodeAgentOrphanGracePeriod are skipped.
+// alive. Jobs younger than nodeAgentOrphanGracePeriod are skipped. It also
+// reaps an aged Job whose workload still has a live claim if the Job's target
+// pod no longer exists: the per-workload pod-set watcher
+// (nodeAgentPodWatchLoop) normally reaps that Job the moment the pod is gone,
+// but a manager restart loses that in-memory watcher along with every other
+// piece of runtime state, so this sweep is its backstop too.
 func (s *State) reconcileNodeAgentJobs(ctx context.Context) error {
 	ns := managerutil.GetEnv(ctx).ManagerNamespace
 	sel := fmt.Sprintf("%s=%s", nodeAgentAppLabel, nodeAgentAppLabelValue)
@@ -221,19 +226,47 @@ func (s *State) reconcileNodeAgentJobs(ctx context.Context) error {
 		// so its key's namespace is "" and never matches a wanted key; such a
 		// Job is reaped once it passes the grace period below.
 		key := wantedKey{name: job.Labels[nodeAgentNameLabel], namespace: job.Labels[nodeAgentNamespaceLabel]}
-		if _, ok := wanted[key]; ok {
-			continue
-		}
+		_, isWanted := wanted[key]
 		if now.Sub(job.CreationTimestamp.Time) < nodeAgentOrphanGracePeriod {
 			continue
 		}
-		clog.Infof(ctx, "reaping orphaned node-agent job %s.%s (no live intercept)", job.Name, ns)
+		reason := "no live intercept"
+		if isWanted {
+			gone, err := targetPodGone(ctx, key.namespace, job.Labels[nodeAgentTargetPodLabel])
+			if err != nil {
+				clog.Errorf(ctx, "unable to check target pod of node-agent job %s.%s: %v", job.Name, ns, err)
+				continue
+			}
+			if !gone {
+				continue
+			}
+			reason = "target pod no longer exists"
+		}
+		clog.Infof(ctx, "reaping node-agent job %s.%s (%s)", job.Name, ns, reason)
 		if err := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(ns).Delete(ctx, job.Name,
 			meta.DeleteOptions{PropagationPolicy: &propagation}); err != nil && !k8sErrors.IsNotFound(err) {
-			clog.Errorf(ctx, "unable to reap orphaned node-agent job %s.%s: %v", job.Name, ns, err)
+			clog.Errorf(ctx, "unable to reap node-agent job %s.%s: %v", job.Name, ns, err)
 		}
 	}
 	return nil
+}
+
+// targetPodGone reports whether podName no longer exists in namespace. An
+// empty podName (a Job created before the targetPod label existed) or an
+// empty namespace is treated as "not gone" -- there is nothing to check, so
+// the existing age-only sweep behavior applies instead.
+func targetPodGone(ctx context.Context, namespace, podName string) (bool, error) {
+	if podName == "" || namespace == "" {
+		return false, nil
+	}
+	_, err := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(namespace).Get(ctx, podName, meta.GetOptions{})
+	if err == nil {
+		return false, nil
+	}
+	if k8sErrors.IsNotFound(err) {
+		return true, nil
+	}
+	return false, err
 }
 
 // ensureNodeAgent provisions a node-hosted traffic-agent (a manager-created

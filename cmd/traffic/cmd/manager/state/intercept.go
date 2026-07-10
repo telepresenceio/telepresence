@@ -525,6 +525,11 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		if err = s.AddInterceptFinalizer(interceptID, s.nodeAgentReapFinalizer()); err != nil {
 			clog.Errorf(ctx, "Failed to add node-agent reap finalizer for %s: %v", interceptID, err)
 		}
+		// Started here rather than in PrepareIntercept, because a watcher
+		// checks nodeAgentWanted as soon as it starts, and the intercept it
+		// would claim on behalf of does not exist until addIntercept above
+		// has stored it.
+		s.startNodeAgentPodWatch(spec.Agent, spec.Namespace)
 	}
 	return client, is.InterceptInfo, nil
 }
@@ -637,6 +642,7 @@ func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, 
 		// -- for as long as the wait below takes, not just the sweep's
 		// grace period.
 		s.addLease(sessionID, n, ns)
+		s.startNodeAgentPodWatch(n, ns)
 		as, err = s.waitForNodeAgent(ctx, n, ns)
 		if err != nil {
 			s.removeLease(sessionID, n, ns)
