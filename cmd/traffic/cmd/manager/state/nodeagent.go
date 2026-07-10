@@ -78,6 +78,16 @@ func nodeAgentGateErr(env *managerutil.Env) error {
 	return nil
 }
 
+// nodeAgentWorkloadSelector returns the label selector matching every
+// node-agent Job created for the agent named agentName and the workload in
+// namespace, regardless of which pod each one targets.
+func nodeAgentWorkloadSelector(agentName, namespace string) string {
+	return fmt.Sprintf("%s=%s,%s=%s,%s=%s",
+		nodeAgentAppLabel, nodeAgentAppLabelValue,
+		nodeAgentNameLabel, agentName,
+		nodeAgentNamespaceLabel, namespace)
+}
+
 // reapNodeAgentJobs deletes the node-agent Job(s) created for the agent named
 // agentName and the workload in namespace, in the traffic-manager's own
 // namespace. It is invoked as an intercept finalizer, so it runs both on
@@ -91,10 +101,7 @@ func nodeAgentGateErr(env *managerutil.Env) error {
 func reapNodeAgentJobs(ctx context.Context, agentName, namespace string) error {
 	env := managerutil.GetEnv(ctx)
 	ns := env.ManagerNamespace
-	sel := fmt.Sprintf("%s=%s,%s=%s,%s=%s",
-		nodeAgentAppLabel, nodeAgentAppLabelValue,
-		nodeAgentNameLabel, agentName,
-		nodeAgentNamespaceLabel, namespace)
+	sel := nodeAgentWorkloadSelector(agentName, namespace)
 	// Foreground propagation keeps the Job object present (with a
 	// DeletionTimestamp) until its pod is fully gone. A successor Job for
 	// the same target must never program the shared nft table while a
@@ -232,12 +239,21 @@ func (s *State) reconcileNodeAgentJobs(ctx context.Context) error {
 // ensureNodeAgent provisions a node-hosted traffic-agent (a manager-created
 // Job that enters the target pod's namespaces) for the workload, using the
 // agent config that the caller already generated via a dryRun ensureAgent
-// call. It creates only the Job; it never touches the workload's pod
-// template, so no sidecar is injected and no pod is restarted.
+// call. It creates only Jobs; it never touches the workload's pod template,
+// so no sidecar is injected and no pod is restarted.
+//
+// allReplicas selects between the two provisioning policies: true (the
+// intercept path) ensures one Job per admissible target, so that traffic
+// load-balanced to any replica is intercepted; false (the ingest path, via
+// EnsureAgent) reuses a live Job for a still-admissible target if one
+// exists, and otherwise ensures a Job for a single target only, since an
+// ingest reads env and mounts from one pod and gains nothing from the
+// others.
 func (s *State) ensureNodeAgent(
 	ctx context.Context,
 	wl k8sapi.Workload,
 	cfg *agentconfig.Sidecar,
+	allReplicas bool,
 ) error {
 	env := managerutil.GetEnv(ctx)
 	if env.NodeAgentCRISocket == "" {
@@ -246,31 +262,77 @@ func (s *State) ensureNodeAgent(
 				"which is unset on this traffic-manager")
 	}
 
-	nodeName, containerIDs, podName, podIP, err := nodeAgentTarget(ctx, wl)
+	targets, err := nodeAgentTargets(ctx, wl)
 	if err != nil {
 		return err
 	}
+
+	namespace := env.ManagerNamespace
+	jobs := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(namespace)
+
+	if allReplicas {
+		for _, target := range targets {
+			if err := ensureNodeAgentTarget(ctx, jobs, namespace, env.NodeAgentCRISocket, cfg, target); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// A Job already targeting one of the current admissible pods still
+	// serves the ingest; reuse it rather than creating a second Job for the
+	// same workload.
+	admissible := make(map[string]struct{}, len(targets))
+	for _, target := range targets {
+		admissible[target.podName] = struct{}{}
+	}
+	sel := nodeAgentWorkloadSelector(cfg.AgentName, cfg.Namespace)
+	existing, err := jobs.List(ctx, meta.ListOptions{LabelSelector: sel})
+	if err != nil {
+		return fmt.Errorf("unable to list node-agent jobs for %s.%s: %w", cfg.AgentName, cfg.Namespace, err)
+	}
+	for i := range existing.Items {
+		job := &existing.Items[i]
+		if job.DeletionTimestamp != nil {
+			continue
+		}
+		if _, ok := admissible[job.Labels[nodeAgentTargetPodLabel]]; ok {
+			clog.Debugf(ctx, "reusing existing node-agent job %s.%s for ingest", job.Name, namespace)
+			return nil
+		}
+	}
+	return ensureNodeAgentTarget(ctx, jobs, namespace, env.NodeAgentCRISocket, cfg, targets[0])
+}
+
+// ensureNodeAgentTarget ensures a single node-agent Job for target: the
+// per-Job create/AlreadyExists/staleness logic, extracted from
+// ensureNodeAgent so it runs unchanged whether it's applied to every target
+// of a workload (an intercept) or to one (an ingest).
+func ensureNodeAgentTarget(
+	ctx context.Context,
+	jobs batchClientV1.JobInterface,
+	namespace, criSocket string,
+	cfg *agentconfig.Sidecar,
+	target nodeAgentPodTarget,
+) error {
 	for _, cn := range cfg.Containers {
-		if _, ok := containerIDs[cn.Name]; !ok {
-			return errcat.User.Newf("unable to resolve a container ID for container %q in pod %s.%s", cn.Name, podName, wl.GetNamespace())
+		if _, ok := target.containerIDs[cn.Name]; !ok {
+			return errcat.User.Newf("unable to resolve a container ID for container %q in pod %s.%s", cn.Name, target.podName, cfg.Namespace)
 		}
 	}
 
-	namespace := env.ManagerNamespace
-
 	job, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
 		namespace:    namespace,
-		nodeName:     nodeName,
-		containerIDs: containerIDs,
-		criSocket:    env.NodeAgentCRISocket,
-		podName:      podName,
-		podIP:        podIP,
+		nodeName:     target.nodeName,
+		containerIDs: target.containerIDs,
+		criSocket:    criSocket,
+		podName:      target.podName,
+		podIP:        target.podIP,
 	})
 	if err != nil {
 		return err
 	}
 
-	jobs := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(namespace)
 	if _, err = jobs.Create(ctx, job, meta.CreateOptions{}); err != nil {
 		if !k8sErrors.IsAlreadyExists(err) {
 			return fmt.Errorf("unable to create node-agent job %s.%s: %w", job.Name, namespace, err)
@@ -389,17 +451,33 @@ func replaceNodeAgentJob(ctx context.Context, jobs batchClientV1.JobInterface, j
 	return nil
 }
 
-// nodeAgentTarget selects a single Running & Ready pod of wl (a node-agent
-// targets one pod, unlike the sidecar which is injected into every replica)
-// and returns the node it is scheduled on, a map of container name to CRI
-// container ID (as reported by the kubelet, including the runtime scheme
-// prefix, e.g. "containerd://abc123"; pkg/cri strips that prefix), the pod's
-// name, and the pod's IP (which the node-agent needs as the PodIP of the
-// netfilter ruleset it programs into the target's network namespace).
-func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, containerIDs map[string]string, podName, podIP string, err error) {
+// nodeAgentPodTarget is the per-pod result of nodeAgentTargets: the node the
+// pod is scheduled on, a map of container name to CRI container ID (as
+// reported by the kubelet, including the runtime scheme prefix, e.g.
+// "containerd://abc123"; pkg/cri strips that prefix), the pod's name, and
+// the pod's IP (which the node-agent needs as the PodIP of the netfilter
+// ruleset it programs into the target's network namespace).
+type nodeAgentPodTarget struct {
+	nodeName     string
+	containerIDs map[string]string
+	podName      string
+	podIP        string
+}
+
+// nodeAgentTargets returns one target for every Running & Ready pod of wl
+// that passes checkNodeAgentTarget. A pod that fails
+// the check is skipped with a log line rather than failing the whole
+// request: replicas share a pod template, so in the steady state they pass
+// or fail together, but during a rollout old-template pods (e.g. carrying a
+// sidecar) can coexist with new ones, and skipping keeps the attachment
+// usable through that window. An error is returned only when no admissible
+// pod exists: the first check failure if at least one pod was Running &
+// Ready (it names the precise cause), or the generic "no pod available"
+// error if none was.
+func nodeAgentTargets(ctx context.Context, wl k8sapi.Workload) ([]nodeAgentPodTarget, error) {
 	selector, err := wl.Selector()
 	if err != nil {
-		return "", nil, "", "", err
+		return nil, err
 	}
 	// This must be a live apiserver list. The manager's shared pod informer
 	// is not usable here: the mutator installs a transform on it (see
@@ -410,33 +488,84 @@ func nodeAgentTarget(ctx context.Context, wl k8sapi.Workload) (nodeName string, 
 		LabelSelector: selector.String(),
 	})
 	if err != nil {
-		return "", nil, "", "", fmt.Errorf("unable to list pods for %s: %w", wl, err)
+		return nil, fmt.Errorf("unable to list pods for %s: %w", wl, err)
 	}
 
-	var target *core.Pod
+	var targets []nodeAgentPodTarget
+	var readyCount int
+	var checkErr error
 	for i := range pods.Items {
-		if pod := &pods.Items[i]; podRunningAndReady(pod) {
-			target = pod
-			break
+		pod := &pods.Items[i]
+		if !podRunningAndReady(pod) {
+			continue
 		}
+		readyCount++
+		if pod.Status.PodIP == "" {
+			// An invariant violation, not a normal admissibility failure:
+			// log it but treat the pod like any other inadmissible one, so
+			// it doesn't fail the request for the other replicas.
+			clog.Infof(ctx, "skipping pod %s.%s as a node-agent target: no PodIP despite being running and ready", pod.Name, pod.Namespace)
+			continue
+		}
+		if err := checkNodeAgentTarget(pod); err != nil {
+			clog.Infof(ctx, "skipping pod %s.%s as a node-agent target: %v", pod.Name, pod.Namespace, err)
+			if checkErr == nil {
+				checkErr = err
+			}
+			continue
+		}
+		ids := make(map[string]string, len(pod.Status.ContainerStatuses))
+		for _, cs := range pod.Status.ContainerStatuses {
+			if cs.ContainerID != "" {
+				ids[cs.Name] = cs.ContainerID
+			}
+		}
+		targets = append(targets, nodeAgentPodTarget{
+			nodeName:     pod.Spec.NodeName,
+			containerIDs: ids,
+			podName:      pod.Name,
+			podIP:        pod.Status.PodIP,
+		})
 	}
-	if target == nil {
-		return "", nil, "", "", errcat.User.Newf("%s has no running and ready pod available to host a node-agent", wl)
+	if len(targets) == 0 {
+		if readyCount > 0 && checkErr != nil {
+			return nil, checkErr
+		}
+		return nil, errcat.User.Newf("%s has no running and ready pod available to host a node-agent", wl)
 	}
-	if target.Status.PodIP == "" {
-		return "", nil, "", "", fmt.Errorf("pod %s.%s has no PodIP despite being running and ready", target.Name, target.Namespace)
-	}
-	if err := checkNodeAgentTarget(target); err != nil {
-		return "", nil, "", "", err
-	}
+	return targets, nil
+}
 
-	ids := make(map[string]string, len(target.Status.ContainerStatuses))
-	for _, cs := range target.Status.ContainerStatuses {
-		if cs.ContainerID != "" {
-			ids[cs.Name] = cs.ContainerID
-		}
+// nodeAgentJobTarget identifies one non-terminating node-agent Job for a
+// workload: its own name (node-agent Jobs generate their pod's name with
+// this as prefix) and the workload pod it targets (the
+// telepresence.io/targetPod label).
+type nodeAgentJobTarget struct {
+	jobName string
+	podName string
+}
+
+// nodeAgentJobsForWorkload lists the non-terminating node-agent Jobs for the
+// agent named agentName and the workload in namespace, in the traffic-
+// manager's own namespace. The caller ensures the Jobs before listing them,
+// so counting the actual Job set (rather than re-listing pods) keeps a wait
+// for their agents consistent with what was really created.
+func nodeAgentJobsForWorkload(ctx context.Context, agentName, namespace string) ([]nodeAgentJobTarget, error) {
+	env := managerutil.GetEnv(ctx)
+	sel := nodeAgentWorkloadSelector(agentName, namespace)
+	jobs, err := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(env.ManagerNamespace).List(ctx, meta.ListOptions{LabelSelector: sel})
+	if err != nil {
+		return nil, fmt.Errorf("unable to list node-agent jobs for %s.%s: %w", agentName, namespace, err)
 	}
-	return target.Spec.NodeName, ids, target.Name, target.Status.PodIP, nil
+	targets := make([]nodeAgentJobTarget, 0, len(jobs.Items))
+	for i := range jobs.Items {
+		job := &jobs.Items[i]
+		if job.DeletionTimestamp != nil {
+			continue
+		}
+		targets = append(targets, nodeAgentJobTarget{jobName: job.Name, podName: job.Labels[nodeAgentTargetPodLabel]})
+	}
+	return targets, nil
 }
 
 // checkNodeAgentTarget rejects a target pod that cannot host a node-agent: one

@@ -190,7 +190,7 @@ func (s *State) PrepareIntercept(
 		// standalone pod, not a sidecar, so it's provisioned here instead of
 		// via the injecting ensureAgent(dryRun=false) that AddIntercept would
 		// otherwise call.
-		if err = s.ensureNodeAgent(ctx, wl, ac); err != nil {
+		if err = s.ensureNodeAgent(ctx, wl, ac, true); err != nil {
 			return interceptError(err)
 		}
 	}
@@ -625,7 +625,7 @@ func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, 
 		if err != nil {
 			return nil, err
 		}
-		if err = s.ensureNodeAgent(ctx, wl, sc); err != nil {
+		if err = s.ensureNodeAgent(ctx, wl, sc, false); err != nil {
 			return nil, err
 		}
 		// The lease is taken before waiting, not after: the reconciler's
@@ -720,7 +720,9 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 		clog.Errorf(ctx, "failed to inactivate pods: %v", err)
 		return nil, nil, err
 	}
-	as, err := s.waitForAgents(ctx, sc.AgentName, sc.Namespace, false, failedCreateCh)
+	// The injector puts exactly one traffic-agent in each pod it just
+	// evicted, so this wait always expects a single arrival.
+	as, err := s.waitForAgents(ctx, sc.AgentName, sc.Namespace, false, 1, failedCreateCh)
 	if err != nil {
 		// If no agent arrives, then drop its entry from the configmap. This ensures that there
 		// are no false positives the next time an intercept is attempted.
@@ -731,13 +733,13 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 	return sc, as, nil
 }
 
-// waitForNodeAgent waits for the node-agent Job for the agent named name in
-// namespace (created during PrepareIntercept, or by ensureNodeAgent for an
-// ingest EnsureAgent call) to register itself as an agent, without injecting
-// a sidecar. It mirrors the wait ensureAgent performs for the sidecar path,
-// but skips config persistence and pod eviction, since a node-agent is a
-// standalone Job rather than an injected container. The caller is
-// responsible for having already provisioned the Job.
+// waitForNodeAgent waits for the node-agent Job(s) for the agent named name
+// in namespace (created during PrepareIntercept, or by ensureNodeAgent for
+// an ingest EnsureAgent call) to register themselves as agents, without
+// injecting a sidecar. It mirrors the wait ensureAgent performs for the
+// sidecar path, but skips config persistence and pod eviction, since a
+// node-agent is a standalone Job rather than an injected container. The
+// caller is responsible for having already provisioned the Job(s).
 func (s *State) waitForNodeAgent(parentCtx context.Context, name, namespace string) ([]*AgentSession, error) {
 	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
 	defer cancel()
@@ -752,7 +754,49 @@ func (s *State) waitForNodeAgent(parentCtx context.Context, name, namespace stri
 	if err != nil {
 		return nil, err
 	}
-	return s.waitForAgents(ctx, name, namespace, true, failedCreateCh)
+
+	// The Job set was just ensured by the caller; counting it, rather than
+	// re-listing the workload's pods, keeps this wait consistent with what
+	// was really created. A workload with no matching Job yet (a race with
+	// the caller's own creation) falls back to waiting for a single agent.
+	jobTargets, err := nodeAgentJobsForWorkload(ctx, name, namespace)
+	if err != nil {
+		return nil, err
+	}
+	expected := len(jobTargets)
+	if expected == 0 {
+		expected = 1
+	}
+
+	as, err := s.waitForAgents(ctx, name, namespace, true, expected, failedCreateCh)
+	if err != nil && ctx.Err() == context.DeadlineExceeded {
+		if missing := missingNodeAgentTargets(jobTargets, as); len(missing) > 0 {
+			err = errcat.User.Newf("%s\nNo agent registered for target pod(s): %s", err.Error(), strings.Join(missing, ", "))
+		}
+	}
+	return as, err
+}
+
+// missingNodeAgentTargets returns the podName of every jobTargets entry
+// whose Job has no corresponding session in arrived. A node-agent Job's own
+// pod name is generated with the Job's name as prefix, so an arrived agent
+// is matched back to its Job by that prefix rather than by the target pod
+// it carries (which names the workload's pod, not the node-agent's own).
+func missingNodeAgentTargets(jobTargets []nodeAgentJobTarget, arrived []*AgentSession) []string {
+	var missing []string
+	for _, jt := range jobTargets {
+		found := false
+		for _, a := range arrived {
+			if strings.HasPrefix(a.PodName, jt.jobName+"-") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missing = append(missing, jt.podName)
+		}
+	}
+	return missing
 }
 
 func (s *State) isExtended(spec *rpc.InterceptSpec) bool {
@@ -989,13 +1033,19 @@ func terminalEventMessage(ctx context.Context, fe *events.Event, podNamespace st
 	return msg
 }
 
+// waitForAgents waits for expected distinct agent sessions matching name,
+// namespace and nodeAgent to register, accumulating matching, non-
+// blacklisted sessions by PodUid across every delta (including the initial
+// snapshot Subscribe delivers of agents already registered) until that many
+// are present.
 func (s *State) waitForAgents(
 	ctx context.Context,
 	name, namespace string,
 	nodeAgent bool,
+	expected int,
 	failedCreateCh <-chan *events.Event,
 ) ([]*AgentSession, error) {
-	clog.Debugf(ctx, "Waiting for agent %s.%s", name, namespace)
+	clog.Debugf(ctx, "Waiting for %d agent(s) %s.%s", expected, name, namespace)
 	deltaCh := s.WatchAgents(ctx, func(_ tunnel.SessionID, agent *AgentSession) bool {
 		return agentSessionMatches(agent, name, namespace, nodeAgent)
 	})
@@ -1012,6 +1062,10 @@ func (s *State) waitForAgents(
 	// fes collects events from the failedCreatedCh and is included in the error message in case
 	// the waitForAgents call times out.
 	var fes []*events.Event
+	// arrived accumulates matching, non-blacklisted sessions by PodUid. It
+	// is returned even alongside a ctx.Done() error, so the partial set of
+	// agents that did register remains observable.
+	arrived := make(map[string]*AgentSession)
 	for {
 		select {
 		case fe, ok := <-failedCreateCh:
@@ -1033,21 +1087,19 @@ func (s *State) waitForAgents(
 				// The request has been canceled.
 				return nil, status.Error(codes.Canceled, fmt.Sprintf("channel closed while waiting for agent %s.%s to arrive", name, namespace))
 			}
-			upserts := delta.Upserts
-			if len(upserts) == 0 {
-				continue
-			}
-			as := make([]*AgentSession, 0)
-			for _, a := range upserts {
+			for _, a := range delta.Upserts {
 				if mm.IsInactive(k8sTypes.UID(a.PodUid)) {
 					clog.Debugf(ctx, "Agent %s(%s) is blacklisted", a.PodName, a.PodIp)
-				} else {
-					clog.Debugf(ctx, "Agent %s(%s) is ready", a.PodName, a.PodIp)
-					as = append(as, a)
-					break
+					continue
 				}
+				clog.Debugf(ctx, "Agent %s(%s) is ready", a.PodName, a.PodIp)
+				arrived[a.PodUid] = a
 			}
-			if len(as) > 0 {
+			if len(arrived) >= expected {
+				as := make([]*AgentSession, 0, len(arrived))
+				for _, a := range arrived {
+					as = append(as, a)
+				}
 				return as, nil
 			}
 		case <-ctx.Done():
@@ -1081,7 +1133,11 @@ func (s *State) waitForAgents(
 							"See https://telepresence.io/docs/troubleshooting#eks-calico-and-traffic-agent-injection-timeouts")
 				}
 			}
-			return nil, errcat.User.New(bf.String())
+			as := make([]*AgentSession, 0, len(arrived))
+			for _, a := range arrived {
+				as = append(as, a)
+			}
+			return as, errcat.User.New(bf.String())
 		}
 	}
 }

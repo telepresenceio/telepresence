@@ -792,7 +792,7 @@ func TestNodeAgentJobStale(t *testing.T) {
 	})
 }
 
-// nodeAgentTestPod returns a Running & Ready pod that nodeAgentTarget will
+// nodeAgentTestPod returns a Running & Ready pod that nodeAgentTargets will
 // select: it carries the labels nodeAgentTestWorkload's Deployment selects
 // on, a resolved container ID for its sole "app" container, and a PodIP.
 func nodeAgentTestPod(ns, podName string) *core.Pod {
@@ -814,6 +814,30 @@ func nodeAgentTestPod(ns, podName string) *core.Pod {
 			},
 		},
 	}
+}
+
+// nodeAgentTestPods returns n distinct Running & Ready pods that
+// nodeAgentTargets will all select, each with its own name, PodIP, and
+// resolved container ID for its "app" container.
+func nodeAgentTestPods(ns string, n int) []*core.Pod {
+	pods := make([]*core.Pod, n)
+	for i := range n {
+		pod := nodeAgentTestPod(ns, fmt.Sprintf("test-agent-pod-%d", i))
+		pod.Status.PodIP = fmt.Sprintf("10.42.0.%d", i+10)
+		pod.Status.ContainerStatuses[0].ContainerID = fmt.Sprintf("containerd://pod%d", i)
+		pods[i] = pod
+	}
+	return pods
+}
+
+// podRuntimeObjects converts pods to the []runtime.Object shape
+// fake.NewSimpleClientset takes as variadic seed objects.
+func podRuntimeObjects(pods []*core.Pod) []runtime.Object {
+	objs := make([]runtime.Object, len(pods))
+	for i, pod := range pods {
+		objs[i] = pod
+	}
+	return objs
 }
 
 // nodeAgentTestWorkload returns a Workload whose selector matches the pod
@@ -864,7 +888,7 @@ func TestEnsureNodeAgent_NoCRISocket(t *testing.T) {
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
 
 	s := &State{}
-	err := s.ensureNodeAgent(ctx, wl, cfg)
+	err := s.ensureNodeAgent(ctx, wl, cfg, true)
 	require.Error(t, err)
 	assert.Equal(t, errcat.User, errcat.GetCategory(err))
 	assert.Contains(t, err.Error(), "nodeAgent.criSocket")
@@ -899,7 +923,7 @@ func TestEnsureNodeAgent_ReusesHealthyExistingJob(t *testing.T) {
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
 	s := &State{}
-	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
 
 	created, deleted := nodeAgentJobActionCounts(ci.Actions())
 	assert.Zero(t, deleted, "a healthy existing job must not be deleted")
@@ -934,7 +958,7 @@ func TestEnsureNodeAgent_ReplacesFailedJob(t *testing.T) {
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
 	s := &State{}
-	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
 
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
 	require.NoError(t, err)
@@ -974,7 +998,7 @@ func TestEnsureNodeAgent_ReplacesTerminatingJob(t *testing.T) {
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
 	s := &State{}
-	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
 
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
 	require.NoError(t, err)
@@ -1013,7 +1037,7 @@ func TestEnsureNodeAgent_ReplacesJobWithDifferentContainerIDs(t *testing.T) {
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
 	s := &State{}
-	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg))
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
 
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
 	require.NoError(t, err)
@@ -1036,4 +1060,208 @@ func TestNodeAgentJobName_NamespaceCollision(t *testing.T) {
 	name1 := nodeAgentJobName("web", "ns1", "web-0")
 	name2 := nodeAgentJobName("web", "ns2", "web-0")
 	assert.NotEqual(t, name1, name2)
+}
+
+// TestNodeAgentTargets_AllReadyPods verifies that nodeAgentTargets returns
+// one target for every Running & Ready pod of the workload, not just the
+// first -- the basis for attaching a node-agent to every replica.
+func TestNodeAgentTargets_AllReadyPods(t *testing.T) {
+	t.Parallel()
+
+	const ns = "test-namespace"
+	wl := nodeAgentTestWorkload(ns)
+	pods := nodeAgentTestPods(ns, 3)
+
+	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+
+	targets, err := nodeAgentTargets(ctx, wl)
+	require.NoError(t, err)
+	names := make([]string, len(targets))
+	for i, tgt := range targets {
+		names[i] = tgt.podName
+	}
+	assert.ElementsMatch(t, []string{"test-agent-pod-0", "test-agent-pod-1", "test-agent-pod-2"}, names)
+}
+
+// TestNodeAgentTargets_SkipsInadmissiblePod verifies that a pod which fails
+// checkNodeAgentTarget (here: one already carrying an injected traffic-agent,
+// as an old-template pod mid-rollout might) is skipped rather than failing
+// the whole request, while the other Running & Ready pods are still
+// returned.
+func TestNodeAgentTargets_SkipsInadmissiblePod(t *testing.T) {
+	t.Parallel()
+
+	const ns = "test-namespace"
+	wl := nodeAgentTestWorkload(ns)
+	pods := nodeAgentTestPods(ns, 3)
+	pods[1].Spec.Containers = append(pods[1].Spec.Containers, core.Container{Name: agentconfig.ContainerName})
+
+	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+
+	targets, err := nodeAgentTargets(ctx, wl)
+	require.NoError(t, err)
+	names := make([]string, len(targets))
+	for i, tgt := range targets {
+		names[i] = tgt.podName
+	}
+	assert.ElementsMatch(t, []string{"test-agent-pod-0", "test-agent-pod-2"}, names,
+		"the inadmissible pod must be skipped, not fail the request for the rest")
+}
+
+// TestNodeAgentTargets_NoneReady verifies that nodeAgentTargets returns the
+// generic "no running and ready pod" user error when no pod of the workload
+// is even a candidate.
+func TestNodeAgentTargets_NoneReady(t *testing.T) {
+	t.Parallel()
+
+	const ns = "test-namespace"
+	wl := nodeAgentTestWorkload(ns)
+	pod := nodeAgentTestPod(ns, "test-agent-pod-0")
+	pod.Status.Phase = core.PodPending
+	pod.Status.Conditions = nil
+
+	ci := fake.NewSimpleClientset(pod)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+
+	_, err := nodeAgentTargets(ctx, wl)
+	require.Error(t, err)
+	assert.Equal(t, errcat.User, errcat.GetCategory(err))
+	assert.Contains(t, err.Error(), "no running and ready pod available")
+}
+
+// TestNodeAgentTargets_AllInadmissible verifies that when every Running &
+// Ready pod fails checkNodeAgentTarget, nodeAgentTargets fails with the
+// precise cause (rather than the generic "no pod" message), since it is the
+// more useful error when the workload does have live pods.
+func TestNodeAgentTargets_AllInadmissible(t *testing.T) {
+	t.Parallel()
+
+	const ns = "test-namespace"
+	wl := nodeAgentTestWorkload(ns)
+	pods := nodeAgentTestPods(ns, 2)
+	for _, pod := range pods {
+		pod.Spec.HostNetwork = true
+	}
+
+	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+
+	_, err := nodeAgentTargets(ctx, wl)
+	require.Error(t, err)
+	assert.Equal(t, errcat.User, errcat.GetCategory(err))
+	assert.Contains(t, err.Error(), "host networking")
+}
+
+// TestEnsureNodeAgent_AllReplicas_CreatesOneJobPerPod verifies the intercept
+// fan-out: ensureNodeAgent(allReplicas=true) creates one Job per Running &
+// Ready pod, each with the pod's own container IDs and PodIP baked into its
+// env and a deterministic name derived from that pod, and that a second
+// request is idempotent (no duplicate Jobs).
+func TestEnsureNodeAgent_AllReplicas_CreatesOneJobPerPod(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	cfg := testSidecar()
+	wl := nodeAgentTestWorkload(cfg.Namespace)
+	pods := nodeAgentTestPods(cfg.Namespace, 3)
+
+	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+
+	s := &State{}
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
+
+	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, jobs.Items, 3, "one job per pod")
+
+	byPod := make(map[string]*batchv1.Job, len(jobs.Items))
+	for i := range jobs.Items {
+		job := &jobs.Items[i]
+		byPod[job.Labels[nodeAgentTargetPodLabel]] = job
+	}
+	for i, pod := range pods {
+		job, ok := byPod[pod.Name]
+		require.True(t, ok, "no job found for pod %s", pod.Name)
+		assert.Equal(t, nodeAgentJobName(cfg.AgentName, cfg.Namespace, pod.Name), job.Name)
+
+		idsEnv, ok := findEnv(job.Spec.Template.Spec.Containers[0].Env, agentconfig.EnvNodeAgentContainerIDs)
+		require.True(t, ok)
+		assert.JSONEq(t, fmt.Sprintf(`{"app":"containerd://pod%d"}`, i), idsEnv.Value)
+
+		podIPEnv, ok := findEnv(job.Spec.Template.Spec.Containers[0].Env, agentconfig.EnvNodeAgentPodIP)
+		require.True(t, ok)
+		assert.Equal(t, pod.Status.PodIP, podIPEnv.Value)
+	}
+
+	// A re-request must be idempotent per Job: no duplicates.
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
+	jobs, err = ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	assert.Len(t, jobs.Items, 3, "re-request must not create duplicate jobs")
+}
+
+// TestEnsureNodeAgent_Ingest_CreatesOnlyOneJob verifies that
+// ensureNodeAgent(allReplicas=false) creates exactly one Job even though
+// several pods are admissible: an ingest reads env and mounts from a single
+// pod and gains nothing from the others.
+func TestEnsureNodeAgent_Ingest_CreatesOnlyOneJob(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	cfg := testSidecar()
+	wl := nodeAgentTestWorkload(cfg.Namespace)
+	pods := nodeAgentTestPods(cfg.Namespace, 3)
+
+	ci := fake.NewSimpleClientset(podRuntimeObjects(pods)...)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+
+	s := &State{}
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, false))
+
+	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, jobs.Items, 1, "an ingest needs only one job even though every pod is admissible")
+}
+
+// TestEnsureNodeAgent_Ingest_ReusesJobForAdmissibleTarget verifies that
+// ensureNodeAgent(allReplicas=false) does nothing when a live Job already
+// targets a pod that is still admissible, instead of creating a second one.
+func TestEnsureNodeAgent_Ingest_ReusesJobForAdmissibleTarget(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	cfg := testSidecar()
+	wl := nodeAgentTestWorkload(cfg.Namespace)
+	pods := nodeAgentTestPods(cfg.Namespace, 2)
+
+	existing, err := buildNodeAgentJob(cfg, nodeAgentJobOpts{
+		namespace:    mgrNs,
+		nodeName:     "node-1",
+		containerIDs: map[string]string{"app": "containerd://pod1"},
+		criSocket:    "/run/containerd/containerd.sock",
+		podName:      pods[1].Name,
+		podIP:        pods[1].Status.PodIP,
+	})
+	require.NoError(t, err)
+
+	objs := append(podRuntimeObjects(pods), existing)
+	ci := fake.NewSimpleClientset(objs...)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+
+	s := &State{}
+	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, false))
+
+	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, jobs.Items, 1, "a live job for a still-admissible pod must be reused, not duplicated")
+	assert.Equal(t, existing.Name, jobs.Items[0].Name)
+
+	created, _ := nodeAgentJobActionCounts(ci.Actions())
+	assert.Zero(t, created, "nothing should be created when a still-admissible job already exists")
 }

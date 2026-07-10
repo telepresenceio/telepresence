@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
+	events "k8s.io/api/events/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	clientfeatures "k8s.io/client-go/features"
@@ -487,4 +489,85 @@ func TestEnsureAgent_InjectorDisabled(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "agent-injector is disabled")
 	})
+}
+
+// waitForAgentsTestSession returns an AgentSession that matches waitForAgents'
+// filter for name/namespace/nodeAgent=true, distinguished by PodUid.
+func waitForAgentsTestSession(podUid, podName string) *AgentSession {
+	return &AgentSession{AgentInfo: &rpc.AgentInfo{
+		Name:      "test-agent",
+		Namespace: "test-namespace",
+		NodeAgent: true,
+		PodUid:    podUid,
+		PodName:   podName,
+	}}
+}
+
+// TestWaitForAgents_FirstArrivalSatisfiesExpectedOne verifies that
+// expected = 1 reproduces the historical behavior: waitForAgents returns as
+// soon as a single matching, non-blacklisted session is present -- here,
+// already registered before the wait even starts, delivered as the initial
+// snapshot Subscribe sends.
+func TestWaitForAgents_FirstArrivalSatisfiesExpectedOne(t *testing.T) {
+	t.Parallel()
+
+	ctx := mutator.WithMap(t.Context(), mutator.NewWatcher())
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: "ambassador"})
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	s := &State{agents: cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond)}
+	s.agents.Store(tunnel.SessionID("s1"), waitForAgentsTestSession("uid-1", "pod-1"))
+
+	as, err := s.waitForAgents(ctx, "test-agent", "test-namespace", true, 1, make(chan *events.Event))
+	require.NoError(t, err)
+	require.Len(t, as, 1)
+	assert.Equal(t, "uid-1", as[0].PodUid)
+}
+
+// TestWaitForAgents_AccumulatesToExpectedCount verifies the wait-for-N
+// semantics: with expected = 2, waitForAgents does not return after the
+// first matching session arrives, and returns both, distinct by PodUid, once
+// the second arrives.
+func TestWaitForAgents_AccumulatesToExpectedCount(t *testing.T) {
+	t.Parallel()
+
+	ctx := mutator.WithMap(t.Context(), mutator.NewWatcher())
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: "ambassador"})
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	s := &State{agents: cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond)}
+	s.agents.Store(tunnel.SessionID("s1"), waitForAgentsTestSession("uid-1", "pod-1"))
+
+	type result struct {
+		as  []*AgentSession
+		err error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		as, err := s.waitForAgents(ctx, "test-agent", "test-namespace", true, 2, make(chan *events.Event))
+		resultCh <- result{as, err}
+	}()
+
+	// The first (already-registered) session alone must not satisfy
+	// expected = 2: give waitForAgents time to consume the initial snapshot
+	// before the second session arrives.
+	select {
+	case r := <-resultCh:
+		t.Fatalf("waitForAgents returned early with %d agent(s) and err=%v; expected it to still be waiting for a second", len(r.as), r.err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	s.agents.Store(tunnel.SessionID("s2"), waitForAgentsTestSession("uid-2", "pod-2"))
+
+	select {
+	case r := <-resultCh:
+		require.NoError(t, r.err)
+		require.Len(t, r.as, 2)
+		uids := []string{r.as[0].PodUid, r.as[1].PodUid}
+		assert.ElementsMatch(t, []string{"uid-1", "uid-2"}, uids)
+	case <-time.After(5 * time.Second):
+		t.Fatal("waitForAgents did not return after the second agent arrived")
+	}
 }
