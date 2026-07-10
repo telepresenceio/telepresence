@@ -357,6 +357,17 @@ func TestReconcileNodeAgentJobs(t *testing.T) {
 		"a live intercept for agent X in ns1 must not protect a Job labeled agent X in ns2")
 }
 
+// newNodeAgentTestState returns a State with the maps ensureNodeAgent's
+// nodeAgentWanted check needs (intercepts, leases, clients), all empty, so
+// tests that call ensureNodeAgent directly don't hit a nil map.
+func newNodeAgentTestState() *State {
+	return &State{
+		intercepts: cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+		leases:     xsync.NewMap[leaseKey, struct{}](),
+		clients:    xsync.NewMap[tunnel.SessionID, *ClientSession](),
+	}
+}
+
 func testSidecar() *agentconfig.Sidecar {
 	return &agentconfig.Sidecar{
 		AgentName:  "test-agent",
@@ -712,8 +723,11 @@ func TestNodeAgentJobNamePrefix_MatchesJobName(t *testing.T) {
 
 // TestNodeAgentJobStale verifies each condition that marks an existing
 // node-agent Job as stale (so ensureNodeAgent replaces it instead of reusing
-// it), and that a difference confined to the marshaled agent config -- which
-// does not identify the target -- does not.
+// it), that a difference confined to the marshaled agent config -- which
+// does not identify the target -- does not, and that the image-change reason
+// is classified separately (nodeAgentStaleImage) from every other staleness
+// reason (nodeAgentStaleFatal), since only the image-change reason may be
+// deferred while a live claim depends on the Job.
 func TestNodeAgentJobStale(t *testing.T) {
 	t.Parallel()
 
@@ -723,8 +737,8 @@ func TestNodeAgentJobStale(t *testing.T) {
 	t.Run("identical job is not stale", func(t *testing.T) {
 		t.Parallel()
 		existing := desired.DeepCopy()
-		stale, reason := nodeAgentJobStale(existing, desired)
-		assert.False(t, stale, reason)
+		staleness, reason := nodeAgentJobStale(existing, desired)
+		assert.Equal(t, nodeAgentFresh, staleness, reason)
 	})
 
 	t.Run("agent config differs is not stale", func(t *testing.T) {
@@ -733,62 +747,76 @@ func TestNodeAgentJobStale(t *testing.T) {
 		cfg.ManagerPort = 9999 // changes the marshaled AGENT_CONFIG, nothing else
 		existing, err := buildNodeAgentJob(cfg, testOpts())
 		require.NoError(t, err)
-		stale, reason := nodeAgentJobStale(existing, desired)
-		assert.False(t, stale, reason)
+		staleness, reason := nodeAgentJobStale(existing, desired)
+		assert.Equal(t, nodeAgentFresh, staleness, reason)
 	})
 
-	t.Run("terminating job is stale", func(t *testing.T) {
+	t.Run("terminating job is fatally stale", func(t *testing.T) {
 		t.Parallel()
 		existing := desired.DeepCopy()
 		now := meta.Now()
 		existing.DeletionTimestamp = &now
-		stale, reason := nodeAgentJobStale(existing, desired)
-		assert.True(t, stale)
+		staleness, reason := nodeAgentJobStale(existing, desired)
+		assert.Equal(t, nodeAgentStaleFatal, staleness)
 		assert.Contains(t, reason, "terminating")
 	})
 
-	t.Run("failed job is stale", func(t *testing.T) {
+	t.Run("failed job is fatally stale", func(t *testing.T) {
 		t.Parallel()
 		existing := desired.DeepCopy()
 		existing.Status.Conditions = []batchv1.JobCondition{
 			{Type: batchv1.JobFailed, Status: core.ConditionTrue},
 		}
-		stale, reason := nodeAgentJobStale(existing, desired)
-		assert.True(t, stale)
+		staleness, reason := nodeAgentJobStale(existing, desired)
+		assert.Equal(t, nodeAgentStaleFatal, staleness)
 		assert.Contains(t, reason, "failed")
 	})
 
-	t.Run("image differs is stale", func(t *testing.T) {
+	t.Run("image differs is stale but not fatal", func(t *testing.T) {
 		t.Parallel()
 		cfg := testSidecar()
 		cfg.AgentImage = "ghcr.io/telepresenceio/tel2:2.100.0"
 		existing, err := buildNodeAgentJob(cfg, testOpts())
 		require.NoError(t, err)
-		stale, reason := nodeAgentJobStale(existing, desired)
-		assert.True(t, stale)
+		staleness, reason := nodeAgentJobStale(existing, desired)
+		assert.Equal(t, nodeAgentStaleImage, staleness)
 		assert.Contains(t, reason, "image")
 	})
 
-	t.Run("container IDs differ is stale", func(t *testing.T) {
+	t.Run("container IDs differ is fatally stale", func(t *testing.T) {
 		t.Parallel()
 		opts := testOpts()
 		opts.containerIDs = map[string]string{"app": "containerd://different"}
 		existing, err := buildNodeAgentJob(testSidecar(), opts)
 		require.NoError(t, err)
-		stale, reason := nodeAgentJobStale(existing, desired)
-		assert.True(t, stale)
+		staleness, reason := nodeAgentJobStale(existing, desired)
+		assert.Equal(t, nodeAgentStaleFatal, staleness)
 		assert.Contains(t, reason, agentconfig.EnvNodeAgentContainerIDs)
 	})
 
-	t.Run("pod IP differs is stale", func(t *testing.T) {
+	t.Run("pod IP differs is fatally stale", func(t *testing.T) {
 		t.Parallel()
 		opts := testOpts()
 		opts.podIP = "10.42.0.99"
 		existing, err := buildNodeAgentJob(testSidecar(), opts)
 		require.NoError(t, err)
-		stale, reason := nodeAgentJobStale(existing, desired)
-		assert.True(t, stale)
+		staleness, reason := nodeAgentJobStale(existing, desired)
+		assert.Equal(t, nodeAgentStaleFatal, staleness)
 		assert.Contains(t, reason, agentconfig.EnvNodeAgentPodIP)
+	})
+
+	t.Run("container IDs differ takes priority over image differing", func(t *testing.T) {
+		t.Parallel()
+		cfg := testSidecar()
+		cfg.AgentImage = "ghcr.io/telepresenceio/tel2:2.100.0"
+		opts := testOpts()
+		opts.containerIDs = map[string]string{"app": "containerd://different"}
+		existing, err := buildNodeAgentJob(cfg, opts)
+		require.NoError(t, err)
+		staleness, reason := nodeAgentJobStale(existing, desired)
+		assert.Equal(t, nodeAgentStaleFatal, staleness,
+			"a fatal reason must be reported even when the image also differs")
+		assert.Contains(t, reason, agentconfig.EnvNodeAgentContainerIDs)
 	})
 }
 
@@ -887,7 +915,7 @@ func TestEnsureNodeAgent_NoCRISocket(t *testing.T) {
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
 
-	s := &State{}
+	s := newNodeAgentTestState()
 	err := s.ensureNodeAgent(ctx, wl, cfg, true)
 	require.Error(t, err)
 	assert.Equal(t, errcat.User, errcat.GetCategory(err))
@@ -922,7 +950,7 @@ func TestEnsureNodeAgent_ReusesHealthyExistingJob(t *testing.T) {
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
-	s := &State{}
+	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
 
 	created, deleted := nodeAgentJobActionCounts(ci.Actions())
@@ -957,7 +985,7 @@ func TestEnsureNodeAgent_ReplacesFailedJob(t *testing.T) {
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
-	s := &State{}
+	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
 
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
@@ -997,7 +1025,7 @@ func TestEnsureNodeAgent_ReplacesTerminatingJob(t *testing.T) {
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
-	s := &State{}
+	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
 
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
@@ -1036,7 +1064,7 @@ func TestEnsureNodeAgent_ReplacesJobWithDifferentContainerIDs(t *testing.T) {
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
-	s := &State{}
+	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
 
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
@@ -1171,7 +1199,7 @@ func TestEnsureNodeAgent_AllReplicas_CreatesOneJobPerPod(t *testing.T) {
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
-	s := &State{}
+	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
 
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
@@ -1220,7 +1248,7 @@ func TestEnsureNodeAgent_Ingest_CreatesOnlyOneJob(t *testing.T) {
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
-	s := &State{}
+	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, false))
 
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
@@ -1254,7 +1282,7 @@ func TestEnsureNodeAgent_Ingest_ReusesJobForAdmissibleTarget(t *testing.T) {
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
 
-	s := &State{}
+	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, false))
 
 	jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})

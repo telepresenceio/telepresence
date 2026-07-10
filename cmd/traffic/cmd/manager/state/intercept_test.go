@@ -328,13 +328,11 @@ func TestAgentSessionMatches(t *testing.T) {
 }
 
 // TestActiveNodeAgentIntercept verifies the scan PrepareIntercept uses to
-// reject a second concurrent node-agent intercept on the same workload, and
-// (in the same direction) to reject a sidecar intercept request against a
-// workload that already has a live node-agent intercept: it finds a live
-// node-agent intercept for the same agent/namespace, ignores the caller's own
-// (retried) intercept id, ignores child (pod-port) intercepts, ignores
-// intercepts for a different agent or a removed disposition, and ignores
-// sidecar intercepts entirely.
+// reject a sidecar intercept request against a workload that already has a
+// live node-agent intercept: it finds a live node-agent intercept for the
+// same agent/namespace, ignores the caller's own (retried) intercept id,
+// ignores child (pod-port) intercepts, ignores intercepts for a different
+// agent or a removed disposition, and ignores sidecar intercepts entirely.
 func TestActiveNodeAgentIntercept(t *testing.T) {
 	t.Parallel()
 
@@ -491,6 +489,119 @@ func TestEnsureAgent_InjectorDisabled(t *testing.T) {
 	})
 }
 
+// TestPrepareIntercept_SecondNodeAgentInterceptShared verifies the guard
+// removal: a second concurrent node-agent intercept of the same workload is
+// accepted (and reuses the Job the first one provisioned, rather than
+// duplicating it), while a sidecar request against the same workload is still
+// rejected because a live node-agent intercept claims it.
+func TestPrepareIntercept_SecondNodeAgentInterceptShared(t *testing.T) {
+	t.Parallel()
+
+	const ns = "default"
+	const mgrNs = "ambassador"
+
+	dep := &apps.Deployment{
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: apps.DeploymentSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+			Template: core.PodTemplateSpec{
+				ObjectMeta: meta.ObjectMeta{Labels: map[string]string{"app": "test-agent"}},
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
+						Name:  "app",
+						Ports: []core.ContainerPort{{ContainerPort: 8080}},
+					}},
+				},
+			},
+		},
+	}
+	svc := &core.Service{
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: core.ServiceSpec{
+			Selector: map[string]string{"app": "test-agent"},
+			Ports: []core.ServicePort{{
+				Port:       80,
+				TargetPort: intstr.FromInt(8080),
+			}},
+		},
+	}
+	pod := nodeAgentTestPod(ns, "test-agent-abc123")
+
+	ci := fake.NewSimpleClientset(dep, svc, pod)
+	ctx := k8sapi.WithJoinedClientSetInterface(t.Context(), ci, argorolloutsfake.NewSimpleClientset())
+
+	env := &managerutil.Env{
+		ManagerNamespace:     mgrNs,
+		NodeAgentEnabled:     true,
+		NodeAgentCRISocket:   "/run/containerd/containerd.sock",
+		EnabledWorkloadKinds: k8sapi.Kinds{k8sapi.DeploymentKind},
+	}
+	ctx = managerutil.WithEnv(ctx, env)
+	ctx = mutator.WithMap(ctx, mutator.NewWatcher())
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
+
+	s := &State{
+		backgroundCtx:    ctx,
+		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
+		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
+		leases:           xsync.NewMap[leaseKey, struct{}](),
+		workloadWatchers: xsync.NewMap[string, Watcher](),
+		timedLogLevel:    log.NewTimedLevel(slog.LevelDebug, clog.SetTreeLevel),
+		llSubs:           newLoglevelSubscribers(),
+	}
+
+	// Wiretap intercepts never conflict (checkInterceptConflicts' early
+	// return), keeping this test focused on the guard under test rather than
+	// global-intercept conflict semantics, which are unchanged and covered
+	// elsewhere.
+	clientA := &ClientSession{ClientInfo: &rpc.ClientInfo{Name: "userA@hostA"}, sessionState: sessionState{id: tunnel.SessionID("sessionA")}}
+	crA := &rpc.CreateInterceptRequest{InterceptSpec: &rpc.InterceptSpec{
+		Name: "wiretap-a", Client: "userA@hostA", Agent: "test-agent", Namespace: ns, NodeAgent: true, Wiretap: true, Mechanism: "tcp",
+	}}
+	piA, err := s.PrepareIntercept(ctx, crA, clientA)
+	require.NoError(t, err)
+	require.Empty(t, piA.Error)
+
+	jobsBefore, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, jobsBefore.Items, 1, "one node-agent job for the single target pod")
+
+	// PrepareIntercept itself never stores an intercept (AddIntercept does);
+	// store the first one directly, exactly as AddIntercept would have after
+	// this same PrepareIntercept call, so the second PrepareIntercept call
+	// below has a live node-agent intercept to (not) be rejected by.
+	s.intercepts.Store("sessionA:wiretap-a", &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:          "sessionA:wiretap-a",
+		Disposition: rpc.InterceptDispositionType_ACTIVE,
+		Spec:        crA.InterceptSpec,
+	}})
+
+	clientB := &ClientSession{ClientInfo: &rpc.ClientInfo{Name: "userB@hostB"}, sessionState: sessionState{id: tunnel.SessionID("sessionB")}}
+	crB := &rpc.CreateInterceptRequest{InterceptSpec: &rpc.InterceptSpec{
+		Name: "wiretap-b", Client: "userB@hostB", Agent: "test-agent", Namespace: ns, NodeAgent: true, Wiretap: true, Mechanism: "tcp",
+	}}
+	piB, err := s.PrepareIntercept(ctx, crB, clientB)
+	require.NoError(t, err)
+	assert.Empty(t, piB.Error, "a second concurrent node-agent intercept of the same workload must be accepted")
+
+	jobsAfter, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+	require.NoError(t, err)
+	assert.Len(t, jobsAfter.Items, 1, "the second intercept must reuse the existing job, not duplicate it")
+	assert.Equal(t, jobsBefore.Items[0].UID, jobsAfter.Items[0].UID)
+
+	// A sidecar request against the same workload must still be rejected: a
+	// live node-agent intercept (sessionA:wiretap-a) claims it.
+	clientC := &ClientSession{ClientInfo: &rpc.ClientInfo{Name: "userC@hostC"}, sessionState: sessionState{id: tunnel.SessionID("sessionC")}}
+	crC := &rpc.CreateInterceptRequest{InterceptSpec: &rpc.InterceptSpec{
+		Name: "sidecar-c", Client: "userC@hostC", Agent: "test-agent", Namespace: ns, NodeAgent: false, Wiretap: true, Mechanism: "tcp",
+	}}
+	piC, err := s.PrepareIntercept(ctx, crC, clientC)
+	require.NoError(t, err)
+	require.NotEmpty(t, piC.Error, "a sidecar intercept request against a workload with a live node-agent intercept must still be rejected")
+	assert.Contains(t, piC.Error, "node-agent")
+}
+
 // waitForAgentsTestSession returns an AgentSession that matches waitForAgents'
 // filter for name/namespace/nodeAgent=true, distinguished by PodUid.
 func waitForAgentsTestSession(podUid, podName string) *AgentSession {
@@ -523,6 +634,45 @@ func TestWaitForAgents_FirstArrivalSatisfiesExpectedOne(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, as, 1)
 	assert.Equal(t, "uid-1", as[0].PodUid)
+}
+
+// TestWaitForAgents_SatisfiedByExistingSnapshot verifies the immediate-wait
+// property a second concurrent node-agent intercept relies on: with
+// expected = 2 and both matching sessions already registered before the wait
+// starts, waitForAgents returns right away from the initial snapshot
+// WatchAgents/Subscribe delivers, without needing either agent to register
+// again.
+func TestWaitForAgents_SatisfiedByExistingSnapshot(t *testing.T) {
+	t.Parallel()
+
+	ctx := mutator.WithMap(t.Context(), mutator.NewWatcher())
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: "ambassador"})
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	s := &State{agents: cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond)}
+	s.agents.Store(tunnel.SessionID("s1"), waitForAgentsTestSession("uid-1", "pod-1"))
+	s.agents.Store(tunnel.SessionID("s2"), waitForAgentsTestSession("uid-2", "pod-2"))
+
+	type result struct {
+		as  []*AgentSession
+		err error
+	}
+	resultCh := make(chan result, 1)
+	go func() {
+		as, err := s.waitForAgents(ctx, "test-agent", "test-namespace", true, 2, make(chan *events.Event))
+		resultCh <- result{as, err}
+	}()
+
+	select {
+	case r := <-resultCh:
+		require.NoError(t, r.err)
+		require.Len(t, r.as, 2)
+		uids := []string{r.as[0].PodUid, r.as[1].PodUid}
+		assert.ElementsMatch(t, []string{"uid-1", "uid-2"}, uids)
+	case <-time.After(1 * time.Second):
+		t.Fatal("waitForAgents did not return immediately even though both expected agents were already registered")
+	}
 }
 
 // TestWaitForAgents_AccumulatesToExpectedCount verifies the wait-for-N

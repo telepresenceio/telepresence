@@ -109,26 +109,14 @@ func (s *State) PrepareIntercept(
 			// running and the replace would be silently ignored.
 			return interceptError(errcat.User.New("node-agent mode does not support --replace"))
 		}
-		// A node-agent Job is reaped (see reapNodeAgentJobs in nodeagent.go)
-		// whenever any node-agent intercept of the agent ends, because Jobs
-		// aren't shared across concurrent intercepts yet. A second concurrent
-		// node-agent intercept on the same workload must therefore be
-		// refused, or ending the first would tear down the Job the second
-		// one still depends on.
-		iid := fmt.Sprintf("%s:%s", client.id, spec.Name)
-		if existing := s.activeNodeAgentIntercept(spec, iid); existing != nil {
-			return interceptError(errcat.User.Newf(
-				"%s.%s already has a node-agent intercept named %q created by client %q; node-agent mode supports only one intercept per workload",
-				spec.Agent, spec.Namespace, existing.Spec.Name, existing.Spec.Client))
-		}
 	} else {
 		// Provisioning a sidecar intercept injects a traffic-agent into the
 		// workload's pod template and restarts its pods. A live node-agent
 		// intercept depends on the specific pod (and its CRI container IDs)
 		// that is currently running, so serving this request would break it
 		// out from under its client. exceptID is irrelevant for a non-
-		// node-agent spec (it can never equal a node-agent intercept's id),
-		// but it's passed for uniformity with the branch above.
+		// node-agent spec (it can never equal a node-agent intercept's id);
+		// it's passed because activeNodeAgentIntercept requires one.
 		iid := fmt.Sprintf("%s:%s", client.id, spec.Name)
 		if existing := s.activeNodeAgentIntercept(spec, iid); existing != nil {
 			return interceptError(errcat.User.Newf(

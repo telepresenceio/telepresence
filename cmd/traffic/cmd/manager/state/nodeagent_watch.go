@@ -65,10 +65,10 @@ type nodeAgentWatchKey struct {
 
 // startNodeAgentPodWatch idempotently starts the goroutine that keeps the
 // node-agent Job set for the workload identified by name and namespace
-// congruent with its live pod set for as long as nodeAgentWanted holds. It is
-// called wherever a claim is created: PrepareIntercept after ensureNodeAgent,
-// EnsureAgent after addLease, and RestoreIntercepts for a restored node-agent
-// intercept.
+// congruent with its live pod set for as long as nodeAgentWanted holds. It
+// must be called only after the claim it is started for is observable
+// through nodeAgentWanted (the intercept stored, or the lease taken), since
+// the watcher exits as soon as that predicate turns false.
 func (s *State) startNodeAgentPodWatch(name, namespace string) {
 	key := nodeAgentWatchKey{name: name, namespace: namespace}
 	s.nodeAgentPodWatchers.LoadOrCompute(key, func() (struct{}, bool) {
@@ -246,7 +246,11 @@ func (s *State) reconcileNodeAgentPodSet(ctx context.Context, name, namespace st
 			return err
 		}
 		for _, t := range createFor {
-			if err := ensureNodeAgentTarget(ctx, jobsClient, mgrNs, env.NodeAgentCRISocket, cfg, t); err != nil {
+			// This reconciler only runs while a claim exists, so an
+			// image-change replacement here would tear down the data path
+			// of every live intercept or ingest sharing the target's Job;
+			// defer it to the next time the Job set turns over on its own.
+			if err := ensureNodeAgentTarget(ctx, jobsClient, mgrNs, env.NodeAgentCRISocket, cfg, t, false); err != nil {
 				clog.Errorf(ctx, "unable to create node-agent job for %s pod %s: %v", wl, t.podName, err)
 			}
 		}

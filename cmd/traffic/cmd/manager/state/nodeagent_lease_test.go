@@ -311,3 +311,60 @@ func TestNodeAgentReapFinalizer_LeaseSurvivesInterceptRemoval(t *testing.T) {
 	require.NoError(t, s.ReleaseAgent(ctx, sid, name, workloadNs))
 	assert.NotContains(t, jobNames(), job.Name, "releasing the last claim must reap the Job")
 }
+
+// TestNodeAgentReapFinalizer_SecondInterceptSurvivesFirstRemoval verifies the
+// regression the guard removal in PrepareIntercept depends on: with two live
+// node-agent intercepts sharing a workload's Job set, removing one (via
+// s.RemoveIntercept, which deletes the intercept from s.intercepts before
+// invoking its finalizers, exactly as production does) must not reap the
+// Jobs while the other is still live, but removing the last one does.
+func TestNodeAgentReapFinalizer_SecondInterceptSurvivesFirstRemoval(t *testing.T) {
+	t.Parallel()
+
+	const mgrNs = "ambassador"
+	const name, workloadNs = "test-agent", "ns1"
+
+	job := &batchv1.Job{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "tel-node-agent-x",
+			Namespace: mgrNs,
+			Labels: map[string]string{
+				nodeAgentAppLabel:       nodeAgentAppLabelValue,
+				nodeAgentNameLabel:      name,
+				nodeAgentNamespaceLabel: workloadNs,
+			},
+		},
+	}
+	ci := fake.NewSimpleClientset(job)
+	installDeleteCollectionReactor(ci)
+	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+
+	s := newLeaseTestState(ctx)
+
+	// Two concurrent node-agent intercepts on the same workload, each
+	// carrying the same reap finalizer that AddIntercept registers.
+	ic1 := storeLiveNodeAgentIntercept(s, "c1:ic1", name, workloadNs)
+	ic1.addFinalizer(s.nodeAgentReapFinalizer())
+	ic2 := storeLiveNodeAgentIntercept(s, "c2:ic2", name, workloadNs)
+	ic2.addFinalizer(s.nodeAgentReapFinalizer())
+
+	jobNames := func() []string {
+		jobs, err := ci.BatchV1().Jobs(mgrNs).List(context.Background(), meta.ListOptions{})
+		require.NoError(t, err)
+		names := make([]string, len(jobs.Items))
+		for i, j := range jobs.Items {
+			names[i] = j.Name
+		}
+		return names
+	}
+
+	// Removing the first intercept must not reap the Job: the second is
+	// still live.
+	s.RemoveIntercept(ic1.Id)
+	assert.Contains(t, jobNames(), job.Name, "Job must survive removal of one of two concurrent node-agent intercepts")
+
+	// Removing the last one reaps it.
+	s.RemoveIntercept(ic2.Id)
+	assert.NotContains(t, jobNames(), job.Name, "removing the last node-agent intercept must reap the Job")
+}

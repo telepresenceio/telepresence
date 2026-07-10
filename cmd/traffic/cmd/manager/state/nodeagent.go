@@ -94,10 +94,12 @@ func nodeAgentWorkloadSelector(agentName, namespace string) string {
 // explicit intercept removal and on client-session drop.
 //
 // NOTE: this deletes by the agentName and workloadNamespace labels, so it
-// reaps the Job for every node-agent intercept of that agent in that
-// namespace at once. That is correct while node-agent intercepts are 1:1
-// with the agent; supporting multiple concurrent node-agent intercepts
-// sharing one Job is future work.
+// reaps every Job of that workload at once. That is correct because every
+// caller (the intercept reap finalizer, ReleaseAgent, and the periodic
+// sweep) invokes it only after nodeAgentWanted reports that no claim on the
+// workload remains, at which point every one of its Jobs is unclaimed
+// together, regardless of how many pods or concurrent intercepts they
+// served.
 func reapNodeAgentJobs(ctx context.Context, agentName, namespace string) error {
 	env := managerutil.GetEnv(ctx)
 	ns := env.ManagerNamespace
@@ -303,9 +305,16 @@ func (s *State) ensureNodeAgent(
 	namespace := env.ManagerNamespace
 	jobs := k8sapi.GetK8sInterface(ctx).BatchV1().Jobs(namespace)
 
+	// An image-change replacement tears down the data path of every live
+	// intercept or ingest sharing the target's Job, so it's only allowed when
+	// nothing currently claims the agent. A claim recorded after this check
+	// (e.g. the intercept or lease this very call is provisioning for) is
+	// irrelevant here: it doesn't yet depend on the Job's current image.
+	allowImageReplace := !s.nodeAgentWanted(cfg.AgentName, cfg.Namespace)
+
 	if allReplicas {
 		for _, target := range targets {
-			if err := ensureNodeAgentTarget(ctx, jobs, namespace, env.NodeAgentCRISocket, cfg, target); err != nil {
+			if err := ensureNodeAgentTarget(ctx, jobs, namespace, env.NodeAgentCRISocket, cfg, target, allowImageReplace); err != nil {
 				return err
 			}
 		}
@@ -334,19 +343,23 @@ func (s *State) ensureNodeAgent(
 			return nil
 		}
 	}
-	return ensureNodeAgentTarget(ctx, jobs, namespace, env.NodeAgentCRISocket, cfg, targets[0])
+	return ensureNodeAgentTarget(ctx, jobs, namespace, env.NodeAgentCRISocket, cfg, targets[0], allowImageReplace)
 }
 
 // ensureNodeAgentTarget ensures a single node-agent Job for target: the
 // per-Job create/AlreadyExists/staleness logic, extracted from
 // ensureNodeAgent so it runs unchanged whether it's applied to every target
-// of a workload (an intercept) or to one (an ingest).
+// of a workload (an intercept) or to one (an ingest). allowImageReplace
+// governs only the image-change staleness reason (nodeAgentStaleImage):
+// every other reason indicates the existing agent is already dead or
+// attached to a stale pod, so it is always replaced.
 func ensureNodeAgentTarget(
 	ctx context.Context,
 	jobs batchClientV1.JobInterface,
 	namespace, criSocket string,
 	cfg *agentconfig.Sidecar,
 	target nodeAgentPodTarget,
+	allowImageReplace bool,
 ) error {
 	for _, cn := range cfg.Containers {
 		if _, ok := target.containerIDs[cn.Name]; !ok {
@@ -382,55 +395,76 @@ func ensureNodeAgentTarget(
 			}
 			return nil
 		}
-		if stale, reason := nodeAgentJobStale(existing, job); stale {
-			clog.Infof(ctx, "replacing stale node-agent job %s.%s: %s", job.Name, namespace, reason)
-			if err = replaceNodeAgentJob(ctx, jobs, job); err != nil {
-				return err
+		switch staleness, reason := nodeAgentJobStale(existing, job); staleness {
+		case nodeAgentStaleImage:
+			if !allowImageReplace {
+				clog.Infof(ctx, "keeping node-agent job %s.%s despite %s: a live claim depends on it", job.Name, namespace, reason)
+				return nil
 			}
-			return nil
+			fallthrough
+		case nodeAgentStaleFatal:
+			clog.Infof(ctx, "replacing stale node-agent job %s.%s: %s", job.Name, namespace, reason)
+			return replaceNodeAgentJob(ctx, jobs, job)
+		default:
+			// A Job with this deterministic name already exists for this
+			// agent and target pod, and still reflects the same target; treat
+			// a re-request as idempotent.
+			clog.Debugf(ctx, "reusing existing node-agent job %s.%s", job.Name, namespace)
 		}
-		// A Job with this deterministic name already exists for this agent
-		// and target pod, and still reflects the same target; treat a
-		// re-request as idempotent.
-		clog.Debugf(ctx, "reusing existing node-agent job %s.%s", job.Name, namespace)
 	}
 	return nil
 }
 
+// nodeAgentStaleness classifies why nodeAgentJobStale found an existing Job
+// stale, so that the caller can defer a replacement that would tear down a
+// live intercept's data path (nodeAgentStaleImage) while never deferring one
+// that indicates the existing agent is already dead or attached to a stale
+// pod (nodeAgentStaleFatal).
+type nodeAgentStaleness int
+
+const (
+	nodeAgentFresh nodeAgentStaleness = iota
+	nodeAgentStaleImage
+	nodeAgentStaleFatal
+)
+
 // nodeAgentJobStale reports whether existing no longer reflects the target
-// that desired was built for, and if so, a short reason for logging.
-// existing is replaced rather than reused when it is already terminating,
-// when it has failed, or when its container image or target-identifying
+// that desired was built for, classified by nodeAgentStaleness, and a short
+// reason for logging. existing is fatally stale when it is already
+// terminating, when it has failed, or when its target-identifying
 // environment (the container IDs or pod IP the node-agent was given) differs
-// from desired. Any other difference -- such as the marshaled agent config
-// -- does not force a replace, so that a re-request for the same live target
-// stays idempotent.
-func nodeAgentJobStale(existing, desired *batchv1.Job) (bool, string) {
+// from desired: each of those means the existing agent is already dead or
+// attached to a stale pod. An image-only difference is classified
+// separately, since replacing a healthy Job for it would tear down the data
+// path of every live intercept sharing it. Any other difference -- such as
+// the marshaled agent config -- does not force a replace, so that a
+// re-request for the same live target stays idempotent.
+func nodeAgentJobStale(existing, desired *batchv1.Job) (nodeAgentStaleness, string) {
 	if existing.DeletionTimestamp != nil {
-		return true, "existing job is terminating"
+		return nodeAgentStaleFatal, "existing job is terminating"
 	}
 	for _, cond := range existing.Status.Conditions {
 		if cond.Type == batchv1.JobFailed && cond.Status == core.ConditionTrue {
-			return true, "existing job failed"
+			return nodeAgentStaleFatal, "existing job failed"
 		}
 	}
 	existingContainer, ok := soleContainer(existing)
 	if !ok {
-		return true, "existing job has no container"
+		return nodeAgentStaleFatal, "existing job has no container"
 	}
 	desiredContainer, ok := soleContainer(desired)
 	if !ok {
-		return true, "desired job has no container"
-	}
-	if existingContainer.Image != desiredContainer.Image {
-		return true, fmt.Sprintf("image changed from %q to %q", existingContainer.Image, desiredContainer.Image)
+		return nodeAgentStaleFatal, "desired job has no container"
 	}
 	for _, name := range []string{agentconfig.EnvNodeAgentContainerIDs, agentconfig.EnvNodeAgentPodIP} {
 		if envVarValue(existingContainer.Env, name) != envVarValue(desiredContainer.Env, name) {
-			return true, fmt.Sprintf("%s changed", name)
+			return nodeAgentStaleFatal, fmt.Sprintf("%s changed", name)
 		}
 	}
-	return false, ""
+	if existingContainer.Image != desiredContainer.Image {
+		return nodeAgentStaleImage, fmt.Sprintf("image changed from %q to %q", existingContainer.Image, desiredContainer.Image)
+	}
+	return nodeAgentFresh, ""
 }
 
 // soleContainer returns the single container of job's pod template.
