@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	batchv1 "k8s.io/api/batch/v1"
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
@@ -100,18 +102,45 @@ func (s *nodeAgentBase) reapLeftoverNodeAgentJobs(ctx context.Context) {
 	}
 }
 
-// assertNoAgentInjected asserts that the given workload's pod is untouched
-// by the agent-injector: same name and UID as origPod, no injected
-// traffic-agent container.
-func (s *nodeAgentBase) assertNoAgentInjected(ctx context.Context, svc string, origPod core.Pod) {
+// assertNoAgentInjected asserts that every one of the workload's pods is
+// untouched by the agent-injector: the running pod set has the same names
+// and UIDs as origPods (order-independent), and none of them carries an
+// injected traffic-agent container.
+func (s *nodeAgentBase) assertNoAgentInjected(ctx context.Context, svc string, origPods []core.Pod) {
 	rq := s.Require()
 	newPods := itest.RunningPods(ctx, svc, s.AppNamespace())
-	rq.Len(newPods, 1)
-	s.Equal(origPod.Name, newPods[0].Name)
-	s.Equal(origPod.UID, newPods[0].UID)
-	for _, c := range newPods[0].Spec.Containers {
-		s.NotEqual("traffic-agent", c.Name)
+	rq.Len(newPods, len(origPods))
+
+	origNameByUID := make(map[string]string, len(origPods))
+	for _, p := range origPods {
+		origNameByUID[string(p.UID)] = p.Name
 	}
+	for _, np := range newPods {
+		name, ok := origNameByUID[string(np.UID)]
+		rq.True(ok, "pod %s (uid %s) was not among the original pods", np.Name, np.UID)
+		s.Equal(name, np.Name)
+		for _, c := range np.Spec.Containers {
+			s.NotEqual("traffic-agent", c.Name)
+		}
+	}
+}
+
+// nodeAgentJobTargetPods returns the sorted, unique set of targetPod label
+// values carried by the workload's node-agent Jobs in the manager namespace.
+// Comparing this against the workload's running pod names asserts Job-set
+// <-> pod-set congruence for the all-replica suite.
+func (s *nodeAgentBase) nodeAgentJobTargetPods(ctx context.Context, svc string) []string {
+	selector := fmt.Sprintf("app=traffic-node-agent,telepresence.io/agentName=%s,telepresence.io/workloadNamespace=%s", svc, s.AppNamespace())
+	out, err := itest.KubectlOut(ctx, s.ManagerNamespace(), "get", "jobs", "-l", selector, "-o", "json")
+	s.Require().NoError(err)
+	var jl batchv1.JobList
+	s.Require().NoError(json.Unmarshal([]byte(out), &jl))
+	names := make([]string, 0, len(jl.Items))
+	for _, job := range jl.Items {
+		names = append(names, job.Labels["telepresence.io/targetPod"])
+	}
+	sort.Strings(names)
+	return names
 }
 
 // assertNodeAgentIntercept runs a node-agent intercept against svc,
@@ -161,7 +190,7 @@ func (s *nodeAgentBase) assertNodeAgentIntercept(svc string) {
 	jobNames := s.nodeAgentJobNames(ctx, svc)
 	rq.Len(jobNames, 1, "expected exactly one node-agent Job for %s", svc)
 
-	s.assertNoAgentInjected(ctx, svc, origPod)
+	s.assertNoAgentInjected(ctx, svc, []core.Pod{origPod})
 
 	itest.TelepresenceOk(ctx, "leave", svc)
 	mustLeave = false
@@ -208,7 +237,7 @@ func (s *nodeAgentBase) assertNodeAgentIngest(svc string) {
 	jobNames := s.nodeAgentJobNames(ctx, svc)
 	rq.Len(jobNames, 1, "expected exactly one node-agent Job for %s", svc)
 
-	s.assertNoAgentInjected(ctx, svc, origPod)
+	s.assertNoAgentInjected(ctx, svc, []core.Pod{origPod})
 
 	itest.TelepresenceOk(ctx, "leave", svc)
 	mustLeave = false
@@ -346,7 +375,7 @@ func (s *nodeAgentSuite) Test_NodeAgentWiretap() {
 	// remain unmutated.
 	jobNames := s.nodeAgentJobNames(ctx, svc)
 	rq.Len(jobNames, 1, "expected exactly one node-agent Job for %s", svc)
-	s.assertNoAgentInjected(ctx, svc, origPod)
+	s.assertNoAgentInjected(ctx, svc, []core.Pod{origPod})
 
 	// The application must keep serving the original traffic while the tap
 	// receives a copy of it.
@@ -483,7 +512,7 @@ func (s *nodeAgentSuite) Test_NodeAgentHTTPFilteredIntercept() {
 	jobNames := s.nodeAgentJobNames(ctx, svc)
 	rq.Len(jobNames, 1, "expected exactly one node-agent Job for %s", svc)
 
-	s.assertNoAgentInjected(ctx, svc, origPod)
+	s.assertNoAgentInjected(ctx, svc, []core.Pod{origPod})
 
 	itest.TelepresenceOk(ctx, "leave", svc)
 	mustLeave = false
@@ -559,7 +588,7 @@ func (s *nodeAgentSuite) Test_NodeAgentHTTPFilteredWiretap() {
 	// remain unmutated.
 	jobNames := s.nodeAgentJobNames(ctx, svc)
 	rq.Len(jobNames, 1, "expected exactly one node-agent Job for %s", svc)
-	s.assertNoAgentInjected(ctx, svc, origPod)
+	s.assertNoAgentInjected(ctx, svc, []core.Pod{origPod})
 
 	curlWithHeader := func() (string, error) {
 		return itest.Output(ctx, "curl", "--silent", "--max-time", "2", "-H", headerName+": "+headerValue, svc)

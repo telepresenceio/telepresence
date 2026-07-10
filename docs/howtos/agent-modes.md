@@ -27,7 +27,7 @@ reaches the workload, what privileges they need, and what they leave behind.
 | Workload modification | Pod template is rewritten; pods restart once when the agent is first injected | None; the existing pod is engaged as-is |
 | Privileges required | None beyond the webhook; works under restrictive Pod Security Standards and on clusters like GKE Autopilot | Privileged: `hostPID`, `SYS_ADMIN`/`SYS_PTRACE`/`NET_ADMIN`/`NET_RAW`, and a read-only mount of the node's container-runtime socket. The traffic-manager's namespace must permit the *privileged* Pod Security Standard |
 | Agent-injector webhook | Required (the API server must be able to reach it) | Not used; works with `agentInjector.enabled=false` |
-| Replicas | The agent is injected into every pod of the workload | One pod per workload is engaged; traffic reaching other replicas is not intercepted |
+| Replicas | The agent is injected into every pod of the workload | One node-agent Job per replica; every replica is engaged, at the cost of one privileged Job per replica |
 | `replace` | Supported | Not supported |
 | Cleanup | The sidecar remains in the pods after the engagement ends (removed by `telepresence uninstall` or `helm uninstall`) | The agent Job is reaped as soon as nothing uses it, and on `helm uninstall` |
 | Service mesh | Full support, including names only resolvable inside the mesh | Traffic interception coexists with a mesh, but mesh-only DNS names (e.g. Istio `ServiceEntry` hosts) do not resolve during the engagement |
@@ -37,8 +37,7 @@ reaches the workload, what privileges they need, and what they leave behind.
 Rules of thumb:
 
 - Prefer the **sidecar** when the cluster restricts privileged pods, when you
-  need `replace`, when every replica must be engaged, or when you depend on
-  mesh-internal DNS.
+  need `replace`, or when you depend on mesh-internal DNS.
 - Prefer the **node-agent** when restarting the workload is expensive or
   disallowed, when an operator reconciles the pod spec and fights the
   webhook, or when the agent-injector webhook cannot be used at all.

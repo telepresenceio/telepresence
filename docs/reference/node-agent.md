@@ -48,32 +48,40 @@ sequenceDiagram
   participant J as node-agent Job
   participant P as target pod
   C->>M: PrepareIntercept / EnsureAgent (node_agent=true)
-  M->>P: select a Running+Ready pod, read node & container IDs
-  M->>J: create Job pinned to the pod's node
-  J->>P: resolve PIDs via CRI, enter namespaces
-  J->>M: ArriveAsAgent (node_agent=true)
-  M->>C: agent ready
+  loop for each admissible Running+Ready pod
+    M->>P: select pod, read node & container IDs
+    M->>J: create Job pinned to the pod's node
+    J->>P: resolve PIDs via CRI, enter namespaces
+    J->>M: ArriveAsAgent (node_agent=true)
+  end
+  M->>C: agent(s) ready
   C->>J: port-forward (manager namespace)
 ```
 
-1. **Target selection.** The manager picks one Running and Ready pod of the
-   workload (a node-agent engages a single pod, unlike the sidecar, which is
-   injected into every replica) and records its node, its IP, and the CRI
-   container ID of every configured container. Pods that cannot host a
-   node-agent are rejected with a user error: pods on the host network (whose
-   namespace the [route controller](route-controller.md) also programs), pods
-   that already contain an injected traffic-agent sidecar, and pods running in
-   their own user namespace (`hostUsers: false` — see
-   [Limitations](#limitations)).
-2. **Job creation.** The Job is created in the *traffic-manager's* namespace,
-   pinned to the target's node via `spec.nodeName`, and carries the same
-   `AGENT_CONFIG` a sidecar would receive, plus the target's container IDs,
-   pod IP, and the CRI socket path (Helm value `nodeAgent.criSocket`,
-   defaulting to containerd's socket). Its name is deterministic — a hash of
-   the target namespace and pod name under a per-agent prefix — so a retried
-   request resolves to the Job already created for the same target. A Job
-   whose target has changed (container restart), whose pod failed, or that is
-   still terminating is replaced, never reused.
+1. **Target selection.** For an intercept, the manager selects *every*
+   admissible Running and Ready pod of the workload — matching the sidecar's
+   every-replica coverage — and records each one's node, its IP, and the CRI
+   container ID of every configured container. A pod that cannot host a
+   node-agent is skipped with a log line rather than failing the whole
+   request: pods on the host network (whose namespace the [route
+   controller](route-controller.md) also programs), pods that already
+   contain an injected traffic-agent sidecar, and pods running in their own
+   user namespace (`hostUsers: false` — see [Limitations](#limitations)). The
+   request fails only when no pod is admissible. An **ingest** is the
+   exception: it reads env and mounts from a single pod, so it reuses an
+   existing Job that still targets an admissible pod, or creates a Job for
+   just one target if none exists — a Job per replica would buy it nothing.
+2. **Job creation.** A Job is created in the *traffic-manager's* namespace
+   for each target pod, pinned to that pod's node via `spec.nodeName`, and
+   carries the same `AGENT_CONFIG` a sidecar would receive, plus that pod's
+   container IDs, pod IP, and the CRI socket path (Helm value
+   `nodeAgent.criSocket`, defaulting to containerd's socket). Each Job's
+   name is deterministic — a hash of the target namespace and pod name under
+   a per-agent prefix — so a retried request resolves to the Job already
+   created for the same target, and Jobs for different pods of the same
+   workload can never collide. A Job whose target has changed (container
+   restart), whose pod failed, or that is still terminating is replaced,
+   never reused.
 3. **Registration.** Once inside the target's namespaces the agent calls
    `ArriveAsAgent` like any traffic-agent, with a `node_agent` flag on its
    `AgentInfo`. From that point the manager's intercept machinery treats it
@@ -94,6 +102,18 @@ sequenceDiagram
    pod could still tear it down. On `helm uninstall`, a pre-delete hook has
    the manager reap every remaining node-agent Job, mirroring how injected
    sidecars are rolled back.
+
+### Replica churn
+
+While any engagement claims a workload, the manager keeps a live watch on its
+pods and reconciles the Job set as replicas come and go, so coverage does not
+freeze at the set that existed when the engagement started. A new replica
+gets its own Job once it becomes Running and Ready; a removed replica's Job
+is reaped as soon as its pod is actually gone — a pod that merely turns
+un-Ready keeps its Job. A rolling restart falls out of the same mechanism:
+the old pods' Jobs are reaped as those pods disappear and the new pods each
+get a Job as they become ready, with no special casing beyond what an
+intercept already tolerates during a sidecar rollout.
 
 ## Entering the target pod
 
@@ -156,15 +176,13 @@ combinations that would break one of them:
 |-----------|----------------|--------|
 | node-agent engagement | pod already has an injected sidecar | rejected — both would program the same nftables table and bind the same agent ports |
 | sidecar engagement | live node-agent intercept or ingest on the workload | rejected — injection would restart the pod the node-agent is attached to |
-| second node-agent intercept | live node-agent intercept on the same workload | rejected — engagements share one Job per workload, and intercept sharing is not implemented |
+| second node-agent intercept | live node-agent intercept on the same workload | allowed — engagements share the workload's Jobs; the same conflict rules as the sidecar apply (concurrent global intercepts of one port still conflict) |
 | node-agent ingest | live node-agent intercept (or other ingest) on the workload | allowed — the Job is shared and reference-counted via leases |
 
 ## Limitations
 
 - **Privileged posture required.** The manager's namespace must admit
   privileged pods; clusters that ban `hostPID` cannot run node-agents.
-- **One pod per workload.** The node-agent engages a single Running pod. New
-  replicas are untouched, and traffic reaching them is not intercepted.
 - **`--replace` is not supported.** Replacing a container is implemented by
   the injection machinery, which node-agent mode never runs.
 - **User-namespaced pods are not supported yet.** A `hostUsers: false` pod
