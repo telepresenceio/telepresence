@@ -132,6 +132,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Telepresence and VPNs](reference/vpn.md)
   - [Networking through Virtual Network Interface](reference/tun-device.md)
   - [Connection Routing](reference/routing.md)
+  - [Traffic Agent Packet Routing](reference/agent-packet-routing.md)
   - [Route Controller](reference/route-controller.md)
   - [Node-hosted Traffic Agent](reference/node-agent.md)
   - [Monitoring](reference/monitoring.md)
