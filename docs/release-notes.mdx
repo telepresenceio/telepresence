@@ -11,7 +11,7 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 <Note>
 	<Title type="feature" docs="reference/node-agent">Node-hosted traffic-agent</Title>
 	<Body>
-Workloads can now be engaged without sidecar injection. When a cluster administrator enables node-agent mode in the traffic-manager's Helm chart (<code>nodeAgent.enabled=true</code>; the manager's namespace must admit privileged pods), intercepts, wiretaps, and ingests can be served by a node-pinned agent that attaches to the existing pod's Linux namespaces, leaving the workload unmodified and its pods unrestarted. The agent-injector webhook is not involved and may even be disabled entirely. Clients select the mode through the <code>config.yml</code> setting <code>nodeAgent.enabled</code>, or per engagement with the <code>--node-agent</code> flag.
+Workloads can now be engaged without sidecar injection. When a cluster administrator enables node-agent mode in the traffic-manager's Helm chart (<code>nodeAgent.enabled=true</code>; the manager's namespace must admit privileged pods), intercepts, wiretaps, and ingests can be served by a node-pinned agent that attaches to the existing pod's Linux namespaces, leaving the workload unmodified and its pods unrestarted. The agent-injector webhook is not involved and may even be disabled entirely. Administrators can set the client default cluster-wide through the Helm chart's <code>client.nodeAgent.enabled</code> value; individual workstations may override it in <code>config.yml</code>, and a single engagement with the <code>--node-agent</code> flag.
   </Body>
 </Note>
 ## Version 2.29.3 <span style={{fontSize:'16px'}}>(July  8)</span>

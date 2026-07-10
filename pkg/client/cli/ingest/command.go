@@ -61,10 +61,9 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	c.WorkloadName = positional[0]
 	c.Cmdline = positional[1:]
 	c.FormattedOutput = output.WantsFormatted(cmd)
-	// --node-agent defaults to the client config's nodeAgent.enabled setting
-	// unless the flag was passed explicitly; an explicit --node-agent=false
-	// always overrides an enabled config default.
-	c.NodeAgent = flags.NodeAgentDefault(cmd, c.NodeAgent)
+	// --node-agent is resolved in Run, once a session is available (see
+	// flags.NodeAgentDefault): Validate runs too early to reach the
+	// session-merged client config.
 	if err := c.MountFlags.Validate(cmd); err != nil {
 		return err
 	}
@@ -81,6 +80,7 @@ func (c *Command) Run(cmd *cobra.Command, positional []string) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
+	c.NodeAgent = flags.NodeAgentDefault(cmd, c.NodeAgent)
 	defer progress.Stop(cmd.Context())
 	ctx := dos.WithStdio(cmd.Context(), cmd)
 	return NewState(c, c.MountFlags.ValidateConnected(ctx)).Run(ctx)

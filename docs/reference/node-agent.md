@@ -14,8 +14,10 @@ target pod's Linux namespaces from the outside.
 The mode is opt-in on both sides: the traffic-manager must be installed with
 `nodeAgent.enabled=true`, and the client requests it per engagement with the
 `--node-agent` flag on `telepresence intercept`, `telepresence wiretap`, and
-`telepresence ingest` (or by default, with `nodeAgent.enabled: true` in the
-client's `config.yml`; an explicit flag always wins).
+`telepresence ingest`. The client-side default can also be set cluster-wide
+through the Helm chart's `client.nodeAgent.enabled` value, overridden by a
+workstation's local `config.yml` setting `nodeAgent.enabled`, with an
+explicit `--node-agent` flag always winning.
 
 ## When to use it
 

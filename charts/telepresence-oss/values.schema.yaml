@@ -281,6 +281,15 @@ properties:
               exactly. Defaults to true, on the assumption that filters exist to limit how the intercept
               impacts others, not the developer's own traffic
             type: boolean
+      nodeAgent:
+        type: object
+        properties:
+          enabled:
+            description: >-
+              Cluster-wide default for the client's --node-agent flag: make intercept, wiretap, and ingest use
+              node-hosted traffic-agent mode unless overridden by a workstation's local config.yml or the
+              --node-agent flag itself. Off by default.
+            type: boolean
       routing:
         type: object
         properties:

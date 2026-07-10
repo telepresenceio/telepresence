@@ -276,10 +276,9 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 		c.Mechanism = "http"
 	}
 
-	// --node-agent defaults to the client config's nodeAgent.enabled setting
-	// unless the flag was passed explicitly; an explicit --node-agent=false
-	// always overrides an enabled config default.
-	c.NodeAgent = flags.NodeAgentDefault(cmd, c.NodeAgent)
+	// --node-agent is resolved in validatedRun, once a session is available
+	// (see flags.NodeAgentDefault): Validate runs too early to reach the
+	// session-merged client config.
 
 	// Actually intercepting something
 	if c.AgentName == "" {
@@ -363,6 +362,11 @@ func (c *Command) RunReplace(cmd *cobra.Command, positional []string) error {
 func (c *Command) validatedRun(cmd *cobra.Command) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
+	}
+	// The replace command shares this method but doesn't register
+	// --node-agent, so leave c.NodeAgent untouched in that case.
+	if cmd.Flags().Lookup("node-agent") != nil {
+		c.NodeAgent = flags.NodeAgentDefault(cmd, c.NodeAgent)
 	}
 	defer progress.Stop(cmd.Context())
 	ctx := dos.WithStdio(cmd.Context(), cmd)

@@ -216,9 +216,9 @@ the filters exactly.
 
 The `nodeAgent` controls the client-side default for node-hosted traffic-agent mode, used by `telepresence intercept`, `telepresence wiretap`, and `telepresence ingest`.
 
-| Field     | Description                                                                                                                        | Type                 | Default |
-|-----------|-------------------------------------------------------------------------------------------------------------------------------------|----------------------|---------|
-| `enabled` | Makes `telepresence intercept`, `wiretap`, and `ingest` behave as if `--node-agent` was given, unless the flag is passed explicitly | [boolean][yaml-bool] | false   |
+| Field     | Description                                                                                                                                                              | Type                 | Default |
+|-----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------|---------|
+| `enabled` | Makes `telepresence intercept`, `wiretap`, and `ingest` behave as if `--node-agent` was given, unless the flag is passed explicitly. Can be globally configured in the Helm chart. | [boolean][yaml-bool] | false   |
 
 ### Log Levels
 
