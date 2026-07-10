@@ -117,9 +117,8 @@ or change the port number that Telepresence is using for the agent injector by p
 using the Helm chart value `agentInjector.webhook.port`.
 Please refer to the [telepresence install instructions](install/cloud#gke) or the [GCP docs](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules) for information to resolve this.
 
-Attachments that use the [node-agent](reference/node-agent.md) (`--node-agent`, with `nodeAgent.enabled=true` on the
-traffic-manager) do not involve the webhook at all and are unaffected by API-server-to-webhook connectivity problems
-like this one.
+Attachments that use the [node-agent](reference/node-agent.md) do not involve the webhook at all and are unaffected
+by API-server-to-webhook connectivity problems like this one.
 
 ### Injected init-container doesn't function properly
 

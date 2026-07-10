@@ -68,8 +68,8 @@ and in sync as far as GitOps workflows (such as ArgoCD) are concerned.
 
 The injection will happen on demand the first time an attempt is made to replace, ingest, intercept, or wiretap the workload.
 
-Attachments created with `--node-agent` never involve the webhook: the traffic-manager creates a
-[node-hosted agent](node-agent.md) instead of injecting a sidecar. Clusters that only use node-agents
+Attachments served by the [node-agent](node-agent.md) never involve the webhook: the traffic-manager creates a
+node-hosted agent instead of injecting a sidecar. Clusters that only use node-agents
 can therefore disable the injector entirely with `agentInjector.enabled=false`.
 
 If you want to prevent that the injection ever happens, simply add the `telepresence.io/inject-traffic-agent: disabled`

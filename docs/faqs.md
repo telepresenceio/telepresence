@@ -69,7 +69,7 @@ Sudo is only needed when using a standalone binary installation without a system
 
 A `traffic-manager` service is deployed in a namespace of your choice (default 'ambassador') within your cluster, and this manages attachments and connections between your local machine and the cluster.
 
-A Traffic Agent container is injected per pod involved in an attachment. The injection happens the first time a `replace`, an `ingest`, or an `intercept` is made on a workload, unless you choose to control the injection using an annotation, in which case the injection happens when the `traffic-manager` is installed. When attaching using `--node-agent` (requires `nodeAgent.enabled=true` on the traffic-manager), nothing is injected — a node-hosted agent instead attaches to the existing pod, which is neither modified nor restarted. See the [node-agent reference](reference/node-agent.md) for details.
+A Traffic Agent container is injected per pod involved in an attachment. The injection happens the first time a `replace`, an `ingest`, or an `intercept` is made on a workload, unless you choose to control the injection using an annotation, in which case the injection happens when the `traffic-manager` is installed. When the cluster is configured to serve attachments with the node-agent (`nodeAgent.enabled=true` on the traffic-manager), nothing is injected — a node-hosted agent instead attaches to the existing pod, which is neither modified nor restarted. See the [node-agent reference](reference/node-agent.md) for details.
 
 #### How can I remove all the Telepresence components installed within my cluster?
 
