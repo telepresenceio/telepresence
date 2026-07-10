@@ -1,9 +1,9 @@
 ---
-title: Route Controller
-description: Prevent routing loops on local clusters by blackholing the service CIDR in an nftables FORWARD chain.
+title: Routing Loop Prevention on Local Clusters
+description: How the route-controller DaemonSet prevents routing loops on local clusters by blackholing the service CIDR in an nftables FORWARD chain.
 ---
 
-# Route Controller
+# Routing Loop Prevention on Local Clusters
 
 ## Overview
 

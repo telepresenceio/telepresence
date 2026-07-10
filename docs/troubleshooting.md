@@ -305,12 +305,12 @@ The packet is forwarded to the traffic-agent, which re-dials the same IP; with n
 rule in place the packet escapes the cluster via the node's default route, returns to the
 workstation, and the cycle repeats until the connection times out.
 
-Enable the **route-controller** DaemonSet to prevent this. It installs an iptables `FORWARD`
-chain `DROP` rule for the service CIDR on every node, ensuring that packets bound for
+Enable the **route-controller** DaemonSet to prevent this. It installs an nftables `forward`
+chain drop rule for the service CIDR on every node, ensuring that packets bound for
 non-existent ClusterIPs are silently dropped rather than escaping the cluster.
 
-See the [Route Controller reference](reference/route-controller.md) for installation and
-configuration instructions.
+See [Routing Loop Prevention on Local Clusters](reference/route-controller.md) for
+installation and configuration instructions.
 
 ## Installation issues
 

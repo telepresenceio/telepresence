@@ -263,7 +263,7 @@
       link: reference/routing
     - title: Traffic Agent Packet Routing
       link: reference/agent-packet-routing
-    - title: Route Controller
+    - title: Routing Loop Prevention on Local Clusters
       link: reference/route-controller
     - title: Node-hosted Traffic Agent
       link: reference/node-agent
