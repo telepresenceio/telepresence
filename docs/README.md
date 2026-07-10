@@ -136,6 +136,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Node-hosted Traffic Agent](reference/node-agent.md)
 - Comparisons
   - [Telepresence vs mirrord](compare/mirrord.md)
+  - [Telepresence vs Gefyra](compare/gefyra.md)
 - [FAQs](faqs.md)
 - [Troubleshooting](troubleshooting.md)
 - [Community](community.md)
