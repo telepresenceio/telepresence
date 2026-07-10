@@ -36,7 +36,7 @@
       link: howtos/mtls
     - title: Resolve Istio ServiceEntry Hosts
       link: howtos/istio
-    - title: Run Telepresence inside a container
+    - title: Run the Telepresence client in a container
       link: howtos/inside-container
     - title: Monitor with Prometheus and Grafana
       link: howtos/monitoring
