@@ -16,6 +16,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Intercepts](concepts/intercepts.md)
 - How do I...
   - [Code and debug an application locally](howtos/engage.md)
+  - [Choose between the sidecar and the node-agent](howtos/agent-modes.md)
   - [Use Telepresence with Docker](howtos/docker.md)
   - [Extend Docker Compose with Telepresence](howtos/docker-compose.md)
   - [Work with large clusters](howtos/large-clusters.md)
