@@ -31,7 +31,7 @@ Telepresence offers three powerful ways to develop your services locally:
   - Provides read-write access to the volumes mounted by the targeted container.
   - Makes it possible to filter traffic using HTTP headers and paths.
 * **Impact:**
-  - A Traffic Agent is injected into the pods of the targeted workload.
+  - A Traffic Agent is injected into the pods of the targeted workload (or, with `--node-agent`, a node-hosted agent engages the pod without modifying or restarting it).
   - Intercepted traffic is rerouted to the local workstation and will no longer reach the remote service.
   - Only traffic that matches the intercept filters will be rerouted.
   - All containers keep on running.
@@ -47,7 +47,7 @@ Telepresence offers three powerful ways to develop your services locally:
   - Provides read-only access to the volumes mounted by the targeted container.
   - Makes it possible to filter traffic using HTTP headers and paths.
 * **Impact:**
-  - A Traffic Agent is injected into the pods of the targeted workload.
+  - A Traffic Agent is injected into the pods of the targeted workload (or, with `--node-agent`, a node-hosted agent engages the pod without modifying or restarting it).
   - All containers keep on running.
   - All traffic will still reach the remote service.
   - Wiretapped traffic is rerouted to the local workstation.
@@ -64,7 +64,7 @@ Telepresence offers three powerful ways to develop your services locally:
    - Makes the remote environment of the ingested container available to the local workstation.
    - Provides read-only access to the volumes mounted by replaced container.
 * **Impact:**
-   - A Traffic Agent is injected into the pods of the targeted workload.
+   - A Traffic Agent is injected into the pods of the targeted workload (or, with `--node-agent`, a node-hosted agent engages the pod without modifying or restarting it).
    - No traffic is rerouted and all containers keep on running.
 * **Use-cases:**
    - You want to keep the impact that your local development has on the cluster to a minimum.

@@ -9,6 +9,11 @@ The injection is triggered by a Kubernetes Mutating Webhook and will
 only happen once. The Traffic Agent is responsible for making the environment and volumes available
 on the developer's workstation, and also for redirecting traffic to it.
 
+Sidecar injection is the default way to engage a workload. A workload can instead be engaged entirely
+without injection — and without any pod restart — by the node-hosted traffic-agent (see
+[Node-hosted traffic-agent](../node-agent.md)), at the cost of running a privileged agent pod. `replace`
+always requires the sidecar; it is not supported by the node-agent.
+
 When replacing a workload container, all traffic intended for it will be rerouted to the local workstation, unless
 limited using the `--port` flag.
 
