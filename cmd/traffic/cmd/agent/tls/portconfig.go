@@ -22,6 +22,7 @@ import (
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 )
 
 type ValueState int32
@@ -33,8 +34,21 @@ const (
 )
 
 type portConfig struct {
-	// The port number that this configuration applies to.
+	// The port number that this configuration applies to. This is the proxy port for a
+	// numeric target port, or the container port unchanged for a named one (see
+	// agentconfig.Sidecar.InterceptorInactivePort).
 	port uint16
+
+	// target is the address the TLS/H2C probes dial to reach the application on this
+	// port when no intercept is active: the same address agentconfig.PassThroughTarget
+	// selects for the pass-through forwarder, so a probe and a pass-through connection
+	// always agree on where the app is.
+	target netip.AddrPort
+
+	// dialer is the Dialer a node-agent injects to reach the application in the target
+	// pod's network namespace, or nil to dial in the agent's own namespace (the sidecar
+	// case, where target is already reachable directly).
+	dialer forwarder.Dialer
 
 	// The path to the secret containing the downstream TLS certificate, as it is mounted into the app-container. The
 	// path is subjected to environment variable expansion, using the same rules as the app-container.
@@ -60,9 +74,11 @@ type portConfig struct {
 	enableH2cProbing bool
 }
 
-func newPortConfig(port uint16, containerName string, enableH2C bool) *portConfig {
+func newPortConfig(target netip.AddrPort, dialer forwarder.Dialer, containerName string, enableH2C bool) *portConfig {
 	return &portConfig{
-		port:                 port,
+		port:                 target.Port(),
+		target:               target,
+		dialer:               dialer,
 		containerName:        containerName,
 		upstreamProbeTimeout: defaultProbeTimeout,
 		TLS:                  ValueUnknown,
@@ -118,20 +134,32 @@ func (p *portConfig) probeWarning(ctx context.Context, what string, err error) {
 		p.port, what, err)
 }
 
-func (p *portConfig) probeTLS(ctx context.Context, podIP netip.Addr) bool {
+// dial connects to the port's pass-through target (p.target), the same address
+// agentconfig.PassThroughTarget selects for the forwarder's own pass-through dial. It
+// uses the injected Dialer when present -- a node-agent's target-netns dialer -- or a
+// plain net.Dialer otherwise, mirroring fwd.configureTransport's dialer injection.
+func (p *portConfig) dial(ctx context.Context) (net.Conn, error) {
+	if p.dialer != nil {
+		return p.dialer.DialContext(ctx, "tcp", p.target.String())
+	}
+	d := &net.Dialer{}
+	return d.DialContext(ctx, "tcp", p.target.String())
+}
+
+func (p *portConfig) probeTLS(ctx context.Context) bool {
 	p.portMutex.Lock()
-	supported := p.probeTLSWithLock(ctx, podIP)
+	supported := p.probeTLSWithLock(ctx)
 	p.portMutex.Unlock()
 	return supported
 }
 
-func (p *portConfig) probeTLSWithLock(ctx context.Context, podIP netip.Addr) bool {
+func (p *portConfig) probeTLSWithLock(ctx context.Context) bool {
 	if p.TLS != ValueUnknown && p.HTTP2 != ValueUnknown {
 		return p.TLS == ValueSupported
 	}
 	port := p.port
-	clog.Debugf(ctx, "Probing port %d for TLS and HTTP/2 support", port)
-	addr := netip.AddrPortFrom(podIP, port).String()
+	addr := p.target
+	clog.Debugf(ctx, "Probing port %d for TLS and HTTP/2 support (dialing %s)", port, addr)
 	bc := backoff.NewExponentialBackOff()
 	bc.MaxElapsedTime = p.upstreamProbeTimeout
 	bc.MaxInterval = 300 * time.Millisecond
@@ -139,8 +167,7 @@ func (p *portConfig) probeTLSWithLock(ctx context.Context, podIP netip.Addr) boo
 	err := backoff.Retry(func() error {
 		ctx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 		defer cancel()
-		dialer := &net.Dialer{}
-		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		conn, err := p.dial(ctx)
 		if err != nil {
 			clog.Debugf(ctx, "Unable to dial %s: %v", addr, err)
 			return err
@@ -167,11 +194,21 @@ func (p *portConfig) probeTLSWithLock(ctx context.Context, podIP netip.Addr) boo
 	}, backoff.WithContext(bc, ctx))
 	if err != nil {
 		p.probeWarning(ctx, "TLS and HTTP/2", err)
+		// The target never became reachable within the retry budget. Cache a
+		// negative result so that every subsequent request on this port doesn't
+		// re-run the same retry budget: UseTLS/UseHTTP2 short-circuit once TLS
+		// and HTTP2 are no longer ValueUnknown.
+		if p.TLS == ValueUnknown {
+			p.TLS = ValueNotSupported
+		}
+		if p.HTTP2 == ValueUnknown {
+			p.HTTP2 = ValueNotSupported
+		}
 	}
 	return p.TLS == ValueSupported
 }
 
-func (p *portConfig) probeHTTP2(ctx context.Context, podIP netip.Addr) bool {
+func (p *portConfig) probeHTTP2(ctx context.Context) bool {
 	p.portMutex.Lock()
 	defer p.portMutex.Unlock()
 	if p.HTTP2 != ValueUnknown {
@@ -187,7 +224,7 @@ func (p *portConfig) probeHTTP2(ctx context.Context, podIP netip.Addr) bool {
 	} else {
 		// TLS has been determined from annotation or appProtocol because otherwise the HTTP/2 status would already be known.
 		// Let's probe TLS to also get HTTP/2 status.
-		p.probeTLSWithLock(ctx, podIP)
+		p.probeTLSWithLock(ctx)
 	}
 	return p.HTTP2 == ValueSupported
 }
@@ -196,16 +233,17 @@ func (p *portConfig) probeHTTP2ClearTextWithLock(ctx context.Context) bool {
 	if !p.enableH2cProbing {
 		return false
 	}
-	clog.Debugf(ctx, "Probing port %d for HTTP/2 clear-text support", p.port)
+	clog.Debugf(ctx, "Probing port %d for HTTP/2 clear-text support (dialing %s)", p.port, p.target)
 	bc := backoff.NewExponentialBackOff()
 	bc.MaxElapsedTime = p.upstreamProbeTimeout
 	bc.MaxInterval = 300 * time.Millisecond
 	bc.InitialInterval = 100 * time.Millisecond
 	var conn net.Conn
 	err := backoff.Retry(func() error {
-		dialer := &net.Dialer{Timeout: 200 * time.Millisecond}
+		dialCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
+		defer cancel()
 		var err error
-		conn, err = dialer.Dial("tcp", fmt.Sprintf(":%d", p.port))
+		conn, err = p.dial(dialCtx)
 		return err
 	}, backoff.WithContext(bc, ctx))
 	if err != nil {

@@ -95,8 +95,3 @@ func Test_newPortHandler_passThroughTarget(t *testing.T) {
 		require.Equal(t, netip.AddrPortFrom(ipv4, wantPort), ph.Target())
 	})
 }
-
-func Test_loopbackFor(t *testing.T) {
-	require.Equal(t, netip.AddrFrom4([4]byte{127, 0, 0, 1}), loopbackFor(netip.MustParseAddr("10.1.2.3")))
-	require.Equal(t, netip.IPv6Loopback(), loopbackFor(netip.MustParseAddr("fd00::1")))
-}

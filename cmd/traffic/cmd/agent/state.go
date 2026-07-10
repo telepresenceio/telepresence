@@ -101,7 +101,7 @@ func (s *state) SessionInfo() *rpc.SessionInfo {
 }
 
 func NewState(ctx context.Context, config Config) (State, error) {
-	tlsManager, err := tls.NewManager(ctx, config.AgentConfig(), config.PodIP(), config.Annotations())
+	tlsManager, err := tls.NewManager(ctx, config.AgentConfig(), config.AppPodIP(), config.DialerFactory(), config.Annotations())
 	if err != nil {
 		return nil, err
 	}

@@ -303,6 +303,39 @@ func (s *Sidecar) InterceptorInactivePort(containerPort uint16, proto types.Prot
 	return containerPort
 }
 
+// PassThroughTarget returns the address that a forwarder or protocol prober should
+// dial to reach containerPort on the application when no intercept is redirecting the
+// connection elsewhere. appPodIP is the IP of the pod that hosts the application
+// containers (Config.AppPodIP: the agent's own pod for a sidecar, the target pod for a
+// node-agent).
+//
+// The result mirrors the pod-IP redirect gate programmed by agentnft (see
+// pkg/agentnft/ruleset.go, gate 2): traffic addressed to the pod IP's app ports is
+// unconditionally redirected to the agent, including the agent's own traffic. A numeric
+// target port resolves to a proxy port via InterceptorInactivePort, and dialing that
+// proxy port at appPodIP is safe -- the proxy-port DNAT rewrites it back to
+// containerPort, breaking the loop the redirect would otherwise create. A named target
+// port has no proxy port, so InterceptorInactivePort returns containerPort unchanged;
+// dialing appPodIP there would hit the same unconditional redirect and loop back into
+// the agent, so the address switches to the family-matched loopback instead, which gate
+// 3 exempts.
+func (s *Sidecar) PassThroughTarget(appPodIP netip.Addr, containerPort uint16, proto types.Proto) netip.AddrPort {
+	cp := s.InterceptorInactivePort(containerPort, proto)
+	targetIP := appPodIP
+	if cp == containerPort {
+		targetIP = LoopbackFor(targetIP)
+	}
+	return netip.AddrPortFrom(targetIP, cp)
+}
+
+// LoopbackFor returns the loopback address of the same address family as ip.
+func LoopbackFor(ip netip.Addr) netip.Addr {
+	if ip.Is6() {
+		return netip.IPv6Loopback()
+	}
+	return netip.AddrFrom4([4]byte{127, 0, 0, 1})
+}
+
 // Clone returns a deep copy of the Sidecar.
 func (s *Sidecar) Clone() *Sidecar {
 	cs := *s
