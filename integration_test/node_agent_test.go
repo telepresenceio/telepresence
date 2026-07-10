@@ -252,7 +252,13 @@ func (s *nodeAgentSuite) SetupSuite() {
 	s.reapLeftoverNodeAgentJobs(ctx)
 	s.skipUnlessNodeAgentPodSecurityOK(ctx)
 
-	s.TelepresenceHelmInstallOK(ctx, false, "--set", "nodeAgent.enabled=true")
+	// h2c probing is disabled because the echo-easy image answers HTTP/2
+	// prior-knowledge probes, which makes the agent speak h2c on the
+	// http-filtered delivery legs; the local echo helper is HTTP/1.1-only.
+	// Protocol parity for h2c applications has its own coverage
+	// (h2c_intercept_test.go); the tests in this suite target engagement
+	// and filter routing.
+	s.TelepresenceHelmInstallOK(ctx, false, "--set", "nodeAgent.enabled=true", "--set", "agent.enableH2cProbing=false")
 	s.ApplyApp(ctx, "echo-easy", "deploy/echo-easy")
 	s.TelepresenceConnect(ctx)
 }
@@ -419,6 +425,211 @@ func (s *nodeAgentSuite) Test_NodeAgentConfigDefault() {
 	rq.Eventually(func() bool {
 		return len(s.nodeAgentJobNames(cfgCtx, svc)) == 0
 	}, 60*time.Second, 2*time.Second, "node-agent Job was not reaped after leaving the intercept")
+}
+
+// Test_NodeAgentHTTPFilteredIntercept verifies that "telepresence intercept
+// --node-agent --http-header ..." engages the node-agent's HTTP-filtered
+// path: the node-agent Job switches to its HTTP listener and reverse-proxy
+// transport, so requests carrying the configured header are routed to the
+// local process while requests without it keep reaching the real
+// application through the node-agent's pass-through dial (which uses the
+// target workload's network namespace). The target pod is left untouched
+// and the node-agent Job is reaped once the intercept is left.
+func (s *nodeAgentSuite) Test_NodeAgentHTTPFilteredIntercept() {
+	const svc = "echo-easy"
+	ctx := s.Context()
+	rq := s.Require()
+
+	origPods := itest.RunningPods(ctx, svc, s.AppNamespace())
+	rq.Len(origPods, 1, "expected exactly one running %s pod before intercepting", svc)
+	origPod := origPods[0]
+
+	port, cancel := itest.StartLocalHttpEchoServer(ctx, svc)
+	defer cancel()
+
+	header := "x-telepresence-test=node-agent-http-filter-intercept"
+
+	// --mount=false avoids a dependency on FUSE (unavailable/unstable on some
+	// CI runners); the assertions below only need the header-routed and
+	// pass-through traffic, not a mount.
+	stdout := itest.TelepresenceOk(ctx, "intercept",
+		"--node-agent",
+		"--port", strconv.Itoa(port),
+		"--mount", "false",
+		"--http-header", header,
+		svc)
+	s.Contains(stdout, "Using Deployment")
+	mustLeave := true
+	defer func() {
+		if mustLeave {
+			itest.TelepresenceOk(ctx, "leave", svc)
+		}
+	}()
+
+	// A request carrying the filter header must reach the local echo server.
+	itest.PingInterceptedEchoServerAndExpect(ctx, svc, "80", svc+" from intercept at /", header)
+
+	// A request without the header must keep reaching the real application
+	// through the node-agent's pass-through dial.
+	rq.Eventually(func() bool {
+		so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", svc)
+		if err != nil {
+			return false
+		}
+		return strings.Contains(so, "Request served by "+origPod.Name)
+	}, 30*time.Second, 3*time.Second, "unfiltered request did not reach the real application through the node-agent pass-through")
+
+	// A node-agent Job must exist for this workload.
+	jobNames := s.nodeAgentJobNames(ctx, svc)
+	rq.Len(jobNames, 1, "expected exactly one node-agent Job for %s", svc)
+
+	s.assertNoAgentInjected(ctx, svc, origPod)
+
+	itest.TelepresenceOk(ctx, "leave", svc)
+	mustLeave = false
+
+	// The node-agent Job is reaped asynchronously (background deletion).
+	rq.Eventually(func() bool {
+		return len(s.nodeAgentJobNames(ctx, svc)) == 0
+	}, 60*time.Second, 2*time.Second, "node-agent Job was not reaped after leaving the intercept")
+}
+
+// Test_NodeAgentHTTPFilteredWiretap verifies that "telepresence wiretap
+// --node-agent --http-header ..." taps only the traffic that matches the
+// header filter, via the node-agent's HTTP listener and reverse-proxy
+// transport: a request carrying the header keeps reaching the real
+// application (a wiretap never steals traffic) and a copy of it arrives at
+// the local tap, while a request without the header also keeps reaching the
+// real application but is never copied to the tap. The target pod is left
+// untouched and the node-agent Job is reaped once the wiretap is left.
+func (s *nodeAgentSuite) Test_NodeAgentHTTPFilteredWiretap() {
+	const svc = "echo-easy"
+	ctx := s.Context()
+	rq := s.Require()
+
+	origPods := itest.RunningPods(ctx, svc, s.AppNamespace())
+	rq.Len(origPods, 1, "expected exactly one running %s pod before wiretapping", svc)
+	origPod := origPods[0]
+
+	tapHits := make(chan struct{}, 100)
+	lc := net.ListenConfig{}
+	l, err := lc.Listen(ctx, "tcp", ":0")
+	rq.NoError(err, "failed to listen on localhost")
+	tapPort := l.Addr().(*net.TCPAddr).Port
+	tapSrv := &http.Server{
+		Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			select {
+			case tapHits <- struct{}{}:
+			default:
+			}
+		}),
+	}
+	go func() {
+		_ = tapSrv.Serve(l)
+	}()
+	defer func() {
+		sCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		defer cancel()
+		_ = tapSrv.Shutdown(sCtx)
+	}()
+
+	const headerName = "x-telepresence-test"
+	const headerValue = "node-agent-http-filter-wiretap"
+	header := headerName + "=" + headerValue
+
+	// --mount=false avoids a dependency on FUSE (unavailable/unstable on some
+	// CI runners); the assertions below only need the tapped and pass-through
+	// traffic, not a mount.
+	stdout := itest.TelepresenceOk(ctx, "wiretap",
+		"--node-agent",
+		"--workload", svc,
+		"--mount=false",
+		"--port", fmt.Sprintf("%d:80", tapPort),
+		"--http-header", header,
+		"wt2")
+	s.Contains(stdout, "Using Deployment "+svc)
+	mustLeave := true
+	defer func() {
+		if mustLeave {
+			itest.TelepresenceOk(ctx, "leave", "wt2")
+		}
+	}()
+
+	// A node-agent Job must exist for this workload, and the target pod must
+	// remain unmutated.
+	jobNames := s.nodeAgentJobNames(ctx, svc)
+	rq.Len(jobNames, 1, "expected exactly one node-agent Job for %s", svc)
+	s.assertNoAgentInjected(ctx, svc, origPod)
+
+	curlWithHeader := func() (string, error) {
+		return itest.Output(ctx, "curl", "--silent", "--max-time", "2", "-H", headerName+": "+headerValue, svc)
+	}
+	curlNoHeader := func() (string, error) {
+		return itest.Output(ctx, "curl", "--silent", "--max-time", "2", svc)
+	}
+
+	// A request carrying the filter header must still reach the real
+	// application: a wiretap never steals traffic, it only copies it.
+	rq.Eventually(func() bool {
+		so, err := curlWithHeader()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(so, "Request served by "+origPod.Name)
+	}, 30*time.Second, 3*time.Second, "application did not keep serving header-matching traffic through the wiretap pass-through")
+
+	// The tap must receive a copy of the header-matching traffic. Since tap
+	// delivery is asynchronous, issue a request in each iteration and then
+	// check if a tap hit arrives.
+	rq.Eventually(func() bool {
+		_, _ = curlWithHeader() // curl output is ignored; we only care about tap delivery
+		select {
+		case <-tapHits:
+			return true
+		default:
+			return false
+		}
+	}, 30*time.Second, 3*time.Second, "wiretap tap did not receive a copy of the header-matching traffic")
+
+	// Drain any straggler hits left over from the positive phase above --
+	// tap delivery is asynchronous, so a copy of the last matched request
+	// could still be in flight -- before checking the negative case below.
+	drainDeadline := time.After(2 * time.Second)
+drain:
+	for {
+		select {
+		case <-tapHits:
+		case <-drainDeadline:
+			break drain
+		}
+	}
+
+	// A request without the header must keep reaching the real application.
+	rq.Eventually(func() bool {
+		so, err := curlNoHeader()
+		if err != nil {
+			return false
+		}
+		return strings.Contains(so, "Request served by "+origPod.Name)
+	}, 30*time.Second, 3*time.Second, "application did not keep serving non-matching traffic through the wiretap pass-through")
+
+	// ...but it must never reach the tap. Issue several non-matching
+	// requests, then assert no tap hit shows up within a modest window.
+	for i := 0; i < 5; i++ {
+		_, _ = curlNoHeader() // curl output is ignored; we only care about tap delivery
+	}
+	select {
+	case <-tapHits:
+		s.Fail("wiretap tap received a copy of traffic that did not match the header filter")
+	case <-time.After(2 * time.Second):
+	}
+
+	itest.TelepresenceOk(ctx, "leave", "wt2")
+	mustLeave = false
+
+	rq.Eventually(func() bool {
+		return len(s.nodeAgentJobNames(ctx, svc)) == 0
+	}, 60*time.Second, 2*time.Second, "node-agent Job was not reaped after leaving the wiretap")
 }
 
 // Test_NodeAgentRejectsReplace verifies that the traffic-manager refuses a
