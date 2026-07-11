@@ -61,6 +61,14 @@ spec:
 	return err
 }
 
+// skipUnlessNodeAgentSupported skips the current suite when the
+// traffic-manager or the client predates node-agent mode.
+func (s *nodeAgentBase) skipUnlessNodeAgentSupported() {
+	if !(s.ManagerIsVersion(">2.29.x") && s.ClientIsVersion(">2.29.x")) {
+		s.T().Skip("node-agent mode requires traffic-manager and client 2.30 or later")
+	}
+}
+
 // skipUnlessNodeAgentPodSecurityOK skips the current suite unless the
 // manager namespace admits privileged node-agent Job pods.
 func (s *nodeAgentBase) skipUnlessNodeAgentPodSecurityOK(ctx context.Context) {
@@ -277,6 +285,7 @@ func init() {
 
 func (s *nodeAgentSuite) SetupSuite() {
 	s.Suite.SetupSuite()
+	s.skipUnlessNodeAgentSupported()
 	ctx := s.Context()
 	s.reapLeftoverNodeAgentJobs(ctx)
 	s.skipUnlessNodeAgentPodSecurityOK(ctx)

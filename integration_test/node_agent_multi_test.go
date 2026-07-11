@@ -45,6 +45,7 @@ func init() {
 
 func (s *nodeAgentMultiSuite) SetupSuite() {
 	s.Suite.SetupSuite()
+	s.skipUnlessNodeAgentSupported()
 	ctx := s.Context()
 	s.reapLeftoverNodeAgentJobs(ctx)
 	s.skipUnlessNodeAgentPodSecurityOK(ctx)
