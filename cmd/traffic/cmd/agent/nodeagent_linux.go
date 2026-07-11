@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"path/filepath"
 	"runtime/debug"
 
@@ -157,9 +158,19 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 
 	socket, ok := dos.LookupEnv(ctx, agentconfig.EnvNodeAgentCRISocket)
 	if !ok || socket == "" {
-		if socket, err = cri.DetectSocket(); err != nil {
+		root := ""
+		if fi, err := os.Stat(agentconfig.NodeAgentHostRunDir); err == nil && fi.IsDir() {
+			root = agentconfig.NodeAgentHostRunDir
+		}
+		var sampleID string
+		for _, id := range ids {
+			sampleID = id
+			break
+		}
+		if socket, err = cri.SocketFor(ctx, root, sampleID); err != nil {
 			return nil, err
 		}
+		clog.Infof(ctx, "Detected CRI socket %s", socket)
 	}
 
 	podIPStr, ok := dos.LookupEnv(ctx, agentconfig.EnvNodeAgentPodIP)

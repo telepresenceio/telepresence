@@ -74,8 +74,15 @@ const (
 	EnvNodeAgentContainerIDs = "_TEL_NODE_AGENT_CONTAINER_IDS"
 
 	// EnvNodeAgentCRISocket is the CRI unix socket path that the traffic-manager sets on a
-	// node-agent Job. When unset or empty, the node-agent falls back to cri.DetectSocket.
+	// node-agent Job when one is configured (Helm value nodeAgent.criSocket). When unset or
+	// empty, the node-agent picks the well-known CRI socket that recognizes its target
+	// containers with cri.SocketFor, under NodeAgentHostRunDir when that mount is present.
 	EnvNodeAgentCRISocket = "_TEL_NODE_AGENT_CRI_SOCKET"
+
+	// NodeAgentHostRunDir is where a node-agent Job mounts the node's /run directory when no
+	// CRI socket path is configured, so that the agent can probe the well-known CRI sockets
+	// beneath it.
+	NodeAgentHostRunDir = "/host/run"
 
 	// EnvNodeAgentPodIP carries the target pod's IP, set by the traffic-manager on a
 	// node-agent Job. It is the PodIP of the netfilter ruleset the node-agent programs into

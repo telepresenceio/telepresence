@@ -125,9 +125,10 @@ With this configuration `replace` is unavailable (it requires the sidecar),
 and a per-engagement `--node-agent=false` fails with an
 "agent-injector is disabled" error instead of falling back.
 
-If the cluster's container runtime is not containerd, also point
-`nodeAgent.criSocket` at the node's runtime socket (e.g.
-`/var/run/crio/crio.sock` for CRI-O).
+The node's container runtime is detected automatically: containerd, CRI-O,
+k3s, and cri-dockerd (the docker runtime) are all recognized. Only when the
+runtime listens on a nonstandard socket path does `nodeAgent.criSocket` need
+to point at it explicitly.
 
 ### Flag and configuration precedence
 

@@ -489,17 +489,46 @@ func TestBuildNodeAgentJob_Env(t *testing.T) {
 	assert.Equal(t, "/run/containerd/containerd.sock", criEnv.Value)
 }
 
-// TestBuildNodeAgentJob_NoCRISocket verifies that an empty criSocket is
-// rejected: the traffic-manager only mounts the CRI socket hostPath when it
-// is non-empty, so building a Job without one would leave the node-agent
-// unable to resolve container IDs and crash on startup.
+// TestBuildNodeAgentJob_NoCRISocket verifies the auto-detect posture of an
+// empty criSocket: the node's /run is mounted read-only at
+// agentconfig.NodeAgentHostRunDir via a hostPath volume of type Directory,
+// and no CRI socket env is set, leaving the agent to probe the well-known
+// sockets beneath the mount.
 func TestBuildNodeAgentJob_NoCRISocket(t *testing.T) {
 	t.Parallel()
 
 	opts := testOpts()
 	opts.criSocket = ""
-	_, err := buildNodeAgentJob(testSidecar(), opts)
-	require.Error(t, err)
+	job, err := buildNodeAgentJob(testSidecar(), opts)
+	require.NoError(t, err)
+
+	podSpec := job.Spec.Template.Spec
+	var vol *core.Volume
+	for i := range podSpec.Volumes {
+		if podSpec.Volumes[i].Name == nodeAgentCRIVolumeName {
+			vol = &podSpec.Volumes[i]
+			break
+		}
+	}
+	require.NotNil(t, vol, "CRI volume not found")
+	require.NotNil(t, vol.HostPath)
+	assert.Equal(t, "/run", vol.HostPath.Path)
+	require.NotNil(t, vol.HostPath.Type)
+	assert.Equal(t, core.HostPathDirectory, *vol.HostPath.Type)
+
+	var mount *core.VolumeMount
+	for i := range podSpec.Containers[0].VolumeMounts {
+		if podSpec.Containers[0].VolumeMounts[i].Name == nodeAgentCRIVolumeName {
+			mount = &podSpec.Containers[0].VolumeMounts[i]
+			break
+		}
+	}
+	require.NotNil(t, mount, "CRI mount not found")
+	assert.Equal(t, agentconfig.NodeAgentHostRunDir, mount.MountPath)
+	assert.True(t, mount.ReadOnly)
+
+	_, ok := findEnv(podSpec.Containers[0].Env, agentconfig.EnvNodeAgentCRISocket)
+	assert.False(t, ok, "no CRI socket env should be set when auto-detecting")
 }
 
 // TestBuildNodeAgentJob_Capabilities verifies the exact set of Linux
@@ -898,11 +927,10 @@ func nodeAgentJobActionCounts(actions []k8stesting.Action) (created, deleted int
 	return created, deleted
 }
 
-// TestEnsureNodeAgent_NoCRISocket verifies that ensureNodeAgent refuses to
-// provision a node-agent Job, with a User-categorized error, when the
-// traffic-manager has no container-runtime socket path configured (Helm
-// value nodeAgent.criSocket unset). Building the Job in that case would
-// produce one with no CRI socket mounted, which crashes on startup.
+// TestEnsureNodeAgent_NoCRISocket verifies that ensureNodeAgent provisions a
+// node-agent Job when the traffic-manager has no container-runtime socket
+// path configured (Helm value nodeAgent.criSocket unset): the Job then runs
+// in auto-detect mode with the node's /run mounted.
 func TestEnsureNodeAgent_NoCRISocket(t *testing.T) {
 	t.Parallel()
 
@@ -917,12 +945,10 @@ func TestEnsureNodeAgent_NoCRISocket(t *testing.T) {
 
 	s := newNodeAgentTestState()
 	err := s.ensureNodeAgent(ctx, wl, cfg, true)
-	require.Error(t, err)
-	assert.Equal(t, errcat.User, errcat.GetCategory(err))
-	assert.Contains(t, err.Error(), "nodeAgent.criSocket")
+	require.NoError(t, err)
 
 	created, _ := nodeAgentJobActionCounts(ci.Actions())
-	assert.Zero(t, created, "no job should be created when the CRI socket is unset")
+	assert.Equal(t, 1, created, "a job should be created in auto-detect mode when the CRI socket is unset")
 }
 
 // TestEnsureNodeAgent_ReusesHealthyExistingJob verifies that ensureNodeAgent

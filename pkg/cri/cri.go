@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -16,12 +19,15 @@ import (
 )
 
 // WellKnownSockets are the CRI unix sockets used by common container
-// runtimes, in probe order. DetectSocket returns the first one that exists.
+// runtimes, in probe order, all rooted under /run (modern hosts make
+// /var/run a symlink to /run). DetectSocket returns the first one that
+// answers a CRI Version request.
 var WellKnownSockets = []string{ //nolint:gochecknoglobals // fixed list of well-known paths
 	"/run/containerd/containerd.sock",
-	"/var/run/crio/crio.sock",
+	"/run/crio/crio.sock",
 	"/run/k3s/containerd/containerd.sock",
-	"/var/run/dockershim.sock",
+	"/run/cri-dockerd.sock",
+	"/run/dockershim.sock",
 }
 
 // StripRuntimePrefix removes the "<runtime>://" scheme that Kubernetes
@@ -90,14 +96,67 @@ func (c *Client) ResolvePID(ctx context.Context, containerID string) (int, error
 	return info.Pid, nil
 }
 
-// DetectSocket returns the first of WellKnownSockets that exists on the
-// filesystem. The node-agent normally receives the socket path from its own
-// configuration; this is a fallback for when it isn't given one.
-func DetectSocket() (string, error) {
+// preferredSockets maps the runtime scheme that Kubernetes prepends to a
+// container ID (e.g. "docker://abc123") to the sockets of the runtimes that
+// mint such IDs, giving detection a deterministic first guess.
+var preferredSockets = map[string][]string{ //nolint:gochecknoglobals // fixed prefix-to-socket mapping
+	"containerd": {"/run/containerd/containerd.sock", "/run/k3s/containerd/containerd.sock"},
+	"cri-o":      {"/run/crio/crio.sock"},
+	"docker":     {"/run/cri-dockerd.sock", "/run/dockershim.sock"},
+}
+
+// SocketFor returns the CRI socket that can resolve containerID, probing the
+// WellKnownSockets under root (the path where the node's /run is mounted, or
+// empty when running directly on the node). Sockets matching the container
+// ID's runtime scheme are probed first.
+//
+// A socket qualifies only when it answers a ContainerStatus request for the
+// container itself. Anything weaker misidentifies the runtime: a
+// docker-runtime node can run a containerd whose CRI service is fully alive,
+// while kubelet's containers exist only in cri-dockerd.
+func SocketFor(ctx context.Context, root, containerID string) (string, error) {
+	scheme, _, _ := strings.Cut(containerID, "://")
+	candidates := slices.Clone(preferredSockets[scheme])
 	for _, path := range WellKnownSockets {
-		if _, err := os.Stat(path); err == nil {
-			return path, nil
+		if !slices.Contains(candidates, path) {
+			candidates = append(candidates, path)
 		}
 	}
-	return "", fmt.Errorf("no CRI socket found among %v", WellKnownSockets)
+
+	var probeErrs []string
+	for _, path := range candidates {
+		sp := path
+		if root != "" {
+			sp = filepath.Join(root, strings.TrimPrefix(path, "/run/"))
+		}
+		if fi, err := os.Stat(sp); err != nil || fi.Mode()&os.ModeSocket == 0 {
+			continue
+		}
+		if err := probeContainer(ctx, sp, containerID); err != nil {
+			probeErrs = append(probeErrs, fmt.Sprintf("%s: %v", sp, err))
+			continue
+		}
+		return sp, nil
+	}
+	if len(probeErrs) > 0 {
+		return "", fmt.Errorf("no CRI socket recognizes container %q: %s", containerID, strings.Join(probeErrs, "; "))
+	}
+	return "", fmt.Errorf("no CRI socket found among %v under root %q", WellKnownSockets, root)
+}
+
+// probeContainer issues a ContainerStatus request for containerID with a
+// short deadline to verify that the socket serves the CRI runtime service
+// that actually manages the container.
+func probeContainer(ctx context.Context, socketPath, containerID string) error {
+	c, err := Connect(socketPath)
+	if err != nil {
+		return err
+	}
+	defer c.Close()
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	_, err = c.rt.ContainerStatus(ctx, &runtimeapi.ContainerStatusRequest{
+		ContainerId: StripRuntimePrefix(containerID),
+	})
+	return err
 }

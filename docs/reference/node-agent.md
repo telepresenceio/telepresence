@@ -74,8 +74,11 @@ sequenceDiagram
 2. **Job creation.** A Job is created in the *traffic-manager's* namespace
    for each target pod, pinned to that pod's node via `spec.nodeName`, and
    carries the same `AGENT_CONFIG` a sidecar would receive, plus that pod's
-   container IDs, pod IP, and the CRI socket path (Helm value
-   `nodeAgent.criSocket`, defaulting to containerd's socket). Each Job's
+   container IDs and pod IP. The node's container-runtime socket is mounted
+   read-only: the one named by the Helm value `nodeAgent.criSocket` when set,
+   or the node's `/run` directory by default, in which case the agent picks
+   the well-known CRI socket that recognizes the target's containers —
+   containerd, CRI-O, k3s, or cri-dockerd (the docker runtime). Each Job's
    name is deterministic — a hash of the target namespace and pod name under
    a per-agent prefix — so a retried request resolves to the Job already
    created for the same target, and Jobs for different pods of the same
