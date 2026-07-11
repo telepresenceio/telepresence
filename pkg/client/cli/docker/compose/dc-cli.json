@@ -1097,15 +1097,15 @@
           "description": "Assign a name to the container"
         },
         {
-          "name": "no-TTY",
-          "shorthand": "T",
-          "type": "bool",
-          "description": "Disable pseudo-TTY allocation (default: auto-detected) (default true)"
-        },
-        {
           "name": "no-deps",
           "type": "bool",
           "description": "Don't start linked services"
+        },
+        {
+          "name": "no-tty",
+          "shorthand": "T",
+          "type": "bool",
+          "description": "Disable pseudo-TTY allocation (default: auto-detected) (default true)"
         },
         {
           "name": "publish",

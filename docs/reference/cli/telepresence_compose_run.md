@@ -37,8 +37,8 @@ Run a one-off command on a service
   -i, --interactive                 Keep STDIN open even if not attached (default true)
   -l, --label stringArray           Add or override a label
       --name string                 Assign a name to the container
-  -T, --no-TTY                      Disable pseudo-TTY allocation (default: auto-detected) (default true)
       --no-deps                     Don't start linked services
+  -T, --no-tty                      Disable pseudo-TTY allocation (default: auto-detected) (default true)
   -p, --publish stringArray         Publish a container's port(s) to the host
       --pull string                 Pull image before running (&quot;always&quot;|&quot;missing&quot;|&quot;never&quot;) (default &quot;policy&quot;)
   -q, --quiet                       Don't print anything to STDOUT
