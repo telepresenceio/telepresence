@@ -13,6 +13,7 @@ import (
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -35,10 +36,19 @@ type Manager interface {
 	StartWatchers(g log.Group, certsReady chan<- struct{})
 }
 
-func NewManager(ctx context.Context, config *agentconfig.Sidecar, podIP netip.Addr, annotations map[string]string) (Manager, error) {
+// NewManager creates a Manager that determines TLS/HTTP2 support for each of config's
+// HTTP-filterable ports, probing the application when the answer isn't already known from
+// annotations or appProtocol. appPodIP and dialer are the same pass-through seams a
+// container's forwarder uses (Config.AppPodIP, Config.DialerFactory): the sidecar passes
+// its own pod IP and a nil dialer (dial in its own network namespace, which is already
+// the application's); the node-agent passes the target pod's IP and a dialer that enters
+// the target pod's network namespace, so the probe reaches the application instead of
+// the empty Job pod the node-agent itself runs in.
+func NewManager(ctx context.Context, config *agentconfig.Sidecar, appPodIP netip.Addr, dialer forwarder.Dialer, annotations map[string]string) (Manager, error) {
 	m := &manager{
 		sidecarConfig: config,
-		podIP:         podIP,
+		appPodIP:      appPodIP,
+		dialer:        dialer,
 		portConfigs:   make(map[uint16]*portConfig, len(config.Containers)),
 	}
 	err := m.createPortConfigs(ctx, annotations)
@@ -51,8 +61,13 @@ func NewManager(ctx context.Context, config *agentconfig.Sidecar, podIP netip.Ad
 const defaultProbeTimeout = 2 * time.Second
 
 type manager struct {
-	// The IP address of this pod.
-	podIP netip.Addr
+	// The IP address of the pod that hosts the application containers. This is the
+	// address the probes in portConfigs dial (via dialer) to reach the application.
+	appPodIP netip.Addr
+
+	// dialer is the Dialer injected for probing the application, or nil to dial in the
+	// agent's own network namespace. See NewManager.
+	dialer forwarder.Dialer
 
 	// portConfigs maps proxy port numbers to port configurations. One for each interceptable port that
 	// might be targeted by HTTP filtered intercepts.
@@ -112,8 +127,14 @@ func (m *manager) createPortConfigs(ctx context.Context, am map[string]string) e
 			cp := ic.ContainerPort
 
 			// The port config is associated with the proxy port, not the container port.
-			iap := m.sidecarConfig.InterceptorInactivePort(cp, types.ProtoTCP)
-			pc := newPortConfig(iap, cn.Name, m.sidecarConfig.EnableH2cProbing)
+			// target is where a probe (and the pass-through forwarder) must dial to
+			// reach the application for cp; its port is the same proxy/container port
+			// InterceptorInactivePort would return. A node-agent (non-nil dialer)
+			// always programs the nftables redirects.
+			nftRedirects := m.dialer != nil || m.sidecarConfig.NftRedirectsActive()
+			target := m.sidecarConfig.PassThroughTarget(m.appPodIP, cp, types.ProtoTCP, nftRedirects)
+			iap := target.Port()
+			pc := newPortConfig(target, m.dialer, cn.Name, m.sidecarConfig.EnableH2cProbing)
 			m.portConfigs[iap] = pc
 
 			// The configured TLS and HTTP/2 values must be determined using the container port.
@@ -205,7 +226,7 @@ func (m *manager) UseTLS(ctx context.Context, proxyPort uint16) bool {
 	if pc.TLS != ValueUnknown {
 		return pc.TLS == ValueSupported
 	}
-	return pc.probeTLS(ctx, m.podIP)
+	return pc.probeTLS(ctx)
 }
 
 func (m *manager) UseHTTP2(ctx context.Context, proxyPort uint16) bool {
@@ -216,7 +237,7 @@ func (m *manager) UseHTTP2(ctx context.Context, proxyPort uint16) bool {
 	if pc.HTTP2 != ValueUnknown {
 		return pc.HTTP2 == ValueSupported
 	}
-	return pc.probeHTTP2(ctx, m.podIP)
+	return pc.probeHTTP2(ctx)
 }
 
 func (m *manager) configuredHTTP2(containerPort uint16) ValueState {

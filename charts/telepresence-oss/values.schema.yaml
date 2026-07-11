@@ -281,6 +281,15 @@ properties:
               exactly. Defaults to true, on the assumption that filters exist to limit how the intercept
               impacts others, not the developer's own traffic
             type: boolean
+      nodeAgent:
+        type: object
+        properties:
+          enabled:
+            description: >-
+              Cluster-wide default for the client's --node-agent flag: make intercept, wiretap, and ingest use
+              node-hosted traffic-agent mode unless overridden by a workstation's local config.yml or the
+              --node-agent flag itself. Off by default.
+            type: boolean
       routing:
         type: object
         properties:
@@ -511,6 +520,27 @@ properties:
   namespaceSelector:
     description: Declares the managed namespace using matchLabels and matchExpressions. Mutually exclusive to namespaces
     $ref: "#/$defs/labelSelector"
+
+  nodeAgent:
+    description: >-
+      Configuration for node-hosted traffic-agent mode, where the traffic-manager creates node-pinned Jobs that
+      serve intercepts by entering an existing pod's namespaces instead of injecting a sidecar.
+    type: object
+    additionalProperties: false
+    properties:
+      enabled:
+        description: >-
+          Enable node-hosted traffic-agent mode. Off by default; it requires that the traffic-manager's own
+          namespace permits the privileged Pod Security Standard, since node-agent Jobs are created there.
+        type: boolean
+      criSocket:
+        description: >-
+          The container-runtime socket path mounted read-only into node-agent pods. When empty (the default),
+          the node's /run directory is mounted read-only instead and the agent picks the well-known CRI socket
+          beneath it that recognizes the target's containers: containerd, CRI-O, k3s, or cri-dockerd (the
+          docker runtime). Set an explicit path only when the node's runtime listens on a socket the probe
+          doesn't cover.
+        type: string
 
   nodeSelector:
     description: Define which Nodes you want to the Traffic Manager to be deployed to.

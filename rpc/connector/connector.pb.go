@@ -838,7 +838,10 @@ type IngestRequest struct {
 	// Extra ports that will be forwarded from the intercepting client's localhost
 	// to the intercepted pod. Each entry is a string containing a port number followed
 	// by an optional "/TCP" or "/UDP".
-	LocalPorts    []string `protobuf:"bytes,4,rep,name=local_ports,json=localPorts,proto3" json:"local_ports,omitempty"`
+	LocalPorts []string `protobuf:"bytes,4,rep,name=local_ports,json=localPorts,proto3" json:"local_ports,omitempty"`
+	// Serve the ingest through a node-hosted traffic-agent instead of an
+	// injected sidecar.
+	NodeAgent     bool `protobuf:"varint,5,opt,name=node_agent,json=nodeAgent,proto3" json:"node_agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -899,6 +902,13 @@ func (x *IngestRequest) GetLocalPorts() []string {
 		return x.LocalPorts
 	}
 	return nil
+}
+
+func (x *IngestRequest) GetNodeAgent() bool {
+	if x != nil {
+		return x.NodeAgent
+	}
+	return false
 }
 
 type IngestInfo struct {
@@ -1889,7 +1899,7 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\x10IngestIdentifier\x12#\n" +
 	"\rworkload_name\x18\x01 \x01(\tR\fworkloadName\x12%\n" +
 	"\x0econtainer_name\x18\x02 \x01(\tR\rcontainerName\x12\x1c\n" +
-	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\xc5\x01\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\xe4\x01\n" +
 	"\rIngestRequest\x12H\n" +
 	"\n" +
 	"identifier\x18\x01 \x01(\v2(.telepresence.connector.IngestIdentifierR\n" +
@@ -1898,7 +1908,9 @@ const file_connector_connector_proto_rawDesc = "" +
 	"mountPoint\x12(\n" +
 	"\x10local_mount_port\x18\x03 \x01(\x05R\x0elocalMountPort\x12\x1f\n" +
 	"\vlocal_ports\x18\x04 \x03(\tR\n" +
-	"localPorts\"\xc1\x04\n" +
+	"localPorts\x12\x1d\n" +
+	"\n" +
+	"node_agent\x18\x05 \x01(\bR\tnodeAgent\"\xc1\x04\n" +
 	"\n" +
 	"IngestInfo\x12\x1a\n" +
 	"\bworkload\x18\x01 \x01(\tR\bworkload\x12#\n" +

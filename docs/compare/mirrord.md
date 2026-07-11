@@ -38,6 +38,11 @@ Mirrord does not require a sidecar. Instead they install a the `mirror-agent` in
 
 Unless using "mirrord for Teams" (proprietary), all users must have permissions to create the job running the `mirror-agent` in the cluster.
 
+Recent versions of Telepresence offer an equivalent, optional [node-agent](../reference/node-agent.md) mode: a
+node-hosted agent that runs with the same class of privileges, engaging a workload without injecting a sidecar. A
+sidecar is therefore a choice, not a requirement. The sidecar remains the default engagement mode and needs none of
+these privileges.
+
 ## Comparison Telepresence vs mirrord
 
 This comparison chart applies to the Open Source editions of both products.
@@ -65,13 +70,15 @@ This comparison chart applies to the Open Source editions of both products.
 | Integrates with Docker Compose                                               | ✅            | ❌       |
 | Provides an API server allowing introspection of replacements and intercepts | ✅            | ❌       |
 | Provides remote mounts as volumes in docker                                  | ✅            | ❌       |
-| Does not require special capabilities such as CAP_SYS_ADMIN in the cluster   | ✅            | ❌       |
+| Does not require special capabilities such as CAP_SYS_ADMIN in the cluster   | ✅ [^4]       | ❌       |
 | Centralized client configuration using Helm chart                            | ✅            | ❌       |
 | Installed using a JSON-schema validated Helm chart                           | ✅            | ❌       |
 | Client need no special RBAC permissions                                      | ✅            | ❌       |
 
 [^1]: Telepresence does not require root access on the workstation when installed using a package installer (which configures the root daemon as a system service) or when running in docker mode.
 
-[^2]: The remote service will only restart when a traffic-agent sidecar is installed. Pod disruption budgets or pre-installed agents can be used to avoid interruptions.
+[^2]: The remote service will only restart when a traffic-agent sidecar is installed. Pod disruption budgets or pre-installed agents can be used to avoid interruptions. Engaging with `--node-agent` never modifies or restarts the workload.
 
-[^3]: A traffic-agent is necessary when engaging with a pod. It is unnecessary when using Telepresence as a VPN.
+[^3]: A traffic-agent is still necessary when engaging with a pod, but it no longer has to be an injected sidecar: [node-agent](../reference/node-agent.md) mode attaches a node-hosted agent without touching the workload. A traffic-agent is unnecessary when using Telepresence as a VPN.
+
+[^4]: This holds for the default sidecar mode, which needs no special capabilities. The optional [node-agent](../reference/node-agent.md) mode runs a privileged node-hosted agent comparable to mirrord's.

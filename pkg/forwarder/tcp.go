@@ -16,12 +16,17 @@ import (
 type tcp struct{ basic }
 
 // NewTCP creates a new TCP forwarder that will forward connections from the given port to the given target.
-func NewTCP(from uint16, tag tunnel.Tag, target netip.AddrPort) Forwarder {
-	return &tcp{basic{
+func NewTCP(from uint16, tag tunnel.Tag, target netip.AddrPort, opts ...Option) Forwarder {
+	f := &tcp{basic{
 		tag:        tag,
 		target:     target,
 		listenPort: int32(from),
+		listener:   defaultListenerFactory{},
 	}}
+	for _, opt := range opts {
+		opt(&f.basic)
+	}
+	return f
 }
 
 func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
@@ -37,7 +42,15 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 	ctx = clog.With(ctx, "target", f.target)
 
 	clog.Debug(ctx, "Forwarding...")
-	targetConn, err := net.DialTCP("tcp", nil, net.TCPAddrFromAddrPort(f.target))
+	var (
+		targetConn net.Conn
+		err        error
+	)
+	if f.dialer != nil {
+		targetConn, err = f.dialer.DialContext(ctx, "tcp", f.target.String())
+	} else {
+		targetConn, err = net.DialTCP("tcp", nil, net.TCPAddrFromAddrPort(f.target))
+	}
 	if err != nil {
 		return fmt.Errorf("error on dial: %w", err)
 	}
@@ -49,7 +62,9 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 		if _, err := io.Copy(targetConn, clientConn); err != nil && ctx.Err() == nil {
 			clog.Debugf(ctx, "Error clientConn->targetConn: %+v", err)
 		}
-		_ = targetConn.CloseWrite()
+		if cw, ok := targetConn.(interface{ CloseWrite() error }); ok {
+			_ = cw.CloseWrite()
+		}
 		done <- struct{}{}
 	}()
 	go func() {
@@ -75,8 +90,7 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 }
 
 func (f *tcp) Listen(ctx context.Context) (net.Listener, error) {
-	lc := net.ListenConfig{}
-	listener, err := lc.Listen(ctx, "tcp", fmt.Sprintf(":%d", atomic.LoadInt32(&f.listenPort)))
+	listener, err := f.listener.Listen(ctx, "tcp", fmt.Sprintf(":%d", atomic.LoadInt32(&f.listenPort)))
 	if err != nil {
 		return nil, err
 	}

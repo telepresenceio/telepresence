@@ -22,6 +22,8 @@
   items:
     - title: Code and debug an application locally
       link: howtos/engage
+    - title: Choose between the sidecar and the node-agent
+      link: howtos/agent-modes
     - title: Use Telepresence with Docker
       link: howtos/docker
     - title: Extend Docker Compose with Telepresence
@@ -261,8 +263,12 @@
       link: reference/tun-device
     - title: Connection Routing
       link: reference/routing
+    - title: Traffic Agent Packet Routing
+      link: reference/agent-packet-routing
     - title: Route Controller
       link: reference/route-controller
+    - title: Node-hosted Traffic Agent
+      link: reference/node-agent
     - title: Monitoring
       link: reference/monitoring
 - title: Comparisons

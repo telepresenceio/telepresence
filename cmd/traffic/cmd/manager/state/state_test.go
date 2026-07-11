@@ -36,6 +36,7 @@ func (s *suiteState) SetupTest() {
 		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, 5*time.Millisecond),
 		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, 5*time.Millisecond),
 		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
+		leases:           xsync.NewMap[leaseKey, struct{}](),
 		workloadWatchers: xsync.NewMap[string, Watcher](),
 		timedLogLevel:    log.NewTimedLevel(slog.LevelDebug, clog.SetTreeLevel),
 		llSubs:           newLoglevelSubscribers(),

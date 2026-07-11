@@ -66,6 +66,7 @@ func TestEnvconfig(t *testing.T) {
 		AgentWatchRetryInterval:      10 * time.Second,
 		AgentConsumptionMetrics:      true,
 		UsageReportingEnabled:        true,
+		MutatorWebhookPort:           8443,
 	}
 
 	testcases := map[string]struct {
@@ -198,6 +199,37 @@ func TestEnvconfig(t *testing.T) {
 			assert.Equal(t, "", actual.QualifiedAgentImage())
 		})
 	}
+}
+
+func TestEnvconfigAgentArrivalTimeoutDefault(t *testing.T) {
+	// AGENT_ARRIVAL_TIMEOUT must default to a positive value so that a
+	// traffic-manager installed without the chart supplying it (e.g. an
+	// agentInjector.enabled=false, nodeAgent.enabled=true install using an
+	// older chart) never ends up with a zero-duration wait for an agent to
+	// arrive.
+	ctx, err := managerutil.LoadEnv(context.Background(), map[string]string{
+		"REGISTRY":    "ghcr.io/telepresenceio",
+		"LOG_LEVEL":   "info",
+		"SERVER_PORT": "8081",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 30*time.Second, managerutil.GetEnv(ctx).AgentArrivalTimeout)
+}
+
+func TestEnvconfigMutatorWebhookPortDefault(t *testing.T) {
+	// MUTATOR_WEBHOOK_PORT must default to the same port the chart's
+	// agentInjector.webhook.port default binds (8443): the chart only sets
+	// this env var when agentInjector.enabled, but the plain-HTTP
+	// /uninstall-only server started for a node-agent-only,
+	// agentInjector.enabled=false install still needs to listen on the port
+	// the agent-injector Service's targetPort names.
+	ctx, err := managerutil.LoadEnv(context.Background(), map[string]string{
+		"REGISTRY":    "ghcr.io/telepresenceio",
+		"LOG_LEVEL":   "info",
+		"SERVER_PORT": "8081",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, uint16(8443), managerutil.GetEnv(ctx).MutatorWebhookPort)
 }
 
 func TestEnvHostNetwork(t *testing.T) {

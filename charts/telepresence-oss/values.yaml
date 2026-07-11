@@ -286,3 +286,24 @@ routeController:
   # If empty, the controller queries the ServiceCIDR API (k8s >= 1.33) and falls
   # back to per-IP blackhole routes on deletion for older clusters.
   serviceCIDRs: []
+
+################################################################################
+## Node Agent Configuration
+################################################################################
+# nodeAgent controls node-hosted traffic-agent mode: the traffic-manager may
+# create node-pinned Jobs that serve intercepts by entering an existing pod's
+# namespaces instead of injecting a sidecar.
+nodeAgent:
+  # enabled turns on node-hosted traffic-agent mode: the traffic-manager may
+  # create node-pinned Jobs that serve intercepts by entering an existing
+  # pod's namespaces instead of injecting a sidecar. Off by default; it
+  # requires that the traffic-manager's own namespace permits the privileged
+  # Pod Security Standard, since node-agent Jobs are created there.
+  enabled: false
+  # criSocket is the container-runtime socket path mounted read-only into
+  # node-agent pods. When empty (the default), the node's /run directory is
+  # mounted read-only instead, and the agent picks the well-known CRI socket
+  # beneath it that recognizes the target's containers: containerd, CRI-O,
+  # k3s, or cri-dockerd (the docker runtime). Set an explicit path only when
+  # the node's runtime listens on a socket the probe doesn't cover.
+  criSocket: ""

@@ -277,6 +277,10 @@ message IngestRequest {
   // to the intercepted pod. Each entry is a string containing a port number followed
   // by an optional "/TCP" or "/UDP".
   repeated string local_ports = 4;
+
+  // Serve the ingest through a node-hosted traffic-agent instead of an
+  // injected sidecar.
+  bool node_agent = 5;
 }
 
 message IngestInfo {

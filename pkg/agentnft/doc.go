@@ -24,5 +24,11 @@
 // single atomic, idempotent full-replace batch) and nftutil.Teardown touch
 // netlink. The package is netns-agnostic: passing nftables.WithNetNSFd to
 // nftutil.Apply targets a network namespace other than the caller's current
-// one.
+// one -- which is how a node-hosted agent programs a target pod's namespace
+// from outside it.
+//
+// Telling the agent's own traffic apart from the application's (Config.Owner)
+// is normally a socket-owner match (skgid/skuid). A network namespace owned
+// by a non-init user namespace rejects that match, so OwnerMatch.Mark selects
+// a firewall-mark match instead for such targets.
 package agentnft

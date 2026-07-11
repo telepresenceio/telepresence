@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -16,8 +17,8 @@ type udp struct {
 	*interceptor
 }
 
-func newUDP(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, target netip.AddrPort) Interceptor {
-	return &udp{interceptor: newInterceptor(ctx, listenPort, tag, target)}
+func newUDP(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, target netip.AddrPort, opts ...forwarder.Option) Interceptor {
+	return &udp{interceptor: newInterceptor(ctx, listenPort, tag, target, opts...)}
 }
 
 func (f *udp) IsHTTP() bool {

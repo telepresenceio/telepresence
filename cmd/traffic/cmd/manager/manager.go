@@ -144,7 +144,13 @@ func MainWithEnv(ctx context.Context) (err error) {
 		}
 
 		var err error
-		if managerutil.AgentInjectorEnabled(ctx) {
+		// GetAgentImage panics without a retriever, and buildNodeAgentJob
+		// needs the image from the generated agent config, so the
+		// retriever is required whenever either the injector or node-agent
+		// is enabled. RegenerateAgentMaps only touches pods that already
+		// carry the sidecar config annotation, so it is safe to run even
+		// when the injector is disabled.
+		if managerutil.AgentInjectorEnabled(ctx) || managerutil.GetEnv(ctx).NodeAgentEnabled {
 			ctx, err = managerutil.WithAgentImageRetriever(ctx, mutator.GetMap(ctx).RegenerateAgentMaps)
 			if err != nil {
 				clog.Errorf(ctx, "unable to initialize agent injector: %v", err)
@@ -177,12 +183,32 @@ func MainWithEnv(ctx context.Context) (err error) {
 		g.Go("config", namespaces.Listen)
 		g.Go("prometheus", mgr.servePrometheus)
 
+		// reapNodeAgentJobs is the callback the uninstall endpoint runs, in
+		// addition to the agent injector's sidecar rollback, to delete every
+		// node-agent Job when the traffic-manager is uninstalled. mutator
+		// cannot import package state (state imports mutator), so it is
+		// wired here. It stays nil -- and is simply not invoked -- when
+		// node-agent mode is disabled.
+		var reapNodeAgentJobs mutator.NodeAgentReaper
+		if env.NodeAgentEnabled {
+			reapNodeAgentJobs = state.ReapAllNodeAgentJobs
+		}
+
 		if managerutil.AgentInjectorEnabled(ctx) {
 			g.Go("agent-injector", func(ctx context.Context) error {
 				if managerutil.GetAgentImageRetriever(ctx) == nil {
 					return nil
 				}
-				return mutator.ServeMutator(ctx, g, injectorCertGetter)
+				return mutator.ServeMutator(ctx, g, injectorCertGetter, reapNodeAgentJobs)
+			})
+		} else if env.NodeAgentEnabled {
+			// The webhook server never runs without the injector, so the
+			// pre-delete hook -- which the chart's agent-injector Service
+			// and Job now render for a node-agent-only install too -- has
+			// nothing to reach unless this plain-HTTP /uninstall-only server
+			// stands in for it.
+			g.Go("node-agent-uninstall", func(ctx context.Context) error {
+				return mutator.ServeNodeAgentUninstall(ctx, reapNodeAgentJobs)
 			})
 		}
 

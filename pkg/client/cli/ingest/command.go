@@ -10,6 +10,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/env"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
@@ -28,6 +29,7 @@ type Command struct {
 	ToPod           []string // --to-pod
 	Cmdline         []string
 	FormattedOutput bool
+	NodeAgent       bool // --node-agent
 }
 
 func (c *Command) AddFlags(cmd *cobra.Command) {
@@ -45,6 +47,10 @@ func (c *Command) AddFlags(cmd *cobra.Command) {
 	c.DockerFlags.AddFlags(flagSet, "ingested")
 	flagSet.StringVar(&c.WaitMessage, "wait-message", "", "Message to print when ingest handler has started")
 
+	flagSet.BoolVar(&c.NodeAgent, "node-agent", false,
+		"Serve this ingest with a node-hosted traffic-agent (a manager-created Job that enters the target pod's namespaces) instead of injecting a sidecar. "+
+			"Requires the traffic-manager to have node-agent mode enabled.")
+
 	_ = cmd.RegisterFlagCompletionFunc("container", AutocompleteContainer)
 }
 
@@ -55,6 +61,9 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	c.WorkloadName = positional[0]
 	c.Cmdline = positional[1:]
 	c.FormattedOutput = output.WantsFormatted(cmd)
+	// --node-agent is resolved in Run, once a session is available (see
+	// flags.NodeAgentDefault): Validate runs too early to reach the
+	// session-merged client config.
 	if err := c.MountFlags.Validate(cmd); err != nil {
 		return err
 	}
@@ -71,6 +80,7 @@ func (c *Command) Run(cmd *cobra.Command, positional []string) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
 	}
+	c.NodeAgent = flags.NodeAgentDefault(cmd, c.NodeAgent)
 	defer progress.Stop(cmd.Context())
 	ctx := dos.WithStdio(cmd.Context(), cmd)
 	return NewState(c, c.MountFlags.ValidateConnected(ctx)).Run(ctx)

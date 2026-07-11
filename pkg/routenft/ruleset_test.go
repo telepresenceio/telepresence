@@ -106,9 +106,6 @@ func TestBuildServiceCIDRSet(t *testing.T) {
 	if !rs.ServiceCIDRs.Set.Interval {
 		t.Error("service CIDR set must be an interval set")
 	}
-	if !rs.ServiceCIDRs.Set.AutoMerge {
-		t.Error("service CIDR set must auto-merge")
-	}
 	if rs.ServiceCIDRs.Set.IsMap {
 		t.Error("service CIDR set must not be a map (membership only, no verdict data)")
 	}

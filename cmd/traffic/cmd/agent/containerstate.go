@@ -9,6 +9,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/fwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -31,15 +32,27 @@ func (c *containerState) AddPortHandler(g log.Group, pp types.PortAndProto, it a
 
 func (c *containerState) newPortHandler(ctx context.Context, pp types.PortAndProto, ics []*agentconfig.Intercept) fwd.Interceptor {
 	ic := ics[0] // They all have the same protocol container port, so the first one will do.
+	var opts []forwarder.Option
+	if lf := c.ListenerFactory(); lf != nil {
+		opts = append(opts, forwarder.WithListener(lf))
+	}
+	if d := c.DialerFactory(); d != nil {
+		opts = append(opts, forwarder.WithDialer(d))
+	}
 	if pp.Proto == types.ProtoTCP && c.container.Replace == agentconfig.ReplacePolicyIntercept {
-		// Redirect non-intercepted traffic to the pod so that injected sidecars that hijack the ports for
-		// incoming connections will continue to work.
-		cp := c.AgentConfig().InterceptorInactivePort(ic.ContainerPort, pp.Proto)
-		defaultTarget := netip.AddrPortFrom(c.PodIP(), cp)
-		return fwd.NewTCPInterceptor(ctx, pp, tunnel.AgentToClient, c.TLSManager(), defaultTarget)
+		// The agent's own pass-through dial to the real app -- made here,
+		// once, when no intercept is active -- must land somewhere the
+		// nftables pod-IP redirect gate doesn't reach; see the doc comment on
+		// agentconfig.Sidecar.PassThroughTarget for the numeric/named
+		// distinction. The TLS/H2C prober in cmd/traffic/cmd/agent/tls uses
+		// the same helper for the identical reason.
+		cfg := c.AgentConfig()
+		nftRedirects := c.DialerFactory() != nil || cfg.NftRedirectsActive()
+		defaultTarget := cfg.PassThroughTarget(c.AppPodIP(), ic.ContainerPort, pp.Proto, nftRedirects)
+		return fwd.NewTCPInterceptor(ctx, pp, tunnel.AgentToClient, c.TLSManager(), defaultTarget, opts...)
 	}
 	// The agent will intercept all traffic intended for this container.
-	return fwd.NewInterceptor(ctx, pp, tunnel.AgentToClient, netip.AddrPort{})
+	return fwd.NewInterceptor(ctx, pp, tunnel.AgentToClient, netip.AddrPort{}, opts...)
 }
 
 func (c *containerState) GlobalState() State {

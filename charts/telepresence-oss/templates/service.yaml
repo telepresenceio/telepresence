@@ -16,7 +16,15 @@ spec:
     targetPort: api
   selector:
     {{- include "telepresence.selectorLabels" $ | nindent 4 }}
-{{- if .agentInjector.enabled }}
+{{- /*
+The agent-injector Service is also needed for a node-agent-only install
+(agentInjector.enabled=false, nodeAgent.enabled=true): the pre-delete hook
+dials it to reach /uninstall, which a plain-HTTP server serves on the same
+port in that mode. The traffic-manager container's "https" port (see
+deployment.yaml) is unconditional on agentInjector.enabled, so this
+Service's targetPort resolves correctly either way.
+*/}}
+{{- if or .agentInjector.enabled .nodeAgent.enabled }}
 ---
 apiVersion: v1
 kind: Service

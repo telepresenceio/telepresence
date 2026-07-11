@@ -55,6 +55,11 @@ jobs:
         uses: medyagh/setup-minikube@latest
         with:
           kubernetes-version: v1.33.5
+          # The full suite runs against containerd, the runtime of most real
+          # clusters (and minikube's default from v1.39). The node-agent's
+          # runtime-specific CRI socket detection is covered against the
+          # docker runtime by the node_agent_docker_runtime job below.
+          container-runtime: containerd
       - name: Build client
         run: make build
       - name: Build images
@@ -77,7 +82,7 @@ jobs:
       - name: Compatibility with older manager and agent
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
-          DEV_MANAGER_VERSION: "2.24.1"
+          DEV_MANAGER_VERSION: "2.29.3"
           DEV_MANAGER_REGISTRY: ghcr.io/telepresenceio
         timeout-minutes: 150
         shell: bash
@@ -90,7 +95,7 @@ jobs:
       - name: Compatibility with older client
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
-          DEV_CLIENT_VERSION: "2.24.1"
+          DEV_CLIENT_VERSION: "2.29.3"
           DEV_CLIENT_REGISTRY: ghcr.io/telepresenceio
         timeout-minutes: 150
         shell: bash
@@ -103,4 +108,54 @@ jobs:
       - uses: ./.github/actions/upload-logs
         env:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-${{ matrix.clusters.distribution }}-${{ matrix.clusters.version }}"
+        if: ${{ always() }}
+
+  # The node-agent resolves container PIDs through the node's CRI socket, and
+  # that path is runtime-specific: a docker-runtime node exposes kubelet's
+  # containers only through cri-dockerd, while also running a live containerd
+  # whose CRI service knows nothing about them. The build_and_test job runs
+  # the full suite against containerd; this job proves the node-agent against
+  # the docker runtime with just the node-agent suites. The runtime is pinned
+  # rather than left to minikube's default, which flips to containerd in
+  # v1.39.
+  node_agent_docker_runtime:
+    if: ${{ github.event.label.name == 'ok to test' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
+      - name: Get Telepresence Version
+        run: |
+          v=$(go run build-aux/genversion/main.go ${{github.run_id}})
+          echo "TELEPRESENCE_VERSION=$v" >> "$GITHUB_ENV"
+          echo "TELEPRESENCE_SEMVER=${v#v}" >> "$GITHUB_ENV"
+      - name: Start minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: v1.33.5
+          container-runtime: docker
+      - name: Build client
+        run: make build
+      - name: Build images
+        run: make client-image tel2-image routecontroller-image
+      - name: Load images into minikube
+        run: |
+          minikube image load ${{env.TELEPRESENCE_REGISTRY}}/telepresence:${{env.TELEPRESENCE_SEMVER}}
+          minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
+          minikube image load ${{env.TELEPRESENCE_REGISTRY}}/route-controller:${{env.TELEPRESENCE_SEMVER}}
+      - name: Run node-agent integration tests
+        timeout-minutes: 60
+        shell: bash
+        env:
+          TEST_SUITE: '^NodeAgent'
+        run: |
+          set -ex
+          make check-integration-ci
+      - uses: ./.github/actions/upload-logs
+        env:
+          LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-docker-runtime"
         if: ${{ always() }}

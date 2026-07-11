@@ -238,16 +238,7 @@ func needInitContainer(ctx context.Context, config *agentconfig.Sidecar) bool {
 		clog.Info(ctx, "Injection of initContainer is disabled in the config. It is enabled by default and can be modified by setting agent.initContainer.enabled in values.yaml")
 		return false
 	}
-	for _, cc := range config.Containers {
-		if cc.Replace == agentconfig.ReplacePolicyIntercept {
-			for _, ic := range cc.Intercepts {
-				if ic.Headless || ic.TargetPortNumeric {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	return config.NftRedirectsActive()
 }
 
 func maybeRemoveAppContainer(pod *core.Pod, config *agentconfig.Sidecar, patches PatchOps) PatchOps {

@@ -99,3 +99,81 @@ func TestIntervalElementsRejectsInvalidPrefix(t *testing.T) {
 		t.Fatal("IntervalElements() error = nil, want error for invalid prefix")
 	}
 }
+
+// TestIntervalElementsCoalesces verifies that overlapping and adjacent subnets
+// are merged into a single interval, so the kernel is never asked to insert
+// overlapping intervals (which fails the whole atomic batch). Disjoint subnets
+// stay separate.
+func TestIntervalElementsCoalesces(t *testing.T) {
+	// boundary is the [start, end-marker] pair a single interval reduces to.
+	type boundary struct{ start, end string }
+	collect := func(t *testing.T, prefixes ...string) []boundary {
+		t.Helper()
+		ps := make([]netip.Prefix, len(prefixes))
+		for i, p := range prefixes {
+			ps[i] = netip.MustParsePrefix(p)
+		}
+		elems, err := IntervalElements(ps)
+		if err != nil {
+			t.Fatalf("IntervalElements() error = %v", err)
+		}
+		var out []boundary
+		for i := 0; i < len(elems); i += 2 {
+			start, _ := netip.AddrFromSlice(elems[i].Key)
+			if elems[i].IntervalEnd {
+				t.Fatalf("elems[%d] unexpectedly flagged IntervalEnd", i)
+			}
+			end, _ := netip.AddrFromSlice(elems[i+1].Key)
+			if !elems[i+1].IntervalEnd {
+				t.Fatalf("elems[%d] not flagged IntervalEnd", i+1)
+			}
+			out = append(out, boundary{start.String(), end.String()})
+		}
+		return out
+	}
+
+	tests := []struct {
+		name     string
+		prefixes []string
+		want     []boundary
+	}{
+		{
+			name:     "nested same start",
+			prefixes: []string{"10.96.0.0/16", "10.96.0.0/12"},
+			want:     []boundary{{"10.96.0.0", "10.112.0.0"}},
+		},
+		{
+			name:     "nested different start",
+			prefixes: []string{"10.96.0.0/12", "10.100.0.0/16"},
+			want:     []boundary{{"10.96.0.0", "10.112.0.0"}},
+		},
+		{
+			name:     "adjacent",
+			prefixes: []string{"10.96.0.0/17", "10.96.128.0/17"},
+			want:     []boundary{{"10.96.0.0", "10.97.0.0"}},
+		},
+		{
+			name:     "exact duplicate",
+			prefixes: []string{"10.96.0.0/16", "10.96.0.0/16"},
+			want:     []boundary{{"10.96.0.0", "10.97.0.0"}},
+		},
+		{
+			name:     "disjoint stays separate",
+			prefixes: []string{"10.96.0.0/16", "10.100.0.0/16"},
+			want:     []boundary{{"10.96.0.0", "10.97.0.0"}, {"10.100.0.0", "10.101.0.0"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := collect(t, tt.prefixes...)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d intervals %v, want %d %v", len(got), got, len(tt.want), tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("interval %d = %v, want %v", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}

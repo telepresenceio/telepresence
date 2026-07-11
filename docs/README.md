@@ -16,6 +16,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Intercepts](concepts/intercepts.md)
 - How do I...
   - [Code and debug an application locally](howtos/engage.md)
+  - [Choose between the sidecar and the node-agent](howtos/agent-modes.md)
   - [Use Telepresence with Docker](howtos/docker.md)
   - [Extend Docker Compose with Telepresence](howtos/docker-compose.md)
   - [Work with large clusters](howtos/large-clusters.md)
@@ -131,7 +132,9 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Telepresence and VPNs](reference/vpn.md)
   - [Networking through Virtual Network Interface](reference/tun-device.md)
   - [Connection Routing](reference/routing.md)
+  - [Traffic Agent Packet Routing](reference/agent-packet-routing.md)
   - [Route Controller](reference/route-controller.md)
+  - [Node-hosted Traffic Agent](reference/node-agent.md)
   - [Monitoring](reference/monitoring.md)
 - Comparisons
   - [Telepresence vs mirrord](compare/mirrord.md)

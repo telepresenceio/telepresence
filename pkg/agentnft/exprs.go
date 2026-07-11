@@ -41,16 +41,30 @@ func matchOif(name string) []expr.Any {
 }
 
 // matchOwner returns expressions that match (or, when neq is true, exclude)
-// the traffic-agent's own sockets, via `meta skgid`/`meta skuid` -- a
-// socket-ownership match keyed on the agent's distinct group or user ID.
+// the traffic-agent's own sockets. Normally this is a socket-ownership match,
+// via `meta skgid`/`meta skuid`, keyed on the agent's distinct group or user
+// ID. When owner.Mark is non-zero, it instead matches the packet's firewall
+// mark (`meta mark`): a socket-owner match cannot be installed into a network
+// namespace owned by a non-init user namespace, so a target in that situation
+// is told apart by mark instead.
 func matchOwner(owner OwnerMatch, neq bool) []expr.Any {
-	key := expr.MetaKeySKGID
-	if !owner.UseGID {
-		key = expr.MetaKeySKUID
-	}
 	op := expr.CmpOpEq
 	if neq {
 		op = expr.CmpOpNeq
+	}
+	if owner.Mark != 0 {
+		return []expr.Any{
+			&expr.Meta{Key: expr.MetaKeyMARK, Register: 1},
+			// meta mark, like skgid/skuid, is a host-endian datatype: nft does
+			// not byte-swap it the way it does for network fields such as ports
+			// or addresses. Comparing with the wrong byte order silently never
+			// matches.
+			&expr.Cmp{Op: op, Register: 1, Data: binaryutil.NativeEndian.PutUint32(owner.Mark)},
+		}
+	}
+	key := expr.MetaKeySKGID
+	if !owner.UseGID {
+		key = expr.MetaKeySKUID
 	}
 	return []expr.Any{
 		&expr.Meta{Key: key, Register: 1},
@@ -84,15 +98,6 @@ func matchDaddr(off, ln uint32, addr netip.Addr, neq bool) []expr.Any {
 	return []expr.Any{
 		&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: off, Len: ln},
 		&expr.Cmp{Op: op, Register: 1, Data: addr.AsSlice()},
-	}
-}
-
-// matchDaddrNotInSet returns expressions that only match destinations NOT in m
-// -- the nft equivalent of `ip daddr != @set`.
-func matchDaddrNotInSet(off, ln uint32, m *nftables.Set) []expr.Any {
-	return []expr.Any{
-		&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: off, Len: ln},
-		&expr.Lookup{SourceRegister: 1, SetName: m.Name, SetID: m.ID, Invert: true},
 	}
 }
 

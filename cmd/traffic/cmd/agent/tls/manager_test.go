@@ -1,7 +1,10 @@
 package tls
 
 import (
+	"context"
+	"net"
 	"net/netip"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,7 +25,7 @@ func TestNewManagerConfiguresHTTPAppProtocolWithoutProbing(t *testing.T) {
 	} {
 		t.Run(appProtocol, func(t *testing.T) {
 			sidecar := sidecarWithAppProtocol(appProtocol)
-			mgr, err := NewManager(t.Context(), sidecar, netip.MustParseAddr("10.0.0.1"), nil)
+			mgr, err := NewManager(t.Context(), sidecar, netip.MustParseAddr("10.0.0.1"), nil, nil)
 			require.NoError(t, err)
 
 			tlsManager := mgr.(*manager)
@@ -72,7 +75,7 @@ func TestNewManagerConfiguresExplicitAppProtocols(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sidecar := sidecarWithAppProtocol(tt.appProtocol)
-			mgr, err := NewManager(t.Context(), sidecar, netip.MustParseAddr("10.0.0.1"), nil)
+			mgr, err := NewManager(t.Context(), sidecar, netip.MustParseAddr("10.0.0.1"), nil, nil)
 			require.NoError(t, err)
 
 			tlsManager := mgr.(*manager)
@@ -85,6 +88,68 @@ func TestNewManagerConfiguresExplicitAppProtocols(t *testing.T) {
 			require.Equal(t, tt.wantTLS, pc.TLS)
 			require.Equal(t, tt.wantHTTP2, pc.HTTP2)
 		})
+	}
+}
+
+// recordingDialer implements forwarder.Dialer, recording every address it is asked to
+// dial and dialing a fixed real listener instead of that address, so a probe can run to
+// completion against a stub "application" without a real pod or netfilter ruleset.
+type recordingDialer struct {
+	mu    sync.Mutex
+	calls []string
+	real  string
+}
+
+func (d *recordingDialer) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	d.mu.Lock()
+	d.calls = append(d.calls, address)
+	d.mu.Unlock()
+	var nd net.Dialer
+	return nd.DialContext(ctx, network, d.real)
+}
+
+func (d *recordingDialer) dialedAddrs() []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]string(nil), d.calls...)
+}
+
+// TestNewManagerProbesThroughInjectedDialer guards the fix for the node-agent bug where
+// the TLS/H2C prober dialed the agent's own pod IP: it must dial through the injected
+// Dialer, at the address agentconfig.PassThroughTarget selects for the intercept's
+// container port -- the same address a pass-through forwarder would dial -- not at the
+// address of whatever pod the agent's own process happens to run in.
+func TestNewManagerProbesThroughInjectedDialer(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			conn.Close()
+		}
+	}()
+
+	dialer := &recordingDialer{real: ln.Addr().String()}
+	sidecar := sidecarWithAppProtocol("") // unknown app protocol: TLS/HTTP2 must be probed.
+	appPodIP := netip.MustParseAddr("10.9.9.9")
+
+	mgr, err := NewManager(t.Context(), sidecar, appPodIP, dialer, nil)
+	require.NoError(t, err)
+
+	proxyPort := sidecar.ProxyPort(9900)
+	mgr.UseTLS(t.Context(), proxyPort)
+
+	// A non-nil dialer marks the node-agent seam, where the nft redirects are
+	// always programmed.
+	wantTarget := sidecar.PassThroughTarget(appPodIP, 8000, types.ProtoTCP, true)
+	calls := dialer.dialedAddrs()
+	require.NotEmpty(t, calls)
+	for _, addr := range calls {
+		require.Equal(t, wantTarget.String(), addr)
 	}
 }
 

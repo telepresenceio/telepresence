@@ -28,21 +28,24 @@ The Root-Daemon manages the networking necessary to handle traffic between the l
 ## Traffic Manager
 
 The Traffic Manager is the central point of communication between Traffic Agents in the cluster and Telepresence Daemons
-on developer workstations. It is responsible for injecting the Traffic Agent sidecar into engaged pods,
-proxying all relevant inbound and outbound traffic, and tracking active engagements.
+on developer workstations. It is responsible for injecting the Traffic Agent sidecar into engaged pods (or, when a
+client requests it, creating a [node-hosted agent](node-agent.md) instead), proxying all relevant inbound and outbound
+traffic, and tracking active engagements.
 
 The Traffic-Manager is installed by a cluster administrator. It can either be installed using the Helm chart embedded
 in the telepresence client binary (`telepresence helm install`) or by using a Helm Chart directly.
 
 ## Traffic Agent
 
-The Traffic Agent is a sidecar container that facilitates engagements. When a `replace`, `ingest`, `intercept`, or `wiretap` is first
-started, the Traffic Agent container is injected into the workload's pod(s). You can see the Traffic Agent's status by
-running `telepresence list` or `kubectl describe pod <pod-name>`.
+The Traffic Agent is the component that facilitates engagements. When a `replace`, `ingest`, `intercept`, or `wiretap`
+is first started, it is normally injected into the workload's pod(s) as a sidecar container. It can instead run as a
+node-hosted pod, requested with the `--node-agent` flag, which attaches to the existing pod's namespaces without
+modifying or restarting it. You can see the Traffic Agent's status by running `telepresence list` or
+`kubectl describe pod <pod-name>`.
 
 Depending on if an `replace` or `intercept` is active or not, the Traffic Agent will either route the incoming request 
 to your workstation, or it will pass it along to the container in the pod usually handling requests.
 
 When a `wiretap` is active, the Traffic Agent will send a copy of the incoming requests to your workstation.
 
-Please see [Traffic Agent Sidecar](engagements/sidecar.md) for details.
+Please see [Traffic Agent Sidecar](engagements/sidecar.md) and [Node-hosted traffic-agent](node-agent.md) for details.

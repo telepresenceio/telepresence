@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/nftables"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
@@ -26,11 +27,19 @@ type Intercept struct {
 // OwnerMatch identifies the traffic-agent's own sockets. It mirrors
 // agentinit's trafficAgentOwner: match on the agent's primary group when
 // AGENT_GID is set (UseGID true), otherwise fall back to its UID. skgid/skuid
-// are matched host-endian (see matchOwner).
+// are matched host-endian (see matchOwner). Mark selects a different
+// discriminator entirely -- see its own doc comment.
 type OwnerMatch struct {
-	// UseGID selects `meta skgid` (true) or `meta skuid` (false).
+	// UseGID selects `meta skgid` (true) or `meta skuid` (false). Ignored
+	// when Mark is non-zero.
 	UseGID bool
 	ID     uint32
+
+	// Mark, when non-zero, identifies the agent's own packets by their
+	// firewall mark (`meta mark`) instead of by socket owner. This is required
+	// for targets whose network namespace is owned by a non-init user
+	// namespace, where a socket-owner match cannot be installed.
+	Mark uint32
 }
 
 // Config describes the ruleset to build for a single pod's network
@@ -58,6 +67,36 @@ type Config struct {
 	// services, which only the mesh proxy knows how to route. Entries whose
 	// address family differs from PodIP's are ignored.
 	MeshDialSubnets []netip.Prefix
+}
+
+// ConfigFor translates a sidecar agent config into the ruleset Config
+// for the pod it serves: every container's port-unique intercepts are
+// flattened into one list, numeric target ports record the proxy port
+// that pass-through dials use, and the mesh dial subnets are carried
+// over.
+func ConfigFor(sc *agentconfig.Sidecar, loopback string, podIP netip.Addr, owner OwnerMatch) Config {
+	var intercepts []Intercept
+	for _, cn := range sc.Containers {
+		for _, ic := range agentconfig.PortUniqueIntercepts(cn) {
+			nic := Intercept{
+				Protocol:      ic.Protocol,
+				ContainerPort: ic.ContainerPort,
+				AgentPort:     ic.AgentPort,
+			}
+			if ic.TargetPortNumeric {
+				nic.ProxyPort = sc.ProxyPort(ic.AgentPort)
+			}
+			intercepts = append(intercepts, nic)
+		}
+	}
+
+	return Config{
+		PodIP:           podIP,
+		Loopback:        loopback,
+		Owner:           owner,
+		Intercepts:      intercepts,
+		MeshDialSubnets: sc.MeshDialSubnets,
+	}
 }
 
 const (

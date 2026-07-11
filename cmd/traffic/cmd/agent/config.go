@@ -18,16 +18,35 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
+	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 type Config interface {
 	AgentConfig() *agentconfig.Sidecar
 	Annotations() map[string]string
+	AppEnviron(ctx context.Context, cn *agentconfig.Container) (map[string]string, error)
 	HasRemoteMounts() bool
 	PodName() string
 	PodIP() netip.Addr
 	PodUID() k8sTypes.UID
+	NodeAgent() bool
+
+	// AppPodIP returns the IP of the pod that hosts the application containers.
+	// For the sidecar that is the agent's own pod (PodIP); the node-agent's
+	// application runs in a separate pod, so it returns that pod's IP. It is the
+	// address a forwarder dials for non-intercepted (pass-through) traffic.
+	AppPodIP() netip.Addr
+
+	// ListenerFactory returns the factory a container's forwarders should use to
+	// create their listen sockets, or nil to listen in the agent's own network
+	// namespace (the sidecar case).
+	ListenerFactory() forwarder.ListenerFactory
+
+	// DialerFactory returns the dialer a container's forwarders should use for
+	// their outbound pass-through connections, or nil to dial in the agent's own
+	// network namespace (the sidecar case).
+	DialerFactory() forwarder.Dialer
 }
 
 type config struct {
@@ -39,6 +58,24 @@ type config struct {
 }
 
 func LoadConfig(ctx context.Context) (Config, error) {
+	c, err := loadBaseConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sc := c.AgentConfig()
+	for _, cn := range sc.Containers {
+		if err := addAppMounts(ctx, sc.MountPolicies, cn); err != nil {
+			return nil, err
+		}
+	}
+	return c, nil
+}
+
+// loadBaseConfig parses AGENT_CONFIG/annotations into a Sidecar config, applies
+// ManagerPort/ClientConnectionTTL defaults and the log level, and reads this pod's
+// identity from the _TEL_AGENT_* environment variables. It does not set up the
+// sidecar-only app-mount symlinks; see addAppMounts.
+func loadBaseConfig(ctx context.Context) (*config, error) {
 	var cfgTight string
 	var ok bool
 	c := config{}
@@ -91,17 +128,16 @@ func LoadConfig(ctx context.Context) (Config, error) {
 		return nil, errors.New("missing POD_UID")
 	}
 	c.podUID = k8sTypes.UID(podUID)
-	for _, cn := range sc.Containers {
-		err = addAppMounts(ctx, sc.MountPolicies, cn)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return &c, nil
 }
 
 func (c *config) PodUID() k8sTypes.UID {
 	return c.podUID
+}
+
+// AppEnviron returns the sidecar's own process environment, transformed for cn.
+func (c *config) AppEnviron(ctx context.Context, cn *agentconfig.Container) (map[string]string, error) {
+	return AppEnvironment(ctx, cn)
 }
 
 func (c *config) HasRemoteMounts() bool {
@@ -131,23 +167,74 @@ func (c *config) PodIP() netip.Addr {
 	return c.podIP
 }
 
+// AppPodIP returns the agent's own pod IP: the sidecar shares its pod with the
+// application containers.
+func (c *config) AppPodIP() netip.Addr {
+	return c.podIP
+}
+
+// NodeAgent reports false: the sidecar agent runs in the workload's own pod.
+func (c *config) NodeAgent() bool {
+	return false
+}
+
+// ListenerFactory returns nil: the sidecar agent's forwarders listen in its own
+// network namespace, which is already the target pod's namespace.
+func (c *config) ListenerFactory() forwarder.ListenerFactory {
+	return nil
+}
+
+// DialerFactory returns nil: the sidecar agent's forwarders dial in its own
+// network namespace, which is already the target pod's namespace.
+func (c *config) DialerFactory() forwarder.Dialer {
+	return nil
+}
+
+// ensureFreshMountPointDir creates dir, or, if it already exists, removes its contents and
+// recreates it empty. logOnExists controls whether an info message announcing the removal is
+// logged before it happens.
+func ensureFreshMountPointDir(ctx context.Context, dir string, logOnExists bool) error {
+	if err := dos.Mkdir(ctx, dir, 0o700); err != nil {
+		if !os.IsExist(err) {
+			return err
+		}
+		if logOnExists {
+			clog.Infof(ctx, "The directory %q already exists. Container restarted?", dir)
+		}
+		if err := dos.RemoveAll(ctx, dir); err != nil {
+			return err
+		}
+		if err := dos.Mkdir(ctx, dir, 0o700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// pruneMissingMounts stats each remote or remote-read-only mount declared in cn.Mounts under
+// cnMountPoint, and deletes from cn.Mounts any entry whose mount is missing, so that the
+// client doesn't attempt to mount nonexistent paths.
+func pruneMissingMounts(ctx context.Context, cn *agentconfig.Container, cnMountPoint string) {
+	for path, policy := range cn.Mounts {
+		mp := filepath.Join(cnMountPoint, path)
+		if policy == types.MountPolicyRemote || policy == types.MountPolicyRemoteReadOnly {
+			_, err := dos.Stat(ctx, mp)
+			if err != nil {
+				clog.Infof(ctx, "Failed to stat %q. It will not be exported: %v", mp, err)
+				delete(cn.Mounts, path)
+			}
+		}
+	}
+}
+
 // addAppMounts adds each of the mounts present under the containers MountPoint as a
 // symlink under the agentconfig.ExportsMountPoint/<container mount>/.
 // Returns MountPolicies keyed by the full path of each mount.
 func addAppMounts(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Container) error {
 	clog.Infof(ctx, "Adding exported mounts for container %s", ag.Name)
 	cnMountPoint := filepath.Join(agentconfig.ExportsMountPoint, filepath.Base(ag.MountPoint))
-	if err := dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
-		if !os.IsExist(err) {
-			return err
-		}
-		clog.Infof(ctx, "The directory %q already exists. Container restarted?", cnMountPoint)
-		if err = dos.RemoveAll(ctx, cnMountPoint); err != nil {
-			return err
-		}
-		if err = dos.Mkdir(ctx, cnMountPoint, 0o700); err != nil {
-			return err
-		}
+	if err := ensureFreshMountPointDir(ctx, cnMountPoint, true); err != nil {
+		return err
 	}
 
 	if appMountsDir, err := dos.Open(ctx, ag.MountPoint); err != nil {
@@ -171,28 +258,22 @@ func addAppMounts(ctx context.Context, mps types.MountPolicies, ag *agentconfig.
 			}
 		}
 	}
-	if err := mountVRS(ctx, mps, ag, cnMountPoint); err != nil {
+	if err := mountVRS(ctx, mps, ag, cnMountPoint, "/"); err != nil {
 		return err
 	}
 
-	// Verify that all mounts exists, so that the client doesn't attempt to mount nonexistent paths
-	for path, policy := range ag.Mounts {
-		mp := filepath.Join(cnMountPoint, path)
-		if policy == types.MountPolicyRemote || policy == types.MountPolicyRemoteReadOnly {
-			_, err := dos.Stat(ctx, mp)
-			if err != nil {
-				clog.Infof(ctx, "Failed to stat %q. It will not be exported: %v", mp, err)
-				delete(ag.Mounts, path)
-			}
-		}
-	}
+	pruneMissingMounts(ctx, ag, cnMountPoint)
 	return nil
 }
 
-func mountVRS(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Container, cnMountPoint string) error {
+// mountVRS captures /var/run/secrets subdirectories that have been injected but not added by
+// the injector, symlinking each one whose policy allows a remote mount under cnMountPoint and
+// recording it in ag.Mounts. root is prepended to every path read from or symlinked to, so the
+// same directory can be captured from a filesystem reached through a resolved path as well as
+// from the filesystem root itself ("/").
+func mountVRS(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Container, cnMountPoint, root string) error {
 	const vrsDir = "/var/run/secrets"
-	// Capture /var/run/secrets subdirs that has been injected but not added by the injector.
-	vrs, err := dos.ReadDir(ctx, vrsDir)
+	vrs, err := dos.ReadDir(ctx, filepath.Join(root, vrsDir))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			err = nil
@@ -222,9 +303,10 @@ func mountVRS(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Cont
 				}
 				hasVrsExportDir = true
 			}
+			src := filepath.Join(root, subDir)
 			newName := filepath.Join(vrsExportDir, vr.Name())
-			if err = dos.Symlink(ctx, subDir, newName); err != nil {
-				return fmt.Errorf("can't symlink %s to %s: %v", subDir, newName, err)
+			if err = dos.Symlink(ctx, src, newName); err != nil {
+				return fmt.Errorf("can't symlink %s to %s: %v", src, newName, err)
 			}
 		}
 		found := false

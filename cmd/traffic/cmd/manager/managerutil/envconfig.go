@@ -31,18 +31,25 @@ import (
 // The Env is responsible for all parsing of the environment strings. No parsing of such
 // strings should be made elsewhere in the code.
 type Env struct {
-	Registry                     string     `required:"true"`
-	LogLevel                     slog.Level `required:"true"`
-	User                         string
-	ServerHost                   string
-	ServerPort                   uint16 `required:"true"`
-	PrometheusPort               uint16
-	PrometheusDropClientLabel    bool
-	MutatorWebhookPort           uint16
+	Registry                  string     `required:"true"`
+	LogLevel                  slog.Level `required:"true"`
+	User                      string
+	ServerHost                string
+	ServerPort                uint16 `required:"true"`
+	PrometheusPort            uint16
+	PrometheusDropClientLabel bool
+	// MutatorWebhookPort is the port the webhook server (or, for a
+	// node-agent-only install with the injector disabled, the plain-HTTP
+	// /uninstall-only server) listens on. The chart only sets
+	// MUTATOR_WEBHOOK_PORT when agentInjector.enabled, so the default here
+	// must match agentInjector.webhook.port's chart default (values.yaml)
+	// -- the agent-injector Service's targetPort is unconditional on that
+	// value regardless of which mode created the listening process.
+	MutatorWebhookPort           uint16 `default:"8443"`
 	ManagerNamespace             string
 	AgentRestApiPort             uint16
-	AgentArrivalTimeout          time.Duration
-	MaxNamespaceSpecificWatchers int `default:"10"`
+	AgentArrivalTimeout          time.Duration `default:"30s"`
+	MaxNamespaceSpecificWatchers int           `default:"10"`
 
 	GrpcMaxReceiveSize resource.Quantity
 
@@ -73,6 +80,18 @@ type Env struct {
 	AgentInitContainerEnabled  bool `default:"true"`
 	AgentMaxIdleTime           time.Duration
 	AgentWatchRetryInterval    time.Duration `default:"10s"`
+
+	// NodeAgentEnabled controls whether this traffic-manager will provision
+	// node-hosted traffic-agents (manager-created Jobs that enter the target
+	// pod's namespaces) when requested by a client. Defaults to false.
+	NodeAgentEnabled bool
+
+	// NodeAgentCRISocket is the path of the container-runtime socket that is
+	// mounted into node-agent Jobs so that they can resolve a target
+	// container's process ID (Helm value nodeAgent.criSocket). When empty,
+	// the Jobs mount the node's /run directory instead and the agent probes
+	// the well-known CRI sockets beneath it.
+	NodeAgentCRISocket string
 
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `envSeparator:" "`
 	ClientRoutingNeverProxySubnets       []netip.Prefix `envSeparator:" "`

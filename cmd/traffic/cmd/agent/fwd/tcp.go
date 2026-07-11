@@ -26,9 +26,9 @@ type tcp struct {
 	listenerSwitch ListenerSwitch
 }
 
-func NewTCPInterceptor(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, tlsManager tls.Manager, target netip.AddrPort) Interceptor {
+func NewTCPInterceptor(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, tlsManager tls.Manager, target netip.AddrPort, opts ...forwarder.Option) Interceptor {
 	return &tcp{
-		interceptor: newInterceptor(ctx, listenPort, tag, target),
+		interceptor: newInterceptor(ctx, listenPort, tag, target, opts...),
 		tlsManager:  tlsManager,
 	}
 }

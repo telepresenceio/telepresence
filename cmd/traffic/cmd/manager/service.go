@@ -532,6 +532,7 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 				PodIp:        aip.AsSlice(),
 				ApiPort:      a.ApiPort,
 				Intercepted:  s.state.IsInterceptedBy(a.Name, a.Namespace, clientSessionID),
+				NodeAgent:    a.NodeAgent,
 			}
 			agents = append(agents, ap)
 			return true
@@ -606,6 +607,7 @@ func (s *service) watchAgentPodsDelta(ctx context.Context, namespaces []string, 
 						PodIp:        aip.AsSlice(),
 						ApiPort:      a.ApiPort,
 						Intercepted:  s.state.IsInterceptedBy(a.Name, a.Namespace, clientSessionID),
+						NodeAgent:    a.NodeAgent,
 					}
 					agentPodInfos.Store(string(k), ap)
 				}
@@ -901,7 +903,7 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 	if err != nil {
 		return nil, err
 	}
-	as, err := s.state.EnsureAgent(ctx, request.Name, ns)
+	as, err := s.state.EnsureAgent(ctx, managerutil.GetSessionID(ctx), request.Name, ns, request.NodeAgent)
 	if err != nil {
 		return nil, status.Convert(err).Err()
 	}
@@ -917,6 +919,24 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 		clog.Tracef(ctx, "Last activity %s", lastActivity)
 	}
 	return &rpc.AgentInfoSnapshot{Agents: rpcAs}, nil
+}
+
+// ReleaseAgent releases the caller's claim on a node-agent previously
+// ensured with node_agent=true in EnsureAgent. It is a no-op for a sidecar
+// agent or an unknown claim.
+func (s *service) ReleaseAgent(ctx context.Context, request *rpc.ReleaseAgentRequest) (*empty.Empty, error) {
+	ctx, client, err := s.ensureClientSession(ctx, request.Session)
+	if err != nil {
+		return nil, err
+	}
+	ns, err := s.managedTargetNamespace(ctx, client, request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.state.ReleaseAgent(ctx, managerutil.GetSessionID(ctx), request.Name, ns); err != nil {
+		return nil, status.Convert(err).Err()
+	}
+	return &empty.Empty{}, nil
 }
 
 // CreateIntercept lets a client create an intercept.

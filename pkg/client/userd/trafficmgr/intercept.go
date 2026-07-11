@@ -463,6 +463,7 @@ func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.
 	return nil
 }
 
+//nolint:unparam // keep the full (major, minor, patch) form so version gates read uniformly
 func (s *session) compareFinalizedManagerVersion(major, minor, patch uint64) int {
 	mv := s.managerVersion
 	n := mv.Major - major
@@ -522,6 +523,10 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 
 	if (spec.PortIdentifier == "all" || len(spec.PodPorts) > 0) && s.compareFinalizedManagerVersion(2, 22, 0) < 0 {
 		return nil, errcat.User.Newf("traffic-manager version %s has no support for multi-port intercepts", s.managerVersion)
+	}
+
+	if spec.NodeAgent && s.compareFinalizedManagerVersion(2, 30, 0) < 0 {
+		return nil, errcat.User.Newf("traffic-manager version %s has no support for node-agents", s.managerVersion)
 	}
 
 	_, err := netip.ParseAddr(spec.TargetHost)

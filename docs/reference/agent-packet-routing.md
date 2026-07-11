@@ -6,7 +6,9 @@ description: How the traffic-agent uses nftables to intercept application traffi
 The traffic-agent steers network traffic inside its pod using **nftables**. When
 the agent is injected, an initialization step programs a dedicated nftables
 table in the pod's network namespace, and the agent process runs *forwarders*
-that this table directs traffic to. The rules do two jobs:
+that this table directs traffic to. A [node-hosted agent](node-agent.md) programs
+the very same table into the target pod's network namespace from outside the
+pod. The rules do two jobs:
 
 1. **Interception** — steer traffic bound for the application's ports into the
    agent's forwarders, so it can be delivered to an intercepting workstation or

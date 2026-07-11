@@ -19,6 +19,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/docker"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/env"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ingest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
@@ -43,8 +44,9 @@ type Command struct {
 	ContainerName string   // --container
 	Address       string   // --address
 
-	Replace bool // whether --replace was passed
-	Wiretap bool // wiretap subcommand used
+	Replace   bool // whether --replace was passed
+	Wiretap   bool // wiretap subcommand used
+	NodeAgent bool // --node-agent
 
 	ToPod []string // --to-pod
 
@@ -188,6 +190,10 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 
 	flagSet.BoolVar(&c.Plaintext, "plaintext", false, "Use plaintext instead of TLS when communicating with the intercept handler")
 
+	flagSet.BoolVar(&c.NodeAgent, "node-agent", false,
+		"Serve this intercept with a node-hosted traffic-agent (a manager-created Job that enters the target pod's namespaces) instead of injecting a sidecar. "+
+			"Requires the traffic-manager to have node-agent mode enabled.")
+
 	_ = cmd.RegisterFlagCompletionFunc("container", ingest.AutocompleteContainer)
 	_ = cmd.RegisterFlagCompletionFunc("service", autocompleteService)
 }
@@ -269,6 +275,10 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 		// Auto-detect and set mechanism to "http"
 		c.Mechanism = "http"
 	}
+
+	// --node-agent is resolved in validatedRun, once a session is available
+	// (see flags.NodeAgentDefault): Validate runs too early to reach the
+	// session-merged client config.
 
 	// Actually intercepting something
 	if c.AgentName == "" {
@@ -352,6 +362,11 @@ func (c *Command) RunReplace(cmd *cobra.Command, positional []string) error {
 func (c *Command) validatedRun(cmd *cobra.Command) error {
 	if err := connect.InitCommand(cmd); err != nil {
 		return err
+	}
+	// The replace command shares this method but doesn't register
+	// --node-agent, so leave c.NodeAgent untouched in that case.
+	if cmd.Flags().Lookup("node-agent") != nil {
+		c.NodeAgent = flags.NodeAgentDefault(cmd, c.NodeAgent)
 	}
 	defer progress.Stop(cmd.Context())
 	ctx := dos.WithStdio(cmd.Context(), cmd)

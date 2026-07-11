@@ -178,7 +178,7 @@ func Build(cfg Config) (*Ruleset, error) {
 	rule := matchOwner(cfg.Owner, false)
 	rule = append(rule, matchDport(dnsPort, true)...)
 	if rs.MeshSet != nil {
-		rule = append(rule, matchDaddrNotInSet(addrOff, addrLen, rs.MeshSet.Set)...)
+		rule = append(rule, nftutil.MatchDaddrInSet(addrOff, addrLen, rs.MeshSet.Set, true)...)
 	}
 	rule = append(rule, identityDNAT(family, addrOff, addrLen)...)
 	rs.AddRule(rs.Output, rule)

@@ -99,6 +99,35 @@ func (s *State) PrepareIntercept(
 		}
 	}
 
+	if spec.NodeAgent {
+		if err = nodeAgentGateErr(managerutil.GetEnv(ctx)); err != nil {
+			return interceptError(err)
+		}
+		if spec.Replace {
+			// Replace is implemented by the sidecar machinery, which
+			// node-agent mode never runs, so the app container would keep
+			// running and the replace would be silently ignored.
+			return interceptError(errcat.User.New("node-agent mode does not support --replace"))
+		}
+	} else {
+		// Provisioning a sidecar intercept injects a traffic-agent into the
+		// workload's pod template and restarts its pods. A live node-agent
+		// intercept depends on the specific pod (and its CRI container IDs)
+		// that is currently running, so serving this request would break it
+		// out from under its client. exceptID is irrelevant for a non-
+		// node-agent spec (it can never equal a node-agent intercept's id);
+		// it's passed because activeNodeAgentIntercept requires one.
+		iid := fmt.Sprintf("%s:%s", client.id, spec.Name)
+		if existing := s.activeNodeAgentIntercept(spec, iid); existing != nil {
+			return interceptError(errcat.User.Newf(
+				"%s.%s has a live node-agent intercept named %q created by client %q; "+
+					"starting this intercept would inject a traffic-agent sidecar and restart the "+
+					"workload's pods, breaking that node-agent intercept. Remove it first, or create "+
+					"this intercept with --node-agent instead",
+				spec.Agent, spec.Namespace, existing.Spec.Name, existing.Spec.Client))
+		}
+	}
+
 	var rp agentconfig.ReplacePolicy
 	if spec.Replace {
 		rp = agentconfig.ReplacePolicyContainer
@@ -142,7 +171,50 @@ func (s *State) PrepareIntercept(
 	if client.Mark(lastActivity) {
 		clog.Tracef(ctx, "Last activity %s", lastActivity)
 	}
+
+	if spec.NodeAgent {
+		// ac was generated with dryRun=true above, so no sidecar was injected
+		// and the workload's pods were not restarted. A node-agent Job is a
+		// standalone pod, not a sidecar, so it's provisioned here instead of
+		// via the injecting ensureAgent(dryRun=false) that AddIntercept would
+		// otherwise call.
+		if err = s.ensureNodeAgent(ctx, wl, ac, true); err != nil {
+			return interceptError(err)
+		}
+	}
 	return pi, nil
+}
+
+// activeNodeAgentIntercept returns a live node-agent intercept for the same
+// agent and namespace as spec, other than the one identified by exceptID, or
+// nil if there is none. spec's own NodeAgent flag is irrelevant: the search
+// is keyed only by agent and namespace, so this also finds a node-agent
+// intercept that a proposed sidecar intercept (spec.NodeAgent == false) would
+// conflict with.
+func (s *State) activeNodeAgentIntercept(spec *rpc.InterceptSpec, exceptID string) *Intercept {
+	return s.findLiveNodeAgentIntercept(spec.Agent, spec.Namespace, exceptID)
+}
+
+// findLiveNodeAgentIntercept scans for a live (non-REMOVED, non-child)
+// node-agent intercept for the given agent name and namespace, other than
+// the one identified by exceptID (pass "" to not exclude any), or nil if
+// there is none. A child (pod-port) intercept shares its parent's spec, so
+// matching the parent is sufficient.
+func (s *State) findLiveNodeAgentIntercept(name, namespace, exceptID string) (existing *Intercept) {
+	s.intercepts.Range(func(id string, ic *Intercept) bool {
+		if id == exceptID || !ic.Spec.GetNodeAgent() || IsChildIntercept(ic.Spec) {
+			return true
+		}
+		if ic.Spec.GetAgent() != name || ic.Spec.GetNamespace() != namespace {
+			return true
+		}
+		if ic.Disposition == rpc.InterceptDispositionType_REMOVED {
+			return true
+		}
+		existing = ic
+		return false
+	})
+	return existing
 }
 
 // serviceIPs returns the cluster IPs of the named service, each in netip.Addr
@@ -365,9 +437,21 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 	if spec.Replace {
 		rp = agentconfig.ReplacePolicyContainer
 	}
-	_, _, err = s.ensureAgent(ctx, wl, s.isExtended(spec), false, spec, rp)
-	if err != nil {
-		return nil, nil, err
+	if spec.NodeAgent {
+		// PrepareIntercept already provisioned the node-agent Job. Running
+		// the injecting ensureAgent here would inject a sidecar and restart
+		// the target pod, invalidating the container ID the Job was given.
+		// Wait for its agent to register instead. The agent's name and
+		// namespace always equal the workload's (see agentmap's config
+		// generator), so no agent config is needed for the wait.
+		if _, err = s.waitForNodeAgent(ctx, wl.GetName(), wl.GetNamespace()); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		_, _, err = s.ensureAgent(ctx, wl, s.isExtended(spec), false, spec, rp)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	is, err := s.addIntercept(interceptID, cir)
@@ -414,11 +498,26 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 			return nil
 		})
 	}
-	err = s.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-		return s.restoreAppContainer(ctx, interceptInfo, wl)
-	})
-	if err != nil {
-		clog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptID, err)
+	if !spec.NodeAgent {
+		// A node-agent intercept never injects a sidecar or modifies the
+		// workload's pod template, so there is nothing for this finalizer
+		// to restore.
+		err = s.AddInterceptFinalizer(interceptID, func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+			return s.restoreAppContainer(ctx, interceptInfo, wl)
+		})
+		if err != nil {
+			clog.Errorf(ctx, "Failed to add finalizer for %s: %v", interceptID, err)
+		}
+	}
+	if spec.NodeAgent {
+		if err = s.AddInterceptFinalizer(interceptID, s.nodeAgentReapFinalizer()); err != nil {
+			clog.Errorf(ctx, "Failed to add node-agent reap finalizer for %s: %v", interceptID, err)
+		}
+		// Started here rather than in PrepareIntercept, because a watcher
+		// checks nodeAgentWanted as soon as it starts, and the intercept it
+		// would claim on behalf of does not exist until addIntercept above
+		// has stored it.
+		s.startNodeAgentPodWatch(spec.Agent, spec.Namespace)
 	}
 	return client, is.InterceptInfo, nil
 }
@@ -481,7 +580,26 @@ func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFin
 	return nil
 }
 
-func (s *State) EnsureAgent(ctx context.Context, n, ns string) (as []*AgentSession, err error) {
+// EnsureAgent ensures that an agent exists for the workload named n in
+// namespace ns and waits for it to become available. When nodeAgent is
+// requested, it provisions (or reuses) a node-hosted traffic-agent Job
+// instead of injecting a sidecar, and takes a lease on it under sessionID so
+// that the Job outlives this call for as long as the session does, until
+// ReleaseAgent is called or the session ends. A sidecar request is rejected
+// while a node-agent intercept or lease already claims the workload, since
+// injecting a sidecar would restart the pod the node-agent depends on.
+func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, ns string, nodeAgent bool) (as []*AgentSession, err error) {
+	if !nodeAgent && s.nodeAgentWanted(n, ns) {
+		// Checked before resolving the workload: a sidecar request against a
+		// workload a node-agent already claims is rejected outright, so
+		// there is no reason to pay for a workload lookup first.
+		return nil, errcat.User.Newf(
+			"%s.%s has a live node-agent intercept or ingest claim; injecting a traffic-agent "+
+				"sidecar would restart the pods the node-agent depends on. Use --node-agent, or "+
+				"release the existing claim first",
+			n, ns)
+	}
+
 	var wl k8sapi.Workload
 	wl, err = agentmap.GetWorkload(ctx, n, ns, "")
 	if err != nil {
@@ -490,6 +608,37 @@ func (s *State) EnsureAgent(ctx context.Context, n, ns string) (as []*AgentSessi
 		}
 		return nil, err
 	}
+
+	if nodeAgent {
+		if err = nodeAgentGateErr(managerutil.GetEnv(ctx)); err != nil {
+			return nil, err
+		}
+		var sc *agentconfig.Sidecar
+		sc, err = s.getOrCreateAgentConfig(ctx, wl, false, true, nil, agentconfig.ReplacePolicyInactive)
+		if err != nil {
+			return nil, err
+		}
+		if err = s.ensureNodeAgent(ctx, wl, sc, false); err != nil {
+			return nil, err
+		}
+		// The lease is taken before waiting, not after: the reconciler's
+		// orphan grace period (nodeAgentOrphanGracePeriod) only protects a
+		// freshly created Job from the periodic sweep, and only for a
+		// limited time. Taking the lease immediately closes the window
+		// against every reap path -- the sweep, a concurrent intercept's
+		// removal finalizer, a concurrent ReleaseAgent, this session ending
+		// -- for as long as the wait below takes, not just the sweep's
+		// grace period.
+		s.addLease(sessionID, n, ns)
+		s.startNodeAgentPodWatch(n, ns)
+		as, err = s.waitForNodeAgent(ctx, n, ns)
+		if err != nil {
+			s.removeLease(sessionID, n, ns)
+			return nil, err
+		}
+		return as, nil
+	}
+
 	_, as, err = s.ensureAgent(ctx, wl, false, false, nil, agentconfig.ReplacePolicyInactive)
 	return as, err
 }
@@ -514,7 +663,10 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 		return nil, nil, status.Error(codes.FailedPrecondition, msg)
 	}
 
-	if !managerutil.AgentInjectorEnabled(parentCtx) {
+	// A node-agent request needs only the generated config, never
+	// injection: the webhook and the manual-annotation path below are both
+	// sidecar concepts that a node-agent spec must bypass entirely.
+	if !managerutil.AgentInjectorEnabled(parentCtx) && !spec.GetNodeAgent() {
 		cfgJSON, ok := wl.GetPodTemplate().Annotations[annotation.Config]
 		if !ok {
 			msg := fmt.Sprintf("agent-injector is disabled and no agent has been added manually for %s", wl)
@@ -562,7 +714,9 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 		clog.Errorf(ctx, "failed to inactivate pods: %v", err)
 		return nil, nil, err
 	}
-	as, err := s.waitForAgents(ctx, sc, failedCreateCh)
+	// The injector puts exactly one traffic-agent in each pod it just
+	// evicted, so this wait always expects a single arrival.
+	as, err := s.waitForAgents(ctx, sc.AgentName, sc.Namespace, false, 1, failedCreateCh)
 	if err != nil {
 		// If no agent arrives, then drop its entry from the configmap. This ensures that there
 		// are no false positives the next time an intercept is attempted.
@@ -571,6 +725,72 @@ func (s *State) ensureAgent(parentCtx context.Context, wl k8sapi.Workload, exten
 	}
 	sortAgents(as)
 	return sc, as, nil
+}
+
+// waitForNodeAgent waits for the node-agent Job(s) for the agent named name
+// in namespace (created during PrepareIntercept, or by ensureNodeAgent for
+// an ingest EnsureAgent call) to register themselves as agents, without
+// injecting a sidecar. It mirrors the wait ensureAgent performs for the
+// sidecar path, but skips config persistence and pod eviction, since a
+// node-agent is a standalone Job rather than an injected container. The
+// caller is responsible for having already provisioned the Job(s).
+func (s *State) waitForNodeAgent(parentCtx context.Context, name, namespace string) ([]*AgentSession, error) {
+	ctx, cancel := context.WithTimeout(parentCtx, managerutil.GetEnv(parentCtx).AgentArrivalTimeout)
+	defer cancel()
+
+	// The node-agent Job may already have been created (e.g. during
+	// PrepareIntercept) before this watch starts, so an early failure event
+	// can be missed. The controllers involved (scheduler, kubelet) retry and
+	// re-emit warnings on each attempt, and the ctx timeout diagnosis in
+	// waitForAgents covers whatever this watch doesn't catch.
+	env := managerutil.GetEnv(parentCtx)
+	failedCreateCh, err := eventwatch.WatchWarnings(ctx, k8sapi.GetK8sInterface(ctx), env.ManagerNamespace, nodeAgentJobNamePrefix(name))
+	if err != nil {
+		return nil, err
+	}
+
+	// The Job set was just ensured by the caller; counting it, rather than
+	// re-listing the workload's pods, keeps this wait consistent with what
+	// was really created. A workload with no matching Job yet (a race with
+	// the caller's own creation) falls back to waiting for a single agent.
+	jobTargets, err := nodeAgentJobsForWorkload(ctx, name, namespace)
+	if err != nil {
+		return nil, err
+	}
+	expected := len(jobTargets)
+	if expected == 0 {
+		expected = 1
+	}
+
+	as, err := s.waitForAgents(ctx, name, namespace, true, expected, failedCreateCh)
+	if err != nil && ctx.Err() == context.DeadlineExceeded {
+		if missing := missingNodeAgentTargets(jobTargets, as); len(missing) > 0 {
+			err = errcat.User.Newf("%s\nNo agent registered for target pod(s): %s", err.Error(), strings.Join(missing, ", "))
+		}
+	}
+	return as, err
+}
+
+// missingNodeAgentTargets returns the podName of every jobTargets entry
+// whose Job has no corresponding session in arrived. A node-agent Job's own
+// pod name is generated with the Job's name as prefix, so an arrived agent
+// is matched back to its Job by that prefix rather than by the target pod
+// it carries (which names the workload's pod, not the node-agent's own).
+func missingNodeAgentTargets(jobTargets []nodeAgentJobTarget, arrived []*AgentSession) []string {
+	var missing []string
+	for _, jt := range jobTargets {
+		found := false
+		for _, a := range arrived {
+			if strings.HasPrefix(a.PodName, jt.jobName+"-") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missing = append(missing, jt.podName)
+		}
+	}
+	return missing
 }
 
 func (s *State) isExtended(spec *rpc.InterceptSpec) bool {
@@ -756,19 +976,90 @@ func checkInterceptAnnotations(ctx context.Context, wl k8sapi.Workload) (bool, e
 	return true, nil
 }
 
-func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, failedCreateCh <-chan *events.Event) ([]*AgentSession, error) {
-	name := ac.AgentName
-	namespace := ac.Namespace
-	clog.Debugf(ctx, "Waiting for agent %s.%s", name, namespace)
+// agentSessionMatches reports whether agent is the one waitForAgents is
+// waiting for: same name and namespace, and the same node-agent/sidecar
+// kind. The kind check matters because a sidecar agent and a node-agent Job
+// for the same workload can both be registering sessions at once, and each
+// wait must only be satisfied by its own kind.
+func agentSessionMatches(agent *AgentSession, name, namespace string, nodeAgent bool) bool {
+	return agent.Name == name && agent.Namespace == namespace && agent.NodeAgent == nodeAgent
+}
+
+// terminalEventMessage turns a terminal warning event into the user-facing
+// message for a failed agent arrival, enriching a BackOff event with the
+// failing container's log and appending a hint that matches the agent kind.
+func terminalEventMessage(ctx context.Context, fe *events.Event, podNamespace string, failedContainerRx *regexp.Regexp, nodeAgent bool) string {
+	msg := fe.Note
+	switch fe.Reason {
+	case "BackOff":
+		// The traffic-agent container was injected, but it fails to start
+		if rr := failedContainerRx.FindStringSubmatch(msg); rr != nil {
+			cn := rr[1]
+			pod := rr[2]
+			rq := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(podNamespace).GetLogs(pod, &core.PodLogOptions{
+				Container: cn,
+			})
+			if rs, err := rq.Stream(ctx); err == nil {
+				if log, err := io.ReadAll(rs); err == nil {
+					clog.Infof(ctx, "Log from failing pod %q, container %s\n%s", pod, cn, string(log))
+				} else {
+					clog.Errorf(ctx, "failed to read log stream from pod %q, container %s\n%s", pod, cn, err)
+				}
+				_ = rs.Close()
+			} else {
+				clog.Errorf(ctx, "failed to read log from pod %q, container %s\n%s", pod, cn, err)
+			}
+		}
+		msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
+	case "Failed", "FailedCreate", "FailedScheduling":
+		if nodeAgent {
+			// The node-agent Job's pod could not be admitted or scheduled.
+			msg = fmt.Sprintf(
+				"%s\nHint: the node-agent Job could not start. If the traffic-manager's namespace enforces Pod Security Admission, it must permit privileged pods for node-agent mode.",
+				msg)
+		} else {
+			// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
+			msg = fmt.Sprintf(
+				"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
+				msg)
+		}
+	}
+	return msg
+}
+
+// waitForAgents waits for expected distinct agent sessions matching name,
+// namespace and nodeAgent to register, accumulating matching, non-
+// blacklisted sessions by PodUid across every delta (including the initial
+// snapshot Subscribe delivers of agents already registered) until that many
+// are present.
+func (s *State) waitForAgents(
+	ctx context.Context,
+	name, namespace string,
+	nodeAgent bool,
+	expected int,
+	failedCreateCh <-chan *events.Event,
+) ([]*AgentSession, error) {
+	clog.Debugf(ctx, "Waiting for %d agent(s) %s.%s", expected, name, namespace)
 	deltaCh := s.WatchAgents(ctx, func(_ tunnel.SessionID, agent *AgentSession) bool {
-		return agent.Name == name && agent.Namespace == namespace
+		return agentSessionMatches(agent, name, namespace, nodeAgent)
 	})
-	failedContainerRx := regexp.MustCompile(`restarting failed container (\S+) in pod ([0-9A-Za-z_-]+)_` + namespace)
+	// podNamespace is where the pods behind failure events live: the
+	// workload's namespace for a sidecar, but the traffic-manager's own
+	// namespace for a node-agent Job.
+	podNamespace := namespace
+	if nodeAgent {
+		podNamespace = managerutil.GetEnv(ctx).ManagerNamespace
+	}
+	failedContainerRx := regexp.MustCompile(`restarting failed container (\S+) in pod ([0-9A-Za-z_-]+)_` + podNamespace)
 	mm := mutator.GetMap(ctx)
 
 	// fes collects events from the failedCreatedCh and is included in the error message in case
 	// the waitForAgents call times out.
 	var fes []*events.Event
+	// arrived accumulates matching, non-blacklisted sessions by PodUid. It
+	// is returned even alongside a ctx.Done() error, so the partial set of
+	// agents that did register remains observable.
+	arrived := make(map[string]*AgentSession)
 	for {
 		select {
 		case fe, ok := <-failedCreateCh:
@@ -784,55 +1075,25 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 			}
 			// A terminal event was encountered. Surface it now with agent-specific context, rather than
 			// making the user wait for a timeout.
-			msg := fe.Note
-			switch fe.Reason {
-			case "BackOff":
-				// The traffic-agent container was injected, but it fails to start
-				if rr := failedContainerRx.FindStringSubmatch(msg); rr != nil {
-					cn := rr[1]
-					pod := rr[2]
-					rq := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(namespace).GetLogs(pod, &core.PodLogOptions{
-						Container: cn,
-					})
-					if rs, err := rq.Stream(ctx); err == nil {
-						if log, err := io.ReadAll(rs); err == nil {
-							clog.Infof(ctx, "Log from failing pod %q, container %s\n%s", pod, cn, string(log))
-						} else {
-							clog.Errorf(ctx, "failed to read log stream from pod %q, container %s\n%s", pod, cn, err)
-						}
-						_ = rs.Close()
-					} else {
-						clog.Errorf(ctx, "failed to read log from pod %q, container %s\n%s", pod, cn, err)
-					}
-				}
-				msg = fmt.Sprintf("%s\nThe logs of %s %s might provide more details", msg, fe.Regarding.Kind, fe.Regarding.Name)
-			case "Failed", "FailedCreate", "FailedScheduling":
-				// The injection of the traffic-agent failed for some reason, most likely due to resource quota restrictions.
-				msg = fmt.Sprintf(
-					"%s\nHint: if the error mentions resource quota, the traffic-agent's requested resources can be configured by providing values to telepresence helm install",
-					msg)
-			}
-			return nil, errcat.User.New(msg)
+			return nil, errcat.User.New(terminalEventMessage(ctx, fe, podNamespace, failedContainerRx, nodeAgent))
 		case delta, ok := <-deltaCh:
 			if !ok {
 				// The request has been canceled.
 				return nil, status.Error(codes.Canceled, fmt.Sprintf("channel closed while waiting for agent %s.%s to arrive", name, namespace))
 			}
-			upserts := delta.Upserts
-			if len(upserts) == 0 {
-				continue
-			}
-			as := make([]*AgentSession, 0)
-			for _, a := range upserts {
+			for _, a := range delta.Upserts {
 				if mm.IsInactive(k8sTypes.UID(a.PodUid)) {
 					clog.Debugf(ctx, "Agent %s(%s) is blacklisted", a.PodName, a.PodIp)
-				} else {
-					clog.Debugf(ctx, "Agent %s(%s) is ready", a.PodName, a.PodIp)
-					as = append(as, a)
-					break
+					continue
 				}
+				clog.Debugf(ctx, "Agent %s(%s) is ready", a.PodName, a.PodIp)
+				arrived[a.PodUid] = a
 			}
-			if len(as) > 0 {
+			if len(arrived) >= expected {
+				as := make([]*AgentSession, 0, len(arrived))
+				for _, a := range arrived {
+					as = append(as, a)
+				}
 				return as, nil
 			}
 		case <-ctx.Done():
@@ -846,16 +1107,31 @@ func (s *State) waitForAgents(ctx context.Context, ac *agentconfig.Sidecar, fail
 				bf.WriteString(": Events that may be relevant:\n")
 				eventwatch.WriteList(bf, fes)
 			} else if ctx.Err() == context.DeadlineExceeded {
-				// No injection failures were observed, yet no agent arrived. This is the typical
-				// signature of the API server being unable to reach the agent-injector webhook
-				// (the pods are admitted unmodified because the webhook's failurePolicy is Ignore).
-				bf.WriteString(
-					"\nThe pods were created without a traffic-agent. This usually means the Kubernetes API server " +
-						"cannot reach the agent-injector webhook. On EKS with the Calico CNI, install or upgrade the " +
-						"traffic-manager with hostNetwork=true, or expose the webhook externally (agentInjector.webhook.url). " +
-						"See https://telepresence.io/docs/troubleshooting#eks-calico-and-traffic-agent-injection-timeouts")
+				if nodeAgent {
+					// No failure events were observed, yet no agent arrived. Unlike
+					// the sidecar path, there's no injector webhook to blame; point
+					// at the Job and its pod instead.
+					ioutil.Printf(bf,
+						"\nThe node-agent Job's pod either failed to start or its agent failed to register. "+
+							"Inspect the Job (kubectl get jobs -n %s -l app=traffic-node-agent) and its pod's logs. "+
+							"If the namespace enforces Pod Security Admission, node-agent Jobs require the privileged profile.",
+						podNamespace)
+				} else {
+					// No injection failures were observed, yet no agent arrived. This is the typical
+					// signature of the API server being unable to reach the agent-injector webhook
+					// (the pods are admitted unmodified because the webhook's failurePolicy is Ignore).
+					bf.WriteString(
+						"\nThe pods were created without a traffic-agent. This usually means the Kubernetes API server " +
+							"cannot reach the agent-injector webhook. On EKS with the Calico CNI, install or upgrade the " +
+							"traffic-manager with hostNetwork=true, or expose the webhook externally (agentInjector.webhook.url). " +
+							"See https://telepresence.io/docs/troubleshooting#eks-calico-and-traffic-agent-injection-timeouts")
+				}
 			}
-			return nil, errcat.User.New(bf.String())
+			as := make([]*AgentSession, 0, len(arrived))
+			for _, a := range arrived {
+				as = append(as, a)
+			}
+			return as, errcat.User.New(bf.String())
 		}
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"os"
+	"strconv"
 	"time"
 
 	core "k8s.io/api/core/v1"
@@ -65,10 +67,47 @@ const (
 	// EnvAPIPort is the port number of the Telepresence API server when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
+	// EnvNodeAgentContainerIDs holds a JSON object mapping agent container name to CRI
+	// container ID, e.g. {"app":"containerd://abc"}. The traffic-manager sets it when it
+	// creates a node-agent Job, and the node-agent reads it to resolve each configured
+	// container's host PID through the CRI socket.
+	EnvNodeAgentContainerIDs = "_TEL_NODE_AGENT_CONTAINER_IDS"
+
+	// EnvNodeAgentCRISocket is the CRI unix socket path that the traffic-manager sets on a
+	// node-agent Job when one is configured (Helm value nodeAgent.criSocket). When unset or
+	// empty, the node-agent picks the well-known CRI socket that recognizes its target
+	// containers with cri.SocketFor, under NodeAgentHostRunDir when that mount is present.
+	EnvNodeAgentCRISocket = "_TEL_NODE_AGENT_CRI_SOCKET"
+
+	// NodeAgentHostRunDir is where a node-agent Job mounts the node's /run directory when no
+	// CRI socket path is configured, so that the agent can probe the well-known CRI sockets
+	// beneath it.
+	NodeAgentHostRunDir = "/host/run"
+
+	// EnvNodeAgentPodIP carries the target pod's IP, set by the traffic-manager on a
+	// node-agent Job. It is the PodIP of the netfilter ruleset the node-agent programs into
+	// the target pod's network namespace.
+	EnvNodeAgentPodIP = "_TEL_NODE_AGENT_POD_IP"
+
 	WorkloadNameLabel    = annotation.DomainPrefix + "workloadName"
 	WorkloadKindLabel    = annotation.DomainPrefix + "workloadKind"
 	WorkloadEnabledLabel = annotation.DomainPrefix + "workloadEnabled"
 )
+
+// AgentGIDFromEnv returns the traffic-agent group id configured through
+// EnvAgentGID. ok is false when the variable is unset or empty; err is
+// non-nil when it is set but does not parse as a 32-bit unsigned integer.
+func AgentGIDFromEnv() (gid uint32, ok bool, err error) {
+	v, set := os.LookupEnv(EnvAgentGID)
+	if !set || v == "" {
+		return 0, false, nil
+	}
+	parsed, err := strconv.ParseUint(v, 10, 32)
+	if err != nil {
+		return 0, true, fmt.Errorf("invalid %s %q: %w", EnvAgentGID, v, err)
+	}
+	return uint32(parsed), true, nil
+}
 
 type ReplacePolicy int
 
@@ -269,6 +308,64 @@ func (s *Sidecar) InterceptorInactivePort(containerPort uint16, proto types.Prot
 		return s.ProxyPort(it.AgentPort())
 	}
 	return containerPort
+}
+
+// PassThroughTarget returns the address that a forwarder or protocol prober should
+// dial to reach containerPort on the application when no intercept is redirecting the
+// connection elsewhere. appPodIP is the IP of the pod that hosts the application
+// containers (Config.AppPodIP: the agent's own pod for a sidecar, the target pod for a
+// node-agent).
+//
+// The result mirrors the pod-IP redirect gate programmed by agentnft (see
+// pkg/agentnft/ruleset.go, gate 2): when the pod carries the agent's nftables ruleset,
+// traffic addressed to the pod IP's app ports is unconditionally redirected to the
+// agent, including the agent's own traffic. A numeric target port resolves to a proxy
+// port via InterceptorInactivePort, and dialing that proxy port at appPodIP is safe --
+// the proxy-port DNAT rewrites it back to containerPort, breaking the loop the redirect
+// would otherwise create. A named target port has no proxy port, so
+// InterceptorInactivePort returns containerPort unchanged; dialing appPodIP there would
+// hit the same unconditional redirect and loop back into the agent, so the address
+// switches to the family-matched loopback instead, which gate 3 exempts.
+//
+// nftRedirects says whether that ruleset is present: always true for a node-agent, and
+// NftRedirectsActive() for a sidecar. Without it there is no gate to loop through, and
+// the named-port dial keeps the pod IP, which an application may be bound to
+// exclusively; loopback would not reach it.
+func (s *Sidecar) PassThroughTarget(appPodIP netip.Addr, containerPort uint16, proto types.Proto, nftRedirects bool) netip.AddrPort {
+	cp := s.InterceptorInactivePort(containerPort, proto)
+	targetIP := appPodIP
+	if cp == containerPort && nftRedirects {
+		targetIP = LoopbackFor(targetIP)
+	}
+	return netip.AddrPortFrom(targetIP, cp)
+}
+
+// NftRedirectsActive reports whether this config makes a sidecar's pod carry the
+// agent's nftables ruleset: a headless or numeric-target intercept in a container
+// that is replaced on intercept requires the init container to program it. Without
+// the ruleset there is no pod-IP redirect gate, and the pass-through dial must use
+// the pod IP so that an application that binds to it (rather than to a wildcard or
+// loopback address) stays reachable. A node-agent programs the ruleset
+// unconditionally, so this predicate only applies to the sidecar.
+func (s *Sidecar) NftRedirectsActive() bool {
+	for _, cc := range s.Containers {
+		if cc.Replace == ReplacePolicyIntercept {
+			for _, ic := range cc.Intercepts {
+				if ic.Headless || ic.TargetPortNumeric {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// LoopbackFor returns the loopback address of the same address family as ip.
+func LoopbackFor(ip netip.Addr) netip.Addr {
+	if ip.Is6() {
+		return netip.IPv6Loopback()
+	}
+	return netip.AddrFrom4([4]byte{127, 0, 0, 1})
 }
 
 // Clone returns a deep copy of the Sidecar.
