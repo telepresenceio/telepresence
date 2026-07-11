@@ -67,25 +67,45 @@ func newTestContainerState(t *testing.T, podIP netip.Addr, numericTarget bool) *
 
 // Test_newPortHandler_passThroughTarget guards the defaultTarget address
 // newPortHandler picks for the agent's own pass-through dial (no intercept
-// active): the pod IP's proxy port for a numeric target port, loopback for
-// a named one. Dialing the pod IP for a named target port would hit the
-// unconditional pod-IP redirect gate and loop back into the agent (see the
+// active): the pod IP's proxy port for a numeric target port; for a named
+// one, the pod IP's container port when the pod carries no nftables ruleset
+// (a named-target-only sidecar — the application may be bound to the pod IP
+// exclusively) and loopback when it does (dialing the pod IP would hit the
+// unconditional pod-IP redirect gate and loop back into the agent; see the
 // comment in newPortHandler).
 func Test_newPortHandler_passThroughTarget(t *testing.T) {
 	ipv4 := netip.MustParseAddr("192.168.50.34")
 	ipv6 := netip.MustParseAddr("fd00::34")
 	pp := types.PortAndProto{Proto: types.ProtoTCP, Port: 8080}
 
-	t.Run("named target port dials IPv4 loopback", func(t *testing.T) {
+	t.Run("named target port dials the IPv4 pod IP without nft redirects", func(t *testing.T) {
 		cs := newTestContainerState(t, ipv4, false)
 		ph := cs.newPortHandler(context.Background(), pp, cs.container.Intercepts)
-		require.Equal(t, netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 8080), ph.Target())
+		require.Equal(t, netip.AddrPortFrom(ipv4, 8080), ph.Target())
 	})
 
-	t.Run("named target port dials IPv6 loopback", func(t *testing.T) {
+	t.Run("named target port dials the IPv6 pod IP without nft redirects", func(t *testing.T) {
 		cs := newTestContainerState(t, ipv6, false)
 		ph := cs.newPortHandler(context.Background(), pp, cs.container.Intercepts)
-		require.Equal(t, netip.AddrPortFrom(netip.IPv6Loopback(), 8080), ph.Target())
+		require.Equal(t, netip.AddrPortFrom(ipv6, 8080), ph.Target())
+	})
+
+	t.Run("named target port dials loopback under nft redirects", func(t *testing.T) {
+		cs := newTestContainerState(t, ipv4, false)
+		// A numeric-target intercept on another port makes the pod carry the
+		// nftables ruleset, so the named port's pass-through must use the
+		// loopback exemption.
+		cs.container.Intercepts = append(cs.container.Intercepts, &agentconfig.Intercept{
+			ContainerPortName: "",
+			ServicePortName:   "metrics",
+			ServicePort:       81,
+			Protocol:          types.ProtoTCP,
+			AgentPort:         9901,
+			ContainerPort:     8081,
+			TargetPortNumeric: true,
+		})
+		ph := cs.newPortHandler(context.Background(), pp, cs.container.Intercepts[:1])
+		require.Equal(t, netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 8080), ph.Target())
 	})
 
 	t.Run("numeric target port dials the pod IP's proxy port", func(t *testing.T) {

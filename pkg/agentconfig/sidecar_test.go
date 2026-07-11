@@ -82,26 +82,38 @@ func sidecarWithTarget(numericTarget bool) *Sidecar {
 
 // Test_PassThroughTarget guards the address a forwarder or protocol prober picks for
 // the agent's pass-through dial to the application when no intercept is active: the pod
-// IP's proxy port for a numeric target port, loopback for a named one. Dialing the pod
-// IP for a named target port would hit the unconditional pod-IP redirect gate and loop
-// back into the agent (see the doc comment on PassThroughTarget).
+// IP's proxy port for a numeric target port, loopback for a named one when the pod
+// carries the nftables ruleset (dialing the pod IP there would hit the unconditional
+// pod-IP redirect gate and loop back into the agent), and the pod IP's container port
+// for a named target port without the ruleset — the application may be bound to the
+// pod IP exclusively, and no gate exists to loop through (see the doc comment on
+// PassThroughTarget).
 func Test_PassThroughTarget(t *testing.T) {
 	ipv4 := netip.MustParseAddr("192.168.50.34")
 	ipv6 := netip.MustParseAddr("fd00::34")
 
-	t.Run("named target port dials IPv4 loopback", func(t *testing.T) {
+	t.Run("named target port dials IPv4 loopback under nft redirects", func(t *testing.T) {
 		sc := sidecarWithTarget(false)
-		got := sc.PassThroughTarget(ipv4, 8080, types.ProtoTCP)
+		got := sc.PassThroughTarget(ipv4, 8080, types.ProtoTCP, true)
 		want := netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 8080)
 		if got != want {
 			t.Fatalf("PassThroughTarget() = %v, want %v", got, want)
 		}
 	})
 
-	t.Run("named target port dials IPv6 loopback", func(t *testing.T) {
+	t.Run("named target port dials IPv6 loopback under nft redirects", func(t *testing.T) {
 		sc := sidecarWithTarget(false)
-		got := sc.PassThroughTarget(ipv6, 8080, types.ProtoTCP)
+		got := sc.PassThroughTarget(ipv6, 8080, types.ProtoTCP, true)
 		want := netip.AddrPortFrom(netip.IPv6Loopback(), 8080)
+		if got != want {
+			t.Fatalf("PassThroughTarget() = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("named target port dials the pod IP without nft redirects", func(t *testing.T) {
+		sc := sidecarWithTarget(false)
+		got := sc.PassThroughTarget(ipv4, 8080, types.ProtoTCP, false)
+		want := netip.AddrPortFrom(ipv4, 8080)
 		if got != want {
 			t.Fatalf("PassThroughTarget() = %v, want %v", got, want)
 		}
@@ -109,12 +121,43 @@ func Test_PassThroughTarget(t *testing.T) {
 
 	t.Run("numeric target port dials the pod IP's proxy port", func(t *testing.T) {
 		sc := sidecarWithTarget(true)
-		got := sc.PassThroughTarget(ipv4, 8080, types.ProtoTCP)
+		got := sc.PassThroughTarget(ipv4, 8080, types.ProtoTCP, true)
 		want := netip.AddrPortFrom(ipv4, sc.ProxyPort(sc.Containers[0].Intercepts[0].AgentPort))
 		if got != want {
 			t.Fatalf("PassThroughTarget() = %v, want %v", got, want)
 		}
 	})
+}
+
+// Test_NftRedirectsActive guards the predicate that decides whether a sidecar's pod
+// carries the agent's nftables ruleset: only a headless or numeric-target intercept in
+// a replace-on-intercept container requires it. The injector's needInitContainer and
+// the agent's pass-through target selection must agree on this, so both use it.
+func Test_NftRedirectsActive(t *testing.T) {
+	named := sidecarWithTarget(false)
+	named.Containers[0].Replace = ReplacePolicyIntercept
+	if named.NftRedirectsActive() {
+		t.Fatal("a named-target-only config must not require nft redirects")
+	}
+
+	numeric := sidecarWithTarget(true)
+	numeric.Containers[0].Replace = ReplacePolicyIntercept
+	if !numeric.NftRedirectsActive() {
+		t.Fatal("a numeric-target config must require nft redirects")
+	}
+
+	headless := sidecarWithTarget(false)
+	headless.Containers[0].Replace = ReplacePolicyIntercept
+	headless.Containers[0].Intercepts[0].Headless = true
+	if !headless.NftRedirectsActive() {
+		t.Fatal("a headless config must require nft redirects")
+	}
+
+	noReplace := sidecarWithTarget(true)
+	noReplace.Containers[0].Replace = ReplacePolicyInactive
+	if noReplace.NftRedirectsActive() {
+		t.Fatal("a config without replace-on-intercept containers must not require nft redirects")
+	}
 }
 
 func Test_LoopbackFor(t *testing.T) {

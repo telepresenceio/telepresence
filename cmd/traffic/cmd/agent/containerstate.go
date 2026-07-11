@@ -46,7 +46,9 @@ func (c *containerState) newPortHandler(ctx context.Context, pp types.PortAndPro
 		// agentconfig.Sidecar.PassThroughTarget for the numeric/named
 		// distinction. The TLS/H2C prober in cmd/traffic/cmd/agent/tls uses
 		// the same helper for the identical reason.
-		defaultTarget := c.AgentConfig().PassThroughTarget(c.AppPodIP(), ic.ContainerPort, pp.Proto)
+		cfg := c.AgentConfig()
+		nftRedirects := c.DialerFactory() != nil || cfg.NftRedirectsActive()
+		defaultTarget := cfg.PassThroughTarget(c.AppPodIP(), ic.ContainerPort, pp.Proto, nftRedirects)
 		return fwd.NewTCPInterceptor(ctx, pp, tunnel.AgentToClient, c.TLSManager(), defaultTarget, opts...)
 	}
 	// The agent will intercept all traffic intended for this container.

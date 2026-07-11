@@ -317,22 +317,47 @@ func (s *Sidecar) InterceptorInactivePort(containerPort uint16, proto types.Prot
 // node-agent).
 //
 // The result mirrors the pod-IP redirect gate programmed by agentnft (see
-// pkg/agentnft/ruleset.go, gate 2): traffic addressed to the pod IP's app ports is
-// unconditionally redirected to the agent, including the agent's own traffic. A numeric
-// target port resolves to a proxy port via InterceptorInactivePort, and dialing that
-// proxy port at appPodIP is safe -- the proxy-port DNAT rewrites it back to
-// containerPort, breaking the loop the redirect would otherwise create. A named target
-// port has no proxy port, so InterceptorInactivePort returns containerPort unchanged;
-// dialing appPodIP there would hit the same unconditional redirect and loop back into
-// the agent, so the address switches to the family-matched loopback instead, which gate
-// 3 exempts.
-func (s *Sidecar) PassThroughTarget(appPodIP netip.Addr, containerPort uint16, proto types.Proto) netip.AddrPort {
+// pkg/agentnft/ruleset.go, gate 2): when the pod carries the agent's nftables ruleset,
+// traffic addressed to the pod IP's app ports is unconditionally redirected to the
+// agent, including the agent's own traffic. A numeric target port resolves to a proxy
+// port via InterceptorInactivePort, and dialing that proxy port at appPodIP is safe --
+// the proxy-port DNAT rewrites it back to containerPort, breaking the loop the redirect
+// would otherwise create. A named target port has no proxy port, so
+// InterceptorInactivePort returns containerPort unchanged; dialing appPodIP there would
+// hit the same unconditional redirect and loop back into the agent, so the address
+// switches to the family-matched loopback instead, which gate 3 exempts.
+//
+// nftRedirects says whether that ruleset is present: always true for a node-agent, and
+// NftRedirectsActive() for a sidecar. Without it there is no gate to loop through, and
+// the named-port dial keeps the pod IP, which an application may be bound to
+// exclusively; loopback would not reach it.
+func (s *Sidecar) PassThroughTarget(appPodIP netip.Addr, containerPort uint16, proto types.Proto, nftRedirects bool) netip.AddrPort {
 	cp := s.InterceptorInactivePort(containerPort, proto)
 	targetIP := appPodIP
-	if cp == containerPort {
+	if cp == containerPort && nftRedirects {
 		targetIP = LoopbackFor(targetIP)
 	}
 	return netip.AddrPortFrom(targetIP, cp)
+}
+
+// NftRedirectsActive reports whether this config makes a sidecar's pod carry the
+// agent's nftables ruleset: a headless or numeric-target intercept in a container
+// that is replaced on intercept requires the init container to program it. Without
+// the ruleset there is no pod-IP redirect gate, and the pass-through dial must use
+// the pod IP so that an application that binds to it (rather than to a wildcard or
+// loopback address) stays reachable. A node-agent programs the ruleset
+// unconditionally, so this predicate only applies to the sidecar.
+func (s *Sidecar) NftRedirectsActive() bool {
+	for _, cc := range s.Containers {
+		if cc.Replace == ReplacePolicyIntercept {
+			for _, ic := range cc.Intercepts {
+				if ic.Headless || ic.TargetPortNumeric {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // LoopbackFor returns the loopback address of the same address family as ip.

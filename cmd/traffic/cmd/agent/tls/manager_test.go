@@ -143,7 +143,9 @@ func TestNewManagerProbesThroughInjectedDialer(t *testing.T) {
 	proxyPort := sidecar.ProxyPort(9900)
 	mgr.UseTLS(t.Context(), proxyPort)
 
-	wantTarget := sidecar.PassThroughTarget(appPodIP, 8000, types.ProtoTCP)
+	// A non-nil dialer marks the node-agent seam, where the nft redirects are
+	// always programmed.
+	wantTarget := sidecar.PassThroughTarget(appPodIP, 8000, types.ProtoTCP, true)
 	calls := dialer.dialedAddrs()
 	require.NotEmpty(t, calls)
 	for _, addr := range calls {

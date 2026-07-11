@@ -193,6 +193,8 @@ combinations that would break one of them:
   match; until that lands, such targets are rejected with a clear error.
 - **Named-port pass-through requires a loopback listener.** The application
   must accept connections on loopback or a wildcard address for pass-through
-  of named target ports (the sidecar's loopback path assumes the same).
+  of named target ports. A sidecar shares this requirement only when its pod
+  carries the agent's nftables ruleset (some intercept has a numeric target
+  port or is headless); the node-agent always programs the ruleset.
 - **Mesh-only DNS names** are not resolvable during a node-agent engagement
   (see [DNS](#dns)).

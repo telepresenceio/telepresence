@@ -129,8 +129,10 @@ func (m *manager) createPortConfigs(ctx context.Context, am map[string]string) e
 			// The port config is associated with the proxy port, not the container port.
 			// target is where a probe (and the pass-through forwarder) must dial to
 			// reach the application for cp; its port is the same proxy/container port
-			// InterceptorInactivePort would return.
-			target := m.sidecarConfig.PassThroughTarget(m.appPodIP, cp, types.ProtoTCP)
+			// InterceptorInactivePort would return. A node-agent (non-nil dialer)
+			// always programs the nftables redirects.
+			nftRedirects := m.dialer != nil || m.sidecarConfig.NftRedirectsActive()
+			target := m.sidecarConfig.PassThroughTarget(m.appPodIP, cp, types.ProtoTCP, nftRedirects)
 			iap := target.Port()
 			pc := newPortConfig(target, m.dialer, cn.Name, m.sidecarConfig.EnableH2cProbing)
 			m.portConfigs[iap] = pc
