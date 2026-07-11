@@ -128,7 +128,7 @@ inside the target's containers.
 
 | Concern | Mechanism |
 |---------|-----------|
-| **PID resolution** | The kubelet-reported CRI container IDs are resolved to host PIDs over the mounted container-runtime socket (`ContainerStatus` with verbose info; containerd and CRI-O both report the `pid` there). One connection is dialed and reused for all containers. |
+| **PID resolution** | The kubelet-reported CRI container IDs are resolved to host PIDs over the mounted container-runtime socket (`ContainerStatus` with verbose info; containerd, CRI-O, and cri-dockerd all report the `pid` there). One connection is dialed and reused for all containers. |
 | **Environment** | Read from `/proc/<pid>/environ` — the fully resolved, post-startup environment of the running container, with entry order and duplicates preserved. The same prefixing and filtering as the sidecar's `AppEnvironment` applies afterwards. |
 | **Filesystem** | Served from `/proc/<pid>/root/...`: the agent populates its exports directory with symlinks that the kernel resolves in the target's mount namespace. The SFTP/FTP servers, the reported mount points, and the client are unchanged from the sidecar. |
 | **Network** | Entered explicitly. Netfilter rules are programmed from outside via a netlink socket bound to the target's netns file descriptor. Listen and dial sockets are created *inside* the target netns by locking an OS thread, `setns(2)`-ing it into the namespace, creating the socket, and restoring the thread (a thread whose restore fails is never returned to Go's thread pool). The namespace fd is opened once per agent and reused. |
