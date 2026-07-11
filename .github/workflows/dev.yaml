@@ -82,7 +82,7 @@ jobs:
       - name: Compatibility with older manager and agent
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
-          DEV_MANAGER_VERSION: "2.24.1"
+          DEV_MANAGER_VERSION: "2.29.3"
           DEV_MANAGER_REGISTRY: ghcr.io/telepresenceio
         timeout-minutes: 150
         shell: bash
@@ -95,7 +95,7 @@ jobs:
       - name: Compatibility with older client
         if:  ${{ github.event.label.name == 'compatibility test' }}
         env:
-          DEV_CLIENT_VERSION: "2.24.1"
+          DEV_CLIENT_VERSION: "2.29.3"
           DEV_CLIENT_REGISTRY: ghcr.io/telepresenceio
         timeout-minutes: 150
         shell: bash
