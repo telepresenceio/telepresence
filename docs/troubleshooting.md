@@ -1,20 +1,67 @@
 ---
 title: Troubleshooting
-description: "Learn how to troubleshoot common issues related to Telepresence, including intercept issues, cluster connection issues, and errors related to Ambassador Cloud."
+description: "How to troubleshoot common Telepresence issues: cluster connections, DNS, volume mounts, and traffic-agent injection."
 ---
 
 # Troubleshooting
 
-## Connecting to a cluster via VPN doesn't work.
+## Connection issues
+
+### Connecting to a cluster via VPN doesn't work.
 
 There are a few different issues that could arise when working with a VPN. Please see the [dedicated page](reference/vpn.md) on Telepresence and VPNs to learn more on how to fix these.
 
-## Connecting to a cluster hosted in a Docker Container or a VM on the workstation doesn't work
+### Connecting to a cluster hosted in a Docker Container or a VM on the workstation doesn't work
 
 The cluster probably has access to the host's network and gets confused when it is mapped by Telepresence.
 Please check the [cluster in hosted container or vm](howtos/cluster-in-vm.md) for more details.
 
-## Volume mounts are not working on macOS
+### Error connecting to GKE or EKS cluster
+
+GKE and EKS require a plugin that utilizes their respective IAM providers. 
+You will need to install the [gke](install/cloud#gke-authentication-plugin) or [eks](install/cloud#eks-authentication-plugin) plugins 
+for Telepresence to connect to your cluster.
+
+### `too many files open` error when running `telepresence connect` on Linux
+
+If `telepresence connect` on linux fails with a message in the logs `too many files open`, then check if `fs.inotify.max_user_instances` is set too low. Check the current settings with `sysctl fs.inotify.max_user_instances` and increase it temporarily with `sudo sysctl -w fs.inotify.max_user_instances=512`. For more information about permanently increasing it see [Kernel inotify watch limit reached](https://unix.stackexchange.com/a/13757/514457).
+
+## DNS issues
+
+### DNS is broken on macOS
+
+Commands like `dig` cannot find cluster resources even though Telepresence is connected to the cluster, but it works
+with `curl`.
+
+This is because `dig`, and some other utilities on macOS have their own built-in DNS client which bypasses the macOS
+native DNS system and use the libc resolver directly. Here's an excerpt from the `dig` command's man-page:
+> Mac OS X NOTICE
+> 
+> The nslookup command does not use the host name and address resolution or the DNS query routing
+> mechanisms used by other processes running on Mac OS X.  The results of name or address queries
+> printed by nslookup may differ from those found by other processes that use the Mac OS X native
+> name and address resolution mechanisms.  The results of DNS queries may also differ from queries
+> that use the Mac OS X DNS routing library.
+
+A command that should always work is:
+```console
+$ dscacheutil -q host -a name <name to resolve>
+```
+
+### DNS does not resolve in GitLab pipeline
+
+If services are not resolving after running `telepresence connect` in a GitLab pipeline, this may be because the `resolv.conf` file is bind-mounted, which prevents it from being copied, deleted, or moved. However, you can still replace its contents.
+```yaml
+job:
+  ...
+  script:
+    - telepresence connect
+    - echo "nameserver 127.0.0.1" > /etc/resolv.conf # Telepresence runs a DNS server on port 53 but cannot update the bind-mounted resolv.conf file
+```
+
+## Volume mount issues
+
+### Volume mounts are not working on macOS
 
 It's necessary to have `sshfs` installed in order for volume mounts to work correctly during intercepts. Lately there's been some issues using `brew install sshfs` a macOS workstation because the required component `osxfuse` (now named `macfuse`) isn't open source and hence, no longer supported. As a workaround, you can now use `gromgit/fuse/sshfs-mac` instead. Follow these steps:
 
@@ -35,55 +82,17 @@ fuse: no mount point
 6. Approve the needed permission
 7. Reboot your computer.
 
-## Volume mounts are not working on Linux
-It's necessary to have `sshfs` installed in order for volume mounts to work correctly when Telepresence engages with remote containers.
+### Volume mounts are not working on Linux
+It's necessary to have `sshfs` installed in order for volume mounts to work correctly when Telepresence attaches to remote containers.
 
 After you've installed `sshfs`, if mounts still aren't working:
 1. Uncomment `user_allow_other` in `/etc/fuse.conf`
 2. Add your user to the "fuse" group with: `sudo usermod -a -G fuse <your username>`
 3. Restart your computer after uncommenting `user_allow_other` 
 
-## DNS is broken on macOS
+## Traffic-agent injection issues
 
-Commands like `dig` cannot find cluster resources even though Telepresence is connected to the cluster, but it works
-with `curl`.
-
-This is because `dig`, and some other utilities on macOS have their own built-in DNS client which bypasses the macOS
-native DNS system and use the libc resolver directly. Here's an excerpt from the `dig` command's man-page:
-> Mac OS X NOTICE
-> 
-> The nslookup command does not use the host name and address resolution or the DNS query routing
-> mechanisms used by other processes running on Mac OS X.  The results of name or address queries
-> printed by nslookup may differ from those found by other processes that use the Mac OS X native
-> name and address resolution mechanisms.  The results of DNS queries may also differ from queries
-> that use the Mac OS X DNS routing library.
-
-A command that should always work is:
-```console
-$ dscacheutil -q host -a name <name to resolve>
-```
-
-## DNS does not resolve in GitLab pipeline
-
-If services are not resolving after running `telepresence connect` in a GitLab pipeline, this may be because the `resolv.conf` file is bind-mounted, which prevents it from being copied, deleted, or moved. However, you can still replace its contents.
-```yaml
-job:
-  ...
-  script:
-    - telepresence connect
-    - echo "nameserver 127.0.0.1" > /etc/resolv.conf # Telepresence runs a DNS server on port 53 but cannot update the bind-mounted resolv.conf file
-```
-
-## Helm install failes with "uncomparable type" error
-
-An attempt to install the traffic-manager using the `helm` command ends with an error similar to: 
-```
-Error: INSTALLATION FAILED: template: telepresence-oss/templates/deployment.yaml:172:22: executing "telepresence-oss/templates/deployment.yaml" at <eq .initSecurityContext nil>: error calling eq: uncomparable type map[string]interface {}: map[capabilities:map[add:[NET_ADMIN]]]
-```
-This will happen when you are using `helm` directly (as opposed to `telepresence helm`) and your helm version is older
-than 3.11.3. To resolve this, you can upgrade your helm to a more recent version.
-
-## No Sidecar Injected in GKE private clusters
+### No Sidecar Injected in GKE private clusters
 
 An attempt to `telepresence intercept` results in a timeout, and upon examination of the pods (`kubectl get pods`) it's discovered that the intercept command did not inject a sidecar into the workload's pods:
 
@@ -108,11 +117,10 @@ or change the port number that Telepresence is using for the agent injector by p
 using the Helm chart value `agentInjector.webhook.port`.
 Please refer to the [telepresence install instructions](install/cloud#gke) or the [GCP docs](https://cloud.google.com/kubernetes-engine/docs/how-to/private-clusters#add_firewall_rules) for information to resolve this.
 
-Engagements that use the [node-agent](reference/node-agent.md) (`--node-agent`, with `nodeAgent.enabled=true` on the
-traffic-manager) do not involve the webhook at all and are unaffected by API-server-to-webhook connectivity problems
-like this one.
+Attachments that use the [node-agent](reference/node-agent.md) do not involve the webhook at all and are unaffected
+by API-server-to-webhook connectivity problems like this one.
 
-## Injected init-container doesn't function properly
+### Injected init-container doesn't function properly
 
 The init-container is injected to insert `iptables` rules that redirects port numbers from the app container to the
 traffic-agent sidecar. This is necessary when the service's `targetPort` is numeric. It requires elevated privileges
@@ -144,7 +152,7 @@ spec:
 ```
 
 Telepresence injects an init-container into the pods of a workload, only if at least one service specifies a numeric
-`tagertPort` that references a `containerPort` in the workload. When this isn't the case, it will instead do the
+`targetPort` that references a `containerPort` in the workload. When this isn't the case, it will instead do the
 following during the injection of the traffic-agent:
 
 1. Rename the designated container's port by prefixing it (i.e., containerPort: http becomes containerPort: tm-http).
@@ -157,7 +165,7 @@ Kubernetes takes care of the rest and will now associate the service's `targetPo
 > If the service is "headless" (using `ClusterIP: None`), then using named ports won't help because the `targetPort` will
 > not get remapped. A headless service will always require the init-container.
 
-## EKS, Calico, and Traffic Agent injection timeouts
+### EKS, Calico, and Traffic Agent injection timeouts
 
 When using EKS with the Calico CNI, the Kubernetes API server often cannot reach the
 agent-injector mutating webhook that triggers traffic-agent injection. The API server runs in
@@ -171,7 +179,7 @@ traffic-agent sidecar is injected. An intercept then fails with a message like
 The blog post [Kubernetes, EKS, Calico, and custom admission webhooks](https://medium.com/@denisstortisilva/kubernetes-eks-calico-and-custom-admission-webhooks-a2956b49bd0d)
 describes the underlying problem in detail.
 
-### Decision path
+#### Decision path
 
 Work through these options in order; the first that is acceptable for your environment is the
 one to use.
@@ -231,7 +239,7 @@ one to use.
    binds, and it cannot bind ports below 1024. Use `agentInjector.service.port` instead, which
    only affects the Service and still targets the container's `8443` port.
 
-### Restrict access to the exposed webhook
+#### Restrict access to the exposed webhook
 
 Exposing the webhook outside the cluster widens its attack surface, so lock it down with the
 network so that **only the EKS control plane** can reach it:
@@ -243,7 +251,7 @@ network so that **only the EKS control plane** can reach it:
   keep the load balancer internal (`service.beta.kubernetes.io/aws-load-balancer-internal`) so
   it is never reachable from the public internet.
 
-### TLS hostname and SAN requirements
+#### TLS hostname and SAN requirements
 
 The API server validates the webhook's serving certificate against the host it connects to.
 Whatever host you put in `agentInjector.webhook.url` (node IP/DNS name or load-balancer
@@ -270,7 +278,7 @@ default in-cluster Service DNS names (`agent-injector.<namespace>` and
 > This does not apply to the `cert-manager` method, which reissues the certificate automatically
 > when its `dnsNames`/`ipAddresses` change.
 
-### `failurePolicy` tradeoffs
+#### `failurePolicy` tradeoffs
 
 The webhook ships with `failurePolicy: Ignore` (`agentInjector.webhook.failurePolicy`). The
 tradeoff:
@@ -287,13 +295,9 @@ If you keep the default `Ignore`, the absence of a `traffic-agent` container in 
 pods (combined with an intercept timeout) is your signal that the API server isn't reaching the
 webhook — return to the decision path above.
 
-## Error connecting to GKE or EKS cluster
+## Routing issues
 
-GKE and EKS require a plugin that utilizes their resepective IAM providers. 
-You will need to install the [gke](install/cloud#gke-authentication-plugin) or [eks](install/cloud#eks-authentication-plugin) plugins 
-for Telepresence to connect to your cluster.
-
-## Routing loops when accessing deleted or non-existent service IPs on local clusters
+### Routing loops when accessing deleted or non-existent service IPs on local clusters
 
 On local Kubernetes clusters (Kind, minikube, k3d, Docker Desktop), accessing a deleted or
 never-assigned service ClusterIP through the Telepresence TUN device can cause a routing loop.
@@ -301,13 +305,20 @@ The packet is forwarded to the traffic-agent, which re-dials the same IP; with n
 rule in place the packet escapes the cluster via the node's default route, returns to the
 workstation, and the cycle repeats until the connection times out.
 
-Enable the **route-controller** DaemonSet to prevent this. It installs an iptables `FORWARD`
-chain `DROP` rule for the service CIDR on every node, ensuring that packets bound for
+Enable the **route-controller** DaemonSet to prevent this. It installs an nftables `forward`
+chain drop rule for the service CIDR on every node, ensuring that packets bound for
 non-existent ClusterIPs are silently dropped rather than escaping the cluster.
 
-See the [Route Controller reference](reference/route-controller.md) for installation and
-configuration instructions.
+See [Routing Loop Prevention on Local Clusters](reference/route-controller.md) for
+installation and configuration instructions.
 
-## `too many files open` error when running `telepresence connect` on Linux
+## Installation issues
 
-If `telepresence connect` on linux fails with a message in the logs `too many files open`, then check if `fs.inotify.max_user_instances` is set too low. Check the current settings with `sysctl fs.inotify.max_user_instances` and increase it temporarily with `sudo sysctl -w fs.inotify.max_user_instances=512`. For more information about permanently increasing it see [Kernel inotify watch limit reached](https://unix.stackexchange.com/a/13757/514457).
+### Helm install fails with "uncomparable type" error
+
+An attempt to install the traffic-manager using the `helm` command ends with an error similar to: 
+```
+Error: INSTALLATION FAILED: template: telepresence-oss/templates/deployment.yaml:172:22: executing "telepresence-oss/templates/deployment.yaml" at <eq .initSecurityContext nil>: error calling eq: uncomparable type map[string]interface {}: map[capabilities:map[add:[NET_ADMIN]]]
+```
+This will happen when you are using `helm` directly (as opposed to `telepresence helm`) and your helm version is older
+than 3.11.3. To resolve this, you can upgrade your helm to a more recent version.

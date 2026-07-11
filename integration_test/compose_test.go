@@ -433,7 +433,7 @@ func (s *composeSuite) Test_ComposeDownPreservesNamedVolumes() {
 	composeDir := itest.TempDir(ctx)
 	composeFile := filepath.Join(composeDir, "docker-compose.yml")
 	ns := s.AppNamespace()
-	// A replace engagement with a user-defined named volume. The connection teardown must not remove
+	// A replace attachment with a user-defined named volume. The connection teardown must not remove
 	// the named volume unless the user explicitly asks for it with -v.
 	composeContent := strings.Join([]string{
 		"x-tele:",

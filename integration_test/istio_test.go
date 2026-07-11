@@ -100,15 +100,15 @@ spec:
 	return itest.Run(ctx, "kubectl", "apply", "-f", f)
 }
 
-// Test_AppTrafficTraversesMeshWhileEngaged is a regression test for #4156: the
+// Test_AppTrafficTraversesMeshWhileAttached is a regression test for #4156: the
 // traffic-agent's mesh bypass used a UID-based iptables owner match, and since
 // the agent's UID is inherited from the app container (or defaults to root),
 // the application's own traffic often matched the bypass and skipped the mesh.
 // A request between meshed pods is made over mTLS, which the target's inbound
 // sidecar records in an X-Forwarded-Client-Cert header. That header must still
-// be present when the app container of an engaged workload requests a meshed
+// be present when the app container of an attached workload requests a meshed
 // service.
-func (s *istioSuite) Test_AppTrafficTraversesMeshWhileEngaged() {
+func (s *istioSuite) Test_AppTrafficTraversesMeshWhileAttached() {
 	rq := s.Require()
 	ctx := s.Context()
 
@@ -124,22 +124,22 @@ func (s *istioSuite) Test_AppTrafficTraversesMeshWhileEngaged() {
 	rq.Eventually(appRequestIsMeshed, 60*time.Second, 5*time.Second,
 		"meshed app request does not carry X-Forwarded-Client-Cert")
 
-	// Engage the workload so that the traffic-agent and its init container are
+	// Attach to the workload so that the traffic-agent and its init container are
 	// injected and the agent-discriminating iptables rules are installed.
 	s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceQuitOk(ctx)
 	itest.TelepresenceOk(ctx, "intercept", s.svc, "--port", "9094:80", "--mount=false")
 	defer func() {
-		_, _, _ = itest.Telepresence(ctx, "leave", s.svc)
+		_, _, _ = itest.Telepresence(ctx, "detach", s.svc)
 	}()
 	rq.NoError(itest.RolloutStatusWait(ctx, s.AppNamespace(), "deploy/"+s.svc))
 
 	// The app container's outbound traffic must still traverse the mesh.
 	rq.Eventually(appRequestIsMeshed, 60*time.Second, 5*time.Second,
-		"app request from engaged workload does not carry X-Forwarded-Client-Cert")
+		"app request from attached workload does not carry X-Forwarded-Client-Cert")
 }
 
-// Test_ResolveAndDialServiceEntry engages the meshed workload with a proxy-via
+// Test_ResolveAndDialServiceEntry attaches to the meshed workload with a proxy-via
 // for the ServiceEntry virtual IP range, then verifies that the ServiceEntry
 // host resolves on the workstation and that HTTP traffic to it is routed by the
 // mesh to the backing service.

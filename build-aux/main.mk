@@ -445,9 +445,13 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./packaging/windows-package.sh
 shellscripts += ./build-aux/check-integration-retry.sh
-.PHONY: lint lint-rpc lint-go
+.PHONY: lint lint-rpc lint-go lint-docs
 
-lint: lint-rpc lint-go
+lint: lint-rpc lint-go lint-docs
+
+lint-docs: $(tools/docslint) ## (QA) Lint the documentation
+	$(tools/docslint) docs
+	docker run --rm -v $$(pwd):/docs -w /docs jdkato/vale:latest docs
 
 lint-go: lint-deps ## (QA) Run the golangci-lint
 ifeq ($(GOOS),windows)

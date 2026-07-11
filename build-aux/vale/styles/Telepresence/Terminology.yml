@@ -1,0 +1,11 @@
+extends: substitution
+message: "Use '%s' instead of '%s': the umbrella term for replace/intercept/wiretap/ingest is 'attachment'."
+level: error
+ignorecase: true
+swap:
+  engagements: attachments
+  engagement: attachment
+  disengage: detach
+  engaged: attached
+  engaging: attaching
+  engage: attach

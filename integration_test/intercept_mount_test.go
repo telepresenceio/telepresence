@@ -59,7 +59,7 @@ func (s *interceptMountSuite) SetupSuite() {
 
 func (s *interceptMountSuite) TearDownSuite() {
 	ctx := s.Context()
-	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 	s.cancelLocal()
 	s.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
@@ -112,7 +112,7 @@ func (s *singleServiceSuite) Test_InterceptMountRelative() {
 	stdout := itest.TelepresenceOk(ctx,
 		"intercept", s.ServiceName(), "--mount", "rel-dir", "--port", strconv.Itoa(port))
 	defer func() {
-		itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+		itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 	}()
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
 
@@ -144,7 +144,7 @@ func (s *singleServiceSuite) Test_InterceptDetailedOutput() {
 		"--format", "json",
 		s.ServiceName())
 	defer func() {
-		itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+		itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 	}()
 	var iInfo intercept.Info
 	require := s.Require()
@@ -181,7 +181,7 @@ func (s *singleServiceSuite) Test_NoInterceptorResponse() {
 	stdout := itest.TelepresenceOk(ctx,
 		"intercept", s.ServiceName(), "--mount", "rel-dir", "--port", "8443")
 	defer func() {
-		itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+		itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 	}()
 	s.Contains(stdout, "Using Deployment "+s.ServiceName())
 	s.Eventually(func() bool {

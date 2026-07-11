@@ -17,14 +17,14 @@ services:
       ...
 ```
 
-Those extensions are recognized by the `telepresence compose`, which acts as an extended `docker compose` command. Telepresence will create connections, engagements, and proxies based on the extensions and then modify the docker compose file with the necessary networks, mounts, and environment variables to make the extended services work.
+Those extensions are recognized by the `telepresence compose` command, which acts as an extended `docker compose` command. Telepresence will create connections, attachments, and proxies based on the extensions and then modify the docker compose file with the necessary networks, mounts, and environment variables to make the extended services work.
 
 ## States
 
 - `telepresence compose up` will ensure that the extended services are in the correct state.
-- `telepresence compose create` is like `up`, but it will not start the containers, and therefore end any existing engagements once all the containers are created.
-- `telepresence compose stop` ends the engagements, but it keeps telepresence connected, because the existing containers use the `teleroute` network backed by that connection.
-- `telepresence compose down` will end the engagements, terminate the network, and quit telepresence.
+- `telepresence compose create` is like `up`, but it will not start the containers, and therefore end any existing attachments once all the containers are created.
+- `telepresence compose stop` ends the attachments, but it keeps telepresence connected, because the existing containers use the `teleroute` network backed by that connection.
+- `telepresence compose down` will end the attachments, terminate the network, and quit telepresence.
 - `telepresence config` will detect if the project is started, if so, produce the extended project file. Otherwise, it will produce the original project file's canonical form.
 - `telepresence quit` will detect if a `telepresence compose` is running and, if so, issue a `telepresence compose down`.
 ## Top-level Extension
@@ -53,18 +53,20 @@ Each connection configuration is an object with the following fields:
 
 ### Mount Configuration
 
-The `mounts` field is a list of mount configurations that controls how the service extensions handle the volumes shared by the traffic-agent that the extended service will engage with. The mount configuration is an object with the following fields:
+The `mounts` field is a list of mount configurations that controls how the service extensions handle the volumes shared by the traffic-agent that the extended service will attach to. The mount configuration is an object with the following fields:
 
 | Name          | Description                                                                                              | Type   | Default Value                   |
 |---------------|----------------------------------------------------------------------------------------------------------|--------|---------------------------------|
 | volume        | Name of a Docker Compose volume. Mutually exclusive to volumePattern.                                    | string | empty                           |
 | volumePattern | Regular expression pattern matching one or several Docker Compose volumes. Mutually exclusive to volume. | string | empty                           |
-| policy        | "local", "remote", or "remoteReadOnly"                                                                   | string | determined by the traffic-agent |
+| policy        | "local", "ignore", "remote", or "remoteReadOnly"                                                         | string | determined by the traffic-agent |
 
 The mount policy determines how the volume is mounted by Docker Compose.
 <dl>
 <dt>local</dt>
 <dd>The Docker Compose volume is not modified.</dd>
+<dt>ignore</dt>
+<dd>The Docker Compose volume is not modified, and the corresponding remote volume is not shared by the traffic-agent.</dd>
 <dt>remote</dt>
 <dd>The Docker Compose volume is modified to mount a remote volume without a read-only restriction. It might still be restricted by the remote volume's permissions.</dd>
 <dt>remoteReadOnly</dt>
@@ -126,12 +128,12 @@ The `intercept` ensures that the docker compose service receives traffic from, a
 | Name             | Description                                                                                    | Type    | Default Value               |
 |------------------|------------------------------------------------------------------------------------------------|---------|-----------------------------|
 | connection       | The name of a connection declared in the top-level `x-tele` extension                          | string  | empty                       |
-| name             | Name of the intercept engagement                                                               | string  | name of the compose service |
+| name             | Name of the intercept attachment                                                               | string  | name of the compose service |
 | httpFilters      | HTTP header filters. Only requests with matching headers will be intercepted                   | object  | empty                       |
 | httpPaths        | HTTP path filters. Only requests with matching paths will be intercepted. Exact path matching. | strings | empty                       |
 | httpPathPrefixes | HTTP path prefix filters. Only requests with matching path prefixes will be intercepted.       | strings | empty                       |
 | httpPathRegexps  | HTTP path regexp filters. Only requests with paths matching the regexp will be intercepted.    | strings | empty                       |
-| workload         | Name of the remote workload (typically the deployment)                                         | string  | name of the engagement      |
+| workload         | Name of the remote workload (typically the deployment)                                         | string  | name of the attachment      |
 | ports            | Service &lt;local port&gt;:&lt;service port&gt; to intercept                                   | strings | empty                       |
 | service          | Name of the remote service                                                                     | string  | empty                       |
 | to-pod           | Ports to forward from the local compose service to the remote pod's localhost                  | strings | empty                       |

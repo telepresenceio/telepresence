@@ -146,6 +146,6 @@ func (s *h2cInterceptSuite) Test_H2CInterceptPreservesProtocol() {
 	itest.PingInterceptedEchoServer(ctx, svc, "80", "x-test=h2c")
 
 	// Leave the intercept
-	_, _, err = itest.Telepresence(ctx, "leave", svc)
+	_, _, err = itest.Telepresence(ctx, "detach", svc)
 	require.NoError(err)
 }

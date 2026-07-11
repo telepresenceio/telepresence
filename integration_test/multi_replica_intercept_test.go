@@ -90,7 +90,7 @@ func (s *multiReplicaInterceptSuite) assertAllReplicasRouted(header string) {
 	stdout, stderr, err := itest.Telepresence(ctx, args...)
 	require.NoError(err, "stdout: %s\nstderr: %s", stdout, stderr)
 	defer func() {
-		_, _, _ = itest.Telepresence(ctx, "leave", s.svc)
+		_, _, _ = itest.Telepresence(ctx, "detach", s.svc)
 	}()
 
 	// The intercept triggers a rolling restart that injects the traffic-agent

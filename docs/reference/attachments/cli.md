@@ -1,79 +1,35 @@
 ---
-title: Configure workload engagements using CLI
+title: Configure workload attachments using CLI
 ---
 
-# Configuring workload engagements using CLI
+# Configuring workload attachments using CLI
 
-## Specifying a namespace for an engagement
+## Specifying a namespace for an attachment
 
-By default, an engagement targets the namespace selected by `telepresence connect --namespace`.
+By default, an attachment targets the namespace selected by `telepresence connect --namespace`.
 The `intercept`, `wiretap`, and `replace` commands also accept `--namespace` when the workload
-to engage is in a different mapped namespace. `ingest` continues to use the connected namespace.
+to attach to is in a different mapped namespace. `ingest` continues to use the connected namespace.
 
 ```shell
 telepresence connect --namespace myns
 telepresence replace/ingest/intercept/wiretap hello
 ```
 
-To engage a workload in another mapped namespace without reconnecting, pass `--namespace`
-to the engagement command:
+To attach to a workload in another mapped namespace without reconnecting, pass `--namespace`
+to the attachment command:
 
 ```shell
 telepresence connect --namespace alpha --mapped-namespaces alpha,beta
 telepresence intercept beta-local --workload hello --namespace beta --http-header x-user=susan --port 8080:80
 ```
 
-Single-label DNS names continue to resolve in the connected namespace. When an engagement
+Single-label DNS names continue to resolve in the connected namespace. When an attachment
 targets another namespace, use a namespace-qualified name such as `hello.beta`.
 
 ## Importing environment variables
 
 Telepresence can import the environment variables from the pod that is
-being engaged, see [this doc](../environment.md) for more details.
-
-## Creating an intercept
-
-The following command will intercept HTTP requests using the header 'X-User: susan' bound to the service and proxy it to your laptop. This includes traffic coming through your ingress controller, so use this option carefully as to not disrupt production environments.
-
-```shell
-telepresence intercept <deployment name> --http-header x-user=susan --port=<TCP port>
-```
-
-Run `telepresence list` to see the list of active intercepts.
-
-```console
-$ telepresence list
-deployment dataprocessingnodeservice: intercepted
-   Intercept name: <deployment name>
-   State         : ACTIVE
-   Workload kind : Deployment
-   Intercepting  : 10.244.0.13 -> 127.0.0.1
-       8080 -> 8080 TCP
-   Intercepting  : Intercepting  : HTTP requests with header 'X-User: susan'
-```
-
-Start a service on your laptop that will receive the intercepted traffic on port 8080, for instance:
-```console
-$ python3 -m http.server 8080
-```
-
-Use curl to send requests to the intercepted service using the header 'X-User: susan'. The service running locally should be the one to respond to the request.
-```console
-$ curl -H "X-User: susan" http://<deployment name>/
-Reply from service running on your local host
-```
-
-Run the same curl command again, but this time without the header 'X-User: susan'. Now the server running in the cluster should respond to the request.
-```console
-$ curl http://<deployment name>/
-Reply from service running in your cluster
-```
-
-Finally, run `telepresence leave <name of intercept>` to stop the intercept.
-
-If you want to change which port has been intercepted, you can create
-a new intercept the same way you did above, and it will change which
-service port is being intercepted.
+attached to, see [this doc](../environment.md) for more details.
 
 ## Creating an intercept when multiple services match your workload
 
@@ -196,7 +152,7 @@ spec:
     spec:
       containers:
         - name: my-headless
-          image: jmalloc/echo-server
+          image: ghcr.io/telepresenceio/echo-server:latest
           ports:
             - containerPort: 8080
           resources: {}
@@ -234,96 +190,57 @@ deployed, and you will be able to intercept the given ports as if they were serv
 The annotation value is a comma separated list of port identifiers consisting of either the name or the port number of a container
 port, optionally suffixed with `/TCP` or `/UDP`
 
-### Let's try it out!
+An example deployment with the annotation:
 
-1. Deploy an annotation similar to this one to your cluster:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-no-svc
+  labels:
+    app: echo-no-svc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-no-svc
+  template:
+    metadata:
+      labels:
+        app: echo-no-svc
+      annotations:
+        telepresence.io/inject-container-ports: http
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: echo-server
+          image: ghcr.io/telepresenceio/echo-server:latest
+          ports:
+            - name: http
+              containerPort: 8080
+```
 
-   ```yaml
-   apiVersion: apps/v1
-   kind: Deployment
-   metadata:
-     name: echo-no-svc
-     labels:
-       app: echo-no-svc
-   spec:
-     replicas: 1
-     selector:
-       matchLabels:
-         app: echo-no-svc
-     template:
-       metadata:
-         labels:
-           app: echo-no-svc
-         annotations:
-           telepresence.io/inject-container-ports: http
-       spec:
-         automountServiceAccountToken: false
-         containers:
-           - name: echo-server
-             image: ghcr.io/telepresenceio/echo-server:latest
-             ports:
-               - name: http
-                 containerPort: 8080
-             env:
-               - name: PORT
-                 value: "8080"
-             resources:
-               limits:
-                 cpu: 50m
-                 memory: 8Mi
-   ```
+The workload shows up in `telepresence list` and can be intercepted like any other. Since no
+service exists, there is no DNS entry either; the output of the intercept command contains an
+"Address" field with the pod address that reaches the intercepted workload:
 
-2. Connect telepresence:
-
-    ```console
-    $ telepresence connect
-    Launching Telepresence User Daemon
-    Launching Telepresence Root Daemon
-    Connected to context kind-dev, namespace default (https://127.0.0.1:36767)
-    ```
-
-3. List your intercept eligible workloads. If the annotation is correct, the deployment should show up in the list:
-
-   ```console
-   $ telepresence list
-   deployment echo-no-svc: ready to engage (traffic-agent not yet installed)
-   ```
-
-4. Start an intercept handler locally that will receive the incoming traffic. Here's an example using a simple python http service:
-
-   ```console
-   $ python3 -m http.server 8080
-   ```
-
-5. Create an intercept:
-
-   ```console
-   $ telepresence intercept echo-no-svc
-   Using Deployment echo-no-svc
-      Intercept name    : echo-no-svc
-      State             : ACTIVE
-      Workload kind     : Deployment
-      Destination       : 127.0.0.1:8080
-      Volume Mount Point: /tmp/telfs-3306285526
-      Intercepting      : all TCP connections
-      Address           : 10.244.0.13:8080
-   ```
-
-Note that the response contains an "Address" that you can curl to reach the intercepted pod. You will not be able to
-curl the name "echo-no-svc". Since there's no service by that name, there's no DNS entry for it either.
-
-6. Curl the intercepted workload:
-
-   ```console
-   $ curl 10.244.0.13:8080
-   < output from your local service>
-   ```
+```console
+$ telepresence intercept echo-no-svc
+Using Deployment echo-no-svc
+   Intercept name    : echo-no-svc
+   State             : ACTIVE
+   Workload kind     : Deployment
+   Destination       : 127.0.0.1:8080
+   Volume Mount Point: /tmp/telfs-3306285526
+   Intercepting      : all TCP connections
+   Address           : 10.244.0.13:8080
+```
 
 > [!IMPORTANT]
 > A service-less intercept utilizes an `initContainer` that requires `NET_ADMIN` capabilities.
 > If your cluster administrator has disabled them, you will only be able to intercept services using symbolic target ports.
 
-## Specifying the engagement traffic target
+## Specifying the attachment traffic target
 
 By default, it's assumed that your local app is reachable on `127.0.0.1` or on the IP of the local container that is
 running that app, and intercepted traffic will be sent to that address at the port given by `--port`. If you wish to
@@ -344,22 +261,13 @@ Using Deployment my-service
 ## Replacing a running workload
 
 By default, your application container continues to run while Telepresence intercepts its traffic. This can cause issues
-for applications with ongoing background activities, such as consuming from a message queue.
-
-To address this, the `telepresence intercept` command provides the `--replace` flag. When used, the Traffic Agent
-replaces the application container within the pod. This ensures that the application itself is not running and avoids
-unintended side effects. The original application container is automatically restored once the intercept session ends.
-
-```console
-$ telepresence intercept my-service --port 8080 --replace
-   Intercept name         : my-service
-   State                  : ACTIVE
-   Workload kind          : Deployment
-   Destination            : 127.0.0.1:8080
-   Service Port Identifier: proxied
-   Volume Mount Point     : /var/folders/j8/kzkn41mx2wsd_ny9hrgd66fc0000gp/T/telfs-517018422
-   Intercepting           : all TCP connections
-```
+for applications with ongoing background activities, such as consuming from a message queue. To address this, use the
+`telepresence replace` command instead of `telepresence intercept`: the Traffic Agent then replaces the application
+container within the pod, and the original container is automatically restored once the attachment ends. See
+[Attachments](../../concepts/attachments.md) for how the modes compare.
 
 > [!NOTE]
 > Sidecars will not be stopped. Only the targeted container will be removed from the pod.
+
+> [!NOTE]
+> The `--replace` flag of `telepresence intercept` is deprecated; use the `telepresence replace` command.

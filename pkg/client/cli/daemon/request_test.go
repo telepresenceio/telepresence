@@ -22,7 +22,7 @@ func TestWithDefaultRequestIgnoresLocalNamespace(t *testing.T) {
 	require.NoError(t, err)
 	req := MustGetRequest(ctx)
 	_, ok := req.KubeFlags["namespace"]
-	require.False(t, ok, "local engagement namespace must not become an implicit connect namespace")
+	require.False(t, ok, "local attachment namespace must not become an implicit connect namespace")
 }
 
 func Test_parseSubnetViaWorkload(t *testing.T) {

@@ -31,7 +31,7 @@ type transformer struct {
 	config      *config
 	project     *compose.Project
 	extensions  map[string]serviceExtension
-	engagements map[string]*engagement
+	attachments map[string]*attachment
 	tpVolumes   *xsync.Map[string, *compose.VolumeConfig]
 	selectsAll  bool
 }
@@ -54,12 +54,12 @@ func newTransformer(config *config, p *compose.Project) (tr *transformer, err er
 			t.extensions[n] = eg
 		}
 	}
-	t.engagements = make(map[string]*engagement, len(t.extensions))
+	t.attachments = make(map[string]*attachment, len(t.extensions))
 	return t, nil
 }
 
-func (t *transformer) addEngagement(engagement *engagement) {
-	t.engagements[engagement.composeService().Name] = engagement
+func (t *transformer) addAttachment(at *attachment) {
+	t.attachments[at.composeService().Name] = at
 }
 
 func (t *transformer) createProject(cmdName, composeFile string) ([]string, error) {
@@ -94,35 +94,35 @@ func (t *transformer) marshalYAML() ([]byte, error) {
 	return t.project.MarshalYAML()
 }
 
-func (t *transformer) engage(ctx context.Context, e serviceExtension, aesCh chan<- *engagement) (err error) {
+func (t *transformer) attach(ctx context.Context, e serviceExtension, atCh chan<- *attachment) (err error) {
 	cn := e.composeService().Name
 	ctx = progress.WithEventId(ctx, cn)
-	progress.Workingf(ctx, fmt.Sprintf("%s %s", e.engagementType().Working(), cn))
-	var ae *engagement
+	progress.Workingf(ctx, fmt.Sprintf("%s %s", e.attachmentType().Working(), cn))
+	var at *attachment
 	if t.config.mustBeConnected {
-		ae, err = e.engaged()
+		at, err = e.attached()
 	} else {
-		ae, err = e.activate(t)
+		at, err = e.activate(t)
 	}
 	if err != nil {
 		return progress.MaybeWriteError(ctx, err)
 	}
-	progress.Donef(ctx, fmt.Sprintf("%s %s", e.engagementType().WorkDone(), cn))
-	aesCh <- ae
+	progress.Donef(ctx, fmt.Sprintf("%s %s", e.attachmentType().WorkDone(), cn))
+	atCh <- at
 	return nil
 }
 
-func (t *transformer) disengage(ctx context.Context) {
-	progress.Start(ctx, "Disengaging")
-	for _, n := range maps.SortedKeys(t.engagements) {
-		e := t.engagements[n]
+func (t *transformer) detach(ctx context.Context) {
+	progress.Start(ctx, "Detaching")
+	for _, n := range maps.SortedKeys(t.attachments) {
+		e := t.attachments[n]
 		eCtx := progress.WithEventId(ctx, n)
-		progress.Workingf(eCtx, fmt.Sprintf("%s %s", e.engagementType().Leaving(), n))
+		progress.Workingf(eCtx, fmt.Sprintf("%s %s", e.attachmentType().Leaving(), n))
 		err := e.deactivate()
 		if err != nil {
 			clog.Error(eCtx, err)
 		}
-		progress.Donef(eCtx, fmt.Sprintf("%s %s", e.engagementType().Left(), n))
+		progress.Donef(eCtx, fmt.Sprintf("%s %s", e.attachmentType().Left(), n))
 	}
 	progress.Stop(ctx)
 }
@@ -163,8 +163,8 @@ func (t *transformer) runCommand(ctx context.Context, name string) error {
 			if err != nil {
 				return err
 			}
-			switch eg.engagementType() {
-			case types.EngagementTypeConnect, types.EngagementTypeProxy:
+			switch eg.attachmentType() {
+			case types.AttachmentTypeConnect, types.AttachmentTypeProxy:
 				continue
 			default:
 			}
@@ -207,7 +207,7 @@ func (t *transformer) runAttachedUp(parentCtx context.Context, composeFile strin
 	// by killing the "docker compose up" process. There are multiple reasons for this:
 	//
 	// 1. If the "docker compose up" process is interrupted, it will detach, and the containers will continue to run
-	//    for a while longer. We don't want that because some of them might depend on engagements that will end once
+	//    for a while longer. We don't want that because some of them might depend on attachments that will end once
 	//    this function returns.
 	// 2. On windows, the "docker compose up" will detach, but it won't stop the containers at all.s
 	ctx := context.WithoutCancel(parentCtx)
@@ -253,9 +253,9 @@ func (t *transformer) withProfiles(profiles []string) error {
 	return err
 }
 
-// ApplyEngagements ensures that the compose-spec is modified in accordance with the engagements.
-func (t *transformer) applyEngagements(ctx context.Context) error {
-	if len(t.engagements) == 0 {
+// applyAttachments ensures that the compose-spec is modified in accordance with the attachments.
+func (t *transformer) applyAttachments(ctx context.Context) error {
+	if len(t.attachments) == 0 {
 		return nil
 	}
 
@@ -264,26 +264,26 @@ func (t *transformer) applyEngagements(ctx context.Context) error {
 	p := t.project.WithServicesDisabled()
 	sm := p.Services
 	deps := make(map[string][]string)
-	for n, e := range t.engagements {
+	for n, e := range t.attachments {
 		if s, ok := sm[n]; ok {
-			if e.engagementType() == types.EngagementTypeProxy {
+			if e.attachmentType() == types.AttachmentTypeProxy {
 				deps[n] = s.GetDependents(p)
 				delete(sm, n)
 			} else {
-				e.engageService(&s)
+				e.attachService(&s)
 				sm[n] = s
 			}
 		}
 	}
 
-	for n, e := range t.engagements {
+	for n, e := range t.attachments {
 		if proxyDeps, ok := deps[n]; ok {
-			e.engageProxyDependents(p, n, proxyDeps)
+			e.attachProxyDependents(p, n, proxyDeps)
 		}
 	}
 
-	for _, e := range t.engagements {
-		e.engageProject(p)
+	for _, e := range t.attachments {
+		e.attachProject(p)
 	}
 
 	t.configureDefaultNetwork(ctx, p)
@@ -372,7 +372,7 @@ func (t *transformer) connections() []*connection {
 	cs := make([]*connection, 0, len(ccs))
 nextCfg:
 	for _, cc := range ccs {
-		for _, e := range t.engagements {
+		for _, e := range t.attachments {
 			if e.connection().connectionConfig == cc {
 				cs = append(cs, e.connection())
 				continue nextCfg
@@ -402,7 +402,7 @@ func (t *transformer) createConfigFile(ctx context.Context, canCreate, forceRecr
 		clog.Debugf(ctx, "Recreating existing compose file %q", composeFile)
 	}
 
-	err = t.applyEngagements(ctx)
+	err = t.applyAttachments(ctx)
 	if err != nil {
 		return "", err
 	}

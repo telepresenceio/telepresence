@@ -85,7 +85,7 @@ func (cc *connectionConfig) Connect(ctx context.Context, es map[string]serviceEx
 	cr.MappedNamespaces = cc.MappedNamespaces
 
 	for _, e := range es {
-		if e.engagementType() == types.EngagementTypeProxy && (e.connectionName() == "" || e.connectionName() == cc.Name) {
+		if e.attachmentType() == types.AttachmentTypeProxy && (e.connectionName() == "" || e.connectionName() == cc.Name) {
 			err := addProxyReroutes(e.(servicePortExtension), cr)
 			if err != nil {
 				return nil, err
@@ -136,7 +136,7 @@ func (cc *connectionConfig) Connect(ctx context.Context, es map[string]serviceEx
 func (cc *connectionConfig) resolveProxies(ctx context.Context, ds *daemon.Session, es map[string]serviceExtension) (map[string]netip.Addr, error) {
 	var proxies map[string]netip.Addr
 	for _, e := range es {
-		if e.engagementType() == types.EngagementTypeProxy && (e.connectionName() == "" || e.connectionName() == cc.Name) {
+		if e.attachmentType() == types.AttachmentTypeProxy && (e.connectionName() == "" || e.connectionName() == cc.Name) {
 			ip, err := ds.Lookup(ctx, e.name())
 			if err != nil {
 				return nil, err

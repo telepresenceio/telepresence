@@ -59,7 +59,7 @@ properties:
         description: Loglevel for the agent, if different from the traffic-manager
         $ref: "#/$defs/logLevel"
       maxIdleTime:
-        description: maximum time the agent is idle (no engagements to the workload) before it is cleaned up by the traffic manager
+        description: maximum time the agent is idle (no attachments to the workload) before it is cleaned up by the traffic manager
         $ref: "#/$defs/duration"
       mountPolicies:
         description: 'List of volume mount policies. Defaults to {"/tmp" : "Ignore"}'
@@ -457,7 +457,7 @@ properties:
         type: object
         properties:
           excluded:
-            description: Environment variables to exclude from the list sent to the client during engagement
+            description: Environment variables to exclude from the list sent to the client during attachment
             type: array
             items:
               type: string

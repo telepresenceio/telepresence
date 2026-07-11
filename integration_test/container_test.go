@@ -38,7 +38,7 @@ func (s *connectedSuite) Test_InterceptsContainer() {
 		"--container", "echo",
 		"--env-json", envFile,
 		"--port", strconv.Itoa(svcPort))
-	defer itest.TelepresenceOk(ctx, "leave", svc)
+	defer itest.TelepresenceOk(ctx, "detach", svc)
 
 	var iInfo intercept.Info
 	require.NoError(json.Unmarshal([]byte(stdout), &iInfo))
@@ -68,7 +68,7 @@ func (s *connectedSuite) Test_InterceptsContainer() {
 	s.Equal("Hello from echo\n", string(content))
 
 	// Intercept again, this time without the --container flag
-	itest.TelepresenceOk(ctx, "leave", svc)
+	itest.TelepresenceOk(ctx, "detach", svc)
 	stdout = itest.TelepresenceOk(ctx, "intercept", svc,
 		"--format", "json",
 		"--detailed-output",
@@ -111,7 +111,7 @@ func (s *connectedSuite) Test_InterceptsContainerAndReplace() {
 		"--replace",
 		"--env-json", envFile,
 		"--port", strconv.Itoa(svcPort))
-	defer itest.TelepresenceOk(ctx, "leave", svc)
+	defer itest.TelepresenceOk(ctx, "detach", svc)
 
 	var iInfo intercept.Info
 	require.NoError(json.Unmarshal([]byte(stdout), &iInfo))
@@ -154,7 +154,7 @@ func (s *connectedSuite) Test_InterceptsContainerAndReplace() {
 	require.Nil(echoContainer)
 
 	// Intercept again, this time without the --container flag
-	itest.TelepresenceOk(ctx, "leave", svc)
+	itest.TelepresenceOk(ctx, "detach", svc)
 	stdout = itest.TelepresenceOk(ctx, "intercept", svc,
 		"--format", "json",
 		"--detailed-output",

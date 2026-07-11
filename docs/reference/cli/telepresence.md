@@ -44,13 +44,13 @@ result in a password prompt.
 | [config](telepresence_config) | Telepresence configuration commands |
 | [connect](telepresence_connect) | Connect to a cluster |
 | [curl](telepresence_curl) | curl with daemon network |
+| [detach](telepresence_detach) | Remove existing attachment |
 | [docker-run](telepresence_docker-run) | Docker run with daemon network |
 | [gather-logs](telepresence_gather-logs) | Gather logs from traffic-manager, traffic-agent, user and root daemons, and export them into a zip file. |
 | [genyaml](telepresence_genyaml) | Generate YAML for use in kubernetes manifests. |
 | [helm](telepresence_helm) | Helm commands using the embedded Telepresence Helm chart. |
 | [ingest](telepresence_ingest) | Ingest a container |
 | [intercept](telepresence_intercept) | Intercept a service |
-| [leave](telepresence_leave) | Remove existing intercept |
 | [list](telepresence_list) | List current intercepts |
 | [list-contexts](telepresence_list-contexts) | Show all contexts |
 | [list-namespaces](telepresence_list-namespaces) | Show all namespaces |

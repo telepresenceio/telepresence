@@ -73,7 +73,7 @@ func (s *localShortcutSuite) interceptAndDial(ctx context.Context, headerFilter 
 	}
 	itest.TelepresenceOk(ctx, iceptArgs...)
 	defer func() {
-		_, _, _ = itest.Telepresence(ctx, "leave", s.svc)
+		_, _, _ = itest.Telepresence(ctx, "detach", s.svc)
 	}()
 	rq.NoError(itest.RolloutStatusWait(ctx, s.AppNamespace(), "deploy/"+s.svc))
 

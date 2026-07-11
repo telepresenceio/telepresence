@@ -70,7 +70,7 @@ func (s *interceptLocalhostSuite) TestIntercept_WithCustomLocalhost() {
 
 	// Run the intercept
 	stdout := itest.TelepresenceOk(ctx, "intercept", s.ServiceName(), "--port", strconv.Itoa(s.port), "--address", s.defaultRoute.LocalIP.String())
-	defer itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	defer itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 
 	s.Require().Contains(stdout, "Using Deployment "+s.ServiceName())
 	itest.PingInterceptedEchoServer(ctx, s.ServiceName(), "80")

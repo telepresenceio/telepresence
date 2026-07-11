@@ -34,10 +34,7 @@ func (s *notConnectedSuite) Test_Uninstall() {
 	s.ApplyApp(ctx, jobname, deployname)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", jobname)
 
-	verb := "engage"
-	if !s.ClientIsVersion(">2.21.x") {
-		verb = "intercept"
-	}
+	verb := s.AttachVerb()
 	s.Eventually(func() bool {
 		stdout, _, err = itest.Telepresence(ctx, "list", "--agents")
 		return err == nil && strings.Contains(stdout, fmt.Sprintf("%s: ready to %s (traffic-agent already installed)", jobname, verb))

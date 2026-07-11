@@ -223,7 +223,7 @@ func (s *restAPISuite) Test_RestAPI_GlobalConsume() {
 	errCh := make(chan error, 1)
 	go s.startIntercept(iCtx, "", "", errCh, wg)
 	rq.NoError(s.waitForInterceptReady(iCtx, errCh))
-	defer itest.TelepresenceOk(ctx, "leave", s.svc)
+	defer itest.TelepresenceOk(ctx, "detach", s.svc)
 
 	so, err = s.curlAPIServer(ctx, 8080, "consume-here", map[string]string{restapi.HeaderCallerInterceptID: "${TELEPRESENCE_INTERCEPT_ID}"})
 	rq.NoError(err)
@@ -264,7 +264,7 @@ func (s *restAPISuite) Test_RestAPI_GlobalInfo() {
 	errCh := make(chan error, 1)
 	go s.startIntercept(iCtx, "my:data", "", errCh, wg)
 	rq.NoError(s.waitForInterceptReady(iCtx, errCh))
-	defer itest.TelepresenceOk(ctx, "leave", s.svc)
+	defer itest.TelepresenceOk(ctx, "detach", s.svc)
 
 	so, err = s.curlAPIServer(ctx, 8080, "intercept-info", map[string]string{restapi.HeaderCallerInterceptID: "${TELEPRESENCE_INTERCEPT_ID}"})
 	rq.NoError(err)
@@ -295,7 +295,7 @@ func (s *restAPISuite) Test_RestAPI_FilteredConsume() {
 	errCh := make(chan error, 1)
 	go s.startIntercept(iCtx, "", "x:y", errCh, wg)
 	s.Require().NoError(s.waitForInterceptReady(iCtx, errCh))
-	defer itest.TelepresenceOk(ctx, "leave", s.svc)
+	defer itest.TelepresenceOk(ctx, "detach", s.svc)
 
 	tts := []struct {
 		name          string
@@ -366,7 +366,7 @@ func (s *restAPISuite) Test_RestAPI_FilteredInfo() {
 	errCh := make(chan error, 1)
 	go s.startIntercept(iCtx, "my:data", "x:y", errCh, wg)
 	s.Require().NoError(s.waitForInterceptReady(iCtx, errCh))
-	defer itest.TelepresenceOk(ctx, "leave", s.svc)
+	defer itest.TelepresenceOk(ctx, "detach", s.svc)
 
 	tts := []struct {
 		name          string

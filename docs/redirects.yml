@@ -1,1 +1,16 @@
 - {from: "", to: "quick-start"}
+- {from: "reference/engagements/cli", to: "reference/attachments/cli"}
+- {from: "reference/engagements/sidecar", to: "reference/attachments/sidecar"}
+- {from: "reference/engagements/container", to: "reference/attachments/container"}
+- {from: "reference/engagements/conflicts", to: "reference/attachments/conflicts"}
+- {from: "howtos/engage", to: "howtos/attach"}
+- {from: "reference/cli/telepresence_leave", to: "reference/cli/telepresence_detach"}
+- {from: "concepts/devloop", to: "quick-start"}
+- {from: "concepts/faster", to: "quick-start"}
+- {from: "concepts/intercepts", to: "concepts/attachments"}
+- {from: "reference/architecture", to: "concepts/architecture"}
+- {from: "reference/monitoring", to: "howtos/monitoring"}
+- {from: "reference/inside-container", to: "howtos/inside-container"}
+- {from: "reference/docker-run", to: "howtos/docker"}
+- {from: "reference/tun-device", to: "reference/routing"}
+- {from: "reference/dns", to: "reference/routing"}

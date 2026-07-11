@@ -1,34 +1,36 @@
 ---
-title: Running Telepresence inside a container
+title: Running the Telepresence client in a container
+description: Run the entire Telepresence client — CLI, daemons, and attachment handlers — inside a single container, for environments like GitHub Codespaces or CI/CD pipelines.
 hide_table_of_contents: true
 ---
-# Running Telepresence inside a container
+# Running the Telepresence client in a container
 
-## Run with the daemon and engagement handler in containers
+This page covers a corner case: running the *entire* Telepresence client —
+the CLI, both daemons, and any attachment handler — inside one container.
+You need this when the container **is** your workstation, as in a
+[GitHub Codespaces](https://docs.github.com/en/codespaces/overview)
+devcontainer, or when Telepresence runs unattended in a CI/CD pipeline.
+When you use Telepresence on an ordinary workstation, you don't.
 
-The `telepresence connect` command now has the option `--docker`. This option tells telepresence to start the Telepresence daemon in a
-docker container.
+> [!IMPORTANT]
+> If you are looking for how to combine Telepresence with Docker on your
+> workstation — running the daemon and your containerized services in
+> containers while the CLI stays on the host — that is the far more common
+> `telepresence connect --docker` mode, described in
+> [Use Telepresence with Docker](docker.md). It needs none of the special
+> privileges described here.
 
-Running the daemon in a container brings many advantages. The daemon will no longer make modifications to the host's network or DNS, and
-it will not mount files in the host's filesystem. Consequently, it will not need admin privileges to run, nor will it need special software
-like macFUSE or WinFSP to mount the remote file systems.
+## Container requirements
 
-The engagement handler (the process that runs locally and optionally will receive intercepted traffic) must also be a docker container,
-because that is the only way to access the cluster network that the daemon makes available, and to mount the docker volumes needed.
-
-## Run everything in a container
-
-Environments like [GitHub Codespaces](https://docs.github.com/en/codespaces/overview) runs everything in a container. Your shell, the
-telepresence CLI, and both its daemons. This means that the container must be configured so that it allows Telepresence to set up its
-Virtual Network Interface before you issue a `telepresence connect`.
-
-There are several conditions that must be met.
+Telepresence's root daemon sets up a Virtual Network Interface, and when
+everything runs inside one container, that happens *inside the container*.
+The container must therefore be started with:
 
 - Access to the `/dev/net/tun` device
 - The `NET_ADMIN` capability
-- If you're using IPv6, then you also need sysctl `net.ipv6.conf.all.disable_ipv6=0`
+- If you're using IPv6, the sysctl `net.ipv6.conf.all.disable_ipv6=0`
 
-The Codespaces `devcontainer.json` will typically need to include:
+A Codespaces `devcontainer.json` will typically need to include:
 
 ```json
     "runArgs": [

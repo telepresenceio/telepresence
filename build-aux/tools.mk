@@ -91,6 +91,13 @@ tools/tocgen = $(TOOLSBINDIR)/tocgen$(EXE)
 $(TOOLSBINDIR)/tocgen$(EXE): $(TOOLSSRCDIR)/tocgen/*.go
 	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) *.go
 
+# Documentation linter
+# ==========
+#
+tools/docslint = $(TOOLSBINDIR)/docslint$(EXE)
+$(TOOLSBINDIR)/docslint$(EXE): $(TOOLSSRCDIR)/docslint/*.go
+	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) *.go
+
 # Release Notes generator
 # ==========
 #

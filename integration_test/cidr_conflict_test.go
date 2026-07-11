@@ -125,7 +125,7 @@ func (s *cidrConflictSuite) Test_AutoConflictResolution() {
 	// Ingest to get a container environment.
 	envFile := filepath.Join(s.T().TempDir(), "echo.env")
 	itest.TelepresenceOk(ctx, "ingest", "echo", "--env-file", envFile, "--env-syntax", "json")
-	itest.TelepresenceOk(ctx, "leave", "echo")
+	itest.TelepresenceOk(ctx, "detach", "echo")
 	var env map[string]string
 	envData, err := os.ReadFile(envFile)
 	rq.NoError(err)

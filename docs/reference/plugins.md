@@ -69,7 +69,7 @@ $ telepresence docker-run --rm -it jonlabelle/network-tools
 ```
 
 When Telepresence starts a docker container, either by using `telepresence curl`, `telepresence docker-run` commands, or
-by using the `--docker-{run|build|debug}` flag in an engagement command, the following happens:
+by using the `--docker-{run|build|debug}` flag in an attachment command, the following happens:
 
 1. The container will automatically be connected to the teleroute network.
 2. The container will get its DNS configured to use the DNS server exposed by the Telepresence daemon.
@@ -82,7 +82,7 @@ Picture showing a Teleroute network connected to a daemon container and three lo
 
 The Telepresence Telemount Docker volume plugin is installed on demand and ensures that remote directories that are made
 available by SFTP-servers in the traffic-agents can be mounted as Docker volumes. The driver is configured when a
-containerized Telepresence daemon is started, so that volumes can be created when Telepresence engages with a remote
+containerized Telepresence daemon is started, so that volumes can be created when Telepresence attaches to a remote
 container using `telepresence {ingest|intercept|replace|wiretap}`. These commands make a port available in the daemon
 that connects the network driver with the remote SFTP-server.
 
@@ -92,18 +92,18 @@ This is the sequence of events that occur when the user runs `telepresence conne
 2. The daemon configures itself to use a bridge mounter. This mounter is just a proxy that makes the port used by a
    remote traffic-agent's SFTP server available on the daemon containers localhost.
 
-When Telepresence engages a container using the `--docker-{run|build|debug}` flag in an engagement command, the 
+When Telepresence attaches to a container using the `--docker-{run|build|debug}` flag in an attachment command, the 
 following happens:
 
 1. A full list of volumes to be mounted is established. The command options are scanned for `-v`, `--volume` and
-   `--mount` flags, and those flags are then merged with the mounts propagated from the traffic-agent of the engaged
+   `--mount` flags, and those flags are then merged with the mounts propagated from the traffic-agent of the attached
    pod. The command options are given priority in this merge.
 2. A `docker create volume --driver=telemount` is executed for each volume in the list, passing the port number of the
    proxied SFTP server to the volume plugin.
 3. The container is started with `-v` flags appointing the newly created volumes.
 4. The telemount performs SFTP mounts of the volumes, as needed.
 
-When the container engagement ends, the volumes are unmounted and removed, and the telepresence daemon closes the
+When the container attachment ends, the volumes are unmounted and removed, and the telepresence daemon closes the
 SFTP proxy.
 
 [^1]: The plugin registry, name, and tag can be fully configured using the `docker.teleroute` in the `config.yml`

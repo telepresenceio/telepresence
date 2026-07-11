@@ -79,7 +79,7 @@ func (s *multiportInterceptSuite) Test_MultiPortIntercept() {
 	}
 	defer func() {
 		for i := 0; i < 2; i++ {
-			itest.TelepresenceOk(ctx, "leave", s.workloads[i])
+			itest.TelepresenceOk(ctx, "detach", s.workloads[i])
 		}
 	}()
 
@@ -118,7 +118,7 @@ func (s *multiportInterceptSuite) Test_MultiPortLocalConflict() {
 		"--mount=false",
 		"--port", fmt.Sprintf("%d:%s", s.servicePort[0], s.ports[0][0]),
 		"--port", fmt.Sprintf("%d:%s", s.servicePort[1], s.ports[0][1]))
-	defer itest.TelepresenceOk(ctx, "leave", s.workloads[0])
+	defer itest.TelepresenceOk(ctx, "detach", s.workloads[0])
 
 	_, _, err := itest.Telepresence(ctx, "intercept", s.workloads[1],
 		"--mount=false",
@@ -134,7 +134,7 @@ func (s *multiportInterceptSuite) Test_MultiPortRemoteConflict() {
 		"--mount=false",
 		"--port", fmt.Sprintf("%d:%s", s.servicePort[0], s.ports[0][0]),
 		"--port", fmt.Sprintf("%d:%s", s.servicePort[1], s.ports[0][1]))
-	defer itest.TelepresenceOk(ctx, "leave", s.workloads[0])
+	defer itest.TelepresenceOk(ctx, "detach", s.workloads[0])
 
 	_, _, err := itest.Telepresence(ctx, "intercept", "--workload", s.workloads[0], s.workloads[0]+"-again",
 		"--mount=false",

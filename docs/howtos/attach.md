@@ -6,69 +6,14 @@ hide_table_of_contents: true
 
 # Code and debug an application locally
 
-## Local Development Methods
+## Four ways to attach
 
-Telepresence offers three powerful ways to develop your services locally:
-
-### Replace
-* **How it Works:**
-  - Replaces an existing container within your Kubernetes cluster with a Traffic Agent.
-  - Reroutes traffic intended for the replaced container to your local workstation.
-  - Makes the remote environment of the replaced container available to the local workstation.
-  - Provides read-write access to the volumes mounted by replaced container.
-* **Impact:**
-  - A Traffic Agent is injected into the pods of the targeted workload.
-  - The replaced container is removed from the pods of the targeted workload.
-  - The replaced container is restored when the replace operation ends.
-* **Use-cases:**
-  - You're working with message queue consumers and must stop the remote container.
-  - You're working with remote containers configured without incoming traffic.
-
-### Intercept
-* **How it Works:**
-  - Intercepts requests destined for a specific service port (or ports) and reroutes them to the local workstation.
-  - Makes the remote environment of the targeted container available to the local workstation.
-  - Provides read-write access to the volumes mounted by the targeted container.
-  - Makes it possible to filter traffic using HTTP headers and paths.
-* **Impact:**
-  - A Traffic Agent is injected into the pods of the targeted workload (or, with `--node-agent`, a node-hosted agent engages the pod without modifying or restarting it).
-  - Intercepted traffic is rerouted to the local workstation and will no longer reach the remote service.
-  - Only traffic that matches the intercept filters will be rerouted.
-  - All containers keep on running.
-* **Use-cases:**
-  - Your main focus is the service API rather than the cluster's pods and containers.
-  - You want your local service to only receive specific ingress traffic, while other traffic must be untouched.
-  - You want your remote container to continue processing other requests or background tasks.
-
-### Wiretap
-* **How it Works:**
-  - Adds a wiretap on a specific service port (or ports) and sends the data to the local workstation.
-  - Makes the remote environment of the targeted container available to the local workstation.
-  - Provides read-only access to the volumes mounted by the targeted container.
-  - Makes it possible to filter traffic using HTTP headers and paths.
-* **Impact:**
-  - A Traffic Agent is injected into the pods of the targeted workload (or, with `--node-agent`, a node-hosted agent engages the pod without modifying or restarting it).
-  - All containers keep on running.
-  - All traffic will still reach the remote service.
-  - Wiretapped traffic is rerouted to the local workstation.
-* **Use-cases:**
-  - You need a solution where several developers can engage with the same service simultaneously.
-  - Your main focus is the service API rather than the cluster's pods and containers.
-  - You want your local service to only receive specific ingress traffic.
-  - You don't care about the responses sent by your local service.
-  - You don't want breakpoints in your local service to affect the remote service.
-  - You want to keep the impact that your local development has on the cluster to a minimum.
-
-### Ingest
-* **How it Works:**
-   - Makes the remote environment of the ingested container available to the local workstation.
-   - Provides read-only access to the volumes mounted by replaced container.
-* **Impact:**
-   - A Traffic Agent is injected into the pods of the targeted workload (or, with `--node-agent`, a node-hosted agent engages the pod without modifying or restarting it).
-   - No traffic is rerouted and all containers keep on running.
-* **Use-cases:**
-   - You want to keep the impact that your local development has on the cluster to a minimum.
-   - You have don't need traffic being routed from the cluster, and read-only access to the container's volumes is ok.
+Telepresence offers four ways to attach to a workload and run your service
+locally against the cluster: **replace**, **intercept**, **wiretap**, and
+**ingest**. They differ in how traffic is routed, whether the remote container
+keeps running, and how volumes are shared; see
+[Attachments](../concepts/attachments.md) for a comparison and guidance on
+choosing. This guide walks through using each of them.
 
 ## Prerequisites
 
@@ -102,11 +47,11 @@ network interface. Remote mounts must be made relative to a specific mount point
    ```console
    $ telepresence list
    ...
-   deolpoyment example-app: ready to engage (traffic-agent not yet installed)
+   deployment example-app: ready to attach (traffic-agent not yet installed)
    ...
    ```
 
-3. Get the name of the container you want to replace (output truncated for brewity)
+3. Get the name of the container you want to replace (output truncated for brevity)
     ```console
     $ kubectl describe deploy example-app
     Name:                   example-app
@@ -123,7 +68,7 @@ network interface. Remote mounts must be made relative to a specific mount point
       Labels:  app=example-app
       Containers:
        echo-server:
-        Image:      ghcr.io/telepresencio/echo-server
+        Image:      ghcr.io/telepresenceio/echo-server
         Port:       8080/TCP
     ```
 
@@ -154,7 +99,7 @@ You can now:
 - Query services only exposed in your cluster's network.
 - Set breakpoints in your IDE to investigate bugs.
 
-6. You end the replace operation with the command `telepresence leave example-app --container echo-server`
+6. You end the replace operation with the command `telepresence detach example-app --container echo-server`
 
 ## Ingest Your Container
 
@@ -279,16 +224,16 @@ present challenges in terms of toolchain integration, debugging, and the overall
 
    You now have access to your remote Kubernetes API server as if you were on the same network.
 
-3. Enter `telepresence list` and make sure the workload you want to engage is listed. For example:
+3. Enter `telepresence list` and make sure the workload you want to attach to is listed. For example:
 
    ```console
    $ telepresence list
    ...
-   deployment example-app: ready to engage (traffic-agent not yet installed)
+   deployment example-app: ready to attach (traffic-agent not yet installed)
    ...
    ```
 
-4. Use `replace`, `inject`, or `intercept` to engage the container in combination with the `--docker-run` flag.
+4. Use `replace`, `inject`, or `intercept` to attach to the container in combination with the `--docker-run` flag.
    Example using `telepresence replace`
 
     ```console

@@ -32,6 +32,25 @@ The telepresence cli can install the traffic manager for you. The basic install 
    telepresence helm install
    ```
 
+### How the traffic-agent reaches your workloads
+
+When a developer attaches to a workload, the traffic-manager places a
+[traffic-agent](../concepts/glossary.md) next to the application. The default
+install supports one way of doing that: the agent-injector webhook adds the
+agent as a **sidecar** container, restarting the workload's pods once. The
+alternative is the **node-agent**: a node-hosted agent that attaches to the
+existing pods without modifying or restarting them, at the cost of running
+privileged. The node-agent is disabled by default and is enabled at install
+time:
+
+```shell
+telepresence helm install --set nodeAgent.enabled=true
+```
+
+See [Choose between the sidecar and the node-agent](../howtos/agent-modes.md)
+for the trade-offs and for configuration examples, including how to make the
+node-agent the default, or the only available mode.
+
 ### Customizing the Traffic Manager.
 
 For details on what the Helm chart installs and what can be configured, see the Helm chart [configuration on artifacthub](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss).
@@ -167,6 +186,9 @@ A selector is considered _static_ if it meets the following conditions:
   The `key` of the match expression must be "kubernetes.io/metadata.name".
   The `operator` of the match expression must be "In" (case sensitive).
   The `values` list of the match expression must contain at least one value.
+
+The exact permissions that the traffic-manager is granted in each mode are listed in
+[Telepresence RBAC](../reference/rbac.md#administrating-telepresence).
 
 ## Static Namespace Selection RBAC
 

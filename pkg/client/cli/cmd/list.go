@@ -196,12 +196,12 @@ func (s *listCommand) printList(ctx context.Context, workloads []*connector.Work
 			return "progressing..."
 		}
 		if workload.AgentVersion != "" {
-			return "ready to engage (traffic-agent already installed)"
+			return "ready to attach (traffic-agent already installed)"
 		}
 		if workload.NotInterceptableReason != "" {
-			return "unable to engage (traffic-agent not installed): " + workload.NotInterceptableReason
+			return "unable to attach (traffic-agent not installed): " + workload.NotInterceptableReason
 		} else {
-			return "ready to engage (traffic-agent not yet installed)"
+			return "ready to attach (traffic-agent not yet installed)"
 		}
 	}
 

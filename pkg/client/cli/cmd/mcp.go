@@ -46,7 +46,7 @@ func mcp() *cobra.Command {
 				CmdSelector: ophis.AllowCmds(
 					"telepresence intercept",
 					"telepresence ingest",
-					"telepresence leave",
+					"telepresence detach",
 					"telepresence list",
 					"telepresence wiretap",
 					"telepresence replace",

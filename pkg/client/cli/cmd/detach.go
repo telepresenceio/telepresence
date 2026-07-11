@@ -1,0 +1,153 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/connect"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
+)
+
+func detachCmd() *cobra.Command {
+	return newDetachCmd("detach")
+}
+
+// newDetachCmd builds the command used to end an attachment (replace, intercept,
+// ingest, or wiretap). It's shared by detachCmd and leaveCmd; the latter is a
+// deprecated alias that only differs in its Use string and visibility.
+func newDetachCmd(use string) *cobra.Command {
+	var containerName string
+	var namespace string
+	cmd := &cobra.Command{
+		Use:  use + " [flags] <attachment_name>",
+		Args: cobra.ExactArgs(1),
+
+		Short: "Remove existing attachment",
+		Annotations: map[string]string{
+			ann.Session: ann.Required,
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := connect.InitCommand(cmd); err != nil {
+				return err
+			}
+			defer progress.Stop(cmd.Context())
+			return detach(cmd.Context(), strings.TrimSpace(args[0]), containerName, namespace)
+		},
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			shellCompDir := cobra.ShellCompDirectiveNoFileComp
+			if len(args) != 0 {
+				return nil, shellCompDir
+			}
+			if err := connect.InitCommand(cmd); err != nil {
+				return nil, shellCompDir | cobra.ShellCompDirectiveError
+			}
+			ctx := cmd.Context()
+			userD := daemon.MustGetUserClient(ctx)
+			resp, err := userD.List(ctx, &connector.ListRequest{
+				Filter: connector.ListRequest_INTERCEPTS | connector.ListRequest_REPLACEMENTS | connector.ListRequest_INGESTS,
+			})
+			if err != nil {
+				return nil, shellCompDir | cobra.ShellCompDirectiveError
+			}
+			if len(resp.Workloads) == 0 {
+				return nil, shellCompDir
+			}
+
+			var completions []string
+			for _, wl := range resp.Workloads {
+				for _, ii := range wl.InterceptInfo {
+					name := ii.Spec.Name
+					if strings.HasPrefix(name, toComplete) {
+						completions = append(completions, name)
+					}
+				}
+				for _, ig := range wl.IngestInfo {
+					name := ig.Workload
+					if strings.HasPrefix(name, toComplete) {
+						completions = append(completions, name)
+					}
+				}
+			}
+			return completions, shellCompDir
+		},
+	}
+	cmd.Flags().StringVarP(&containerName, "container", "c", "", "Container name")
+	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Namespace of the ingest. Required to disambiguate ingests with the same workload name across mapped namespaces")
+	return cmd
+}
+
+func detach(ctx context.Context, name, container, namespace string) error {
+	userD := daemon.MustGetUserClient(ctx)
+
+	var ic *manager.InterceptInfo
+	var ig *connector.IngestInfo
+	var env map[string]string
+	var err error
+	icName := name
+	if container != "" {
+		icName += "/" + container
+	}
+	ic, err = userD.GetIntercept(ctx, &manager.GetInterceptRequest{Name: icName})
+	if err != nil && status.Code(err) != codes.NotFound {
+		return grpc.FromGRPC(err)
+	}
+
+	if ic == nil {
+		ig, err = userD.GetIngest(ctx, &connector.IngestIdentifier{
+			WorkloadName:  name,
+			ContainerName: container,
+			Namespace:     namespace,
+		})
+		if err != nil {
+			if status.Code(err) != codes.NotFound {
+				return grpc.FromGRPC(err)
+			}
+
+			// User probably misspelled the name of the replace/intercept/ingest
+			msg := fmt.Sprintf("Found no replace, intercept, or ingest named %q", name)
+			if container != "" {
+				msg = fmt.Sprintf("%s with container %q", msg, container)
+			}
+			return errcat.User.New(msg)
+		}
+		env = ig.Environment
+	} else {
+		env = ic.Environment
+	}
+
+	if userD.DaemonID().Containerized {
+		handlerContainer, stopContainer := env["TELEPRESENCE_HANDLER_CONTAINER_NAME"]
+		if stopContainer {
+			// Stop the handler's container. The daemon is most likely running in another
+			// container, and won't be able to.
+			err = docker.StopContainer(ctx, handlerContainer)
+			if err != nil {
+				clog.Error(ctx, err)
+			}
+		}
+	}
+
+	if ic != nil {
+		_, err = userD.RemoveIntercept(ctx, &manager.RemoveInterceptRequest2{Name: ic.Spec.Name})
+	} else {
+		_, err = userD.LeaveIngest(ctx, &connector.IngestIdentifier{
+			WorkloadName:  ig.Workload,
+			ContainerName: ig.Container,
+			Namespace:     ig.Namespace,
+		})
+	}
+	return grpc.FromGRPC(err)
+}

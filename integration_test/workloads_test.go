@@ -85,7 +85,7 @@ func (s *connectedSuite) doIntercept(tp, wl, port string) {
 	}, 60*time.Second, 5*time.Second)
 	s.CapturePodLogs(ctx, wl, "traffic-agent", s.AppNamespace())
 	time.Sleep(10 * time.Second)
-	itest.TelepresenceOk(ctx, "leave", wl)
+	itest.TelepresenceOk(ctx, "detach", wl)
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.NotContains(stdout, wl+": intercepted")
 }
@@ -112,7 +112,7 @@ func (s *connectedSuite) successfulIngest(tp, wl string) {
 	require.Contains(stdout, wl+": ingested")
 	require.NotContains(stdout, "Volume Mount Point")
 	s.CapturePodLogs(ctx, wl, "traffic-agent", s.AppNamespace())
-	itest.TelepresenceOk(ctx, "leave", wl)
+	itest.TelepresenceOk(ctx, "detach", wl)
 	stdout = itest.TelepresenceOk(ctx, "list", "--ingests")
 	require.NotContains(stdout, wl+": ingested")
 	if !s.ClientIsVersion(">2.21.x") && s.ManagerIsVersion(">2.21.x") {

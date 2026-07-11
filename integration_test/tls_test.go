@@ -226,7 +226,7 @@ func (s *dockerDaemonSuite) Test_TLSAnnotations() {
 			}, 10*time.Second, 3*time.Second, "expected curl response never arrived")
 
 			// Terminate the ongoing intercept
-			so, se, err := itest.Telepresence(ctx, "leave", ttSvc)
+			so, se, err := itest.Telepresence(ctx, "detach", ttSvc)
 			if so != "" {
 				clog.Info(ctx, so)
 			}

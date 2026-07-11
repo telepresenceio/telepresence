@@ -2,35 +2,23 @@
 title: "Using Telepresence with Docker Compose"
 hide_table_of_contents: true
 ---
-# Telepresence Docker Compose Extensions
+# Extend Docker Compose with Telepresence
 
 A Docker Compose file can contain extensions that Docker Compose ignores. The `telepresence compose` command functions similarly to `docker compose`, but will process any `x-tele` extensions present in the Docker Compose file or its overrides before passing the final Compose specification to Docker Compose.
 
-The `x-tele` extensions are particularly useful when you have a set of services defined in a Docker Compose file that mirrors services running in a cluster, and you want your local services to interact with remote services or vice versa. The `x-tele` extensions enable your Compose services to either act as handlers when telepresence engages a remote service, or to temporarily act as proxies for remotely running services.
+The `x-tele` extensions are particularly useful when you have a set of services defined in a Docker Compose file that mirrors services running in a cluster, and you want your local services to interact with remote services or vice versa. The `x-tele` extensions enable your Compose services to either act as handlers when telepresence attaches to a remote service, or to temporarily act as proxies for remotely running services.
 
 The extensions can be added directly to the `compose.yaml` file, or to a `compose.override.yaml` (merged automatically by Docker Compose).
 
-## Supported `x-tele` Extensions
+## The `x-tele` extensions
 
-### Top-level Extension
-The `x-tele` [top-level extension](../reference/compose#top-level-extension) is used to define a connection to the cluster, and to override the default mount behavior when engaging with remote services.
-
-### Service Extensions
-
-The `x-tele` [service extensions](../reference/compose#service-extensions) are used to define the behavior of a service when engaged with a remote service.
-
-Telepresence supports the following types:
-
-| Type                                        | Local service Behavior                                          | Similar to               |
-|---------------------------------------------|-----------------------------------------------------------------|--------------------------|
-| [connect](../reference/compose#connect)     | Service has access to the cluster's resources (DNS and routing) | `telepresence connect`   |
-| [proxy](../reference/compose#proxy)         | Replaced with a proxy for a service in the cluster              | N/A                      |
-| [wiretap](../reference/compose#wiretap)     | Receives wiretapped data from a service in the cluster          | `telepresence wiretap`   |
-| [ingest](../reference/compose#ingest)       | Acts as the handler for an ingested container the cluster       | `telepresence ingest`    |
-| [intercept](../reference/compose#intercept) | Acts as the handler for an intercepted service the cluster      | `telepresence intercept` |
-| [replace](../reference/compose#replace)     | Replaces a remote container in the cluster                      | `telepresence replace`   |
-
-All types imply a `connect`, and thus rely on the top-level `x-tele` extension that defines the connection to the cluster.
+Telepresence recognizes an `x-tele` extension at the top level of the Compose file — defining
+connections to the cluster and volume mount policies — and per-service `x-tele` extensions of
+type `connect`, `proxy`, `ingest`, `intercept`, `replace`, or `wiretap`, each mirroring the
+telepresence command of the same name. All service types imply a `connect`. The complete field
+reference for every extension is in
+[Telepresence Docker Compose Extension](../reference/compose.md); this page walks through using
+them.
 
 ## Walkthrough and Samples
 This documentation will give some examples on how to use the `x-tele` extension using the sample Emoji application, originally developed by Buoyant.io, from the https://github.com/telepresenceio/emojivoto repository. This app is easy to deploy locally using `docker compose up` or remotely to a cluster using `kubectl apply --kustomize`.
@@ -64,7 +52,7 @@ $ docker compose down
 
 #### 3. Use the app remotely
 
-We Create the cluster resources by applying the `kustomize/deployment` directory using the following command:
+We create the cluster resources by applying the `kustomize/deployment` directory using the following command:
 
 ```console
 $ kubectl apply -k kustomize/deployment
@@ -255,7 +243,7 @@ vote-bot-1  | ✔ Voting for :100:
 vote-bot-1  | ✔ Voting for :bulb:
 ...
 ```
-We now see "Proxied service voting" and then, in contrast to the output from a `docker compose up`, no further output from that service. The `vote-bot-1` continues to vote though, to it's obviously still talking to a `voting`.
+We now see "Proxied service voting" and then, in contrast to the output from a `docker compose up`, no further output from that service. The `vote-bot-1` continues to vote though, so it's obviously still talking to a `voting`.
 
 ### Takeaways
 Using our Telepresence "proxy" extension, we have now successfully modified our setup so that the services in the compose.yaml file interact with a service in the cluster.
@@ -317,7 +305,7 @@ services:
 ```console
 $ telepresence compose up
  ✔ Connected to context minikube, namespace emojivoto (https://192.168.49.2:8443)     2.8s 
-[+] Engaging 2/2
+[+] Attaching 2/2
  ✔ emoji  Replaced service emoji                                                      2.0s 
  ✔ voting Replaced service voting                                                     1.6s 
 [+] Running 4/4

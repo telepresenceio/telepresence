@@ -8,19 +8,13 @@ hide_table_of_contents: true
 
 ### Why Telepresence
 
-Modern microservices-based applications that are deployed into Kubernetes often consist of tens or hundreds of services. The resource constraints and number of these services means that it is often difficult to impossible to run all of this on a local development machine, which makes fast development and debugging very challenging. The fast [inner development loop](concepts/devloop.md) from previous software projects is often a distant memory for cloud developers.
+Modern microservices-based applications that are deployed into Kubernetes often consist of tens or hundreds of services. The resource constraints and number of these services means that it is often difficult to impossible to run all of this on a local development machine, which makes fast development and debugging very challenging. The fast inner development loop from previous software projects is often a distant memory for cloud developers.
 
 Telepresence enables you to connect your local development machine seamlessly to the cluster via a two-way proxying mechanism. This enables you to code locally and run the majority of your services within a remote Kubernetes cluster — which in the cloud means you have access to effectively unlimited resources.
 
 Ultimately, this empowers you to develop services locally and still test integrations with dependent services or data stores running in the remote cluster.
 
-Telepresence provides three different ways for you to code, debug, and test your service locally using your favourite local IDE and in-process debugger.
-
-First off, you can "replace" the service with your own local version. This means even though you run your service locally, you can see how it interacts with the rest of the services in the cluster. It's like swapping out a piece of a puzzle and seeing how the whole picture changes. Your local process will have access to the same network, environment, and volumes as the service that it replaces.
-
-You can also "intercept" any requests made to a service. This is similar to replacing the service, but the remote service will keep running, perform background tasks, and handle traffic that isn't intercepted.
-
-Finally, you can "ingest" a service. Again, similar to a "replace", but nothing changes in the cluster during an "ingest", and no traffic is routed to the workstation.
+Telepresence provides four different ways for you to code, debug, and test your service locally using your favourite local IDE and in-process debugger: you can **replace** a remote container entirely, **intercept** the requests made to a service, **wiretap** a copy of a service's traffic, or **ingest** a container's environment and volumes without touching traffic. See [Attachments](concepts/attachments.md) for how the four modes compare and when to use which.
 
 #### What operating systems does Telepresence work on?
 
@@ -56,9 +50,9 @@ In essence, Telepresence makes the DNS of the connected namespace available loca
 
 You can connect to cloud-based data stores and services that are directly addressable within the cluster (e.g. when using an [ExternalName](https://kubernetes.io/docs/concepts/services-networking/service/#externalname) Service type), such as AWS RDS, Google pub-sub, or Azure SQL Database.
 
-#### Will Telepresence be able to engage with workloads running on a private cluster or cluster running within a virtual private cloud (VPC)?
+#### Will Telepresence be able to attach to workloads running on a private cluster or cluster running within a virtual private cloud (VPC)?
 
-Yes, but it doesn't need to have a publicly accessible IP address.
+Yes. The cluster does not need to have a publicly accessible IP address.
 
 The cluster must also have access to an external registry to be able to download the traffic-manager and traffic-agent images that are deployed when connecting with Telepresence.
 
@@ -73,13 +67,13 @@ Sudo is only needed when using a standalone binary installation without a system
 
 #### What components get installed in the cluster when running Telepresence?
 
-A `traffic-manager` service is deployed in a namespace of your choice (default 'ambassador') within your cluster, and this manages resilient intercepts and connections between your local machine and the cluster.
+A `traffic-manager` service is deployed in a namespace of your choice (default 'ambassador') within your cluster, and this manages attachments and connections between your local machine and the cluster.
 
-A Traffic Agent container is injected per pod that is being engaged. The injection happens the first time a `replace`, an `ingest`, or an `intercept` is made on a workload, unless you choose to control the injection using an annotation, in which case the injection happens when the `traffic-manager` is installed. When engaging with `--node-agent` (requires `nodeAgent.enabled=true` on the traffic-manager), nothing is injected — a node-hosted agent instead attaches to the existing pod, which is neither modified nor restarted. See the [node-agent reference](reference/node-agent.md) for details.
+A Traffic Agent container is injected per pod involved in an attachment. The injection happens the first time a `replace`, an `ingest`, or an `intercept` is made on a workload, unless you choose to control the injection using an annotation, in which case the injection happens when the `traffic-manager` is installed. When the cluster is configured to serve attachments with the node-agent (`nodeAgent.enabled=true` on the traffic-manager), nothing is injected — a node-hosted agent instead attaches to the existing pod, which is neither modified nor restarted. See the [node-agent reference](reference/node-agent.md) for details.
 
 #### How can I remove all the Telepresence components installed within my cluster?
 
-You can run the command `telepresence helm uninstall` to remove everything from the cluster, including the `traffic-manager`, all the `traffic-agent` containers injected into each pod being engaged, and any node-hosted agent Jobs.
+You can run the command `telepresence helm uninstall` to remove everything from the cluster, including the `traffic-manager`, all the `traffic-agent` containers injected into each attached pod, and any node-hosted agent Jobs.
 
 You also can run the command `telepresence uninstall <workload>` to remove the injected `traffic-agent` containers injected into each pod for that workload.
 
@@ -99,7 +93,7 @@ protocol over that connection.
 
 #### Is Telepresence OSS open source?
 
-Yes, it is! You'll find both source code and documentation in the [Telepresence GitHub repository](https://github.com/telepresenceio/telepresence), licensed using the [apache License Version 2.0](https://github.com/telepresenceio/telepresence?tab=License-1-ov-file#readme).
+Yes, it is! You'll find both source code and documentation in the [Telepresence GitHub repository](https://github.com/telepresenceio/telepresence), licensed using the [Apache License Version 2.0](https://github.com/telepresenceio/telepresence?tab=License-1-ov-file#readme).
 
 #### How do I share my feedback on Telepresence?
 

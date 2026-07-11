@@ -117,13 +117,13 @@ func testManualAgent(s *itest.Suite, nsp itest.NamespacePair) {
 	defer itest.TelepresenceQuitOk(ctx)
 
 	stdout = itest.TelepresenceOk(ctx, "list")
-	require.Regexp(regexp.MustCompile(`.*`+sc.WorkloadName+`\s*:\s*ready to (engage|intercept) \(traffic-agent already installed\).*`), stdout)
+	require.Regexp(regexp.MustCompile(`.*`+sc.WorkloadName+`\s*:\s*ready to (attach|intercept) \(traffic-agent already installed\).*`), stdout)
 
 	svcPort, svcCancel := itest.StartLocalHttpEchoServer(ctx, sc.WorkloadName)
 	defer svcCancel()
 
 	itest.TelepresenceOk(ctx, "intercept", sc.WorkloadName, "--port", strconv.Itoa(svcPort))
-	defer itest.TelepresenceOk(ctx, "leave", sc.WorkloadName)
+	defer itest.TelepresenceOk(ctx, "detach", sc.WorkloadName)
 
 	s.Eventually(func() bool {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")

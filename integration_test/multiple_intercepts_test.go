@@ -61,7 +61,7 @@ func (s *multipleInterceptsSuite) SetupSuite() {
 func (s *multipleInterceptsSuite) TearDownSuite() {
 	ctx := s.Context()
 	for i := 0; i < s.ServiceCount(); i++ {
-		itest.TelepresenceOk(ctx, "leave", fmt.Sprintf("%s-%d", s.Name(), i))
+		itest.TelepresenceOk(ctx, "detach", fmt.Sprintf("%s-%d", s.Name(), i))
 	}
 	for _, cancel := range s.serviceCancel {
 		if cancel != nil {
@@ -72,7 +72,7 @@ func (s *multipleInterceptsSuite) TearDownSuite() {
 	s.Eventually(func() bool {
 		stdout := itest.TelepresenceOk(ctx, "list", "-n", s.AppNamespace())
 		for i := 0; i < s.ServiceCount(); i++ {
-			rx := regexp.MustCompile(fmt.Sprintf(`%s-%d\s*: ready to (engage|intercept)`, s.Name(), i))
+			rx := regexp.MustCompile(fmt.Sprintf(`%s-%d\s*: ready to %s`, s.Name(), i, s.AttachVerb()))
 			if !rx.MatchString(stdout) {
 				return false
 			}
@@ -145,7 +145,7 @@ func (s *multipleInterceptsSuite) Test_Intercepts() {
 func (s *multipleInterceptsSuite) Test_ReportsPortConflict() {
 	ctx := s.Context()
 	svc := fmt.Sprintf("%s-%d", s.Name(), 0)
-	itest.TelepresenceOk(ctx, "leave", svc)
+	itest.TelepresenceOk(ctx, "detach", svc)
 	defer itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--port", strconv.Itoa(s.servicePort[0]), svc)
 	_, stderr, err := itest.Telepresence(s.Context(), "intercept", "--mount", "false", "--port", strconv.Itoa(s.servicePort[1]), svc)
 	s.Error(err)

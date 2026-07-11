@@ -97,7 +97,7 @@ func (s *singleServiceSuite) Test_InterceptOperationRestoredAfterFailingInject()
 		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
 	}, 12*time.Second, 3*time.Second)
-	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 }
 
 // Test_HelmUpgradeWebhookSecret tests that updating the webhook secret doesn't interfere with
@@ -121,7 +121,7 @@ func (s *singleServiceSuite) Test_HelmUpgradeWebhookSecret() {
 	// Check that the intercept is still active
 	st := itest.TelepresenceStatusOk(ctx)
 	rq.Len(st.UserDaemon.Intercepts, 1)
-	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 
 	// Uninstall the agent again. We want to be sure that the webhook kicks in to inject it once
 	// we intercept.
@@ -141,7 +141,7 @@ func (s *singleServiceSuite) Test_HelmUpgradeWebhookSecret() {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
 	}, 12*time.Second, 3*time.Second)
-	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 }
 
 // Test_HelmUpgradeMountedWebhookSecret tests that updating the webhook secret does interfere with
@@ -191,5 +191,5 @@ func (s *singleServiceSuite) Test_HelmUpgradeMountedWebhookSecret() {
 		stdout, _, err := itest.Telepresence(ctx, "list", "--intercepts")
 		return err == nil && regexp.MustCompile(s.ServiceName()+`\s*: intercepted`).MatchString(stdout)
 	}, 12*time.Second, 3*time.Second)
-	itest.TelepresenceOk(ctx, "leave", s.ServiceName())
+	itest.TelepresenceOk(ctx, "detach", s.ServiceName())
 }

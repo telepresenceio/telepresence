@@ -71,10 +71,7 @@ func (s *workloadConfigurationSuite) Test_InterceptsDeploymentWithDisabledReplic
 	s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceDisconnectOk(ctx)
 
-	verb := "engage"
-	if !s.ClientIsVersion(">2.21.x") {
-		verb = "intercept"
-	}
+	verb := s.AttachVerb()
 	require.Eventually(
 		func() bool {
 			stdout, _, err := itest.Telepresence(ctx, "list")
@@ -89,7 +86,7 @@ func (s *workloadConfigurationSuite) Test_InterceptsDeploymentWithDisabledReplic
 
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.Contains(stdout, fmt.Sprintf("%s: intercepted", wl))
-	itest.TelepresenceOk(ctx, "leave", wl)
+	itest.TelepresenceOk(ctx, "detach", wl)
 }
 
 func (s *workloadConfigurationSuite) Test_InterceptsReplicaSetWithDisabledDeployments() {
@@ -108,10 +105,7 @@ func (s *workloadConfigurationSuite) Test_InterceptsReplicaSetWithDisabledDeploy
 	s.TelepresenceConnect(ctx)
 	defer itest.TelepresenceDisconnectOk(ctx)
 
-	verb := "engage"
-	if !s.ClientIsVersion(">2.21.x") {
-		verb = "intercept"
-	}
+	verb := s.AttachVerb()
 	expect := fmt.Sprintf("%s: ready to %s", interceptableWl, verb)
 	require.Eventuallyf(
 		func() bool {
@@ -129,5 +123,5 @@ func (s *workloadConfigurationSuite) Test_InterceptsReplicaSetWithDisabledDeploy
 
 	stdout = itest.TelepresenceOk(ctx, "list", "--intercepts")
 	require.Contains(stdout, fmt.Sprintf("%s: intercepted", interceptableWl))
-	itest.TelepresenceOk(ctx, "leave", interceptableWl)
+	itest.TelepresenceOk(ctx, "detach", interceptableWl)
 }

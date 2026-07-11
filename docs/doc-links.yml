@@ -12,16 +12,16 @@
       link: install/cloud
 - title: Core concepts
   items:
-    - title: The developer experience and the inner dev loop
-      link: concepts/devloop
-    - title: "Making the remote local: Faster feedback, collaboration and debugging"
-      link: concepts/faster
-    - title: Intercepts
-      link: concepts/intercepts
+    - title: Architecture
+      link: concepts/architecture
+    - title: Attachments
+      link: concepts/attachments
+    - title: Glossary
+      link: concepts/glossary
 - title: How do I...
   items:
     - title: Code and debug an application locally
-      link: howtos/engage
+      link: howtos/attach
     - title: Choose between the sidecar and the node-agent
       link: howtos/agent-modes
     - title: Use Telepresence with Docker
@@ -34,12 +34,16 @@
       link: howtos/cluster-in-vm
     - title: Intercept TLS/mTLS Applications
       link: howtos/mtls
+    - title: Resolve Istio ServiceEntry Hosts
+      link: howtos/istio
+    - title: Run the Telepresence client in a container
+      link: howtos/inside-container
+    - title: Monitor with Prometheus and Grafana
+      link: howtos/monitoring
     - title: Use Telepresence with Azure (Microsoft Learn)
       link: https://learn.microsoft.com/en-us/azure/aks/use-telepresence-aks
 - title: Technical reference
   items:
-    - title: Architecture
-      link: reference/architecture
     - title: Telepresence CLI
       link: reference/cli/telepresence
       items:
@@ -127,6 +131,8 @@
           link: reference/cli/telepresence_connect
         - title: telepresence curl
           link: reference/cli/telepresence_curl
+        - title: telepresence detach
+          link: reference/cli/telepresence_detach
         - title: telepresence docker-run
           link: reference/cli/telepresence_docker-run
         - title: telepresence gather-logs
@@ -163,8 +169,6 @@
           link: reference/cli/telepresence_ingest
         - title: telepresence intercept
           link: reference/cli/telepresence_intercept
-        - title: telepresence leave
-          link: reference/cli/telepresence_leave
         - title: telepresence list
           link: reference/cli/telepresence_list
         - title: telepresence list-contexts
@@ -229,52 +233,46 @@
       link: reference/config
     - title: Cluster-side configuration
       link: reference/cluster-config
-    - title: Using Docker for engagements
-      link: reference/docker-run
     - title: Telepresence Compose Extensions
       link: reference/compose
-    - title: Running Telepresence in a Docker container
-      link: reference/inside-container
     - title: Environment variables
       link: reference/environment
-    - title: Engagements
+    - title: Attachments
       items:
-        - title: Configure intercept using CLI
-          link: reference/engagements/cli
+        - title: Configure attachments using CLI
+          link: reference/attachments/cli
         - title: Traffic Agent Sidecar
-          link: reference/engagements/sidecar
+          link: reference/attachments/sidecar
         - title: Target a specific container
-          link: reference/engagements/container
-        - title: Dealing With Conflicting Engagements
-          link: reference/engagements/conflicts
+          link: reference/attachments/container
+        - title: Dealing With Conflicting Attachments
+          link: reference/attachments/conflicts
+        - title: Protocol selection
+          link: reference/attachments/protocols
     - title: Telepresence Docker Plugins
       link: reference/plugins
     - title: Volume mounts
       link: reference/volume
     - title: RESTful API service
       link: reference/restapi
-    - title: DNS resolution
-      link: reference/dns
     - title: RBAC
       link: reference/rbac
     - title: Telepresence and VPNs
       link: reference/vpn
-    - title: Networking through Virtual Network Interface
-      link: reference/tun-device
     - title: Connection Routing
       link: reference/routing
     - title: Traffic Agent Packet Routing
       link: reference/agent-packet-routing
-    - title: Route Controller
+    - title: Routing Loop Prevention on Local Clusters
       link: reference/route-controller
     - title: Node-hosted Traffic Agent
       link: reference/node-agent
-    - title: Monitoring
-      link: reference/monitoring
 - title: Comparisons
   items:
     - title: Telepresence vs mirrord
       link: compare/mirrord
+    - title: Telepresence vs Gefyra
+      link: compare/gefyra
 - title: FAQs
   link: faqs
 - title: Troubleshooting

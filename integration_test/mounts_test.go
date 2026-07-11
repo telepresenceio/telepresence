@@ -111,12 +111,12 @@ func (s *mountsSuite) Test_MountWrite() {
 	path := filepath.Join(mountPoint, "data", "hello.txt")
 	rq := s.Require()
 	rq.NoError(os.WriteFile(path, []byte(content), 0o644))
-	itest.TelepresenceOk(ctx, "leave", "hello")
+	itest.TelepresenceOk(ctx, "detach", "hello")
 	time.Sleep(2 * time.Second)
 
 	mountPoint = filepath.Join(s.T().TempDir(), "data")
 	itest.TelepresenceOk(ctx, "intercept", "hello", "--mount", mountPoint, "--port", "80:80")
-	defer itest.TelepresenceOk(ctx, "leave", "hello")
+	defer itest.TelepresenceOk(ctx, "detach", "hello")
 	s.CapturePodLogs(ctx, "hello", "traffic-agent", s.AppNamespace())
 
 	path = filepath.Join(mountPoint, "data", "hello.txt")
@@ -135,7 +135,7 @@ func (s *mountsSuite) Test_MountReadOnly() {
 
 	mountPoint := filepath.Join(s.T().TempDir(), "mnt")
 	itest.TelepresenceOk(ctx, "intercept", "hello", "--mount", mountPoint+":ro", "--port", "80:80")
-	defer itest.TelepresenceOk(ctx, "leave", "hello")
+	defer itest.TelepresenceOk(ctx, "detach", "hello")
 	time.Sleep(2 * time.Second)
 	s.Require().Error(os.WriteFile(filepath.Join(mountPoint, "data", "hello.txt"), []byte("hello world\n"), 0o644))
 }
@@ -187,7 +187,7 @@ func (s *mountsSuite) Test_CollidingMounts() {
 			ctx := s.Context()
 			require := s.Require()
 			stdout := itest.TelepresenceOk(ctx, "intercept", "hello", "--mount", tt.mountPoint, "--port", fmt.Sprintf("%d:%d", tt.svcPort, tt.svcPort))
-			defer itest.TelepresenceOk(ctx, "leave", "hello")
+			defer itest.TelepresenceOk(ctx, "detach", "hello")
 			require.Contains(stdout, "Using Deployment hello")
 			if i == 0 {
 				s.CapturePodLogs(ctx, "hello", "traffic-agent", s.AppNamespace())

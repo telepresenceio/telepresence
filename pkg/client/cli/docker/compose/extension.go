@@ -21,15 +21,15 @@ import (
 
 type serviceExtension interface {
 	// Activate the service extension.
-	activate(*transformer) (*engagement, error)
+	activate(*transformer) (*attachment, error)
 
 	deactivate() error
 
-	engaged() (*engagement, error)
+	attached() (*attachment, error)
 
-	engagementType() types.EngagementType
+	attachmentType() types.AttachmentType
 
-	// name used for the proxy or the engagement. It defaults to the name of the compose-service.
+	// name used for the proxy or the attachment. It defaults to the name of the compose-service.
 	name() string
 
 	// connection used when the extension is activated.
@@ -48,7 +48,7 @@ type serviceExtension interface {
 	// SetConnection assigns the connection used when the extension is activated.
 	setConnection(c *connection)
 
-	init(*config, types.EngagementType, *compose.ServiceConfig)
+	init(*config, types.AttachmentType, *compose.ServiceConfig)
 }
 
 type mountsExtension interface {
@@ -60,7 +60,7 @@ type mountsExtension interface {
 type workloadExtension interface {
 	mountsExtension
 
-	// workload is the name of the engaged workload. It defaults to name().
+	// workload is the name of the attached workload. It defaults to name().
 	workload() string
 
 	createInterceptRequest(localMountPort uint16) (*connector.CreateInterceptRequest, error)
@@ -80,7 +80,7 @@ func (c *config) parseServiceExtension(composeService *compose.ServiceConfig, v 
 	if !ok {
 		return nil, errcat.User.Newf("%s extension must have a type", extensionKey)
 	}
-	et, err := types.ParseEngagementType(typ)
+	et, err := types.ParseAttachmentType(typ)
 	if err != nil {
 		return nil, errcat.User.Newf("%s extension has invalid type: %v", extensionKey, err)
 	}
@@ -90,17 +90,17 @@ func (c *config) parseServiceExtension(composeService *compose.ServiceConfig, v 
 		return nil, err
 	}
 	switch et {
-	case types.EngagementTypeConnect:
+	case types.AttachmentTypeConnect:
 		se = &extension{}
-	case types.EngagementTypeIngest:
+	case types.AttachmentTypeIngest:
 		se = &ingestExtension{}
-	case types.EngagementTypeIntercept:
+	case types.AttachmentTypeIntercept:
 		se = &interceptExtension{}
-	case types.EngagementTypeProxy:
+	case types.AttachmentTypeProxy:
 		se = &proxyExtension{}
-	case types.EngagementTypeReplace:
+	case types.AttachmentTypeReplace:
 		se = &replaceExtension{}
-	case types.EngagementTypeWiretap:
+	case types.AttachmentTypeWiretap:
 		se = &wiretapExtension{}
 	default:
 		return nil, errcat.User.Newf("%s has unsupported extension type %s", extensionKey, et)
@@ -115,13 +115,13 @@ func (c *config) parseServiceExtension(composeService *compose.ServiceConfig, v 
 }
 
 type extension struct {
-	Type       types.EngagementType `json:"type"`
+	Type       types.AttachmentType `json:"type"`
 	Connection string               `json:"connection,omitempty"`
 	composeSvc *compose.ServiceConfig
 	conn       *connection
 }
 
-func (e *extension) init(_ *config, et types.EngagementType, composeService *compose.ServiceConfig) {
+func (e *extension) init(_ *config, et types.AttachmentType, composeService *compose.ServiceConfig) {
 	e.Type = et
 	e.composeSvc = composeService
 }
@@ -131,7 +131,7 @@ func (e *extension) name() string {
 	return e.composeSvc.Name
 }
 
-func (e *extension) engagementType() types.EngagementType {
+func (e *extension) attachmentType() types.AttachmentType {
 	return e.Type
 }
 
@@ -148,8 +148,8 @@ func (e *extension) connection() *connection {
 	return e.conn
 }
 
-func (e *extension) engaged() (*engagement, error) {
-	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
+func (e *extension) attached() (*attachment, error) {
+	return createAttachment(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *extension) needsVolumes() bool {
@@ -160,8 +160,8 @@ func (e *extension) setConnection(c *connection) {
 	e.conn = c
 }
 
-func (e *extension) activate(*transformer) (*engagement, error) {
-	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
+func (e *extension) activate(*transformer) (*attachment, error) {
+	return createAttachment(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *extension) deactivate() error {
@@ -174,15 +174,15 @@ type proxyExtension struct {
 	Ports []types.PortMapping `json:"ports,omitempty"`
 }
 
-func (e *proxyExtension) init(c *config, et types.EngagementType, composeService *compose.ServiceConfig) {
+func (e *proxyExtension) init(c *config, et types.AttachmentType, composeService *compose.ServiceConfig) {
 	e.extension.init(c, et, composeService)
 	if e.Name == "" {
 		e.Name = composeService.Name
 	}
 }
 
-func (e *proxyExtension) activate(*transformer) (*engagement, error) {
-	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
+func (e *proxyExtension) activate(*transformer) (*attachment, error) {
+	return createAttachment(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 // Name is the name of the service that this proxy connects to. It defaults to the name of the compose-service.
@@ -195,13 +195,13 @@ func (e *proxyExtension) servicePorts() []types.PortMapping {
 	return e.Ports
 }
 
-type engageExtension struct {
+type attachExtension struct {
 	extension
 	Name   string `json:"name"`
 	mounts []volumeMountPolicy
 }
 
-func (e *engageExtension) init(c *config, et types.EngagementType, composeService *compose.ServiceConfig) {
+func (e *attachExtension) init(c *config, et types.AttachmentType, composeService *compose.ServiceConfig) {
 	e.extension.init(c, et, composeService)
 	if e.Name == "" {
 		e.Name = composeService.Name
@@ -209,21 +209,21 @@ func (e *engageExtension) init(c *config, et types.EngagementType, composeServic
 	e.mounts = c.Mounts
 }
 
-// Name is the name of the engagement. It defaults to the name of the compose-service.
-func (e *engageExtension) name() string {
+// Name is the name of the attachment. It defaults to the name of the compose-service.
+func (e *attachExtension) name() string {
 	return e.Name
 }
 
-// Workload is the name of the engaged workload. It defaults to Name.
-func (e *engageExtension) workload() string {
+// Workload is the name of the attached workload. It defaults to Name.
+func (e *attachExtension) workload() string {
 	return e.Name
 }
 
-func (e *engageExtension) needsVolumes() bool {
+func (e *attachExtension) needsVolumes() bool {
 	return len(e.composeService().Volumes) > 0
 }
 
-func (e *engageExtension) desiredRemoteMounts(remoteMounts types.MountPolicies) (types.MountPolicies, map[string]*compose.ServiceVolumeConfig) {
+func (e *attachExtension) desiredRemoteMounts(remoteMounts types.MountPolicies) (types.MountPolicies, map[string]*compose.ServiceVolumeConfig) {
 	desiredMounts := make(types.MountPolicies, len(remoteMounts))
 	volumes := make(map[string]*compose.ServiceVolumeConfig)
 	composeVolumes := e.composeService().Volumes
@@ -253,7 +253,7 @@ func (e *engageExtension) desiredRemoteMounts(remoteMounts types.MountPolicies) 
 }
 
 type httpFilterExtension struct {
-	engageExtension
+	attachExtension
 	HttpFilters  map[string]string   `json:"httpFilters,omitempty"`
 	Metadata     map[string]string   `json:"metadata,omitempty"`
 	Ports        []types.PortMapping `json:"ports,omitempty"`
@@ -265,7 +265,7 @@ type httpFilterExtension struct {
 func (e *httpFilterExtension) amendInterceptSpec(spec *manager.InterceptSpec) error {
 	ports := e.servicePorts()
 	if len(ports) == 0 {
-		return fmt.Errorf("a %s requires at least one port", e.engagementType())
+		return fmt.Errorf("a %s requires at least one port", e.attachmentType())
 	}
 	err := addPortsSpec(spec, ports)
 	if err != nil {
@@ -295,24 +295,24 @@ func (e *interceptExtension) deactivate() error {
 	return deactivateIntercept(e)
 }
 
-func (e *interceptExtension) init(c *config, et types.EngagementType, composeService *compose.ServiceConfig) {
-	e.engageExtension.init(c, et, composeService)
+func (e *interceptExtension) init(c *config, et types.AttachmentType, composeService *compose.ServiceConfig) {
+	e.attachExtension.init(c, et, composeService)
 	if e.Workload == "" {
 		e.Workload = e.Name
 	}
 }
 
-// Workload is the name of the engaged workload. It defaults to Name.
+// Workload is the name of the attached workload. It defaults to Name.
 func (e *interceptExtension) workload() string {
 	return e.Workload
 }
 
-func (e *interceptExtension) activate(t *transformer) (*engagement, error) {
+func (e *interceptExtension) activate(t *transformer) (*attachment, error) {
 	return activateIntercept(e, t)
 }
 
-func (e *interceptExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
+func (e *interceptExtension) attached() (*attachment, error) {
+	return createAttachment(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *interceptExtension) service() string {
@@ -338,12 +338,12 @@ func (e *interceptExtension) createInterceptRequest(localMountPort uint16) (*con
 }
 
 type ingestExtension struct {
-	engageExtension
+	attachExtension
 	Container string               `json:"container,omitempty"`
 	ToPod     []types.PortAndProto `json:"toPod,omitempty"`
 }
 
-func (e *ingestExtension) activate(t *transformer) (*engagement, error) {
+func (e *ingestExtension) activate(t *transformer) (*attachment, error) {
 	ctx := e.conn
 	ud := daemon.MustGetUserClient(ctx)
 	sftpPort, err := t.config.getMountPort(e)
@@ -374,12 +374,12 @@ func (e *ingestExtension) activate(t *transformer) (*engagement, error) {
 			return nil, grpc.FromGRPC(err)
 		}
 	}
-	ae, err := createEngagement(ud, e, sftpPort)
+	at, err := createAttachment(ud, e, sftpPort)
 	if err != nil {
 		return nil, err
 	}
-	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
-	return ae, nil
+	at.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
+	return at, nil
 }
 
 func (e *ingestExtension) container() string {
@@ -407,17 +407,17 @@ func (e *ingestExtension) deactivate() error {
 	return grpc.FromGRPC(err)
 }
 
-func (e *ingestExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
+func (e *ingestExtension) attached() (*attachment, error) {
+	return createAttachment(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
-// ToPod maps local ports to ports in an engaged pod.
+// ToPod maps local ports to ports in an attached pod.
 func (e *ingestExtension) toPod() []types.PortAndProto {
 	return e.ToPod
 }
 
 type replaceExtension struct {
-	engageExtension
+	attachExtension
 
 	// Container is the name of the container that Telepresence will replace.
 	Container string `json:"container,omitempty"`
@@ -425,11 +425,11 @@ type replaceExtension struct {
 	// Ports maps container ports to local ports.
 	Ports []types.PortMapping `json:"ports,omitempty"`
 
-	// ToPod maps local ports to ports in an engaged pod.
+	// ToPod maps local ports to ports in an attached pod.
 	ToPod []types.PortAndProto `json:"toPod,omitempty"`
 }
 
-func (e *replaceExtension) activate(t *transformer) (*engagement, error) {
+func (e *replaceExtension) activate(t *transformer) (*attachment, error) {
 	return activateIntercept(e, t)
 }
 
@@ -437,8 +437,8 @@ func (e *replaceExtension) deactivate() error {
 	return deactivateIntercept(e)
 }
 
-func (e *replaceExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
+func (e *replaceExtension) attached() (*attachment, error) {
+	return createAttachment(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *replaceExtension) container() string {
@@ -456,11 +456,11 @@ func (e *replaceExtension) toPod() []types.PortAndProto {
 type wiretapExtension struct {
 	httpFilterExtension
 
-	// Service is the Kubernetes service that Telepresence will engage with.
+	// Service is the Kubernetes service that Telepresence will attach to.
 	Service string `json:"service,omitempty"`
 }
 
-func (e *wiretapExtension) activate(t *transformer) (*engagement, error) {
+func (e *wiretapExtension) activate(t *transformer) (*attachment, error) {
 	return activateIntercept(e, t)
 }
 
@@ -468,8 +468,8 @@ func (e *wiretapExtension) deactivate() error {
 	return deactivateIntercept(e)
 }
 
-func (e *wiretapExtension) engaged() (*engagement, error) {
-	return createEngagement(daemon.MustGetUserClient(e.conn), e, 0)
+func (e *wiretapExtension) attached() (*attachment, error) {
+	return createAttachment(daemon.MustGetUserClient(e.conn), e, 0)
 }
 
 func (e *wiretapExtension) service() string {
@@ -548,7 +548,7 @@ func createInterceptRequest(e workloadExtension, localMountPort uint16) *connect
 	return ir
 }
 
-func activateIntercept(e workloadExtension, t *transformer) (*engagement, error) {
+func activateIntercept(e workloadExtension, t *transformer) (*attachment, error) {
 	ctx := e.connection()
 	ud := daemon.MustGetUserClient(ctx)
 	sftpPort, err := t.config.getMountPort(e)
@@ -573,12 +573,12 @@ func activateIntercept(e workloadExtension, t *transformer) (*engagement, error)
 			return nil, fmt.Errorf("connector.CreateIntercept: %w", err)
 		}
 	}
-	ae, err := createEngagement(ud, e, sftpPort)
+	at, err := createAttachment(ud, e, sftpPort)
 	if err != nil {
 		return nil, err
 	}
-	ae.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
-	return ae, nil
+	at.assignEnvAndCreateMounts(ii.Environment, ii.Mounts, t)
+	return at, nil
 }
 
 func deactivateIntercept(e workloadExtension) error {

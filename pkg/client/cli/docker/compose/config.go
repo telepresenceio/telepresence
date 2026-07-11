@@ -204,7 +204,7 @@ func (c *config) appendFlags(flags *pflag.FlagSet, opts []string) []string {
 
 func (c *config) run(cmd *cobra.Command) (err error) {
 	if dryFlag := cmd.Flag("dry-run"); dryFlag != nil && dryFlag.Changed {
-		// A dry-run is impossible, because Telepresence will have to engage with a workload to get
+		// A dry-run is impossible, because Telepresence will have to attach to a workload to get
 		// the data needed to modify the docker compose project. The intercept, replace, ingest, and
 		// wiretap will all install a traffic-agent and cannot be considered a dry-run.
 		return errcat.User.New("--dry-run is not supported")
@@ -276,10 +276,10 @@ func (c *config) run(cmd *cobra.Command) (err error) {
 		c.existingProject = p
 	}
 	g := log.NewGroup(ctx)
-	aesCh := make(chan *engagement, len(es))
-	progress.Start(ctx, "Engaging")
+	atCh := make(chan *attachment, len(es))
+	progress.Start(ctx, "Attaching")
 	for _, e := range es {
-		g.Go(e.composeService().Name, func(ctx context.Context) error { return tr.engage(ctx, e, aesCh) })
+		g.Go(e.composeService().Name, func(ctx context.Context) error { return tr.attach(ctx, e, atCh) })
 	}
 
 	g.Go("compose", func(ctx context.Context) error {
@@ -287,13 +287,13 @@ func (c *config) run(cmd *cobra.Command) (err error) {
 			select {
 			case <-ctx.Done():
 				return nil
-			case ae := <-aesCh:
-				tr.addEngagement(ae)
+			case at := <-atCh:
+				tr.addAttachment(at)
 			}
 		}
 		progress.Stop(ctx)
 		if name == "create" || name == "stop" || name == "up" && !c.detached() {
-			defer tr.disengage(ctx)
+			defer tr.detach(ctx)
 		}
 		return tr.runCommand(ctx, name)
 	})
@@ -319,7 +319,7 @@ func (c *config) connect(ctx context.Context, es map[string]serviceExtension, co
 			}
 			connections[cc.Name] = cx
 		}
-		clog.Debugf(ctx, "Service %q will be %s", e.composeService().Name, e.engagementType().WorkDone())
+		clog.Debugf(ctx, "Service %q will be %s", e.composeService().Name, e.attachmentType().WorkDone())
 		if existingComposeFile == "" {
 			existingComposeFile = daemon.MustGetSession(cx).DaemonInfo().ComposeFile
 		}

@@ -85,7 +85,7 @@ func (s *nodeAgentNoInjectorSuite) Test_PlainInterceptFailsWithInjectorDisabled(
 // path is invoked with errOnFail=false, so a second uninstall of an
 // already-removed release is a no-op, not a failure.
 //
-// The ingest is deliberately left running (no "leave") when the uninstall
+// The ingest is deliberately left running (no "detach") when the uninstall
 // runs: ReapAllNodeAgentJobs must delete the Job regardless of any live
 // client lease, unlike the per-intercept reap and the orphan sweep.
 func (s *nodeAgentNoInjectorSuite) Test_ZUninstallReapsJobs() {

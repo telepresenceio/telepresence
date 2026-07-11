@@ -179,7 +179,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentGlobalInterceptAllReplicas() {
 	mustDetach := true
 	defer func() {
 		if mustDetach {
-			itest.TelepresenceOk(ctx, "leave", name)
+			itest.TelepresenceOk(ctx, "detach", name)
 		}
 	}()
 	s.CapturePodLogs(ctx, nodeAgentMultiSvc, "", s.AppNamespace())
@@ -229,7 +229,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentGlobalInterceptAllReplicas() {
 	rq.NoError(err)
 	s.Contains(out, "ACTIVE")
 
-	itest.TelepresenceOk(ctx, "leave", name)
+	itest.TelepresenceOk(ctx, "detach", name)
 	mustDetach = false
 
 	rq.Eventually(func() bool {
@@ -266,7 +266,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentHTTPFilteredInterceptAllReplicas() {
 	mustDetach := true
 	defer func() {
 		if mustDetach {
-			itest.TelepresenceOk(ctx, "leave", name)
+			itest.TelepresenceOk(ctx, "detach", name)
 		}
 	}()
 	s.CapturePodLogs(ctx, nodeAgentMultiSvc, "", s.AppNamespace())
@@ -289,7 +289,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentHTTPFilteredInterceptAllReplicas() {
 	served := nodeAgentMultiPollServedBy(ctx, nodeAgentMultiSvc, 2, 30*time.Second)
 	rq.GreaterOrEqual(len(served), 2, "headerless requests reached only one replica: %v", served)
 
-	itest.TelepresenceOk(ctx, "leave", name)
+	itest.TelepresenceOk(ctx, "detach", name)
 	mustDetach = false
 
 	rq.Eventually(func() bool {
@@ -327,7 +327,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentSharedJobHTTPFiltered() {
 	adamLive := true
 	defer func() {
 		if adamLive {
-			itest.TelepresenceOk(ctx, "leave", nameAdam)
+			itest.TelepresenceOk(ctx, "detach", nameAdam)
 		}
 	}()
 	rq.Eventually(func() bool {
@@ -345,7 +345,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentSharedJobHTTPFiltered() {
 	bertilLive := true
 	defer func() {
 		if bertilLive {
-			itest.TelepresenceOk(ctx, "leave", nameBertil)
+			itest.TelepresenceOk(ctx, "detach", nameBertil)
 		}
 	}()
 
@@ -364,7 +364,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentSharedJobHTTPFiltered() {
 		return err == nil && strings.Contains(so, "Request served by")
 	}, 30*time.Second, 3*time.Second, "headerless requests did not reach the application")
 
-	itest.TelepresenceOk(ctx, "leave", nameAdam)
+	itest.TelepresenceOk(ctx, "detach", nameAdam)
 	adamLive = false
 
 	// The Jobs must survive adam's detach, and bertil's intercept must keep
@@ -372,7 +372,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentSharedJobHTTPFiltered() {
 	rq.Len(s.nodeAgentJobNames(ctx, nodeAgentMultiSvc), 4, "Jobs must remain while the second intercept is still live")
 	itest.PingInterceptedEchoServerAndExpect(ctx, nodeAgentMultiSvc, "80", "bertil from intercept at /", "x-user=bertil")
 
-	itest.TelepresenceOk(ctx, "leave", nameBertil)
+	itest.TelepresenceOk(ctx, "detach", nameBertil)
 	bertilLive = false
 
 	rq.Eventually(func() bool {
@@ -408,7 +408,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentSharedJobGlobal() {
 	firstLive := true
 	defer func() {
 		if firstLive {
-			itest.TelepresenceOk(ctx, "leave", nameFirst)
+			itest.TelepresenceOk(ctx, "detach", nameFirst)
 		}
 	}()
 
@@ -435,7 +435,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentSharedJobGlobal() {
 	sort.Strings(jobsAfterConflict)
 	rq.Equal(jobsBeforeConflict, jobsAfterConflict, "a rejected second intercept must not disturb the first's Jobs")
 
-	itest.TelepresenceOk(ctx, "leave", nameFirst)
+	itest.TelepresenceOk(ctx, "detach", nameFirst)
 	firstLive = false
 	rq.Eventually(func() bool {
 		return len(s.nodeAgentJobNames(ctx, nodeAgentMultiSvc)) == 0
@@ -462,7 +462,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentSharedJobGlobal() {
 	aLive := true
 	defer func() {
 		if aLive {
-			itest.TelepresenceOk(ctx, "leave", nameA)
+			itest.TelepresenceOk(ctx, "detach", nameA)
 		}
 	}()
 
@@ -474,7 +474,7 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentSharedJobGlobal() {
 	bLive := true
 	defer func() {
 		if bLive {
-			itest.TelepresenceOk(ctx, "leave", nameB)
+			itest.TelepresenceOk(ctx, "detach", nameB)
 		}
 	}()
 
@@ -492,13 +492,13 @@ func (s *nodeAgentMultiSuite) Test_NodeAgentSharedJobGlobal() {
 	itest.PingInterceptedEchoServerAndExpect(ctx, podIP, "8080", "port-a from intercept at /")
 	itest.PingInterceptedEchoServerAndExpect(ctx, podIP, "8081", "port-b from intercept at /")
 
-	itest.TelepresenceOk(ctx, "leave", nameA)
+	itest.TelepresenceOk(ctx, "detach", nameA)
 	aLive = false
 
 	rq.Len(s.nodeAgentJobNames(ctx, dep), 1, "the shared Job must survive while the other intercept is still live")
 	itest.PingInterceptedEchoServerAndExpect(ctx, podIP, "8081", "port-b from intercept at /")
 
-	itest.TelepresenceOk(ctx, "leave", nameB)
+	itest.TelepresenceOk(ctx, "detach", nameB)
 	bLive = false
 
 	rq.Eventually(func() bool {

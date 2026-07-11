@@ -304,7 +304,7 @@ func TestWithFormat(t *testing.T) {
 		cmd.SetArgs([]string{"--format=table"})
 		_, fmtOutput, err := Execute(cmd)
 		require.NoError(t, err)
-		require.False(t, fmtOutput, "global machinery must not engage for a local --format")
+		require.False(t, fmtOutput, "global machinery must not activate for a local --format")
 		require.Equal(t, "table", local, "local --format must receive the value")
 		require.Equal(t, "from compose", outBuf.String(), "output must be unchanged plain text")
 	})
