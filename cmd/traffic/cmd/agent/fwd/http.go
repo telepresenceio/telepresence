@@ -245,6 +245,18 @@ func (f *tcp) serveHTTPIntercept(
 		egressBytes = tunnel.NewCounterProbe("ToClientBytes")
 	}
 	trn := f.configureUpstreamTransport(ctx, spec.Plaintext)
+
+	// The transport's protocols mirror what the app supports, but this
+	// connection goes to the intercept handler on the workstation, and the
+	// exchange must use the protocol of the request being forwarded: h2c
+	// prior knowledge on an HTTP/1 exchange breaks handlers that only speak
+	// HTTP/1.
+	if request.ProtoMajor < 2 && trn.Protocols.UnencryptedHTTP2() {
+		pr := new(http.Protocols)
+		pr.SetHTTP1(true)
+		trn.Protocols = pr
+	}
+
 	trn.DialContext = func(context.Context, string, string) (net.Conn, error) {
 		s, err := f.createStream(ctx, src, ii)
 		if err != nil {
