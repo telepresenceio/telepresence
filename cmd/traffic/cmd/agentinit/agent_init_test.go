@@ -1,63 +1,25 @@
+//go:build linux
+
 package agentinit
 
 import (
-	"context"
 	"net/netip"
 	"os"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentnft"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
-
-type iptablesCall struct {
-	op       string
-	table    string
-	chain    string
-	position int
-	rulespec []string
-}
-
-type fakeIPTables struct {
-	calls []iptablesCall
-}
-
-func (f *fakeIPTables) ClearChain(table, chain string) error {
-	f.calls = append(f.calls, iptablesCall{op: "clear", table: table, chain: chain})
-	return nil
-}
-
-func (f *fakeIPTables) AppendUnique(table, chain string, rulespec ...string) error {
-	f.calls = append(f.calls, iptablesCall{op: "append", table: table, chain: chain, rulespec: rulespec})
-	return nil
-}
-
-func (f *fakeIPTables) Insert(table, chain string, pos int, rulespec ...string) error {
-	f.calls = append(f.calls, iptablesCall{op: "insert", table: table, chain: chain, position: pos, rulespec: rulespec})
-	return nil
-}
-
-func requireCall(t *testing.T, calls []iptablesCall, want iptablesCall) {
-	t.Helper()
-	for _, call := range calls {
-		if call.op == want.op && call.table == want.table && call.chain == want.chain &&
-			call.position == want.position && strings.Join(call.rulespec, "\x00") == strings.Join(want.rulespec, "\x00") {
-			return
-		}
-	}
-	require.Failf(t, "missing iptables call", "wanted %#v in %#v", want, calls)
-}
 
 func TestTrafficAgentUIDDefaultsToProcessUID(t *testing.T) {
 	t.Setenv(agentconfig.EnvAgentUID, "")
 
 	uid, err := trafficAgentUID()
 	require.NoError(t, err)
-	require.Equal(t, strconv.Itoa(os.Getuid()), uid)
+	require.Equal(t, uint32(os.Getuid()), uid)
 }
 
 func TestTrafficAgentUIDUsesEnvironment(t *testing.T) {
@@ -65,7 +27,7 @@ func TestTrafficAgentUIDUsesEnvironment(t *testing.T) {
 
 	uid, err := trafficAgentUID()
 	require.NoError(t, err)
-	require.Equal(t, "1000", uid)
+	require.Equal(t, uint32(1000), uid)
 }
 
 func TestTrafficAgentUIDRejectsInvalidEnvironment(t *testing.T) {
@@ -79,205 +41,121 @@ func TestTrafficAgentOwnerUsesGroupFromEnvironment(t *testing.T) {
 	t.Setenv(agentconfig.EnvAgentUID, "1000")
 	t.Setenv(agentconfig.EnvAgentGID, "7439")
 
-	flag, id, err := trafficAgentOwner()
+	owner, err := trafficAgentOwner()
 	require.NoError(t, err)
-	require.Equal(t, "--gid-owner", flag)
-	require.Equal(t, "7439", id)
+	require.Equal(t, agentnft.OwnerMatch{UseGID: true, ID: 7439}, owner)
 }
 
 func TestTrafficAgentOwnerFallsBackToUID(t *testing.T) {
 	t.Setenv(agentconfig.EnvAgentUID, "1000")
 	t.Setenv(agentconfig.EnvAgentGID, "")
 
-	flag, id, err := trafficAgentOwner()
+	owner, err := trafficAgentOwner()
 	require.NoError(t, err)
-	require.Equal(t, "--uid-owner", flag)
-	require.Equal(t, "1000", id)
+	require.Equal(t, agentnft.OwnerMatch{UseGID: false, ID: 1000}, owner)
 }
 
 func TestTrafficAgentOwnerRejectsInvalidGroup(t *testing.T) {
 	t.Setenv(agentconfig.EnvAgentGID, "not-a-gid")
 
-	_, _, err := trafficAgentOwner()
+	_, err := trafficAgentOwner()
 	require.Error(t, err)
 }
 
-func TestConfigureIptablesCatchesPodIPOutputTraffic(t *testing.T) {
-	// AGENT_GID takes precedence over AGENT_UID, so all owner matches must be group-based.
-	t.Setenv(agentconfig.EnvAgentUID, "1000")
+// TestBuildNftConfigFlattensIntercepts verifies the sidecar -> agentnft.Config
+// translation: every container's port-unique intercepts are flattened, the
+// owner is derived from AGENT_GID, and mesh-dial subnets are carried over.
+func TestBuildNftConfigFlattensIntercepts(t *testing.T) {
 	t.Setenv(agentconfig.EnvAgentGID, "7439")
 	podIP := netip.MustParseAddr("10.129.70.53")
-	ipt := &fakeIPTables{}
 	cfg := &config{Sidecar: &agentconfig.Sidecar{
+		MeshDialSubnets: []netip.Prefix{netip.MustParsePrefix("240.240.0.0/16")},
 		Containers: []*agentconfig.Container{
 			{
 				Name: "app",
 				Intercepts: []*agentconfig.Intercept{
-					{
-						Protocol:          types.ProtoTCP,
-						ContainerPort:     8000,
-						AgentPort:         9900,
-						TargetPortNumeric: true,
-					},
+					{Protocol: types.ProtoTCP, ContainerPort: 8080, AgentPort: 9080},
+					{Protocol: types.ProtoUDP, ContainerPort: 8081, AgentPort: 9081},
+				},
+			},
+			{
+				Name: "sidecar",
+				Intercepts: []*agentconfig.Intercept{
+					{Protocol: types.ProtoTCP, ContainerPort: 9000, AgentPort: 9900},
 				},
 			},
 		},
 	}}
 
-	err := cfg.configureIptables(context.Background(), ipt, "lo", netip.MustParsePrefix("127.0.0.1/32"), podIP)
+	nftCfg, err := cfg.buildNftConfig("lo", podIP)
 	require.NoError(t, err)
-
-	requireCall(t, ipt.calls, iptablesCall{
-		op:    "append",
-		table: nat,
-		chain: "TEL_OUTPUT_TCP",
-		rulespec: []string{
-			"-p", "tcp", "--dport", "8000",
-			"-j", "REDIRECT", "--to-ports", "9900",
-		},
-	})
-	requireCall(t, ipt.calls, iptablesCall{
-		op:    "append",
-		table: nat,
-		chain: "TEL_OUTPUT_TCP",
-		rulespec: []string{
-			"-p", "tcp", "-d", "10.129.70.53", "--dport", "9912",
-			"-j", "DNAT", "--to-destination", "10.129.70.53:8000",
-		},
-	})
-	requireCall(t, ipt.calls, iptablesCall{
-		op:       "insert",
-		table:    nat,
-		chain:    "OUTPUT",
-		position: 1,
-		rulespec: []string{
-			"-p", "tcp",
-			"-d", "10.129.70.53",
-			"-m", "owner", "!", "--gid-owner", "7439",
-			"-j", "TEL_OUTPUT_TCP",
-		},
-	})
-	requireCall(t, ipt.calls, iptablesCall{
-		op:       "insert",
-		table:    nat,
-		chain:    "OUTPUT",
-		position: 1,
-		rulespec: []string{
-			"-p", "tcp",
-			"-d", "10.129.70.53",
-			"-m", "owner", "--gid-owner", "7439",
-			"-j", "TEL_OUTPUT_TCP",
-		},
-	})
-	// The agent-owner mesh bypass must not match DNS traffic, so that the agent's
-	// lookups are subjected to a service mesh's DNS interception when present.
-	requireCall(t, ipt.calls, iptablesCall{
-		op:       "insert",
-		table:    nat,
-		chain:    "OUTPUT",
-		position: 5,
-		rulespec: []string{
-			"-p", "tcp",
-			"-m", "owner", "--gid-owner", "7439",
-			"-m", "tcp", "!", "--dport", "53",
-			"-j", "RETURN",
-		},
-	})
-	requireCall(t, ipt.calls, iptablesCall{
-		op:       "insert",
-		table:    nat,
-		chain:    "OUTPUT",
-		position: 6,
-		rulespec: []string{
-			"-p", "udp",
-			"-m", "owner", "--gid-owner", "7439",
-			"-m", "udp", "!", "--dport", "53",
-			"-j", "RETURN",
-		},
-	})
+	require.Equal(t, podIP, nftCfg.PodIP)
+	require.Equal(t, "lo", nftCfg.Loopback)
+	require.Equal(t, agentnft.OwnerMatch{UseGID: true, ID: 7439}, nftCfg.Owner)
+	require.Equal(t, cfg.MeshDialSubnets, nftCfg.MeshDialSubnets)
+	require.Len(t, nftCfg.Intercepts, 3)
+	require.Contains(t, nftCfg.Intercepts, agentnft.Intercept{Protocol: types.ProtoTCP, ContainerPort: 8080, AgentPort: 9080})
+	require.Contains(t, nftCfg.Intercepts, agentnft.Intercept{Protocol: types.ProtoUDP, ContainerPort: 8081, AgentPort: 9081})
+	require.Contains(t, nftCfg.Intercepts, agentnft.Intercept{Protocol: types.ProtoTCP, ContainerPort: 9000, AgentPort: 9900})
 }
 
-func TestConfigureIptablesMeshDialSubnets(t *testing.T) {
-	// AGENT_GID is unset (config generated by an older traffic-manager), so all
-	// owner matches must fall back to the UID-based form.
-	t.Setenv(agentconfig.EnvAgentUID, "1000")
-	t.Setenv(agentconfig.EnvAgentGID, "")
+// TestBuildNftConfigNumericTargetSetsProxyPort verifies that a numeric target
+// port records the proxy port (agentinit's proxy-port DNAT input), while a
+// symbolic target port leaves ProxyPort zero.
+func TestBuildNftConfigNumericTargetSetsProxyPort(t *testing.T) {
+	t.Setenv(agentconfig.EnvAgentGID, "7439")
 	podIP := netip.MustParseAddr("10.129.70.53")
-	ipt := &fakeIPTables{}
-	cfg := &config{Sidecar: &agentconfig.Sidecar{
-		MeshDialSubnets: []netip.Prefix{
-			netip.MustParsePrefix("240.240.0.0/16"),
-			netip.MustParsePrefix("fd00:240::/32"), // wrong family, must be skipped
-		},
+	sc := &agentconfig.Sidecar{
 		Containers: []*agentconfig.Container{
 			{
 				Name: "app",
 				Intercepts: []*agentconfig.Intercept{
-					{
-						Protocol:      types.ProtoTCP,
-						ContainerPort: 8000,
-						AgentPort:     9900,
-					},
+					{Protocol: types.ProtoTCP, ContainerPort: 8000, AgentPort: 9900, TargetPortNumeric: true},
+					{Protocol: types.ProtoTCP, ContainerPort: 8001, AgentPort: 9901}, // symbolic
+				},
+			},
+		},
+	}
+	cfg := &config{Sidecar: sc}
+
+	nftCfg, err := cfg.buildNftConfig("lo", podIP)
+	require.NoError(t, err)
+	require.Len(t, nftCfg.Intercepts, 2)
+
+	byCPort := map[uint16]agentnft.Intercept{}
+	for _, ic := range nftCfg.Intercepts {
+		byCPort[ic.ContainerPort] = ic
+	}
+	require.Equal(t, sc.ProxyPort(9900), byCPort[8000].ProxyPort, "numeric target must record the proxy port")
+	require.NotZero(t, byCPort[8000].ProxyPort)
+	require.Zero(t, byCPort[8001].ProxyPort, "symbolic target must not record a proxy port")
+}
+
+// TestBuildNftConfigProducesApplicableRuleset ties the translation to Build:
+// the resulting config must construct a valid ruleset (root-free), covering the
+// representative cases the old iptables tests exercised.
+func TestBuildNftConfigProducesApplicableRuleset(t *testing.T) {
+	t.Setenv(agentconfig.EnvAgentUID, "1000")
+	t.Setenv(agentconfig.EnvAgentGID, "") // exercise the UID fallback
+	podIP := netip.MustParseAddr("10.129.70.53")
+	cfg := &config{Sidecar: &agentconfig.Sidecar{
+		Containers: []*agentconfig.Container{
+			{
+				Name: "app",
+				Intercepts: []*agentconfig.Intercept{
+					{Protocol: types.ProtoTCP, ContainerPort: 8000, AgentPort: 9900, TargetPortNumeric: true},
 				},
 			},
 		},
 	}}
 
-	err := cfg.configureIptables(context.Background(), ipt, "lo", netip.MustParsePrefix("127.0.0.1/32"), podIP)
+	nftCfg, err := cfg.buildNftConfig("lo", podIP)
 	require.NoError(t, err)
+	require.Equal(t, agentnft.OwnerMatch{UseGID: false, ID: 1000}, nftCfg.Owner)
 
-	// The configured subnets (of the pod's address family) are exempted from the
-	// mesh bypass so connections to them are made through the mesh proxy.
-	requireCall(t, ipt.calls, iptablesCall{
-		op:    "clear",
-		table: nat,
-		chain: "TEL_MESH_BYPASS",
-	})
-	requireCall(t, ipt.calls, iptablesCall{
-		op:    "append",
-		table: nat,
-		chain: "TEL_MESH_BYPASS",
-		rulespec: []string{
-			"-d", "240.240.0.0/16",
-			"-j", "RETURN",
-		},
-	})
-	requireCall(t, ipt.calls, iptablesCall{
-		op:    "append",
-		table: nat,
-		chain: "TEL_MESH_BYPASS",
-		rulespec: []string{
-			"-j", "ACCEPT",
-		},
-	})
-	for _, call := range ipt.calls {
-		if call.chain == "TEL_MESH_BYPASS" && len(call.rulespec) > 1 && call.rulespec[1] == "fd00:240::/32" {
-			t.Fatalf("subnet of the wrong address family must not be added: %#v", call)
-		}
-	}
-	// The bypass rules target the exemption chain instead of RETURN.
-	requireCall(t, ipt.calls, iptablesCall{
-		op:       "insert",
-		table:    nat,
-		chain:    "OUTPUT",
-		position: 5,
-		rulespec: []string{
-			"-p", "tcp",
-			"-m", "owner", "--uid-owner", "1000",
-			"-m", "tcp", "!", "--dport", "53",
-			"-j", "TEL_MESH_BYPASS",
-		},
-	})
-	requireCall(t, ipt.calls, iptablesCall{
-		op:       "insert",
-		table:    nat,
-		chain:    "OUTPUT",
-		position: 6,
-		rulespec: []string{
-			"-p", "udp",
-			"-m", "owner", "--uid-owner", "1000",
-			"-m", "udp", "!", "--dport", "53",
-			"-j", "TEL_MESH_BYPASS",
-		},
-	})
+	rs, err := agentnft.Build(nftCfg)
+	require.NoError(t, err)
+	require.NotNil(t, rs.Prerouting)
+	require.NotNil(t, rs.Output)
+	require.NotEmpty(t, rs.Rules)
 }

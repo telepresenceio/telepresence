@@ -10,12 +10,12 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/compose-spec/compose-go/v2 v2.12.1
 	github.com/containerd/errdefs v1.0.0
-	github.com/coreos/go-iptables v0.8.0
 	github.com/datawire/argo-rollouts-go-client v0.0.0-20241216133646-cb1073556c99
 	github.com/docker/go-units v0.5.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/go-cmp v0.7.0
+	github.com/google/nftables v0.3.0
 	github.com/google/uuid v1.6.0
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/hectane/go-acl v1.0.0
@@ -135,6 +135,8 @@ require (
 	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/mattn/go-shellwords v1.0.13 // indirect
+	github.com/mdlayher/netlink v1.7.3-0.20250113171957-fbb4dce95f42 // indirect
+	github.com/mdlayher/socket v0.5.1 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
