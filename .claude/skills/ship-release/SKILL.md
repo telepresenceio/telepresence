@@ -207,9 +207,18 @@ The workflow requires manual approval of a protected GitHub environment (`macos-
 - If a job other than `build-macos-pkg` fails → **stop and report**.
 - If `build-macos-pkg` itself is never approved within 24h → tell the user; per CLAUDE.md the release still ships without `.pkg` installers, and the user can decide whether to proceed to 3.3 anyway.
 
-### 3.3 Merge both PRs
+### 3.3 Merge both PRs — **GA versions only**
 
-Order does not matter. Both must use a **merge commit** (CLAUDE.md: never squash, never rebase).
+**For pre-release versions (`-test.N`, `-rc.N`): skip this step entirely and
+stop here.** Both PRs stay open until the GA release ships: the release
+branch accumulates the rc and GA prepare-release commits and merges once,
+after GA, and the docs PR must not publish the new version's docs on
+telepresence.io before GA exists (regenerate it from the GA branch before
+merging). The rc's GitHub pre-release and its tags are the only public
+artifacts of a pre-release ship.
+
+For a GA version: order does not matter. Both must use a **merge commit**
+(CLAUDE.md: never squash, never rebase).
 
 ```
 # telepresence PR (in telepresence repo)
@@ -242,6 +251,7 @@ Each wake-up: re-fetch state, decide green/red/still-waiting, schedule the next 
 
 - Run `make prepare-release` itself — that's a separate skill and a separate decision.
 - Push tags before all required PR checks are green (Phase 1 must complete first).
+- Merge the release PR or the docs PR for a pre-release (`-test.*`/`-rc.*`) version — both stay open until GA (see 3.3).
 - Merge PRs as squash or rebase — both repos require merge commits.
 - Skip `ok to test` and try to trigger `build_and_test` some other way.
 - Approve the `macos-signing` environment programmatically — that requires a human reviewer.
