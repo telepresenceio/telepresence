@@ -1,17 +1,19 @@
 ---
-title: "Telepresence vs mirrord"
+title: "mirrord vs Telepresence"
+description: "An honest, maintainer-written comparison of mirrord and Telepresence for local Kubernetes development: architectures, security models, a feature table, and when each tool is the better alternative."
 hide_table_of_contents: true
 ---
 
-# Telepresence vs mirrord
+# mirrord vs Telepresence
 
 Telepresence and mirrord solve the same problem: run one service on your
 workstation, with your own IDE and debugger, while it behaves as if it were
 running inside the cluster. They solve it with fundamentally different
 architectures, and nearly every practical difference between the two tools
 follows from that choice. Neither architecture is simply better — they
-distribute their costs differently, and which tool fits you depends on which
-costs you would rather pay.
+distribute their costs differently, and which costs you would rather pay is
+what should decide, whether you are picking a first tool or looking for an
+alternative to the one you use today.
 
 ## Two architectures
 
