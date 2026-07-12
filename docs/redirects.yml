@@ -14,3 +14,8 @@
 - {from: "reference/docker-run", to: "howtos/docker"}
 - {from: "reference/tun-device", to: "reference/routing"}
 - {from: "reference/dns", to: "reference/routing"}
+- {from: "howtos/intercepts", to: "howtos/attach"}
+- {from: "reference/intercepts/cli", to: "reference/attachments/cli"}
+- {from: "reference/cluster_config", to: "reference/cluster-config"}
+- {from: "reference/client", to: "reference/config"}
+- {from: "reference/teleroute", to: "howtos/docker"}

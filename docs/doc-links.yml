@@ -269,7 +269,7 @@
       link: reference/node-agent
 - title: Comparisons
   items:
-    - title: Telepresence vs mirrord
+    - title: mirrord vs Telepresence
       link: compare/mirrord
     - title: Telepresence vs Gefyra
       link: compare/gefyra
