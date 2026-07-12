@@ -135,7 +135,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Routing Loop Prevention on Local Clusters](reference/route-controller.md)
   - [Node-hosted Traffic Agent](reference/node-agent.md)
 - Comparisons
-  - [Telepresence vs mirrord](compare/mirrord.md)
+  - [mirrord vs Telepresence](compare/mirrord.md)
   - [Telepresence vs Gefyra](compare/gefyra.md)
 - [FAQs](faqs.md)
 - [Troubleshooting](troubleshooting.md)
