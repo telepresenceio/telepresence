@@ -17,7 +17,7 @@ Telepresence is a [CNCF](https://www.cncf.io/) project that connects your local 
 
 - [Quick Start Guide](https://telepresence.io/docs/quick-start) - Get up and running in minutes
 - [Installation](https://telepresence.io/docs/install/client) - Install the Telepresence client
-- [Documentation](https://telepresence.io/docs/) - Full documentation
+- [Documentation](https://telepresence.io/docs) - Full documentation
 
 ## How It Works
 
@@ -30,7 +30,7 @@ When Telepresence connects to a cluster, it creates a virtual network interface 
 
 ## Contributing
 
-See [CLAUDE.md](CLAUDE.md) for build instructions, architecture overview, and development guidelines.
+See [AGENTS.md](AGENTS.md) for build instructions, architecture overview, and development guidelines.
 
 ## License
 
