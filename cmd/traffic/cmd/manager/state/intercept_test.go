@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
 // TestAllowGlobalIntercepts_ValidationLogic tests the validation logic
@@ -720,4 +721,85 @@ func TestWaitForAgents_AccumulatesToExpectedCount(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("waitForAgents did not return after the second agent arrived")
 	}
+}
+
+// TestAddIntercept_NodeAgent_ReportsAttach verifies that a successful
+// node-agent AddIntercept emits a "manager.attach" usage report carrying
+// agent.type=node and the intercept's mechanism.
+func TestAddIntercept_NodeAgent_ReportsAttach(t *testing.T) {
+	t.Parallel()
+
+	const ns = "default"
+	const mgrNs = "ambassador"
+
+	dep := &apps.Deployment{
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: apps.DeploymentSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+			Template: core.PodTemplateSpec{
+				ObjectMeta: meta.ObjectMeta{Labels: map[string]string{"app": "test-agent"}},
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
+						Name:  "app",
+						Ports: []core.ContainerPort{{ContainerPort: 8080}},
+					}},
+				},
+			},
+		},
+	}
+	pod := nodeAgentTestPod(ns, "test-agent-abc123")
+
+	ci := fake.NewSimpleClientset(dep, pod)
+	ctx := k8sapi.WithJoinedClientSetInterface(t.Context(), ci, argorolloutsfake.NewSimpleClientset())
+
+	env := &managerutil.Env{
+		ManagerNamespace:     mgrNs,
+		NodeAgentEnabled:     true,
+		NodeAgentCRISocket:   "/run/containerd/containerd.sock",
+		EnabledWorkloadKinds: k8sapi.Kinds{k8sapi.DeploymentKind},
+		AgentArrivalTimeout:  5 * time.Second,
+	}
+	ctx = managerutil.WithEnv(ctx, env)
+	ctx = mutator.WithMap(ctx, mutator.NewWatcher())
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
+	ctx, sink := usg.InstallManager(ctx, "test-install")
+
+	s := &State{
+		backgroundCtx:        ctx,
+		intercepts:           cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+		agents:               cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
+		clients:              xsync.NewMap[tunnel.SessionID, *ClientSession](),
+		leases:               xsync.NewMap[leaseKey, struct{}](),
+		workloadWatchers:     xsync.NewMap[string, Watcher](),
+		nodeAgentPodWatchers: xsync.NewMap[nodeAgentWatchKey, struct{}](),
+		timedLogLevel:        log.NewTimedLevel(slog.LevelDebug, clog.SetTreeLevel),
+		llSubs:               newLoglevelSubscribers(),
+	}
+
+	const sessionID = tunnel.SessionID("sessionA")
+	s.clients.Store(sessionID, &ClientSession{ClientInfo: &rpc.ClientInfo{Name: "userA@hostA"}, sessionState: sessionState{id: sessionID}})
+
+	// The node-agent Job's own agent session is already registered by the
+	// time AddIntercept waits for it, mirroring waitForAgents' immediate-wait
+	// property exercised elsewhere in this file.
+	s.agents.Store(sessionID, &AgentSession{AgentInfo: &rpc.AgentInfo{
+		Name: "test-agent", Namespace: ns, NodeAgent: true, PodUid: "uid-1", PodName: "test-agent-abc123",
+	}})
+
+	cir := &rpc.CreateInterceptRequest{
+		Session: &rpc.SessionInfo{SessionId: string(sessionID)},
+		InterceptSpec: &rpc.InterceptSpec{
+			Name: "ic1", Client: "userA@hostA", Agent: "test-agent", Namespace: ns,
+			WorkloadKind: string(k8sapi.DeploymentKind), NodeAgent: true, Wiretap: true, Mechanism: "tcp",
+		},
+	}
+	_, ii, err := s.AddIntercept(ctx, cir)
+	require.NoError(t, err)
+	require.NotNil(t, ii)
+
+	reports := sink.Drain(0)
+	require.Len(t, reports, 1)
+	assert.Equal(t, "manager.attach", reports[0].Topic)
+	assert.Equal(t, "node", reports[0].Entries["agent.type"])
+	assert.Equal(t, "tcp", reports[0].Entries["mechanism"])
 }

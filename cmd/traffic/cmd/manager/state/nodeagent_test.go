@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
 // TestNodeAgentGateErr_Disabled verifies that requesting node-agent mode
@@ -942,6 +943,7 @@ func TestEnsureNodeAgent_NoCRISocket(t *testing.T) {
 	ci := fake.NewSimpleClientset(pod)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs})
+	ctx, sink := usg.InstallManager(ctx, "test-install")
 
 	s := newNodeAgentTestState()
 	err := s.ensureNodeAgent(ctx, wl, cfg, true)
@@ -949,6 +951,11 @@ func TestEnsureNodeAgent_NoCRISocket(t *testing.T) {
 
 	created, _ := nodeAgentJobActionCounts(ci.Actions())
 	assert.Equal(t, 1, created, "a job should be created in auto-detect mode when the CRI socket is unset")
+
+	reports := sink.Drain(0)
+	require.Len(t, reports, 1)
+	assert.Equal(t, "manager.nodeagent.create", reports[0].Topic)
+	assert.Equal(t, "ensure", reports[0].Entries["trigger"])
 }
 
 // TestEnsureNodeAgent_ReusesHealthyExistingJob verifies that ensureNodeAgent
@@ -1010,6 +1017,7 @@ func TestEnsureNodeAgent_ReplacesFailedJob(t *testing.T) {
 	ci := fake.NewSimpleClientset(pod, existing)
 	ctx := k8sapi.WithK8sInterface(t.Context(), ci)
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: mgrNs, NodeAgentCRISocket: "/run/containerd/containerd.sock"})
+	ctx, sink := usg.InstallManager(ctx, "test-install")
 
 	s := newNodeAgentTestState()
 	require.NoError(t, s.ensureNodeAgent(ctx, wl, cfg, true))
@@ -1022,6 +1030,11 @@ func TestEnsureNodeAgent_ReplacesFailedJob(t *testing.T) {
 	created, deleted := nodeAgentJobActionCounts(ci.Actions())
 	assert.Equal(t, 1, deleted)
 	assert.Equal(t, 2, created)
+
+	reports := sink.Drain(0)
+	require.Len(t, reports, 1, "only the replacement create should be reported, not the failed initial attempt")
+	assert.Equal(t, "manager.nodeagent.create", reports[0].Topic)
+	assert.Equal(t, "replace", reports[0].Entries["trigger"])
 }
 
 // TestEnsureNodeAgent_ReplacesTerminatingJob verifies that ensureNodeAgent
