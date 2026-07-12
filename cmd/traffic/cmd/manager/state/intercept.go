@@ -38,6 +38,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
 // PrepareIntercept ensures that the given request can be matched against the intercept configuration of
@@ -519,6 +520,12 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		// has stored it.
 		s.startNodeAgentPodWatch(spec.Agent, spec.Namespace)
 	}
+
+	agentType := "sidecar"
+	if spec.NodeAgent {
+		agentType = "node"
+	}
+	usg.Quick(ctx, "manager.attach", "agent.type", agentType, "mechanism", spec.Mechanism)
 	return client, is.InterceptInfo, nil
 }
 
@@ -636,10 +643,14 @@ func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, 
 			s.removeLease(sessionID, n, ns)
 			return nil, err
 		}
+		usg.Quick(ctx, "manager.attach", "agent.type", "node")
 		return as, nil
 	}
 
 	_, as, err = s.ensureAgent(ctx, wl, false, false, nil, agentconfig.ReplacePolicyInactive)
+	if err == nil {
+		usg.Quick(ctx, "manager.attach", "agent.type", "sidecar")
+	}
 	return as, err
 }
 

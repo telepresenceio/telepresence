@@ -21,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
 const (
@@ -340,6 +341,12 @@ func (s *State) ensureNodeAgent(
 	return ensureNodeAgentTarget(ctx, jobs, namespace, env.NodeAgentCRISocket, cfg, targets[0], allowImageReplace)
 }
 
+// reportNodeAgentJobCreate emits a manager.nodeagent.create usage report for
+// a newly created node-agent Job. No-op without a usage producer on ctx.
+func reportNodeAgentJobCreate(ctx context.Context, trigger string) {
+	usg.Quick(ctx, "manager.nodeagent.create", "trigger", trigger)
+}
+
 // ensureNodeAgentTarget ensures a single node-agent Job for target: the
 // per-Job create/AlreadyExists/staleness logic, extracted from
 // ensureNodeAgent so it runs unchanged whether it's applied to every target
@@ -387,6 +394,7 @@ func ensureNodeAgentTarget(
 			if _, err = jobs.Create(ctx, job, meta.CreateOptions{}); err != nil {
 				return fmt.Errorf("unable to create node-agent job %s.%s: %w", job.Name, namespace, err)
 			}
+			reportNodeAgentJobCreate(ctx, "ensure")
 			return nil
 		}
 		switch staleness, reason := nodeAgentJobStale(existing, job); staleness {
@@ -405,7 +413,9 @@ func ensureNodeAgentTarget(
 			// a re-request as idempotent.
 			clog.Debugf(ctx, "reusing existing node-agent job %s.%s", job.Name, namespace)
 		}
+		return nil
 	}
+	reportNodeAgentJobCreate(ctx, "ensure")
 	return nil
 }
 
@@ -509,6 +519,7 @@ func replaceNodeAgentJob(ctx context.Context, jobs batchClientV1.JobInterface, j
 	if _, err := jobs.Create(ctx, job, meta.CreateOptions{}); err != nil {
 		return fmt.Errorf("unable to create node-agent job %s: %w", job.Name, err)
 	}
+	reportNodeAgentJobCreate(ctx, "replace")
 	return nil
 }
 
