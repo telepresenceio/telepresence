@@ -50,8 +50,9 @@ func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMoun
 				clog.Infof(ctx, "Unmounting SFTP file system for container %s[%s] (pod %s) at %q", workload, container, podIP, clientMountPoint)
 				time.Sleep(time.Second)
 
-				// sshfs sometimes leave the mount point in a bad state. This will clean it up
-				ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+				// sshfs sometimes leave the mount point in a bad state. This will clean it up.
+				// A forced unmount of an NFS mount with a dead server can take several seconds.
+				ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 				defer cancel()
 				var umount *exec.Cmd
 				if runtime.GOOS == "darwin" {
@@ -105,14 +106,25 @@ func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMoun
 				exe = "sshfs-win"
 			}
 			var err error
-			if useIPv6 {
+			switch {
+			case useIPv6:
 				var conn net.Conn
 				if conn, err = net.Dial("tcp6", podAddrPort.String()); err == nil {
 					defer conn.Close()
 					err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
 				}
-			} else {
+			case runtime.GOOS == "windows":
 				err = proc.Run(ctx, nil, exe, sshfsArgs...)
+			default:
+				// sshfs must be given a chance to unmount before it exits. With a kext-less
+				// FUSE implementation (FUSE-T), the kernel NFS mount outlives a killed sshfs
+				// process as a dead mount that also prevents subsequent mounts.
+				cmd := proc.CommandStd(ctx, nil, exe, sshfsArgs...)
+				cmd.Cancel = func() error { return cmd.Process.Signal(proc.SIGTERM) }
+				cmd.WaitDelay = 5 * time.Second
+				if err = proc.StartCmd(ctx, cmd); err == nil {
+					err = cmd.Wait()
+				}
 			}
 			return err
 		}, bc)

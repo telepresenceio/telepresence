@@ -191,11 +191,14 @@ func (s *mountsSuite) Test_CollidingMounts() {
 			require.Contains(stdout, "Using Deployment hello")
 			if i == 0 {
 				s.CapturePodLogs(ctx, "hello", "traffic-agent", s.AppNamespace())
-			} else {
-				// Mounts are sometimes slow
-				time.Sleep(3 * time.Second)
 			}
-			ns, err := os.ReadFile(filepath.Join(tt.mountPoint, "var", "run", "secrets", "kubernetes.io", "serviceaccount", "namespace"))
+			nsPath := filepath.Join(tt.mountPoint, "var", "run", "secrets", "kubernetes.io", "serviceaccount", "namespace")
+			// The mount is established asynchronously, after the intercept command returns
+			s.Eventually(func() bool {
+				_, err := os.Stat(nsPath)
+				return err == nil
+			}, 10*time.Second, time.Second)
+			ns, err := os.ReadFile(nsPath)
 			require.NoError(err)
 			require.Equal(s.AppNamespace(), string(ns))
 			token, err := os.ReadFile(filepath.Join(tt.mountPoint, "var", "run", "secrets", "kubernetes.io", "serviceaccount", "token"))

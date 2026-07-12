@@ -63,24 +63,16 @@ job:
 
 ### Volume mounts are not working on macOS
 
-It's necessary to have `sshfs` installed in order for volume mounts to work correctly during intercepts. Lately there's been some issues using `brew install sshfs` a macOS workstation because the required component `osxfuse` (now named `macfuse`) isn't open source and hence, no longer supported. As a workaround, you can now use `gromgit/fuse/sshfs-mac` instead. Follow these steps:
+It's necessary to have `sshfs` installed in order for volume mounts to work correctly during intercepts. On macOS, use [FUSE-T](https://github.com/macos-fuse-t/fuse-t) together with its `sshfs` build. FUSE-T is a kext-less FUSE implementation that bridges to a local NFSv4 server, so unlike the older macFUSE it requires no kernel extension approval and no reboot. Follow these steps:
 
-1. Remove old sshfs, macfuse, osxfuse using `brew uninstall`
-2. `brew install --cask macfuse`
-3. `brew install gromgit/fuse/sshfs-mac`
-4. `brew link --overwrite sshfs-mac`
+1. Remove old installations of sshfs, macfuse, and osxfuse, e.g. `brew uninstall sshfs-mac` and `brew uninstall --cask macfuse`
+2. `brew tap macos-fuse-t/cask`
+3. `brew trust macos-fuse-t/cask` (needed when your Homebrew version enforces tap trust)
+4. `brew install fuse-t fuse-t-sshfs`
 
-Now sshfs -V shows you the correct version, e.g.:
-```
-$ sshfs -V
-SSHFS version 2.10
-FUSE library version: 2.9.9
-fuse: no mount point
-```
+Next, try a mount (or a replace/ingest/intercept that performs a mount). If accessing the mounted volume fails with "Operation not permitted", allow your terminal application to access network volumes under System Settings > Privacy & Security > Files and Folders.
 
-5. Next, try a mount (or an replace/ingest/intercept that performs a mount). It will fail because you need to give permission to “Benjamin Fleischer” to execute a kernel extension (a pop-up appears that takes you to the system preferences).
-6. Approve the needed permission
-7. Reboot your computer.
+If a mount silently shows up empty, check `mount` for a stale `fuse-t:` NFS entry left by an earlier session (e.g. after a hard kill of the daemon) and remove it with `umount -f <mount point>`; a stale FUSE-T mount can prevent subsequent mounts from working.
 
 ### Volume mounts are not working on Linux
 It's necessary to have `sshfs` installed in order for volume mounts to work correctly when Telepresence attaches to remote containers.

@@ -27,17 +27,6 @@ items:
   - version: 2.30.0
     date: (TBD)
     notes:
-      - type: change
-        title: The engagement concept is renamed to attachment
-        body: >-
-          The umbrella term for the replace, intercept, ingest, and wiretap
-          modes is now "attachment": you attach to a workload and detach from
-          it. The new <code>telepresence detach</code> command replaces
-          <code>telepresence leave</code>, which keeps working as a hidden,
-          deprecated alias. Command output, such as the "ready to attach"
-          messages from <code>telepresence list</code>, follows the new
-          vocabulary.
-        docs: reference/attachments/cli
       - type: feature
         title: Node-hosted traffic-agent
         body: >-
@@ -54,6 +43,29 @@ items:
           individual workstations may override it in <code>config.yml</code>,
           and a single attachment with the <code>--node-agent</code> flag.
         docs: reference/node-agent
+      - type: change
+        title: The engagement concept is renamed to attachment
+        body: >-
+          The umbrella term for the replace, intercept, ingest, and wiretap
+          modes is now "attachment": you attach to a workload and detach from
+          it. The new <code>telepresence detach</code> command replaces
+          <code>telepresence leave</code>, which keeps working as a hidden,
+          deprecated alias. Command output, such as the "ready to attach"
+          messages from <code>telepresence list</code>, follows the new
+          vocabulary.
+        docs: reference/attachments/cli
+      - type: change
+        title: macOS volume mounts now use FUSE-T
+        body: >-
+          The recommended FUSE stack on macOS is now
+          <a href="https://github.com/macos-fuse-t/fuse-t">FUSE-T</a> with its
+          sshfs build (<code>brew install fuse-t fuse-t-sshfs</code>),
+          replacing the deprecated macfuse/sshfs-mac combination. FUSE-T is
+          kext-less, so it needs no kernel extension approval and no reboot.
+          The client also terminates sshfs gracefully when a mount ends,
+          giving it time to unmount; under FUSE-T, a killed sshfs left a
+          stale NFS mount behind that prevented subsequent mounts.
+        docs: troubleshooting
   - version: 2.29.3
     date: 2026-07-08
     notes:

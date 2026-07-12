@@ -40,17 +40,16 @@ runs:
         rm /usr/local/bin/python3* || :
 
         brew update
-        brew install --cask macfuse
-        # Trust the fuse tap so brew installs sshfs-mac instead of skipping it
-        # as untrusted. The tap-trust check runs during brew tap itself -
-        # before the tap can possibly be trusted - and sshfs-mac is deprecated
-        # upstream, so both commands emit warnings that are expected here. Run
-        # them without the GitHub Actions detection: the log keeps the text,
-        # the run stays free of annotations, and exit codes are unaffected.
-        env -u GITHUB_ACTIONS brew tap gromgit/fuse
-        brew trust gromgit/fuse
-        env -u GITHUB_ACTIONS brew install gromgit/fuse/sshfs-mac
-        command -v sshfs >/dev/null || brew link --overwrite sshfs-mac
+        # FUSE-T is a kext-less FUSE implementation (it bridges to a local
+        # NFSv4 server), so no kernel extension approval is needed. The
+        # tap-trust check runs during brew tap itself - before the tap can
+        # possibly be trusted - so run it without the GitHub Actions
+        # detection: the log keeps the warning text, the run stays free of
+        # annotations, and exit codes are unaffected.
+        env -u GITHUB_ACTIONS brew tap macos-fuse-t/cask
+        brew trust macos-fuse-t/cask
+        brew install fuse-t fuse-t-sshfs
+        command -v sshfs
 
         if [[ ${RUNNER_ARCH} == "ARM64" ]]; then
           brew install jq

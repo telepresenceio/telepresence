@@ -49,7 +49,7 @@ that one process sees the cluster; nothing else on your workstation changes.
   to manage them; mirrord sidesteps them by design.
 - **Remote files without mount software.** File access is intercepted at the
   system-call layer, so remote files are visible to the process without FUSE.
-  Telepresence's volume mounts rely on `sshfs` (macFUSE on macOS, WinFSP on
+  Telepresence's volume mounts rely on `sshfs` (FUSE-T on macOS, WinFSP on
   Windows).
 
 ## Where Telepresence has the edge
