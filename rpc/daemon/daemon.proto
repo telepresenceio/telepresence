@@ -72,7 +72,22 @@ message DaemonStatus {
   bool managed = 2;
   NetworkConfig outbound_config = 4;
   telepresence.common.VersionInfo version = 5;
+
+  // tunnel_transport reports which transport currently serves manager-bound
+  // tunnel streams. Absent when there is no active session (an old root
+  // daemon that predates this field is indistinguishable from that case).
+  TunnelTransport tunnel_transport = 6;
   reserved 3;
+}
+
+// TunnelTransport reports which transport currently serves manager-bound
+// tunnel streams for the connected session.
+message TunnelTransport {
+  // "grpc", "quic", or "grpc (fallback)".
+  string transport = 1;
+
+  // The remote QUIC endpoint address. Only set when transport is "quic".
+  string endpoint = 2;
 }
 
 message Domains {

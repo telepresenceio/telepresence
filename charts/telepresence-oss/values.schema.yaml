@@ -592,6 +592,48 @@ properties:
         description: optionally drop the client label from prometheus metrics for GDPR personal data compliance
         type: boolean
 
+  quicTunnel:
+    description: >-
+      Configuration for the opt-in QUIC tunnel endpoint. When enabled, the traffic-manager exposes a UDP QUIC
+      listener that clients upgrade to when reachable; the port-forwarded gRPC transport remains the default
+      and the fallback.
+    type: object
+    additionalProperties: false
+    properties:
+      enabled:
+        description: Enable the traffic-manager's QUIC tunnel listener.
+        type: boolean
+      port:
+        description: UDP port the traffic-manager's QUIC listener binds to.
+        type: integer
+      externalHost:
+        description: >-
+          Externally reachable host or IP advertised to clients. The QUIC endpoint is not advertised until
+          this is set (e.g. to the LoadBalancer address of the quic Service).
+        type: string
+      externalPort:
+        description: Advertised UDP port when it differs from the Service port (0 = same).
+        type: integer
+      service:
+        description: Configuration for the Service that fronts the QUIC endpoint.
+        type: object
+        additionalProperties: false
+        properties:
+          create:
+            description: Whether to create a Service for the QUIC endpoint.
+            type: boolean
+          type:
+            description: The type of Service for the QUIC endpoint.
+            type: string
+          nodePort:
+            description: >-
+              Fixed node port for the QUIC Service when quicTunnel.service.type is NodePort. 0 lets
+              Kubernetes allocate one.
+            type: integer
+          annotations:
+            description: Annotations to add to the QUIC Service.
+            type: object
+
   rbac:
     type: object
     additionalProperties: false

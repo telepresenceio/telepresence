@@ -31,6 +31,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	mgrusg "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/usg"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
@@ -185,6 +186,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 
 		g.Go("config", namespaces.Listen)
 		g.Go("prometheus", mgr.servePrometheus)
+		g.Go("quictunnel", mgr.serveQuicTunnel)
 
 		// reapNodeAgentJobs is the callback the uninstall endpoint runs, in
 		// addition to the agent injector's sidecar rollback, to delete every
@@ -352,6 +354,26 @@ func (s *service) servePrometheus(ctx context.Context) error {
 
 	<-ctx.Done()
 	return svc.Shutdown(context.Background())
+}
+
+// serveQuicTunnel starts the QUIC tunnel listener if env.TunnelQuicPort != 0. It
+// blocks, serving accepted tunnel streams through s.state.Tunnel, until ctx is done.
+func (s *service) serveQuicTunnel(ctx context.Context) error {
+	env := managerutil.GetEnv(ctx)
+	if env.TunnelQuicPort == 0 {
+		return nil
+	}
+	serverCert, err := s.quicCA.ServerTLSCert()
+	if err != nil {
+		return fmt.Errorf("unable to mint QUIC server certificate: %w", err)
+	}
+	ln, err := quictunnel.Listen(env.TunnelQuicPort, s.quicCA, serverCert, s.state.Tunnel)
+	if err != nil {
+		return fmt.Errorf("unable to start QUIC tunnel listener: %w", err)
+	}
+	clog.Infof(ctx, "QUIC tunnel listener started on %s", ln.Addr())
+	defer clog.Info(ctx, "QUIC tunnel listener stopped")
+	return ln.Serve(ctx)
 }
 
 func (s *service) serveHTTP(ctx context.Context) error {

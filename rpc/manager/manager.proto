@@ -492,6 +492,36 @@ message TunnelMessage {
   bytes payload = 1;
 }
 
+// QuicTunnelEndpoint describes the traffic-manager's QUIC endpoint, if any, so that a
+// client can dial it directly instead of tunneling over the port-forwarded connection.
+message QuicTunnelEndpoint {
+  // Whether the traffic-manager has a QUIC listener exposed. The remaining fields are
+  // only meaningful when this is true.
+  bool enabled = 1;
+
+  // Externally reachable host or IP of the QUIC endpoint.
+  string host = 2;
+
+  // UDP port of the QUIC endpoint.
+  int32 port = 3;
+
+  // CA bundle (PEM) to verify the server certificate against.
+  bytes ca_pem = 4;
+
+  // Session-scoped client certificate (PEM) to present to the server.
+  bytes client_cert_pem = 5;
+
+  // Private key (PEM) for the client certificate.
+  bytes client_key_pem = 6;
+
+  // TLS server name to use when verifying the server certificate.
+  string server_name = 7;
+
+  // ALPN protocol to offer in the TLS handshake. An empty value means the
+  // client's built-in default.
+  string alpn = 8;
+}
+
 message DialRequest {
   bytes conn_id = 1;
   int64 roundtrip_latency = 2;
@@ -938,6 +968,12 @@ service Manager {
   // always contain the session ID, connection ID, and timeouts used by
   // the dialer endpoints.
   rpc Tunnel(stream TunnelMessage) returns (stream TunnelMessage);
+
+  // GetQuicTunnelEndpoint returns the descriptor for the traffic-manager's QUIC
+  // endpoint, including a session-scoped client certificate, so that the caller can
+  // dial it directly instead of tunneling over this port-forwarded connection. The
+  // returned descriptor has enabled == false when no QUIC endpoint is exposed.
+  rpc GetQuicTunnelEndpoint(SessionInfo) returns (QuicTunnelEndpoint);
 
   // ReportMetrics is used by a traffic-agent to report metrics for streams
   // established when clients connect directly to traffic-agents using port-forward.

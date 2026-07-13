@@ -60,7 +60,7 @@ func (ac *client) String() string {
 	return fmt.Sprintf("%s(%s), port %d", ai.PodName, net.IP(ai.PodIp), ai.ApiPort)
 }
 
-func (ac *client) Tunnel(ctx context.Context, opts ...grpc.CallOption) (tunnel.Client, error) {
+func (ac *client) Tunnel(ctx context.Context, opts ...grpc.CallOption) (tunnel.GRPCClientStream, error) {
 	cli, err := ac.ensureConnect(ctx)
 	if err != nil {
 		return nil, err

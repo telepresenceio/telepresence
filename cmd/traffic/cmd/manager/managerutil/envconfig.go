@@ -93,6 +93,21 @@ type Env struct {
 	// the well-known CRI sockets beneath it.
 	NodeAgentCRISocket string
 
+	// TunnelQuicPort is the UDP port the traffic-manager's QUIC tunnel listener
+	// binds to on all interfaces. Zero (the default) disables the listener.
+	TunnelQuicPort uint16
+
+	// TunnelQuicExternalHost is the externally reachable host or IP advertised
+	// to clients for the QUIC tunnel endpoint. The endpoint is only advertised
+	// (GetQuicTunnelEndpoint returns Enabled: true) when this is set and the
+	// listener is enabled.
+	TunnelQuicExternalHost string
+
+	// TunnelQuicExternalPort is the UDP port advertised to clients for the QUIC
+	// tunnel endpoint. Zero (the default) means the same port as TunnelQuicPort,
+	// i.e. the Service in front of the listener doesn't remap it.
+	TunnelQuicExternalPort uint16
+
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `envSeparator:" "`
 	ClientRoutingNeverProxySubnets       []netip.Prefix `envSeparator:" "`
 	ClientRoutingAllowConflictingSubnets []netip.Prefix `envSeparator:" "`

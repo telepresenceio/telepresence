@@ -58,6 +58,7 @@ const (
 	Manager_LookupDNS_FullMethodName                       = "/telepresence.manager.Manager/LookupDNS"
 	Manager_WatchLogLevel_FullMethodName                   = "/telepresence.manager.Manager/WatchLogLevel"
 	Manager_Tunnel_FullMethodName                          = "/telepresence.manager.Manager/Tunnel"
+	Manager_GetQuicTunnelEndpoint_FullMethodName           = "/telepresence.manager.Manager/GetQuicTunnelEndpoint"
 	Manager_ReportMetrics_FullMethodName                   = "/telepresence.manager.Manager/ReportMetrics"
 	Manager_UninstallAgents_FullMethodName                 = "/telepresence.manager.Manager/UninstallAgents"
 )
@@ -174,6 +175,11 @@ type ManagerClient interface {
 	// always contain the session ID, connection ID, and timeouts used by
 	// the dialer endpoints.
 	Tunnel(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TunnelMessage, TunnelMessage], error)
+	// GetQuicTunnelEndpoint returns the descriptor for the traffic-manager's QUIC
+	// endpoint, including a session-scoped client certificate, so that the caller can
+	// dial it directly instead of tunneling over this port-forwarded connection. The
+	// returned descriptor has enabled == false when no QUIC endpoint is exposed.
+	GetQuicTunnelEndpoint(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*QuicTunnelEndpoint, error)
 	// ReportMetrics is used by a traffic-agent to report metrics for streams
 	// established when clients connect directly to traffic-agents using port-forward.
 	ReportMetrics(ctx context.Context, in *TunnelMetrics, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -623,6 +629,16 @@ func (c *managerClient) Tunnel(ctx context.Context, opts ...grpc.CallOption) (gr
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_TunnelClient = grpc.BidiStreamingClient[TunnelMessage, TunnelMessage]
 
+func (c *managerClient) GetQuicTunnelEndpoint(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*QuicTunnelEndpoint, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QuicTunnelEndpoint)
+	err := c.cc.Invoke(ctx, Manager_GetQuicTunnelEndpoint_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) ReportMetrics(ctx context.Context, in *TunnelMetrics, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
@@ -755,6 +771,11 @@ type ManagerServer interface {
 	// always contain the session ID, connection ID, and timeouts used by
 	// the dialer endpoints.
 	Tunnel(grpc.BidiStreamingServer[TunnelMessage, TunnelMessage]) error
+	// GetQuicTunnelEndpoint returns the descriptor for the traffic-manager's QUIC
+	// endpoint, including a session-scoped client certificate, so that the caller can
+	// dial it directly instead of tunneling over this port-forwarded connection. The
+	// returned descriptor has enabled == false when no QUIC endpoint is exposed.
+	GetQuicTunnelEndpoint(context.Context, *SessionInfo) (*QuicTunnelEndpoint, error)
 	// ReportMetrics is used by a traffic-agent to report metrics for streams
 	// established when clients connect directly to traffic-agents using port-forward.
 	ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error)
@@ -872,6 +893,9 @@ func (UnimplementedManagerServer) WatchLogLevel(*emptypb.Empty, grpc.ServerStrea
 }
 func (UnimplementedManagerServer) Tunnel(grpc.BidiStreamingServer[TunnelMessage, TunnelMessage]) error {
 	return status.Error(codes.Unimplemented, "method Tunnel not implemented")
+}
+func (UnimplementedManagerServer) GetQuicTunnelEndpoint(context.Context, *SessionInfo) (*QuicTunnelEndpoint, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetQuicTunnelEndpoint not implemented")
 }
 func (UnimplementedManagerServer) ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportMetrics not implemented")
@@ -1431,6 +1455,24 @@ func _Manager_Tunnel_Handler(srv interface{}, stream grpc.ServerStream) error {
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Manager_TunnelServer = grpc.BidiStreamingServer[TunnelMessage, TunnelMessage]
 
+func _Manager_GetQuicTunnelEndpoint_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SessionInfo)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).GetQuicTunnelEndpoint(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_GetQuicTunnelEndpoint_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).GetQuicTunnelEndpoint(ctx, req.(*SessionInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_ReportMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TunnelMetrics)
 	if err := dec(in); err != nil {
@@ -1565,6 +1607,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LookupDNS",
 			Handler:    _Manager_LookupDNS_Handler,
+		},
+		{
+			MethodName: "GetQuicTunnelEndpoint",
+			Handler:    _Manager_GetQuicTunnelEndpoint_Handler,
 		},
 		{
 			MethodName: "ReportMetrics",

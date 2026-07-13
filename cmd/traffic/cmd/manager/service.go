@@ -33,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
@@ -60,6 +61,7 @@ type Service interface {
 	runUpdateTrafficManagerConfigMapLoop(context.Context) error
 	serveHTTP(context.Context) error
 	servePrometheus(context.Context) error
+	serveQuicTunnel(context.Context) error
 }
 
 type service struct {
@@ -73,6 +75,12 @@ type service struct {
 	serviceNameFQN     string
 	dotClusterDomain   string
 	tmConfigMapUpdated atomic.Bool
+
+	// quicCA is non-nil only when the QUIC tunnel listener is enabled
+	// (TUNNEL_QUIC_PORT != 0). It is generated once in NewService and never
+	// persisted; a manager restart mints a new CA and implicitly revokes every
+	// client certificate the previous one signed.
+	quicCA *quictunnel.CA
 
 	rpc.UnsafeManagerServer
 }
@@ -101,10 +109,19 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 		clog.Errorf(ctx, "unable to initialize cluster info: %v", err)
 		return nil, err
 	}
-	ns := managerutil.GetEnv(ctx).ManagerNamespace
+	env := managerutil.GetEnv(ctx)
+	ns := env.ManagerNamespace
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
+
+	if env.TunnelQuicPort != 0 {
+		ret.quicCA, err = quictunnel.NewCA()
+		if err != nil {
+			clog.Errorf(ctx, "unable to initialize QUIC tunnel CA: %v", err)
+			return nil, err
+		}
+	}
 
 	ret.state = state.NewState(ctx, g, configWatcher.AdminCommandChannel())
 	return ret, nil
@@ -1098,6 +1115,39 @@ func (s *service) Tunnel(server grpc.BidiStreamingServer[rpc.TunnelMessage, rpc.
 		return errors.FromError(err, codes.FailedPrecondition, fmt.Sprintf("failed to connect stream: %v", err))
 	}
 	return s.state.Tunnel(ctx, stream)
+}
+
+// GetQuicTunnelEndpoint returns the descriptor for the traffic-manager's QUIC endpoint.
+// The endpoint is only advertised once the listener is enabled and an externally
+// reachable host has been configured for it; otherwise the client is told to keep
+// using the port-forwarded gRPC transport.
+func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicTunnelEndpoint, error) {
+	env := managerutil.GetEnv(ctx)
+	if s.quicCA == nil || env.TunnelQuicExternalHost == "" {
+		return &rpc.QuicTunnelEndpoint{Enabled: false}, nil
+	}
+	sessionID := tunnel.SessionID(session.GetSessionId())
+	if s.state.GetClient(sessionID) == nil {
+		return nil, errors.Errorf(codes.NotFound, "Session %q not found", sessionID)
+	}
+	certPEM, keyPEM, err := s.quicCA.MintClientCert(string(sessionID))
+	if err != nil {
+		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to mint QUIC client certificate: %v", err))
+	}
+	port := env.TunnelQuicExternalPort
+	if port == 0 {
+		port = env.TunnelQuicPort
+	}
+	return &rpc.QuicTunnelEndpoint{
+		Enabled:       true,
+		Host:          env.TunnelQuicExternalHost,
+		Port:          int32(port),
+		CaPem:         s.quicCA.CertPEM(),
+		ClientCertPem: certPEM,
+		ClientKeyPem:  keyPEM,
+		ServerName:    quictunnel.ServerName,
+		Alpn:          tunnel.QuicALPN,
+	}, nil
 }
 
 // hasDomainSuffix checks if the given name is suffixed with the given suffix. The following

@@ -26,7 +26,7 @@ func newBlockingTunnelProvider() *blockingTunnelProvider {
 	}
 }
 
-func (p *blockingTunnelProvider) Tunnel(ctx context.Context, _ ...grpc.CallOption) (Client, error) {
+func (p *blockingTunnelProvider) Tunnel(ctx context.Context, _ ...grpc.CallOption) (GRPCClientStream, error) {
 	active := atomic.AddInt32(&p.active, 1)
 	for {
 		maxActive := atomic.LoadInt32(&p.max)

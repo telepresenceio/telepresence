@@ -133,6 +133,20 @@ spec:
             value: {{ .insecure | quote }}
           {{- end }}
           {{- end }}
+          {{- with .quicTunnel }}
+          {{- if .enabled }}
+          - name: TUNNEL_QUIC_PORT
+            value: {{ .port | quote }}
+          {{- if .externalHost }}
+          - name: TUNNEL_QUIC_EXTERNAL_HOST
+            value: {{ .externalHost | quote }}
+          {{- end }}
+          {{- if .externalPort }}
+          - name: TUNNEL_QUIC_EXTERNAL_PORT
+            value: {{ .externalPort | quote }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
       {{- if or .agentInjector.enabled .nodeAgent.enabled }}
         {{- /*
         Agent arrival timeout, image resolution, and every setting that is
@@ -331,6 +345,11 @@ spec:
           {{- if .prometheus.port }}  # 0 is false
           - name: prometheus
             containerPort: {{ .prometheus.port }}
+          {{- end }}
+          {{- if .quicTunnel.enabled }}
+          - name: quic
+            containerPort: {{ .quicTunnel.port }}
+            protocol: UDP
           {{- end }}
           {{- with .livenessProbe }}
           livenessProbe:

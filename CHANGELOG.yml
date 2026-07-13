@@ -24,6 +24,22 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.31.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Opt-in QUIC transport for the tunnel
+        body: >-
+          The traffic-manager can now expose a QUIC endpoint for the tunnel
+          (Helm chart value <code>quicTunnel.enabled</code>). When the
+          endpoint is reachable, the client automatically upgrades new
+          tunneled connections to it, removing the head-of-line blocking that
+          the shared port-forwarded gRPC connection imposes across flows and
+          surviving client network changes such as a laptop switching
+          networks. The port-forwarded gRPC transport remains the default
+          and is used as the fallback whenever the QUIC endpoint is disabled
+          or unreachable, and <code>telepresence status</code> now reports
+          which transport is active.
   - version: 2.30.1
     date: 2026-07-17
     notes:

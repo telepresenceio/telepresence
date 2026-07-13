@@ -30,6 +30,7 @@ require (
 	github.com/pkg/sftp v1.13.10
 	github.com/prometheus/client_golang v1.23.2
 	github.com/puzpuzpuz/xsync/v4 v4.5.0
+	github.com/quic-go/quic-go v0.60.0
 	github.com/rogpeppe/go-internal v1.15.0
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
 	github.com/spf13/afero v1.15.0

@@ -113,12 +113,12 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 
 		if tp == nil {
 			if s.isAlsoProxyDestination(destAddr) {
-				tp = tunnel.ManagerProvider(s.managerClient())
+				tp = s.managerTunnelProvider()
 				clog.Debugf(c, "Opening traffic-manager tunnel for also-proxy id %s", id)
 			} else if tp = s.getAgentClient(destAddr); tp != nil {
 				clog.Debugf(c, "Opening traffic-agent tunnel for id %s using agent %s", id, tp)
 			} else {
-				tp = tunnel.ManagerProvider(s.managerClient())
+				tp = s.managerTunnelProvider()
 				clog.Debugf(c, "Opening traffic-manager tunnel for id %s", id)
 			}
 		}

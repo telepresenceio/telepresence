@@ -197,6 +197,35 @@ prometheus: {}
   # port: 0
   # dropClientLabel: false
 
+################################################################################
+## QUIC Tunnel Configuration
+################################################################################
+# quicTunnel controls the opt-in QUIC endpoint that the traffic-manager can
+# expose so that clients able to reach it upgrade tunneled connections from
+# the port-forwarded gRPC transport, removing head-of-line blocking between
+# flows. The port-forwarded transport remains the default and the fallback
+# when this is disabled or unreachable.
+quicTunnel:
+  enabled: false
+  # UDP port the traffic-manager's QUIC listener binds to. Chosen clear of
+  # the other ports this chart uses: apiPort (8081, TCP gRPC),
+  # agentInjector.webhook.port (8443, TCP), agent.port (9900, TCP), and
+  # prometheus.port (opt-in, TCP).
+  port: 7778
+  # Externally reachable host or IP advertised to clients. The QUIC endpoint is
+  # not advertised until this is set (e.g. to the LoadBalancer address of the
+  # quic service).
+  externalHost: ""
+  # Advertised UDP port when it differs from the Service port (0 = same).
+  externalPort: 0
+  service:
+    # Whether to create a Service for the QUIC endpoint.
+    create: true
+    type: LoadBalancer
+    # nodePort pins the node port when type is NodePort. 0 lets Kubernetes allocate one.
+    nodePort: 0
+    annotations: {}
+
 # Values specific to the helm chart hooks for managing upgrade/deleting
 hooks:
   busybox:

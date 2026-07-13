@@ -29,6 +29,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/shellquote"
 	"github.com/telepresenceio/telepresence/v2/pkg/sigctx"
+	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 	"github.com/telepresenceio/telepresence/v2/pkg/vif"
 )
 
@@ -161,6 +162,13 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 		}
 	}
 	c = client.WithConfig(c, cfg)
+
+	// Install the usage producer on the daemon's main context, so every context
+	// derived from it (including per-session contexts) can emit usage reports, e.g.
+	// the tunnel-transport reports from quic.go. Reports land in the same on-disk FIFO
+	// the user daemon writes to and drains (see usg.DiskSink); the root daemon runs no
+	// sender of its own, so the returned sink is discarded, matching the CLI's pattern.
+	c, _ = usg.InstallClient(c)
 
 	addrFlag := flags.Lookup(addressFlag)
 	if !addrFlag.Changed {

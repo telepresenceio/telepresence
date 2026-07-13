@@ -20,6 +20,7 @@ import (
 	"github.com/blang/semver/v4"
 	dns2 "github.com/miekg/dns"
 	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/quic-go/quic-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
@@ -217,6 +218,62 @@ type session struct {
 	interceptShortcuts atomic.Pointer[shortcutTable]
 
 	lookupSequencer *xsync.Map[string, clusterLookupResult]
+
+	// quicConn is the client's QUIC connection to the traffic-manager, set once the
+	// opportunistic QUIC dial at session start succeeds. Nil for the lifetime of the
+	// session when QUIC was never dialed (older manager, endpoint disabled, or the dial
+	// failed); the tunnel then stays on the port-forwarded gRPC path. Written from the
+	// "quic" goroutine started in Start and read from streamCreator and stop, hence atomic.
+	quicConn atomic.Pointer[quic.Conn]
+
+	// quicTunnelProvider serves manager-bound tunnel streams over QUIC while healthy,
+	// falling back permanently to the port-forwarded gRPC connection after the first
+	// QUIC failure. Nil when quicConn is nil. See quicConn for the concurrency note.
+	quicTunnelProvider atomic.Pointer[quicFallbackProvider]
+
+	// transportStatus is the observable tunnel transport for manager-bound streams. A
+	// nil pointer means the default steady state: gRPC, because QUIC was never dialed
+	// (older manager, endpoint disabled, unimplemented, or dial failed). Replaced, never
+	// mutated, by the "quic" goroutine on a successful dial and by quicFallbackProvider
+	// when it trips its dead flag; see TransportStatus and setTransportStatus.
+	transportStatus atomic.Pointer[transportStatus]
+}
+
+// Observable values of transportStatus.transport, as reported by TransportStatus and
+// surfaced in the daemon Status RPC and usage reports.
+const (
+	TransportGRPC         = "grpc"
+	TransportQUIC         = "quic"
+	TransportGRPCFallback = "grpc (fallback)"
+)
+
+// transportStatus is the value stored in session.transportStatus. Immutable once
+// stored, so concurrent readers of the atomic.Pointer never observe a half-written
+// value.
+type transportStatus struct {
+	transport string
+	endpoint  string // remote QUIC endpoint address; only set when transport is TransportQUIC
+}
+
+// TransportStatus returns the tunnel transport currently serving manager-bound tunnel
+// streams ("grpc" by default) and, when it is "quic", the remote endpoint address.
+func (s *session) TransportStatus() (transport, endpoint string) {
+	if ts := s.transportStatus.Load(); ts != nil {
+		return ts.transport, ts.endpoint
+	}
+	return TransportGRPC, ""
+}
+
+// setTransportStatus replaces the observable transport state.
+func (s *session) setTransportStatus(transport, endpoint string) {
+	s.transportStatus.Store(&transportStatus{transport: transport, endpoint: endpoint})
+}
+
+// tunnelTransportRPC returns the current transport status in the shape the daemon
+// Status and Connect RPCs report it in.
+func (s *session) tunnelTransportRPC() *rpc.TunnelTransport {
+	transport, endpoint := s.TransportStatus()
+	return &rpc.TunnelTransport{Transport: transport, Endpoint: endpoint}
 }
 
 // createSession will establish a connection to the traffic-manager and return a new properly initialized session object.
@@ -1309,6 +1366,14 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 		return s.watchClusterInfo(teleroutePort)
 	})
 
+	// Opportunistically dial the traffic-manager's QUIC tunnel endpoint. This must never
+	// fail or delay session startup, so it runs detached from the rest of startup and
+	// always reports success to the group; startQuicTunnel itself never returns an error.
+	g.Go("quic", func(ctx context.Context) error {
+		s.startQuicTunnel(ctx)
+		return nil
+	})
+
 	if s.agentClients == nil && len(s.subnetViaWorkloads) > 0 {
 		return fmt.Errorf("--proxy-via can only be used when cluster.agentPortForward is enabled")
 	}
@@ -1388,6 +1453,11 @@ func (s *session) stop() {
 			cancel()
 		}()
 		<-cc.Done()
+	}
+
+	if conn := s.quicConn.Load(); conn != nil {
+		clog.Debug(s, "Closing QUIC tunnel connection to traffic-manager")
+		_ = conn.CloseWithError(0, "session closed")
 	}
 
 	if s.tunVif != nil {

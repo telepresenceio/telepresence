@@ -1,0 +1,132 @@
+package tunnel
+
+import (
+	"context"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"sync"
+
+	"github.com/quic-go/quic-go"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
+
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+)
+
+// QuicALPN is the ALPN protocol negotiated between client and manager for the QUIC tunnel
+// transport. Both ends of the handshake must offer/accept exactly this value.
+const QuicALPN = "tp-tunnel"
+
+// maxFrameSize is the largest TunnelMessage frame that will be sent or accepted on a QUIC
+// stream. It exists to bound how much memory a single frame length prefix can commit us to
+// allocating before the payload has even arrived.
+const maxFrameSize = 4 * 1024 * 1024 // 4 MiB
+
+// readFrame reads one length-prefixed frame from r. A clean end of stream at a frame boundary
+// is reported as io.EOF; a stream end in the middle of a frame is reported as
+// io.ErrUnexpectedEOF so that callers can tell a graceful close from a truncated message.
+func readFrame(r io.Reader) ([]byte, error) {
+	var lb [4]byte
+	if _, err := io.ReadFull(r, lb[:]); err != nil {
+		return nil, err
+	}
+	n := binary.BigEndian.Uint32(lb[:])
+	if n > maxFrameSize {
+		return nil, fmt.Errorf("quic tunnel frame of %d bytes exceeds maximum of %d bytes", n, maxFrameSize)
+	}
+	b := make([]byte, n)
+	if n > 0 {
+		if _, err := io.ReadFull(r, b); err != nil {
+			if err == io.EOF { //nolint:errorlint // io.ReadFull only ever returns io.EOF verbatim, never wrapped
+				err = io.ErrUnexpectedEOF
+			}
+			return nil, err
+		}
+	}
+	return b, nil
+}
+
+// writeFrame writes b to w as one length-prefixed frame.
+func writeFrame(w io.Writer, b []byte) error {
+	if len(b) > maxFrameSize {
+		return fmt.Errorf("quic tunnel frame of %d bytes exceeds maximum of %d bytes", len(b), maxFrameSize)
+	}
+	fb := make([]byte, 4+len(b))
+	binary.BigEndian.PutUint32(fb, uint32(len(b)))
+	copy(fb[4:], b)
+	_, err := w.Write(fb)
+	return err
+}
+
+// quicStream frames TunnelMessages onto a *quic.Stream. Send is safe for concurrent use; the
+// underlying quic.Stream is not, so writes (including the write-side close done by
+// quicClientStream.CloseSend) are serialized through sendMu.
+type quicStream struct {
+	stream *quic.Stream
+	sendMu sync.Mutex
+}
+
+func (s *quicStream) Send(m *rpc.TunnelMessage) error {
+	b, err := proto.Marshal(m)
+	if err != nil {
+		return err
+	}
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	return writeFrame(s.stream, b)
+}
+
+func (s *quicStream) Recv() (*rpc.TunnelMessage, error) {
+	b, err := readFrame(s.stream)
+	if err != nil {
+		return nil, err
+	}
+	m := new(rpc.TunnelMessage)
+	if err := proto.Unmarshal(b, m); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal QUIC tunnel frame: %w", err)
+	}
+	return m, nil
+}
+
+// quicClientStream is the client side of a QUIC tunnel stream.
+type quicClientStream struct {
+	quicStream
+}
+
+// NewQuicClientStream wraps a QUIC stream opened by the client as a GRPCClientStream.
+func NewQuicClientStream(s *quic.Stream) GRPCClientStream {
+	return &quicClientStream{quicStream{stream: s}}
+}
+
+// CloseSend closes the write direction of the underlying QUIC stream; the read direction stays
+// open so a peer response already in flight can still be received.
+func (s *quicClientStream) CloseSend() error {
+	s.sendMu.Lock()
+	defer s.sendMu.Unlock()
+	return s.stream.Close()
+}
+
+// NewQuicServerStream wraps a QUIC stream accepted by the manager as a GRPCStream.
+func NewQuicServerStream(s *quic.Stream) GRPCStream {
+	return &quicStream{stream: s}
+}
+
+// quicProvider is a Provider that opens tunnel streams on a QUIC connection.
+type quicProvider struct {
+	conn *quic.Conn
+}
+
+// NewQuicProvider returns a Provider that opens a new bidirectional QUIC stream for each
+// call to Tunnel. The passed grpc.CallOptions are not applicable to QUIC and are ignored.
+func NewQuicProvider(conn *quic.Conn) Provider {
+	return quicProvider{conn: conn}
+}
+
+func (p quicProvider) Tunnel(ctx context.Context, _ ...grpc.CallOption) (GRPCClientStream, error) {
+	s, err := p.conn.OpenStreamSync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return NewQuicClientStream(s), nil
+}
