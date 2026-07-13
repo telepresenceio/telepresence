@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perf-payload
+  labels:
+    app: perf-payload
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: perf-payload
+  template:
+    metadata:
+      labels:
+        app: perf-payload
+    spec:
+      # An initContainer generates a fixed-size random (incompressible) file that
+      # nginx then serves as a static asset. This gives the download experiment a
+      # predictable payload with no application-level quirks. Keep the byte count
+      # in sync with exp1PayloadBytes in experiment1_test.go.
+      initContainers:
+        - name: gen
+          image: busybox:1.36
+          command: ["sh", "-c", "dd if=/dev/urandom of=/data/payload.bin bs=1048576 count=8"]
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: nginx
+          image: nginx:1.27-alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: data
+              mountPath: /usr/share/nginx/html
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /payload.bin
+              port: 80
+            initialDelaySeconds: 1
+            periodSeconds: 2
+          resources:
+            requests:
+              cpu: 200m
+              memory: 64Mi
+            limits:
+              cpu: "2"
+              memory: 256Mi
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: perf-payload
+  labels:
+    app: perf-payload
+spec:
+  selector:
+    app: perf-payload
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

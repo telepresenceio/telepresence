@@ -520,6 +520,13 @@ check-integration: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the
 check-integration-ci: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the integration suite with up to 3 attempts, each retry scoped to the previous attempt's failures
 	build-aux/check-integration-retry.sh $(tools/test-report)
 
+.PHONY: perf
+perf: ## (QA) Run the QUIC performance experiments (needs a cluster; see perf/README.md)
+	# Behind the 'perf' build tag so it never runs in check-unit/check-integration.
+	# Reinstalls the traffic-manager and needs a QUIC-reachable endpoint plus, for
+	# the head-of-line result, PERF_NETEM_IFACE and passwordless 'sudo tc'.
+	go test -tags perf -count=1 -v -timeout=30m ./perf/... $(if $(TEST_NAME),-run '$(TEST_NAME)')
+
 .PHONY: _login
 _login:
 	docker login --username "$$TELEPRESENCE_REGISTRY_USERNAME" --password "$$TELEPRESENCE_REGISTRY_PASSWORD"
