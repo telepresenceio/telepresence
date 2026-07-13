@@ -59,6 +59,7 @@ const (
 	Manager_WatchLogLevel_FullMethodName                   = "/telepresence.manager.Manager/WatchLogLevel"
 	Manager_Tunnel_FullMethodName                          = "/telepresence.manager.Manager/Tunnel"
 	Manager_GetQuicTunnelEndpoint_FullMethodName           = "/telepresence.manager.Manager/GetQuicTunnelEndpoint"
+	Manager_GetQuicAgentCert_FullMethodName                = "/telepresence.manager.Manager/GetQuicAgentCert"
 	Manager_WatchQuicBackends_FullMethodName               = "/telepresence.manager.Manager/WatchQuicBackends"
 	Manager_ReportMetrics_FullMethodName                   = "/telepresence.manager.Manager/ReportMetrics"
 	Manager_UninstallAgents_FullMethodName                 = "/telepresence.manager.Manager/UninstallAgents"
@@ -181,6 +182,12 @@ type ManagerClient interface {
 	// dial it directly instead of tunneling over this port-forwarded connection. The
 	// returned descriptor has enabled == false when no QUIC endpoint is exposed.
 	GetQuicTunnelEndpoint(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*QuicTunnelEndpoint, error)
+	// GetQuicAgentCert mints a QUIC server certificate for the calling agent's
+	// own SNI name (quicfwd.AgentSNI(pod UID)), so it can run a QUIC listener
+	// behind the forwarder. The caller's session must be an agent session
+	// (established via ArriveAsAgent/ReconnectAgent). The returned descriptor
+	// has enabled == false when the manager has no QUIC CA.
+	GetQuicAgentCert(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*QuicAgentCert, error)
 	// WatchQuicBackends notifies the QUIC forwarder of the set of pod IPs
 	// (traffic-manager and traffic-agent alike) it may route QUIC traffic to.
 	// Unlike the other Watch* RPCs this call carries no SessionInfo: the
@@ -648,6 +655,16 @@ func (c *managerClient) GetQuicTunnelEndpoint(ctx context.Context, in *SessionIn
 	return out, nil
 }
 
+func (c *managerClient) GetQuicAgentCert(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*QuicAgentCert, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(QuicAgentCert)
+	err := c.cc.Invoke(ctx, Manager_GetQuicAgentCert_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) WatchQuicBackends(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[QuicBackendSnapshot], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[11], Manager_WatchQuicBackends_FullMethodName, cOpts...)
@@ -804,6 +821,12 @@ type ManagerServer interface {
 	// dial it directly instead of tunneling over this port-forwarded connection. The
 	// returned descriptor has enabled == false when no QUIC endpoint is exposed.
 	GetQuicTunnelEndpoint(context.Context, *SessionInfo) (*QuicTunnelEndpoint, error)
+	// GetQuicAgentCert mints a QUIC server certificate for the calling agent's
+	// own SNI name (quicfwd.AgentSNI(pod UID)), so it can run a QUIC listener
+	// behind the forwarder. The caller's session must be an agent session
+	// (established via ArriveAsAgent/ReconnectAgent). The returned descriptor
+	// has enabled == false when the manager has no QUIC CA.
+	GetQuicAgentCert(context.Context, *SessionInfo) (*QuicAgentCert, error)
 	// WatchQuicBackends notifies the QUIC forwarder of the set of pod IPs
 	// (traffic-manager and traffic-agent alike) it may route QUIC traffic to.
 	// Unlike the other Watch* RPCs this call carries no SessionInfo: the
@@ -932,6 +955,9 @@ func (UnimplementedManagerServer) Tunnel(grpc.BidiStreamingServer[TunnelMessage,
 }
 func (UnimplementedManagerServer) GetQuicTunnelEndpoint(context.Context, *SessionInfo) (*QuicTunnelEndpoint, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetQuicTunnelEndpoint not implemented")
+}
+func (UnimplementedManagerServer) GetQuicAgentCert(context.Context, *SessionInfo) (*QuicAgentCert, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetQuicAgentCert not implemented")
 }
 func (UnimplementedManagerServer) WatchQuicBackends(*emptypb.Empty, grpc.ServerStreamingServer[QuicBackendSnapshot]) error {
 	return status.Error(codes.Unimplemented, "method WatchQuicBackends not implemented")
@@ -1512,6 +1538,24 @@ func _Manager_GetQuicTunnelEndpoint_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_GetQuicAgentCert_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SessionInfo)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).GetQuicAgentCert(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_GetQuicAgentCert_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).GetQuicAgentCert(ctx, req.(*SessionInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_WatchQuicBackends_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(emptypb.Empty)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1661,6 +1705,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetQuicTunnelEndpoint",
 			Handler:    _Manager_GetQuicTunnelEndpoint_Handler,
+		},
+		{
+			MethodName: "GetQuicAgentCert",
+			Handler:    _Manager_GetQuicAgentCert_Handler,
 		},
 		{
 			MethodName: "ReportMetrics",

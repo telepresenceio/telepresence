@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
@@ -777,6 +778,12 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 			Name:  agentconfig.EnvNodeAgentPodIP,
 			Value: opts.podIP,
 		},
+	}
+	if cfg.QuicPort > 0 {
+		env = append(env, core.EnvVar{
+			Name:  agentconfig.EnvAgentQuicPort,
+			Value: strconv.Itoa(int(cfg.QuicPort)),
+		})
 	}
 
 	// With a configured CRI socket, only that socket is mounted, at its host

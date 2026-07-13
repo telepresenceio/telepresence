@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/telepresenceio/clog"
@@ -20,12 +21,21 @@ import (
 // after a failure, via pkg/grpc/watcher.WatchWithRetry's constant backoff.
 const allowlistWatchRetryInterval = 5 * time.Second
 
+// backendInfo is one allowlisted backend's kind and QUIC port.
+type backendInfo struct {
+	kind string
+	port uint16
+}
+
 // backendSet is one immutable, full-replacement snapshot of the live backend
-// allowlist: every allowlisted pod IP's kind, plus the subset that are managers
-// (precomputed so ManagerAddr doesn't rebuild it on every call).
+// allowlist: every allowlisted pod IP's kind and port, plus the subsets needed to
+// resolve an SNI without a linear scan -- the manager IPs (precomputed so
+// ManagerBackend doesn't rebuild it on every call) and agent pod UID -> IP
+// (precomputed so AgentBackend can resolve an AgentSNI's pod UID directly).
 type backendSet struct {
-	kinds    map[netip.Addr]string
-	managers []netip.Addr
+	backends    map[netip.Addr]backendInfo
+	managers    []netip.Addr
+	agentsByUID map[string]netip.Addr
 }
 
 // Allowlist is the forwarder's atomic view of the live manager/agent pod IPs a
@@ -35,15 +45,28 @@ type backendSet struct {
 //
 // It implements backendPicker.
 type Allowlist struct {
+	// fallbackManagerPort is used for a manager entry whose QuicBackend.Port is
+	// 0 -- an older traffic-manager that doesn't yet report its own QUIC port.
+	// See config.go's Env.BackendPort doc comment for the full rationale; this
+	// keeps a rolling upgrade from an older manager (or a manager whose
+	// WatchQuicBackends response predates this field) working without also
+	// upgrading the forwarder in lockstep. It is never applied to agent
+	// entries: an agent with no reported port has no QUIC listener at all, and
+	// silently guessing one would risk routing traffic to an unrelated
+	// listener on that pod.
+	fallbackManagerPort uint16
+
 	snapshot  atomic.Pointer[backendSet]
 	ready     atomic.Bool
 	readyOnce sync.Once
 }
 
 // NewAllowlist returns an Allowlist with no snapshot yet: Ready() is false and
-// Contains/ManagerAddr report nothing is allowlisted until the first snapshot arrives.
-func NewAllowlist() *Allowlist {
-	return &Allowlist{}
+// Backend/ManagerBackend/AgentBackend report nothing is allowlisted until the first
+// snapshot arrives. fallbackManagerPort is used for a manager entry whose reported
+// port is 0; see the Allowlist.fallbackManagerPort doc comment.
+func NewAllowlist(fallbackManagerPort uint16) *Allowlist {
+	return &Allowlist{fallbackManagerPort: fallbackManagerPort}
 }
 
 // Ready implements backendPicker.
@@ -51,26 +74,48 @@ func (a *Allowlist) Ready() bool {
 	return a.ready.Load()
 }
 
-// Contains implements backendPicker.
+// Contains reports whether ip is a currently live, allowlisted backend (manager or
+// agent). Test/diagnostic convenience; Router itself calls Backend, which also
+// resolves the port a CID-routed datagram must be forwarded to.
 func (a *Allowlist) Contains(ip netip.Addr) bool {
-	s := a.snapshot.Load()
-	if s == nil {
-		return false
-	}
-	_, ok := s.kinds[ip]
+	_, ok := a.Backend(ip)
 	return ok
 }
 
-// ManagerAddr implements backendPicker. Per the design, any allowlisted manager
+// Backend implements backendPicker.
+func (a *Allowlist) Backend(ip netip.Addr) (uint16, bool) {
+	s := a.snapshot.Load()
+	if s == nil {
+		return 0, false
+	}
+	info, ok := s.backends[ip]
+	return info.port, ok
+}
+
+// ManagerBackend implements backendPicker. Per the design, any allowlisted manager
 // backend is an acceptable resolution for quicfwd.ManagerSNI; which one is returned
 // when several are allowlisted is unspecified (Go's randomized map iteration order
 // gives basic distribution across replicas for free).
-func (a *Allowlist) ManagerAddr() (netip.Addr, bool) {
+func (a *Allowlist) ManagerBackend() (netip.Addr, uint16, bool) {
 	s := a.snapshot.Load()
 	if s == nil || len(s.managers) == 0 {
-		return netip.Addr{}, false
+		return netip.Addr{}, 0, false
 	}
-	return s.managers[0], true
+	ip := s.managers[0]
+	return ip, s.backends[ip].port, true
+}
+
+// AgentBackend implements backendPicker.
+func (a *Allowlist) AgentBackend(podUID string) (netip.Addr, uint16, bool) {
+	s := a.snapshot.Load()
+	if s == nil {
+		return netip.Addr{}, 0, false
+	}
+	ip, ok := s.agentsByUID[podUID]
+	if !ok {
+		return netip.Addr{}, 0, false
+	}
+	return ip, s.backends[ip].port, true
 }
 
 // update replaces the current snapshot with backends, and -- exactly once, on the
@@ -78,24 +123,43 @@ func (a *Allowlist) ManagerAddr() (netip.Addr, bool) {
 // clears the snapshot on its own: losing the manager (WatchAllowlist's stream ending)
 // keeps the last known-good snapshot, per the design's "soft state" treatment of the
 // allowlist.
+//
+// A backend whose resolved port is 0 (an agent entry with no reported port, or a
+// manager entry with no reported port and no fallbackManagerPort configured) is
+// dropped from the snapshot entirely: a port-0 "backend" cannot be dialed, and
+// admitting it into the allowlist would only let a CID or SNI resolve to a dead end
+// instead of falling through to dropUnresolvedSNI/dropAllowlistMiss.
 func (a *Allowlist) update(ctx context.Context, backends []*rpc.QuicBackend) {
-	kinds := make(map[netip.Addr]string, len(backends))
+	infos := make(map[netip.Addr]backendInfo, len(backends))
 	var managers []netip.Addr
+	agentsByUID := make(map[string]netip.Addr)
 	for _, b := range backends {
 		ip, ok := netip.AddrFromSlice(b.Ip)
 		if !ok {
 			continue
 		}
 		ip = ip.Unmap()
-		kinds[ip] = b.Kind
-		if b.Kind == "manager" {
+		port := uint16(b.Port)
+		if port == 0 && b.Kind == "manager" {
+			port = a.fallbackManagerPort
+		}
+		if port == 0 {
+			continue
+		}
+		infos[ip] = backendInfo{kind: b.Kind, port: port}
+		switch b.Kind {
+		case "manager":
 			managers = append(managers, ip)
+		case "agent":
+			if b.PodUid != "" {
+				agentsByUID[b.PodUid] = ip
+			}
 		}
 	}
-	a.snapshot.Store(&backendSet{kinds: kinds, managers: managers})
+	a.snapshot.Store(&backendSet{backends: infos, managers: managers, agentsByUID: agentsByUID})
 	a.readyOnce.Do(func() {
 		a.ready.Store(true)
-		clog.Infof(ctx, "quic-forwarder: received first backend allowlist snapshot (%d backend(s))", len(kinds))
+		clog.Infof(ctx, "quic-forwarder: received first backend allowlist snapshot (%d backend(s))", len(infos))
 	})
 }
 
@@ -108,7 +172,17 @@ func (a *Allowlist) update(ctx context.Context, backends []*rpc.QuicBackend) {
 // retrying, and allowlist.update is only ever called with a newer snapshot, never with
 // an empty one on disconnect.
 func WatchAllowlist(ctx context.Context, address string, allowlist *Allowlist) error {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// Keepalives so a manager pod that vanishes (a rollout, a crash) is noticed within
+	// seconds rather than whenever TCP eventually gives up: WatchWithRetry can only
+	// resubscribe once the dead stream errors, and until it does the allowlist keeps
+	// the departed pod's IP, so a manager-bound QUIC dial routes to a dead backend.
+	conn, err := grpc.NewClient(address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                10 * time.Second,
+			Timeout:             5 * time.Second,
+			PermitWithoutStream: true,
+		}))
 	if err != nil {
 		return err
 	}

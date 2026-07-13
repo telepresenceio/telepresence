@@ -42,12 +42,16 @@ type backendPicker interface {
 	// Ready reports whether at least one allowlist snapshot has ever been
 	// received. Before that, every datagram is dropped.
 	Ready() bool
-	// Contains reports whether ip is a currently live, allowlisted backend
-	// (manager or agent).
-	Contains(ip netip.Addr) bool
-	// ManagerAddr returns any one currently allowlisted manager backend. ok is
-	// false when none is allowlisted.
-	ManagerAddr() (ip netip.Addr, ok bool)
+	// Backend resolves ip to its QUIC port if it is a currently live,
+	// allowlisted backend (manager or agent).
+	Backend(ip netip.Addr) (port uint16, ok bool)
+	// ManagerBackend returns any one currently allowlisted manager backend's
+	// IP and port. ok is false when none is allowlisted.
+	ManagerBackend() (ip netip.Addr, port uint16, ok bool)
+	// AgentBackend resolves podUID (an AgentSNI's pod UID) to its currently
+	// live, allowlisted IP and port. ok is false when no agent with that pod
+	// UID is allowlisted.
+	AgentBackend(podUID string) (ip netip.Addr, port uint16, ok bool)
 }
 
 // flowSink is the routing engine's view of the flow table. The real implementation is
@@ -57,9 +61,9 @@ type flowSink interface {
 	// Forward writes datagram to the existing flow for src, if any, and
 	// reports whether one existed.
 	Forward(ctx context.Context, src netip.AddrPort, datagram []byte) bool
-	// CreateAndForward creates a new flow from src to backend and writes each
-	// of datagrams to it, in order.
-	CreateAndForward(ctx context.Context, src netip.AddrPort, backend netip.Addr, datagrams [][]byte)
+	// CreateAndForward creates a new flow from src to backend:port and writes
+	// each of datagrams to it, in order.
+	CreateAndForward(ctx context.Context, src netip.AddrPort, backend netip.Addr, port uint16, datagrams [][]byte)
 }
 
 // handshakeKey identifies one in-progress connection attempt: a client's source address
@@ -183,11 +187,16 @@ func (r *Router) Route(ctx context.Context, src netip.AddrPort, datagram []byte)
 // live, allowlisted backend, create a flow and forward datagram to it.
 func (r *Router) routeByCID(ctx context.Context, src netip.AddrPort, dcid []byte, datagram []byte) {
 	ip, ok := quicfwd.DecodeCID(dcid)
-	if !ok || !r.allowlist.Contains(ip) {
+	if !ok {
 		r.dropf(ctx, dropAllowlistMiss, "CID does not resolve to an allowlisted backend (src %s)", src)
 		return
 	}
-	r.sink.CreateAndForward(ctx, src, ip, [][]byte{datagram})
+	port, ok := r.allowlist.Backend(ip)
+	if !ok {
+		r.dropf(ctx, dropAllowlistMiss, "CID does not resolve to an allowlisted backend (src %s)", src)
+		return
+	}
+	r.sink.CreateAndForward(ctx, src, ip, port, [][]byte{datagram})
 	r.metrics.addForwarded(1)
 }
 
@@ -236,18 +245,17 @@ func (r *Router) routeInitial(ctx context.Context, src netip.AddrPort, dcid []by
 	delete(r.handshakes, key)
 	r.mu.Unlock()
 
-	backendKind, _ := quicfwd.ParseSNI(sni)
+	backendKind, podUID := quicfwd.ParseSNI(sni)
 	var (
-		backendIP netip.Addr
-		resolved  bool
+		backendIP   netip.Addr
+		backendPort uint16
+		resolved    bool
 	)
 	switch backendKind {
 	case quicfwd.BackendManager:
-		backendIP, resolved = r.allowlist.ManagerAddr()
+		backendIP, backendPort, resolved = r.allowlist.ManagerBackend()
 	case quicfwd.BackendAgent:
-		// Phase 5 has no agent backends behind the forwarder; agent SNIs
-		// stay unresolvable until phase 6.
-		resolved = false
+		backendIP, backendPort, resolved = r.allowlist.AgentBackend(podUID)
 	default:
 		resolved = false
 	}
@@ -256,7 +264,7 @@ func (r *Router) routeInitial(ctx context.Context, src netip.AddrPort, dcid []by
 		return
 	}
 
-	r.sink.CreateAndForward(ctx, src, backendIP, buffered)
+	r.sink.CreateAndForward(ctx, src, backendIP, backendPort, buffered)
 	r.metrics.addForwarded(int64(len(buffered)))
 }
 

@@ -42,7 +42,7 @@ func Listen(env *Env, allowlist *Allowlist) (*Forwarder, error) {
 		return nil, fmt.Errorf("quic-forwarder: listen on UDP :%d: %w", env.ListenPort, err)
 	}
 	m := newMetrics()
-	flows := newFlowTable(front, env.BackendPort, m)
+	flows := newFlowTable(front, m)
 	router := NewRouter(allowlist, flows, m)
 	return &Forwarder{
 		front:   front,

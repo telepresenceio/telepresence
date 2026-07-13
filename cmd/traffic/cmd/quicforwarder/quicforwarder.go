@@ -35,12 +35,12 @@ func Main(ctx context.Context, _ ...string) error {
 // Run builds the Forwarder and its backend-allowlist watcher and runs both until ctx is
 // done.
 func Run(ctx context.Context, env *Env) error {
-	allowlist := NewAllowlist()
+	allowlist := NewAllowlist(env.BackendPort)
 	fwd, err := Listen(env, allowlist)
 	if err != nil {
 		return err
 	}
-	clog.Infof(ctx, "quic-forwarder listening on %s, routing to backend port %d, manager at %s",
+	clog.Infof(ctx, "quic-forwarder listening on %s, manager backend port fallback %d, manager at %s",
 		fwd.Addr(), env.BackendPort, env.ManagerAddress())
 
 	g := log.NewGroup(ctx)

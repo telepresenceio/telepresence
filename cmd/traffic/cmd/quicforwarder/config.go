@@ -30,11 +30,15 @@ type Env struct {
 	// the forwarder takes over binding it once it sits in front of the manager.
 	ListenPort uint16 `default:"7778"`
 
-	// BackendPort is the UDP port every backend (the traffic-manager, and every
-	// traffic-agent once phase 6 lands) binds its own QUIC listener to. It is a
-	// single cluster-wide constant, not per-backend configuration: the
-	// allowlist tells the forwarder which pod IPs are live backends, and this
-	// port is where all of them listen.
+	// BackendPort is a fallback QUIC port used only for a manager backend whose
+	// WatchQuicBackends entry reports port 0 -- an older traffic-manager that
+	// predates QuicBackend.Port and QuicBackend.PodUid. Every other backend
+	// (a manager or agent reporting a real port, and every agent full stop:
+	// an agent with no reported port has no QUIC listener at all) is routed
+	// using the port the allowlist itself carries, per-backend, from
+	// WatchQuicBackends; BackendPort plays no part in that path. It exists so
+	// a forwarder need not be upgraded in lockstep with the manager it talks
+	// to.
 	BackendPort uint16 `default:"7778"`
 
 	// ManagerHost is the traffic-manager's in-cluster DNS name (or IP), used to

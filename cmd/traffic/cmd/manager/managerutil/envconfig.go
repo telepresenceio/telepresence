@@ -108,6 +108,19 @@ type Env struct {
 	// i.e. the Service in front of the listener doesn't remap it.
 	TunnelQuicExternalPort uint16
 
+	// TunnelQuicAgentPort is the UDP port a traffic-agent's own QUIC listener
+	// binds to, delivered to agent pods (sidecar and node-agent alike) as the
+	// AGENT_QUIC_PORT environment variable via the generated agent config, only
+	// when the QUIC tunnel is enabled on this manager (TunnelQuicPort != 0). It
+	// is deliberately not the manager's own TunnelQuicPort: a sidecar agent
+	// shares its pod's network namespace with the application, so its QUIC
+	// listener needs a port of its own. This has a Go-level default (unlike most
+	// of Env, see the comment on MutatorWebhookPort above) because the Helm
+	// chart's quicTunnel.agentPort value that will set it is added in a later
+	// task; until then every manager and every agent must still agree on the
+	// same default port.
+	TunnelQuicAgentPort uint16 `default:"7787"`
+
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `envSeparator:" "`
 	ClientRoutingNeverProxySubnets       []netip.Prefix `envSeparator:" "`
 	ClientRoutingAllowConflictingSubnets []netip.Prefix `envSeparator:" "`
@@ -143,9 +156,18 @@ func (e *Env) HostNetwork() bool {
 }
 
 func (e *Env) GeneratorConfig(qualifiedAgentImage string) (*agentmap.GeneratorConfig, error) {
+	// QuicPort is only delivered to agents when this manager's own QUIC tunnel
+	// listener is enabled; an agent QUIC listener is useless if there is no
+	// manager-side CA to mint it a certificate (GetQuicAgentCert) or forwarder
+	// backend entry (WatchQuicBackends) to route through.
+	var quicPort uint16
+	if e.TunnelQuicPort != 0 {
+		quicPort = e.TunnelQuicAgentPort
+	}
 	return &agentmap.GeneratorConfig{
 		AgentPort:           e.AgentPort,
 		APIPort:             e.AgentRestApiPort,
+		QuicPort:            quicPort,
 		ClientConnectionTTL: e.ClientConnectionTTL,
 		ManagerPort:         e.ServerPort,
 		QualifiedAgentImage: qualifiedAgentImage,

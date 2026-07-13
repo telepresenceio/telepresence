@@ -156,8 +156,11 @@ func (s *nodeAgentBase) nodeAgentJobTargetPods(ctx context.Context, svc string) 
 // reaches the local process) while confirming the target workload's pod is
 // left untouched (no restart, no injected traffic-agent container) and a
 // node-agent Job appears in the manager namespace, then leaves the intercept
-// and asserts the Job is reaped.
-func (s *nodeAgentBase) assertNodeAgentIntercept(svc string, flags ...string) {
+// and asserts the Job is reaped. Any duringIntercept callbacks run after the
+// traffic round-trip and before the intercept is torn down, so callers can
+// add assertions (e.g. the active transport) that only hold while the
+// node-agent attachment is still live.
+func (s *nodeAgentBase) assertNodeAgentIntercept(svc string, flags []string, duringIntercept ...func()) {
 	ctx := s.Context()
 	rq := s.Require()
 
@@ -194,6 +197,10 @@ func (s *nodeAgentBase) assertNodeAgentIntercept(svc string, flags ...string) {
 
 	// Traffic sent to the service must reach the local echo server.
 	itest.PingInterceptedEchoServer(ctx, svc, "80")
+
+	for _, fn := range duringIntercept {
+		fn()
+	}
 
 	// A node-agent Job must exist for this workload.
 	jobNames := s.nodeAgentJobNames(ctx, svc)
@@ -315,7 +322,7 @@ func (s *nodeAgentSuite) TearDownSuite() {
 // restart, no injected traffic-agent container) and a node-agent Job appears
 // in the manager namespace and is reaped when the intercept is left.
 func (s *nodeAgentSuite) Test_NodeAgentIntercept() {
-	s.assertNodeAgentIntercept("echo-easy", "--node-agent")
+	s.assertNodeAgentIntercept("echo-easy", []string{"--node-agent"})
 }
 
 // Test_NodeAgentIngest verifies that "telepresence ingest --node-agent"

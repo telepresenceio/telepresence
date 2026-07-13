@@ -614,6 +614,11 @@ properties:
       externalPort:
         description: Advertised UDP port when it differs from the Service port (0 = same).
         type: integer
+      agentPort:
+        description: >-
+          UDP port a traffic-agent's own QUIC listener binds to (sidecar and node-agent alike). Delivered to
+          agents only when quicTunnel.enabled is true.
+        type: integer
       service:
         description: Configuration for the Service that fronts the QUIC endpoint.
         type: object

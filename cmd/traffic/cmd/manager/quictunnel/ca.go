@@ -106,9 +106,18 @@ func (ca *CA) Pool() *x509.CertPool {
 	return ca.pool
 }
 
-// ServerTLSCert mints a server certificate for ServerName, signed by ca, for use in a
-// QUIC listener's tls.Config.
+// ServerTLSCert mints a server certificate for ServerName, signed by ca, for use in the
+// traffic-manager's own QUIC listener's tls.Config. It is a thin wrapper around
+// MintServerCert for that one, fixed SNI name.
 func (ca *CA) ServerTLSCert() (tls.Certificate, error) {
+	return ca.MintServerCert(ServerName)
+}
+
+// MintServerCert mints a server certificate for sniName, signed by ca, for use in any
+// QUIC listener's tls.Config -- the traffic-manager's own (via ServerTLSCert) or, per
+// "Agent connections over QUIC" in docs/plans/quic-transport/design.md, a traffic-agent's
+// (via the GetQuicAgentCert RPC, which mints for quicfwd.AgentSNI(pod UID)).
+func (ca *CA) MintServerCert(sniName string) (tls.Certificate, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return tls.Certificate{}, fmt.Errorf("quictunnel: generate server key: %w", err)
@@ -120,8 +129,8 @@ func (ca *CA) ServerTLSCert() (tls.Certificate, error) {
 	now := time.Now()
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: ServerName},
-		DNSNames:     []string{ServerName},
+		Subject:      pkix.Name{CommonName: sniName},
+		DNSNames:     []string{sniName},
 		NotBefore:    now.Add(-notBeforeSkew),
 		NotAfter:     now.Add(caValidity),
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
@@ -135,6 +144,23 @@ func (ca *CA) ServerTLSCert() (tls.Certificate, error) {
 		Certificate: [][]byte{der},
 		PrivateKey:  key,
 	}, nil
+}
+
+// ServerCertToPEM PEM-encodes cert -- a tls.Certificate produced by MintServerCert or
+// ServerTLSCert -- for transfer over the wire (e.g. QuicAgentCert.CertPem/KeyPem). Only
+// the ECDSA private keys this package generates are supported.
+func ServerCertToPEM(cert tls.Certificate) (certPEM, keyPEM []byte, err error) {
+	key, ok := cert.PrivateKey.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, nil, fmt.Errorf("quictunnel: unsupported private key type %T", cert.PrivateKey)
+	}
+	keyDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("quictunnel: marshal server key: %w", err)
+	}
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]})
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
+	return certPEM, keyPEM, nil
 }
 
 // MintClientCert mints a short-lived client certificate for sessionID, signed by ca.

@@ -62,6 +62,52 @@ func TestCA_ServerTLSCert(t *testing.T) {
 	require.NoError(t, err, "minted server certificate must verify against the CA")
 }
 
+func TestCA_MintServerCert_ArbitrarySNI(t *testing.T) {
+	ca, err := quictunnel.NewCA()
+	require.NoError(t, err)
+
+	const sni = "some-pod-uid.agent.telepresence"
+	serverCert, err := ca.MintServerCert(sni)
+	require.NoError(t, err)
+
+	cert, err := x509.ParseCertificate(serverCert.Certificate[0])
+	require.NoError(t, err)
+	require.Equal(t, sni, cert.Subject.CommonName)
+	require.Contains(t, cert.DNSNames, sni)
+
+	_, err = cert.Verify(x509.VerifyOptions{
+		Roots:     ca.Pool(),
+		DNSName:   sni,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	})
+	require.NoError(t, err, "minted server certificate must verify against the CA")
+}
+
+func TestCA_ServerCertToPEM_RoundTrips(t *testing.T) {
+	ca, err := quictunnel.NewCA()
+	require.NoError(t, err)
+
+	const sni = "some-pod-uid.agent.telepresence"
+	serverCert, err := ca.MintServerCert(sni)
+	require.NoError(t, err)
+
+	certPEM, keyPEM, err := quictunnel.ServerCertToPEM(serverCert)
+	require.NoError(t, err)
+
+	pair, err := tls.X509KeyPair(certPEM, keyPEM)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(pair.Certificate[0])
+	require.NoError(t, err)
+	require.Equal(t, sni, cert.Subject.CommonName)
+
+	_, err = cert.Verify(x509.VerifyOptions{
+		Roots:     ca.Pool(),
+		DNSName:   sni,
+		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	})
+	require.NoError(t, err, "PEM-round-tripped server certificate must still verify against the CA")
+}
+
 func TestCA_DifferentInstancesDoNotCrossTrust(t *testing.T) {
 	ca1, err := quictunnel.NewCA()
 	require.NoError(t, err)

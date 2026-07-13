@@ -10,9 +10,13 @@ import (
 	"time"
 
 	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/quic-go/quic-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/telepresenceio/clog"
@@ -20,6 +24,8 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	tpClient "github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
+	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -44,6 +50,27 @@ type client struct {
 	connectErr      error
 	tunnelCount     int32
 	lastActive      int64
+
+	// quicDead is set the first time a QUIC dial, TLS handshake, or stream-open attempt
+	// fails for this agent pod. Once set, the dialer built in dialAgent goes straight to
+	// the port-forward path for the remainder of this AgentPodInfo generation; refresh
+	// clears it whenever the watch reports an updated AgentPodInfo for the pod, so a pod
+	// restart gets a fresh chance.
+	quicDead atomic.Bool
+
+	// quicConnMu guards quicConn. It is a dedicated mutex, distinct from the RWMutex
+	// above, because the dialer that reads and writes quicConn runs on a goroutine
+	// managed by grpc-go's connection machinery and must never depend on (or block)
+	// whatever holds the client's main lock.
+	quicConnMu sync.Mutex
+	// quicConn is this agent's cached QUIC connection, reused to open additional streams,
+	// e.g. after grpc's own reconnect machinery redials following a stream failure.
+	quicConn *quic.Conn
+
+	// transport records which transport currently carries the live gRPC connection to
+	// this agent ("quic" or "grpc"), read by Transports() for the status surface. Empty
+	// until a connection attempt has completed at least once.
+	transport atomic.Value
 }
 
 const dormantLingerTime = 5 * time.Second
@@ -104,7 +131,7 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		if ai.NodeAgent {
 			ns = k8s.GetManagerNamespace(ctx)
 		}
-		conn, cli, _, err := ac.ConnectToAgent(dialCtx, ns, ai.PodName, uint16(ai.ApiPort), types.UID(ai.PodId))
+		conn, cli, err := ac.dialAgent(dialCtx, ns, ai)
 		if err != nil {
 			ac.connectErr = err
 
@@ -122,10 +149,12 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 			// Need to run this in a separate thread to avoid deadlock.
 			go func() {
 				conn.Close()
+				ac.closeQuicConn()
 				ac.Lock()
 				atomic.StoreInt32(&ac.tunnelCount, 0)
 				ac.cancelClient = nil
 				ac.cli = nil
+				ac.transport.Store("")
 				ac.Unlock()
 			}()
 		}
@@ -139,6 +168,46 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 	}
 	atomic.StoreInt64(&ac.lastActive, time.Now().UnixNano())
 	return ac.cli, nil
+}
+
+// dialAgent establishes the gRPC connection to this agent's API port. When the agent
+// advertises a quic_sni (ai.QuicSni != "") and QUIC hasn't previously failed for it, the
+// dialer handed to grpc tries QUIC first for every connection attempt -- including the ones
+// grpc's own reconnect machinery makes transparently after a transport failure -- and falls
+// back to the Kubernetes port-forward otherwise. That single dialer closure is therefore
+// both the initial-connect path and the reconnect path: a mid-session QUIC death surfaces
+// as this gRPC connection failing, grpc redials using the same dialer, and that redial tries
+// QUIC again exactly once (the forwarder or agent may have restarted) before falling back
+// and marking QUIC dead for the remainder of this AgentPodInfo generation.
+func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.AgentPodInfo) (*grpc.ClientConn, agent.AgentClient, error) {
+	podID := types.UID(ai.PodId)
+	var grpcAddr string
+	if podID == "" {
+		grpcAddr = fmt.Sprintf("pod/%s.%s:%d", ai.PodName, ns, ai.ApiPort)
+	} else {
+		grpcAddr = fmt.Sprintf("pod/%s.%s:%d#%s", ai.PodName, ns, ai.ApiPort, podID)
+	}
+
+	pfDialer := portforward.Dialer(ac.Cluster)
+	dialer := agentDialer(ai.QuicSni, &ac.quicDead, &ac.transport,
+		ac.owner.quicEndpointFor, ac.dialAgentQUIC, pfDialer,
+		func(err error) { clog.Infof(ac, "%s: QUIC dial failed, falling back to port-forward: %v", ac, err) })
+
+	conn, err := grpcClient.DialGRPC(dialCtx, portforward.K8sPFScheme+":///"+grpcAddr,
+		grpc.WithContextDialer(dialer),
+		grpc.WithResolvers(portforward.NewResolver(ac.Cluster, nil)),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
+		grpc.WithIdleTimeout(0),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, err
+	}
+	cli := agent.NewAgentClient(conn)
+	if _, err := cli.Version(dialCtx, &empty.Empty{}); err != nil {
+		conn.Close()
+		return nil, nil, tpClient.CheckTimeout(dialCtx, fmt.Errorf("dial agent: %w", err))
+	}
+	return conn, cli, nil
 }
 
 func (ac *client) idleTime() time.Duration {
@@ -199,6 +268,9 @@ func (ac *client) refresh(ai *manager.AgentPodInfo) {
 
 	oldStatus := ac.info.Intercepted
 	ac.info = ai
+	// Give a previously failed QUIC path a fresh chance on every watch update for this
+	// pod; a pod restart in particular gets a new attempt this way.
+	ac.quicDead.Store(false)
 	if ai.Intercepted == oldStatus {
 		if ai.Intercepted && ac.cancelDialWatch == nil {
 			clog.Debugf(ac, "Agent %s(%s) is intercepted but has no dial watcher; ensuring connection", ai.PodName, net.IP(ai.PodIp))
@@ -288,6 +360,20 @@ type Clients interface {
 	// pod is added to or removed from the watched set. Passing nil disables the
 	// callback. Safe to call at any time.
 	SetChangeListener(func())
+
+	// Transports returns the current transport ("quic" or "grpc") for every agent pod
+	// that has ever completed a connection attempt this session. An agent that hasn't
+	// been dialed yet is omitted; the status surface renders this list only when
+	// non-empty.
+	Transports() []AgentTransport
+}
+
+// AgentTransport reports which transport currently carries the live connection to one
+// connected agent pod, for the status surface.
+type AgentTransport struct {
+	Workload  string
+	Pod       string
+	Transport string // "quic" or "grpc"
 }
 
 type ipWaitKey struct {
@@ -324,6 +410,15 @@ type clients struct {
 	// to or removed from the watched set. Guarded by changeListenerMu.
 	changeListenerMu sync.RWMutex
 	changeListener   func()
+
+	// mcMu guards mc, the manager client used to lazily fetch the QUIC tunnel endpoint
+	// descriptor for agent connections. Set once WatchAgentPods starts.
+	mcMu sync.RWMutex
+	mc   manager.ManagerClient
+
+	// quicEP lazily fetches and caches the QUIC tunnel endpoint descriptor, at most once
+	// per connector session, the first time an agent that advertises a quic_sni is dialed.
+	quicEP quicEndpointCache
 }
 
 func NewClients(cl *k8s.Cluster, session *manager.SessionInfo, namespaces []string) Clients {
@@ -533,7 +628,42 @@ func (s *clients) hasWaiterFor(info *manager.AgentPodInfo) bool {
 	return false
 }
 
+// setManagerClient records the manager client used to lazily fetch the QUIC tunnel
+// endpoint descriptor for agent connections.
+func (s *clients) setManagerClient(mc manager.ManagerClient) {
+	s.mcMu.Lock()
+	s.mc = mc
+	s.mcMu.Unlock()
+}
+
+func (s *clients) managerClient() manager.ManagerClient {
+	s.mcMu.RLock()
+	defer s.mcMu.RUnlock()
+	return s.mc
+}
+
+// quicEndpointFor returns the traffic-manager's QUIC tunnel endpoint descriptor for agent
+// connections, fetching and caching it (including negative results) on first use. Returns
+// nil when QUIC isn't usable this session, or when no manager client is available yet (in
+// which case the fetch is left unattempted rather than cached as a false negative).
+func (s *clients) quicEndpointFor(ctx context.Context) *quicEndpoint {
+	return s.quicEP.get(ctx, s.managerClient(), s.session)
+}
+
+// Transports implements Clients.
+func (s *clients) Transports() []AgentTransport {
+	var ts []AgentTransport
+	s.clients.Range(func(_ string, ac *client) bool {
+		if tr, _ := ac.transport.Load().(string); tr != "" {
+			ts = append(ts, AgentTransport{Workload: ac.info.WorkloadName, Pod: ac.info.PodName, Transport: tr})
+		}
+		return true
+	})
+	return ts
+}
+
 func (s *clients) WatchAgentPods(rmc manager.ManagerClient) error {
+	s.setManagerClient(rmc)
 	defer func() {
 		activeCount := 0
 		s.clients.Range(func(_ string, ac *client) bool {

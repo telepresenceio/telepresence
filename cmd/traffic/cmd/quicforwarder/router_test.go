@@ -44,13 +44,15 @@ func buildLongHeader(t *testing.T, dcid, scid, token, payload []byte) []byte {
 type fakeAllowlist struct {
 	mu         sync.Mutex
 	ready      bool
-	allowed    map[netip.Addr]bool
+	allowed    map[netip.Addr]uint16
+	agentsByID map[string]netip.Addr
 	manager    netip.Addr
+	managerPrt uint16
 	hasManager bool
 }
 
 func newFakeAllowlist() *fakeAllowlist {
-	return &fakeAllowlist{ready: true, allowed: map[netip.Addr]bool{}}
+	return &fakeAllowlist{ready: true, allowed: map[netip.Addr]uint16{}, agentsByID: map[string]netip.Addr{}}
 }
 
 func (f *fakeAllowlist) Ready() bool {
@@ -60,34 +62,61 @@ func (f *fakeAllowlist) Ready() bool {
 }
 
 func (f *fakeAllowlist) Contains(ip netip.Addr) bool {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.allowed[ip]
+	_, ok := f.Backend(ip)
+	return ok
 }
 
-func (f *fakeAllowlist) ManagerAddr() (netip.Addr, bool) {
+func (f *fakeAllowlist) Backend(ip netip.Addr) (uint16, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.manager, f.hasManager
+	port, ok := f.allowed[ip]
+	return port, ok
 }
 
-func (f *fakeAllowlist) allow(ip netip.Addr) {
+func (f *fakeAllowlist) ManagerBackend() (netip.Addr, uint16, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.allowed[ip] = true
+	return f.manager, f.managerPrt, f.hasManager
 }
 
-func (f *fakeAllowlist) setManager(ip netip.Addr) {
+func (f *fakeAllowlist) AgentBackend(podUID string) (netip.Addr, uint16, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.allowed[ip] = true
+	ip, ok := f.agentsByID[podUID]
+	if !ok {
+		return netip.Addr{}, 0, false
+	}
+	return ip, f.allowed[ip], true
+}
+
+// allow allowlists ip with the given port (0 is a valid CID-routable port for tests
+// that only exercise a decode failure or allowlist miss, never an actual dial).
+func (f *fakeAllowlist) allow(ip netip.Addr, port uint16) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.allowed[ip] = port
+}
+
+func (f *fakeAllowlist) setManager(ip netip.Addr, port uint16) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.allowed[ip] = port
 	f.manager = ip
+	f.managerPrt = port
 	f.hasManager = true
+}
+
+func (f *fakeAllowlist) setAgent(ip netip.Addr, port uint16, podUID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.allowed[ip] = port
+	f.agentsByID[podUID] = ip
 }
 
 type createCall struct {
 	src       netip.AddrPort
 	backend   netip.Addr
+	port      uint16
 	datagrams [][]byte
 }
 
@@ -112,13 +141,13 @@ func (f *fakeSink) Forward(_ context.Context, src netip.AddrPort, datagram []byt
 	return true
 }
 
-func (f *fakeSink) CreateAndForward(_ context.Context, src netip.AddrPort, backend netip.Addr, datagrams [][]byte) {
+func (f *fakeSink) CreateAndForward(_ context.Context, src netip.AddrPort, backend netip.Addr, port uint16, datagrams [][]byte) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.flows[src] = true
 	cp := make([][]byte, len(datagrams))
 	copy(cp, datagrams)
-	f.creates = append(f.creates, createCall{src: src, backend: backend, datagrams: cp})
+	f.creates = append(f.creates, createCall{src: src, backend: backend, port: port, datagrams: cp})
 }
 
 func (f *fakeSink) createCount() int {
@@ -162,7 +191,7 @@ func TestRoute_ShortHeaderCIDHit(t *testing.T) {
 	require.NoError(t, err)
 
 	allowlist := newFakeAllowlist()
-	allowlist.allow(backendIP)
+	allowlist.allow(backendIP, 7787)
 	sink := newFakeSink()
 	r := NewRouter(allowlist, sink, newMetrics())
 
@@ -175,6 +204,7 @@ func TestRoute_ShortHeaderCIDHit(t *testing.T) {
 	require.Equal(t, 1, sink.createCount())
 	call := sink.lastCreate()
 	assert.Equal(t, backendIP, call.backend)
+	assert.Equal(t, uint16(7787), call.port)
 	assert.Equal(t, [][]byte{datagram}, call.datagrams)
 	assert.Equal(t, int64(1), r.metrics.forwarded.Load())
 }
@@ -323,7 +353,7 @@ func TestRoute_HandshakeAccumulation_RealMultiPacketSplit_BufferedFlushOrder(t *
 
 	managerIP := netip.MustParseAddr("10.9.9.9")
 	allowlist := newFakeAllowlist()
-	allowlist.setManager(managerIP)
+	allowlist.setManager(managerIP, 7778)
 	sink := newFakeSink()
 	r := NewRouter(allowlist, sink, newMetrics())
 
@@ -360,10 +390,43 @@ func TestRoute_HandshakeAccumulation_RealMultiPacketSplit_BufferedFlushOrder(t *
 	assert.Equal(t, [][]byte{[]byte("post-handshake-1-rtt-would-go-here")}, sink.fwd[src])
 }
 
-func TestRoute_HandshakeAgentSNIUnresolvable(t *testing.T) {
+// TestRoute_HandshakeAgentSNIResolvesToAllowlistedAgent proves phase 6's central
+// change to Router: an AgentSNI (quicfwd.AgentSNI(pod UID)) now resolves, via the
+// allowlist's pod-UID map, to that agent's own IP and QUIC port -- unlike phase 5,
+// where every AgentSNI was unconditionally unresolvable.
+func TestRoute_HandshakeAgentSNIResolvesToAllowlistedAgent(t *testing.T) {
+	const podUID = "some-pod-uid"
+	packets := captureInitialDatagrams(t, quicfwd.AgentSNI(podUID))
+
+	agentIP := netip.MustParseAddr("10.4.4.4")
+	allowlist := newFakeAllowlist()
+	allowlist.setAgent(agentIP, 7787, podUID)
+	sink := newFakeSink()
+	r := NewRouter(allowlist, sink, newMetrics())
+
+	src := someSrc()
+	ctx := context.Background()
+	resolvedAt := -1
+	for i, pkt := range packets {
+		r.Route(ctx, src, pkt)
+		if sink.createCount() > 0 {
+			resolvedAt = i
+			break
+		}
+	}
+	require.NotEqual(t, -1, resolvedAt, "SNI must resolve from some prefix of the captured packets")
+
+	require.Equal(t, 1, sink.createCount())
+	call := sink.lastCreate()
+	assert.Equal(t, agentIP, call.backend)
+	assert.Equal(t, uint16(7787), call.port)
+	assert.Equal(t, packets[:resolvedAt+1], call.datagrams, "buffered datagrams must flush in arrival order")
+}
+
+func TestRoute_HandshakeAgentSNIUnresolvableWithoutAllowlistedAgent(t *testing.T) {
 	packets := captureInitialDatagrams(t, quicfwd.AgentSNI("some-pod-uid"))
 
-	allowlist := newFakeAllowlist() // no manager, no agent backends -- phase 5
+	allowlist := newFakeAllowlist() // no manager, no agent backends allowlisted
 	sink := newFakeSink()
 	r := NewRouter(allowlist, sink, newMetrics())
 
@@ -381,7 +444,7 @@ func TestRoute_HandshakeUnknownSNIUnresolvable(t *testing.T) {
 	packets := captureInitialDatagrams(t, "not-a-recognized-name.example")
 
 	allowlist := newFakeAllowlist()
-	allowlist.setManager(netip.MustParseAddr("10.9.9.9"))
+	allowlist.setManager(netip.MustParseAddr("10.9.9.9"), 7778)
 	sink := newFakeSink()
 	r := NewRouter(allowlist, sink, newMetrics())
 
@@ -419,7 +482,7 @@ func TestRoute_HandshakeCacheCapExceeded(t *testing.T) {
 	require.GreaterOrEqual(t, len(packets), 2, "test requires a real multi-packet split")
 
 	allowlist := newFakeAllowlist()
-	allowlist.setManager(netip.MustParseAddr("10.9.9.9"))
+	allowlist.setManager(netip.MustParseAddr("10.9.9.9"), 7778)
 	sink := newFakeSink()
 	r := NewRouter(allowlist, sink, newMetrics())
 
@@ -468,7 +531,7 @@ func TestRoute_HandshakeTTLExpiry(t *testing.T) {
 	require.GreaterOrEqual(t, len(packets), 2, "test requires a real multi-packet split")
 
 	allowlist := newFakeAllowlist()
-	allowlist.setManager(netip.MustParseAddr("10.9.9.9"))
+	allowlist.setManager(netip.MustParseAddr("10.9.9.9"), 7778)
 	sink := newFakeSink()
 	r := NewRouter(allowlist, sink, newMetrics())
 

@@ -42,6 +42,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	maps2 "github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/tmconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -564,6 +565,7 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 				ApiPort:      a.ApiPort,
 				Intercepted:  s.state.IsInterceptedBy(a.Name, a.Namespace, clientSessionID),
 				NodeAgent:    a.NodeAgent,
+				QuicSni:      quicSNIForAgent(a.QuicPort, a.PodUid),
 			}
 			agents = append(agents, ap)
 			return true
@@ -639,6 +641,7 @@ func (s *service) watchAgentPodsDelta(ctx context.Context, namespaces []string, 
 						ApiPort:      a.ApiPort,
 						Intercepted:  s.state.IsInterceptedBy(a.Name, a.Namespace, clientSessionID),
 						NodeAgent:    a.NodeAgent,
+						QuicSni:      quicSNIForAgent(a.QuicPort, a.PodUid),
 					}
 					agentPodInfos.Store(string(k), ap)
 				}
@@ -1150,6 +1153,51 @@ func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.Sessio
 	}, nil
 }
 
+// GetQuicAgentCert mints a QUIC server certificate for the calling agent's own SNI
+// name, so it can run a QUIC listener behind the forwarder. See "Agent connections
+// over QUIC" in docs/plans/quic-transport/design.md.
+//
+// Unlike GetQuicTunnelEndpoint, the caller's session must already be an agent
+// session (established via ArriveAsAgent/ReconnectAgent): a client has no pod UID
+// and thus no SNI name to mint for, and GetQuicAgentCert never validates a client
+// session's SessionInfo, whether or not the QUIC CA is enabled.
+func (s *service) GetQuicAgentCert(_ context.Context, session *rpc.SessionInfo) (*rpc.QuicAgentCert, error) {
+	sessionID := tunnel.SessionID(session.GetSessionId())
+	agent := s.state.GetAgent(sessionID)
+	if agent == nil {
+		return nil, errors.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
+	}
+	if s.quicCA == nil {
+		return &rpc.QuicAgentCert{Enabled: false}, nil
+	}
+	sni := quicfwd.AgentSNI(agent.PodUid)
+	cert, err := s.quicCA.MintServerCert(sni)
+	if err != nil {
+		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to mint QUIC agent certificate: %v", err))
+	}
+	certPEM, keyPEM, err := quictunnel.ServerCertToPEM(cert)
+	if err != nil {
+		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to encode QUIC agent certificate: %v", err))
+	}
+	return &rpc.QuicAgentCert{
+		Enabled: true,
+		CertPem: certPEM,
+		KeyPem:  keyPEM,
+		CaPem:   s.quicCA.CertPEM(),
+		Sni:     sni,
+	}, nil
+}
+
+// quicSNIForAgent returns the SNI name a client dials, through the QUIC forwarder,
+// to reach an agent's QUIC listener -- or "" when quicPort is not positive, meaning
+// the agent has no QUIC listener and must be reached by port-forward only.
+func quicSNIForAgent(quicPort int32, podUID string) string {
+	if quicPort <= 0 {
+		return ""
+	}
+	return quicfwd.AgentSNI(podUID)
+}
+
 // quicBackendWatchDebounce coalesces a burst of agent-session changes (e.g. a
 // rollout replacing every agent pod at once) into a single QuicBackendSnapshot,
 // mirroring the debounce pattern used by the node-agent pod-set watcher
@@ -1161,11 +1209,12 @@ const quicBackendWatchDebounce = 250 * time.Millisecond
 // empty when that env var is unset, which is normal outside of a real cluster
 // (e.g. unit tests that don't populate managerutil.Env.PodIp).
 func (s *service) quicManagerBackends(ctx context.Context) []*rpc.QuicBackend {
-	podIP := managerutil.GetEnv(ctx).PodIp
+	env := managerutil.GetEnv(ctx)
+	podIP := env.PodIp
 	if !podIP.IsValid() {
 		return nil
 	}
-	return []*rpc.QuicBackend{{Ip: podIP.AsSlice(), Kind: "manager"}}
+	return []*rpc.QuicBackend{{Ip: podIP.AsSlice(), Kind: "manager", Port: int32(env.TunnelQuicPort)}}
 }
 
 // WatchQuicBackends notifies the QUIC forwarder (a separate, stateless packet
@@ -1202,6 +1251,12 @@ func (s *service) WatchQuicBackends(_ *empty.Empty, stream grpc.ServerStreamingS
 	buildSnapshot := func() *rpc.QuicBackendSnapshot {
 		backends := slices.Clone(managerBackends)
 		for _, a := range agents {
+			// Only agents with a QUIC listener of their own are useful
+			// forwarder backends; an agent that never fetched or never got a
+			// QUIC port has nothing behind it to route to.
+			if a.QuicPort <= 0 {
+				continue
+			}
 			if m.IsInactive(types.UID(a.PodUid)) {
 				continue
 			}
@@ -1210,7 +1265,12 @@ func (s *service) WatchQuicBackends(_ *empty.Empty, stream grpc.ServerStreamingS
 				clog.Errorf(ctx, "quic backend allowlist: error parsing agent pod ip %q: %v", a.PodIp, err)
 				continue
 			}
-			backends = append(backends, &rpc.QuicBackend{Ip: aip.AsSlice(), Kind: "agent"})
+			backends = append(backends, &rpc.QuicBackend{
+				Ip:     aip.AsSlice(),
+				Kind:   "agent",
+				Port:   a.QuicPort,
+				PodUid: a.PodUid,
+			})
 		}
 		return &rpc.QuicBackendSnapshot{Backends: backends}
 	}

@@ -28,9 +28,15 @@ var TrafficManagerSelector = labels.SelectorFromSet(map[string]string{ //nolint:
 })
 
 type GeneratorConfig struct {
-	ManagerPort         uint16
-	AgentPort           uint16
-	APIPort             uint16
+	ManagerPort uint16
+	AgentPort   uint16
+	APIPort     uint16
+	// QuicPort is the UDP port a traffic-agent's own QUIC listener binds to,
+	// delivered to the generated Sidecar config as AGENT_QUIC_PORT. Zero means
+	// the traffic-manager has no QUIC tunnel enabled, so agents get no QUIC
+	// listener; see managerutil.Env.GeneratorConfig, which zeroes it exactly
+	// when TunnelQuicPort == 0.
+	QuicPort            uint16
 	QualifiedAgentImage string
 	ManagerNamespace    string
 	ClusterDomain       string
@@ -184,6 +190,7 @@ func (cfg *GeneratorConfig) Generate(
 		ManagerHost:         ManagerHost(cfg.ManagerNamespace, cfg.ClusterDomain),
 		ManagerPort:         cfg.ManagerPort,
 		APIPort:             cfg.APIPort,
+		QuicPort:            cfg.QuicPort,
 		ClientConnectionTTL: cfg.ClientConnectionTTL,
 		MountPolicies:       cfg.MountPolicies,
 		MeshDialSubnets:     cfg.MeshDialSubnets,

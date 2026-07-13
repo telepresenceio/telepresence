@@ -58,10 +58,19 @@ type echoBackend struct {
 
 func startEchoBackend(t *testing.T) *echoBackend {
 	t.Helper()
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	return startEchoBackendOnIP(t, netip.MustParseAddr("127.0.0.1"))
+}
+
+// startEchoBackendOnIP is startEchoBackend, parameterized on the loopback IP to bind
+// and to mint connection IDs for. Two backends on two different loopback IPs (the
+// whole 127.0.0.0/8 range is loopback on Linux) simulate two distinct pods, which is
+// what the CID-encodes-the-pod-IP scheme (pkg/quicfwd.CIDGenerator) actually requires
+// to tell them apart -- a real cluster never has two live backends sharing one pod IP.
+func startEchoBackendOnIP(t *testing.T, ip netip.Addr) *echoBackend { //nolint:revive // t first, matches other test helpers in this file
+	t.Helper()
+	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IP(ip.AsSlice())})
 	require.NoError(t, err)
 
-	ip := netip.MustParseAddr("127.0.0.1")
 	transport := &quic.Transport{
 		Conn:                  conn,
 		ConnectionIDGenerator: quicfwd.NewCIDGenerator(ip),
@@ -113,8 +122,15 @@ func (b *echoBackend) close() {
 // forwarder must route to the echo backend on a connection's first packet.
 func dialClient(t *testing.T, ctx context.Context, fwdAddr string) *quic.Conn { //nolint:revive // t first, matches other test helpers in this file
 	t.Helper()
+	return dialClientSNI(t, ctx, fwdAddr, quicfwd.ManagerSNI)
+}
+
+// dialClientSNI is dialClient, parameterized on the SNI name to present -- e.g.
+// quicfwd.AgentSNI(podUID) to dial an agent backend through the forwarder.
+func dialClientSNI(t *testing.T, ctx context.Context, fwdAddr, sni string) *quic.Conn { //nolint:revive // t first, matches other test helpers in this file
+	t.Helper()
 	tlsConf := &tls.Config{
-		ServerName:         quicfwd.ManagerSNI,
+		ServerName:         sni,
 		InsecureSkipVerify: true,
 		NextProtos:         []string{tunnel.QuicALPN},
 	}
@@ -154,9 +170,9 @@ func TestE2E_HandshakeThroughForwarder_BidirectionalData_ConcurrentSecondClient(
 	backend := startEchoBackend(t)
 	defer backend.close()
 
-	env := &Env{ListenPort: 0, BackendPort: backend.port}
-	allowlist := NewAllowlist()
-	allowlist.update(context.Background(), []*rpc.QuicBackend{{Ip: backend.ip.AsSlice(), Kind: "manager"}})
+	env := &Env{ListenPort: 0}
+	allowlist := NewAllowlist(0)
+	allowlist.update(context.Background(), []*rpc.QuicBackend{{Ip: backend.ip.AsSlice(), Kind: "manager", Port: int32(backend.port)}})
 
 	fwd, err := Listen(env, allowlist)
 	require.NoError(t, err)
@@ -197,6 +213,65 @@ func TestE2E_HandshakeThroughForwarder_BidirectionalData_ConcurrentSecondClient(
 	}
 }
 
+// TestE2E_SecondBackendOnDifferentPort_ReachedViaAgentSNI proves phase 6's
+// per-backend port resolution end to end: two live backends -- a "manager" and an
+// "agent", each a real quic-go server on its own loopback IP and its own port --
+// are both reachable through one forwarder, with the SNI on each connection's first
+// packet ((quicfwd.ManagerSNI and quicfwd.AgentSNI(podUID)) resolving to the right
+// backend and the right port, and the two connections staying independently usable
+// afterward via CID routing.
+func TestE2E_SecondBackendOnDifferentPort_ReachedViaAgentSNI(t *testing.T) {
+	managerBackend := startEchoBackend(t)
+	defer managerBackend.close()
+	agentBackend := startEchoBackendOnIP(t, netip.MustParseAddr("127.0.0.2"))
+	defer agentBackend.close()
+	require.NotEqual(t, managerBackend.port, agentBackend.port,
+		"the two backends must listen on different ports for this test to prove per-backend port resolution")
+
+	const podUID = "agent-pod-uid"
+	allowlist := NewAllowlist(0)
+	allowlist.update(context.Background(), []*rpc.QuicBackend{
+		{Ip: managerBackend.ip.AsSlice(), Kind: "manager", Port: int32(managerBackend.port)},
+		{Ip: agentBackend.ip.AsSlice(), Kind: "agent", Port: int32(agentBackend.port), PodUid: podUID},
+	})
+
+	env := &Env{ListenPort: 0}
+	fwd, err := Listen(env, allowlist)
+	require.NoError(t, err)
+	defer fwd.front.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- fwd.Serve(ctx) }()
+
+	fwdAddr := net.JoinHostPort("127.0.0.1", fmt.Sprint(fwd.front.LocalAddr().(*net.UDPAddr).Port))
+
+	managerClient := dialClient(t, ctx, fwdAddr)
+	defer func() { _ = managerClient.CloseWithError(0, "") }()
+	exchange(t, ctx, managerClient, "hello manager")
+
+	agentClient := dialClientSNI(t, ctx, fwdAddr, quicfwd.AgentSNI(podUID))
+	defer func() { _ = agentClient.CloseWithError(0, "") }()
+	exchange(t, ctx, agentClient, "hello agent")
+
+	// Both connections stay simultaneously usable, each still routed (now by
+	// CID, not SNI) to its own backend: the manager and agent backends, on two
+	// different ports, are never mixed up.
+	exchange(t, ctx, managerClient, "hello manager again")
+	exchange(t, ctx, agentClient, "hello agent again")
+
+	assert.Equal(t, 2, fwd.flows.count())
+
+	cancel()
+	select {
+	case err := <-serveErr:
+		assert.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not return after ctx cancellation")
+	}
+}
+
 // TestE2E_ForwarderRestartSurvival exercises the design's central "stateless" claim
 // directly: a forwarder that dies and comes back on the same port loses its flow
 // table entirely, yet an established client<->backend QUIC connection resumes without
@@ -209,10 +284,10 @@ func TestE2E_ForwarderRestartSurvival(t *testing.T) {
 	backend := startEchoBackend(t)
 	defer backend.close()
 
-	allowlist := NewAllowlist()
-	allowlist.update(context.Background(), []*rpc.QuicBackend{{Ip: backend.ip.AsSlice(), Kind: "manager"}})
+	allowlist := NewAllowlist(0)
+	allowlist.update(context.Background(), []*rpc.QuicBackend{{Ip: backend.ip.AsSlice(), Kind: "manager", Port: int32(backend.port)}})
 
-	env1 := &Env{ListenPort: 0, BackendPort: backend.port}
+	env1 := &Env{ListenPort: 0}
 	fwd1, err := Listen(env1, allowlist)
 	require.NoError(t, err)
 	port := fwd1.front.LocalAddr().(*net.UDPAddr).Port
@@ -238,7 +313,7 @@ func TestE2E_ForwarderRestartSurvival(t *testing.T) {
 		t.Fatal("first forwarder's Serve did not return")
 	}
 
-	env2 := &Env{ListenPort: uint16(port), BackendPort: backend.port}
+	env2 := &Env{ListenPort: uint16(port)}
 	fwd2, err := Listen(env2, allowlist)
 	require.NoError(t, err, "rebinding the same port after the first forwarder's socket closed")
 	defer fwd2.front.Close()

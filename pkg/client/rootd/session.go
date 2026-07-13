@@ -276,6 +276,26 @@ func (s *session) tunnelTransportRPC() *rpc.TunnelTransport {
 	return &rpc.TunnelTransport{Transport: transport, Endpoint: endpoint}
 }
 
+// agentTransportsRPC returns, in the shape the daemon Status and Connect RPCs report it in,
+// which transport ("quic" or "grpc") currently carries the live connection to each
+// traffic-agent pod that has completed a connection attempt this session. Returns nil
+// (omitted on the wire) when agent port-forwards are disabled or no agent has connected
+// yet, so an older CLI simply sees nothing to render.
+func (s *session) agentTransportsRPC() []*rpc.AgentTransport {
+	if s.agentClients == nil {
+		return nil
+	}
+	ts := s.agentClients.Transports()
+	if len(ts) == 0 {
+		return nil
+	}
+	out := make([]*rpc.AgentTransport, len(ts))
+	for i, t := range ts {
+		out[i] = &rpc.AgentTransport{Workload: t.Workload, Pod: t.Pod, Transport: t.Transport}
+	}
+	return out
+}
+
 // createSession will establish a connection to the traffic-manager and return a new properly initialized session object.
 func createSession(
 	sessionCtx, dialCtx context.Context,

@@ -218,6 +218,12 @@ quicTunnel:
   externalHost: ""
   # Advertised UDP port when it differs from the Service port (0 = same).
   externalPort: 0
+  # UDP port a traffic-agent's own QUIC listener binds to (sidecar and
+  # node-agent alike). Delivered to agents only when quicTunnel.enabled is
+  # true. A sidecar agent shares its pod's network namespace with the
+  # application container, so it needs a port of its own, distinct from the
+  # traffic-manager's quicTunnel.port above.
+  agentPort: 7787
   service:
     # Whether to create a Service for the QUIC endpoint.
     create: true

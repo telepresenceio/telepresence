@@ -29,20 +29,18 @@ func (e *flowEntry) touch() {
 // clients simply re-appear via CID or SNI routing and QUIC's path validation handles
 // the new return path.
 type flowTable struct {
-	front       *net.UDPConn
-	backendPort uint16
-	metrics     *metrics
+	front   *net.UDPConn
+	metrics *metrics
 
 	mu    sync.RWMutex
 	flows map[netip.AddrPort]*flowEntry
 }
 
-func newFlowTable(front *net.UDPConn, backendPort uint16, m *metrics) *flowTable {
+func newFlowTable(front *net.UDPConn, m *metrics) *flowTable {
 	return &flowTable{
-		front:       front,
-		backendPort: backendPort,
-		metrics:     m,
-		flows:       make(map[netip.AddrPort]*flowEntry),
+		front:   front,
+		metrics: m,
+		flows:   make(map[netip.AddrPort]*flowEntry),
 	}
 }
 
@@ -62,8 +60,8 @@ func (t *flowTable) Forward(ctx context.Context, src netip.AddrPort, datagram []
 }
 
 // CreateAndForward implements flowSink.
-func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, backendIP netip.Addr, datagrams [][]byte) {
-	backendAddr := netip.AddrPortFrom(backendIP, t.backendPort)
+func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, backendIP netip.Addr, port uint16, datagrams [][]byte) {
+	backendAddr := netip.AddrPortFrom(backendIP, port)
 	conn, err := net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(backendAddr))
 	if err != nil {
 		clog.Debugf(ctx, "quic-forwarder: dial backend %s for flow %s failed: %v", backendAddr, src, err)

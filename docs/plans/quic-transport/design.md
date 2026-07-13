@@ -214,12 +214,24 @@ that resolve outside the allowlist are dropped.
 **Failure modes.** The forwarder dying kills every QUIC connection at once —
 immediately and unambiguously (connection error, never a hang) — and every consumer
 falls back to its port-forward path, which does not involve the forwarder. QUIC is
-retried on the next connect. The manager dying no longer affects client⇄agent
-traffic at all: the forwarder routes packets and the agents terminate their own
-TLS, so attachments keep flowing through a manager restart exactly as they do
-today. This is the decisive advantage over relaying agent traffic through the
-manager, and the reason the forwarder is a requirement rather than an
-optimization.
+retried on the next connect. The manager dying no longer affects the client⇄agent
+*data path*: the forwarder routes packets and the agents terminate their own TLS, so
+cluster-originated traffic to an intercepted workload keeps tunneling to the laptop
+handler through a manager outage. This is the decisive advantage over relaying agent
+traffic through the manager, and the reason the forwarder is a requirement rather
+than an optimization.
+
+The scope of that guarantee is worth stating precisely, because it is narrower than
+"everything keeps working". What survives a manager outage is the agent attachment
+data path — a request that *originates in the cluster*, hits the intercepted pod, and
+is tunneled agent → forwarder → laptop. What does *not* survive is traffic the
+developer originates from the laptop through the VPN (`curl some-cluster-service`):
+that path needs cluster DNS resolution and subnet routing, both of which run over the
+manager-bound tunnel, so it is down for the duration of the outage like everything
+else VPN-borne. Verified manually on 2026-07-13: with the traffic-manager scaled to
+zero, an in-cluster `curl` of the intercepted service still reached the local
+handler, while a laptop-side `curl` through the VPN did not — exactly as this scoping
+predicts.
 
 ### Agent connections over QUIC
 
@@ -252,6 +264,21 @@ connection per agent pod, each subject to HoL blocking and apiserver throughput
 limits. The forwarded path is client → forwarder → agent, where the middle hop is
 stateless packet forwarding: per-stream independence end to end, no apiserver, no
 TLS re-termination, and no session state anywhere in the path.
+
+**Manager CA rotation.** The CA that signs agent (and manager) certificates is
+ephemeral — a manager restart mints a new one, which implicitly revokes every
+certificate the previous manager signed. A surviving agent re-fetches its server
+certificate over its (re-established) manager session, and a client re-fetches the CA
+bundle and its own client certificate when it reconnects, so both ends converge on
+the new CA within seconds of the manager coming back. During that window an agent may
+still be presenting a certificate from the old CA; a client that dials it then fails
+verification and falls back to the port-forward. That fallback is currently *sticky*
+per agent — the client stays on the port-forward for that peer until the agent
+connection is torn down and re-established, rather than re-probing QUIC once the agent
+has re-fetched. Correct (the fallback works) but suboptimal after any manager rollout;
+listed under Hardening. This is observable, and asserted, by the manager-outage
+integration test's recovery phase, which re-establishes the attachment and waits for
+the agent transport to return to QUIC.
 
 ### Zero-configuration endpoint discovery
 
@@ -318,7 +345,11 @@ free and could ship as an intermediate step.
    per-stream fallback, `telepresence status` reporting.
 4. **Hardening.** Migration testing (address change mid-session), idle-timeout
    tuning against real-world middleboxes, integration tests that run the suite over
-   both transports.
+   both transports. Includes recovering QUIC after a manager CA rotation (see the
+   note below): when the client's QUIC path to a peer fails on a certificate
+   mismatch during a manager restart, it currently sticks on the port-forward
+   fallback for that peer until the connection is re-established, rather than
+   re-probing once the peer has re-fetched its certificate.
 
 Phases 1–4 are implemented (manager-terminated endpoint, exposed directly). The
 forwarder-first architecture builds on them:

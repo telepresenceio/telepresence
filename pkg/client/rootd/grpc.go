@@ -33,6 +33,7 @@ func (s *service) Status(ctx context.Context, _ *emptypb.Empty) (*rpc.DaemonStat
 	if s.session != nil {
 		r.OutboundConfig = s.session.getNetworkConfig()
 		r.TunnelTransport = s.session.tunnelTransportRPC()
+		r.AgentTransports = s.session.agentTransportsRPC()
 	}
 	return r, nil
 }
@@ -72,6 +73,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 	err = s.withSession(ctx, func(_ context.Context, session *session) error {
 		reply.OutboundConfig = s.session.getNetworkConfig()
 		reply.TunnelTransport = s.session.tunnelTransportRPC()
+		reply.AgentTransports = s.session.agentTransportsRPC()
 		return nil
 	})
 	if err == nil {
@@ -84,6 +86,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		// Someone took the lock before we did and created a session.k
 		reply.OutboundConfig = s.session.getNetworkConfig()
 		reply.TunnelTransport = s.session.tunnelTransportRPC()
+		reply.AgentTransports = s.session.agentTransportsRPC()
 		return reply, nil
 	}
 
@@ -109,6 +112,8 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 	// this is always "grpc" for a session just created by this call; callers that want
 	// the resolved transport re-check via the Status RPC.
 	reply.TunnelTransport = sn.tunnelTransportRPC()
+	// No agent has had a chance to connect yet either.
+	reply.AgentTransports = sn.agentTransportsRPC()
 	initErrCh := make(chan error, 1)
 
 	sessionRunning := make(chan struct{})

@@ -145,6 +145,10 @@ spec:
           - name: TUNNEL_QUIC_EXTERNAL_PORT
             value: {{ .externalPort | quote }}
           {{- end }}
+          {{- if .agentPort }}
+          - name: TUNNEL_QUIC_AGENT_PORT
+            value: {{ .agentPort | quote }}
+          {{- end }}
           {{- end }}
           {{- end }}
       {{- if or .agentInjector.enabled .nodeAgent.enabled }}

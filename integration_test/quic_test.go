@@ -199,12 +199,20 @@ func probeUDPReachable(ctx context.Context, addr string, timeout time.Duration) 
 }
 
 // requireQuicTransport asserts that "telepresence status" currently reports
-// the quic transport with this suite's endpoint, waiting briefly for it to
-// settle. Unlike awaitQuicOrSkip (used once, at connect, when reachability is
-// still unproven), a failure here is never treated as a skip: by the time
+// the quic transport with this suite's endpoint, waiting briefly (10s) for it
+// to settle. Unlike awaitQuicOrSkip (used once, at connect, when reachability
+// is still unproven), a failure here is never treated as a skip: by the time
 // this is called, SetupSuite has already established that the endpoint is
 // reachable and working.
 func (s *quicTunnelSuite) requireQuicTransport(ctx context.Context) *itest.StatusResponse {
+	return s.requireQuicTransportWithin(ctx, 10*time.Second)
+}
+
+// requireQuicTransportWithin is requireQuicTransport with a caller-supplied
+// timeout, for callers (e.g. Test_ZManagerOutageAttachmentSurvival) that need a
+// wider window than the default 10s -- e.g. because the client's manager
+// connection has to run its own reconnect cycle first.
+func (s *quicTunnelSuite) requireQuicTransportWithin(ctx context.Context, timeout time.Duration) *itest.StatusResponse {
 	rq := s.Require()
 	want := "quic (" + s.endpoint + ")"
 	var last *itest.StatusResponse
@@ -215,7 +223,46 @@ func (s *quicTunnelSuite) requireQuicTransport(ctx context.Context) *itest.Statu
 		}
 		last = st
 		return st.RootDaemon != nil && st.RootDaemon.TunnelTransport == want
-	}, 10*time.Second, time.Second, "status never reported tunnel_transport %q", want)
+	}, timeout, time.Second, "status never reported tunnel_transport %q", want)
+	return last
+}
+
+// requireAgentTransport asserts that "telepresence status" currently reports
+// the given transport ("quic" or "grpc" -- see the transportQUIC/
+// transportPortForward constants in pkg/client/agentpf/quic.go) for the live
+// connection to workload's traffic-agent, waiting briefly for it to settle.
+// The agent_transports list (root_daemon.agent_transports) is populated only
+// while an agent is actually connected -- see toStatusAgentTransports in
+// pkg/client/cli/cmd/status.go -- so this only makes sense to call while an
+// attachment (intercept or ingest) to workload is live.
+func (s *quicTunnelSuite) requireAgentTransport(ctx context.Context, workload, want string) *itest.StatusResponse {
+	return s.requireAgentTransportWithin(ctx, workload, want, 30*time.Second)
+}
+
+// requireAgentTransportWithin is requireAgentTransport with a caller-supplied
+// timeout, for callers that need a wider window -- e.g. after a manager CA
+// rotation, when a surviving agent must reconnect and re-fetch its server
+// certificate before the client can reach it over quic again.
+func (s *quicTunnelSuite) requireAgentTransportWithin(ctx context.Context, workload, want string, timeout time.Duration) *itest.StatusResponse {
+	rq := s.Require()
+	var last *itest.StatusResponse
+	rq.Eventually(func() bool {
+		st, err := itest.TelepresenceStatus(ctx)
+		if err != nil {
+			return false
+		}
+		last = st
+		if st.RootDaemon == nil {
+			return false
+		}
+		for _, at := range st.RootDaemon.AgentTransports {
+			if at.Workload == workload {
+				return at.Transport == want
+			}
+		}
+		return false
+	}, timeout, time.Second,
+		"status never reported agent transport %q for workload %q", want, workload)
 	return last
 }
 
@@ -239,11 +286,12 @@ func (s *quicTunnelSuite) Test_VPNOnlyTransport() {
 }
 
 // Test_TrafficAgentCoexistence verifies that a regular (sidecar) intercept
-// keeps working the same way it always has while the manager-bound tunnel is
-// on the quic transport (client-to-agent flows stay on port-forward per the
-// design doc; only the manager-bound tunnel -- DNS, non-intercepted traffic
-// -- moves to quic), and that status still reports quic once the intercept
-// is active.
+// keeps working while the manager-bound tunnel is on the quic transport, that
+// status still reports quic once the intercept is active, and -- now that
+// agents run their own QUIC listeners behind the forwarder (phase 6, "Agent
+// connections over QUIC" in docs/plans/quic-transport/design.md) -- that the
+// client-to-agent attachment itself has also come up over quic rather than
+// falling back to its per-agent port-forward.
 func (s *quicTunnelSuite) Test_TrafficAgentCoexistence() {
 	ctx := s.Context()
 	const svc = "echo-easy"
@@ -261,6 +309,7 @@ func (s *quicTunnelSuite) Test_TrafficAgentCoexistence() {
 
 	itest.PingInterceptedEchoServer(ctx, svc, "80")
 	s.requireQuicTransport(ctx)
+	s.requireAgentTransport(ctx, svc, "quic")
 
 	itest.TelepresenceOk(ctx, "detach", svc)
 	mustLeave = false
@@ -312,7 +361,11 @@ func (s *quicTunnelSuite) Test_AgentPortForwardDisabledRelaysOverQuic() {
 // nodeAgentBase.assertNodeAgentIntercept for the attach and traffic
 // round-trip instead of duplicating nodeAgentSuite's full matrix -- this
 // suite only needs to know that node-agent mode and the quic transport don't
-// interfere with each other.
+// interfere with each other. It also asserts, while the node-agent
+// attachment is still live, that the client-to-agent connection itself rides
+// quic: node-agent Jobs get the same AGENT_QUIC_PORT plumbing as an injected
+// sidecar (see pkg/agentmap/generator.go), so there is nothing
+// node-agent-specific about the agent transport upgrade.
 func (s *quicTunnelSuite) Test_NodeAgentTransport() {
 	ctx := s.Context()
 	s.skipUnlessNodeAgentSupported()
@@ -324,7 +377,9 @@ func (s *quicTunnelSuite) Test_NodeAgentTransport() {
 	s.ApplyApp(ctx, svc, "deploy/"+svc)
 	defer s.DeleteSvcAndWorkload(ctx, "deploy", svc)
 
-	s.assertNodeAgentIntercept(svc)
+	s.assertNodeAgentIntercept(svc, []string{"--node-agent"}, func() {
+		s.requireAgentTransport(ctx, svc, "quic")
+	})
 	s.requireQuicTransport(ctx)
 }
 
@@ -390,4 +445,131 @@ func (s *quicTunnelSuite) Test_ForwarderRestartSurvival() {
 	so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "5", "echo-easy")
 	rq.NoError(err, "curl through the tunnel failed after forwarder recovery")
 	rq.Contains(so, "Request served by")
+}
+
+// Test_ZManagerOutageAttachmentSurvival is the decisive test for the
+// forwarder architecture described in "The forwarder" section of
+// docs/plans/quic-transport/design.md: "The manager dying no longer affects
+// client<->agent traffic at all: the forwarder routes packets and the agents
+// terminate their own TLS, so attachments keep flowing through a manager
+// restart exactly as they do today." With a sidecar intercept active and its
+// agent connection already confirmed on quic, it scales the traffic-manager
+// Deployment to zero, confirms the intercepted round-trip keeps working while
+// the manager is entirely gone, then scales the manager back up and confirms
+// both the manager-bound tunnel and the agent attachment recover.
+//
+// The client session's own connection to the manager is expected to error
+// out and reconnect around this outage (session keepalives, watches, etc.);
+// that is not what this test is about and is not asserted one way or the
+// other. What must hold throughout is the client<->agent data path for
+// cluster-originated traffic: an in-cluster request to the intercepted
+// workload is tunneled agent -> forwarder -> laptop handler, which never
+// touches the manager. (Requests the developer makes from the laptop through
+// the VPN are a different path: they need the manager tunnel for cluster DNS
+// and subnet routing, so those are not expected to survive and are not what
+// this asserts.)
+func (s *quicTunnelSuite) Test_ZManagerOutageAttachmentSurvival() {
+	ctx := s.Context()
+	rq := s.Require()
+	const svc = "echo-easy"
+
+	port, cancel := itest.StartLocalHttpEchoServer(ctx, svc)
+	defer cancel()
+
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--port", strconv.Itoa(port), svc)
+	mustLeave := true
+	defer func() {
+		if mustLeave {
+			itest.TelepresenceOk(ctx, "detach", svc)
+		}
+	}()
+
+	// Baseline: intercepted traffic works and the agent attachment is
+	// already on quic before the outage starts.
+	itest.PingInterceptedEchoServer(ctx, svc, "80")
+	s.requireAgentTransport(ctx, svc, "quic")
+
+	managerNs := s.ManagerNamespace()
+	rq.NoError(itest.Kubectl(ctx, managerNs, "scale", "deploy/traffic-manager", "--replicas", "0"),
+		"failed to scale the traffic-manager Deployment to zero")
+
+	// Wait for the manager pod to actually be gone, not just for the scale
+	// command to have been accepted -- the outage assertions below are only
+	// meaningful once there is no traffic-manager pod left to (accidentally)
+	// service the intercepted traffic.
+	rq.Eventually(func() bool {
+		return len(itest.RunningPods(ctx, "traffic-manager", managerNs)) == 0
+	}, 60*time.Second, 2*time.Second, "traffic-manager pod did not terminate after scaling to zero")
+
+	restoreManager := true
+	defer func() {
+		if restoreManager {
+			_ = itest.Kubectl(ctx, managerNs, "scale", "deploy/traffic-manager", "--replicas", "1")
+			_ = itest.RolloutStatusWait(ctx, managerNs, "deploy/traffic-manager")
+		}
+	}()
+
+	// The decisive assertion: a request that ORIGINATES IN THE CLUSTER and hits
+	// the intercepted workload still reaches the client's local handler with no
+	// traffic-manager pod at all. This is deliberately not PingInterceptedEchoServer
+	// (as the baseline above uses): that pings the service through the client's VPN,
+	// whose DNS resolution and subnet routing run over the manager-bound tunnel and so
+	// legitimately cannot work while the manager is gone. The property the forwarder
+	// architecture actually provides is that the client<->agent data path --
+	// cluster-originated traffic tunneled from the agent to the laptop handler -- is
+	// independent of the manager. So drive it from an in-cluster pod (curlimages/curl,
+	// same pattern as not_connected_test.go). Polled a handful of times rather than
+	// once, so a single lucky round-trip can't mask a race with the outage taking hold.
+	for i := 0; i < 3; i++ {
+		out, err := s.KubectlOut(ctx, "run", "-i", fmt.Sprintf("quic-outage-probe-%d", i),
+			"--rm", "--image", "curlimages/curl", "--restart", "Never", "--command", "--",
+			"curl", "--silent", "--max-time", "5", "http://"+svc)
+		rq.NoError(err, "in-cluster request to intercepted %s failed while the manager was down", svc)
+		rq.Contains(out, svc+" from intercept at /",
+			"in-cluster request to intercepted %s did not reach the local handler while the manager was down", svc)
+		if i < 2 {
+			time.Sleep(2 * time.Second)
+		}
+	}
+
+	rq.NoError(itest.Kubectl(ctx, managerNs, "scale", "deploy/traffic-manager", "--replicas", "1"),
+		"failed to scale the traffic-manager Deployment back to one")
+	restoreManager = false
+	rq.NoError(itest.RolloutStatusWait(ctx, managerNs, "deploy/traffic-manager"),
+		"traffic-manager Deployment did not report ready after scaling back up")
+
+	// Recovery. The live session's own control-plane connection to the manager
+	// (userd -> manager, used by commands like detach) was pinned to the pod that
+	// was just deleted; the realistic recovery from a manager that vanished
+	// entirely is to reconnect, not to wait for the existing session to self-heal
+	// every connection (a separate, timing-sensitive property that is not what
+	// this test is about). Reconnecting also leaves echo-easy with no active
+	// intercept for the tests that run after this one. The intercept created
+	// above is dropped by the quit, so no explicit detach is needed.
+	//
+	// Reconnect until the fresh session lands back on quic rather than asserting
+	// it after a single reconnect: the forwarder needs a few seconds to notice
+	// (via keepalive) that its backend-allowlist stream died with the old manager
+	// pod and to relearn the new pod's IP, and a client that connects before that
+	// refresh dials a manager backend the forwarder still maps to the dead pod, so
+	// it falls back to grpc for that whole session (there is no mid-session
+	// re-probe). Each reconnect is a fresh chance; bounded generously.
+	mustLeave = false
+	want := "quic (" + s.endpoint + ")"
+	rq.Eventually(func() bool {
+		itest.TelepresenceQuitOk(ctx)
+		s.TelepresenceConnect(ctx)
+		st, err := itest.TelepresenceStatus(ctx)
+		return err == nil && st.RootDaemon != nil && st.RootDaemon.TunnelTransport == want
+	}, 90*time.Second, 15*time.Second,
+		"session did not return to the quic transport after the manager outage recovered")
+
+	// Note on what is deliberately NOT asserted: a surviving agent's attachment
+	// returning to quic after this rotation. The new manager process has a new
+	// ephemeral CA; the agent re-fetches its server certificate within seconds,
+	// but a client connection that already fell back to the port-forward during
+	// that window does not spontaneously re-probe quic (a documented Hardening
+	// item -- see "Manager CA rotation" in the design doc). This test therefore
+	// runs last in the suite (its name sorts after the others), so no sibling
+	// test dials a mid-rotation agent, and TearDownSuite follows immediately.
 }

@@ -77,6 +77,12 @@ message DaemonStatus {
   // tunnel streams. Absent when there is no active session (an old root
   // daemon that predates this field is indistinguishable from that case).
   TunnelTransport tunnel_transport = 6;
+
+  // agent_transports reports which transport currently carries the live
+  // connection to each connected traffic-agent pod. Empty unless at least one
+  // agent connection is up; an old root daemon that predates this field is
+  // indistinguishable from that case, so callers must treat both as "omit".
+  repeated AgentTransport agent_transports = 7;
   reserved 3;
 }
 
@@ -88,6 +94,19 @@ message TunnelTransport {
 
   // The remote QUIC endpoint address. Only set when transport is "quic".
   string endpoint = 2;
+}
+
+// AgentTransport reports which transport currently carries the live
+// connection to one traffic-agent pod.
+message AgentTransport {
+  // The workload that the agent pod belongs to.
+  string workload = 1;
+
+  // The name of the agent pod.
+  string pod = 2;
+
+  // "quic" or "grpc" (the port-forwarded transport).
+  string transport = 3;
 }
 
 message Domains {

@@ -2,6 +2,8 @@ package manager
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json/v2"
 	"net"
 	"net/netip"
@@ -37,6 +39,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
+	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -215,7 +218,7 @@ func TestWatchQuicBackends(t *testing.T) {
 
 	testAgents := testdata.GetTestAgents(t)
 
-	conn := getTestClientConn(ctx, t)
+	conn := getTestClientConn(ctx, t, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
 	defer conn.Close()
 
 	client := rpc.NewManagerClient(conn)
@@ -223,18 +226,31 @@ func TestWatchQuicBackends(t *testing.T) {
 	wqb, err := client.WatchQuicBackends(ctx, &empty.Empty{})
 	req.NoError(err)
 
-	// Initial snapshot: just this traffic-manager's own pod IP.
+	// Initial snapshot: just this traffic-manager's own pod IP and port.
 	snap, err := wqb.Recv()
 	req.NoError(err)
 	req.Len(snap.Backends, 1)
 	req.Equal("manager", snap.Backends[0].Kind)
+	req.Equal(int32(7778), snap.Backends[0].Port)
 	mgrIP, ok := netip.AddrFromSlice(snap.Backends[0].Ip)
 	req.True(ok)
 	req.Equal("10.0.0.9", mgrIP.String())
 
-	// An agent arrives; its pod IP joins the allowlist.
+	// An agent with no QUIC listener of its own (QuicPort == 0) arrives: it
+	// must NOT join the allowlist -- a port-0 "backend" cannot be dialed. It
+	// arrives immediately before the QUIC-enabled agent below so that both
+	// changes coalesce into the single debounced snapshot asserted next; that
+	// snapshot must reflect its exclusion.
+	noQuicAgent := proto.Clone(testAgents["helloPro"]).(*rpc.AgentInfo)
+	noQuicAgent.PodIp = "10.1.2.4"
+	_, err = client.ArriveAsAgent(ctx, noQuicAgent)
+	req.NoError(err)
+
+	// An agent with a QUIC listener arrives; its pod IP, port, and pod UID all
+	// join the allowlist.
 	helloAgent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
 	helloAgent.PodIp = "10.1.2.3"
+	helloAgent.QuicPort = 7787
 	helloSess, err := client.ArriveAsAgent(ctx, helloAgent)
 	req.NoError(err)
 
@@ -249,9 +265,12 @@ func TestWatchQuicBackends(t *testing.T) {
 		case "manager":
 			sawManager = true
 			req.Equal("10.0.0.9", ip.String())
+			req.Equal(int32(7778), b.Port)
 		case "agent":
 			sawAgent = true
 			req.Equal("10.1.2.3", ip.String())
+			req.Equal(int32(7787), b.Port)
+			req.Equal(helloAgent.PodUid, b.PodUid)
 		default:
 			t.Fatalf("unexpected backend kind %q", b.Kind)
 		}
@@ -269,7 +288,81 @@ func TestWatchQuicBackends(t *testing.T) {
 	req.Equal("manager", snap.Backends[0].Kind)
 }
 
-func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
+// TestGetQuicAgentCert covers the three cases the RPC's contract distinguishes,
+// per "Agent connections over QUIC" in docs/plans/quic-transport/design.md: an agent
+// session gets a certificate that verifies against the manager's QUIC CA for exactly
+// its own SNI name; a manager with no QUIC CA reports enabled=false rather than
+// erroring; and a client (non-agent) session is rejected outright, regardless of
+// whether the QUIC CA exists.
+func TestGetQuicAgentCert(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+
+	testAgents := testdata.GetTestAgents(t)
+	testClients := testdata.GetTestClients(t)
+
+	t.Run("agent session with QUIC CA", func(t *testing.T) {
+		req := require.New(t)
+		conn := getTestClientConn(ctx, t, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
+		defer conn.Close()
+		client := rpc.NewManagerClient(conn)
+
+		helloAgent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+		agentSess, err := client.ArriveAsAgent(ctx, helloAgent)
+		req.NoError(err)
+
+		cert, err := client.GetQuicAgentCert(ctx, agentSess)
+		req.NoError(err)
+		req.True(cert.Enabled)
+		wantSNI := quicfwd.AgentSNI(helloAgent.PodUid)
+		req.Equal(wantSNI, cert.Sni)
+
+		roots := x509.NewCertPool()
+		req.True(roots.AppendCertsFromPEM(cert.CaPem))
+		pair, err := tls.X509KeyPair(cert.CertPem, cert.KeyPem)
+		req.NoError(err)
+		leaf, err := x509.ParseCertificate(pair.Certificate[0])
+		req.NoError(err)
+		_, err = leaf.Verify(x509.VerifyOptions{
+			Roots:     roots,
+			DNSName:   wantSNI,
+			KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		})
+		req.NoError(err, "minted agent certificate must verify against the manager's QUIC CA for its own SNI name")
+	})
+
+	t.Run("no QUIC CA", func(t *testing.T) {
+		req := require.New(t)
+		// TunnelQuicPort defaults to 0 here, so NewService never creates a
+		// QUIC CA at all (see service.go's NewService).
+		conn := getTestClientConn(ctx, t)
+		defer conn.Close()
+		client := rpc.NewManagerClient(conn)
+
+		helloAgent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+		agentSess, err := client.ArriveAsAgent(ctx, helloAgent)
+		req.NoError(err)
+
+		cert, err := client.GetQuicAgentCert(ctx, agentSess)
+		req.NoError(err)
+		req.False(cert.Enabled)
+	})
+
+	t.Run("non-agent session", func(t *testing.T) {
+		req := require.New(t)
+		conn := getTestClientConn(ctx, t, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
+		defer conn.Close()
+		client := rpc.NewManagerClient(conn)
+
+		clientSess, err := client.ArriveAsClient(ctx, testClients["alice"])
+		req.NoError(err)
+
+		_, err = client.GetQuicAgentCert(ctx, clientSess)
+		req.Error(err)
+	})
+}
+
+func getTestClientConn(ctx context.Context, t *testing.T, envMods ...func(*managerutil.Env)) *grpc.ClientConn {
 	const bufsize = 64 * 1024
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
@@ -360,6 +453,9 @@ matchExpressions:
 		AgentInitContainerEnabled: true,
 		AgentMaxIdleTime:          24 * time.Hour,
 		ClientConnectionTTL:       24 * time.Minute,
+	}
+	for _, mod := range envMods {
+		mod(&env)
 	}
 	ctx = managerutil.WithEnv(ctx, &env)
 	ctx = mutator.WithMap(ctx, mutator.Load(ctx))

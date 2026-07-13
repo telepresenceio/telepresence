@@ -49,7 +49,9 @@ duplicate serves everything else.
   limits, and a Docker Desktop extension drives the whole flow from a GUI.
 - **A WireGuard tunnel.** Traffic to the cluster rides an encrypted UDP
   tunnel rather than a TCP-based one, which avoids TCP-over-TCP overhead on
-  bulk transfers.
+  bulk transfers. Telepresence offers an equivalent encrypted-UDP data path
+  with its opt-in QUIC transport, but for Gefyra it is the default — there is
+  no cluster-side decision to make.
 
 ## Where Telepresence has the edge
 
@@ -60,10 +62,15 @@ duplicate serves everything else.
   database GUIs, and test suites can all reach cluster services by name.
   Telepresence can also be used as a plain cluster VPN, with no attachment
   at all.
-- **No extra ports to open.** Telepresence tunnels everything over the same
-  Kubernetes API connection that `kubectl` uses. Gefyra's WireGuard tunnel
-  needs UDP node port 31820 reachable from the workstation — frequently
-  impossible on managed or otherwise firewalled clusters.
+- **The fast path is optional, not required.** Telepresence tunnels
+  everything over the same Kubernetes API connection that `kubectl` uses, so
+  it works wherever `kubectl` works. Gefyra's WireGuard tunnel needs UDP node
+  port 31820 reachable from the workstation — frequently impossible on
+  managed or otherwise firewalled clusters — and there is no fallback when it
+  isn't. On clusters where a UDP port *can* be exposed, Telepresence's opt-in
+  QUIC transport provides the same class of encrypted UDP data path, with the
+  trust bootstrapped from your kubeconfig and a silent per-connection
+  fallback to the API-server path when the UDP route is blocked.
 - **Attachments don't rewrite your workloads.** A Gefyra bridge patches the
   target workload's manifest — its container image is swapped for the
   Carrier proxy — and creates a duplicate workload beside it, which restarts
@@ -109,6 +116,8 @@ This comparison applies to the Open Source editions of both products.
 | Cluster network available to all local tools (including browser) | ✅ [^2]       | ❌      |
 | Can act as a cluster VPN only                                    | ✅            | ❌ [^3] |
 | Tunnels over the Kubernetes API connection (no extra open ports) | ✅            | ❌      |
+| Encrypted UDP data path (QUIC / WireGuard)                       | ✅ [^5]       | ✅      |
+| Falls back to the Kubernetes API connection when UDP is blocked  | ✅            | ❌      |
 | Mounts remote volumes locally                                    | ✅            | ❌      |
 | Copies the remote container's environment                        | ✅            | ✅      |
 | Can intercept traffic                                            | ✅            | ✅      |
@@ -139,3 +148,7 @@ bridge, but only that container does; nothing else on the workstation can.
 is injected (pre-installing the agent avoids this). Attaching with the
 optional [node-agent](../reference/node-agent.md) mode never modifies or
 restarts the workload.
+
+[^5]: Opt-in: the cluster operator enables the QUIC endpoint in the
+traffic-manager's Helm chart. Clients use it automatically when reachable and
+otherwise stay on the API-server path.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/puzpuzpuz/xsync/v4"
+	"google.golang.org/grpc"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
@@ -34,6 +35,22 @@ type State interface {
 	SessionInfo() *rpc.SessionInfo
 	SetFileSharingPorts(ftp uint16, sftp uint16)
 	SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClient, version semver.Version)
+
+	// SetGRPCServer records the agent's gRPC server so that RefreshQuicAgentListener
+	// can serve it over the QUIC listener as well as the plain TCP one.
+	SetGRPCServer(svc *grpc.Server)
+
+	// RefreshQuicAgentListener is called after every (re-)established manager
+	// session. It does nothing unless AGENT_QUIC_PORT is set; otherwise it fetches
+	// this agent's QUIC server certificate over the just-(re)established session
+	// (fetchCtx bounds that RPC) and either starts the QUIC listener -- the first
+	// time this is called with a manager that has QUIC enabled -- or, if the
+	// listener is already running, atomically swaps in the freshly fetched TLS
+	// material. processCtx bounds the listener's own lifetime, which spans manager
+	// reconnects; it is not the same context as fetchCtx. See "Agent connections
+	// over QUIC" in docs/plans/quic-transport/design.md.
+	RefreshQuicAgentListener(processCtx, fetchCtx context.Context)
+
 	FtpPort() uint16
 	SftpPort() uint16
 	TLSManager() tls.Manager
@@ -78,6 +95,16 @@ type state struct {
 	manager     rpc.ManagerClient
 	mgrVer      semver.Version
 
+	// grpcServer is the agent's gRPC server, recorded by SetGRPCServer once it is
+	// created. RefreshQuicAgentListener serves it a second time, over the QUIC
+	// listener, once a manager session confirms QUIC is enabled.
+	grpcServer *grpc.Server
+
+	// quicAgent guards the QUIC listener across manager reconnects: created once,
+	// its TLS material refreshed (never replaced) on every subsequent successful
+	// RefreshQuicAgentListener call.
+	quicAgent *quicAgentState
+
 	interceptStates []InterceptState
 	containerStates map[string]ContainerState
 	agent.UnimplementedAgentServer
@@ -111,6 +138,7 @@ func NewState(ctx context.Context, config Config) (State, error) {
 		containerStates:  make(map[string]ContainerState),
 		dialWatchers:     xsync.NewMap[tunnel.SessionID, chan *rpc.DialRequest](),
 		awaitingForwards: xsync.NewMap[tunnel.SessionID, *xsync.Map[tunnel.ConnID, *awaitingForward]](),
+		quicAgent:        &quicAgentState{},
 	}, nil
 }
 
@@ -191,6 +219,10 @@ func (s *state) SetManager(sessionInfo *rpc.SessionInfo, manager rpc.ManagerClie
 	s.manager = manager
 	s.sessionInfo = sessionInfo
 	s.mgrVer = version
+}
+
+func (s *state) SetGRPCServer(svc *grpc.Server) {
+	s.grpcServer = svc
 }
 
 func (s *state) FtpPort() uint16 {
