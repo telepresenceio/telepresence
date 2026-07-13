@@ -66,17 +66,23 @@ func clientVersion(t *testing.T, telepresence string) string {
 	if err != nil {
 		t.Fatalf("telepresence version: %v", err)
 	}
+	// `version --output json` shapes vary across releases: some have a "client"
+	// field, others wrap the human-readable table in "stdout". Scan only decoded
+	// JSON string values -- in the raw bytes a `\n` is a two-character escape,
+	// not whitespace, so a raw Fields scan would glue the next label onto the
+	// version token.
 	var v struct {
 		Client string `json:"client"`
+		Stdout string `json:"stdout"`
 	}
-	// `version --output json` shapes vary across releases; fall back to a plain
-	// scan for a v-prefixed token if the field isn't where we expect.
-	if json.Unmarshal(out, &v) == nil && v.Client != "" {
-		return v.Client
-	}
-	for _, tok := range strings.Fields(string(out)) {
-		if strings.HasPrefix(tok, "v") && strings.Count(tok, ".") >= 2 {
-			return strings.Trim(tok, `",`)
+	if json.Unmarshal(out, &v) == nil {
+		if v.Client != "" {
+			return v.Client
+		}
+		for _, tok := range strings.Fields(v.Stdout) {
+			if strings.HasPrefix(tok, "v") && strings.Count(tok, ".") >= 2 {
+				return tok
+			}
 		}
 	}
 	t.Fatalf("could not determine client version from: %s", out)

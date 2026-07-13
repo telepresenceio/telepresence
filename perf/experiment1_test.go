@@ -74,6 +74,7 @@ func TestExperiment1_HeadOfLineBlockingUnderLoss(t *testing.T) {
 
 			cfg.connect(t)
 			cfg.assertTransport(t, tr)
+			cfg.warmup(t, exp1Streams)
 
 			for _, loss := range exp1LossPercents {
 				removeLoss := cfg.applyLoss(t, loss)
@@ -85,6 +86,9 @@ func TestExperiment1_HeadOfLineBlockingUnderLoss(t *testing.T) {
 				p := summarize(results)
 				t.Logf("%s @ %g%% loss: p50=%v p95=%v p99=%v (failures=%d/%d)",
 					tr, loss, p.p50, p.p95, p.p99, p.failures, exp1Streams)
+				if p.failures > 0 {
+					logFailures(t, results)
+				}
 				rows = append(rows, msRow(ts, tr, loss, exp1Streams, exp1PayloadBytes, p))
 				if loss == topLoss {
 					p99AtTopLoss[tr] = p.p99

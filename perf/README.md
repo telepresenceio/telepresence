@@ -26,12 +26,15 @@ concurrency) rather than measuring a best case.
 
 ## Experiment 1: head-of-line blocking under loss
 
-Drives `exp1Streams` (50) concurrent downloads of a 4 MiB payload through the
+Drives `exp1Streams` (50) concurrent downloads of an 8 MiB payload through the
 tunnel at several client-side packet-loss levels (0, 1, 3 %), once with the
 manager installed QUIC-enabled and once gRPC-only, and compares the per-stream
-completion-time tail. The payload comes from a `go-httpbin` `GET /bytes/{n}`
-service reached by cluster DNS name, so the traffic rides the VPN (manager
-tunnel) — the shared transport whose behavior we are measuring.
+completion-time tail. The payload is a static file served by nginx
+(`testdata/payload.yaml`) reached by cluster DNS name, so the traffic rides the
+VPN (manager tunnel) — the shared transport whose behavior we are measuring.
+Each arm runs a discarded warm-up window first (session establishment, nginx
+page cache, and congestion-control ramp would otherwise land in the first
+measured window and make it incomparable to the later ones).
 
 **Assertion:** at the highest loss level, the gRPC p99 must be at least
 `exp1MinP99Ratio` (2×) the QUIC p99. The threshold is a *ratio*, not an
@@ -75,11 +78,26 @@ p50/p95/p99 table is written to `perf/results/experiment1.csv` either way.
 ## Caveats
 
 - The experiment **reinstalls the traffic-manager twice** (once per transport
-  arm) and installs/removes a `perf-httpbin` workload. Do not run it against a
+  arm) and installs/removes a `perf-payload` workload. Do not run it against a
   cluster whose traffic-manager you care about.
-- Loss is injected on the client's **egress** only; that is enough to surface
-  head-of-line blocking but understates loss on the return path. Symmetric loss
-  (ingress via an `ifb` device) is a possible refinement.
+- The harness **disables TSO/GSO on the netem interface** for the duration of
+  each loss window (restoring them afterwards). With them on, netem sits above
+  the segmentation step and each "packet" it drops from a TCP flow is a
+  pre-segmentation super-packet of up to 64 KB, while QUIC datagrams are
+  wire-sized — the two arms would see wildly different effective loss rates.
+  (quic-go's own UDP GSO still coalesces its egress, so even with this fix the
+  arms are not perfectly symmetric under netem.)
+- Loss is injected on the client's **egress** only. Download payloads ride the
+  *ingress* path, so egress loss cannot produce head-of-line blocking on the
+  measured transfers at all — it only degrades ACKs and requests. Until loss is
+  injected on ingress too (an `ifb` device) or the workload is an upload, the
+  head-of-line ratio assertion is expected to fail; the numbers still document
+  each transport's stability under ACK-path loss.
+- QUIC bulk throughput is capped by the cluster nodes'
+  `net.core.rmem_max`/`wmem_max` (see "Throughput and node tuning" in
+  `docs/reference/quic-transport.md`). On nodes with small caps (GKE
+  Container-Optimized OS: 208 KiB) the QUIC arm reflects that ceiling, not the
+  transport's potential.
 - Results depend on client CPU, cluster location, and the workload; treat the
   CSV as a comparison between the two arms of the *same run*, not as an absolute
   benchmark comparable across machines.
