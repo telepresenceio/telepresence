@@ -84,9 +84,12 @@ If a prior run was killed, before re-running:
    `registry/name:version`) and, for a local cluster (kind / minikube / Docker Desktop),
    `TELEPRESENCE_REGISTRY=local` — then LOAD images into the cluster instead of
    pushing to a registry:
-   - client-side Go (`pkg/`, `cmd/cli`):
+   - client-side Go (`pkg/`, `cmd/cli`) — AND any `charts/` change:
      `make build TELEPRESENCE_VERSION=<itest.yml>` — else the harness runs a
-     stale binary (e.g. missing a newly added flag).
+     stale binary (e.g. missing a newly added flag). The Helm chart is
+     go:embedded into the client binary (`charts.WriteChart`, used by
+     `telepresence helm install`), so a chart-only change without `make build`
+     silently installs the OLD chart.
    - manager/agent (`cmd/traffic`, `charts/`):
      `make load-tel2-image TELEPRESENCE_VERSION=<itest.yml> TELEPRESENCE_REGISTRY=local`.
    - `--docker` tests only:

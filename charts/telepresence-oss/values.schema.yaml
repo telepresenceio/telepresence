@@ -633,6 +633,21 @@ properties:
           annotations:
             description: Annotations to add to the QUIC Service.
             type: object
+      forwarder:
+        description: >-
+          Configuration for the quic-forwarder Deployment, the stateless QUIC packet router that fronts the
+          QUIC tunnel endpoint. Only deployed when quicTunnel.enabled is true.
+        type: object
+        additionalProperties: false
+        properties:
+          replicas:
+            description: >-
+              Number of quic-forwarder replicas. The forwarder keeps no state that matters across a restart,
+              so this can be scaled freely.
+            type: integer
+          resources:
+            description: Resource requests and limits for the quic-forwarder container.
+            $ref: "#/$defs/resourceRequirements"
 
   rbac:
     type: object

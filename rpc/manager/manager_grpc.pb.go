@@ -59,6 +59,7 @@ const (
 	Manager_WatchLogLevel_FullMethodName                   = "/telepresence.manager.Manager/WatchLogLevel"
 	Manager_Tunnel_FullMethodName                          = "/telepresence.manager.Manager/Tunnel"
 	Manager_GetQuicTunnelEndpoint_FullMethodName           = "/telepresence.manager.Manager/GetQuicTunnelEndpoint"
+	Manager_WatchQuicBackends_FullMethodName               = "/telepresence.manager.Manager/WatchQuicBackends"
 	Manager_ReportMetrics_FullMethodName                   = "/telepresence.manager.Manager/ReportMetrics"
 	Manager_UninstallAgents_FullMethodName                 = "/telepresence.manager.Manager/UninstallAgents"
 )
@@ -180,6 +181,14 @@ type ManagerClient interface {
 	// dial it directly instead of tunneling over this port-forwarded connection. The
 	// returned descriptor has enabled == false when no QUIC endpoint is exposed.
 	GetQuicTunnelEndpoint(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*QuicTunnelEndpoint, error)
+	// WatchQuicBackends notifies the QUIC forwarder of the set of pod IPs
+	// (traffic-manager and traffic-agent alike) it may route QUIC traffic to.
+	// Unlike the other Watch* RPCs this call carries no SessionInfo: the
+	// forwarder has no client session, and the backend set it returns is not
+	// scoped to one. The first message is sent immediately on subscribe; a
+	// new one follows whenever the backend set changes. Every message is a
+	// full QuicBackendSnapshot, not a delta.
+	WatchQuicBackends(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[QuicBackendSnapshot], error)
 	// ReportMetrics is used by a traffic-agent to report metrics for streams
 	// established when clients connect directly to traffic-agents using port-forward.
 	ReportMetrics(ctx context.Context, in *TunnelMetrics, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -639,6 +648,25 @@ func (c *managerClient) GetQuicTunnelEndpoint(ctx context.Context, in *SessionIn
 	return out, nil
 }
 
+func (c *managerClient) WatchQuicBackends(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[QuicBackendSnapshot], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[11], Manager_WatchQuicBackends_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[emptypb.Empty, QuicBackendSnapshot]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchQuicBackendsClient = grpc.ServerStreamingClient[QuicBackendSnapshot]
+
 func (c *managerClient) ReportMetrics(ctx context.Context, in *TunnelMetrics, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
@@ -776,6 +804,14 @@ type ManagerServer interface {
 	// dial it directly instead of tunneling over this port-forwarded connection. The
 	// returned descriptor has enabled == false when no QUIC endpoint is exposed.
 	GetQuicTunnelEndpoint(context.Context, *SessionInfo) (*QuicTunnelEndpoint, error)
+	// WatchQuicBackends notifies the QUIC forwarder of the set of pod IPs
+	// (traffic-manager and traffic-agent alike) it may route QUIC traffic to.
+	// Unlike the other Watch* RPCs this call carries no SessionInfo: the
+	// forwarder has no client session, and the backend set it returns is not
+	// scoped to one. The first message is sent immediately on subscribe; a
+	// new one follows whenever the backend set changes. Every message is a
+	// full QuicBackendSnapshot, not a delta.
+	WatchQuicBackends(*emptypb.Empty, grpc.ServerStreamingServer[QuicBackendSnapshot]) error
 	// ReportMetrics is used by a traffic-agent to report metrics for streams
 	// established when clients connect directly to traffic-agents using port-forward.
 	ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error)
@@ -896,6 +932,9 @@ func (UnimplementedManagerServer) Tunnel(grpc.BidiStreamingServer[TunnelMessage,
 }
 func (UnimplementedManagerServer) GetQuicTunnelEndpoint(context.Context, *SessionInfo) (*QuicTunnelEndpoint, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetQuicTunnelEndpoint not implemented")
+}
+func (UnimplementedManagerServer) WatchQuicBackends(*emptypb.Empty, grpc.ServerStreamingServer[QuicBackendSnapshot]) error {
+	return status.Error(codes.Unimplemented, "method WatchQuicBackends not implemented")
 }
 func (UnimplementedManagerServer) ReportMetrics(context.Context, *TunnelMetrics) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method ReportMetrics not implemented")
@@ -1473,6 +1512,17 @@ func _Manager_GetQuicTunnelEndpoint_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_WatchQuicBackends_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(emptypb.Empty)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ManagerServer).WatchQuicBackends(m, &grpc.GenericServerStream[emptypb.Empty, QuicBackendSnapshot]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Manager_WatchQuicBackendsServer = grpc.ServerStreamingServer[QuicBackendSnapshot]
+
 func _Manager_ReportMetrics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TunnelMetrics)
 	if err := dec(in); err != nil {
@@ -1677,6 +1727,11 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _Manager_Tunnel_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchQuicBackends",
+			Handler:       _Manager_WatchQuicBackends_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "manager/manager.proto",

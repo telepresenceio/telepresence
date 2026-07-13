@@ -153,11 +153,133 @@ The abstraction seam already exists and should not move:
   `TunnelMessage` framing, and feeds them into the existing `state.Tunnel` entry
   point (`cmd/traffic/cmd/manager/service.go`).
 
-Client-to-agent tunnels (`pkg/client/agentpf`) stay on port-forward in the first
-iteration; flows to intercepted pods can also be routed via the manager's QUIC
-endpoint since the manager already knows how to relay to agents. Exposing QUIC per
-agent pod is explicitly out of scope — it multiplies the exposure surface for little
-gain.
+Client-to-agent tunnels (`pkg/client/agentpf`) stayed on port-forward in the first
+iteration; the sections below remove that limitation by routing all QUIC — manager-
+and agent-bound alike — through a single stateless packet forwarder. *Externally*
+exposing anything per agent pod remains explicitly out of scope; agents listen only
+on their pod IPs and are reachable solely through the forwarder. The
+manager-terminated endpoint implemented in the first iteration becomes an internal
+backend behind that forwarder: its listener, CA, certificates, framing, fallback,
+and observability all carry over — the Service that used to expose the manager
+directly is re-pointed at the forwarder.
+
+### The forwarder
+
+The forwarder is the architecture's single exposed component and its foundation:
+a stateless QUIC *packet* router that owns the one UDP entry point into the
+cluster. Every QUIC connection — client⇄manager and client⇄agent alike — passes
+through it, encrypted end to end. The forwarder never terminates TLS, holds no
+keys, and sees no plaintext; the manager and the agents run QUIC listeners on
+their pod IPs, reachable only through it.
+
+Routing works in two tiers, following the QUIC-LB pattern
+(draft-ietf-quic-load-balancers):
+
+* A connection's first packet (the client Initial) is routed by the **SNI** in its
+  ClientHello, which is readable without terminating TLS. SNI names identify the
+  backend: `manager.<install-id>` for the traffic-manager, `<pod-uid>.<install-id>`
+  for an agent.
+* Every subsequent packet is routed by the **server-issued connection ID**:
+  backends mint connection IDs that encode their own pod IP (quic-go supports
+  custom connection-ID generators; an IPv6 address plus a version/length octet
+  fits inside the 20-byte CID limit). A forwarder can therefore route any
+  mid-connection packet with no flow table at all.
+
+Statelessness is what makes the forwarder an acceptable hard dependency: a restart
+loses nothing that matters, replicas need no coordination, and it can run as a small
+Deployment (default) or DaemonSet. It ships as another command in the tel2 image.
+
+One qualification to "stateless": a ClientHello can span multiple Initial packets
+(post-quantum hybrid key shares push it past one packet's CRYPTO capacity, and Go's
+TLS stack sends them by default), and continuation fragments carry no SNI. The
+forwarder therefore keeps a small, ephemeral **handshake cache** — original client
+DCID + source address → backend, seconds-scale TTL, consulted only for long-header
+packets. Established connections never touch it (server-issued CIDs route those), so
+a forwarder restart costs only the handshakes in flight at that moment.
+
+Anything that resolves to no backend — non-QUIC junk on the port, QUIC versions the
+forwarder cannot read Initial keys for, SNI-less ClientHellos from foreign clients,
+malformed packets, undecodable CIDs — is **dropped silently** (rate-limited metric,
+no response). Nothing is ever defaulted to a backend: routing unauthenticated
+traffic inward would only relocate the DoS surface, and the Telepresence client
+always sends SNI in a known version.
+
+**Backend allowlist (required).** A CID-routing forwarder would otherwise be an
+open UDP redirector to any pod IP an attacker encodes into a forged CID. The
+forwarder must validate every routing decision — SNI resolution and decoded CIDs —
+against the set of live manager and agent pod IPs, maintained by watching pods with
+the corresponding labels (a small RBAC grant for its own ServiceAccount). Packets
+that resolve outside the allowlist are dropped.
+
+**Failure modes.** The forwarder dying kills every QUIC connection at once —
+immediately and unambiguously (connection error, never a hang) — and every consumer
+falls back to its port-forward path, which does not involve the forwarder. QUIC is
+retried on the next connect. The manager dying no longer affects client⇄agent
+traffic at all: the forwarder routes packets and the agents terminate their own
+TLS, so attachments keep flowing through a manager restart exactly as they do
+today. This is the decisive advantage over relaying agent traffic through the
+manager, and the reason the forwarder is a requirement rather than an
+optimization.
+
+### Agent connections over QUIC
+
+The client's connection to a traffic-agent — sidecar or node-agent alike — is a gRPC
+connection to the agent's API port, carried today over its own Kubernetes
+port-forward per agent pod. Everything an attachment needs (the `WatchDial` reverse
+dials, the agent `Tunnel` streams, environment and mount negotiation) flows over
+that one connection, so moving *it* moves the entire attachment.
+
+* The agent runs a QUIC listener on its pod IP (no exposure; reachable only via
+  the forwarder). On arrival — and again whenever its manager connection is
+  re-established, since a manager restart mints a new CA — it requests a server
+  certificate for its SNI name over its existing, authenticated manager session.
+  It accepts any client certificate chaining to the CA; all such certificates are
+  short-lived and session-scoped by construction.
+* `agentpf` swaps the transport under the agent gRPC connection: instead of a
+  Kubernetes port-forward, a `grpc.WithContextDialer` that dials the forwarder
+  with the agent's SNI name. One QUIC connection per agent (TLS terminates at the
+  agent, so connections cannot be shared across agents), all sharing the client's
+  UDP socket. The agent's SNI name travels in the `AgentPodInfo` the client
+  already watches.
+* Fallback: if the QUIC connection to an agent dies, `agentpf`'s existing
+  reconnect logic dials the Kubernetes port-forward instead. The port-forward
+  machinery is only ever bypassed, never disabled; it remains the reconnect
+  target for the remainder of the session. Caller cancellation is, as always, not
+  a transport failure.
+
+Path comparison: the port-forward is client → apiserver → kubelet → agent, one TCP
+connection per agent pod, each subject to HoL blocking and apiserver throughput
+limits. The forwarded path is client → forwarder → agent, where the middle hop is
+stateless packet forwarding: per-stream independence end to end, no apiserver, no
+TLS re-termination, and no session state anywhere in the path.
+
+### Zero-configuration endpoint discovery
+
+`quicTunnel.enabled=true` should be sufficient for the common case. It deploys the
+forwarder and its Service (`LoadBalancer` by default) and enables the QUIC
+listeners in the manager and the agents. In-cluster ports stay chart defaults —
+they are pod-internal and no admin has a reason to care about them. The externally
+reachable address is discovered rather than configured:
+
+* The manager watches the forwarder's Service (RBAC already grants get/list/watch
+  on services, and on nodes in cluster-scoped installs).
+* `LoadBalancer`: advertise `status.loadBalancer.ingress[].ip|hostname` with the
+  Service port, once assigned. Until assignment the endpoint is simply not
+  advertised; clients pick it up on a later connect.
+* `NodePort`: advertise the assigned `nodePort` with node addresses, preferring
+  `ExternalIP` over `InternalIP`.
+* The endpoint descriptor carries an ordered list of candidate addresses rather
+  than a single host, plus the SNI scheme. The client dials candidates
+  concurrently within the probe budget and keeps the first whose handshake
+  completes. An unreachable candidate is harmless — that is the silent-fallback
+  property doing its job — so discovery can guess generously. (The descriptor RPC
+  is unreleased; reshaping it is not a compatibility event.)
+* `quicTunnel.externalHost`/`externalPort` remain as overrides that replace
+  discovery entirely, for topologies the manager cannot see (NAT in front of the
+  LoadBalancer, port remapping, DNS names that only resolve on the developer VPN).
+* Namespace-scoped installs may lack node read access; NodePort discovery then
+  degrades to requiring the explicit override, which the reference documentation
+  must state.
 
 ### Non-goals
 
@@ -198,6 +320,28 @@ free and could ship as an intermediate step.
    tuning against real-world middleboxes, integration tests that run the suite over
    both transports.
 
+Phases 1–4 are implemented (manager-terminated endpoint, exposed directly). The
+forwarder-first architecture builds on them:
+
+5. **The forwarder.** Stateless SNI + connection-ID packet routing, the pod
+   allowlist watch, a new command in the tel2 image, Deployment + the single
+   exposed Service. The manager's listener moves behind it: pod-IP listening,
+   CID generator encoding the pod IP, SNI-named server certificate; the chart's
+   QUIC Service targets the forwarder instead of the manager. Client changes are
+   minimal (SNI on dial). Everything from phases 1–4 — trust bootstrap, framing,
+   fallback, status/usage reporting, integration suites — carries over and must
+   stay green throughout.
+6. **Agents behind the forwarder.** Agent-side QUIC listener with certificate
+   fetch over the agent's manager session (re-fetch on manager reconnect), SNI
+   names in `AgentPodInfo`, the `agentpf` QUIC dialer with port-forward fallback
+   on reconnect, injector/node-agent plumbing. Integration coverage must assert
+   that attachments actually ride QUIC, that a forwarder restart mid-session
+   degrades to port-forwards and recovers on reconnect, and that a manager
+   restart leaves client⇄agent QUIC traffic flowing.
+7. **Zero-configuration discovery.** Service/node watch in the manager, candidate
+   address list + SNI scheme in the endpoint descriptor, concurrent client probe,
+   docs reduced to "set `quicTunnel.enabled=true`".
+
 ## Open questions
 
 * Should the probe result influence DNS and agent flows immediately, or only new
@@ -210,3 +354,10 @@ free and could ship as an intermediate step.
 * Interaction with `telepresence connect --docker` (containerized daemon): the UDP
   probe runs from inside the container network; needs verification that nothing
   assumes host networking.
+* ~~Encrypted connection IDs~~ — decided: deferred. Plain CIDs leak internal pod
+  IPs to on-path observers; that is topology information, not payload or
+  credentials. QUIC-LB's encrypted-CID variant can be added later if a user asks;
+  the key-distribution machinery is not worth carrying up front.
+* ~~SNI-less Initials~~ — decided: drop silently, never default to a backend; a
+  small ephemeral handshake cache routes multi-packet ClientHello fragments (see
+  "The forwarder").

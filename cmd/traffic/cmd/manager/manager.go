@@ -363,11 +363,14 @@ func (s *service) serveQuicTunnel(ctx context.Context) error {
 	if env.TunnelQuicPort == 0 {
 		return nil
 	}
+	if !env.PodIp.IsValid() {
+		return errors.New("QUIC tunnel listener is enabled but POD_IP is not set")
+	}
 	serverCert, err := s.quicCA.ServerTLSCert()
 	if err != nil {
 		return fmt.Errorf("unable to mint QUIC server certificate: %w", err)
 	}
-	ln, err := quictunnel.Listen(env.TunnelQuicPort, s.quicCA, serverCert, s.state.Tunnel)
+	ln, err := quictunnel.Listen(env.TunnelQuicPort, env.PodIp, s.quicCA, serverCert, s.state.Tunnel)
 	if err != nil {
 		return fmt.Errorf("unable to start QUIC tunnel listener: %w", err)
 	}

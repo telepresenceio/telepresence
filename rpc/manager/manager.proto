@@ -522,6 +522,26 @@ message QuicTunnelEndpoint {
   string alpn = 8;
 }
 
+// QuicBackend identifies one live pod IP that the QUIC forwarder (a separate
+// stateless packet router; see docs/plans/quic-transport/design.md) may
+// route traffic to.
+message QuicBackend {
+  // Pod IP in netip.Addr binary form (4 or 16 bytes), the same encoding
+  // AgentPodInfo.pod_ip uses.
+  bytes ip = 1;
+
+  // "manager" or "agent".
+  string kind = 2;
+}
+
+// QuicBackendSnapshot is a full replacement snapshot of every pod IP the
+// QUIC forwarder may route to. There is no delta variant: each snapshot
+// replaces the previous one in its entirety, which keeps the forwarder
+// simple and self-healing across a manager restart.
+message QuicBackendSnapshot {
+  repeated QuicBackend backends = 1;
+}
+
 message DialRequest {
   bytes conn_id = 1;
   int64 roundtrip_latency = 2;
@@ -974,6 +994,15 @@ service Manager {
   // dial it directly instead of tunneling over this port-forwarded connection. The
   // returned descriptor has enabled == false when no QUIC endpoint is exposed.
   rpc GetQuicTunnelEndpoint(SessionInfo) returns (QuicTunnelEndpoint);
+
+  // WatchQuicBackends notifies the QUIC forwarder of the set of pod IPs
+  // (traffic-manager and traffic-agent alike) it may route QUIC traffic to.
+  // Unlike the other Watch* RPCs this call carries no SessionInfo: the
+  // forwarder has no client session, and the backend set it returns is not
+  // scoped to one. The first message is sent immediately on subscribe; a
+  // new one follows whenever the backend set changes. Every message is a
+  // full QuicBackendSnapshot, not a delta.
+  rpc WatchQuicBackends(google.protobuf.Empty) returns (stream QuicBackendSnapshot);
 
   // ReportMetrics is used by a traffic-agent to report metrics for streams
   // established when clients connect directly to traffic-agents using port-forward.

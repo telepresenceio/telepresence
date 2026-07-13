@@ -1,0 +1,80 @@
+{{- /*
+The quic-forwarder Deployment: the stateless QUIC packet router described in
+"The forwarder" section of docs/plans/quic-transport/design.md. It owns the
+UDP entry point that used to be exposed directly on the traffic-manager;
+the traffic-manager-quic Service (templates/service.yaml) now targets these
+pods instead. It needs no Kubernetes API access of its own -- the backend
+allowlist it consumes is served by the traffic-manager's own, already
+RBAC-covered pod watch (WatchQuicBackends) -- so its ServiceAccount carries
+no Role/RoleBinding.
+*/}}
+{{- with .Values }}
+{{- if and .quicTunnel .quicTunnel.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: quic-forwarder
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quic-forwarder
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ .quicTunnel.forwarder.replicas }}
+  selector:
+    matchLabels:
+      {{- include "telepresence.quicForwarderSelectorLabels" $ | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "telepresence.quicForwarderSelectorLabels" $ | nindent 8 }}
+    spec:
+      {{- with .image.imagePullSecrets }}
+      imagePullSecrets:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{ toYaml .podSecurityContext | nindent 8 }}
+      serviceAccountName: quic-forwarder
+      containers:
+        - name: quic-forwarder
+          securityContext:
+            {{ toYaml .securityContext | nindent 12 }}
+          {{- with .image }}
+          image: "{{ .registry }}/{{ .name }}:{{ .tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .pullPolicy }}
+          {{- end }}
+          args: ["quic-forwarder"]
+          env:
+          - name: LISTEN_PORT
+            value: {{ .quicTunnel.port | quote }}
+          - name: BACKEND_PORT
+            {{- /*
+            The traffic-manager listens on this same quicTunnel.port value
+            (TUNNEL_QUIC_PORT, templates/deployment.yaml) -- it is one chart
+            value governing both the forwarder's external port and the
+            backend port every QUIC listener behind it binds to.
+            */}}
+            value: {{ .quicTunnel.port | quote }}
+          - name: MANAGER_HOST
+            value: {{ include "traffic-manager.name" $ | quote }}
+          - name: MANAGER_PORT
+            value: {{ .apiPort | quote }}
+          - name: LOG_LEVEL
+            value: {{ .logLevel }}
+          ports:
+          - name: quic
+            containerPort: {{ .quicTunnel.port }}
+            protocol: UDP
+          {{- with .quicTunnel.forwarder.resources }}
+          resources:
+            {{ toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
+{{- end }}

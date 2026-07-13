@@ -21,6 +21,12 @@ import (
 // certificate. Clients verify the server certificate against exactly this name (not
 // against system roots), and the manager advertises it to clients as the
 // QuicTunnelEndpoint.ServerName so the two stay in sync.
+//
+// Behind the packet forwarder, this is also the SNI the forwarder routes a
+// connection's first packet on: it must equal pkg/quicfwd.ManagerSNI, which is what
+// the forwarder actually reads. pkg/quicfwd duplicates the value rather than
+// importing it, because that package must not depend on anything under cmd/;
+// pkg/quicfwd/sni_test.go asserts the two constants stay equal.
 const ServerName = "traffic-manager.telepresence"
 
 // caValidity bounds the lifetime of the ephemeral CA and the server certificate it

@@ -1150,6 +1150,116 @@ func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.Sessio
 	}, nil
 }
 
+// quicBackendWatchDebounce coalesces a burst of agent-session changes (e.g. a
+// rollout replacing every agent pod at once) into a single QuicBackendSnapshot,
+// mirroring the debounce pattern used by the node-agent pod-set watcher
+// (state.nodeAgentPodWatchDebounce).
+const quicBackendWatchDebounce = 250 * time.Millisecond
+
+// quicManagerBackends returns this traffic-manager pod's own QuicBackend entries,
+// derived from the POD_IP the chart's downward API sets on the container. It is
+// empty when that env var is unset, which is normal outside of a real cluster
+// (e.g. unit tests that don't populate managerutil.Env.PodIp).
+func (s *service) quicManagerBackends(ctx context.Context) []*rpc.QuicBackend {
+	podIP := managerutil.GetEnv(ctx).PodIp
+	if !podIP.IsValid() {
+		return nil
+	}
+	return []*rpc.QuicBackend{{Ip: podIP.AsSlice(), Kind: "manager"}}
+}
+
+// WatchQuicBackends notifies the QUIC forwarder (a separate, stateless packet
+// router; see docs/plans/quic-transport/design.md, "The forwarder") of the set
+// of pod IPs it may route QUIC traffic to. Unlike the other Watch* RPCs this
+// call carries no SessionInfo and is callable without an established session,
+// the same way Version and GetTelepresenceAPI are: the forwarder has no client
+// session of its own.
+//
+// The first QuicBackendSnapshot -- this manager's own pod IP plus the pod IP
+// of every currently live agent session -- is sent immediately. A new,
+// full-replacement snapshot follows whenever the agent set changes, coalesced
+// by quicBackendWatchDebounce so a burst of churn (a rollout, a mass
+// reconnect) produces one snapshot instead of one per event.
+func (s *service) WatchQuicBackends(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.QuicBackendSnapshot]) error {
+	ctx := stream.Context()
+	managerBackends := s.quicManagerBackends(ctx)
+	agentsCh := s.state.WatchAgents(ctx, nil)
+	m := mutator.GetMap(ctx)
+	agents := make(map[tunnel.SessionID]*state.AgentSession)
+
+	applyDelta := func(delta cache.Delta[tunnel.SessionID, *state.AgentSession]) (changed bool) {
+		for id, a := range delta.Upserts {
+			agents[id] = a
+			changed = true
+		}
+		for id := range delta.Removals {
+			delete(agents, id)
+			changed = true
+		}
+		return changed
+	}
+
+	buildSnapshot := func() *rpc.QuicBackendSnapshot {
+		backends := slices.Clone(managerBackends)
+		for _, a := range agents {
+			if m.IsInactive(types.UID(a.PodUid)) {
+				continue
+			}
+			aip, err := netip.ParseAddr(a.PodIp)
+			if err != nil {
+				clog.Errorf(ctx, "quic backend allowlist: error parsing agent pod ip %q: %v", a.PodIp, err)
+				continue
+			}
+			backends = append(backends, &rpc.QuicBackend{Ip: aip.AsSlice(), Kind: "agent"})
+		}
+		return &rpc.QuicBackendSnapshot{Backends: backends}
+	}
+
+	// The first delta on agentsCh is always the current full snapshot
+	// (cache.Map.Subscribe semantics); send it right away, with no debounce.
+	select {
+	case <-ctx.Done():
+		return nil
+	case delta, ok := <-agentsCh:
+		if !ok {
+			return nil
+		}
+		applyDelta(delta)
+	}
+	if err := stream.Send(buildSnapshot()); err != nil {
+		return err
+	}
+
+	debounce := time.NewTimer(quicBackendWatchDebounce)
+	if !debounce.Stop() {
+		<-debounce.C
+	}
+	pending := false
+	for {
+		var debounceCh <-chan time.Time
+		if pending {
+			debounceCh = debounce.C
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case delta, ok := <-agentsCh:
+			if !ok {
+				return nil
+			}
+			if applyDelta(delta) && !pending {
+				pending = true
+				debounce.Reset(quicBackendWatchDebounce)
+			}
+		case <-debounceCh:
+			pending = false
+			if err := stream.Send(buildSnapshot()); err != nil {
+				return err
+			}
+		}
+	}
+}
+
 // hasDomainSuffix checks if the given name is suffixed with the given suffix. The following
 // rules apply:
 //

@@ -346,11 +346,13 @@ spec:
           - name: prometheus
             containerPort: {{ .prometheus.port }}
           {{- end }}
-          {{- if .quicTunnel.enabled }}
-          - name: quic
-            containerPort: {{ .quicTunnel.port }}
-            protocol: UDP
-          {{- end }}
+          {{- /*
+          No "quic" containerPort here: since the forwarder (templates/quicforwarder.yaml)
+          took over the traffic-manager-quic Service, this pod's QUIC listener (still
+          governed by TUNNEL_QUIC_PORT below) is reachable only via the forwarder's
+          SNI/connection-ID routing, never directly through a Service targeting this
+          container -- advertising the port here would suggest otherwise.
+          */}}
           {{- with .livenessProbe }}
           livenessProbe:
             {{ toYaml . | nindent 12 }}

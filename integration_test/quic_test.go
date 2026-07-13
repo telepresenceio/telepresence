@@ -327,3 +327,67 @@ func (s *quicTunnelSuite) Test_NodeAgentTransport() {
 	s.assertNodeAgentIntercept(svc)
 	s.requireQuicTransport(ctx)
 }
+
+// quicForwarderLabelSelector selects the quic-forwarder Deployment's pods
+// (charts/telepresence-oss/templates/quicforwarder.yaml, built from the
+// "telepresence.quicForwarderSelectorLabels" chart helper).
+const quicForwarderLabelSelector = "app=quic-forwarder,telepresence=quic-forwarder"
+
+// Test_ForwarderRestartSurvival exercises the forwarder's central failure-mode
+// claim from "The forwarder" section of docs/plans/quic-transport/design.md:
+// killing the stateless packet router must not force a permanent fallback to
+// the gRPC transport. With the connection already established and the
+// manager-bound tunnel on quic, it deletes every quic-forwarder pod, waits
+// for the Deployment to report a ready replacement, and then asserts that
+// traffic recovers -- and that "telepresence status" still reports the quic
+// transport throughout, never grpc.
+//
+// Either the client's QUIC connection survives the restart outright (CID
+// routing plus path validation to the replacement pod's new address) or, at
+// worst, traffic stalls until the client's 15s keep-alives establish a fresh
+// flow through the new pod (kube-proxy's UDP conntrack can keep pinning the
+// old flow to the now-gone pod IP for a while). Either way tunnel_transport
+// must never flip to grpc: that would mean the client gave up on quic
+// instead of riding out the forwarder restart, which is exactly what a
+// stateless forwarder is supposed to make unnecessary.
+func (s *quicTunnelSuite) Test_ForwarderRestartSurvival() {
+	ctx := s.Context()
+	rq := s.Require()
+
+	// Establish the baseline: connected, transport already on quic.
+	s.requireQuicTransport(ctx)
+
+	// The chart deploys quic-forwarder in the same namespace as the
+	// traffic-manager (templates/quicforwarder.yaml uses
+	// traffic-manager.namespace), not the app namespace.
+	managerNs := s.ManagerNamespace()
+	rq.NoError(itest.Kubectl(ctx, managerNs, "delete", "pod", "-l", quicForwarderLabelSelector),
+		"failed to delete quic-forwarder pod(s)")
+
+	rq.NoError(itest.RolloutStatusWait(ctx, managerNs, "deploy/quic-forwarder"),
+		"quic-forwarder Deployment did not report a ready replacement after pod deletion")
+
+	// 60s ceiling: kube-proxy's UDP conntrack may keep routing the client's
+	// existing flow to the deleted pod's address for a while; the client's
+	// 15s keep-alives are what eventually punch a fresh flow through to the
+	// replacement pod. The transport assertion stays strict throughout --
+	// this only widens the window for traffic (and status) to catch up, it
+	// never tolerates an observed "grpc" transport as a passing state.
+	want := "quic (" + s.endpoint + ")"
+	rq.Eventually(func() bool {
+		so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", "echo-easy")
+		if err != nil || !strings.Contains(so, "Request served by") {
+			return false
+		}
+		st, err := itest.TelepresenceStatus(ctx)
+		return err == nil && st.RootDaemon != nil && st.RootDaemon.TunnelTransport == want
+	}, 60*time.Second, 2*time.Second,
+		"tunnel did not recover over the quic transport after the forwarder restarted "+
+			"(it must not have permanently fallen back to grpc)")
+
+	// A final, non-Eventually round-trip: recovery isn't just a momentarily
+	// true poll result, plain traffic through the tunnel keeps working.
+	so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "5", "echo-easy")
+	rq.NoError(err, "curl through the tunnel failed after forwarder recovery")
+	rq.Contains(so, "Request served by")
+}

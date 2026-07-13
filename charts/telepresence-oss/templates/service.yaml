@@ -67,6 +67,12 @@ spec:
   selector:
     {{- include "telepresence.selectorLabels" $ | nindent 4 }}
 {{- end }}
+{{- /*
+This Service fronts the quic-forwarder Deployment (templates/quicforwarder.yaml), not
+the traffic-manager itself -- see "The forwarder" in
+docs/plans/quic-transport/design.md. The manager's own QUIC listener is reachable only
+through the forwarder's SNI/connection-ID packet routing.
+*/}}
 {{- if and .quicTunnel.enabled .quicTunnel.service.create }}
 ---
 apiVersion: v1
@@ -94,7 +100,7 @@ spec:
     nodePort: {{ . }}
     {{- end }}
   selector:
-    {{- include "telepresence.selectorLabels" $ | nindent 4 }}
+    {{- include "telepresence.quicForwarderSelectorLabels" $ | nindent 4 }}
 {{- end }}
 {{- end }}
 {{- end }}

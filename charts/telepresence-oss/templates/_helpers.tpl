@@ -184,6 +184,14 @@ telepresence: manager
 {{- end }}
 
 {{- /*
+Selector labels for the quic-forwarder Deployment/Service.
+*/}}
+{{- define "telepresence.quicForwarderSelectorLabels" -}}
+app: quic-forwarder
+telepresence: quic-forwarder
+{{- end }}
+
+{{- /*
 Client RBAC name suffix
 */}}
 {{- define "telepresence.clientRbacName" -}}

@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 	"strconv"
 	"time"
 
 	"github.com/quic-go/quic-go"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -35,14 +37,22 @@ type TunnelHandler func(ctx context.Context, stream tunnel.Stream) error
 // connection's client certificate CommonName, handed to a TunnelHandler.
 type Listener struct {
 	ln      *quic.Listener
+	conn    net.PacketConn
 	handler TunnelHandler
 }
 
-// Listen starts a QUIC listener on 0.0.0.0:port. Clients must present a certificate
-// that verifies against ca; the listener presents serverCert. handler is invoked, once
-// per accepted stream, with the stream already verified to belong to the session named
-// by that stream's peer certificate.
-func Listen(port uint16, ca *CA, serverCert tls.Certificate, handler TunnelHandler) (*Listener, error) {
+// Listen starts a QUIC listener on 0.0.0.0:port, running behind the packet forwarder
+// described in docs/plans/quic-transport/design.md ("The forwarder"). podIP is this
+// manager's own pod IP; the listener is built on a quic.Transport configured with a
+// quicfwd.CIDGenerator for podIP, so every connection ID it hands out -- not just the
+// one used during the handshake -- decodes back to this pod via quicfwd.DecodeCID. That
+// is what lets the forwarder route every packet after a connection's first straight to
+// this listener with no flow table of its own.
+//
+// Clients must present a certificate that verifies against ca; the listener presents
+// serverCert. handler is invoked, once per accepted stream, with the stream already
+// verified to belong to the session named by that stream's peer certificate.
+func Listen(port uint16, podIP netip.Addr, ca *CA, serverCert tls.Certificate, handler TunnelHandler) (*Listener, error) {
 	tlsConf := &tls.Config{
 		Certificates: []tls.Certificate{serverCert},
 		ClientAuth:   tls.RequireAndVerifyClientCert,
@@ -50,14 +60,27 @@ func Listen(port uint16, ca *CA, serverCert tls.Certificate, handler TunnelHandl
 		NextProtos:   []string{tunnel.QuicALPN},
 	}
 	addr := net.JoinHostPort("0.0.0.0", strconv.Itoa(int(port)))
-	// Clients keep otherwise-idle connections alive with pings every 15s; the idle
-	// timeout only needs to be comfortably above that ping interval.
-	qCfg := &quic.Config{MaxIdleTimeout: time.Minute}
-	ln, err := quic.ListenAddr(addr, tlsConf, qCfg)
+	udpAddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("quictunnel: resolve %s: %w", addr, err)
+	}
+	conn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		return nil, fmt.Errorf("quictunnel: listen on %s: %w", addr, err)
 	}
-	return &Listener{ln: ln, handler: handler}, nil
+	// Clients keep otherwise-idle connections alive with pings every 15s; the idle
+	// timeout only needs to be comfortably above that ping interval.
+	qCfg := &quic.Config{MaxIdleTimeout: time.Minute}
+	tr := &quic.Transport{
+		Conn:                  conn,
+		ConnectionIDGenerator: quicfwd.NewCIDGenerator(podIP),
+	}
+	ln, err := tr.Listen(tlsConf, qCfg)
+	if err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("quictunnel: listen on %s: %w", addr, err)
+	}
+	return &Listener{ln: ln, conn: conn, handler: handler}, nil
 }
 
 // Addr returns the listener's local address.
@@ -66,10 +89,15 @@ func (l *Listener) Addr() net.Addr {
 }
 
 // Close closes the underlying QUIC listener without waiting for accepted connections
-// to drain. Serve's shutdown path calls this via ctx cancellation; direct callers
-// (e.g. tests) may call it to force an in-progress Serve to return.
+// to drain, then closes the transport's UDP socket. Serve's shutdown path calls this
+// via ctx cancellation; direct callers (e.g. tests) may call it to force an
+// in-progress Serve to return.
 func (l *Listener) Close() error {
-	return l.ln.Close()
+	err := l.ln.Close()
+	if cerr := l.conn.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // Serve runs the accept loop until ctx is done, at which point it closes the listener

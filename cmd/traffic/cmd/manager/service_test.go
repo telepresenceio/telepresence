@@ -202,6 +202,73 @@ func TestConnect(t *testing.T) {
 	require.NoError(err)
 }
 
+// TestWatchQuicBackends proves the backend-allowlist RPC's subscribe/update
+// contract required by the QUIC forwarder design (docs/plans/quic-transport/
+// design.md, "The forwarder"): an immediate initial snapshot containing the
+// traffic-manager's own pod IP, and a further, full-replacement snapshot
+// whenever an agent session arrives or departs. The call is deliberately made
+// with no SessionInfo -- the forwarder has no client session.
+func TestWatchQuicBackends(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	testAgents := testdata.GetTestAgents(t)
+
+	conn := getTestClientConn(ctx, t)
+	defer conn.Close()
+
+	client := rpc.NewManagerClient(conn)
+
+	wqb, err := client.WatchQuicBackends(ctx, &empty.Empty{})
+	req.NoError(err)
+
+	// Initial snapshot: just this traffic-manager's own pod IP.
+	snap, err := wqb.Recv()
+	req.NoError(err)
+	req.Len(snap.Backends, 1)
+	req.Equal("manager", snap.Backends[0].Kind)
+	mgrIP, ok := netip.AddrFromSlice(snap.Backends[0].Ip)
+	req.True(ok)
+	req.Equal("10.0.0.9", mgrIP.String())
+
+	// An agent arrives; its pod IP joins the allowlist.
+	helloAgent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+	helloAgent.PodIp = "10.1.2.3"
+	helloSess, err := client.ArriveAsAgent(ctx, helloAgent)
+	req.NoError(err)
+
+	snap, err = wqb.Recv()
+	req.NoError(err)
+	req.Len(snap.Backends, 2)
+	var sawManager, sawAgent bool
+	for _, b := range snap.Backends {
+		ip, ok := netip.AddrFromSlice(b.Ip)
+		req.True(ok)
+		switch b.Kind {
+		case "manager":
+			sawManager = true
+			req.Equal("10.0.0.9", ip.String())
+		case "agent":
+			sawAgent = true
+			req.Equal("10.1.2.3", ip.String())
+		default:
+			t.Fatalf("unexpected backend kind %q", b.Kind)
+		}
+	}
+	req.True(sawManager)
+	req.True(sawAgent)
+
+	// The agent departs; the allowlist shrinks back to just the manager.
+	_, err = client.Depart(ctx, helloSess)
+	req.NoError(err)
+
+	snap, err = wqb.Recv()
+	req.NoError(err)
+	req.Len(snap.Backends, 1)
+	req.Equal("manager", snap.Backends[0].Kind)
+}
+
 func getTestClientConn(ctx context.Context, t *testing.T) *grpc.ClientConn {
 	const bufsize = 64 * 1024
 	var cancel func()
@@ -289,6 +356,7 @@ matchExpressions:
 		PodCidrs: []netip.Prefix{
 			netip.PrefixFrom(netip.AddrFrom4([4]byte{192, 168, 0, 0}), 16),
 		},
+		PodIp:                     netip.AddrFrom4([4]byte{10, 0, 0, 9}),
 		AgentInitContainerEnabled: true,
 		AgentMaxIdleTime:          24 * time.Hour,
 		ClientConnectionTTL:       24 * time.Minute,
