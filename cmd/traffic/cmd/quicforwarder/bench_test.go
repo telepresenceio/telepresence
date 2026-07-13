@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/qlog"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
@@ -93,7 +94,9 @@ func startBenchQuicServer(tb testing.TB) (addr string, closer func()) {
 		tb.Fatal(err)
 	}
 	tr := &quic.Transport{Conn: udp, ConnectionIDGenerator: quicfwd.NewCIDGenerator(ip)}
-	ln, err := tr.Listen(benchTLSConfig(tb), &quic.Config{MaxIdleTimeout: time.Minute})
+	// The qlog tracer is a no-op unless QLOGDIR is set; with it set, the server
+	// (sender) side's congestion controller and loss recovery become inspectable.
+	ln, err := tr.Listen(benchTLSConfig(tb), &quic.Config{MaxIdleTimeout: time.Minute, Tracer: qlog.DefaultConnectionTracer})
 	if err != nil {
 		tb.Fatal(err)
 	}
@@ -110,7 +113,14 @@ func startBenchQuicServer(tb testing.TB) (addr string, closer func()) {
 					if err != nil {
 						return
 					}
-					go servePayloadStream(s)
+					// CancelRead releases the receive direction, which
+					// servePayloadStream never reads to EOF; without it the stream
+					// never terminates, its stream-limit credit is never returned,
+					// and the concurrent benchmarks hang once the limit is spent.
+					go func() {
+						servePayloadStream(s)
+						s.CancelRead(0)
+					}()
 				}
 			}()
 		}

@@ -18,6 +18,12 @@ import (
 // transport. Both ends of the handshake must offer/accept exactly this value.
 const QuicALPN = "tp-tunnel"
 
+// QuicMaxIncomingStreams is the concurrent-stream limit the manager's and agent's QUIC
+// listeners grant a client connection. Every flow routed through the tunnel is one
+// concurrent stream, so this must accommodate a busy client; quic-go's default of 100
+// is far too small.
+const QuicMaxIncomingStreams = 4096
+
 // maxFrameSize is the largest TunnelMessage frame that will be sent or accepted on a QUIC
 // stream. It exists to bound how much memory a single frame length prefix can commit us to
 // allocating before the payload has even arrived.
@@ -89,6 +95,15 @@ func (s *quicStream) Recv() (*rpc.TunnelMessage, error) {
 	return m, nil
 }
 
+// CloseRecv releases the receive direction of the underlying QUIC stream. The tunnel
+// protocol ends a conversation with a closeSend message rather than by reading the
+// transport stream to EOF, so without this explicit cancel the receive direction --
+// and with it the stream's bookkeeping in quic-go, and on the server the stream-limit
+// credit owed back to the client -- would linger until the connection closes.
+func (s *quicStream) CloseRecv() {
+	s.stream.CancelRead(0)
+}
+
 // quicClientStream is the client side of a QUIC tunnel stream.
 type quicClientStream struct {
 	quicStream
@@ -104,7 +119,12 @@ func NewQuicClientStream(s *quic.Stream) GRPCClientStream {
 func (s *quicClientStream) CloseSend() error {
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
-	return s.stream.Close()
+	// The only error quic.Stream.Close reports is that the send direction was already
+	// canceled -- locally, or by the STOP_SENDING a peer sends when it finishes the
+	// stream first. The direction is terminated either way, which is all CloseSend
+	// promises, so that error is not propagated.
+	_ = s.stream.Close()
+	return nil
 }
 
 // NewQuicServerStream wraps a QUIC stream accepted by the manager as a GRPCStream.

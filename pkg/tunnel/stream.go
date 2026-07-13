@@ -55,6 +55,16 @@ type GRPCStream interface {
 	Send(*rpc.TunnelMessage) error
 }
 
+// RecvCloser is optionally implemented by GRPCStream transports whose receive
+// direction must be released explicitly when the tunnel conversation ends at the
+// message level (a closeSend message) rather than by reading the transport stream
+// to EOF. gRPC streams don't need this -- the RPC's own termination cleans up --
+// but a QUIC stream's receive direction would otherwise linger until the
+// connection closes.
+type RecvCloser interface {
+	CloseRecv()
+}
+
 // GRPCContextStream is similar to GRPCStream but also allows the caller to pass a context.Context
 // to Recv and Send so that the stream can be canceled.
 type GRPCContextStream interface {
@@ -268,6 +278,12 @@ func (s *stream) Receive(ctx context.Context) (Message, error) {
 	switch m.Code() {
 	case closeSend:
 		clog.Tracef(ctx, "<- %s %s, close send", s.tag, s.id)
+		// The conversation ends here, at the message level; the transport stream
+		// will never be read again, so give transports that need it (QUIC) the
+		// chance to release their receive direction.
+		if rc, ok := s.grpcStream.(RecvCloser); ok {
+			rc.CloseRecv()
+		}
 		return nil, net.ErrClosed
 	case streamInfo:
 		clog.Tracef(ctx, "<- %s, %s", s.tag, m)

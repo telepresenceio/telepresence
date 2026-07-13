@@ -97,8 +97,9 @@ func New(podIP netip.Addr, port uint16, grpcServer *grpc.Server, initial Materia
 	}
 	// Clients keep otherwise-idle connections alive with pings well inside this
 	// window; see cmd/traffic/cmd/manager/quictunnel.Listen for the equivalent
-	// manager-side choice.
-	qCfg := &quic.Config{MaxIdleTimeout: time.Minute}
+	// manager-side choices, including why the stream limit is raised above
+	// quic-go's default of 100.
+	qCfg := &quic.Config{MaxIdleTimeout: time.Minute, MaxIncomingStreams: tunnel.QuicMaxIncomingStreams}
 	tr := &quic.Transport{
 		Conn:                  conn,
 		ConnectionIDGenerator: quicfwd.NewCIDGenerator(podIP),
@@ -211,6 +212,15 @@ type streamConn struct {
 
 func (c *streamConn) LocalAddr() net.Addr  { return c.local }
 func (c *streamConn) RemoteAddr() net.Addr { return c.remote }
+
+// Close fully terminates the stream. quic.Stream.Close finishes only the send
+// direction; the receive direction must be released explicitly or the stream never
+// terminates, never returns its stream-limit credit to the peer, and keeps its
+// bookkeeping in quic-go alive for the life of the connection.
+func (c *streamConn) Close() error {
+	c.CancelRead(0)
+	return c.Stream.Close()
+}
 
 // streamListener is a net.Listener whose Accept returns connections pushed to it by
 // push, rather than accepted from any socket of its own. It is what lets a

@@ -69,8 +69,10 @@ func Listen(port uint16, podIP netip.Addr, ca *CA, serverCert tls.Certificate, h
 		return nil, fmt.Errorf("quictunnel: listen on %s: %w", addr, err)
 	}
 	// Clients keep otherwise-idle connections alive with pings every 15s; the idle
-	// timeout only needs to be comfortably above that ping interval.
-	qCfg := &quic.Config{MaxIdleTimeout: time.Minute}
+	// timeout only needs to be comfortably above that ping interval. Every flow the
+	// client routes through the VPN is one concurrent stream, so the stream limit
+	// must accommodate a busy client, not quic-go's default of 100.
+	qCfg := &quic.Config{MaxIdleTimeout: time.Minute, MaxIncomingStreams: tunnel.QuicMaxIncomingStreams}
 	tr := &quic.Transport{
 		Conn:                  conn,
 		ConnectionIDGenerator: quicfwd.NewCIDGenerator(podIP),
@@ -142,6 +144,17 @@ func (l *Listener) handleConn(ctx context.Context, conn *quic.Conn) {
 }
 
 func (l *Listener) handleStream(ctx context.Context, qs *quic.Stream, certCN string) {
+	// A QUIC stream only terminates -- and only returns its stream-limit credit to
+	// the peer -- once both directions have finished. Close finishes the send
+	// direction; CancelRead releases the receive direction even when the client's
+	// FIN was never read (the tunnel protocol ends conversations with a closeSend
+	// message, not at transport EOF). Without both, every completed tunnel stream
+	// leaks its credit and after MaxIncomingStreams of them the client can no
+	// longer open any stream on the connection.
+	defer func() {
+		_ = qs.Close()
+		qs.CancelRead(0)
+	}()
 	stream, err := tunnel.NewServerStream(ctx, tunnel.ClientToManager, tunnel.NewQuicServerStream(qs))
 	if err != nil {
 		clog.Errorf(ctx, "quictunnel: stream handshake failed: %v", err)

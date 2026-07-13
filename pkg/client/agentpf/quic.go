@@ -181,6 +181,15 @@ func newQuicStreamConn(stream *quic.Stream, conn *quic.Conn) net.Conn {
 func (c *quicStreamConn) LocalAddr() net.Addr  { return c.conn.LocalAddr() }
 func (c *quicStreamConn) RemoteAddr() net.Addr { return c.conn.RemoteAddr() }
 
+// Close fully terminates the stream. quic.Stream.Close finishes only the send
+// direction; the receive direction must be released explicitly or the stream never
+// terminates and keeps its bookkeeping in quic-go alive for the life of the
+// connection.
+func (c *quicStreamConn) Close() error {
+	c.CancelRead(0)
+	return c.Stream.Close()
+}
+
 // dialAgentQUIC returns a net.Conn wrapping a freshly opened stream on this agent's cached
 // per-agent QUIC connection, dialing that connection first if none is cached yet. Any
 // failure -- to dial, to complete the TLS handshake, or to open the stream -- is returned
