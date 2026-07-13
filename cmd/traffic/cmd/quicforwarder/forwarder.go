@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"golang.org/x/net/ipv4"
+
 	"github.com/telepresenceio/clog"
 )
 
@@ -27,6 +29,7 @@ const (
 // Router.Route with datagrams read off that socket.
 type Forwarder struct {
 	front   *net.UDPConn
+	frontPC *ipv4.PacketConn
 	env     *Env
 	router  *Router
 	flows   *flowTable
@@ -41,11 +44,13 @@ func Listen(env *Env, allowlist *Allowlist) (*Forwarder, error) {
 	if err != nil {
 		return nil, fmt.Errorf("quic-forwarder: listen on UDP :%d: %w", env.ListenPort, err)
 	}
+	frontPC := ipv4.NewPacketConn(front)
 	m := newMetrics()
-	flows := newFlowTable(front, m)
+	flows := newFlowTable(frontPC, m)
 	router := NewRouter(allowlist, flows, m)
 	return &Forwarder{
 		front:   front,
+		frontPC: frontPC,
 		env:     env,
 		router:  router,
 		flows:   flows,
@@ -94,9 +99,46 @@ func (f *Forwarder) Serve(ctx context.Context) error {
 		}
 	}()
 
-	buf := make([]byte, maxDatagramSize)
+	f.runIngress(ctx)
+
+	<-sweepDone
+	f.flows.closeAll()
+	return nil
+}
+
+// runIngress reads batches of datagrams off the front socket (ReadBatch, i.e.
+// recvmmsg on Linux) and routes each one, in order. It is the single goroutine whose
+// ordering guarantee the handshake cache relies on (concurrent Initial packets for one
+// connection attempt are never processed out of order relative to each other), so it
+// must stay single-threaded.
+//
+// A datagram whose source address already has an established flow bypasses
+// Router.Route entirely -- Route's own case-(a) check would just confirm the same
+// thing -- and instead joins a run of consecutive datagrams for that same flow. A run
+// is flushed, with one WriteBatch to the flow's backend socket, whenever it ends: the
+// destination flow changes, or the current datagram belongs to no established flow.
+// That guarantees order is preserved both within a flow's run and relative to any
+// interleaved datagram that still needs Router.Route (new-flow dial, handshake
+// buffering, or drop), which stays exactly as before: unbatched, since it is cold
+// relative to steady-state throughput.
+func (f *Forwarder) runIngress(ctx context.Context) {
+	msgs := newBatchMessages(batchSize)
+	group := make([]ipv4.Message, 0, batchSize)
+	scratch := make([]byte, maxDatagramSize)
+	var groupEntry *flowEntry
+
+	flush := func() {
+		if groupEntry == nil {
+			return
+		}
+		n := f.flows.writeBatchToBackend(ctx, groupEntry, group, scratch)
+		f.metrics.addForwarded(int64(n))
+		group = group[:0]
+		groupEntry = nil
+	}
+
 	for {
-		n, src, err := f.front.ReadFromUDPAddrPort(buf)
+		n, err := f.frontPC.ReadBatch(msgs, 0)
 		if err != nil {
 			if ctx.Err() != nil {
 				break
@@ -104,12 +146,37 @@ func (f *Forwarder) Serve(ctx context.Context) error {
 			clog.Debugf(ctx, "quic-forwarder: read error: %v", err)
 			continue
 		}
-		datagram := make([]byte, n)
-		copy(datagram, buf[:n])
-		f.router.Route(ctx, src, datagram)
-	}
+		for i := range n {
+			m := &msgs[i]
+			if m.N <= 0 {
+				continue
+			}
+			ua, ok := m.Addr.(*net.UDPAddr)
+			if !ok {
+				continue
+			}
+			src := ua.AddrPort()
+			data := m.Buffers[0][:m.N]
 
-	<-sweepDone
-	f.flows.closeAll()
-	return nil
+			if e, ok := f.flows.lookup(src); ok {
+				if groupEntry != e {
+					flush()
+					groupEntry = e
+				}
+				group = append(group, ipv4.Message{Buffers: [][]byte{data}})
+				continue
+			}
+
+			// Cold path: no established flow yet. Flush any pending run first
+			// so writes stay in arrival order, then hand this one datagram to
+			// Router.Route exactly as before -- including the durable copy,
+			// since Route may retain it (the handshake cache) past this call,
+			// well after this batch's buffers are reused.
+			flush()
+			datagram := make([]byte, len(data))
+			copy(datagram, data)
+			f.router.Route(ctx, src, datagram)
+		}
+		flush()
+	}
 }

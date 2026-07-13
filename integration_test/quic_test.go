@@ -135,19 +135,31 @@ func (s *quicTunnelSuite) awaitQuicOrSkip(ctx context.Context) *itest.StatusResp
 	// A plain rq.Eventually here would record a hard failure the moment the
 	// deadline passes, before we get a chance to tell a skip apart from a
 	// failure -- so this polls by hand instead.
-	deadline := time.Now().Add(10 * time.Second)
+	//
+	// The QUIC dial happens once per connect with a short budget (quicDialTimeout,
+	// 3s). A cold handshake -- or a forwarder that has only just received its
+	// backend allowlist -- can miss it, leaving the session on grpc for good with
+	// no mid-session re-probe. Since a fresh connect is a fresh dial, reconnect a
+	// few times before concluding the endpoint is unusable, so a cold-start miss
+	// isn't mistaken for an unreachable endpoint (which would wrongly skip the
+	// whole suite).
 	var last *itest.StatusResponse
-	for {
-		if st, err := itest.TelepresenceStatus(ctx); err == nil {
-			last = st
-			if st.RootDaemon != nil && strings.HasPrefix(st.RootDaemon.TunnelTransport, "quic ") {
-				return st
+	for attempt := 0; attempt < 4; attempt++ {
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			if st, err := itest.TelepresenceStatus(ctx); err == nil {
+				last = st
+				if st.RootDaemon != nil && strings.HasPrefix(st.RootDaemon.TunnelTransport, "quic ") {
+					return st
+				}
 			}
+			if time.Now().After(deadline) {
+				break
+			}
+			time.Sleep(time.Second)
 		}
-		if time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(time.Second)
+		itest.TelepresenceQuitOk(ctx)
+		s.TelepresenceConnect(ctx)
 	}
 
 	observed := ""

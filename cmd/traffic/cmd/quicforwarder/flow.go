@@ -8,13 +8,17 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/net/ipv4"
+
 	"github.com/telepresenceio/clog"
 )
 
 // flowEntry is one established client<->backend flow: a connected UDP socket to the
-// backend, and the last time either direction saw traffic (used by sweepIdle).
+// backend (plus its batch-I/O wrapper), and the last time either direction saw traffic
+// (used by sweepIdle).
 type flowEntry struct {
 	conn       *net.UDPConn
+	pc         *ipv4.PacketConn
 	lastActive atomic.Int64 // UnixNano
 }
 
@@ -24,21 +28,20 @@ func (e *flowEntry) touch() {
 
 // flowTable is the real, socket-owning implementation of flowSink: one goroutine per
 // established flow pumps backend->client traffic onto the forwarder's single front
-// socket, addressed back to the client's source address (WriteToUDPAddrPort). This is
-// the "soft state" the design describes: a forwarder restart loses the table, but
-// clients simply re-appear via CID or SNI routing and QUIC's path validation handles
-// the new return path.
+// socket, addressed back to the client's source address. This is the "soft state" the
+// design describes: a forwarder restart loses the table, but clients simply re-appear
+// via CID or SNI routing and QUIC's path validation handles the new return path.
 type flowTable struct {
-	front   *net.UDPConn
+	frontPC *ipv4.PacketConn
 	metrics *metrics
 
 	mu    sync.RWMutex
 	flows map[netip.AddrPort]*flowEntry
 }
 
-func newFlowTable(front *net.UDPConn, m *metrics) *flowTable {
+func newFlowTable(frontPC *ipv4.PacketConn, m *metrics) *flowTable {
 	return &flowTable{
-		front:   front,
+		frontPC: frontPC,
 		metrics: m,
 		flows:   make(map[netip.AddrPort]*flowEntry),
 	}
@@ -59,6 +62,31 @@ func (t *flowTable) Forward(ctx context.Context, src netip.AddrPort, datagram []
 	return true
 }
 
+// lookup returns the established flow for src, if any, without touching lastActive or
+// writing. Used by Forwarder.runIngress to decide, per datagram, whether it belongs to
+// the fast batched path (an existing flow) or must go through Router.Route.
+func (t *flowTable) lookup(src netip.AddrPort) (*flowEntry, bool) {
+	t.mu.RLock()
+	e, ok := t.flows[src]
+	t.mu.RUnlock()
+	return e, ok
+}
+
+// writeBatchToBackend writes every message in msgs -- an existing flow's consecutive
+// datagrams, in arrival order -- to e's backend connection (GSO where the datagrams are
+// uniformly sized and the kernel supports it, plain sendmmsg batching otherwise), and
+// touches e's lastActive once. It always returns len(msgs): a write failure is logged
+// and the rest of the group is silently dropped, the same silent-drop-on-error behavior
+// Forward already applies per datagram. scratch is Forwarder.runIngress's reusable GSO
+// assembly buffer.
+func (t *flowTable) writeBatchToBackend(ctx context.Context, e *flowEntry, msgs []ipv4.Message, scratch []byte) int {
+	e.touch()
+	if err := writeMsgsBatch(e.pc, msgs, scratch); err != nil {
+		clog.Debugf(ctx, "quic-forwarder: batch write to backend failed: %v", err)
+	}
+	return len(msgs)
+}
+
 // CreateAndForward implements flowSink.
 func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, backendIP netip.Addr, port uint16, datagrams [][]byte) {
 	backendAddr := netip.AddrPortFrom(backendIP, port)
@@ -68,7 +96,7 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 		return
 	}
 
-	e := &flowEntry{conn: conn}
+	e := &flowEntry{conn: conn, pc: ipv4.NewPacketConn(conn)}
 	e.touch()
 
 	t.mu.Lock()
@@ -80,10 +108,8 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 		t.mu.Unlock()
 		_ = conn.Close()
 		existing.touch()
-		for _, dg := range datagrams {
-			if _, err := existing.conn.Write(dg); err != nil {
-				clog.Debugf(ctx, "quic-forwarder: write to backend for flow %s failed: %v", src, err)
-			}
+		if err := writeBatchAll(existing.pc, msgsForDatagrams(datagrams)); err != nil {
+			clog.Debugf(ctx, "quic-forwarder: write to backend for flow %s failed: %v", src, err)
 		}
 		return
 	}
@@ -93,25 +119,32 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 	clog.Debugf(ctx, "quic-forwarder: new flow %s -> %s", src, backendAddr)
 	go t.pump(ctx, src, e)
 
-	for _, dg := range datagrams {
-		if _, err := conn.Write(dg); err != nil {
-			clog.Debugf(ctx, "quic-forwarder: write to backend %s for flow %s failed: %v", backendAddr, src, err)
-		}
+	if err := writeBatchAll(e.pc, msgsForDatagrams(datagrams)); err != nil {
+		clog.Debugf(ctx, "quic-forwarder: write to backend %s for flow %s failed: %v", backendAddr, src, err)
 	}
 }
 
-// pump reads backend->client traffic off e's backend socket and relays it to src on
-// the shared front socket, until the backend socket is closed (by sweepIdle or
-// closeAll).
+// pump reads backend->client traffic off e's backend socket (ReadBatch, i.e. recvmmsg
+// on Linux) and relays it to src on the shared front socket with one WriteBatch per
+// read (or, when the read's datagrams are uniformly sized and the kernel supports it,
+// one GSO write), until the backend socket is closed (by sweepIdle or closeAll).
 func (t *flowTable) pump(ctx context.Context, src netip.AddrPort, e *flowEntry) {
-	buf := make([]byte, 65535)
+	rmsgs := newBatchMessages(batchSize)
+	wmsgs := make([]ipv4.Message, batchSize)
+	scratch := make([]byte, maxDatagramSize)
+	addr := net.UDPAddrFromAddrPort(src)
+
 	for {
-		n, err := e.conn.Read(buf)
+		n, err := e.pc.ReadBatch(rmsgs, 0)
 		if err != nil {
 			return
 		}
 		e.touch()
-		if _, err := t.front.WriteToUDPAddrPort(buf[:n], src); err != nil {
+		for i := range n {
+			wmsgs[i].Buffers = [][]byte{rmsgs[i].Buffers[0][:rmsgs[i].N]}
+			wmsgs[i].Addr = addr
+		}
+		if err := writeMsgsBatch(t.frontPC, wmsgs[:n], scratch); err != nil {
 			clog.Debugf(ctx, "quic-forwarder: write to client %s failed: %v", src, err)
 		}
 	}

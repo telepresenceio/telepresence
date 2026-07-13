@@ -243,8 +243,18 @@ quicTunnel:
     # matters across a restart, so this can be scaled freely without any
     # coordination between replicas.
     replicas: 1
-    # Resource requests and limits for the quic-forwarder container.
-    resources: {}
+    # Resource requests and limits for the quic-forwarder container. A CPU
+    # request is set so autoscalers with a minimum allocation (e.g. GKE
+    # Autopilot, which otherwise floors an unset request at ~250m and
+    # throttles the data plane) give it enough to actually forward traffic.
+    # No CPU limit is set deliberately: throttling a packet relay under load
+    # is worse than letting it contend for spare CPU on the node.
+    resources:
+      requests:
+        cpu: 500m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
 
 # Values specific to the helm chart hooks for managing upgrade/deleting
 hooks:

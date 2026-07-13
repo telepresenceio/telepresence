@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"golang.org/x/net/ipv4"
 )
 
 // TestFlowTable_CreateAndForward_RoundTrip drives a real UDP "backend" socket through
@@ -26,7 +28,7 @@ func TestFlowTable_CreateAndForward_RoundTrip(t *testing.T) {
 
 	backendPort := uint16(backend.LocalAddr().(*net.UDPAddr).Port)
 	m := newMetrics()
-	ft := newFlowTable(front, m)
+	ft := newFlowTable(ipv4.NewPacketConn(front), m)
 
 	// Simulate a "client" by using a second UDP socket whose address is what
 	// the flow is keyed on -- but the flow table itself never touches this
@@ -79,7 +81,7 @@ func TestFlowTable_Forward_UnknownSourceReturnsFalse(t *testing.T) {
 	require.NoError(t, err)
 	defer front.Close()
 
-	ft := newFlowTable(front, newMetrics())
+	ft := newFlowTable(ipv4.NewPacketConn(front), newMetrics())
 	ok := ft.Forward(context.Background(), netip.MustParseAddrPort("127.0.0.1:1"), []byte("x"))
 	assert.False(t, ok)
 }
@@ -94,7 +96,7 @@ func TestFlowTable_SweepIdle_ClosesStaleFlows(t *testing.T) {
 	defer backend.Close()
 	backendPort := uint16(backend.LocalAddr().(*net.UDPAddr).Port)
 
-	ft := newFlowTable(front, newMetrics())
+	ft := newFlowTable(ipv4.NewPacketConn(front), newMetrics())
 	src := netip.MustParseAddrPort("127.0.0.1:54321")
 	ft.CreateAndForward(context.Background(), src, netip.MustParseAddr("127.0.0.1"), backendPort, [][]byte{[]byte("x")})
 	require.Equal(t, 1, ft.count())
