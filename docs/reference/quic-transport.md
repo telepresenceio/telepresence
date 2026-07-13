@@ -95,6 +95,31 @@ The root daemon logs `QUIC tunnel transport active (host:port)` on a
 successful upgrade, and the traffic-manager logs
 `QUIC tunnel listener started` when the listener is enabled.
 
+## Throughput and node tuning
+
+QUIC runs in userspace over UDP, so its bulk throughput depends on the UDP
+socket buffers the cluster nodes allow. Both the traffic-manager and the
+forwarder ask the kernel for large buffers at startup, but the grant is
+silently capped by the node's `net.core.rmem_max` / `net.core.wmem_max`
+sysctls. On nodes with small caps (for example Container-Optimized OS
+defaults to 208 KiB), a paced burst from the sender can overflow a receive
+buffer; every such overflow is silent packet loss that shrinks the sender's
+congestion window, which caps sustained throughput well below what the link
+supports.
+
+Watch for two log lines:
+
+- the traffic-manager (from quic-go): `failed to sufficiently increase
+  receive buffer size (wanted: 7168 kiB, got: ...)`
+- the forwarder: `front socket buffers: rcv=... snd=... (asked for ...)`
+
+If they report far less than what was asked for, raise the node sysctls —
+for example `net.core.rmem_max=16777216` and `net.core.wmem_max=16777216`
+via your node configuration mechanism (on GKE Standard,
+`linuxNodeConfig.sysctls`; not configurable on GKE Autopilot). The
+port-forwarded gRPC transport is unaffected: it rides kernel TCP, whose
+buffers autotune independently of these caps.
+
 ## Version compatibility
 
 The endpoint descriptor is a purely additive API. Old clients never ask for

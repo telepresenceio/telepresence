@@ -95,6 +95,7 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 		clog.Debugf(ctx, "quic-forwarder: dial backend %s for flow %s failed: %v", backendAddr, src, err)
 		return
 	}
+	raiseSocketBuffers(conn)
 
 	e := &flowEntry{conn: conn, pc: ipv4.NewPacketConn(conn)}
 	e.touch()

@@ -34,6 +34,10 @@ type Forwarder struct {
 	router  *Router
 	flows   *flowTable
 	metrics *metrics
+	// Socket buffer sizes the kernel granted the front socket, logged by Serve so an
+	// undersized net.core.{r,w}mem_max -- which caps burst absorption and with it QUIC
+	// throughput -- is visible in the forwarder's log.
+	frontRcvBuf, frontSndBuf int
 }
 
 // Listen binds the forwarder's front UDP socket on env.ListenPort (all interfaces) and
@@ -44,17 +48,20 @@ func Listen(env *Env, allowlist *Allowlist) (*Forwarder, error) {
 	if err != nil {
 		return nil, fmt.Errorf("quic-forwarder: listen on UDP :%d: %w", env.ListenPort, err)
 	}
+	frontRcv, frontSnd := raiseSocketBuffers(front)
 	frontPC := ipv4.NewPacketConn(front)
 	m := newMetrics()
 	flows := newFlowTable(frontPC, m)
 	router := NewRouter(allowlist, flows, m)
 	return &Forwarder{
-		front:   front,
-		frontPC: frontPC,
-		env:     env,
-		router:  router,
-		flows:   flows,
-		metrics: m,
+		front:       front,
+		frontPC:     frontPC,
+		env:         env,
+		router:      router,
+		flows:       flows,
+		metrics:     m,
+		frontRcvBuf: frontRcv,
+		frontSndBuf: frontSnd,
 	}, nil
 }
 
@@ -71,6 +78,8 @@ func (f *Forwarder) Addr() net.Addr {
 // every QUIC connection through this forwarder simply stops working the moment it
 // stops running.
 func (f *Forwarder) Serve(ctx context.Context) error {
+	clog.Infof(ctx, "quic-forwarder: front socket buffers: rcv=%d snd=%d (asked for %d each)",
+		f.frontRcvBuf, f.frontSndBuf, desiredSocketBuffer)
 	go func() {
 		<-ctx.Done()
 		_ = f.front.Close()
