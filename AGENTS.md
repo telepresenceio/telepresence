@@ -179,6 +179,27 @@ make docs-files
 
 Run `make generate` and commit changes to `DEPENDENCY_LICENSES.md` and `DEPENDENCIES.md`.
 
+## Documentation
+
+The documentation under `docs/` aims to follow the
+[Diátaxis](https://diataxis.fr/) framework. Its four quadrants map to the
+layout like this:
+
+| Diátaxis quadrant | Orientation | Location |
+|-------------------|-------------|----------|
+| Tutorials | learning | `docs/quick-start.md` |
+| How-to guides | task | `docs/howtos/` |
+| Reference | information | `docs/reference/` |
+| Explanation | understanding | `docs/concepts/` |
+
+When documenting a new feature, decide which quadrants it needs — typically a
+how-to guide (how to enable/use it) plus a reference page (its complete
+behavior, configuration, and limitations) — and keep the quadrants separate:
+a how-to gets a task done and links to the reference for details; a reference
+describes exhaustively and doesn't teach. Add new pages to the navigation in
+`docs/doc-links.yml`, and run `make lint-docs` (link/nav consistency and
+terminology) before pushing.
+
 ## Architecture
 
 ### Main Components
