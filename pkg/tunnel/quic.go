@@ -67,10 +67,32 @@ func writeFrame(w io.Writer, b []byte) error {
 
 // quicStream frames TunnelMessages onto a *quic.Stream. Send is safe for concurrent use; the
 // underlying quic.Stream is not, so writes (including the write-side close done by
-// quicClientStream.CloseSend) are serialized through sendMu.
+// quicClientStream.CloseSend) are serialized through sendMu. conn is the *quic.Conn the
+// stream was opened or accepted on; it is what makes quicStream a DatagramCapable, giving
+// the transport-agnostic stream type access to the connection's unreliable datagrams
+// without depending on quic-go itself.
 type quicStream struct {
 	stream *quic.Stream
+	conn   *quic.Conn
 	sendMu sync.Mutex
+}
+
+// SupportsDatagrams reports whether both ends of the connection carrying this stream
+// negotiated RFC 9221 datagram support.
+func (s *quicStream) SupportsDatagrams() bool {
+	sd := s.conn.ConnectionState().SupportsDatagrams
+	return sd.Local && sd.Remote
+}
+
+// SendDatagram sends payload as an unreliable QUIC datagram on the connection carrying
+// this stream.
+func (s *quicStream) SendDatagram(payload []byte) error {
+	return s.conn.SendDatagram(payload)
+}
+
+// Conn returns the QUIC connection carrying this stream.
+func (s *quicStream) Conn() *quic.Conn {
+	return s.conn
 }
 
 func (s *quicStream) Send(m *rpc.TunnelMessage) error {
@@ -110,8 +132,9 @@ type quicClientStream struct {
 }
 
 // NewQuicClientStream wraps a QUIC stream opened by the client as a GRPCClientStream.
-func NewQuicClientStream(s *quic.Stream) GRPCClientStream {
-	return &quicClientStream{quicStream{stream: s}}
+// conn is the connection s was opened on.
+func NewQuicClientStream(conn *quic.Conn, s *quic.Stream) GRPCClientStream {
+	return &quicClientStream{quicStream{stream: s, conn: conn}}
 }
 
 // CloseSend closes the write direction of the underlying QUIC stream; the read direction stays
@@ -128,8 +151,9 @@ func (s *quicClientStream) CloseSend() error {
 }
 
 // NewQuicServerStream wraps a QUIC stream accepted by the manager as a GRPCStream.
-func NewQuicServerStream(s *quic.Stream) GRPCStream {
-	return &quicStream{stream: s}
+// conn is the connection s was accepted on.
+func NewQuicServerStream(conn *quic.Conn, s *quic.Stream) GRPCStream {
+	return &quicStream{stream: s, conn: conn}
 }
 
 // quicProvider is a Provider that opens tunnel streams on a QUIC connection.
@@ -148,5 +172,5 @@ func (p quicProvider) Tunnel(ctx context.Context, _ ...grpc.CallOption) (GRPCCli
 	if err != nil {
 		return nil, err
 	}
-	return NewQuicClientStream(s), nil
+	return NewQuicClientStream(p.conn, s), nil
 }

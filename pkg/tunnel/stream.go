@@ -15,6 +15,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // Version of the stream protocol.
@@ -229,6 +230,27 @@ type stream struct {
 	syncRatio        uint32 // send and check sync after each syncRatio message
 	ackWindow        uint32 // maximum permitted difference between sent and received ack
 	peerVersion      uint16
+
+	// datagrams, when non-nil (set by AttachDatagramRoute), delivers payloads that
+	// arrived as QUIC datagrams for this flow's ConnID. Receive merges it with
+	// transport-carried messages so a UDP flow that is also getting some payloads over
+	// unreliable datagrams still presents as one ordinary message stream to its caller.
+	datagrams        chan []byte
+	datagramCounters *DatagramCounters
+
+	// pumpOnce and pumpCh back the transport-receive goroutine Receive starts the first
+	// time it is called on a stream with a non-nil datagrams channel: a single blocking
+	// Receive call can't select against a channel, so a goroutine pumps the transport
+	// into pumpCh instead, letting Receive select between it and datagrams.
+	pumpOnce sync.Once
+	pumpCh   chan recvResult
+}
+
+// recvResult is one result of the transport-receive goroutine Receive spawns for a
+// datagram-attached stream.
+type recvResult struct {
+	m   Message
+	err error
 }
 
 func newStream(tag Tag, grpcStream GRPCStream) stream {
@@ -264,6 +286,47 @@ func (s *stream) SessionID() SessionID {
 }
 
 func (s *stream) Receive(ctx context.Context) (Message, error) {
+	if s.datagrams == nil {
+		return s.receiveFromTransport(ctx)
+	}
+	// A datagram for this flow can arrive at any time, independently of the transport
+	// stream, so the two must be waited on concurrently. A goroutine that pumps the
+	// (blocking) transport receive into a channel lets this select do that; it is
+	// started at most once and runs until the transport reports an error, i.e. for the
+	// lifetime of the flow.
+	s.pumpOnce.Do(func() {
+		s.pumpCh = make(chan recvResult, 1)
+		go s.pumpTransportRecv(ctx)
+	})
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case b := <-s.datagrams:
+		clog.Tracef(ctx, "<- %s %s, datagram len %d", s.tag, s.id, len(b))
+		return NewMessage(Normal, b), nil
+	case r := <-s.pumpCh:
+		return r.m, r.err
+	}
+}
+
+// pumpTransportRecv repeatedly calls receiveFromTransport and forwards every result to
+// pumpCh, stopping after the first error (receiveFromTransport itself never succeeds
+// again after that, so there is nothing more to pump).
+func (s *stream) pumpTransportRecv(ctx context.Context) {
+	for {
+		m, err := s.receiveFromTransport(ctx)
+		select {
+		case s.pumpCh <- recvResult{m, err}:
+		case <-ctx.Done():
+			return
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func (s *stream) receiveFromTransport(ctx context.Context) (Message, error) {
 	var cm *rpc.TunnelMessage
 	var err error
 	if streamCtx, ok := s.grpcStream.(GRPCContextStream); ok {
@@ -294,6 +357,25 @@ func (s *stream) Receive(ctx context.Context) (Message, error) {
 }
 
 func (s *stream) Send(ctx context.Context, m Message) error {
+	// Only a UDP flow's Normal (payload) messages are datagram-eligible; everything
+	// else -- streamInfo, DialOK/DialReject, Disconnect, KeepAlive, closeSend -- keeps
+	// the stream's ordering and delivery guarantees.
+	if m.Code() == Normal && s.id.Protocol() == types.ProtoUDP {
+		if dc, ok := s.grpcStream.(DatagramCapable); ok && dc.SupportsDatagrams() {
+			if err := dc.SendDatagram(EncodeDatagram(s.id, m.Payload())); err == nil {
+				if s.datagramCounters != nil {
+					s.datagramCounters.sent.Add(1)
+				}
+				clog.Tracef(ctx, "-> %s %s, datagram len %d", s.tag, s.id, len(m.Payload()))
+				return nil
+			} else if s.datagramCounters != nil {
+				s.datagramCounters.fallback.Add(1)
+			}
+			// The datagram was rejected (typically DatagramTooLargeError) or the send
+			// otherwise failed; fall back to the stream for this message only -- MTU
+			// can change, so a fallback here must not latch.
+		}
+	}
 	var err error
 	if streamCtx, ok := s.grpcStream.(GRPCContextStream); ok {
 		err = streamCtx.SendContext(ctx, m.TunnelMessage())
