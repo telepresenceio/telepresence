@@ -9,5 +9,5 @@ hide_table_of_contents: true
 Please review our [contributor's guide](https://github.com/telepresenceio/telepresence/blob/release/v2/CONTRIBUTING.md)
 on GitHub to learn how you can help make Telepresence better.
 
-## Meetings
-Check out our community [meeting schedule](https://github.com/telepresenceio/telepresence/blob/release/v2/MEETING_SCHEDULE.md) for opportunities to interact with Telepresence developers.
+## Get involved
+Visit the [Telepresence home page](https://telepresence.io/) to connect with the community.
