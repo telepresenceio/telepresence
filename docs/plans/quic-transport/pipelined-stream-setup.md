@@ -74,8 +74,8 @@ improvement entry to a decided/struck state) and stop.
   oldest supported tunnel version (see how `peerVersion` consumers branch).
 * Integration: full `QuicTunnel` suites plus a standard (gRPC transport)
   suite touching intercepts, since this changes the shared protocol.
-* Re-run the step-0 measurement and record before/after in the PR
-  description.
+* Re-run the step-0 measurement and record before/after in the commit
+  message.
 
 ## Acceptance criteria
 

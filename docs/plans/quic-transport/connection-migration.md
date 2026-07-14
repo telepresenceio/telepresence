@@ -40,8 +40,10 @@ Walk this chain and note where assumptions live:
    reconnects on interface changes). If rootd tears down the session or the
    daemon on a network change, migration never gets a chance. Establish what
    rootd does on (a) source-IP change with default route intact, (b) default
-   route flapping to another interface. Document findings in the PR; fixing
-   an aggressive teardown may be a separate follow-up if it is invasive.
+   route flapping to another interface. Document findings in the commit
+   message and, if they change what migration can deliver, in `design.md`;
+   fixing an aggressive teardown may be a separate follow-up if it is
+   invasive.
 
 ## The test that gates everything: NAT-rebind simulation, pure Go
 
@@ -73,8 +75,8 @@ A full interface-roam test needs an environment the integration harness does
 not provide. A pragmatic middle step: run `telepresence connect` inside a
 network namespace or container whose SNAT rule can be flipped mid-transfer
 (iptables MASQUERADE with `--to-ports` change). Treat this as a manual
-verification script under `perf/` or a documented procedure in the PR, not a
-CI test. The Go-level NAT-rebind test above is the merge gate.
+verification script under `perf/` or a procedure documented in the commit
+message, not a CI test. The Go-level NAT-rebind test above is the merge gate.
 
 ## Hardening that may fall out
 
@@ -100,6 +102,7 @@ CI test. The Go-level NAT-rebind test above is the merge gate.
 
 * NAT-rebind Go test in `cmd/traffic/cmd/quicforwarder` passing in CI
   (no root, no netns).
-* A written trace (PR description) of rootd's behavior on real interface
-  changes, with follow-up issues filed if teardown preempts migration.
+* A written trace (commit message, plus `design.md` if claims change) of
+  rootd's behavior on real interface changes, with follow-up issues filed if
+  teardown preempts migration.
 * No docs claim beyond what the tests demonstrate.

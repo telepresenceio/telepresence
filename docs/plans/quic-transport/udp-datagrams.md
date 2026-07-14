@@ -37,7 +37,7 @@ transport keeps stream carriage unchanged, always.
   `quicserver` and `agentpf` configs are out of scope per above.)
 * The forwarder needs **no change**: DATAGRAM frames ride ordinary QUIC
   packets and the forwarder routes packets by connection ID without looking
-  deeper. State this in the PR description; do not add code there.
+  deeper. State this in the commit message; do not add code there.
 
 ## Wire format
 

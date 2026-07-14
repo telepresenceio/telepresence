@@ -15,9 +15,25 @@ behind it. Read this file first; it holds the context every plan assumes.
 | `connection-migration.md` | Prove and harden client address migration | nothing |
 | `session-resumption.md` | TLS session resumption on reconnect | re-probe from `relay-hardening.md` |
 | `relay-hardening.md` | Forwarder GRO, buffer observability, QUIC re-probe | nothing |
+| `phase8-pr-assembly.md` | Final verification, docs pass, PR creation | **everything above** |
 
-Per the rule in `AGENTS.md` ("Design Plans"), each plan file is deleted in the
-final commit of the PR that implements it.
+## How the work lands
+
+**Every plan is implemented as commits directly on `thallgren/quic`.** There
+are no per-plan branches and no per-plan PRs: one PR ships the whole QUIC
+transport, and it is assembled only when everything else is complete
+(`phase8-pr-assembly.md`). Consequences for anyone executing a plan:
+
+* Findings, measurements, and negative results that a per-plan PR
+  description would have carried go into the **commit message** and — when
+  they change the design's claims — into `design.md`.
+* Keep commits logical and individually buildable; the branch history *is*
+  the review narrative until phase 8.
+* Do not push and do not touch draft PR #4204; phase 8 owns both.
+* Per the rule in `AGENTS.md` ("Design Plans"): the concluding commit of
+  each work item deletes its own plan file from this directory; phase 8's
+  final commit deletes whatever remains (`design.md`, this README, and
+  `phase8-pr-assembly.md` itself).
 
 ## Branch and state
 

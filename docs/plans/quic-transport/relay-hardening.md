@@ -111,8 +111,8 @@ re-probe is the important one (it is also the prerequisite for
 
 * CA-rotation test: manager restart → transport returns to `quic` without
   reconnect; suite green.
-* GRO: measured improvement recorded in the PR (or a measured "no gain"
-  and the code dropped — GRO gains depend on kernel/NIC; a negative result
-  is acceptable, silence is not).
+* GRO: measured improvement recorded in the commit message (or a measured
+  "no gain" and the code dropped — GRO gains depend on kernel/NIC; a
+  negative result is acceptable, silence is not).
 * Lint (`golangci-lint`, `gofumpt`), unit tests, and both `QuicTunnel`
   integration suites green per `README.md` workflow.
