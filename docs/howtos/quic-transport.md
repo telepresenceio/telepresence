@@ -1,6 +1,6 @@
 ---
 title: Enable the QUIC tunnel transport
-description: Expose the traffic-manager's opt-in QUIC endpoint and let clients upgrade the tunnel from the port-forwarded connection, removing head-of-line blocking and surviving network changes.
+description: Expose the traffic-manager's opt-in QUIC endpoint and let clients upgrade the tunnel from the port-forwarded connection, removing head-of-line blocking and taking the API server out of the data path.
 hide_table_of_contents: true
 ---
 
@@ -14,9 +14,9 @@ be a data plane.
 
 The traffic-manager can additionally expose a **QUIC endpoint**. When it is
 reachable, clients upgrade to it automatically: each tunneled connection gets
-its own independently retransmitted QUIC stream, the tunnel survives your
-workstation changing networks, and the API server is taken out of the data
-path. The port-forwarded transport remains the default and the fallback, so
+its own independently retransmitted QUIC stream, and the API server is taken
+out of the data path. The port-forwarded transport remains the default and the
+fallback, so
 enabling QUIC never breaks a client that cannot reach the endpoint. See the
 [QUIC Tunnel Transport](../reference/quic-transport.md) reference for how the
 upgrade, discovery, and its security model work.

@@ -40,15 +40,22 @@ upgrade, never a requirement. Enabling it is described in the
    reachable, rather than re-probing the candidate list themselves.
 
 An established QUIC connection is kept alive with pings every 15 seconds
-while idle. If it is lost mid-session, the client logs one warning, moves the
-affected and all subsequent streams back to the port-forwarded transport, and
-does not retry QUIC until the next `telepresence connect`.
+while idle. If it is lost mid-session, the client logs one warning and moves
+the affected and all subsequent streams back to the port-forwarded transport.
+It then re-probes the QUIC endpoint in the background on an interval and
+returns new streams to QUIC once a probe succeeds, without a
+`telepresence connect` -- see the recovery behavior described under
+"Observability" below.
 
-Streams to a traffic-agent that use the client's direct agent port-forward
-are not affected by the upgrade; they keep their own port-forwarded
-connections. When agent port-forwarding is disabled
-(`cluster.agentPortForward=false`), agent-bound traffic relays through the
-traffic-manager and therefore does benefit from QUIC.
+Direct client-to-agent connections upgrade independently. When
+`cluster.agentPortForward` is enabled (the default) the client dials each
+agent that advertises a QUIC listener through the forwarder, using the
+agent's own SNI, and falls back to that agent's Kubernetes port-forward if
+the QUIC dial fails; `telepresence status` reports each agent's transport
+separately from the traffic-manager's. When agent port-forwarding is disabled
+(`cluster.agentPortForward=false`) the client makes no direct agent
+connections at all: agent-bound traffic relays through the traffic-manager
+and rides whatever transport the manager tunnel is using.
 
 ## Endpoint discovery
 
@@ -255,4 +262,3 @@ several. No coordinated upgrade is required in either direction.
   agent's gRPC server over QUIC streams, so a tunnel message there lives
   *inside* a gRPC frame rather than in pkg/tunnel's own framing, and
   datagram carriage for that path is unimplemented.
-- Direct client-to-agent port-forwards do not use QUIC.
