@@ -204,7 +204,11 @@ prometheus: {}
 # expose so that clients able to reach it upgrade tunneled connections from
 # the port-forwarded gRPC transport, removing head-of-line blocking between
 # flows. The port-forwarded transport remains the default and the fallback
-# when this is disabled or unreachable.
+# when this is disabled or unreachable. Setting quicTunnel.enabled=true alone
+# is enough on any cluster whose quic Service type the traffic-manager can
+# observe: it discovers the reachable address(es) itself (a LoadBalancer
+# Service's assigned ingress, or a NodePort Service's node addresses) and
+# advertises them to clients, no further configuration required.
 quicTunnel:
   enabled: false
   # UDP port the traffic-manager's QUIC listener binds to. Chosen clear of
@@ -212,11 +216,18 @@ quicTunnel:
   # agentInjector.webhook.port (8443, TCP), agent.port (9900, TCP), and
   # prometheus.port (opt-in, TCP).
   port: 7778
-  # Externally reachable host or IP advertised to clients. The QUIC endpoint is
-  # not advertised until this is set (e.g. to the LoadBalancer address of the
-  # quic service).
+  # Externally reachable host or IP advertised to clients, overriding
+  # discovery entirely. Leave empty to let the traffic-manager discover the
+  # address itself from the quic Service below (the common case). Set this
+  # explicitly for topologies the traffic-manager cannot see: a NAT or proxy
+  # in front of the LoadBalancer, port remapping, a DNS name that only
+  # resolves on the developer's VPN, or a NodePort Service in a
+  # namespace-scoped install (which lacks the Node read access discovery
+  # needs -- see traffic-manager.namespaced in the reference docs).
   externalHost: ""
   # Advertised UDP port when it differs from the Service port (0 = same).
+  # Only meaningful together with externalHost; discovery always uses the
+  # Service's own port.
   externalPort: 0
   # UDP port a traffic-agent's own QUIC listener binds to (sidecar and
   # node-agent alike). Delivered to agents only when quicTunnel.enabled is

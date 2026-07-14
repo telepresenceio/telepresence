@@ -78,7 +78,7 @@ through the forwarder's SNI/connection-ID packet routing.
 apiVersion: v1
 kind: Service
 metadata:
-  name: traffic-manager-quic
+  name: {{ include "traffic-manager.quicServiceName" $ }}
   namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}

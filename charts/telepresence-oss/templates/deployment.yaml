@@ -149,6 +149,17 @@ spec:
           - name: TUNNEL_QUIC_AGENT_PORT
             value: {{ .agentPort | quote }}
           {{- end }}
+          {{- /*
+          Only meaningful, and only needed, when there is discovery for it to do: an
+          externalHost override bypasses discovery entirely (service.go's
+          GetQuicTunnelEndpoint), and a Service that was never created has nothing to
+          watch. See "Zero-configuration endpoint discovery" in
+          docs/plans/quic-transport/design.md.
+          */}}
+          {{- if and (not .externalHost) .service.create }}
+          - name: TUNNEL_QUIC_SERVICE_NAME
+            value: {{ include "traffic-manager.quicServiceName" $ | quote }}
+          {{- end }}
           {{- end }}
           {{- end }}
       {{- if or .agentInjector.enabled .nodeAgent.enabled }}

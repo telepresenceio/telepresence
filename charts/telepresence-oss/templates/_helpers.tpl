@@ -14,6 +14,16 @@ Traffic Manager deployment/service name - as of v2.20.3, must be "traffic-manage
 {{- end -}}
 
 {{- /*
+Name of the Service fronting the quic-forwarder Deployment (templates/quicforwarder.yaml
+and templates/service.yaml); also the value of TUNNEL_QUIC_SERVICE_NAME
+(templates/deployment.yaml) that tells the traffic-manager's QUIC endpoint discovery
+(cmd/traffic/cmd/manager/quictunnel.Discovery) which Service to watch.
+*/}}
+{{- define "traffic-manager.quicServiceName" -}}
+traffic-manager-quic
+{{- end -}}
+
+{{- /*
 Traffic Manager Namespace
 */}}
 {{- define "traffic-manager.namespace" -}}
