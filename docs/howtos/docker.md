@@ -98,7 +98,7 @@ It's recommended that you always use `--docker-run` in combination with a connec
 `telepresence connect --docker`, because that makes everything less intrusive:
 
 - No admin user access is needed. Network modifications are confined to a Docker network.
-- There's no need for special filesystem mount software like MacFUSE or WinFSP. The volume mounts happen in the Docker engine.
+- There's no need for special filesystem mount software like FUSE-T or WinFSP. The volume mounts happen in the Docker engine.
 
 The following happens under the hood when both flags are in use:
 

@@ -18,6 +18,15 @@ Telepresence is a Kubernetes development tool that enables fast local developmen
 - Push the branch and create a pull request for review.
 - Always merge PRs with a merge commit (never squash or rebase).
 
+## Design Plans
+
+Major work (multi-file changes, new features, refactors) starts with a written plan
+under `docs/plans/<topic>/`, presented for review before implementation begins.
+
+A plan is scaffolding for review, not a lasting artifact. It is removed in the last
+commit on the PR that implements it. By then, everything in the plan must have been
+implemented and documented, so the plan no longer has a purpose.
+
 ## Build Artifacts
 
 The Open Source version of Telepresence consists of three artifacts:

@@ -409,7 +409,11 @@ func (s *service) RemoteMountAvailability(ctx context.Context, ex *empty.Empty) 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		clog.Errorf(ctx, "sshfs not installed: %v", err)
-		return ex, errcat.User.New("sshfs is not installed on your local machine")
+		msg := "sshfs is not installed on your local machine"
+		if runtime.GOOS == "darwin" {
+			msg += `. Install it with "brew install fuse-t fuse-t-sshfs"`
+		}
+		return ex, errcat.User.New(msg)
 	}
 
 	// OSXFUSE changed to macFUSE, and we've noticed that older versions of OSXFUSE

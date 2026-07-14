@@ -23,11 +23,14 @@ runs:
       env:
         HOMEBREW_NO_INSTALL_FROM_API: ""
         HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+        HOMEBREW_NO_ENV_HINTS: "1"
       run: |
         brew untap homebrew/core || :
         brew untap homebrew/cask || :
-        # Untrusted runner taps we don't use; drop them to silence brew tap-trust warnings.
-        brew untap aws/tap azure/bicep hashicorp/tap || :
+        # Untrusted runner taps we don't use; drop them to silence brew
+        # tap-trust warnings. --force, because the runner image has formulae
+        # installed from some of them.
+        brew untap --force aws/tap azure/bicep hashicorp/tap || :
 
         # Remove Python3 symlinks in /usr/local/bin as workaround to brew update issues
         # https://github.com/actions/setup-python/issues/577
@@ -37,12 +40,16 @@ runs:
         rm /usr/local/bin/python3* || :
 
         brew update
-        brew install --cask macfuse
-        # Trust the fuse tap so brew installs sshfs-mac instead of skipping it as untrusted.
-        brew tap gromgit/fuse
-        brew trust gromgit/fuse
-        brew install gromgit/fuse/sshfs-mac
-        brew link --overwrite sshfs-mac
+        # FUSE-T is a kext-less FUSE implementation (it bridges to a local
+        # NFSv4 server), so no kernel extension approval is needed. The
+        # tap-trust check runs during brew tap itself - before the tap can
+        # possibly be trusted - so run it without the GitHub Actions
+        # detection: the log keeps the warning text, the run stays free of
+        # annotations, and exit codes are unaffected.
+        env -u GITHUB_ACTIONS brew tap macos-fuse-t/cask
+        brew trust macos-fuse-t/cask
+        brew install fuse-t fuse-t-sshfs
+        command -v sshfs
 
         if [[ ${RUNNER_ARCH} == "ARM64" ]]; then
           brew install jq
