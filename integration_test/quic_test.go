@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -237,6 +238,103 @@ func (s *quicTunnelSuite) requireQuicTransportWithin(ctx context.Context, timeou
 		return st.RootDaemon != nil && st.RootDaemon.TunnelTransport == want
 	}, timeout, time.Second, "status never reported tunnel_transport %q", want)
 	return last
+}
+
+// quicDiscoverableEndpoints returns "<address>:<quicNodePort>" for every cluster
+// Node's preferred address -- ExternalIP if it has one, else InternalIP -- exactly the
+// rule cmd/traffic/cmd/manager/quictunnel.Discovery applies for a NodePort Service.
+// Test_ZZDiscoveryNodePort doesn't know, or need to know, which Node the client's
+// candidate probe will settle on; it only needs the full set of endpoints that would
+// be a legitimate discovery result to check the observed one against. Every kind node
+// hits the InternalIP fallback, since kind assigns no ExternalIP.
+func (s *quicTunnelSuite) quicDiscoverableEndpoints(ctx context.Context) []string {
+	out, err := itest.KubectlOut(ctx, "", "get", "nodes", "-o",
+		`jsonpath={range .items[*]}{.status.addresses[?(@.type=="ExternalIP")].address}{"|"}{.status.addresses[?(@.type=="InternalIP")].address}{"\n"}{end}`)
+	s.Require().NoError(err, "failed to list node addresses")
+
+	var endpoints []string
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if line == "" {
+			continue
+		}
+		externalIPs, internalIPs, _ := strings.Cut(line, "|")
+		host := ""
+		if fs := strings.Fields(externalIPs); len(fs) > 0 {
+			host = fs[0]
+		} else if fs := strings.Fields(internalIPs); len(fs) > 0 {
+			host = fs[0]
+		}
+		if host != "" {
+			endpoints = append(endpoints, net.JoinHostPort(host, strconv.Itoa(quicNodePort)))
+		}
+	}
+	s.Require().NotEmpty(endpoints, "no cluster node reported a usable address")
+	return endpoints
+}
+
+// Test_ZZDiscoveryNodePort proves the zero-configuration path this phase exists for:
+// with quicTunnel.externalHost/externalPort left unset, the traffic-manager discovers
+// the NodePort Service's assigned port and the cluster's Node addresses itself, and
+// the client reaches the endpoint it derives with no further configuration. Runs last
+// in the suite (its name sorts after Test_ZManagerOutageAttachmentSurvival): it
+// reconfigures the traffic-manager away from the explicit-override install every other
+// test in this suite relies on, and there is no reason for a later test to see it.
+//
+// helm upgrade with -f/--set fully replaces the settings it names (this chart is never
+// installed with --reuse-values, see itest.TelepresenceHelmInstall), so simply omitting
+// externalHost/externalPort here is enough to revert them to the chart defaults (""/0)
+// and put the manager back into discovery mode; quicTunnel.service.nodePort stays
+// pinned to quicNodePort so the Service itself, and therefore every candidate's port,
+// doesn't change.
+func (s *quicTunnelSuite) Test_ZZDiscoveryNodePort() {
+	ctx := s.Context()
+	rq := s.Require()
+
+	// The harness always installs the traffic-manager namespace-scoped (a static
+	// namespaces list -- see itest.TelepresenceHelmInstall -- selects the
+	// namespace-scoped Roles in trafficManagerRbac/namespace-scope.yaml), which is
+	// precisely the shape whose NodePort discovery degrades to nothing: no Node read
+	// access, by design. A first version of this test stopped there, proving only the
+	// degradation. To exercise discovery itself, grant this traffic-manager exactly
+	// the Node access a cluster-scoped install's ClusterRole carries, before the
+	// upgrade below rolls the manager pod (the manager checks its Node access once,
+	// at startup).
+	managerNs := s.ManagerNamespace()
+	roleName := "quic-discovery-nodes-" + managerNs
+	rq.NoError(itest.Kubectl(ctx, "", "create", "clusterrole", roleName,
+		"--verb=get,list,watch", "--resource=nodes"))
+	defer func() { _ = itest.Kubectl(ctx, "", "delete", "clusterrole", roleName) }()
+	rq.NoError(itest.Kubectl(ctx, "", "create", "clusterrolebinding", roleName,
+		"--clusterrole="+roleName, "--serviceaccount="+managerNs+":traffic-manager"))
+	defer func() { _ = itest.Kubectl(ctx, "", "delete", "clusterrolebinding", roleName) }()
+
+	s.TelepresenceHelmInstallOK(ctx, true,
+		"--set", "nodeAgent.enabled=true",
+		"--set", "quicTunnel.enabled=true",
+		"--set", "quicTunnel.service.type=NodePort",
+		"--set", fmt.Sprintf("quicTunnel.service.nodePort=%d", quicNodePort),
+	)
+
+	// A fresh connect is required: the endpoint descriptor (and the candidate list it
+	// carries) is fetched once at connect, and the live session's copy was fetched
+	// under the old, override-based configuration. Reconnect until the fresh session
+	// lands on quic rather than asserting after a single reconnect, for the same
+	// reason Test_ZManagerOutageAttachmentSurvival does: the upgrade rolled the
+	// traffic-manager pod, the forwarder needs a few seconds to relearn the new pod's
+	// IP for its backend allowlist, and a client that connects before that refresh
+	// falls back to grpc for that whole session (there is no mid-session re-probe).
+	endpoints := s.quicDiscoverableEndpoints(ctx)
+	want := make([]string, len(endpoints))
+	for i, ep := range endpoints {
+		want[i] = "quic (" + ep + ")"
+	}
+	rq.Eventually(func() bool {
+		itest.TelepresenceQuitOk(ctx)
+		s.TelepresenceConnect(ctx)
+		st, err := itest.TelepresenceStatus(ctx)
+		return err == nil && st.RootDaemon != nil && slices.Contains(want, st.RootDaemon.TunnelTransport)
+	}, 90*time.Second, 15*time.Second,
+		"status never reported tunnel_transport as one of %q", want)
 }
 
 // requireAgentTransport asserts that "telepresence status" currently reports

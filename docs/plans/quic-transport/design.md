@@ -370,9 +370,15 @@ forwarder-first architecture builds on them:
    degrades to port-forwards and recovers on reconnect, and that a manager
    restart leaves client⇄agent QUIC traffic flowing.
 7. **Zero-configuration discovery.** Service/node watch in the manager, candidate
-   address list + SNI scheme in the endpoint descriptor, concurrent client probe,
-   docs reduced to "set `quicTunnel.enabled=true`". Detailed handoff plan:
-   `phase7-zero-config-discovery.md` in this directory.
+   address list in the endpoint descriptor, concurrent client probe, docs reduced
+   to "set `quicTunnel.enabled=true`". Implemented: `quictunnel.Discovery` watches
+   the forwarder's Service (raw Get+Watch, because the shared Services informer's
+   transform strips exactly the LoadBalancer status discovery needs) and, given
+   Node RBAC, the Nodes; `GetQuicTunnelEndpoint` advertises the ordered candidate
+   list (`QuicTunnelEndpoint.candidates`, with `host`/`port` duplicating the first
+   for older clients); the client races candidates with a 250 ms stagger and agent
+   connections reuse the winning address. The SNI scheme mentioned in early drafts
+   was already carried by phases 5–6 and needed nothing here.
 
 ## What measurement taught us, and the improvements it motivates
 

@@ -9,7 +9,6 @@ behind it. Read this file first; it holds the context every plan assumes.
 
 | File | Work item | Depends on |
 |------|-----------|------------|
-| `phase7-zero-config-discovery.md` | `quicTunnel.enabled=true` is sufficient; endpoint discovery | nothing |
 | `udp-datagrams.md` | RFC 9221 unreliable datagrams for tunneled UDP | nothing |
 | `pipelined-stream-setup.md` | Remove the streamInfo/streamOK wait (verification-gated) | nothing |
 | `connection-migration.md` | Prove and harden client address migration | nothing |
