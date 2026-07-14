@@ -631,6 +631,47 @@ Plain resumption (without 0-RTT early data) is the right first step: it keeps th
 anti-replay analysis trivial and still removes the expensive part. Low effort, low
 risk, small but universal win.
 
+**Implemented, plain resumption only.** `Allow0RTT` is unset (false) everywhere —
+grep-clean across the repo. A `tls.ClientSessionCache` is attached to every QUIC
+client dial, one instance owned by the object that is actually created once per
+connector session in each package (`pkg/client/rootd`'s `session`;
+`pkg/client/agentpf`'s `clients`, via its `quicEndpointCache.cache` field) and
+never reset alongside the CA/cert re-fetch a manager restart triggers, so a stale
+ticket from before the restart simply fails to resume and falls back to a full
+handshake against the fresh CA. `quic.Conn.ConnectionState().TLS.DidResume` is
+logged at debug after every client dial and folded into the `session.transport`
+usage report as a `resumed` entry (present, and only ever `"true"`, when it
+happens).
+
+The plan flagged one bug candidate before implementation: the agent's QUIC
+listener (`cmd/traffic/cmd/agent/quicserver`) returns a `*tls.Config` built fresh
+on every handshake from its `GetConfigForClient` callback, and TLS session-ticket
+keys are normally lazily generated and cached *on* a `*tls.Config` — so the
+worry was that a fresh Config per handshake would mean fresh, unrelated keys
+every time and resumption could never succeed. Investigation (reading
+`crypto/tls`'s `handshake_server.go`/`handshake_server_tls13.go`, then
+confirming empirically) found this does not apply: the auto-rotated keys are
+derived from the *base* Config passed to `quic.Transport.Listen` — the one
+holding `GetConfigForClient`, which is constructed once and lives for the
+listener's lifetime — never from whatever `GetConfigForClient` returns, so a
+fresh return value per handshake does not fragment ticket-key state. Separately,
+and independently of ticket keys, a resumed ticket's embedded client certificate
+is re-verified against the Config's *current* `ClientCAs` on every resumption
+attempt, which is what makes a `SetMaterial` swap (a manager restart handing the
+agent a new signing CA) correctly defeat resumption of a ticket minted under the
+old CA. No code fix was needed; `getConfigForClient`'s doc comment now records
+this so it isn't re-litigated, and both properties (resumption succeeds across
+ordinary reconnects, and fails across a Material swap) are covered by tests
+against the real listener.
+
+Cross-*session* resumption (a ticket reused under a new telepresence session)
+was already handled: the ticket carries the original session's client identity
+(cert CN = session ID) forward into the resumed connection, and the manager's
+existing per-stream `SessionID == cert CN` check
+(`quictunnel/listener.go`'s `handleStream`) rejects it — proven by a test that
+resumes across two dials sharing one cache and declares a different session ID
+on the second connection's stream.
+
 ### Relay hardening
 
 Implemented:

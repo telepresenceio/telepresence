@@ -54,21 +54,169 @@ func startTestListener(t *testing.T, ctx context.Context, handler quictunnel.Tun
 
 func dialSession(t *testing.T, ctx context.Context, ca *quictunnel.CA, dialAddr, sessionID string) *quic.Conn {
 	t.Helper()
+	return dialSessionWithCache(t, ctx, ca, dialAddr, sessionID, nil)
+}
+
+// dialSessionWithCache is dialSession with an explicit tls.ClientSessionCache, so a test
+// can observe -- or deliberately misuse -- TLS session resumption across dials.
+func dialSessionWithCache(t *testing.T, ctx context.Context, ca *quictunnel.CA, dialAddr, sessionID string, cache tls.ClientSessionCache) *quic.Conn {
+	t.Helper()
 	certPEM, keyPEM, err := ca.MintClientCert(sessionID)
 	require.NoError(t, err)
 	clientCert, err := tls.X509KeyPair(certPEM, keyPEM)
 	require.NoError(t, err)
 
 	tlsConf := &tls.Config{
-		Certificates: []tls.Certificate{clientCert},
-		RootCAs:      ca.Pool(),
-		ServerName:   quictunnel.ServerName,
-		NextProtos:   []string{tunnel.QuicALPN},
+		Certificates:       []tls.Certificate{clientCert},
+		RootCAs:            ca.Pool(),
+		ServerName:         quictunnel.ServerName,
+		NextProtos:         []string{tunnel.QuicALPN},
+		ClientSessionCache: cache,
 	}
 	conn, err := quic.DialAddr(ctx, dialAddr, tlsConf, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.CloseWithError(0, "") })
 	return conn
+}
+
+// notifyingSessionCache wraps a real tls.ClientSessionCache and signals put so a test can
+// wait for the server's post-handshake session ticket to actually land before re-dialing,
+// instead of sleeping and hoping.
+type notifyingSessionCache struct {
+	tls.ClientSessionCache
+	put chan struct{}
+}
+
+func (c *notifyingSessionCache) Put(sessionKey string, cs *tls.ClientSessionState) {
+	c.ClientSessionCache.Put(sessionKey, cs)
+	select {
+	case c.put <- struct{}{}:
+	default:
+	}
+}
+
+func openTunnelStream(t *testing.T, ctx context.Context, conn *quic.Conn, sourcePort uint16, sessionID string) tunnel.Stream {
+	t.Helper()
+	qs, err := conn.OpenStreamSync(ctx)
+	require.NoError(t, err)
+	id := tunnel.NewConnID(types.ProtoTCP,
+		netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), sourcePort),
+		netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
+	client, err := tunnel.NewClientStream(ctx, tunnel.ClientToManager, tunnel.NewQuicClientStream(conn, qs),
+		id, tunnel.SessionID(sessionID), 0, 0)
+	require.NoError(t, err)
+	return client
+}
+
+// TestListener_ResumesOnRedialWithSharedCache is the manager-listener half of the
+// session-resumption acceptance criteria: a client that re-dials sharing the same
+// tls.ClientSessionCache resumes instead of paying a full handshake, and the resumed
+// connection's streams keep working.
+func TestListener_ResumesOnRedialWithSharedCache(t *testing.T) {
+	ctx, cancel := testContext(t, 10*time.Second)
+	defer cancel()
+
+	streamCh := make(chan tunnel.Stream, 2)
+	handler := func(_ context.Context, s tunnel.Stream) error {
+		streamCh <- s
+		return nil
+	}
+
+	ca, dialAddr := startTestListener(t, ctx, handler)
+	cache := &notifyingSessionCache{ClientSessionCache: tls.NewLRUClientSessionCache(16), put: make(chan struct{}, 1)}
+
+	conn1 := dialSessionWithCache(t, ctx, ca, dialAddr, "resume-session", cache)
+	require.False(t, conn1.ConnectionState().TLS.DidResume, "the first dial has no ticket to resume")
+
+	client1 := openTunnelStream(t, ctx, conn1, 1001, "resume-session")
+	select {
+	case <-streamCh:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for the first stream to be accepted")
+	}
+	require.NoError(t, client1.CloseSend(ctx))
+
+	select {
+	case <-cache.put:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for a session ticket to be cached")
+	}
+	require.NoError(t, conn1.CloseWithError(0, ""))
+
+	conn2 := dialSessionWithCache(t, ctx, ca, dialAddr, "resume-session", cache)
+	require.True(t, conn2.ConnectionState().TLS.DidResume, "re-dial with the same session cache must resume")
+
+	client2 := openTunnelStream(t, ctx, conn2, 1002, "resume-session")
+	select {
+	case <-streamCh:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for the resumed connection's stream to be accepted")
+	}
+	require.NoError(t, client2.CloseSend(ctx))
+}
+
+// TestListener_CrossSessionResumptionFailsClosed proves the correct-by-design failure
+// mode for TLS session resumption across telepresence sessions: a session ticket embeds
+// the client certificate presented during the original (full) handshake, so a connection
+// that resumes it carries that original identity regardless of which session's cache it
+// came from. A stream declaring a different session ID than that identity -- the shape a
+// stale cache carried over into a new telepresence session would produce -- must be
+// rejected, never silently served.
+func TestListener_CrossSessionResumptionFailsClosed(t *testing.T) {
+	ctx, cancel := testContext(t, 10*time.Second)
+	defer cancel()
+
+	streamCh := make(chan tunnel.Stream, 2)
+	handler := func(_ context.Context, s tunnel.Stream) error {
+		streamCh <- s
+		return nil
+	}
+
+	ca, dialAddr := startTestListener(t, ctx, handler)
+	cache := &notifyingSessionCache{ClientSessionCache: tls.NewLRUClientSessionCache(16), put: make(chan struct{}, 1)}
+
+	conn1 := dialSessionWithCache(t, ctx, ca, dialAddr, "session-a", cache)
+	client1 := openTunnelStream(t, ctx, conn1, 1001, "session-a")
+	select {
+	case <-streamCh:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for session A's stream to be accepted")
+	}
+	require.NoError(t, client1.CloseSend(ctx))
+
+	select {
+	case <-cache.put:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for a session ticket to be cached")
+	}
+	require.NoError(t, conn1.CloseWithError(0, ""))
+
+	// Re-dial with session A's cache -- as a new telepresence session that inherited a
+	// stale cache would -- but declare session B's ID on the resumed connection's
+	// stream, exactly as that new session's own tunnel code would.
+	conn2 := dialSessionWithCache(t, ctx, ca, dialAddr, "session-a", cache)
+	require.True(t, conn2.ConnectionState().TLS.DidResume,
+		"the second dial must actually resume for this test to exercise the intended scenario")
+
+	qs2, err := conn2.OpenStreamSync(ctx)
+	require.NoError(t, err)
+	id2 := tunnel.NewConnID(types.ProtoTCP,
+		netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1002),
+		netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
+	client2, err := tunnel.NewClientStream(ctx, tunnel.ClientToManager, tunnel.NewQuicClientStream(conn2, qs2),
+		id2, tunnel.SessionID("session-b"), 0, 0)
+	// As with TestListener_MismatchedSessionIsRejected, the rejection can surface either
+	// as NewClientStream's own error or, if that races the StreamOK reply, on first use.
+	if err == nil {
+		_, err = client2.Receive(ctx)
+	}
+	require.Error(t, err, "a resumed connection must not serve a stream for a session other than the one its ticket-carried certificate names")
+
+	select {
+	case <-streamCh:
+		t.Fatal("handler must not be invoked for a cross-session resumed stream")
+	case <-time.After(200 * time.Millisecond):
+	}
 }
 
 func TestListener_MatchingSessionIsServed(t *testing.T) {

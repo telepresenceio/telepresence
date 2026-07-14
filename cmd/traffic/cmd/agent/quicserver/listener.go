@@ -118,6 +118,15 @@ func New(podIP netip.Addr, port uint16, grpcServer *grpc.Server, initial Materia
 // SetMaterial can swap the certificate and client CA pool a running Listener uses
 // without tearing down the QUIC transport: Go's TLS stack calls this once per
 // handshake and uses the returned Config in place of the original.
+//
+// Returning a fresh *tls.Config on every call does not defeat TLS session-ticket
+// resumption: crypto/tls derives the auto-rotated ticket-encryption keys from the base
+// Config passed to Listen (the one holding GetConfigForClient), not from whatever this
+// method returns, and a resumed ticket's embedded client certificate is independently
+// re-verified against this Config's current ClientCAs -- so a ticket minted under a
+// since-replaced Material's CA (see SetMaterial) fails that re-verification and falls
+// back to a full handshake, without needing this method to track ticket-key state
+// itself.
 func (l *Listener) getConfigForClient(*tls.ClientHelloInfo) (*tls.Config, error) {
 	m := l.material.Load()
 	return &tls.Config{
