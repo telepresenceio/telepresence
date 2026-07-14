@@ -28,10 +28,12 @@ transport, and it is assembled only when everything else is complete
 * Keep commits logical and individually buildable; the branch history *is*
   the review narrative until phase 8.
 * Do not push and do not touch draft PR #4204; phase 8 owns both.
-* Per the rule in `AGENTS.md` ("Design Plans"): the concluding commit of
-  each work item deletes its own plan file from this directory; phase 8's
-  final commit deletes whatever remains (`design.md`, this README, and
-  `phase8-pr-assembly.md` itself).
+* A work item's plan file stays in this directory until the orchestrator's
+  review of that work item completes; the reviewer then deletes it in the
+  review-acceptance commit (owner's instruction, superseding the "concluding
+  commit deletes its own plan" convention for this branch). Phase 8's final
+  commit deletes whatever remains (`design.md`, this README, and
+  `phase8-pr-assembly.md` itself) — only after its own review.
 
 ## Branch and state
 
