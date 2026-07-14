@@ -581,6 +581,46 @@ test, assert no stream resets) and then documented, because it differentiates th
 design from both the port-forward (dies with the TCP connection) and from
 NAT-rebinding-hostile alternatives.
 
+**Measured and decided.** The forwarder-construction claim holds: a pure-Go
+NAT-rebind test in `cmd/traffic/cmd/quicforwarder` (no netns, no root — a `natProxy`
+swaps its forwarder-facing socket mid-transfer, exactly like a NAT re-mapping or an
+interface roam that leaves the client's own local socket usable) proves an 8 MiB
+transfer survives a mid-transfer rebind, survives two rebinds in one transfer, and
+survives a rebind followed by idling past the keep-alive interval on the new path
+alone — all via the same cold-path CID routing (`Router.Route`'s existing case (b),
+`routeByCID`) that RFC 9221 datagrams already rely on for their own short-header
+packets; migration needed no forwarder change because that path already existed
+and is exercised identically regardless of frame content.
+
+One case does not migrate, and is now precisely characterized rather than assumed:
+a rebind that straddles a single connection attempt's own Initial-packet retry (the
+handshake cache is keyed on source address, since no connection ID exists yet)
+leaves two independently-negotiated backend connections alive for what the client
+considers one `Dial()`; the client cannot reconcile them and the attempt fails
+cleanly. This is narrower than "any rebind during the handshake fails" — a rebind
+whose retry lands cleanly under one new source recovers the same way an
+established flow does.
+
+The client-side risk the plan flagged — rootd tearing the session down before
+migration gets a chance — does not apply, but not because it was guarded against:
+`pkg/client/rootd` has no network- or interface-change monitoring of any kind (no
+netlink route subscription, no OS-level path-change API, no periodic route/gateway
+polling). Every recovery path in rootd (`watchClusterInfo`'s `WatchWithRetry`,
+`quicReprobeLoop`, `agentpf.Clients`' per-agent dead latch) is reactive to an
+already-observed failure on a specific connection, never triggered by detecting a
+network change as such. That means a NAT re-mapping is invisible to rootd end to
+end (nothing reacts, which is correct — the existing connection just keeps
+working), but it also means a genuine change to the client's own local address is
+not actively migrated: quic-go's client-side path addition (`Conn.AddPath`) requires
+the application to detect the change and call it, and nothing in
+`pkg/client/rootd/quic.go` does. A true interface roam therefore degrades like any
+other QUIC path failure — idle timeout, fallback to port-forwarded gRPC, background
+re-probe onto a brand-new connection with in-flight streams lost — rather than
+being torn down aggressively. Building active client-side path migration (OS-level
+network-change detection plus `AddPath`) is real, non-trivial new functionality and
+is left as a follow-up; it was out of scope for proving the forwarder's own
+construction claim.
+
 ### 0-RTT session resumption
 
 Reconnects — daemon restart, `telepresence quit`/`connect`, fallback recovery —

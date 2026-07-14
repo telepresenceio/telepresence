@@ -149,6 +149,53 @@ recovers on its own once the endpoint is reachable again — for example after
 a traffic-manager restart, without a `telepresence quit`/`connect` cycle.
 `telepresence status` returns to `quic (host:port)` once a retry succeeds.
 
+## Connection migration
+
+A QUIC connection is not tied to the client's network 4-tuple the way the
+port-forwarded TCP transport is. Once a connection is established, the
+forwarder routes its packets by the connection ID the traffic-manager (or
+agent) assigned during the handshake, never by the client's source address;
+RFC 9221 datagrams ride the same connection-ID-routed packets as everything
+else, with no special case. A change in the client's source address — a NAT
+re-mapping, or roaming to a network whose local address the OS keeps usable
+on the same socket — therefore does not interrupt an established connection:
+the forwarder sees the next packet from an unrecognized source, decodes its
+connection ID, and forwards it to the same backend exactly as it would for a
+brand-new connection, while quic-go's own path validation
+(PATH_CHALLENGE/PATH_RESPONSE) confirms the new path before trusting it.
+This is proven end to end, without a cluster, by
+`cmd/traffic/cmd/quicforwarder`'s NAT-rebind tests: an 8 MiB transfer
+survives a mid-transfer rebind, a connection survives two rebinds in a row,
+and a rebind followed by an idle period past the keep-alive interval still
+leaves the connection alive on the new path.
+
+Two things do not survive a rebind:
+
+- **A source change before the handshake completes.** Until the manager has
+  assigned a connection ID, the forwarder can only route by SNI, keyed on
+  the client's source address. A rebind that straddles the handshake's own
+  Initial-packet retry leaves two independently-negotiated connection
+  attempts alive for what the client considers a single dial, which it
+  cannot reconcile; the dial fails and the client is left to retry, the
+  same as against any other unreachable endpoint.
+- **A change to the client's own local address**, as opposed to a NAT
+  re-mapping that leaves the client's local socket untouched, is not
+  actively migrated today. quic-go supports adding a new local path to an
+  existing connection, but only if the application detects the network
+  change and requests it; the root daemon does not monitor the
+  workstation's network or interface state, so nothing currently makes
+  that call. A genuine interface roam degrades the same way any other QUIC
+  path failure does: the connection idles out, the session falls back to
+  the port-forwarded transport, and the background re-probe described
+  above re-establishes a fresh QUIC connection once the new path is
+  reachable — but in-flight streams on the old connection are not carried
+  over to it.
+
+The port-forwarded fallback transport has no migration property of its own:
+it is plain TCP through the Kubernetes API server, and a network change
+that breaks the underlying connection requires a reconnect, the same as any
+other TCP-based tool.
+
 ## Throughput and node tuning
 
 QUIC runs in userspace over UDP, so its bulk throughput depends on the UDP
