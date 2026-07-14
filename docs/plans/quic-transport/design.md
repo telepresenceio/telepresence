@@ -479,6 +479,37 @@ This should be validated by its own experiment: an inner-QUIC-through-the-tunnel
 benchmark (HTTP/3 client against an in-cluster server), designed load-first with
 the lessons below.
 
+**Implemented for the client↔manager path only** (`pkg/tunnel/datagram.go`,
+`pkg/client/rootd/quic.go`, `cmd/traffic/cmd/manager/quictunnel/listener.go`). The
+agent path (`cmd/traffic/cmd/agent/quicserver`) was out of scope and remains
+unimplemented, because it isn't the same kind of connection: the agent's QUIC
+listener serves the agent's whole gRPC server over QUIC streams (each stream is one
+gRPC call, framed by gRPC itself), whereas the client↔manager path is
+`pkg/tunnel`'s own TunnelMessage framing directly on a QUIC stream, one stream per
+flow. A tunneled UDP payload bound for an agent is therefore never a bare
+`pkg/tunnel` Normal message sitting on its own stream the way it is here — it is
+already wrapped inside a gRPC `Tunnel` streaming call's own framing, itself inside a
+QUIC stream. Datagram carriage for that path would need:
+
+* A dispatch registry on the agent side keyed by ConnID, analogous to this change's
+  `datagramConn`/`AttachDatagramRoute`, but reachable from *inside* the agent's gRPC
+  `Tunnel` handler rather than from a listener that owns the raw stream directly.
+* The agent's `quicserver` listener to enable `EnableDatagrams` on its `quic.Config`
+  and expose the accepted `*quic.Conn` to that handler (today the gRPC server is
+  handed a `net.Listener` adapter over the QUIC stream and never sees the
+  connection itself).
+* `pkg/client/agentpf`'s dialer to do the same on the client's side of that
+  connection, and to carry a decoded ConnID similarly into its own gRPC-based
+  stream plumbing (it wraps a QUIC stream as a `net.Conn` for a real gRPC client,
+  not `pkg/tunnel`'s framing, so it cannot reuse `AttachDatagramRoute` or
+  `DatagramCapable` as they stand).
+
+None of this is free, and the client↔manager path is where the design's own
+measurements (see "What measurement taught us") found the head-of-line cost that
+motivates datagrams in the first place — a personal intercept's traffic to an
+agent is comparatively low-volume and short-lived. Building it should wait for a
+concrete case that needs it.
+
 ### Pipelined stream setup: remove a round trip from every new flow
 
 `NewClientStream` sends `streamInfo` and then **blocks waiting for** `streamOK`

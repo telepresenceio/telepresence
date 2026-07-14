@@ -195,6 +195,17 @@ several. No coordinated upgrade is required in either direction.
 
 ## Current limitations
 
-- Tunneled UDP is carried over reliable QUIC streams, like it is over the
-  port-forwarded transport; QUIC's unreliable datagrams are not used yet.
+- Tunneled UDP between the client and the traffic-manager is a hybrid: a
+  payload that fits the connection's datagram budget rides an unreliable
+  QUIC datagram (RFC 9221), and an oversized one falls back to the flow's
+  reliable stream, per message -- there is no negotiation or latching, so
+  an occasional oversized payload never disables the fast path for the
+  rest of the flow. Both ends must have negotiated datagram support for
+  this to happen at all; against an older peer, or over the gRPC fallback
+  transport, every payload keeps arriving on the stream exactly as
+  before. Direct client-to-agent UDP flows are unaffected by this: the
+  agent's QUIC listener (`cmd/traffic/cmd/agent/quicserver`) serves the
+  agent's gRPC server over QUIC streams, so a tunnel message there lives
+  *inside* a gRPC frame rather than in pkg/tunnel's own framing, and
+  datagram carriage for that path is unimplemented.
 - Direct client-to-agent port-forwards do not use QUIC.
