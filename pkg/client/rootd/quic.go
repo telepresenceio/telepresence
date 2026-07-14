@@ -107,9 +107,13 @@ func (s *session) probeQuicTunnel(ctx context.Context) quicProbeResult {
 	// The connection is expected to be idle whenever no tunnel streams are active, so
 	// it must be kept alive; without this, quic-go's idle timeout tears it down and the
 	// session falls back to the port-forwarded transport until the next re-probe.
+	// EnableDatagrams lets a UDP flow's payload ride an unreliable QUIC datagram
+	// instead of its stream when the manager negotiated it too; an older manager
+	// simply never sends one and every payload keeps arriving on the stream as before.
 	qCfg := &quic.Config{
 		MaxIdleTimeout:  time.Minute,
 		KeepAlivePeriod: 15 * time.Second,
+		EnableDatagrams: true,
 	}
 	conn, addr, err := dialQuicCandidates(dialCtx, quicCandidateAddrs(ep), tlsConf, qCfg)
 	if err != nil {
@@ -148,6 +152,14 @@ func (s *session) activateQuicTunnel(ctx context.Context, conn *quic.Conn, addr,
 	s.quicTunnelProvider.Store(newQuicFallbackProvider(ctx, tunnel.NewQuicProvider(conn), func() tunnel.Provider {
 		return tunnel.ManagerProvider(s.managerClient())
 	}, conn, s.onQuicFallback(ctx)))
+	// The receive loop this starts is scoped to conn, not to the session: it exits on
+	// its own once conn stops yielding datagrams, which happens both when the session
+	// ends (session.stop closes s.quicConn) and when this connection is later
+	// superseded by a reprobe (quicFallbackProvider closes it on the first tripped
+	// error). s.datagramCounters is session-scoped and accumulates across every
+	// connection activateQuicTunnel is ever called with, so the total logged at
+	// session end covers every reconnect, not just the last one.
+	tunnel.StartDatagramReceiver(ctx, conn, s.datagramCounters)
 	reportTransport(ctx, TransportQUIC, reason)
 }
 

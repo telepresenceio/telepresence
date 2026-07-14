@@ -242,6 +242,12 @@ type session struct {
 	// bare session{} and never trip a provider.
 	quicReprobeTrigger chan struct{}
 
+	// datagramCounters accumulates RFC 9221 datagram sent/received/fallback/unknown-conn
+	// totals across every QUIC connection this session ever activates (initial dial and
+	// every reprobe recovery share this one instance), so the summary logged at session
+	// end in stop() covers the whole session rather than just its last connection.
+	datagramCounters *tunnel.DatagramCounters
+
 	// transportStatus is the observable tunnel transport for manager-bound streams. A
 	// nil pointer means the default steady state: gRPC, because QUIC was never dialed
 	// (older manager, endpoint disabled, unimplemented, or dial failed). Replaced, never
@@ -347,6 +353,7 @@ func newSession(
 	s := &session{
 		Cluster:               cluster,
 		handlers:              tunnel.NewPool(),
+		datagramCounters:      &tunnel.DatagramCounters{},
 		rndSource:             rand.NewSource(time.Now().UnixNano()),
 		session:               mi.Session,
 		managerConn:           managerConn,
@@ -1509,6 +1516,7 @@ func (s *session) stop() {
 
 	if conn := s.quicConn.Load(); conn != nil {
 		clog.Debug(s, "Closing QUIC tunnel connection to traffic-manager")
+		clog.Infof(s, "QUIC tunnel datagram counters: %s", s.datagramCounters)
 		_ = conn.CloseWithError(0, "session closed")
 	}
 

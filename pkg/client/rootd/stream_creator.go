@@ -131,8 +131,24 @@ func (s *session) streamCreator() tunnel.StreamCreator {
 		}
 
 		tc := client.GetConfig(c).Timeouts()
-		return tunnel.NewClientStream(
+		cs, err := tunnel.NewClientStream(
 			c, tunnel.TunToClient, ct, id, tunnel.SessionID(s.session.SessionId), tc.Get(client.TimeoutRoundtripLatency), tc.Get(client.TimeoutEndpointDial))
+		if err != nil {
+			return nil, err
+		}
+		if id.Protocol() == types.ProtoUDP {
+			// A no-op unless ct is backed by a QUIC connection that negotiated
+			// datagrams (never true for tp == s.agentClients.* today, since agentpf
+			// wraps a QUIC stream as a net.Conn for a real gRPC client rather than
+			// using pkg/tunnel's own framing); detach is called once this flow's
+			// context ends rather than here, since the stream is only just starting.
+			detach := tunnel.AttachDatagramRoute(cs)
+			go func() {
+				<-c.Done()
+				detach()
+			}()
+		}
+		return cs, nil
 	}
 }
 

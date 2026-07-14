@@ -118,8 +118,13 @@ var datagramConns sync.Map //nolint:gochecknoglobals // keyed by *quic.Conn iden
 // every DATAGRAM frame conn receives and dispatches it to whichever flow last called
 // AttachDatagramRoute for that ConnID, counting the outcome in counters. The goroutine
 // -- and conn's routing table with it -- exits when ctx is done or conn stops yielding
-// datagrams, which is always the case once conn is closed.
+// datagrams, which is always the case once conn is closed. A nil conn (as tests that
+// exercise the surrounding transport-selection logic without a real dial may pass) is
+// a no-op: there is nothing to receive from.
 func StartDatagramReceiver(ctx context.Context, conn *quic.Conn, counters *DatagramCounters) {
+	if conn == nil {
+		return
+	}
 	dc := &datagramConn{counters: counters}
 	datagramConns.Store(conn, dc)
 	go func() {
