@@ -5,6 +5,8 @@ package quicforwarder
 import (
 	"encoding/binary"
 	"net"
+	"os"
+	"strconv"
 	"sync"
 	"unsafe"
 
@@ -25,6 +27,14 @@ import (
 //
 //nolint:gochecknoglobals // process-wide kernel capability, probed once and cached.
 var gsoSupported = sync.OnceValue(func() bool {
+	// Honor quic-go's own escape hatch so a single env var disables UDP GSO
+	// uniformly across every process in the QUIC path (manager, agent, and this
+	// forwarder). Needed when loss is injected with tc netem for testing: netem
+	// sits above the segmentation step, so a GSO super-packet is dropped as one
+	// unit of up to ~47 datagrams, wildly distorting the effective loss rate.
+	if disabled, err := strconv.ParseBool(os.Getenv("QUIC_GO_DISABLE_GSO")); err == nil && disabled {
+		return false
+	}
 	c, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
 	if err != nil {
 		return false

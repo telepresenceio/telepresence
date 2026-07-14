@@ -5,8 +5,11 @@ package perf
 import (
 	"context"
 	"encoding/csv"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -46,8 +49,34 @@ type config struct {
 	// netemIface is the host interface `tc qdisc ... netem` is applied to. This
 	// must be the interface that carries tunnel transport packets toward the
 	// cluster (NOT the telepresence VIF, which carries decapsulated traffic).
-	// Empty disables loss injection (a clean-network baseline run).
+	// Empty disables loss injection (a clean-network baseline run). Loss on this
+	// interface is client-EGRESS only: it degrades ACKs and requests but cannot
+	// touch download payloads, so it cannot produce head-of-line blocking on a
+	// download workload. Use impairNode for that.
 	netemIface string
+
+	// impairNode is the name of a kind node docker container to impair instead of
+	// a host interface. The netem qdisc goes on the node's eth0 INSIDE the
+	// container, whose egress is the cluster->client direction -- i.e. ingress
+	// loss on the very path the download payloads ride, which is what makes
+	// head-of-line blocking observable at all. The qdisc also carries a constant
+	// netemDelay in every window, including 0% loss: head-of-line blocking is a
+	// function of RTT (recovery takes a round trip), and the windows are only
+	// comparable if they all share the same RTT.
+	impairNode string
+
+	// netemDelay is the one-way delay netem adds in impairNode mode (RTT as seen
+	// by the transports, since the return direction is unimpaired).
+	netemDelay string
+
+	// kubeContext is the kubeconfig context every kubectl and telepresence command
+	// is pinned to with an explicit --context. It is REQUIRED: the experiment
+	// installs and uninstalls a traffic-manager, and inheriting the ambient
+	// current-context is unsafe on a shared machine, where a concurrent
+	// `gcloud container clusters get-credentials` rewrites ~/.kube/config and
+	// silently repoints current-context (this pointed a kind run at a production
+	// cluster once). Pinning makes ambient current-context irrelevant.
+	kubeContext string
 
 	// outDir is where CSV results are written.
 	outDir string
@@ -67,14 +96,66 @@ func loadConfig(t *testing.T) config {
 		quicExternalHost: os.Getenv("PERF_QUIC_EXTERNAL_HOST"),
 		quicNodePort:     envInt("PERF_QUIC_NODEPORT", 30777),
 		netemIface:       os.Getenv("PERF_NETEM_IFACE"),
+		impairNode:       os.Getenv("PERF_IMPAIR_NODE"),
+		netemDelay:       envOr("PERF_NETEM_DELAY", "20ms"),
+		kubeContext:      os.Getenv("PERF_KUBE_CONTEXT"),
 		outDir:           envOr("PERF_OUT_DIR", filepath.Join(repoRoot, "perf", "results")),
 	}
+	if c.netemIface != "" && c.impairNode != "" {
+		t.Fatal("PERF_NETEM_IFACE and PERF_IMPAIR_NODE are mutually exclusive; pick one impairment point")
+	}
+	if c.kubeContext == "" {
+		t.Fatal("PERF_KUBE_CONTEXT is required: this experiment installs and uninstalls a " +
+			"traffic-manager, and must not inherit the ambient kubectl current-context " +
+			"(a concurrent `gcloud ... get-credentials` can repoint it mid-run). Set it to " +
+			"the target context, e.g. kind-dev.")
+	}
+	c.assertContextExists(t)
 	if c.imageTag == "" {
 		// Match the version the local binary reports, so a `local` image built
 		// from this tree is the one that gets installed.
 		c.imageTag = strings.TrimPrefix(clientVersion(t, c.telepresence), "v")
 	}
 	return c
+}
+
+// assertContextExists fails the test unless kubeContext is a real context in the
+// kubeconfig. It is the fail-fast guard that turns a misconfigured or hijacked
+// environment into an immediate, unambiguous error instead of a run against the
+// wrong cluster.
+func (c config) assertContextExists(t *testing.T) {
+	t.Helper()
+	out, err := exec.Command("kubectl", "config", "get-contexts", "-o", "name").Output()
+	if err != nil {
+		t.Fatalf("list kubeconfig contexts: %v", err)
+	}
+	for _, name := range strings.Fields(string(out)) {
+		if name == c.kubeContext {
+			return
+		}
+	}
+	t.Fatalf("PERF_KUBE_CONTEXT %q is not a context in the kubeconfig; available: %s",
+		c.kubeContext, strings.Join(strings.Fields(string(out)), " "))
+}
+
+// kubectl runs a kubectl command pinned to c.kubeContext with --context, so the
+// ambient current-context is irrelevant.
+func (c config) kubectl(t *testing.T, args ...string) {
+	t.Helper()
+	run(t, "kubectl", append([]string{"--context", c.kubeContext}, args...)...)
+}
+
+// kubectlQuiet is the best-effort (cleanup) form of kubectl, still context-pinned.
+func (c config) kubectlQuiet(args ...string) error {
+	return runQuiet("kubectl", append([]string{"--context", c.kubeContext}, args...)...)
+}
+
+// tele runs a telepresence command pinned to c.kubeContext. Only commands that talk
+// to the cluster (connect, helm) take --context; daemon-only commands (quit, status)
+// do not and must not be given it.
+func (c config) tele(t *testing.T, args ...string) {
+	t.Helper()
+	run(t, c.telepresence, append(args, "--context", c.kubeContext)...)
 }
 
 // transport is one arm of an experiment: the manager is installed with QUIC
@@ -105,24 +186,42 @@ func (c config) helmInstall(t *testing.T, tr transport) {
 			"--set", fmt.Sprintf("quicTunnel.externalPort=%d", c.quicNodePort),
 		)
 	}
-	run(t, c.telepresence, args...)
-	run(t, "kubectl", "-n", c.managerNamespace, "rollout", "status",
+	c.tele(t, args...)
+	c.kubectl(t, "-n", c.managerNamespace, "rollout", "status",
 		"deploy/traffic-manager", "--timeout=120s")
 	if tr == transportQUIC {
-		run(t, "kubectl", "-n", c.managerNamespace, "rollout", "status",
+		c.kubectl(t, "-n", c.managerNamespace, "rollout", "status",
+			"deploy/quic-forwarder", "--timeout=120s")
+	}
+	if tr == transportQUIC && c.impairNode != "" {
+		// In impairNode mode the netem qdisc sits above the segmentation step
+		// inside the node, so quic-go's (and the forwarder's) UDP GSO
+		// super-packets would each be dropped as one unit of up to ~47 datagrams
+		// while the TCP arm -- with tso/gso disabled on the node's eth0 -- loses
+		// wire-sized segments. Disabling UDP GSO in the senders makes the two
+		// arms lose comparable units.
+		c.kubectl(t, "-n", c.managerNamespace, "set", "env",
+			"deploy/traffic-manager", "QUIC_GO_DISABLE_GSO=true")
+		c.kubectl(t, "-n", c.managerNamespace, "set", "env",
+			"deploy/quic-forwarder", "QUIC_GO_DISABLE_GSO=true")
+		c.kubectl(t, "-n", c.managerNamespace, "rollout", "status",
+			"deploy/traffic-manager", "--timeout=120s")
+		c.kubectl(t, "-n", c.managerNamespace, "rollout", "status",
 			"deploy/quic-forwarder", "--timeout=120s")
 	}
 }
 
 func (c config) helmUninstall(t *testing.T) {
 	t.Helper()
-	// Best-effort: the arm may have failed before installing.
-	_ = exec.Command(c.telepresence, "helm", "uninstall").Run()
+	// Best-effort: the arm may have failed before installing. Context-pinned like
+	// every other cluster command, so a hijacked current-context cannot send this
+	// uninstall at some other cluster's traffic-manager.
+	_ = exec.Command(c.telepresence, "helm", "uninstall", "--context", c.kubeContext).Run()
 }
 
 func (c config) connect(t *testing.T) {
 	t.Helper()
-	run(t, c.telepresence, "connect", "--namespace", c.appNamespace)
+	c.tele(t, "connect", "--namespace", c.appNamespace)
 }
 
 func (c config) quit(t *testing.T) {
@@ -173,6 +272,9 @@ func (c config) assertTransport(t *testing.T, want transport) {
 // at the configured rate.
 func (c config) applyLoss(t *testing.T, lossPct float64) func() {
 	t.Helper()
+	if c.impairNode != "" {
+		return c.applyNodeImpairment(t, lossPct)
+	}
 	if c.netemIface == "" || lossPct <= 0 {
 		return func() {}
 	}
@@ -190,13 +292,35 @@ func (c config) applyLoss(t *testing.T, lossPct float64) func() {
 	return del
 }
 
-// offloadFlags maps the feature names `ethtool -k` reports to the short flags
-// `ethtool -K` sets. Only transmit-side segmentation offloads matter here: loss
-// is injected on egress only, and receive-side coalescing (GRO/LRO) happens
-// below any ingress impairment point anyway.
-var offloadFlags = map[string]string{
-	"tcp-segmentation-offload":     "tso",
-	"generic-segmentation-offload": "gso",
+// applyNodeImpairment impairs eth0 inside the kind node container c.impairNode:
+// netemDelay of one-way delay in every window (see the impairNode field for why the
+// 0%-loss window carries it too) plus lossPct% loss, with tso/gso disabled on the
+// node's eth0 so the TCP arm loses wire-sized segments rather than pre-segmentation
+// super-packets. Everything runs via docker exec, so no host interface or sudo is
+// involved, and the returned cleanup restores the node completely.
+func (c config) applyNodeImpairment(t *testing.T, lossPct float64) func() {
+	t.Helper()
+	run(t, "docker", "exec", c.impairNode, "ethtool", "-K", "eth0", "tso", "off", "gso", "off")
+	netem := []string{
+		"exec", c.impairNode, "tc", "qdisc", "replace", "dev", "eth0", "root",
+		"netem", "delay", c.netemDelay,
+	}
+	if lossPct > 0 {
+		netem = append(netem, "loss", fmt.Sprintf("%g%%", lossPct))
+	}
+	run(t, "docker", netem...)
+	del := func() {
+		_ = runQuiet("docker", "exec", c.impairNode, "tc", "qdisc", "del", "dev", "eth0", "root")
+		_ = runQuiet("docker", "exec", c.impairNode, "ethtool", "-K", "eth0", "tso", "on", "gso", "on")
+	}
+	t.Cleanup(del)
+	return del
+}
+
+// impairing reports whether any loss-injection point is configured; without one the
+// experiment records a clean-network baseline that must not be asserted on.
+func (c config) impairing() bool {
+	return c.netemIface != "" || c.impairNode != ""
 }
 
 // disableSegmentationOffloads turns off the transmit segmentation offloads that
@@ -204,6 +328,14 @@ var offloadFlags = map[string]string{
 // exactly those, so a host where an offload was already off is left untouched.
 func disableSegmentationOffloads(t *testing.T, iface string) func() {
 	t.Helper()
+	// Feature names as `ethtool -k` reports them -> the short flags `ethtool -K`
+	// sets. Only transmit-side segmentation offloads matter here: loss is injected
+	// on egress only, and receive-side coalescing (GRO/LRO) happens below any
+	// ingress impairment point anyway.
+	offloadFlags := map[string]string{
+		"tcp-segmentation-offload":     "tso",
+		"generic-segmentation-offload": "gso",
+	}
 	out, err := exec.Command("ethtool", "-k", iface).Output()
 	if err != nil {
 		t.Fatalf("ethtool -k %s: %v", iface, err)
@@ -234,12 +366,12 @@ type streamResult struct {
 }
 
 // warmup drives the payload path until it flows: first single downloads with
-// retries (a fresh session's DNS and tunnel may lag connect), then one full
-// concurrent window whose timings are discarded. Without this, session
-// establishment, nginx page-cache population, and congestion-control ramp-up
-// all land in the first measured window and make it incomparable to the later
-// ones.
-func (c config) warmup(t *testing.T, streams int) {
+// retries (a fresh session's DNS and tunnel may lag connect), then a short
+// full-concurrency request burst whose timings are discarded. Without this,
+// session establishment, nginx page-cache population, and congestion-control
+// ramp-up all land in the first measured window and make it incomparable to
+// the later ones.
+func (c config) warmup(t *testing.T, workers, reqBytes int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Minute)
 	for {
@@ -255,11 +387,11 @@ func (c config) warmup(t *testing.T, streams int) {
 		t.Logf("warmup: %v; retrying", r.err)
 		time.Sleep(2 * time.Second)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	results := runConcurrentDownloads(ctx, streams)
+	results := runRequestWorkers(ctx, workers, reqBytes, 0, 5*time.Second)
 	if p := summarize(results); p.failures > 0 {
-		t.Logf("warmup window: %d/%d streams failed", p.failures, streams)
+		t.Logf("warmup window: %d of %d requests failed", p.failures, len(results))
 		logFailures(t, results)
 	}
 }
@@ -294,22 +426,54 @@ func logFailures(t *testing.T, results []streamResult) {
 // must match exp1PayloadBytes.
 const payloadURL = "http://perf-payload/payload.bin"
 
-// runConcurrentDownloads issues `streams` concurrent GETs of the payload from
-// the perf workload through the tunnel, timing each, and returns the per-stream
-// results. The URL is resolved via the cluster DNS name, so the traffic rides
-// the VPN (manager tunnel) -- exactly the shared transport whose head-of-line
-// behavior the experiment measures.
-func runConcurrentDownloads(ctx context.Context, streams int) []streamResult {
-	results := make([]streamResult, streams)
+// runRequestWorkers runs `workers` goroutines for the duration dur, each issuing
+// sequential GETs of the first reqBytes bytes of the payload over its OWN persistent
+// HTTP connection, pausing think between requests, and returns every request's
+// result. One worker therefore maps to one long-lived TCP flow through the tunnel
+// for the whole window, which is the shape that exposes head-of-line blocking: on
+// the shared gRPC transport a single lost packet stalls the in-order byte stream
+// every worker multiplexes onto, so unrelated requests wait out the retransmit;
+// over QUIC each flow is its own stream and only the punctured one waits. reqBytes
+// must be small enough to fit a congestion window, and (workers, reqBytes, think)
+// must together offer a load well below the shared connection's loss-limited
+// capacity -- see the experiment's knobs for why both matter.
+func runRequestWorkers(ctx context.Context, workers, reqBytes int, think, dur time.Duration) []streamResult {
+	deadline := time.Now().Add(dur)
+	resCh := make(chan streamResult, 1024)
 	var wg sync.WaitGroup
-	wg.Add(streams)
-	for i := range streams {
-		go func(i int) {
+	wg.Add(workers)
+	for range workers {
+		go func() {
 			defer wg.Done()
-			results[i] = timedGet(ctx, payloadURL)
-		}(i)
+			client := &http.Client{Transport: &http.Transport{MaxConnsPerHost: 1}}
+			defer client.CloseIdleConnections()
+			for time.Now().Before(deadline) {
+				reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+				r := timedClientGet(reqCtx, client, payloadURL, reqBytes)
+				cancel()
+				select {
+				case resCh <- r:
+				case <-ctx.Done():
+					return
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				if think > 0 {
+					select {
+					case <-time.After(think):
+					case <-ctx.Done():
+						return
+					}
+				}
+			}
+		}()
 	}
-	wg.Wait()
+	go func() { wg.Wait(); close(resCh) }()
+	var results []streamResult
+	for r := range resCh {
+		results = append(results, r)
+	}
 	return results
 }
 
@@ -370,7 +534,7 @@ func writeCSV(t *testing.T, outDir, experiment string, rows [][]string) string {
 	}
 	defer f.Close()
 	w := csv.NewWriter(f)
-	if os.IsNotExist(statErr) {
+	if errors.Is(statErr, fs.ErrNotExist) {
 		_ = w.Write([]string{"timestamp", "transport", "loss_pct", "streams", "payload_bytes", "p50_ms", "p95_ms", "p99_ms", "failures", "n"})
 	}
 	for _, row := range rows {

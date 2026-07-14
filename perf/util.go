@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -107,15 +108,26 @@ func parseTunnelTransport(statusJSON []byte) string {
 // whole transfer took. The body is fully read so the timing reflects the
 // complete download, which is what a stalled shared connection lengthens.
 func timedGet(ctx context.Context, url string) streamResult {
+	// A fresh client per request so the streams do not share an HTTP keep-alive
+	// pool on the client side -- each is its own TCP connection into the tunnel,
+	// which is what makes them independent flows to multiplex (or not).
+	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	defer client.CloseIdleConnections()
+	return timedClientGet(ctx, client, url, 0)
+}
+
+// timedClientGet performs one GET on client -- of the first rangeBytes bytes when
+// rangeBytes > 0, of the whole object otherwise -- draining the body and timing the
+// complete exchange.
+func timedClientGet(ctx context.Context, client *http.Client, url string, rangeBytes int) streamResult {
 	start := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return streamResult{err: err}
 	}
-	// A fresh client per request so the streams do not share an HTTP keep-alive
-	// pool on the client side -- each is its own TCP connection into the tunnel,
-	// which is what makes them independent flows to multiplex (or not).
-	client := &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
+	if rangeBytes > 0 {
+		req.Header.Set("Range", fmt.Sprintf("bytes=0-%d", rangeBytes-1))
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return streamResult{err: err}
