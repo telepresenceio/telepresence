@@ -147,8 +147,9 @@ func startBenchTCPServer(tb testing.TB) (addr string, closer func()) {
 }
 
 // startBenchForwarder puts the production forwarder in front of backendAddr and
-// returns the forwarder's dialable address.
-func startBenchForwarder(tb testing.TB, backendAddr string) (addr string, closer func()) {
+// returns the forwarder's dialable address and the *Forwarder itself, for tests that
+// need to inspect its internal state (e.g. flow-table size).
+func startBenchForwarder(tb testing.TB, backendAddr string) (addr string, fwd *Forwarder, closer func()) {
 	tb.Helper()
 	ap := netip.MustParseAddrPort(backendAddr)
 	allowlist := NewAllowlist(0)
@@ -161,6 +162,7 @@ func startBenchForwarder(tb testing.TB, backendAddr string) (addr string, closer
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() { _ = fwd.Serve(ctx) }()
 	return net.JoinHostPort("127.0.0.1", fmt.Sprint(fwd.front.LocalAddr().(*net.UDPAddr).Port)),
+		fwd,
 		func() { cancel(); _ = fwd.front.Close() }
 }
 
@@ -237,7 +239,7 @@ func BenchmarkThroughputQuicDirect(b *testing.B) {
 func BenchmarkThroughputQuicForwarded(b *testing.B) {
 	backendAddr, closeSrv := startBenchQuicServer(b)
 	defer closeSrv()
-	fwdAddr, closeFwd := startBenchForwarder(b, backendAddr)
+	fwdAddr, _, closeFwd := startBenchForwarder(b, backendAddr)
 	defer closeFwd()
 	conn := dialBenchQuic(b, fwdAddr)
 	defer func() { _ = conn.CloseWithError(0, "") }()
@@ -253,7 +255,7 @@ func BenchmarkThroughputQuicForwarded(b *testing.B) {
 func BenchmarkThroughputQuicForwardedConcurrent50(b *testing.B) {
 	backendAddr, closeSrv := startBenchQuicServer(b)
 	defer closeSrv()
-	fwdAddr, closeFwd := startBenchForwarder(b, backendAddr)
+	fwdAddr, _, closeFwd := startBenchForwarder(b, backendAddr)
 	defer closeFwd()
 	conn := dialBenchQuic(b, fwdAddr)
 	defer func() { _ = conn.CloseWithError(0, "") }()
