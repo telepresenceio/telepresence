@@ -142,6 +142,13 @@ The root daemon logs `QUIC tunnel transport active (host:port)` on a
 successful upgrade, and the traffic-manager logs
 `QUIC tunnel listener started` when the listener is enabled.
 
+A session that falls back to `grpc (fallback)` is not stuck there: the root
+daemon retries the QUIC dial in the background, re-fetching the endpoint
+descriptor (a fresh CA and client certificate) on every attempt, so it
+recovers on its own once the endpoint is reachable again — for example after
+a traffic-manager restart, without a `telepresence quit`/`connect` cycle.
+`telepresence status` returns to `quic (host:port)` once a retry succeeds.
+
 ## Throughput and node tuning
 
 QUIC runs in userspace over UDP, so its bulk throughput depends on the UDP
@@ -181,6 +188,4 @@ several. No coordinated upgrade is required in either direction.
 
 - Tunneled UDP is carried over reliable QUIC streams, like it is over the
   port-forwarded transport; QUIC's unreliable datagrams are not used yet.
-- A session that fell back to the port-forwarded transport does not re-probe
-  the QUIC endpoint until the next connect.
 - Direct client-to-agent port-forwards do not use QUIC.

@@ -17,6 +17,7 @@ import (
 	"google.golang.org/grpc"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/agentpf"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
@@ -235,6 +236,98 @@ func TestQuicFallbackProvider_OnFallbackUpdatesTransportStatus(t *testing.T) {
 	_, err = p.Tunnel(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, sink.Drain(0), 0, "onFallback (and its usage report) must fire exactly once")
+}
+
+// --- re-probe ------------------------------------------------------------------------
+
+// fakeAgentClients is an agentpf.Clients that only implements ResetQuicEndpoint, by
+// embedding a nil agentpf.Clients: attemptReprobe only ever calls that one method on
+// session.agentClients, so a call to anything else here panics loudly rather than
+// silently succeeding.
+type fakeAgentClients struct {
+	agentpf.Clients
+	resets int
+}
+
+func (f *fakeAgentClients) ResetQuicEndpoint() { f.resets++ }
+
+// TestSession_QuicReprobe_RecoversAfterFallbackTrip is the unit-level proof of the
+// re-probe design: a quicFallbackProvider trips into fallback through the exact
+// onFallback callback production wires up (onQuicFallback), which wakes the reprobe
+// trigger; a fake prober is then retried exactly as quicReprobeLoop would retry it
+// (advancing the probe by calling attemptReprobe directly, once per simulated tick, with
+// no real timer involved); and once it succeeds the session's active provider swaps back
+// to serve QUIC. Both the fallback usage report and the recovery usage report must fire
+// exactly once, for their one respective transition.
+func TestSession_QuicReprobe_RecoversAfterFallbackTrip(t *testing.T) {
+	ctx, sink := usg.InstallManager(t.Context(), "test-install")
+	agents := &fakeAgentClients{}
+	s := &session{agentClients: agents, quicReprobeTrigger: make(chan struct{}, 1)}
+	s.setTransportStatus(TransportQUIC, "198.51.100.1:7778")
+
+	// Trip: the same failure path a real quicFallbackProvider takes when its Tunnel()
+	// call fails, wired with the production onFallback callback.
+	quicErr := errors.New("quic: connection lost")
+	quicP := &fakeTunnelProvider{name: "quic", errs: []error{quicErr}}
+	fallbackP := &fakeTunnelProvider{name: "grpc"}
+	conn := &fakeConnCloser{}
+	trippedProvider := newQuicFallbackProvider(ctx, quicP, func() tunnel.Provider { return fallbackP }, conn, s.onQuicFallback(ctx))
+	s.quicTunnelProvider.Store(trippedProvider)
+
+	_, err := trippedProvider.Tunnel(context.Background())
+	require.NoError(t, err) // served by the fallback
+
+	transport, _ := s.TransportStatus()
+	require.Equal(t, TransportGRPCFallback, transport, "the trip must have downgraded transport status")
+	select {
+	case <-s.quicReprobeTrigger:
+	default:
+		t.Fatal("the trip must have woken the reprobe loop")
+	}
+	reports := sink.Drain(0)
+	require.Len(t, reports, 1, "the trip must emit exactly one usage report")
+	assert.Equal(t, "fallback", reports[0].Entries["reason"])
+	require.Equal(t, 0, agents.resets, "a trip must not touch agent QUIC state; only a recovered reprobe does")
+
+	// Advance the probe: two failed attempts (still on fallback, no state touched),
+	// then a successful one.
+	calls := 0
+	probe := func(context.Context) (*quic.Conn, string, error) {
+		calls++
+		if calls < 3 {
+			return nil, "", errors.New("still unreachable")
+		}
+		return nil, "198.51.100.9:7778", nil
+	}
+	require.False(t, s.attemptReprobe(ctx, probe))
+	require.False(t, s.attemptReprobe(ctx, probe))
+	transport, _ = s.TransportStatus()
+	require.Equal(t, TransportGRPCFallback, transport, "a failed reprobe attempt must not touch transport status")
+	require.Empty(t, sink.Drain(0), "a failed reprobe attempt must not emit a usage report")
+	require.Equal(t, 0, agents.resets)
+
+	require.True(t, s.attemptReprobe(ctx, probe))
+
+	transport, endpoint := s.TransportStatus()
+	assert.Equal(t, TransportQUIC, transport, "a successful reprobe must swap the provider back to quic")
+	assert.Equal(t, "198.51.100.9:7778", endpoint)
+	assert.NotSame(t, trippedProvider, s.quicTunnelProvider.Load(),
+		"reprobe must install a fresh provider, not resurrect the tripped one")
+	assert.Equal(t, 1, agents.resets, "a successful reprobe must reset agent QUIC state exactly once")
+
+	reports = sink.Drain(0)
+	require.Len(t, reports, 1, "the recovery must emit exactly one usage report")
+	assert.Equal(t, "quic", reports[0].Entries["transport"])
+	assert.Equal(t, "reprobe", reports[0].Entries["reason"])
+
+	// The freshly-installed provider has its own onFallback closure (from
+	// s.onQuicFallback(ctx) inside activateQuicTunnel), independently CAS-guarded, so a
+	// later trip of *this* provider fires the callback again -- "exactly once" means
+	// once per transition, not once ever. newQuicFallbackProvider's own tests already
+	// cover that a single provider only ever fires its callback once; what matters here
+	// is that recovery installed a distinct provider capable of tripping on its own.
+	recovered := s.quicTunnelProvider.Load()
+	assert.NotNil(t, recovered.onFallback, "the recovered provider must carry its own onFallback callback")
 }
 
 // --- candidate list and concurrent probe ------------------------------------------------

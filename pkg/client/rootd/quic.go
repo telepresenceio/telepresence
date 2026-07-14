@@ -33,6 +33,13 @@ const quicDialTimeout = 3 * time.Second
 // unreachable one costs at most this much delay rather than the full dial timeout.
 const quicCandidateStagger = 250 * time.Millisecond
 
+// quicReprobeInterval is how often quicReprobeLoop retries the QUIC dial after
+// quicTunnelProvider trips to fallback, until one succeeds. Deliberately generous: a
+// manager restart's own rollout and the forwarder's backend-allowlist refresh both take
+// several seconds, so a tight retry interval would just burn probes against a path that
+// isn't back yet.
+const quicReprobeInterval = 60 * time.Second
+
 // transportUsageTopic is the usage report topic for tunnel transport observability:
 // once when startQuicTunnel resolves (quic active, or grpc with a reason), and again
 // if quicFallbackProvider later trips (reason "fallback"). Never carries the endpoint
@@ -50,14 +57,26 @@ func reportTransport(ctx context.Context, transport, reason string) {
 	}
 }
 
-// startQuicTunnel opportunistically fetches the traffic-manager's QUIC tunnel endpoint
-// descriptor and, if one is advertised, dials it. It never returns an error: any
-// problem here (older manager, endpoint disabled, unreachable endpoint, bad
-// certificate, ...) just means manager-bound tunnel streams stay on the
-// port-forwarded gRPC path, per the design's silent-fallback requirement. Either way,
-// it resolves the session's observable transport state and emits the usage report
-// exactly once for this dial attempt.
-func (s *session) startQuicTunnel(ctx context.Context) {
+// quicProbeResult is the outcome of one probeQuicTunnel attempt: conn/addr on success,
+// or reason/err on failure. reason is in the same vocabulary as transportUsageTopic
+// ("rpc-error", "unimplemented", "disabled", "tls-error", "dial-failed").
+type quicProbeResult struct {
+	conn   *quic.Conn
+	addr   string
+	reason string
+	err    error
+}
+
+// probeQuicTunnel fetches the traffic-manager's QUIC tunnel endpoint descriptor over the
+// (healthy, gRPC) manager connection and dials it. Called once at session start by
+// startQuicTunnel, and again on every quicReprobeInterval tick by quicReprobeLoop after a
+// trip to fallback -- always re-fetched, never re-dialed with a cached TLS config,
+// because GetQuicTunnelEndpoint hands out a fresh CA bundle and session-scoped client
+// certificate signed by whichever manager process answers the RPC, which after a manager
+// restart is not the one the original certificate was issued by. The session's own
+// manager connection reconnects on its own after such a restart, so this RPC just works
+// again once it does; there is nothing special to do here for that case.
+func (s *session) probeQuicTunnel(ctx context.Context) quicProbeResult {
 	dialCtx, cancel := context.WithTimeout(ctx, quicDialTimeout)
 	defer cancel()
 
@@ -72,25 +91,22 @@ func (s *session) startQuicTunnel(ctx context.Context) {
 		} else {
 			clog.Debugf(ctx, "unable to fetch QUIC tunnel endpoint: %v", err)
 		}
-		reportTransport(ctx, TransportGRPC, reason)
-		return
+		return quicProbeResult{reason: reason, err: err}
 	}
 	if !ep.Enabled {
 		clog.Debug(ctx, "traffic-manager has no QUIC tunnel endpoint exposed")
-		reportTransport(ctx, TransportGRPC, "disabled")
-		return
+		return quicProbeResult{reason: "disabled", err: errors.New("QUIC tunnel endpoint disabled")}
 	}
 
 	tlsConf, err := quicTLSConfig(ep)
 	if err != nil {
 		clog.Infof(ctx, "unable to use QUIC tunnel endpoint: %v", err)
-		reportTransport(ctx, TransportGRPC, "tls-error")
-		return
+		return quicProbeResult{reason: "tls-error", err: err}
 	}
 
 	// The connection is expected to be idle whenever no tunnel streams are active, so
 	// it must be kept alive; without this, quic-go's idle timeout tears it down and the
-	// session permanently falls back to the port-forwarded transport.
+	// session falls back to the port-forwarded transport until the next re-probe.
 	qCfg := &quic.Config{
 		MaxIdleTimeout:  time.Minute,
 		KeepAlivePeriod: 15 * time.Second,
@@ -98,20 +114,114 @@ func (s *session) startQuicTunnel(ctx context.Context) {
 	conn, addr, err := dialQuicCandidates(dialCtx, quicCandidateAddrs(ep), tlsConf, qCfg)
 	if err != nil {
 		clog.Infof(ctx, "unable to dial QUIC tunnel endpoint: %v", err)
-		reportTransport(ctx, TransportGRPC, "dial-failed")
+		return quicProbeResult{reason: "dial-failed", err: err}
+	}
+	return quicProbeResult{conn: conn, addr: addr}
+}
+
+// startQuicTunnel opportunistically probes the traffic-manager's QUIC tunnel endpoint
+// and, if reachable, activates it. It never returns an error: any problem here (older
+// manager, endpoint disabled, unreachable endpoint, bad certificate, ...) just means
+// manager-bound tunnel streams stay on the port-forwarded gRPC path, per the design's
+// silent-fallback requirement -- quicReprobeLoop only retries after an established
+// connection later trips, not after this initial probe fails. Either way, it resolves
+// the session's observable transport state and emits the usage report exactly once for
+// this attempt.
+func (s *session) startQuicTunnel(ctx context.Context) {
+	r := s.probeQuicTunnel(ctx)
+	if r.err != nil {
+		reportTransport(ctx, TransportGRPC, r.reason)
 		return
 	}
+	s.activateQuicTunnel(ctx, r.conn, r.addr, "")
+}
 
+// activateQuicTunnel installs conn as the session's active QUIC tunnel connection: new
+// manager-bound tunnel streams are served over it until a future trip to fallback, and
+// agent QUIC connections resolve it as their preferred forwarder candidate (see
+// SetPreferredQuicAddr). Used both for the initial dial (reason "") and for a
+// post-fallback recovery (reason "reprobe"; see reportTransport).
+func (s *session) activateQuicTunnel(ctx context.Context, conn *quic.Conn, addr, reason string) {
 	clog.Infof(ctx, "QUIC tunnel transport active (%s)", addr)
 	s.quicConn.Store(conn)
 	s.setTransportStatus(TransportQUIC, addr)
 	s.quicTunnelProvider.Store(newQuicFallbackProvider(ctx, tunnel.NewQuicProvider(conn), func() tunnel.Provider {
 		return tunnel.ManagerProvider(s.managerClient())
-	}, conn, func() {
+	}, conn, s.onQuicFallback(ctx)))
+	reportTransport(ctx, TransportQUIC, reason)
+}
+
+// onQuicFallback returns the callback installed on a freshly activated
+// quicFallbackProvider: it downgrades the observable transport state, reports the
+// fallback usage event, and wakes quicReprobeLoop with a non-blocking send -- the
+// channel is buffered 1 and the loop drains it whenever it's ready, so a trip that
+// happens while a probe is already in flight is coalesced into the retry already
+// running rather than lost or blocking the tripping goroutine.
+func (s *session) onQuicFallback(ctx context.Context) func() {
+	return func() {
 		s.setTransportStatus(TransportGRPCFallback, "")
 		reportTransport(ctx, TransportGRPC, "fallback")
-	}))
-	reportTransport(ctx, TransportQUIC, "")
+		select {
+		case s.quicReprobeTrigger <- struct{}{}:
+		default:
+		}
+	}
+}
+
+// quicReprober is the shape of a QUIC dial attempt used by quicReprobeLoop: production
+// wires probeQuicTunnel, narrowed to conn/addr/err since a re-probe doesn't need
+// startQuicTunnel's granular failure reason; tests substitute a fake so the retry
+// sequence can be driven deterministically without a real manager or network.
+type quicReprober func(ctx context.Context) (conn *quic.Conn, addr string, err error)
+
+// attemptReprobe makes one QUIC re-probe attempt via probe and, on success, activates it
+// exactly as the initial dial does (reason "reprobe") and clears any per-agent QUIC
+// latches an earlier fallback left behind: agent connections share the manager tunnel's
+// endpoint descriptor and candidate address, so they need the same fresh CA/cert this
+// probe just fetched (see agentpf.Clients.ResetQuicEndpoint). Returns whether the probe
+// succeeded, so a caller retrying on an interval can call this on every tick without
+// tracking trip state itself.
+func (s *session) attemptReprobe(ctx context.Context, probe quicReprober) bool {
+	conn, addr, err := probe(ctx)
+	if err != nil {
+		return false
+	}
+	s.activateQuicTunnel(ctx, conn, addr, "reprobe")
+	if s.agentClients != nil {
+		s.agentClients.ResetQuicEndpoint()
+	}
+	return true
+}
+
+// quicReprobeLoop waits for quicTunnelProvider to trip into fallback (signaled on
+// quicReprobeTrigger by onQuicFallback) and retries the QUIC dial every
+// quicReprobeInterval until one succeeds, then goes back to waiting for the next trip.
+// Existing fallback streams are never migrated to a recovered path: only Tunnel() calls
+// made after the swap see it, because managerTunnelProvider always loads the current
+// provider fresh. Runs for the lifetime of ctx (the session).
+func (s *session) quicReprobeLoop(ctx context.Context) {
+	probe := func(ctx context.Context) (*quic.Conn, string, error) {
+		r := s.probeQuicTunnel(ctx)
+		return r.conn, r.addr, r.err
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.quicReprobeTrigger:
+		}
+		ticker := time.NewTicker(quicReprobeInterval)
+		for recovered := false; !recovered; {
+			select {
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				recovered = s.attemptReprobe(ctx, probe)
+			}
+		}
+		ticker.Stop()
+	}
 }
 
 // quicTLSConfig builds the client TLS configuration for the QUIC tunnel connection from
@@ -228,11 +338,15 @@ type quicConnCloser interface {
 }
 
 // quicFallbackProvider is a tunnel.Provider that serves calls from a QUIC provider
-// while healthy. The first error from the QUIC provider's Tunnel() permanently and
-// atomically switches the provider to a gRPC fallback for the remainder of the
-// session: the failed call is retried against the fallback and every later call goes
-// straight to it. There is no background re-probe of the QUIC path in this phase
-// (design doc, "Reachability and fallback" defers that to hardening).
+// while healthy. The first error from the QUIC provider's Tunnel() atomically switches
+// the provider to a gRPC fallback: the failed call is retried against the fallback and
+// every later call goes straight to it, for as long as this particular
+// quicFallbackProvider instance is the one installed on session.quicTunnelProvider. A
+// tripped instance never un-trips itself; recovery is external -- onFallback (see
+// session.onQuicFallback) wakes quicReprobeLoop, which retries the dial and, on
+// success, installs a brand new quicFallbackProvider via
+// session.quicTunnelProvider.Store, leaving this tripped instance to be garbage
+// collected along with whatever streams were already using its fallback.
 type quicFallbackProvider struct {
 	logCtx     context.Context
 	quic       tunnel.Provider
@@ -242,8 +356,9 @@ type quicFallbackProvider struct {
 	onFallback func()
 }
 
-// newQuicFallbackProvider wraps quicP with a permanent fallback to a provider obtained
-// from fallback once quicP.Tunnel() first fails. onFallback, if non-nil, is invoked
+// newQuicFallbackProvider wraps quicP with a fallback to a provider obtained from
+// fallback once quicP.Tunnel() first fails; see quicFallbackProvider's doc for how a
+// tripped instance is recovered from. onFallback, if non-nil, is invoked
 // exactly once at that point (guarded by the same dead-flag CAS that decides whether
 // to close conn and log), so callers can use it to update observable state without
 // their own synchronization.

@@ -133,6 +133,18 @@ func (c *quicEndpointCache) get(ctx context.Context, mc manager.ManagerClient, s
 	return c.ep
 }
 
+// reset clears the cached descriptor, including a cached negative result, so the next
+// get call re-fetches. Used when the rootd session's manager-bound QUIC re-probe
+// recovers after a manager restart: the cached descriptor may carry a CA and
+// session-scoped client certificate issued by a manager process that no longer exists,
+// which would make every agent QUIC dial fail identically until re-fetched.
+func (c *quicEndpointCache) reset() {
+	c.mu.Lock()
+	c.ep = nil
+	c.set = false
+	c.mu.Unlock()
+}
+
 // agentDialer builds the grpc.WithContextDialer function used for one agent's gRPC
 // connection: a closure invoked by grpc-go both for the initial dial and for every
 // transparent reconnect it makes afterward, on a transport failure, using the same dialer.

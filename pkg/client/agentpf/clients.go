@@ -368,6 +368,15 @@ type Clients interface {
 	// reverts to the descriptor's own host/port. Safe to call at any time.
 	SetPreferredQuicAddr(func() string)
 
+	// ResetQuicEndpoint clears the cached QUIC tunnel endpoint descriptor and every
+	// agent's quicDead latch, so the next agent dial re-fetches a fresh descriptor
+	// (new CA, new session-scoped client certificate) and is willing to try QUIC
+	// again rather than going straight to the port-forward fallback. Called by the
+	// rootd session once its own manager-bound QUIC re-probe recovers after a
+	// manager restart, since agent connections are dialed against the same
+	// manager-issued descriptor.
+	ResetQuicEndpoint()
+
 	// Transports returns the current transport ("quic" or "grpc") for every agent pod
 	// that has ever completed a connection attempt this session. An agent that hasn't
 	// been dialed yet is omitted; the status surface renders this list only when
@@ -684,6 +693,15 @@ func (s *clients) preferredQuicAddr() string {
 // which case the fetch is left unattempted rather than cached as a false negative).
 func (s *clients) quicEndpointFor(ctx context.Context) *quicEndpoint {
 	return s.quicEP.get(ctx, s.managerClient(), s.session, s.preferredQuicAddr())
+}
+
+// ResetQuicEndpoint implements Clients.
+func (s *clients) ResetQuicEndpoint() {
+	s.quicEP.reset()
+	s.clients.Range(func(_ string, ac *client) bool {
+		ac.quicDead.Store(false)
+		return true
+	})
 }
 
 // Transports implements Clients.

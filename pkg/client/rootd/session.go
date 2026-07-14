@@ -219,23 +219,35 @@ type session struct {
 
 	lookupSequencer *xsync.Map[string, clusterLookupResult]
 
-	// quicConn is the client's QUIC connection to the traffic-manager, set once the
-	// opportunistic QUIC dial at session start succeeds. Nil for the lifetime of the
+	// quicConn is the client's current QUIC connection to the traffic-manager, set
+	// whenever a dial (initial or re-probe) succeeds. Nil for the lifetime of the
 	// session when QUIC was never dialed (older manager, endpoint disabled, or the dial
 	// failed); the tunnel then stays on the port-forwarded gRPC path. Written from the
-	// "quic" goroutine started in Start and read from streamCreator and stop, hence atomic.
+	// "quic" goroutine started in Start, and from quicReprobeLoop after a later
+	// recovery; read from streamCreator and stop, hence atomic.
 	quicConn atomic.Pointer[quic.Conn]
 
 	// quicTunnelProvider serves manager-bound tunnel streams over QUIC while healthy,
-	// falling back permanently to the port-forwarded gRPC connection after the first
-	// QUIC failure. Nil when quicConn is nil. See quicConn for the concurrency note.
+	// falling back to the port-forwarded gRPC connection once the installed
+	// quicFallbackProvider trips. Nil when quicConn is nil. quicReprobeLoop retries the
+	// dial after a trip and, on success, replaces this pointer with a fresh provider
+	// (see quicFallbackProvider's doc). See quicConn for the concurrency note.
 	quicTunnelProvider atomic.Pointer[quicFallbackProvider]
+
+	// quicReprobeTrigger receives a value each time quicTunnelProvider trips to
+	// fallback (sent by onQuicFallback), waking quicReprobeLoop. Buffered 1 with
+	// non-blocking sends: a trip that happens while a probe is already in flight is
+	// coalesced into the retry already running, never lost and never blocking the
+	// tripping goroutine. Initialized in newSession; nil only in tests that construct a
+	// bare session{} and never trip a provider.
+	quicReprobeTrigger chan struct{}
 
 	// transportStatus is the observable tunnel transport for manager-bound streams. A
 	// nil pointer means the default steady state: gRPC, because QUIC was never dialed
 	// (older manager, endpoint disabled, unimplemented, or dial failed). Replaced, never
-	// mutated, by the "quic" goroutine on a successful dial and by quicFallbackProvider
-	// when it trips its dead flag; see TransportStatus and setTransportStatus.
+	// mutated, by the "quic" goroutine on a successful dial and by onQuicFallback /
+	// quicReprobeLoop on every later transition; see TransportStatus and
+	// setTransportStatus.
 	transportStatus atomic.Pointer[transportStatus]
 }
 
@@ -350,6 +362,7 @@ func newSession(
 		virtualIPs:            xsync.NewMap[netip.Addr, agentVIP](),
 		l4PortMap:             xsync.NewMap[types.AddrPortProto, uint16](),
 		sessionStart:          time.Now(),
+		quicReprobeTrigger:    make(chan struct{}, 1),
 	}
 	cfg := client.GetConfig(s)
 
@@ -1402,6 +1415,14 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 	// always reports success to the group; startQuicTunnel itself never returns an error.
 	g.Go("quic", func(ctx context.Context) error {
 		s.startQuicTunnel(ctx)
+		return nil
+	})
+
+	// Retries the QUIC dial after a later trip to fallback (e.g. a manager restart that
+	// rotates the QUIC CA); see quicReprobeLoop. Runs for the life of the session,
+	// mostly idle: it blocks on quicReprobeTrigger until onQuicFallback wakes it.
+	g.Go("quic-reprobe", func(ctx context.Context) error {
+		s.quicReprobeLoop(ctx)
 		return nil
 	})
 

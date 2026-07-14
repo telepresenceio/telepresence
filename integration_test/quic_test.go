@@ -590,7 +590,9 @@ func (s *quicTunnelSuite) Test_ZManagerOutageAttachmentSurvival() {
 	mustLeave := true
 	defer func() {
 		if mustLeave {
-			itest.TelepresenceOk(ctx, "detach", svc)
+			// Retrying, not itest.TelepresenceOk: see detachRetrying's doc for why a
+			// plain one-shot detach right after this test's outage is brittle.
+			s.detachRetrying(ctx, svc)
 		}
 	}()
 
@@ -648,38 +650,42 @@ func (s *quicTunnelSuite) Test_ZManagerOutageAttachmentSurvival() {
 	rq.NoError(itest.RolloutStatusWait(ctx, managerNs, "deploy/traffic-manager"),
 		"traffic-manager Deployment did not report ready after scaling back up")
 
-	// Recovery. The live session's own control-plane connection to the manager
-	// (userd -> manager, used by commands like detach) was pinned to the pod that
-	// was just deleted; the realistic recovery from a manager that vanished
-	// entirely is to reconnect, not to wait for the existing session to self-heal
-	// every connection (a separate, timing-sensitive property that is not what
-	// this test is about). Reconnecting also leaves echo-easy with no active
-	// intercept for the tests that run after this one. The intercept created
-	// above is dropped by the quit, so no explicit detach is needed.
-	//
-	// Reconnect until the fresh session lands back on quic rather than asserting
-	// it after a single reconnect: the forwarder needs a few seconds to notice
-	// (via keepalive) that its backend-allowlist stream died with the old manager
-	// pod and to relearn the new pod's IP, and a client that connects before that
-	// refresh dials a manager backend the forwarder still maps to the dead pod, so
-	// it falls back to grpc for that whole session (there is no mid-session
-	// re-probe). Each reconnect is a fresh chance; bounded generously.
-	mustLeave = false
-	want := "quic (" + s.endpoint + ")"
-	rq.Eventually(func() bool {
-		itest.TelepresenceQuitOk(ctx)
-		s.TelepresenceConnect(ctx)
-		st, err := itest.TelepresenceStatus(ctx)
-		return err == nil && st.RootDaemon != nil && st.RootDaemon.TunnelTransport == want
-	}, 90*time.Second, 15*time.Second,
-		"session did not return to the quic transport after the manager outage recovered")
+	// Recovery, same session: no quit/reconnect. The client's manager-bound tunnel
+	// fell back to grpc while the manager was gone (the forwarder's backend allowlist
+	// had no live pod left to route the old QUIC connection to, and the new manager
+	// process's CA no longer verifies the session's client certificate anyway); the
+	// client's re-probe loop retries the QUIC dial on an interval, re-fetching the
+	// endpoint descriptor (fresh CA, fresh session-scoped client certificate) on every
+	// attempt, so it recovers once the new manager process is reachable and the
+	// forwarder has relearned its pod IP -- without the client ever knowing a
+	// restart happened. Bound the wait comfortably above the re-probe interval to
+	// also absorb the forwarder's own relearning delay.
+	s.requireQuicTransportWithin(ctx, 150*time.Second)
 
-	// Note on what is deliberately NOT asserted: a surviving agent's attachment
-	// returning to quic after this rotation. The new manager process has a new
-	// ephemeral CA; the agent re-fetches its server certificate within seconds,
-	// but a client connection that already fell back to the port-forward during
-	// that window does not spontaneously re-probe quic (a documented Hardening
-	// item -- see "Manager CA rotation" in the design doc). This test therefore
-	// runs last in the suite (its name sorts after the others), so no sibling
-	// test dials a mid-rotation agent, and TearDownSuite follows immediately.
+	// The client<->agent attachment's own QUIC connection is independent of the
+	// manager (see the decisive assertion above) and is not expected to have tripped
+	// at all during the outage; confirm it is still serving quic once the
+	// manager-bound tunnel has also recovered, now that the re-probe's recovery also
+	// resets any per-agent QUIC state a fallback would have left behind.
+	s.requireAgentTransport(ctx, svc, "quic")
+}
+
+// detachRetrying detaches from workload, retrying briefly on failure. The rootd
+// session's QUIC re-probe (what requireQuicTransportWithin above just waited on) is a
+// separate connection from the userd connector daemon's own control-plane connection
+// to the manager, which detach itself needs; that connection resolves the manager pod
+// by listing pods with a live selector (pkg/client/portforward/resolve.go
+// ResolveSvcToPod) each time it (re)dials, rather than watching for changes, so right
+// after a manager pod replacement it can lag a few seconds behind both
+// RolloutStatusWait (which only waits on the Deployment's own rollout status) and the
+// QUIC transport's own recovery. A plain one-shot detach attempted in that window
+// fails with "no running pods with accessible ports found for service"; retrying
+// absorbs it without weakening what the test actually asserts (that already happened
+// above).
+func (s *quicTunnelSuite) detachRetrying(ctx context.Context, workload string) {
+	rq := s.Require()
+	rq.Eventually(func() bool {
+		_, _, err := itest.Telepresence(ctx, "detach", workload)
+		return err == nil
+	}, 30*time.Second, 2*time.Second, "detach %q kept failing", workload)
 }
