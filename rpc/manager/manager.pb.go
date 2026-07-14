@@ -436,7 +436,7 @@ type AgentInfo struct {
 	// sidecar running in the workload's own pods.
 	NodeAgent bool `protobuf:"varint,15,opt,name=node_agent,json=nodeAgent,proto3" json:"node_agent,omitempty"`
 	// UDP port of this agent's QUIC listener, reachable only through the QUIC
-	// forwarder (see docs/plans/quic-transport/design.md, "Agent connections
+	// forwarder (see docs/reference/quic-transport-architecture.md, "Agent connections
 	// over QUIC"). 0 means this agent has no QUIC listener.
 	QuicPort      int32 `protobuf:"varint,16,opt,name=quic_port,json=quicPort,proto3" json:"quic_port,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -2542,7 +2542,7 @@ type QuicTunnelEndpoint struct {
 	Alpn string `protobuf:"bytes,8,opt,name=alpn,proto3" json:"alpn,omitempty"`
 	// Candidate dialable addresses for the QUIC endpoint, ordered by the
 	// traffic-manager's preference (see "Zero-configuration endpoint discovery" in
-	// docs/plans/quic-transport/design.md). The client dials candidates
+	// docs/reference/quic-transport-architecture.md). The client dials candidates
 	// concurrently and keeps the first whose handshake completes. host/port above
 	// always duplicate the first entry, if any, so an older client (built before
 	// this field existed) still gets a single address to dial.
@@ -2699,7 +2699,7 @@ func (x *QuicEndpointCandidate) GetPort() int32 {
 }
 
 // QuicBackend identifies one live pod IP that the QUIC forwarder (a separate
-// stateless packet router; see docs/plans/quic-transport/design.md) may
+// stateless packet router; see docs/reference/quic-transport-architecture.md) may
 // route traffic to.
 type QuicBackend struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2886,7 +2886,7 @@ func (x *DialRequest) GetDialTimeout() int64 {
 // QuicAgentCert is the response to GetQuicAgentCert: a server certificate,
 // minted by the traffic-manager's QUIC CA for the caller agent's own SNI
 // name, so the agent can run a QUIC listener behind the forwarder. See
-// docs/plans/quic-transport/design.md, "Agent connections over QUIC".
+// docs/reference/quic-transport-architecture.md, "Agent connections over QUIC".
 type QuicAgentCert struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// false when the manager has no QUIC CA (the QUIC tunnel listener is

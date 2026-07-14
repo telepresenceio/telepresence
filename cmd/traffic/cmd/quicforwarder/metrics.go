@@ -10,7 +10,7 @@ import (
 )
 
 // dropReason categorizes why a datagram was silently dropped, per "The forwarder"
-// section of docs/plans/quic-transport/design.md: anything that resolves to no
+// section of docs/reference/quic-transport-architecture.md: anything that resolves to no
 // backend is dropped silently, with a rate-limited metric and no response.
 type dropReason int
 

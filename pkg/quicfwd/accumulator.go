@@ -8,7 +8,7 @@ package quicfwd
 // client configuration, by the capture tests in capture_test.go, which observed the
 // split placing no contiguous offset-0 run in either individual packet. A forwarder
 // keeps one CryptoAccumulator per (source address, client DCID) handshake attempt (see
-// "The forwarder" in docs/plans/quic-transport/design.md) and calls Feed with each
+// "The forwarder" in docs/reference/quic-transport-architecture.md) and calls Feed with each
 // Initial packet it sees for that attempt, in arrival order, until ok is true or the
 // attempt is abandoned (cap/TTL eviction is the caller's responsibility; this type holds
 // no time source and enforces no limit of its own on how much it will accumulate).

@@ -1,5 +1,5 @@
 // Package perf contains standalone performance experiments that quantify the
-// benefit of the QUIC tunnel transport (docs/plans/quic-transport/design.md)
+// benefit of the QUIC tunnel transport (docs/reference/quic-transport-architecture.md)
 // against the default port-forwarded gRPC transport.
 //
 // The experiments are NOT part of `make check-integration` or `go test ./...`:

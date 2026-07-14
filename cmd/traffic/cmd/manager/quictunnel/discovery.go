@@ -50,7 +50,7 @@ const (
 // Discovery watches the QUIC forwarder's Service and derives the ordered candidate
 // address list that GetQuicTunnelEndpoint advertises to clients when no explicit
 // externalHost override is configured. See "Zero-configuration endpoint discovery" in
-// docs/plans/quic-transport/design.md.
+// docs/reference/quic-transport-architecture.md.
 //
 // A zero Discovery is usable: Candidates returns an empty slice until Start has run
 // and produced a snapshot.

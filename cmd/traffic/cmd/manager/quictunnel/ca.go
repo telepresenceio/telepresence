@@ -1,6 +1,6 @@
 // Package quictunnel implements the manager side of the QUIC tunnel transport: an
 // ephemeral CA and session-scoped client certificates that back the mTLS trust
-// bootstrap described in docs/plans/quic-transport/design.md, and the QUIC listener
+// bootstrap described in docs/reference/quic-transport-architecture.md, and the QUIC listener
 // that accepts tunnel streams authenticated by that CA.
 package quictunnel
 
@@ -115,7 +115,7 @@ func (ca *CA) ServerTLSCert() (tls.Certificate, error) {
 
 // MintServerCert mints a server certificate for sniName, signed by ca, for use in any
 // QUIC listener's tls.Config -- the traffic-manager's own (via ServerTLSCert) or, per
-// "Agent connections over QUIC" in docs/plans/quic-transport/design.md, a traffic-agent's
+// "Agent connections over QUIC" in docs/reference/quic-transport-architecture.md, a traffic-agent's
 // (via the GetQuicAgentCert RPC, which mints for quicfwd.AgentSNI(pod UID)).
 func (ca *CA) MintServerCert(sniName string) (tls.Certificate, error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

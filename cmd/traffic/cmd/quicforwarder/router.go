@@ -17,7 +17,7 @@ const (
 	// handshake-cache entry (one connection attempt's buffered datagrams,
 	// keyed by source address + client DCID) will hold before it is dropped
 	// unresolved. Per "The forwarder" section of
-	// docs/plans/quic-transport/design.md this keeps the cache small and
+	// docs/reference/quic-transport-architecture.md this keeps the cache small and
 	// ephemeral -- an attacker cannot make it grow arbitrarily by trickling
 	// Initial-looking datagrams that never complete a handshake.
 	handshakeMaxDatagrams = 8
@@ -84,7 +84,7 @@ type handshakeEntry struct {
 }
 
 // Router implements the forwarder's per-datagram routing decision (cases a-e of "The
-// forwarder" in docs/plans/quic-transport/design.md). It is deliberately decoupled from
+// forwarder" in docs/reference/quic-transport-architecture.md). It is deliberately decoupled from
 // any real socket: Route and Sweep take an explicit clock/context and delegate all
 // observable effects to backendPicker and flowSink, so the whole decision tree is
 // unit-testable with fakes.

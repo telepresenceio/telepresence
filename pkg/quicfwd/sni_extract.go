@@ -17,7 +17,7 @@ const (
 
 // ExtractSNI reads the SNI (server_name) sent in the ClientHello carried by a QUIC v1
 // Initial packet, without terminating the connection. This is the mechanism "The
-// forwarder" section of docs/plans/quic-transport/design.md relies on to route a
+// forwarder" section of docs/reference/quic-transport-architecture.md relies on to route a
 // connection's first packet: the SNI is readable this way because Initial packets are
 // protected with keys derived from public, connection-visible material (RFC 9001 §5.2),
 // not from anything secret to the client and server.

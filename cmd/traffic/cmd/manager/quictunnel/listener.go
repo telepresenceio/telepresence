@@ -50,7 +50,7 @@ type Listener struct {
 }
 
 // Listen starts a QUIC listener on 0.0.0.0:port, running behind the packet forwarder
-// described in docs/plans/quic-transport/design.md ("The forwarder"). podIP is this
+// described in docs/reference/quic-transport-architecture.md ("The forwarder"). podIP is this
 // manager's own pod IP; the listener is built on a quic.Transport configured with a
 // quicfwd.CIDGenerator for podIP, so every connection ID it hands out -- not just the
 // one used during the handshake -- decodes back to this pod via quicfwd.DecodeCID. That

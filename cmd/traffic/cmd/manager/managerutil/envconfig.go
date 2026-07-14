@@ -100,7 +100,7 @@ type Env struct {
 	// TunnelQuicExternalHost is the externally reachable host or IP advertised to
 	// clients for the QUIC tunnel endpoint, overriding candidate discovery
 	// entirely (see "Zero-configuration endpoint discovery" in
-	// docs/plans/quic-transport/design.md). When unset, GetQuicTunnelEndpoint
+	// docs/reference/quic-transport-architecture.md). When unset, GetQuicTunnelEndpoint
 	// advertises whatever quicDiscovery has found instead; the endpoint is
 	// enabled either way as soon as the listener is enabled and at least one
 	// candidate (explicit or discovered) exists.

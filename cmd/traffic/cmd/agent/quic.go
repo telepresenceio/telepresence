@@ -23,7 +23,7 @@ type quicAgentState struct {
 }
 
 // RefreshQuicAgentListener implements the State method of the same name. See "Agent
-// connections over QUIC" in docs/plans/quic-transport/design.md.
+// connections over QUIC" in docs/reference/quic-transport-architecture.md.
 func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) {
 	quicPort, ok := quicPortFromEnv(fetchCtx)
 	if !ok {

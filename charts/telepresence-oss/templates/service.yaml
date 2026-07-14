@@ -70,7 +70,7 @@ spec:
 {{- /*
 This Service fronts the quic-forwarder Deployment (templates/quicforwarder.yaml), not
 the traffic-manager itself -- see "The forwarder" in
-docs/plans/quic-transport/design.md. The manager's own QUIC listener is reachable only
+docs/reference/quic-transport-architecture.md. The manager's own QUIC listener is reachable only
 through the forwarder's SNI/connection-ID packet routing.
 */}}
 {{- if and .quicTunnel.enabled .quicTunnel.service.create }}

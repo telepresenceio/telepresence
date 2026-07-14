@@ -25,7 +25,7 @@ type Backend int
 const (
 	// BackendUnknown means the SNI didn't match any known naming scheme. The
 	// forwarder's response to this, per "The forwarder" in
-	// docs/plans/quic-transport/design.md, is to drop the packet silently: an SNI
+	// docs/reference/quic-transport-architecture.md, is to drop the packet silently: an SNI
 	// is only ever trusted when it names a real backend.
 	BackendUnknown Backend = iota
 	BackendManager

@@ -28,7 +28,7 @@ import (
 // fakeQuicManager is a minimal stand-in for the traffic-manager's GetQuicAgentCert RPC,
 // mirroring the real implementation in cmd/traffic/cmd/manager/service.go closely enough
 // to exercise the agent's fetch-and-swap logic against a real, independently minted CA per
-// "Agent connections over QUIC" (docs/plans/quic-transport/design.md). Every other Manager
+// "Agent connections over QUIC" (docs/reference/quic-transport-architecture.md). Every other Manager
 // RPC is unimplemented; RefreshQuicAgentListener never calls any of them.
 type fakeQuicManager struct {
 	mgrrpc.UnimplementedManagerServer

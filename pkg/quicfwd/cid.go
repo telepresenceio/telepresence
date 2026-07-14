@@ -48,7 +48,7 @@ const (
 // (traffic-manager, traffic-agents) call this from their ConnectionIDGenerator so that
 // every server-issued CID lets the forwarder route mid-connection packets straight to
 // the pod that owns the connection, without any per-connection state (see "The
-// forwarder" in docs/plans/quic-transport/design.md).
+// forwarder" in docs/reference/quic-transport-architecture.md).
 func EncodeCID(ip netip.Addr) ([]byte, error) {
 	if !ip.IsValid() || ip.IsUnspecified() || ip.IsMulticast() {
 		return nil, fmt.Errorf("quicfwd: cannot encode CID for address %s", ip)

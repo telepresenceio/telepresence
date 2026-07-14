@@ -68,7 +68,7 @@ func captureClientInitialDatagrams(t *testing.T, tlsConf *tls.Config, cfg *quic.
 // contiguous run from offset 0 all the way to the server_name extension: the first
 // packet's own frames stop a few bytes short of where the extensions block even begins,
 // and the byte range that would bridge the two arrives only in the next packet. That is
-// precisely the scenario "The forwarder" section of docs/plans/quic-transport/design.md
+// precisely the scenario "The forwarder" section of docs/reference/quic-transport-architecture.md
 // describes as needing a small, ephemeral, cross-packet handshake cache -- reassembly
 // across packets is explicitly that later task's job, not this package's. So when no
 // single packet carries the SNI, this test simulates what that cache will eventually do

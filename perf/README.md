@@ -1,7 +1,7 @@
 # Telepresence QUIC performance experiments
 
 Standalone experiments that quantify what the opt-in QUIC tunnel transport
-(`docs/plans/quic-transport/design.md`) buys over the default port-forwarded
+(`docs/reference/quic-transport-architecture.md`) buys over the default port-forwarded
 gRPC transport. They are **not** run by `make check-integration` or
 `go test ./...` — every experiment file is behind the `perf` build tag.
 

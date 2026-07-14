@@ -1,6 +1,6 @@
 // Package quicforwarder implements the "quic-forwarder" subcommand of the tel2 image:
 // the stateless QUIC packet router described in "The forwarder" section of
-// docs/plans/quic-transport/design.md. It owns the single UDP entry point into the
+// docs/reference/quic-transport-architecture.md. It owns the single UDP entry point into the
 // cluster for QUIC tunnel traffic and routes every datagram, by SNI on a connection's
 // first packet and by server-issued connection ID afterwards, to the traffic-manager or
 // a traffic-agent -- without ever terminating TLS or holding any connection state that

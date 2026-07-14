@@ -25,7 +25,7 @@ var initialSaltV1 = []byte{ //nolint:gochecknoglobals // constant
 
 // ErrUnsupportedVersion is returned by ExtractSNI when the packet's QUIC version isn't
 // one this package can derive Initial keys for. Per "The forwarder" in
-// docs/plans/quic-transport/design.md, a version the forwarder cannot read Initial keys
+// docs/reference/quic-transport-architecture.md, a version the forwarder cannot read Initial keys
 // for is dropped silently, never routed by default -- this error is what a caller tests
 // for to make that call.
 var ErrUnsupportedVersion = errors.New("quicfwd: unsupported QUIC version")
@@ -155,7 +155,7 @@ func removeHeaderProtectionAndDecrypt(b []byte, fields longHeaderFields) ([]byte
 	// RFC 9000 Appendix A packet-number decoding reconstructs the full packet
 	// number from its truncated wire encoding relative to the largest packet
 	// number processed so far. This forwarder tracks no per-connection state (by
-	// design -- see "The forwarder" in docs/plans/quic-transport/design.md), so
+	// design -- see "The forwarder" in docs/reference/quic-transport-architecture.md), so
 	// there is no "largest so far"; treating it as -1 (no packet seen yet) is the
 	// only value that makes sense, and with it the decoding algorithm always
 	// yields the truncated value verbatim (the candidate reconstruction can only

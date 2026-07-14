@@ -29,7 +29,7 @@ func TestCryptoAccumulator_RFC9001Vector(t *testing.T) {
 // TestExtractSNI_CapturedQuicGoClient does) and feeds every captured Initial datagram to
 // a single CryptoAccumulator in arrival order. Every packet but the last must come back
 // ok=false with no error; the last must recover the SNI -- this is the scenario "The
-// forwarder" section of docs/plans/quic-transport/design.md describes needing a
+// forwarder" section of docs/reference/quic-transport-architecture.md describes needing a
 // cross-packet handshake cache for, and CryptoAccumulator is that cache's reassembly
 // core.
 func TestCryptoAccumulator_CapturedQuicGoClient_TwoPacketSplit(t *testing.T) {

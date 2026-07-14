@@ -70,7 +70,7 @@ const (
 	// EnvAgentQuicPort is the UDP port the traffic-agent's own QUIC listener binds
 	// to, set only when the traffic-manager that generated this config has its
 	// QUIC tunnel enabled (see managerutil.Env.TunnelQuicAgentPort). Per "Agent
-	// connections over QUIC" in docs/plans/quic-transport/design.md, the agent
+	// connections over QUIC" in docs/reference/quic-transport-architecture.md, the agent
 	// fetches its server certificate for this listener over its authenticated
 	// manager session (GetQuicAgentCert), for quicfwd.AgentSNI(its own pod UID).
 	EnvAgentQuicPort = "AGENT_QUIC_PORT"

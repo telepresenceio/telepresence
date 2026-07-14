@@ -290,7 +290,7 @@ func TestWatchQuicBackends(t *testing.T) {
 }
 
 // TestGetQuicAgentCert covers the three cases the RPC's contract distinguishes,
-// per "Agent connections over QUIC" in docs/plans/quic-transport/design.md: an agent
+// per "Agent connections over QUIC" in docs/reference/quic-transport-architecture.md: an agent
 // session gets a certificate that verifies against the manager's QUIC CA for exactly
 // its own SNI name; a manager with no QUIC CA reports enabled=false rather than
 // erroring; and a client (non-agent) session is rejected outright, regardless of
@@ -364,7 +364,7 @@ func TestGetQuicAgentCert(t *testing.T) {
 }
 
 // TestGetQuicTunnelEndpoint_Gating covers the three cases "Zero-configuration endpoint
-// discovery" (docs/plans/quic-transport/design.md) distinguishes: an explicit
+// discovery" (docs/reference/quic-transport-architecture.md) distinguishes: an explicit
 // externalHost override always wins and bypasses discovery outright; discovery
 // candidates alone are sufficient to enable the endpoint when no override is set; and
 // neither present means Enabled stays false, exactly as an older manager (before

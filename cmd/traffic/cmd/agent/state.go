@@ -48,7 +48,7 @@ type State interface {
 	// listener is already running, atomically swaps in the freshly fetched TLS
 	// material. processCtx bounds the listener's own lifetime, which spans manager
 	// reconnects; it is not the same context as fetchCtx. See "Agent connections
-	// over QUIC" in docs/plans/quic-transport/design.md.
+	// over QUIC" in docs/reference/quic-transport-architecture.md.
 	RefreshQuicAgentListener(processCtx, fetchCtx context.Context)
 
 	FtpPort() uint16

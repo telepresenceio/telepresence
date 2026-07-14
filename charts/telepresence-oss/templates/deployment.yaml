@@ -154,7 +154,7 @@ spec:
           externalHost override bypasses discovery entirely (service.go's
           GetQuicTunnelEndpoint), and a Service that was never created has nothing to
           watch. See "Zero-configuration endpoint discovery" in
-          docs/plans/quic-transport/design.md.
+          docs/reference/quic-transport-architecture.md.
           */}}
           {{- if and (not .externalHost) .service.create }}
           - name: TUNNEL_QUIC_SERVICE_NAME

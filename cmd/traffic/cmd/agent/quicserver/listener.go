@@ -1,5 +1,5 @@
 // Package quicserver implements the traffic-agent side of the QUIC listener described in
-// "Agent connections over QUIC" (docs/plans/quic-transport/design.md). It binds a QUIC
+// "Agent connections over QUIC" (docs/reference/quic-transport-architecture.md). It binds a QUIC
 // transport to the agent's own pod IP, authenticated with a certificate the agent fetches
 // from the traffic-manager over its own session (see cmd/traffic/cmd/agent's use of the
 // GetQuicAgentCert RPC), and feeds every accepted QUIC stream into the agent's existing
@@ -69,7 +69,7 @@ type Listener struct {
 }
 
 // New starts a QUIC listener on 0.0.0.0:port, running behind the packet forwarder
-// described in "The forwarder" (docs/plans/quic-transport/design.md). podIP is this
+// described in "The forwarder" (docs/reference/quic-transport-architecture.md). podIP is this
 // agent's own pod IP; the listener is built on a quic.Transport configured with a
 // quicfwd.CIDGenerator for podIP, so every connection ID it hands out decodes back to
 // this pod via quicfwd.DecodeCID -- what lets the forwarder route every packet after a
@@ -196,7 +196,7 @@ func (l *Listener) Serve(ctx context.Context) error {
 // certificate doesn't chain to the CA in the Material active at handshake time, so no
 // further per-stream authentication happens here -- any client cert signed by that CA
 // is, by construction, a legitimate short-lived session credential (see "Agent
-// connections over QUIC" in docs/plans/quic-transport/design.md).
+// connections over QUIC" in docs/reference/quic-transport-architecture.md).
 func (l *Listener) handleConn(ctx context.Context, conn *quic.Conn, streamLn *streamListener) {
 	for {
 		qs, err := conn.AcceptStream(ctx)

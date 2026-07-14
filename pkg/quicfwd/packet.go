@@ -78,7 +78,7 @@ func (t PacketType) String() string {
 
 // PacketInfo is the result of classifying a single QUIC packet enough to route it, per
 // the QUIC-LB pattern described in "The forwarder" section of
-// docs/plans/quic-transport/design.md: SNI for a connection's first packet, CID for
+// docs/reference/quic-transport-architecture.md: SNI for a connection's first packet, CID for
 // every packet after that.
 type PacketInfo struct {
 	Kind Kind

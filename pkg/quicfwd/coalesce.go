@@ -25,7 +25,7 @@ import (
 //
 // A non-nil error means datagram doesn't parse as a sequence of QUIC packets at all
 // (some prefix is truncated or otherwise malformed); the caller's response, per "The
-// forwarder" in docs/plans/quic-transport/design.md, is the same silent drop as any
+// forwarder" in docs/reference/quic-transport-architecture.md, is the same silent drop as any
 // other unparseable packet.
 func SplitCoalesced(datagram []byte) ([][]byte, error) {
 	var packets [][]byte

@@ -27,7 +27,7 @@ const quicNodePort = 30777
 // traffic-manager installed with quicTunnel.enabled=true, a NodePort Service
 // pinned to quicNodePort, and quicTunnel.externalHost set to the first node's
 // InternalIP. It covers the matrix described in
-// docs/plans/quic-transport/design.md: plain VPN-only traffic through the
+// docs/reference/quic-transport-architecture.md: plain VPN-only traffic through the
 // manager, a regular (sidecar) intercept coexisting with the transport
 // upgrade, traffic to an intercepted workload forced to relay through the
 // manager (cluster.agentPortForward=false), and a node-agent attach. All four
@@ -483,7 +483,7 @@ func (s *quicTunnelSuite) Test_AUDPEchoDatagrams() {
 // keeps working while the manager-bound tunnel is on the quic transport, that
 // status still reports quic once the intercept is active, and -- now that
 // agents run their own QUIC listeners behind the forwarder (phase 6, "Agent
-// connections over QUIC" in docs/plans/quic-transport/design.md) -- that the
+// connections over QUIC" in docs/reference/quic-transport-architecture.md) -- that the
 // client-to-agent attachment itself has also come up over quic rather than
 // falling back to its per-agent port-forward.
 func (s *quicTunnelSuite) Test_TrafficAgentCoexistence() {
@@ -583,7 +583,7 @@ func (s *quicTunnelSuite) Test_NodeAgentTransport() {
 const quicForwarderLabelSelector = "app=quic-forwarder,telepresence=quic-forwarder"
 
 // Test_ForwarderRestartSurvival exercises the forwarder's central failure-mode
-// claim from "The forwarder" section of docs/plans/quic-transport/design.md:
+// claim from "The forwarder" section of docs/reference/quic-transport-architecture.md:
 // killing the stateless packet router must not force a permanent fallback to
 // the gRPC transport. With the connection already established and the
 // manager-bound tunnel on quic, it deletes every quic-forwarder pod, waits
@@ -643,7 +643,7 @@ func (s *quicTunnelSuite) Test_ForwarderRestartSurvival() {
 
 // Test_ZManagerOutageAttachmentSurvival is the decisive test for the
 // forwarder architecture described in "The forwarder" section of
-// docs/plans/quic-transport/design.md: "The manager dying no longer affects
+// docs/reference/quic-transport-architecture.md: "The manager dying no longer affects
 // client<->agent traffic at all: the forwarder routes packets and the agents
 // terminate their own TLS, so attachments keep flowing through a manager
 // restart exactly as they do today." With a sidecar intercept active and its

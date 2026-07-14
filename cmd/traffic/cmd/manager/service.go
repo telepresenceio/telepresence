@@ -1135,7 +1135,7 @@ func (s *service) Tunnel(server grpc.BidiStreamingServer[rpc.TunnelMessage, rpc.
 // GetQuicTunnelEndpoint returns the descriptor for the traffic-manager's QUIC endpoint.
 // The endpoint is only advertised once the listener is enabled and at least one
 // candidate address exists for it -- explicit (TunnelQuicExternalHost) or discovered
-// (see "Zero-configuration endpoint discovery" in docs/plans/quic-transport/design.md);
+// (see "Zero-configuration endpoint discovery" in docs/reference/quic-transport-architecture.md);
 // otherwise the client is told to keep using the port-forwarded gRPC transport.
 func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicTunnelEndpoint, error) {
 	if s.quicCA == nil {
@@ -1198,7 +1198,7 @@ func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandid
 
 // GetQuicAgentCert mints a QUIC server certificate for the calling agent's own SNI
 // name, so it can run a QUIC listener behind the forwarder. See "Agent connections
-// over QUIC" in docs/plans/quic-transport/design.md.
+// over QUIC" in docs/reference/quic-transport-architecture.md.
 //
 // Unlike GetQuicTunnelEndpoint, the caller's session must already be an agent
 // session (established via ArriveAsAgent/ReconnectAgent): a client has no pod UID
@@ -1261,7 +1261,7 @@ func (s *service) quicManagerBackends(ctx context.Context) []*rpc.QuicBackend {
 }
 
 // WatchQuicBackends notifies the QUIC forwarder (a separate, stateless packet
-// router; see docs/plans/quic-transport/design.md, "The forwarder") of the set
+// router; see docs/reference/quic-transport-architecture.md, "The forwarder") of the set
 // of pod IPs it may route QUIC traffic to. Unlike the other Watch* RPCs this
 // call carries no SessionInfo and is callable without an established session,
 // the same way Version and GetTelepresenceAPI are: the forwarder has no client

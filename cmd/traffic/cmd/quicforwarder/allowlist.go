@@ -40,7 +40,7 @@ type backendSet struct {
 
 // Allowlist is the forwarder's atomic view of the live manager/agent pod IPs a
 // routing decision may validate against, per "Backend allowlist (required)" in "The
-// forwarder" section of docs/plans/quic-transport/design.md. It is updated by
+// forwarder" section of docs/reference/quic-transport-architecture.md. It is updated by
 // WatchAllowlist and read (via the backendPicker interface) by Router.
 //
 // It implements backendPicker.
