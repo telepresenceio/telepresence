@@ -165,7 +165,11 @@ Watch for two log lines:
 
 - the traffic-manager (from quic-go): `failed to sufficiently increase
   receive buffer size (wanted: 7168 kiB, got: ...)`
-- the forwarder: `front socket buffers: rcv=... snd=... (asked for ...)`
+- the forwarder: `front socket buffers: rcv=... snd=... (asked for ...),
+  gro=..., gso=...` — the granted socket buffers plus whether the kernel
+  accepted UDP_GRO/UDP_SEGMENT (generic receive/segmentation offload), which
+  roughly halve the forwarder's per-datagram relay cost at high throughput
+  when the kernel supports them
 
 If they report far less than what was asked for, raise the node sysctls —
 for example `net.core.rmem_max=16777216` and `net.core.wmem_max=16777216`

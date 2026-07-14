@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/netip"
 	"time"
 
 	"golang.org/x/net/ipv4"
@@ -38,6 +39,10 @@ type Forwarder struct {
 	// undersized net.core.{r,w}mem_max -- which caps burst absorption and with it QUIC
 	// throughput -- is visible in the forwarder's log.
 	frontRcvBuf, frontSndBuf int
+	// frontGRO reports whether UDP_GRO is enabled on the front socket (see enableGRO);
+	// logged by Serve and consulted by runIngress to decide whether a ReadBatch message
+	// needs splitGRO.
+	frontGRO bool
 }
 
 // Listen binds the forwarder's front UDP socket on env.ListenPort (all interfaces) and
@@ -49,6 +54,7 @@ func Listen(env *Env, allowlist *Allowlist) (*Forwarder, error) {
 		return nil, fmt.Errorf("quic-forwarder: listen on UDP :%d: %w", env.ListenPort, err)
 	}
 	frontRcv, frontSnd := raiseSocketBuffers(front)
+	frontGRO := enableGRO(front)
 	frontPC := ipv4.NewPacketConn(front)
 	m := newMetrics()
 	flows := newFlowTable(frontPC, m)
@@ -62,6 +68,7 @@ func Listen(env *Env, allowlist *Allowlist) (*Forwarder, error) {
 		metrics:     m,
 		frontRcvBuf: frontRcv,
 		frontSndBuf: frontSnd,
+		frontGRO:    frontGRO,
 	}, nil
 }
 
@@ -78,8 +85,8 @@ func (f *Forwarder) Addr() net.Addr {
 // every QUIC connection through this forwarder simply stops working the moment it
 // stops running.
 func (f *Forwarder) Serve(ctx context.Context) error {
-	clog.Infof(ctx, "quic-forwarder: front socket buffers: rcv=%d snd=%d (asked for %d each)",
-		f.frontRcvBuf, f.frontSndBuf, desiredSocketBuffer)
+	clog.Infof(ctx, "quic-forwarder: front socket buffers: rcv=%d snd=%d (asked for %d each), gro=%t, gso=%t",
+		f.frontRcvBuf, f.frontSndBuf, desiredSocketBuffer, f.frontGRO, gsoSupported())
 	go func() {
 		<-ctx.Done()
 		_ = f.front.Close()
@@ -131,7 +138,7 @@ func (f *Forwarder) Serve(ctx context.Context) error {
 // buffering, or drop), which stays exactly as before: unbatched, since it is cold
 // relative to steady-state throughput.
 func (f *Forwarder) runIngress(ctx context.Context) {
-	msgs := newBatchMessages(batchSize)
+	msgs := newReadBatchMessages(batchSize, f.frontGRO)
 	group := make([]ipv4.Message, 0, batchSize)
 	scratch := make([]byte, maxDatagramSize)
 	var groupEntry *flowEntry
@@ -144,6 +151,33 @@ func (f *Forwarder) runIngress(ctx context.Context) {
 		f.metrics.addForwarded(int64(n))
 		group = group[:0]
 		groupEntry = nil
+	}
+
+	// yield is called once per wire-sized datagram splitGRO expands a ReadBatch message
+	// into -- ordinarily one, but possibly several when the front socket coalesced a run
+	// from the same client with UDP_GRO -- and applies the exact per-datagram logic the
+	// pre-GRO loop applied directly. Built once, closing over curSrc rather than per
+	// message/datagram, so the common (non-coalesced) case allocates nothing extra.
+	var curSrc netip.AddrPort
+	yield := func(data []byte) {
+		if e, ok := f.flows.lookup(curSrc); ok {
+			if groupEntry != e {
+				flush()
+				groupEntry = e
+			}
+			group = append(group, ipv4.Message{Buffers: [][]byte{data}})
+			return
+		}
+
+		// Cold path: no established flow yet. Flush any pending run first so writes
+		// stay in arrival order, then hand this one datagram to Router.Route exactly
+		// as before -- including the durable copy, since Route may retain it (the
+		// handshake cache) past this call, well after this batch's buffers are
+		// reused.
+		flush()
+		datagram := make([]byte, len(data))
+		copy(datagram, data)
+		f.router.Route(ctx, curSrc, datagram)
 	}
 
 	for {
@@ -164,27 +198,8 @@ func (f *Forwarder) runIngress(ctx context.Context) {
 			if !ok {
 				continue
 			}
-			src := ua.AddrPort()
-			data := m.Buffers[0][:m.N]
-
-			if e, ok := f.flows.lookup(src); ok {
-				if groupEntry != e {
-					flush()
-					groupEntry = e
-				}
-				group = append(group, ipv4.Message{Buffers: [][]byte{data}})
-				continue
-			}
-
-			// Cold path: no established flow yet. Flush any pending run first
-			// so writes stay in arrival order, then hand this one datagram to
-			// Router.Route exactly as before -- including the durable copy,
-			// since Route may retain it (the handshake cache) past this call,
-			// well after this batch's buffers are reused.
-			flush()
-			datagram := make([]byte, len(data))
-			copy(datagram, data)
-			f.router.Route(ctx, src, datagram)
+			curSrc = ua.AddrPort()
+			splitGRO(m, yield)
 		}
 		flush()
 	}

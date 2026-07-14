@@ -19,6 +19,7 @@ import (
 type flowEntry struct {
 	conn       *net.UDPConn
 	pc         *ipv4.PacketConn
+	gro        bool         // UDP_GRO enabled on conn; see enableGRO.
 	lastActive atomic.Int64 // UnixNano
 }
 
@@ -96,8 +97,9 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 		return
 	}
 	raiseSocketBuffers(conn)
+	gro := enableGRO(conn)
 
-	e := &flowEntry{conn: conn, pc: ipv4.NewPacketConn(conn)}
+	e := &flowEntry{conn: conn, pc: ipv4.NewPacketConn(conn), gro: gro}
 	e.touch()
 
 	t.mu.Lock()
@@ -128,12 +130,20 @@ func (t *flowTable) CreateAndForward(ctx context.Context, src netip.AddrPort, ba
 // pump reads backend->client traffic off e's backend socket (ReadBatch, i.e. recvmmsg
 // on Linux) and relays it to src on the shared front socket with one WriteBatch per
 // read (or, when the read's datagrams are uniformly sized and the kernel supports it,
-// one GSO write), until the backend socket is closed (by sweepIdle or closeAll).
+// one GSO write), until the backend socket is closed (by sweepIdle or closeAll). When
+// e.gro is set, a read message may be a UDP_GRO-coalesced super-datagram covering
+// several of the backend's wire packets; splitGRO expands each one back into its own
+// ipv4.Message before the write, so the GSO write path re-coalesces from individual
+// QUIC packet boundaries rather than re-sending whatever the kernel happened to bundle
+// together on receipt.
 func (t *flowTable) pump(ctx context.Context, src netip.AddrPort, e *flowEntry) {
-	rmsgs := newBatchMessages(batchSize)
-	wmsgs := make([]ipv4.Message, batchSize)
+	rmsgs := newReadBatchMessages(batchSize, e.gro)
+	wmsgs := make([]ipv4.Message, 0, batchSize)
 	scratch := make([]byte, maxDatagramSize)
 	addr := net.UDPAddrFromAddrPort(src)
+	yield := func(data []byte) {
+		wmsgs = append(wmsgs, ipv4.Message{Buffers: [][]byte{data}, Addr: addr})
+	}
 
 	for {
 		n, err := e.pc.ReadBatch(rmsgs, 0)
@@ -141,11 +151,11 @@ func (t *flowTable) pump(ctx context.Context, src netip.AddrPort, e *flowEntry) 
 			return
 		}
 		e.touch()
+		wmsgs = wmsgs[:0]
 		for i := range n {
-			wmsgs[i].Buffers = [][]byte{rmsgs[i].Buffers[0][:rmsgs[i].N]}
-			wmsgs[i].Addr = addr
+			splitGRO(&rmsgs[i], yield)
 		}
-		if err := writeMsgsBatch(t.frontPC, wmsgs[:n], scratch); err != nil {
+		if err := writeMsgsBatch(t.frontPC, wmsgs, scratch); err != nil {
 			clog.Debugf(ctx, "quic-forwarder: write to client %s failed: %v", src, err)
 		}
 	}
