@@ -221,13 +221,15 @@ func (d *Discovery) onNodes(ctx context.Context, lister listersCore.NodeLister) 
 	d.recompute(ctx)
 }
 
+// recompute derives and publishes a fresh snapshot. The store happens under mu so
+// that two concurrent recomputes cannot publish out of input order and leave a stale
+// snapshot in place until the next resync.
 func (d *Discovery) recompute(ctx context.Context) {
 	d.mu.Lock()
-	svc, nodes := d.svc, d.nodes
-	d.mu.Unlock()
-	cands := candidatesForService(svc, nodes)
-	clog.Debugf(ctx, "quic tunnel discovery: %d candidate(s)", len(cands))
+	cands := candidatesForService(d.svc, d.nodes)
 	d.candidates.Store(&cands)
+	d.mu.Unlock()
+	clog.Debugf(ctx, "quic tunnel discovery: %d candidate(s)", len(cands))
 }
 
 // candidatesForService derives the ordered candidate list for svc, a pure function of
@@ -274,9 +276,7 @@ func candidatesForService(svc *core.Service, nodes []*core.Node) []Candidate {
 }
 
 // preferredNodeAddress returns a Node's ExternalIP if it has one, else its
-// InternalIP, else "" (the Node is skipped). Every kind cluster node hits the
-// InternalIP fallback, since kind assigns no ExternalIP -- exercising that branch is
-// exactly what the NodePort integration test does.
+// InternalIP, else "" (the Node is skipped).
 func preferredNodeAddress(node *core.Node) string {
 	var internal string
 	for _, addr := range node.Status.Addresses {

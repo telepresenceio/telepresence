@@ -41,13 +41,21 @@ item's concluding commit deleted its own plan).
    (`PERF_KUBE_CONTEXT`, `PERF_QUIC_EXTERNAL_HOST`, `PERF_IMPAIR_NODE`
    against a kind cluster). The head-of-line assertion must pass; record
    the numbers — they go in the PR description.
-7. Docs build/consistency pass: `docs/howtos/quic-transport.md` and
+7. Dangling-reference sweep: `rg -n 'plans/quic-transport' --glob
+   '!docs/plans/**'` finds every code/chart/proto comment that cites
+   `design.md` (there are 35+, spread across phases 1-6). The final commit
+   deletes that file, so each reference must be rewritten first: retarget it
+   to the section of `docs/reference/quic-transport.md` that carries the
+   surviving explanation, or make the comment self-contained. Move any
+   design.md content a comment depends on into the reference doc rather than
+   losing it. Proto comment changes need `make protoc` to sync `.pb.go`.
+8. Docs build/consistency pass: `docs/howtos/quic-transport.md` and
    `docs/reference/quic-transport.md` must describe the *final* behavior
    (zero-config happy path, datagram carriage and its agent-path exception,
    migration, node tuning). Do not edit generated files
    (`docs/reference/cli/**`, `docs/release-notes*`, `DEPENDENCIES.md`,
    `DEPENDENCY_LICENSES.md`).
-8. Changelog: add entries following the repository's existing convention
+9. Changelog: add entries following the repository's existing convention
    (see how recent features are recorded at the repo root / release-notes
    pipeline) — one entry for the QUIC transport feature, plus entries for
    any user-visible sub-features (datagrams, zero-config). Follow existing
