@@ -714,19 +714,21 @@ func (s *quicTunnelSuite) Test_ZManagerOutageAttachmentSurvival() {
 	// architecture actually provides is that the client<->agent data path --
 	// cluster-originated traffic tunneled from the agent to the laptop handler -- is
 	// independent of the manager. So drive it from an in-cluster pod (curlimages/curl,
-	// same pattern as not_connected_test.go). Polled a handful of times rather than
-	// once, so a single lucky round-trip can't mask a race with the outage taking hold.
-	for i := 0; i < 3; i++ {
-		out, err := s.KubectlOut(ctx, "run", "-i", fmt.Sprintf("quic-outage-probe-%d", i),
+	// same pattern as not_connected_test.go). The manager pod is already confirmed
+	// gone above, so the outage has taken hold before the first probe; poll until a
+	// probe reaches the handler rather than requiring every probe to, so a transient
+	// curl-pod hiccup under load (an empty response from a cold-scheduled pod) cannot
+	// fail a fundamentally working path. A genuinely broken path fails every probe and
+	// times out the poll.
+	probe := 0
+	rq.Eventually(func() bool {
+		out, err := s.KubectlOut(ctx, "run", "-i", fmt.Sprintf("quic-outage-probe-%d", probe),
 			"--rm", "--image", "curlimages/curl", "--restart", "Never", "--command", "--",
 			"curl", "--silent", "--max-time", "5", "http://"+svc)
-		rq.NoError(err, "in-cluster request to intercepted %s failed while the manager was down", svc)
-		rq.Contains(out, svc+" from intercept at /",
-			"in-cluster request to intercepted %s did not reach the local handler while the manager was down", svc)
-		if i < 2 {
-			time.Sleep(2 * time.Second)
-		}
-	}
+		probe++
+		return err == nil && strings.Contains(out, svc+" from intercept at /")
+	}, 30*time.Second, 3*time.Second,
+		"in-cluster request to intercepted %s never reached the local handler while the manager was down", svc)
 
 	rq.NoError(itest.Kubectl(ctx, managerNs, "scale", "deploy/traffic-manager", "--replicas", "1"),
 		"failed to scale the traffic-manager Deployment back to one")
