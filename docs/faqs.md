@@ -97,4 +97,4 @@ Yes, it is! You'll find both source code and documentation in the [Telepresence 
 
 #### How do I share my feedback on Telepresence?
 
-Your feedback is always appreciated and helps us build a product that provides as much value as possible for our community. You can chat with us directly on our #telepresence-oss channel at the [CNCF Slack](https://slack.cncf.io), and also report issues or create pull-requests on the GitHub repository.
+Your feedback is always appreciated and helps us build a product that provides as much value as possible for our community. You can ask questions and share ideas in [GitHub Discussions](https://github.com/telepresenceio/telepresence/discussions), chat with us on our #telepresence-oss channel at the [CNCF Slack](https://slack.cncf.io), and also report issues or create pull-requests on the GitHub repository.
