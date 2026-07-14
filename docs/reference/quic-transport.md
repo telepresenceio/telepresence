@@ -161,15 +161,20 @@ buffer; every such overflow is silent packet loss that shrinks the sender's
 congestion window, which caps sustained throughput well below what the link
 supports.
 
-Watch for two log lines:
+Watch for these log lines:
 
 - the traffic-manager (from quic-go): `failed to sufficiently increase
   receive buffer size (wanted: 7168 kiB, got: ...)`
-- the forwarder: `front socket buffers: rcv=... snd=... (asked for ...),
-  gro=..., gso=...` — the granted socket buffers plus whether the kernel
-  accepted UDP_GRO/UDP_SEGMENT (generic receive/segmentation offload), which
-  roughly halve the forwarder's per-datagram relay cost at high throughput
-  when the kernel supports them
+- the forwarder, once at startup: `front socket buffers: rcv=... snd=...
+  (asked for ...), gro=..., gso=...` — the granted socket buffers plus
+  whether the kernel accepted UDP_GRO/UDP_SEGMENT (generic receive/segmentation
+  offload), which roughly halve the forwarder's per-datagram relay cost at
+  high throughput when the kernel supports them
+- the forwarder, periodically at debug level: `quic-forwarder counters:
+  forwarded=... rcvbuf=... sndbuf=... gro=... gso=...` — the same buffer and
+  offload state carried alongside the running forwarded/dropped counters, so
+  a long-lived log answers "why is throughput capped" without having to
+  scroll back to the startup line
 
 If they report far less than what was asked for, raise the node sysctls —
 for example `net.core.rmem_max=16777216` and `net.core.wmem_max=16777216`

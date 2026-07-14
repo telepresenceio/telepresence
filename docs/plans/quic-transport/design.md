@@ -345,11 +345,10 @@ free and could ship as an intermediate step.
    per-stream fallback, `telepresence status` reporting.
 4. **Hardening.** Migration testing (address change mid-session), idle-timeout
    tuning against real-world middleboxes, integration tests that run the suite over
-   both transports. Includes recovering QUIC after a manager CA rotation (see the
-   note below): when the client's QUIC path to a peer fails on a certificate
-   mismatch during a manager restart, it currently sticks on the port-forward
-   fallback for that peer until the connection is re-established, rather than
-   re-probing once the peer has re-fetched its certificate.
+   both transports. Includes recovering QUIC after a manager CA rotation: a
+   session whose QUIC path trips to the port-forward fallback re-probes on an
+   interval rather than sticking there until reconnect (`quicReprobeLoop`,
+   `pkg/client/rootd/quic.go` -- see "Relay hardening" below).
 
 Phases 1–4 are implemented (manager-terminated endpoint, exposed directly). The
 forwarder-first architecture builds on them:
@@ -526,19 +525,31 @@ Plain resumption (without 0-RTT early data) is the right first step: it keeps th
 anti-replay analysis trivial and still removes the expensive part. Low effort, low
 risk, small but universal win.
 
-### Relay hardening left on the table
+### Relay hardening
 
-* **Receive-side GRO** on the forwarder (`UDP_GRO`): the write side already
-  coalesces with GSO; symmetric coalescing on reads roughly halves per-datagram
-  receive cost at high rates. Straightforward, Linux-only, and measurable with the
-  existing microbenchmarks.
-* **Surface degraded socket buffers.** The forwarder logs the granted buffer sizes
-  at startup, but a log line is easy to miss. The granted sizes (and the
-  `rmem_max` they imply) should travel into the usage/status reporting so an
-  operator can see *why* bulk throughput is capped without shell access to a node.
-* **Post-CA-rotation re-probe** (already listed under phase 4 hardening) remains
-  the known availability gap: a client that fell back during a manager restart
-  stays on the port-forward until reconnect.
+Implemented:
+
+* **QUIC re-probe.** A session whose QUIC path trips to the port-forward
+  fallback no longer sticks there until reconnect: `quicReprobeLoop`
+  (`pkg/client/rootd/quic.go`) retries the dial every `quicReprobeInterval`
+  (60s) after a trip, re-fetching the endpoint descriptor -- fresh CA bundle and
+  session-scoped client certificate -- on every attempt, so a manager restart's
+  CA rotation is picked up without the client ever reconnecting. A successful
+  retry swaps in a fresh `quicFallbackProvider` and resets the agentpf QUIC
+  endpoint cache and every agent's dead latch (`agentpf.Clients.ResetQuicEndpoint`),
+  so agent connections recover too. In-flight streams are never migrated, only
+  new ones see the recovered path.
+* **Receive-side GRO** on the forwarder (`enableGRO`, `splitGRO` in
+  `cmd/traffic/cmd/quicforwarder/gso_linux.go`), the read-side mirror of the
+  existing GSO write path and gated by the same `QUIC_GO_DISABLE_GSO` escape
+  hatch. Measured on `BenchmarkThroughputQuicForwarded` (idle machine, `go test
+  -bench BenchmarkThroughputQuicForwarded -benchtime 3x`): roughly 552-559 MB/s
+  before, 645-692 MB/s after -- a consistent, if noisy, ~20% improvement.
+* **Buffer/offload observability.** The forwarder already logged its granted
+  socket buffer sizes once at startup; the periodic `metrics.LogSnapshot` line
+  now carries the same buffer sizes plus GRO/GSO enablement alongside the
+  forwarded/dropped counters, so a long-lived log answers "why is throughput
+  capped" without scrolling back to the startup line.
 
 ### Measurement methodology, distilled
 

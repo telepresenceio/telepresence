@@ -71,10 +71,32 @@ func (d dropReason) String() string {
 type metrics struct {
 	forwarded atomic.Int64
 	dropped   [numDropReasons]atomic.Int64
+
+	// frontRcvBuf/frontSndBuf/gro/gso are static for the process's lifetime (set once,
+	// by setBufferInfo, before Serve starts) and carried alongside the counters so a
+	// long-lived log's periodic LogSnapshot line answers "why is throughput capped" on
+	// its own -- the granted socket buffers and whether GRO/GSO ended up enabled --
+	// without an operator having to scroll back to Serve's one-time startup line to
+	// find them. Zero value (unset) for every metrics built in tests that never call
+	// setBufferInfo, which LogSnapshot reports as-is.
+	frontRcvBuf, frontSndBuf int
+	gro, gso                 bool
 }
 
 func newMetrics() *metrics {
 	return &metrics{}
+}
+
+// setBufferInfo records the front socket's granted buffer sizes and GRO/GSO enablement
+// for LogSnapshot to report on every periodic tick; see the metrics doc. Called once,
+// from Listen, before Serve starts -- not safe for concurrent use with LogSnapshot
+// (unlike the counters, this is fixed process-wide config, not something that races
+// against a running forwarder).
+func (m *metrics) setBufferInfo(frontRcvBuf, frontSndBuf int, gro, gso bool) {
+	m.frontRcvBuf = frontRcvBuf
+	m.frontSndBuf = frontSndBuf
+	m.gro = gro
+	m.gso = gso
 }
 
 func (m *metrics) addForwarded(n int64) {
@@ -99,5 +121,13 @@ func (m *metrics) LogSnapshot(ctx context.Context) {
 			b.WriteString(strconv.FormatInt(n, 10))
 		}
 	}
+	b.WriteString(" rcvbuf=")
+	b.WriteString(strconv.Itoa(m.frontRcvBuf))
+	b.WriteString(" sndbuf=")
+	b.WriteString(strconv.Itoa(m.frontSndBuf))
+	b.WriteString(" gro=")
+	b.WriteString(strconv.FormatBool(m.gro))
+	b.WriteString(" gso=")
+	b.WriteString(strconv.FormatBool(m.gso))
 	clog.Debugf(ctx, "quic-forwarder counters: %s", b.String())
 }

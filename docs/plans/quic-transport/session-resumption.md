@@ -23,11 +23,15 @@ telepresence session against the same manager process**, because:
   every stream. Resumption across sessions is therefore useless by design —
   do not try to make it work; make sure it *fails closed* (it does, via that
   check, but add a test).
-* Today the client dials QUIC **once per session** (`startQuicTunnel`) and
-  the fallback is permanent (`quicFallbackProvider.dead` latches). With no
-  re-dial, there is nothing to resume. **The re-probe item in
-  `relay-hardening.md` must land first.** If it has not, implement that plan
-  before this one.
+* The re-probe (`pkg/client/rootd/quic.go`'s `quicReprobeLoop`, `quicReprobeInterval`
+  = 60s) is what gives this item something to resume: `startQuicTunnel` still dials
+  once at session start, but a session that trips `quicFallbackProvider` to
+  fallback now re-dials on that interval via `probeQuicTunnel`/`attemptReprobe`
+  until it succeeds, re-fetching the endpoint descriptor (fresh CA bundle, fresh
+  session-scoped client certificate) on every attempt. That re-dial is the
+  reconnect this plan's `tls.ClientSessionCache` should attach to — thread it
+  through both call sites (`startQuicTunnel` and the re-probe path share
+  `quicTLSConfig`, so one cache instance on the session object covers both).
 
 ## Implementation
 

@@ -12,8 +12,7 @@ behind it. Read this file first; it holds the context every plan assumes.
 | `udp-datagrams.md` | RFC 9221 unreliable datagrams for tunneled UDP | nothing |
 | `pipelined-stream-setup.md` | Remove the streamInfo/streamOK wait (verification-gated) | nothing |
 | `connection-migration.md` | Prove and harden client address migration | nothing |
-| `session-resumption.md` | TLS session resumption on reconnect | re-probe from `relay-hardening.md` |
-| `relay-hardening.md` | Forwarder GRO, buffer observability, QUIC re-probe | nothing |
+| `session-resumption.md` | TLS session resumption on reconnect | nothing (re-probe is implemented: `pkg/client/rootd/quic.go`'s `quicReprobeLoop`) |
 | `phase8-pr-assembly.md` | Final verification, docs pass, PR creation | **everything above** |
 
 ## How the work lands

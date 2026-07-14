@@ -57,6 +57,7 @@ func Listen(env *Env, allowlist *Allowlist) (*Forwarder, error) {
 	frontGRO := enableGRO(front)
 	frontPC := ipv4.NewPacketConn(front)
 	m := newMetrics()
+	m.setBufferInfo(frontRcv, frontSnd, frontGRO, gsoSupported())
 	flows := newFlowTable(frontPC, m)
 	router := NewRouter(allowlist, flows, m)
 	return &Forwarder{
