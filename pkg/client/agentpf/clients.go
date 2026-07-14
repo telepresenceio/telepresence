@@ -2,6 +2,7 @@ package agentpf
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/netip"
@@ -456,6 +457,13 @@ func NewClients(cl *k8s.Cluster, session *manager.SessionInfo, namespaces []stri
 		wlWaiters: xsync.NewMap[string, chan struct{}](),
 		proxyVias: xsync.NewMap[string, struct{}](),
 	}
+	// One TLS session cache for every agent QUIC dial this connector session ever makes:
+	// tls.ClientSessionCache is keyed by ServerName, so a single LRU instance shared
+	// across every agent's quic_sni is enough for each to resume independently. It must
+	// not outlive this *clients (a fresh connector session presents a different
+	// session-scoped client certificate, and a ticket resumed under the old one would
+	// simply be rejected by the manager's per-stream session check).
+	cs.quicEP.cache = tls.NewLRUClientSessionCache(16)
 	cs.setNamespaces(namespaces)
 	return cs
 }

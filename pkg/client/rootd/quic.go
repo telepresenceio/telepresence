@@ -48,13 +48,18 @@ const transportUsageTopic = "session.transport"
 
 // reportTransport enqueues a transportUsageTopic usage report. reason is omitted for
 // a successful QUIC dial (transport == TransportQUIC); every grpc-transport outcome
-// carries one.
-func reportTransport(ctx context.Context, transport, reason string) {
-	if reason == "" {
-		usg.Quick(ctx, transportUsageTopic, "transport", transport)
-	} else {
-		usg.Quick(ctx, transportUsageTopic, "transport", transport, "reason", reason)
+// carries one. resumed adds a "resumed" entry, and only ever as "true": its mere
+// presence answers whether TLS session resumption is landing in the field, so a
+// non-resumed dial simply omits the key rather than spelling out "false".
+func reportTransport(ctx context.Context, transport, reason string, resumed bool) {
+	kv := []string{"transport", transport}
+	if reason != "" {
+		kv = append(kv, "reason", reason)
 	}
+	if resumed {
+		kv = append(kv, "resumed", "true")
+	}
+	usg.Quick(ctx, transportUsageTopic, kv...)
 }
 
 // quicProbeResult is the outcome of one probeQuicTunnel attempt: conn/addr on success,
@@ -98,7 +103,7 @@ func (s *session) probeQuicTunnel(ctx context.Context) quicProbeResult {
 		return quicProbeResult{reason: "disabled", err: errors.New("QUIC tunnel endpoint disabled")}
 	}
 
-	tlsConf, err := quicTLSConfig(ep)
+	tlsConf, err := s.quicTLSConfig(ep)
 	if err != nil {
 		clog.Infof(ctx, "unable to use QUIC tunnel endpoint: %v", err)
 		return quicProbeResult{reason: "tls-error", err: err}
@@ -134,7 +139,7 @@ func (s *session) probeQuicTunnel(ctx context.Context) quicProbeResult {
 func (s *session) startQuicTunnel(ctx context.Context) {
 	r := s.probeQuicTunnel(ctx)
 	if r.err != nil {
-		reportTransport(ctx, TransportGRPC, r.reason)
+		reportTransport(ctx, TransportGRPC, r.reason, false)
 		return
 	}
 	s.activateQuicTunnel(ctx, r.conn, r.addr, "")
@@ -146,6 +151,14 @@ func (s *session) startQuicTunnel(ctx context.Context) {
 // SetPreferredQuicAddr). Used both for the initial dial (reason "") and for a
 // post-fallback recovery (reason "reprobe"; see reportTransport).
 func (s *session) activateQuicTunnel(ctx context.Context, conn *quic.Conn, addr, reason string) {
+	// conn is nil only in tests exercising the reprobe bookkeeping with a scripted
+	// prober that never dials a real connection; production always calls this with the
+	// connection probeQuicTunnel just dialed.
+	var resumed bool
+	if conn != nil {
+		resumed = conn.ConnectionState().TLS.DidResume
+	}
+	clog.Debugf(ctx, "QUIC tunnel TLS session resumed: %t", resumed)
 	clog.Infof(ctx, "QUIC tunnel transport active (%s)", addr)
 	s.quicConn.Store(conn)
 	s.setTransportStatus(TransportQUIC, addr)
@@ -160,7 +173,7 @@ func (s *session) activateQuicTunnel(ctx context.Context, conn *quic.Conn, addr,
 	// connection activateQuicTunnel is ever called with, so the total logged at
 	// session end covers every reconnect, not just the last one.
 	tunnel.StartDatagramReceiver(ctx, conn, s.datagramCounters)
-	reportTransport(ctx, TransportQUIC, reason)
+	reportTransport(ctx, TransportQUIC, reason, resumed)
 }
 
 // onQuicFallback returns the callback installed on a freshly activated
@@ -172,7 +185,7 @@ func (s *session) activateQuicTunnel(ctx context.Context, conn *quic.Conn, addr,
 func (s *session) onQuicFallback(ctx context.Context) func() {
 	return func() {
 		s.setTransportStatus(TransportGRPCFallback, "")
-		reportTransport(ctx, TransportGRPC, "fallback")
+		reportTransport(ctx, TransportGRPC, "fallback", false)
 		select {
 		case s.quicReprobeTrigger <- struct{}{}:
 		default:
@@ -241,7 +254,13 @@ func (s *session) quicReprobeLoop(ctx context.Context) {
 // bundle handed out over the (RBAC-authenticated) port-forwarded connection, never
 // against the system trust store, and the session-scoped client certificate is
 // presented so the manager can bind the QUIC connection to the session.
-func quicTLSConfig(ep *manager.QuicTunnelEndpoint) (*tls.Config, error) {
+//
+// s.quicSessionCache is attached so a later dial against the same manager process can
+// resume; it is re-attached on every call (rather than baked in once) because ep, and
+// therefore the rest of this config, is re-fetched fresh on every probe -- see
+// probeQuicTunnel -- while the cache instance itself stays the same for the life of the
+// session.
+func (s *session) quicTLSConfig(ep *manager.QuicTunnelEndpoint) (*tls.Config, error) {
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(ep.CaPem) {
 		return nil, errors.New("no valid CA certificate in QUIC tunnel endpoint descriptor")
@@ -255,10 +274,11 @@ func quicTLSConfig(ep *manager.QuicTunnelEndpoint) (*tls.Config, error) {
 		alpn = tunnel.QuicALPN
 	}
 	return &tls.Config{
-		RootCAs:      pool,
-		ServerName:   ep.ServerName,
-		Certificates: []tls.Certificate{cert},
-		NextProtos:   []string{alpn},
+		RootCAs:            pool,
+		ServerName:         ep.ServerName,
+		Certificates:       []tls.Certificate{cert},
+		NextProtos:         []string{alpn},
+		ClientSessionCache: s.quicSessionCache,
 	}, nil
 }
 

@@ -242,6 +242,15 @@ type session struct {
 	// bare session{} and never trip a provider.
 	quicReprobeTrigger chan struct{}
 
+	// quicSessionCache is the TLS session cache attached to every QUIC dial this session
+	// makes to the traffic-manager (initial dial and every reprobe retry alike), so a
+	// reconnect within the session's lifetime can resume instead of paying a full TLS 1.3
+	// handshake. One instance per session, never global: a resumed ticket carries this
+	// session's client identity (cert CN = session ID), so it must not survive into a new
+	// telepresence session. Initialized in newSession; nil only in tests that construct a
+	// bare session{}, in which case quicTLSConfig simply dials without resumption.
+	quicSessionCache tls.ClientSessionCache
+
 	// datagramCounters accumulates RFC 9221 datagram sent/received/fallback/unknown-conn
 	// totals across every QUIC connection this session ever activates (initial dial and
 	// every reprobe recovery share this one instance), so the summary logged at session
@@ -370,6 +379,7 @@ func newSession(
 		l4PortMap:             xsync.NewMap[types.AddrPortProto, uint16](),
 		sessionStart:          time.Now(),
 		quicReprobeTrigger:    make(chan struct{}, 1),
+		quicSessionCache:      tls.NewLRUClientSessionCache(16),
 	}
 	cfg := client.GetConfig(s)
 

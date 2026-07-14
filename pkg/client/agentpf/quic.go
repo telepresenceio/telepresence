@@ -34,22 +34,26 @@ const quicDialTimeout = 3 * time.Second
 
 // quicEndpoint holds the parsed, ready-to-use pieces of a manager.QuicTunnelEndpoint
 // descriptor: the forwarder address to dial and a TLS config template. ServerName is
-// overridden per agent (its quic_sni), so it is not part of the template.
+// overridden per agent (its quic_sni), so it is not part of the template. cache is the
+// owning clients' session-lifetime tls.ClientSessionCache (see quicEndpointCache),
+// shared across every agent SNI so a reconnect to any agent can resume.
 type quicEndpoint struct {
-	addr string
-	pool *x509.CertPool
-	cert tls.Certificate
-	alpn string
+	addr  string
+	pool  *x509.CertPool
+	cert  tls.Certificate
+	alpn  string
+	cache tls.ClientSessionCache
 }
 
 // tlsConfig returns the client TLS configuration to use when dialing this endpoint on
 // behalf of the agent identified by sni.
 func (e *quicEndpoint) tlsConfig(sni string) *tls.Config {
 	return &tls.Config{
-		RootCAs:      e.pool,
-		ServerName:   sni,
-		Certificates: []tls.Certificate{e.cert},
-		NextProtos:   []string{e.alpn},
+		RootCAs:            e.pool,
+		ServerName:         sni,
+		Certificates:       []tls.Certificate{e.cert},
+		NextProtos:         []string{e.alpn},
+		ClientSessionCache: e.cache,
 	}
 }
 
@@ -65,7 +69,13 @@ func (e *quicEndpoint) tlsConfig(sni string) *tls.Config {
 // Reusing it avoids racing the candidate list a second time and, more importantly,
 // guarantees agent connections dial the address this session is actually observed to work
 // through rather than possibly a different candidate that also happens to answer.
-func fetchQuicEndpoint(ctx context.Context, mc manager.ManagerClient, session *manager.SessionInfo, preferredAddr string) *quicEndpoint {
+func fetchQuicEndpoint(
+	ctx context.Context,
+	mc manager.ManagerClient,
+	session *manager.SessionInfo,
+	preferredAddr string,
+	cache tls.ClientSessionCache,
+) *quicEndpoint {
 	dialCtx, cancel := context.WithTimeout(ctx, quicDialTimeout)
 	defer cancel()
 	ep, err := mc.GetQuicTunnelEndpoint(dialCtx, session)
@@ -100,10 +110,11 @@ func fetchQuicEndpoint(ctx context.Context, mc manager.ManagerClient, session *m
 		addr = net.JoinHostPort(ep.Host, strconv.Itoa(int(ep.Port)))
 	}
 	return &quicEndpoint{
-		addr: addr,
-		pool: pool,
-		cert: cert,
-		alpn: alpn,
+		addr:  addr,
+		pool:  pool,
+		cert:  cert,
+		alpn:  alpn,
+		cache: cache,
 	}
 }
 
@@ -113,10 +124,18 @@ func fetchQuicEndpoint(ctx context.Context, mc manager.ManagerClient, session *m
 // descriptor -- so that no later agent dial ever repeats the RPC. If no manager client is
 // available yet (the agent watch races the very start of the session), the fetch is left
 // unattempted rather than cached as a false negative; the next agent dial tries again.
+//
+// cache is the tls.ClientSessionCache attached to every quicEndpoint this fetches, so a
+// reconnect to any agent within the same connector session can resume its TLS session
+// regardless of which quicEndpoint instance (pre- or post-reset) served the dial. It is
+// set once, by the owning *clients at construction, and is never itself cleared by
+// reset(): a stale ticket for a since-restarted manager's CA simply fails to resume and
+// falls back to a full handshake against the fresh CA that reset's caller just fetched.
 type quicEndpointCache struct {
-	mu  sync.Mutex
-	ep  *quicEndpoint
-	set bool
+	mu    sync.Mutex
+	ep    *quicEndpoint
+	set   bool
+	cache tls.ClientSessionCache
 }
 
 func (c *quicEndpointCache) get(ctx context.Context, mc manager.ManagerClient, session *manager.SessionInfo, preferredAddr string) *quicEndpoint {
@@ -128,7 +147,7 @@ func (c *quicEndpointCache) get(ctx context.Context, mc manager.ManagerClient, s
 	if mc == nil {
 		return nil
 	}
-	c.ep = fetchQuicEndpoint(ctx, mc, session, preferredAddr)
+	c.ep = fetchQuicEndpoint(ctx, mc, session, preferredAddr, c.cache)
 	c.set = true
 	return c.ep
 }

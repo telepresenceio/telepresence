@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"math/big"
 	"testing"
@@ -180,8 +182,8 @@ func TestSession_SetTransportStatus(t *testing.T) {
 func TestReportTransport(t *testing.T) {
 	ctx, sink := usg.InstallManager(t.Context(), "test-install")
 
-	reportTransport(ctx, TransportQUIC, "")
-	reportTransport(ctx, TransportGRPC, "dial-failed")
+	reportTransport(ctx, TransportQUIC, "", false)
+	reportTransport(ctx, TransportGRPC, "dial-failed", false)
 
 	reports := sink.Drain(0)
 	require.Len(t, reports, 2)
@@ -190,6 +192,8 @@ func TestReportTransport(t *testing.T) {
 	assert.Equal(t, "quic", reports[0].Entries["transport"])
 	_, hasReason := reports[0].Entries["reason"]
 	assert.False(t, hasReason, "a successful QUIC dial must not carry a reason entry")
+	_, hasResumed := reports[0].Entries["resumed"]
+	assert.False(t, hasResumed, "a non-resumed dial must not carry a resumed entry")
 
 	assert.Equal(t, transportUsageTopic, reports[1].Topic)
 	assert.Equal(t, "grpc", reports[1].Entries["transport"])
@@ -200,6 +204,20 @@ func TestReportTransport(t *testing.T) {
 			assert.NotContains(t, v, ".", "no report entry should carry an address-shaped value")
 		}
 	}
+}
+
+// TestReportTransport_Resumed verifies that resumed is only ever reported as "true",
+// never spelled out as "false", so its mere presence in field data answers whether
+// resumption happened.
+func TestReportTransport_Resumed(t *testing.T) {
+	ctx, sink := usg.InstallManager(t.Context(), "test-install")
+
+	reportTransport(ctx, TransportQUIC, "reprobe", true)
+
+	reports := sink.Drain(0)
+	require.Len(t, reports, 1)
+	assert.Equal(t, "reprobe", reports[0].Entries["reason"])
+	assert.Equal(t, "true", reports[0].Entries["resumed"])
 }
 
 // TestQuicFallbackProvider_OnFallbackUpdatesTransportStatus is an integration-shaped
@@ -216,7 +234,7 @@ func TestQuicFallbackProvider_OnFallbackUpdatesTransportStatus(t *testing.T) {
 
 	p := newQuicFallbackProvider(ctx, quicP, func() tunnel.Provider { return fallbackP }, conn, func() {
 		s.setTransportStatus(TransportGRPCFallback, "")
-		reportTransport(ctx, TransportGRPC, "fallback")
+		reportTransport(ctx, TransportGRPC, "fallback", false)
 	})
 
 	_, err := p.Tunnel(context.Background())
@@ -429,4 +447,232 @@ func TestDialQuicCandidates_AllUnreachableReturnsError(t *testing.T) {
 
 	_, _, err := dialQuicCandidates(ctx, []string{"127.0.0.1:0", "127.0.0.1:0"}, clientQuicTLSConfig(), nil)
 	require.Error(t, err)
+}
+
+// --- TLS session resumption ------------------------------------------------------------
+
+// testResumptionCA is a minimal self-signed CA plus leaf-minting helpers, for tests that
+// need a real (verified, not InsecureSkipVerify) TLS chain: quicTLSConfig always builds
+// RootCAs from ep.CaPem, so a genuine dial requires a genuine chain to verify against.
+type testResumptionCA struct {
+	cert *x509.Certificate
+	key  ed25519.PrivateKey
+	pem  []byte
+}
+
+func newTestResumptionCA(t *testing.T) *testResumptionCA {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "resumption-test-ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, pub, priv)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+	return &testResumptionCA{cert: cert, key: priv, pem: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})}
+}
+
+func (ca *testResumptionCA) mintServerCert(t *testing.T, sni string) tls.Certificate {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: sni},
+		DNSNames:     []string{sni},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, pub, ca.key)
+	require.NoError(t, err)
+	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: priv}
+}
+
+func (ca *testResumptionCA) mintClientCertPEM(t *testing.T, cn string) (certPEM, keyPEM []byte) {
+	t.Helper()
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(3),
+		Subject:      pkix.Name{CommonName: cn},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, pub, ca.key)
+	require.NoError(t, err)
+	keyDER, err := x509.MarshalPKCS8PrivateKey(priv)
+	require.NoError(t, err)
+	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+	return certPEM, keyPEM
+}
+
+// notifyingSessionCache wraps a real tls.ClientSessionCache and signals put so a test can
+// wait for the server's post-handshake session ticket to actually land before re-dialing,
+// instead of sleeping and hoping.
+type notifyingSessionCache struct {
+	tls.ClientSessionCache
+	put chan struct{}
+}
+
+func (c *notifyingSessionCache) Put(sessionKey string, cs *tls.ClientSessionState) {
+	c.ClientSessionCache.Put(sessionKey, cs)
+	select {
+	case c.put <- struct{}{}:
+	default:
+	}
+}
+
+// TestSession_QuicTLSConfig_ResumesOnRedial is the unit-level proof required by the
+// session-resumption plan: dialing the same peer twice through the session's own
+// quicTLSConfig, sharing its quicSessionCache, resumes the second time and the resumed
+// connection's streams work.
+func TestSession_QuicTLSConfig_ResumesOnRedial(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ca := newTestResumptionCA(t)
+	const sni = "quic-resume-test.example"
+	serverCert := ca.mintServerCert(t, sni)
+	clientCertPEM, clientKeyPEM := ca.mintClientCertPEM(t, "test-session")
+
+	serverTLSConf := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		NextProtos:   []string{"quic-resume-test"},
+	}
+	ln, err := quic.ListenAddr("127.0.0.1:0", serverTLSConf, nil)
+	require.NoError(t, err)
+	defer ln.Close()
+
+	streamCh := make(chan *quic.Stream, 2)
+	go func() {
+		for {
+			conn, err := ln.Accept(ctx)
+			if err != nil {
+				return
+			}
+			go func() {
+				qs, err := conn.AcceptStream(ctx)
+				if err != nil {
+					return
+				}
+				streamCh <- qs
+			}()
+		}
+	}()
+
+	cache := &notifyingSessionCache{ClientSessionCache: tls.NewLRUClientSessionCache(16), put: make(chan struct{}, 1)}
+	s := &session{quicSessionCache: cache}
+	ep := &rpc.QuicTunnelEndpoint{
+		CaPem:         ca.pem,
+		ClientCertPem: clientCertPEM,
+		ClientKeyPem:  clientKeyPEM,
+		ServerName:    sni,
+		Alpn:          "quic-resume-test",
+	}
+
+	dial := func() *quic.Conn {
+		tlsConf, err := s.quicTLSConfig(ep)
+		require.NoError(t, err)
+		conn, err := quic.DialAddr(ctx, ln.Addr().String(), tlsConf, nil)
+		require.NoError(t, err)
+		return conn
+	}
+
+	conn1 := dial()
+	require.False(t, conn1.ConnectionState().TLS.DidResume, "the first dial has no ticket to resume")
+	qs1, err := conn1.OpenStreamSync(ctx)
+	require.NoError(t, err)
+	// A QUIC stream is only observed by the peer's AcceptStream once data actually flows
+	// on it.
+	_, err = qs1.Write([]byte("ping"))
+	require.NoError(t, err)
+	select {
+	case <-streamCh:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for the first stream to be accepted")
+	}
+
+	select {
+	case <-cache.put:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for a session ticket to be cached")
+	}
+	require.NoError(t, conn1.CloseWithError(0, ""))
+
+	conn2 := dial()
+	defer func() { _ = conn2.CloseWithError(0, "") }()
+	require.True(t, conn2.ConnectionState().TLS.DidResume, "re-dial with the same session cache must resume")
+
+	qs2, err := conn2.OpenStreamSync(ctx)
+	require.NoError(t, err)
+	defer func() { _ = qs2.Close() }()
+	_, err = qs2.Write([]byte("ping"))
+	require.NoError(t, err)
+	select {
+	case <-streamCh:
+	case <-ctx.Done():
+		t.Fatal("timed out waiting for the resumed connection's stream to be accepted")
+	}
+}
+
+// TestSession_QuicTLSConfig_NoSessionCacheNeverResumes documents the fallback shape a
+// bare session{} (quicSessionCache == nil) leaves quicTLSConfig in: dialing is unaffected,
+// resumption is simply never attempted, matching a plain tls.Config with no
+// ClientSessionCache set.
+func TestSession_QuicTLSConfig_NoSessionCacheNeverResumes(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	ca := newTestResumptionCA(t)
+	const sni = "quic-no-resume-test.example"
+	serverCert := ca.mintServerCert(t, sni)
+	clientCertPEM, clientKeyPEM := ca.mintClientCertPEM(t, "test-session")
+
+	serverTLSConf := &tls.Config{
+		Certificates: []tls.Certificate{serverCert},
+		NextProtos:   []string{"quic-no-resume-test"},
+	}
+	ln, err := quic.ListenAddr("127.0.0.1:0", serverTLSConf, nil)
+	require.NoError(t, err)
+	defer ln.Close()
+	go func() {
+		for {
+			conn, err := ln.Accept(ctx)
+			if err != nil {
+				return
+			}
+			go func() { _ = conn.CloseWithError(0, "") }()
+		}
+	}()
+
+	s := &session{}
+	ep := &rpc.QuicTunnelEndpoint{
+		CaPem:         ca.pem,
+		ClientCertPem: clientCertPEM,
+		ClientKeyPem:  clientKeyPEM,
+		ServerName:    sni,
+		Alpn:          "quic-no-resume-test",
+	}
+
+	tlsConf, err := s.quicTLSConfig(ep)
+	require.NoError(t, err)
+	require.Nil(t, tlsConf.ClientSessionCache)
+
+	conn, err := quic.DialAddr(ctx, ln.Addr().String(), tlsConf, nil)
+	require.NoError(t, err)
+	defer func() { _ = conn.CloseWithError(0, "") }()
+	require.False(t, conn.ConnectionState().TLS.DidResume)
 }
