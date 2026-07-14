@@ -15,7 +15,14 @@ import (
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
+
+// datagramStatsInterval is how often Serve logs the listener-wide datagram counters.
+// There is no existing periodic stats log in the manager to piggyback on for this, so
+// this mirrors the quicforwarder's own metricsLogInterval cadence (see
+// cmd/traffic/cmd/quicforwarder/forwarder.go) rather than inventing an unrelated one.
+const datagramStatsInterval = 30 * time.Second
 
 // quic stream error codes used to reject a stream instead of letting it proceed to
 // the tunnel handler. The values only need to be distinct; quic-go delivers them to
@@ -36,9 +43,10 @@ type TunnelHandler func(ctx context.Context, stream tunnel.Stream) error
 // a tunnel.Stream and, once its declared session ID has been checked against the
 // connection's client certificate CommonName, handed to a TunnelHandler.
 type Listener struct {
-	ln      *quic.Listener
-	conn    net.PacketConn
-	handler TunnelHandler
+	ln       *quic.Listener
+	conn     net.PacketConn
+	handler  TunnelHandler
+	datagram *tunnel.DatagramCounters
 }
 
 // Listen starts a QUIC listener on 0.0.0.0:port, running behind the packet forwarder
@@ -71,8 +79,15 @@ func Listen(port uint16, podIP netip.Addr, ca *CA, serverCert tls.Certificate, h
 	// Clients keep otherwise-idle connections alive with pings every 15s; the idle
 	// timeout only needs to be comfortably above that ping interval. Every flow the
 	// client routes through the VPN is one concurrent stream, so the stream limit
-	// must accommodate a busy client, not quic-go's default of 100.
-	qCfg := &quic.Config{MaxIdleTimeout: time.Minute, MaxIncomingStreams: tunnel.QuicMaxIncomingStreams}
+	// must accommodate a busy client, not quic-go's default of 100. EnableDatagrams
+	// lets a UDP flow's payload ride an unreliable QUIC datagram instead of its
+	// stream when the client negotiated it too; an older client that didn't simply
+	// never sends one and every payload keeps arriving on the stream as before.
+	qCfg := &quic.Config{
+		MaxIdleTimeout:     time.Minute,
+		MaxIncomingStreams: tunnel.QuicMaxIncomingStreams,
+		EnableDatagrams:    true,
+	}
 	tr := &quic.Transport{
 		Conn:                  conn,
 		ConnectionIDGenerator: quicfwd.NewCIDGenerator(podIP),
@@ -82,7 +97,7 @@ func Listen(port uint16, podIP netip.Addr, ca *CA, serverCert tls.Certificate, h
 		_ = conn.Close()
 		return nil, fmt.Errorf("quictunnel: listen on %s: %w", addr, err)
 	}
-	return &Listener{ln: ln, conn: conn, handler: handler}, nil
+	return &Listener{ln: ln, conn: conn, handler: handler, datagram: &tunnel.DatagramCounters{}}, nil
 }
 
 // Addr returns the listener's local address.
@@ -111,6 +126,7 @@ func (l *Listener) Serve(ctx context.Context) error {
 		<-ctx.Done()
 		_ = l.ln.Close()
 	}()
+	go l.logDatagramStatsLoop(ctx)
 	for {
 		conn, err := l.ln.Accept(ctx)
 		if err != nil {
@@ -124,6 +140,23 @@ func (l *Listener) Serve(ctx context.Context) error {
 	}
 }
 
+// logDatagramStatsLoop periodically logs the listener-wide datagram counters -- summed
+// across every client connection this Listener has ever accepted, since there is no
+// natural per-connection lifecycle hook shorter than the manager's own -- so the
+// datagram feature is observable in the field without per-flow logging.
+func (l *Listener) logDatagramStatsLoop(ctx context.Context) {
+	ticker := time.NewTicker(datagramStatsInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			clog.Debugf(ctx, "quictunnel: datagram counters: %s", l.datagram)
+		}
+	}
+}
+
 func (l *Listener) handleConn(ctx context.Context, conn *quic.Conn) {
 	cn, err := peerCommonName(conn)
 	if err != nil {
@@ -131,6 +164,7 @@ func (l *Listener) handleConn(ctx context.Context, conn *quic.Conn) {
 		_ = conn.CloseWithError(0, "no verified client certificate")
 		return
 	}
+	tunnel.StartDatagramReceiver(ctx, conn, l.datagram)
 	for {
 		qs, err := conn.AcceptStream(ctx)
 		if err != nil {
@@ -139,11 +173,11 @@ func (l *Listener) handleConn(ctx context.Context, conn *quic.Conn) {
 			}
 			return
 		}
-		go l.handleStream(ctx, qs, cn)
+		go l.handleStream(ctx, conn, qs, cn)
 	}
 }
 
-func (l *Listener) handleStream(ctx context.Context, qs *quic.Stream, certCN string) {
+func (l *Listener) handleStream(ctx context.Context, conn *quic.Conn, qs *quic.Stream, certCN string) {
 	// A QUIC stream only terminates -- and only returns its stream-limit credit to
 	// the peer -- once both directions have finished. Close finishes the send
 	// direction; CancelRead releases the receive direction even when the client's
@@ -155,7 +189,7 @@ func (l *Listener) handleStream(ctx context.Context, qs *quic.Stream, certCN str
 		_ = qs.Close()
 		qs.CancelRead(0)
 	}()
-	stream, err := tunnel.NewServerStream(ctx, tunnel.ClientToManager, tunnel.NewQuicServerStream(qs))
+	stream, err := tunnel.NewServerStream(ctx, tunnel.ClientToManager, tunnel.NewQuicServerStream(conn, qs))
 	if err != nil {
 		clog.Errorf(ctx, "quictunnel: stream handshake failed: %v", err)
 		qs.CancelWrite(errHandshakeFailed)
@@ -167,6 +201,10 @@ func (l *Listener) handleStream(ctx context.Context, qs *quic.Stream, certCN str
 		qs.CancelWrite(errSessionCertMismatch)
 		qs.CancelRead(errSessionCertMismatch)
 		return
+	}
+	if stream.ID().Protocol() == types.ProtoUDP {
+		detach := tunnel.AttachDatagramRoute(stream)
+		defer detach()
 	}
 	if err := l.handler(ctx, stream); err != nil && ctx.Err() == nil {
 		clog.Errorf(ctx, "quictunnel: tunnel for session %s ended with error: %v", certCN, err)

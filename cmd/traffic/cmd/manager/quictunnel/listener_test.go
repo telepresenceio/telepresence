@@ -90,7 +90,7 @@ func TestListener_MatchingSessionIsServed(t *testing.T) {
 	id := tunnel.NewConnID(types.ProtoTCP,
 		netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001),
 		netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
-	client, err := tunnel.NewClientStream(ctx, tunnel.ClientToManager, tunnel.NewQuicClientStream(qs),
+	client, err := tunnel.NewClientStream(ctx, tunnel.ClientToManager, tunnel.NewQuicClientStream(conn, qs),
 		id, tunnel.SessionID("session-match"), 0, 0)
 	require.NoError(t, err)
 
@@ -125,7 +125,7 @@ func TestListener_MismatchedSessionIsRejected(t *testing.T) {
 	id := tunnel.NewConnID(types.ProtoTCP,
 		netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001),
 		netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
-	client, err := tunnel.NewClientStream(ctx, tunnel.ClientToManager, tunnel.NewQuicClientStream(qs),
+	client, err := tunnel.NewClientStream(ctx, tunnel.ClientToManager, tunnel.NewQuicClientStream(conn, qs),
 		id, tunnel.SessionID("declared-session"), 0, 0)
 	// The listener resets the stream as soon as it observes the session mismatch,
 	// which races with the StreamOK reply already written for the handshake: either
@@ -287,7 +287,7 @@ func TestListener_ServerCIDsEncodePodIP(t *testing.T) {
 	id := tunnel.NewConnID(types.ProtoTCP,
 		netip.AddrPortFrom(netip.AddrFrom4([4]byte{127, 0, 0, 1}), 1001),
 		netip.AddrPortFrom(netip.AddrFrom4([4]byte{192, 168, 0, 1}), 8080))
-	client, err := tunnel.NewClientStream(ctx, tunnel.ClientToManager, tunnel.NewQuicClientStream(qs),
+	client, err := tunnel.NewClientStream(ctx, tunnel.ClientToManager, tunnel.NewQuicClientStream(conn, qs),
 		id, tunnel.SessionID("session-cid"), 0, 0)
 	require.NoError(t, err)
 
