@@ -371,7 +371,8 @@ forwarder-first architecture builds on them:
    restart leaves client⇄agent QUIC traffic flowing.
 7. **Zero-configuration discovery.** Service/node watch in the manager, candidate
    address list + SNI scheme in the endpoint descriptor, concurrent client probe,
-   docs reduced to "set `quicTunnel.enabled=true`".
+   docs reduced to "set `quicTunnel.enabled=true`". Detailed handoff plan:
+   `phase7-zero-config-discovery.md` in this directory.
 
 ## What measurement taught us, and the improvements it motivates
 
@@ -420,7 +421,9 @@ sense against them:
   packet relay must raise its UDP socket buffers or it converts scheduling hiccups
   into congestion signals.
 
-The improvements, in the order they are worth doing:
+The improvements, in the order they are worth doing (each has a detailed,
+self-contained handoff plan in this directory — see `README.md` for the index
+and the shared context those plans assume):
 
 ### Unreliable datagrams for tunneled UDP (RFC 9221)
 
