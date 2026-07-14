@@ -373,15 +373,200 @@ forwarder-first architecture builds on them:
    address list + SNI scheme in the endpoint descriptor, concurrent client probe,
    docs reduced to "set `quicTunnel.enabled=true`".
 
+## What measurement taught us, and the improvements it motivates
+
+Phases 1–6 were followed by a measurement campaign (the `perf/` harness, plus
+microbenchmarks in `cmd/traffic/cmd/quicforwarder`) that falsified parts of the
+original performance narrative, confirmed others, and surfaced improvements that
+were not visible on paper. The facts first, because the improvements only make
+sense against them:
+
+* **Head-of-line blocking is real and QUIC eliminates it — for the flows, not the
+  bytes.** With loss injected on the download data path and the offered load kept
+  well below the connection's loss-limited capacity, the gRPC transport's p95
+  request latency is 1.6–1.8× QUIC's at 1–3 % loss, and — the cleaner signal — the
+  QUIC *median* stays at the clean-network baseline through 3 % loss while the gRPC
+  median degrades. The confirmation required three experiment designs: bulk
+  transfers and saturating request rates both degenerate into measuring
+  congestion-control efficiency (where kernel TCP beats a userspace stack), because
+  a single congestion-controlled connection under random loss is Mathis-bound
+  (`~MSS/RTT × 1.22/√loss`) no matter how clever its streams are. QUIC's stream
+  independence protects *innocent* flows from each other's losses; it does not make
+  the punctured flow faster, and it does not raise the connection's aggregate
+  capacity.
+* **Raw throughput is not the story.** Over a real WAN the port-forwarded transport
+  moves bulk data ~25 % faster than the QUIC path, because kernel TCP + TSO beats a
+  userspace UDP stack whose socket buffers are capped by the node's
+  `net.core.rmem_max` (208 KiB on GKE's Container-Optimized OS — silent
+  burst-overflow loss that pins the congestion window). We raise every buffer we
+  control and document the node sysctl, but on managed node images this ceiling is
+  a fact of life. Any pitch of this transport as "faster downloads" would be
+  dishonest; the honest pitch is tail latency and flow isolation.
+* **An unhypothesized clean-network win: idle restart.** With sparse, pause-heavy
+  traffic at WAN RTT, the gRPC transport's clean-network median is 2×RTT versus
+  QUIC's 1×RTT. Linux collapses a TCP connection's congestion window after an idle
+  period (`tcp_slow_start_after_idle`, RFC 2861, default-on, and it is the
+  *cluster-side* kernel that matters — not tunable on managed platforms), so the
+  first burst after every pause pays an extra round trip on the shared TCP
+  connection. quic-go performs no such collapse. Interactive development traffic is
+  almost entirely pauses, so this is arguably the most user-visible benefit
+  measured so far: after every pause, the first interaction over QUIC is one RTT
+  faster.
+* **Two latent defects were flushed out by measuring**, both worth remembering as
+  design constraints: a QUIC stream only returns its stream-limit credit when both
+  directions terminate, so every layer that adapts `quic.Stream` to another
+  interface must cancel the receive direction explicitly (the tunnel protocol ends
+  conversations at the message level and never reads to transport EOF); and a
+  packet relay must raise its UDP socket buffers or it converts scheduling hiccups
+  into congestion signals.
+
+The improvements, in the order they are worth doing:
+
+### Unreliable datagrams for tunneled UDP (RFC 9221)
+
+The design's cost #4 — UDP-over-reliable-stream semantics — is still unpaid: today
+a UDP flow rides an ordered QUIC stream exactly as it rides an ordered HTTP/2
+stream on the fallback transport. For sparse request/response UDP (DNS, the bulk of
+real tunneled UDP) this is fine and even beneficial: the transport retransmits a
+lost query in ~1 RTT instead of the resolver waiting out its multi-second timeout.
+But for sustained or latency-sensitive UDP the damage is structural, and it is
+worst precisely when the inner protocol is itself QUIC (HTTP/3 through the VIF):
+
+* one lost carrier packet stalls **every** datagram of the flow behind it, so all
+  the inner connection's streams stall together — the tunnel silently re-imposes
+  the head-of-line blocking the application adopted QUIC to escape;
+* the outer transport retransmits datagrams the inner protocol has already
+  re-sent — duplicate data and polluted inner RTT estimates;
+* the inner congestion controller never sees loss, only delay, then bursts of
+  drops at queue boundaries when the tunnel stream backpressures into netstack —
+  the worst possible signal for a loss-based controller.
+
+Browsers mostly *mask* this by racing HTTP/3 against HTTP/2 and quietly falling
+back, so the symptom in the field is "H3 never gets used through Telepresence"
+rather than visible slowness.
+
+The fix is the hybrid carriage the RFC was written for, and it is only possible on
+the QUIC transport — HTTP/2 structurally cannot offer unreliable delivery, so this
+is an upgrade the QUIC path earns over the fallback rather than a parity feature:
+
+* `EnableDatagrams` on all three QUIC endpoints (client dial, manager listener,
+  agent listener). The forwarder needs nothing: DATAGRAM frames live inside
+  ordinary QUIC packets, and the forwarder routes packets by connection ID without
+  looking deeper.
+* A tunnel-level datagram framing of `ConnID + payload`, associating each datagram
+  with its flow the way the stream's `streamInfo` does today. Flow setup, teardown,
+  and anything with delivery semantics (`Disconnect`, `KeepAlive`) stay on the
+  flow's stream; only `Normal` UDP payload messages are eligible.
+* **Size-based hybrid, not all-or-nothing:** a UDP payload that fits the outer
+  datagram budget (path MTU minus QUIC overhead minus the ConnID header) is sent
+  unreliably; an oversized one falls back to the flow's stream. The VIF's MTU is
+  under our control, so the common case fits by construction; IP-fragmented jumbo
+  datagrams reassembled by netstack take the reliable path rather than forcing a
+  fragmentation scheme of our own.
+* The gRPC fallback transport keeps stream carriage unchanged, and a peer that
+  did not negotiate datagram support (older manager/agent) simply never receives
+  the datagram framing — the stream path remains complete on its own.
+
+This should be validated by its own experiment: an inner-QUIC-through-the-tunnel
+benchmark (HTTP/3 client against an in-cluster server), designed load-first with
+the lessons below.
+
+### Pipelined stream setup: remove a round trip from every new flow
+
+`NewClientStream` sends `streamInfo` and then **blocks waiting for** `streamOK`
+before the dial message goes out, so every tunneled connection pays two tunnel
+round trips before the peer even starts dialing the destination: one of ours, then
+the semantically unavoidable `DialOK` (the remote connect). The `streamInfo` wait
+exists to learn the peer stream version before committing to framing — a concern
+that is fixed per session, not per stream, since every tunnel stream of a session
+terminates in the same manager (or agent) process.
+
+The improvement: resolve the peer version once per session (or optimistically
+assume the current version and let the first `streamOK` correct it), send
+`streamInfo` and the dial payload in the same flight, and treat a version mismatch
+or rejection as a stream reset — exactly how the listener already rejects
+handshake failures. On QUIC, opening a stream on an established connection is
+free, so flow setup drops from 2×RTT + connect to 1×RTT + connect. At an 80 ms
+WAN RTT that halves the time-to-first-byte of every short-lived connection, and a
+development workload is dominated by short-lived connections. The same
+optimization helps the gRPC transport equally — it is a tunnel-protocol
+improvement that the QUIC measurements happened to expose.
+
+### Validate and advertise connection migration
+
+Migration is the design's cost #3 and remains untested (the planned experiment 3).
+Two things make it worth pulling forward. First, the measured latency story
+(head-of-line plus idle-restart) is about *comfort*, while migration is about not
+losing the session at all — a categorically stronger user experience claim.
+Second, the forwarder architecture is migration-proof **by construction**: routing
+is keyed on server-issued connection IDs that encode the backend pod, never on the
+client's 4-tuple, so a client that hops from Wi-Fi to a hotspot keeps every tunnel
+stream alive through the same forwarder without any state reconciliation. That
+synergy should be demonstrated (roam the client mid-transfer in an integration
+test, assert no stream resets) and then documented, because it differentiates this
+design from both the port-forward (dies with the TCP connection) and from
+NAT-rebinding-hostile alternatives.
+
+### 0-RTT session resumption
+
+Reconnects — daemon restart, `telepresence quit`/`connect`, fallback recovery —
+currently pay a full TLS handshake. quic-go supports session resumption; enabling
+ticket-based resumption cuts a round trip from reconnect, and the certificates
+involved are session-scoped and short-lived, which bounds the replay surface.
+Plain resumption (without 0-RTT early data) is the right first step: it keeps the
+anti-replay analysis trivial and still removes the expensive part. Low effort, low
+risk, small but universal win.
+
+### Relay hardening left on the table
+
+* **Receive-side GRO** on the forwarder (`UDP_GRO`): the write side already
+  coalesces with GSO; symmetric coalescing on reads roughly halves per-datagram
+  receive cost at high rates. Straightforward, Linux-only, and measurable with the
+  existing microbenchmarks.
+* **Surface degraded socket buffers.** The forwarder logs the granted buffer sizes
+  at startup, but a log line is easy to miss. The granted sizes (and the
+  `rmem_max` they imply) should travel into the usage/status reporting so an
+  operator can see *why* bulk throughput is capped without shell access to a node.
+* **Post-CA-rotation re-probe** (already listed under phase 4 hardening) remains
+  the known availability gap: a client that fell back during a manager restart
+  stays on the port-forward until reconnect.
+
+### Measurement methodology, distilled
+
+Recorded here because the next experiment will otherwise re-learn them at the same
+cost (each of these invalidated at least one full run):
+
+1. Loss must be injected on the **data path** (inside the kind node, on its egress
+   toward the client); client-egress loss only touches ACKs and requests and
+   cannot produce head-of-line blocking on responses.
+2. Requests must fit in a congestion window, **and** the offered load must stay
+   well below the Mathis capacity at the top loss level *at the tested RTT* —
+   capacity shrinks as 1/RTT, so think time must scale with emulated delay or the
+   experiment silently degenerates into the queue-bound regime.
+3. Everything that segments must be neutralized at the impairment point: TSO/GSO
+   off on the impaired interface, `QUIC_GO_DISABLE_GSO` in the senders, or the two
+   arms lose incomparable units (a 64 KB super-packet versus a 1350-byte
+   datagram per drop event).
+4. The clean-network (0 % loss) window must carry the same emulated RTT as the
+   loss windows, and each arm needs a discarded warm-up window.
+5. Percentile assertions belong on p95, not p99, at achievable sample counts; and
+   the assertion threshold must come from measurement, not hope.
+6. Sustained UDP egress from a cloud VM to a single external IP matches DoS
+   heuristics (this campaign earned a GCP abuse notice and an outbound rate limit
+   on the project). Remote-cluster experiments should keep the client inside the
+   provider's network — which also removes the wifi and consumer-ISP variables.
+
 ## Open questions
 
 * Should the probe result influence DNS and agent flows immediately, or only new
   subnets/flows? (Leaning: all new streams, never migrate live ones.)
 * Certificate lifetime and rotation policy for the QUIC endpoint; whether to reuse
   the agent-injector CA machinery or keep a dedicated CA.
-* Whether `quic-go`'s datagram MTU constraints require fragmenting large UDP
-  payloads in `pkg/tunnel` or whether streams-with-message-boundaries is good enough
-  for the UDP case in practice.
+* ~~Whether `quic-go`'s datagram MTU constraints require fragmenting large UDP
+  payloads in `pkg/tunnel`~~ — decided: no fragmentation scheme of our own. A
+  size-based hybrid sends fitting payloads as unreliable datagrams and routes
+  oversized ones over the flow's stream (see "Unreliable datagrams for tunneled
+  UDP").
 * Interaction with `telepresence connect --docker` (containerized daemon): the UDP
   probe runs from inside the container network; needs verification that nothing
   assumes host networking.
