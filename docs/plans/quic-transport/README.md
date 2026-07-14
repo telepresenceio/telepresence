@@ -9,7 +9,6 @@ behind it. Read this file first; it holds the context every plan assumes.
 
 | File | Work item | Depends on |
 |------|-----------|------------|
-| `udp-datagrams.md` | RFC 9221 unreliable datagrams for tunneled UDP | nothing |
 | `pipelined-stream-setup.md` | Remove the streamInfo/streamOK wait (verification-gated) | nothing |
 | `connection-migration.md` | Prove and harden client address migration | nothing |
 | `session-resumption.md` | TLS session resumption on reconnect | nothing (re-probe is implemented: `pkg/client/rootd/quic.go`'s `quicReprobeLoop`) |
