@@ -525,6 +525,21 @@ message QuicTunnelEndpoint {
   // ALPN protocol to offer in the TLS handshake. An empty value means the
   // client's built-in default.
   string alpn = 8;
+
+  // Candidate dialable addresses for the QUIC endpoint, ordered by the
+  // traffic-manager's preference (see "Zero-configuration endpoint discovery" in
+  // docs/plans/quic-transport/design.md). The client dials candidates
+  // concurrently and keeps the first whose handshake completes. host/port above
+  // always duplicate the first entry, if any, so an older client (built before
+  // this field existed) still gets a single address to dial.
+  repeated QuicEndpointCandidate candidates = 9;
+}
+
+// One dialable address for the QUIC endpoint. Candidates are ordered by the
+// manager's preference; the client keeps the first that handshakes.
+message QuicEndpointCandidate {
+  string host = 1;
+  int32 port = 2;
 }
 
 // QuicBackend identifies one live pod IP that the QUIC forwarder (a separate
