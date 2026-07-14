@@ -23,14 +23,21 @@ upgrade, never a requirement. Enabling it is described in the
 1. The client connects exactly as it always has, over the port-forwarded
    connection, and establishes its session.
 2. It then asks the traffic-manager for the QUIC endpoint descriptor. A
-   manager without a listener (or one predating the feature) answers that no
-   endpoint exists, and the session simply stays on the port-forwarded
-   transport.
-3. If an endpoint is advertised, the client dials it with a three-second
-   budget. Success upgrades all traffic-manager-bound tunnel streams to QUIC
-   for the rest of the session; failure is logged at debug level and the
-   session continues on the port-forwarded transport. Session startup is
-   never delayed or failed by this step.
+   manager without a listener (or one predating the feature), or one with a
+   listener but no candidate address to advertise (see "Endpoint discovery"
+   below), answers that no endpoint exists, and the session simply stays on
+   the port-forwarded transport.
+3. If an endpoint is advertised, it carries an ordered list of candidate
+   addresses. The client dials every candidate concurrently, staggered by
+   250ms in the manager's preferred order so the preferred candidate
+   normally wins outright, within an overall three-second budget. The first
+   candidate whose handshake completes upgrades all traffic-manager-bound
+   tunnel streams to QUIC for the rest of the session; every other candidate
+   is closed. If every candidate fails, that is logged at debug level and
+   the session continues on the port-forwarded transport. Session startup is
+   never delayed or failed by this step. Direct client-to-agent connections
+   that also use QUIC (see below) dial the same address this step found
+   reachable, rather than re-probing the candidate list themselves.
 
 An established QUIC connection is kept alive with pings every 15 seconds
 while idle. If it is lost mid-session, the client logs one warning, moves the
@@ -42,6 +49,44 @@ are not affected by the upgrade; they keep their own port-forwarded
 connections. When agent port-forwarding is disabled
 (`cluster.agentPortForward=false`), agent-bound traffic relays through the
 traffic-manager and therefore does benefit from QUIC.
+
+## Endpoint discovery
+
+`quicTunnel.enabled=true` alone is enough to get the QUIC transport working
+on any cluster whose `quicTunnel.service.type` the traffic-manager can
+observe: it watches the Service in front of the QUIC forwarder and derives
+the candidate address list from it, rather than requiring an admin to look
+up and configure an address by hand.
+
+| Service type | Candidates | Requires |
+|---|---|---|
+| `LoadBalancer` (default) | One per `status.loadBalancer.ingress[]` entry (IP or hostname), at the Service's port | Nothing beyond the default `services` RBAC every install has |
+| `NodePort` | One per cluster Node, at the Service's assigned `nodePort`; a Node's external IP is preferred, its internal IP is the fallback | Read access to Nodes (`list`, `watch`) |
+| `ClusterIP`, or `quicTunnel.service.create=false` | None | — |
+
+A `LoadBalancer` Service with no ingress assigned yet (the cloud provider
+hasn't provisioned one), or a Node without any usable address, simply
+contributes no candidate; clients pick up a candidate on a later connect
+once one exists. The candidate list is capped at 8 entries and ordered
+deterministically (ingress order for `LoadBalancer`, Nodes sorted by name
+for `NodePort`), so which addresses are advertised is stable across
+reconnects.
+
+**Namespace-scoped installs and NodePort.** A traffic-manager restricted to
+a namespace-scoped Role (`traffic-manager.namespaced`) has no RBAC to list
+or watch Nodes — Node objects are cluster-scoped, and granting a
+namespace-scoped install access to them would widen its privileges beyond
+its own namespace. Discovery detects this once at startup, logs it at info,
+and simply advertises no NodePort candidates rather than erroring. Reaching
+the endpoint at all in this shape requires the explicit override described
+in the [howto](../howtos/quic-transport.md#when-discovery-cannot-see-your-topology).
+
+`quicTunnel.externalHost` bypasses all of the above: when it's set,
+discovery isn't even started, and the descriptor always advertises exactly
+that one address. This is the escape hatch for topologies the
+traffic-manager cannot observe by watching its own Service and Nodes — a NAT
+or proxy in front of the load balancer, port remapping, or a DNS name that
+only resolves on the developer's VPN.
 
 ## Trust model
 
@@ -69,16 +114,18 @@ a TLS handshake it cannot complete.
 |-------|---------|-------------|
 | `quicTunnel.enabled` | `false` | Run the QUIC listener and create its Service |
 | `quicTunnel.port` | `7778` | UDP port the listener binds to |
-| `quicTunnel.externalHost` | `""` | Host or IP advertised to clients. The endpoint is not advertised while this is empty |
-| `quicTunnel.externalPort` | `0` | Port advertised to clients; `0` means `quicTunnel.port` |
-| `quicTunnel.service.create` | `true` | Create a Service for the endpoint |
-| `quicTunnel.service.type` | `LoadBalancer` | Type of that Service |
+| `quicTunnel.externalHost` | `""` | Host or IP advertised to clients, overriding discovery entirely. Empty means discover the address instead (see "Endpoint discovery" above) |
+| `quicTunnel.externalPort` | `0` | Port advertised to clients when `externalHost` is set; `0` means `quicTunnel.port`. Not used by discovery, which always uses the Service's own port |
+| `quicTunnel.service.create` | `true` | Create a Service for the endpoint. Discovery has nothing to watch when this is `false` |
+| `quicTunnel.service.type` | `LoadBalancer` | Type of that Service; determines which discovery rule applies |
 | `quicTunnel.service.nodePort` | `0` | Fixed node port when the type is `NodePort`; `0` auto-assigns |
 | `quicTunnel.service.annotations` | `{}` | Annotations for the Service |
 
 The chart passes these to the traffic-manager as the environment variables
-`TUNNEL_QUIC_PORT`, `TUNNEL_QUIC_EXTERNAL_HOST`, and
-`TUNNEL_QUIC_EXTERNAL_PORT`.
+`TUNNEL_QUIC_PORT`, `TUNNEL_QUIC_EXTERNAL_HOST`, `TUNNEL_QUIC_EXTERNAL_PORT`,
+and — whenever there is discovery for the traffic-manager to do, i.e.
+`externalHost` is unset and the Service is created —
+`TUNNEL_QUIC_SERVICE_NAME`, naming the Service discovery watches.
 
 ## Observability
 
@@ -124,8 +171,11 @@ buffers autotune independently of these caps.
 
 The endpoint descriptor is a purely additive API. Old clients never ask for
 it and behave as before against a new traffic-manager; new clients treat an
-old traffic-manager as one without an endpoint. No coordinated upgrade is
-required in either direction.
+old traffic-manager as one without an endpoint. The candidate list is
+likewise additive: the descriptor's `host`/`port` fields always duplicate
+the first candidate, so a client built before candidate discovery existed
+still gets exactly one address to dial from a traffic-manager that now has
+several. No coordinated upgrade is required in either direction.
 
 ## Current limitations
 
