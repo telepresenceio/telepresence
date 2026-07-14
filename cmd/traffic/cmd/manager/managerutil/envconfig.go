@@ -97,11 +97,23 @@ type Env struct {
 	// binds to on all interfaces. Zero (the default) disables the listener.
 	TunnelQuicPort uint16
 
-	// TunnelQuicExternalHost is the externally reachable host or IP advertised
-	// to clients for the QUIC tunnel endpoint. The endpoint is only advertised
-	// (GetQuicTunnelEndpoint returns Enabled: true) when this is set and the
-	// listener is enabled.
+	// TunnelQuicExternalHost is the externally reachable host or IP advertised to
+	// clients for the QUIC tunnel endpoint, overriding candidate discovery
+	// entirely (see "Zero-configuration endpoint discovery" in
+	// docs/plans/quic-transport/design.md). When unset, GetQuicTunnelEndpoint
+	// advertises whatever quicDiscovery has found instead; the endpoint is
+	// enabled either way as soon as the listener is enabled and at least one
+	// candidate (explicit or discovered) exists.
 	TunnelQuicExternalHost string
+
+	// TunnelQuicServiceName is the name of the Service the QUIC forwarder listens
+	// behind (charts/telepresence-oss/templates/quicforwarder.yaml's
+	// "traffic-manager-quic" Service), in the manager's own namespace. Discovery
+	// watches this Service -- and, for a NodePort Service, the cluster's Nodes --
+	// to derive the candidate list. Empty disables discovery (an older chart, or
+	// quicTunnel.service.create == false); TunnelQuicExternalHost still works in
+	// that case, discovery just never starts.
+	TunnelQuicServiceName string
 
 	// TunnelQuicExternalPort is the UDP port advertised to clients for the QUIC
 	// tunnel endpoint. Zero (the default) means the same port as TunnelQuicPort,

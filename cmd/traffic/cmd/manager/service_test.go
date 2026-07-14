@@ -19,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	k8sVersion "k8s.io/apimachinery/pkg/version"
 	fakeDiscovery "k8s.io/client-go/discovery/fake"
 	clientfeatures "k8s.io/client-go/features"
@@ -60,7 +61,7 @@ func TestConnect(t *testing.T) {
 
 	version.Version, version.Structured = version.Init("0.0.0-testing", "TELEPRESENCE_VERSION")
 
-	conn := getTestClientConn(ctx, t)
+	conn := getTestClientConn(ctx, t, nil)
 	defer conn.Close()
 
 	client := rpc.NewManagerClient(conn)
@@ -218,7 +219,7 @@ func TestWatchQuicBackends(t *testing.T) {
 
 	testAgents := testdata.GetTestAgents(t)
 
-	conn := getTestClientConn(ctx, t, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
+	conn := getTestClientConn(ctx, t, nil, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
 	defer conn.Close()
 
 	client := rpc.NewManagerClient(conn)
@@ -303,7 +304,7 @@ func TestGetQuicAgentCert(t *testing.T) {
 
 	t.Run("agent session with QUIC CA", func(t *testing.T) {
 		req := require.New(t)
-		conn := getTestClientConn(ctx, t, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
+		conn := getTestClientConn(ctx, t, nil, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
 		defer conn.Close()
 		client := rpc.NewManagerClient(conn)
 
@@ -335,7 +336,7 @@ func TestGetQuicAgentCert(t *testing.T) {
 		req := require.New(t)
 		// TunnelQuicPort defaults to 0 here, so NewService never creates a
 		// QUIC CA at all (see service.go's NewService).
-		conn := getTestClientConn(ctx, t)
+		conn := getTestClientConn(ctx, t, nil)
 		defer conn.Close()
 		client := rpc.NewManagerClient(conn)
 
@@ -350,7 +351,7 @@ func TestGetQuicAgentCert(t *testing.T) {
 
 	t.Run("non-agent session", func(t *testing.T) {
 		req := require.New(t)
-		conn := getTestClientConn(ctx, t, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
+		conn := getTestClientConn(ctx, t, nil, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
 		defer conn.Close()
 		client := rpc.NewManagerClient(conn)
 
@@ -362,7 +363,90 @@ func TestGetQuicAgentCert(t *testing.T) {
 	})
 }
 
-func getTestClientConn(ctx context.Context, t *testing.T, envMods ...func(*managerutil.Env)) *grpc.ClientConn {
+// TestGetQuicTunnelEndpoint_Gating covers the three cases "Zero-configuration endpoint
+// discovery" (docs/plans/quic-transport/design.md) distinguishes: an explicit
+// externalHost override always wins and bypasses discovery outright; discovery
+// candidates alone are sufficient to enable the endpoint when no override is set; and
+// neither present means Enabled stays false, exactly as an older manager (before
+// discovery existed) behaved for any admin who hadn't set externalHost.
+func TestGetQuicTunnelEndpoint_Gating(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testClients := testdata.GetTestClients(t)
+
+	arriveAndFetch := func(t *testing.T, conn *grpc.ClientConn) *rpc.QuicTunnelEndpoint {
+		t.Helper()
+		req := require.New(t)
+		client := rpc.NewManagerClient(conn)
+		sess, err := client.ArriveAsClient(ctx, testClients["alice"])
+		req.NoError(err)
+		ep, err := client.GetQuicTunnelEndpoint(ctx, sess)
+		req.NoError(err)
+		return ep
+	}
+
+	t.Run("explicit override, no discovery", func(t *testing.T) {
+		conn := getTestClientConn(ctx, t, nil, func(e *managerutil.Env) {
+			e.TunnelQuicPort = 7778
+			e.TunnelQuicExternalHost = "quic.example.com"
+			// A discovered candidate must be ignored in favor of the override:
+			// deliberately do NOT set TunnelQuicServiceName, so if the gate ever
+			// regressed to consulting discovery first this would fail loudly
+			// (Enabled would be false) rather than silently picking the wrong host.
+		})
+		defer conn.Close()
+
+		ep := arriveAndFetch(t, conn)
+		require.True(t, ep.Enabled)
+		require.Equal(t, "quic.example.com", ep.Host)
+		require.Equal(t, int32(7778), ep.Port)
+		require.Len(t, ep.Candidates, 1)
+		require.Equal(t, "quic.example.com", ep.Candidates[0].Host)
+	})
+
+	t.Run("discovery candidates present, no override", func(t *testing.T) {
+		mgrNs := "ambassador"
+		svc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{Name: "traffic-manager-quic", Namespace: mgrNs},
+			Spec: corev1.ServiceSpec{
+				Type:  corev1.ServiceTypeLoadBalancer,
+				Ports: []corev1.ServicePort{{Port: 7778}},
+			},
+			Status: corev1.ServiceStatus{
+				LoadBalancer: corev1.LoadBalancerStatus{
+					Ingress: []corev1.LoadBalancerIngress{{IP: "203.0.113.9"}},
+				},
+			},
+		}
+		conn := getTestClientConn(ctx, t, []runtime.Object{svc}, func(e *managerutil.Env) {
+			e.TunnelQuicPort = 7778
+			e.TunnelQuicServiceName = "traffic-manager-quic"
+		})
+		defer conn.Close()
+
+		ep := arriveAndFetch(t, conn)
+		require.True(t, ep.Enabled)
+		require.Equal(t, "203.0.113.9", ep.Host)
+		require.Equal(t, int32(7778), ep.Port)
+		require.Len(t, ep.Candidates, 1)
+		require.Equal(t, "203.0.113.9", ep.Candidates[0].Host)
+	})
+
+	t.Run("neither override nor discovery candidates", func(t *testing.T) {
+		conn := getTestClientConn(ctx, t, nil, func(e *managerutil.Env) {
+			e.TunnelQuicPort = 7778
+			e.TunnelQuicServiceName = "traffic-manager-quic"
+			// No Service seeded in the fake clientset: discovery starts (the
+			// service name is set) but finds nothing, and there is no override.
+		})
+		defer conn.Close()
+
+		ep := arriveAndFetch(t, conn)
+		require.False(t, ep.Enabled)
+	})
+}
+
+func getTestClientConn(ctx context.Context, t *testing.T, extraObjects []runtime.Object, envMods ...func(*managerutil.Env)) *grpc.ClientConn {
 	const bufsize = 64 * 1024
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
@@ -372,14 +456,15 @@ func getTestClientConn(ctx context.Context, t *testing.T, envMods ...func(*manag
 		return lis.Dial()
 	}
 
-	fakeClient := fake.NewClientset(&corev1.Namespace{
+	seedObjects := append([]runtime.Object{&corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "default",
 			Labels: map[string]string{
 				labels.NameLabelKey: "default",
 			},
 		},
-	})
+	}}, extraObjects...)
+	fakeClient := fake.NewClientset(seedObjects...)
 	k8sapi.InstallFakeSelfSubjectAccessReviews(fakeClient, nil)
 	fakeClient.Discovery().(*fakeDiscovery.FakeDiscovery).FakedServerVersion = &k8sVersion.Info{
 		GitVersion: "v1.30.5",

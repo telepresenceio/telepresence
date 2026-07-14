@@ -83,6 +83,12 @@ type service struct {
 	// client certificate the previous one signed.
 	quicCA *quictunnel.CA
 
+	// quicDiscovery is non-nil only when the QUIC tunnel listener is enabled AND no
+	// explicit TunnelQuicExternalHost override is configured: the override replaces
+	// discovery entirely (see GetQuicTunnelEndpoint), so there is nothing for it to
+	// do. quicCandidates checks for nil before calling Candidates.
+	quicDiscovery *quictunnel.Discovery
+
 	rpc.UnsafeManagerServer
 }
 
@@ -121,6 +127,12 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 		if err != nil {
 			clog.Errorf(ctx, "unable to initialize QUIC tunnel CA: %v", err)
 			return nil, err
+		}
+		// An explicit externalHost bypasses discovery entirely (see
+		// GetQuicTunnelEndpoint), so there is no reason to start it.
+		if env.TunnelQuicExternalHost == "" && env.TunnelQuicServiceName != "" {
+			ret.quicDiscovery = quictunnel.NewDiscovery()
+			ret.quicDiscovery.Start(ctx, ns, env.TunnelQuicServiceName)
 		}
 	}
 
@@ -1121,12 +1133,16 @@ func (s *service) Tunnel(server grpc.BidiStreamingServer[rpc.TunnelMessage, rpc.
 }
 
 // GetQuicTunnelEndpoint returns the descriptor for the traffic-manager's QUIC endpoint.
-// The endpoint is only advertised once the listener is enabled and an externally
-// reachable host has been configured for it; otherwise the client is told to keep
-// using the port-forwarded gRPC transport.
+// The endpoint is only advertised once the listener is enabled and at least one
+// candidate address exists for it -- explicit (TunnelQuicExternalHost) or discovered
+// (see "Zero-configuration endpoint discovery" in docs/plans/quic-transport/design.md);
+// otherwise the client is told to keep using the port-forwarded gRPC transport.
 func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicTunnelEndpoint, error) {
-	env := managerutil.GetEnv(ctx)
-	if s.quicCA == nil || env.TunnelQuicExternalHost == "" {
+	if s.quicCA == nil {
+		return &rpc.QuicTunnelEndpoint{Enabled: false}, nil
+	}
+	candidates := s.quicCandidates(managerutil.GetEnv(ctx))
+	if len(candidates) == 0 {
 		return &rpc.QuicTunnelEndpoint{Enabled: false}, nil
 	}
 	sessionID := tunnel.SessionID(session.GetSessionId())
@@ -1137,20 +1153,47 @@ func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.Sessio
 	if err != nil {
 		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to mint QUIC client certificate: %v", err))
 	}
-	port := env.TunnelQuicExternalPort
-	if port == 0 {
-		port = env.TunnelQuicPort
-	}
+	// host/port duplicate the first candidate so a client built before the candidates
+	// field existed still gets a single address to dial; see the proto comment on
+	// QuicTunnelEndpoint.candidates.
+	first := candidates[0]
 	return &rpc.QuicTunnelEndpoint{
 		Enabled:       true,
-		Host:          env.TunnelQuicExternalHost,
-		Port:          int32(port),
+		Host:          first.Host,
+		Port:          first.Port,
 		CaPem:         s.quicCA.CertPEM(),
 		ClientCertPem: certPEM,
 		ClientKeyPem:  keyPEM,
 		ServerName:    quictunnel.ServerName,
 		Alpn:          tunnel.QuicALPN,
+		Candidates:    candidates,
 	}, nil
+}
+
+// quicCandidates returns the ordered candidate list to advertise: exactly the explicit
+// TunnelQuicExternalHost override when one is configured (bypassing discovery
+// entirely, per the design's override semantics), otherwise whatever quicDiscovery has
+// found so far. Returns nil (not enabled) when neither applies.
+func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandidate {
+	if env.TunnelQuicExternalHost != "" {
+		port := env.TunnelQuicExternalPort
+		if port == 0 {
+			port = env.TunnelQuicPort
+		}
+		return []*rpc.QuicEndpointCandidate{{Host: env.TunnelQuicExternalHost, Port: int32(port)}}
+	}
+	if s.quicDiscovery == nil {
+		return nil
+	}
+	found := s.quicDiscovery.Candidates()
+	if len(found) == 0 {
+		return nil
+	}
+	candidates := make([]*rpc.QuicEndpointCandidate, len(found))
+	for i, c := range found {
+		candidates[i] = &rpc.QuicEndpointCandidate{Host: c.Host, Port: c.Port}
+	}
+	return candidates
 }
 
 // GetQuicAgentCert mints a QUIC server certificate for the calling agent's own SNI
