@@ -510,7 +510,7 @@ motivates datagrams in the first place — a personal intercept's traffic to an
 agent is comparatively low-volume and short-lived. Building it should wait for a
 concrete case that needs it.
 
-### Pipelined stream setup: remove a round trip from every new flow
+### ~~Pipelined stream setup: remove a round trip from every new flow~~ — decided: no measurable win
 
 `NewClientStream` sends `streamInfo` and then **blocks waiting for** `streamOK`
 before the dial message goes out, so every tunneled connection pays two tunnel
@@ -530,6 +530,41 @@ WAN RTT that halves the time-to-first-byte of every short-lived connection, and 
 development workload is dominated by short-lived connections. The same
 optimization helps the gRPC transport equally — it is a tunnel-protocol
 improvement that the QUIC measurements happened to expose.
+
+**Verified and declined: the wait already overlaps the dial.**
+`NewServerStream` (`pkg/tunnel/server_stream.go`) parses `streamInfo` — which
+already carries the full `ConnID`, session ID and dial timeout — and only then
+sends `streamOK`; its caller (`state.Tunnel` → `clientTunnel` → `dialer.Start`
+for the manager, and the equivalent path in the agent and the QUIC listener)
+starts the destination dial immediately after `NewServerStream` returns, a few
+microseconds after `streamOK` is queued for transmission and never gated on
+anything the client sends after `streamInfo`. `streamOK`'s only payload is
+`peerVersion`, which today has no production consumer (`grep`-verified: every
+`PeerVersion()` caller in the tree is a test assertion), so nothing
+version-dependent is blocked on it either. The client's blocking wait therefore
+overlaps the server's dial in wall-clock time instead of serializing before it,
+and the transport's receive buffer already holds `DialOK` by the time the
+client asks for it, regardless of when the application code issues that
+`Receive` — so the second blocking read returns almost instantly once
+`streamOK` has arrived.
+
+Measured on the kind `dev` cluster (`PERF_IMPAIR_NODE=dev-control-plane`, 0 %
+loss, one-way egress delay) with a fresh-TCP-connection TTFB probe (1-byte
+ranged GET, fresh client per request, 30 samples) through an established
+tunnel connection:
+
+| Delay | Transport | p50 TTFB |
+|---|---|---|
+| none | QUIC | 1.9 ms |
+| 80 ms | QUIC | 162.6 ms |
+| 80 ms | gRPC | 163.0 ms |
+
+Both arms land at baseline + **2×** the emulated delay (160 ms), not 3× (~240 ms,
+which a genuine extra tunnel-setup round trip would add): one delayed leg is the
+tunnel handshake (already at the 1×RTT + dial floor), the other is the HTTP
+response itself returning over the same delayed leg — an irreducible cost
+pipelining cannot touch. Removing the client's wait would not move `DialOK`'s
+wall-clock arrival time earlier on either transport. No code change made.
 
 ### Validate and advertise connection migration
 
