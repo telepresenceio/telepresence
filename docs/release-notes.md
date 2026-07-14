@@ -5,7 +5,7 @@
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Opt-in QUIC transport for the tunnel</div></div>
 <div style="margin-left: 15px">
 
-The traffic-manager can now expose a QUIC endpoint for the tunnel (Helm chart value <code>quicTunnel.enabled</code>). When the endpoint is reachable, the client automatically upgrades new tunneled connections to it, removing the head-of-line blocking that the shared port-forwarded gRPC connection imposes across flows and surviving client network changes such as a laptop switching networks. The port-forwarded gRPC transport remains the default and is used as the fallback whenever the QUIC endpoint is disabled or unreachable, and <code>telepresence status</code> now reports which transport is active.
+The traffic-manager can now expose a QUIC endpoint for the tunnel (Helm chart value <code>quicTunnel.enabled</code>). When the endpoint is reachable, the client automatically upgrades new tunneled connections to it, removing the head-of-line blocking that the shared port-forwarded gRPC connection imposes across flows. The port-forwarded gRPC transport remains the default and is used as the fallback whenever the QUIC endpoint is disabled or unreachable, and <code>telepresence status</code> now reports which transport is active.
 </div>
 
 ## Version 2.30.1 <span style="font-size: 16px;">(July 17)</span>
