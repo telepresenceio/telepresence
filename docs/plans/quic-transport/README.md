@@ -9,8 +9,7 @@ behind it. Read this file first; it holds the context every plan assumes.
 
 | File | Work item | Depends on |
 |------|-----------|------------|
-| `session-resumption.md` | TLS session resumption on reconnect | nothing (re-probe is implemented: `pkg/client/rootd/quic.go`'s `quicReprobeLoop`) |
-| `phase8-pr-assembly.md` | Final verification, docs pass, PR creation | **everything above** |
+| `phase8-pr-assembly.md` | Final verification, docs pass, PR creation | **everything above (all complete)** |
 
 ## How the work lands
 
