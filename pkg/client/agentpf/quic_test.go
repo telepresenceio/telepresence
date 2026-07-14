@@ -47,8 +47,8 @@ func TestQuicEndpointCache_NegativeCacheUnimplemented(t *testing.T) {
 	c := &quicEndpointCache{}
 	session := &manager.SessionInfo{SessionId: "s"}
 
-	ep1 := c.get(context.Background(), fc, session)
-	ep2 := c.get(context.Background(), fc, session)
+	ep1 := c.get(context.Background(), fc, session, "")
+	ep2 := c.get(context.Background(), fc, session, "")
 
 	assert.Nil(t, ep1)
 	assert.Nil(t, ep2)
@@ -60,8 +60,8 @@ func TestQuicEndpointCache_NegativeCacheDisabled(t *testing.T) {
 	c := &quicEndpointCache{}
 	session := &manager.SessionInfo{SessionId: "s"}
 
-	require.Nil(t, c.get(context.Background(), fc, session))
-	require.Nil(t, c.get(context.Background(), fc, session))
+	require.Nil(t, c.get(context.Background(), fc, session, ""))
+	require.Nil(t, c.get(context.Background(), fc, session, ""))
 	assert.EqualValues(t, 1, atomic.LoadInt32(&fc.calls))
 }
 
@@ -71,7 +71,7 @@ func TestQuicEndpointCache_NilManagerClientNotCached(t *testing.T) {
 
 	// No manager client available yet (e.g. WatchAgentPods hasn't started): the fetch
 	// must be skipped, not cached as a permanent negative.
-	require.Nil(t, c.get(context.Background(), nil, session))
+	require.Nil(t, c.get(context.Background(), nil, session, ""))
 
 	certPEM, keyPEM := testCertAndKeyPEM(t)
 	fc := &fakeManagerClient{ep: &manager.QuicTunnelEndpoint{
@@ -82,13 +82,13 @@ func TestQuicEndpointCache_NilManagerClientNotCached(t *testing.T) {
 		ClientCertPem: certPEM,
 		ClientKeyPem:  keyPEM,
 	}}
-	ep := c.get(context.Background(), fc, session)
+	ep := c.get(context.Background(), fc, session, "")
 	require.NotNil(t, ep)
 	assert.EqualValues(t, 1, atomic.LoadInt32(&fc.calls))
 
 	// Now cached: a later call, even with a client that would fail, must not re-fetch.
 	fc2 := &fakeManagerClient{err: errors.New("must not be called")}
-	ep2 := c.get(context.Background(), fc2, session)
+	ep2 := c.get(context.Background(), fc2, session, "")
 	assert.Same(t, ep, ep2)
 	assert.EqualValues(t, 0, atomic.LoadInt32(&fc2.calls))
 }
@@ -104,7 +104,50 @@ func TestQuicEndpointCache_BadCertNotUsable(t *testing.T) {
 		ClientKeyPem:  keyPEM,
 	}}
 	c := &quicEndpointCache{}
-	require.Nil(t, c.get(context.Background(), fc, &manager.SessionInfo{SessionId: "s"}))
+	require.Nil(t, c.get(context.Background(), fc, &manager.SessionInfo{SessionId: "s"}, ""))
+}
+
+// TestQuicEndpointCache_PreferredAddrOverridesDescriptor proves the "same winner" wiring
+// documented on fetchQuicEndpoint: when a non-empty preferredAddr is supplied (the
+// manager-bound QUIC tunnel's own winning candidate), it -- not the descriptor's
+// host/port -- becomes the endpoint's dial address.
+func TestQuicEndpointCache_PreferredAddrOverridesDescriptor(t *testing.T) {
+	certPEM, keyPEM := testCertAndKeyPEM(t)
+	fc := &fakeManagerClient{ep: &manager.QuicTunnelEndpoint{
+		Enabled:       true,
+		Host:          "203.0.113.9",
+		Port:          7778,
+		CaPem:         certPEM,
+		ClientCertPem: certPEM,
+		ClientKeyPem:  keyPEM,
+	}}
+	c := &quicEndpointCache{}
+	session := &manager.SessionInfo{SessionId: "s"}
+
+	ep := c.get(context.Background(), fc, session, "198.51.100.5:31778")
+	require.NotNil(t, ep)
+	assert.Equal(t, "198.51.100.5:31778", ep.addr)
+}
+
+// TestQuicEndpointCache_EmptyPreferredAddrFallsBackToDescriptor proves the case where the
+// manager-bound QUIC tunnel hasn't picked a winner yet (or was never dialed): the
+// descriptor's own host/port is used, exactly as before candidate discovery existed.
+func TestQuicEndpointCache_EmptyPreferredAddrFallsBackToDescriptor(t *testing.T) {
+	certPEM, keyPEM := testCertAndKeyPEM(t)
+	fc := &fakeManagerClient{ep: &manager.QuicTunnelEndpoint{
+		Enabled:       true,
+		Host:          "203.0.113.9",
+		Port:          7778,
+		CaPem:         certPEM,
+		ClientCertPem: certPEM,
+		ClientKeyPem:  keyPEM,
+	}}
+	c := &quicEndpointCache{}
+	session := &manager.SessionInfo{SessionId: "s"}
+
+	ep := c.get(context.Background(), fc, session, "")
+	require.NotNil(t, ep)
+	assert.Equal(t, "203.0.113.9:7778", ep.addr)
 }
 
 // --- agentDialer decision logic -------------------------------------------------------

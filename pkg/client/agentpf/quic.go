@@ -57,7 +57,15 @@ func (e *quicEndpoint) tlsConfig(sni string) *tls.Config {
 // descriptor. It returns nil whenever the endpoint cannot be used for agent connections
 // (older manager, disabled, or a malformed descriptor); every such case is logged at debug
 // or info, never above, because the port-forward path is always fully functional.
-func fetchQuicEndpoint(ctx context.Context, mc manager.ManagerClient, session *manager.SessionInfo) *quicEndpoint {
+//
+// preferredAddr, when non-empty, is used as the forwarder address in place of the
+// descriptor's own host/port: it is the winning candidate the manager-bound QUIC tunnel
+// (pkg/client/rootd/quic.go's startQuicTunnel) already found reachable this session, and
+// agent connections go through the same forwarder, just with a different SNI per agent.
+// Reusing it avoids racing the candidate list a second time and, more importantly,
+// guarantees agent connections dial the address this session is actually observed to work
+// through rather than possibly a different candidate that also happens to answer.
+func fetchQuicEndpoint(ctx context.Context, mc manager.ManagerClient, session *manager.SessionInfo, preferredAddr string) *quicEndpoint {
 	dialCtx, cancel := context.WithTimeout(ctx, quicDialTimeout)
 	defer cancel()
 	ep, err := mc.GetQuicTunnelEndpoint(dialCtx, session)
@@ -87,8 +95,12 @@ func fetchQuicEndpoint(ctx context.Context, mc manager.ManagerClient, session *m
 	if alpn == "" {
 		alpn = tunnel.QuicALPN
 	}
+	addr := preferredAddr
+	if addr == "" {
+		addr = net.JoinHostPort(ep.Host, strconv.Itoa(int(ep.Port)))
+	}
 	return &quicEndpoint{
-		addr: net.JoinHostPort(ep.Host, strconv.Itoa(int(ep.Port))),
+		addr: addr,
 		pool: pool,
 		cert: cert,
 		alpn: alpn,
@@ -107,7 +119,7 @@ type quicEndpointCache struct {
 	set bool
 }
 
-func (c *quicEndpointCache) get(ctx context.Context, mc manager.ManagerClient, session *manager.SessionInfo) *quicEndpoint {
+func (c *quicEndpointCache) get(ctx context.Context, mc manager.ManagerClient, session *manager.SessionInfo, preferredAddr string) *quicEndpoint {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.set {
@@ -116,7 +128,7 @@ func (c *quicEndpointCache) get(ctx context.Context, mc manager.ManagerClient, s
 	if mc == nil {
 		return nil
 	}
-	c.ep = fetchQuicEndpoint(ctx, mc, session)
+	c.ep = fetchQuicEndpoint(ctx, mc, session, preferredAddr)
 	c.set = true
 	return c.ep
 }

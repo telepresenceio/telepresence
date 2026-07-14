@@ -1360,6 +1360,17 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 			// Flush the DNS cache whenever the agent set changes. A workload may have been recreated
 			// with a new Service ClusterIP, which would otherwise be masked by a stale cache entry.
 			s.agentClients.SetChangeListener(s.dnsServer.Flush)
+			// Agent connections go through the same forwarder as the manager-bound QUIC
+			// tunnel, just with a different SNI per agent, so they should dial the same
+			// candidate address startQuicTunnel's own probe already found reachable
+			// (nil/"" until that probe resolves, in which case quicEndpointFor falls
+			// back to the descriptor's own host/port -- see its doc).
+			s.agentClients.SetPreferredQuicAddr(func() string {
+				if c := s.quicConn.Load(); c != nil {
+					return c.RemoteAddr().String()
+				}
+				return ""
+			})
 			g.Go("agentPods", func(ctx context.Context) error {
 				return s.agentClients.WatchAgentPods(s.managerClient())
 			})

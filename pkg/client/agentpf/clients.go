@@ -361,6 +361,13 @@ type Clients interface {
 	// callback. Safe to call at any time.
 	SetChangeListener(func())
 
+	// SetPreferredQuicAddr installs the callback used to resolve the forwarder
+	// address for agent QUIC connections, in place of the QUIC tunnel endpoint
+	// descriptor's own host/port. See the method doc on *clients for the intended
+	// use (sharing the manager-bound QUIC tunnel's winning candidate). Passing nil
+	// reverts to the descriptor's own host/port. Safe to call at any time.
+	SetPreferredQuicAddr(func() string)
+
 	// Transports returns the current transport ("quic" or "grpc") for every agent pod
 	// that has ever completed a connection attempt this session. An agent that hasn't
 	// been dialed yet is omitted; the status surface renders this list only when
@@ -419,6 +426,13 @@ type clients struct {
 	// quicEP lazily fetches and caches the QUIC tunnel endpoint descriptor, at most once
 	// per connector session, the first time an agent that advertises a quic_sni is dialed.
 	quicEP quicEndpointCache
+
+	// preferredAddr, when set, returns the forwarder address the manager-bound QUIC
+	// tunnel already found reachable this session (see SetPreferredQuicAddr); a nil
+	// func or an empty return means none is known yet, and quicEndpointFor falls back
+	// to the descriptor's own host/port, exactly as it did before candidate discovery.
+	preferredAddrMu sync.RWMutex
+	preferredAddr   func() string
 }
 
 func NewClients(cl *k8s.Cluster, session *manager.SessionInfo, namespaces []string) Clients {
@@ -642,12 +656,34 @@ func (s *clients) managerClient() manager.ManagerClient {
 	return s.mc
 }
 
+// SetPreferredQuicAddr installs the callback quicEndpointFor consults for the forwarder
+// address to use, in place of the QUIC tunnel endpoint descriptor's own host/port. f is
+// typically a closure over the rootd session's manager-bound QUIC connection, returning
+// "" until that connection's own candidate probe has picked a winner. Passing nil (the
+// default) makes agent connections use the descriptor's host/port directly, as before
+// candidate discovery existed.
+func (s *clients) SetPreferredQuicAddr(f func() string) {
+	s.preferredAddrMu.Lock()
+	s.preferredAddr = f
+	s.preferredAddrMu.Unlock()
+}
+
+func (s *clients) preferredQuicAddr() string {
+	s.preferredAddrMu.RLock()
+	f := s.preferredAddr
+	s.preferredAddrMu.RUnlock()
+	if f == nil {
+		return ""
+	}
+	return f()
+}
+
 // quicEndpointFor returns the traffic-manager's QUIC tunnel endpoint descriptor for agent
 // connections, fetching and caching it (including negative results) on first use. Returns
 // nil when QUIC isn't usable this session, or when no manager client is available yet (in
 // which case the fetch is left unattempted rather than cached as a false negative).
 func (s *clients) quicEndpointFor(ctx context.Context) *quicEndpoint {
-	return s.quicEP.get(ctx, s.managerClient(), s.session)
+	return s.quicEP.get(ctx, s.managerClient(), s.session, s.preferredQuicAddr())
 }
 
 // Transports implements Clients.
