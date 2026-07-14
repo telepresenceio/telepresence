@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -97,6 +99,9 @@ func (s *quicTunnelSuite) SetupSuite() {
 		"--set", fmt.Sprintf("quicTunnel.service.nodePort=%d", quicNodePort),
 		"--set", "quicTunnel.externalHost="+s.nodeIP,
 		"--set", fmt.Sprintf("quicTunnel.externalPort=%d", quicNodePort),
+		// Test_AUDPEchoDatagrams asserts on the manager's periodic datagram-counters
+		// log line, which is logged at debug.
+		"--set", "logLevel=debug",
 	)
 	s.ApplyApp(ctx, "echo-easy", "deploy/echo-easy")
 	s.TelepresenceConnect(ctx)
@@ -393,6 +398,85 @@ func (s *quicTunnelSuite) Test_VPNOnlyTransport() {
 	}, 30*time.Second, 2*time.Second, "echo-easy was not reachable through the VPN-only tunnel")
 
 	s.requireQuicTransport(ctx)
+}
+
+// datagramCountersLogRE extracts the "received" total from the manager's periodic
+// datagram-counters log line (cmd/traffic/cmd/manager/quictunnel/listener.go's
+// logDatagramStatsLoop, formatted by pkg/tunnel.DatagramCounters.String).
+var datagramCountersLogRE = regexp.MustCompile(`datagram counters: sent \d+, received (\d+),`)
+
+// Test_AUDPEchoDatagrams proves the RFC 9221 datagram hybrid actually carries real
+// tunneled UDP traffic while the manager-bound tunnel is on the quic transport: a UDP
+// echo round trip through the VPN-only tunnel, followed by the manager's own periodic
+// log reporting a nonzero received count. The manager's counters are shared across
+// every connection it accepts (see Listener.datagram), so this is the cross-session
+// total, not just this one echo -- but the fixed suite-scoped Service name and this
+// being the first (and, per the suite's other tests, only sustained) UDP flow through
+// this manager instance keeps the assertion meaningful in practice.
+//
+// Runs first in the suite (its name sorts before
+// Test_AgentPortForwardDisabledRelaysOverQuic): only manager-bound flows can ride
+// datagrams, and once any later test attaches to a workload, the app namespace has a
+// live traffic-agent that agentpf.Clients.GetClient returns as the provider for
+// *every* destination in the cluster -- the flow would ride the client-to-agent path,
+// which never negotiates datagrams, and the received count would legitimately stay
+// zero.
+func (s *quicTunnelSuite) Test_AUDPEchoDatagrams() {
+	ctx := s.Context()
+	rq := s.Require()
+
+	s.requireQuicTransport(ctx)
+
+	svc := "udp-echo-quic"
+	tag := "ghcr.io/telepresenceio/udp-echo:latest"
+	rq.NoError(s.Kubectl(ctx, "create", "deploy", svc, "--image", tag))
+	rq.NoError(s.Kubectl(ctx, "expose", "deploy", svc, "--port", "80", "--protocol", "UDP", "--target-port", "8080"))
+	defer func() {
+		_ = s.Kubectl(ctx, "delete", "svc,deploy", svc)
+	}()
+	rq.NoError(s.RolloutStatusWait(ctx, "deploy/"+svc))
+	s.CapturePodLogs(ctx, svc, "udp-echo", s.AppNamespace())
+
+	var conn net.Conn
+	rq.Eventually(func() bool {
+		var err error
+		conn, err = net.Dial("udp", fmt.Sprintf("%s.%s:80", svc, s.AppNamespace()))
+		return err == nil
+	}, 12*time.Second, 3*time.Second, "dial never succeeds")
+	defer conn.Close()
+
+	// A UDP Dial succeeds immediately without confirming anything is listening yet
+	// (see TestUDPEcho in udp_test.go for the same wait, against the same image).
+	time.Sleep(2 * time.Second)
+
+	msg := "ping over quic datagrams"
+	_, err := conn.Write([]byte(msg))
+	rq.NoError(err)
+	rq.NoError(conn.SetReadDeadline(time.Now().Add(5 * time.Second)))
+	buf := make([]byte, 0x10000)
+	n, err := conn.Read(buf)
+	rq.Greater(n, 0)
+	if errors.Is(err, io.EOF) {
+		err = nil
+	}
+	rq.NoError(err)
+	rq.Contains(string(buf[:n]), msg)
+
+	s.requireQuicTransport(ctx)
+
+	managerNs := s.ManagerNamespace()
+	rq.Eventually(func() bool {
+		out, err := itest.KubectlOut(ctx, managerNs, "logs", "deploy/traffic-manager")
+		if err != nil {
+			return false
+		}
+		for _, m := range datagramCountersLogRE.FindAllStringSubmatch(out, -1) {
+			if m[1] != "0" {
+				return true
+			}
+		}
+		return false
+	}, 45*time.Second, 3*time.Second, "manager never logged a nonzero datagram received count")
 }
 
 // Test_TrafficAgentCoexistence verifies that a regular (sidecar) intercept
