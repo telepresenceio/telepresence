@@ -2,8 +2,14 @@ package rootd
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"math/big"
 	"testing"
+	"time"
 
 	"github.com/quic-go/quic-go"
 	"github.com/stretchr/testify/assert"
@@ -229,4 +235,105 @@ func TestQuicFallbackProvider_OnFallbackUpdatesTransportStatus(t *testing.T) {
 	_, err = p.Tunnel(context.Background())
 	require.NoError(t, err)
 	assert.Len(t, sink.Drain(0), 0, "onFallback (and its usage report) must fire exactly once")
+}
+
+// --- candidate list and concurrent probe ------------------------------------------------
+
+func TestQuicCandidateAddrs_FallsBackToHostPort(t *testing.T) {
+	ep := &rpc.QuicTunnelEndpoint{Host: "203.0.113.9", Port: 7778}
+	assert.Equal(t, []string{"203.0.113.9:7778"}, quicCandidateAddrs(ep))
+}
+
+func TestQuicCandidateAddrs_UsesCandidatesWhenPresent(t *testing.T) {
+	ep := &rpc.QuicTunnelEndpoint{
+		Host: "203.0.113.9", Port: 7778, // older-manager-compatible duplicate of candidates[0]
+		Candidates: []*rpc.QuicEndpointCandidate{
+			{Host: "203.0.113.9", Port: 7778},
+			{Host: "198.51.100.5", Port: 31778},
+		},
+	}
+	assert.Equal(t, []string{"203.0.113.9:7778", "198.51.100.5:31778"}, quicCandidateAddrs(ep))
+}
+
+// generateTestQuicTLSConfig returns a bare-bones self-signed server TLS config for use
+// with quic-go in a loopback test.
+func generateTestQuicTLSConfig(t *testing.T) *tls.Config {
+	t.Helper()
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	template := x509.Certificate{SerialNumber: big.NewInt(1)}
+	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, priv.Public(), priv)
+	require.NoError(t, err)
+	return &tls.Config{
+		Certificates: []tls.Certificate{{
+			Certificate: [][]byte{certDER},
+			PrivateKey:  priv,
+		}},
+		NextProtos: []string{"quic-candidate-test"},
+	}
+}
+
+// startTestQuicListener starts a bare quic-go listener on loopback and returns its dial
+// address; the caller is responsible for accepting connections if it cares to.
+func startTestQuicListener(t *testing.T, ctx context.Context) string {
+	t.Helper()
+	ln, err := quic.ListenAddr("127.0.0.1:0", generateTestQuicTLSConfig(t), nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			conn, err := ln.Accept(ctx)
+			if err != nil {
+				return
+			}
+			go func() { _ = conn.CloseWithError(0, "") }()
+		}
+	}()
+	return ln.Addr().String()
+}
+
+func clientQuicTLSConfig() *tls.Config {
+	return &tls.Config{
+		InsecureSkipVerify: true, // no CA to verify against in this loopback test
+		NextProtos:         []string{"quic-candidate-test"},
+	}
+}
+
+func TestDialQuicCandidates_PicksTheOnlyReachableCandidate(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	live := startTestQuicListener(t, ctx)
+	// Port 0 is never dialable; it fails immediately rather than timing out, so this
+	// case exercises "one candidate fails, the other succeeds" without waiting out a
+	// full stagger interval.
+	conn, addr, err := dialQuicCandidates(ctx, []string{"127.0.0.1:0", live}, clientQuicTLSConfig(), nil)
+	require.NoError(t, err)
+	defer func() { _ = conn.CloseWithError(0, "") }()
+	assert.Equal(t, live, addr)
+}
+
+func TestDialQuicCandidates_PreferredCandidateWinsWithoutWaitingForStagger(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	live := startTestQuicListener(t, ctx)
+	// live is listed first; a second, reachable-but-slower-to-start candidate must not
+	// delay the result past roughly one handshake, proving the preferred candidate's
+	// success is returned without waiting for every candidate to resolve.
+	start := time.Now()
+	conn, addr, err := dialQuicCandidates(ctx, []string{live, "127.0.0.1:0"}, clientQuicTLSConfig(), nil)
+	elapsed := time.Since(start)
+	require.NoError(t, err)
+	defer func() { _ = conn.CloseWithError(0, "") }()
+	assert.Equal(t, live, addr)
+	assert.Less(t, elapsed, quicCandidateStagger, "the first candidate's success must not wait for the second's stagger delay")
+}
+
+func TestDialQuicCandidates_AllUnreachableReturnsError(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, _, err := dialQuicCandidates(ctx, []string{"127.0.0.1:0", "127.0.0.1:0"}, clientQuicTLSConfig(), nil)
+	require.Error(t, err)
 }

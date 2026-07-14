@@ -27,6 +27,12 @@ import (
 // a firewall that silently drops UDP, cannot delay session startup.
 const quicDialTimeout = 3 * time.Second
 
+// quicCandidateStagger is the pause between starting successive candidate dials
+// (happy-eyeballs style): the manager orders candidates by its own preference, so the
+// first one usually completes its handshake before a later one even starts, and an
+// unreachable one costs at most this much delay rather than the full dial timeout.
+const quicCandidateStagger = 250 * time.Millisecond
+
 // transportUsageTopic is the usage report topic for tunnel transport observability:
 // once when startQuicTunnel resolves (quic active, or grpc with a reason), and again
 // if quicFallbackProvider later trips (reason "fallback"). Never carries the endpoint
@@ -82,7 +88,6 @@ func (s *session) startQuicTunnel(ctx context.Context) {
 		return
 	}
 
-	addr := net.JoinHostPort(ep.Host, strconv.Itoa(int(ep.Port)))
 	// The connection is expected to be idle whenever no tunnel streams are active, so
 	// it must be kept alive; without this, quic-go's idle timeout tears it down and the
 	// session permanently falls back to the port-forwarded transport.
@@ -90,9 +95,9 @@ func (s *session) startQuicTunnel(ctx context.Context) {
 		MaxIdleTimeout:  time.Minute,
 		KeepAlivePeriod: 15 * time.Second,
 	}
-	conn, err := quic.DialAddr(dialCtx, addr, tlsConf, qCfg)
+	conn, addr, err := dialQuicCandidates(dialCtx, quicCandidateAddrs(ep), tlsConf, qCfg)
 	if err != nil {
-		clog.Infof(ctx, "unable to dial QUIC tunnel endpoint %s: %v", addr, err)
+		clog.Infof(ctx, "unable to dial QUIC tunnel endpoint: %v", err)
 		reportTransport(ctx, TransportGRPC, "dial-failed")
 		return
 	}
@@ -133,6 +138,75 @@ func quicTLSConfig(ep *manager.QuicTunnelEndpoint) (*tls.Config, error) {
 		Certificates: []tls.Certificate{cert},
 		NextProtos:   []string{alpn},
 	}, nil
+}
+
+// quicCandidateAddrs returns the ordered host:port candidates to probe, from
+// ep.Candidates when the manager advertised any, falling back to a single candidate
+// built from the legacy host/port fields (a manager built before this field existed
+// always duplicates the first candidate there anyway; see the proto comment on
+// QuicTunnelEndpoint.candidates).
+func quicCandidateAddrs(ep *manager.QuicTunnelEndpoint) []string {
+	if len(ep.Candidates) == 0 {
+		return []string{net.JoinHostPort(ep.Host, strconv.Itoa(int(ep.Port)))}
+	}
+	addrs := make([]string, len(ep.Candidates))
+	for i, c := range ep.Candidates {
+		addrs[i] = net.JoinHostPort(c.Host, strconv.Itoa(int(c.Port)))
+	}
+	return addrs
+}
+
+// dialQuicCandidates dials every address in addrs concurrently, starts staggered by
+// quicCandidateStagger in list order (happy-eyeballs style), and returns the
+// connection and address of the first handshake to complete. Every other dial --
+// whether still stagger-waiting, mid-handshake, or already connected -- is closed in
+// the background once a winner is chosen or ctx is done; the caller's ctx bounds how
+// long that cleanup can take, not this call, which returns as soon as it has a winner
+// or every candidate has failed.
+func dialQuicCandidates(ctx context.Context, addrs []string, tlsConf *tls.Config, qCfg *quic.Config) (*quic.Conn, string, error) {
+	type dialResult struct {
+		conn *quic.Conn
+		addr string
+		err  error
+	}
+	results := make(chan dialResult, len(addrs))
+	for i, addr := range addrs {
+		go func(i int, addr string) {
+			if i > 0 {
+				select {
+				case <-ctx.Done():
+					results <- dialResult{addr: addr, err: ctx.Err()}
+					return
+				case <-time.After(time.Duration(i) * quicCandidateStagger):
+				}
+			}
+			conn, err := quic.DialAddr(ctx, addr, tlsConf, qCfg)
+			results <- dialResult{conn: conn, addr: addr, err: err}
+		}(i, addr)
+	}
+
+	var firstErr error
+	for consumed := 1; consumed <= len(addrs); consumed++ {
+		r := <-results
+		if r.err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%s: %w", r.addr, r.err)
+			}
+			continue
+		}
+		// Drain the remaining results off the main path so this call doesn't wait on
+		// stragglers; every one of them respects ctx, so this goroutine outlives the
+		// caller by at most the remaining dial budget.
+		go func(remaining int) {
+			for ; remaining > 0; remaining-- {
+				if rr := <-results; rr.conn != nil {
+					_ = rr.conn.CloseWithError(0, "")
+				}
+			}
+		}(len(addrs) - consumed)
+		return r.conn, r.addr, nil
+	}
+	return nil, "", firstErr
 }
 
 // managerTunnelProvider returns the Provider to use for a manager-bound tunnel stream:
