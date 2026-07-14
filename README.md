@@ -45,6 +45,7 @@ for the full picture.
 
 ## Community
 
+- [GitHub Discussions](https://github.com/telepresenceio/telepresence/discussions) - Ask questions, share ideas, and help shape the roadmap
 - [CNCF Slack](https://communityinviter.com/apps/cloud-native/cncf) - Join [#telepresence-oss](https://cloud-native.slack.com/archives/C06B36KJ85P)
 - [Troubleshooting](https://telepresence.io/docs/troubleshooting/) - Common issues and solutions
 
