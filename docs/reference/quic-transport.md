@@ -18,6 +18,39 @@ port-forwarded transport always remains available; QUIC is an opportunistic
 upgrade, never a requirement. Enabling it is described in the
 [Enable the QUIC tunnel transport](../howtos/quic-transport.md) howto.
 
+## When it helps (and when it doesn't)
+
+QUIC is an opt-in optimization, not a universal win. It helps most when the
+network is lossy or the round trip is long; it helps least on a quiet link or a
+node whose UDP buffers are capped. Which transport comes out ahead, by situation:
+
+| Situation | gRPC | QUIC | Why |
+|---|---|---|---|
+| Small requests under packet loss |  | faster (~1.8x p95) | One lost packet stalls all gRPC flows on the shared connection; QUIC recovers each on its own stream. |
+| A single bulk transfer, well-buffered node |  | faster (~8x) | gRPC's one flow is window-capped by the port-forward at RTT; QUIC's per-flow streams are not. |
+| Pause-heavy traffic at WAN latency |  | faster (~1 RTT/req) | Kernel TCP shrinks its window after every idle gap; QUIC keeps it. |
+| Workstation changes network (roam, NAT rebind) |  | survives | The connection survives the address change instead of reconnecting. |
+| Traffic-manager restart, active intercept |  | keeps flowing | Agent traffic rides the forwarder, not the manager. |
+| Bulk transfer on capped-UDP-buffer nodes (GKE COS / Autopilot) | faster |  | QUIC's UDP buffers pin below the bandwidth-delay product; kernel TCP autotunes past it. Tunable on GKE Standard / on-prem. |
+| Many concurrent bulk transfers | faster |  | Independent flows aggregate past QUIC's buffer-capped ceiling. |
+| Quiet, unloaded network | even | even | Nothing to fix: no loss, no queueing. |
+| Tunneled UDP carried as datagrams | no worse | no better | RFC 9221 datagram carriage measured no better and often worse; off by default. |
+
+**Beyond speed: the API server stops carrying the data plane.** On the
+port-forwarded transport, every tunneled byte that a traffic-agent doesn't handle
+is relayed by the traffic-manager through the Kubernetes API server's
+port-forward. QUIC moves that data plane onto the dedicated forwarder, so the API
+server no longer carries telepresence's tunnel traffic at all. In a large cluster
+with many connected developers, that removes the API server as a shared chokepoint
+and rate-limited dependency for the data path -- potentially the biggest win of
+all, but a cluster-scalability property rather than a per-request one, so it is
+not in the table above.
+
+These are directional results from the `perf/network` experiments (kind), not
+guarantees -- they shift with RTT, loss, concurrency, and especially node UDP
+buffer limits (see "Throughput and node tuning" below). How each was measured is
+in `perf/README.md`.
+
 ## How the upgrade happens
 
 1. The client connects exactly as it always has, over the port-forwarded
