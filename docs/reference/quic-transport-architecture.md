@@ -73,8 +73,8 @@ fallback. QUIC rather than direct (m)TLS gRPC or WireGuard because:
   implemented on the client↔manager path but is **not proven**: a measurement of
   an inner QUIC (HTTP/3) request/response workload found datagram carriage no
   better than stream carriage and often worse (see the reference doc and
-  `perf/README.md`, "Experiment 2"). It remains enabled by default with an
-  opt-out, pending a workload that demonstrates a benefit.
+  `perf/README.md`, "Datagram carriage"). It is disabled by default and opt-in via
+  `TELEPRESENCE_QUIC_ENABLE_DATAGRAMS`, pending a workload that demonstrates a benefit.
 * **Connection migration.** A QUIC connection survives the client changing IP
   address; laptop roaming stops killing the tunnel (cost #3). TLS 1.3 session
   resumption makes the remaining reconnects cheap.
@@ -190,6 +190,12 @@ Routing works in two tiers, following the QUIC-LB pattern
 Statelessness is what makes the forwarder an acceptable hard dependency: a restart
 loses nothing that matters, replicas need no coordination, and it can run as a small
 Deployment (default) or DaemonSet. It ships as another command in the tel2 image.
+"Stateless" here means stateless for *routing identity*: every routing decision comes
+from the packet itself (SNI or server-issued CID), never from remembered
+per-connection state. The forwarder does keep soft per-flow relay state -- which client
+address a given backend flow's responses go back to -- but that is reconstructed from
+the next client packet after a restart (QUIC is client-initiated), so it changes none
+of the properties above.
 
 One qualification to "stateless": a ClientHello can span multiple Initial packets
 (post-quantum hybrid key shares push it past one packet's CRYPTO capacity, and Go's
@@ -247,7 +253,13 @@ that one connection, so moving *it* moves the entire attachment.
   re-established, since a manager restart mints a new CA -- it requests a server
   certificate for its SNI name over its existing, authenticated manager session. It
   accepts any client certificate chaining to the CA; all such certificates are
-  short-lived and session-scoped by construction.
+  short-lived and session-scoped by construction. This is not a new authorization
+  surface: an authenticated session already reaches every managed pod -- agent API
+  ports included -- at the network level through the manager tunnel/VPN, which enforces
+  no per-user RBAC of its own (the manager dials whatever destination a tunnel stream
+  names, with the manager's own cluster access). Gating the agent QUIC path on a
+  session-scoped certificate is therefore no weaker than -- in fact slightly stricter
+  than -- the VPN path it parallels.
 * `agentpf` swaps the transport under the agent gRPC connection: instead of a
   Kubernetes port-forward, a `grpc.WithContextDialer` that dials the forwarder with
   the agent's SNI name. One QUIC connection per agent (TLS terminates at the agent,
@@ -307,3 +319,26 @@ address is discovered rather than configured:
   for, it is a reachability variant (the manager becomes dialable over the tailnet),
   not a transport variant, and is orthogonal to this work.
 * Multiplexing changes inside `pkg/tunnel`. The flow-per-stream model is kept.
+* Application 0-RTT. QUIC/TLS session resumption is used -- a reconnect resumes rather
+  than paying a full handshake -- but tunnel payloads are never sent as 0-RTT early
+  data: early data is replayable, and replaying a tunnel write could duplicate TCP
+  bytes, UDP datagrams, or a dial's side effects. Resumption stays confined to the
+  handshake.
+* Active local-path migration. CID routing already survives the client's *source
+  address* changing (NAT rebind) and a forwarder restart, but rootd does not watch for
+  the workstation gaining a new local interface and proactively open a path over it; a
+  roam that changes the local interface falls back and re-probes like any other path
+  loss. Proactive migration is a possible later refinement.
+* Multiple traffic-manager replicas. The QUIC endpoint assumes a single manager pod:
+  the CA and session state are process-local and the manager SNI is not pod-specific,
+  so a second replica could hand a client a certificate one manager minted while the
+  forwarder routes the fixed manager SNI to another. The manager runs as a single
+  replica; more than one is unsupported for the QUIC path (the port-forwarded path is
+  unaffected). The connection ID also carries the backend's own (internal) pod IP in
+  the clear; obfuscated CIDs (QUIC-LB style) are a possible hardening if that ever
+  matters.
+* Pipelining the per-flow stream setup. Opening a flow still costs one round trip
+  (`streamInfo` -> `streamOK`) before the server-side dial begins. That RTT was hidden
+  by larger overheads on the port-forwarded path but is visible on QUIC for short-lived
+  calls; letting the server validate `streamInfo`, dial immediately, and pipeline the
+  reply is a worthwhile follow-up that the flow-per-stream model already allows.

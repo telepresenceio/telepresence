@@ -249,7 +249,7 @@ several. No coordinated upgrade is required in either direction.
 
 ## Current limitations
 
-- **Datagram carriage for tunneled UDP is enabled but unproven.** A UDP
+- **Datagram carriage for tunneled UDP is off by default and unproven.** A UDP
   payload between the client and the traffic-manager rides an unreliable
   QUIC datagram (RFC 9221) when it fits the connection's datagram budget,
   and falls back to the flow's reliable stream per message when it does not
@@ -258,10 +258,10 @@ several. No coordinated upgrade is required in either direction.
   remove the head-of-line blocking that reliable-stream carriage imposes on
   tunneled UDP, but a measurement of an inner QUIC (HTTP/3) request/response
   workload found datagram carriage **no better than stream carriage and
-  often worse** (see `perf/README.md`, "Experiment 2") — it has not been
+  often worse** (see `perf/README.md`, "Datagram carriage") — it has not been
   shown to help a real workload, and there is evidence of a latency penalty.
-  It stays on by default; set the manager environment variable
-  `TELEPRESENCE_QUIC_DISABLE_DATAGRAMS=true` to force stream carriage. Both
+  It is off by default; set the manager environment variable
+  `TELEPRESENCE_QUIC_ENABLE_DATAGRAMS=true` to opt in. Both
   ends must have negotiated datagram support for it to happen at all;
   against an older peer, or over the gRPC fallback transport, every payload
   keeps arriving on the stream exactly as before. Direct client-to-agent UDP
@@ -270,3 +270,12 @@ several. No coordinated upgrade is required in either direction.
   QUIC streams, so a tunnel message there lives *inside* a gRPC frame rather
   than in pkg/tunnel's own framing, and datagram carriage for that path is
   unimplemented.
+
+- **The QUIC endpoint assumes a single traffic-manager replica.** The
+  manager's QUIC certificate authority and session state are process-local,
+  and the manager's SNI is not pod-specific, so with more than one
+  traffic-manager pod a client can receive a certificate minted by one manager
+  while the forwarder routes the fixed manager SNI to another, breaking the
+  handshake. The traffic-manager runs as a single replica; more than one is
+  unsupported for the QUIC path. The port-forwarded transport is unaffected and
+  works with any number of replicas.
