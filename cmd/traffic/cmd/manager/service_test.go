@@ -207,8 +207,9 @@ func TestConnect(t *testing.T) {
 }
 
 // TestWatchQuicBackends proves the backend-allowlist RPC's subscribe/update
-// contract required by the QUIC forwarder design (docs/plans/quic-transport/
-// design.md, "The forwarder"): an immediate initial snapshot containing the
+// contract required by the QUIC forwarder design
+// (docs/reference/quic-transport-architecture.md, "The forwarder"): an
+// immediate initial snapshot containing the
 // traffic-manager's own pod IP, and a further, full-replacement snapshot
 // whenever an agent session arrives or departs. The call is deliberately made
 // with no SessionInfo -- the forwarder has no client session.
