@@ -244,9 +244,9 @@ quicTunnel:
     annotations: {}
   # The forwarder is the stateless QUIC packet router (the "quic-forwarder"
   # tel2 subcommand) that owns the UDP entry point above and routes packets,
-  # by SNI and then by connection ID, to the traffic-manager (and, in a later
-  # release, traffic-agents). It never terminates TLS and needs no Kubernetes
-  # API access of its own -- the traffic-manager's existing RBAC covers the
+  # by SNI and then by connection ID, to the traffic-manager and
+  # traffic-agents. It never terminates TLS and needs no Kubernetes API
+  # access of its own -- the traffic-manager's existing RBAC covers the
   # backend allowlist it consumes over gRPC. Only deployed when
   # quicTunnel.enabled is true.
   forwarder:

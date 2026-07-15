@@ -1,7 +1,8 @@
 // Package quicfwd implements the pure wire-format logic a stateless QUIC packet
 // forwarder needs, per "The forwarder" section of
 // docs/reference/quic-transport-architecture.md: no sockets, no goroutines, no Kubernetes -- just
-// parsing and codec functions that a runtime (a later task) calls to route packets.
+// parsing and codec functions that a runtime (the quic-forwarder command,
+// cmd/traffic/cmd/quicforwarder) calls to route packets.
 //
 // Two mechanisms, following the QUIC-LB pattern (draft-ietf-quic-load-balancers), cover
 // every packet in a connection's life:

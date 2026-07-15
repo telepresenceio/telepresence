@@ -29,8 +29,8 @@ const (
 	// live, allowlisted backend.
 	dropAllowlistMiss
 	// dropUnresolvedSNI means a ClientHello's SNI didn't resolve to any
-	// allowlisted backend: an unrecognized name, an agent SNI (unsupported
-	// until phase 6 adds agent backends), or a manager SNI with no manager
+	// allowlisted backend: an unrecognized name, an agent SNI whose pod UID
+	// no allowlisted agent matches, or a manager SNI with no manager
 	// currently allowlisted.
 	dropUnresolvedSNI
 	// dropCapExceeded means a handshake-cache entry's buffered datagram
@@ -65,9 +65,8 @@ func (d dropReason) String() string {
 }
 
 // metrics accumulates the forwarder's forwarded/dropped-by-reason counters. All
-// operations are safe for concurrent use. Prometheus export is deliberately out of
-// scope for this task; LogSnapshot is how the counters surface, at debug level, until a
-// later task wires them up as real metrics.
+// operations are safe for concurrent use. LogSnapshot is how the counters surface, at
+// debug level; Prometheus export is a possible follow-up, not implemented.
 type metrics struct {
 	forwarded atomic.Int64
 	dropped   [numDropReasons]atomic.Int64

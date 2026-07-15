@@ -127,10 +127,10 @@ type Env struct {
 	// is deliberately not the manager's own TunnelQuicPort: a sidecar agent
 	// shares its pod's network namespace with the application, so its QUIC
 	// listener needs a port of its own. This has a Go-level default (unlike most
-	// of Env, see the comment on MutatorWebhookPort above) because the Helm
-	// chart's quicTunnel.agentPort value that will set it is added in a later
-	// task; until then every manager and every agent must still agree on the
-	// same default port.
+	// of Env, see the comment on MutatorWebhookPort above) so that a manager and
+	// its agents agree on a port even when the chart's quicTunnel.agentPort
+	// value doesn't reach the manager (a chart predating the value, or one that
+	// sets it to zero).
 	TunnelQuicAgentPort uint16 `default:"7787"`
 
 	ClientRoutingAlsoProxySubnets        []netip.Prefix `envSeparator:" "`

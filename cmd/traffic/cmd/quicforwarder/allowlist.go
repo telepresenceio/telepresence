@@ -92,10 +92,11 @@ func (a *Allowlist) Backend(ip netip.Addr) (uint16, bool) {
 	return info.port, ok
 }
 
-// ManagerBackend implements backendPicker. Per the design, any allowlisted manager
-// backend is an acceptable resolution for quicfwd.ManagerSNI; which one is returned
-// when several are allowlisted is unspecified (Go's randomized map iteration order
-// gives basic distribution across replicas for free).
+// ManagerBackend implements backendPicker. Any allowlisted manager backend is an
+// acceptable resolution for quicfwd.ManagerSNI; the first in the snapshot's order is
+// returned. The traffic-manager runs as a single replica (more than one is unsupported
+// for the QUIC path; see "Non-goals" in docs/reference/quic-transport-architecture.md),
+// so several entries only occur transiently, during a manager rollout.
 func (a *Allowlist) ManagerBackend() (netip.Addr, uint16, bool) {
 	s := a.snapshot.Load()
 	if s == nil || len(s.managers) == 0 {
