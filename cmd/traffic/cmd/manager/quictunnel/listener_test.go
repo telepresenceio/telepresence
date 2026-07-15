@@ -79,6 +79,28 @@ func dialSessionWithCache(t *testing.T, ctx context.Context, ca *quictunnel.CA, 
 	return conn
 }
 
+// dialSessionWithQUICConfig is dialSession with an explicit quic.Config, so a test can
+// control what the client itself offers during negotiation (e.g. EnableDatagrams) instead
+// of relying on quic-go's zero-value defaults.
+func dialSessionWithQUICConfig(t *testing.T, ctx context.Context, ca *quictunnel.CA, dialAddr, sessionID string, qCfg *quic.Config) *quic.Conn {
+	t.Helper()
+	certPEM, keyPEM, err := ca.MintClientCert(sessionID)
+	require.NoError(t, err)
+	clientCert, err := tls.X509KeyPair(certPEM, keyPEM)
+	require.NoError(t, err)
+
+	tlsConf := &tls.Config{
+		Certificates: []tls.Certificate{clientCert},
+		RootCAs:      ca.Pool(),
+		ServerName:   quictunnel.ServerName,
+		NextProtos:   []string{tunnel.QuicALPN},
+	}
+	conn, err := quic.DialAddr(ctx, dialAddr, tlsConf, qCfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.CloseWithError(0, "") })
+	return conn
+}
+
 // notifyingSessionCache wraps a real tls.ClientSessionCache and signals put so a test can
 // wait for the server's post-handshake session ticket to actually land before re-dialing,
 // instead of sleeping and hoping.
@@ -471,4 +493,27 @@ func TestListener_ServerCIDsEncodePodIP(t *testing.T) {
 		}
 	}
 	require.True(t, found, "expected at least one short-header packet whose DCID decodes to the configured pod IP")
+}
+
+// TestListener_DatagramsDisabledByEnv proves TELEPRESENCE_QUIC_DISABLE_DATAGRAMS turns off
+// RFC 9221 datagram negotiation bilaterally: a client that itself offers EnableDatagrams
+// only ends up with a connection reporting SupportsDatagrams() when the listener also
+// offered it, and the env var controls exactly that.
+func TestListener_DatagramsDisabledByEnv(t *testing.T) {
+	ctx, cancel := testContext(t, 10*time.Second)
+	defer cancel()
+
+	handler := func(context.Context, tunnel.Stream) error { return nil }
+	clientQCfg := &quic.Config{EnableDatagrams: true}
+
+	ca, dialAddr := startTestListener(t, ctx, handler)
+	conn := dialSessionWithQUICConfig(t, ctx, ca, dialAddr, "session-datagrams-enabled", clientQCfg)
+	sd := conn.ConnectionState().SupportsDatagrams
+	require.True(t, sd.Local && sd.Remote, "expected datagram negotiation to succeed with the env var unset")
+
+	t.Setenv("TELEPRESENCE_QUIC_DISABLE_DATAGRAMS", "true")
+	ca, dialAddr = startTestListener(t, ctx, handler)
+	conn = dialSessionWithQUICConfig(t, ctx, ca, dialAddr, "session-datagrams-disabled", clientQCfg)
+	sd = conn.ConnectionState().SupportsDatagrams
+	require.False(t, sd.Local && sd.Remote, "expected datagram negotiation to fail once the listener stops offering it")
 }

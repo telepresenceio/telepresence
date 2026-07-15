@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"strconv"
 	"time"
 
@@ -86,7 +87,7 @@ func Listen(port uint16, podIP netip.Addr, ca *CA, serverCert tls.Certificate, h
 	qCfg := &quic.Config{
 		MaxIdleTimeout:     time.Minute,
 		MaxIncomingStreams: tunnel.QuicMaxIncomingStreams,
-		EnableDatagrams:    true,
+		EnableDatagrams:    !datagramsDisabledByEnv(),
 	}
 	tr := &quic.Transport{
 		Conn:                  conn,
@@ -98,6 +99,18 @@ func Listen(port uint16, podIP netip.Addr, ca *CA, serverCert tls.Certificate, h
 		return nil, fmt.Errorf("quictunnel: listen on %s: %w", addr, err)
 	}
 	return &Listener{ln: ln, conn: conn, handler: handler, datagram: &tunnel.DatagramCounters{}}, nil
+}
+
+// datagramsDisabledByEnv reports whether TELEPRESENCE_QUIC_DISABLE_DATAGRAMS is set to a
+// truthy value (strconv.ParseBool). RFC 9221 datagram support is negotiated per QUIC
+// connection from what each end offers in its quic.Config, so a listener that never offers
+// EnableDatagrams makes the negotiated result false for every client regardless of what the
+// client itself offered: this single flag turns datagram carriage off bilaterally for every
+// connection this listener accepts, without any client-side change. Unset (the default)
+// leaves EnableDatagrams on.
+func datagramsDisabledByEnv() bool {
+	disabled, _ := strconv.ParseBool(os.Getenv("TELEPRESENCE_QUIC_DISABLE_DATAGRAMS"))
+	return disabled
 }
 
 // Addr returns the listener's local address.
