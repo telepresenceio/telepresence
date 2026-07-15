@@ -249,16 +249,24 @@ several. No coordinated upgrade is required in either direction.
 
 ## Current limitations
 
-- Tunneled UDP between the client and the traffic-manager is a hybrid: a
-  payload that fits the connection's datagram budget rides an unreliable
-  QUIC datagram (RFC 9221), and an oversized one falls back to the flow's
-  reliable stream, per message -- there is no negotiation or latching, so
-  an occasional oversized payload never disables the fast path for the
-  rest of the flow. Both ends must have negotiated datagram support for
-  this to happen at all; against an older peer, or over the gRPC fallback
-  transport, every payload keeps arriving on the stream exactly as
-  before. Direct client-to-agent UDP flows are unaffected by this: the
-  agent's QUIC listener (`cmd/traffic/cmd/agent/quicserver`) serves the
-  agent's gRPC server over QUIC streams, so a tunnel message there lives
-  *inside* a gRPC frame rather than in pkg/tunnel's own framing, and
-  datagram carriage for that path is unimplemented.
+- **Datagram carriage for tunneled UDP is enabled but unproven.** A UDP
+  payload between the client and the traffic-manager rides an unreliable
+  QUIC datagram (RFC 9221) when it fits the connection's datagram budget,
+  and falls back to the flow's reliable stream per message when it does not
+  (no negotiation or latching, so an occasional oversized payload never
+  disables the fast path for the rest of the flow). This was intended to
+  remove the head-of-line blocking that reliable-stream carriage imposes on
+  tunneled UDP, but a measurement of an inner QUIC (HTTP/3) request/response
+  workload found datagram carriage **no better than stream carriage and
+  often worse** (see `perf/README.md`, "Experiment 2") — it has not been
+  shown to help a real workload, and there is evidence of a latency penalty.
+  It stays on by default; set the manager environment variable
+  `TELEPRESENCE_QUIC_DISABLE_DATAGRAMS=true` to force stream carriage. Both
+  ends must have negotiated datagram support for it to happen at all;
+  against an older peer, or over the gRPC fallback transport, every payload
+  keeps arriving on the stream exactly as before. Direct client-to-agent UDP
+  flows are unaffected: the agent's QUIC listener
+  (`cmd/traffic/cmd/agent/quicserver`) serves the agent's gRPC server over
+  QUIC streams, so a tunnel message there lives *inside* a gRPC frame rather
+  than in pkg/tunnel's own framing, and datagram carriage for that path is
+  unimplemented.

@@ -22,9 +22,11 @@ unloaded network the two transports look alike. The wins are specific:
 
 - **No head-of-line blocking under loss.** gRPC multiplexes every tunneled flow
   onto one HTTP/2 connection, so one lost packet stalls all of them; QUIC
-  streams are retransmitted independently. **This is experiment 1.**
-- **No apiserver bottleneck under concurrency** (future experiment 2).
-- **Survives the client changing networks** (future experiment 3).
+  streams are retransmitted independently. **This is experiment 1, and it holds.**
+- **RFC 9221 datagram carriage removing that same effect for tunneled UDP** was
+  the hypothesis of **experiment 2 — and it did NOT hold.** For an inner QUIC
+  (HTTP/3) connection, datagram carriage measured no better and often worse. See
+  "Experiment 2" below.
 
 So the experiments deliberately induce the adverse condition (packet loss,
 concurrency) rather than measuring a best case.
@@ -88,6 +90,57 @@ signature of kernel TCP's congestion-window collapse after idle
 on managed nodes), which quic-go does not do. Interactive, pause-heavy
 traffic — the typical dev-loop pattern — therefore pays +1 RTT per
 interaction on the shared TCP transport at WAN RTTs.
+
+## Experiment 2: datagram carriage for tunneled UDP (negative result)
+
+Runs `exp2Workers` (10) concurrent HTTP/3 requests, **all sharing one inner
+QUIC connection** (one `http3.Transport`) to an in-cluster HTTP/3 server
+(`testdata/h3server`), through the tunnel, at the same loss levels — once with
+the manager offering RFC 9221 datagram carriage for tunneled UDP and once with
+it forced off (`TELEPRESENCE_QUIC_DISABLE_DATAGRAMS`). Both arms run over the
+QUIC transport; only the carriage of the single UDP flow differs. The
+hypothesis was that unreliable datagram carriage would let the inner QUIC
+recover loss per-stream, while reliable stream carriage would stall the whole
+inner connection on any carrier loss — so datagrams should win the tail.
+
+**The hypothesis did not hold.** Datagram carriage was never better and was
+often substantially worse. p95 request latency (ms), three runs on kind
+(`dev-control-plane`, 20 ms RTT):
+
+| loss | datagram p95 (run 1 / 2 / 3) | stream p95 (run 1 / 2 / 3) |
+|------|------------------------------|----------------------------|
+| 0 %  | 22 / 60 / 61                 | 22 / 23 / 22               |
+| 1 %  | 62 / 84 / 84                 | 52 / 61 / 61               |
+| 3 %  | 103 / 169 / 153              | 81 / 87 / 96               |
+
+The stream arm is stable across runs; the datagram arm is not. Run 1's datagram
+numbers match the stream arm (its 0 %-loss p95 is a clean 22 ms), consistent
+with datagrams not having engaged that run — a silent fall-back to stream
+carriage — while runs 2 and 3 show datagram carriage's true cost: a ~40 ms p95
+penalty **at 0 % loss**, where there is no loss for the hypothesized mechanism
+to act on at all, and roughly 1.7× the stream p95 at 3 % loss. (The stream
+arm's stability across all three runs is what rules out machine-wide contention
+as the cause: contention would have moved both arms.)
+
+**Most plausible explanation (QUIC-in-QUIC):** with stream carriage the outer
+reliable tunnel stream recovers a lost carrier packet over the short
+client↔forwarder↔manager hop; datagram carriage instead forces the *inner* QUIC
+connection to detect and recover the loss over the full end-to-end path, which
+is slower — so the "unreliable is faster under loss" intuition inverts. The
+0 %-loss penalty additionally points at a latency cost in the datagram receive
+path itself, unrelated to loss recovery, which was not chased down.
+
+**Scope caveat.** This is a think-time request/response workload. It does *not*
+exercise the sustained, buffer-filling inner-UDP regime (media, bulk HTTP/3)
+that the datagram design originally targeted, where a backpressured tunnel
+stream drops in bursts; that regime remains unmeasured. So this refutes the
+general "datagrams remove head-of-line blocking for tunneled UDP" claim and
+shows a case where they hurt, but does not prove they never help.
+
+The experiment therefore **records** rather than asserts — there is no benefit
+to gate on; the p50/p95/p99 table is written to `perf/results/experiment2.csv`.
+Datagram carriage remains enabled by default (with
+`TELEPRESENCE_QUIC_DISABLE_DATAGRAMS` as an opt-out).
 
 ## Prerequisites
 

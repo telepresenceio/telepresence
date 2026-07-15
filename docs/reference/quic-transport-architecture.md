@@ -68,8 +68,13 @@ fallback. QUIC rather than direct (m)TLS gRPC or WireGuard because:
 * **Per-stream independence.** QUIC streams are independently retransmitted; loss
   on one flow no longer stalls the others. This directly fixes cost #1 and maps
   one-to-one onto the existing flow-per-stream model in `pkg/tunnel`.
-* **Datagram frames (RFC 9221)** give real unreliable delivery for tunneled UDP,
-  fixing cost #4.
+* **Datagram frames (RFC 9221)** can carry tunneled UDP unreliably, intended to
+  address cost #4 (UDP emulated over a reliable stream). This capability is
+  implemented on the client↔manager path but is **not proven**: a measurement of
+  an inner QUIC (HTTP/3) request/response workload found datagram carriage no
+  better than stream carriage and often worse (see the reference doc and
+  `perf/README.md`, "Experiment 2"). It remains enabled by default with an
+  opt-out, pending a workload that demonstrates a benefit.
 * **Connection migration.** A QUIC connection survives the client changing IP
   address; laptop roaming stops killing the tunnel (cost #3). TLS 1.3 session
   resumption makes the remaining reconnects cheap.

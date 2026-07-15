@@ -20,16 +20,6 @@ var (
 	exp2ThinkTime    = 300 * time.Millisecond
 	exp2WindowDur    = 30 * time.Second
 	exp2LossPercents = []float64{0, 1, 3}
-	// exp2MinP95Ratio is the pass threshold at the highest loss level: the stream-carriage
-	// arm's p95 request latency must be at least this many times the datagram-carriage arm's
-	// p95. Deliberately more conservative than exp1MinP95Ratio (1.4) as a starting point --
-	// this experiment's HoL mechanism is a single shared inner QUIC connection's OWN loss
-	// recovery being either exposed to the tunnel's real per-packet loss (datagram carriage)
-	// or hidden behind an outer reliable stream's coarser, connection-wide stall (stream
-	// carriage), rather than exp1's cross-flow blocking on a shared byte stream, and it was
-	// unmeasured at authoring time. Raise it if a run shows a larger stable gap; if a run
-	// shows none, that is the recorded result, not a reason to lower this until one appears.
-	exp2MinP95Ratio = 1.3
 )
 
 // TestExperiment2_DatagramHeadOfLine runs exp2Workers concurrent HTTP/3 requests -- ALL
@@ -59,12 +49,19 @@ var (
 //     loss recovery handles, delaying only the one or two inner HTTP/3 streams whose data was
 //     actually in it.
 //
-// The hypothesis: forcing stream carriage converts the inner protocol's own designed-for-loss
-// behavior into connection-wide stalls, so the stream-carriage arm's tail latency should be
-// worse than the datagram-carriage arm's, in proportion to how many concurrent inner streams
-// are usually in flight when a loss lands. The test asserts that at the highest loss level
-// the stream-carriage p95 is at least exp2MinP95Ratio times the datagram-carriage p95, and
-// writes the full p50/p95/p99 table to perf/results/experiment2.csv regardless.
+// The hypothesis was that forcing stream carriage would convert the inner protocol's own
+// designed-for-loss behavior into connection-wide stalls, making the stream-carriage arm's
+// tail latency worse than the datagram-carriage arm's. MEASUREMENT DID NOT BEAR THIS OUT.
+// Across three runs on kind (recorded in perf/README.md, "Experiment 2"), datagram carriage
+// was never better and was often substantially worse -- including a large p95 penalty at 0%
+// loss, where there is no loss for the hypothesized mechanism to act on. The most plausible
+// reason is that this is QUIC-in-QUIC: with stream carriage the outer reliable stream recovers
+// a lost carrier packet over the short client<->forwarder<->manager hop, whereas datagram
+// carriage forces the INNER QUIC to recover it over the full end-to-end path, which is slower
+// -- so the "unreliable is faster under loss" intuition inverts here. This test therefore no
+// longer asserts a benefit; it records the p50/p95/p99 comparison to
+// perf/results/experiment2.csv and logs the observed ratio, so the result is reproducible and
+// visible without pretending to a win the data does not show.
 //
 // Skipped unless a QUIC-reachable endpoint is configured (PERF_QUIC_EXTERNAL_HOST); without
 // any impairment configured it still runs and records a clean-network baseline. The loss
@@ -136,22 +133,22 @@ func TestExperiment2_DatagramHeadOfLine(t *testing.T) {
 	path := writeCSV(t, cfg.outDir, "experiment2", rows)
 	t.Logf("results written to %s", path)
 
-	// As in experiment 1, the ratio assertion only makes sense when loss was actually
-	// injected on the download data path.
+	// This experiment records rather than asserts: the hypothesized datagram benefit did not
+	// materialize (see the doc comment above and perf/README.md), so there is no benefit to
+	// gate on. When loss was injected, log the observed stream/datagram p95 ratio so a run's
+	// direction is visible in the output; a value below 1 means datagram carriage was the worse
+	// of the two, which is what has been measured so far.
 	if cfg.impairNode == "" || topLoss == 0 {
 		return
 	}
 	datagramP95 := p95AtTopLoss[armDatagram]
 	streamP95 := p95AtTopLoss[armStream]
 	if datagramP95 <= 0 {
-		t.Fatalf("no successful datagram-carriage requests at %g%% loss; cannot compare", topLoss)
+		t.Logf("no successful datagram-carriage requests at %g%% loss; nothing to compare", topLoss)
+		return
 	}
-	ratio := float64(streamP95) / float64(datagramP95)
-	t.Logf("at %g%% loss: stream p95 / datagram p95 = %.2f (threshold %.2f)", topLoss, ratio, exp2MinP95Ratio)
-	if ratio < exp2MinP95Ratio {
-		t.Fatalf("expected stream-carriage p95 to be >= %.2fx datagram-carriage p95 at %g%% loss (datagram head-of-line benefit), got %.2fx",
-			exp2MinP95Ratio, topLoss, ratio)
-	}
+	t.Logf("at %g%% loss: stream p95 / datagram p95 = %.2f (a value < 1 means datagram carriage was worse)",
+		topLoss, float64(streamP95)/float64(datagramP95))
 }
 
 // armDatagram and armStream label experiment 2's two arms for logging and CSV output. Both
