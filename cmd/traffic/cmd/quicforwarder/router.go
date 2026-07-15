@@ -134,6 +134,11 @@ func (r *Router) dropf(ctx context.Context, reason dropReason, format string, ar
 // forwarder's front socket, and forwards it (immediately, or once buffered and later
 // flushed) or drops it. It never blocks on anything but the flowSink/backendPicker
 // calls it makes.
+//
+// Route must not be called concurrently with itself: a handshake-cache entry's
+// CryptoAccumulator relies on the Initial packets of one connection attempt being fed
+// in arrival order, which only Forwarder.runIngress's single goroutine guarantees.
+// Sweep may run concurrently with Route.
 func (r *Router) Route(ctx context.Context, src netip.AddrPort, datagram []byte) {
 	if !r.allowlist.Ready() {
 		r.dropf(ctx, dropNotReady, "")
@@ -142,7 +147,11 @@ func (r *Router) Route(ctx context.Context, src netip.AddrPort, datagram []byte)
 
 	// (a) An existing flow for this source address always wins, regardless of
 	// what the datagram contains: once routed, a connection's packets are
-	// never re-classified.
+	// never re-classified. This is sound only because a client UDP socket
+	// carries at most one QUIC connection (every Telepresence dial creates a
+	// socket of its own), so a source address can never belong to two
+	// backends -- see "The forwarder" in
+	// docs/reference/quic-transport-architecture.md.
 	if r.sink.Forward(ctx, src, datagram) {
 		r.metrics.addForwarded(1)
 		return

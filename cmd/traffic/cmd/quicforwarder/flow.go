@@ -32,6 +32,11 @@ func (e *flowEntry) touch() {
 // socket, addressed back to the client's source address. This is the "soft state" the
 // design describes: a forwarder restart loses the table, but clients simply re-appear
 // via CID or SNI routing and QUIC's path validation handles the new return path.
+//
+// Keying flows by the client's source address alone encodes a system-wide invariant:
+// a client UDP socket carries at most one QUIC connection (every Telepresence dial
+// creates a socket of its own), so one source address maps to exactly one backend.
+// See "The forwarder" in docs/reference/quic-transport-architecture.md.
 type flowTable struct {
 	frontPC *ipv4.PacketConn
 	metrics *metrics

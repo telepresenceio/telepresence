@@ -301,7 +301,14 @@ func quicCandidateAddrs(ep *manager.QuicTunnelEndpoint) []string {
 
 // dialQuicCandidates dials every address in addrs concurrently, starts staggered by
 // quicCandidateStagger in list order (happy-eyeballs style), and returns the
-// connection and address of the first handshake to complete. Every other dial --
+// connection and address of the first handshake to complete.
+//
+// Every dial uses quic.DialAddr, which gives each connection a UDP socket -- and thus
+// a client source address -- of its own. That is a requirement, not a convenience:
+// the forwarder routes every packet of an established flow by its client source
+// address alone, so one socket must never carry more than one QUIC connection (see
+// "The forwarder" in docs/reference/quic-transport-architecture.md). A shared
+// quic.Transport across dials would violate this. Every other dial --
 // whether still stagger-waiting, mid-handshake, or already connected -- is closed in
 // the background once a winner is chosen or ctx is done; the caller's ctx bounds how
 // long that cleanup can take, not this call, which returns as soon as it has a winner

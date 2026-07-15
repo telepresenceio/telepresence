@@ -250,6 +250,13 @@ func (ac *client) dialAgentQUIC(ctx context.Context, ep *quicEndpoint, sni strin
 			MaxIdleTimeout:  time.Minute,
 			KeepAlivePeriod: 15 * time.Second,
 		}
+		// quic.DialAddr gives the connection a UDP socket -- and thus a client
+		// source address -- of its own. That is a requirement, not a convenience:
+		// the forwarder routes every packet of an established flow by its client
+		// source address alone, so one socket must never carry more than one QUIC
+		// connection (see "The forwarder" in
+		// docs/reference/quic-transport-architecture.md). A quic.Transport shared
+		// across agents would violate this.
 		newConn, err := quic.DialAddr(dialCtx, ep.addr, ep.tlsConfig(sni), qCfg)
 		if err != nil {
 			return nil, fmt.Errorf("dial QUIC endpoint %s (sni %s): %w", ep.addr, sni, err)
