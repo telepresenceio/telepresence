@@ -112,9 +112,10 @@ func (s *session) probeQuicTunnel(ctx context.Context) quicProbeResult {
 	// The connection is expected to be idle whenever no tunnel streams are active, so
 	// it must be kept alive; without this, quic-go's idle timeout tears it down and the
 	// session falls back to the port-forwarded transport until the next re-probe.
-	// EnableDatagrams lets a UDP flow's payload ride an unreliable QUIC datagram
-	// instead of its stream when the manager negotiated it too; an older manager
-	// simply never sends one and every payload keeps arriving on the stream as before.
+	// The client always offers EnableDatagrams, but RFC 9221 datagram carriage is opt-in
+	// and OFF unless the manager enables it (TELEPRESENCE_QUIC_ENABLE_DATAGRAMS): support
+	// is negotiated, so a manager that never offers it means every payload keeps arriving
+	// on the stream, exactly as an older manager that can't offer it at all would.
 	qCfg := &quic.Config{
 		MaxIdleTimeout:  time.Minute,
 		KeepAlivePeriod: 15 * time.Second,

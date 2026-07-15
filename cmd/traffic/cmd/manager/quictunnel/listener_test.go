@@ -495,25 +495,28 @@ func TestListener_ServerCIDsEncodePodIP(t *testing.T) {
 	require.True(t, found, "expected at least one short-header packet whose DCID decodes to the configured pod IP")
 }
 
-// TestListener_DatagramsDisabledByEnv proves TELEPRESENCE_QUIC_DISABLE_DATAGRAMS turns off
-// RFC 9221 datagram negotiation bilaterally: a client that itself offers EnableDatagrams
-// only ends up with a connection reporting SupportsDatagrams() when the listener also
-// offered it, and the env var controls exactly that.
-func TestListener_DatagramsDisabledByEnv(t *testing.T) {
+// TestListener_DatagramsEnabledByEnv proves TELEPRESENCE_QUIC_ENABLE_DATAGRAMS is the opt-in
+// that turns on RFC 9221 datagram negotiation: datagram carriage is OFF by default, so a
+// client that itself offers EnableDatagrams only ends up with a connection reporting
+// SupportsDatagrams() once the listener has been told to offer it too.
+func TestListener_DatagramsEnabledByEnv(t *testing.T) {
 	ctx, cancel := testContext(t, 10*time.Second)
 	defer cancel()
 
 	handler := func(context.Context, tunnel.Stream) error { return nil }
 	clientQCfg := &quic.Config{EnableDatagrams: true}
 
+	// Default: the listener does not offer datagrams, so negotiation fails even though the
+	// client offered.
 	ca, dialAddr := startTestListener(t, ctx, handler)
-	conn := dialSessionWithQUICConfig(t, ctx, ca, dialAddr, "session-datagrams-enabled", clientQCfg)
+	conn := dialSessionWithQUICConfig(t, ctx, ca, dialAddr, "session-datagrams-default", clientQCfg)
 	sd := conn.ConnectionState().SupportsDatagrams
-	require.True(t, sd.Local && sd.Remote, "expected datagram negotiation to succeed with the env var unset")
+	require.False(t, sd.Local && sd.Remote, "expected datagram negotiation to fail by default (opt-in feature)")
 
-	t.Setenv("TELEPRESENCE_QUIC_DISABLE_DATAGRAMS", "true")
+	// Opt in: with the env var set the listener offers datagrams and negotiation succeeds.
+	t.Setenv("TELEPRESENCE_QUIC_ENABLE_DATAGRAMS", "true")
 	ca, dialAddr = startTestListener(t, ctx, handler)
-	conn = dialSessionWithQUICConfig(t, ctx, ca, dialAddr, "session-datagrams-disabled", clientQCfg)
+	conn = dialSessionWithQUICConfig(t, ctx, ca, dialAddr, "session-datagrams-enabled", clientQCfg)
 	sd = conn.ConnectionState().SupportsDatagrams
-	require.False(t, sd.Local && sd.Remote, "expected datagram negotiation to fail once the listener stops offering it")
+	require.True(t, sd.Local && sd.Remote, "expected datagram negotiation to succeed once the listener opts in")
 }

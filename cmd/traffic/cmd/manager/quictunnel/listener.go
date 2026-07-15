@@ -80,14 +80,16 @@ func Listen(port uint16, podIP netip.Addr, ca *CA, serverCert tls.Certificate, h
 	// Clients keep otherwise-idle connections alive with pings every 15s; the idle
 	// timeout only needs to be comfortably above that ping interval. Every flow the
 	// client routes through the VPN is one concurrent stream, so the stream limit
-	// must accommodate a busy client, not quic-go's default of 100. EnableDatagrams
-	// lets a UDP flow's payload ride an unreliable QUIC datagram instead of its
-	// stream when the client negotiated it too; an older client that didn't simply
-	// never sends one and every payload keeps arriving on the stream as before.
+	// must accommodate a busy client, not quic-go's default of 100. RFC 9221 datagram
+	// carriage is OFF by default and opt-in via TELEPRESENCE_QUIC_ENABLE_DATAGRAMS: it
+	// measured no better than stream carriage and often worse (see perf/README.md,
+	// "Datagram carriage"). A client always offers datagrams, so this manager-side flag
+	// alone decides the negotiated result; a manager that never offers makes it off
+	// bilaterally and every payload keeps riding the stream.
 	qCfg := &quic.Config{
 		MaxIdleTimeout:     time.Minute,
 		MaxIncomingStreams: tunnel.QuicMaxIncomingStreams,
-		EnableDatagrams:    !datagramsDisabledByEnv(),
+		EnableDatagrams:    datagramsEnabledByEnv(),
 	}
 	tr := &quic.Transport{
 		Conn:                  conn,
@@ -101,16 +103,17 @@ func Listen(port uint16, podIP netip.Addr, ca *CA, serverCert tls.Certificate, h
 	return &Listener{ln: ln, conn: conn, handler: handler, datagram: &tunnel.DatagramCounters{}}, nil
 }
 
-// datagramsDisabledByEnv reports whether TELEPRESENCE_QUIC_DISABLE_DATAGRAMS is set to a
-// truthy value (strconv.ParseBool). RFC 9221 datagram support is negotiated per QUIC
-// connection from what each end offers in its quic.Config, so a listener that never offers
-// EnableDatagrams makes the negotiated result false for every client regardless of what the
-// client itself offered: this single flag turns datagram carriage off bilaterally for every
-// connection this listener accepts, without any client-side change. Unset (the default)
-// leaves EnableDatagrams on.
-func datagramsDisabledByEnv() bool {
-	disabled, _ := strconv.ParseBool(os.Getenv("TELEPRESENCE_QUIC_DISABLE_DATAGRAMS"))
-	return disabled
+// datagramsEnabledByEnv reports whether TELEPRESENCE_QUIC_ENABLE_DATAGRAMS is set to a
+// truthy value (strconv.ParseBool). RFC 9221 datagram carriage is OFF by default: a
+// measurement found it no better than stream carriage and often worse (see perf/README.md,
+// "Datagram carriage"), so it is opt-in. Support is negotiated per QUIC connection from what
+// each end offers, so a listener that never offers EnableDatagrams makes the negotiated
+// result false for every client regardless of what the client offered: this single
+// manager-side flag turns datagram carriage on bilaterally for every connection this
+// listener accepts, without any client-side change. Unset (the default) leaves it off.
+func datagramsEnabledByEnv() bool {
+	enabled, _ := strconv.ParseBool(os.Getenv("TELEPRESENCE_QUIC_ENABLE_DATAGRAMS"))
+	return enabled
 }
 
 // Addr returns the listener's local address.
