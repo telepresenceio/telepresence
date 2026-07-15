@@ -126,9 +126,18 @@ as the cause: contention would have moved both arms.)
 reliable tunnel stream recovers a lost carrier packet over the short
 client↔forwarder↔manager hop; datagram carriage instead forces the *inner* QUIC
 connection to detect and recover the loss over the full end-to-end path, which
-is slower — so the "unreliable is faster under loss" intuition inverts. The
-0 %-loss penalty additionally points at a latency cost in the datagram receive
-path itself, unrelated to loss recovery, which was not chased down.
+is slower — so the "unreliable is faster under loss" intuition inverts.
+
+The **0 %-loss penalty** (datagram p95 ~60 ms vs stream ~22 ms with no loss at
+all) was investigated separately. The obvious suspect — the per-flow receive
+channel silently dropping datagrams on overflow, which a reliable inner QUIC
+would then retransmit — was **ruled out**: with a `dropped-full` counter added
+and the channel enlarged to depth 1024, a re-run showed `dropped-full` = 0 and
+the penalty **unchanged** (datagram p95 still ~62 ms). So the penalty is not
+overflow-driven. Its exact mechanism was not pinned down; it is consistent with
+a send-side pacing cost or the inner QUIC reacting to datagram reordering, and
+it is buffer-independent — the channel depth was left at its modest default and
+the `dropped-full` counter retained for field visibility.
 
 **Scope caveat.** This is a think-time request/response workload. It does *not*
 exercise the sustained, buffer-filling inner-UDP regime (media, bulk HTTP/3)

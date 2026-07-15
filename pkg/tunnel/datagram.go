@@ -53,6 +53,15 @@ func DecodeDatagram(b []byte) (ConnID, []byte, error) {
 	return ConnID(b[:idLen]), b[idLen:], nil
 }
 
+// datagramFlowBufferDepth is the capacity of each flow's inbound datagram delivery
+// channel. Overflow is dropped (counted as dropped-full) rather than blocking, since
+// blocking would re-impose the head-of-line stall datagrams exist to avoid. Enlarging
+// this was investigated as the cause of the datagram-carriage latency penalty that
+// experiment 2 measured even at 0% loss (see perf/README.md): at depth 1024 the
+// dropped-full counter stayed 0 while the penalty was unchanged, so the penalty is NOT
+// overflow-driven and the modest depth is kept.
+const datagramFlowBufferDepth = 8
+
 // DatagramCapable is implemented by the GRPCStream/GRPCClientStream backing a QUIC
 // tunnel stream (see quicStream in quic.go) so that pkg/tunnel's transport-agnostic
 // stream type can reach the *quic.Conn carrying it without every Stream implementation
@@ -84,16 +93,18 @@ type DatagramCounters struct {
 	received    atomic.Uint64
 	fallback    atomic.Uint64
 	unknownConn atomic.Uint64
+	droppedFull atomic.Uint64
 }
 
 // Snapshot returns the current totals.
-func (c *DatagramCounters) Snapshot() (sent, received, fallback, unknownConn uint64) {
-	return c.sent.Load(), c.received.Load(), c.fallback.Load(), c.unknownConn.Load()
+func (c *DatagramCounters) Snapshot() (sent, received, fallback, unknownConn, droppedFull uint64) {
+	return c.sent.Load(), c.received.Load(), c.fallback.Load(), c.unknownConn.Load(), c.droppedFull.Load()
 }
 
 func (c *DatagramCounters) String() string {
-	sent, received, fallback, unknownConn := c.Snapshot()
-	return fmt.Sprintf("sent %d, received %d, fallback-to-stream %d, unknown-conn %d", sent, received, fallback, unknownConn)
+	sent, received, fallback, unknownConn, droppedFull := c.Snapshot()
+	return fmt.Sprintf("sent %d, received %d, fallback-to-stream %d, unknown-conn %d, dropped-full %d",
+		sent, received, fallback, unknownConn, droppedFull)
 }
 
 // datagramConn is the per-QUIC-connection state StartDatagramReceiver installs: routes
@@ -148,7 +159,13 @@ func StartDatagramReceiver(ctx context.Context, conn *quic.Conn, counters *Datag
 			select {
 			case v.(chan []byte) <- payload:
 			default:
-				// The flow's channel is momentarily full; UDP tolerates the drop.
+				// The per-flow delivery channel is full: the consumer (the flow's
+				// Receive loop) is not draining as fast as datagrams arrive in a
+				// burst. Raw UDP tolerates the drop, but when the inner protocol is
+				// itself reliable (QUIC/HTTP-3) a drop here is application-level loss
+				// that the inner protocol must retransmit -- so this is counted, not
+				// silent, and datagramFlowBufferDepth is sized to absorb a burst.
+				counters.droppedFull.Add(1)
 			}
 		}
 	}()
@@ -185,7 +202,7 @@ func AttachDatagramRoute(s Stream) (detach func()) {
 	}
 	entry := v.(*datagramConn)
 
-	ch := make(chan []byte, 8)
+	ch := make(chan []byte, datagramFlowBufferDepth)
 	entry.routes.Store(backing.id, ch)
 	backing.datagrams = ch
 	backing.datagramCounters = entry.counters

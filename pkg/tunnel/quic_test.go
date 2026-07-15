@@ -248,11 +248,11 @@ func TestQuicE2E_Datagrams(t *testing.T) {
 	assert.Equal(t, payload, m.Payload())
 
 	require.Eventually(t, func() bool {
-		sent, _, _, _ := clientCounters.Snapshot()
+		sent, _, _, _, _ := clientCounters.Snapshot()
 		return sent == 1
 	}, time.Second, 10*time.Millisecond, "client did not record a sent datagram")
 	require.Eventually(t, func() bool {
-		_, received, _, _ := serverCounters.Snapshot()
+		_, received, _, _, _ := serverCounters.Snapshot()
 		return received == 1
 	}, time.Second, 10*time.Millisecond, "server did not record a received datagram")
 
@@ -265,7 +265,7 @@ func TestQuicE2E_Datagrams(t *testing.T) {
 	assert.Equal(t, big, m.Payload())
 
 	require.Eventually(t, func() bool {
-		_, _, fallback, _ := clientCounters.Snapshot()
+		_, _, fallback, _, _ := clientCounters.Snapshot()
 		return fallback == 1
 	}, time.Second, 10*time.Millisecond, "client did not record a stream fallback")
 
@@ -277,7 +277,7 @@ func TestQuicE2E_Datagrams(t *testing.T) {
 	require.NoError(t, conn.SendDatagram(EncodeDatagram(deadID, []byte("nobody home"))))
 
 	require.Eventually(t, func() bool {
-		_, _, _, unknown := serverCounters.Snapshot()
+		_, _, _, unknown, _ := serverCounters.Snapshot()
 		return unknown == 1
 	}, time.Second, 10*time.Millisecond, "server did not record the dead-ConnID datagram as unknown-conn")
 
