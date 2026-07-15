@@ -178,8 +178,16 @@ buffer change in `pkg/vif/stack.go`. Following the note co-located here
 number; otherwise the change is dropped and the negative result recorded, the same
 way the datagram experiment above is.
 
-**Status: measurement pending.** Results and the resulting decision will be recorded
-here and in `netstack-tuning.md`.
+**Result (kind, 20 ms RTT, 200 Mbit/s offered): the VIF UDP buffer is not the
+bottleneck — the transport is.** The gRPC arm is window-limited to ~20 Mbit/s because
+it rides one SPDY port-forward stream through the apiserver (~64 KiB window / 20 ms RTT
+≈ 26 Mbit/s), while QUIC's per-flow streams deliver **~173 Mbit/s — an 8.8× bulk-UDP
+throughput win**, the same shared-stream root cause as the head-of-line result. Sizing
+the VIF UDP endpoint buffer from 32 KiB to 2 MiB moved no number on either transport
+(QUIC: 13.6%→12.6% loss at ~175 Mbit/s), so the buffer change was reverted; only the
+TCP receive-`Default` copy-paste fix in `pkg/vif/stack.go` was kept. The residual ~13%
+QUIC loss is upstream of the client VIF (raising it 64× didn't touch it; most likely
+the netem/GSO-off impairment harness at that rate). See `netstack-tuning.md`.
 
 ## Prerequisites
 
