@@ -1,6 +1,6 @@
 //go:build perf
 
-package perf
+package network
 
 import (
 	"context"
@@ -422,8 +422,9 @@ func logFailures(t *testing.T, results []streamResult) {
 }
 
 // payloadURL is the fixed static asset served by the perf-payload workload
-// (testdata/payload.yaml); its size is set by that manifest's initContainer and
-// must match exp1PayloadBytes.
+// (testdata/payload.yaml); the object's full size is set by that manifest's
+// initContainer, and callers Range-read only the leading bytes they need
+// (holRequestBytes for the head-of-line experiment).
 const payloadURL = "http://perf-payload/payload.bin"
 
 // runRequestWorkers runs `workers` goroutines for the duration dur, each issuing

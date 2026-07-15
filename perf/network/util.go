@@ -1,6 +1,6 @@
 //go:build perf
 
-package perf
+package network
 
 import (
 	"bytes"

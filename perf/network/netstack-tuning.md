@@ -1,12 +1,14 @@
 # Follow-up: netstack buffer tuning (VIF)
 
 Engineering note, not user documentation. Filed 2026-07-15, discovered while
-investigating the QUIC datagram experiment (`perf/README.md`, "Experiment 2").
-Not yet acted on — this records the finding and the *measured* way to act on it.
+investigating the datagram-carriage experiment (`perf/README.md`, "Datagram
+carriage"). Co-located with the experiment that measures it
+(`vifthroughput_test.go`). Not yet acted on — this records the finding and the
+*measured* way to act on it.
 
 ## What was found
 
-The gVisor netstack in `stack.go` tunes TCP buffers but leaves UDP at defaults:
+The gVisor netstack in `pkg/vif/stack.go` tunes TCP buffers but leaves UDP at defaults:
 
 - **UDP endpoints use gVisor's 32 KiB default** send and receive buffers
   (`udp.DefaultSendBufferSize` / `udp.DefaultReceiveBufferSize`, both `32 << 10`;
@@ -23,7 +25,7 @@ and netstack drops the excess silently.
 Two smaller TCP issues in the same code:
 
 - **Copy-paste:** the receive-buffer `Default` is set to
-  `tcp.DefaultSendBufferSize` (`stack.go`, in `setTCPHandler`). Harmless today
+  `tcp.DefaultSendBufferSize` (`pkg/vif/stack.go`, in `setTCPHandler`). Harmless today
   because gVisor sets both send and receive defaults to 1 MiB, but it is a
   latent bug the moment those diverge — it should be
   `tcp.DefaultReceiveBufferSize`.
@@ -43,12 +45,12 @@ Fixing the VIF buffers lets app traffic realize the tunnel's capacity. This is
 
 ## What this is NOT
 
-It is **not** the cause of experiment 2's datagram-carriage latency penalty.
+It is **not** the cause of the datagram-carriage experiment's latency penalty.
 That penalty was investigated here and is a tail-latency effect inherent to
 carrying a reliable inner protocol over unreliable, unordered datagrams
 (raising both the tunnel channel buffer to 1024 and the VIF UDP buffer to 2 MiB
 left it unchanged; datagram and stream share the same median, only the datagram
-tail diverges). See `perf/README.md`, "Experiment 2". Do not conflate the two.
+tail diverges). See `perf/README.md`, "Datagram carriage". Do not conflate the two.
 
 ## How to do it (measured, not guessed)
 

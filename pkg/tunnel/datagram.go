@@ -57,7 +57,7 @@ func DecodeDatagram(b []byte) (ConnID, []byte, error) {
 // channel. Overflow is dropped (counted as dropped-full) rather than blocking, since
 // blocking would re-impose the head-of-line stall datagrams exist to avoid. Enlarging
 // this was investigated as the cause of the datagram-carriage latency penalty that
-// experiment 2 measured even at 0% loss (see perf/README.md): at depth 1024 the
+// the datagram-carriage experiment measured even at 0% loss (see perf/README.md): at depth 1024 the
 // dropped-full counter stayed 0 while the penalty was unchanged, so the penalty is NOT
 // overflow-driven and the modest depth is kept.
 const datagramFlowBufferDepth = 8

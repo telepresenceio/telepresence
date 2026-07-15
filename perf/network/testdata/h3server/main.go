@@ -1,4 +1,5 @@
-// Command h3server is a minimal in-cluster HTTP/3 server used by perf/experiment2_test.go
+// Command h3server is a minimal in-cluster HTTP/3 server used by the datagram-carriage
+// experiment (perf/network/datagram_test.go)
 // to measure RFC 9221 datagram carriage's head-of-line benefit for tunneled UDP: the
 // experiment's inner transport (HTTP/3, itself UDP-based) rides as a UDP flow through the
 // telepresence tunnel, so a lost tunnel-carrier packet exercises exactly the datagram-vs
@@ -6,7 +7,7 @@
 //
 // It serves one fixed, randomly generated (incompressible) payload at GET /payload.bin,
 // honoring Range requests the same way the nginx-backed perf-payload workload
-// (testdata/payload.yaml) does for experiment 1, and presents a self-signed TLS
+// (testdata/payload.yaml) does for the head-of-line experiment, and presents a self-signed TLS
 // certificate generated at startup -- there is no cluster CA to hand it one, and the perf
 // client connects with InsecureSkipVerify, so a self-signed cert is sufficient.
 package main

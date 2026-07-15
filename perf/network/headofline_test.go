@@ -1,6 +1,6 @@
 //go:build perf
 
-package perf
+package network
 
 import (
 	"context"
@@ -8,19 +8,20 @@ import (
 	"time"
 )
 
-// Experiment 1 knobs. Kept as vars (not env) because they define the shape of
-// the published result; override in a fork if you are exploring, not per run.
+// Head-of-line experiment knobs. Kept as vars (not env) because they define the
+// shape of the published result; override in a fork if you are exploring, not per
+// run.
 var (
-	exp1Workers = 10 // concurrent request workers, one long-lived flow each
-	// exp1RequestBytes is the size of each request (a Range read of the payload
+	holWorkers = 10 // concurrent request workers, one long-lived flow each
+	// holRequestBytes is the size of each request (a Range read of the payload
 	// object). It must be small enough to fit comfortably inside a congestion
 	// window: a request that spans many round trips turns into a bulk transfer
 	// whose completion time is congestion-control-bound (the Mathis limit,
 	// ~MSS/RTT * 1.22/sqrt(loss)), which drowns the head-of-line signal this
 	// experiment exists to measure.
-	exp1RequestBytes = 8 * 1024
-	// exp1ThinkTime is each worker's pause between requests. Together with
-	// exp1Workers and exp1RequestBytes it sets the offered load, which must stay
+	holRequestBytes = 8 * 1024
+	// holThinkTime is each worker's pause between requests. Together with
+	// holWorkers and holRequestBytes it sets the offered load, which must stay
 	// well BELOW the shared connection's loss-limited capacity at the top loss
 	// level: on a saturated connection every request queues behind the
 	// congestion window and the experiment degenerates into measuring
@@ -30,12 +31,12 @@ var (
 	// delays are the recovery events themselves: on the shared gRPC byte stream
 	// a single loss shows up in unrelated workers' latencies, over QUIC it
 	// stays confined to the punctured stream.
-	exp1ThinkTime = 300 * time.Millisecond
-	// exp1WindowDur is how long each (transport, loss) window runs; every worker
+	holThinkTime = 300 * time.Millisecond
+	// holWindowDur is how long each (transport, loss) window runs; every worker
 	// issues sequential requests for the whole window.
-	exp1WindowDur    = 30 * time.Second
-	exp1LossPercents = []float64{0, 1, 3}
-	// exp1MinP95Ratio is the pass threshold at the highest loss level: the gRPC
+	holWindowDur    = 30 * time.Second
+	holLossPercents = []float64{0, 1, 3}
+	// holMinP95Ratio is the pass threshold at the highest loss level: the gRPC
 	// transport's p95 request latency must be at least this many times the QUIC
 	// transport's p95, i.e. QUIC's independently recovered streams must
 	// demonstrably contain the tail that head-of-line blocking on the shared
@@ -46,14 +47,14 @@ var (
 	// (1.8x at 1%), with the medians telling the same story -- at 1% loss the
 	// QUIC median is indistinguishable from the clean baseline while the gRPC
 	// median doubles.
-	exp1MinP95Ratio = 1.4
+	holMinP95Ratio = 1.4
 )
 
-// TestExperiment1_HeadOfLineBlockingUnderLoss runs exp1Workers concurrent
-// workers, each issuing sequential small (exp1RequestBytes) requests over its
-// own persistent connection through the tunnel, at several data-path
-// packet-loss levels -- once over the QUIC transport and once over the
-// port-forwarded gRPC transport -- and compares the per-request latency tail.
+// TestHeadOfLineBlockingUnderLoss runs holWorkers concurrent workers, each
+// issuing sequential small (holRequestBytes) requests over its own persistent
+// connection through the tunnel, at several data-path packet-loss levels --
+// once over the QUIC transport and once over the port-forwarded gRPC transport
+// -- and compares the per-request latency tail.
 //
 // The hypothesis: on the gRPC transport every tunneled flow shares one TCP
 // byte stream, so a single lost packet stalls in-order delivery for all of
@@ -61,10 +62,10 @@ var (
 // their p99; on QUIC each flow is an independently retransmitted stream, so a
 // loss delays only the punctured request and the tail stays close to the
 // median. The test asserts that at the highest loss level the gRPC p95 is at
-// least exp1MinP95Ratio times the QUIC p95, and writes the full p50/p95/p99
-// table to perf/results/experiment1.csv regardless.
+// least holMinP95Ratio times the QUIC p95, and writes the full p50/p95/p99
+// table to perf/results/head-of-line.csv regardless.
 //
-// When exploring other RTTs (PERF_NETEM_DELAY), scale exp1ThinkTime with the
+// When exploring other RTTs (PERF_NETEM_DELAY), scale holThinkTime with the
 // RTT: the Mathis capacity the offered load must stay below is proportional
 // to 1/RTT, so knobs tuned for 20ms saturate the connection at 80ms and the
 // experiment silently degenerates into the queue-bound regime again.
@@ -75,7 +76,7 @@ var (
 // skipped unless a QUIC-reachable endpoint is configured
 // (PERF_QUIC_EXTERNAL_HOST); without any impairment configured it still runs
 // and records a clean-network baseline.
-func TestExperiment1_HeadOfLineBlockingUnderLoss(t *testing.T) {
+func TestHeadOfLineBlockingUnderLoss(t *testing.T) {
 	cfg := loadConfig(t)
 	if cfg.quicExternalHost == "" {
 		t.Skip("set PERF_QUIC_EXTERNAL_HOST (and PERF_QUIC_NODEPORT) to the forwarder's reachable address to run the quic arm")
@@ -89,7 +90,7 @@ func TestExperiment1_HeadOfLineBlockingUnderLoss(t *testing.T) {
 	ts := time.Now().UTC().Format(time.RFC3339)
 	var rows [][]string
 	// p95 at the top loss level, per transport, for the final ratio assertion.
-	topLoss := exp1LossPercents[len(exp1LossPercents)-1]
+	topLoss := holLossPercents[len(holLossPercents)-1]
 	p95AtTopLoss := map[transport]time.Duration{}
 
 	for _, tr := range []transport{transportQUIC, transportGRPC} {
@@ -109,12 +110,12 @@ func TestExperiment1_HeadOfLineBlockingUnderLoss(t *testing.T) {
 
 			cfg.connect(t)
 			cfg.assertTransport(t, tr)
-			cfg.warmup(t, exp1Workers, exp1RequestBytes)
+			cfg.warmup(t, holWorkers, holRequestBytes)
 
-			for _, loss := range exp1LossPercents {
+			for _, loss := range holLossPercents {
 				removeLoss := cfg.applyLoss(t, loss)
-				ctx, cancel := context.WithTimeout(context.Background(), exp1WindowDur+time.Minute)
-				results := runRequestWorkers(ctx, exp1Workers, exp1RequestBytes, exp1ThinkTime, exp1WindowDur)
+				ctx, cancel := context.WithTimeout(context.Background(), holWindowDur+time.Minute)
+				results := runRequestWorkers(ctx, holWorkers, holRequestBytes, holThinkTime, holWindowDur)
 				cancel()
 				removeLoss()
 
@@ -124,7 +125,7 @@ func TestExperiment1_HeadOfLineBlockingUnderLoss(t *testing.T) {
 				if p.failures > 0 {
 					logFailures(t, results)
 				}
-				rows = append(rows, msRow(ts, tr, loss, exp1Workers, exp1RequestBytes, p))
+				rows = append(rows, msRow(ts, tr, loss, holWorkers, holRequestBytes, p))
 				if loss == topLoss {
 					p95AtTopLoss[tr] = p.p95
 				}
@@ -132,7 +133,7 @@ func TestExperiment1_HeadOfLineBlockingUnderLoss(t *testing.T) {
 		}()
 	}
 
-	path := writeCSV(t, cfg.outDir, "experiment1", rows)
+	path := writeCSV(t, cfg.outDir, "head-of-line", rows)
 	t.Logf("results written to %s", path)
 
 	// The head-of-line assertion only makes sense when loss was actually injected
@@ -148,9 +149,9 @@ func TestExperiment1_HeadOfLineBlockingUnderLoss(t *testing.T) {
 		t.Fatalf("no successful QUIC requests at %g%% loss; cannot compare", topLoss)
 	}
 	ratio := float64(grpcP95) / float64(quicP95)
-	t.Logf("at %g%% loss: gRPC p95 / QUIC p95 = %.2f (threshold %.2f)", topLoss, ratio, exp1MinP95Ratio)
-	if ratio < exp1MinP95Ratio {
+	t.Logf("at %g%% loss: gRPC p95 / QUIC p95 = %.2f (threshold %.2f)", topLoss, ratio, holMinP95Ratio)
+	if ratio < holMinP95Ratio {
 		t.Fatalf("expected gRPC p95 to be >= %.2fx QUIC p95 at %g%% loss (head-of-line blocking), got %.2fx",
-			exp1MinP95Ratio, topLoss, ratio)
+			holMinP95Ratio, topLoss, ratio)
 	}
 }

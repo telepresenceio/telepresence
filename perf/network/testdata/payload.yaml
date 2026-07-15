@@ -16,8 +16,9 @@ spec:
     spec:
       # An initContainer generates a fixed-size random (incompressible) file that
       # nginx then serves as a static asset. This gives the download experiment a
-      # predictable payload with no application-level quirks. Keep the byte count
-      # in sync with exp1PayloadBytes in experiment1_test.go.
+      # predictable payload with no application-level quirks. The object is 8 MiB
+      # (the dd below); the head-of-line experiment Range-reads only the leading
+      # holRequestBytes of it, so this size only needs to exceed the request size.
       initContainers:
         - name: gen
           image: busybox:1.36

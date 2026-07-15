@@ -1,15 +1,17 @@
-# Telepresence QUIC performance experiments
+# Telepresence data-path performance experiments
 
-Standalone experiments that quantify what the opt-in QUIC tunnel transport
-(`docs/reference/quic-transport-architecture.md`) buys over the default port-forwarded
-gRPC transport. They are **not** run by `make check-integration` or
-`go test ./...` — every experiment file is behind the `perf` build tag.
+Standalone experiments that quantify how the telepresence data path behaves under
+adverse conditions — the opt-in QUIC tunnel transport
+(`docs/reference/quic-transport-architecture.md`) versus the default port-forwarded
+gRPC transport, and the client-side VIF netstack that terminates tunneled TCP/UDP.
+They are **not** run by `make check-integration` or `go test ./...` — every
+experiment file is behind the `perf` build tag.
 
 ```
 # kind, head-of-line result (ingress loss on the data path):
 PERF_KUBE_CONTEXT=kind-dev PERF_QUIC_EXTERNAL_HOST=<node-ip> \
   PERF_IMPAIR_NODE=<kind-node-container> \
-  go test -tags perf -run Experiment1 -v -timeout 30m ./perf/...
+  go test -tags perf -run TestHeadOfLineBlockingUnderLoss -v -timeout 30m ./perf/...
 ```
 
 `PERF_KUBE_CONTEXT` is required (see Prerequisites). `make perf` forwards the
@@ -18,24 +20,30 @@ same environment.
 ## What these prove (and don't)
 
 QUIC's advantage here is **not** raw throughput on a quiet link — on an
-unloaded network the two transports look alike. The wins are specific:
+unloaded network the two transports look alike. The wins (and non-wins) are specific:
 
 - **No head-of-line blocking under loss.** gRPC multiplexes every tunneled flow
   onto one HTTP/2 connection, so one lost packet stalls all of them; QUIC
-  streams are retransmitted independently. **This is experiment 1, and it holds.**
+  streams are retransmitted independently. This is the head-of-line experiment,
+  **and it holds.**
 - **RFC 9221 datagram carriage removing that same effect for tunneled UDP** was
-  the hypothesis of **experiment 2 — and it did NOT hold.** For an inner QUIC
+  the datagram-carriage hypothesis — **and it did NOT hold.** For an inner QUIC
   (HTTP/3) connection, datagram carriage measured no better and often worse. See
-  "Experiment 2" below.
+  "Datagram carriage for tunneled UDP" below.
+- **VIF UDP buffer sizing** asks whether the client-side netstack's 32 KiB UDP
+  endpoint buffers window-limit bulk UDP traffic. This one is about UDP **in
+  general**, not QUIC — every UDP flow that terminates at the VIF shares those
+  buffers, and any fix helps both tunnel transports equally. See "VIF bulk
+  throughput" below.
 
 So the experiments deliberately induce the adverse condition (packet loss,
-concurrency) rather than measuring a best case.
+concurrency, bandwidth-delay product) rather than measuring a best case.
 
-## Experiment 1: head-of-line blocking under loss
+## Head-of-line blocking under loss
 
-Runs `exp1Workers` (10) concurrent workers for `exp1WindowDur` (30 s) per
+Runs `holWorkers` (10) concurrent workers for `holWindowDur` (30 s) per
 (transport, loss) window, each issuing sequential **small** requests (an 8 KiB
-Range read of the payload object, `exp1ThinkTime` = 300 ms apart) over its own
+Range read of the payload object, `holThinkTime` = 300 ms apart) over its own
 persistent connection, at several data-path loss levels (0, 1, 3 %) — once
 with the manager installed QUIC-enabled and once gRPC-only — and compares the
 per-request latency tail.
@@ -56,7 +64,7 @@ that signal to be measurable:
    (`~MSS/RTT x 1.22/sqrt(loss)`, under 1 MB/s at 1 % loss and 20 ms RTT) for
    *both* transports. An early bulk-download (50 × 8 MiB) variant of this
    experiment did exactly that, and both arms simply timed out.
-2. The offered load (`exp1Workers` × `exp1RequestBytes` / `exp1ThinkTime`)
+2. The offered load (`holWorkers` × `holRequestBytes` / `holThinkTime`)
    must stay well below that Mathis capacity at the top loss level. On a
    saturated connection every request queues behind the shared congestion
    window and queuing delay drowns the blocking signal — a 50-worker,
@@ -71,7 +79,7 @@ connection to the apiserver (`pkg/client/portforward`, `podDialers` keyed by
 pod UID) — three nested layers of strictly in-order multiplexing.
 
 **Assertion:** at the highest loss level, the gRPC p95 request latency must be
-at least `exp1MinP95Ratio` (1.4×) the QUIC p95, and only in `PERF_IMPAIR_NODE`
+at least `holMinP95Ratio` (1.4×) the QUIC p95, and only in `PERF_IMPAIR_NODE`
 mode (data-path loss). The threshold is a *ratio*, not an absolute latency, so
 it is portable across clusters and networks; p95 rather than p99 because p99
 rests on a handful of samples at these window sizes. Measured on kind: 1.75×
@@ -79,7 +87,7 @@ at 3 % loss and 20 ms RTT (1.8× at 1 %), 1.62× at 3 % and 80 ms RTT (with
 think time scaled ×5 to keep the offered load below the RTT-reduced Mathis
 capacity — see the knob comments). At both RTTs the QUIC *median* stays at
 the clean baseline through 3 % loss while the gRPC median degrades. The full
-p50/p95/p99 table is written to `perf/results/experiment1.csv` either way.
+p50/p95/p99 table is written to `perf/results/head-of-line.csv` either way.
 
 **A second effect observed at 80 ms RTT** (worth its own experiment): with
 sparse traffic (1.5 s think time), the gRPC transport's clean-network median
@@ -91,14 +99,15 @@ on managed nodes), which quic-go does not do. Interactive, pause-heavy
 traffic — the typical dev-loop pattern — therefore pays +1 RTT per
 interaction on the shared TCP transport at WAN RTTs.
 
-## Experiment 2: datagram carriage for tunneled UDP (negative result)
+## Datagram carriage for tunneled UDP (negative result)
 
-Runs `exp2Workers` (10) concurrent HTTP/3 requests, **all sharing one inner
+Runs `datagramWorkers` (10) concurrent HTTP/3 requests, **all sharing one inner
 QUIC connection** (one `http3.Transport`) to an in-cluster HTTP/3 server
 (`testdata/h3server`), through the tunnel, at the same loss levels — once with
-the manager offering RFC 9221 datagram carriage for tunneled UDP and once with
-it forced off (`TELEPRESENCE_QUIC_DISABLE_DATAGRAMS`). Both arms run over the
-QUIC transport; only the carriage of the single UDP flow differs. The
+the manager opting into RFC 9221 datagram carriage for tunneled UDP
+(`TELEPRESENCE_QUIC_ENABLE_DATAGRAMS`) and once left at the default of stream
+carriage. Both arms run over the QUIC transport; only the carriage of the single
+UDP flow differs. The
 hypothesis was that unreliable datagram carriage would let the inner QUIC
 recover loss per-stream, while reliable stream carriage would stall the whole
 inner connection on any carrier loss — so datagrams should win the tail.
@@ -147,9 +156,30 @@ general "datagrams remove head-of-line blocking for tunneled UDP" claim and
 shows a case where they hurt, but does not prove they never help.
 
 The experiment therefore **records** rather than asserts — there is no benefit
-to gate on; the p50/p95/p99 table is written to `perf/results/experiment2.csv`.
-Datagram carriage remains enabled by default (with
-`TELEPRESENCE_QUIC_DISABLE_DATAGRAMS` as an opt-out).
+to gate on; the p50/p95/p99 table is written to `perf/results/datagram-carriage.csv`.
+Datagram carriage is disabled by default (opt-in via
+`TELEPRESENCE_QUIC_ENABLE_DATAGRAMS`), following this result.
+
+## VIF bulk throughput (UDP buffer sizing)
+
+Unlike the two experiments above, this one is **not about QUIC** — it is about the
+client-side VIF netstack that terminates *every* tunneled UDP flow (DNS, media,
+QUIC/HTTP-3, any UDP app), regardless of which tunnel transport carries it. gVisor's
+UDP endpoints default to 32 KiB send/receive buffers with no receive auto-tuning,
+~30× smaller than the netstack's tuned TCP buffers; the question is whether that
+window-limits bulk UDP throughput once the bandwidth-delay product exceeds 32 KiB,
+and whether raising the buffers helps.
+
+`TestVIFBulkThroughput` drives a bulk UDP flow through the VIF at a representative RTT
+(netem *delay*, not loss — this is window-limiting, not loss recovery) and measures
+delivered throughput (MB/s), on both tunnel transports, before and after a candidate
+buffer change in `pkg/vif/stack.go`. Following the note co-located here
+(`netstack-tuning.md`), a buffer size is only committed if it moves a measured
+number; otherwise the change is dropped and the negative result recorded, the same
+way the datagram experiment above is.
+
+**Status: measurement pending.** Results and the resulting decision will be recorded
+here and in `netstack-tuning.md`.
 
 ## Prerequisites
 

@@ -1,6 +1,6 @@
 //go:build perf
 
-package perf
+package network
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 
 // h3PayloadURL is the fixed asset served by the perf-h3 workload (testdata/h3server.yaml),
 // sized by that manifest's PAYLOAD_BYTES env var; every request in this experiment reads
-// only the first exp2RequestBytes of it via a Range header, so the full size only bounds how
+// only the first datagramRequestBytes of it via a Range header, so the full size only bounds how
 // large a request the workload could serve, not how much any single request transfers.
 const h3PayloadURL = "https://perf-h3/payload.bin"
 
@@ -69,7 +69,7 @@ func (c config) warmupH3(t *testing.T, client *http.Client, workers, reqBytes in
 // either stalls every worker (stream carriage keeps that flow's Normal messages in one
 // ordered sequence) or only the one inner UDP packet it happened to carry (datagram
 // carriage). runRequestWorkers gives every worker its OWN client for the opposite reason:
-// experiment 1 measures independently-tunneled flows, one per worker.
+// the head-of-line experiment measures independently-tunneled flows, one per worker.
 func runH3Workers(ctx context.Context, client *http.Client, url string, workers, reqBytes int, think, dur time.Duration) []streamResult {
 	deadline := time.Now().Add(dur)
 	resCh := make(chan streamResult, 1024)

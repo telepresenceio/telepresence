@@ -26,7 +26,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
-            # exp2PayloadBytes in experiment2_test.go must match.
+            # 8 MiB; the datagram-carriage experiment Range-reads only the leading
+            # datagramRequestBytes of it, so this only needs to exceed the request size.
             - name: PAYLOAD_BYTES
               value: "8388608"
           resources:
