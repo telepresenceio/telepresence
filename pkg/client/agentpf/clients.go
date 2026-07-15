@@ -717,7 +717,10 @@ func (s *clients) Transports() []AgentTransport {
 	var ts []AgentTransport
 	s.clients.Range(func(_ string, ac *client) bool {
 		if tr, _ := ac.transport.Load().(string); tr != "" {
-			ts = append(ts, AgentTransport{Workload: ac.info.WorkloadName, Pod: ac.info.PodName, Transport: tr})
+			ac.RLock()
+			ai := ac.info
+			ac.RUnlock()
+			ts = append(ts, AgentTransport{Workload: ai.WorkloadName, Pod: ai.PodName, Transport: tr})
 		}
 		return true
 	})
