@@ -178,7 +178,7 @@ func setTCPHandler(ctx context.Context, s *stack.Stack, streamCreator tunnel.Str
 	if err := s.SetTransportProtocolOption(tcp.ProtocolNumber,
 		&tcpip.TCPReceiveBufferSizeRangeOption{
 			Min:     tcp.MinBufferSize,
-			Default: tcp.DefaultSendBufferSize,
+			Default: tcp.DefaultReceiveBufferSize,
 			Max:     tcp.MaxBufferSize,
 		}); err != nil {
 		return
