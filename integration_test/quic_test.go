@@ -103,6 +103,17 @@ func (s *quicTunnelSuite) SetupSuite() {
 		// log line, which is logged at debug.
 		"--set", "logLevel=debug",
 	)
+
+	// The forwarder's Deployment gates readiness on having received its first
+	// backend-allowlist snapshot (it drops every datagram until then). Waiting for
+	// the rollout here does double duty: it keeps awaitQuicOrSkip below from
+	// probing a Service that has no ready endpoints yet, and it turns a readiness
+	// regression (a broken probe never passes) into a hard failure -- without this,
+	// such a regression would leave the NodePort silent and awaitQuicOrSkip would
+	// misread that as "this network filters UDP" and skip the entire suite.
+	s.Require().NoError(itest.RolloutStatusWait(ctx, s.ManagerNamespace(), "deploy/quic-forwarder"),
+		"quic-forwarder Deployment never became ready (did its readiness probe break?)")
+
 	s.ApplyApp(ctx, "echo-easy", "deploy/echo-easy")
 	s.TelepresenceConnect(ctx)
 
@@ -245,6 +256,25 @@ func (s *quicTunnelSuite) requireQuicTransportWithin(ctx context.Context, timeou
 	return last
 }
 
+// reconnectUntilQuic quits and reconnects until a fresh session reports the quic
+// transport at this suite's endpoint. Used after anything that replaces the
+// traffic-manager pod (a helm upgrade, an env change): the endpoint descriptor is
+// fetched once per connect, and the forwarder needs a few seconds to relearn the new
+// pod's IP for its backend allowlist, so a session that connects before that refresh
+// falls back to grpc for that whole session (the mid-session re-probe only starts
+// after a fallback from an *established* QUIC connection, never after a failed
+// initial dial). Same loop Test_ZZDiscoveryNodePort uses, for the same reason.
+func (s *quicTunnelSuite) reconnectUntilQuic(ctx context.Context) {
+	want := "quic (" + s.endpoint + ")"
+	s.Require().Eventually(func() bool {
+		itest.TelepresenceQuitOk(ctx)
+		s.TelepresenceConnect(ctx)
+		st, err := itest.TelepresenceStatus(ctx)
+		return err == nil && st.RootDaemon != nil && st.RootDaemon.TunnelTransport == want
+	}, 90*time.Second, 15*time.Second,
+		"status never reported tunnel_transport %q after reconnecting", want)
+}
+
 // quicDiscoverableEndpoints returns "<address>:<quicNodePort>" for every cluster
 // Node's preferred address -- ExternalIP if it has one, else InternalIP -- exactly the
 // rule cmd/traffic/cmd/manager/quictunnel.Discovery applies for a NodePort Service.
@@ -342,6 +372,66 @@ func (s *quicTunnelSuite) Test_ZZDiscoveryNodePort() {
 		"status never reported tunnel_transport as one of %q", want)
 }
 
+// Test_ZYUnreachableEndpointFallsBack proves the silent-fallback property for an
+// endpoint that is advertised but not reachable -- the "this network eats UDP" case
+// the reference documentation promises never breaks a client: connect succeeds
+// normally, the transport settles on plain "grpc" (not "grpc (fallback)" -- an
+// initial dial that fails quietly is not a fallback event), and VPN traffic works.
+// The unreachable endpoint is manufactured by pointing quicTunnel.externalHost at
+// 192.0.2.1 (TEST-NET-1, RFC 5737: guaranteed non-routable), which the manager then
+// advertises as the single candidate.
+//
+// Runs between Test_ZManagerOutageAttachmentSurvival and Test_ZZDiscoveryNodePort
+// (name sort); it reconfigures the traffic-manager and restores the suite's standard
+// install before returning.
+func (s *quicTunnelSuite) Test_ZYUnreachableEndpointFallsBack() {
+	ctx := s.Context()
+	rq := s.Require()
+
+	s.TelepresenceHelmInstallOK(ctx, true,
+		"--set", "nodeAgent.enabled=true",
+		"--set", "quicTunnel.enabled=true",
+		"--set", "quicTunnel.service.type=NodePort",
+		"--set", fmt.Sprintf("quicTunnel.service.nodePort=%d", quicNodePort),
+		"--set", "quicTunnel.externalHost=192.0.2.1",
+		"--set", fmt.Sprintf("quicTunnel.externalPort=%d", quicNodePort),
+	)
+	defer func() {
+		// Restore the suite's standard install (same settings as SetupSuite) and
+		// leave the shared session back on quic for the remaining tests.
+		s.TelepresenceHelmInstallOK(ctx, true,
+			"--set", "nodeAgent.enabled=true",
+			"--set", "quicTunnel.enabled=true",
+			"--set", "quicTunnel.service.type=NodePort",
+			"--set", fmt.Sprintf("quicTunnel.service.nodePort=%d", quicNodePort),
+			"--set", "quicTunnel.externalHost="+s.nodeIP,
+			"--set", fmt.Sprintf("quicTunnel.externalPort=%d", quicNodePort),
+			"--set", "logLevel=debug",
+		)
+		s.reconnectUntilQuic(ctx)
+	}()
+
+	itest.TelepresenceQuitOk(ctx)
+	s.TelepresenceConnect(ctx)
+
+	// The opportunistic dial resolves within its own 3s budget (quicDialTimeout,
+	// pkg/client/rootd/quic.go) of connect and never retries after an initial
+	// failure, so after double that budget the observed "grpc" is the settled
+	// state, not a probe still in flight.
+	time.Sleep(6 * time.Second)
+	st, err := itest.TelepresenceStatus(ctx)
+	rq.NoError(err)
+	rq.NotNil(st.RootDaemon)
+	rq.Equal("grpc", st.RootDaemon.TunnelTransport,
+		"an unreachable advertised endpoint must leave the session on the plain grpc transport")
+
+	// And the tunnel must be fully functional over it.
+	rq.Eventually(func() bool {
+		so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", "echo-easy")
+		return err == nil && strings.Contains(so, "Request served by")
+	}, 30*time.Second, 2*time.Second, "echo-easy was not reachable over the port-forwarded transport")
+}
+
 // requireAgentTransport asserts that "telepresence status" currently reports
 // the given transport ("quic" or "grpc" -- see the transportQUIC/
 // transportPortForward constants in pkg/client/agentpf/quic.go) for the live
@@ -405,22 +495,55 @@ func (s *quicTunnelSuite) Test_VPNOnlyTransport() {
 // logDatagramStatsLoop, formatted by pkg/tunnel.DatagramCounters.String).
 var datagramCountersLogRE = regexp.MustCompile(`datagram counters: sent \d+, received (\d+),`)
 
-// Test_AUDPEchoDatagrams proves the RFC 9221 datagram hybrid actually carries real
-// tunneled UDP traffic while the manager-bound tunnel is on the quic transport: a UDP
-// echo round trip through the VPN-only tunnel, followed by the manager's own periodic
-// log reporting a nonzero received count. The manager's counters are shared across
-// every connection it accepts (see Listener.datagram), so this is the cross-session
-// total, not just this one echo -- but the fixed suite-scoped Service name and this
-// being the first (and, per the suite's other tests, only sustained) UDP flow through
-// this manager instance keeps the assertion meaningful in practice.
+// udpEchoRoundTrip sends msg to the udp-echo Service through the VPN and requires the
+// echoed payload back.
+func (s *quicTunnelSuite) udpEchoRoundTrip(ctx context.Context, svc, msg string) {
+	rq := s.Require()
+
+	var conn net.Conn
+	var d net.Dialer
+	rq.Eventually(func() bool {
+		var err error
+		conn, err = d.DialContext(ctx, "udp", fmt.Sprintf("%s.%s:80", svc, s.AppNamespace()))
+		return err == nil
+	}, 12*time.Second, 3*time.Second, "dial never succeeds")
+	defer conn.Close()
+
+	// A UDP Dial succeeds immediately without confirming anything is listening yet
+	// (see TestUDPEcho in udp_test.go for the same wait, against the same image).
+	time.Sleep(2 * time.Second)
+
+	_, err := conn.Write([]byte(msg))
+	rq.NoError(err)
+	rq.NoError(conn.SetReadDeadline(time.Now().Add(5 * time.Second)))
+	buf := make([]byte, 0x10000)
+	n, err := conn.Read(buf)
+	rq.Greater(n, 0)
+	if errors.Is(err, io.EOF) {
+		err = nil
+	}
+	rq.NoError(err)
+	rq.Contains(string(buf[:n]), msg)
+}
+
+// Test_AUDPEchoDatagrams proves RFC 9221 datagram carriage actually carries real
+// tunneled UDP traffic once it is opted into. Datagram carriage is OFF by default
+// (a measurement found it no better than stream carriage; see "Current limitations"
+// in docs/reference/quic-transport.md), enabled per manager process by the
+// TELEPRESENCE_QUIC_ENABLE_DATAGRAMS environment variable. So this first proves a
+// UDP echo works over the default stream carriage, then sets the opt-in on the
+// traffic-manager, reconnects, repeats the echo, and requires the manager's own
+// periodic datagram counters to go nonzero. Setting the env var rolled the manager
+// pod, so those counters started at zero and a nonzero received count is
+// attributable to this test's echo rather than to any cross-session total.
 //
 // Runs first in the suite (its name sorts before
-// Test_AgentPortForwardDisabledRelaysOverQuic): only manager-bound flows can ride
-// datagrams, and once any later test attaches to a workload, the app namespace has a
-// live traffic-agent that agentpf.Clients.GetClient returns as the provider for
-// *every* destination in the cluster -- the flow would ride the client-to-agent path,
-// which never negotiates datagrams, and the received count would legitimately stay
-// zero.
+// Test_AZForwarderOutageFallsBackAndRecovers, the first test to attach): only
+// manager-bound flows can ride datagrams, and once any test attaches to a workload,
+// the app namespace has a live traffic-agent that agentpf.Clients.GetClient returns
+// as the provider for *every* destination in the cluster -- the flow would ride the
+// client-to-agent path, which never negotiates datagrams, and the received count
+// would legitimately stay zero.
 func (s *quicTunnelSuite) Test_AUDPEchoDatagrams() {
 	ctx := s.Context()
 	rq := s.Require()
@@ -437,34 +560,30 @@ func (s *quicTunnelSuite) Test_AUDPEchoDatagrams() {
 	rq.NoError(s.RolloutStatusWait(ctx, "deploy/"+svc))
 	s.CapturePodLogs(ctx, svc, "udp-echo", s.AppNamespace())
 
-	var conn net.Conn
-	rq.Eventually(func() bool {
-		var err error
-		conn, err = net.Dial("udp", fmt.Sprintf("%s.%s:80", svc, s.AppNamespace()))
-		return err == nil
-	}, 12*time.Second, 3*time.Second, "dial never succeeds")
-	defer conn.Close()
-
-	// A UDP Dial succeeds immediately without confirming anything is listening yet
-	// (see TestUDPEcho in udp_test.go for the same wait, against the same image).
-	time.Sleep(2 * time.Second)
-
-	msg := "ping over quic datagrams"
-	_, err := conn.Write([]byte(msg))
-	rq.NoError(err)
-	rq.NoError(conn.SetReadDeadline(time.Now().Add(5 * time.Second)))
-	buf := make([]byte, 0x10000)
-	n, err := conn.Read(buf)
-	rq.Greater(n, 0)
-	if errors.Is(err, io.EOF) {
-		err = nil
-	}
-	rq.NoError(err)
-	rq.Contains(string(buf[:n]), msg)
-
+	// Default: stream carriage. That the default really is off is unit-tested
+	// (quictunnel's listener test); what belongs here is that a tunneled UDP round
+	// trip works over the quic transport without the opt-in.
+	s.udpEchoRoundTrip(ctx, svc, "ping over quic streams")
 	s.requireQuicTransport(ctx)
 
+	// Opt in on the manager. This rolls the traffic-manager pod (new process, new
+	// CA, and the forwarder must relearn the new pod's IP), so a fresh connect --
+	// retried until it lands on quic, see reconnectUntilQuic -- is required before
+	// the datagram-enabled listener serves this client.
 	managerNs := s.ManagerNamespace()
+	rq.NoError(itest.Kubectl(ctx, managerNs, "set", "env", "deploy/traffic-manager",
+		"TELEPRESENCE_QUIC_ENABLE_DATAGRAMS=true"))
+	defer func() {
+		rq.NoError(itest.Kubectl(ctx, managerNs, "set", "env", "deploy/traffic-manager",
+			"TELEPRESENCE_QUIC_ENABLE_DATAGRAMS-"))
+		rq.NoError(itest.RolloutStatusWait(ctx, managerNs, "deploy/traffic-manager"))
+		s.reconnectUntilQuic(ctx)
+	}()
+	rq.NoError(itest.RolloutStatusWait(ctx, managerNs, "deploy/traffic-manager"))
+	s.reconnectUntilQuic(ctx)
+
+	s.udpEchoRoundTrip(ctx, svc, "ping over quic datagrams")
+
 	rq.Eventually(func() bool {
 		out, err := itest.KubectlOut(ctx, managerNs, "logs", "deploy/traffic-manager")
 		if err != nil {
@@ -477,6 +596,94 @@ func (s *quicTunnelSuite) Test_AUDPEchoDatagrams() {
 		}
 		return false
 	}, 45*time.Second, 3*time.Second, "manager never logged a nonzero datagram received count")
+}
+
+// Test_AZForwarderOutageFallsBackAndRecovers exercises the complement of
+// Test_ForwarderRestartSurvival: that test kills the forwarder briefly and requires
+// the transport to ride it out without ever leaving quic; this one takes the
+// forwarder away entirely (scale to zero) and requires the documented degradation
+// instead -- everything falls back, nothing breaks, and the session recovers on its
+// own once the forwarder returns:
+//
+//   - The manager-bound tunnel's QUIC connection dies (its packets are blackholed, so
+//     nothing errors until quic-go's one-minute idle timeout closes the connection),
+//     after which the next tunnel stream trips the provider: status must report
+//     "grpc (fallback)" -- the one observable transport state no other test in this
+//     suite reaches -- and VPN traffic must keep working over the fallback.
+//   - A fresh attachment made during the outage cannot reach the agent's QUIC
+//     listener (the forwarder is the only path to it), so the agent connection must
+//     come up on its per-agent Kubernetes port-forward and the intercept must work
+//     over it.
+//   - Once the forwarder is scaled back up, the session's background re-probe (60s
+//     interval, armed by the trip above) must return the tunnel to quic without a
+//     reconnect.
+//
+// Runs after Test_AUDPEchoDatagrams and before every other attaching test (its name
+// sorts between them): the fallback phase needs VPN flows to ride the manager-bound
+// tunnel, which they only do while no traffic-agent exists in the app namespace --
+// and this test's own intercept is what injects the first one.
+func (s *quicTunnelSuite) Test_AZForwarderOutageFallsBackAndRecovers() {
+	ctx := s.Context()
+	rq := s.Require()
+	const svc = "echo-easy"
+
+	s.requireQuicTransport(ctx)
+	managerNs := s.ManagerNamespace()
+
+	rq.NoError(itest.Kubectl(ctx, managerNs, "scale", "deploy/quic-forwarder", "--replicas", "0"),
+		"failed to scale the quic-forwarder Deployment to zero")
+	restoreForwarder := true
+	defer func() {
+		if restoreForwarder {
+			_ = itest.Kubectl(ctx, managerNs, "scale", "deploy/quic-forwarder", "--replicas", "1")
+			_ = itest.RolloutStatusWait(ctx, managerNs, "deploy/quic-forwarder")
+		}
+	}()
+	rq.Eventually(func() bool {
+		return len(itest.RunningPods(ctx, "quic-forwarder", managerNs)) == 0
+	}, 60*time.Second, 2*time.Second, "quic-forwarder pod did not terminate after scaling to zero")
+
+	// Fallback. Polling a VPN round trip does double duty: in the zombie window
+	// before the idle timeout, tunnel streams open locally and hang, so the curl
+	// fails -- that is the window this poll rides out -- and each attempt is also
+	// the stream open that, once the connection has died, trips the provider into
+	// fallback. Both the traffic and the "grpc (fallback)" status must then hold.
+	rq.Eventually(func() bool {
+		so, err := itest.Output(ctx, "curl", "--silent", "--max-time", "2", svc)
+		if err != nil || !strings.Contains(so, "Request served by") {
+			return false
+		}
+		st, err := itest.TelepresenceStatus(ctx)
+		return err == nil && st.RootDaemon != nil && st.RootDaemon.TunnelTransport == "grpc (fallback)"
+	}, 150*time.Second, 3*time.Second,
+		"VPN traffic and the \"grpc (fallback)\" status never both held while the forwarder was gone")
+
+	// A fresh attachment during the outage: the agent's QUIC dial fails within its
+	// 3s budget and the connection must come up on the per-agent port-forward.
+	port, cancel := itest.StartLocalHttpEchoServer(ctx, svc)
+	defer cancel()
+	itest.TelepresenceOk(ctx, "intercept", "--mount", "false", "--port", strconv.Itoa(port), svc)
+	mustDetach := true
+	defer func() {
+		if mustDetach {
+			itest.TelepresenceOk(ctx, "detach", svc)
+		}
+	}()
+	itest.PingInterceptedEchoServer(ctx, svc, "80")
+	s.requireAgentTransport(ctx, svc, "grpc")
+	itest.TelepresenceOk(ctx, "detach", svc)
+	mustDetach = false
+
+	// Recovery, same session: no quit/reconnect. The re-probe loop was armed by the
+	// trip above and retries the dial on its interval; once the forwarder is back
+	// (and has re-fetched its backend allowlist from the still-running manager) a
+	// retry succeeds and the tunnel returns to quic.
+	rq.NoError(itest.Kubectl(ctx, managerNs, "scale", "deploy/quic-forwarder", "--replicas", "1"),
+		"failed to scale the quic-forwarder Deployment back to one")
+	restoreForwarder = false
+	rq.NoError(itest.RolloutStatusWait(ctx, managerNs, "deploy/quic-forwarder"),
+		"quic-forwarder Deployment did not report ready after scaling back up")
+	s.requireQuicTransportWithin(ctx, 150*time.Second)
 }
 
 // Test_TrafficAgentCoexistence verifies that a regular (sidecar) intercept
