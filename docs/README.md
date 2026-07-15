@@ -139,6 +139,5 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Telepresence vs Gefyra](compare/gefyra.md)
 - [FAQs](faqs.md)
 - [Troubleshooting](troubleshooting.md)
-- [Community](community.md)
 - [Release Notes](release-notes.md)
 - [Licenses](licenses.md)
