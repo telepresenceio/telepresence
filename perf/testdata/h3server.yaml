@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perf-h3
+  labels:
+    app: perf-h3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: perf-h3
+  template:
+    metadata:
+      labels:
+        app: perf-h3
+    spec:
+      containers:
+        - name: h3server
+          image: local/perf-h3:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 443
+              protocol: UDP
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            # exp2PayloadBytes in experiment2_test.go must match.
+            - name: PAYLOAD_BYTES
+              value: "8388608"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 64Mi
+            limits:
+              cpu: "2"
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: perf-h3
+  labels:
+    app: perf-h3
+spec:
+  selector:
+    app: perf-h3
+  ports:
+    - name: https-udp
+      port: 443
+      protocol: UDP
+      targetPort: 443
