@@ -40,8 +40,8 @@ func Run(ctx context.Context, env *Env) error {
 	if err != nil {
 		return err
 	}
-	clog.Infof(ctx, "quic-forwarder listening on %s, manager backend port fallback %d, manager at %s",
-		fwd.Addr(), env.BackendPort, env.ManagerAddress())
+	clog.Infof(ctx, "quic-forwarder listening on %s, manager backend port fallback %d, manager at %s, health on :%d",
+		fwd.Addr(), env.BackendPort, env.ManagerAddress(), env.HealthPort)
 
 	g := log.NewGroup(ctx)
 	g.Go("allowlist", func(ctx context.Context) error {
@@ -49,6 +49,9 @@ func Run(ctx context.Context, env *Env) error {
 	})
 	g.Go("forwarder", func(ctx context.Context) error {
 		return fwd.Serve(ctx)
+	})
+	g.Go("health", func(ctx context.Context) error {
+		return ServeHealth(ctx, env.HealthPort, allowlist)
 	})
 	return g.Wait()
 }

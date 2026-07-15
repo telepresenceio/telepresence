@@ -55,6 +55,15 @@ type Env struct {
 
 	// LogLevel controls this process's log verbosity.
 	LogLevel slog.Level `default:"info"`
+
+	// HealthPort is the TCP port of the HTTP health endpoint that backs the
+	// Deployment's readiness probe. Readiness is defined as "the first
+	// backend-allowlist snapshot has been received" (see Allowlist.Ready),
+	// because until then the forwarder drops every datagram it receives; a
+	// fresh pod that Kubernetes has already routed traffic to would otherwise
+	// silently blackhole it for as long as the manager takes to answer
+	// WatchQuicBackends.
+	HealthPort uint16 `default:"8080"`
 }
 
 // ManagerAddress returns the host:port the forwarder dials to reach the

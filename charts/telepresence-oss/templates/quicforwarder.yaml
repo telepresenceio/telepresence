@@ -68,10 +68,26 @@ spec:
             value: {{ .apiPort | quote }}
           - name: LOG_LEVEL
             value: {{ .logLevel }}
+          - name: HEALTH_PORT
+            {{- /*
+            Not a user-facing chart value: the forwarder's HTTP readiness
+            endpoint is internal wiring and must match the readinessProbe
+            port below.
+            */}}
+            value: "8080"
           ports:
           - name: quic
             containerPort: {{ .quicTunnel.port }}
             protocol: UDP
+          - name: health
+            containerPort: 8080
+            protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            periodSeconds: 2
+            failureThreshold: 3
           {{- with .quicTunnel.forwarder.resources }}
           resources:
             {{ toYaml . | nindent 12 }}
