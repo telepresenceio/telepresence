@@ -1,4 +1,7 @@
-# QUIC tunnel transport: architecture
+---
+title: QUIC tunnel transport architecture
+description: How the opt-in QUIC tunnel transport is built and why - the packet forwarder, its two-tier routing, the trust bootstrap, and the alternatives that were rejected.
+---
 
 This document describes how the opt-in QUIC tunnel transport is built and why.
 It is the architecture reference that the QUIC subsystem's code comments point
@@ -103,9 +106,9 @@ The direct path must not weaken the "kubeconfig is the credential" model. The
 port-forwarded gRPC connection -- which the client always establishes first, and
 which is authenticated by Kubernetes RBAC -- doubles as the trust channel:
 
-1. The traffic-manager generates (or is given via Helm) a CA and a server
-   certificate for its QUIC endpoint. Rotation is the manager's problem; nothing
-   is stored on the client.
+1. The traffic-manager generates an ephemeral CA and a server certificate for
+   its QUIC endpoint at startup, held only in memory. Rotation is the manager's
+   problem; nothing is stored on the client.
 2. Over the existing port-forwarded connection, the client requests the QUIC
    endpoint descriptor: address(es), port, CA bundle, and a short-lived
    session-scoped client certificate (CN = session ID).
@@ -125,9 +128,9 @@ its re-established manager session) and converge on the new CA within seconds.
 
 ## Reachability and fallback
 
-* The Helm chart gains an opt-in QUIC endpoint: a UDP path to the forwarder plus a
-  Service of the operator's choosing (LoadBalancer, NodePort, or an existing
-  Gateway). Default: disabled.
+* The Helm chart has an opt-in QUIC endpoint: a UDP path to the forwarder plus a
+  Service of the operator's choosing (LoadBalancer or NodePort; the explicit
+  `externalHost` override covers anything else). Default: disabled.
 * The client probes the advertised endpoint concurrently with normal startup. If
   the handshake succeeds within a short budget, new tunnel streams use QUIC;
   otherwise everything stays on the port-forwarded path.
@@ -176,8 +179,12 @@ Routing works in two tiers, following the QUIC-LB pattern
 
 * A connection's first packet (the client Initial) is routed by the **SNI** in its
   ClientHello, which is readable without terminating TLS. SNI names identify the
-  backend: `manager.<install-id>` for the traffic-manager, `<pod-uid>.<install-id>`
-  for an agent.
+  backend: `traffic-manager.telepresence` for the traffic-manager,
+  `<pod-uid>.agent.telepresence` for an agent (pkg/quicfwd's `ManagerSNI` and
+  `AgentSNI`). The names are fixed rather than install-scoped: every resolution is
+  validated against the backend allowlist below, which each install's forwarder
+  receives from its own traffic-manager, so two installs in one cluster cannot
+  cross-route even though they use the same manager name.
 * Every subsequent packet is routed by the **server-issued connection ID**:
   backends mint connection IDs that encode their own pod IP (quic-go supports
   custom connection-ID generators; an IPv6 address plus a version/length octet fits
@@ -188,14 +195,23 @@ Routing works in two tiers, following the QUIC-LB pattern
   quic-go's own path validation confirms the new path.
 
 Statelessness is what makes the forwarder an acceptable hard dependency: a restart
-loses nothing that matters, replicas need no coordination, and it can run as a small
-Deployment (default) or DaemonSet. It ships as another command in the tel2 image.
+loses nothing that matters, replicas need no coordination, and it runs as a small
+Deployment that can be scaled freely. It ships as another command in the tel2 image.
 "Stateless" here means stateless for *routing identity*: every routing decision comes
 from the packet itself (SNI or server-issued CID), never from remembered
 per-connection state. The forwarder does keep soft per-flow relay state -- which client
 address a given backend flow's responses go back to -- but that is reconstructed from
 the next client packet after a restart (QUIC is client-initiated), so it changes none
 of the properties above.
+
+That relay state is keyed by the client's source address alone, which rests on an
+invariant the client upholds: **every QUIC connection is dialed on a UDP socket of its
+own** (`quic.DialAddr`; one connection per client 4-tuple). One source address
+therefore maps to exactly one backend. A client that shared a socket -- say, one
+`quic.Transport` carrying the manager connection and agent connections together --
+would have every packet of the second connection forwarded to the first one's backend,
+because an established flow wins before any packet inspection. Anything that changes
+the client's socket model must revisit this keying.
 
 One qualification to "stateless": a ClientHello can span multiple Initial packets
 (post-quantum hybrid key shares push it past one packet's CRYPTO capacity, and Go's
@@ -217,9 +233,17 @@ always sends SNI in a known version.
 **Backend allowlist (required).** A CID-routing forwarder would otherwise be an open
 UDP redirector to any pod IP an attacker encodes into a forged CID. The forwarder
 validates every routing decision -- SNI resolution and decoded CIDs -- against the
-set of live manager and agent pod IPs, maintained by watching pods with the
-corresponding labels (a small RBAC grant for its own ServiceAccount). Packets that
-resolve outside the allowlist are dropped.
+set of live manager and agent backends, which the traffic-manager streams to it as
+full-replacement snapshots over its in-cluster gRPC port (the `WatchQuicBackends`
+RPC), derived from the agent sessions the manager already tracks; the forwarder needs
+no Kubernetes API access of its own. Packets that resolve outside the allowlist are
+dropped. The allowlist is soft state with a deliberate asymmetry: losing the manager
+keeps the last known-good snapshot, so established routing keeps working, but a
+forwarder that has never received a snapshot drops everything until the first one
+arrives. `WatchQuicBackends` itself carries no credential -- any in-cluster caller can
+read the manager/agent pod IPs, UIDs, and QUIC ports it serves -- which matches the
+plaintext in-cluster posture of the manager's other gRPC endpoints and exposes no
+keys: reaching a backend still requires completing its mTLS handshake.
 
 **Failure modes.** The forwarder dying kills every QUIC connection at once --
 immediately and unambiguously (connection error, never a hang) -- and every consumer
@@ -238,7 +262,9 @@ agent -> forwarder -> laptop. What does *not* survive is traffic the developer
 originates from the laptop through the VPN (`curl some-cluster-service`): that path
 needs cluster DNS resolution and subnet routing, both of which run over the
 manager-bound tunnel, so it is down for the duration of the outage like everything
-else VPN-borne.
+else VPN-borne. The guarantee also assumes the forwarder itself keeps running through
+the outage: a forwarder that restarts while the manager is down comes up with no
+allowlist snapshot and drops everything until the manager returns.
 
 ## Agent connections over QUIC
 
@@ -263,9 +289,10 @@ that one connection, so moving *it* moves the entire attachment.
 * `agentpf` swaps the transport under the agent gRPC connection: instead of a
   Kubernetes port-forward, a `grpc.WithContextDialer` that dials the forwarder with
   the agent's SNI name. One QUIC connection per agent (TLS terminates at the agent,
-  so connections cannot be shared across agents), all sharing the client's UDP
-  socket. The agent's SNI name travels in the `AgentPodInfo` the client already
-  watches.
+  so connections cannot be shared across agents), each dialed on a UDP socket of its
+  own -- the forwarder's source-address keying (see "The forwarder" above) forbids
+  sharing one socket between connections. The agent's SNI name travels in the
+  `AgentPodInfo` the client already watches.
 * Fallback: if the QUIC connection to an agent dies, `agentpf`'s existing reconnect
   logic dials the Kubernetes port-forward instead. The port-forward machinery is
   only ever bypassed, never disabled; it remains the reconnect target for the
@@ -328,7 +355,9 @@ address is discovered rather than configured:
   address* changing (NAT rebind) and a forwarder restart, but rootd does not watch for
   the workstation gaining a new local interface and proactively open a path over it; a
   roam that changes the local interface falls back and re-probes like any other path
-  loss. Proactive migration is a possible later refinement.
+  loss. Proactive migration is a possible later refinement -- one whose new path must
+  get a socket of its own, to preserve the one-connection-per-source-address invariant
+  the forwarder's flow keying relies on.
 * Multiple traffic-manager replicas. The QUIC endpoint assumes a single manager pod:
   the CA and session state are process-local and the manager SNI is not pod-specific,
   so a second replica could hand a client a certificate one manager minted while the

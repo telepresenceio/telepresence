@@ -101,8 +101,9 @@ Root Daemon    : Running
 
 `quic (host:port)` means the upgrade succeeded. `grpc` means the client
 stayed on the port-forwarded transport — expected when the endpoint isn't
-advertised (nothing discovered yet, or discovered and reachable) or the
-client cannot reach any advertised address over UDP. `grpc (fallback)` means
+advertised (discovery hasn't found a candidate address yet, or has nothing
+to discover from) or the client cannot reach any advertised address over
+UDP. `grpc (fallback)` means
 the QUIC connection was lost mid-session and the client downgraded; the next
 `telepresence connect` will try QUIC again.
 

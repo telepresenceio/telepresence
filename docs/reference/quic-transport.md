@@ -16,7 +16,10 @@ streams. QUIC gives each tunneled connection an independently retransmitted
 stream, and its connections survive the client's address changing. The
 port-forwarded transport always remains available; QUIC is an opportunistic
 upgrade, never a requirement. Enabling it is described in the
-[Enable the QUIC tunnel transport](../howtos/quic-transport.md) howto.
+[Enable the QUIC tunnel transport](../howtos/quic-transport.md) howto; how the
+transport is built -- the packet forwarder, its routing, and the reasoning
+behind the design -- in the
+[architecture reference](quic-transport-architecture.md).
 
 ## When it helps (and when it doesn't)
 

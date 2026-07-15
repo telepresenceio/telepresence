@@ -265,6 +265,8 @@
       link: reference/routing
     - title: QUIC Tunnel Transport
       link: reference/quic-transport
+    - title: QUIC Tunnel Transport Architecture
+      link: reference/quic-transport-architecture
     - title: Traffic Agent Packet Routing
       link: reference/agent-packet-routing
     - title: Routing Loop Prevention on Local Clusters
