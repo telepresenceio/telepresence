@@ -8,6 +8,9 @@ metadata:
   labels:
     {{ include "telepresence.labels" $ | nindent 4 }}
 spec:
+{{- if and .quicTunnel .quicTunnel.enabled (gt (int .replicaCount) 1) }}
+{{- fail "quicTunnel.enabled requires replicaCount 1: the traffic-manager's QUIC certificate authority and session state are process-local, so a second replica breaks the QUIC handshake (see the QUIC Tunnel Transport reference)" }}
+{{- end }}
   replicas: {{ .replicaCount }}
   selector:
     matchLabels:
