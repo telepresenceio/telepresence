@@ -124,13 +124,14 @@ type session struct {
 
 	ingestTracker *podAccessTracker
 
-	// currentInterceptsLock ensures that all accesses to currentAgents, currentIntercepts, currentMatchers,
+	// currentInterceptsLock ensures that all accesses to currentAgentPods, currentIntercepts, currentMatchers,
 	// currentAPIServers, interceptWaiters, and ingressInfo are synchronized
 	//
 	currentInterceptsLock sync.Mutex
 
-	// currentAgents is the latest snapshot returned by the agents watcher.
-	currentAgents []*manager.AgentInfo
+	// currentAgentPods is the latest agent-pod snapshot: built from AgentPodInfo in
+	// combined mode, projected from AgentInfo in legacy fallback mode.
+	currentAgentPods []agentPod
 
 	// currentIntercepts is the latest snapshot returned by the intercept watcher. It
 	// is keyeed by the intercept ID
@@ -168,6 +169,37 @@ type session struct {
 	// root daemon. Captured here so the usage reporter can read it when the
 	// session itself shuts down.
 	rootEndMetrics *rootdRpc.Activity
+
+	// podRelay accumulates the agent-pod projection and relays it to the root
+	// daemon. Only driven when agentPodWatchNamespaces is non-empty.
+	podRelay *podRelay
+
+	// agentPodWatchNamespacesOnce and agentPodWatchNamespacesValue memoize
+	// agentPodWatchNamespaces; the mapped namespace set is fixed after the
+	// session is constructed.
+	agentPodWatchNamespacesOnce  sync.Once
+	agentPodWatchNamespacesValue []string
+}
+
+// agentPodWatchNamespaces returns the namespaces in which this client watches
+// agent pods: nil when cluster.agentPortForward is disabled (there's no
+// channel to traffic-agents at all), otherwise the mapped namespaces this
+// client can port-forward to. This is the same computation the root daemon's
+// Start used to perform on its own (rootd/session.go); the user daemon now
+// performs it once and passes the result to the traffic-manager
+// (SessionEventsRequest.Namespaces) and to the root daemon
+// (NetworkConfig.AgentPodNamespaces) so both sides agree without computing it
+// independently.
+func (s *session) agentPodWatchNamespaces() []string {
+	s.agentPodWatchNamespacesOnce.Do(func() {
+		if !client.GetConfig(s).Cluster().AgentPortForward {
+			return
+		}
+		s.agentPodWatchNamespacesValue = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
+			return !k8s.CanPortForward(s, ns)
+		})
+	})
+	return s.agentPodWatchNamespacesValue
 }
 
 func (s *session) RevokeIntercept(ctx context.Context, interceptID string) error {
@@ -396,6 +428,7 @@ func connectMgr(
 		interceptWaiters:   make(map[string]*awaitIntercept),
 		isPodDaemon:        cr.IsPodDaemon,
 		subnetViaWorkloads: cr.SubnetViaWorkloads,
+		podRelay:           newPodRelay(),
 	}
 	sess.Context = withSession(sess.Context, sess)
 	return sess, nil
@@ -417,6 +450,9 @@ func (s *session) reconnectManager() (returnedErr error) {
 		}
 	}()
 
+	// Agents is intentionally left empty: traffic-agents hold their own manager
+	// sessions and re-arrive on their own within seconds of a manager restart;
+	// intercepts are restored in full below.
 	_, err = manager.NewManagerClient(conn).ReconnectClient(tc, &manager.ReconnectClientRequest{
 		Session: s.sessionInfo,
 		Client: &manager.ClientInfo{
@@ -427,7 +463,6 @@ func (s *session) reconnectManager() (returnedErr error) {
 			Version:   client.Version(),
 		},
 		Intercepts: s.getCurrentInterceptInfos(),
-		Agents:     s.getCurrentAgents(),
 	})
 	if err != nil {
 		return fmt.Errorf("unable to reconnect client: %w", err)
@@ -557,13 +592,16 @@ func (s *session) rootDaemonReconnectConfig() (*rootdRpc.NetworkConfig, bool) {
 	nc.Session = s.sessionInfo
 	nc.SubnetViaWorkloads = s.subnetViaWorkloads
 	nc.ClientConfig, _ = json.Marshal(client.GetConfig(s))
+	nc.AgentPodNamespaces = s.agentPodWatchNamespaces()
 	return nc, isPodDaemon
 }
 
 func (s *session) startServices(g log.Group) {
 	g.Go("remain", s.remainLoop)
-	g.Go("agents", s.watchAgentsLoop)
-	g.Go("intercept-port-forward", s.watchInterceptsHandler)
+	g.Go("session-events", s.sessionEventsHandler)
+	if len(s.agentPodWatchNamespaces()) > 0 {
+		g.Go("agent-pods-relay", func(ctx context.Context) error { return s.podRelay.run(ctx, s) })
+	}
 }
 
 func runWithRetry(ctx context.Context, f func(context.Context) error) error {
@@ -789,10 +827,12 @@ func (s *session) WorkloadInfoSnapshot(
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
 	if len(nss) == 1 && nss[0] == s.Namespace {
-		cas := s.getCurrentAgents()
+		cas := s.getCurrentAgentPods()
 		sMap = make(map[string]string, len(cas))
 		for _, a := range cas {
-			sMap[a.Name] = a.Version
+			if a.namespace == s.Namespace {
+				sMap[a.workload] = a.version
+			}
 		}
 	}
 	s.ensureWatchers(nss)
@@ -1015,6 +1055,7 @@ func (s *session) getNetworkInfo(cr *rpc.ConnectRequest) *rootdRpc.NetworkConfig
 		SubnetViaWorkloads: s.subnetViaWorkloads,
 		HomeDir:            homedir.HomeDir(),
 		ClientConfig:       jsonCfg,
+		AgentPodNamespaces: s.agentPodWatchNamespaces(),
 	}
 }
 

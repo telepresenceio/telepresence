@@ -16,11 +16,34 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
+
+// fakeIngestRootDaemon is a minimal daemon.Daemon gRPC server that only echoes
+// TranslateEnvIPs, used to let Ingest's translateContainerEnv step succeed
+// without a real root daemon.
+type fakeIngestRootDaemon struct {
+	rootdRpc.UnimplementedDaemonServer
+}
+
+func (f *fakeIngestRootDaemon) TranslateEnvIPs(_ context.Context, e *rootdRpc.Environment) (*rootdRpc.Environment, error) {
+	return e, nil
+}
+
+// withFakeRootDaemon wires s up with a bufconn-backed root daemon that only
+// supports TranslateEnvIPs, so Ingest's post-EnsureAgent env-translation step
+// succeeds.
+func withFakeRootDaemon(t *testing.T, s *session) {
+	t.Helper()
+	conn, cleanup, err := dialTestRootDaemon(&fakeIngestRootDaemon{})
+	require.NoError(t, err)
+	t.Cleanup(cleanup)
+	s.setRootDaemon(rootdRpc.NewDaemonClient(conn), conn, nil, false)
+}
 
 // fakeManagerServer is a minimal manager.ManagerServer used to observe and canned-answer
 // the EnsureAgent/ReleaseAgent calls made by session.Ingest and session.LeaveIngest.
@@ -32,13 +55,23 @@ type fakeManagerServer struct {
 
 	mu                sync.Mutex
 	releaseAgentCalls []*manager.ReleaseAgentRequest
+	ensureAgentCalls_ []*manager.EnsureAgentRequest
 }
 
-func (f *fakeManagerServer) EnsureAgent(context.Context, *manager.EnsureAgentRequest) (*manager.AgentInfoSnapshot, error) {
+func (f *fakeManagerServer) EnsureAgent(_ context.Context, rq *manager.EnsureAgentRequest) (*manager.AgentInfoSnapshot, error) {
+	f.mu.Lock()
+	f.ensureAgentCalls_ = append(f.ensureAgentCalls_, rq)
+	f.mu.Unlock()
 	if f.ensureAgentErr != nil {
 		return nil, f.ensureAgentErr
 	}
 	return f.ensureAgentResponse, nil
+}
+
+func (f *fakeManagerServer) ensureAgentCalls() []*manager.EnsureAgentRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*manager.EnsureAgentRequest(nil), f.ensureAgentCalls_...)
 }
 
 func (f *fakeManagerServer) ReleaseAgent(_ context.Context, rq *manager.ReleaseAgentRequest) (*emptypb.Empty, error) {
@@ -112,15 +145,8 @@ func TestSession_Ingest_NodeAgentVersionGate(t *testing.T) {
 
 func TestSession_Ingest_CachedSidecarRejectsNodeAgentRequest(t *testing.T) {
 	s := newIngestTestSession(t, nil)
-	s.currentAgents = []*manager.AgentInfo{
-		{
-			Name:      "wl",
-			Namespace: "default",
-			NodeAgent: false,
-			Containers: map[string]*manager.AgentInfo_ContainerInfo{
-				"cn": {},
-			},
-		},
+	s.currentAgentPods = []agentPod{
+		{workload: "wl", namespace: "default", podName: "wl-pod", nodeAgent: false},
 	}
 
 	_, err := s.Ingest(s, &rpc.IngestRequest{
@@ -132,18 +158,25 @@ func TestSession_Ingest_CachedSidecarRejectsNodeAgentRequest(t *testing.T) {
 }
 
 func TestSession_Ingest_CachedNodeAgentReusedSilentlyForPlainRequest(t *testing.T) {
-	s := newIngestTestSession(t, nil)
-	ik := ingestKey{workload: "wl", container: "cn", namespace: "default"}
-	ai := &manager.AgentInfo{
-		Name:      "wl",
-		Namespace: "default",
-		NodeAgent: true,
-		Containers: map[string]*manager.AgentInfo_ContainerInfo{
-			"cn": {},
+	fake := &fakeManagerServer{
+		ensureAgentResponse: &manager.AgentInfoSnapshot{
+			Agents: []*manager.AgentInfo{
+				{
+					Name:      "wl",
+					Namespace: "default",
+					NodeAgent: true,
+					Containers: map[string]*manager.AgentInfo_ContainerInfo{
+						"cn": {},
+					},
+				},
+			},
 		},
 	}
-	s.currentAgents = []*manager.AgentInfo{ai}
-	s.currentIngests.Store(ik, &ingest{ingestKey: ik, AgentInfo: ai})
+	s := newIngestTestSession(t, dialTestManager(t, fake))
+	withFakeRootDaemon(t, s)
+	s.currentAgentPods = []agentPod{
+		{workload: "wl", namespace: "default", podName: "wl-pod", nodeAgent: true},
+	}
 
 	ii, err := s.Ingest(s, &rpc.IngestRequest{
 		Identifier: &rpc.IngestIdentifier{WorkloadName: "wl", ContainerName: "cn"},
@@ -151,6 +184,10 @@ func TestSession_Ingest_CachedNodeAgentReusedSilentlyForPlainRequest(t *testing.
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "wl", ii.Workload)
+
+	calls := fake.ensureAgentCalls()
+	require.Len(t, calls, 1)
+	assert.True(t, calls[0].NodeAgent, "a cached node-agent must be requested explicitly from EnsureAgent so the manager does not inject a sidecar on top of it")
 }
 
 func TestSession_Ingest_ResponseHardeningRejectsSidecarFromManager(t *testing.T) {

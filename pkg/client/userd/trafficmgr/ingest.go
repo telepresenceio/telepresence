@@ -108,14 +108,15 @@ func (s *session) validateAgentForIngest(ai *manager.AgentInfo) error {
 	return nil
 }
 
-// getCurrentAgent returns the locally-cached agent matching the workload name in the
-// given namespace, or nil when no such agent is cached. The cache only contains agents
-// from the connected namespace, so cross-namespace lookups always fall through to
-// EnsureAgent on the traffic-manager.
-func (s *session) getCurrentAgent(name, namespace string) *manager.AgentInfo {
-	for _, ai := range s.getCurrentAgents() {
-		if ai.Name == name && ai.Namespace == namespace {
-			return ai
+// getCurrentAgent returns the cached agentPod matching the workload name in the
+// given namespace, or nil when no such agent is cached. Consulted only for the
+// ingest fast path and node-agent semantics; container-level data always comes
+// from EnsureAgent.
+func (s *session) getCurrentAgent(workload, namespace string) *agentPod {
+	for _, ap := range s.getCurrentAgentPods() {
+		if ap.workload == workload && ap.namespace == namespace {
+			found := ap
+			return &found
 		}
 	}
 	return nil
@@ -144,59 +145,78 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 		container: id.ContainerName,
 		namespace: ns,
 	}
-	ai := s.getCurrentAgent(ik.workload, ik.namespace)
 
-	if ai != nil {
-		if rq.NodeAgent && !ai.NodeAgent {
-			return nil, errcat.User.Newf(
-				"workload %s already has an injected traffic-agent, which a node-agent cannot replace; "+
-					"omit --node-agent, or uninstall the existing agent and retry",
-				ik.workload)
-		}
-		// A node-agent serves env and mounts identically to a sidecar, so a
-		// cached node-agent silently satisfies a plain (non-node-agent)
-		// ingest request too. Injecting a sidecar on top of it would break
-		// the live node-agent, so it is reused rather than rejected.
-		if ik.container == "" {
-			ik.container, err = s.getSingleContainerName(ai)
-			if err != nil {
-				return nil, err
-			}
-		}
+	// Fast path: an ingest already exists for this key -- or, when the
+	// container is unspecified, exactly one ingest exists for this
+	// workload+namespace.
+	if ik.container != "" {
 		if ig, loaded := s.currentIngests.Load(ik); loaded {
 			return ig.response(), nil
 		}
+	} else {
+		var found *ingest
+		s.currentIngests.Range(func(key ingestKey, ig *ingest) bool {
+			if key.workload != ik.workload || key.namespace != ik.namespace {
+				return true
+			}
+			if found != nil {
+				err = status.Error(codes.NotFound, fmt.Sprintf("workload %s has multiple ingests. Please specify which one to use", ik.workload))
+				return false
+			}
+			found = ig
+			return true
+		})
+		if err != nil {
+			return nil, err
+		}
+		if found != nil {
+			return found.response(), nil
+		}
 	}
+
+	// Node-agent semantics via the pod cache: existence and node-agent flag
+	// only, container-level data is never cached (see the agentPod comment).
+	ap := s.getCurrentAgent(ik.workload, ik.namespace)
+	if rq.NodeAgent && ap != nil && !ap.nodeAgent {
+		return nil, errcat.User.Newf(
+			"workload %s already has an injected traffic-agent, which a node-agent cannot replace; "+
+				"omit --node-agent, or uninstall the existing agent and retry",
+			ik.workload)
+	}
+	// A node-agent serves env and mounts identically to a sidecar, so a
+	// cached node-agent silently satisfies a plain (non-node-agent) ingest
+	// request too. Requesting NodeAgent from EnsureAgent in that case
+	// prevents the manager from injecting a sidecar on top of the live
+	// node-agent.
+	nodeAgent := rq.NodeAgent || (ap != nil && ap.nodeAgent)
 
 	err = s.ensureNoMountConflict(rq.MountPoint, rq.LocalMountPort)
 	if err != nil {
 		return nil, err
 	}
 
-	if ai == nil {
-		var as *manager.AgentInfoSnapshot
-		timeoutCtx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutIntercept)
-		defer cancel()
-		as, err = s.ManagerClient().EnsureAgent(timeoutCtx, &manager.EnsureAgentRequest{
-			Session:   s.sessionInfo,
-			Name:      ik.workload,
-			Namespace: ik.namespace,
-			NodeAgent: rq.NodeAgent,
-		})
-		if err != nil {
-			return nil, err
-		}
-		ai = as.Agents[0]
-		// A sidecar returned when a node-agent was explicitly requested must
-		// never be used silently: its env/mounts assume no sidecar was
-		// injected, so a mismatch here means the traffic-manager did not
-		// honor node-agent mode (e.g. the version gate above was bypassed by
-		// a manager that predates the node_agent field). Fail loudly instead
-		// of quietly falling back to sidecar semantics.
-		if rq.NodeAgent && !ai.NodeAgent {
-			return nil, errcat.User.Newf(
-				"traffic-manager did not honor node-agent mode for workload %s", ik.workload)
-		}
+	var as *manager.AgentInfoSnapshot
+	timeoutCtx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutIntercept)
+	defer cancel()
+	as, err = s.ManagerClient().EnsureAgent(timeoutCtx, &manager.EnsureAgentRequest{
+		Session:   s.sessionInfo,
+		Name:      ik.workload,
+		Namespace: ik.namespace,
+		NodeAgent: nodeAgent,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ai := as.Agents[0]
+	// A sidecar returned when a node-agent was explicitly requested must
+	// never be used silently: its env/mounts assume no sidecar was
+	// injected, so a mismatch here means the traffic-manager did not
+	// honor node-agent mode (e.g. the version gate above was bypassed by
+	// a manager that predates the node_agent field). Fail loudly instead
+	// of quietly falling back to sidecar semantics.
+	if rq.NodeAgent && !ai.NodeAgent {
+		return nil, errcat.User.Newf(
+			"traffic-manager did not honor node-agent mode for workload %s", ik.workload)
 	}
 	if err = s.validateAgentForIngest(ai); err != nil {
 		return nil, err
