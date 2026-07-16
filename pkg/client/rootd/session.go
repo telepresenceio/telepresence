@@ -192,6 +192,11 @@ type session struct {
 
 	subnetViaWorkloads []*rpc.SubnetViaWorkload
 
+	// agentPodNamespaces are the namespaces in which the user daemon relays agent-pod
+	// events using the daemon.Daemon WatchAgentPods RPC. When non-empty, this daemon
+	// does not watch agent pods itself; see session.Start.
+	agentPodNamespaces []string
+
 	// daemon runs as part of a pod-daemon setup.
 	podDaemon bool
 	routesCh  chan []netip.Prefix
@@ -368,6 +373,7 @@ func newSession(
 		managerConn:           managerConn,
 		managerVersion:        ver,
 		subnetViaWorkloads:    mi.SubnetViaWorkloads,
+		agentPodNamespaces:    mi.AgentPodNamespaces,
 		proxyClusterPods:      true,
 		proxyClusterSvcs:      true,
 		vifReady:              make(chan error, 2),
@@ -1378,9 +1384,18 @@ func (s *session) run(initErrs chan<- error) {
 func (s *session) Start(g log.Group, teleroutePort uint16) error {
 	clusterCfg := client.GetConfig(s).Cluster()
 	if clusterCfg.AgentPortForward {
-		agentNamespaces := slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
-			return !k8s.CanPortForward(s, ns)
-		})
+		// Relay mode: the user daemon has already computed the namespace set (the
+		// same one it requests from the traffic-manager) and pushes deltas via
+		// WatchAgentPods instead of this daemon watching the traffic-manager itself.
+		relayMode := len(s.agentPodNamespaces) > 0
+		var agentNamespaces []string
+		if relayMode {
+			agentNamespaces = s.agentPodNamespaces
+		} else {
+			agentNamespaces = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
+				return !k8s.CanPortForward(s, ns)
+			})
+		}
 		if len(agentNamespaces) > 0 {
 			s.agentClients = agentpf.NewClients(s.Cluster, s.session, agentNamespaces)
 			// Receive a callback per dial accepted from the dial watchers,
@@ -1401,9 +1416,15 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 				}
 				return ""
 			})
-			g.Go("agentPods", func(ctx context.Context) error {
-				return s.agentClients.WatchAgentPods(s.managerClient())
-			})
+			if relayMode {
+				g.Go("agentPods", func(ctx context.Context) error {
+					return s.agentClients.RunDeltaSink(s.managerClient())
+				})
+			} else {
+				g.Go("agentPods", func(ctx context.Context) error {
+					return s.agentClients.WatchAgentPods(s.managerClient())
+				})
+			}
 		} else {
 			clog.Infof(s, "Agent port-forwards are disabled. Client is not permitted to do port-forward to any mapped namespace")
 		}
@@ -1732,6 +1753,18 @@ func (s *session) waitForAgentIP(ctx context.Context, request *rpc.WaitForAgentI
 		return nil, err
 	}
 	return &rpc.WaitForAgentIPResponse{LocalIp: ip.AsSlice()}, nil
+}
+
+// applyAgentPodsDelta forwards a relayed agent-pod delta, pushed by the user daemon's
+// WatchAgentPods call, to the agent-pod client set. s.agentClients is nil whenever this
+// daemon isn't running an agent-pod watch at all (AgentPortForward disabled, or no
+// port-forwardable namespace); the caller must treat the resulting error as a reason to
+// stop relaying.
+func (s *session) applyAgentPodsDelta(delta *rpc.AgentPodsDelta) error {
+	if s.agentClients == nil {
+		return status.Error(codes.FailedPrecondition, "no agent-pod client set for this session")
+	}
+	return s.agentClients.ApplyPodsDelta(delta.Reset_, delta.Upserts, delta.Removals)
 }
 
 func (s *session) ManagerVersion() semver.Version {

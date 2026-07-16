@@ -123,6 +123,20 @@ func (rd *InProcSession) ActivityWatcher(ctx context.Context, in *empty.Empty, o
 	return nil, status.Error(codes.Unimplemented, "ActivityWatcher not implemented")
 }
 
+func (rd *InProcSession) WatchAgentPods(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (grpc.ClientStreamingClient[rpc.AgentPodsDelta, empty.Empty], error) {
+	// The InProcSession is relayed to directly via ApplyAgentPodsDelta instead of a stream.
+	return nil, status.Error(codes.Unimplemented, "WatchAgentPods not implemented")
+}
+
+// ApplyAgentPodsDelta lets the user daemon apply a relayed agent-pod delta directly when
+// the root session runs in-process, bypassing gRPC.
+func (rd *InProcSession) ApplyAgentPodsDelta(_ context.Context, delta *rpc.AgentPodsDelta) error {
+	return rd.applyAgentPodsDelta(delta)
+}
+
 // NewInProcSession returns a root daemon session suitable to use in-process (from the user daemon) and is primarily intended for
 // when the user daemon runs in a docker container with NET_ADMIN capabilities.
 func NewInProcSession(
