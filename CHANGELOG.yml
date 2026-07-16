@@ -39,6 +39,30 @@ items:
           fallback whenever the QUIC endpoint is disabled or unreachable, and
           <code>telepresence status</code> now reports which transport is
           active.
+      - type: change
+        title: One combined traffic-manager watcher per client
+        body: >-
+          The client now registers a single combined watcher stream
+          (<code>WatchSessionEvents</code>) with the traffic-manager for
+          everything related to workloads and attachments: agent pods and the
+          client's intercepts. The user daemon relays the agent-pod events to
+          the root daemon locally, halving the number of watcher streams the
+          traffic-manager serves per client. Bulk container data
+          (environments, mounts) is no longer streamed at all; it is fetched
+          on demand when an attachment needs it. Both directions remain fully
+          backward compatible: a new client degrades to the separate watchers
+          against an older traffic-manager, and an older client keeps using
+          them against a new one.
+      - type: bugfix
+        title: Ingests in other namespaces survive agent churn in the connected namespace
+        body: >-
+          An ingest into a namespace other than the connected one would lose
+          its volume mounts and port-forwards as soon as any traffic-agent
+          activity occurred in the connected namespace, because the agent
+          snapshot bookkeeping treated every ingest as belonging to the
+          connected namespace. The bookkeeping is now namespace-aware, and a
+          same-named workload in the connected namespace can no longer be
+          mistaken for the ingested one.
   - version: 2.30.1
     date: 2026-07-17
     notes:

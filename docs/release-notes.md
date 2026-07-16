@@ -8,17 +8,16 @@
 The traffic-manager can now expose a QUIC endpoint for the tunnel (Helm chart value <code>quicTunnel.enabled</code>). When the endpoint is reachable, the client automatically upgrades new tunneled connections to it, removing the head-of-line blocking that the shared port-forwarded gRPC connection imposes across flows. The port-forwarded gRPC transport remains the default and is used as the fallback whenever the QUIC endpoint is disabled or unreachable, and <code>telepresence status</code> now reports which transport is active.
 </div>
 
-## Version 2.30.1 <span style="font-size: 16px;">(July 17)</span>
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Enabling node-agent mode makes it the client default](reference/node-agent)</div></div>
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">One combined traffic-manager watcher per client</div></div>
 <div style="margin-left: 15px">
 
-Installing the traffic-manager with <code>nodeAgent.enabled=true</code> now also makes the node-agent the default mode for client attachments; previously the client-side default had to be enabled separately through the Helm chart's <code>client.nodeAgent.enabled</code> value. An explicitly set <code>client.nodeAgent.enabled</code> always wins, so administrators can keep the sidecar as the default while still allowing node-agent attachments by setting it to <code>false</code>.
+The client now registers a single combined watcher stream (<code>WatchSessionEvents</code>) with the traffic-manager for everything related to workloads and attachments: agent pods and the client's intercepts. The user daemon relays the agent-pod events to the root daemon locally, halving the number of watcher streams the traffic-manager serves per client. Bulk container data (environments, mounts) is no longer streamed at all; it is fetched on demand when an attachment needs it. Both directions remain fully backward compatible: a new client degrades to the separate watchers against an older traffic-manager, and an older client keeps using them against a new one.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ports forwarded with --to-pod bind the loopback interface only</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ingests in other namespaces survive agent churn in the connected namespace</div></div>
 <div style="margin-left: 15px">
 
-The local listeners created for <code>--to-pod</code> ports bound all workstation interfaces, exposing the forwarded pod ports to the local network. They now bind the loopback interface, matching the flag's documented <code>localhost:PORT</code> contract. A containerized daemon is unaffected: its listeners stay on all interfaces of the daemon container's private network namespace, which docker port publishing requires.
+An ingest into a namespace other than the connected one would lose its volume mounts and port-forwards as soon as any traffic-agent activity occurred in the connected namespace, because the agent snapshot bookkeeping treated every ingest as belonging to the connected namespace. The bookkeeping is now namespace-aware, and a same-named workload in the connected namespace can no longer be mistaken for the ingested one.
 </div>
 
 ## Version 2.30.0 <span style="font-size: 16px;">(July 14)</span>
