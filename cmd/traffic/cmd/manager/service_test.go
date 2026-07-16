@@ -447,6 +447,17 @@ func TestGetQuicTunnelEndpoint_Gating(t *testing.T) {
 }
 
 func getTestClientConn(ctx context.Context, t *testing.T, extraObjects []runtime.Object, envMods ...func(*managerutil.Env)) *grpc.ClientConn {
+	conn, _, _ := getTestClientConnAndService(ctx, t, extraObjects, envMods...)
+	return conn
+}
+
+// getTestClientConnAndService is identical to getTestClientConn, but also
+// returns the manager Service (for direct state access, e.g. RestoreIntercepts)
+// and the context the server runs with (for direct mutator.Map access, e.g.
+// marking a pod inactive via mutator.GetMap(ctx).Inactivate).
+func getTestClientConnAndService(
+	ctx context.Context, t *testing.T, extraObjects []runtime.Object, envMods ...func(*managerutil.Env),
+) (*grpc.ClientConn, Service, context.Context) {
 	const bufsize = 64 * 1024
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
@@ -489,12 +500,13 @@ func getTestClientConn(ctx context.Context, t *testing.T, extraObjects []runtime
 			Namespace: mgrNs,
 		},
 		Data: map[string]string{
-			"namespace-selector.yaml": ` 
+			"namespace-selector.yaml": `
 matchExpressions:
 - key: kubernetes.io/metadata.name
   operator: In
   values:
     - default
+    - other
 `,
 			"agent-state.yaml": ``,
 		},
@@ -571,7 +583,7 @@ matchExpressions:
 			t.Error(err)
 		}
 	})
-	return conn
+	return conn, mgr, ctx
 }
 
 func Test_hasDomainSuffix(t *testing.T) {
