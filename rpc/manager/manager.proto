@@ -354,6 +354,33 @@ message InterceptInfoDelta {
   repeated string removals = 2;
 }
 
+// SessionEventsRequest identifies the watching session and scopes the agent
+// portion of the WatchSessionEvents stream.
+message SessionEventsRequest {
+  SessionInfo session = 1;
+
+  // Namespaces in which the client wants agent events in addition to the
+  // session's connected namespace. This is the set of mapped namespaces that
+  // the client is permitted to port-forward to.
+  repeated string namespaces = 2;
+}
+
+// SessionEventsDelta multiplexes agent-pod and intercept deltas onto one
+// stream. Either or both fields may be present in a single message.
+//
+// Container-level agent data (environments, mounts, ports) is deliberately
+// not streamed; clients retrieve it on demand from the EnsureAgent response
+// or from InterceptInfo.
+message SessionEventsDelta {
+  // Agent pods in the requested namespaces plus the session's connected
+  // namespace. Same projection as the WatchAgentPodsInNamespacesDelta
+  // stream, including the per-client intercepted flag.
+  AgentPodInfoDelta agent_pods = 1;
+
+  // The watching client's intercepts.
+  InterceptInfoDelta intercepts = 2;
+}
+
 message CreateInterceptRequest {
   SessionInfo session = 1;
   InterceptSpec intercept_spec = 2;
@@ -729,6 +756,9 @@ message AgentPodInfo {
   // to reach this agent's QUIC listener. Empty means this agent has no QUIC
   // listener, so it must be dialed via port-forward only.
   string quic_sni = 9;
+
+  // The agent's version.
+  string version = 10;
 }
 
 message AgentPodInfoSnapshot {
@@ -980,6 +1010,13 @@ service Manager {
   // WatchInterceptsDelta notifies a client or agent of changes in the set of intercepts
   // relevant to that client or agent.
   rpc WatchInterceptsDelta(SessionInfo) returns (stream InterceptInfoDelta);
+
+  // WatchSessionEvents notifies a client of changes to the set of known
+  // agent pods in the requested namespaces and to the client's own
+  // intercepts, multiplexed onto a single stream. It replaces the
+  // combination of WatchAgentsDelta, WatchInterceptsDelta, and
+  // WatchAgentPodsInNamespacesDelta for clients that support it.
+  rpc WatchSessionEvents(SessionEventsRequest) returns (stream SessionEventsDelta);
 
   // WatchWorkloads notifies a client of the set of Workloads from the client
   // connection's namespace.

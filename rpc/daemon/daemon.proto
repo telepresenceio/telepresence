@@ -66,6 +66,13 @@ service Daemon {
   rpc SetInterceptShortcuts(SetInterceptShortcutsRequest) returns (google.protobuf.Empty);
 
   rpc ActivityWatcher(google.protobuf.Empty) returns (stream Activity);
+
+  // WatchAgentPods is called by the user daemon to push the agent-pod
+  // projection it derives from its combined traffic-manager watcher. It is
+  // only used when the NetworkConfig passed to Connect has a non-empty
+  // agent_pod_namespaces, which tells this daemon not to watch agent pods
+  // itself.
+  rpc WatchAgentPods(stream AgentPodsDelta) returns (google.protobuf.Empty);
 }
 
 message DaemonStatus {
@@ -192,6 +199,23 @@ message NetworkConfig {
 
   // The completely merged client Config, unless daemon runs embedded
   optional bytes client_config = 7;
+
+  // Namespaces in which the user daemon relays agent-pod events using
+  // WatchAgentPods. When non-empty, this daemon must not watch agent pods
+  // itself.
+  repeated string agent_pod_namespaces = 11;
+}
+
+// AgentPodsDelta is pushed by the user daemon, carrying the agent-pod
+// projection it derives from its combined traffic-manager watcher.
+message AgentPodsDelta {
+  // When true, discard all previously received agent-pod state before
+  // applying the upserts/removals in this message. Set on the first message
+  // of every relay stream and whenever the user daemon's traffic-manager
+  // watcher has been re-established.
+  bool reset = 1;
+  map<string, manager.AgentPodInfo> upserts = 2;
+  repeated string removals = 3;
 }
 
 message SetDNSExcludesRequest {

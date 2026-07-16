@@ -40,6 +40,7 @@ const (
 	Daemon_RerouteRemotePort_FullMethodName     = "/telepresence.daemon.Daemon/RerouteRemotePort"
 	Daemon_SetInterceptShortcuts_FullMethodName = "/telepresence.daemon.Daemon/SetInterceptShortcuts"
 	Daemon_ActivityWatcher_FullMethodName       = "/telepresence.daemon.Daemon/ActivityWatcher"
+	Daemon_WatchAgentPods_FullMethodName        = "/telepresence.daemon.Daemon/WatchAgentPods"
 )
 
 // DaemonClient is the client API for Daemon service.
@@ -86,6 +87,12 @@ type DaemonClient interface {
 	// Each call replaces the previously declared set.
 	SetInterceptShortcuts(ctx context.Context, in *SetInterceptShortcutsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	ActivityWatcher(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[Activity], error)
+	// WatchAgentPods is called by the user daemon to push the agent-pod
+	// projection it derives from its combined traffic-manager watcher. It is
+	// only used when the NetworkConfig passed to Connect has a non-empty
+	// agent_pod_namespaces, which tells this daemon not to watch agent pods
+	// itself.
+	WatchAgentPods(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AgentPodsDelta, emptypb.Empty], error)
 }
 
 type daemonClient struct {
@@ -285,6 +292,19 @@ func (c *daemonClient) ActivityWatcher(ctx context.Context, in *emptypb.Empty, o
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Daemon_ActivityWatcherClient = grpc.ServerStreamingClient[Activity]
 
+func (c *daemonClient) WatchAgentPods(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AgentPodsDelta, emptypb.Empty], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Daemon_ServiceDesc.Streams[1], Daemon_WatchAgentPods_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AgentPodsDelta, emptypb.Empty]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Daemon_WatchAgentPodsClient = grpc.ClientStreamingClient[AgentPodsDelta, emptypb.Empty]
+
 // DaemonServer is the server API for Daemon service.
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility.
@@ -329,6 +349,12 @@ type DaemonServer interface {
 	// Each call replaces the previously declared set.
 	SetInterceptShortcuts(context.Context, *SetInterceptShortcutsRequest) (*emptypb.Empty, error)
 	ActivityWatcher(*emptypb.Empty, grpc.ServerStreamingServer[Activity]) error
+	// WatchAgentPods is called by the user daemon to push the agent-pod
+	// projection it derives from its combined traffic-manager watcher. It is
+	// only used when the NetworkConfig passed to Connect has a non-empty
+	// agent_pod_namespaces, which tells this daemon not to watch agent pods
+	// itself.
+	WatchAgentPods(grpc.ClientStreamingServer[AgentPodsDelta, emptypb.Empty]) error
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -392,6 +418,9 @@ func (UnimplementedDaemonServer) SetInterceptShortcuts(context.Context, *SetInte
 }
 func (UnimplementedDaemonServer) ActivityWatcher(*emptypb.Empty, grpc.ServerStreamingServer[Activity]) error {
 	return status.Error(codes.Unimplemented, "method ActivityWatcher not implemented")
+}
+func (UnimplementedDaemonServer) WatchAgentPods(grpc.ClientStreamingServer[AgentPodsDelta, emptypb.Empty]) error {
+	return status.Error(codes.Unimplemented, "method WatchAgentPods not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
 func (UnimplementedDaemonServer) testEmbeddedByValue()                {}
@@ -731,6 +760,13 @@ func _Daemon_ActivityWatcher_Handler(srv interface{}, stream grpc.ServerStream) 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Daemon_ActivityWatcherServer = grpc.ServerStreamingServer[Activity]
 
+func _Daemon_WatchAgentPods_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServer).WatchAgentPods(&grpc.GenericServerStream[AgentPodsDelta, emptypb.Empty]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Daemon_WatchAgentPodsServer = grpc.ClientStreamingServer[AgentPodsDelta, emptypb.Empty]
+
 // Daemon_ServiceDesc is the grpc.ServiceDesc for Daemon service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -812,6 +848,11 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "ActivityWatcher",
 			Handler:       _Daemon_ActivityWatcher_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "WatchAgentPods",
+			Handler:       _Daemon_WatchAgentPods_Handler,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "daemon/daemon.proto",
