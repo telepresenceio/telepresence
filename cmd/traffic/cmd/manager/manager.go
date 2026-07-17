@@ -169,7 +169,10 @@ func MainWithEnv(ctx context.Context) (err error) {
 					Address:  env.UsageCollectorAddress,
 					Insecure: env.UsageCollectorInsecure,
 				})
-				usg.Quick(ctx, "manager.boot")
+				usg.Quick(ctx, "manager.boot",
+					"nodeagent.enabled", strconv.FormatBool(env.NodeAgentEnabled),
+					"injector.enabled", strconv.FormatBool(managerutil.AgentInjectorEnabled(ctx)),
+				)
 			}
 		}
 

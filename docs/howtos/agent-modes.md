@@ -60,10 +60,13 @@ $ telepresence intercept my-service --port 8080
 
 ### Both modes available, the developer chooses
 
-The administrator enables node-agent mode; the sidecar remains the default:
+Enabling `nodeAgent.enabled` also flips the client-side default to the
+node-agent (see the next section), so an administrator who wants to keep the
+sidecar as the default while still making the node-agent available opts the
+client-side default back out explicitly:
 
 ```console
-$ telepresence helm install --set nodeAgent.enabled=true
+$ telepresence helm install --set nodeAgent.enabled=true --set client.nodeAgent.enabled=false
 ```
 
 A developer picks the node-agent per attachment:
@@ -83,16 +86,15 @@ nodeAgent:
 ### The administrator makes the node-agent the cluster-wide default
 
 Everything under the Helm chart's `client` section flows into the client
-configuration that connecting workstations receive, so the client-side
-default can be set centrally too:
+configuration that connecting workstations receive. `client.nodeAgent.enabled`
+defaults to the chart's own `nodeAgent.enabled` value, so simply turning on
+node-agent mode already makes it the client-side default too — no separate
+`client` setting is required:
 
 ```yaml
 # values.yaml
 nodeAgent:
   enabled: true
-client:
-  nodeAgent:
-    enabled: true
 ```
 
 ```console
@@ -114,9 +116,6 @@ so nothing can ever be injected:
 # values.yaml
 nodeAgent:
   enabled: true
-client:
-  nodeAgent:
-    enabled: true
 agentInjector:
   enabled: false
 ```
@@ -137,7 +136,10 @@ From highest to lowest:
 1. An explicit `--node-agent` flag (either value).
 2. The workstation's `config.yml` `nodeAgent.enabled` (when set to a
    non-default value).
-3. The cluster-provided `client.nodeAgent.enabled` from the Helm chart.
+3. The cluster-provided `client.nodeAgent.enabled` from the Helm chart. This
+   defaults to the chart's own `nodeAgent.enabled` value, unless the
+   administrator sets `client.nodeAgent.enabled` explicitly (either value),
+   which always overrides that default.
 4. Off — the sidecar is used.
 
 ## Further reading

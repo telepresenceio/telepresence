@@ -151,13 +151,13 @@ func (s *nodeAgentBase) nodeAgentJobTargetPods(ctx context.Context, svc string) 
 	return names
 }
 
-// assertNodeAgentIntercept runs a node-agent intercept against svc,
-// verifies parity with a regular intercept (traffic reaches the local
-// process) while confirming the target workload's pod is left untouched
-// (no restart, no injected traffic-agent container) and a node-agent Job
-// appears in the manager namespace, then leaves the intercept and asserts
-// the Job is reaped.
-func (s *nodeAgentBase) assertNodeAgentIntercept(svc string) {
+// assertNodeAgentIntercept runs "telepresence intercept" with the given
+// extra flags against svc, verifies parity with a regular intercept (traffic
+// reaches the local process) while confirming the target workload's pod is
+// left untouched (no restart, no injected traffic-agent container) and a
+// node-agent Job appears in the manager namespace, then leaves the intercept
+// and asserts the Job is reaped.
+func (s *nodeAgentBase) assertNodeAgentIntercept(svc string, flags ...string) {
 	ctx := s.Context()
 	rq := s.Require()
 
@@ -171,13 +171,14 @@ func (s *nodeAgentBase) assertNodeAgentIntercept(svc string) {
 	// --mount=false avoids a dependency on FUSE (unavailable/unstable on some
 	// CI runners); the assertions below only need the environment and the
 	// intercepted traffic, not a mount.
-	stdout := itest.TelepresenceOk(ctx, "intercept",
-		"--node-agent",
+	args := append([]string{"intercept"}, flags...)
+	args = append(args,
 		"--port", strconv.Itoa(port),
 		"--detailed-output",
 		"--format", "json",
 		"--mount", "false",
 		svc)
+	stdout := itest.TelepresenceOk(ctx, args...)
 	mustLeave := true
 	defer func() {
 		if mustLeave {
@@ -314,7 +315,7 @@ func (s *nodeAgentSuite) TearDownSuite() {
 // restart, no injected traffic-agent container) and a node-agent Job appears
 // in the manager namespace and is reaped when the intercept is left.
 func (s *nodeAgentSuite) Test_NodeAgentIntercept() {
-	s.assertNodeAgentIntercept("echo-easy")
+	s.assertNodeAgentIntercept("echo-easy", "--node-agent")
 }
 
 // Test_NodeAgentIngest verifies that "telepresence ingest --node-agent"
@@ -418,11 +419,17 @@ func (s *nodeAgentSuite) Test_NodeAgentWiretap() {
 	}, 60*time.Second, 2*time.Second, "node-agent Job was not reaped after leaving the wiretap")
 }
 
-// Test_NodeAgentConfigDefault verifies that the client config's
-// nodeAgent.enabled default is honored by "telepresence intercept" when
-// --node-agent is not passed: a node-agent Job appears even though the
-// command line never mentions node-agent mode, and it is reaped once the
-// intercept is left.
+// Test_NodeAgentConfigDefault verifies that a flagless "telepresence
+// intercept" on this install is served by a node-agent: a node-agent Job
+// appears even though the command line never mentions node-agent mode, and
+// it is reaped once the intercept is left. The workstation config.yml's
+// nodeAgent.enabled default is set to the same value here, but since this
+// suite's install already serves nodeAgent.enabled=true as the cluster-wide
+// client default, the config.yml setting is not isolated by this test.
+// Explicit-value precedence (client config vs. cluster default vs.
+// command-line flag) is covered by unit tests in pkg/client/cli/flags, and
+// sidecar-refusal behavior is covered by the NodeAgentNoInjector suite's
+// Test_SidecarInterceptFailsWithInjectorDisabled test.
 func (s *nodeAgentSuite) Test_NodeAgentConfigDefault() {
 	const svc = "echo-easy"
 	rq := s.Require()
@@ -433,8 +440,7 @@ func (s *nodeAgentSuite) Test_NodeAgentConfigDefault() {
 	s.TelepresenceConnect(cfgCtx)
 	defer func() {
 		itest.TelepresenceQuitOk(cfgCtx)
-		// Restore the suite's shared connection (default config, so
-		// --node-agent again defaults to disabled) for the remaining tests.
+		// Restore the suite's shared connection for the remaining tests.
 		s.TelepresenceConnect(s.Context())
 	}()
 
