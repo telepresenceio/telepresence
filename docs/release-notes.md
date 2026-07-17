@@ -8,12 +8,6 @@
 Installing the traffic-manager with <code>nodeAgent.enabled=true</code> now also makes the node-agent the default mode for client attachments; previously the client-side default had to be enabled separately through the Helm chart's <code>client.nodeAgent.enabled</code> value. An explicitly set <code>client.nodeAgent.enabled</code> always wins, so administrators can keep the sidecar as the default while still allowing node-agent attachments by setting it to <code>false</code>.
 </div>
 
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The traffic-manager reports node-agent and agent-injector enablement</div></div>
-<div style="margin-left: 15px">
-
-The traffic-manager's anonymous usage report now records whether node-agent mode and the agent-injector are enabled, so adoption of the agent modes can be measured.
-</div>
-
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ports forwarded with --to-pod bind the loopback interface only</div></div>
 <div style="margin-left: 15px">
 

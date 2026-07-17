@@ -15,12 +15,6 @@ Installing the traffic-manager with <code>nodeAgent.enabled=true</code> now also
   </Body>
 </Note>
 <Note>
-	<Title type="change">The traffic-manager reports node-agent and agent-injector enablement</Title>
-	<Body>
-The traffic-manager's anonymous usage report now records whether node-agent mode and the agent-injector are enabled, so adoption of the agent modes can be measured.
-  </Body>
-</Note>
-<Note>
 	<Title type="bugfix">Ports forwarded with --to-pod bind the loopback interface only</Title>
 	<Body>
 The local listeners created for <code>--to-pod</code> ports bound all workstation interfaces, exposing the forwarded pod ports to the local network. They now bind the loopback interface, matching the flag's documented <code>localhost:PORT</code> contract. A containerized daemon is unaffected: its listeners stay on all interfaces of the daemon container's private network namespace, which docker port publishing requires.

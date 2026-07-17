@@ -39,12 +39,6 @@ items:
           can keep the sidecar as the default while still allowing node-agent
           attachments by setting it to <code>false</code>.
         docs: reference/node-agent
-      - type: change
-        title: The traffic-manager reports node-agent and agent-injector enablement
-        body: >-
-          The traffic-manager's anonymous usage report now records whether
-          node-agent mode and the agent-injector are enabled, so adoption of
-          the agent modes can be measured.
       - type: bugfix
         title: Ports forwarded with --to-pod bind the loopback interface only
         body: >-
