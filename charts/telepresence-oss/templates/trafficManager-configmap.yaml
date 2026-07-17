@@ -6,9 +6,17 @@ metadata:
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 data:
-{{- if .Values.client }}
+{{- $client := deepCopy (.Values.client | default dict) }}
+{{- if .Values.nodeAgent.enabled }}
+{{- $na := default dict (get $client "nodeAgent") }}
+{{- if not (hasKey $na "enabled") }}
+{{- $_ := set $na "enabled" true }}
+{{- $_ := set $client "nodeAgent" $na }}
+{{- end }}
+{{- end }}
+{{- if $client }}
   client.yaml: |
-    {{- toYaml .Values.client | nindent 4 }}
+    {{- toYaml $client | nindent 4 }}
 {{- end }}
 {{- with .Values.intercept }}
 {{- if .environment }}

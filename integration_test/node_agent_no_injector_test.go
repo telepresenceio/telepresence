@@ -11,12 +11,13 @@ import (
 // nodeAgentNoInjectorSuite exercises node-agent intercepts and ingests when
 // the agent-injector is disabled (agentInjector.enabled=false). Node-agent
 // mode does not depend on the mutating webhook, so intercepts and ingests
-// must still work; a plain (sidecar) intercept must still fail with the
-// established "agent-injector is disabled" error.
+// must still work; with node-agent mode enabled the flagless default is the
+// node-agent, and an explicit --node-agent=false (sidecar) intercept must
+// still fail with the established "agent-injector is disabled" error.
 //
 // This suite shares its setup shape and its intercept/ingest assertions with
 // nodeAgentSuite (node_agent_test.go) via the embedded nodeAgentBase; only
-// the Helm install flags and the extra "plain intercept fails" test differ.
+// the Helm install flags and the extra default/sidecar-refusal tests differ.
 type nodeAgentNoInjectorSuite struct {
 	nodeAgentBase
 }
@@ -53,7 +54,7 @@ func (s *nodeAgentNoInjectorSuite) TearDownSuite() {
 // Test_NodeAgentIntercept verifies that a node-agent intercept works
 // end-to-end even though the agent-injector is disabled.
 func (s *nodeAgentNoInjectorSuite) Test_NodeAgentIntercept() {
-	s.assertNodeAgentIntercept("echo-easy")
+	s.assertNodeAgentIntercept("echo-easy", "--node-agent")
 }
 
 // Test_NodeAgentIngest verifies that a node-agent ingest works end-to-end
@@ -62,13 +63,21 @@ func (s *nodeAgentNoInjectorSuite) Test_NodeAgentIngest() {
 	s.assertNodeAgentIngest("echo-easy")
 }
 
-// Test_PlainInterceptFailsWithInjectorDisabled verifies that a plain
-// (sidecar) intercept is still rejected with the established
-// "agent-injector is disabled" error, mirroring
-// agentInjectorDisabledSuite.Test_AgentInjectorDisabled.
-func (s *nodeAgentNoInjectorSuite) Test_PlainInterceptFailsWithInjectorDisabled() {
+// Test_DefaultInterceptUsesNodeAgent verifies that a flagless intercept is
+// served by the node-agent: with nodeAgent.enabled=true the traffic-manager
+// serves nodeAgent.enabled as the client-side default, so no --node-agent
+// flag and no client configuration is needed on a node-agent-only install.
+func (s *nodeAgentNoInjectorSuite) Test_DefaultInterceptUsesNodeAgent() {
+	s.assertNodeAgentIntercept("echo-easy")
+}
+
+// Test_SidecarInterceptFailsWithInjectorDisabled verifies that an explicit
+// --node-agent=false wins over the cluster-served node-agent default and is
+// rejected with the established "agent-injector is disabled" error, since
+// the sidecar path needs the disabled webhook.
+func (s *nodeAgentNoInjectorSuite) Test_SidecarInterceptFailsWithInjectorDisabled() {
 	ctx := s.Context()
-	_, stderr, err := itest.Telepresence(ctx, "intercept", "echo-easy")
+	_, stderr, err := itest.Telepresence(ctx, "intercept", "--node-agent=false", "echo-easy")
 	s.Error(err)
 	s.Contains(stderr, "agent-injector is disabled")
 }

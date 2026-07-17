@@ -12,13 +12,14 @@ inside the pod, the agent runs as a node-pinned Job that enters the *existing*
 target pod's Linux namespaces from the outside.
 
 The mode is enabled by the cluster administrator: the traffic-manager must
-be installed with `nodeAgent.enabled=true`, and the administrator can make
-the node-agent the default for all attachments by also setting the Helm
-chart's `client.nodeAgent.enabled` value. A workstation can override that
-default with the `nodeAgent.enabled` setting in its local `config.yml`, and
-a single `telepresence intercept`, `telepresence wiretap`, or
-`telepresence ingest` attachment can pick a mode explicitly with the
-`--node-agent` flag, which always wins. See
+be installed with `nodeAgent.enabled=true`, which also makes the node-agent
+the default for all attachments. An administrator who wants to keep the
+sidecar as the default while still allowing node-agent attachments can do
+so by explicitly setting the Helm chart's `client.nodeAgent.enabled=false`.
+A workstation can override that default with the `nodeAgent.enabled` setting
+in its local `config.yml`, and a single `telepresence intercept`,
+`telepresence wiretap`, or `telepresence ingest` attachment can pick a mode
+explicitly with the `--node-agent` flag, which always wins. See
 [Choose between the sidecar and the node-agent](../howtos/agent-modes.md)
 for configuration examples.
 

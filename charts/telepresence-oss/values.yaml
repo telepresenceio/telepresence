@@ -298,7 +298,9 @@ nodeAgent:
   # create node-pinned Jobs that serve intercepts by entering an existing
   # pod's namespaces instead of injecting a sidecar. Off by default; it
   # requires that the traffic-manager's own namespace permits the privileged
-  # Pod Security Standard, since node-agent Jobs are created there.
+  # Pod Security Standard, since node-agent Jobs are created there. Enabling
+  # this also makes the node-agent the default mode for client attachments,
+  # unless client.nodeAgent.enabled is set explicitly.
   enabled: false
   # criSocket is the container-runtime socket path mounted read-only into
   # node-agent pods. When empty (the default), the node's /run directory is
