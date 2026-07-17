@@ -16,6 +16,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -146,7 +147,31 @@ func (pa *podAccess) workerPortForward(ctx context.Context, port string, wg *syn
 		clog.Errorf(ctx, "error parsing pod IP address %q: %v", pa.podIP, err)
 		return
 	}
-	f := forwarder.New(pp, tunnel.ClientToAgent, netip.AddrPortFrom(addr, pp.Port))
+	target := netip.AddrPortFrom(addr, pp.Port)
+	if proc.RunningInContainer() {
+		// A containerized daemon binds all addresses: its network namespace
+		// is private to the container, and docker port publishing requires a
+		// non-loopback listener.
+		f := forwarder.New(pp, tunnel.ClientToAgent, target)
+		err = f.Serve(ctx, nil)
+		if err != nil && ctx.Err() == nil {
+			clog.Errorf(ctx, "port-forwarder failed with %v", err)
+		}
+		return
+	}
+
+	// The to-pod ports are documented as available on localhost:PORT, and
+	// localhost resolves to either loopback address, so both are bound. A
+	// wildcard bind would expose the pod's ports on every workstation
+	// interface and collide with unrelated wildcard listeners on the same
+	// port. The IPv6 bind is best-effort; the host may have IPv6 disabled.
+	go func() {
+		f := forwarder.New(pp, tunnel.ClientToAgent, target, forwarder.WithListenAddr(netip.IPv6Loopback()))
+		if err := f.Serve(ctx, nil); err != nil && ctx.Err() == nil {
+			clog.Debugf(ctx, "IPv6 loopback port-forwarder failed with %v", err)
+		}
+	}()
+	f := forwarder.New(pp, tunnel.ClientToAgent, target, forwarder.WithListenAddr(netip.AddrFrom4([4]byte{127, 0, 0, 1})))
 	err = f.Serve(ctx, nil)
 	if err != nil && ctx.Err() == nil {
 		clog.Errorf(ctx, "port-forwarder failed with %v", err)

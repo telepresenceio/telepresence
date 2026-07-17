@@ -90,7 +90,7 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 }
 
 func (f *tcp) Listen(ctx context.Context) (net.Listener, error) {
-	listener, err := f.listener.Listen(ctx, "tcp", fmt.Sprintf(":%d", atomic.LoadInt32(&f.listenPort)))
+	listener, err := f.listener.Listen(ctx, "tcp", f.bindAddr(atomic.LoadInt32(&f.listenPort)))
 	if err != nil {
 		return nil, err
 	}

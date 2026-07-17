@@ -65,7 +65,7 @@ func (f *udp) ServeTo(ctx context.Context, initCh chan<- netip.AddrPort, fw func
 			return nil
 		default:
 		}
-		pc, err := f.listener.ListenPacket(ctx, "udp", fmt.Sprintf(":%d", lp))
+		pc, err := f.listener.ListenPacket(ctx, "udp", f.bindAddr(int32(lp)))
 		if err != nil {
 			return err
 		}

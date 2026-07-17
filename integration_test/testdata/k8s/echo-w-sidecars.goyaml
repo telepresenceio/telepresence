@@ -43,11 +43,11 @@ spec:
           image: ghcr.io/telepresenceio/echo-server:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8081
+            - containerPort: {{ .PortOne }}
               name: http-one
           env:
             - name: PORT
-              value: "8081"
+              value: "{{ .PortOne }}"
           resources:
             limits:
               cpu: 50m
@@ -56,11 +56,11 @@ spec:
           image: ghcr.io/telepresenceio/echo-server:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8082
+            - containerPort: {{ .PortTwo }}
               name: http-two
           env:
             - name: PORT
-              value: "8082"
+              value: "{{ .PortTwo }}"
           resources:
             limits:
               cpu: 50m
@@ -69,11 +69,11 @@ spec:
           image: ghcr.io/telepresenceio/echo-server:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8083
+            - containerPort: {{ .PortThree }}
               name: http-three
           env:
             - name: PORT
-              value: "8083"
+              value: "{{ .PortThree }}"
           resources:
             limits:
               cpu: 50m

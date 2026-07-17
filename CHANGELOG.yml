@@ -45,6 +45,16 @@ items:
           The traffic-manager's anonymous usage report now records whether
           node-agent mode and the agent-injector are enabled, so adoption of
           the agent modes can be measured.
+      - type: bugfix
+        title: Ports forwarded with --to-pod bind the loopback interface only
+        body: >-
+          The local listeners created for <code>--to-pod</code> ports bound
+          all workstation interfaces, exposing the forwarded pod ports to the
+          local network. They now bind the loopback interface, matching the
+          flag's documented <code>localhost:PORT</code> contract. A
+          containerized daemon is unaffected: its listeners stay on all
+          interfaces of the daemon container's private network namespace,
+          which docker port publishing requires.
   - version: 2.30.0
     date: 2026-07-14
     notes:
