@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/netip"
+	"strconv"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -27,7 +28,8 @@ type Forwarder interface {
 	// Serve will call the ServeTCP or ServeUDP method depending on the protocol of the forwarder.
 	Serve(ctx context.Context, initCh chan<- netip.AddrPort) error
 
-	// ServeTo starts the listener and accept-loop for this forwarder. The listener will listen to all available addresses on the given port.
+	// ServeTo starts the listener and accept-loop for this forwarder. The listener will listen to all available addresses on the given port,
+	// unless the WithListenAddr option restricted it to one address.
 	// The accept-loop calls the fw function a separate go-routine for each accepted connection.
 	// The fw function is responsible for closing the connection.
 	// The port can be zero, in which case the listener will assign a random port number.
@@ -51,6 +53,16 @@ type basic struct {
 	listenPort int32
 	listener   ListenerFactory
 	dialer     Dialer
+
+	// listenAddr is the host part of the address the listener binds. Empty
+	// means all available addresses.
+	listenAddr string
+}
+
+// bindAddr returns the address that the forwarder's listener binds for the
+// given port.
+func (f *basic) bindAddr(port int32) string {
+	return net.JoinHostPort(f.listenAddr, strconv.Itoa(int(port)))
 }
 
 // ListenerFactory creates the listen sockets a forwarder uses. The default
@@ -100,6 +112,14 @@ func WithListener(lf ListenerFactory) Option {
 func WithDialer(d Dialer) Option {
 	return func(b *basic) {
 		b.dialer = d
+	}
+}
+
+// WithListenAddr restricts the forwarder's listener to the given address.
+// Without this option, a forwarder listens to all available addresses.
+func WithListenAddr(addr netip.Addr) Option {
+	return func(b *basic) {
+		b.listenAddr = addr.String()
 	}
 }
 
