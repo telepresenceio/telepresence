@@ -905,7 +905,7 @@ func (s *session) CheckStatus(cr *rpc.ConnectRequest) error {
 		envEQ := true
 		for k, v := range cr.Environment {
 			if k[0] == '-' {
-				if _, ok := os.LookupEnv(k[:1]); ok {
+				if _, ok := os.LookupEnv(k[1:]); ok {
 					envEQ = false
 					break
 				}
