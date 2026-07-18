@@ -102,6 +102,16 @@ func parseKeyValue(kv string) (string, string, error) {
 	return "", "", fmt.Errorf("invalid format '%s': must be key=value or key: value", kv)
 }
 
+// ValidateKeyValues validates that each string is a valid "key=value" or "key: value" pair.
+func ValidateKeyValues(kvs []string) error {
+	for _, kv := range kvs {
+		if _, _, err := parseKeyValue(kv); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // tryParseHeaderWithSeparator attempts to parse a header with the given separator.
 // Returns the key, value, and true if successful; empty strings and false otherwise.
 func tryParseHeaderWithSeparator(header, separator string) (string, string, bool) {

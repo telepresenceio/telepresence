@@ -75,28 +75,57 @@ Schema design decisions:
 
 ## Command semantics
 
-### `telepresence apply -f <file>`
+### `telepresence apply [--dry-run] -f <file>`
 
 1. Load the file (`-f -` reads stdin), convert YAML→JSON, validate against the
    embedded schema, then strict-unmarshal into Go structs. Semantic validation
    on top: unique attachment names, port-string syntax, etc.
 2. Connection handling:
-   - `connection` present: resolve the connection name (explicit `name` or
-     derived from context/namespace, same daemon logic as today). If that
-     connection already exists, reuse it as-is — no drift reconciliation in v1.
-     Otherwise connect with the declared flags (build a
-     `connector.ConnectRequest` the same way `daemon.CobraRequest.CommitFlags`
-     does).
+   - `connection` present, real apply: build a `connector.ConnectRequest` the
+     same way `daemon.CobraRequest.CommitFlags` does. When a matching daemon
+     is already running, first ask it — read-only, via the `CheckConnect`
+     RPC, which wraps the daemon's authoritative `session.CheckStatus` —
+     whether the request is aligned; drift is a User error and nothing is
+     touched. Connect is never attempted against a drifted session, because
+     the connect flow treats a failed Connect by deleting the daemon info
+     file, which shuts the daemon down together with every attachment it
+     carries (including ones the manifest doesn't own). Only an aligned or
+     session-less daemon proceeds into the standard `connect.InitCommand`
+     flow with the request in context, exactly like a repeated
+     `telepresence connect`. There is no client-side field comparison.
+   - `connection` present, dry run: look up a running daemon matching the
+     connection name without launching one. None running → "would-connect",
+     nothing else can be checked. One running → call the read-only
+     `CheckConnect` RPC (verifies alignment without altering state); a nil
+     result means the connection matches and the per-attachment comparison
+     proceeds, `Unavailable` means the daemon is running but has no session
+     (treated as "would-connect"), and any other error means drift, reported
+     to the user.
    - `connection` absent: standard `connect.InitCommand` with a required
      session — the existing connection selected via `--use`/`--context`
      applies; error out if none exists.
-3. For each attachment, in order: if it already exists (`GetIntercept` /
-   `GetIngest` by name) it is skipped — apply is idempotent. Otherwise create
-   it by reusing the existing `intercept.Command`/`ingest.Command` state
-   machinery (create only, no command to run, no leave), which also writes env
-   files and establishes mounts.
-4. Print a summary line per attachment (created/already present), honoring
-   `--output` formatting like other commands.
+3. For each attachment, in order, resolve the current state by name
+   (`GetIntercept`, then `GetIngest`) and reconcile:
+   - not found → create it by reusing the existing
+     `intercept.Command`/`ingest.Command` state machinery (create only, no
+     command to run, no leave), which also writes env files and establishes
+     mounts.
+   - found with a matching spec → leave untouched.
+   - found with drift (different attachment type, or a differing value in any
+     field that the daemon state can be compared against: workload, namespace,
+     container, ports, address, HTTP filters, plaintext, metadata, toPod,
+     mount point/port/read-only) → re-create: remove the existing attachment,
+     then create it from the manifest. Fields with no server-side
+     representation (the env file paths) can't be drift-checked; they take
+     effect when an attachment is (re-)created.
+4. Print a summary line per attachment (created / unchanged / re-created),
+   honoring `--output` formatting like other commands.
+
+`--dry-run` performs the same load, validation, and comparison but changes
+nothing: it reports would-connect / reuse / connection-drift (an error, exit
+non-zero) and, per attachment, would-create / unchanged / would-re-create.
+When the manifest declares a connection that doesn't exist yet there is no
+session to query, so every attachment is reported as would-create.
 
 First failure aborts apply; already-created attachments from the same run are
 left in place (they are part of the desired state, and re-running apply is
@@ -137,12 +166,9 @@ idempotent). The error reports which attachment failed.
 3. Delete: attachment removal + conditional disconnect.
 4. Command registration, help texts, changelog.
 
-## Open questions
+## Resolved questions
 
-1. `kind: WorkstationState` and `apiVersion: telepresence.io/v1alpha1` — happy
-   to rename (e.g. `State`, `v1`).
-2. Apply-time drift: v1 reuses an existing connection/attachment by name
-   without comparing flags. A later iteration could detect drift and
-   re-create (attachments) or error (connection).
-3. Should `apply` gain `--dry-run` (validate + report only)? Cheap to add;
-   left out of v1 unless wanted.
+1. `kind: WorkstationState` / `apiVersion: telepresence.io/v1alpha1` stay.
+2. Apply detects drift: attachments with differing specs are re-created,
+   connection drift is an error.
+3. `apply --dry-run` is included.

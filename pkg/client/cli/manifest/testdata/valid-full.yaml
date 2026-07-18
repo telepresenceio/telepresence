@@ -1,0 +1,45 @@
+apiVersion: telepresence.io/v1alpha1
+kind: WorkstationState
+connection:
+  name: dev
+  context: kind-dev
+  namespace: default
+  managerNamespace: ambassador
+  mappedNamespaces: [default, backend]
+  alsoProxy: [10.96.0.0/12]
+  neverProxy: ["2001:db8::/64"]
+  proxyVia:
+    - subnet: pods
+      workload: echo-server
+    - subnet: 10.100.0.0/16
+      workload: local
+  rerouteLocal: ["8080:my-svc:http/tcp"]
+  kubeFlags:
+    request-timeout: 30s
+attachments:
+  - type: intercept
+    name: echo-easy
+    ports: ["8080:http", 9090]
+    service: echo-easy
+    httpHeaders: ["x-dev-user=thomas"]
+    metadata:
+      owner: thhal
+    toPod: ["8081/UDP", "9091"]
+    env:
+      file: ./echo.env
+      syntax: sh:export
+    mount:
+      path: /tmp/echo-mounts
+      readOnly: true
+  - type: replace
+    name: echo-server/svc
+    ports: [all]
+  - type: ingest
+    name: echo-sidecar
+    container: logger
+    mount:
+      localMountPort: 1234
+  - type: wiretap
+    name: echo-tap
+    workload: echo-server
+    plaintext: true

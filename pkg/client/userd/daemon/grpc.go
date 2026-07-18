@@ -160,6 +160,13 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 	return result, err
 }
 
+// CheckConnect verifies that cr is aligned with the current session without altering any state.
+func (s *service) CheckConnect(ctx context.Context, cr *rpc.ConnectRequest) (*empty.Empty, error) {
+	return &empty.Empty{}, s.withSession(ctx, func(_ context.Context, session userd.Session) error {
+		return session.CheckStatus(cr)
+	})
+}
+
 func (s *service) Disconnect(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
 	s.cancelSession(ctx, true)
 	return &empty.Empty{}, nil

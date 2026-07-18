@@ -1,0 +1,6 @@
+apiVersion: telepresence.io/v1alpha1
+kind: WorkstationState
+attachments:
+  - type: replace
+    name: echo-server/svc
+    container: svc

@@ -29,6 +29,7 @@ const (
 	Connector_AgentImageFQN_FullMethodName           = "/telepresence.connector.Connector/AgentImageFQN"
 	Connector_GetIntercept_FullMethodName            = "/telepresence.connector.Connector/GetIntercept"
 	Connector_Connect_FullMethodName                 = "/telepresence.connector.Connector/Connect"
+	Connector_CheckConnect_FullMethodName            = "/telepresence.connector.Connector/CheckConnect"
 	Connector_Disconnect_FullMethodName              = "/telepresence.connector.Connector/Disconnect"
 	Connector_GetClusterSubnets_FullMethodName       = "/telepresence.connector.Connector/GetClusterSubnets"
 	Connector_Status_FullMethodName                  = "/telepresence.connector.Connector/Status"
@@ -85,6 +86,10 @@ type ConnectorClient interface {
 	// MUST_RESTART is returned, based on whether the current connection
 	// is in agreement with the ConnectionRequest.
 	Connect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*ConnectInfo, error)
+	// Verifies that the request is aligned with the current session without altering any state.
+	// Returns an error when the configuration has drifted, and Unavailable when there is no
+	// active session.
+	CheckConnect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Disconnects the cluster
 	Disconnect(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// GetClusterSubnets gets the outbound info that has been set on daemon
@@ -220,6 +225,16 @@ func (c *connectorClient) Connect(ctx context.Context, in *ConnectRequest, opts 
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ConnectInfo)
 	err := c.cc.Invoke(ctx, Connector_Connect_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) CheckConnect(ctx context.Context, in *ConnectRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Connector_CheckConnect_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -559,6 +574,10 @@ type ConnectorServer interface {
 	// MUST_RESTART is returned, based on whether the current connection
 	// is in agreement with the ConnectionRequest.
 	Connect(context.Context, *ConnectRequest) (*ConnectInfo, error)
+	// Verifies that the request is aligned with the current session without altering any state.
+	// Returns an error when the configuration has drifted, and Unavailable when there is no
+	// active session.
+	CheckConnect(context.Context, *ConnectRequest) (*emptypb.Empty, error)
 	// Disconnects the cluster
 	Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	// GetClusterSubnets gets the outbound info that has been set on daemon
@@ -657,6 +676,9 @@ func (UnimplementedConnectorServer) GetIntercept(context.Context, *manager.GetIn
 }
 func (UnimplementedConnectorServer) Connect(context.Context, *ConnectRequest) (*ConnectInfo, error) {
 	return nil, status.Error(codes.Unimplemented, "method Connect not implemented")
+}
+func (UnimplementedConnectorServer) CheckConnect(context.Context, *ConnectRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method CheckConnect not implemented")
 }
 func (UnimplementedConnectorServer) Disconnect(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method Disconnect not implemented")
@@ -873,6 +895,24 @@ func _Connector_Connect_Handler(srv interface{}, ctx context.Context, dec func(i
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(ConnectorServer).Connect(ctx, req.(*ConnectRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_CheckConnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConnectRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).CheckConnect(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_CheckConnect_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).CheckConnect(ctx, req.(*ConnectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1440,6 +1480,10 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Connect",
 			Handler:    _Connector_Connect_Handler,
+		},
+		{
+			MethodName: "CheckConnect",
+			Handler:    _Connector_CheckConnect_Handler,
 		},
 		{
 			MethodName: "Disconnect",
