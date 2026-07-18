@@ -63,3 +63,34 @@ func TestBuildConnectRequest(t *testing.T) {
 	assert.Equal(t, "default", cr.KubeFlags["namespace"])
 	assert.Equal(t, "30s", cr.KubeFlags["request-timeout"])
 }
+
+func TestBuildConnectRequest_VnatLowering(t *testing.T) {
+	t.Run("vnat entries follow proxyVia entries with workload local", func(t *testing.T) {
+		conn := &Connection{
+			Context:  "kind-dev",
+			ProxyVia: []ProxyVia{{Subnet: "pods", Workload: "echo-server"}},
+			Vnat:     []string{"10.100.0.0/16", "service"},
+		}
+		cr, err := buildConnectRequest(conn)
+		require.NoError(t, err)
+		require.Len(t, cr.SubnetViaWorkloads, 3)
+		assert.Equal(t, "pods", cr.SubnetViaWorkloads[0].Subnet)
+		assert.Equal(t, "echo-server", cr.SubnetViaWorkloads[0].Workload)
+		assert.Equal(t, "10.100.0.0/16", cr.SubnetViaWorkloads[1].Subnet)
+		assert.Equal(t, "local", cr.SubnetViaWorkloads[1].Workload)
+		assert.Equal(t, "service", cr.SubnetViaWorkloads[2].Subnet)
+		assert.Equal(t, "local", cr.SubnetViaWorkloads[2].Workload)
+		assert.Equal(t, []ProxyVia{{Subnet: "pods", Workload: "echo-server"}}, conn.ProxyVia)
+	})
+
+	t.Run("vnat overlapping a proxyVia entry is rejected", func(t *testing.T) {
+		conn := &Connection{
+			Context:  "kind-dev",
+			ProxyVia: []ProxyVia{{Subnet: "10.0.0.0/8", Workload: "echo-server"}},
+			Vnat:     []string{"10.1.0.0/16"},
+		}
+		_, err := buildConnectRequest(conn)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "overlapping")
+	})
+}

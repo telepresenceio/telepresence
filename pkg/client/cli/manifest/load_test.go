@@ -29,6 +29,7 @@ func TestLoadFile_Valid(t *testing.T) {
 					MappedNamespaces: []string{"default", "backend"},
 					AlsoProxy:        []string{"10.96.0.0/12"},
 					NeverProxy:       []string{"2001:db8::/64"},
+					Vnat:             []string{"10.101.0.0/16", "service"},
 					ProxyVia: []manifest.ProxyVia{
 						{Subnet: "pods", Workload: "echo-server"},
 						{Subnet: "10.100.0.0/16", Workload: "local"},
@@ -171,6 +172,11 @@ func TestLoadFile_Invalid(t *testing.T) {
 			name:    "bad env.syntax value",
 			file:    "testdata/invalid-env-syntax.yaml",
 			wantErr: "/attachments/0/env/syntax",
+		},
+		{
+			name:    "vnat entry that is neither a CIDR nor a known symbol",
+			file:    "testdata/invalid-vnat-entry.yaml",
+			wantErr: "/connection/vnat",
 		},
 		{
 			name:    "replace name/container conflict",

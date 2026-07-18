@@ -8,6 +8,7 @@ connection:
   mappedNamespaces: [default, backend]
   alsoProxy: [10.96.0.0/12]
   neverProxy: ["2001:db8::/64"]
+  vnat: [10.101.0.0/16, service]
   proxyVia:
     - subnet: pods
       workload: echo-server

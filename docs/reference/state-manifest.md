@@ -46,7 +46,13 @@ editing.
 The `connection` object corresponds to the flags of `telepresence connect`:
 `name`, `kubeconfig`, `context`, `namespace`, `kubeFlags`,
 `managerNamespace`, `mappedNamespaces`, `alsoProxy`, `neverProxy`,
-`allowConflictingSubnets`, `proxyVia`, `rerouteLocal`, and `rerouteRemote`.
+`allowConflictingSubnets`, `vnat`, `proxyVia`, `rerouteLocal`, and
+`rerouteRemote`.
+
+Each `vnat` entry is a subnet in CIDR notation or one of the symbolic names
+`service`, `pods`, `also`, or `all`, and is shorthand for a `proxyVia` entry
+with the workload `local` — just like the `--vnat` flag. Use `proxyVia`
+directly only when the subnet must be routed via a specific workload.
 
 ### attachments
 
