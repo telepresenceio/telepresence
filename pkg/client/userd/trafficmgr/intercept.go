@@ -232,7 +232,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 		}
 		pat.start(pa)
 	}
-	pat.cancelUnwanted(s)
+	pat.cancelUnwanted(s, nil)
 	s.pushInterceptShortcuts(intercepts)
 }
 

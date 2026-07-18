@@ -2,6 +2,7 @@ package rootd
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -267,6 +268,26 @@ func (s *service) RerouteRemotePort(ctx context.Context, request *rpc.ReroutePor
 		return err
 	})
 	return &emptypb.Empty{}, err
+}
+
+// WatchAgentPods is called by the user daemon, in relay mode, to push the agent-pod
+// projection it derives from its combined traffic-manager watcher. The call ends (and
+// the user daemon retries it) once there is no active session to relay to.
+func (s *service) WatchAgentPods(stream rpc.Daemon_WatchAgentPodsServer) error {
+	for {
+		delta, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				return stream.SendAndClose(&emptypb.Empty{})
+			}
+			return err
+		}
+		if err := s.withSession(stream.Context(), func(_ context.Context, session *session) error {
+			return session.applyAgentPodsDelta(delta)
+		}); err != nil {
+			return err
+		}
+	}
 }
 
 func (s *service) withSession(ctx context.Context, f func(context.Context, *session) error) (err error) {

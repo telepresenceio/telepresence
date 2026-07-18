@@ -294,10 +294,16 @@ func (lpf *podAccessTracker) cancelContainer(workload, container string) {
 	lpf.Unlock()
 }
 
-// cancelUnwanted cancels all mounts and port forwards that haven't been started since initSnapshot.
-func (lpf *podAccessTracker) cancelUnwanted(ctx context.Context) {
+// cancelUnwanted cancels all mounts and port forwards that haven't been started since
+// initSnapshot, skipping entries whose namespace covered reports as not covered by this
+// snapshot -- those survive unrelated churn in other namespaces. covered == nil means every
+// namespace is covered.
+func (lpf *podAccessTracker) cancelUnwanted(ctx context.Context, covered func(namespace string) bool) {
 	lpf.Lock()
 	for fk, lp := range lpf.alivePods {
+		if covered != nil && !covered(fk.namespace) {
+			continue
+		}
 		if _, isWanted := lpf.snapshot[fk]; !isWanted {
 			clog.Infof(ctx, "Terminating mounts and port-forwards for %+v", fk)
 			lpf.privateDelete(fk, lp)

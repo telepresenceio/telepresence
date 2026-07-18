@@ -27,7 +27,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
-	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -338,6 +337,16 @@ type Clients interface {
 	GetRandomAgent(context.Context) agent.AgentClient
 	GetClient(netip.Addr) tunnel.Provider
 	WatchAgentPods(rmc manager.ManagerClient) error
+
+	// ApplyPodsDelta applies one agent-pod delta pushed by the user daemon. When reset
+	// is true, all previously applied state is discarded first.
+	ApplyPodsDelta(reset bool, upserts map[string]*manager.AgentPodInfo, removals []string) error
+
+	// RunDeltaSink is the relay-mode counterpart of WatchAgentPods: it records the
+	// manager client used for lazy QUIC endpoint fetches, then blocks until the
+	// session ends, performing the same teardown as WatchAgentPods on exit.
+	RunDeltaSink(rmc manager.ManagerClient) error
+
 	WaitForIP(ctx context.Context, timeout time.Duration, namespace string, ip netip.Addr) error
 	WaitForWorkload(timeout time.Duration, name string) error
 	GetWorkloadClient(workload string) (ag tunnel.Provider)
@@ -411,6 +420,13 @@ type clients struct {
 	// retried. Guarded by snapshotMu.
 	snapshotMu sync.RWMutex
 	snapshot   map[string]*manager.AgentPodInfo
+
+	// deltaMu guards deltaSnapshot, the snapshot map maintained by ApplyPodsDelta.
+	// Separate from snapshotMu (and from the self-watch mode's local snapMap in
+	// WatchAgentPods) because relay pushes can race with the user daemon's relay
+	// stream being re-established.
+	deltaMu       sync.Mutex
+	deltaSnapshot map[string]*manager.AgentPodInfo
 
 	// dialMetrics, when non-nil, receives a callback for every dial
 	// request accepted (or rejected) by a started dial watcher. Guarded
@@ -494,13 +510,6 @@ func (s *clients) watchesNamespace(namespace string) bool {
 	_, ok := s.namespaces[namespace]
 	s.namespacesMu.RUnlock()
 	return ok
-}
-
-func (s *clients) agentsRequest() *manager.AgentsRequest {
-	return &manager.AgentsRequest{
-		Session:    s.session,
-		Namespaces: s.namespaceList(),
-	}
 }
 
 // GetClient returns tunnel.Provider that opens a tunnel to a known traffic-agent.
@@ -724,65 +733,60 @@ func (s *clients) Transports() []AgentTransport {
 
 func (s *clients) WatchAgentPods(rmc manager.ManagerClient) error {
 	s.setManagerClient(rmc)
-	defer func() {
-		activeCount := 0
-		s.clients.Range(func(_ string, ac *client) bool {
-			if ac.cancel() {
-				activeCount++
-			}
-			return true
-		})
-		clog.Debugf(s, "WatchAgentPods ending with %d clients still active", activeCount)
-		s.disabled.Store(true)
-	}()
+	defer s.teardown()
 
 	snapMap := make(map[string]*manager.AgentPodInfo)
-	err := watcher.WatchWithRetry(s, "WatchAgentPodsInNamespacesDelta", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
-		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoDelta], error) {
-			clog.Debugf(ctx, "WatchAgentPodsInNamespacesDelta starting")
-			return rmc.WatchAgentPodsInNamespacesDelta(ctx, s.agentsRequest())
-		},
-		func(delta *manager.AgentPodInfoDelta) error {
-			clog.Debugf(s, "WatchAgentPodsInNamespacesDelta received %d upserts, %d removals", len(delta.Upserts), len(delta.Removals))
-			maps.DeltaUpdate(snapMap, delta.Upserts, delta.Removals)
+	return WatchPods(s, rmc, s.session, s.namespaceList(), s.Namespace,
+		func(upserts map[string]*manager.AgentPodInfo, removals []string) error {
+			maps.DeltaUpdate(snapMap, upserts, removals)
 			return s.updateClients(maps.Values(snapMap))
-		}, func() error {
+		},
+		func() error {
 			clear(snapMap)
 			return nil
-		})
-	if err == nil || status.Code(err) != codes.Unimplemented {
-		return err
-	}
-
-	// Older traffic-manager. Fall back to watching agents in the connected namespace.
-	s.setNamespaces([]string{s.Namespace})
-	clog.Warnf(s, "WatchAgentPodsInNamespacesDelta is not implemented by the traffic-manager, falling back to WatchAgentPodsDelta in namespace %s", s.Namespace)
-	err = watcher.WatchWithRetry(s, "WatchAgentPodsDelta", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
-		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoDelta], error) {
-			clog.Debugf(ctx, "WatchAgentPodsDelta starting")
-			return rmc.WatchAgentPodsDelta(ctx, s.session)
 		},
-		func(delta *manager.AgentPodInfoDelta) error {
-			clog.Debugf(s, "WatchAgentPodsDelta received %d upserts, %d removals", len(delta.Upserts), len(delta.Removals))
-			maps.DeltaUpdate(snapMap, delta.Upserts, delta.Removals)
-			return s.updateClients(maps.Values(snapMap))
-		}, func() error {
-			clear(snapMap)
-			return nil
-		})
-	if err == nil || status.Code(err) != codes.Unimplemented {
-		return err
-	}
+		s.setNamespaces)
+}
 
-	clog.Warnf(s, "WatchAgentPodsDelta is not implemented by the traffic-manager, falling back to WatchAgentPods and full snapshots")
-	return watcher.WatchWithRetry(s, "WatchAgentPods", tpClient.GetConfig(s).Grpc().WatchRetryInterval,
-		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoSnapshot], error) {
-			clog.Debugf(ctx, "No delta support in traffic-manager, starting WatchAgentPods instead")
-			return rmc.WatchAgentPods(ctx, s.session)
-		},
-		func(snapshot *manager.AgentPodInfoSnapshot) error {
-			return s.updateClients(snapshot.Agents)
-		}, nil)
+// ApplyPodsDelta implements Clients. It applies one agent-pod delta pushed by the user
+// daemon through the relay. Guarded by deltaMu because relay pushes can race with the
+// user daemon's relay stream being re-established.
+func (s *clients) ApplyPodsDelta(reset bool, upserts map[string]*manager.AgentPodInfo, removals []string) error {
+	s.deltaMu.Lock()
+	defer s.deltaMu.Unlock()
+	if s.deltaSnapshot == nil {
+		s.deltaSnapshot = make(map[string]*manager.AgentPodInfo)
+	}
+	if reset {
+		clear(s.deltaSnapshot)
+	}
+	maps.DeltaUpdate(s.deltaSnapshot, upserts, removals)
+	return s.updateClients(maps.Values(s.deltaSnapshot))
+}
+
+// RunDeltaSink implements Clients. It is the relay-mode counterpart of WatchAgentPods:
+// it records the manager client used for lazy QUIC endpoint fetches, then blocks until
+// the session ends, performing the same teardown as WatchAgentPods on exit.
+func (s *clients) RunDeltaSink(rmc manager.ManagerClient) error {
+	s.setManagerClient(rmc)
+	defer s.teardown()
+	<-s.Done()
+	return nil
+}
+
+// teardown cancels every live agent client and disables further use of this Clients
+// instance. It runs when the watch (self-watching or relay) that feeds this instance
+// ends, whichever mode that is.
+func (s *clients) teardown() {
+	activeCount := 0
+	s.clients.Range(func(_ string, ac *client) bool {
+		if ac.cancel() {
+			activeCount++
+		}
+		return true
+	})
+	clog.Debugf(s, "WatchAgentPods ending with %d clients still active", activeCount)
+	s.disabled.Store(true)
 }
 
 func (ac *client) notify(waiter chan struct{}) {

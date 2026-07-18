@@ -890,6 +890,11 @@ func TelepresenceCmd(ctx context.Context, args ...string) *exec.Cmd {
 	})
 
 	gh := GetGlobalHarness(ctx)
+	if len(args) > 0 && args[0] == "detach" && !gh.ClientIsVersion(">2.29.x") {
+		// The detach verb was introduced in 2.30.0. Older clients, driven when
+		// DEV_CLIENT_VERSION points at a previous release, use its predecessor.
+		args = append([]string{"leave"}, args[1:]...)
+	}
 	if len(args) > 0 && (args[0] == "connect") {
 		rest := args[1:]
 		args = append(make([]string, 0, len(args)+3), args[0])
