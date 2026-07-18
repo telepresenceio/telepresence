@@ -48,7 +48,18 @@ func buildConnectRequest(mc *Connection) (*daemon.Request, error) {
 	cr.LocalReroutes = slices.Clone(mc.RerouteLocal)
 	cr.RemoteReroutes = slices.Clone(mc.RerouteRemote)
 
-	svs, err := buildSubnetViaWorkloads(mc.ProxyVia)
+	// A vnat entry is shorthand for a proxyVia entry with workload "local",
+	// appended after the explicit proxyVia entries, exactly like the CLI's
+	// --vnat lowering.
+	pvs := mc.ProxyVia
+	if len(mc.Vnat) > 0 {
+		pvs = make([]ProxyVia, 0, len(mc.ProxyVia)+len(mc.Vnat))
+		pvs = append(pvs, mc.ProxyVia...)
+		for _, v := range mc.Vnat {
+			pvs = append(pvs, ProxyVia{Subnet: v, Workload: "local"})
+		}
+	}
+	svs, err := buildSubnetViaWorkloads(pvs)
 	if err != nil {
 		return nil, err
 	}
@@ -91,9 +102,9 @@ func buildSubnetViaWorkloads(pvs []ProxyVia) ([]*daemonrpc.SubnetViaWorkload, er
 		for _, o := range entries {
 			switch {
 			case e.symbolic != "" && o.symbolic == e.symbolic:
-				return errcat.User.Newf("proxyVia entries for %q are overlapping", e.symbolic)
+				return errcat.User.Newf("vnat/proxyVia entries for %q are overlapping", e.symbolic)
 			case e.symbolic == "" && o.symbolic == "" && o.prefix.Overlaps(e.prefix):
-				return errcat.User.Newf("proxyVia subnets %s and %s are overlapping", o.prefix, e.prefix)
+				return errcat.User.Newf("vnat/proxyVia subnets %s and %s are overlapping", o.prefix, e.prefix)
 			}
 		}
 		return nil
@@ -108,7 +119,7 @@ func buildSubnetViaWorkloads(pvs []ProxyVia) ([]*daemonrpc.SubnetViaWorkload, er
 		default:
 			p, err := netip.ParsePrefix(pv.Subnet)
 			if err != nil {
-				return nil, errcat.User.Errorf(err, "proxyVia subnet %q is not a valid CIDR", pv.Subnet)
+				return nil, errcat.User.Errorf(err, "vnat/proxyVia subnet %q is not a valid CIDR", pv.Subnet)
 			}
 			e.prefix = p
 		}

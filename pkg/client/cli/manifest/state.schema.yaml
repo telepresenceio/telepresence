@@ -92,11 +92,18 @@ $defs:
         type: array
         items:
           $ref: '#/$defs/CIDR'
+      vnat:
+        description: >-
+          Subnets translated using virtual IPs without routing via a specific
+          workload (the equivalent of the --vnat flag); each entry is
+          shorthand for a proxyVia entry with workload "local".
+        type: array
+        items:
+          $ref: '#/$defs/SymbolicSubnet'
       proxyVia:
         description: >-
-          Subnets translated using virtual IPs and routed via a workload. Use
-          the workload "local" for plain virtual network address translation
-          (the equivalent of the --vnat flag).
+          Subnets translated using virtual IPs and routed via a workload. The
+          workload "local" is what a vnat entry expands to.
         type: array
         items:
           type: object
