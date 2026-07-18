@@ -4,12 +4,13 @@ description: How the opt-in QUIC endpoint carries tunneled traffic, how trust is
 ---
 
 Telepresence tunnels traffic between the workstation and the cluster as
-streams of messages. By default those streams are gRPC streams, multiplexed
-onto a single connection that is port-forwarded through the Kubernetes API
-server — universally reachable, but subject to head-of-line blocking (all
-streams share one TCP connection, so one lost packet stalls them all), to the
-API server's throughput limits, and to connection loss when the workstation
-changes networks.
+streams of messages. There are several tunnels: one to the traffic-manager,
+and one to the traffic-agent of each attached workload. By default each
+tunnel is a gRPC connection port-forwarded through the Kubernetes API
+server — universally reachable, but subject to head-of-line blocking (a
+tunnel's streams share one TCP connection, so one lost packet stalls all of
+them), to the API server's throughput limits, and to connection loss when
+the workstation changes networks.
 
 The traffic-manager can expose an alternative **QUIC endpoint** for the same
 streams. QUIC gives each tunneled connection an independently retransmitted
@@ -178,7 +179,7 @@ traffic-manager-bound tunnel streams:
 | Reported value | Meaning |
 |----------------|---------|
 | `grpc` | The port-forwarded transport; no QUIC upgrade happened |
-| `quic (host:port)` | The QUIC endpoint at that address carries the tunnel |
+| `quic (host:port)` | The QUIC endpoint at that address carries the manager tunnel |
 | `grpc (fallback)` | QUIC was active but was lost; the session downgraded |
 
 The root daemon logs `QUIC tunnel transport active (host:port)` on a

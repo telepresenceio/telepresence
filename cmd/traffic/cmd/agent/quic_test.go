@@ -218,12 +218,12 @@ func TestQuicAgentListener_RoundTrip(t *testing.T) {
 	require.Equal(t, tpagent.DisplayName, ver.Name)
 }
 
-// TestQuicAgentListener_CertSwapWithoutRestart proves item 3 of the design's agent
-// listener lifecycle: a manager reconnect (simulated here by pointing
-// RefreshQuicAgentListener at a second fake manager with an independent CA) swaps the
-// running listener's TLS material in place -- same address, no restart -- so that
-// clients bearing the new CA's certificates are accepted and clients bearing the old
-// CA's are rejected, without ever tearing down the QUIC listener.
+// TestQuicAgentListener_CertSwapWithoutRestart verifies the in-place cert swap:
+// a manager reconnect (simulated here by pointing RefreshQuicAgentListener at a
+// second fake manager with an independent CA) swaps the running listener's TLS
+// material in place -- same address, no restart -- so that clients bearing the new
+// CA's certificates are accepted and clients bearing the old CA's are rejected,
+// without ever tearing down the QUIC listener.
 func TestQuicAgentListener_CertSwapWithoutRestart(t *testing.T) {
 	quicPort := freeUDPPort(t)
 	ctx, state := newTestAgentState(t, quicPort)

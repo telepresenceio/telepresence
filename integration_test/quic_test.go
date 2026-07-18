@@ -325,15 +325,13 @@ func (s *quicTunnelSuite) Test_ZZDiscoveryNodePort() {
 	ctx := s.Context()
 	rq := s.Require()
 
-	// The harness always installs the traffic-manager namespace-scoped (a static
-	// namespaces list -- see itest.TelepresenceHelmInstall -- selects the
+	// The harness always installs the traffic-manager namespace-scoped (a
+	// static namespaces list -- see itest.TelepresenceHelmInstall -- selects the
 	// namespace-scoped Roles in trafficManagerRbac/namespace-scope.yaml), which is
 	// precisely the shape whose NodePort discovery degrades to nothing: no Node read
-	// access, by design. A first version of this test stopped there, proving only the
-	// degradation. To exercise discovery itself, grant this traffic-manager exactly
-	// the Node access a cluster-scoped install's ClusterRole carries, before the
-	// upgrade below rolls the manager pod (the manager checks its Node access once,
-	// at startup).
+	// access, by design. To exercise discovery itself, grant this traffic-manager exactly
+	// the Node access a cluster-scoped install's ClusterRole carries, before the upgrade
+	// below rolls the manager pod (the manager checks its Node access once, at startup).
 	managerNs := s.ManagerNamespace()
 	roleName := "quic-discovery-nodes-" + managerNs
 	rq.NoError(itest.Kubectl(ctx, "", "create", "clusterrole", roleName,
@@ -528,7 +526,7 @@ func (s *quicTunnelSuite) udpEchoRoundTrip(ctx context.Context, svc, msg string)
 
 // Test_AUDPEchoDatagrams proves RFC 9221 datagram carriage actually carries real
 // tunneled UDP traffic once it is opted into. Datagram carriage is OFF by default
-// (a measurement found it no better than stream carriage; see "Current limitations"
+// (no better than stream carriage; see "Current limitations"
 // in docs/reference/quic-transport.md), enabled per manager process by the
 // TELEPRESENCE_QUIC_ENABLE_DATAGRAMS environment variable. So this first proves a
 // UDP echo works over the default stream carriage, then sets the opt-in on the

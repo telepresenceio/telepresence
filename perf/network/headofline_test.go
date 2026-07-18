@@ -21,16 +21,15 @@ var (
 	// experiment exists to measure.
 	holRequestBytes = 8 * 1024
 	// holThinkTime is each worker's pause between requests. Together with
-	// holWorkers and holRequestBytes it sets the offered load, which must stay
-	// well BELOW the shared connection's loss-limited capacity at the top loss
-	// level: on a saturated connection every request queues behind the
-	// congestion window and the experiment degenerates into measuring
-	// congestion-control efficiency again (a 50-worker variant of this
-	// experiment did exactly that -- both arms' medians moved into seconds and
-	// the head-of-line signal drowned). On a mostly idle connection the only
-	// delays are the recovery events themselves: on the shared gRPC byte stream
-	// a single loss shows up in unrelated workers' latencies, over QUIC it
-	// stays confined to the punctured stream.
+	// holWorkers and holRequestBytes it sets the offered load, which must
+	// stay well BELOW the shared connection's loss-limited capacity at
+	// the top loss level: on a saturated connection every request queues
+	// behind the congestion window and the experiment degenerates into
+	// measuring congestion-control efficiency again (both arms' medians
+	// move into seconds and the head-of-line signal drowns). On a mostly
+	// idle connection the only delays are the recovery events themselves:
+	// on the shared gRPC byte stream a single loss shows up in unrelated
+	// workers' latencies, over QUIC it stays confined to the punctured stream.
 	holThinkTime = 300 * time.Millisecond
 	// holWindowDur is how long each (transport, loss) window runs; every worker
 	// issues sequential requests for the whole window.

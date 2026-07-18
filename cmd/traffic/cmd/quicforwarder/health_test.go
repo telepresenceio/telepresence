@@ -2,6 +2,7 @@ package quicforwarder
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -17,7 +18,7 @@ func TestHealthHandler_ReadyReflectsAllowlist(t *testing.T) {
 
 	handler := healthHandler(allowlist)
 
-	req := httptest.NewRequest("GET", "/healthz", nil)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, 503, rec.Code)
@@ -27,7 +28,7 @@ func TestHealthHandler_ReadyReflectsAllowlist(t *testing.T) {
 	allowlist.update(context.Background(), []*rpc.QuicBackend{{Ip: managerIP[:], Kind: "manager", Port: 7778}})
 	require.True(t, allowlist.Ready())
 
-	req = httptest.NewRequest("GET", "/healthz", nil)
+	req = httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	assert.Equal(t, 200, rec.Code)

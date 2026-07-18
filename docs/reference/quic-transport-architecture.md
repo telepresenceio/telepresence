@@ -41,10 +41,11 @@ This design has two properties worth preserving at all cost:
 
 It also has costs that the QUIC transport addresses:
 
-1. **Head-of-line blocking.** Every flow shares one TCP connection. A single lost
-   packet on the path to the apiserver stalls *all* tunneled flows until
-   retransmission, because HTTP/2 multiplexing cannot deliver stream B while
-   stream A has a gap in the underlying byte stream.
+1. **Head-of-line blocking.** All flows on a tunnel share that tunnel's one TCP
+   connection. A single lost packet on the path to the apiserver stalls every
+   flow sharing the connection until retransmission, because HTTP/2 multiplexing
+   cannot deliver stream B while stream A has a gap in the underlying byte
+   stream.
 2. **The apiserver is the data plane.** It was never designed for that. It adds
    two hops (apiserver, kubelet), it is rate-limited and connection-capped by
    cluster operators, and a busy apiserver degrades tunnel throughput and latency

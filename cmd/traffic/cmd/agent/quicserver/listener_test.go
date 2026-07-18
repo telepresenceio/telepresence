@@ -186,11 +186,11 @@ func grpcCallOverStream(t *testing.T, ctx context.Context, dialAddr string, tlsC
 	require.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
 }
 
-// TestListener_ResumesOnRedialWithSameMaterial is the agent-listener half of the
-// session-resumption acceptance criteria. getConfigForClient returns a brand new
-// *tls.Config on every handshake (see its doc comment for why that does not fragment
-// ticket-key state); this test is the empirical proof that resumption still succeeds
-// across two dials through that Material-swapped GetConfigForClient path.
+// TestListener_ResumesOnRedialWithSameMaterial verifies session resumption on redial
+// with the same Material. getConfigForClient returns a brand new *tls.Config on every
+// handshake (see its doc comment for why that does not fragment ticket-key state);
+// this test is the empirical proof that resumption still succeeds across two dials
+// through that Material-swapped GetConfigForClient path.
 func TestListener_ResumesOnRedialWithSameMaterial(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.NewContext(t, false), 10*time.Second)
 	defer cancel()

@@ -1,12 +1,10 @@
 {{- /*
-The quic-forwarder Deployment: the stateless QUIC packet router described in
-"The forwarder" section of docs/reference/quic-transport-architecture.md. It owns the
-UDP entry point that used to be exposed directly on the traffic-manager;
-the traffic-manager-quic Service (templates/service.yaml) now targets these
-pods instead. It needs no Kubernetes API access of its own -- the backend
-allowlist it consumes is served by the traffic-manager's own, already
-RBAC-covered pod watch (WatchQuicBackends) -- so its ServiceAccount carries
-no Role/RoleBinding.
+The quic-forwarder Deployment: the stateless QUIC packet router described in "The
+forwarder" section of docs/reference/quic-transport-architecture.md. It owns the
+UDP entry point: the traffic-manager-quic Service (templates/service.yaml) targets
+these pods. It needs no Kubernetes API access of its own -- the backend allowlist
+it consumes is served by the traffic-manager's own, already RBAC-covered pod watch
+(WatchQuicBackends) -- so its ServiceAccount carries no Role/RoleBinding.
 */}}
 {{- with .Values }}
 {{- if and .quicTunnel .quicTunnel.enabled }}

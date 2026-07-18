@@ -247,11 +247,6 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error) {
 	ac := config.AgentConfig()
 
-	// Created here, rather than inside the "tunneling" goroutine below, so that it
-	// can also be recorded on srv: RefreshQuicAgentListener serves it a second time,
-	// over the agent's QUIC listener, once a manager session confirms QUIC is
-	// enabled. grpc.Server.Serve is scoped per net.Listener, so serving the same
-	// *grpc.Server on two listeners concurrently is supported.
 	svc := server.New(clog.WithGroup(g, "tunneling"), grpc.KeepaliveParams(keepalive.ServerParameters{
 		Time:    ac.ClientConnectionTTL,
 		Timeout: 20 * time.Second,

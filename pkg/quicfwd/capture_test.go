@@ -67,16 +67,14 @@ func captureClientInitialDatagrams(t *testing.T, tlsConf *tls.Config, cfg *quic.
 // the ClientHello's CRYPTO data such that neither individual Initial packet contains a
 // contiguous run from offset 0 all the way to the server_name extension: the first
 // packet's own frames stop a few bytes short of where the extensions block even begins,
-// and the byte range that would bridge the two arrives only in the next packet. That is
-// precisely the scenario "The forwarder" section of docs/reference/quic-transport-architecture.md
-// describes as needing a small, ephemeral, cross-packet handshake cache -- reassembly
-// across packets is explicitly that later task's job, not this package's. So when no
-// single packet carries the SNI, this test simulates what that cache will eventually do
-// -- merge every CRYPTO segment observed across all captured packets of the same
-// connection attempt -- using this package's own reassembleFromZero, and confirms the
-// result is a well-formed ClientHello containing the expected SNI. That demonstrates
-// the low-level frame/decrypt/parse logic is correct and that the only thing missing
-// for full end-to-end extraction against this real client is the cross-packet cache.
+// and the byte range that would bridge the two arrives only in the next packet.
+// That is precisely the scenario "The forwarder" section of
+// docs/reference/quic-transport-architecture.md describes as needing a small,
+// ephemeral, cross-packet handshake cache. So when no single packet carries the
+// SNI, this test merges every CRYPTO segment observed across all captured packets
+// of the same connection attempt -- using this package's own reassembleFromZero --
+// and confirms the result is a well-formed ClientHello containing the expected SNI,
+// proving the per-packet miss is a genuine multi-packet split.
 func assertExtractSNIAcrossCapturedPackets(t *testing.T, packets [][]byte, sni string) {
 	t.Helper()
 	require.NotEmpty(t, packets, "client must have sent at least one datagram")

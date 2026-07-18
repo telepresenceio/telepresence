@@ -368,8 +368,7 @@ func TestGetQuicAgentCert(t *testing.T) {
 // discovery" (docs/reference/quic-transport-architecture.md) distinguishes: an explicit
 // externalHost override always wins and bypasses discovery outright; discovery
 // candidates alone are sufficient to enable the endpoint when no override is set; and
-// neither present means Enabled stays false, exactly as an older manager (before
-// discovery existed) behaved for any admin who hadn't set externalHost.
+// neither present means Enabled stays false.
 func TestGetQuicTunnelEndpoint_Gating(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)

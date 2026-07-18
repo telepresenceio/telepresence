@@ -1,16 +1,18 @@
 ---
 title: Enable the QUIC tunnel transport
-description: Expose the traffic-manager's opt-in QUIC endpoint and let clients upgrade the tunnel from the port-forwarded connection, removing head-of-line blocking and taking the API server out of the data path.
+description: Expose the traffic-manager's opt-in QUIC endpoint and let clients upgrade their tunnels from port-forwarded connections, removing head-of-line blocking and taking the API server out of the data path.
 hide_table_of_contents: true
 ---
 
 # Enable the QUIC tunnel transport
 
-By default, everything Telepresence tunnels between your workstation and the
-cluster shares a single port-forwarded connection through the Kubernetes API
-server. That works everywhere `kubectl` works, but one lost packet stalls
-every tunneled connection at once, and the API server was never designed to
-be a data plane.
+By default, Telepresence tunnels traffic between your workstation and the
+cluster over port-forwarded connections through the Kubernetes API server:
+one to the traffic-manager, and one to the traffic-agent of each workload
+you attach to. That works everywhere `kubectl` works, but each tunnel
+multiplexes all its connections over a single TCP stream — one lost packet
+stalls every connection sharing that tunnel — and the API server was never
+designed to be a data plane.
 
 The traffic-manager can additionally expose a **QUIC endpoint**. When it is
 reachable, clients upgrade to it automatically: each tunneled connection gets

@@ -175,11 +175,7 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 // advertises a quic_sni (ai.QuicSni != "") and QUIC hasn't previously failed for it, the
 // dialer handed to grpc tries QUIC first for every connection attempt -- including the ones
 // grpc's own reconnect machinery makes transparently after a transport failure -- and falls
-// back to the Kubernetes port-forward otherwise. That single dialer closure is therefore
-// both the initial-connect path and the reconnect path: a mid-session QUIC death surfaces
-// as this gRPC connection failing, grpc redials using the same dialer, and that redial tries
-// QUIC again exactly once (the forwarder or agent may have restarted) before falling back
-// and marking QUIC dead for the remainder of this AgentPodInfo generation.
+// back to the Kubernetes port-forward otherwise.
 func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.AgentPodInfo) (*grpc.ClientConn, agent.AgentClient, error) {
 	podID := types.UID(ai.PodId)
 	var grpcAddr string
@@ -440,7 +436,7 @@ type clients struct {
 	// preferredAddr, when set, returns the forwarder address the manager-bound QUIC
 	// tunnel already found reachable this session (see SetPreferredQuicAddr); a nil
 	// func or an empty return means none is known yet, and quicEndpointFor falls back
-	// to the descriptor's own host/port, exactly as it did before candidate discovery.
+	// to the descriptor's own host/port.
 	preferredAddrMu sync.RWMutex
 	preferredAddr   func() string
 }
@@ -677,8 +673,7 @@ func (s *clients) managerClient() manager.ManagerClient {
 // address to use, in place of the QUIC tunnel endpoint descriptor's own host/port. f is
 // typically a closure over the rootd session's manager-bound QUIC connection, returning
 // "" until that connection's own candidate probe has picked a winner. Passing nil (the
-// default) makes agent connections use the descriptor's host/port directly, as before
-// candidate discovery existed.
+// default) makes agent connections use the descriptor's host/port directly.
 func (s *clients) SetPreferredQuicAddr(f func() string) {
 	s.preferredAddrMu.Lock()
 	s.preferredAddr = f

@@ -16,15 +16,7 @@ const batchSize = 64
 // backend alike, regardless of the wrapped socket's address family: ipv4.Message and
 // ipv6.Message are both plain aliases of golang.org/x/net/internal/socket.Message, and
 // ReadBatch/WriteBatch (recvmmsg/sendmmsg) don't interpret address families at all --
-// they hand back/take whatever net.Addr the OS's sockaddr resolves to. quic-go's own
-// oobConn does exactly this (always ipv4.NewPacketConn, see sys_conn_oob.go), including
-// for its own dual-stack wildcard-bound sockets. Verified directly against this
-// package's front socket (net.ListenUDP("udp", ...), which binds an AF_INET6 socket
-// with IPV6_V6ONLY off): both a v4 and a v6 client's datagrams arrive through one
-// ipv4.PacketConn's ReadBatch, addressed as *net.UDPAddr (v4 clients arrive as
-// IPv4-in-IPv6-mapped netip.Addrs, exactly as net.UDPConn.ReadFromUDPAddrPort already
-// reported them before this change), and writing back to that mapped address through
-// the same ipv4.PacketConn's WriteBatch reaches the v4 client correctly.
+// they hand back/take whatever net.Addr the OS's sockaddr resolves to.
 
 // newBatchMessages allocates n reusable maxDatagramSize-capacity messages for a
 // ReadBatch loop, so repeated ReadBatch calls reuse the same backing arrays instead of

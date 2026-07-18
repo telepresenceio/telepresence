@@ -390,10 +390,9 @@ func TestRoute_HandshakeAccumulation_RealMultiPacketSplit_BufferedFlushOrder(t *
 	assert.Equal(t, [][]byte{[]byte("post-handshake-1-rtt-would-go-here")}, sink.fwd[src])
 }
 
-// TestRoute_HandshakeAgentSNIResolvesToAllowlistedAgent proves phase 6's central
-// change to Router: an AgentSNI (quicfwd.AgentSNI(pod UID)) now resolves, via the
-// allowlist's pod-UID map, to that agent's own IP and QUIC port -- unlike phase 5,
-// where every AgentSNI was unconditionally unresolvable.
+// TestRoute_HandshakeAgentSNIResolvesToAllowlistedAgent verifies that an
+// AgentSNI (quicfwd.AgentSNI(pod UID)) resolves, via the allowlist's pod-UID
+// map, to that agent's own IP and QUIC port.
 func TestRoute_HandshakeAgentSNIResolvesToAllowlistedAgent(t *testing.T) {
 	const podUID = "some-pod-uid"
 	packets := captureInitialDatagrams(t, quicfwd.AgentSNI(podUID))

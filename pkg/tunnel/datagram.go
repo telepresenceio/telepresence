@@ -55,11 +55,7 @@ func DecodeDatagram(b []byte) (ConnID, []byte, error) {
 
 // datagramFlowBufferDepth is the capacity of each flow's inbound datagram delivery
 // channel. Overflow is dropped (counted as dropped-full) rather than blocking, since
-// blocking would re-impose the head-of-line stall datagrams exist to avoid. Enlarging
-// this was investigated as the cause of the datagram-carriage latency penalty that
-// the datagram-carriage experiment measured even at 0% loss (see perf/README.md): at depth 1024 the
-// dropped-full counter stayed 0 while the penalty was unchanged, so the penalty is NOT
-// overflow-driven and the modest depth is kept.
+// blocking would re-impose the head-of-line stall datagrams exist to avoid.
 const datagramFlowBufferDepth = 8
 
 // DatagramCapable is implemented by the GRPCStream/GRPCClientStream backing a QUIC

@@ -165,7 +165,7 @@ func dialQuicWithConfig(t *testing.T, addr string, cfg *quic.Config) (*quic.Conn
 	}, cfg)
 }
 
-// TestMigration_NATRebind is the merge gate for connection migration: a NAT rebind (or
+// TestMigration_NATRebind verifies connection migration: a NAT rebind (or
 // client interface roam) mid-transfer must not reset the QUIC connection, because the
 // forwarder's steady-state routing key is the server-issued connection ID
 // (pkg/quicfwd's CID codec), never the client's source address. natProxy simulates the

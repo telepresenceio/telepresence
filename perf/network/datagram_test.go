@@ -60,8 +60,8 @@ var (
 // stream recovers a lost carrier packet over the short client<->forwarder<->manager hop,
 // whereas datagram carriage forces the INNER QUIC to recover it over the full end-to-end
 // path, which is slower -- so the "unreliable is faster under loss" intuition inverts here.
-// This test therefore no longer asserts a benefit; it records the p50/p95/p99 comparison to
-// perf/results/datagram-carriage.csv and logs the observed ratio, so the result is
+// This test records the p50/p95/p99 comparison to perf/results/datagram-carriage.csv
+// rather than asserting a benefit, and logs the observed ratio, so the result is
 // reproducible and visible without pretending to a win the data does not show.
 //
 // Skipped unless a QUIC-reachable endpoint is configured (PERF_QUIC_EXTERNAL_HOST); without

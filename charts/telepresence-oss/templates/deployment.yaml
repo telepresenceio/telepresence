@@ -365,11 +365,10 @@ spec:
             containerPort: {{ .prometheus.port }}
           {{- end }}
           {{- /*
-          No "quic" containerPort here: since the forwarder (templates/quicforwarder.yaml)
-          took over the traffic-manager-quic Service, this pod's QUIC listener (still
-          governed by TUNNEL_QUIC_PORT below) is reachable only via the forwarder's
-          SNI/connection-ID routing, never directly through a Service targeting this
-          container -- advertising the port here would suggest otherwise.
+          No "quic" containerPort here: the manager's QUIC listener (governed by
+          TUNNEL_QUIC_PORT below) is reachable only via the forwarder's SNI/connection-ID
+          routing (templates/quicforwarder.yaml), never directly through a Service
+          targeting this container -- advertising the port here would suggest otherwise.
           */}}
           {{- with .livenessProbe }}
           livenessProbe:

@@ -103,14 +103,10 @@ func Listen(port uint16, podIP netip.Addr, ca *CA, serverCert tls.Certificate, h
 	return &Listener{ln: ln, conn: conn, handler: handler, datagram: &tunnel.DatagramCounters{}}, nil
 }
 
-// datagramsEnabledByEnv reports whether TELEPRESENCE_QUIC_ENABLE_DATAGRAMS is set to a
-// truthy value (strconv.ParseBool). RFC 9221 datagram carriage is OFF by default: a
-// measurement found it no better than stream carriage and often worse (see perf/README.md,
-// "Datagram carriage"), so it is opt-in. Support is negotiated per QUIC connection from what
-// each end offers, so a listener that never offers EnableDatagrams makes the negotiated
-// result false for every client regardless of what the client offered: this single
-// manager-side flag turns datagram carriage on bilaterally for every connection this
-// listener accepts, without any client-side change. Unset (the default) leaves it off.
+// datagramsEnabledByEnv reports whether TELEPRESENCE_QUIC_ENABLE_DATAGRAMS is truthy
+// (strconv.ParseBool). A listener that never offers datagrams makes the negotiated
+// result false for every client regardless of what the client offered; unset (the
+// default) leaves it off.
 func datagramsEnabledByEnv() bool {
 	enabled, _ := strconv.ParseBool(os.Getenv("TELEPRESENCE_QUIC_ENABLE_DATAGRAMS"))
 	return enabled

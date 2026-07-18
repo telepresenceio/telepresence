@@ -44,11 +44,11 @@ func generateQuicServerTLSConfig(t *testing.T) *tls.Config {
 }
 
 // echoBackend is a real quic-go server, standing in for "the manager as it will be
-// configured behind the forwarder" per the task: a quic.Transport bound to a loopback
-// UDP socket, minting connection IDs with pkg/quicfwd's CIDGenerator (so mid-connection
-// packets route through the forwarder with no flow-table entry needed on its own,
-// exactly like a real backend), presenting a certificate and ALPN a client dialing
-// quicfwd.ManagerSNI expects, and echoing every stream's bytes back to the client.
+// configured behind the forwarder": a quic.Transport bound to a loopback UDP socket,
+// minting connection IDs with pkg/quicfwd's CIDGenerator (so mid-connection packets
+// route through the forwarder with no flow-table entry needed on its own, exactly like
+// a real backend), presenting a certificate and ALPN a client dialing quicfwd.ManagerSNI
+// expects, and echoing every stream's bytes back to the client.
 type echoBackend struct {
 	transport *quic.Transport
 	ln        *quic.Listener
@@ -155,17 +155,16 @@ func exchange(t *testing.T, ctx context.Context, conn *quic.Conn, msg string) { 
 	assert.Equal(t, msg, string(got))
 }
 
-// TestE2E_HandshakeThroughForwarder_BidirectionalData_ConcurrentSecondClient is the
-// full end-to-end test the task calls for: a real quic-go client dials the forwarder
-// presenting quicfwd.ManagerSNI; the forwarder's Initial-packet SNI routing (buffering
-// across the multi-packet ClientHello split, per the handshake cache) and its
-// CID-based routing for every packet after that must get the handshake all the way
-// through to a real quic-go "manager" backend, indistinguishable (from the
-// forwarder's point of view) from how the real manager will be configured: pod-IP
-// listening (loopback here), a CIDGenerator-minted connection ID, and
-// pkg/tunnel.QuicALPN. Once that connection is up, a second client dials while the
-// first stays active, proving the forwarder's flow table keys correctly by source
-// address rather than mixing the two up.
+// TestE2E_HandshakeThroughForwarder_BidirectionalData_ConcurrentSecondClient exercises
+// the full path end to end: a real quic-go client dials the forwarder presenting
+// quicfwd.ManagerSNI; the forwarder's Initial-packet SNI routing (buffering across the
+// multi-packet ClientHello split, per the handshake cache) and its CID-based routing
+// for every packet after that must get the handshake all the way through to a real
+// quic-go "manager" backend, indistinguishable (from the forwarder's point of view)
+// from how the real manager will be configured: pod-IP listening (loopback here),
+// a CIDGenerator-minted connection ID, and pkg/tunnel.QuicALPN. Once that connection
+// is up, a second client dials while the first stays active, proving the forwarder's
+// flow table keys correctly by source address rather than mixing the two up.
 func TestE2E_HandshakeThroughForwarder_BidirectionalData_ConcurrentSecondClient(t *testing.T) {
 	backend := startEchoBackend(t)
 	defer backend.close()

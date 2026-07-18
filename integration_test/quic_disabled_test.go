@@ -10,8 +10,8 @@ import (
 
 // quicTunnelDisabledSuite verifies the other half of the fallback story: a
 // traffic-manager installed without quicTunnel.enabled (the chart default)
-// must keep serving the tunnel over plain gRPC, exactly like before this
-// feature existed, and "telepresence status" must say so.
+// must keep serving the tunnel over plain gRPC, and "telepresence status" must
+// say so.
 //
 // This is a separate suite (rather than a sub-scenario of quicTunnelSuite)
 // because it needs its own traffic-manager install without the quicTunnel

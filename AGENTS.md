@@ -158,6 +158,13 @@ make format
 
 Linting uses golangci-lint v2 running in Docker. Configuration is in `.golangci.yml`.
 
+## Code Comments
+
+Comments must describe the code as it is. Never write comments that describe a
+transition — why code was moved, what it replaced, or how it differs from an
+earlier version. The reader sees only the current code, so such comments carry
+no information for them. Keep comments short; avoid long explanations.
+
 ## Code Generation
 
 ```bash

@@ -27,8 +27,7 @@ import (
 )
 
 // These benchmarks decompose the transport stack to locate where bulk-transfer
-// throughput goes, after a field measurement showed the QUIC path well behind
-// the port-forwarded gRPC path at zero packet loss:
+// throughput goes:
 //
 //	tcp-direct     kernel TCP loopback: the reference ceiling.
 //	quic-direct    client <-> quic-go server, no forwarder: userspace QUIC cost.
@@ -250,8 +249,8 @@ func BenchmarkThroughputQuicForwarded(b *testing.B) {
 	}
 }
 
-// The Concurrent variants mirror the field experiment's shape: 50 streams share
-// one connection (QUIC) or use one TCP connection each, all active at once.
+// The Concurrent variants run 50 streams sharing one connection (QUIC) or one
+// TCP connection each, all active at once.
 func BenchmarkThroughputQuicForwardedConcurrent50(b *testing.B) {
 	backendAddr, closeSrv := startBenchQuicServer(b)
 	defer closeSrv()

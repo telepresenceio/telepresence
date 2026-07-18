@@ -15,15 +15,14 @@ import (
 )
 
 // gsoSupported reports whether this kernel accepts UDP_SEGMENT (UDP generic
-// segmentation offload), probed once and cached: a plain sendmmsg/recvmmsg batch still
-// pays the same per-datagram kernel-side cost (route lookup, checksum, skb allocation)
-// as one sendmsg/recvmsg per datagram would -- batching only removes the syscall
-// entry/exit overhead, which measurement on real traffic through this forwarder showed
-// is a small fraction of that per-datagram cost. GSO removes the per-datagram cost
-// itself: the kernel does routing/checksum/etc. once for a whole coalesced buffer and
-// segments it into wire datagrams far more cheaply, provided every datagram but
-// possibly the last is exactly the same size and shares one destination -- exactly the
-// shape of a steady-state, single-flow QUIC data stream.
+// segmentation offload), probed once and cached: a plain sendmmsg/recvmmsg batch
+// still pays the same per-datagram kernel-side cost (route lookup, checksum, skb
+// allocation) as one sendmsg/recvmsg per datagram would -- batching only removes
+// the syscall entry/exit overhead, a small fraction of that per-datagram cost. GSO
+// removes the per-datagram cost itself: the kernel does routing/checksum/etc. once
+// for a whole coalesced buffer and segments it into wire datagrams far more cheaply,
+// provided every datagram but possibly the last is exactly the same size and shares
+// one destination -- exactly the shape of a steady-state, single-flow QUIC data stream.
 //
 //nolint:gochecknoglobals // process-wide kernel capability, probed once and cached.
 var gsoSupported = sync.OnceValue(func() bool {

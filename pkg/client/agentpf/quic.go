@@ -175,11 +175,6 @@ func (c *quicEndpointCache) reset() {
 // but a dialQUIC error -- flips quicDead (exactly once; logFail runs only on that
 // transition) and falls through to dialFallback for this and every later invocation, until
 // something (e.g. client.refresh, on a new AgentPodInfo) resets quicDead.
-//
-// This one closure is therefore both the initial-connect path and the whole reconnect
-// story: a mid-session QUIC death surfaces as the gRPC connection failing, grpc redials
-// using this same dialer, and that redial tries QUIC again exactly once (the forwarder or
-// agent may have restarted) before falling back and marking QUIC dead again.
 func agentDialer(
 	sni string,
 	quicDead *atomic.Bool,
