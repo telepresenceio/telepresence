@@ -1,0 +1,139 @@
+package setup
+
+import (
+	"bytes"
+	"context"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func runInterview(t *testing.T, facts *ClusterFacts, input string, answers Answers, preset Preset, nonInteractive bool) (*Answers, string, error) {
+	t.Helper()
+	out := &bytes.Buffer{}
+	iv := &Interviewer{
+		Facts:          facts,
+		In:             strings.NewReader(input),
+		Out:            out,
+		NonInteractive: nonInteractive,
+		Answers:        answers,
+		Preset:         preset,
+	}
+	a, err := iv.Interview(context.Background())
+	return a, out.String(), err
+}
+
+func TestInterview_Defaults(t *testing.T) {
+	a, out, err := runInterview(t, recFacts(), "\n\n\n", Answers{}, Preset{}, false)
+	require.NoError(t, err)
+	assert.True(t, a.Attach)
+	assert.False(t, a.Replace)
+	assert.Equal(t, ScopeAll, a.Scope)
+	assert.Equal(t, TriAuto, a.Quic)
+	assert.Equal(t, TriAuto, a.NodeAgent)
+	assert.Contains(t, out, "attach to workloads")
+	assert.Contains(t, out, "replace command")
+	assert.Contains(t, out, "Choose 1-4 [1]")
+}
+
+func TestInterview_ReplaceGating(t *testing.T) {
+	t.Run("skipped when node-agent is not viable", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) { f.NodeAgent.Viable = Finding{Verdict: VerdictNo} })
+		a, out, err := runInterview(t, facts, "\n\n", Answers{}, Preset{}, false)
+		require.NoError(t, err)
+		assert.False(t, a.Replace)
+		assert.NotContains(t, out, "replace command")
+	})
+	t.Run("skipped when node-agent is forced off", func(t *testing.T) {
+		a, out, err := runInterview(t, recFacts(), "\n\n", Answers{NodeAgent: TriOff}, Preset{}, false)
+		require.NoError(t, err)
+		assert.False(t, a.Replace)
+		assert.NotContains(t, out, "replace command")
+	})
+}
+
+func TestInterview_UpgradeGating(t *testing.T) {
+	t.Run("older release is asked about", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{Installed: true, Version: olderVersion(), Namespace: "ambassador"}
+		})
+		a, out, err := runInterview(t, facts, "\n\n\n\n", Answers{}, Preset{}, false)
+		require.NoError(t, err)
+		assert.True(t, a.UpgradeManager)
+		assert.Contains(t, out, "Upgrade the traffic-manager?")
+	})
+	t.Run("newer release is advisory only", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{Installed: true, Version: newerVersion(), Namespace: "ambassador"}
+		})
+		a, out, err := runInterview(t, facts, "\n\n\n", Answers{}, Preset{}, false)
+		require.NoError(t, err)
+		assert.False(t, a.UpgradeManager)
+		assert.NotContains(t, out, "Upgrade the traffic-manager?")
+		assert.Contains(t, out, "newer than this client")
+	})
+}
+
+func TestInterview_ScopeNamespaces(t *testing.T) {
+	a, out, err := runInterview(t, recFacts(), "\n\n2\nfoo,bar\n", Answers{}, Preset{}, false)
+	require.NoError(t, err)
+	assert.Equal(t, ScopeNamespaces, a.Scope)
+	assert.Equal(t, []string{"foo", "bar", "ambassador"}, a.ManagedNamespaces)
+	assert.Contains(t, out, "Namespaces to manage")
+}
+
+func TestInterview_InvalidInputReprompts(t *testing.T) {
+	_, out, err := runInterview(t, recFacts(), "x\nx\nx\n", Answers{}, Preset{}, false)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "too many invalid answers")
+	assert.Contains(t, out, "Please answer y or n.")
+}
+
+func TestInterview_NonInteractive(t *testing.T) {
+	t.Run("defaults without prompting", func(t *testing.T) {
+		a, out, err := runInterview(t, recFacts(), "", Answers{}, Preset{}, true)
+		require.NoError(t, err)
+		assert.True(t, a.Attach)
+		assert.False(t, a.Replace)
+		assert.Equal(t, ScopeAll, a.Scope)
+		assert.Empty(t, out)
+	})
+	t.Run("missing cluster-wide privileges default to a namespace scope", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}
+		})
+		a, _, err := runInterview(t, facts, "", Answers{}, Preset{}, true)
+		require.NoError(t, err)
+		assert.Equal(t, ScopeNamespaces, a.Scope)
+		assert.Equal(t, []string{"ambassador"}, a.ManagedNamespaces)
+	})
+	t.Run("mapped scope requires a namespace list", func(t *testing.T) {
+		_, _, err := runInterview(t, recFacts(), "", Answers{Scope: ScopeMapped}, Preset{Scope: true}, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "--managed-namespaces")
+	})
+}
+
+func TestInterview_PresetSkipsPrompts(t *testing.T) {
+	a, out, err := runInterview(t, recFacts(), "\n", Answers{Attach: false}, Preset{Attach: true}, false)
+	require.NoError(t, err)
+	assert.False(t, a.Attach)
+	assert.NotContains(t, out, "attach to workloads")
+	assert.NotContains(t, out, "replace command")
+	assert.Contains(t, out, "Choose 1-4")
+	assert.Equal(t, ScopeAll, a.Scope)
+}
+
+func TestInterview_ScopeRecommendation(t *testing.T) {
+	facts := recFacts(func(f *ClusterFacts) {
+		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}
+	})
+	a, out, err := runInterview(t, facts, "\n\n\nfoo\n", Answers{}, Preset{}, false)
+	require.NoError(t, err)
+	assert.Contains(t, out, "cluster-wide install looks impossible")
+	assert.Contains(t, out, "Choose 1-4 [2]")
+	assert.Equal(t, ScopeNamespaces, a.Scope)
+	assert.Equal(t, []string{"foo", "ambassador"}, a.ManagedNamespaces)
+}

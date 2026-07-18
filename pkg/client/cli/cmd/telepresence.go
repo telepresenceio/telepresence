@@ -178,6 +178,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 		quit(),
 		replaceCmd(),
 		serveCmd(),
+		setupCmd(),
 		statusCmd(),
 		uninstall(),
 		versionCmd(),
