@@ -20,6 +20,7 @@ var schemaYAML []byte
 
 const schemaID = "https://telepresence.io/schemas/workstation-state.v1alpha1.yaml"
 
+//nolint:gochecknoglobals // process-wide cache of the compiled embedded schema
 var compileSchema = sync.OnceValues(func() (*jsonschema.Schema, error) {
 	schemaJSON, err := yaml.YAMLToJSON(schemaYAML)
 	if err != nil {
