@@ -11,16 +11,18 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agentinit"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/quicforwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 )
 
 func main() {
 	cmds := map[string]func(ctx context.Context, args ...string) error{
-		"agent":       agent.Main,
-		"agent-init":  agentinit.Main,
-		"agent-ready": agent.ReadyMain,
-		"manager":     manager.Main,
-		"node-agent":  agent.NodeAgentMain,
+		"agent":          agent.Main,
+		"agent-init":     agentinit.Main,
+		"agent-ready":    agent.ReadyMain,
+		"manager":        manager.Main,
+		"node-agent":     agent.NodeAgentMain,
+		"quic-forwarder": quicforwarder.Main,
 	}
 
 	var name string

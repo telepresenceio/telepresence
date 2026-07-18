@@ -54,7 +54,7 @@ func (s *nodeAgentNoInjectorSuite) TearDownSuite() {
 // Test_NodeAgentIntercept verifies that a node-agent intercept works
 // end-to-end even though the agent-injector is disabled.
 func (s *nodeAgentNoInjectorSuite) Test_NodeAgentIntercept() {
-	s.assertNodeAgentIntercept("echo-easy", "--node-agent")
+	s.assertNodeAgentIntercept("echo-easy", []string{"--node-agent"})
 }
 
 // Test_NodeAgentIngest verifies that a node-agent ingest works end-to-end
@@ -68,7 +68,7 @@ func (s *nodeAgentNoInjectorSuite) Test_NodeAgentIngest() {
 // serves nodeAgent.enabled as the client-side default, so no --node-agent
 // flag and no client configuration is needed on a node-agent-only install.
 func (s *nodeAgentNoInjectorSuite) Test_DefaultInterceptUsesNodeAgent() {
-	s.assertNodeAgentIntercept("echo-easy")
+	s.assertNodeAgentIntercept("echo-easy", nil)
 }
 
 // Test_SidecarInterceptFailsWithInjectorDisabled verifies that an explicit

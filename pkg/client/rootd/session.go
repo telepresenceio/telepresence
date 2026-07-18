@@ -20,6 +20,7 @@ import (
 	"github.com/blang/semver/v4"
 	dns2 "github.com/miekg/dns"
 	"github.com/puzpuzpuz/xsync/v4"
+	"github.com/quic-go/quic-go"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
@@ -217,6 +218,109 @@ type session struct {
 	interceptShortcuts atomic.Pointer[shortcutTable]
 
 	lookupSequencer *xsync.Map[string, clusterLookupResult]
+
+	// quicConn is the client's current QUIC connection to the traffic-manager, set
+	// whenever a dial (initial or re-probe) succeeds. Nil for the lifetime of the
+	// session when QUIC was never dialed (older manager, endpoint disabled, or the dial
+	// failed); the tunnel then stays on the port-forwarded gRPC path. Written from the
+	// "quic" goroutine started in Start, and from quicReprobeLoop after a later
+	// recovery; read from streamCreator and stop, hence atomic.
+	quicConn atomic.Pointer[quic.Conn]
+
+	// quicTunnelProvider serves manager-bound tunnel streams over QUIC while healthy,
+	// falling back to the port-forwarded gRPC connection once the installed
+	// quicFallbackProvider trips. Nil when quicConn is nil. quicReprobeLoop retries the
+	// dial after a trip and, on success, replaces this pointer with a fresh provider
+	// (see quicFallbackProvider's doc). See quicConn for the concurrency note.
+	quicTunnelProvider atomic.Pointer[quicFallbackProvider]
+
+	// quicReprobeTrigger receives a value each time quicTunnelProvider trips to
+	// fallback (sent by onQuicFallback), waking quicReprobeLoop. Buffered 1 with
+	// non-blocking sends: a trip that happens while a probe is already in flight is
+	// coalesced into the retry already running, never lost and never blocking the
+	// tripping goroutine. Initialized in newSession; nil only in tests that construct a
+	// bare session{} and never trip a provider.
+	quicReprobeTrigger chan struct{}
+
+	// quicSessionCache is the TLS session cache attached to every QUIC dial this session
+	// makes to the traffic-manager (initial dial and every reprobe retry alike), so a
+	// reconnect within the session's lifetime can resume instead of paying a full TLS 1.3
+	// handshake. One instance per session, never global: a resumed ticket carries this
+	// session's client identity (cert CN = session ID), so it must not survive into a new
+	// telepresence session. Initialized in newSession; nil only in tests that construct a
+	// bare session{}, in which case quicTLSConfig simply dials without resumption.
+	quicSessionCache tls.ClientSessionCache
+
+	// datagramCounters accumulates RFC 9221 datagram sent/received/fallback/unknown-conn
+	// totals across every QUIC connection this session ever activates (initial dial and
+	// every reprobe recovery share this one instance), so the summary logged at session
+	// end in stop() covers the whole session rather than just its last connection.
+	datagramCounters *tunnel.DatagramCounters
+
+	// transportStatus is the observable tunnel transport for manager-bound streams. A
+	// nil pointer means the default steady state: gRPC, because QUIC was never dialed
+	// (older manager, endpoint disabled, unimplemented, or dial failed). Replaced, never
+	// mutated, by the "quic" goroutine on a successful dial and by onQuicFallback /
+	// quicReprobeLoop on every later transition; see TransportStatus and
+	// setTransportStatus.
+	transportStatus atomic.Pointer[transportStatus]
+}
+
+// Observable values of transportStatus.transport, as reported by TransportStatus and
+// surfaced in the daemon Status RPC and usage reports.
+const (
+	TransportGRPC         = "grpc"
+	TransportQUIC         = "quic"
+	TransportGRPCFallback = "grpc (fallback)"
+)
+
+// transportStatus is the value stored in session.transportStatus. Immutable once
+// stored, so concurrent readers of the atomic.Pointer never observe a half-written
+// value.
+type transportStatus struct {
+	transport string
+	endpoint  string // remote QUIC endpoint address; only set when transport is TransportQUIC
+}
+
+// TransportStatus returns the tunnel transport currently serving manager-bound tunnel
+// streams ("grpc" by default) and, when it is "quic", the remote endpoint address.
+func (s *session) TransportStatus() (transport, endpoint string) {
+	if ts := s.transportStatus.Load(); ts != nil {
+		return ts.transport, ts.endpoint
+	}
+	return TransportGRPC, ""
+}
+
+// setTransportStatus replaces the observable transport state.
+func (s *session) setTransportStatus(transport, endpoint string) {
+	s.transportStatus.Store(&transportStatus{transport: transport, endpoint: endpoint})
+}
+
+// tunnelTransportRPC returns the current transport status in the shape the daemon
+// Status and Connect RPCs report it in.
+func (s *session) tunnelTransportRPC() *rpc.TunnelTransport {
+	transport, endpoint := s.TransportStatus()
+	return &rpc.TunnelTransport{Transport: transport, Endpoint: endpoint}
+}
+
+// agentTransportsRPC returns, in the shape the daemon Status and Connect RPCs report it in,
+// which transport ("quic" or "grpc") currently carries the live connection to each
+// traffic-agent pod that has completed a connection attempt this session. Returns nil
+// (omitted on the wire) when agent port-forwards are disabled or no agent has connected
+// yet, so an older CLI simply sees nothing to render.
+func (s *session) agentTransportsRPC() []*rpc.AgentTransport {
+	if s.agentClients == nil {
+		return nil
+	}
+	ts := s.agentClients.Transports()
+	if len(ts) == 0 {
+		return nil
+	}
+	out := make([]*rpc.AgentTransport, len(ts))
+	for i, t := range ts {
+		out[i] = &rpc.AgentTransport{Workload: t.Workload, Pod: t.Pod, Transport: t.Transport}
+	}
+	return out
 }
 
 // createSession will establish a connection to the traffic-manager and return a new properly initialized session object.
@@ -258,6 +362,7 @@ func newSession(
 	s := &session{
 		Cluster:               cluster,
 		handlers:              tunnel.NewPool(),
+		datagramCounters:      &tunnel.DatagramCounters{},
 		rndSource:             rand.NewSource(time.Now().UnixNano()),
 		session:               mi.Session,
 		managerConn:           managerConn,
@@ -273,6 +378,8 @@ func newSession(
 		virtualIPs:            xsync.NewMap[netip.Addr, agentVIP](),
 		l4PortMap:             xsync.NewMap[types.AddrPortProto, uint16](),
 		sessionStart:          time.Now(),
+		quicReprobeTrigger:    make(chan struct{}, 1),
+		quicSessionCache:      tls.NewLRUClientSessionCache(16),
 	}
 	cfg := client.GetConfig(s)
 
@@ -1283,6 +1390,17 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 			// Flush the DNS cache whenever the agent set changes. A workload may have been recreated
 			// with a new Service ClusterIP, which would otherwise be masked by a stale cache entry.
 			s.agentClients.SetChangeListener(s.dnsServer.Flush)
+			// Agent connections go through the same forwarder as the manager-bound QUIC
+			// tunnel, just with a different SNI per agent, so they should dial the same
+			// candidate address startQuicTunnel's own probe already found reachable
+			// (nil/"" until that probe resolves, in which case quicEndpointFor falls
+			// back to the descriptor's own host/port -- see its doc).
+			s.agentClients.SetPreferredQuicAddr(func() string {
+				if c := s.quicConn.Load(); c != nil {
+					return c.RemoteAddr().String()
+				}
+				return ""
+			})
 			g.Go("agentPods", func(ctx context.Context) error {
 				return s.agentClients.WatchAgentPods(s.managerClient())
 			})
@@ -1307,6 +1425,22 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 			cancelDNSLock.Unlock()
 		}()
 		return s.watchClusterInfo(teleroutePort)
+	})
+
+	// Opportunistically dial the traffic-manager's QUIC tunnel endpoint. This must never
+	// fail or delay session startup, so it runs detached from the rest of startup and
+	// always reports success to the group; startQuicTunnel itself never returns an error.
+	g.Go("quic", func(ctx context.Context) error {
+		s.startQuicTunnel(ctx)
+		return nil
+	})
+
+	// Retries the QUIC dial after a later trip to fallback (e.g. a manager restart that
+	// rotates the QUIC CA); see quicReprobeLoop. Runs for the life of the session,
+	// mostly idle: it blocks on quicReprobeTrigger until onQuicFallback wakes it.
+	g.Go("quic-reprobe", func(ctx context.Context) error {
+		s.quicReprobeLoop(ctx)
+		return nil
 	})
 
 	if s.agentClients == nil && len(s.subnetViaWorkloads) > 0 {
@@ -1388,6 +1522,12 @@ func (s *session) stop() {
 			cancel()
 		}()
 		<-cc.Done()
+	}
+
+	if conn := s.quicConn.Load(); conn != nil {
+		clog.Debug(s, "Closing QUIC tunnel connection to traffic-manager")
+		clog.Infof(s, "QUIC tunnel datagram counters: %s", s.datagramCounters)
+		_ = conn.CloseWithError(0, "session closed")
 	}
 
 	if s.tunVif != nil {

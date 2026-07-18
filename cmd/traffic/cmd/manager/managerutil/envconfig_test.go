@@ -67,6 +67,7 @@ func TestEnvconfig(t *testing.T) {
 		AgentConsumptionMetrics:      true,
 		UsageReportingEnabled:        true,
 		MutatorWebhookPort:           8443,
+		TunnelQuicAgentPort:          7787,
 	}
 
 	testcases := map[string]struct {

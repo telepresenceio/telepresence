@@ -41,14 +41,24 @@ type SingleConnectStatusInfo struct {
 }
 
 type RootDaemonStatus struct {
-	Managed      bool             `json:"managed,omitempty"`
-	Running      bool             `json:"running,omitempty"`
-	Name         string           `json:"name,omitempty"`
-	Version      string           `json:"version,omitempty"`
-	APIVersion   int32            `json:"api_version,omitempty"`
-	PortMappings []string         `json:"port_mappings,omitempty"`
-	DNS          *client.DNSSnake `json:"dns,omitempty"`
+	Managed         bool                   `json:"managed,omitempty"`
+	Running         bool                   `json:"running,omitempty"`
+	Name            string                 `json:"name,omitempty"`
+	Version         string                 `json:"version,omitempty"`
+	APIVersion      int32                  `json:"api_version,omitempty"`
+	PortMappings    []string               `json:"port_mappings,omitempty"`
+	DNS             *client.DNSSnake       `json:"dns,omitempty"`
+	TunnelTransport string                 `json:"tunnel_transport,omitempty"`
+	AgentTransports []StatusAgentTransport `json:"agent_transports,omitempty"`
 	*client.RoutingSnake
+}
+
+// StatusAgentTransport reports which transport currently carries the live connection to
+// one connected traffic-agent pod.
+type StatusAgentTransport struct {
+	Workload  string `json:"workload,omitempty"`
+	Pod       string `json:"pod,omitempty"`
+	Transport string `json:"transport,omitempty"`
 }
 
 type UserDaemonStatus struct {
@@ -78,8 +88,10 @@ type UserDaemonStatus struct {
 
 type ContainerizedDaemonStatus struct {
 	*UserDaemonStatus
-	PortMappings []string         `json:"port_mappings,omitempty"`
-	DNS          *client.DNSSnake `json:"dns,omitempty"`
+	PortMappings    []string               `json:"port_mappings,omitempty"`
+	DNS             *client.DNSSnake       `json:"dns,omitempty"`
+	TunnelTransport string                 `json:"tunnel_transport,omitempty"`
+	AgentTransports []StatusAgentTransport `json:"agent_transports,omitempty"`
 	*client.RoutingSnake
 }
 
@@ -207,6 +219,8 @@ func (s *StatusInfo) WriterTos() []io.WriterTo {
 				UserDaemonStatus: &s.UserDaemon,
 				PortMappings:     s.RootDaemon.PortMappings,
 				DNS:              s.RootDaemon.DNS,
+				TunnelTransport:  s.RootDaemon.TunnelTransport,
+				AgentTransports:  s.RootDaemon.AgentTransports,
 				RoutingSnake:     s.RootDaemon.RoutingSnake,
 			},
 			&s.TrafficManager,
@@ -225,6 +239,8 @@ func (s *StatusInfo) toMap() map[string]any {
 			"daemon": &ContainerizedDaemonStatus{
 				UserDaemonStatus: &s.UserDaemon,
 				DNS:              s.RootDaemon.DNS,
+				TunnelTransport:  s.RootDaemon.TunnelTransport,
+				AgentTransports:  s.RootDaemon.AgentTransports,
 				RoutingSnake:     s.RootDaemon.RoutingSnake,
 			},
 			"traffic_manager": &s.TrafficManager,
@@ -348,6 +364,8 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 	if obc := rStatus.OutboundConfig; obc != nil {
 		rs.PortMappings = obc.PortMappings
 	}
+	rs.TunnelTransport = formatTunnelTransport(rStatus.TunnelTransport)
+	rs.AgentTransports = toStatusAgentTransports(rStatus.AgentTransports)
 	if rootCfg, err := daemon.GetRootClientConfig(rStatus); err == nil {
 		us := &wt.UserDaemon
 		rs.DNS = rootCfg.DNS().ToSnake()
@@ -363,6 +381,47 @@ func getStatusInfo(ctx context.Context, di *daemon.Info) (*StatusInfo, error) {
 		}
 	}
 	return wt, nil
+}
+
+// formatTunnelTransport renders a daemon.TunnelTransport as the single string shown in
+// status output, e.g. "quic (1.2.3.4:7778)" or "grpc". Returns "" for a nil transport
+// (an older root daemon that predates the field), which callers use to omit the line
+// or JSON key entirely — old daemon, new CLI degrades gracefully.
+func formatTunnelTransport(tt *daemonRpc.TunnelTransport) string {
+	if tt == nil || tt.Transport == "" {
+		return ""
+	}
+	if tt.Endpoint != "" {
+		return fmt.Sprintf("%s (%s)", tt.Transport, tt.Endpoint)
+	}
+	return tt.Transport
+}
+
+// toStatusAgentTransports converts the wire AgentTransport list to the CLI's status shape.
+// Returns nil for an empty (or absent, e.g. an older root daemon) list, which callers use to
+// omit the line or JSON key entirely.
+func toStatusAgentTransports(ats []*daemonRpc.AgentTransport) []StatusAgentTransport {
+	if len(ats) == 0 {
+		return nil
+	}
+	out := make([]StatusAgentTransport, len(ats))
+	for i, at := range ats {
+		out[i] = StatusAgentTransport{Workload: at.Workload, Pod: at.Pod, Transport: at.Transport}
+	}
+	return out
+}
+
+// formatAgentTransports renders the per-agent transport list as the single string shown in
+// status output, e.g. "echo-easy: quic, echo-easy-2: grpc". Returns "" for an empty list.
+func formatAgentTransports(ats []StatusAgentTransport) string {
+	if len(ats) == 0 {
+		return ""
+	}
+	parts := make([]string, len(ats))
+	for i, at := range ats {
+		parts[i] = fmt.Sprintf("%s: %s", at.Workload, at.Transport)
+	}
+	return strings.Join(parts, ", ")
 }
 
 func (s *SingleConnectStatusInfo) WriterTos() []io.WriterTo {
@@ -451,6 +510,12 @@ func (cs *ContainerizedDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		if cs.DNS != nil {
 			printDNS(kvf, cs.DNS)
 		}
+		if cs.TunnelTransport != "" {
+			kvf.Add("Tunnel transport", cs.TunnelTransport)
+		}
+		if at := formatAgentTransports(cs.AgentTransports); at != "" {
+			kvf.Add("Agent transports", at)
+		}
 		if cs.RoutingSnake != nil {
 			printRouting(kvf, cs.RoutingSnake)
 		}
@@ -478,6 +543,12 @@ func (ds *RootDaemonStatus) WriteTo(out io.Writer) (int64, error) {
 		}
 		if ds.DNS != nil {
 			printDNS(kvf, ds.DNS)
+		}
+		if ds.TunnelTransport != "" {
+			kvf.Add("Tunnel transport", ds.TunnelTransport)
+		}
+		if at := formatAgentTransports(ds.AgentTransports); at != "" {
+			kvf.Add("Agent transports", at)
 		}
 		if ds.RoutingSnake != nil {
 			printRouting(kvf, ds.RoutingSnake)

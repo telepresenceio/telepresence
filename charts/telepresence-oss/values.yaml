@@ -197,6 +197,76 @@ prometheus: {}
   # port: 0
   # dropClientLabel: false
 
+################################################################################
+## QUIC Tunnel Configuration
+################################################################################
+# quicTunnel controls the opt-in QUIC endpoint that the traffic-manager can
+# expose so that clients able to reach it upgrade tunneled connections from
+# the port-forwarded gRPC transport, removing head-of-line blocking between
+# flows. The port-forwarded transport remains the default and the fallback
+# when this is disabled or unreachable. Setting quicTunnel.enabled=true alone
+# is enough on any cluster whose quic Service type the traffic-manager can
+# observe: it discovers the reachable address(es) itself (a LoadBalancer
+# Service's assigned ingress, or a NodePort Service's node addresses) and
+# advertises them to clients, no further configuration required.
+quicTunnel:
+  enabled: false
+  # UDP port the traffic-manager's QUIC listener binds to. Chosen clear of
+  # the other ports this chart uses: apiPort (8081, TCP gRPC),
+  # agentInjector.webhook.port (8443, TCP), agent.port (9900, TCP), and
+  # prometheus.port (opt-in, TCP).
+  port: 7778
+  # Externally reachable host or IP advertised to clients, overriding
+  # discovery entirely. Leave empty to let the traffic-manager discover the
+  # address itself from the quic Service below (the common case). Set this
+  # explicitly for topologies the traffic-manager cannot see: a NAT or proxy
+  # in front of the LoadBalancer, port remapping, a DNS name that only
+  # resolves on the developer's VPN, or a NodePort Service in a
+  # namespace-scoped install (which lacks the Node read access discovery
+  # needs -- see traffic-manager.namespaced in the reference docs).
+  externalHost: ""
+  # Advertised UDP port when it differs from the Service port (0 = same).
+  # Only meaningful together with externalHost; discovery always uses the
+  # Service's own port.
+  externalPort: 0
+  # UDP port a traffic-agent's own QUIC listener binds to (sidecar and
+  # node-agent alike). Delivered to agents only when quicTunnel.enabled is
+  # true. A sidecar agent shares its pod's network namespace with the
+  # application container, so it needs a port of its own, distinct from the
+  # traffic-manager's quicTunnel.port above.
+  agentPort: 7787
+  service:
+    # Whether to create a Service for the QUIC endpoint.
+    create: true
+    type: LoadBalancer
+    # nodePort pins the node port when type is NodePort. 0 lets Kubernetes allocate one.
+    nodePort: 0
+    annotations: {}
+  # The forwarder is the stateless QUIC packet router (the "quic-forwarder"
+  # tel2 subcommand) that owns the UDP entry point above and routes packets,
+  # by SNI and then by connection ID, to the traffic-manager and
+  # traffic-agents. It never terminates TLS and needs no Kubernetes API
+  # access of its own -- the traffic-manager's existing RBAC covers the
+  # backend allowlist it consumes over gRPC. Only deployed when
+  # quicTunnel.enabled is true.
+  forwarder:
+    # Number of quic-forwarder replicas. The forwarder keeps no state that
+    # matters across a restart, so this can be scaled freely without any
+    # coordination between replicas.
+    replicas: 1
+    # Resource requests and limits for the quic-forwarder container. A CPU
+    # request is set so autoscalers with a minimum allocation (e.g. GKE
+    # Autopilot, which otherwise floors an unset request at ~250m and
+    # throttles the data plane) give it enough to actually forward traffic.
+    # No CPU limit is set deliberately: throttling a packet relay under load
+    # is worse than letting it contend for spare CPU on the node.
+    resources:
+      requests:
+        cpu: 500m
+        memory: 128Mi
+      limits:
+        memory: 512Mi
+
 # Values specific to the helm chart hooks for managing upgrade/deleting
 hooks:
   busybox:

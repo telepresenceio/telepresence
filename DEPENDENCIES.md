@@ -117,6 +117,8 @@ following Free and Open Source software:
     github.com/prometheus/common                                              v0.70.0                                 Apache License 2.0
     github.com/prometheus/procfs                                              v0.21.1                                 Apache License 2.0
     github.com/puzpuzpuz/xsync/v4                                             v4.5.0                                  Apache License 2.0
+    github.com/quic-go/qpack                                                  v0.6.0                                  MIT license
+    github.com/quic-go/quic-go                                                v0.60.0                                 MIT license
     github.com/rogpeppe/go-internal                                           v1.15.0                                 3-clause BSD license
     github.com/rubenv/sql-migrate                                             v1.8.1                                  MIT license
     github.com/russross/blackfriday/v2                                        v2.1.0                                  2-clause BSD license

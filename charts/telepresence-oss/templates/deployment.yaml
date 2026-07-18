@@ -8,6 +8,9 @@ metadata:
   labels:
     {{ include "telepresence.labels" $ | nindent 4 }}
 spec:
+{{- if and .quicTunnel .quicTunnel.enabled (gt (int .replicaCount) 1) }}
+{{- fail "quicTunnel.enabled requires replicaCount 1: the traffic-manager's QUIC certificate authority and session state are process-local, so a second replica breaks the QUIC handshake (see the QUIC Tunnel Transport reference)" }}
+{{- end }}
   replicas: {{ .replicaCount }}
   selector:
     matchLabels:
@@ -131,6 +134,35 @@ spec:
           {{- if .insecure }}
           - name: USAGE_COLLECTOR_INSECURE
             value: {{ .insecure | quote }}
+          {{- end }}
+          {{- end }}
+          {{- with .quicTunnel }}
+          {{- if .enabled }}
+          - name: TUNNEL_QUIC_PORT
+            value: {{ .port | quote }}
+          {{- if .externalHost }}
+          - name: TUNNEL_QUIC_EXTERNAL_HOST
+            value: {{ .externalHost | quote }}
+          {{- end }}
+          {{- if .externalPort }}
+          - name: TUNNEL_QUIC_EXTERNAL_PORT
+            value: {{ .externalPort | quote }}
+          {{- end }}
+          {{- if .agentPort }}
+          - name: TUNNEL_QUIC_AGENT_PORT
+            value: {{ .agentPort | quote }}
+          {{- end }}
+          {{- /*
+          Only meaningful, and only needed, when there is discovery for it to do: an
+          externalHost override bypasses discovery entirely (service.go's
+          GetQuicTunnelEndpoint), and a Service that was never created has nothing to
+          watch. See "Zero-configuration endpoint discovery" in
+          docs/reference/quic-transport-architecture.md.
+          */}}
+          {{- if and (not .externalHost) .service.create }}
+          - name: TUNNEL_QUIC_SERVICE_NAME
+            value: {{ include "traffic-manager.quicServiceName" $ | quote }}
+          {{- end }}
           {{- end }}
           {{- end }}
       {{- if or .agentInjector.enabled .nodeAgent.enabled }}
@@ -332,6 +364,12 @@ spec:
           - name: prometheus
             containerPort: {{ .prometheus.port }}
           {{- end }}
+          {{- /*
+          No "quic" containerPort here: the manager's QUIC listener (governed by
+          TUNNEL_QUIC_PORT below) is reachable only via the forwarder's SNI/connection-ID
+          routing (templates/quicforwarder.yaml), never directly through a Service
+          targeting this container -- advertising the port here would suggest otherwise.
+          */}}
           {{- with .livenessProbe }}
           livenessProbe:
             {{ toYaml . | nindent 12 }}

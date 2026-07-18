@@ -77,6 +77,11 @@ message AgentInfo {
   // sidecar running in the workload's own pods.
   bool node_agent = 15;
 
+  // UDP port of this agent's QUIC listener, reachable only through the QUIC
+  // forwarder (see docs/reference/quic-transport-architecture.md, "Agent connections
+  // over QUIC"). 0 means this agent has no QUIC listener.
+  int32 quic_port = 16;
+
   reserved 6;
 }
 
@@ -492,11 +497,106 @@ message TunnelMessage {
   bytes payload = 1;
 }
 
+// QuicTunnelEndpoint describes the traffic-manager's QUIC endpoint, if any, so that a
+// client can dial it directly instead of tunneling over the port-forwarded connection.
+message QuicTunnelEndpoint {
+  // Whether the traffic-manager has a QUIC listener exposed. The remaining fields are
+  // only meaningful when this is true.
+  bool enabled = 1;
+
+  // Externally reachable host or IP of the QUIC endpoint.
+  string host = 2;
+
+  // UDP port of the QUIC endpoint.
+  int32 port = 3;
+
+  // CA bundle (PEM) to verify the server certificate against.
+  bytes ca_pem = 4;
+
+  // Session-scoped client certificate (PEM) to present to the server.
+  bytes client_cert_pem = 5;
+
+  // Private key (PEM) for the client certificate.
+  bytes client_key_pem = 6;
+
+  // TLS server name to use when verifying the server certificate.
+  string server_name = 7;
+
+  // ALPN protocol to offer in the TLS handshake. An empty value means the
+  // client's built-in default.
+  string alpn = 8;
+
+  // Candidate dialable addresses for the QUIC endpoint, ordered by the
+  // traffic-manager's preference (see "Zero-configuration endpoint discovery" in
+  // docs/reference/quic-transport-architecture.md). The client dials candidates
+  // concurrently and keeps the first whose handshake completes. host/port above
+  // always duplicate the first entry, if any, so an older client (built before
+  // this field existed) still gets a single address to dial.
+  repeated QuicEndpointCandidate candidates = 9;
+}
+
+// One dialable address for the QUIC endpoint. Candidates are ordered by the
+// manager's preference; the client keeps the first that handshakes.
+message QuicEndpointCandidate {
+  string host = 1;
+  int32 port = 2;
+}
+
+// QuicBackend identifies one live pod IP that the QUIC forwarder (a separate
+// stateless packet router; see docs/reference/quic-transport-architecture.md) may
+// route traffic to.
+message QuicBackend {
+  // Pod IP in netip.Addr binary form (4 or 16 bytes), the same encoding
+  // AgentPodInfo.pod_ip uses.
+  bytes ip = 1;
+
+  // "manager" or "agent".
+  string kind = 2;
+
+  // UDP port of this backend's QUIC listener.
+  int32 port = 3;
+
+  // Pod UID of this backend, used by the forwarder to resolve an AgentSNI
+  // (quicfwd.AgentSNI) to this entry. Empty for kind "manager".
+  string pod_uid = 4;
+}
+
+// QuicBackendSnapshot is a full replacement snapshot of every pod IP the
+// QUIC forwarder may route to. There is no delta variant: each snapshot
+// replaces the previous one in its entirety, which keeps the forwarder
+// simple and self-healing across a manager restart.
+message QuicBackendSnapshot {
+  repeated QuicBackend backends = 1;
+}
+
 message DialRequest {
   bytes conn_id = 1;
   int64 roundtrip_latency = 2;
   int64 dial_timeout = 3;
   reserved 4;
+}
+
+// QuicAgentCert is the response to GetQuicAgentCert: a server certificate,
+// minted by the traffic-manager's QUIC CA for the caller agent's own SNI
+// name, so the agent can run a QUIC listener behind the forwarder. See
+// docs/reference/quic-transport-architecture.md, "Agent connections over QUIC".
+message QuicAgentCert {
+  // false when the manager has no QUIC CA (the QUIC tunnel listener is
+  // disabled); the remaining fields are only meaningful when this is true.
+  bool enabled = 1;
+
+  // Server certificate (PEM) for the agent's SNI name.
+  bytes cert_pem = 2;
+
+  // Private key (PEM) for cert_pem.
+  bytes key_pem = 3;
+
+  // CA bundle (PEM) the agent uses as ClientCAs, to verify client
+  // certificates presented by connecting clients.
+  bytes ca_pem = 4;
+
+  // The SNI name the certificate was minted for (quicfwd.AgentSNI(pod UID)).
+  string sni = 5;
 }
 
 message LookupRequest {
@@ -624,6 +724,11 @@ message AgentPodInfo {
   // namespace that enters the target pod's namespaces, rather than a
   // sidecar running in the workload's own pods.
   bool node_agent = 8;
+
+  // SNI name (quicfwd.AgentSNI(pod UID)) to dial, through the QUIC forwarder,
+  // to reach this agent's QUIC listener. Empty means this agent has no QUIC
+  // listener, so it must be dialed via port-forward only.
+  string quic_sni = 9;
 }
 
 message AgentPodInfoSnapshot {
@@ -938,6 +1043,28 @@ service Manager {
   // always contain the session ID, connection ID, and timeouts used by
   // the dialer endpoints.
   rpc Tunnel(stream TunnelMessage) returns (stream TunnelMessage);
+
+  // GetQuicTunnelEndpoint returns the descriptor for the traffic-manager's QUIC
+  // endpoint, including a session-scoped client certificate, so that the caller can
+  // dial it directly instead of tunneling over this port-forwarded connection. The
+  // returned descriptor has enabled == false when no QUIC endpoint is exposed.
+  rpc GetQuicTunnelEndpoint(SessionInfo) returns (QuicTunnelEndpoint);
+
+  // GetQuicAgentCert mints a QUIC server certificate for the calling agent's
+  // own SNI name (quicfwd.AgentSNI(pod UID)), so it can run a QUIC listener
+  // behind the forwarder. The caller's session must be an agent session
+  // (established via ArriveAsAgent/ReconnectAgent). The returned descriptor
+  // has enabled == false when the manager has no QUIC CA.
+  rpc GetQuicAgentCert(SessionInfo) returns (QuicAgentCert);
+
+  // WatchQuicBackends notifies the QUIC forwarder of the set of pod IPs
+  // (traffic-manager and traffic-agent alike) it may route QUIC traffic to.
+  // Unlike the other Watch* RPCs this call carries no SessionInfo: the
+  // forwarder has no client session, and the backend set it returns is not
+  // scoped to one. The first message is sent immediately on subscribe; a
+  // new one follows whenever the backend set changes. Every message is a
+  // full QuicBackendSnapshot, not a delta.
+  rpc WatchQuicBackends(google.protobuf.Empty) returns (stream QuicBackendSnapshot);
 
   // ReportMetrics is used by a traffic-agent to report metrics for streams
   // established when clients connect directly to traffic-agents using port-forward.

@@ -158,6 +158,13 @@ make format
 
 Linting uses golangci-lint v2 running in Docker. Configuration is in `.golangci.yml`.
 
+## Code Comments
+
+Comments must describe the code as it is. Never write comments that describe a
+transition — why code was moved, what it replaced, or how it differs from an
+earlier version. The reader sees only the current code, so such comments carry
+no information for them. Keep comments short; avoid long explanations.
+
 ## Code Generation
 
 ```bash
@@ -178,6 +185,27 @@ make docs-files
 ### Updating License Documentation
 
 Run `make generate` and commit changes to `DEPENDENCY_LICENSES.md` and `DEPENDENCIES.md`.
+
+## Documentation
+
+The documentation under `docs/` aims to follow the
+[Diátaxis](https://diataxis.fr/) framework. Its four quadrants map to the
+layout like this:
+
+| Diátaxis quadrant | Orientation | Location |
+|-------------------|-------------|----------|
+| Tutorials | learning | `docs/quick-start.md` |
+| How-to guides | task | `docs/howtos/` |
+| Reference | information | `docs/reference/` |
+| Explanation | understanding | `docs/concepts/` |
+
+When documenting a new feature, decide which quadrants it needs — typically a
+how-to guide (how to enable/use it) plus a reference page (its complete
+behavior, configuration, and limitations) — and keep the quadrants separate:
+a how-to gets a task done and links to the reference for details; a reference
+describes exhaustively and doesn't teach. Add new pages to the navigation in
+`docs/doc-links.yml`, and run `make lint-docs` (link/nav consistency and
+terminology) before pushing.
 
 ## Architecture
 

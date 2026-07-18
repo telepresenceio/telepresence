@@ -82,6 +82,12 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 			Value: strconv.Itoa(int(a.Config.APIPort)),
 		})
 	}
+	if a.Config.QuicPort > 0 {
+		evs = append(evs, core.EnvVar{
+			Name:  EnvAgentQuicPort,
+			Value: strconv.Itoa(int(a.Config.QuicPort)),
+		})
+	}
 	evs = append(evs,
 		core.EnvVar{
 			Name: EnvPrefixAgent + "POD_IP",

@@ -43,6 +43,11 @@ func (is interceptsStringer) String() string {
 var NewExtendedManagerClient func(conn *grpc.ClientConn, ossManager rpc.ManagerClient) rpc.ManagerClient //nolint:gochecknoglobals // extension point
 
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {
+	// processCtx outlives this single manager session: it bounds the QUIC listener
+	// RefreshQuicAgentListener may start below, which must survive the reconnects
+	// that create new instances of the (per-connection) ctx shadowed on the next
+	// line.
+	processCtx := ctx
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -75,6 +80,16 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	}
 
 	state.SetManager(session, manager, mgrVer)
+
+	// Best-effort and non-blocking: a manager without QUIC enabled, or one that's
+	// briefly unreachable for this one RPC, must never delay or fail the rest of
+	// this session. Bounded independently of ctx's lifetime so a slow manager can't
+	// wedge this goroutine past the session's own teardown.
+	go func() {
+		fetchCtx, fetchCancel := context.WithTimeout(ctx, 10*time.Second)
+		defer fetchCancel()
+		state.RefreshQuicAgentListener(processCtx, fetchCtx)
+	}()
 
 	// Create the /tmp/agent directory if it doesn't exist
 	// We use this to place a file which conveys 'readiness'

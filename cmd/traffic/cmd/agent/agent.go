@@ -246,6 +246,14 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 
 func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error) {
 	ac := config.AgentConfig()
+
+	svc := server.New(clog.WithGroup(g, "tunneling"), grpc.KeepaliveParams(keepalive.ServerParameters{
+		Time:    ac.ClientConnectionTTL,
+		Timeout: 20 * time.Second,
+	}))
+	agent.RegisterAgentServer(svc, srv)
+	srv.SetGRPCServer(svc)
+
 	grpcPortCh := make(chan uint16)
 	g.Go("tunneling", func(ctx context.Context) error {
 		defer close(grpcPortCh)
@@ -258,11 +266,6 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 		grpcPortCh <- uint16(grpcAddress.Port)
 
 		clog.Debugf(ctx, "Listener opened on %s", grpcAddress)
-		svc := server.New(ctx, grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    ac.ClientConnectionTTL,
-			Timeout: 20 * time.Second,
-		}))
-		agent.RegisterAgentServer(svc, srv)
 		clog.Debugf(ctx, "Serving client connections using idle TTL %s", ac.ClientConnectionTTL)
 		return server.Serve(ctx, svc, grpcListener)
 	})
@@ -330,6 +333,7 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 		ApiPort:   int32(grpcPort),
 		FtpPort:   int32(ftpPort),
 		SftpPort:  int32(sftpPort),
+		QuicPort:  int32(ac.QuicPort),
 		Product:   "telepresence",
 		Version:   version.Version,
 		Mechanisms: []*rpc.AgentInfo_Mechanism{

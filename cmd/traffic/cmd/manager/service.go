@@ -33,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
@@ -41,6 +42,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	maps2 "github.com/telepresenceio/telepresence/v2/pkg/maps"
+	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/tmconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -60,6 +62,7 @@ type Service interface {
 	runUpdateTrafficManagerConfigMapLoop(context.Context) error
 	serveHTTP(context.Context) error
 	servePrometheus(context.Context) error
+	serveQuicTunnel(context.Context) error
 }
 
 type service struct {
@@ -73,6 +76,18 @@ type service struct {
 	serviceNameFQN     string
 	dotClusterDomain   string
 	tmConfigMapUpdated atomic.Bool
+
+	// quicCA is non-nil only when the QUIC tunnel listener is enabled
+	// (TUNNEL_QUIC_PORT != 0). It is generated once in NewService and never
+	// persisted; a manager restart mints a new CA and implicitly revokes every
+	// client certificate the previous one signed.
+	quicCA *quictunnel.CA
+
+	// quicDiscovery is non-nil only when the QUIC tunnel listener is enabled AND no
+	// explicit TunnelQuicExternalHost override is configured: the override replaces
+	// discovery entirely (see GetQuicTunnelEndpoint), so there is nothing for it to
+	// do. quicCandidates checks for nil before calling Candidates.
+	quicDiscovery *quictunnel.Discovery
 
 	rpc.UnsafeManagerServer
 }
@@ -101,10 +116,25 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 		clog.Errorf(ctx, "unable to initialize cluster info: %v", err)
 		return nil, err
 	}
-	ns := managerutil.GetEnv(ctx).ManagerNamespace
+	env := managerutil.GetEnv(ctx)
+	ns := env.ManagerNamespace
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
+
+	if env.TunnelQuicPort != 0 {
+		ret.quicCA, err = quictunnel.NewCA()
+		if err != nil {
+			clog.Errorf(ctx, "unable to initialize QUIC tunnel CA: %v", err)
+			return nil, err
+		}
+		// An explicit externalHost bypasses discovery entirely (see
+		// GetQuicTunnelEndpoint), so there is no reason to start it.
+		if env.TunnelQuicExternalHost == "" && env.TunnelQuicServiceName != "" {
+			ret.quicDiscovery = quictunnel.NewDiscovery()
+			ret.quicDiscovery.Start(ctx, ns, env.TunnelQuicServiceName)
+		}
+	}
 
 	ret.state = state.NewState(ctx, g, configWatcher.AdminCommandChannel())
 	return ret, nil
@@ -547,6 +577,7 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 				ApiPort:      a.ApiPort,
 				Intercepted:  s.state.IsInterceptedBy(a.Name, a.Namespace, clientSessionID),
 				NodeAgent:    a.NodeAgent,
+				QuicSni:      quicSNIForAgent(a.QuicPort, a.PodUid),
 			}
 			agents = append(agents, ap)
 			return true
@@ -622,6 +653,7 @@ func (s *service) watchAgentPodsDelta(ctx context.Context, namespaces []string, 
 						ApiPort:      a.ApiPort,
 						Intercepted:  s.state.IsInterceptedBy(a.Name, a.Namespace, clientSessionID),
 						NodeAgent:    a.NodeAgent,
+						QuicSni:      quicSNIForAgent(a.QuicPort, a.PodUid),
 					}
 					agentPodInfos.Store(string(k), ap)
 				}
@@ -1098,6 +1130,237 @@ func (s *service) Tunnel(server grpc.BidiStreamingServer[rpc.TunnelMessage, rpc.
 		return errors.FromError(err, codes.FailedPrecondition, fmt.Sprintf("failed to connect stream: %v", err))
 	}
 	return s.state.Tunnel(ctx, stream)
+}
+
+// GetQuicTunnelEndpoint returns the descriptor for the traffic-manager's QUIC endpoint.
+// The endpoint is only advertised once the listener is enabled and at least one
+// candidate address exists for it -- explicit (TunnelQuicExternalHost) or discovered
+// (see "Zero-configuration endpoint discovery" in docs/reference/quic-transport-architecture.md);
+// otherwise the client is told to keep using the port-forwarded gRPC transport.
+func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicTunnelEndpoint, error) {
+	if s.quicCA == nil {
+		return &rpc.QuicTunnelEndpoint{Enabled: false}, nil
+	}
+	candidates := s.quicCandidates(managerutil.GetEnv(ctx))
+	if len(candidates) == 0 {
+		return &rpc.QuicTunnelEndpoint{Enabled: false}, nil
+	}
+	sessionID := tunnel.SessionID(session.GetSessionId())
+	if s.state.GetClient(sessionID) == nil {
+		return nil, errors.Errorf(codes.NotFound, "Session %q not found", sessionID)
+	}
+	certPEM, keyPEM, err := s.quicCA.MintClientCert(string(sessionID))
+	if err != nil {
+		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to mint QUIC client certificate: %v", err))
+	}
+	// host/port duplicate the first candidate so a client built before the candidates
+	// field existed still gets a single address to dial; see the proto comment on
+	// QuicTunnelEndpoint.candidates.
+	first := candidates[0]
+	return &rpc.QuicTunnelEndpoint{
+		Enabled:       true,
+		Host:          first.Host,
+		Port:          first.Port,
+		CaPem:         s.quicCA.CertPEM(),
+		ClientCertPem: certPEM,
+		ClientKeyPem:  keyPEM,
+		ServerName:    quictunnel.ServerName,
+		Alpn:          tunnel.QuicALPN,
+		Candidates:    candidates,
+	}, nil
+}
+
+// quicCandidates returns the ordered candidate list to advertise: exactly the explicit
+// TunnelQuicExternalHost override when one is configured (bypassing discovery
+// entirely, per the design's override semantics), otherwise whatever quicDiscovery has
+// found so far. Returns nil (not enabled) when neither applies.
+func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandidate {
+	if env.TunnelQuicExternalHost != "" {
+		port := env.TunnelQuicExternalPort
+		if port == 0 {
+			port = env.TunnelQuicPort
+		}
+		return []*rpc.QuicEndpointCandidate{{Host: env.TunnelQuicExternalHost, Port: int32(port)}}
+	}
+	if s.quicDiscovery == nil {
+		return nil
+	}
+	found := s.quicDiscovery.Candidates()
+	if len(found) == 0 {
+		return nil
+	}
+	candidates := make([]*rpc.QuicEndpointCandidate, len(found))
+	for i, c := range found {
+		candidates[i] = &rpc.QuicEndpointCandidate{Host: c.Host, Port: c.Port}
+	}
+	return candidates
+}
+
+// GetQuicAgentCert mints a QUIC server certificate for the calling agent's own SNI
+// name, so it can run a QUIC listener behind the forwarder. See "Agent connections
+// over QUIC" in docs/reference/quic-transport-architecture.md.
+//
+// Unlike GetQuicTunnelEndpoint, the caller's session must already be an agent
+// session (established via ArriveAsAgent/ReconnectAgent): a client has no pod UID
+// and thus no SNI name to mint for, and GetQuicAgentCert never validates a client
+// session's SessionInfo, whether or not the QUIC CA is enabled.
+func (s *service) GetQuicAgentCert(_ context.Context, session *rpc.SessionInfo) (*rpc.QuicAgentCert, error) {
+	sessionID := tunnel.SessionID(session.GetSessionId())
+	agent := s.state.GetAgent(sessionID)
+	if agent == nil {
+		return nil, errors.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
+	}
+	if s.quicCA == nil {
+		return &rpc.QuicAgentCert{Enabled: false}, nil
+	}
+	sni := quicfwd.AgentSNI(agent.PodUid)
+	cert, err := s.quicCA.MintServerCert(sni)
+	if err != nil {
+		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to mint QUIC agent certificate: %v", err))
+	}
+	certPEM, keyPEM, err := quictunnel.ServerCertToPEM(cert)
+	if err != nil {
+		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to encode QUIC agent certificate: %v", err))
+	}
+	return &rpc.QuicAgentCert{
+		Enabled: true,
+		CertPem: certPEM,
+		KeyPem:  keyPEM,
+		CaPem:   s.quicCA.CertPEM(),
+		Sni:     sni,
+	}, nil
+}
+
+// quicSNIForAgent returns the SNI name a client dials, through the QUIC forwarder,
+// to reach an agent's QUIC listener -- or "" when quicPort is not positive, meaning
+// the agent has no QUIC listener and must be reached by port-forward only.
+func quicSNIForAgent(quicPort int32, podUID string) string {
+	if quicPort <= 0 {
+		return ""
+	}
+	return quicfwd.AgentSNI(podUID)
+}
+
+// quicBackendWatchDebounce coalesces a burst of agent-session changes (e.g. a
+// rollout replacing every agent pod at once) into a single QuicBackendSnapshot,
+// mirroring the debounce pattern used by the node-agent pod-set watcher
+// (state.nodeAgentPodWatchDebounce).
+const quicBackendWatchDebounce = 250 * time.Millisecond
+
+// quicManagerBackends returns this traffic-manager pod's own QuicBackend entries,
+// derived from the POD_IP the chart's downward API sets on the container. It is
+// empty when that env var is unset, which is normal outside of a real cluster
+// (e.g. unit tests that don't populate managerutil.Env.PodIp).
+func (s *service) quicManagerBackends(ctx context.Context) []*rpc.QuicBackend {
+	env := managerutil.GetEnv(ctx)
+	podIP := env.PodIp
+	if !podIP.IsValid() {
+		return nil
+	}
+	return []*rpc.QuicBackend{{Ip: podIP.AsSlice(), Kind: "manager", Port: int32(env.TunnelQuicPort)}}
+}
+
+// WatchQuicBackends notifies the QUIC forwarder (a separate, stateless packet
+// router; see docs/reference/quic-transport-architecture.md, "The forwarder") of the set
+// of pod IPs it may route QUIC traffic to. Unlike the other Watch* RPCs this
+// call carries no SessionInfo and is callable without an established session,
+// the same way Version and GetTelepresenceAPI are: the forwarder has no client
+// session of its own.
+//
+// The first QuicBackendSnapshot -- this manager's own pod IP plus the pod IP
+// of every currently live agent session -- is sent immediately. A new,
+// full-replacement snapshot follows whenever the agent set changes, coalesced
+// by quicBackendWatchDebounce so a burst of churn (a rollout, a mass
+// reconnect) produces one snapshot instead of one per event.
+func (s *service) WatchQuicBackends(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.QuicBackendSnapshot]) error {
+	ctx := stream.Context()
+	managerBackends := s.quicManagerBackends(ctx)
+	agentsCh := s.state.WatchAgents(ctx, nil)
+	m := mutator.GetMap(ctx)
+	agents := make(map[tunnel.SessionID]*state.AgentSession)
+
+	applyDelta := func(delta cache.Delta[tunnel.SessionID, *state.AgentSession]) (changed bool) {
+		for id, a := range delta.Upserts {
+			agents[id] = a
+			changed = true
+		}
+		for id := range delta.Removals {
+			delete(agents, id)
+			changed = true
+		}
+		return changed
+	}
+
+	buildSnapshot := func() *rpc.QuicBackendSnapshot {
+		backends := slices.Clone(managerBackends)
+		for _, a := range agents {
+			// Only agents with a QUIC listener of their own are useful
+			// forwarder backends; an agent that never fetched or never got a
+			// QUIC port has nothing behind it to route to.
+			if a.QuicPort <= 0 {
+				continue
+			}
+			if m.IsInactive(types.UID(a.PodUid)) {
+				continue
+			}
+			aip, err := netip.ParseAddr(a.PodIp)
+			if err != nil {
+				clog.Errorf(ctx, "quic backend allowlist: error parsing agent pod ip %q: %v", a.PodIp, err)
+				continue
+			}
+			backends = append(backends, &rpc.QuicBackend{
+				Ip:     aip.AsSlice(),
+				Kind:   "agent",
+				Port:   a.QuicPort,
+				PodUid: a.PodUid,
+			})
+		}
+		return &rpc.QuicBackendSnapshot{Backends: backends}
+	}
+
+	// The first delta on agentsCh is always the current full snapshot
+	// (cache.Map.Subscribe semantics); send it right away, with no debounce.
+	select {
+	case <-ctx.Done():
+		return nil
+	case delta, ok := <-agentsCh:
+		if !ok {
+			return nil
+		}
+		applyDelta(delta)
+	}
+	if err := stream.Send(buildSnapshot()); err != nil {
+		return err
+	}
+
+	debounce := time.NewTimer(quicBackendWatchDebounce)
+	if !debounce.Stop() {
+		<-debounce.C
+	}
+	pending := false
+	for {
+		var debounceCh <-chan time.Time
+		if pending {
+			debounceCh = debounce.C
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case delta, ok := <-agentsCh:
+			if !ok {
+				return nil
+			}
+			if applyDelta(delta) && !pending {
+				pending = true
+				debounce.Reset(quicBackendWatchDebounce)
+			}
+		case <-debounceCh:
+			pending = false
+			if err := stream.Send(buildSnapshot()); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 // hasDomainSuffix checks if the given name is suffixed with the given suffix. The following

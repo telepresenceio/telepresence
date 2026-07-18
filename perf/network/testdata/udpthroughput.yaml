@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: perf-udp
+  labels:
+    app: perf-udp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: perf-udp
+  template:
+    metadata:
+      labels:
+        app: perf-udp
+    spec:
+      containers:
+        - name: udpthroughput
+          image: local/perf-udp:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 5202
+              protocol: UDP
+          env:
+            - name: PORT
+              value: "5202"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 64Mi
+            limits:
+              cpu: "2"
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: perf-udp
+  labels:
+    app: perf-udp
+spec:
+  selector:
+    app: perf-udp
+  ports:
+    - name: udp
+      port: 5202
+      targetPort: 5202
+      protocol: UDP

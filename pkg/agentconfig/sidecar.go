@@ -67,6 +67,14 @@ const (
 	// EnvAPIPort is the port number of the Telepresence API server when it is enabled.
 	EnvAPIPort = "TELEPRESENCE_API_PORT"
 
+	// EnvAgentQuicPort is the UDP port the traffic-agent's own QUIC listener binds
+	// to, set only when the traffic-manager that generated this config has its
+	// QUIC tunnel enabled (see managerutil.Env.TunnelQuicAgentPort). Per "Agent
+	// connections over QUIC" in docs/reference/quic-transport-architecture.md, the agent
+	// fetches its server certificate for this listener over its authenticated
+	// manager session (GetQuicAgentCert), for quicfwd.AgentSNI(its own pod UID).
+	EnvAgentQuicPort = "AGENT_QUIC_PORT"
+
 	// EnvNodeAgentContainerIDs holds a JSON object mapping agent container name to CRI
 	// container ID, e.g. {"app":"containerd://abc"}. The traffic-manager sets it when it
 	// creates a node-agent Job, and the node-agent reads it to resolve each configured
@@ -231,6 +239,11 @@ type Sidecar struct {
 
 	// The port used by the agents restFUL API server.
 	APIPort uint16 `json:"apiPort,omitzero"`
+
+	// QuicPort is the UDP port the traffic-agent's own QUIC listener binds to.
+	// Zero (the default) means the traffic-manager that generated this config
+	// has no QUIC tunnel enabled, so the agent runs no QUIC listener at all.
+	QuicPort uint16 `json:"quicPort,omitzero"`
 
 	// Resources for the sidecar.
 	Resources *core.ResourceRequirements `json:"resources,omitempty"`

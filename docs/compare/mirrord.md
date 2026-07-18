@@ -88,6 +88,16 @@ architecture pays off:
   back again (the [local shortcut](../reference/config.md#intercept)). With
   per-process injection, every hop between the local services goes through
   the cluster.
+- **An optional QUIC data path.** By default, both tools tunnel all traffic
+  through the Kubernetes API server: one TCP connection, where a single lost
+  packet stalls every flow sharing it (head-of-line blocking) and a busy
+  apiserver throttles the session. For mirrord that path is the only one.
+  Telepresence keeps it as the zero-configuration default, but a cluster
+  operator can opt in to a QUIC endpoint: tunneled flows then ride
+  independently retransmitted streams over an encrypted UDP path that leaves
+  the apiserver out entirely, survives the laptop switching networks, and
+  falls back to the API-server path silently whenever UDP is blocked. Trust
+  still bootstraps from your kubeconfig — no new credentials to manage.
 
 ## Choosing between them
 
@@ -122,6 +132,7 @@ This comparison applies to the Open Source editions of both products.
 | Can replace a container                                              | ✅            | ❌       |
 | Can ingest a container                                               | ✅            | ❌       |
 | Routes traffic between concurrent local attachments locally          | ✅            | ❌       |
+| Optional QUIC transport that takes the data path off the API server  | ✅            | ❌       |
 | Works without restarting the remote workload                         | ✅ [^3]       | ✅       |
 | Centralized client configuration through a Helm chart                | ✅            | ❌       |
 
