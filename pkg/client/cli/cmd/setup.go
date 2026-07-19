@@ -13,6 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/setup"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
 type setupCommand struct {
@@ -100,10 +101,11 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	facts, err := sc.gatherFacts(cmd)
+	cl, err := sc.connectAndProbe(cmd)
 	if err != nil {
 		return err
 	}
+	facts := cl.facts
 	ctx := cmd.Context()
 
 	_, isTTY := term.GetFdInfo(cmd.InOrStdin())
@@ -160,12 +162,23 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	applying := sc.apply && proposal.Action != setup.ActionNone
+	var applyOutcome string
+	var verification []setup.Note
+	if applying && formatted {
+		if applyOutcome, verification, err = sc.applyAndVerify(cl, proposal, io.Discard); err != nil {
+			return err
+		}
+	}
+
 	if !toStdout {
 		sum := &setup.Summary{
-			Facts:    facts,
-			Answers:  ivAnswers,
-			Proposal: proposal,
-			Action:   setup.ActionWord(proposal.Action, sc.apply),
+			Facts:        facts,
+			Answers:      ivAnswers,
+			Proposal:     proposal,
+			Action:       setup.ActionWord(proposal.Action, sc.apply),
+			ApplyOutcome: applyOutcome,
+			Verification: verification,
 		}
 		if err = setup.PrintReport(cmd, sum); err != nil {
 			return err
@@ -184,16 +197,43 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
-	if sc.apply && proposal.Action != setup.ActionNone {
-		return errcat.User.New("--apply is not yet implemented")
+	if applying && !formatted {
+		w := cmd.OutOrStdout()
+		if toStdout {
+			w = cmd.ErrOrStderr()
+		}
+		ioutil.Println(w, "Applying...")
+		if _, verification, err = sc.applyAndVerify(cl, proposal, w); err != nil {
+			return err
+		}
+		setup.PrintNotes(w, "Verification:", verification)
 	}
 	return nil
 }
 
-// gatherFacts connects to the cluster named by the kube flags and runs the
-// probes against it, exactly the way the helm commands resolve their cluster
-// and manager namespace.
-func (sc *setupCommand) gatherFacts(cmd *cobra.Command) (*setup.ClusterFacts, error) {
+// applyAndVerify installs or upgrades the traffic-manager with the proposal
+// and runs the post-apply checks.
+func (sc *setupCommand) applyAndVerify(cl *setupCluster, p *setup.Proposal, out io.Writer) (string, []setup.Note, error) {
+	if err := setup.Apply(cl.cluster, cl.cluster.Kubeconfig, cl.managerNamespace, p, out); err != nil {
+		return "", nil, err
+	}
+	return setup.ApplyOutcome(p.Action), setup.VerifyInstall(cl.cluster, cl.ki, cl.managerNamespace, p.Values), nil
+}
+
+// setupCluster is the probed cluster together with the handles the apply and
+// verification steps need: the cluster acts as both context and
+// RESTClientGetter.
+type setupCluster struct {
+	facts            *setup.ClusterFacts
+	cluster          *k8s.Cluster
+	ki               kubernetes.Interface
+	managerNamespace string
+}
+
+// connectAndProbe connects to the cluster named by the kube flags and runs
+// the probes against it, exactly the way the helm commands resolve their
+// cluster and manager namespace.
+func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, error) {
 	if err := sc.rq.CommitFlags(cmd); err != nil {
 		return nil, err
 	}
@@ -224,10 +264,18 @@ func (sc *setupCommand) gatherFacts(cmd *cobra.Command) (*setup.ClusterFacts, er
 		return nil, err
 	}
 
+	cl := &setupCluster{
+		cluster:          cluster,
+		ki:               ki,
+		managerNamespace: k8s.GetManagerNamespace(cluster),
+	}
 	prober := &setup.Prober{
 		KubeClient:       ki,
-		ManagerNamespace: k8s.GetManagerNamespace(cluster),
+		ManagerNamespace: cl.managerNamespace,
 		ReleaseLookup:    setup.NewReleaseLookup(cluster.Kubeconfig),
 	}
-	return prober.GatherFacts(cluster)
+	if cl.facts, err = prober.GatherFacts(cluster); err != nil {
+		return nil, err
+	}
+	return cl, nil
 }

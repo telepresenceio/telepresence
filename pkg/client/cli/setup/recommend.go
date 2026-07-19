@@ -43,6 +43,7 @@ type Proposal struct {
 	Values      map[string]any `json:"values"`                // final values to install/upgrade with
 	BaseValues  map[string]any `json:"baseValues,omitempty"`  // existing release values when upgrading
 	ChangedKeys []string       `json:"changedKeys,omitempty"` // dotted paths where Values differs from BaseValues
+	Version     string         `json:"version,omitempty"`     // chart/manager version the apply must use; empty means the client's own
 	Notes       []Note         `json:"notes,omitempty"`
 }
 
@@ -234,6 +235,7 @@ func decideAction(facts *ClusterFacts, a *Answers, vals map[string]any, p *Propo
 		case len(p.ChangedKeys) > 0:
 			p.Action = ActionUpgrade
 			if age != releaseSame {
+				p.Version = facts.Release.Version
 				info("the installed traffic-manager version %s is kept; only values change", facts.Release.Version)
 			}
 		default:

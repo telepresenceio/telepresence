@@ -16,12 +16,14 @@ import (
 )
 
 // Summary is the one structured object the setup command reports: everything
-// that was found, answered, and proposed.
+// that was found, answered, proposed, and (with --apply) done.
 type Summary struct {
-	Facts    *ClusterFacts `json:"facts"`
-	Answers  *Answers      `json:"answers"`
-	Proposal *Proposal     `json:"proposal"`
-	Action   string        `json:"action"` // "would-install" / "would-upgrade" / "install" / "upgrade" / "none"
+	Facts        *ClusterFacts `json:"facts"`
+	Answers      *Answers      `json:"answers"`
+	Proposal     *Proposal     `json:"proposal"`
+	Action       string        `json:"action"` // "would-install" / "would-upgrade" / "install" / "upgrade" / "none"
+	ApplyOutcome string        `json:"applyOutcome,omitempty"`
+	Verification []Note        `json:"verification,omitempty"`
 }
 
 // ActionWord renders a proposal action in the state-manifest verb style:
@@ -57,18 +59,25 @@ func PrintReport(cmd *cobra.Command, s *Summary) error {
 			}
 		}
 	}
-	if len(s.Proposal.Notes) > 0 {
-		ioutil.Println(w, "Notes:")
-		for _, n := range s.Proposal.Notes {
-			label := "note"
-			if n.Level == NoteWarning {
-				label = "warning"
-			}
-			ioutil.Printf(w, "  %s: %s\n", label, n.Text)
-		}
-	}
+	PrintNotes(w, "Notes:", s.Proposal.Notes)
 	ioutil.Printf(w, "Action: %s\n", s.Action)
 	return nil
+}
+
+// PrintNotes renders a section of note/warning lines; an empty list renders
+// nothing.
+func PrintNotes(w io.Writer, header string, notes []Note) {
+	if len(notes) == 0 {
+		return
+	}
+	ioutil.Println(w, header)
+	for _, n := range notes {
+		label := "note"
+		if n.Level == NoteWarning {
+			label = "warning"
+		}
+		ioutil.Printf(w, "  %s: %s\n", label, n.Text)
+	}
 }
 
 func printFindings(w io.Writer, facts *ClusterFacts) {

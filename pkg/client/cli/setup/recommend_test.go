@@ -198,6 +198,7 @@ func TestRecommend_UpgradeMerge(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, ActionUpgrade, p.Action)
+	assert.Empty(t, p.Version)
 	assert.Equal(t, facts.Release.Values, p.BaseValues)
 	assert.Equal(t, "debug", val(t, p.Values, "logLevel"))
 	assert.Equal(t, false, val(t, p.Values, "agentInjector", "enabled"))
@@ -217,6 +218,7 @@ func TestRecommend_KeepVersionWhenUpgradeDeclined(t *testing.T) {
 	p, err := Recommend(facts, recAnswers())
 	require.NoError(t, err)
 	assert.Equal(t, ActionUpgrade, p.Action)
+	assert.Equal(t, olderVersion(), p.Version)
 	assert.Contains(t, notesText(p), "version "+olderVersion()+" is kept")
 }
 
