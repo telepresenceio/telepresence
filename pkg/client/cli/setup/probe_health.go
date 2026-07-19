@@ -71,7 +71,7 @@ func (p *Prober) probeHealth(ctx context.Context, rel *ReleaseFacts) *HealthFact
 		h.InjectorEndpoints = &endpoints
 	}
 	if enabled, present := boolAt(rel.Values, "quicTunnel", "enabled"); present && enabled {
-		quic, _ := quicServiceFinding(ctx, p.KubeClient, p.ManagerNamespace)
+		quic, _, _ := quicServiceFinding(ctx, p.KubeClient, p.ManagerNamespace)
 		h.Quic = &quic
 	}
 	return h
