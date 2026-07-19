@@ -126,6 +126,62 @@ func TestInterview_PresetSkipsPrompts(t *testing.T) {
 	assert.Equal(t, ScopeAll, a.Scope)
 }
 
+// TestInterview_InputPinsSkipQuestions verifies that answers pinned by an
+// input values document are not asked, while unpinned questions still are.
+func TestInterview_InputPinsSkipQuestions(t *testing.T) {
+	t.Run("pinned attach and scope are not asked", func(t *testing.T) {
+		pins := DerivePins(map[string]any{
+			"agentInjector": map[string]any{"enabled": false},
+			"nodeAgent":     map[string]any{"enabled": true},
+			"quicTunnel":    map[string]any{"enabled": false},
+			"namespaces":    []any{"foo"},
+		})
+		a := Answers{Attach: true, Quic: TriAuto}
+		pre := Preset{}
+		pins.ApplyTo(&a, &pre)
+
+		got, out, err := runInterview(t, recFacts(), "", a, pre, false)
+		require.NoError(t, err)
+		assert.NotContains(t, out, "attach to workloads")
+		assert.NotContains(t, out, "replace command")
+		assert.NotContains(t, out, "Choose 1-4")
+		assert.True(t, got.Attach)
+		assert.False(t, got.Replace)
+		assert.Equal(t, TriOff, got.Quic)
+		assert.Equal(t, ScopeNamespaces, got.Scope)
+		assert.Equal(t, []string{"foo", "ambassador"}, got.ManagedNamespaces)
+	})
+	t.Run("VPN-only input pins attach=false and skips the question", func(t *testing.T) {
+		pins := DerivePins(map[string]any{
+			"agentInjector": map[string]any{"enabled": false},
+			"nodeAgent":     map[string]any{"enabled": false},
+		})
+		a := Answers{Attach: true, Quic: TriAuto}
+		pre := Preset{}
+		pins.ApplyTo(&a, &pre)
+
+		got, out, err := runInterview(t, recFacts(), "\n", a, pre, false)
+		require.NoError(t, err)
+		assert.NotContains(t, out, "attach to workloads")
+		assert.NotContains(t, out, "replace command")
+		assert.Contains(t, out, "Choose 1-4")
+		assert.False(t, got.Attach)
+	})
+	t.Run("unpinned questions are still asked", func(t *testing.T) {
+		pins := DerivePins(map[string]any{"nodeAgent": map[string]any{"enabled": true}})
+		a := Answers{Quic: TriAuto}
+		pre := Preset{}
+		pins.ApplyTo(&a, &pre)
+
+		got, out, err := runInterview(t, recFacts(), "\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.NotContains(t, out, "attach to workloads")
+		assert.Contains(t, out, "replace command")
+		assert.Contains(t, out, "Choose 1-4")
+		assert.True(t, got.Attach)
+	})
+}
+
 func TestInterview_ScopeRecommendation(t *testing.T) {
 	facts := recFacts(func(f *ClusterFacts) {
 		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}

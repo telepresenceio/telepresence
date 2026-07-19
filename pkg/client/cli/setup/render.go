@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/manifest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -25,19 +25,17 @@ type Summary struct {
 }
 
 // ActionWord renders a proposal action in the state-manifest verb style:
-// dry-run actions become "would-<action>".
-func ActionWord(a Action, dryRun bool) string {
-	if dryRun && a != ActionNone {
+// without --apply the action becomes "would-<action>".
+func ActionWord(a Action, apply bool) string {
+	if !apply && a != ActionNone {
 		return "would-" + string(a)
 	}
 	return string(a)
 }
 
 // PrintReport writes the summary: one structured object when formatted output
-// was requested, otherwise sectioned text. showManifest selects whether a
-// mapped-namespaces proposal renders its workstation state snippet inline
-// (false when the snippet already went to a --manifest-out file).
-func PrintReport(cmd *cobra.Command, s *Summary, showManifest bool) error {
+// was requested, otherwise sectioned text.
+func PrintReport(cmd *cobra.Command, s *Summary) error {
 	if output.WantsFormatted(cmd) {
 		output.Object(cmd.Context(), s, true)
 		return nil
@@ -68,14 +66,6 @@ func PrintReport(cmd *cobra.Command, s *Summary, showManifest bool) error {
 			}
 			ioutil.Printf(w, "  %s: %s\n", label, n.Text)
 		}
-	}
-	if showManifest && len(s.Proposal.MappedNamespaces) > 0 {
-		snippet, err := WorkstationStateSnippet(s.Facts.ManagerNamespace, s.Proposal.MappedNamespaces)
-		if err != nil {
-			return err
-		}
-		ioutil.Println(w, "Workstation state manifest:")
-		writeIndented(w, string(snippet))
 	}
 	ioutil.Printf(w, "Action: %s\n", s.Action)
 	return nil
@@ -175,33 +165,21 @@ func writeIndented(w io.Writer, text string) {
 	}
 }
 
-// WriteValuesFile writes the proposal's Helm values as YAML.
-func WriteValuesFile(path string, values map[string]any) error {
+// WriteValues writes the proposal's Helm values as YAML.
+func WriteValues(w io.Writer, values map[string]any) error {
 	data, err := yaml.Marshal(values)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	_, err = w.Write(data)
+	return err
 }
 
-// WorkstationStateSnippet renders a WorkstationState manifest that maps the
-// given namespaces client-side.
-func WorkstationStateSnippet(managerNamespace string, mappedNamespaces []string) ([]byte, error) {
-	return yaml.Marshal(manifest.State{
-		APIVersion: "telepresence.io/v1alpha1",
-		Kind:       "WorkstationState",
-		Connection: &manifest.Connection{
-			ManagerNamespace: managerNamespace,
-			MappedNamespaces: mappedNamespaces,
-		},
-	})
-}
-
-// WriteManifestSnippet writes the WorkstationState snippet to a file.
-func WriteManifestSnippet(path, managerNamespace string, mappedNamespaces []string) error {
-	data, err := WorkstationStateSnippet(managerNamespace, mappedNamespaces)
-	if err != nil {
+// WriteValuesFile writes the proposal's Helm values as YAML to a file.
+func WriteValuesFile(path string, values map[string]any) error {
+	var buf bytes.Buffer
+	if err := WriteValues(&buf, values); err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, buf.Bytes(), 0o644)
 }

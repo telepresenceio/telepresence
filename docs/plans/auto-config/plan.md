@@ -28,10 +28,10 @@ telepresence setup [flags]
 
 | Flag | Meaning |
 |------|---------|
-| `--dry-run` | Probe, interview, and print the proposal; change nothing |
-| `--values-out FILE` | Write the generated values.yaml |
-| `--non-interactive` | Never prompt; unanswered questions fall back to flag values or safe defaults, and the final confirmation is skipped only with `--yes` |
-| `--yes` | Skip the final apply confirmation (not `--force`, which already means force-recreate in kubectl/helm) |
+| `--output FILE` | Write the resulting values.yaml, suitable for a Helm install. `-` writes it to stdout and silences all other output: the report is suppressed and prompts/advisories go to stderr, so `setup --output - \| helm install -f -` works, interactively or not. Combining `--output -` with `--format` is an error (both claim stdout) |
+| `--input FILE` | Read such a values file; its settings become pinned defaults (see Input pinning) |
+| `--apply` | Install/upgrade the traffic-manager with the resulting values |
+| `--non-interactive` | Never prompt; unanswered questions fall back to flag values, input-pinned settings, or safe defaults |
 | `--attach[=bool]` | Answer Q1 (clients attach to workloads) |
 | `--replace[=bool]` | Answer Q2 (replace command will be used) |
 | `--upgrade-manager[=bool]` | Answer Q4 (upgrade existing traffic-manager) |
@@ -40,13 +40,68 @@ telepresence setup [flags]
 | `--scope=all\|namespaces\|selector\|mapped` | Answer Q5 (namespace limiting strategy) |
 | `--managed-namespaces=LIST` | Namespace list when `--scope=namespaces` |
 
+All flags are optional and every combination is allowed. The mode falls out
+of `--output`/`--apply`: with neither, the command probes, interviews, and
+reports — it simply validates the setup. `--output` additionally writes the
+values file; `--apply` additionally performs the install/upgrade. There is
+no separate confirmation step and no `--dry-run`/`--yes`: not passing
+`--apply` is the dry run, and passing it is the consent.
+
+A local `--output FILE` deliberately shadows the deprecated hidden global
+`--output` format flag; the output package detects the shadowing by the
+global flag's `"default"` default value and leaves the local flag alone, and
+structured output remains available via `--format`.
+
 Plus the standard kube flags (`--kubeconfig`, `--context`, `-n` for the
 manager namespace, resolved the same way `helm install` resolves it today,
 `pkg/client/cli/helm/install.go`).
 
+### Non-interactive defaults
+
+With `--non-interactive` (or a non-TTY stdin) every unanswered question takes
+a default. Precedence per setting: explicit flag > input-pinned value >
+default. The defaults are:
+
+| Setting | Default |
+|---------|---------|
+| attach | yes |
+| replace | no |
+| manager upgrade | yes (only relevant when an older release is installed) |
+| QUIC | `auto` — the probe verdict decides |
+| node-agent | `auto` — the probe verdict decides |
+| scope | no limit; when the probes show cluster-wide privileges are missing, a managed list containing just the manager namespace |
+| managed namespaces | with `--scope=namespaces` and no list: the manager namespace; `--scope=mapped` without `--managed-namespaces` is an error; `--scope=selector` is an error (the label selector has no flag and needs a prompt) |
+
 Prompting is plain stdin/stdout (bufio + `[y/N]`-style questions), no new TUI
 dependency. When stdin is not a TTY the command behaves as
 `--non-interactive`.
+
+### Input pinning (`--input`)
+
+The input file is a Helm values document (typically one produced by
+`--output`, but any traffic-manager values file works). Its settings are
+authoritative defaults:
+
+- A setting present in the input is never asked about when it doesn't
+  conflict with the probes' conclusions: `agentInjector.enabled` /
+  `nodeAgent.enabled` pin the attach/replace decisions they imply,
+  `quicTunnel.enabled` (and `quicTunnel.service.type`) pin the QUIC choice,
+  and `namespaces` / `namespaceSelector` /
+  `client.cluster.mappedNamespaces` pin the scope question.
+- A pinned setting is never changed without consulting the user. When the
+  decision engine would choose differently, the conflict is put to the user
+  (`The input sets <key>=<v>; probing recommends <w>. Keep the input value?
+  [Y/n]`, default keep). In non-interactive mode the input value is kept and
+  the report carries a warning note instead.
+- Hard incompatibilities stay errors regardless (e.g. the input enables the
+  agent-injector but the webhook cannot be created): validation's job is to
+  surface them, not to negotiate.
+- Keys the engine has no opinion about (image, resources, ...) pass through
+  to the result untouched, so an `--input FILE --output FILE` round trip is
+  lossless.
+
+Value precedence, bottom to top: existing release values (when upgrading) <
+input values < engine decisions for unpinned keys and consented changes.
 
 ## Probes (cluster analysis)
 
@@ -150,13 +205,16 @@ Best-effort fetch of `stable.txt` (the `ann.Tel2` URL format,
 ## Interview (gated questions)
 
 Questions are only asked when the probes make them relevant, and every
-question is answerable via flag for scripting:
+question is answerable via flag for scripting. An answer pinned by the
+`--input` file (see Input pinning) is never asked either — "always" below
+means "unless answered by a flag or pinned by the input":
 
 1. **Attach or VPN-only** (always): "Will clients attach to workloads
    (intercept/replace/ingest/wiretap), or is this cluster access only?"
    VPN-only → no agent machinery at all: `agentInjector.enabled: false`,
    `nodeAgent.enabled: false`, and the report notes the reduced RBAC
-   footprint.
+   footprint. An input carrying both of those keys pins this answer (both
+   false → VPN-only), so the question is skipped.
 2. **Replace usage** (only if Q1 = attach AND node-agent viable): "Will you
    use the replace command?" — replace is implemented by the injection
    machinery and is not supported in node-agent mode, so a yes keeps the
@@ -172,9 +230,10 @@ question is answerable via flag for scripting:
    downgrade the manager.
 5. **Namespace scope** (always asked, presenting the P5 count as evidence):
    choose between a managed namespace list (`namespaces`), a label selector
-   (`namespaceSelector`), client-side mapped namespaces (emitted as a
-   workstation state manifest `connection.mappedNamespaces` snippet, not a
-   helm value), or no limit. The default answer is "no limit" for small
+   (`namespaceSelector`), mapped namespaces (an unrestricted install that
+   sets `client.cluster.mappedNamespaces` — the manager delivers it to
+   clients as their mapped-namespaces default, which local flags/config
+   still override), or no limit. The default answer is "no limit" for small
    clusters, with a recommendation to limit when the namespace count is
    large.
 
@@ -207,15 +266,17 @@ probe evidence that produced each decision), and the planned action
 
 - **Report rendering** mirrors `pkg/client/cli/manifest/report.go`:
   `output.WantsFormatted` → one structured object
-  `{facts, answers, proposal, actions}` honoring `--output json|yaml`;
+  `{facts, answers, proposal, actions}` honoring `--format json|yaml`;
   otherwise sectioned text: Findings, Proposed configuration (the values
   document verbatim), Actions.
-- **Dry-run** stops after the report (actions rendered as `would-install` /
-  `would-upgrade`, matching the state-manifest verb style).
-- **Apply**: confirmation prompt showing the values document (skipped with
-  `--yes`), then hand the marshaled values to the existing
+- **Validation mode** (no `--apply`) stops after the report and any
+  `--output` file (actions rendered as `would-install` / `would-upgrade`,
+  matching the state-manifest verb style).
+- **Apply** (`--apply`): hand the marshaled values to the existing
   `helm.Request.Run` daemon path — inheriting `Atomic`, `Wait`, and the
-  `runManagerHelm` event-watch abort diagnostics for free.
+  `runManagerHelm` event-watch abort diagnostics for free. No confirmation
+  prompt: the flag is the consent, and the interview already engaged the
+  user for everything debatable.
 - **Post-apply verification**:
   - traffic-manager Deployment ready (already covered by Atomic/Wait);
   - QUIC: when enabled, poll the quic Service for LB ingress (LoadBalancer)
@@ -238,9 +299,10 @@ pkg/client/cli/setup/
   probe_release.go  // P6
   probe_update.go   // P7
   interview.go      // Answers, gating, prompting, flag overrides
+  input.go          // --input parsing, pinned-answer derivation, conflicts
   recommend.go      // pure decision engine
   render.go         // values generation + report (manifest/report.go pattern)
-  apply.go          // confirmation + helm.Request handoff + verification
+  apply.go          // helm.Request handoff + verification
 pkg/client/cli/cmd/setup.go   // command registration
 ```
 
@@ -250,11 +312,12 @@ pkg/client/cli/cmd/setup.go   // command registration
   QUIC/scope permutations); probe tests against fake clientsets and
   `pkg/k8sapi/fake_auth.go`.
 - **Integration** (`integration_test/setup_test.go`): against the kind test
-  cluster — `setup --dry-run --non-interactive --attach` should conclude
-  node-agent viable (containerd, permissive PSS) and QUIC = NodePort (no
-  LB); a full `setup --yes` install followed by connect + a node-agent
-  attachment; an upgrade scenario over a pre-installed older-values release
-  verifying the merge-and-diff behavior.
+  cluster — `setup --non-interactive --attach` should conclude node-agent
+  viable (containerd, permissive PSS) and QUIC = NodePort (no LB); a full
+  `setup --apply` install followed by connect + a node-agent attachment; an
+  upgrade scenario over a pre-installed older-values release verifying the
+  merge-and-diff behavior; an `--output` / `--input` round trip preserving
+  passthrough keys and skipping the pinned questions.
 - **Docs**: `docs/reference/setup.md` (or a quick-start slot) + changelog
   entry.
 
@@ -271,12 +334,20 @@ pkg/client/cli/cmd/setup.go   // command registration
 1. **Command name**: `telepresence setup`.
 2. **Q3 action**: advisory only; the tool never attempts a client
    self-update.
-3. **Mapped-namespaces emission**: when the user picks client-side scoping,
-   emit a `WorkstationState` manifest snippet (this branch's schema) via
-   `--manifest-out FILE`, printed otherwise.
-4. **Default mode**: apply with a confirmation prompt; `--dry-run` proposes
-   without changing anything, `--yes` applies without confirmation
-   (`--force` was rejected: kubectl and helm both use it to mean
-   force-recreate, and setup delegates to helm upgrade).
+3. **Mapped-namespaces emission** (superseded 2026-07-19): originally a
+   `WorkstationState` snippet via `--manifest-out`. Removed: setup stores
+   nothing client-side — its only client-side output is the update-check
+   advisory (`ann.UpdateCheckFormat: ann.Tel2`, as on `telepresence
+   intercept`). The mapped choice instead sets the Helm value
+   `client.cluster.mappedNamespaces`: the chart writes `.Values.client`
+   into the manager's `client.yaml`, `GetClientConfig` delivers it at
+   session start, and `effectiveMappedNamespaces`
+   (`pkg/client/userd/trafficmgr/session.go`) applies it as the default
+   with local flag/config priority.
+4. **Default mode** (superseded 2026-07-19): originally
+   apply-with-confirmation plus `--dry-run`/`--yes` (`--force` was rejected:
+   kubectl and helm both use it to mean force-recreate). Replaced by the
+   `--output`/`--input`/`--apply` surface: validation is the default, the
+   mutating flags are the consent, and no confirmation prompt exists.
 5. **Namespace scoping**: no automatic threshold — the scope question is
    always asked, with the probed namespace count presented as evidence.

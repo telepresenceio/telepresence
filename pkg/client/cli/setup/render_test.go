@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
 
 func renderSummary() *Summary {
@@ -28,7 +30,7 @@ func renderSummary() *Summary {
 				{Level: NoteWarning, Text: "a cautionary note"},
 			},
 		},
-		Action: ActionWord(ActionInstall, true),
+		Action: ActionWord(ActionInstall, false),
 	}
 }
 
@@ -37,7 +39,7 @@ func TestPrintReport_Text(t *testing.T) {
 	cmd := &cobra.Command{}
 	cmd.SetOut(out)
 
-	require.NoError(t, PrintReport(cmd, renderSummary(), true))
+	require.NoError(t, PrintReport(cmd, renderSummary()))
 	text := out.String()
 	assert.Contains(t, text, "Findings:")
 	assert.Contains(t, text, "  privileges: cluster-wide install yes")
@@ -49,20 +51,29 @@ func TestPrintReport_Text(t *testing.T) {
 	assert.Contains(t, text, "Action: would-install")
 }
 
-func TestPrintReport_MappedManifestSection(t *testing.T) {
-	s := renderSummary()
-	s.Proposal.MappedNamespaces = []string{"foo"}
+func TestActionWord(t *testing.T) {
+	assert.Equal(t, "would-install", ActionWord(ActionInstall, false))
+	assert.Equal(t, "would-upgrade", ActionWord(ActionUpgrade, false))
+	assert.Equal(t, "install", ActionWord(ActionInstall, true))
+	assert.Equal(t, "none", ActionWord(ActionNone, false))
+	assert.Equal(t, "none", ActionWord(ActionNone, true))
+}
 
+// TestPrintReport_LocalOutputFlagDoesNotConfuseFormatting pins the deliberate
+// shadowing of the deprecated hidden global --output format flag by setup's
+// local --output FILE flag: the output package recognizes the global flag by
+// its "default" default value, so a set local flag with default "" must not
+// switch the report into formatted mode.
+func TestPrintReport_LocalOutputFlagDoesNotConfuseFormatting(t *testing.T) {
 	out := &bytes.Buffer{}
 	cmd := &cobra.Command{}
 	cmd.SetOut(out)
-	require.NoError(t, PrintReport(cmd, s, true))
-	assert.Contains(t, out.String(), "Workstation state manifest:")
-	assert.Contains(t, out.String(), "kind: WorkstationState")
+	cmd.Flags().String("output", "", "")
+	require.NoError(t, cmd.Flags().Set("output", "/tmp/values.yaml"))
 
-	out.Reset()
-	require.NoError(t, PrintReport(cmd, s, false))
-	assert.NotContains(t, out.String(), "Workstation state manifest:")
+	assert.False(t, output.WantsFormatted(cmd))
+	require.NoError(t, PrintReport(cmd, renderSummary()))
+	assert.Contains(t, out.String(), "Findings:")
 }
 
 func TestSummary_MarshalsCleanJSON(t *testing.T) {
@@ -75,6 +86,19 @@ func TestSummary_MarshalsCleanJSON(t *testing.T) {
 	assert.Contains(t, m, "answers")
 	assert.Contains(t, m, "proposal")
 	assert.Equal(t, "would-install", m["action"])
+}
+
+func TestWriteValues_RoundTrip(t *testing.T) {
+	values := map[string]any{
+		"nodeAgent": map[string]any{"enabled": true},
+		"client":    map[string]any{"cluster": map[string]any{"mappedNamespaces": []any{"foo"}}},
+	}
+	buf := &bytes.Buffer{}
+	require.NoError(t, WriteValues(buf, values))
+
+	var got map[string]any
+	require.NoError(t, yaml.Unmarshal(buf.Bytes(), &got))
+	assert.Equal(t, values, got)
 }
 
 func TestWriteValuesFile_RoundTrip(t *testing.T) {
@@ -90,15 +114,4 @@ func TestWriteValuesFile_RoundTrip(t *testing.T) {
 	var got map[string]any
 	require.NoError(t, yaml.Unmarshal(data, &got))
 	assert.Equal(t, values, got)
-}
-
-func TestWorkstationStateSnippet(t *testing.T) {
-	data, err := WorkstationStateSnippet("ambassador", []string{"foo", "bar"})
-	require.NoError(t, err)
-	text := string(data)
-	assert.Contains(t, text, "apiVersion: telepresence.io/v1alpha1")
-	assert.Contains(t, text, "kind: WorkstationState")
-	assert.Contains(t, text, "managerNamespace: ambassador")
-	assert.Contains(t, text, "mappedNamespaces:")
-	assert.Contains(t, text, "- foo")
 }

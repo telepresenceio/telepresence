@@ -242,8 +242,22 @@ func TestRecommend_MappedScope(t *testing.T) {
 	})
 	p, err := Recommend(recFacts(), answers)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"foo", "bar"}, p.MappedNamespaces)
+	assert.Equal(t, []any{"foo", "bar"}, val(t, p.Values, "client", "cluster", "mappedNamespaces"))
 	assert.NotContains(t, p.Values, "namespaces")
+	assert.Contains(t, notesText(p), "mapped-namespaces default")
+
+	t.Run("other scopes set no client value", func(t *testing.T) {
+		for _, scope := range []ScopeChoice{ScopeAll, ScopeNamespaces, ScopeSelector} {
+			answers := recAnswers(func(a *Answers) {
+				a.Scope = scope
+				a.ManagedNamespaces = []string{"foo"}
+				a.SelectorLabels = map[string]string{"team": "dev"}
+			})
+			p, err := Recommend(recFacts(), answers)
+			require.NoError(t, err)
+			assert.NotContains(t, p.Values, "client", "scope %s", scope)
+		}
+	})
 }
 
 func TestRecommend_SelectorScope(t *testing.T) {

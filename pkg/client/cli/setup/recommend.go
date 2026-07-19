@@ -39,12 +39,11 @@ type Note struct {
 // Proposal is the outcome of the decision engine: the values to install or
 // upgrade with, the planned action, and the notes explaining both.
 type Proposal struct {
-	Action           Action         `json:"action"`
-	Values           map[string]any `json:"values"`                     // final values to install/upgrade with
-	BaseValues       map[string]any `json:"baseValues,omitempty"`       // existing release values when upgrading
-	ChangedKeys      []string       `json:"changedKeys,omitempty"`      // dotted paths where Values differs from BaseValues
-	MappedNamespaces []string       `json:"mappedNamespaces,omitempty"` // scope=mapped: goes to a WorkstationState snippet, not helm
-	Notes            []Note         `json:"notes,omitempty"`
+	Action      Action         `json:"action"`
+	Values      map[string]any `json:"values"`                // final values to install/upgrade with
+	BaseValues  map[string]any `json:"baseValues,omitempty"`  // existing release values when upgrading
+	ChangedKeys []string       `json:"changedKeys,omitempty"` // dotted paths where Values differs from BaseValues
+	Notes       []Note         `json:"notes,omitempty"`
 }
 
 type releaseAge int
@@ -79,6 +78,14 @@ func compareRelease(facts *ClusterFacts, clientVersion semver.Version) releaseAg
 // Recommend is the pure decision engine: it turns probed facts and interview
 // answers into a proposal, without any I/O or cluster access.
 func Recommend(facts *ClusterFacts, answers *Answers) (*Proposal, error) {
+	return RecommendWithInput(facts, answers, nil, nil)
+}
+
+// RecommendWithInput is Recommend with an input values document whose settings
+// are authoritative: the engine's values are reconciled against it before the
+// release-values merge, so the precedence is release values < input values <
+// engine decisions for unpinned keys and consented changes.
+func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]any, consult ConsultFunc) (*Proposal, error) {
 	a := *answers
 	if a.Scope == "" {
 		a.Scope = ScopeAll
@@ -136,7 +143,14 @@ func Recommend(facts *ClusterFacts, answers *Answers) (*Proposal, error) {
 		vals["namespaceSelector"] = map[string]any{"matchLabels": matchLabels}
 		info("a namespaceSelector uses one watcher per selected namespace up to maxNamespaceSpecificWatchers (default 10) before switching to cluster-wide watchers")
 	case ScopeMapped:
-		p.MappedNamespaces = a.ManagedNamespaces
+		nss := make([]any, len(a.ManagedNamespaces))
+		for i, ns := range a.ManagedNamespaces {
+			nss[i] = ns
+		}
+		// vals carries no "client" key at this point: the engine only sets
+		// agentInjector, nodeAgent, and quicTunnel before the scope switch.
+		vals["client"] = map[string]any{"cluster": map[string]any{"mappedNamespaces": nss}}
+		info("clients receive these namespaces as their mapped-namespaces default; a local --mapped-namespaces flag or config setting overrides it")
 	case ScopeAll:
 	}
 
@@ -145,6 +159,15 @@ func Recommend(facts *ClusterFacts, answers *Answers) (*Proposal, error) {
 	}
 	if injector && facts.Webhook.ReachabilityConcern != "" {
 		warn("%s", facts.Webhook.ReachabilityConcern)
+	}
+
+	if input != nil {
+		reconciled, notes, err := ReconcileWithInput(vals, input, consult)
+		if err != nil {
+			return nil, err
+		}
+		p.Notes = append(p.Notes, notes...)
+		vals = reconciled
 	}
 
 	decideAction(facts, &a, vals, p, info, warn)
@@ -177,8 +200,7 @@ func agentMachinery(facts *ClusterFacts, a *Answers, info, warn func(string, ...
 	if injector {
 		switch facts.Webhook.CanCreate.Verdict {
 		case VerdictNo:
-			return false, false, errcat.User.New(
-				"the agent-injector webhook is required, but creating mutatingwebhookconfigurations.admissionregistration.k8s.io is not permitted")
+			return false, false, webhookDeniedError()
 		case VerdictUnknown:
 			warn("could not verify permission to create the agent-injector webhook: %s",
 				strings.Join(facts.Webhook.CanCreate.Evidence, "; "))
@@ -229,15 +251,7 @@ func checkPrivileges(facts *ClusterFacts, clusterScope bool, warn func(string, .
 	if clusterScope {
 		switch pf.ClusterWide.Verdict {
 		case VerdictNo:
-			msg := "insufficient privileges for a cluster-wide install; missing:\n  " + strings.Join(pf.Missing, "\n  ")
-			switch pf.Namespaced.Verdict {
-			case VerdictYes:
-				msg += "\na namespace-limited install (--scope=namespaces) appears possible"
-			case VerdictNo:
-				msg += "\na namespace-limited install is also not permitted; missing:\n  " + strings.Join(pf.MissingNamespaced, "\n  ")
-			case VerdictProbable, VerdictUnknown:
-			}
-			return errcat.User.New(msg)
+			return clusterWideDeniedError(facts)
 		case VerdictUnknown:
 			warn("install privileges could not be verified: %s", strings.Join(pf.ClusterWide.Evidence, "; "))
 		case VerdictYes, VerdictProbable:
@@ -252,6 +266,29 @@ func checkPrivileges(facts *ClusterFacts, clusterScope bool, warn func(string, .
 	case VerdictYes, VerdictProbable:
 	}
 	return nil
+}
+
+// webhookDeniedError names the hard incompatibility between wanting the
+// agent-injector and lacking the privilege to create its webhook.
+func webhookDeniedError() error {
+	return errcat.User.New(
+		"the agent-injector webhook is required, but creating mutatingwebhookconfigurations.admissionregistration.k8s.io is not permitted")
+}
+
+// clusterWideDeniedError itemizes why a cluster-wide install is not permitted
+// and points at the namespace-limited fallback when the probes concluded it
+// would work.
+func clusterWideDeniedError(facts *ClusterFacts) error {
+	pf := &facts.Privileges
+	msg := "insufficient privileges for a cluster-wide install; missing:\n  " + strings.Join(pf.Missing, "\n  ")
+	switch pf.Namespaced.Verdict {
+	case VerdictYes:
+		msg += "\na namespace-limited install (--scope=namespaces) appears possible"
+	case VerdictNo:
+		msg += "\na namespace-limited install is also not permitted; missing:\n  " + strings.Join(pf.MissingNamespaced, "\n  ")
+	case VerdictProbable, VerdictUnknown:
+	}
+	return errcat.User.New(msg)
 }
 
 // quicValues decides quicTunnel.enabled and its service type and adds them to

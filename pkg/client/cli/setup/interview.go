@@ -197,7 +197,7 @@ func (iv *Interviewer) completeScope(a *Answers) error {
 			if iv.NonInteractive {
 				return errcat.User.New("--scope=mapped requires --managed-namespaces in non-interactive mode")
 			}
-			nss, err := iv.askList("Namespaces to map on the workstation (comma-separated): ")
+			nss, err := iv.askList("Namespaces delivered to clients as their mapped-namespaces default (comma-separated): ")
 			if err != nil {
 				return err
 			}
@@ -250,18 +250,12 @@ func (iv *Interviewer) askScope() (ScopeChoice, error) {
 	ioutil.Println(iv.Out, `  1) no limit (cluster-wide)`)
 	ioutil.Println(iv.Out, `  2) managed namespace list (Helm value "namespaces")`)
 	ioutil.Println(iv.Out, `  3) namespace label selector (Helm value "namespaceSelector")`)
-	ioutil.Println(iv.Out, `  4) client-side mapped namespaces (workstation state manifest)`)
+	ioutil.Println(iv.Out, `  4) mapped-namespaces default delivered to clients (Helm value "client.cluster.mappedNamespaces")`)
 	choice, err := iv.askChoice(fmt.Sprintf("Choose 1-4 [%d]: ", def), 4, def)
 	if err != nil {
 		return "", err
 	}
 	return [...]ScopeChoice{ScopeAll, ScopeNamespaces, ScopeSelector, ScopeMapped}[choice-1], nil
-}
-
-// Confirm asks a single yes/no question, defaulting to no.
-func Confirm(in io.Reader, out io.Writer, prompt string) (bool, error) {
-	iv := &Interviewer{In: in, Out: out}
-	return iv.askYesNo(prompt, false)
 }
 
 func (iv *Interviewer) askYesNo(prompt string, def bool) (bool, error) {
