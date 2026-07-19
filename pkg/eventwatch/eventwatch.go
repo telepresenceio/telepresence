@@ -33,6 +33,32 @@ func regardingMatches(e *events.Event, name, nd string) bool {
 	return (e.Regarding.Kind == "Pod" || e.Regarding.Kind == "ReplicaSet") && strings.HasPrefix(n, nd)
 }
 
+// ListWarnings returns the Warning events (type != "Normal") the API server
+// currently retains for the object named name, or any Pod or ReplicaSet it
+// owns (matched by the "name-" prefix), in namespace. Aggregated "(combined
+// from similar events)" duplicates are excluded. A one-shot complement to
+// WatchWarnings.
+func ListWarnings(ctx context.Context, ki kubernetes.Interface, namespace, name string) ([]*events.Event, error) {
+	el, err := ki.EventsV1().Events(namespace).List(ctx, meta.ListOptions{
+		FieldSelector: fields.OneTermNotEqualSelector("type", "Normal").String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	nd := name + "-"
+	var es []*events.Event
+	for i := range el.Items {
+		e := &el.Items[i]
+		if e.Type == "Normal" || strings.HasPrefix(e.Note, combinedNotePrefix) {
+			continue
+		}
+		if regardingMatches(e, name, nd) {
+			es = append(es, e)
+		}
+	}
+	return es, nil
+}
+
 // WatchWarnings streams Warning events (type != "Normal") for the object named
 // name, or any Pod or ReplicaSet it owns (matched by the "name-" prefix), in
 // namespace. Only events created at or after the call are delivered. The

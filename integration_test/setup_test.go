@@ -118,11 +118,15 @@ func (s *setupSuite) Test_SetupApplyIdempotence() {
 	s.True(s.trafficManagerInstalled(ctx), "expected a traffic-manager release after --apply")
 
 	// A second apply concludes that there is nothing to change; the epilogue
-	// still applies since a healthy installation exists.
+	// still applies since a healthy installation exists, and the doctor
+	// checks report it healthy.
 	stdout = itest.TelepresenceOk(ctx, s.setupArgs("--apply", "--non-interactive")...)
 	s.Contains(stdout, "Action: none")
 	s.Contains(stdout, "up to date")
 	s.NotContains(stdout, "Applying...")
+	s.Contains(stdout, "health: traffic-manager deployment yes")
+	s.Contains(stdout, "health: quic endpoint yes")
+	s.Contains(stdout, "health: version skew yes")
 	s.Contains(stdout, "Next steps:")
 
 	// Formatted validation over the up-to-date installation.
@@ -130,6 +134,17 @@ func (s *setupSuite) Test_SetupApplyIdempotence() {
 	var sum map[string]any
 	rq.NoError(json.Unmarshal([]byte(jsonOut), &sum))
 	s.Equal("none", sum["action"])
+	facts, ok := sum["facts"].(map[string]any)
+	rq.True(ok)
+	s.Contains(facts, "health")
+
+	// A broken installation turns the doctor checks into warnings and mutes
+	// the epilogue.
+	rq.NoError(itest.Kubectl(ctx, s.ManagerNamespace(), "scale", "deploy", "traffic-manager", "--replicas=0"))
+	stdout = itest.TelepresenceOk(ctx, s.setupArgs("--non-interactive")...)
+	s.Contains(stdout, "health: traffic-manager deployment no")
+	s.Contains(stdout, "scaled to zero")
+	s.NotContains(stdout, "Next steps:")
 }
 
 func (s *setupSuite) Test_SetupRoundTrip() {

@@ -130,10 +130,43 @@ func TestBanner(t *testing.T) {
 }
 
 func TestNextStepsWanted(t *testing.T) {
-	assert.True(t, NextStepsWanted(ActionInstall, true, false), "a successful apply wants next steps")
-	assert.True(t, NextStepsWanted(ActionNone, false, true), "validation over a healthy install wants next steps")
-	assert.False(t, NextStepsWanted(ActionInstall, false, false), "a plain would-install does not")
-	assert.False(t, NextStepsWanted(ActionNone, false, false), "action none without an install does not")
+	assert.True(t, NextStepsWanted(ActionInstall, true, false, true), "a successful apply wants next steps")
+	assert.True(t, NextStepsWanted(ActionNone, false, true, true), "validation over a healthy install wants next steps")
+	assert.False(t, NextStepsWanted(ActionInstall, false, false, true), "a plain would-install does not")
+	assert.False(t, NextStepsWanted(ActionNone, false, false, true), "action none without an install does not")
+	assert.False(t, NextStepsWanted(ActionNone, false, true, false), "an unhealthy install does not")
+}
+
+func TestHealthFactsClean(t *testing.T) {
+	var h *HealthFacts
+	assert.True(t, h.Clean(), "no health checks is clean")
+	h = &HealthFacts{
+		ManagerReady: Finding{Verdict: VerdictYes},
+		VersionSkew:  Finding{Verdict: VerdictUnknown},
+	}
+	assert.True(t, h.Clean(), "unknown findings do not make an install unhealthy")
+	h.Quic = &Finding{Verdict: VerdictNo}
+	assert.False(t, h.Clean())
+}
+
+func TestPrintReport_HealthLines(t *testing.T) {
+	s := renderSummary()
+	quic := Finding{Verdict: VerdictYes, Evidence: []string{"QUIC endpoint allocated node port 31234"}}
+	s.Facts.Health = &HealthFacts{
+		ManagerReady: Finding{Verdict: VerdictNo, Evidence: []string{"0 of 1 replicas ready", "BackOff: image pull failure"}},
+		Quic:         &quic,
+		VersionSkew:  Finding{Verdict: VerdictYes, Evidence: []string{"client and traffic-manager are both 2.31.0"}},
+	}
+	out := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(out)
+	require.NoError(t, PrintReport(cmd, s))
+	text := out.String()
+	assert.Contains(t, text, "  health: traffic-manager deployment no")
+	assert.Contains(t, text, "    - BackOff: image pull failure")
+	assert.Contains(t, text, "  health: quic endpoint yes")
+	assert.Contains(t, text, "  health: version skew yes")
+	assert.NotContains(t, text, "agent-injector webhook", "absent optional findings render no line")
 }
 
 func TestPrintNextSteps(t *testing.T) {

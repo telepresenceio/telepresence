@@ -244,7 +244,7 @@ func (sc *setupCommand) emit(
 		}
 		setup.PrintNotes(textOut, "Verification:", verification)
 	}
-	if !formatted && setup.NextStepsWanted(proposal.Action, applying, facts.Release.Installed) {
+	if !formatted && setup.NextStepsWanted(proposal.Action, applying, facts.Release.Installed, facts.Health.Clean()) {
 		setup.PrintNextSteps(textOut, facts, cl.workloadNamespace)
 	}
 	return nil

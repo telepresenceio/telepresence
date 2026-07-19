@@ -74,5 +74,13 @@ func TestGatherFacts_Smoke(t *testing.T) {
 	assert.Equal(t, VerdictYes, facts.Webhook.CanCreate.Verdict)
 	assert.Equal(t, 2, facts.Namespaces.Count)
 	assert.True(t, facts.Release.Installed)
+	require.NotNil(t, facts.Health, "an installed release must produce health facts")
+	assert.Equal(t, VerdictNo, facts.Health.VersionSkew.Verdict, "the stub release is newer than the test client")
+
 	assert.Equal(t, "2.31.0", facts.Release.Version)
+
+	p.ReleaseLookup = nil
+	facts, err = p.GatherFacts(context.Background())
+	require.NoError(t, err)
+	assert.Nil(t, facts.Health, "no installed release must leave the health facts nil")
 }

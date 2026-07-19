@@ -49,6 +49,7 @@ type ClusterFacts struct {
 	Webhook          WebhookFacts   `json:"webhook"`
 	Namespaces       NamespaceFacts `json:"namespaces"`
 	Release          ReleaseFacts   `json:"release"`
+	Health           *HealthFacts   `json:"health,omitempty"` // read-only doctor checks; only when a release is installed
 	ClientUpdate     UpdateFacts    `json:"clientUpdate"`
 	Workloads        WorkloadFacts  `json:"workloads"`
 }
@@ -196,6 +197,10 @@ func (p *Prober) GatherFacts(ctx context.Context) (*ClusterFacts, error) {
 	facts.Namespaces = p.probeNamespaceScale(ctx)
 	p.progress("Looking for an existing installation")
 	facts.Release = p.probeRelease(ctx)
+	if facts.Release.Installed {
+		p.progress("Checking installation health")
+		facts.Health = p.probeHealth(ctx, &facts.Release)
+	}
 	p.progress("Checking for a client update")
 	facts.ClientUpdate = p.probeUpdate(ctx)
 	facts.Workloads = p.probeWorkloads(ctx)

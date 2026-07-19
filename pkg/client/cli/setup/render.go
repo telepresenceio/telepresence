@@ -81,9 +81,11 @@ func Banner(facts *ClusterFacts) string {
 }
 
 // NextStepsWanted reports whether the next-steps epilogue applies: after a
-// successful apply, or when the installation already matches the proposal.
-func NextStepsWanted(action Action, applied, releaseInstalled bool) bool {
-	return applied || action == ActionNone && releaseInstalled
+// successful apply, or when a healthy installation already matches the
+// proposal. An unhealthy install gets the health findings, not a cheerful
+// epilogue.
+func NextStepsWanted(action Action, applied, releaseInstalled, healthy bool) bool {
+	return (applied || action == ActionNone && releaseInstalled) && healthy
 }
 
 // PrintNextSteps renders the personalized epilogue: how to connect, list, and
@@ -171,6 +173,15 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 		area(w, "release", "not installed", nil)
 	}
 
+	if h := facts.Health; h != nil {
+		healthArea(w, "traffic-manager deployment", &h.ManagerReady)
+		healthArea(w, "agent-injector webhook", h.Webhook)
+		healthArea(w, "webhook certificate", h.Certificate)
+		healthArea(w, "agent-injector endpoints", h.InjectorEndpoints)
+		healthArea(w, "quic endpoint", h.Quic)
+		healthArea(w, "version skew", &h.VersionSkew)
+	}
+
 	cu := &facts.ClientUpdate
 	switch {
 	case cu.UpdateAvailable:
@@ -179,6 +190,12 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 		area(w, "client update", "check failed", []string{cu.CheckError})
 	default:
 		area(w, "client update", "up to date", nil)
+	}
+}
+
+func healthArea(w io.Writer, label string, f *Finding) {
+	if f != nil {
+		area(w, "health", fmt.Sprintf("%s %s", label, f.Verdict), f.Evidence)
 	}
 }
 
