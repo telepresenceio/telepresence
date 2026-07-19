@@ -2,16 +2,21 @@ package cmd
 
 import (
 	"io"
+	"time"
 
 	"github.com/moby/term"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/setup"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
@@ -101,7 +106,11 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	sc.initProgress(cmd, toStdout)
+	pctx := cmd.Context()
+	progress.Start(pctx, "Analyzing cluster")
 	cl, err := sc.connectAndProbe(cmd)
+	progress.Stop(pctx)
 	if err != nil {
 		return err
 	}
@@ -117,6 +126,9 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 		promptOut = cmd.ErrOrStderr()
 	case formatted:
 		promptOut = io.Discard
+	}
+	if interactive {
+		ioutil.Println(promptOut, setup.Banner(facts))
 	}
 	answers := setup.Answers{
 		Attach:            sc.attach,
@@ -162,9 +174,31 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	return sc.emit(cmd, cl, ivAnswers, proposal, toStdout, formatted)
+}
+
+// emit produces everything the command outputs after the decision is made:
+// the report (or its structured equivalent), the values document, the apply
+// with its verification, and the next-steps epilogue.
+func (sc *setupCommand) emit(
+	cmd *cobra.Command, cl *setupCluster, answers *setup.Answers, proposal *setup.Proposal, toStdout, formatted bool,
+) error {
+	ctx := cmd.Context()
+	facts := cl.facts
+
+	var plannedObjects []string
+	if proposal.Action == setup.ActionInstall {
+		var err error
+		if plannedObjects, err = setup.PlannedObjects(ctx, cl.managerNamespace, proposal.Values); err != nil {
+			clog.Debugf(ctx, "unable to render the planned objects: %v", err)
+			plannedObjects = nil
+		}
+	}
+
 	applying := sc.apply && proposal.Action != setup.ActionNone
 	var applyOutcome string
 	var verification []setup.Note
+	var err error
 	if applying && formatted {
 		if applyOutcome, verification, err = sc.applyAndVerify(cl, proposal, io.Discard); err != nil {
 			return err
@@ -173,12 +207,13 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 
 	if !toStdout {
 		sum := &setup.Summary{
-			Facts:        facts,
-			Answers:      ivAnswers,
-			Proposal:     proposal,
-			Action:       setup.ActionWord(proposal.Action, sc.apply),
-			ApplyOutcome: applyOutcome,
-			Verification: verification,
+			Facts:          facts,
+			Answers:        answers,
+			Proposal:       proposal,
+			Action:         setup.ActionWord(proposal.Action, sc.apply),
+			PlannedObjects: plannedObjects,
+			ApplyOutcome:   applyOutcome,
+			Verification:   verification,
 		}
 		if err = setup.PrintReport(cmd, sum); err != nil {
 			return err
@@ -186,27 +221,31 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 	}
 
 	if len(proposal.Values) > 0 {
+		header := setup.ProvenanceHeader(facts, time.Now())
 		switch {
 		case toStdout:
-			err = setup.WriteValues(cmd.OutOrStdout(), proposal.Values)
+			err = setup.WriteValues(cmd.OutOrStdout(), proposal.Values, header...)
 		case sc.outputFile != "":
-			err = setup.WriteValuesFile(sc.outputFile, proposal.Values)
+			err = setup.WriteValuesFile(sc.outputFile, proposal.Values, header...)
 		}
 		if err != nil {
 			return err
 		}
 	}
 
+	textOut := cmd.OutOrStdout()
+	if toStdout {
+		textOut = cmd.ErrOrStderr()
+	}
 	if applying && !formatted {
-		w := cmd.OutOrStdout()
-		if toStdout {
-			w = cmd.ErrOrStderr()
-		}
-		ioutil.Println(w, "Applying...")
-		if _, verification, err = sc.applyAndVerify(cl, proposal, w); err != nil {
+		ioutil.Println(textOut, "Applying...")
+		if _, verification, err = sc.applyAndVerify(cl, proposal, textOut); err != nil {
 			return err
 		}
-		setup.PrintNotes(w, "Verification:", verification)
+		setup.PrintNotes(textOut, "Verification:", verification)
+	}
+	if !formatted && setup.NextStepsWanted(proposal.Action, applying, facts.Release.Installed) {
+		setup.PrintNextSteps(textOut, facts, cl.workloadNamespace)
 	}
 	return nil
 }
@@ -224,10 +263,33 @@ func (sc *setupCommand) applyAndVerify(cl *setupCluster, p *setup.Proposal, out 
 // verification steps need: the cluster acts as both context and
 // RESTClientGetter.
 type setupCluster struct {
-	facts            *setup.ClusterFacts
-	cluster          *k8s.Cluster
-	ki               kubernetes.Interface
-	managerNamespace string
+	facts             *setup.ClusterFacts
+	cluster           *k8s.Cluster
+	ki                kubernetes.Interface
+	managerNamespace  string
+	workloadNamespace string
+}
+
+// initProgress installs the progress writer, mirroring how session-bound
+// commands resolve the mode; --output - keeps stdout clean by routing
+// progress to stderr.
+func (sc *setupCommand) initProgress(cmd *cobra.Command, toStdout bool) {
+	ctx := cmd.Context()
+	mode := progress.ModeAuto
+	if output.WantsFormatted(cmd) {
+		mode = progress.ModeQuiet
+	} else if progress.IsNoOp(ctx) {
+		if pf := cmd.Flag(global.FlagProgress); pf != nil && pf.Changed {
+			mode = progress.Mode(pf.Value.String())
+		} else if me, ok := dos.LookupEnv(ctx, "TELEPRESENCE_PROGRESS"); ok {
+			mode = progress.Mode(me)
+		}
+	}
+	out := dos.Stdout(ctx)
+	if toStdout {
+		out = dos.Stderr(ctx)
+	}
+	cmd.SetContext(progress.WithContextWriter(ctx, progress.NewWriter(out, dos.Stderr(ctx), mode)))
 }
 
 // connectAndProbe connects to the cluster named by the kube flags and runs
@@ -265,17 +327,36 @@ func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, erro
 	}
 
 	cl := &setupCluster{
-		cluster:          cluster,
-		ki:               ki,
-		managerNamespace: k8s.GetManagerNamespace(cluster),
+		cluster:           cluster,
+		ki:                ki,
+		managerNamespace:  k8s.GetManagerNamespace(cluster),
+		workloadNamespace: cluster.Namespace,
 	}
+	if len(sc.managedNss) > 0 {
+		cl.workloadNamespace = sc.managedNss[0]
+	}
+	pctx := ctx
+	var lastPhase string
 	prober := &setup.Prober{
-		KubeClient:       ki,
-		ManagerNamespace: cl.managerNamespace,
-		ReleaseLookup:    setup.NewReleaseLookup(cluster.Kubeconfig),
+		KubeClient:        ki,
+		ManagerNamespace:  cl.managerNamespace,
+		WorkloadNamespace: cl.workloadNamespace,
+		Context:           cluster.KubeContext,
+		Server:            cluster.Server,
+		Progress: func(phase string) {
+			if lastPhase != "" {
+				progress.Done(progress.WithEventId(pctx, lastPhase))
+			}
+			lastPhase = phase
+			progress.Working(progress.WithEventId(pctx, phase))
+		},
+		ReleaseLookup: setup.NewReleaseLookup(cluster.Kubeconfig),
 	}
 	if cl.facts, err = prober.GatherFacts(cluster); err != nil {
 		return nil, err
+	}
+	if lastPhase != "" {
+		progress.Done(progress.WithEventId(pctx, lastPhase))
 	}
 	return cl, nil
 }

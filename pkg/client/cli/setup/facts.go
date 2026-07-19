@@ -39,6 +39,8 @@ type Finding struct {
 // ClusterFacts is the result of probing a cluster; it carries no client
 // handles and is safe to marshal, diff, or hand to a pure decision function.
 type ClusterFacts struct {
+	Context          string         `json:"context,omitempty"`
+	Server           string         `json:"server,omitempty"`
 	ManagerNamespace string         `json:"managerNamespace"`
 	NamespaceExists  bool           `json:"namespaceExists"`
 	Privileges       PrivilegeFacts `json:"privileges"`
@@ -48,6 +50,7 @@ type ClusterFacts struct {
 	Namespaces       NamespaceFacts `json:"namespaces"`
 	Release          ReleaseFacts   `json:"release"`
 	ClientUpdate     UpdateFacts    `json:"clientUpdate"`
+	Workloads        WorkloadFacts  `json:"workloads"`
 }
 
 type PrivilegeFacts struct {
@@ -96,6 +99,17 @@ type UpdateFacts struct {
 	CheckError      string `json:"checkError,omitempty"`
 }
 
+// WorkloadSample is a Deployment a next-steps example can name.
+type WorkloadSample struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Port      int32  `json:"port,omitempty"` // first container port
+}
+
+type WorkloadFacts struct {
+	Samples []WorkloadSample `json:"samples,omitempty"`
+}
+
 // defaultUpdateCheckHost is the host queried for the client's own stable-release
 // check when Prober.UpdateCheckHost is unset.
 const defaultUpdateCheckHost = "app.getambassador.io"
@@ -116,11 +130,15 @@ func DefaultCandidateValues() map[string]any {
 
 // Prober gathers ClusterFacts for one cluster/manager-namespace pair.
 type Prober struct {
-	KubeClient       kubernetes.Interface
-	ManagerNamespace string
-	CandidateValues  map[string]any // values for the P1 chart render; nil means DefaultCandidateValues()
-	UpdateCheckHost  string         // default "app.getambassador.io"
-	HTTPClient       *http.Client   // default a client with a short timeout
+	KubeClient        kubernetes.Interface
+	ManagerNamespace  string
+	WorkloadNamespace string         // namespace sampled for next-steps workload examples; empty skips the sampling
+	Context           string         // kubeconfig context name, recorded in the facts
+	Server            string         // API server URL, recorded in the facts
+	CandidateValues   map[string]any // values for the P1 chart render; nil means DefaultCandidateValues()
+	UpdateCheckHost   string         // default "app.getambassador.io"
+	HTTPClient        *http.Client   // default a client with a short timeout
+	Progress          func(string)   // called with a phase description as each probe starts; nil is silent
 
 	// ReleaseLookup finds an existing traffic-manager Helm release; nil disables
 	// P6 and ReleaseFacts stays zero.
@@ -161,21 +179,37 @@ func (p *Prober) GatherFacts(ctx context.Context) (*ClusterFacts, error) {
 	}
 
 	facts := &ClusterFacts{
+		Context:          p.Context,
+		Server:           p.Server,
 		ManagerNamespace: p.ManagerNamespace,
 		NamespaceExists:  nsExists,
-		Privileges:       p.probeRBAC(ctx, nsExists),
-		Quic:             p.probeQuic(ctx, nodes, nodesErr, provider),
-		NodeAgent:        p.probeNodeAgent(ctx, nodes, nodesErr, provider, nsExists),
-		Webhook:          p.probeWebhook(ctx, provider),
-		Namespaces:       p.probeNamespaceScale(ctx),
-		Release:          p.probeRelease(ctx),
-		ClientUpdate:     p.probeUpdate(ctx),
 	}
+	p.progress("Probing install privileges")
+	facts.Privileges = p.probeRBAC(ctx, nsExists)
+	p.progress("Probing QUIC viability")
+	facts.Quic = p.probeQuic(ctx, nodes, nodesErr, provider)
+	p.progress("Probing node-agent viability")
+	facts.NodeAgent = p.probeNodeAgent(ctx, nodes, nodesErr, provider, nsExists)
+	p.progress("Probing webhook access")
+	facts.Webhook = p.probeWebhook(ctx, provider)
+	p.progress("Counting namespaces")
+	facts.Namespaces = p.probeNamespaceScale(ctx)
+	p.progress("Looking for an existing installation")
+	facts.Release = p.probeRelease(ctx)
+	p.progress("Checking for a client update")
+	facts.ClientUpdate = p.probeUpdate(ctx)
+	facts.Workloads = p.probeWorkloads(ctx)
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	return facts, nil
+}
+
+func (p *Prober) progress(phase string) {
+	if p.Progress != nil {
+		p.Progress(phase)
+	}
 }
 
 // namespaceExists reports whether the manager namespace exists. An RBAC
