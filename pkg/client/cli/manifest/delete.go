@@ -13,8 +13,8 @@ import (
 	tpgrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
 )
 
-// Delete tears down the workstation state described by st; see the "Command semantics" section
-// of docs/plans/state-manifest/plan.md for the exact rules.
+// Delete tears down the workstation state described by st; see the "Delete semantics" section
+// of docs/reference/state-manifest.md for the exact rules.
 func Delete(cmd *cobra.Command, st *State) error {
 	connect.InitProgressWriter(cmd)
 	cmd.SetContext(dos.WithStdio(cmd.Context(), cmd))

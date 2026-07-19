@@ -17,7 +17,7 @@ import (
 )
 
 // Apply brings the workstation state described by st to the desired state; see the
-// "Command semantics" section of docs/plans/state-manifest/plan.md for the exact rules.
+// "Apply semantics" section of docs/reference/state-manifest.md for the exact rules.
 func Apply(cmd *cobra.Command, st *State, dryRun bool) error {
 	connect.InitProgressWriter(cmd)
 	cmd.SetContext(dos.WithStdio(cmd.Context(), cmd))
