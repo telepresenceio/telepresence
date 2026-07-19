@@ -100,6 +100,13 @@ func TestLoadFile_Valid(t *testing.T) {
 	}
 }
 
+func TestLoadFile_Command(t *testing.T) {
+	state, err := manifest.LoadFile("testdata/valid-command.yaml")
+	require.NoError(t, err)
+	require.Len(t, state.Attachments, 1)
+	assert.Equal(t, []string{"node", "server.js"}, state.Attachments[0].Command)
+}
+
 func TestLoadFile_PortIdentifierFromIntegerAndString(t *testing.T) {
 	state, err := manifest.LoadFile("testdata/valid-full.yaml")
 	require.NoError(t, err)
@@ -169,6 +176,11 @@ func TestLoadFile_Invalid(t *testing.T) {
 			name:    "replace name/container conflict",
 			file:    "testdata/invalid-replace-container-conflict.yaml",
 			wantErr: "echo-server/svc",
+		},
+		{
+			name:    "empty command",
+			file:    "testdata/invalid-empty-command.yaml",
+			wantErr: "/attachments/0/command",
 		},
 	}
 	for _, tt := range tests {

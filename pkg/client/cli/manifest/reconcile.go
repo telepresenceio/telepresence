@@ -21,10 +21,11 @@ import (
 )
 
 type attachmentResult struct {
-	Name   string `json:"name"`
-	Type   string `json:"type"`
-	Action string `json:"action"`
-	Detail string `json:"detail,omitempty"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Action  string `json:"action"`
+	Detail  string `json:"detail,omitempty"`
+	Handler string `json:"handler,omitempty"`
 }
 
 // lookupAttachment resolves the current daemon-side state of an attachment by name: the
@@ -77,24 +78,91 @@ func removeExisting(ctx context.Context, existingIntercept *manager.InterceptInf
 
 // createAttachmentNow builds the attachment's Command from the manifest and creates it detached,
 // reusing the same state machinery that the imperative intercept/replace/wiretap/ingest commands
-// use when invoked without a trailing command to run.
-func createAttachmentNow(cmd *cobra.Command, a *Attachment) error {
+// use when invoked without a trailing command to run. It returns the attachment's environment and
+// the id under which a handler process must register with the daemon (matching what the
+// imperative commands pass to AddHandler), for use by the caller when a.Command is declared.
+func createAttachmentNow(cmd *cobra.Command, a *Attachment) (env map[string]string, handlerID string, err error) {
 	ctx := cmd.Context()
 	if a.Type == TypeIngest {
 		c, err := buildIngestCommand(cmd, a)
 		if err != nil {
-			return err
+			return nil, "", err
 		}
 		mountErr := c.MountFlags.ValidateConnected(ctx)
-		return ingest.NewState(c, mountErr).Run(ctx)
+		if err := ingest.NewState(c, mountErr).Run(ctx); err != nil {
+			return nil, "", err
+		}
+		ud := daemon.MustGetUserClient(ctx)
+		ii, err := ud.GetIngest(ctx, &connector.IngestIdentifier{WorkloadName: a.Name, ContainerName: a.Container, Namespace: a.Namespace})
+		if err != nil {
+			return nil, "", tpgrpc.FromGRPC(err)
+		}
+		env = handlerEnv(ctx, ii.Environment, a.Name+"/"+ii.Container, ii.ClientMountPoint)
+		return env, fmt.Sprintf("%s/%s/%s", a.Name, ii.Container, ii.Namespace), nil
 	}
 	c, err := buildInterceptLikeCommand(cmd, a)
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	mountErr := c.MountFlags.ValidateConnected(ctx)
-	_, err = intercept.NewState(c, mountErr).Run(ctx)
-	return err
+	info, err := intercept.NewState(c, mountErr).Run(ctx)
+	if err != nil {
+		return nil, "", err
+	}
+	return info.Environment, info.ID, nil
+}
+
+// startNewHandler clears any stale handler record for a (leftover from a previous manifest run)
+// and, when a declares a command, starts it fresh against the freshly (re-)created attachment.
+func startNewHandler(ctx context.Context, a *Attachment, env map[string]string, handlerID string) (string, error) {
+	stopHandler(ctx, a)
+	if a.Command == nil {
+		return "", nil
+	}
+	if err := startHandler(ctx, a, env, handlerID); err != nil {
+		return "", err
+	}
+	return "started", nil
+}
+
+// reconcileHandler applies the handler decision tree for an attachment whose spec is otherwise
+// unchanged: a matching running handler is left alone, an exited or never-started one is started,
+// a handler whose argv differs is restarted, and a handler command removed from the manifest is
+// stopped. dryRun only reports what would happen.
+func reconcileHandler(ctx context.Context, a *Attachment, env map[string]string, handlerID string, dryRun bool) (string, error) {
+	running, argsEqual, rec := handlerStatus(ctx, a)
+	if a.Command == nil {
+		if rec == nil {
+			return "", nil
+		}
+		if dryRun {
+			return "would-stop", nil
+		}
+		stopHandler(ctx, a)
+		return "stopped", nil
+	}
+	if running && argsEqual {
+		return "", nil
+	}
+	if running {
+		// argv differs
+		if dryRun {
+			return "would-restart", nil
+		}
+		stopHandler(ctx, a)
+		if err := startHandler(ctx, a, env, handlerID); err != nil {
+			return "", err
+		}
+		return "restarted", nil
+	}
+	// no recorded process, or it has exited
+	if dryRun {
+		return "would-start", nil
+	}
+	if err := startHandler(ctx, a, env, handlerID); err != nil {
+		return "", err
+	}
+	return "started", nil
 }
 
 // desiredInterceptSpec builds the InterceptSpec that creating c would send, without performing
@@ -214,36 +282,66 @@ func reconcileAttachment(cmd *cobra.Command, a *Attachment, dryRun bool) (attach
 	default:
 		if dryRun {
 			res.Action = "would-create"
+			if a.Command != nil {
+				res.Handler = "would-start"
+			}
 			return res, nil
 		}
-		if err := createAttachmentNow(cmd, a); err != nil {
+		env, handlerID, err := createAttachmentNow(cmd, a)
+		if err != nil {
 			return res, err
 		}
 		res.Action = "created"
+		if res.Handler, err = startNewHandler(ctx, a, env, handlerID); err != nil {
+			return res, err
+		}
 		return res, nil
 	}
 
 	if len(drift) == 0 {
 		res.Action = "unchanged"
+		var env map[string]string
+		var handlerID string
+		if existingIntercept != nil {
+			env = handlerEnv(ctx, existingIntercept.Environment, existingIntercept.Id, existingIntercept.ClientMountPoint)
+			handlerID = existingIntercept.Id
+		} else {
+			env = handlerEnv(ctx, existingIngest.Environment, a.Name+"/"+existingIngest.Container, existingIngest.ClientMountPoint)
+			handlerID = fmt.Sprintf("%s/%s/%s", a.Name, existingIngest.Container, existingIngest.Namespace)
+		}
+		handler, err := reconcileHandler(ctx, a, env, handlerID, dryRun)
+		if err != nil {
+			return res, err
+		}
+		res.Handler = handler
 		return res, nil
 	}
 	res.Detail = strings.Join(drift, "; ")
 	if dryRun {
 		res.Action = "would-re-create"
+		if a.Command != nil {
+			res.Handler = "would-start"
+		}
 		return res, nil
 	}
 	if err := removeExisting(ctx, existingIntercept, existingIngest); err != nil {
 		return res, err
 	}
-	if err := createAttachmentNow(cmd, a); err != nil {
+	env, handlerID, err := createAttachmentNow(cmd, a)
+	if err != nil {
 		return res, err
 	}
 	res.Action = "re-created"
+	if res.Handler, err = startNewHandler(ctx, a, env, handlerID); err != nil {
+		return res, err
+	}
 	return res, nil
 }
 
 // removeAttachment tears down a single manifest attachment for "telepresence delete"; a missing
-// attachment is reported but is not an error.
+// attachment is reported but is not an error. The daemon already terminates a registered handler
+// when its attachment is removed; stopHandler here is the fallback and the client-side record
+// cleanup, so an already-dead recorded pid is tolerated silently.
 func removeAttachment(cmd *cobra.Command, a *Attachment) (attachmentResult, error) {
 	ctx := cmd.Context()
 	res := attachmentResult{Name: a.Name, Type: string(a.Type)}
@@ -251,13 +349,17 @@ func removeAttachment(cmd *cobra.Command, a *Attachment) (attachmentResult, erro
 	if err != nil {
 		return res, err
 	}
+	_, _, rec := handlerStatus(ctx, a)
 	if existingIntercept == nil && existingIngest == nil {
 		res.Action = "absent"
-		return res, nil
+	} else {
+		if err := removeExisting(ctx, existingIntercept, existingIngest); err != nil {
+			return res, err
+		}
+		res.Action = "removed"
 	}
-	if err := removeExisting(ctx, existingIntercept, existingIngest); err != nil {
-		return res, err
+	if stopHandler(ctx, a) || rec != nil {
+		res.Handler = "stopped"
 	}
-	res.Action = "removed"
 	return res, nil
 }

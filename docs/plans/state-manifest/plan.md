@@ -140,6 +140,34 @@ idempotent). The error reports which attachment failed.
    (`Disconnect`, not `Quit -s` — daemons keep running). Without `connection`
    in the manifest, the connection is left untouched.
 
+### Handler processes
+
+Each attachment may declare `command`, an argv array naming the local process
+that handles the attachment's traffic — the manifest equivalent of the
+trailing `-- <cmd> <args...>` accepted by the imperative commands. The process
+must see the attachment's remote environment and mount paths, so apply starts
+it only after the attachment is established, with the environment from the
+create response merged over the local environment. Unlike the imperative
+commands, apply cannot supervise the handler (apply is one-shot), so:
+
+- The handler is started detached (its own session/process group; stdout and
+  stderr go to `handler-<attachment>.log` in the user log dir) and registered
+  with the user daemon via the existing `AddInterceptor` RPC, which makes the
+  daemon terminate it whenever the attachment is removed — by delete, by a
+  drift re-create, or by an imperative leave.
+- The pid and argv are also recorded client-side under the user cache dir,
+  keyed by daemon ID and attachment name, so a later apply can tell whether
+  the declared handler is still the one running.
+- Reconcile semantics on an unchanged attachment: running with equal argv →
+  untouched; exited → started again; argv differs → terminated and started
+  with the new argv; `command` removed from the manifest → terminated. A
+  handler command change alone never re-creates the attachment (the command
+  has no server-side representation).
+- Delete terminates the handler (via the daemon registration, plus the
+  recorded pid as fallback) and removes the client-side record.
+- `--dry-run` reports would-start / would-restart / would-stop without
+  touching anything.
+
 ## Implementation layout
 
 - `pkg/client/cli/manifest/` (new package):

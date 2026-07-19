@@ -32,6 +32,9 @@ func printSummary(cmd *cobra.Command, connLine string, results []attachmentResul
 		if r.Detail != "" {
 			line += fmt.Sprintf(" (drift: %s)", r.Detail)
 		}
+		if r.Handler != "" {
+			line += fmt.Sprintf(", handler: %s", r.Handler)
+		}
 		ioutil.Printf(out, "%s\n", line)
 	}
 }

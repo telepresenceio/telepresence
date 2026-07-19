@@ -17,7 +17,7 @@ The traffic-manager can now expose a QUIC endpoint for the tunnel (Helm chart va
 <Note>
 	<Title type="feature">Declarative workstation state with telepresence apply and delete</Title>
 	<Body>
-The new <code>telepresence apply -f &lt;manifest&gt;</code> command brings the workstation to the state described by a YAML manifest: an optional connection with its flags, and a set of attachments (intercept, replace, ingest, or wiretap) complete with theirs. The manifest is validated against a JSON schema, apply is idempotent and re-creates attachments whose spec has drifted, and <code>--dry-run</code> reports what would change without touching anything. The <code>telepresence delete -f &lt;manifest&gt;</code> command tears the state down again, disconnecting only when the manifest declares the connection.
+The new <code>telepresence apply -f &lt;manifest&gt;</code> command brings the workstation to the state described by a YAML manifest: an optional connection with its flags, and a set of attachments (intercept, replace, ingest, or wiretap) complete with theirs. The manifest is validated against a JSON schema, apply is idempotent and re-creates attachments whose spec has drifted, and <code>--dry-run</code> reports what would change without touching anything. The <code>telepresence delete -f &lt;manifest&gt;</code> command tears the state down again, disconnecting only when the manifest declares the connection. Each attachment can also declare a <code>command</code>, a local process that apply starts detached once the attachment is up and keeps in sync on later applies, and that delete stops.
   </Body>
 </Note>
 <Note>

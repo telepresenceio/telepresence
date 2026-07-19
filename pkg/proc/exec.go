@@ -96,6 +96,17 @@ func KillProcessGroup(ctx context.Context, cmd *exec.Cmd, signal os.Signal) {
 	killProcessGroup(ctx, cmd, signal)
 }
 
+// CreateDetached configures cmd to run detached from the controlling terminal, in its own
+// session, so that it survives the parent process exiting.
+func CreateDetached(cmd *exec.Cmd) {
+	createDetached(cmd)
+}
+
+// IsAlive reports whether the process with the given pid is still running.
+func IsAlive(pid int) bool {
+	return isAlive(pid)
+}
+
 // Run will run the given executable with given args and env, wait for it to terminate, and return
 // the result. The run will dispatch signals as appropriate for the given platform (SIGTERM and SIGINT on Unix platforms
 // and os.Interrupt on Windows).

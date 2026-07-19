@@ -163,6 +163,18 @@ $defs:
       nodeAgent:
         description: Use a node-scoped traffic agent.
         type: boolean
+      command:
+        description: >-
+          Local command that handles the attachment's traffic, like the
+          trailing "-- <cmd> <args...>" of the imperative commands. Apply
+          starts it after the attachment is established, so that it sees the
+          remote environment variables and the mount paths, and restarts it
+          when it has exited or when this command has changed. The process is
+          stopped when the attachment is removed.
+        type: array
+        minItems: 1
+        items:
+          type: string
 
   InterceptCommon:
     description: Properties shared by intercept and wiretap attachments.

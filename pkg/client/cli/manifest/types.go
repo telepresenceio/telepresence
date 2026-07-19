@@ -51,6 +51,7 @@ type Attachment struct {
 	Env       *Env           `json:"env,omitempty"`
 	Mount     *Mount         `json:"mount,omitempty"`
 	NodeAgent *bool          `json:"nodeAgent,omitempty"`
+	Command   []string       `json:"command,omitempty"`
 
 	Workload  string           `json:"workload,omitempty"`
 	Service   string           `json:"service,omitempty"`

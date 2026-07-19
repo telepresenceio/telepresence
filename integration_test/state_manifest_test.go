@@ -4,9 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/telepresenceio/telepresence/v2/integration_test/itest"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 )
 
 const (
@@ -242,6 +247,101 @@ func (s *stateManifestSuite) Test_ApplyDeleteNoConnectionRequiresSession() {
 	s.Contains(stderr, `not connected; run "telepresence connect" first`)
 
 	s.assertNothingRunning(itest.TelepresenceOk(ctx, "status"))
+}
+
+// handlerManifest writes a manifest whose intercept attachment declares a command that records
+// its TELEPRESENCE_INTERCEPT_ID into markerFile and then sleeps, so the test can observe both
+// that the handler saw the attachment's environment and that it's still running. variant only
+// changes the handler's argv (a no-op ":" marker), leaving the attachment's spec, and hence drift
+// detection, untouched.
+func (s *stateManifestSuite) handlerManifest(dir, markerFile, variant string) string {
+	content := fmt.Sprintf(`apiVersion: telepresence.io/v1alpha1
+kind: WorkstationState
+connection:
+  name: %s
+  namespace: %s
+  managerNamespace: %s
+attachments:
+  - type: intercept
+    name: %s
+    ports: ["%d:%d"]
+    mount:
+      enabled: false
+    command: ["sh", "-c", "echo $TELEPRESENCE_INTERCEPT_ID > %s; : %s; sleep 300"]
+`, smConnectionName, s.AppNamespace(), s.ManagerNamespace(), smInterceptWL, smLocalPort, smSvcPort, markerFile, variant)
+	name := fmt.Sprintf("handler-%s.yaml", variant)
+	return s.writeManifestFile(dir, name, content)
+}
+
+// handlerRecord mirrors the client-side handler state file that "telepresence apply" writes
+// under the user cache dir.
+type handlerRecord struct {
+	Pid  int      `json:"pid"`
+	Args []string `json:"args"`
+}
+
+// handlerPid reads the recorded pid of the intercept attachment's handler process.
+func (s *stateManifestSuite) handlerPid() int {
+	var rec handlerRecord
+	file := filepath.Join("handlers", daemon.InfoFileName, smInterceptWL+".json")
+	s.Require().NoError(cache.LoadFromUserCache(s.Context(), &rec, file))
+	return rec.Pid
+}
+
+func (s *stateManifestSuite) Test_ApplyHandlerCommand() {
+	if runtime.GOOS == "windows" {
+		s.T().Skip("handler command uses sh")
+	}
+	ctx := s.Context()
+	dir := itest.TempDir(ctx)
+	markerFile := filepath.Join(dir, "handler-marker")
+	defer itest.TelepresenceQuitOk(ctx)
+
+	mf := s.handlerManifest(dir, markerFile, "v1")
+	stdout := itest.TelepresenceOk(ctx, "apply", "-f", mf)
+	s.Contains(stdout, s.interceptLine("created")+", handler: started")
+
+	var interceptID string
+	s.Eventually(func() bool {
+		b, err := os.ReadFile(markerFile)
+		if err != nil || len(strings.TrimSpace(string(b))) == 0 {
+			return false
+		}
+		interceptID = strings.TrimSpace(string(b))
+		return true
+	}, 15*time.Second, 200*time.Millisecond, "handler never wrote its marker file")
+	s.NotEmpty(interceptID)
+
+	pid1 := s.handlerPid()
+	s.True(proc.IsAlive(pid1))
+
+	// Second apply: attachment and handler are both unchanged, same pid.
+	stdout = itest.TelepresenceOk(ctx, "apply", "-f", mf)
+	s.Contains(stdout, s.interceptLine("unchanged"))
+	s.NotContains(stdout, "handler:")
+	s.Equal(pid1, s.handlerPid())
+
+	// A changed command restarts the handler; the attachment itself stays unchanged since the
+	// command has no server-side representation.
+	os.Remove(markerFile)
+	mf2 := s.handlerManifest(dir, markerFile, "v2")
+	stdout = itest.TelepresenceOk(ctx, "apply", "-f", mf2)
+	s.Contains(stdout, s.interceptLine("unchanged")+", handler: restarted")
+
+	s.Eventually(func() bool {
+		b, err := os.ReadFile(markerFile)
+		return err == nil && len(strings.TrimSpace(string(b))) > 0
+	}, 15*time.Second, 200*time.Millisecond, "restarted handler never wrote its marker file")
+	pid2 := s.handlerPid()
+	s.NotEqual(pid1, pid2)
+	s.True(proc.IsAlive(pid2))
+	s.False(proc.IsAlive(pid1))
+
+	// Delete terminates the handler.
+	itest.TelepresenceOk(ctx, "delete", "-f", mf2)
+	s.Eventually(func() bool {
+		return !proc.IsAlive(pid2)
+	}, 15*time.Second, 200*time.Millisecond, "handler still alive after delete")
 }
 
 func (s *stateManifestSuite) Test_ApplyDeleteWithoutConnectionKeepsSession() {

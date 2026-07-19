@@ -51,7 +51,10 @@ items:
           <code>--dry-run</code> reports what would change without touching
           anything. The <code>telepresence delete -f &lt;manifest&gt;</code>
           command tears the state down again, disconnecting only when the
-          manifest declares the connection.
+          manifest declares the connection. Each attachment can also declare
+          a <code>command</code>, a local process that apply starts detached
+          once the attachment is up and keeps in sync on later applies, and
+          that delete stops.
       - type: change
         title: One combined traffic-manager watcher per client
         body: >-

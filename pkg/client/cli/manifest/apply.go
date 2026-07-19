@@ -35,6 +35,9 @@ func Apply(cmd *cobra.Command, st *State, dryRun bool) error {
 			results := make([]attachmentResult, len(st.Attachments))
 			for i, a := range st.Attachments {
 				results[i] = attachmentResult{Name: a.Name, Type: string(a.Type), Action: "would-create"}
+				if a.Command != nil {
+					results[i].Handler = "would-start"
+				}
 			}
 			printSummary(cmd, connLine, results)
 			return nil

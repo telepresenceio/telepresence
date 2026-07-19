@@ -29,6 +29,31 @@ func createNewProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &windows.SysProcAttr{CreationFlags: windows.CREATE_NEW_PROCESS_GROUP}
 }
 
+func createDetached(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &windows.SysProcAttr{}
+	}
+	cmd.SysProcAttr.CreationFlags |= windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS
+}
+
+// stillActive is the well-known GetExitCodeProcess value for a process that hasn't exited yet.
+const stillActive = 259
+
+// isAlive reports whether pid is still running, using its exit code rather than process identity
+// (a reused pid would read as alive, same as on unix where a reused pid isn't distinguished either).
+func isAlive(pid int) bool {
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return false
+	}
+	defer windows.CloseHandle(h) //nolint:errcheck // best effort
+	var code uint32
+	if err := windows.GetExitCodeProcess(h, &code); err != nil {
+		return false
+	}
+	return code == stillActive
+}
+
 func startInBackground(_ bool, args ...string) error {
 	return shellExec("open", args[0], args[1:]...)
 }
