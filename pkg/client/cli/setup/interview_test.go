@@ -221,6 +221,32 @@ func TestInterview_AllowConflicts(t *testing.T) {
 	})
 }
 
+// TestInterview_ClientRbacPassthrough verifies that a ClientRbac answer set
+// by a flag or an input pin flows into the interview's result unchanged,
+// without any prompt.
+func TestInterview_ClientRbacPassthrough(t *testing.T) {
+	t.Run("flag-given subjects pass through", func(t *testing.T) {
+		presetSubjects := []ClientRbacSubject{{Kind: "User", Name: "alice"}}
+		a, out, err := runInterview(t, recFacts(), "\n\n\n",
+			Answers{ClientRbac: true, ClientRbacSubjects: presetSubjects}, Preset{ClientRbac: true}, false)
+		require.NoError(t, err)
+		assert.NotContains(t, out, "clientRbac")
+		assert.True(t, a.ClientRbac)
+		assert.Equal(t, presetSubjects, a.ClientRbacSubjects)
+	})
+	t.Run("input-pinned clientRbac passes through", func(t *testing.T) {
+		pins := DerivePins(map[string]any{"clientRbac": map[string]any{"create": true}})
+		answers := Answers{Quic: TriAuto}
+		pre := Preset{}
+		pins.ApplyTo(&answers, &pre)
+
+		a, out, err := runInterview(t, recFacts(), "\n\n\n", answers, pre, false)
+		require.NoError(t, err)
+		assert.NotContains(t, out, "clientRbac")
+		assert.True(t, a.ClientRbac)
+	})
+}
+
 func TestInterview_ScopeRecommendation(t *testing.T) {
 	facts := recFacts(func(f *ClusterFacts) {
 		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}

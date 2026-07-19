@@ -77,16 +77,24 @@ func compareRelease(facts *ClusterFacts, clientVersion semver.Version) releaseAg
 }
 
 // Recommend is the pure decision engine: it turns probed facts and interview
-// answers into a proposal, without any I/O or cluster access.
+// answers into a proposal, without any I/O or cluster access. It always runs
+// as if applying, so a missing install privilege is a hard error; use
+// RecommendWithInput directly to compute a proposal for validation-only runs.
 func Recommend(facts *ClusterFacts, answers *Answers) (*Proposal, error) {
-	return RecommendWithInput(facts, answers, nil, nil)
+	return RecommendWithInput(facts, answers, nil, nil, true)
 }
 
 // RecommendWithInput is Recommend with an input values document whose settings
 // are authoritative: the engine's values are reconciled against it before the
 // release-values merge, so the precedence is release values < input values <
 // engine decisions for unpinned keys and consented changes.
-func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]any, consult ConsultFunc) (*Proposal, error) {
+//
+// applying distinguishes an --apply run from a validation (--output-only or
+// plain) run: a missing install privilege aborts an --apply run with an
+// error, since the apply is about to fail anyway, but only becomes a warning
+// note (plus handoff instructions) otherwise, so the proposal can still be
+// computed and written for an admin to apply later.
+func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]any, consult ConsultFunc, applying bool) (*Proposal, error) {
 	a := *answers
 	if a.Scope == "" {
 		a.Scope = ScopeAll
@@ -102,7 +110,7 @@ func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]
 	// scope all and mapped both install the unrestricted chart; only
 	// namespaces and selector produce a namespace-limited install.
 	clusterScope := a.Scope == ScopeAll || a.Scope == ScopeMapped
-	if err := checkPrivileges(facts, clusterScope, warn); err != nil {
+	if err := checkPrivileges(facts, a.Scope, applying, info, warn); err != nil {
 		return nil, err
 	}
 
@@ -151,6 +159,10 @@ func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]
 		nestedMap(vals, "client", "cluster")["mappedNamespaces"] = nss
 		info("clients receive these namespaces as their mapped-namespaces default; a local --mapped-namespaces flag or config setting overrides it")
 	case ScopeAll:
+	}
+
+	if a.ClientRbac {
+		clientRbacValues(vals, &a)
 	}
 
 	if conflicts := facts.Routing.ConflictingSubnets(); len(conflicts) > 0 {
@@ -257,29 +269,71 @@ func decideAction(facts *ClusterFacts, a *Answers, vals map[string]any, p *Propo
 	}
 }
 
-// checkPrivileges turns the P1 facts into an error when the chosen scope's
-// install is known to be denied, or a warning note when it could not be
-// verified.
-func checkPrivileges(facts *ClusterFacts, clusterScope bool, warn func(string, ...any)) error {
-	pf := &facts.Privileges
-	if clusterScope {
-		switch pf.ClusterWide.Verdict {
-		case VerdictNo:
-			return clusterWideDeniedError(facts)
-		case VerdictUnknown:
-			warn("install privileges could not be verified: %s", strings.Join(pf.ClusterWide.Evidence, "; "))
-		case VerdictYes, VerdictProbable:
-		}
-		return nil
+// PrivilegeDenial returns the Finding relevant to an install at the given
+// scope, together with its structured denials: the cluster-wide render's for
+// scope all/mapped (and the empty default), the namespace-scoped render's
+// otherwise. cmd/setup.go uses this to select the denials --rbac-out
+// generates a manifest from, matching exactly what checkPrivileges evaluated.
+func PrivilegeDenial(facts *ClusterFacts, scope ScopeChoice) (Finding, []DeniedAttribute) {
+	if scope == ScopeAll || scope == ScopeMapped || scope == "" {
+		return facts.Privileges.ClusterWide, facts.Privileges.MissingAttributes
 	}
-	switch pf.Namespaced.Verdict {
+	return facts.Privileges.Namespaced, facts.Privileges.MissingNamespacedAttributes
+}
+
+// checkPrivileges turns the P1 facts into an error when the chosen scope's
+// install is known to be denied and the run is applying, a warning note (with
+// handoff instructions) when it is denied but the run is only validating, or
+// a warning note when the privileges could not be verified at all.
+func checkPrivileges(facts *ClusterFacts, scope ScopeChoice, applying bool, info, warn func(string, ...any)) error {
+	finding, _ := PrivilegeDenial(facts, scope)
+	switch finding.Verdict {
 	case VerdictNo:
-		return errcat.User.New("insufficient privileges for a namespace-limited install; missing:\n  " + strings.Join(pf.MissingNamespaced, "\n  "))
+		err := privilegeDeniedError(facts, scope)
+		if applying {
+			return err
+		}
+		warn("%s", err.Error())
+		info("an admin can complete this install: run 'telepresence setup --output FILE' and hand the file to them, " +
+			"then have them run 'telepresence setup --input FILE --apply'; add --rbac-out FILE to generate ready-to-review " +
+			"RBAC covering the missing privileges")
 	case VerdictUnknown:
-		warn("install privileges could not be verified: %s", strings.Join(pf.Namespaced.Evidence, "; "))
+		warn("install privileges could not be verified: %s", strings.Join(finding.Evidence, "; "))
 	case VerdictYes, VerdictProbable:
 	}
 	return nil
+}
+
+// privilegeDeniedError names the missing-privilege error for the given scope.
+func privilegeDeniedError(facts *ClusterFacts, scope ScopeChoice) error {
+	if scope == ScopeAll || scope == ScopeMapped || scope == "" {
+		return clusterWideDeniedError(facts)
+	}
+	return errcat.User.New("insufficient privileges for a namespace-limited install; missing:\n  " +
+		strings.Join(facts.Privileges.MissingNamespaced, "\n  "))
+}
+
+// clientRbacValues fills in the clientRbac.* values the team-RBAC question
+// answered yes to: create, the managed namespaces when the scope is a
+// namespace list (otherwise the chart falls back to the manager's own), and
+// the parsed subjects.
+func clientRbacValues(vals map[string]any, a *Answers) {
+	cr := nestedMap(vals, "clientRbac")
+	cr["create"] = true
+	if a.Scope == ScopeNamespaces {
+		nss := make([]any, len(a.ManagedNamespaces))
+		for i, ns := range a.ManagedNamespaces {
+			nss[i] = ns
+		}
+		cr["namespaces"] = nss
+	}
+	if len(a.ClientRbacSubjects) > 0 {
+		subjects := make([]any, len(a.ClientRbacSubjects))
+		for i, s := range a.ClientRbacSubjects {
+			subjects[i] = clientRbacSubjectValue(s)
+		}
+		cr["subjects"] = subjects
+	}
 }
 
 // webhookDeniedError names the hard incompatibility between wanting the

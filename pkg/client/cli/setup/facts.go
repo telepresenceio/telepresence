@@ -57,10 +57,12 @@ type ClusterFacts struct {
 }
 
 type PrivilegeFacts struct {
-	ClusterWide       Finding  `json:"clusterWide"`       // can create every object of a cluster-wide chart render
-	Namespaced        Finding  `json:"namespaced"`        // same for a namespace-scoped render (only evaluated when ClusterWide is not yes)
-	Missing           []string `json:"missing,omitempty"` // itemized denials for the cluster-wide render, e.g. `create clusterroles.rbac.authorization.k8s.io`
-	MissingNamespaced []string `json:"missingNamespaced,omitempty"`
+	ClusterWide                 Finding           `json:"clusterWide"`       // can create every object of a cluster-wide chart render
+	Namespaced                  Finding           `json:"namespaced"`        // same for a namespace-scoped render (only evaluated when ClusterWide is not yes)
+	Missing                     []string          `json:"missing,omitempty"` // itemized denials for the cluster-wide render, e.g. `create clusterroles.rbac.authorization.k8s.io`
+	MissingNamespaced           []string          `json:"missingNamespaced,omitempty"`
+	MissingAttributes           []DeniedAttribute `json:"missingAttributes,omitempty"`           // structured form of Missing, for RBAC generation
+	MissingNamespacedAttributes []DeniedAttribute `json:"missingNamespacedAttributes,omitempty"` // structured form of MissingNamespaced
 }
 
 type QuicFacts struct {

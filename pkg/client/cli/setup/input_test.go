@@ -132,6 +132,16 @@ func TestDerivePins(t *testing.T) {
 			want: Pins{AllowConflictsDetermined: true},
 		},
 		{
+			name:   "clientRbac.create true pins the question yes",
+			values: map[string]any{"clientRbac": map[string]any{"create": true}},
+			want:   Pins{ClientRbacDetermined: true, ClientRbac: true},
+		},
+		{
+			name:   "clientRbac.create false pins the question no",
+			values: map[string]any{"clientRbac": map[string]any{"create": false}},
+			want:   Pins{ClientRbacDetermined: true},
+		},
+		{
 			name:   "unrelated keys pin nothing",
 			values: map[string]any{"image": map[string]any{"registry": "ghcr.io/telepresenceio"}},
 			want:   Pins{},
@@ -177,6 +187,21 @@ func TestPinsApplyTo(t *testing.T) {
 		pins.ApplyTo(&a, &pre)
 		assert.True(t, a.Attach)
 		assert.Equal(t, TriOn, a.Quic)
+	})
+	t.Run("a pinned clientRbac.create skips the question", func(t *testing.T) {
+		pins := Pins{ClientRbacDetermined: true, ClientRbac: true}
+		a := Answers{}
+		pre := Preset{}
+		pins.ApplyTo(&a, &pre)
+		assert.True(t, a.ClientRbac)
+		assert.True(t, pre.ClientRbac)
+	})
+	t.Run("a flag-preset clientRbac wins over a pin", func(t *testing.T) {
+		pins := Pins{ClientRbacDetermined: true, ClientRbac: true}
+		a := Answers{ClientRbac: false}
+		pre := Preset{ClientRbac: true}
+		pins.ApplyTo(&a, &pre)
+		assert.False(t, a.ClientRbac)
 	})
 }
 
@@ -248,28 +273,43 @@ func TestReconcileWithInput(t *testing.T) {
 func TestValidateValues(t *testing.T) {
 	t.Run("webhook denied", func(t *testing.T) {
 		facts := recFacts(func(f *ClusterFacts) { f.Webhook.CanCreate = Finding{Verdict: VerdictNo} })
-		err := ValidateValues(facts, map[string]any{"agentInjector": map[string]any{"enabled": true}})
+		err := ValidateValues(facts, map[string]any{"agentInjector": map[string]any{"enabled": true}}, true)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "mutatingwebhookconfigurations")
 
-		assert.NoError(t, ValidateValues(facts, map[string]any{"agentInjector": map[string]any{"enabled": false}}))
+		assert.NoError(t, ValidateValues(facts, map[string]any{"agentInjector": map[string]any{"enabled": false}}, true))
+	})
+	t.Run("webhook denied is a hard error even without --apply", func(t *testing.T) {
+		// Hard incompatibilities are not downgraded: only the missing
+		// install-privilege check softens for validation-only runs.
+		facts := recFacts(func(f *ClusterFacts) { f.Webhook.CanCreate = Finding{Verdict: VerdictNo} })
+		err := ValidateValues(facts, map[string]any{"agentInjector": map[string]any{"enabled": true}}, false)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "mutatingwebhookconfigurations")
 	})
 	t.Run("cluster-wide denied", func(t *testing.T) {
 		facts := recFacts(func(f *ClusterFacts) {
 			f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}
 			f.Privileges.Missing = []string{"create clusterroles.rbac.authorization.k8s.io"}
 		})
-		err := ValidateValues(facts, map[string]any{})
+		err := ValidateValues(facts, map[string]any{}, true)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "cluster-wide")
 
-		assert.NoError(t, ValidateValues(facts, map[string]any{"namespaces": []any{"foo"}}))
+		assert.NoError(t, ValidateValues(facts, map[string]any{"namespaces": []any{"foo"}}, true))
+	})
+	t.Run("cluster-wide denial does not abort a validation-only run", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}
+			f.Privileges.Missing = []string{"create clusterroles.rbac.authorization.k8s.io"}
+		})
+		assert.NoError(t, ValidateValues(facts, map[string]any{}, false))
 	})
 	t.Run("quic with multiple replicas", func(t *testing.T) {
 		err := ValidateValues(recFacts(), map[string]any{
 			"quicTunnel":   map[string]any{"enabled": true},
 			"replicaCount": float64(2),
-		})
+		}, true)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "replicaCount")
 	})
@@ -278,7 +318,7 @@ func TestValidateValues(t *testing.T) {
 			"agentInjector": map[string]any{"enabled": false},
 			"nodeAgent":     map[string]any{"enabled": true},
 			"quicTunnel":    map[string]any{"enabled": true},
-		}))
+		}, true))
 	})
 }
 
@@ -297,7 +337,7 @@ func TestRecommendWithInput_RoundTrip(t *testing.T) {
 	pre := Preset{}
 	pins.ApplyTo(answers, &pre)
 
-	p, err := RecommendWithInput(recFacts(), answers, input, nil)
+	p, err := RecommendWithInput(recFacts(), answers, input, nil, true)
 	require.NoError(t, err)
 	assert.Equal(t, "ghcr.io/other", val(t, p.Values, "image", "registry"))
 	assert.Equal(t, "2.30.0", val(t, p.Values, "image", "tag"))

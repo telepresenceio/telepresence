@@ -40,6 +40,8 @@ type Pins struct {
 	ManagedNamespaces        []string
 	SelectorLabels           map[string]string
 	AllowConflictsDetermined bool // client.routing.allowConflictingSubnets is pinned by the input
+	ClientRbacDetermined     bool // clientRbac.create is pinned by the input
+	ClientRbac               bool
 }
 
 // DerivePins derives the answer pins from an input values document. Only keys
@@ -89,6 +91,11 @@ func DerivePins(values map[string]any) Pins {
 
 	if subnets, ok := stringListAt(values, "client", "routing", "allowConflictingSubnets"); ok && len(subnets) > 0 {
 		pins.AllowConflictsDetermined = true
+	}
+
+	if create, present := boolAt(values, "clientRbac", "create"); present {
+		pins.ClientRbacDetermined = true
+		pins.ClientRbac = create
 	}
 	return pins
 }
@@ -146,6 +153,10 @@ func (pins *Pins) ApplyTo(a *Answers, pre *Preset) {
 		// pinned value.
 		a.AllowConflicts = true
 		pre.AllowConflicts = true
+	}
+	if pins.ClientRbacDetermined && !pre.ClientRbac {
+		a.ClientRbac = pins.ClientRbac
+		pre.ClientRbac = true
 	}
 }
 
@@ -234,8 +245,12 @@ func reconcileWalk(rec, input, final map[string]any, prefix string, consult Cons
 
 // ValidateValues checks the final values, wherever they came from, against
 // the hard incompatibilities the probes uncovered. Only keys present in the
-// values participate.
-func ValidateValues(facts *ClusterFacts, vals map[string]any) error {
+// values participate. The missing-install-privilege check is a hard error
+// only when applying: RecommendWithInput already downgraded it to a warning
+// note for validation-mode runs, so re-raising it here would defeat that.
+// Every other incompatibility (webhook, replicaCount) stays an error
+// regardless of mode.
+func ValidateValues(facts *ClusterFacts, vals map[string]any, applying bool) error {
 	if injector, present := boolAt(vals, "agentInjector", "enabled"); present && injector {
 		if facts.Webhook.CanCreate.Verdict == VerdictNo {
 			return webhookDeniedError()
@@ -243,7 +258,7 @@ func ValidateValues(facts *ClusterFacts, vals map[string]any) error {
 	}
 	_, hasNamespaces := vals["namespaces"]
 	_, hasSelector := vals["namespaceSelector"]
-	if !hasNamespaces && !hasSelector && facts.Privileges.ClusterWide.Verdict == VerdictNo {
+	if applying && !hasNamespaces && !hasSelector && facts.Privileges.ClusterWide.Verdict == VerdictNo {
 		return clusterWideDeniedError(facts)
 	}
 	if quic, present := boolAt(vals, "quicTunnel", "enabled"); present && quic {

@@ -319,6 +319,93 @@ func TestRecommend_RoutingConflicts(t *testing.T) {
 	})
 }
 
+func TestRecommend_ClientRbac(t *testing.T) {
+	t.Run("create with no scope-derived namespaces for an unrestricted install", func(t *testing.T) {
+		answers := recAnswers(func(a *Answers) { a.ClientRbac = true })
+		p, err := Recommend(recFacts(), answers)
+		require.NoError(t, err)
+		assert.Equal(t, true, val(t, p.Values, "clientRbac", "create"))
+		cr := val(t, p.Values, "clientRbac").(map[string]any)
+		assert.NotContains(t, cr, "namespaces")
+	})
+	t.Run("namespaces scope carries the managed namespace list", func(t *testing.T) {
+		answers := recAnswers(func(a *Answers) {
+			a.ClientRbac = true
+			a.Scope = ScopeNamespaces
+			a.ManagedNamespaces = []string{"foo", "bar"}
+		})
+		p, err := Recommend(recFacts(), answers)
+		require.NoError(t, err)
+		assert.Equal(t, []any{"foo", "bar"}, val(t, p.Values, "clientRbac", "namespaces"))
+	})
+	t.Run("subjects are mirrored into the chart's subject shape", func(t *testing.T) {
+		answers := recAnswers(func(a *Answers) {
+			a.ClientRbac = true
+			a.ClientRbacSubjects = []ClientRbacSubject{
+				{Kind: "User", Name: "alice"},
+				{Kind: "ServiceAccount", Name: "sa", Namespace: "ns"},
+			}
+		})
+		p, err := Recommend(recFacts(), answers)
+		require.NoError(t, err)
+		subjects := val(t, p.Values, "clientRbac", "subjects").([]any)
+		require.Len(t, subjects, 2)
+		assert.Equal(t, map[string]any{"kind": "User", "name": "alice", "apiGroup": "rbac.authorization.k8s.io"}, subjects[0])
+		assert.Equal(t, map[string]any{"kind": "ServiceAccount", "name": "sa", "namespace": "ns"}, subjects[1])
+	})
+	t.Run("declined leaves no clientRbac value", func(t *testing.T) {
+		p, err := Recommend(recFacts(), recAnswers())
+		require.NoError(t, err)
+		assert.NotContains(t, p.Values, "clientRbac")
+	})
+}
+
+// TestRecommendWithInput_ValidationDoesNotAbortOnPrivilegeDenial covers the
+// non-admin handoff: a validation-only run (applying=false) still computes
+// and returns the proposal on a privilege denial, downgrading the error to a
+// warning plus handoff instructions; an --apply run keeps the hard error.
+func TestRecommendWithInput_ValidationDoesNotAbortOnPrivilegeDenial(t *testing.T) {
+	facts := recFacts(func(f *ClusterFacts) {
+		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}
+		f.Privileges.Missing = []string{"create clusterroles.rbac.authorization.k8s.io"}
+	})
+
+	t.Run("validation mode warns and hands off instead of aborting", func(t *testing.T) {
+		p, err := RecommendWithInput(facts, recAnswers(), nil, nil, false)
+		require.NoError(t, err)
+		require.NotNil(t, p)
+		text := notesText(p)
+		assert.Contains(t, text, "create clusterroles.rbac.authorization.k8s.io")
+		assert.Contains(t, text, "--input FILE --apply")
+		assert.Contains(t, text, "--rbac-out")
+	})
+
+	t.Run("apply mode still errors", func(t *testing.T) {
+		_, err := RecommendWithInput(facts, recAnswers(), nil, nil, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "create clusterroles.rbac.authorization.k8s.io")
+	})
+}
+
+func TestPrivilegeDenial(t *testing.T) {
+	facts := recFacts(func(f *ClusterFacts) {
+		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}
+		f.Privileges.MissingAttributes = []DeniedAttribute{{Verb: "create", Resource: "clusterroles"}}
+		f.Privileges.Namespaced = Finding{Verdict: VerdictYes}
+		f.Privileges.MissingNamespacedAttributes = nil
+	})
+	for _, scope := range []ScopeChoice{ScopeAll, ScopeMapped, ""} {
+		finding, attrs := PrivilegeDenial(facts, scope)
+		assert.Equal(t, VerdictNo, finding.Verdict, "scope %s", scope)
+		assert.Equal(t, facts.Privileges.MissingAttributes, attrs, "scope %s", scope)
+	}
+	for _, scope := range []ScopeChoice{ScopeNamespaces, ScopeSelector} {
+		finding, attrs := PrivilegeDenial(facts, scope)
+		assert.Equal(t, VerdictYes, finding.Verdict, "scope %s", scope)
+		assert.Empty(t, attrs, "scope %s", scope)
+	}
+}
+
 func notesText(p *Proposal) string {
 	var sb strings.Builder
 	for _, n := range p.Notes {

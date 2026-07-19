@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/moby/term"
@@ -22,18 +24,20 @@ import (
 )
 
 type setupCommand struct {
-	rq             *daemon.CobraRequest
-	nonInteractive bool
-	attach         bool
-	replace        bool
-	upgradeManager bool
-	quic           string
-	nodeAgent      string
-	scope          string
-	managedNss     []string
-	outputFile     string
-	inputFile      string
-	apply          bool
+	rq                 *daemon.CobraRequest
+	nonInteractive     bool
+	attach             bool
+	replace            bool
+	upgradeManager     bool
+	quic               string
+	nodeAgent          string
+	scope              string
+	managedNss         []string
+	outputFile         string
+	inputFile          string
+	apply              bool
+	rbacOut            string
+	clientRbacSubjects []string
 }
 
 func setupCmd() *cobra.Command {
@@ -72,8 +76,13 @@ installs or upgrades the traffic-manager with it.`,
 	flags.StringVar(&sc.nodeAgent, "node-agent", "auto", "Override the node-agent probe verdict (auto|on|off)")
 	flags.StringVar(&sc.scope, "scope", "", "Namespace limiting strategy (all|namespaces|selector|mapped)")
 	flags.StringSliceVar(&sc.managedNss, "managed-namespaces", nil, "Namespace list when --scope=namespaces or --scope=mapped")
+	flags.StringVar(&sc.rbacOut, "rbac-out", "",
+		"When install privileges are missing, write ready-to-review RBAC YAML covering them to this file")
+	flags.StringSliceVar(&sc.clientRbacSubjects, "client-rbac-subjects", nil,
+		`Grant these subjects (kind:name for User/Group, kind:name:namespace for ServiceAccount) the RBAC needed to use Telepresence`)
 	_ = cmd.MarkFlagFilename("output")
 	_ = cmd.MarkFlagFilename("input")
+	_ = cmd.MarkFlagFilename("rbac-out")
 	sc.rq = daemon.InitRequest(cmd)
 	return cmd
 }
@@ -105,6 +114,12 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
+	var clientRbacSubjects []setup.ClientRbacSubject
+	if len(sc.clientRbacSubjects) > 0 {
+		if clientRbacSubjects, err = setup.ParseClientRbacSubjects(sc.clientRbacSubjects); err != nil {
+			return err
+		}
+	}
 
 	sc.initProgress(cmd, toStdout)
 	pctx := cmd.Context()
@@ -130,14 +145,17 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 	if interactive {
 		ioutil.Println(promptOut, setup.Banner(facts))
 	}
+	rbacSubjectsGiven := flags.Changed("client-rbac-subjects")
 	answers := setup.Answers{
-		Attach:            sc.attach,
-		Replace:           sc.replace,
-		UpgradeManager:    sc.upgradeManager,
-		Scope:             scope,
-		ManagedNamespaces: sc.managedNss,
-		Quic:              quic,
-		NodeAgent:         nodeAgent,
+		Attach:             sc.attach,
+		Replace:            sc.replace,
+		UpgradeManager:     sc.upgradeManager,
+		Scope:              scope,
+		ManagedNamespaces:  sc.managedNss,
+		Quic:               quic,
+		NodeAgent:          nodeAgent,
+		ClientRbac:         rbacSubjectsGiven,
+		ClientRbacSubjects: clientRbacSubjects,
 	}
 	preset := setup.Preset{
 		Attach:            flags.Changed("attach"),
@@ -145,6 +163,7 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 		UpgradeManager:    flags.Changed("upgrade-manager"),
 		Scope:             flags.Changed("scope"),
 		ManagedNamespaces: flags.Changed("managed-namespaces"),
+		ClientRbac:        rbacSubjectsGiven,
 	}
 	pins := setup.DerivePins(inputVals)
 	pins.ApplyTo(&answers, &preset)
@@ -166,12 +185,17 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 	if interactive {
 		consult = iv.ConsultInput
 	}
-	proposal, err := setup.RecommendWithInput(facts, ivAnswers, inputVals, consult)
+	proposal, err := setup.RecommendWithInput(facts, ivAnswers, inputVals, consult, sc.apply)
 	if err != nil {
 		return err
 	}
-	if err = setup.ValidateValues(facts, proposal.Values); err != nil {
+	if err = setup.ValidateValues(facts, proposal.Values, sc.apply); err != nil {
 		return err
+	}
+	if sc.rbacOut != "" {
+		if err = sc.writeMissingRBAC(facts, ivAnswers.Scope, proposal); err != nil {
+			return err
+		}
 	}
 
 	return sc.emit(cmd, cl, ivAnswers, proposal, toStdout, formatted)
@@ -247,6 +271,30 @@ func (sc *setupCommand) emit(
 	if !formatted && setup.NextStepsWanted(proposal.Action, applying, facts.Release.Installed, facts.Health.Clean()) {
 		setup.PrintNextSteps(textOut, facts, cl.workloadNamespace)
 	}
+	return nil
+}
+
+// writeMissingRBAC generates the RBAC manifest for --rbac-out from the
+// denials recorded for the scope the interview settled on (the same denials
+// checkPrivileges evaluated), writes it, and records the file in the
+// proposal's notes. It errors when there is nothing to write: --rbac-out only
+// makes sense alongside a recorded privilege denial.
+func (sc *setupCommand) writeMissingRBAC(facts *setup.ClusterFacts, scope setup.ScopeChoice, p *setup.Proposal) error {
+	finding, attrs := setup.PrivilegeDenial(facts, scope)
+	if finding.Verdict != setup.VerdictNo || len(attrs) == 0 {
+		return errcat.User.New("--rbac-out was given, but no install privileges were denied; nothing to write")
+	}
+	manifest, err := setup.GenerateMissingRBAC(attrs)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(sc.rbacOut, manifest, 0o644); err != nil {
+		return errcat.User.Errorf(err, "writing RBAC manifest %q", sc.rbacOut)
+	}
+	p.Notes = append(p.Notes, setup.Note{
+		Level: setup.NoteInfo,
+		Text:  fmt.Sprintf("RBAC covering the missing privileges was written to %s; review it, then have an admin apply it", sc.rbacOut),
+	})
 	return nil
 }
 

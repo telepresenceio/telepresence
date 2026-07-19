@@ -38,6 +38,17 @@ var clusterScopedKinds = map[string]bool{ //nolint:gochecknoglobals // constant 
 	"PriorityClass":                  true,
 }
 
+// DeniedAttribute is a JSON-clean mirror of the authv1.ResourceAttributes a
+// SelfSubjectAccessReview denied; it is the raw material the RBAC handoff
+// (rbac.go) turns into ready-to-review YAML.
+type DeniedAttribute struct {
+	Verb      string `json:"verb"`
+	Group     string `json:"group,omitempty"`
+	Resource  string `json:"resource"`
+	Namespace string `json:"namespace,omitempty"`
+	Name      string `json:"name,omitempty"`
+}
+
 // probeRBAC is P1: it renders the embedded chart with the candidate values and
 // checks "create" access on every rendered object plus the install-time extras.
 // When the cluster-wide render is not fully permitted, it re-renders scoped to
@@ -45,9 +56,10 @@ var clusterScopedKinds = map[string]bool{ //nolint:gochecknoglobals // constant 
 func (p *Prober) probeRBAC(ctx context.Context, nsExists bool) PrivilegeFacts {
 	facts := PrivilegeFacts{}
 
-	clusterWide, missing := p.evaluateChartAccess(ctx, nsExists, p.candidateValues())
+	clusterWide, missing, attrs := p.evaluateChartAccess(ctx, nsExists, p.candidateValues())
 	facts.ClusterWide = clusterWide
 	facts.Missing = missing
+	facts.MissingAttributes = attrs
 
 	if clusterWide.Verdict == VerdictYes {
 		facts.Namespaced = Finding{Verdict: VerdictYes, Evidence: []string{"implied by cluster-wide result"}}
@@ -57,41 +69,62 @@ func (p *Prober) probeRBAC(ctx context.Context, nsExists bool) PrivilegeFacts {
 	nsValues := chartutil.CoalesceTables(cloneTopLevel(p.candidateValues()), map[string]any{
 		"namespaces": []any{p.ManagerNamespace},
 	})
-	namespaced, missingNs := p.evaluateChartAccess(ctx, nsExists, nsValues)
+	namespaced, missingNs, nsAttrs := p.evaluateChartAccess(ctx, nsExists, nsValues)
 	facts.Namespaced = namespaced
 	facts.MissingNamespaced = missingNs
+	facts.MissingNamespacedAttributes = nsAttrs
 	return facts
 }
 
 // evaluateChartAccess renders the chart with values, builds the resulting
 // ResourceAttributes set plus the install-time extras, and issues a
-// SelfSubjectAccessReview for each.
-func (p *Prober) evaluateChartAccess(ctx context.Context, nsExists bool, values map[string]any) (Finding, []string) {
+// SelfSubjectAccessReview for each. The formatted denial strings and the
+// structured DeniedAttribute list both derive from the same sorted sweep
+// result, so they never drift apart.
+func (p *Prober) evaluateChartAccess(ctx context.Context, nsExists bool, values map[string]any) (Finding, []string, []DeniedAttribute) {
 	chrt, err := loadEmbeddedChart()
 	if err != nil {
-		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
 	}
 	manifest, err := renderChart(ctx, chrt, p.ManagerNamespace, values)
 	if err != nil {
-		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
 	}
 	objs, err := decodeManifests(manifest)
 	if err != nil {
-		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
 	}
 
 	ras := attributesForObjects(objs, p.ManagerNamespace)
 	ras = append(ras, extraChecks(nsExists, values, p.ManagerNamespace)...)
 	ras = dedupeAttributes(ras)
 
-	missing, sweepErr := p.sweepAccess(ctx, ras)
+	denied, sweepErr := p.sweepAccess(ctx, ras)
 	if sweepErr != nil {
-		return Finding{Verdict: VerdictUnknown, Evidence: []string{sweepErr.Error()}}, nil
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{sweepErr.Error()}}, nil, nil
 	}
-	if len(missing) == 0 {
-		return Finding{Verdict: VerdictYes}, nil
+	if len(denied) == 0 {
+		return Finding{Verdict: VerdictYes}, nil, nil
 	}
-	return Finding{Verdict: VerdictNo}, missing
+	missing := make([]string, len(denied))
+	attrs := make([]DeniedAttribute, len(denied))
+	for i, ra := range denied {
+		missing[i] = formatAttributes(ra)
+		attrs[i] = toDeniedAttribute(ra)
+	}
+	return Finding{Verdict: VerdictNo}, missing, attrs
+}
+
+// toDeniedAttribute mirrors a denied ResourceAttributes into its JSON-clean
+// fact form.
+func toDeniedAttribute(ra *authv1.ResourceAttributes) DeniedAttribute {
+	return DeniedAttribute{
+		Verb:      ra.Verb,
+		Group:     ra.Group,
+		Resource:  ra.Resource,
+		Namespace: ra.Namespace,
+		Name:      ra.Name,
+	}
 }
 
 // loadEmbeddedChart mirrors loadCoreChart in pkg/client/cli/helm/chart.go, which
@@ -209,13 +242,19 @@ func nodeAgentEnabled(values map[string]any) bool {
 	return enabled
 }
 
+// attributeKey renders every field a SelfSubjectAccessReview compares into a
+// single string, used for both deduplication and deterministic ordering.
+func attributeKey(ra *authv1.ResourceAttributes) string {
+	return strings.Join([]string{ra.Verb, ra.Group, ra.Version, ra.Resource, ra.Subresource, ra.Namespace, ra.Name}, "|")
+}
+
 // dedupeAttributes removes ResourceAttributes that are identical in every
 // field that a SelfSubjectAccessReview compares.
 func dedupeAttributes(ras []*authv1.ResourceAttributes) []*authv1.ResourceAttributes {
 	seen := make(map[string]bool, len(ras))
 	out := make([]*authv1.ResourceAttributes, 0, len(ras))
 	for _, ra := range ras {
-		key := strings.Join([]string{ra.Verb, ra.Group, ra.Version, ra.Resource, ra.Subresource, ra.Namespace, ra.Name}, "|")
+		key := attributeKey(ra)
 		if seen[key] {
 			continue
 		}
@@ -226,11 +265,11 @@ func dedupeAttributes(ras []*authv1.ResourceAttributes) []*authv1.ResourceAttrib
 }
 
 // sweepAccess issues one SelfSubjectAccessReview per attribute set and returns
-// the itemized, sorted list of denials. It errors only when a review call
-// itself fails (transport or API error), never on a denial.
-func (p *Prober) sweepAccess(ctx context.Context, ras []*authv1.ResourceAttributes) ([]string, error) {
+// the denied attributes, sorted deterministically. It errors only when a
+// review call itself fails (transport or API error), never on a denial.
+func (p *Prober) sweepAccess(ctx context.Context, ras []*authv1.ResourceAttributes) ([]*authv1.ResourceAttributes, error) {
 	sar := p.KubeClient.AuthorizationV1().SelfSubjectAccessReviews()
-	var missing []string
+	var denied []*authv1.ResourceAttributes
 	var callErrs []string
 	for _, ra := range ras {
 		review := &authv1.SelfSubjectAccessReview{Spec: authv1.SelfSubjectAccessReviewSpec{ResourceAttributes: ra}}
@@ -240,14 +279,14 @@ func (p *Prober) sweepAccess(ctx context.Context, ras []*authv1.ResourceAttribut
 			continue
 		}
 		if !result.Status.Allowed {
-			missing = append(missing, formatAttributes(ra))
+			denied = append(denied, ra)
 		}
 	}
 	if len(callErrs) > 0 {
-		return missing, errors.New(strings.Join(callErrs, "; "))
+		return denied, errors.New(strings.Join(callErrs, "; "))
 	}
-	sort.Strings(missing)
-	return missing, nil
+	sort.Slice(denied, func(i, j int) bool { return attributeKey(denied[i]) < attributeKey(denied[j]) })
+	return denied, nil
 }
 
 // singleAccessCheck issues one SelfSubjectAccessReview and reports the result

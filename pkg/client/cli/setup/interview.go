@@ -56,15 +56,17 @@ func ParseScope(s string) (ScopeChoice, error) {
 // Answers holds the interview's conclusions, whether they came from flags,
 // prompts, or defaults.
 type Answers struct {
-	Attach            bool              `json:"attach"`
-	Replace           bool              `json:"replace,omitempty"`
-	UpgradeManager    bool              `json:"upgradeManager,omitempty"`
-	Scope             ScopeChoice       `json:"scope"`
-	ManagedNamespaces []string          `json:"managedNamespaces,omitempty"` // for scope namespaces|mapped
-	SelectorLabels    map[string]string `json:"selectorLabels,omitempty"`    // for scope selector
-	Quic              Tri               `json:"quic"`
-	NodeAgent         Tri               `json:"nodeAgent"`
-	AllowConflicts    bool              `json:"allowConflicts,omitempty"` // accept routing conflicts cluster-wide
+	Attach             bool                `json:"attach"`
+	Replace            bool                `json:"replace,omitempty"`
+	UpgradeManager     bool                `json:"upgradeManager,omitempty"`
+	Scope              ScopeChoice         `json:"scope"`
+	ManagedNamespaces  []string            `json:"managedNamespaces,omitempty"` // for scope namespaces|mapped
+	SelectorLabels     map[string]string   `json:"selectorLabels,omitempty"`    // for scope selector
+	Quic               Tri                 `json:"quic"`
+	NodeAgent          Tri                 `json:"nodeAgent"`
+	AllowConflicts     bool                `json:"allowConflicts,omitempty"` // accept routing conflicts cluster-wide
+	ClientRbac         bool                `json:"clientRbac,omitempty"`     // grant non-admin users the RBAC to use telepresence
+	ClientRbacSubjects []ClientRbacSubject `json:"clientRbacSubjects,omitempty"`
 }
 
 // Preset records which Answers fields were set by command-line flags or input
@@ -76,6 +78,7 @@ type Preset struct {
 	Scope             bool
 	ManagedNamespaces bool
 	AllowConflicts    bool
+	ClientRbac        bool
 }
 
 // promptAttempts bounds how many invalid answers a single question tolerates
@@ -184,6 +187,7 @@ func (iv *Interviewer) Interview(ctx context.Context) (*Answers, error) {
 		}
 		a.AllowConflicts = v
 	}
+
 	return &a, ctx.Err()
 }
 
