@@ -28,6 +28,7 @@ installs or upgrades the traffic-manager with it.
       --also-proxy strings                  Additional comma separated list of CIDR to proxy
       --apply                               Install/upgrade the traffic-manager with the resulting values
       --attach                              Clients will attach to workloads (intercept/replace/ingest/wiretap) (default true)
+      --client-rbac-subjects strings        Grant these subjects (kind:name for User/Group, kind:name:namespace for ServiceAccount) the RBAC needed to use Telepresence
       --docker                              Start, or connect to, daemon in a docker container
       --expose stringArray                  Port that a containerized daemon will expose. See docker run -p for more info. Can be repeated
   -h, --help                                help for setup
@@ -44,6 +45,7 @@ installs or upgrades the traffic-manager with it.
       --output string                       Write the resulting Helm values to this file, suitable for a Helm install; &quot;-&quot; writes them to stdout and suppresses the report
       --proxy-via strings                   Use Network Address Translation to create virtual IPs for the given CIDR, and route via WORKLOAD. Must be in the form CIDR=WORKLOAD. CIDR can be substituted for the symbolic name &quot;service&quot;, &quot;pods&quot;, &quot;also&quot;, or &quot;all&quot;.
       --quic string                         Override the QUIC probe verdict (auto|on|off) (default &quot;auto&quot;)
+      --rbac-out string                     When install privileges are missing, write ready-to-review RBAC YAML covering them to this file
       --replace                             The replace command will be used
       --reroute-local strings               Reroute port on local host to remote host. Format is &lt;local port&gt;:&lt;host&gt;:&lt;port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.
       --reroute-remote strings              Reroute port on remote host. Format is &lt;host&gt;:&lt;port&gt;:&lt;new port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.

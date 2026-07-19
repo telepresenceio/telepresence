@@ -1,7 +1,6 @@
-// Package setup implements the probe layer for `telepresence setup`: a
-// read-only survey of a cluster's viability for a traffic-manager
-// installation, expressed as a ClusterFacts value that later milestones turn
-// into an interview and a values proposal.
+// Package setup implements `telepresence setup`: a read-only survey of a
+// cluster's viability for a traffic-manager installation, expressed as a
+// ClusterFacts value, followed by an interview and a values proposal.
 package setup
 
 import (

@@ -235,11 +235,11 @@ func (s *setupSuite) Test_SetupUpgradeMerge() {
 
 // Test_SetupNonAdminHandoff runs setup impersonating the suite's restricted
 // test user (bound only to get/list on nodes, no create rights at all) so
-// every P1 privilege check comes back denied. Milestone 8's contract: a
-// validation-only run must not abort on that denial — it still computes and
-// writes the proposal, downgrading the denial to a warning note that hands
-// off to an admin, and --rbac-out must produce ready-to-review RBAC covering
-// the recorded denials.
+// every install-privilege check comes back denied. A validation-only run
+// must not abort on that denial — it still computes and writes the
+// proposal, downgrading the denial to a warning note that hands off to an
+// admin, and --rbac-out must produce ready-to-review RBAC covering the
+// recorded denials.
 func (s *setupSuite) Test_SetupNonAdminHandoff() {
 	ctx := s.Context()
 	rq := s.Require()

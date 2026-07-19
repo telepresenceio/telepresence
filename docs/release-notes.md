@@ -33,6 +33,12 @@ The traffic-manager can now expose a QUIC endpoint for the tunnel (Helm chart va
 The new <code>telepresence apply -f &lt;manifest&gt;</code> command brings the workstation to the state described by a YAML manifest: an optional connection with its flags, and a set of attachments (intercept, replace, ingest, or wiretap) complete with theirs. The manifest is validated against a JSON schema, apply is idempotent and re-creates attachments whose spec has drifted, and <code>--dry-run</code> reports what would change without touching anything. The <code>telepresence delete -f &lt;manifest&gt;</code> command tears the state down again, disconnecting only when the manifest declares the connection. Each attachment can also declare a <code>command</code>, a local process that apply starts detached once the attachment is up and keeps in sync on later applies, and that delete stops.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Guided traffic-manager setup with telepresence setup](reference/setup)</div></div>
+<div style="margin-left: 15px">
+
+The new <code>telepresence setup</code> command analyzes the cluster (install privileges, QUIC and node-agent viability, webhook reachability, namespace scale, routing conflicts, and any existing installation), asks only the questions the findings leave open, and then validates, writes, or applies a fully configured traffic-manager Helm install. <code>--output</code> produces a normal Helm values file for GitOps, <code>--input</code> re-runs without repeating prior decisions, and <code>--apply</code> installs or upgrades with post-apply verification, including a real QUIC reachability check. When install privileges are missing, <code>--rbac-out</code> generates ready-to-review RBAC manifests to hand to a cluster admin instead of a dead end, and <code>telepresence setup --format json</code> is a convenient attachment for bug reports.
+</div>
+
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">One combined traffic-manager watcher per client</div></div>
 <div style="margin-left: 15px">
 

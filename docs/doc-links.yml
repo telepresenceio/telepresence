@@ -229,6 +229,8 @@
           link: reference/cli/telepresence_revoke
         - title: telepresence serve
           link: reference/cli/telepresence_serve
+        - title: telepresence setup
+          link: reference/cli/telepresence_setup
         - title: telepresence status
           link: reference/cli/telepresence_status
         - title: telepresence uninstall
@@ -237,6 +239,8 @@
           link: reference/cli/telepresence_version
         - title: telepresence wiretap
           link: reference/cli/telepresence_wiretap
+    - title: Guided cluster setup
+      link: reference/setup
     - title: Laptop-side configuration
       link: reference/config
     - title: Cluster-side configuration
