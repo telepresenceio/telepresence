@@ -103,7 +103,7 @@ func InitRequest(cmd *cobra.Command) *CobraRequest {
 	nwFlags.StringSliceVar(&cr.vnats,
 		"vnat", nil, ``+
 			`Use Network Address Translation to create virtual IPs for the given CIDR. CIDR can be substituted for the `+
-			`symblic name "service", "pods", "also", or "all".`)
+			`symbolic name "service", "pods", "also", or "all".`)
 	nwFlags.StringSliceVar(&cr.LocalReroutes,
 		"reroute-local", nil, ``+
 			`Reroute port on local host to remote host. Format is <local port>:<host>:<port>[/{tcp,udp}]. `+
@@ -115,7 +115,7 @@ func InitRequest(cmd *cobra.Command) *CobraRequest {
 	nwFlags.StringSliceVar(&cr.proxyVia,
 		"proxy-via", nil, ``+
 			`Use Network Address Translation to create virtual IPs for the given CIDR, and route via WORKLOAD. Must be in the `+
-			`form CIDR=WORKLOAD. CIDR can be substituted for the symblic name "service", "pods", "also", or "all".`)
+			`form CIDR=WORKLOAD. CIDR can be substituted for the symbolic name "service", "pods", "also", or "all".`)
 	nwFlags.StringSliceVar(&cr.AllowConflictingSubnets,
 		"allow-conflicting-subnets", nil, ``+
 			`Comma separated list of CIDR that will be allowed to conflict with local subnets`)
