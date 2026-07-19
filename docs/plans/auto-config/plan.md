@@ -286,6 +286,157 @@ probe evidence that produced each decision), and the planned action
     confirm the injector answers (bounded by the `failurePolicy: Ignore`
     silent-degradation caveat).
 
+## Onboarding polish (milestone 5)
+
+Small improvements that serve the tool's core motivation — lowering the
+entry barrier — and are tightly coupled to the existing code. (The four
+larger onboarding features follow as milestones 6–9 below; everything ships
+in the one setup PR, #4214.)
+
+1. **Funnel**: the "traffic manager not found" errors
+   (`pkg/client/k8s/cluster.go:173`, `pkg/client/k8s/connect.go:41`) point
+   the user at `telepresence setup` (keeping `telepresence helm install` as
+   the plain-install alternative), and `helm upgrade`'s not-installed error
+   (`pkg/client/cli/helm/install.go:470`) mentions setup too. The moment of
+   failure is when the wizard matters.
+2. **Will-create summary + reversibility**: when the action is an install,
+   the report lists what the apply will create, grouped by kind with names
+   — produced by re-rendering the embedded chart with the FINAL values (the
+   P1 render uses maximal candidate values and may not match), via a
+   `PlannedObjects(managerNamespace, values)` helper reusing P1's
+   render/decode. A closing line notes that `telepresence helm uninstall`
+   removes everything setup created.
+3. **Next-steps epilogue**: after a successful apply (and after a
+   validation that found a healthy existing release), text mode prints
+   personalized commands: `telepresence connect -n <first managed
+   namespace>`, `telepresence list`, and — when the new workload-sample
+   probe found a candidate — an attach example naming a real Deployment
+   (and its first container port when known). The probe lists Deployments
+   (small limit) in the managed namespaces or the connection namespace,
+   tolerates denials, and records at most a handful of samples in the
+   facts.
+4. **Probe progress**: `GatherFacts` reports phase progress ("Probing
+   install privileges", "Probing node-agent viability", ...) through an
+   optional `Progress func(string)` on the Prober (nil in tests). The
+   command wires it to the existing progress machinery behind the global
+   `--progress` flag, suppressed under `--format` and routed to stderr
+   under `--output -`.
+5. **Values provenance header**: files written by `--output` (and the
+   `--output -` stream) start with comment lines recording the generating
+   client version, cluster context and server, manager namespace, and
+   date, so the file explains itself in a GitOps repo. Comments survive an
+   `--input` round trip (YAML).
+6. **Target-cluster banner**: interactive sessions open with `Configuring
+   cluster "<context>" (server <URL>, manager namespace <ns>)` before the
+   first question — the wrong-kubecontext accident deserves that line —
+   and the facts gain the context/server identification so formatted
+   reports are self-identifying.
+
+## Follow-on onboarding features (milestones 6–9)
+
+Shared constraint (established for setup, applies throughout): setup stores
+and mutates nothing on the workstation. Reading local state (routes, a UDP
+dial) is allowed; every remedy it produces is either a cluster-side Helm
+value or an informative message.
+
+### Doctor diagnostics for existing installs (milestone 6)
+
+Position `telepresence setup` (validation mode) as the first command
+support asks anyone to run.
+
+- When the release probe finds an installation, add read-only health
+  checks, denials tolerated: traffic-manager Deployment readiness plus
+  recent Warning events (reuse `pkg/eventwatch`), MutatingWebhookConfiguration
+  presence and CA-bundle certificate expiry, agent-injector endpoint
+  readiness (reuse `verify.go`), QUIC service state, and client↔manager
+  version skew.
+- **Facts**: a `Health` section rendered under Findings with the usual
+  verdict/evidence model; everything already flows into `--format json`,
+  making `telepresence setup --format json` the standard bug-report
+  attachment (documented in the setup docs at milestone 10).
+- **Tests**: fake-clientset cases per check (ready/unready deployment,
+  expired cert, missing webhook, endpoint-less injector); integration:
+  break a fresh install (scale the manager to 0), validate, assert the
+  health warnings.
+
+### Subnet-conflict probe and cluster-side routing defaults (milestone 7)
+
+The classic silent failure: a corporate VPN's routes overlap the cluster's
+pod/service CIDRs; everything installs, then routing and DNS misbehave.
+
+- **Probe (new P8)**: cluster subnets from the data the prober already
+  fetches — `node.spec.podCIDRs` and observed Service ClusterIPs (deriving
+  the service CIDR from the spread, best-effort) — compared against the
+  workstation's route table read with the existing cross-platform
+  `pkg/routing.GetRoutingTable`. The route source is an interface on the
+  Prober so unit tests feed synthetic tables. Local inspection is read-only
+  (resolved 2026-07-19: allowed; only the remedy must be cluster-side).
+- **Facts**: a `Routing` section listing each overlap: cluster subnet,
+  local route, interface name — evidence for the report and the interview.
+- **Interview/engine**: a conflict triggers a gated question per overlap
+  class: accept the conflict cluster-wide
+  (`client.routing.allowConflictingSubnets` value, delivered to all
+  clients) or leave it to clients with an informative note recommending
+  `telepresence connect --vnat <subnet>` (VNAT has no cluster-side default,
+  so the note is the honest remedy). Non-interactive: no value is set; the
+  report carries a warning with both remedies. Input pinning applies to
+  `client.routing.allowConflictingSubnets` like the other pinned keys.
+- **Tests**: table-driven overlap detection (IPv4/IPv6, host routes,
+  default route excluded), engine rules, interview gating; integration:
+  a synthetic route source is not available to the harness, so integration
+  covers the no-conflict path and the flag/values plumbing.
+
+### Non-admin handoff (milestone 8)
+
+The person running setup often cannot install. Today they get an itemized
+denial list; this feature turns the dead end into a handoff.
+
+- **Missing-RBAC generation**: P1 already holds the denied
+  `ResourceAttributes`. A `--rbac-out FILE` flag (mentioned in the
+  privilege-error text) writes ready-to-review RBAC YAML: a
+  ClusterRole/Role pair covering exactly the denied verbs/resources, a
+  binding with a placeholder subject and a comment telling the admin to
+  fill in the requester's identity. Generation is mechanical and
+  unit-testable from synthetic denial lists.
+- **Handoff instructions**: when privileges are missing but the interview
+  completed, the error/report suggests the two-step flow: `--output
+  values.yaml`, hand the file to an admin, admin runs `telepresence setup
+  --input values.yaml --apply` (the input-pinning semantics make the
+  admin's run ask nothing that the developer already answered).
+- **Team RBAC question**: the chart's `clientRbac.*` values are never asked
+  about today. A gated interview question — "Should non-admin users get
+  the RBAC needed to use Telepresence?" — sets `clientRbac.create`,
+  `clientRbac.namespaces` (from the chosen scope), and prompts for
+  `clientRbac.subjects` (comma-separated kind:name entries; a
+  `--client-rbac-subjects` flag for non-interactive runs). Input pinning
+  covers the `clientRbac` keys.
+- **Tests**: unit tests from synthetic denial lists; integration: run the
+  probe under an impersonated restricted user (`--as`), assert the RBAC
+  file and the handoff message.
+
+### QUIC reachability probe (milestone 9)
+
+Milestone 3 verifies the QUIC endpoint exists; this verifies it is
+reachable from this workstation over UDP — the question that actually
+matters.
+
+- After the endpoint appears (LB ingress address or node address +
+  NodePort), attempt one QUIC handshake with a short (~3s) timeout,
+  reusing the client's dial configuration (`pkg/client/rootd/quic.go`
+  machinery / quic-go, ALPN as the manager expects). The manager's CA is
+  session-local, so the probe tolerates certificate-verification failure:
+  any completed or cert-rejected handshake proves UDP reachability;
+  timeout proves the opposite.
+- Verification note upgrade: info `QUIC endpoint reachable from this
+  workstation` vs warning `QUIC endpoint not reachable over UDP — clients
+  will silently fall back to gRPC` (naming likely causes: firewall, LB
+  still provisioning, NodePort on an unreachable node network — the kind
+  docker-network case is exactly the honest signal we want).
+- **Tests**: unit tests against a local quic-go listener (accept +
+  refuse + no-listener cases); integration: apply with QUIC on kind and
+  assert the reachability note (whichever verdict the harness network
+  honestly produces, asserted accordingly).
+
 ## Package layout
 
 ```
@@ -311,23 +462,49 @@ pkg/client/cli/cmd/setup.go   // command registration
 - **Unit**: table-driven tests for `Recommend` (the decision table above ×
   QUIC/scope permutations); probe tests against fake clientsets and
   `pkg/k8sapi/fake_auth.go`.
-- **Integration** (`integration_test/setup_test.go`): against the kind test
-  cluster — `setup --non-interactive --attach` should conclude node-agent
-  viable (containerd, permissive PSS) and QUIC = NodePort (no LB); a full
-  `setup --apply` install followed by connect + a node-agent attachment; an
-  upgrade scenario over a pre-installed older-values release verifying the
-  merge-and-diff behavior; an `--output` / `--input` round trip preserving
-  passthrough keys and skipping the pinned questions.
+- **Integration** (`integration_test/setup_test.go`): a suite that starts
+  from a cluster WITHOUT a pre-installed traffic-manager (setup installs it
+  itself — study the itest harness and `state_manifest_test.go` for the
+  pattern). The foundation (milestone 4) covers the existing surface:
+  `setup --non-interactive` validation concluding node-agent viable
+  (containerd, permissive PSS on kind), an `--output` / `--input` round
+  trip preserving passthrough keys and skipping the pinned questions, a
+  full `setup --apply` install with the verification section, idempotent
+  re-run (`Action: none`), an upgrade scenario over a pre-installed
+  older-values release verifying the merge-and-diff behavior, and
+  `--output -` stream cleanliness. Every later milestone extends the suite
+  with its own scenarios.
+- **Per-feature verification gate**: after each implemented milestone the
+  full gate runs before the milestone is committed: unit tests
+  (`go test ./pkg/client/cli/...`), `golangci-lint`, and the setup
+  integration suite (`make check-integration` scoped with
+  `TEST_SUITE`/`TEST_NAME`; `make build` first — the harness runs the
+  prebuilt `build-output/bin/telepresence`, so client changes are invisible
+  without it).
 - **Docs**: `docs/reference/setup.md` (or a quick-start slot) + changelog
   entry.
 
 ## Milestones
 
-1. Probes + `ClusterFacts` (P1–P7), unit-tested against fakes.
+Everything ships in one PR (#4214). After each milestone the full
+verification gate runs (unit tests, golangci-lint, and the setup
+integration suite — see Testing) before the milestone is committed.
+
+1. Probes + `ClusterFacts` (P1–P7), unit-tested against fakes. (done)
 2. Interview + decision engine + dry-run report (tool is useful read-only
-   here).
-3. Apply path + post-apply verification.
-4. Integration tests + docs + changelog.
+   here). (done; later reworked into the `--input`/`--output`/`--apply`
+   surface)
+3. Apply path + post-apply verification. (done)
+4. Integration test foundation covering the existing surface (see
+   Testing).
+5. Onboarding polish (see the section above).
+6. Doctor diagnostics for existing installs.
+7. Subnet-conflict probe and cluster-side routing defaults.
+8. Non-admin handoff.
+9. QUIC reachability probe.
+10. User documentation + changelog; this plan folder is deleted in the
+    commit that completes the milestone, with any remaining plan-only
+    information folded into the docs.
 
 ## Resolved questions
 
