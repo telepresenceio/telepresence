@@ -64,16 +64,18 @@ type Answers struct {
 	SelectorLabels    map[string]string `json:"selectorLabels,omitempty"`    // for scope selector
 	Quic              Tri               `json:"quic"`
 	NodeAgent         Tri               `json:"nodeAgent"`
+	AllowConflicts    bool              `json:"allowConflicts,omitempty"` // accept routing conflicts cluster-wide
 }
 
-// Preset records which Answers fields were set by command-line flags; a preset
-// answer is never asked.
+// Preset records which Answers fields were set by command-line flags or input
+// pins; a preset answer is never asked.
 type Preset struct {
 	Attach            bool
 	Replace           bool
 	UpgradeManager    bool
 	Scope             bool
 	ManagedNamespaces bool
+	AllowConflicts    bool
 }
 
 // promptAttempts bounds how many invalid answers a single question tolerates
@@ -171,6 +173,16 @@ func (iv *Interviewer) Interview(ctx context.Context) (*Answers, error) {
 	}
 	if err := iv.completeScope(&a); err != nil {
 		return nil, err
+	}
+
+	if conflicts := iv.Facts.Routing.ConflictingSubnets(); len(conflicts) > 0 && !iv.Preset.AllowConflicts {
+		v, err := iv.askYesNo(fmt.Sprintf(
+			"Local routes overlap the cluster's subnets (%s). Allow the conflicts cluster-wide (traffic to those ranges goes to the cluster for every client)? [y/N] ",
+			strings.Join(conflicts, ", ")), false)
+		if err != nil {
+			return nil, err
+		}
+		a.AllowConflicts = v
 	}
 	return &a, ctx.Err()
 }

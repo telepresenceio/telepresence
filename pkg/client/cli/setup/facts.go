@@ -18,6 +18,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
 
 // Verdict classifies a probe conclusion.
@@ -52,6 +53,7 @@ type ClusterFacts struct {
 	Health           *HealthFacts   `json:"health,omitempty"` // read-only doctor checks; only when a release is installed
 	ClientUpdate     UpdateFacts    `json:"clientUpdate"`
 	Workloads        WorkloadFacts  `json:"workloads"`
+	Routing          RoutingFacts   `json:"routing"`
 }
 
 type PrivilegeFacts struct {
@@ -144,6 +146,10 @@ type Prober struct {
 	// ReleaseLookup finds an existing traffic-manager Helm release; nil disables
 	// P6 and ReleaseFacts stays zero.
 	ReleaseLookup func(ctx context.Context, namespace string) (*release.Release, error)
+
+	// RouteSource reads the workstation's routing table; nil means
+	// routing.GetRoutingTable.
+	RouteSource func(ctx context.Context) ([]*routing.Route, error)
 }
 
 func (p *Prober) candidateValues() map[string]any {
@@ -204,6 +210,8 @@ func (p *Prober) GatherFacts(ctx context.Context) (*ClusterFacts, error) {
 	p.progress("Checking for a client update")
 	facts.ClientUpdate = p.probeUpdate(ctx)
 	facts.Workloads = p.probeWorkloads(ctx)
+	p.progress("Checking for subnet conflicts")
+	facts.Routing = p.probeRouting(ctx, nodes)
 
 	if err := ctx.Err(); err != nil {
 		return nil, err

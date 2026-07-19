@@ -125,6 +125,13 @@ func TestDerivePins(t *testing.T) {
 			want: Pins{Scope: scopePtr(ScopeNamespaces), ManagedNamespaces: []string{"foo"}},
 		},
 		{
+			name: "allowConflictingSubnets pins the conflicts question",
+			values: map[string]any{
+				"client": map[string]any{"routing": map[string]any{"allowConflictingSubnets": []any{"10.244.0.0/16"}}},
+			},
+			want: Pins{AllowConflictsDetermined: true},
+		},
+		{
 			name:   "unrelated keys pin nothing",
 			values: map[string]any{"image": map[string]any{"registry": "ghcr.io/telepresenceio"}},
 			want:   Pins{},
@@ -154,6 +161,14 @@ func TestPinsApplyTo(t *testing.T) {
 		assert.Equal(t, ScopeNamespaces, a.Scope)
 		assert.True(t, pre.Scope)
 		assert.Equal(t, []string{"foo"}, a.ManagedNamespaces)
+	})
+	t.Run("a pinned conflicts value skips the question and lets reconcile guard it", func(t *testing.T) {
+		pins := Pins{AllowConflictsDetermined: true}
+		a := Answers{}
+		pre := Preset{}
+		pins.ApplyTo(&a, &pre)
+		assert.True(t, a.AllowConflicts)
+		assert.True(t, pre.AllowConflicts)
 	})
 	t.Run("flag presets win over pins", func(t *testing.T) {
 		pins := Pins{Attach: boolPtr(false), Quic: triPtr(TriOff)}

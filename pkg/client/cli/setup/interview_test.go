@@ -182,6 +182,45 @@ func TestInterview_InputPinsSkipQuestions(t *testing.T) {
 	})
 }
 
+func TestInterview_AllowConflicts(t *testing.T) {
+	conflictFacts := recFacts(func(f *ClusterFacts) {
+		f.Routing = RoutingFacts{
+			Summary: Finding{Verdict: VerdictNo},
+			Conflicts: []RoutingConflict{
+				{ClusterSubnet: "10.244.0.0/16", Source: sourcePodCIDR, LocalRoute: "10.0.0.0/8", Interface: "tun0"},
+			},
+		}
+	})
+	t.Run("asked only when conflicts exist, default no", func(t *testing.T) {
+		a, out, err := runInterview(t, conflictFacts, "\n\n\n\n", Answers{}, Preset{}, false)
+		require.NoError(t, err)
+		assert.Contains(t, out, "Local routes overlap the cluster's subnets (10.244.0.0/16).")
+		assert.False(t, a.AllowConflicts)
+	})
+	t.Run("yes accepts the conflicts", func(t *testing.T) {
+		a, _, err := runInterview(t, conflictFacts, "\n\n\ny\n", Answers{}, Preset{}, false)
+		require.NoError(t, err)
+		assert.True(t, a.AllowConflicts)
+	})
+	t.Run("not asked without conflicts", func(t *testing.T) {
+		_, out, err := runInterview(t, recFacts(), "\n\n\n", Answers{}, Preset{}, false)
+		require.NoError(t, err)
+		assert.NotContains(t, out, "Local routes overlap")
+	})
+	t.Run("non-interactive defaults to no", func(t *testing.T) {
+		a, out, err := runInterview(t, conflictFacts, "", Answers{}, Preset{}, true)
+		require.NoError(t, err)
+		assert.False(t, a.AllowConflicts)
+		assert.Empty(t, out)
+	})
+	t.Run("preset skips the question", func(t *testing.T) {
+		a, out, err := runInterview(t, conflictFacts, "\n\n\n", Answers{AllowConflicts: true}, Preset{AllowConflicts: true}, false)
+		require.NoError(t, err)
+		assert.NotContains(t, out, "Local routes overlap")
+		assert.True(t, a.AllowConflicts)
+	})
+}
+
 func TestInterview_ScopeRecommendation(t *testing.T) {
 	facts := recFacts(func(f *ClusterFacts) {
 		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}

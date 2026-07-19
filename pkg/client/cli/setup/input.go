@@ -32,13 +32,14 @@ func LoadInputValues(path string) (map[string]any, error) {
 // Pins are the unambiguous answers an input values document implies; a pinned
 // answer skips its interview question exactly like a flag-preset answer.
 type Pins struct {
-	Attach            *bool
-	ReplaceDetermined bool // the replace question is moot or answered by the input
-	Replace           bool
-	Quic              *Tri // TriOn/TriOff from quicTunnel.enabled
-	Scope             *ScopeChoice
-	ManagedNamespaces []string
-	SelectorLabels    map[string]string
+	Attach                   *bool
+	ReplaceDetermined        bool // the replace question is moot or answered by the input
+	Replace                  bool
+	Quic                     *Tri // TriOn/TriOff from quicTunnel.enabled
+	Scope                    *ScopeChoice
+	ManagedNamespaces        []string
+	SelectorLabels           map[string]string
+	AllowConflictsDetermined bool // client.routing.allowConflictingSubnets is pinned by the input
 }
 
 // DerivePins derives the answer pins from an input values document. Only keys
@@ -84,6 +85,10 @@ func DerivePins(values map[string]any) Pins {
 	case pinScopeList(&pins, ScopeNamespaces, values, "namespaces"):
 	case pinScopeSelector(&pins, values):
 	case pinScopeList(&pins, ScopeMapped, values, "client", "cluster", "mappedNamespaces"):
+	}
+
+	if subnets, ok := stringListAt(values, "client", "routing", "allowConflictingSubnets"); ok && len(subnets) > 0 {
+		pins.AllowConflictsDetermined = true
 	}
 	return pins
 }
@@ -134,6 +139,13 @@ func (pins *Pins) ApplyTo(a *Answers, pre *Preset) {
 		if len(pins.SelectorLabels) > 0 && len(a.SelectorLabels) == 0 {
 			a.SelectorLabels = pins.SelectorLabels
 		}
+	}
+	if pins.AllowConflictsDetermined && !pre.AllowConflicts {
+		// The input's allowConflictingSubnets is authoritative; answering yes
+		// lets the engine emit its own list and the reconcile pass guard the
+		// pinned value.
+		a.AllowConflicts = true
+		pre.AllowConflicts = true
 	}
 }
 

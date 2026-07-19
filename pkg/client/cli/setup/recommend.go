@@ -148,11 +148,23 @@ func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]
 		for i, ns := range a.ManagedNamespaces {
 			nss[i] = ns
 		}
-		// vals carries no "client" key at this point: the engine only sets
-		// agentInjector, nodeAgent, and quicTunnel before the scope switch.
-		vals["client"] = map[string]any{"cluster": map[string]any{"mappedNamespaces": nss}}
+		nestedMap(vals, "client", "cluster")["mappedNamespaces"] = nss
 		info("clients receive these namespaces as their mapped-namespaces default; a local --mapped-namespaces flag or config setting overrides it")
 	case ScopeAll:
+	}
+
+	if conflicts := facts.Routing.ConflictingSubnets(); len(conflicts) > 0 {
+		if a.AllowConflicts {
+			subnets := make([]any, len(conflicts))
+			for i, sn := range conflicts {
+				subnets[i] = sn
+			}
+			nestedMap(vals, "client", "routing")["allowConflictingSubnets"] = subnets
+			info("clients accept local route conflicts with %s; traffic to those ranges goes to the cluster", strings.Join(conflicts, ", "))
+		} else {
+			warn("local routes overlap the cluster's subnets (%s); either set client.routing.allowConflictingSubnets cluster-wide, "+
+				"or accept them per client with 'telepresence connect --vnat <subnet>'", strings.Join(conflicts, ", "))
+		}
 	}
 
 	if facts.ClientUpdate.UpdateAvailable {
@@ -336,6 +348,21 @@ func quicValues(facts *ClusterFacts, a *Answers, clusterScope bool, vals map[str
 		quic["service"] = map[string]any{"type": serviceType}
 	}
 	vals["quicTunnel"] = quic
+}
+
+// nestedMap returns the map at the given key path in vals, creating any
+// missing (or non-map) intermediate levels.
+func nestedMap(vals map[string]any, keys ...string) map[string]any {
+	m := vals
+	for _, k := range keys {
+		next, ok := m[k].(map[string]any)
+		if !ok {
+			next = map[string]any{}
+			m[k] = next
+		}
+		m = next
+	}
+	return m
 }
 
 // numericValue coerces the numeric types that YAML/JSON decoding produces.

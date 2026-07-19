@@ -168,18 +168,26 @@ func (s *setupSuite) Test_SetupRoundTrip() {
 	// with the comment lines stripped.
 	s.Equal(stripComments(string(b1)), stripComments(string(b2)), "an --output/--input round trip must be lossless")
 
-	// A key the engine has no opinion about passes through to the result.
+	// A key the engine has no opinion about passes through to the result, and
+	// a pinned client.routing.allowConflictingSubnets survives untouched.
 	f3 := filepath.Join(dir, "values-custom.yaml")
 	f4 := filepath.Join(dir, "values-custom-out.yaml")
-	rq.NoError(os.WriteFile(f3, append(b1, []byte("logLevel: debug\n")...), 0o644))
+	custom := "logLevel: debug\nclient:\n  routing:\n    allowConflictingSubnets: [10.88.0.0/16]\n"
+	rq.NoError(os.WriteFile(f3, append(b1, []byte(custom)...), 0o644))
 	stdout = itest.TelepresenceOk(ctx, s.setupArgs("--non-interactive", "--input", f3, "--output", f4)...)
 	s.NotContains(stdout, "warning: the input pins")
+	s.NotContains(stdout, "Local routes overlap")
 
 	b4, err := os.ReadFile(f4)
 	rq.NoError(err)
 	var values map[string]any
 	rq.NoError(yaml.Unmarshal(b4, &values))
 	s.Equal("debug", values["logLevel"], "passthrough keys must survive the round trip")
+	clientVals, ok := values["client"].(map[string]any)
+	rq.True(ok, "the pinned client value must survive")
+	routingVals, ok := clientVals["routing"].(map[string]any)
+	rq.True(ok)
+	s.Equal([]any{"10.88.0.0/16"}, routingVals["allowConflictingSubnets"])
 
 	s.False(s.trafficManagerInstalled(ctx), "round trips must not mutate the cluster")
 }
@@ -235,6 +243,10 @@ func (s *setupSuite) Test_SetupValidation() {
 	// The manager namespace exists (the harness created it) and kind's PSS is
 	// permissive, so the admission canary confirms node-agent viability.
 	s.Contains(stdout, "node-agent: yes")
+	// The subnet-conflict probe always reports; against the local kind
+	// cluster the honest expectation is the no-conflict (or, if the route
+	// table is unreadable, unknown) line.
+	s.Contains(stdout, "  routing: ")
 	s.Contains(stdout, "Proposed configuration:")
 	// QUIC is enabled either via an observed LoadBalancer capability or via
 	// NodePort on a bare kind cluster; the service type may differ, the

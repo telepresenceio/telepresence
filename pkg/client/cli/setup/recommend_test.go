@@ -273,6 +273,52 @@ func TestRecommend_SelectorScope(t *testing.T) {
 	assert.Contains(t, notesText(p), "maxNamespaceSpecificWatchers")
 }
 
+func TestRecommend_RoutingConflicts(t *testing.T) {
+	conflictFacts := func() *ClusterFacts {
+		return recFacts(func(f *ClusterFacts) {
+			f.Routing = RoutingFacts{
+				Summary: Finding{Verdict: VerdictNo},
+				Conflicts: []RoutingConflict{
+					{ClusterSubnet: "10.244.0.0/16", Source: sourcePodCIDR, LocalRoute: "10.0.0.0/8", Interface: "tun0"},
+					{ClusterSubnet: "10.96.0.0/16", Source: sourceServiceCIDR, LocalRoute: "10.0.0.0/8", Interface: "tun0"},
+				},
+			}
+		})
+	}
+
+	t.Run("accepted conflicts become a cluster-wide value", func(t *testing.T) {
+		p, err := Recommend(conflictFacts(), recAnswers(func(a *Answers) { a.AllowConflicts = true }))
+		require.NoError(t, err)
+		assert.Equal(t, []any{"10.244.0.0/16", "10.96.0.0/16"}, val(t, p.Values, "client", "routing", "allowConflictingSubnets"))
+		assert.NotContains(t, notesText(p), "--vnat")
+	})
+	t.Run("declined conflicts leave no value and warn with both remedies", func(t *testing.T) {
+		p, err := Recommend(conflictFacts(), recAnswers())
+		require.NoError(t, err)
+		assert.NotContains(t, p.Values, "client")
+		text := notesText(p)
+		assert.Contains(t, text, "10.244.0.0/16")
+		assert.Contains(t, text, "client.routing.allowConflictingSubnets")
+		assert.Contains(t, text, "--vnat")
+	})
+	t.Run("no conflicts set nothing", func(t *testing.T) {
+		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) { a.AllowConflicts = true }))
+		require.NoError(t, err)
+		assert.NotContains(t, p.Values, "client")
+	})
+	t.Run("mapped scope and accepted conflicts share the client value", func(t *testing.T) {
+		answers := recAnswers(func(a *Answers) {
+			a.Scope = ScopeMapped
+			a.ManagedNamespaces = []string{"foo"}
+			a.AllowConflicts = true
+		})
+		p, err := Recommend(conflictFacts(), answers)
+		require.NoError(t, err)
+		assert.Equal(t, []any{"foo"}, val(t, p.Values, "client", "cluster", "mappedNamespaces"))
+		assert.Equal(t, []any{"10.244.0.0/16", "10.96.0.0/16"}, val(t, p.Values, "client", "routing", "allowConflictingSubnets"))
+	})
+}
+
 func notesText(p *Proposal) string {
 	var sb strings.Builder
 	for _, n := range p.Notes {

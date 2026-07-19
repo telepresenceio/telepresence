@@ -121,6 +121,43 @@ func TestPrintReport_ClusterLine(t *testing.T) {
 	assert.Contains(t, out.String(), "  cluster: context kind-dev, server https://127.0.0.1:6443")
 }
 
+func TestPrintReport_RoutingLine(t *testing.T) {
+	t.Run("no conflicts", func(t *testing.T) {
+		s := renderSummary()
+		s.Facts.Routing = RoutingFacts{Summary: Finding{Verdict: VerdictYes}}
+		out := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(out)
+		require.NoError(t, PrintReport(cmd, s))
+		assert.Contains(t, out.String(), "  routing: no conflicts")
+	})
+	t.Run("conflicts with evidence", func(t *testing.T) {
+		s := renderSummary()
+		s.Facts.Routing = RoutingFacts{
+			Summary: Finding{Verdict: VerdictNo, Evidence: []string{"10.244.0.0/16 (pod CIDR) overlaps local route 10.0.0.0/8 dev tun0"}},
+			Conflicts: []RoutingConflict{
+				{ClusterSubnet: "10.244.0.0/16", Source: sourcePodCIDR, LocalRoute: "10.0.0.0/8", Interface: "tun0"},
+			},
+		}
+		out := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(out)
+		require.NoError(t, PrintReport(cmd, s))
+		text := out.String()
+		assert.Contains(t, text, "  routing: 1 conflicts")
+		assert.Contains(t, text, "    - 10.244.0.0/16 (pod CIDR) overlaps local route 10.0.0.0/8 dev tun0")
+	})
+	t.Run("unknown", func(t *testing.T) {
+		s := renderSummary()
+		s.Facts.Routing = RoutingFacts{Summary: Finding{Verdict: VerdictUnknown, Evidence: []string{"the workstation's routing table could not be read: nope"}}}
+		out := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(out)
+		require.NoError(t, PrintReport(cmd, s))
+		assert.Contains(t, out.String(), "  routing: unknown")
+	})
+}
+
 func TestBanner(t *testing.T) {
 	facts := recFacts(func(f *ClusterFacts) {
 		f.Context = "kind-dev"

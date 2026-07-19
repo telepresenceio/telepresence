@@ -167,6 +167,15 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 		area(w, "namespaces", fmt.Sprintf("%d", facts.Namespaces.Count), nil)
 	}
 
+	switch rs := &facts.Routing.Summary; rs.Verdict {
+	case VerdictYes:
+		area(w, "routing", "no conflicts", nil)
+	case VerdictNo:
+		area(w, "routing", fmt.Sprintf("%d conflicts", len(facts.Routing.Conflicts)), rs.Evidence)
+	default:
+		area(w, "routing", "unknown", rs.Evidence)
+	}
+
 	if facts.Release.Installed {
 		area(w, "release", fmt.Sprintf("traffic-manager %s installed in namespace %s", facts.Release.Version, facts.Release.Namespace), nil)
 	} else {

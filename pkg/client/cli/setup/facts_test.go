@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -29,7 +30,7 @@ func TestGatherFacts_Smoke(t *testing.T) {
 				Name:   "node-1",
 				Labels: map[string]string{"kubernetes.io/os": "linux"},
 			},
-			Spec: corev1.NodeSpec{ProviderID: "kind://docker/kind/kind-control-plane"},
+			Spec: corev1.NodeSpec{ProviderID: "kind://docker/kind/kind-control-plane", PodCIDR: "10.244.0.0/16"},
 			Status: corev1.NodeStatus{
 				Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "172.18.0.2"}},
 				NodeInfo:  corev1.NodeSystemInfo{ContainerRuntimeVersion: "containerd://1.6.6"},
@@ -57,6 +58,9 @@ func TestGatherFacts_Smoke(t *testing.T) {
 		ReleaseLookup: func(context.Context, string) (*release.Release, error) {
 			return stubRelease, nil
 		},
+		RouteSource: func(context.Context) ([]*routing.Route, error) {
+			return []*routing.Route{localRoute("192.168.1.0/24", "eth0")}, nil
+		},
 	}
 
 	facts, err := p.GatherFacts(context.Background())
@@ -78,6 +82,7 @@ func TestGatherFacts_Smoke(t *testing.T) {
 	assert.Equal(t, VerdictNo, facts.Health.VersionSkew.Verdict, "the stub release is newer than the test client")
 
 	assert.Equal(t, "2.31.0", facts.Release.Version)
+	assert.Equal(t, VerdictYes, facts.Routing.Summary.Verdict)
 
 	p.ReleaseLookup = nil
 	facts, err = p.GatherFacts(context.Background())
