@@ -256,6 +256,18 @@ Protocol buffers are in `rpc/` with separate packages:
 - `rpc/manager/` - Client/userd-to-traffic-manager communication
 - `rpc/agent/` - Traffic-manager-to-traffic-agent communication
 
+### Version Parity Between CLI and Daemons
+
+The CLI never talks to a user or root daemon of a different version.
+`pkg/client/cli/connect/version_check.go` enforces this on every command
+that reaches a daemon: the host user daemon and root daemon must match the
+client version exactly, and a containerized user daemon must match on
+major.minor.patch. This means changes to `rpc/connector/` and `rpc/daemon/`
+never need backward-compatibility fallbacks — a new RPC can be assumed to
+exist on the daemon side. Backward compatibility DOES matter for
+`rpc/manager/` and `rpc/agent/`, where the cluster side is upgraded
+independently of the client.
+
 ### Helm Chart
 
 The traffic-manager Helm chart is in `charts/telepresence-oss/`.

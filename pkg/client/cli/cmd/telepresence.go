@@ -153,10 +153,12 @@ func OnlySubcommands(cmd *cobra.Command, args []string) error {
 
 func WithSubCommands(ctx context.Context) context.Context {
 	return MergeSubCommands(ctx,
+		applyCmd(),
 		composeCmd(),
 		configCmd(),
 		connectCmd(),
 		curlCmd(),
+		deleteCmd(),
 		detachCmd(),
 		dockerRunCmd(),
 		gatherLogs(),

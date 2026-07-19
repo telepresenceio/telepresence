@@ -1,0 +1,5 @@
+apiVersion: telepresence.io/v1alpha1
+kind: NotAWorkstationState
+attachments:
+  - type: ingest
+    name: echo-sidecar

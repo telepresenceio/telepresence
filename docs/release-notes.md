@@ -8,6 +8,12 @@
 The traffic-manager can now expose a QUIC endpoint for the tunnel (Helm chart value <code>quicTunnel.enabled</code>). When the endpoint is reachable, the client automatically upgrades new tunneled connections to it, removing the head-of-line blocking that the shared port-forwarded gRPC connection imposes across flows. The port-forwarded gRPC transport remains the default and is used as the fallback whenever the QUIC endpoint is disabled or unreachable, and <code>telepresence status</code> now reports which transport is active.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Declarative workstation state with telepresence apply and delete</div></div>
+<div style="margin-left: 15px">
+
+The new <code>telepresence apply -f &lt;manifest&gt;</code> command brings the workstation to the state described by a YAML manifest: an optional connection with its flags, and a set of attachments (intercept, replace, ingest, or wiretap) complete with theirs. The manifest is validated against a JSON schema, apply is idempotent and re-creates attachments whose spec has drifted, and <code>--dry-run</code> reports what would change without touching anything. The <code>telepresence delete -f &lt;manifest&gt;</code> command tears the state down again, disconnecting only when the manifest declares the connection. Each attachment can also declare a <code>command</code>, a local process that apply starts detached once the attachment is up and keeps in sync on later applies, and that delete stops.
+</div>
+
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">One combined traffic-manager watcher per client</div></div>
 <div style="margin-left: 15px">
 

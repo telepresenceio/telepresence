@@ -1,0 +1,2 @@
+apiVersion: telepresence.io/v1alpha1
+kind: WorkstationState

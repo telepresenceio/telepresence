@@ -35,6 +35,11 @@ service Connector {
   // is in agreement with the ConnectionRequest.
   rpc Connect(ConnectRequest) returns (ConnectInfo);
 
+  // Verifies that the request is aligned with the current session without altering any state.
+  // Returns an error when the configuration has drifted, and Unavailable when there is no
+  // active session.
+  rpc CheckConnect(ConnectRequest) returns (google.protobuf.Empty);
+
   // Disconnects the cluster
   rpc Disconnect(google.protobuf.Empty) returns (google.protobuf.Empty);
 

@@ -132,6 +132,7 @@ generate-clean: ## (Generate) Delete generated files
 	rm -f docs/release-notes.md*
 	rm -f docs/README.md
 	rm -f docs/helm/values.schema.json
+	rm -f docs/schemas/workstation-state.v1alpha1.json
 
 CHANGELOG.yml: FORCE
 	@# Check if the version is in the x.x.x format (GA release)
@@ -142,7 +143,7 @@ CHANGELOG.yml: FORCE
 		git add CHANGELOG.yml; \
 	fi
 
-docs-files: docs/README.md docs/release-notes.md docs/release-notes.mdx docs/variables.yml docs/helm/values.schema.json docs/reference/cli/telepresence.md
+docs-files: docs/README.md docs/release-notes.md docs/release-notes.mdx docs/variables.yml docs/helm/values.schema.json docs/schemas/workstation-state.v1alpha1.json docs/reference/cli/telepresence.md
 
 docs/reference/cli/telepresence.md: $(TELEPRESENCE)
 	$(TELEPRESENCE) man-pages --dir $(@D)
@@ -165,6 +166,11 @@ docs/variables.yml: CHANGELOG.yml $(tools/relnotesgen)
 	git add $@
 
 docs/helm/values.schema.json: charts/telepresence-oss/values.schema.yaml $(tools/y2j)
+	mkdir -p $(@D)
+	$(tools/y2j) < $< > $@
+	git add $@
+
+docs/schemas/workstation-state.v1alpha1.json: pkg/client/cli/manifest/state.schema.yaml $(tools/y2j)
 	mkdir -p $(@D)
 	$(tools/y2j) < $< > $@
 	git add $@
@@ -354,6 +360,7 @@ clobber:  clobber-tools generate-clean ## (Build) Remove all build artifacts and
 	rm -rf cmd/teleroute/build-output
 	rm -f pkg/client/cli/docker/compose/dc-cli.json
 	rm -f docs/helm/values.schema.json
+	rm -f docs/schemas/workstation-state.v1alpha1.json
 
 # Release: Push the artifacts places, update pointers ot them
 # ===========================================================

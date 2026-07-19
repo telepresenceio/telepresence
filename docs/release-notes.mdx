@@ -15,6 +15,12 @@ The traffic-manager can now expose a QUIC endpoint for the tunnel (Helm chart va
   </Body>
 </Note>
 <Note>
+	<Title type="feature">Declarative workstation state with telepresence apply and delete</Title>
+	<Body>
+The new <code>telepresence apply -f &lt;manifest&gt;</code> command brings the workstation to the state described by a YAML manifest: an optional connection with its flags, and a set of attachments (intercept, replace, ingest, or wiretap) complete with theirs. The manifest is validated against a JSON schema, apply is idempotent and re-creates attachments whose spec has drifted, and <code>--dry-run</code> reports what would change without touching anything. The <code>telepresence delete -f &lt;manifest&gt;</code> command tears the state down again, disconnecting only when the manifest declares the connection. Each attachment can also declare a <code>command</code>, a local process that apply starts detached once the attachment is up and keeps in sync on later applies, and that delete stops.
+  </Body>
+</Note>
+<Note>
 	<Title type="change">One combined traffic-manager watcher per client</Title>
 	<Body>
 The client now registers a single combined watcher stream (<code>WatchSessionEvents</code>) with the traffic-manager for everything related to workloads and attachments: agent pods and the client's intercepts. The user daemon relays the agent-pod events to the root daemon locally, halving the number of watcher streams the traffic-manager serves per client. Bulk container data (environments, mounts) is no longer streamed at all; it is fetched on demand when an attachment needs it. Both directions remain fully backward compatible: a new client degrades to the separate watchers against an older traffic-manager, and an older client keeps using them against a new one.

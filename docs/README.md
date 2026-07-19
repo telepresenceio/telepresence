@@ -19,6 +19,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Choose between the sidecar and the node-agent](howtos/agent-modes.md)
   - [Use Telepresence with Docker](howtos/docker.md)
   - [Extend Docker Compose with Telepresence](howtos/docker-compose.md)
+  - [Declare the workstation state with a manifest](howtos/state-manifest.md)
   - [Work with large clusters](howtos/large-clusters.md)
   - [Host a cluster in Docker or a VM](howtos/cluster-in-vm.md)
   - [Intercept TLS/mTLS Applications](howtos/mtls.md)
@@ -29,6 +30,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Use Telepresence with Azure (Microsoft Learn)](https://learn.microsoft.com/en-us/azure/aks/use-telepresence-aks.md)
 - Technical reference
   - [Telepresence CLI](reference/cli/telepresence.md)
+    - [telepresence apply](reference/cli/telepresence_apply.md)
     - [telepresence completion](reference/cli/telepresence_completion.md)
     - [telepresence compose](reference/cli/telepresence_compose.md)
       - [attach](reference/cli/telepresence_compose_attach.md)
@@ -70,6 +72,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
       - [view](reference/cli/telepresence_config_view.md)
     - [telepresence connect](reference/cli/telepresence_connect.md)
     - [telepresence curl](reference/cli/telepresence_curl.md)
+    - [telepresence delete](reference/cli/telepresence_delete.md)
     - [telepresence detach](reference/cli/telepresence_detach.md)
     - [telepresence docker-run](reference/cli/telepresence_docker-run.md)
     - [telepresence gather-logs](reference/cli/telepresence_gather-logs.md)
@@ -119,6 +122,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Laptop-side configuration](reference/config.md)
   - [Cluster-side configuration](reference/cluster-config.md)
   - [Telepresence Compose Extensions](reference/compose.md)
+  - [Workstation state manifest](reference/state-manifest.md)
   - [Environment variables](reference/environment.md)
   - Attachments
     - [Configure attachments using CLI](reference/attachments/cli.md)

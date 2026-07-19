@@ -28,6 +28,8 @@
       link: howtos/docker
     - title: Extend Docker Compose with Telepresence
       link: howtos/docker-compose
+    - title: Declare the workstation state with a manifest
+      link: howtos/state-manifest
     - title: Work with large clusters
       link: howtos/large-clusters
     - title: Host a cluster in Docker or a VM
@@ -49,6 +51,8 @@
     - title: Telepresence CLI
       link: reference/cli/telepresence
       items:
+        - title: telepresence apply
+          link: reference/cli/telepresence_apply
         - title: telepresence completion
           link: reference/cli/telepresence_completion
         - title: telepresence compose
@@ -133,6 +137,8 @@
           link: reference/cli/telepresence_connect
         - title: telepresence curl
           link: reference/cli/telepresence_curl
+        - title: telepresence delete
+          link: reference/cli/telepresence_delete
         - title: telepresence detach
           link: reference/cli/telepresence_detach
         - title: telepresence docker-run
@@ -237,6 +243,8 @@
       link: reference/cluster-config
     - title: Telepresence Compose Extensions
       link: reference/compose
+    - title: Workstation state manifest
+      link: reference/state-manifest
     - title: Environment variables
       link: reference/environment
     - title: Attachments

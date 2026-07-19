@@ -4,6 +4,7 @@ package proc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec" //nolint:depguard // We want no logging and no soft-context signal handling
@@ -75,6 +76,22 @@ func createNewProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &unix.SysProcAttr{
 		Setpgid: true,
 	}
+}
+
+func createDetached(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &unix.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setsid = true
+}
+
+func isAlive(pid int) bool {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	err = p.Signal(unix.Signal(0))
+	return err == nil || errors.Is(err, unix.EPERM)
 }
 
 func killProcessGroup(_ context.Context, cmd *exec.Cmd, signal os.Signal) {

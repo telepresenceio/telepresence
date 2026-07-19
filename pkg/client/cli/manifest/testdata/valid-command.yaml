@@ -1,0 +1,7 @@
+apiVersion: telepresence.io/v1alpha1
+kind: WorkstationState
+attachments:
+  - type: intercept
+    name: echo-easy
+    ports: ["8080"]
+    command: ["node", "server.js"]

@@ -39,11 +39,13 @@ result in a password prompt.
 ### Available Commands:
 | Command | Description |
 |---------|-------------|
+| [apply](telepresence_apply) | Bring the workstation to the state described by a manifest |
 | [completion](telepresence_completion) | Generate a shell completion script |
 | [compose](telepresence_compose) | Define and run multi-container applications with Telepresence and Docker |
 | [config](telepresence_config) | Telepresence configuration commands |
 | [connect](telepresence_connect) | Connect to a cluster |
 | [curl](telepresence_curl) | curl with daemon network |
+| [delete](telepresence_delete) | Tear down the state described by a manifest |
 | [detach](telepresence_detach) | Remove existing attachment |
 | [docker-run](telepresence_docker-run) | Docker run with daemon network |
 | [gather-logs](telepresence_gather-logs) | Gather logs from traffic-manager, traffic-agent, user and root daemons, and export them into a zip file. |

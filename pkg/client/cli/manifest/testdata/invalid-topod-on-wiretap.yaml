@@ -1,0 +1,7 @@
+apiVersion: telepresence.io/v1alpha1
+kind: WorkstationState
+attachments:
+  - type: wiretap
+    name: echo-tap
+    workload: echo-server
+    toPod: ["9091"]
