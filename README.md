@@ -49,6 +49,14 @@ for the full picture.
 - [CNCF Slack](https://communityinviter.com/apps/cloud-native/cncf) - Join [#telepresence-oss](https://cloud-native.slack.com/archives/C06B36KJ85P)
 - [Troubleshooting](https://telepresence.io/docs/troubleshooting/) - Common issues and solutions
 
+## Sponsors
+
+Thank you to the sponsors who support the development of Telepresence:
+
+- [OpenAI](https://openai.com)
+
+You can support the project too, via [GitHub Sponsors](https://github.com/sponsors/thallgren).
+
 ## Contributing
 
 See [AGENTS.md](AGENTS.md) for build instructions, architecture overview, and development guidelines.
