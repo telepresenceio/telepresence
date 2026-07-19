@@ -92,13 +92,13 @@ func TestProbeHealth_ManagerReadiness(t *testing.T) {
 				Type:       "Warning",
 				Reason:     "BackOff",
 				Note:       "Back-off pulling image",
-				Regarding:  corev1.ObjectReference{Name: "traffic-manager-abc123-xyz", Namespace: "ambassador"},
+				Regarding:  corev1.ObjectReference{Kind: "Pod", Name: "traffic-manager-abc123-xyz", Namespace: "ambassador"},
 			},
 			&eventsv1.Event{
 				ObjectMeta: metav1.ObjectMeta{Name: "ev2", Namespace: "ambassador"},
 				Type:       "Normal",
 				Reason:     "Pulled",
-				Regarding:  corev1.ObjectReference{Name: "traffic-manager-abc123-xyz", Namespace: "ambassador"},
+				Regarding:  corev1.ObjectReference{Kind: "Pod", Name: "traffic-manager-abc123-xyz", Namespace: "ambassador"},
 			},
 			&eventsv1.Event{
 				ObjectMeta: metav1.ObjectMeta{Name: "ev3", Namespace: "ambassador"},
