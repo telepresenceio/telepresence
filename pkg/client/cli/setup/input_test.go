@@ -13,7 +13,7 @@ func boolPtr(b bool) *bool { return &b }
 
 func triPtr(t Tri) *Tri { return &t }
 
-func scopePtr(s ScopeChoice) *ScopeChoice { return &s }
+func managedScopePtr(s ManagedScope) *ManagedScope { return &s }
 
 func TestLoadInputValues(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "values.yaml")
@@ -102,27 +102,30 @@ func TestDerivePins(t *testing.T) {
 		{
 			name:   "namespaces pin the scope",
 			values: map[string]any{"namespaces": []any{"foo", "bar"}},
-			want:   Pins{Scope: scopePtr(ScopeNamespaces), ManagedNamespaces: []string{"foo", "bar"}},
+			want:   Pins{ManagedScope: managedScopePtr(ManagedScopeNamespaces), ManagedNamespaces: []string{"foo", "bar"}},
 		},
 		{
 			name:   "namespaceSelector pins the selector scope",
 			values: map[string]any{"namespaceSelector": map[string]any{"matchLabels": map[string]any{"team": "dev"}}},
-			want:   Pins{Scope: scopePtr(ScopeSelector), SelectorLabels: map[string]string{"team": "dev"}},
+			want:   Pins{ManagedScope: managedScopePtr(ManagedScopeSelector), SelectorLabels: map[string]string{"team": "dev"}},
 		},
 		{
-			name: "client mapped-namespaces default pins the mapped scope",
+			name: "client mapped-namespaces default pins the mapped-namespaces setting",
 			values: map[string]any{
 				"client": map[string]any{"cluster": map[string]any{"mappedNamespaces": []any{"foo", "bar"}}},
 			},
-			want: Pins{Scope: scopePtr(ScopeMapped), ManagedNamespaces: []string{"foo", "bar"}},
+			want: Pins{MappedNamespacesDetermined: true, MappedNamespaces: []string{"foo", "bar"}},
 		},
 		{
-			name: "namespaces win over the mapped-namespaces default",
+			name: "namespaces and the mapped-namespaces default pin independently",
 			values: map[string]any{
 				"namespaces": []any{"foo"},
 				"client":     map[string]any{"cluster": map[string]any{"mappedNamespaces": []any{"bar"}}},
 			},
-			want: Pins{Scope: scopePtr(ScopeNamespaces), ManagedNamespaces: []string{"foo"}},
+			want: Pins{
+				ManagedScope: managedScopePtr(ManagedScopeNamespaces), ManagedNamespaces: []string{"foo"},
+				MappedNamespacesDetermined: true, MappedNamespaces: []string{"bar"},
+			},
 		},
 		{
 			name: "allowConflictingSubnets pins the conflicts question",
@@ -132,14 +135,9 @@ func TestDerivePins(t *testing.T) {
 			want: Pins{AllowConflictsDetermined: true},
 		},
 		{
-			name:   "clientRbac.create true pins the question yes",
-			values: map[string]any{"clientRbac": map[string]any{"create": true}},
-			want:   Pins{ClientRbacDetermined: true, ClientRbac: true},
-		},
-		{
-			name:   "clientRbac.create false pins the question no",
-			values: map[string]any{"clientRbac": map[string]any{"create": false}},
-			want:   Pins{ClientRbacDetermined: true},
+			name:   "clientRbac is a pure input passthrough and pins nothing",
+			values: map[string]any{"clientRbac": map[string]any{"create": true, "subjects": []any{map[string]any{"kind": "User", "name": "alice"}}}},
+			want:   Pins{},
 		},
 		{
 			name:   "unrelated keys pin nothing",
@@ -159,7 +157,7 @@ func TestPinsApplyTo(t *testing.T) {
 		pins := Pins{
 			Attach:            boolPtr(false),
 			Quic:              triPtr(TriOff),
-			Scope:             scopePtr(ScopeNamespaces),
+			ManagedScope:      managedScopePtr(ManagedScopeNamespaces),
 			ManagedNamespaces: []string{"foo"},
 		}
 		a := Answers{Attach: true, Quic: TriAuto}
@@ -168,9 +166,31 @@ func TestPinsApplyTo(t *testing.T) {
 		assert.False(t, a.Attach)
 		assert.True(t, pre.Attach)
 		assert.Equal(t, TriOff, a.Quic)
-		assert.Equal(t, ScopeNamespaces, a.Scope)
-		assert.True(t, pre.Scope)
+		assert.Equal(t, ManagedScopeNamespaces, a.ManagedScope)
+		assert.True(t, pre.ManagedScope)
 		assert.Equal(t, []string{"foo"}, a.ManagedNamespaces)
+	})
+	t.Run("a pinned mapped-namespaces default fills the answer independently of the managed scope", func(t *testing.T) {
+		pins := Pins{
+			ManagedScope:               managedScopePtr(ManagedScopeNamespaces),
+			ManagedNamespaces:          []string{"foo"},
+			MappedNamespacesDetermined: true,
+			MappedNamespaces:           []string{"bar", "baz"},
+		}
+		a := Answers{}
+		pre := Preset{}
+		pins.ApplyTo(&a, &pre)
+		assert.Equal(t, ManagedScopeNamespaces, a.ManagedScope)
+		assert.Equal(t, []string{"foo"}, a.ManagedNamespaces)
+		assert.Equal(t, []string{"bar", "baz"}, a.MappedNamespaces)
+		assert.True(t, pre.MappedNamespaces)
+	})
+	t.Run("a flag-preset mapped-namespaces wins over a pin", func(t *testing.T) {
+		pins := Pins{MappedNamespacesDetermined: true, MappedNamespaces: []string{"bar"}}
+		a := Answers{MappedNamespaces: []string{"foo"}}
+		pre := Preset{MappedNamespaces: true}
+		pins.ApplyTo(&a, &pre)
+		assert.Equal(t, []string{"foo"}, a.MappedNamespaces)
 	})
 	t.Run("a pinned conflicts value skips the question and lets reconcile guard it", func(t *testing.T) {
 		pins := Pins{AllowConflictsDetermined: true}
@@ -180,28 +200,13 @@ func TestPinsApplyTo(t *testing.T) {
 		assert.True(t, a.AllowConflicts)
 		assert.True(t, pre.AllowConflicts)
 	})
-	t.Run("flag presets win over pins", func(t *testing.T) {
+	t.Run("an already-preset answer wins over a pin", func(t *testing.T) {
 		pins := Pins{Attach: boolPtr(false), Quic: triPtr(TriOff)}
 		a := Answers{Attach: true, Quic: TriOn}
 		pre := Preset{Attach: true}
 		pins.ApplyTo(&a, &pre)
 		assert.True(t, a.Attach)
 		assert.Equal(t, TriOn, a.Quic)
-	})
-	t.Run("a pinned clientRbac.create skips the question", func(t *testing.T) {
-		pins := Pins{ClientRbacDetermined: true, ClientRbac: true}
-		a := Answers{}
-		pre := Preset{}
-		pins.ApplyTo(&a, &pre)
-		assert.True(t, a.ClientRbac)
-		assert.True(t, pre.ClientRbac)
-	})
-	t.Run("a flag-preset clientRbac wins over a pin", func(t *testing.T) {
-		pins := Pins{ClientRbacDetermined: true, ClientRbac: true}
-		a := Answers{ClientRbac: false}
-		pre := Preset{ClientRbac: true}
-		pins.ApplyTo(&a, &pre)
-		assert.False(t, a.ClientRbac)
 	})
 }
 

@@ -60,7 +60,7 @@ type PrivilegeFacts struct {
 	Namespaced                  Finding           `json:"namespaced"`        // same for a namespace-scoped render (only evaluated when ClusterWide is not yes)
 	Missing                     []string          `json:"missing,omitempty"` // itemized denials for the cluster-wide render, e.g. `create clusterroles.rbac.authorization.k8s.io`
 	MissingNamespaced           []string          `json:"missingNamespaced,omitempty"`
-	MissingAttributes           []DeniedAttribute `json:"missingAttributes,omitempty"`           // structured form of Missing, for RBAC generation
+	MissingAttributes           []DeniedAttribute `json:"missingAttributes,omitempty"`           // structured form of Missing
 	MissingNamespacedAttributes []DeniedAttribute `json:"missingNamespacedAttributes,omitempty"` // structured form of MissingNamespaced
 }
 

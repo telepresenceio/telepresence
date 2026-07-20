@@ -30,12 +30,12 @@ func TestInterview_Defaults(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, a.Attach)
 	assert.False(t, a.Replace)
-	assert.Equal(t, ScopeAll, a.Scope)
+	assert.Equal(t, ManagedScopeAll, a.ManagedScope)
 	assert.Equal(t, TriAuto, a.Quic)
 	assert.Equal(t, TriAuto, a.NodeAgent)
 	assert.Contains(t, out, "attach to workloads")
 	assert.Contains(t, out, "replace command")
-	assert.Contains(t, out, "Choose 1-4 [1]")
+	assert.Contains(t, out, "Choose 1-3 [1]")
 }
 
 func TestInterview_ReplaceGating(t *testing.T) {
@@ -76,10 +76,10 @@ func TestInterview_UpgradeGating(t *testing.T) {
 	})
 }
 
-func TestInterview_ScopeNamespaces(t *testing.T) {
+func TestInterview_ManagedScopeNamespaces(t *testing.T) {
 	a, out, err := runInterview(t, recFacts(), "\n\n2\nfoo,bar\n", Answers{}, Preset{}, false)
 	require.NoError(t, err)
-	assert.Equal(t, ScopeNamespaces, a.Scope)
+	assert.Equal(t, ManagedScopeNamespaces, a.ManagedScope)
 	assert.Equal(t, []string{"foo", "bar", "ambassador"}, a.ManagedNamespaces)
 	assert.Contains(t, out, "Namespaces to manage")
 }
@@ -97,7 +97,7 @@ func TestInterview_NonInteractive(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, a.Attach)
 		assert.False(t, a.Replace)
-		assert.Equal(t, ScopeAll, a.Scope)
+		assert.Equal(t, ManagedScopeAll, a.ManagedScope)
 		assert.Empty(t, out)
 	})
 	t.Run("missing cluster-wide privileges default to a namespace scope", func(t *testing.T) {
@@ -106,13 +106,13 @@ func TestInterview_NonInteractive(t *testing.T) {
 		})
 		a, _, err := runInterview(t, facts, "", Answers{}, Preset{}, true)
 		require.NoError(t, err)
-		assert.Equal(t, ScopeNamespaces, a.Scope)
+		assert.Equal(t, ManagedScopeNamespaces, a.ManagedScope)
 		assert.Equal(t, []string{"ambassador"}, a.ManagedNamespaces)
 	})
-	t.Run("mapped scope requires a namespace list", func(t *testing.T) {
-		_, _, err := runInterview(t, recFacts(), "", Answers{Scope: ScopeMapped}, Preset{Scope: true}, true)
+	t.Run("selector scope requires an interactive session", func(t *testing.T) {
+		_, _, err := runInterview(t, recFacts(), "", Answers{ManagedScope: ManagedScopeSelector}, Preset{ManagedScope: true}, true)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "--managed-namespaces")
+		assert.Contains(t, err.Error(), "--managed-scope=selector")
 	})
 }
 
@@ -122,8 +122,8 @@ func TestInterview_PresetSkipsPrompts(t *testing.T) {
 	assert.False(t, a.Attach)
 	assert.NotContains(t, out, "attach to workloads")
 	assert.NotContains(t, out, "replace command")
-	assert.Contains(t, out, "Choose 1-4")
-	assert.Equal(t, ScopeAll, a.Scope)
+	assert.Contains(t, out, "Choose 1-3")
+	assert.Equal(t, ManagedScopeAll, a.ManagedScope)
 }
 
 // TestInterview_InputPinsSkipQuestions verifies that answers pinned by an
@@ -144,11 +144,11 @@ func TestInterview_InputPinsSkipQuestions(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, out, "attach to workloads")
 		assert.NotContains(t, out, "replace command")
-		assert.NotContains(t, out, "Choose 1-4")
+		assert.NotContains(t, out, "Choose 1-3")
 		assert.True(t, got.Attach)
 		assert.False(t, got.Replace)
 		assert.Equal(t, TriOff, got.Quic)
-		assert.Equal(t, ScopeNamespaces, got.Scope)
+		assert.Equal(t, ManagedScopeNamespaces, got.ManagedScope)
 		assert.Equal(t, []string{"foo", "ambassador"}, got.ManagedNamespaces)
 	})
 	t.Run("VPN-only input pins attach=false and skips the question", func(t *testing.T) {
@@ -164,7 +164,7 @@ func TestInterview_InputPinsSkipQuestions(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, out, "attach to workloads")
 		assert.NotContains(t, out, "replace command")
-		assert.Contains(t, out, "Choose 1-4")
+		assert.Contains(t, out, "Choose 1-3")
 		assert.False(t, got.Attach)
 	})
 	t.Run("unpinned questions are still asked", func(t *testing.T) {
@@ -177,7 +177,7 @@ func TestInterview_InputPinsSkipQuestions(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, out, "attach to workloads")
 		assert.Contains(t, out, "replace command")
-		assert.Contains(t, out, "Choose 1-4")
+		assert.Contains(t, out, "Choose 1-3")
 		assert.True(t, got.Attach)
 	})
 }
@@ -221,40 +221,14 @@ func TestInterview_AllowConflicts(t *testing.T) {
 	})
 }
 
-// TestInterview_ClientRbacPassthrough verifies that a ClientRbac answer set
-// by a flag or an input pin flows into the interview's result unchanged,
-// without any prompt.
-func TestInterview_ClientRbacPassthrough(t *testing.T) {
-	t.Run("flag-given subjects pass through", func(t *testing.T) {
-		presetSubjects := []ClientRbacSubject{{Kind: "User", Name: "alice"}}
-		a, out, err := runInterview(t, recFacts(), "\n\n\n",
-			Answers{ClientRbac: true, ClientRbacSubjects: presetSubjects}, Preset{ClientRbac: true}, false)
-		require.NoError(t, err)
-		assert.NotContains(t, out, "clientRbac")
-		assert.True(t, a.ClientRbac)
-		assert.Equal(t, presetSubjects, a.ClientRbacSubjects)
-	})
-	t.Run("input-pinned clientRbac passes through", func(t *testing.T) {
-		pins := DerivePins(map[string]any{"clientRbac": map[string]any{"create": true}})
-		answers := Answers{Quic: TriAuto}
-		pre := Preset{}
-		pins.ApplyTo(&answers, &pre)
-
-		a, out, err := runInterview(t, recFacts(), "\n\n\n", answers, pre, false)
-		require.NoError(t, err)
-		assert.NotContains(t, out, "clientRbac")
-		assert.True(t, a.ClientRbac)
-	})
-}
-
-func TestInterview_ScopeRecommendation(t *testing.T) {
+func TestInterview_ManagedScopeRecommendation(t *testing.T) {
 	facts := recFacts(func(f *ClusterFacts) {
 		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}
 	})
 	a, out, err := runInterview(t, facts, "\n\n\nfoo\n", Answers{}, Preset{}, false)
 	require.NoError(t, err)
 	assert.Contains(t, out, "cluster-wide install looks impossible")
-	assert.Contains(t, out, "Choose 1-4 [2]")
-	assert.Equal(t, ScopeNamespaces, a.Scope)
+	assert.Contains(t, out, "Choose 1-3 [2]")
+	assert.Equal(t, ManagedScopeNamespaces, a.ManagedScope)
 	assert.Equal(t, []string{"foo", "ambassador"}, a.ManagedNamespaces)
 }

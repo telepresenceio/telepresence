@@ -39,7 +39,7 @@ func recFacts(mods ...func(*ClusterFacts)) *ClusterFacts {
 }
 
 func recAnswers(mods ...func(*Answers)) *Answers {
-	a := &Answers{Attach: true, Scope: ScopeAll, Quic: TriAuto, NodeAgent: TriAuto}
+	a := &Answers{Attach: true, ManagedScope: ManagedScopeAll, Quic: TriAuto, NodeAgent: TriAuto}
 	for _, m := range mods {
 		m(a)
 	}
@@ -130,7 +130,7 @@ func TestRecommend_ClusterWidePrivilegesMissing(t *testing.T) {
 	_, err := Recommend(facts, recAnswers())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "create clusterroles.rbac.authorization.k8s.io")
-	assert.Contains(t, err.Error(), "--scope=namespaces")
+	assert.Contains(t, err.Error(), "--managed-scope=namespaces")
 }
 
 func TestRecommend_QuicAuto(t *testing.T) {
@@ -155,7 +155,7 @@ func TestRecommend_QuicAuto(t *testing.T) {
 			f.Quic.LoadBalancer = Finding{Verdict: VerdictNo}
 		})
 		answers := recAnswers(func(a *Answers) {
-			a.Scope = ScopeNamespaces
+			a.ManagedScope = ManagedScopeNamespaces
 			a.ManagedNamespaces = []string{"ambassador"}
 		})
 		p, err := Recommend(facts, answers)
@@ -237,10 +237,9 @@ func TestRecommend_NewerRelease(t *testing.T) {
 	assert.Contains(t, notesText(p), "newer than this client")
 }
 
-func TestRecommend_MappedScope(t *testing.T) {
+func TestRecommend_MappedNamespaces(t *testing.T) {
 	answers := recAnswers(func(a *Answers) {
-		a.Scope = ScopeMapped
-		a.ManagedNamespaces = []string{"foo", "bar"}
+		a.MappedNamespaces = []string{"foo", "bar"}
 	})
 	p, err := Recommend(recFacts(), answers)
 	require.NoError(t, err)
@@ -248,10 +247,10 @@ func TestRecommend_MappedScope(t *testing.T) {
 	assert.NotContains(t, p.Values, "namespaces")
 	assert.Contains(t, notesText(p), "mapped-namespaces default")
 
-	t.Run("other scopes set no client value", func(t *testing.T) {
-		for _, scope := range []ScopeChoice{ScopeAll, ScopeNamespaces, ScopeSelector} {
+	t.Run("no mapped namespaces sets no client value regardless of managed scope", func(t *testing.T) {
+		for _, scope := range []ManagedScope{ManagedScopeAll, ManagedScopeNamespaces, ManagedScopeSelector} {
 			answers := recAnswers(func(a *Answers) {
-				a.Scope = scope
+				a.ManagedScope = scope
 				a.ManagedNamespaces = []string{"foo"}
 				a.SelectorLabels = map[string]string{"team": "dev"}
 			})
@@ -260,11 +259,26 @@ func TestRecommend_MappedScope(t *testing.T) {
 			assert.NotContains(t, p.Values, "client", "scope %s", scope)
 		}
 	})
+
+	// This is the case the old three-way ScopeChoice model could not
+	// express: a namespace-limited managed scope and an independent
+	// mapped-namespaces client default, both rendered in the same proposal.
+	t.Run("managed scope namespaces combined with mapped namespaces renders both", func(t *testing.T) {
+		answers := recAnswers(func(a *Answers) {
+			a.ManagedScope = ManagedScopeNamespaces
+			a.ManagedNamespaces = []string{"foo", "bar"}
+			a.MappedNamespaces = []string{"baz"}
+		})
+		p, err := Recommend(recFacts(), answers)
+		require.NoError(t, err)
+		assert.Equal(t, []any{"foo", "bar"}, val(t, p.Values, "namespaces"))
+		assert.Equal(t, []any{"baz"}, val(t, p.Values, "client", "cluster", "mappedNamespaces"))
+	})
 }
 
 func TestRecommend_SelectorScope(t *testing.T) {
 	answers := recAnswers(func(a *Answers) {
-		a.Scope = ScopeSelector
+		a.ManagedScope = ManagedScopeSelector
 		a.SelectorLabels = map[string]string{"team": "dev"}
 	})
 	p, err := Recommend(recFacts(), answers)
@@ -306,10 +320,9 @@ func TestRecommend_RoutingConflicts(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, p.Values, "client")
 	})
-	t.Run("mapped scope and accepted conflicts share the client value", func(t *testing.T) {
+	t.Run("mapped namespaces and accepted conflicts share the client value", func(t *testing.T) {
 		answers := recAnswers(func(a *Answers) {
-			a.Scope = ScopeMapped
-			a.ManagedNamespaces = []string{"foo"}
+			a.MappedNamespaces = []string{"foo"}
 			a.AllowConflicts = true
 		})
 		p, err := Recommend(conflictFacts(), answers)
@@ -319,44 +332,33 @@ func TestRecommend_RoutingConflicts(t *testing.T) {
 	})
 }
 
-func TestRecommend_ClientRbac(t *testing.T) {
-	t.Run("create with no scope-derived namespaces for an unrestricted install", func(t *testing.T) {
-		answers := recAnswers(func(a *Answers) { a.ClientRbac = true })
-		p, err := Recommend(recFacts(), answers)
-		require.NoError(t, err)
-		assert.Equal(t, true, val(t, p.Values, "clientRbac", "create"))
-		cr := val(t, p.Values, "clientRbac").(map[string]any)
-		assert.NotContains(t, cr, "namespaces")
-	})
-	t.Run("namespaces scope carries the managed namespace list", func(t *testing.T) {
-		answers := recAnswers(func(a *Answers) {
-			a.ClientRbac = true
-			a.Scope = ScopeNamespaces
-			a.ManagedNamespaces = []string{"foo", "bar"}
-		})
-		p, err := Recommend(recFacts(), answers)
-		require.NoError(t, err)
-		assert.Equal(t, []any{"foo", "bar"}, val(t, p.Values, "clientRbac", "namespaces"))
-	})
-	t.Run("subjects are mirrored into the chart's subject shape", func(t *testing.T) {
-		answers := recAnswers(func(a *Answers) {
-			a.ClientRbac = true
-			a.ClientRbacSubjects = []ClientRbacSubject{
-				{Kind: "User", Name: "alice"},
-				{Kind: "ServiceAccount", Name: "sa", Namespace: "ns"},
-			}
-		})
-		p, err := Recommend(recFacts(), answers)
-		require.NoError(t, err)
-		subjects := val(t, p.Values, "clientRbac", "subjects").([]any)
-		require.Len(t, subjects, 2)
-		assert.Equal(t, map[string]any{"kind": "User", "name": "alice", "apiGroup": "rbac.authorization.k8s.io"}, subjects[0])
-		assert.Equal(t, map[string]any{"kind": "ServiceAccount", "name": "sa", "namespace": "ns"}, subjects[1])
-	})
-	t.Run("declined leaves no clientRbac value", func(t *testing.T) {
+// TestRecommend_ClientRbacPassthrough proves that client RBAC is now purely
+// an --input concern: the engine has no opinion about clientRbac.* at all,
+// so an input file's clientRbac.create/subjects/namespaces round-trip
+// unchanged into the proposal via ReconcileWithInput's deep clone.
+func TestRecommend_ClientRbacPassthrough(t *testing.T) {
+	t.Run("no input sets no clientRbac value", func(t *testing.T) {
 		p, err := Recommend(recFacts(), recAnswers())
 		require.NoError(t, err)
 		assert.NotContains(t, p.Values, "clientRbac")
+	})
+	t.Run("an input's clientRbac block round-trips unchanged", func(t *testing.T) {
+		input := map[string]any{
+			"clientRbac": map[string]any{
+				"create":     true,
+				"namespaces": []any{"foo", "bar"},
+				"subjects": []any{
+					map[string]any{"kind": "User", "name": "alice", "apiGroup": "rbac.authorization.k8s.io"},
+					map[string]any{"kind": "ServiceAccount", "name": "sa", "namespace": "ns"},
+				},
+			},
+		}
+		p, err := RecommendWithInput(recFacts(), recAnswers(), input, nil, true)
+		require.NoError(t, err)
+		assert.Equal(t, input["clientRbac"], val(t, p.Values, "clientRbac"))
+		for _, n := range p.Notes {
+			assert.NotEqual(t, NoteWarning, n.Level, "unexpected warning: %s", n.Text)
+		}
 	})
 }
 
@@ -377,7 +379,7 @@ func TestRecommendWithInput_ValidationDoesNotAbortOnPrivilegeDenial(t *testing.T
 		text := notesText(p)
 		assert.Contains(t, text, "create clusterroles.rbac.authorization.k8s.io")
 		assert.Contains(t, text, "--input FILE --apply")
-		assert.Contains(t, text, "--rbac-out")
+		assert.Contains(t, text, "missing privileges listed above")
 	})
 
 	t.Run("apply mode still errors", func(t *testing.T) {
@@ -394,12 +396,12 @@ func TestPrivilegeDenial(t *testing.T) {
 		f.Privileges.Namespaced = Finding{Verdict: VerdictYes}
 		f.Privileges.MissingNamespacedAttributes = nil
 	})
-	for _, scope := range []ScopeChoice{ScopeAll, ScopeMapped, ""} {
+	for _, scope := range []ManagedScope{ManagedScopeAll, ""} {
 		finding, attrs := PrivilegeDenial(facts, scope)
 		assert.Equal(t, VerdictNo, finding.Verdict, "scope %s", scope)
 		assert.Equal(t, facts.Privileges.MissingAttributes, attrs, "scope %s", scope)
 	}
-	for _, scope := range []ScopeChoice{ScopeNamespaces, ScopeSelector} {
+	for _, scope := range []ManagedScope{ManagedScopeNamespaces, ManagedScopeSelector} {
 		finding, attrs := PrivilegeDenial(facts, scope)
 		assert.Equal(t, VerdictYes, finding.Verdict, "scope %s", scope)
 		assert.Empty(t, attrs, "scope %s", scope)

@@ -30,18 +30,18 @@ func LoadInputValues(path string) (map[string]any, error) {
 }
 
 // Pins are the unambiguous answers an input values document implies; a pinned
-// answer skips its interview question exactly like a flag-preset answer.
+// answer skips its interview question.
 type Pins struct {
-	Attach                   *bool
-	ReplaceDetermined        bool // the replace question is moot or answered by the input
-	Replace                  bool
-	Quic                     *Tri // TriOn/TriOff from quicTunnel.enabled
-	Scope                    *ScopeChoice
-	ManagedNamespaces        []string
-	SelectorLabels           map[string]string
-	AllowConflictsDetermined bool // client.routing.allowConflictingSubnets is pinned by the input
-	ClientRbacDetermined     bool // clientRbac.create is pinned by the input
-	ClientRbac               bool
+	Attach                     *bool
+	ReplaceDetermined          bool // the replace question is moot or answered by the input
+	Replace                    bool
+	Quic                       *Tri // TriOn/TriOff from quicTunnel.enabled
+	ManagedScope               *ManagedScope
+	ManagedNamespaces          []string
+	SelectorLabels             map[string]string
+	MappedNamespacesDetermined bool // client.cluster.mappedNamespaces is pinned by the input
+	MappedNamespaces           []string
+	AllowConflictsDetermined   bool // client.routing.allowConflictingSubnets is pinned by the input
 }
 
 // DerivePins derives the answer pins from an input values document. Only keys
@@ -81,49 +81,50 @@ func DerivePins(values map[string]any) Pins {
 		pins.Quic = &tri
 	}
 
-	// Scope pins are matched in order; a "namespaces" key wins over the
-	// mapped-namespaces client default, since combining them is nonsensical.
+	// Managed-scope pins are matched in order.
 	switch {
-	case pinScopeList(&pins, ScopeNamespaces, values, "namespaces"):
-	case pinScopeSelector(&pins, values):
-	case pinScopeList(&pins, ScopeMapped, values, "client", "cluster", "mappedNamespaces"):
+	case pinManagedScopeList(&pins, ManagedScopeNamespaces, values, "namespaces"):
+	case pinManagedScopeSelector(&pins, values):
+	}
+
+	// The mapped-namespaces client default is an independent setting: it can
+	// be pinned alongside any managed scope, including "namespaces".
+	if nss, ok := stringListAt(values, "client", "cluster", "mappedNamespaces"); ok && len(nss) > 0 {
+		pins.MappedNamespacesDetermined = true
+		pins.MappedNamespaces = nss
 	}
 
 	if subnets, ok := stringListAt(values, "client", "routing", "allowConflictingSubnets"); ok && len(subnets) > 0 {
 		pins.AllowConflictsDetermined = true
 	}
 
-	if create, present := boolAt(values, "clientRbac", "create"); present {
-		pins.ClientRbacDetermined = true
-		pins.ClientRbac = create
-	}
 	return pins
 }
 
-func pinScopeList(pins *Pins, scope ScopeChoice, values map[string]any, path ...string) bool {
+func pinManagedScopeList(pins *Pins, scope ManagedScope, values map[string]any, path ...string) bool {
 	nss, ok := stringListAt(values, path...)
 	if !ok || len(nss) == 0 {
 		return false
 	}
-	pins.Scope = &scope
+	pins.ManagedScope = &scope
 	pins.ManagedNamespaces = nss
 	return true
 }
 
-func pinScopeSelector(pins *Pins, values map[string]any) bool {
+func pinManagedScopeSelector(pins *Pins, values map[string]any) bool {
 	labels, ok := stringMapAt(values, "namespaceSelector", "matchLabels")
 	if !ok {
 		return false
 	}
-	scope := ScopeSelector
-	pins.Scope = &scope
+	scope := ManagedScopeSelector
+	pins.ManagedScope = &scope
 	pins.SelectorLabels = labels
 	return true
 }
 
 // ApplyTo transfers the pins into answers and presets so the interview skips
-// the pinned questions. A flag-preset answer always wins over a pin; the QUIC
-// override is pinned only while it is still "auto".
+// the pinned questions. An answer already marked preset in pre is left
+// untouched; the QUIC override is pinned only while it is still "auto".
 func (pins *Pins) ApplyTo(a *Answers, pre *Preset) {
 	if pins.Attach != nil && !pre.Attach {
 		a.Attach = *pins.Attach
@@ -136,9 +137,9 @@ func (pins *Pins) ApplyTo(a *Answers, pre *Preset) {
 	if pins.Quic != nil && (a.Quic == "" || a.Quic == TriAuto) {
 		a.Quic = *pins.Quic
 	}
-	if pins.Scope != nil && !pre.Scope {
-		a.Scope = *pins.Scope
-		pre.Scope = true
+	if pins.ManagedScope != nil && !pre.ManagedScope {
+		a.ManagedScope = *pins.ManagedScope
+		pre.ManagedScope = true
 		if len(pins.ManagedNamespaces) > 0 && !pre.ManagedNamespaces {
 			a.ManagedNamespaces = slices.Clone(pins.ManagedNamespaces)
 			pre.ManagedNamespaces = true
@@ -147,16 +148,16 @@ func (pins *Pins) ApplyTo(a *Answers, pre *Preset) {
 			a.SelectorLabels = pins.SelectorLabels
 		}
 	}
+	if pins.MappedNamespacesDetermined && !pre.MappedNamespaces {
+		a.MappedNamespaces = slices.Clone(pins.MappedNamespaces)
+		pre.MappedNamespaces = true
+	}
 	if pins.AllowConflictsDetermined && !pre.AllowConflicts {
 		// The input's allowConflictingSubnets is authoritative; answering yes
 		// lets the engine emit its own list and the reconcile pass guard the
 		// pinned value.
 		a.AllowConflicts = true
 		pre.AllowConflicts = true
-	}
-	if pins.ClientRbacDetermined && !pre.ClientRbac {
-		a.ClientRbac = pins.ClientRbac
-		pre.ClientRbac = true
 	}
 }
 

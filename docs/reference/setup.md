@@ -34,7 +34,7 @@ runs a set of read-only probes before asking anything:
 | QUIC viability | Whether the cluster can expose a working QUIC endpoint, and which Service type to use: `LoadBalancer` when the cluster shows working LB provisioning, `NodePort` when a cluster-wide install has no LB signal, or "unavailable" for a namespaced install with neither. |
 | Node-agent viability | Whether nodes are Linux, whether the container runtime is one the agent supports, whether the cluster is GKE Autopilot (unsupported), and a server-side dry-run admission canary that exercises Pod Security admission and any policy engine (Kyverno, Gatekeeper, ...) directly. |
 | Webhook viability | Whether the mutating webhook can be created, and whether the cluster has the known API-server-cannot-reach-Services problem some CNIs exhibit. |
-| Namespace scale | How many namespaces exist, presented as evidence when the scope question is asked. |
+| Namespace scale | How many namespaces exist, presented as evidence when the managed-scope question is asked. |
 | Existing installation | Whether a `traffic-manager` Helm release already exists, its version, and its current values. |
 | Client update | A best-effort check of the latest released client, advisory only. |
 | Existing-install health | When a release is found: Deployment readiness and recent warning events, webhook presence and certificate expiry, agent-injector endpoint readiness, QUIC endpoint state, and client/manager version skew. |
@@ -93,13 +93,17 @@ $ telepresence setup --input values.yaml --output values.yaml
 treats its settings as pinned: anything it already decided —
 `agentInjector.enabled`/`nodeAgent.enabled` (attach/replace),
 `quicTunnel.enabled`/`quicTunnel.service.type` (QUIC), `namespaces` /
-`namespaceSelector` / `client.cluster.mappedNamespaces` (scope), and the
-`clientRbac.*` keys — is never asked about again and never silently
-changed. If a fresh probe recommends something different, the interactive
-session asks whether to keep the pinned value (default: keep); a
-non-interactive run keeps it and the report carries a warning note instead.
-Keys the tool has no opinion about (image, resources, ...) pass through
-untouched, so an `--input FILE --output FILE` round trip is lossless.
+`namespaceSelector` (managed scope), and `client.cluster.mappedNamespaces`
+(mapped namespaces, pinned independently of the managed scope) — is never
+asked about again and never silently changed. If a fresh probe recommends
+something different, the interactive session asks whether to keep the
+pinned value (default: keep); a non-interactive run keeps it and the report
+carries a warning note instead. Keys the tool has no opinion about (image,
+resources, `clientRbac.*`, ...) pass through untouched, so an
+`--input FILE --output FILE` round trip is lossless. This is also how every
+setting that used to be its own flag is expressed now: there is no
+`--attach`, `--quic`, `--managed-namespaces`, `--client-rbac-subjects`, or
+similar — write (or hand-edit) a values file and pass it with `--input`.
 
 ### No cluster-admin: hand off to an admin
 
@@ -109,25 +113,22 @@ Run setup as the person who needs the cluster, without admin rights:
 $ telepresence setup --output values.yaml
 ```
 
-The report lists exactly which privileges are missing. Generate ready-to-
-review RBAC manifests covering them:
-
-```console
-$ telepresence setup --rbac-out rbac.yaml
-```
-
-`rbac.yaml` contains a ClusterRole/ClusterRoleBinding pair for the
-cluster-scoped denials and a Role/RoleBinding pair per namespace for the
-namespaced ones, with an empty subjects list and a commented example the
-admin fills in with the requester's identity. Hand `rbac.yaml` and
-`values.yaml` to an admin, who applies the RBAC and then runs:
+The command still computes and writes the proposal; the report itemizes
+exactly which privileges are missing (verb, API group, resource, and
+namespace for namespaced ones — also available structured, as
+`facts.privileges.missingAttributes`, via `--format json`). Hand that list
+and `values.yaml` to a cluster admin. Once the admin has granted the missing
+privileges (by hand, or via their own RBAC tooling), they run:
 
 ```console
 $ telepresence setup --input values.yaml --apply
 ```
 
 Because the input file pins everything the original run already decided,
-the admin's run asks nothing new.
+the admin's run asks nothing new. To also grant the team RBAC to use
+Telepresence, add a `clientRbac` block directly to `values.yaml` before
+handing it off — the tool has no opinion about it, so it passes through the
+round trip unchanged.
 
 ## Command reference
 
@@ -142,26 +143,20 @@ confirmation step: `--apply` itself is the consent.
 | `--output FILE` | Write the resulting values.yaml, suitable for a Helm install. `-` writes it to stdout and silences all other output to stderr, so `telepresence setup --output - \| helm install -f -` works, interactively or not. Combining `--output -` with `--format` is an error. |
 | `--input FILE` | Read a previous values file; its settings become pinned defaults (see "Re-run with the previous decisions" above). |
 | `--apply` | Install or upgrade the traffic-manager with the resulting values. |
-| `--non-interactive` | Never prompt; unanswered questions fall back to flag values, input-pinned settings, or safe defaults. A non-TTY stdin behaves the same way automatically. |
-| `--attach[=bool]` | Answer "will clients attach to workloads?" |
-| `--replace[=bool]` | Answer "will you use the replace command?" |
-| `--upgrade-manager[=bool]` | Answer "upgrade the existing traffic-manager?" |
-| `--quic=auto\|on\|off` | Override the QUIC probe verdict. |
-| `--node-agent=auto\|on\|off` | Override the node-agent probe verdict. |
-| `--scope=all\|namespaces\|selector\|mapped` | Answer the namespace-scope question. |
-| `--managed-namespaces=LIST` | Namespace list when `--scope=namespaces` or `--scope=mapped`. |
-| `--rbac-out FILE` | When install privileges are missing, write ready-to-review RBAC YAML covering them to this file. |
-| `--client-rbac-subjects=LIST` | Grant these subjects (`kind:name` for `User`/`Group`, `ServiceAccount:name:namespace`) the RBAC needed to use Telepresence: sets `clientRbac.create`, `clientRbac.namespaces` (from the chosen scope), and `clientRbac.subjects` in the generated values. |
+| `--non-interactive` | Never prompt; unanswered questions fall back to an input-pinned setting or a safe default. A non-TTY stdin behaves the same way automatically. |
 
 Plus the standard kube flags (`--kubeconfig`, `--context`, `-n` for the
 manager namespace) resolved the same way `telepresence helm install` resolves
-them.
+them, and the global `--format`/`--progress` flags. There is no flag to
+preset an individual answer — every one of them is already expressible in an
+`--input` values file (see "Re-run with the previous decisions" above); the
+interview and `--input` are the only two ways to decide something.
 
 ### Non-interactive defaults
 
 Under `--non-interactive` (or whenever stdin is not a TTY), every
-unanswered question takes a default. Precedence, highest first: explicit
-flag, then an input-pinned value, then the default below.
+unanswered question takes a default. Precedence, highest first: an
+input-pinned value, then the default below.
 
 | Setting | Default |
 |---------|---------|
@@ -170,15 +165,15 @@ flag, then an input-pinned value, then the default below.
 | Manager upgrade | yes (only relevant when an older release is installed) |
 | QUIC | `auto` — the probe verdict decides |
 | Node-agent | `auto` — the probe verdict decides |
-| Scope | no limit; when the probes show cluster-wide install privileges are missing, a managed list containing just the manager namespace |
-| Managed namespaces | with `--scope=namespaces` and no list: the manager namespace. `--scope=mapped` without `--managed-namespaces` is an error. `--scope=selector` is an error — the label selector has no flag and needs a prompt. |
+| Managed scope | no limit; when the probes show cluster-wide install privileges are missing, a managed list containing just the manager namespace |
+| Managed namespaces | with a managed scope of namespaces and no input-pinned list: the manager namespace. A managed scope of selector without an input-pinned label selector is an error — the label selector needs a prompt and none is possible non-interactively. |
+| Mapped namespaces | none unless an input file's `client.cluster.mappedNamespaces` sets them; not asked interactively. |
 | Routing conflicts | not accepted; the report carries a warning naming both remedies (see "Routing conflicts" below) |
 
 ## The interview
 
-Every question below is skipped when a flag already answers it or when
-`--input` pins it (see "Re-run with the previous decisions"); "always"
-means "unless answered by a flag or pinned by the input".
+Every question below is skipped when `--input` pins it (see "Re-run with the
+previous decisions"); "always" means "unless pinned by the input".
 
 1. **Attach or cluster-access-only** (always): "Will clients attach to
    workloads (intercept/replace/ingest/wiretap), or is this cluster access
@@ -196,14 +191,18 @@ means "unless answered by a flag or pinned by the input".
    manager X.Y.Z is installed, client is X.Y.Z+n — upgrade?" A newer
    manager than the client inverts the message: it recommends upgrading the
    client instead, and never proposes downgrading the manager.
-5. **Namespace scope** (always, presenting the probed namespace count as
-   evidence): choose between no limit, a managed namespace list
-   (`namespaces`), a label selector (`namespaceSelector`), or mapped
-   namespaces (`client.cluster.mappedNamespaces`, delivered to clients as
-   their default — local flags/config still override it). The default is
-   "no limit" for small clusters, with a recommendation to limit when the
-   namespace count is large; a cluster where cluster-wide privileges are
-   missing defaults to a namespace list instead.
+5. **Managed scope** (always, presenting the probed namespace count as
+   evidence): choose which namespaces the traffic-manager manages — no
+   limit, a managed namespace list (`namespaces`), or a label selector
+   (`namespaceSelector`). The default is "no limit" for small clusters,
+   with a recommendation to limit when the namespace count is large; a
+   cluster where cluster-wide privileges are missing defaults to a
+   namespace list instead. Mapped namespaces are not part of this question:
+   an input file's `client.cluster.mappedNamespaces` sets a client-side
+   default for each client's own namespace mapping (local flags/config
+   still override it) that is independent of the managed scope — a
+   namespace-limited managed scope and a mapped-namespaces default can both
+   be set at once.
 6. **Routing conflicts** (only when the probe finds an overlap): "Local
    routes overlap the cluster's subnets. Allow the conflicts cluster-wide
    (traffic to those ranges goes to the cluster for every client)?" A yes
@@ -225,8 +224,8 @@ report. In text mode it has up to three sections:
   when upgrading an existing release, the list of keys that would change.
 - **Notes**: warnings and informational notes explaining any decision that
   needed one (a routing conflict left unresolved, an `--input` value kept
-  over the probe's recommendation, an RBAC file written for a missing
-  privilege, ...).
+  over the probe's recommendation, missing install privileges and how to
+  hand off to an admin, ...).
 
 The final line is always `Action: <action>` — `install`, `upgrade`, or
 `none` when applying, prefixed with `would-` when not (`would-install`,

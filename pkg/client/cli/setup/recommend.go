@@ -96,8 +96,8 @@ func Recommend(facts *ClusterFacts, answers *Answers) (*Proposal, error) {
 // computed and written for an admin to apply later.
 func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]any, consult ConsultFunc, applying bool) (*Proposal, error) {
 	a := *answers
-	if a.Scope == "" {
-		a.Scope = ScopeAll
+	if a.ManagedScope == "" {
+		a.ManagedScope = ManagedScopeAll
 	}
 	p := &Proposal{}
 	info := func(format string, args ...any) {
@@ -107,10 +107,10 @@ func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]
 		p.Notes = append(p.Notes, Note{Level: NoteWarning, Text: fmt.Sprintf(format, args...)})
 	}
 
-	// scope all and mapped both install the unrestricted chart; only
-	// namespaces and selector produce a namespace-limited install.
-	clusterScope := a.Scope == ScopeAll || a.Scope == ScopeMapped
-	if err := checkPrivileges(facts, a.Scope, applying, info, warn); err != nil {
+	// managed scope "all" installs the unrestricted chart; namespaces and
+	// selector produce a namespace-limited install.
+	clusterScope := a.ManagedScope == ManagedScopeAll
+	if err := checkPrivileges(facts, a.ManagedScope, applying, info, warn); err != nil {
 		return nil, err
 	}
 
@@ -137,32 +137,33 @@ func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]
 		}
 	}
 
-	switch a.Scope {
-	case ScopeNamespaces:
+	switch a.ManagedScope {
+	case ManagedScopeNamespaces:
 		nss := make([]any, len(a.ManagedNamespaces))
 		for i, ns := range a.ManagedNamespaces {
 			nss[i] = ns
 		}
 		vals["namespaces"] = nss
-	case ScopeSelector:
+	case ManagedScopeSelector:
 		matchLabels := make(map[string]any, len(a.SelectorLabels))
 		for k, v := range a.SelectorLabels {
 			matchLabels[k] = v
 		}
 		vals["namespaceSelector"] = map[string]any{"matchLabels": matchLabels}
 		info("a namespaceSelector uses one watcher per selected namespace up to maxNamespaceSpecificWatchers (default 10) before switching to cluster-wide watchers")
-	case ScopeMapped:
-		nss := make([]any, len(a.ManagedNamespaces))
-		for i, ns := range a.ManagedNamespaces {
+	case ManagedScopeAll:
+	}
+
+	// The mapped-namespaces client default is independent of the managed
+	// scope: a namespace-limited manager and a client-side mapped-namespaces
+	// default can both be set at once.
+	if len(a.MappedNamespaces) > 0 {
+		nss := make([]any, len(a.MappedNamespaces))
+		for i, ns := range a.MappedNamespaces {
 			nss[i] = ns
 		}
 		nestedMap(vals, "client", "cluster")["mappedNamespaces"] = nss
 		info("clients receive these namespaces as their mapped-namespaces default; a local --mapped-namespaces flag or config setting overrides it")
-	case ScopeAll:
-	}
-
-	if a.ClientRbac {
-		clientRbacValues(vals, &a)
 	}
 
 	if conflicts := facts.Routing.ConflictingSubnets(); len(conflicts) > 0 {
@@ -270,22 +271,22 @@ func decideAction(facts *ClusterFacts, a *Answers, vals map[string]any, p *Propo
 }
 
 // PrivilegeDenial returns the Finding relevant to an install at the given
-// scope, together with its structured denials: the cluster-wide render's for
-// scope all/mapped (and the empty default), the namespace-scoped render's
-// otherwise. cmd/setup.go uses this to select the denials --rbac-out
-// generates a manifest from, matching exactly what checkPrivileges evaluated.
-func PrivilegeDenial(facts *ClusterFacts, scope ScopeChoice) (Finding, []DeniedAttribute) {
-	if scope == ScopeAll || scope == ScopeMapped || scope == "" {
+// managed scope, together with its structured denials: the cluster-wide
+// render's for scope all (and the empty default), the namespace-scoped
+// render's otherwise.
+func PrivilegeDenial(facts *ClusterFacts, scope ManagedScope) (Finding, []DeniedAttribute) {
+	if scope == ManagedScopeAll || scope == "" {
 		return facts.Privileges.ClusterWide, facts.Privileges.MissingAttributes
 	}
 	return facts.Privileges.Namespaced, facts.Privileges.MissingNamespacedAttributes
 }
 
-// checkPrivileges turns the P1 facts into an error when the chosen scope's
-// install is known to be denied and the run is applying, a warning note (with
-// handoff instructions) when it is denied but the run is only validating, or
-// a warning note when the privileges could not be verified at all.
-func checkPrivileges(facts *ClusterFacts, scope ScopeChoice, applying bool, info, warn func(string, ...any)) error {
+// checkPrivileges turns the P1 facts into an error when the chosen managed
+// scope's install is known to be denied and the run is applying, a warning
+// note (with handoff instructions) when it is denied but the run is only
+// validating, or a warning note when the privileges could not be verified at
+// all.
+func checkPrivileges(facts *ClusterFacts, scope ManagedScope, applying bool, info, warn func(string, ...any)) error {
 	finding, _ := PrivilegeDenial(facts, scope)
 	switch finding.Verdict {
 	case VerdictNo:
@@ -294,9 +295,9 @@ func checkPrivileges(facts *ClusterFacts, scope ScopeChoice, applying bool, info
 			return err
 		}
 		warn("%s", err.Error())
-		info("an admin can complete this install: run 'telepresence setup --output FILE' and hand the file to them, " +
-			"then have them run 'telepresence setup --input FILE --apply'; add --rbac-out FILE to generate ready-to-review " +
-			"RBAC covering the missing privileges")
+		info("an admin can complete this install: hand them the missing privileges listed above so they can be granted, " +
+			"plus this file (run 'telepresence setup --output FILE' to produce it), then have them run " +
+			"'telepresence setup --input FILE --apply'")
 	case VerdictUnknown:
 		warn("install privileges could not be verified: %s", strings.Join(finding.Evidence, "; "))
 	case VerdictYes, VerdictProbable:
@@ -304,36 +305,14 @@ func checkPrivileges(facts *ClusterFacts, scope ScopeChoice, applying bool, info
 	return nil
 }
 
-// privilegeDeniedError names the missing-privilege error for the given scope.
-func privilegeDeniedError(facts *ClusterFacts, scope ScopeChoice) error {
-	if scope == ScopeAll || scope == ScopeMapped || scope == "" {
+// privilegeDeniedError names the missing-privilege error for the given
+// managed scope.
+func privilegeDeniedError(facts *ClusterFacts, scope ManagedScope) error {
+	if scope == ManagedScopeAll || scope == "" {
 		return clusterWideDeniedError(facts)
 	}
 	return errcat.User.New("insufficient privileges for a namespace-limited install; missing:\n  " +
 		strings.Join(facts.Privileges.MissingNamespaced, "\n  "))
-}
-
-// clientRbacValues fills in the clientRbac.* values the team-RBAC question
-// answered yes to: create, the managed namespaces when the scope is a
-// namespace list (otherwise the chart falls back to the manager's own), and
-// the parsed subjects.
-func clientRbacValues(vals map[string]any, a *Answers) {
-	cr := nestedMap(vals, "clientRbac")
-	cr["create"] = true
-	if a.Scope == ScopeNamespaces {
-		nss := make([]any, len(a.ManagedNamespaces))
-		for i, ns := range a.ManagedNamespaces {
-			nss[i] = ns
-		}
-		cr["namespaces"] = nss
-	}
-	if len(a.ClientRbacSubjects) > 0 {
-		subjects := make([]any, len(a.ClientRbacSubjects))
-		for i, s := range a.ClientRbacSubjects {
-			subjects[i] = clientRbacSubjectValue(s)
-		}
-		cr["subjects"] = subjects
-	}
 }
 
 // webhookDeniedError names the hard incompatibility between wanting the
@@ -351,7 +330,7 @@ func clusterWideDeniedError(facts *ClusterFacts) error {
 	msg := "insufficient privileges for a cluster-wide install; missing:\n  " + strings.Join(pf.Missing, "\n  ")
 	switch pf.Namespaced.Verdict {
 	case VerdictYes:
-		msg += "\na namespace-limited install (--scope=namespaces) appears possible"
+		msg += "\na namespace-limited install (--managed-scope=namespaces) appears possible"
 	case VerdictNo:
 		msg += "\na namespace-limited install is also not permitted; missing:\n  " + strings.Join(pf.MissingNamespaced, "\n  ")
 	case VerdictProbable, VerdictUnknown:

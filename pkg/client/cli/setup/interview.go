@@ -23,7 +23,7 @@ const (
 	TriOff  Tri = "off"
 )
 
-// ParseTri validates a --quic/--node-agent flag value.
+// ParseTri validates a Tri value ("auto", "on", or "off").
 func ParseTri(s string) (Tri, error) {
 	switch t := Tri(s); t {
 	case TriAuto, TriOn, TriOff:
@@ -33,52 +33,50 @@ func ParseTri(s string) (Tri, error) {
 	}
 }
 
-// ScopeChoice is the namespace limiting strategy.
-type ScopeChoice string
+// ManagedScope is the traffic-manager's namespace limiting strategy.
+type ManagedScope string
 
 const (
-	ScopeAll        ScopeChoice = "all"
-	ScopeNamespaces ScopeChoice = "namespaces"
-	ScopeSelector   ScopeChoice = "selector"
-	ScopeMapped     ScopeChoice = "mapped"
+	ManagedScopeAll        ManagedScope = "all"
+	ManagedScopeNamespaces ManagedScope = "namespaces"
+	ManagedScopeSelector   ManagedScope = "selector"
 )
 
-// ParseScope validates a --scope flag value.
-func ParseScope(s string) (ScopeChoice, error) {
-	switch c := ScopeChoice(s); c {
-	case ScopeAll, ScopeNamespaces, ScopeSelector, ScopeMapped:
+// ParseManagedScope validates a ManagedScope value ("all", "namespaces", or
+// "selector").
+func ParseManagedScope(s string) (ManagedScope, error) {
+	switch c := ManagedScope(s); c {
+	case ManagedScopeAll, ManagedScopeNamespaces, ManagedScopeSelector:
 		return c, nil
 	default:
-		return "", errcat.User.Newf("invalid scope %q: must be all, namespaces, selector, or mapped", s)
+		return "", errcat.User.Newf("invalid managed scope %q: must be all, namespaces, or selector", s)
 	}
 }
 
-// Answers holds the interview's conclusions, whether they came from flags,
-// prompts, or defaults.
+// Answers holds the interview's conclusions, whether they came from an
+// --input pin, a prompt, or a default.
 type Answers struct {
-	Attach             bool                `json:"attach"`
-	Replace            bool                `json:"replace,omitempty"`
-	UpgradeManager     bool                `json:"upgradeManager,omitempty"`
-	Scope              ScopeChoice         `json:"scope"`
-	ManagedNamespaces  []string            `json:"managedNamespaces,omitempty"` // for scope namespaces|mapped
-	SelectorLabels     map[string]string   `json:"selectorLabels,omitempty"`    // for scope selector
-	Quic               Tri                 `json:"quic"`
-	NodeAgent          Tri                 `json:"nodeAgent"`
-	AllowConflicts     bool                `json:"allowConflicts,omitempty"` // accept routing conflicts cluster-wide
-	ClientRbac         bool                `json:"clientRbac,omitempty"`     // grant non-admin users the RBAC to use telepresence
-	ClientRbacSubjects []ClientRbacSubject `json:"clientRbacSubjects,omitempty"`
+	Attach            bool              `json:"attach"`
+	Replace           bool              `json:"replace,omitempty"`
+	UpgradeManager    bool              `json:"upgradeManager,omitempty"`
+	ManagedScope      ManagedScope      `json:"managedScope"`
+	ManagedNamespaces []string          `json:"managedNamespaces,omitempty"` // for managed scope namespaces
+	SelectorLabels    map[string]string `json:"selectorLabels,omitempty"`    // for managed scope selector
+	MappedNamespaces  []string          `json:"mappedNamespaces,omitempty"`  // becomes the clients' mapped-namespaces default
+	Quic              Tri               `json:"quic"`
+	NodeAgent         Tri               `json:"nodeAgent"`
+	AllowConflicts    bool              `json:"allowConflicts,omitempty"` // accept routing conflicts cluster-wide
 }
 
-// Preset records which Answers fields were set by command-line flags or input
-// pins; a preset answer is never asked.
+// Preset records which Answers fields were already decided by an --input
+// pin; a preset answer is never asked.
 type Preset struct {
 	Attach            bool
 	Replace           bool
-	UpgradeManager    bool
-	Scope             bool
+	ManagedScope      bool
 	ManagedNamespaces bool
+	MappedNamespaces  bool
 	AllowConflicts    bool
-	ClientRbac        bool
 }
 
 // promptAttempts bounds how many invalid answers a single question tolerates
@@ -104,8 +102,8 @@ type Interviewer struct {
 	br *bufio.Reader
 }
 
-// Interview fills in the answers that were not preset by flags and returns
-// the completed set.
+// Interview fills in the answers that were not pinned by an --input file and
+// returns the completed set.
 func (iv *Interviewer) Interview(ctx context.Context) (*Answers, error) {
 	a := iv.Answers
 	if a.Quic == "" {
@@ -143,38 +141,34 @@ func (iv *Interviewer) Interview(ctx context.Context) (*Answers, error) {
 			ioutil.Printf(iv.Out, "The installed traffic-manager %s is newer than this client (%s); consider upgrading the client instead.\n",
 				iv.Facts.Release.Version, version.Version)
 		case releaseOlder:
-			if !iv.Preset.UpgradeManager {
-				v, err := iv.askYesNo(fmt.Sprintf("traffic-manager %s is installed; client is %s. Upgrade the traffic-manager? [Y/n] ",
-					iv.Facts.Release.Version, version.Version), true)
-				if err != nil {
-					return nil, err
-				}
-				a.UpgradeManager = v
+			v, err := iv.askYesNo(fmt.Sprintf("traffic-manager %s is installed; client is %s. Upgrade the traffic-manager? [Y/n] ",
+				iv.Facts.Release.Version, version.Version), true)
+			if err != nil {
+				return nil, err
 			}
+			a.UpgradeManager = v
 		case releaseUnparseable:
-			if !iv.Preset.UpgradeManager {
-				v, err := iv.askYesNo(fmt.Sprintf("traffic-manager version %q could not be parsed (assuming it is older); client is %s. Upgrade the traffic-manager? [Y/n] ",
-					iv.Facts.Release.Version, version.Version), true)
-				if err != nil {
-					return nil, err
-				}
-				a.UpgradeManager = v
+			v, err := iv.askYesNo(fmt.Sprintf("traffic-manager version %q could not be parsed (assuming it is older); client is %s. Upgrade the traffic-manager? [Y/n] ",
+				iv.Facts.Release.Version, version.Version), true)
+			if err != nil {
+				return nil, err
 			}
+			a.UpgradeManager = v
 		case releaseSame, releaseAbsent:
 		}
 	}
 
-	if !iv.Preset.Scope {
-		scope, err := iv.askScope()
+	if !iv.Preset.ManagedScope {
+		scope, err := iv.askManagedScope()
 		if err != nil {
 			return nil, err
 		}
-		a.Scope = scope
+		a.ManagedScope = scope
 	}
-	if a.Scope == "" {
-		a.Scope = ScopeAll
+	if a.ManagedScope == "" {
+		a.ManagedScope = ManagedScopeAll
 	}
-	if err := iv.completeScope(&a); err != nil {
+	if err := iv.completeManagedScope(&a); err != nil {
 		return nil, err
 	}
 
@@ -191,11 +185,11 @@ func (iv *Interviewer) Interview(ctx context.Context) (*Answers, error) {
 	return &a, ctx.Err()
 }
 
-// completeScope fills in the namespace list or selector that the chosen scope
-// requires but the flags did not supply.
-func (iv *Interviewer) completeScope(a *Answers) error {
-	switch a.Scope {
-	case ScopeNamespaces:
+// completeManagedScope fills in the namespace list or selector that the
+// chosen managed scope requires but the answers did not already supply.
+func (iv *Interviewer) completeManagedScope(a *Answers) error {
+	switch a.ManagedScope {
+	case ManagedScopeNamespaces:
 		if len(a.ManagedNamespaces) == 0 {
 			if iv.NonInteractive {
 				a.ManagedNamespaces = []string{iv.Facts.ManagerNamespace}
@@ -208,21 +202,10 @@ func (iv *Interviewer) completeScope(a *Answers) error {
 			}
 		}
 		a.ManagedNamespaces = ensureContains(a.ManagedNamespaces, iv.Facts.ManagerNamespace)
-	case ScopeMapped:
-		if len(a.ManagedNamespaces) == 0 {
-			if iv.NonInteractive {
-				return errcat.User.New("--scope=mapped requires --managed-namespaces in non-interactive mode")
-			}
-			nss, err := iv.askList("Namespaces delivered to clients as their mapped-namespaces default (comma-separated): ")
-			if err != nil {
-				return err
-			}
-			a.ManagedNamespaces = nss
-		}
-	case ScopeSelector:
+	case ManagedScopeSelector:
 		if len(a.SelectorLabels) == 0 {
 			if iv.NonInteractive {
-				return errcat.User.New("--scope=selector requires an interactive session to enter the label selector")
+				return errcat.User.New("--managed-scope=selector requires an interactive session to enter the label selector")
 			}
 			labels, err := iv.askLabels("Namespace label selector (key=value, comma-separated): ")
 			if err != nil {
@@ -230,20 +213,21 @@ func (iv *Interviewer) completeScope(a *Answers) error {
 			}
 			a.SelectorLabels = labels
 		}
-	case ScopeAll:
+	case ManagedScopeAll:
 	}
 	return nil
 }
 
-// askScope presents the numbered scope choice, defaulting to a namespace
-// list when the probes concluded that a cluster-wide install is impossible.
-func (iv *Interviewer) askScope() (ScopeChoice, error) {
+// askManagedScope presents the numbered managed-scope choice, defaulting to a
+// namespace list when the probes concluded that a cluster-wide install is
+// impossible.
+func (iv *Interviewer) askManagedScope() (ManagedScope, error) {
 	clusterWideDenied := iv.Facts.Privileges.ClusterWide.Verdict == VerdictNo
 	if iv.NonInteractive {
 		if clusterWideDenied {
-			return ScopeNamespaces, nil
+			return ManagedScopeNamespaces, nil
 		}
-		return ScopeAll, nil
+		return ManagedScopeAll, nil
 	}
 
 	switch {
@@ -262,16 +246,15 @@ func (iv *Interviewer) askScope() (ScopeChoice, error) {
 		ioutil.Println(iv.Out, "A cluster-wide install looks impossible with the current privileges; a namespace-limited install is recommended.")
 		def = 2
 	}
-	ioutil.Println(iv.Out, "How should the traffic-manager's scope be limited?")
+	ioutil.Println(iv.Out, "Which namespaces should the traffic-manager manage?")
 	ioutil.Println(iv.Out, `  1) no limit (cluster-wide)`)
 	ioutil.Println(iv.Out, `  2) managed namespace list (Helm value "namespaces")`)
 	ioutil.Println(iv.Out, `  3) namespace label selector (Helm value "namespaceSelector")`)
-	ioutil.Println(iv.Out, `  4) mapped-namespaces default delivered to clients (Helm value "client.cluster.mappedNamespaces")`)
-	choice, err := iv.askChoice(fmt.Sprintf("Choose 1-4 [%d]: ", def), 4, def)
+	choice, err := iv.askChoice(fmt.Sprintf("Choose 1-3 [%d]: ", def), 3, def)
 	if err != nil {
 		return "", err
 	}
-	return [...]ScopeChoice{ScopeAll, ScopeNamespaces, ScopeSelector, ScopeMapped}[choice-1], nil
+	return [...]ManagedScope{ManagedScopeAll, ManagedScopeNamespaces, ManagedScopeSelector}[choice-1], nil
 }
 
 func (iv *Interviewer) askYesNo(prompt string, def bool) (bool, error) {

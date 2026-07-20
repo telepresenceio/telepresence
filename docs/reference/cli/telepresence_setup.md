@@ -27,30 +27,21 @@ installs or upgrades the traffic-manager with it.
       --allow-conflicting-subnets strings   Comma separated list of CIDR that will be allowed to conflict with local subnets
       --also-proxy strings                  Additional comma separated list of CIDR to proxy
       --apply                               Install/upgrade the traffic-manager with the resulting values
-      --attach                              Clients will attach to workloads (intercept/replace/ingest/wiretap) (default true)
-      --client-rbac-subjects strings        Grant these subjects (kind:name for User/Group, kind:name:namespace for ServiceAccount) the RBAC needed to use Telepresence
       --docker                              Start, or connect to, daemon in a docker container
       --expose stringArray                  Port that a containerized daemon will expose. See docker run -p for more info. Can be repeated
   -h, --help                                help for setup
       --hostname string                     Hostname used by a containerized daemon
       --input string                        Read a Helm values file; its settings become pinned defaults
-      --managed-namespaces strings          Namespace list when --scope=namespaces or --scope=mapped
       --manager-namespace string            The namespace where the traffic manager is to be found. Overrides any other manager namespace set in config
       --mapped-namespaces strings           Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. Defaults to all namespaces
       --name string                         Optional name to use for the connection
   -n, --namespace string                    If present, the namespace scope for this CLI request
       --never-proxy strings                 Comma separated list of CIDR to never proxy
-      --node-agent string                   Override the node-agent probe verdict (auto|on|off) (default &quot;auto&quot;)
-      --non-interactive                     Never prompt; unanswered questions fall back to flag values, input-pinned settings, or safe defaults
+      --non-interactive                     Never prompt; unanswered questions fall back to input-pinned settings or safe defaults
       --output string                       Write the resulting Helm values to this file, suitable for a Helm install; &quot;-&quot; writes them to stdout and suppresses the report
       --proxy-via strings                   Use Network Address Translation to create virtual IPs for the given CIDR, and route via WORKLOAD. Must be in the form CIDR=WORKLOAD. CIDR can be substituted for the symbolic name &quot;service&quot;, &quot;pods&quot;, &quot;also&quot;, or &quot;all&quot;.
-      --quic string                         Override the QUIC probe verdict (auto|on|off) (default &quot;auto&quot;)
-      --rbac-out string                     When install privileges are missing, write ready-to-review RBAC YAML covering them to this file
-      --replace                             The replace command will be used
       --reroute-local strings               Reroute port on local host to remote host. Format is &lt;local port&gt;:&lt;host&gt;:&lt;port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.
       --reroute-remote strings              Reroute port on remote host. Format is &lt;host&gt;:&lt;port&gt;:&lt;new port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.
-      --scope string                        Namespace limiting strategy (all|namespaces|selector|mapped)
-      --upgrade-manager                     Upgrade an existing, older traffic-manager (default true)
       --vnat strings                        Use Network Address Translation to create virtual IPs for the given CIDR. CIDR can be substituted for the symbolic name &quot;service&quot;, &quot;pods&quot;, &quot;also&quot;, or &quot;all&quot;.
 ```
 

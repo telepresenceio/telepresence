@@ -39,8 +39,8 @@ var clusterScopedKinds = map[string]bool{ //nolint:gochecknoglobals // constant 
 }
 
 // DeniedAttribute is a JSON-clean mirror of the authv1.ResourceAttributes a
-// SelfSubjectAccessReview denied; it is the raw material the RBAC handoff
-// (rbac.go) turns into ready-to-review YAML.
+// SelfSubjectAccessReview denied; it is exposed in --format json/yaml output
+// so an admin can see exactly which privileges to grant.
 type DeniedAttribute struct {
 	Verb      string `json:"verb"`
 	Group     string `json:"group,omitempty"`
