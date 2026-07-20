@@ -51,6 +51,7 @@ func TestGatherFacts_Smoke(t *testing.T) {
 	}
 
 	srv := newUpdateServer(t, version.Structured.String()+"\n", http.StatusOK)
+	var phases []string
 	p := &Prober{
 		KubeClient:       client,
 		ManagerNamespace: "ambassador",
@@ -61,11 +62,13 @@ func TestGatherFacts_Smoke(t *testing.T) {
 		RouteSource: func(context.Context) ([]*routing.Route, error) {
 			return []*routing.Route{localRoute("192.168.1.0/24", "eth0")}, nil
 		},
+		Progress: func(phase string) { phases = append(phases, phase) },
 	}
 
 	facts, err := p.GatherFacts(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, facts)
+	assert.Equal(t, ProbePhases, phases, "phase sequence must not depend on whether a release is installed")
 
 	assert.Equal(t, "ambassador", facts.ManagerNamespace)
 	assert.True(t, facts.NamespaceExists)
@@ -84,8 +87,10 @@ func TestGatherFacts_Smoke(t *testing.T) {
 	assert.Equal(t, "2.31.0", facts.Release.Version)
 	assert.Equal(t, VerdictYes, facts.Routing.Summary.Verdict)
 
+	phases = nil
 	p.ReleaseLookup = nil
 	facts, err = p.GatherFacts(context.Background())
 	require.NoError(t, err)
 	assert.Nil(t, facts.Health, "no installed release must leave the health facts nil")
+	assert.Equal(t, ProbePhases, phases, "phase sequence must not depend on whether a release is installed")
 }

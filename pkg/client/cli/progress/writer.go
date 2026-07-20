@@ -43,6 +43,11 @@ type Writer interface {
 
 	// TriggerRefresh triggers a refresh of event output on the tty writer
 	TriggerRefresh()
+
+	// SetTotal tells the writer how many events the current run will
+	// eventually report, so a progress header can show the correct total
+	// before all of them have arrived.
+	SetTotal(total int)
 }
 
 type writerKey struct{}
@@ -91,6 +96,12 @@ func Start(ctx context.Context, title string) {
 
 func Stop(ctx context.Context) {
 	ContextWriter(ctx).Stop()
+}
+
+// SetTotal tells the context's writer how many events the current run will
+// eventually report.
+func SetTotal(ctx context.Context, total int) {
+	ContextWriter(ctx).SetTotal(total)
 }
 
 func Working(ctx context.Context, args ...any) *Event {

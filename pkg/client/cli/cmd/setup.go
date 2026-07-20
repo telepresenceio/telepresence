@@ -124,6 +124,7 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 	sc.initProgress(cmd, toStdout)
 	pctx := cmd.Context()
 	progress.Start(pctx, "Analyzing cluster")
+	progress.SetTotal(pctx, len(setup.ProbePhases))
 	cl, err := sc.connectAndProbe(cmd)
 	progress.Stop(pctx)
 	if err != nil {

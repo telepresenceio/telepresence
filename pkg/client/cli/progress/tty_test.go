@@ -232,6 +232,36 @@ func tty() *ttyWriter {
 	return newTTYWriter(os.Stderr).(*ttyWriter)
 }
 
+// TestSetTotalShowsHeaderFromFirstFrame verifies that SetTotal makes the
+// "[+] title N/M" header appear even when only one event has arrived, and
+// that without a total, a single event renders no header at all.
+func TestSetTotalShowsHeaderFromFirstFrame(t *testing.T) {
+	ev := func(id string) *Event {
+		return &Event{
+			ID:        id,
+			Text:      "Text",
+			Status:    EventStatusWorking,
+			StartTime: time.Now(),
+			spinner:   &spinner{chars: []string{"."}},
+		}
+	}
+
+	buf := &syncBuffer{}
+	w := newTTYWriter(buf).(*ttyWriter)
+	w.progressTitle = "Analyzing cluster"
+	w.SetTotal(9)
+	w.event(ev("id1"))
+	w.print()
+	assert.Contains(t, buf.buf.String(), "[+] Analyzing cluster 0/9")
+
+	buf2 := &syncBuffer{}
+	w2 := newTTYWriter(buf2).(*ttyWriter)
+	w2.progressTitle = "Analyzing cluster"
+	w2.event(ev("id1"))
+	w2.print()
+	assert.NotContains(t, buf2.buf.String(), "[+] Analyzing cluster")
+}
+
 // syncBuffer wraps a bytes.Buffer with a mutex so it can be written from the
 // ticker goroutine while the test reads its length from the main goroutine.
 type syncBuffer struct {

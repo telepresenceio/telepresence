@@ -62,3 +62,6 @@ func (p plainWriter) TailMsgf(msg string, args ...any) {
 
 func (p plainWriter) TriggerRefresh() {
 }
+
+func (p plainWriter) SetTotal(int) {
+}

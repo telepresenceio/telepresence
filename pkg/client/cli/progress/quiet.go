@@ -38,3 +38,6 @@ func (q quiet) TailMsgf(_ string, _ ...any) {
 
 func (q quiet) TriggerRefresh() {
 }
+
+func (q quiet) SetTotal(int) {
+}

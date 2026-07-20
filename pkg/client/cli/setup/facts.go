@@ -114,6 +114,20 @@ type WorkloadFacts struct {
 	Samples []WorkloadSample `json:"samples,omitempty"`
 }
 
+// ProbePhases are the phases GatherFacts reports through Prober.Progress, in
+// the order they occur.
+var ProbePhases = []string{ //nolint:gochecknoglobals // immutable
+	"Probing install privileges",
+	"Probing QUIC viability",
+	"Probing node-agent viability",
+	"Probing webhook access",
+	"Counting namespaces",
+	"Looking for an existing installation",
+	"Checking installation health",
+	"Checking for a client update",
+	"Checking for subnet conflicts",
+}
+
 // defaultUpdateCheckHost is the host queried for the client's own stable-release
 // check when Prober.UpdateCheckHost is unset.
 const defaultUpdateCheckHost = "app.getambassador.io"
@@ -204,8 +218,8 @@ func (p *Prober) GatherFacts(ctx context.Context) (*ClusterFacts, error) {
 	facts.Namespaces = p.probeNamespaceScale(ctx)
 	p.progress("Looking for an existing installation")
 	facts.Release = p.probeRelease(ctx)
+	p.progress("Checking installation health")
 	if facts.Release.Installed {
-		p.progress("Checking installation health")
 		facts.Health = p.probeHealth(ctx, &facts.Release)
 	}
 	p.progress("Checking for a client update")

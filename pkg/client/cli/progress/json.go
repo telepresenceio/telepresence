@@ -63,3 +63,6 @@ func (p *jsonWriter) Stop() {
 
 func (p *jsonWriter) TriggerRefresh() {
 }
+
+func (p *jsonWriter) SetTotal(int) {
+}
