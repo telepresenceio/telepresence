@@ -145,12 +145,14 @@ confirmation step: `--apply` itself is the consent.
 | `--apply` | Install or upgrade the traffic-manager with the resulting values. |
 | `--non-interactive` | Never prompt; unanswered questions fall back to an input-pinned setting or a safe default. A non-TTY stdin behaves the same way automatically. |
 
-Plus the standard kube flags (`--kubeconfig`, `--context`, `-n` for the
-manager namespace) resolved the same way `telepresence helm install` resolves
-them, and the global `--format`/`--progress` flags. There is no flag to
-preset an individual answer — every one of them is already expressible in an
-`--input` values file (see "Re-run with the previous decisions" above); the
-interview and `--input` are the only two ways to decide something.
+Plus the standard kube flags (`--kubeconfig`, `--context`, `-n`/`--namespace`)
+and `--manager-namespace`, resolved the same way `telepresence helm install`
+resolves them: `--manager-namespace` wins if given, otherwise `-n`/`--namespace`
+is used, otherwise it falls back to `ambassador`. Also the global
+`--format`/`--progress` flags. There is no flag to preset an individual
+answer — every one of them is already expressible in an `--input` values file
+(see "Re-run with the previous decisions" above); the interview and `--input`
+are the only two ways to decide something.
 
 ### Non-interactive defaults
 

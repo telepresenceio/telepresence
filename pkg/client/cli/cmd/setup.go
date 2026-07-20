@@ -60,7 +60,7 @@ installs or upgrades the traffic-manager with it.`,
 		"Never prompt; unanswered questions fall back to input-pinned settings or safe defaults")
 	_ = cmd.MarkFlagFilename("output")
 	_ = cmd.MarkFlagFilename("input")
-	sc.rq = daemon.InitRequest(cmd)
+	sc.rq = daemon.InitKubeRequest(cmd)
 	return cmd
 }
 

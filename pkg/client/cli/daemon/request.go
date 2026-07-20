@@ -140,16 +140,42 @@ func InitRequest(cmd *cobra.Command) *CobraRequest {
 	_ = dbgFlags.MarkHidden("rootd-profiling-port")
 	flags.AddFlagSet(dbgFlags)
 
-	cr.kubeConfig = genericclioptions.NewConfigFlags(false)
-	cr.KubeFlags = make(map[string]string)
-	cr.kubeFlagSet = pflag.NewFlagSet("Kubernetes flags", 0)
-	cr.kubeConfig.AddFlags(cr.kubeFlagSet)
-	flags.AddFlagSet(cr.kubeFlagSet)
+	cr.addKubeFlags(cmd)
 	_ = cmd.RegisterFlagCompletionFunc("mapped-namespaces", cr.autocompleteNamespaces)
 	_ = cmd.RegisterFlagCompletionFunc("manager-namespace", cr.autocompleteNamespace)
 	_ = cmd.RegisterFlagCompletionFunc("namespace", cr.autocompleteNamespace)
 	_ = cmd.RegisterFlagCompletionFunc("cluster", cr.autocompleteCluster)
 	return &cr
+}
+
+// InitKubeRequest adds only the --manager-namespace flag and the Kubernetes flags to the given
+// command and returns a Request and a FlagSet with the Kubernetes flags. It is intended for
+// commands that resolve a kubeconfig and talk to the cluster directly (e.g. via client-go),
+// without starting a daemon session, and therefore have no use for the networking flags that
+// InitRequest registers (--also-proxy, --docker, --vnat, etc).
+func InitKubeRequest(cmd *cobra.Command) *CobraRequest {
+	cr := CobraRequest{
+		Request: Request{
+			ConnectRequest: &connector.ConnectRequest{},
+		},
+	}
+	cmd.Flags().StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
+		`Overrides any other manager namespace set in config`)
+
+	cr.addKubeFlags(cmd)
+	_ = cmd.RegisterFlagCompletionFunc("manager-namespace", cr.autocompleteNamespace)
+	_ = cmd.RegisterFlagCompletionFunc("namespace", cr.autocompleteNamespace)
+	return &cr
+}
+
+// addKubeFlags installs the Kubernetes flag set (--kubeconfig, --context, --namespace, --as, etc.)
+// shared by InitRequest and InitKubeRequest.
+func (cr *CobraRequest) addKubeFlags(cmd *cobra.Command) {
+	cr.kubeConfig = genericclioptions.NewConfigFlags(false)
+	cr.KubeFlags = make(map[string]string)
+	cr.kubeFlagSet = pflag.NewFlagSet("Kubernetes flags", 0)
+	cr.kubeConfig.AddFlags(cr.kubeFlagSet)
+	cmd.Flags().AddFlagSet(cr.kubeFlagSet)
 }
 
 type requestKey struct{}

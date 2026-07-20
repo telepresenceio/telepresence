@@ -24,25 +24,13 @@ installs or upgrades the traffic-manager with it.
 
 ### Flags:
 ```
-      --allow-conflicting-subnets strings   Comma separated list of CIDR that will be allowed to conflict with local subnets
-      --also-proxy strings                  Additional comma separated list of CIDR to proxy
-      --apply                               Install/upgrade the traffic-manager with the resulting values
-      --docker                              Start, or connect to, daemon in a docker container
-      --expose stringArray                  Port that a containerized daemon will expose. See docker run -p for more info. Can be repeated
-  -h, --help                                help for setup
-      --hostname string                     Hostname used by a containerized daemon
-      --input string                        Read a Helm values file; its settings become pinned defaults
-      --manager-namespace string            The namespace where the traffic manager is to be found. Overrides any other manager namespace set in config
-      --mapped-namespaces strings           Comma separated list of namespaces considered by DNS resolver and NAT for outbound connections. Defaults to all namespaces
-      --name string                         Optional name to use for the connection
-  -n, --namespace string                    If present, the namespace scope for this CLI request
-      --never-proxy strings                 Comma separated list of CIDR to never proxy
-      --non-interactive                     Never prompt; unanswered questions fall back to input-pinned settings or safe defaults
-      --output string                       Write the resulting Helm values to this file, suitable for a Helm install; &quot;-&quot; writes them to stdout and suppresses the report
-      --proxy-via strings                   Use Network Address Translation to create virtual IPs for the given CIDR, and route via WORKLOAD. Must be in the form CIDR=WORKLOAD. CIDR can be substituted for the symbolic name &quot;service&quot;, &quot;pods&quot;, &quot;also&quot;, or &quot;all&quot;.
-      --reroute-local strings               Reroute port on local host to remote host. Format is &lt;local port&gt;:&lt;host&gt;:&lt;port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.
-      --reroute-remote strings              Reroute port on remote host. Format is &lt;host&gt;:&lt;port&gt;:&lt;new port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.
-      --vnat strings                        Use Network Address Translation to create virtual IPs for the given CIDR. CIDR can be substituted for the symbolic name &quot;service&quot;, &quot;pods&quot;, &quot;also&quot;, or &quot;all&quot;.
+      --apply                      Install/upgrade the traffic-manager with the resulting values
+  -h, --help                       help for setup
+      --input string               Read a Helm values file; its settings become pinned defaults
+      --manager-namespace string   The namespace where the traffic manager is to be found. Overrides any other manager namespace set in config
+  -n, --namespace string           If present, the namespace scope for this CLI request
+      --non-interactive            Never prompt; unanswered questions fall back to input-pinned settings or safe defaults
+      --output string              Write the resulting Helm values to this file, suitable for a Helm install; &quot;-&quot; writes them to stdout and suppresses the report
 ```
 
 ### Kubernetes flags:
