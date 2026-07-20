@@ -40,7 +40,6 @@ type ttyWriter struct {
 	eventIDs        []string
 	repeated        bool
 	numLines        int
-	doneOnce        sync.Once
 	done            chan struct{}
 	mtx             sync.Mutex
 	skipChildEvents bool
@@ -88,9 +87,13 @@ func (w *ttyWriter) IsNoOp() bool {
 }
 
 func (w *ttyWriter) Stop() {
-	w.doneOnce.Do(func() {
+	w.mtx.Lock()
+	select {
+	case <-w.done:
+	default:
 		close(w.done)
-	})
+	}
+	w.mtx.Unlock()
 	w.print()
 }
 
@@ -246,12 +249,11 @@ func (w *ttyWriter) lineText(event *Event, withID bool, terminalWidth, statusPad
 	} else {
 		txt = event.Text
 	}
-	if withID {
-		if txt == "" {
-			txt = event.ID
-		} else {
-			txt = fmt.Sprintf("%s %s", event.ID, txt)
-		}
+	switch {
+	case txt == "" && (withID || event.StatusText == ""):
+		txt = event.ID
+	case txt != "" && withID:
+		txt = fmt.Sprintf("%s %s", event.ID, txt)
 	}
 	textLen := len(txt)
 	padding := statusPadding - textLen
@@ -304,7 +306,11 @@ func (w *ttyWriter) lineText(event *Event, withID bool, terminalWidth, statusPad
 			writePad(bld, padding)
 			bld.WriteString(event.Status.color().Apply(status))
 			if timerLen > 0 {
-				writePad(bld, terminalWidth-allExceptStatusLen-len(status))
+				// The last column is left empty. A line that fills the
+				// terminal's full width wraps, taking two rows where this
+				// writer counts one, which makes the next frame's cursor-up
+				// land short and leaves stale lines on screen.
+				writePad(bld, terminalWidth-allExceptStatusLen-len(status)-1)
 				bld.WriteString(coloredTimer)
 			}
 		}
