@@ -61,6 +61,10 @@ installs or upgrades the traffic-manager with it.`,
 	_ = cmd.MarkFlagFilename("output")
 	_ = cmd.MarkFlagFilename("input")
 	sc.rq = daemon.InitKubeRequest(cmd)
+	if nsFlag := flags.Lookup("namespace"); nsFlag != nil {
+		// The traffic-manager's namespace comes from --manager-namespace alone.
+		nsFlag.Usage = "The namespace you work in; its workloads are sampled for the suggested next steps"
+	}
 	return cmd
 }
 
@@ -260,13 +264,6 @@ func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, erro
 	}
 	ctx := cmd.Context()
 	cr := sc.rq.ConnectRequest
-	if cr.ManagerNamespace == "" {
-		if ns, ok := cr.KubeFlags["namespace"]; ok {
-			cr.ManagerNamespace = ns
-		} else {
-			cr.ManagerNamespace = "ambassador"
-		}
-	}
 
 	config, err := k8s.DaemonKubeconfig(ctx, cr)
 	if err != nil {
@@ -308,7 +305,7 @@ func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, erro
 		},
 		ReleaseLookup: setup.NewReleaseLookup(cluster.Kubeconfig),
 	}
-	if cl.facts, err = prober.GatherFacts(cluster); err != nil {
+	if cl.facts, err = prober.GatherFacts(ctx); err != nil {
 		return nil, err
 	}
 	if lastPhase != "" {

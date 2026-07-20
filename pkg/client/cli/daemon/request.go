@@ -149,7 +149,7 @@ func InitRequest(cmd *cobra.Command) *CobraRequest {
 }
 
 // InitKubeRequest adds only the --manager-namespace flag and the Kubernetes flags to the given
-// command and returns a Request and a FlagSet with the Kubernetes flags. It is intended for
+// command and returns the resulting CobraRequest. It is intended for
 // commands that resolve a kubeconfig and talk to the cluster directly (e.g. via client-go),
 // without starting a daemon session, and therefore have no use for the networking flags that
 // InitRequest registers (--also-proxy, --docker, --vnat, etc).

@@ -28,7 +28,7 @@ installs or upgrades the traffic-manager with it.
   -h, --help                       help for setup
       --input string               Read a Helm values file; its settings become pinned defaults
       --manager-namespace string   The namespace where the traffic manager is to be found. Overrides any other manager namespace set in config
-  -n, --namespace string           If present, the namespace scope for this CLI request
+  -n, --namespace string           The namespace you work in; its workloads are sampled for the suggested next steps
       --non-interactive            Never prompt; unanswered questions fall back to input-pinned settings or safe defaults
       --output string              Write the resulting Helm values to this file, suitable for a Helm install; &quot;-&quot; writes them to stdout and suppresses the report
 ```
