@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json/v2"
+	"errors"
 	"net"
 	"net/netip"
 	"testing"
@@ -456,6 +457,110 @@ func TestAgentSessionBinding(t *testing.T) {
 	})
 }
 
+// TestClientSessionBinding covers the caller-identity binding established at
+// client arrival and enforced on later client-session RPCs: a session bound to
+// one principal can't be driven by another, even across a token rotation that
+// keeps the same username and UID; a caller whose token couldn't be verified
+// for infrastructure reasons gets Unavailable rather than PermissionDenied,
+// since ownership could not be established either way; and a session that
+// arrived without a principal (an older client) keeps working permissively.
+func TestClientSessionBinding(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testClients := testdata.GetTestClients(t)
+
+	t.Run("owned session locks out every other identity", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		bound := mgr.State().GetClient(tunnel.SessionID(sess.SessionId)).Principal()
+		req.NotNil(bound)
+		req.Equal(principal.Username, bound.Username)
+
+		// The bound caller itself keeps working.
+		_, err = mgr.Remain(auth.WithPrincipal(sctx, principal), &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		// A token rotation that keeps the same username and UID still passes:
+		// SameAs compares values, not the Principal instance.
+		rotated := &auth.Principal{Username: principal.Username, UID: principal.UID}
+		_, err = mgr.Remain(auth.WithPrincipal(sctx, rotated), &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		// A different identity is denied.
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.Remain(otherCtx, &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+
+		// No principal at all is denied too: a bound session requires claims.
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+
+		// A caller whose token couldn't be verified for infrastructure reasons
+		// gets Unavailable instead: ownership could not be established either way.
+		_, err = mgr.Remain(auth.WithAuthUnavailable(sctx), &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.Unavailable, status.Code(err))
+	})
+
+	t.Run("unowned session stays permissive", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		bob := proto.Clone(testClients["bob"]).(*rpc.ClientInfo)
+		sess, err := mgr.ArriveAsClient(sctx, bob)
+		req.NoError(err)
+		req.Nil(mgr.State().GetClient(tunnel.SessionID(sess.SessionId)).Principal())
+
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.Remain(otherCtx, &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+	})
+
+	t.Run("ReconnectClient by a non-owner is denied", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.ReconnectClient(otherCtx, &rpc.ReconnectClientRequest{Session: sess, Client: alice})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("GetQuicTunnelEndpoint by a non-owner is denied", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
+			e.TunnelQuicPort = 7778
+			e.TunnelQuicExternalHost = "quic.example.com"
+		})
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.GetQuicTunnelEndpoint(otherCtx, sess)
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+	})
+}
+
 // TestGetQuicTunnelEndpoint_Gating covers the three cases "Zero-configuration endpoint
 // discovery" (docs/reference/quic-transport-architecture.md) distinguishes: an explicit
 // externalHost override always wins and bypasses discovery outright; discovery
@@ -671,7 +776,10 @@ matchExpressions:
 	})
 	t.Cleanup(func() {
 		s.GracefulStop()
-		if err := g.Wait(); err != nil {
+		// Serve races harmlessly with GracefulStop when a test never dials the
+		// listener (e.g. it calls the Service's methods directly): the server
+		// goroutine may not have reached Serve yet when GracefulStop runs.
+		if err := g.Wait(); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			t.Error(err)
 		}
 	})

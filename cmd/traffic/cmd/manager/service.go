@@ -226,7 +226,7 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	SetGauge(ctx, s.state.GetConnectActiveStatus(), client.Name, client.InstallId, nil, 1)
 
 	return &rpc.SessionInfo{
-		SessionId:        string(s.state.AddClient(client, time.Now())),
+		SessionId:        string(s.state.AddClient(client, auth.PrincipalFrom(ctx), time.Now())),
 		ManagerInstallId: s.clusterInfo.ID(),
 		InstallId:        &installId,
 	}, nil
@@ -235,7 +235,10 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClientRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, info.Session)
 	sessionID := tunnel.SessionID(info.GetSession().GetSessionId())
-	if s.state.GetClient(sessionID) != nil {
+	if session := s.state.GetClient(sessionID); session != nil {
+		if err := state.ClientOwnershipError(ctx, sessionID, session); err != nil {
+			return nil, err
+		}
 		// We already know this client, so we don't need to do anything.
 		return &empty.Empty{}, nil
 	}
@@ -249,7 +252,7 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 		return nil, status.Error(codes.InvalidArgument, val)
 	}
 	now := time.Now()
-	st.RestoreClient(sessionID, client, now)
+	st.RestoreClient(sessionID, client, auth.PrincipalFrom(ctx), now)
 	agents := slices.DeleteFunc(slices.Clone(info.Agents), func(agent *rpc.AgentInfo) bool {
 		if st.ManagesNamespace(ctx, agent.Namespace) {
 			return false
@@ -323,6 +326,8 @@ func verifiedAgentPrincipal(ctx context.Context, agent *rpc.AgentInfo) *auth.Pri
 // agentOwnershipError returns a PermissionDenied error when agent is bound to a
 // verified pod identity and the caller's principal doesn't match it. Returns nil
 // when the session is unbound (old agent) or the caller is the bound pod itself.
+// A caller whose token couldn't be verified for infrastructure reasons gets
+// Unavailable instead, since ownership could not be established either way.
 func agentOwnershipError(ctx context.Context, sessionID tunnel.SessionID, agent *state.AgentSession) error {
 	bound := agent.Principal()
 	if bound == nil {
@@ -330,6 +335,9 @@ func agentOwnershipError(ctx context.Context, sessionID tunnel.SessionID, agent 
 	}
 	if p := auth.PrincipalFrom(ctx); p != nil && p.PodUID == bound.PodUID && p.PodName == bound.PodName {
 		return nil
+	}
+	if auth.AuthUnavailable(ctx) {
+		return errors.Errorf(codes.Unavailable, "cannot verify session ownership: authentication unavailable")
 	}
 	return errors.Errorf(codes.PermissionDenied, "agent session %q is bound to another workload identity", sessionID)
 }
@@ -377,6 +385,9 @@ func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 	if client == nil {
 		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
+	if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
+		return nil, err
+	}
 	var lastActivity time.Time
 	if la := req.LastActivity; la != nil {
 		lastActivity = la.AsTime()
@@ -397,6 +408,10 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	sessionID := tunnel.SessionID(session.GetSessionId())
 	if agent := s.state.GetAgent(sessionID); agent != nil {
 		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+			return nil, err
+		}
+	} else if client := s.state.GetClient(sessionID); client != nil {
+		if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
 			return nil, err
 		}
 	}
@@ -929,6 +944,13 @@ func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo)
 			}
 		} else {
 			// sessionID refers to a client session.
+			client := s.state.GetClient(sessionID)
+			if client == nil {
+				return nil, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+			}
+			if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
+				return nil, nil, err
+			}
 			filter = func(id string, info *state.Intercept) bool {
 				return info.ClientSession.SessionId == string(sessionID) &&
 					info.Disposition != rpc.InterceptDispositionType_REMOVED &&
@@ -1161,7 +1183,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return interceptInfo, nil
 }
 
-func (s *service) MakeInterceptID(_ context.Context, sessionID string, name string) (string, error) {
+func (s *service) MakeInterceptID(ctx context.Context, sessionID string, name string) (string, error) {
 	// When something without a session ID (e.g. System A) calls this function,
 	// it is sending the intercept ID as the name, so we use that.
 	//
@@ -1172,8 +1194,13 @@ func (s *service) MakeInterceptID(_ context.Context, sessionID string, name stri
 	if sessionID == "" {
 		return name, nil
 	}
-	if s.state.GetClient(tunnel.SessionID(sessionID)) == nil {
+	sid := tunnel.SessionID(sessionID)
+	client := s.state.GetClient(sid)
+	if client == nil {
 		return "", errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
+	if err := state.ClientOwnershipError(ctx, sid, client); err != nil {
+		return "", err
 	}
 	return sessionID + ":" + name, nil
 }
@@ -1287,8 +1314,12 @@ func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.Sessio
 		return &rpc.QuicTunnelEndpoint{Enabled: false}, nil
 	}
 	sessionID := tunnel.SessionID(session.GetSessionId())
-	if s.state.GetClient(sessionID) == nil {
+	client := s.state.GetClient(sessionID)
+	if client == nil {
 		return nil, errors.Errorf(codes.NotFound, "Session %q not found", sessionID)
+	}
+	if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
+		return nil, err
 	}
 	certPEM, keyPEM, err := s.quicCA.MintClientCert(string(sessionID))
 	if err != nil {
@@ -1661,6 +1692,11 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (respo
 	}
 
 	sessionID := tunnel.SessionID(request.GetSession().GetSessionId())
+	if client := s.state.GetClient(sessionID); client != nil {
+		if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
+			return nil, err
+		}
+	}
 	noSearchDomain := s.dotClusterDomain
 	rrs, rCode := s.lookupFromManager(ctx, sessionID, qType, request.Name, noSearchDomain)
 	return dnsproxy.ToRPC(rrs, rCode)
@@ -1771,6 +1807,9 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream grpc
 		if clientInfo == nil {
 			return status.Errorf(codes.NotFound, "Client session %q not found", clientSession)
 		}
+		if err := state.ClientOwnershipError(ctx, clientSession, clientInfo); err != nil {
+			return err
+		}
 		namespace = clientInfo.Namespace
 	} else if !s.State().ManagesNamespace(ctx, namespace) {
 		return status.Error(codes.FailedPrecondition, fmt.Sprintf("namespace %s is not managed", namespace))
@@ -1809,6 +1848,9 @@ func (s *service) ensureClientSession(ctx context.Context, sessionInfo *rpc.Sess
 	session := s.state.GetClient(sessionID)
 	if session == nil {
 		return ctx, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
+	if err := state.ClientOwnershipError(ctx, sessionID, session); err != nil {
+		return ctx, nil, err
 	}
 	return ctx, session, nil
 }

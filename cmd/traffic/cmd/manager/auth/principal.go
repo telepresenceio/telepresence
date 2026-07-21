@@ -41,3 +41,20 @@ func PrincipalFrom(ctx context.Context) *Principal {
 	p, _ := ctx.Value(principalKey{}).(*Principal)
 	return p
 }
+
+type authUnavailableKey struct{}
+
+// WithAuthUnavailable marks ctx as carrying a bearer token that could not be
+// verified because the TokenReview infrastructure failed. The caller is neither
+// authenticated nor known to be an impostor.
+func WithAuthUnavailable(ctx context.Context) context.Context {
+	return context.WithValue(ctx, authUnavailableKey{}, true)
+}
+
+// AuthUnavailable reports whether token verification failed for infrastructure
+// reasons. Checks that would deny access for a missing Principal should fail
+// with Unavailable rather than PermissionDenied when this is set.
+func AuthUnavailable(ctx context.Context) bool {
+	v, _ := ctx.Value(authUnavailableKey{}).(bool)
+	return v
+}

@@ -97,9 +97,9 @@ func (s *suiteState) TestStateInternal() {
 		g := log.NewGroup(ctx)
 		s := NewState(ctx, g, nil)
 
-		s1 := s.AddClient(testClients["alice"], clock.Now())
-		s2 := s.AddClient(testClients["bob"], clock.Now())
-		s3 := s.AddClient(testClients["cameron"], clock.Now())
+		s1 := s.AddClient(testClients["alice"], nil, clock.Now())
+		s2 := s.AddClient(testClients["bob"], nil, clock.Now())
+		s3 := s.AddClient(testClients["cameron"], nil, clock.Now())
 
 		c1 := s.GetClient(s1)
 		c2 := s.GetClient(s2)
@@ -151,7 +151,7 @@ func (s *suiteState) TestAddClient() {
 		InstallId: "1234",
 		Product:   "5668",
 		Version:   "2.14.2",
-	}, now)
+	}, nil, now)
 
 	// then
 	assert.Equal(s.T(), 1, s.state.clients.Size())
@@ -165,13 +165,13 @@ func (s *suiteState) TestRemoveSession() {
 		InstallId: "1234",
 		Product:   "5668",
 		Version:   "2.14.2",
-	}, now)
+	}, nil, now)
 	s2 := s.state.AddClient(&manager.ClientInfo{
 		Name:      "your-client",
 		InstallId: "5678",
 		Product:   "5668",
 		Version:   "2.14.2",
-	}, now)
+	}, nil, now)
 
 	assert.Equal(s.T(), s.state.CountSessions(), 2)
 

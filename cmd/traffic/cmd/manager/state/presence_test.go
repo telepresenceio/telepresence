@@ -23,8 +23,8 @@ func TestPresence(t *testing.T) {
 
 	now := time.Now()
 
-	sa := p.AddClient(&rpc.ClientInfo{Name: "item-a"}, now)
-	sb := p.AddClient(&rpc.ClientInfo{Name: "item-b"}, now)
+	sa := p.AddClient(&rpc.ClientInfo{Name: "item-a"}, nil, now)
+	sb := p.AddClient(&rpc.ClientInfo{Name: "item-b"}, nil, now)
 
 	isPresent := func(sessionID tunnel.SessionID) bool {
 		_, err := p.SessionDone(sessionID)
@@ -56,7 +56,7 @@ func TestPresence(t *testing.T) {
 
 	now = now.Add(time.Second)
 	a.True(cb.Mark(now))
-	sc := p.AddClient(&rpc.ClientInfo{Name: "item-c"}, now)
+	sc := p.AddClient(&rpc.ClientInfo{Name: "item-c"}, nil, now)
 
 	// A@0 B@1 C@1
 
@@ -93,5 +93,5 @@ func TestPresence(t *testing.T) {
 	a.False(isPresent(sc))
 	a.False(isPresent("d"))
 
-	a.Panics(func() { p.addClient(sb, &rpc.ClientInfo{Name: "duplicate-item-b"}, now) })
+	a.Panics(func() { p.addClient(sb, &rpc.ClientInfo{Name: "duplicate-item-b"}, nil, now) })
 }

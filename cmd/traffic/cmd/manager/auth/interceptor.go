@@ -75,6 +75,7 @@ func (i *Interceptor) authenticate(ctx context.Context, method string) context.C
 		clog.Warnf(ctx, "call to %s presented an invalid bearer token", method)
 	default:
 		clog.Errorf(ctx, "token authentication unavailable for %s: %v", method, err)
+		ctx = WithAuthUnavailable(ctx)
 	}
 	return ctx
 }

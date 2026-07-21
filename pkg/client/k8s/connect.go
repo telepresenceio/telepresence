@@ -45,7 +45,15 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 		return nil, "", semver.Version{}, err
 	}
 
-	conn, err = kc.dialGRPC(dialCtx, grpcAddr, pap)
+	var extra []grpc.DialOption
+	if src := newManagerTokenSource(kc.Kubeconfig); src != nil {
+		clog.Debugf(kc, "manager calls will carry the kubeconfig's bearer credentials")
+		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(src)))
+	} else {
+		clog.Debugf(kc, "the kubeconfig yields no bearer token for the traffic-manager connection")
+	}
+
+	conn, err = kc.dialGRPC(dialCtx, grpcAddr, pap, extra...)
 	if err != nil {
 		return nil, "", ver, err
 	}
@@ -99,12 +107,16 @@ func (kc *Cluster) ConnectToAgent(
 	return conn, mClient, vi, err
 }
 
-func (kc *Cluster) dialGRPC(dialCtx context.Context, address string, knownPod *portforward.PodAddress) (*grpc.ClientConn, error) {
-	return grpcClient.DialGRPC(dialCtx, portforward.K8sPFScheme+":///"+address, grpc.WithContextDialer(portforward.Dialer(kc)),
+func (kc *Cluster) dialGRPC(dialCtx context.Context, address string, knownPod *portforward.PodAddress, extra ...grpc.DialOption) (*grpc.ClientConn, error) {
+	opts := append(make([]grpc.DialOption, 0, 5+len(extra)),
+		grpc.WithContextDialer(portforward.Dialer(kc)),
 		grpc.WithResolvers(portforward.NewResolver(kc, knownPod)),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
 		grpc.WithIdleTimeout(0),
-		grpc.WithTransportCredentials(insecure.NewCredentials()))
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	opts = append(opts, extra...)
+	return grpcClient.DialGRPC(dialCtx, portforward.K8sPFScheme+":///"+address, opts...)
 }
 
 func getVersion(ctx context.Context, gc versionAPI) (*manager.VersionInfo2, error) {

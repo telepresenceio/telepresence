@@ -17,6 +17,7 @@ type sessionState struct {
 	doneCh    <-chan struct{}
 	cancel    context.CancelFunc
 	timestamp int64
+	principal atomic.Pointer[auth.Principal]
 }
 
 func (s *sessionState) sessionID() tunnel.SessionID {
@@ -52,6 +53,17 @@ func newSessionState(ctx context.Context, id tunnel.SessionID, now time.Time) se
 	}
 }
 
+// SetPrincipal binds p as this session's verified identity.
+func (s *sessionState) SetPrincipal(p *auth.Principal) {
+	s.principal.Store(p)
+}
+
+// Principal returns this session's verified identity, or nil if the session
+// was established without one (e.g. an older client or agent).
+func (s *sessionState) Principal() *auth.Principal {
+	return s.principal.Load()
+}
+
 type ClientSession struct {
 	*rpc.ClientInfo
 	sessionState
@@ -73,7 +85,6 @@ func newClientSessionState(ctx context.Context, id tunnel.SessionID, ci *rpc.Cli
 type AgentSession struct {
 	*rpc.AgentInfo
 	sessionState
-	principal atomic.Pointer[auth.Principal]
 }
 
 func newAgentSessionState(ctx context.Context, id tunnel.SessionID, ai *rpc.AgentInfo, ts time.Time) *AgentSession {
@@ -82,15 +93,4 @@ func newAgentSessionState(ctx context.Context, id tunnel.SessionID, ai *rpc.Agen
 		sessionState: newSessionState(ctx, id, ts),
 	}
 	return as
-}
-
-// SetPrincipal binds p as this session's verified pod identity.
-func (as *AgentSession) SetPrincipal(p *auth.Principal) {
-	as.principal.Store(p)
-}
-
-// Principal returns the verified pod identity bound to this session, or nil
-// if the session was established without one (e.g. an older agent).
-func (as *AgentSession) Principal() *auth.Principal {
-	return as.principal.Load()
 }
