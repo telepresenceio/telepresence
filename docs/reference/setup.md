@@ -39,7 +39,6 @@ runs a set of read-only probes before asking anything:
 | Client update | A best-effort check of the latest released client, advisory only. |
 | Existing-install health | When a release is found: Deployment readiness and recent warning events, webhook presence and certificate expiry, agent-injector endpoint readiness, QUIC endpoint state, and client/manager version skew. |
 | Routing conflicts | Whether the workstation's local routes overlap the cluster's pod/service subnets (read from the local route table; the remedy is always cluster-side). |
-| Sample workloads | A handful of Deployments in the relevant namespaces, used to personalize the next-steps epilogue. |
 
 Every probe tolerates denied permissions — a probe that cannot get an
 answer is reported as unknown rather than aborting the command.
@@ -145,13 +144,11 @@ confirmation step: `--apply` itself is the consent.
 | `--apply` | Install or upgrade the traffic-manager with the resulting values. |
 | `--non-interactive` | Never prompt; unanswered questions fall back to an input-pinned setting or a safe default. A non-TTY stdin behaves the same way automatically. |
 
-Plus the standard kube flags (`--kubeconfig`, `--context`, `-n`/`--namespace`)
+Plus the standard kube flags (`--kubeconfig`, `--context`, ...)
 and `--manager-namespace`. The traffic-manager's namespace comes from
 `--manager-namespace` alone; without it, setup uses an existing
 traffic-manager's namespace when it finds one and otherwise `ambassador`.
-`-n`/`--namespace` names the namespace you work in: its workloads are sampled
-to make the suggested next steps concrete, and it never decides where the
-traffic-manager goes. Also the global
+Also the global
 `--format`/`--progress` flags. There is no flag to preset an individual
 answer — every one of them is already expressible in an `--input` values file
 (see "Re-run with the previous decisions" above); the interview and `--input`
@@ -266,11 +263,6 @@ the result instead of assuming success:
   has ready endpoints — the point being that the webhook's
   `failurePolicy: Ignore` lets a broken injector degrade silently: pods
   simply stop getting agents, with no error anywhere.
-
-A successful apply — or a validation run against an already-healthy
-existing release — ends with a personalized next-steps epilogue:
-`telepresence connect`, `telepresence list`, and, when a sample workload was
-found, an example `telepresence intercept` naming it.
 
 ## See also
 

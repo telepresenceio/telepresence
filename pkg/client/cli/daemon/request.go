@@ -140,7 +140,7 @@ func InitRequest(cmd *cobra.Command) *CobraRequest {
 	_ = dbgFlags.MarkHidden("rootd-profiling-port")
 	flags.AddFlagSet(dbgFlags)
 
-	cr.addKubeFlags(cmd)
+	cr.addKubeFlags(cmd, true)
 	_ = cmd.RegisterFlagCompletionFunc("mapped-namespaces", cr.autocompleteNamespaces)
 	_ = cmd.RegisterFlagCompletionFunc("manager-namespace", cr.autocompleteNamespace)
 	_ = cmd.RegisterFlagCompletionFunc("namespace", cr.autocompleteNamespace)
@@ -152,7 +152,8 @@ func InitRequest(cmd *cobra.Command) *CobraRequest {
 // command and returns the resulting CobraRequest. It is intended for
 // commands that resolve a kubeconfig and talk to the cluster directly (e.g. via client-go),
 // without starting a daemon session, and therefore have no use for the networking flags that
-// InitRequest registers (--also-proxy, --docker, --vnat, etc).
+// InitRequest registers (--also-proxy, --docker, --vnat, etc). The --namespace flag is also
+// omitted; such commands have no workload namespace to scope to.
 func InitKubeRequest(cmd *cobra.Command) *CobraRequest {
 	cr := CobraRequest{
 		Request: Request{
@@ -162,16 +163,19 @@ func InitKubeRequest(cmd *cobra.Command) *CobraRequest {
 	cmd.Flags().StringVar(&cr.ManagerNamespace, "manager-namespace", "", `The namespace where the traffic manager is to be found. `+
 		`Overrides any other manager namespace set in config`)
 
-	cr.addKubeFlags(cmd)
+	cr.addKubeFlags(cmd, false)
 	_ = cmd.RegisterFlagCompletionFunc("manager-namespace", cr.autocompleteNamespace)
-	_ = cmd.RegisterFlagCompletionFunc("namespace", cr.autocompleteNamespace)
 	return &cr
 }
 
-// addKubeFlags installs the Kubernetes flag set (--kubeconfig, --context, --namespace, --as, etc.)
-// shared by InitRequest and InitKubeRequest.
-func (cr *CobraRequest) addKubeFlags(cmd *cobra.Command) {
+// addKubeFlags installs the Kubernetes flag set (--kubeconfig, --context, --as, etc.)
+// shared by InitRequest and InitKubeRequest; --namespace is only included when
+// withNamespace is true.
+func (cr *CobraRequest) addKubeFlags(cmd *cobra.Command, withNamespace bool) {
 	cr.kubeConfig = genericclioptions.NewConfigFlags(false)
+	if !withNamespace {
+		cr.kubeConfig.Namespace = nil
+	}
 	cr.KubeFlags = make(map[string]string)
 	cr.kubeFlagSet = pflag.NewFlagSet("Kubernetes flags", 0)
 	cr.kubeConfig.AddFlags(cr.kubeFlagSet)

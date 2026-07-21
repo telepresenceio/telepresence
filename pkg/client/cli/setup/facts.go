@@ -51,7 +51,6 @@ type ClusterFacts struct {
 	Release          ReleaseFacts   `json:"release"`
 	Health           *HealthFacts   `json:"health,omitempty"` // read-only doctor checks; only when a release is installed
 	ClientUpdate     UpdateFacts    `json:"clientUpdate"`
-	Workloads        WorkloadFacts  `json:"workloads"`
 	Routing          RoutingFacts   `json:"routing"`
 }
 
@@ -103,17 +102,6 @@ type UpdateFacts struct {
 	CheckError      string `json:"checkError,omitempty"`
 }
 
-// WorkloadSample is a Deployment a next-steps example can name.
-type WorkloadSample struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Port      int32  `json:"port,omitempty"` // first container port
-}
-
-type WorkloadFacts struct {
-	Samples []WorkloadSample `json:"samples,omitempty"`
-}
-
 // ProbePhases are the phases GatherFacts reports through Prober.Progress, in
 // the order they occur.
 var ProbePhases = []string{ //nolint:gochecknoglobals // immutable
@@ -148,15 +136,14 @@ func DefaultCandidateValues() map[string]any {
 
 // Prober gathers ClusterFacts for one cluster/manager-namespace pair.
 type Prober struct {
-	KubeClient        kubernetes.Interface
-	ManagerNamespace  string
-	WorkloadNamespace string         // namespace sampled for next-steps workload examples; empty skips the sampling
-	Context           string         // kubeconfig context name, recorded in the facts
-	Server            string         // API server URL, recorded in the facts
-	CandidateValues   map[string]any // values for the P1 chart render; nil means DefaultCandidateValues()
-	UpdateCheckHost   string         // default "app.getambassador.io"
-	HTTPClient        *http.Client   // default a client with a short timeout
-	Progress          func(string)   // called with a phase description as each probe starts; nil is silent
+	KubeClient       kubernetes.Interface
+	ManagerNamespace string
+	Context          string         // kubeconfig context name, recorded in the facts
+	Server           string         // API server URL, recorded in the facts
+	CandidateValues  map[string]any // values for the P1 chart render; nil means DefaultCandidateValues()
+	UpdateCheckHost  string         // default "app.getambassador.io"
+	HTTPClient       *http.Client   // default a client with a short timeout
+	Progress         func(string)   // called with a phase description as each probe starts; nil is silent
 
 	// ReleaseLookup finds an existing traffic-manager Helm release; nil disables
 	// P6 and ReleaseFacts stays zero.
@@ -224,7 +211,6 @@ func (p *Prober) GatherFacts(ctx context.Context) (*ClusterFacts, error) {
 	}
 	p.progress("Checking for a client update")
 	facts.ClientUpdate = p.probeUpdate(ctx)
-	facts.Workloads = p.probeWorkloads(ctx)
 	p.progress("Checking for subnet conflicts")
 	facts.Routing = p.probeRouting(ctx, nodes)
 

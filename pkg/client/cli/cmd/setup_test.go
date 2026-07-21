@@ -23,7 +23,6 @@ func TestSetupCmdFlags(t *testing.T) {
 		"manager-namespace",
 		"context",
 		"kubeconfig",
-		"namespace",
 	} {
 		assert.NotNilf(t, flags.Lookup(name), "expected flag %q to be present", name)
 	}
@@ -41,17 +40,8 @@ func TestSetupCmdFlags(t *testing.T) {
 		"reroute-remote",
 		"allow-conflicting-subnets",
 		"mapped-namespaces",
+		"namespace",
 	} {
 		assert.Nilf(t, flags.Lookup(name), "expected flag %q to be absent", name)
 	}
-}
-
-// TestSetupNamespaceFlagUsage verifies that --namespace describes the role it
-// has in this command: it names the namespace whose workloads are sampled,
-// and has no say in where the traffic-manager goes.
-func TestSetupNamespaceFlagUsage(t *testing.T) {
-	nsFlag := setupCmd().Flags().Lookup("namespace")
-	assert.NotNil(t, nsFlag)
-	assert.Contains(t, nsFlag.Usage, "namespace you work in")
-	assert.NotContains(t, nsFlag.Usage, "scope for this CLI request")
 }

@@ -80,34 +80,6 @@ func Banner(facts *ClusterFacts) string {
 		facts.Context, facts.Server, facts.ManagerNamespace)
 }
 
-// NextStepsWanted reports whether the next-steps epilogue applies: after a
-// successful apply, or when a healthy installation already matches the
-// proposal. An unhealthy install gets the health findings, not a cheerful
-// epilogue.
-func NextStepsWanted(action Action, applied, releaseInstalled, healthy bool) bool {
-	return (applied || action == ActionNone && releaseInstalled) && healthy
-}
-
-// PrintNextSteps renders the personalized epilogue: how to connect, list, and
-// attach, naming a sampled workload when one was found.
-func PrintNextSteps(w io.Writer, facts *ClusterFacts, namespace string) {
-	ioutil.Println(w, "Next steps:")
-	if namespace != "" {
-		ioutil.Printf(w, "  telepresence connect -n %s\n", namespace)
-	} else {
-		ioutil.Println(w, "  telepresence connect")
-	}
-	ioutil.Println(w, "  telepresence list")
-	if samples := facts.Workloads.Samples; len(samples) > 0 {
-		sample := samples[0]
-		if sample.Port > 0 {
-			ioutil.Printf(w, "  telepresence intercept %s --port %d\n", sample.Name, sample.Port)
-		} else {
-			ioutil.Printf(w, "  telepresence intercept %s\n", sample.Name)
-		}
-	}
-}
-
 // PrintNotes renders a section of note/warning lines; an empty list renders
 // nothing.
 func PrintNotes(w io.Writer, header string, notes []Note) {

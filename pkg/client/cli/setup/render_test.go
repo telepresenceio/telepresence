@@ -166,14 +166,6 @@ func TestBanner(t *testing.T) {
 	assert.Equal(t, `Configuring cluster "kind-dev" (server https://127.0.0.1:6443, manager namespace ambassador)`, Banner(facts))
 }
 
-func TestNextStepsWanted(t *testing.T) {
-	assert.True(t, NextStepsWanted(ActionInstall, true, false, true), "a successful apply wants next steps")
-	assert.True(t, NextStepsWanted(ActionNone, false, true, true), "validation over a healthy install wants next steps")
-	assert.False(t, NextStepsWanted(ActionInstall, false, false, true), "a plain would-install does not")
-	assert.False(t, NextStepsWanted(ActionNone, false, false, true), "action none without an install does not")
-	assert.False(t, NextStepsWanted(ActionNone, false, true, false), "an unhealthy install does not")
-}
-
 func TestHealthFactsClean(t *testing.T) {
 	var h *HealthFacts
 	assert.True(t, h.Clean(), "no health checks is clean")
@@ -204,32 +196,6 @@ func TestPrintReport_HealthLines(t *testing.T) {
 	assert.Contains(t, text, "  health: quic endpoint yes")
 	assert.Contains(t, text, "  health: version skew yes")
 	assert.NotContains(t, text, "agent-injector webhook", "absent optional findings render no line")
-}
-
-func TestPrintNextSteps(t *testing.T) {
-	facts := recFacts(func(f *ClusterFacts) {
-		f.Workloads.Samples = []WorkloadSample{{Name: "echo-easy", Namespace: "default", Port: 8080}}
-	})
-	out := &bytes.Buffer{}
-	PrintNextSteps(out, facts, "default")
-	text := out.String()
-	assert.Contains(t, text, "Next steps:")
-	assert.Contains(t, text, "  telepresence connect -n default")
-	assert.Contains(t, text, "  telepresence list")
-	assert.Contains(t, text, "  telepresence intercept echo-easy --port 8080")
-
-	t.Run("sample without port omits the port flag", func(t *testing.T) {
-		facts.Workloads.Samples[0].Port = 0
-		out := &bytes.Buffer{}
-		PrintNextSteps(out, facts, "default")
-		assert.Contains(t, out.String(), "  telepresence intercept echo-easy\n")
-	})
-	t.Run("no sample omits the intercept line", func(t *testing.T) {
-		facts.Workloads.Samples = nil
-		out := &bytes.Buffer{}
-		PrintNextSteps(out, facts, "default")
-		assert.NotContains(t, out.String(), "intercept")
-	})
 }
 
 func TestWriteValues_ProvenanceHeader(t *testing.T) {

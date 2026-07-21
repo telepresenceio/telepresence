@@ -61,10 +61,6 @@ installs or upgrades the traffic-manager with it.`,
 	_ = cmd.MarkFlagFilename("output")
 	_ = cmd.MarkFlagFilename("input")
 	sc.rq = daemon.InitKubeRequest(cmd)
-	if nsFlag := flags.Lookup("namespace"); nsFlag != nil {
-		// The traffic-manager's namespace comes from --manager-namespace alone.
-		nsFlag.Usage = "The namespace you work in; its workloads are sampled for the suggested next steps"
-	}
 	return cmd
 }
 
@@ -141,8 +137,8 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 }
 
 // emit produces everything the command outputs after the decision is made:
-// the report (or its structured equivalent), the values document, the apply
-// with its verification, and the next-steps epilogue.
+// the report (or its structured equivalent), the values document, and the
+// apply with its verification.
 func (sc *setupCommand) emit(
 	cmd *cobra.Command, cl *setupCluster, answers *setup.Answers, proposal *setup.Proposal, toStdout, formatted bool,
 ) error {
@@ -207,9 +203,6 @@ func (sc *setupCommand) emit(
 		}
 		setup.PrintNotes(textOut, "Verification:", verification)
 	}
-	if !formatted && setup.NextStepsWanted(proposal.Action, applying, facts.Release.Installed, facts.Health.Clean()) {
-		setup.PrintNextSteps(textOut, facts, cl.workloadNamespace)
-	}
 	return nil
 }
 
@@ -226,11 +219,10 @@ func (sc *setupCommand) applyAndVerify(cl *setupCluster, p *setup.Proposal, out 
 // verification steps need: the cluster acts as both context and
 // RESTClientGetter.
 type setupCluster struct {
-	facts             *setup.ClusterFacts
-	cluster           *k8s.Cluster
-	ki                kubernetes.Interface
-	managerNamespace  string
-	workloadNamespace string
+	facts            *setup.ClusterFacts
+	cluster          *k8s.Cluster
+	ki               kubernetes.Interface
+	managerNamespace string
 }
 
 // initProgress installs the progress writer, mirroring how session-bound
@@ -283,19 +275,17 @@ func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, erro
 	}
 
 	cl := &setupCluster{
-		cluster:           cluster,
-		ki:                ki,
-		managerNamespace:  k8s.GetManagerNamespace(cluster),
-		workloadNamespace: cluster.Namespace,
+		cluster:          cluster,
+		ki:               ki,
+		managerNamespace: k8s.GetManagerNamespace(cluster),
 	}
 	pctx := ctx
 	var lastPhase string
 	prober := &setup.Prober{
-		KubeClient:        ki,
-		ManagerNamespace:  cl.managerNamespace,
-		WorkloadNamespace: cl.workloadNamespace,
-		Context:           cluster.KubeContext,
-		Server:            cluster.Server,
+		KubeClient:       ki,
+		ManagerNamespace: cl.managerNamespace,
+		Context:          cluster.KubeContext,
+		Server:           cluster.Server,
 		Progress: func(phase string) {
 			if lastPhase != "" {
 				progress.Done(progress.WithEventId(pctx, lastPhase))

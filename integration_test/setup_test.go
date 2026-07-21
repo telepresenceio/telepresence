@@ -112,14 +112,10 @@ func (s *setupSuite) Test_SetupApplyIdempotence() {
 	s.Contains(stdout, "Applying...")
 	s.Contains(stdout, "Traffic Manager installed successfully")
 	s.Contains(stdout, "Verification:")
-	s.Contains(stdout, "Next steps:")
-	s.Contains(stdout, "telepresence connect -n")
-	s.Contains(stdout, "telepresence list")
 	s.True(s.trafficManagerInstalled(ctx), "expected a traffic-manager release after --apply")
 
-	// A second apply concludes that there is nothing to change; the epilogue
-	// still applies since a healthy installation exists, and the doctor
-	// checks report it healthy.
+	// A second apply concludes that there is nothing to change, and the
+	// doctor checks report the existing installation healthy.
 	stdout = itest.TelepresenceOk(ctx, s.setupArgs("--apply", "--non-interactive")...)
 	s.Contains(stdout, "Action: none")
 	s.Contains(stdout, "up to date")
@@ -127,7 +123,6 @@ func (s *setupSuite) Test_SetupApplyIdempotence() {
 	s.Contains(stdout, "health: traffic-manager deployment yes")
 	s.Contains(stdout, "health: quic endpoint yes")
 	s.Contains(stdout, "health: version skew yes")
-	s.Contains(stdout, "Next steps:")
 
 	// Formatted validation over the up-to-date installation.
 	jsonOut := itest.TelepresenceOk(ctx, s.setupArgs("--non-interactive", "--format", "json")...)
@@ -138,13 +133,11 @@ func (s *setupSuite) Test_SetupApplyIdempotence() {
 	rq.True(ok)
 	s.Contains(facts, "health")
 
-	// A broken installation turns the doctor checks into warnings and mutes
-	// the epilogue.
+	// A broken installation turns the doctor checks into warnings.
 	rq.NoError(itest.Kubectl(ctx, s.ManagerNamespace(), "scale", "deploy", "traffic-manager", "--replicas=0"))
 	stdout = itest.TelepresenceOk(ctx, s.setupArgs("--non-interactive")...)
 	s.Contains(stdout, "health: traffic-manager deployment no")
 	s.Contains(stdout, "scaled to zero")
-	s.NotContains(stdout, "Next steps:")
 }
 
 func (s *setupSuite) Test_SetupRoundTrip() {
@@ -334,8 +327,6 @@ func (s *setupSuite) Test_SetupValidation() {
 	s.Contains(stdout, "This install will create:")
 	s.Contains(stdout, "removed by 'telepresence helm uninstall'")
 	s.Contains(stdout, "Action: would-install")
-	// The epilogue only follows an apply or an already-satisfied installation.
-	s.NotContains(stdout, "Next steps:")
 
 	s.False(s.trafficManagerInstalled(ctx), "validation must not mutate the cluster")
 }
