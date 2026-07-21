@@ -39,6 +39,27 @@ func TestIsTerminal(t *testing.T) {
 	}
 }
 
+func TestRegardingMatches(t *testing.T) {
+	tests := []struct {
+		name string
+		kind string
+		obj  string
+		want bool
+	}{
+		{"exact name match is kind-agnostic", "Deployment", "traffic-manager", true},
+		{"owned pod matches by prefix", "Pod", "traffic-manager-abc", true},
+		{"owned replicaset matches by prefix", "ReplicaSet", "traffic-manager-abc", true},
+		{"same-prefix service does not match", "Service", "traffic-manager-quic", false},
+		{"unrelated pod does not match", "Pod", "agent-injector-abc", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := &events.Event{Regarding: core.ObjectReference{Kind: tt.kind, Name: tt.obj}}
+			assert.Equal(t, tt.want, regardingMatches(e, "traffic-manager", "traffic-manager-"))
+		})
+	}
+}
+
 func TestWriteList(t *testing.T) {
 	now := meta.Now()
 	es := []*events.Event{
