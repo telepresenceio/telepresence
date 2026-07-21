@@ -24,7 +24,7 @@ Verify the embedded telepresence Helm chart
       --name string                         Optional name to use for the connection
   -n, --namespace string                    If present, the namespace scope for this CLI request
       --never-proxy strings                 Comma separated list of CIDR to never proxy
-      --proxy-via strings                   Use Network Address Translation to create virtual IPs for the given CIDR, and route via WORKLOAD. Must be in the form CIDR=WORKLOAD. CIDR can be substituted for the symblic name &quot;service&quot;, &quot;pods&quot;, &quot;also&quot;, or &quot;all&quot;.
+      --proxy-via strings                   Use Network Address Translation to create virtual IPs for the given CIDR, and route via WORKLOAD. Must be in the form CIDR=WORKLOAD. CIDR can be substituted for the symbolic name &quot;service&quot;, &quot;pods&quot;, &quot;also&quot;, or &quot;all&quot;.
       --reroute-local strings               Reroute port on local host to remote host. Format is &lt;local port&gt;:&lt;host&gt;:&lt;port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.
       --reroute-remote strings              Reroute port on remote host. Format is &lt;host&gt;:&lt;port&gt;:&lt;new port&gt;[/{tcp,udp}]. &lt;port&gt; can be symbolic when &lt;host&gt; is a service name.
       --set stringArray                     specify a value as a.b=v (can specify multiple or separate values with commas: a.b=v1,a.c=v2)
@@ -33,7 +33,7 @@ Verify the embedded telepresence Helm chart
       --set-string stringArray              set STRING values on the command line (can specify multiple or separate values with commas: a.b=val1,a.c=val2)
   -f, --values stringArray                  specify values in a YAML file or a URL (can specify multiple)
       --version string                      the telepresence version if different from the client's version. May be a range (e.g. ^2.21.0)
-      --vnat strings                        Use Network Address Translation to create virtual IPs for the given CIDR. CIDR can be substituted for the symblic name &quot;service&quot;, &quot;pods&quot;, &quot;also&quot;, or &quot;all&quot;.
+      --vnat strings                        Use Network Address Translation to create virtual IPs for the given CIDR. CIDR can be substituted for the symbolic name &quot;service&quot;, &quot;pods&quot;, &quot;also&quot;, or &quot;all&quot;.
 ```
 
 ### Kubernetes flags:

@@ -24,6 +24,29 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.30.2
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Progress rendering stops when the reported operation stops
+        body: >-
+          The TTY progress renderer's stop signal only worked for the first
+          start/stop cycle, so a later progress-reporting operation in the
+          same command could leave the render goroutine of a previous one
+          alive, duplicating and re-rendering stale progress lines over
+          subsequent output. Every stop now reliably ends its own cycle, and
+          a lingering goroutine from a previous cycle can no longer silence
+          the rendering of the next one.
+      - type: bugfix
+        title: Warning events are attributed to the right workload
+        body: >-
+          The event watch that explains why a workload fails to become ready
+          matched any object whose name starts with the workload's name and a
+          dash, so warnings for an unrelated sibling (for example a Service
+          named <code>traffic-manager-something</code>) could be attributed
+          to the workload, aborting an install wait with someone else's
+          error. The prefix match now only accepts Pods and ReplicaSets, the
+          kinds a workload owns.
   - version: 2.30.1
     date: 2026-07-17
     notes:
