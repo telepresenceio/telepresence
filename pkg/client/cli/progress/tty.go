@@ -66,8 +66,8 @@ func (w *ttyWriter) Start(ctx context.Context, progressTitle string) {
 	w.done = make(chan struct{})
 	w.skipChildEvents = false
 	w.progressTitle = progressTitle
+	done := w.done
 	go func() {
-		defer w.ticker.Stop()
 		for {
 			select {
 			case <-w.ticker.C:
@@ -75,7 +75,7 @@ func (w *ttyWriter) Start(ctx context.Context, progressTitle string) {
 			case <-ctx.Done():
 				w.print()
 				return
-			case <-w.done:
+			case <-done:
 				return
 			}
 		}
@@ -94,6 +94,11 @@ func (w *ttyWriter) Stop() {
 		close(w.done)
 	}
 	w.mtx.Unlock()
+	// The ticker is shared between runs, so it must be stopped here rather
+	// than by the goroutine in Start; a goroutine from a previous run may
+	// still be draining when the next run has already begun. TriggerRefresh
+	// re-arms it.
+	w.ticker.Stop()
 	w.print()
 }
 
