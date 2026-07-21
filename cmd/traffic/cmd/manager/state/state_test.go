@@ -74,13 +74,13 @@ func (s *suiteState) TestStateInternal() {
 		g := log.NewGroup(ctx)
 		st := NewState(ctx, g, nil)
 
-		h, err := st.AddAgent(ctx, helloAgent, clock.Now())
+		h, err := st.AddAgent(ctx, helloAgent, nil, clock.Now())
 		require.NoError(t, err)
-		hp, err := st.AddAgent(ctx, helloProAgent, clock.Now())
+		hp, err := st.AddAgent(ctx, helloProAgent, nil, clock.Now())
 		require.NoError(t, err)
-		d1, err := st.AddAgent(ctx, demoAgent1, clock.Now())
+		d1, err := st.AddAgent(ctx, demoAgent1, nil, clock.Now())
 		require.NoError(t, err)
-		d2, err := st.AddAgent(ctx, demoAgent2, clock.Now())
+		d2, err := st.AddAgent(ctx, demoAgent2, nil, clock.Now())
 		require.NoError(t, err)
 
 		a.Equal(helloAgent, st.GetAgent(h).AgentInfo)

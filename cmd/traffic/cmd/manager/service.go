@@ -29,6 +29,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/cluster"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
@@ -280,7 +281,8 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		s.removeExcludedEnvVars(cn.Environment)
 	}
 
-	sessionID, err := s.state.AddAgent(ctx, agent, time.Now())
+	principal := verifiedAgentPrincipal(ctx, agent)
+	sessionID, err := s.state.AddAgent(ctx, agent, principal, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -293,8 +295,43 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 
 func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, rq.Session)
-	_, err := s.state.RestoreAgent(ctx, tunnel.SessionID(rq.GetSession().SessionId), rq.Agent, time.Now())
+	sessionID := tunnel.SessionID(rq.GetSession().SessionId)
+	if _, _, err := s.ensureAgentSession(ctx, rq.Session); err != nil && status.Code(err) != codes.NotFound {
+		return nil, err
+	}
+	principal := verifiedAgentPrincipal(ctx, rq.Agent)
+	_, err := s.state.RestoreAgent(ctx, sessionID, rq.Agent, principal, time.Now())
 	return &empty.Empty{}, err
+}
+
+// verifiedAgentPrincipal returns the caller's principal when its bound-token pod
+// claims match the presented AgentInfo, nil otherwise.
+func verifiedAgentPrincipal(ctx context.Context, agent *rpc.AgentInfo) *auth.Principal {
+	p := auth.PrincipalFrom(ctx)
+	if p == nil {
+		clog.Debugf(ctx, "agent %s.%s arrived without a bound token", agent.PodName, agent.Namespace)
+		return nil
+	}
+	if p.PodName == agent.PodName && p.PodUID == agent.PodUid && strings.HasPrefix(p.Username, "system:serviceaccount:"+agent.Namespace+":") {
+		return p
+	}
+	clog.Warnf(ctx, "bound token for pod %s (uid %s) does not match presented agent identity %s.%s (uid %s); not binding the session",
+		p.PodName, p.PodUID, agent.PodName, agent.Namespace, agent.PodUid)
+	return nil
+}
+
+// agentOwnershipError returns a PermissionDenied error when agent is bound to a
+// verified pod identity and the caller's principal doesn't match it. Returns nil
+// when the session is unbound (old agent) or the caller is the bound pod itself.
+func agentOwnershipError(ctx context.Context, sessionID tunnel.SessionID, agent *state.AgentSession) error {
+	bound := agent.Principal()
+	if bound == nil {
+		return nil
+	}
+	if p := auth.PrincipalFrom(ctx); p != nil && p.PodUID == bound.PodUID && p.PodName == bound.PodName {
+		return nil
+	}
+	return errors.Errorf(codes.PermissionDenied, "agent session %q is bound to another workload identity", sessionID)
 }
 
 func (s *service) ReportMetrics(ctx context.Context, metrics *rpc.TunnelMetrics) (*empty.Empty, error) {
@@ -312,42 +349,45 @@ func (s *service) GetClientConfig(ctx context.Context, _ *empty.Empty) (*rpc.CLI
 func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, req.GetSession())
 	sessionID := managerutil.GetSessionID(ctx)
-	agent := s.state.GetAgent(sessionID)
-	if agent == nil {
-		client := s.state.GetClient(sessionID)
-		if client == nil {
-			return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
+	if agent := s.state.GetAgent(sessionID); agent != nil {
+		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+			return nil, err
 		}
-		var lastActivity time.Time
-		if la := req.LastActivity; la != nil {
-			lastActivity = la.AsTime()
-		} else {
-			lastActivity = time.Now()
+
+		agent.Mark(time.Now())
+		workloadKey := &mutator.WorkloadKey{
+			Name:      agent.Name,
+			Namespace: agent.Namespace,
+			Kind:      k8sapi.Kind(agent.Kind),
 		}
-		if client.Mark(lastActivity) {
-			clog.Tracef(ctx, "Last activity: %s", lastActivity)
+
+		err := s.UpdateLastAttachmentTime(ctx, workloadKey)
+		if err != nil {
+			clog.Errorf(ctx, "error updating last attachment time: %v", err)
 		}
-		client.ConsumptionMetrics().AddTimeSpent()
-		return &empty.Empty{}, nil
+		err = s.removeUnusedAgent(ctx, workloadKey)
+		if err != nil {
+			clog.Errorf(ctx, "error removing unused agent: %v", err)
+		}
+
+		return &empty.Empty{}, err
 	}
 
-	agent.Mark(time.Now())
-	workloadKey := &mutator.WorkloadKey{
-		Name:      agent.Name,
-		Namespace: agent.Namespace,
-		Kind:      k8sapi.Kind(agent.Kind),
+	client := s.state.GetClient(sessionID)
+	if client == nil {
+		return nil, status.Errorf(codes.NotFound, "Session %q not found", sessionID)
 	}
-
-	err := s.UpdateLastAttachmentTime(ctx, workloadKey)
-	if err != nil {
-		clog.Errorf(ctx, "error updating last attachment time: %v", err)
+	var lastActivity time.Time
+	if la := req.LastActivity; la != nil {
+		lastActivity = la.AsTime()
+	} else {
+		lastActivity = time.Now()
 	}
-	err = s.removeUnusedAgent(ctx, workloadKey)
-	if err != nil {
-		clog.Errorf(ctx, "error removing unused agent: %v", err)
+	if client.Mark(lastActivity) {
+		clog.Tracef(ctx, "Last activity: %s", lastActivity)
 	}
-
-	return &empty.Empty{}, err
+	client.ConsumptionMetrics().AddTimeSpent()
+	return &empty.Empty{}, nil
 }
 
 // Depart terminates a session.
@@ -355,6 +395,11 @@ func (s *service) Depart(ctx context.Context, session *rpc.SessionInfo) (*empty.
 	ctx = managerutil.WithSessionInfo(ctx, session)
 
 	sessionID := tunnel.SessionID(session.GetSessionId())
+	if agent := s.state.GetAgent(sessionID); agent != nil {
+		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+			return nil, err
+		}
+	}
 	// There's no reason for the caller to wait for this removal to complete.
 	go s.state.RemoveSession(context.WithoutCancel(ctx), sessionID)
 	return &empty.Empty{}, nil
@@ -856,6 +901,9 @@ func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo)
 		}
 
 		if agent := s.state.GetAgent(sessionID); agent != nil {
+			if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+				return nil, nil, err
+			}
 			filter = func(id string, info *state.Intercept) bool {
 				if info.Spec.Namespace != agent.Namespace || info.Spec.Agent != agent.Name {
 					// Don't return intercepts for different agents.
@@ -1159,13 +1207,14 @@ func (s *service) GetIntercept(ctx context.Context, request *rpc.GetInterceptReq
 
 // ReviewIntercept lets an agent approve or reject an intercept.
 func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewInterceptRequest) (*empty.Empty, error) {
-	ctx = managerutil.WithSessionInfo(ctx, rIReq.GetSession())
-	sessionID := tunnel.SessionID(rIReq.GetSession().GetSessionId())
 	ceptID := rIReq.Id
 
-	agent := s.state.GetAgent(sessionID)
-	if agent == nil {
-		return &empty.Empty{}, nil
+	ctx, agent, err := s.ensureAgentSession(ctx, rIReq.GetSession())
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return &empty.Empty{}, nil
+		}
+		return nil, err
 	}
 
 	if rIReq.Disposition == rpc.InterceptDispositionType_AGENT_ERROR {
@@ -1296,11 +1345,10 @@ func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandid
 // session (established via ArriveAsAgent/ReconnectAgent): a client has no pod UID
 // and thus no SNI name to mint for, and GetQuicAgentCert never validates a client
 // session's SessionInfo, whether or not the QUIC CA is enabled.
-func (s *service) GetQuicAgentCert(_ context.Context, session *rpc.SessionInfo) (*rpc.QuicAgentCert, error) {
-	sessionID := tunnel.SessionID(session.GetSessionId())
-	agent := s.state.GetAgent(sessionID)
-	if agent == nil {
-		return nil, errors.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
+func (s *service) GetQuicAgentCert(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicAgentCert, error) {
+	_, agent, err := s.ensureAgentSession(ctx, session)
+	if err != nil {
+		return nil, err
 	}
 	if s.quicCA == nil {
 		return &rpc.QuicAgentCert{Enabled: false}, nil
@@ -1761,6 +1809,22 @@ func (s *service) ensureClientSession(ctx context.Context, sessionInfo *rpc.Sess
 	session := s.state.GetClient(sessionID)
 	if session == nil {
 		return ctx, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+	}
+	return ctx, session, nil
+}
+
+// ensureAgentSession looks up the agent session identified by sessionInfo and, when
+// the session is bound to a verified pod identity, requires the caller's own
+// principal to match that identity before granting access.
+func (s *service) ensureAgentSession(ctx context.Context, sessionInfo *rpc.SessionInfo) (context.Context, *state.AgentSession, error) {
+	ctx = managerutil.WithSessionInfo(ctx, sessionInfo)
+	sessionID := tunnel.SessionID(sessionInfo.GetSessionId())
+	session := s.state.GetAgent(sessionID)
+	if session == nil {
+		return ctx, nil, errors.Errorf(codes.NotFound, "Agent session %q not found", sessionID)
+	}
+	if err := agentOwnershipError(ctx, sessionID, session); err != nil {
+		return ctx, nil, err
 	}
 	return ctx, session, nil
 }

@@ -134,6 +134,11 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 			Name:      TempVolumeName,
 			MountPath: TempMountPoint,
 		},
+		core.VolumeMount{
+			Name:      ManagerTokenVolumeName,
+			ReadOnly:  true,
+			MountPath: ManagerTokenMountPath,
+		},
 	)
 
 	anns := make(map[string]string)

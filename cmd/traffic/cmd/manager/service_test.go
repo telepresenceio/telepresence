@@ -12,7 +12,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
@@ -29,6 +31,7 @@ import (
 	fakeargorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned/fake"
 	"github.com/telepresenceio/clog/testutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
@@ -41,6 +44,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -361,6 +365,94 @@ func TestGetQuicAgentCert(t *testing.T) {
 
 		_, err = client.GetQuicAgentCert(ctx, clientSess)
 		req.Error(err)
+	})
+}
+
+// agentPrincipal returns the Principal a bound projected ServiceAccount token for
+// agent would produce, as auth.NewInterceptor would inject it into ctx.
+func agentPrincipal(agent *rpc.AgentInfo) *auth.Principal {
+	return &auth.Principal{
+		Username: "system:serviceaccount:" + agent.Namespace + ":traffic-agent",
+		PodName:  agent.PodName,
+		PodUID:   agent.PodUid,
+	}
+}
+
+// TestAgentSessionBinding covers the pod-identity binding established at agent
+// arrival and enforced by ensureAgentSession on later agent-session RPCs: matching
+// claims bind the session and lock out every other identity (including no identity
+// at all); mismatched claims leave the session unbound, so it keeps working
+// permissively, the same as an agent that presents no token at all.
+func TestAgentSessionBinding(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testAgents := testdata.GetTestAgents(t)
+
+	t.Run("matching claims bind the session", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		agent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+		principal := agentPrincipal(agent)
+		sess, err := mgr.ArriveAsAgent(auth.WithPrincipal(sctx, principal), agent)
+		req.NoError(err)
+
+		bound := mgr.State().GetAgent(tunnel.SessionID(sess.SessionId)).Principal()
+		req.NotNil(bound)
+		req.Equal(principal.PodUID, bound.PodUID)
+
+		// The bound pod itself keeps working.
+		_, err = mgr.Remain(auth.WithPrincipal(sctx, principal), &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		// A different pod UID is denied, even though it presents a valid token.
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{
+			Username: principal.Username,
+			PodName:  "some-other-pod",
+			PodUID:   "some-other-uid",
+		})
+		_, err = mgr.Remain(otherCtx, &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+
+		// No principal at all is denied too: a bound session requires claims.
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("mismatched claims leave the session unbound and permissive", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		agent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+		mismatched := &auth.Principal{
+			Username: "system:serviceaccount:" + agent.Namespace + ":traffic-agent",
+			PodName:  "not-" + agent.PodName,
+			PodUID:   "not-" + agent.PodUid,
+		}
+		sess, err := mgr.ArriveAsAgent(auth.WithPrincipal(sctx, mismatched), agent)
+		req.NoError(err)
+		req.Nil(mgr.State().GetAgent(tunnel.SessionID(sess.SessionId)).Principal())
+
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+	})
+
+	t.Run("old agent with no token anywhere works as before", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		agent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+		sess, err := mgr.ArriveAsAgent(sctx, agent)
+		req.NoError(err)
+		req.Nil(mgr.State().GetAgent(tunnel.SessionID(sess.SessionId)).Principal())
+
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		_, err = mgr.GetQuicAgentCert(sctx, sess)
+		req.NoError(err)
 	})
 }
 

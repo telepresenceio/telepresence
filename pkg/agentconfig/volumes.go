@@ -42,6 +42,19 @@ func AgentVolumes(agentName string, pod *core.Pod) (volumes []core.Volume, err e
 				EmptyDir: &core.EmptyDirVolumeSource{},
 			},
 		},
+		{
+			Name: ManagerTokenVolumeName,
+			VolumeSource: core.VolumeSource{
+				Projected: &core.ProjectedVolumeSource{
+					Sources: []core.VolumeProjection{{
+						ServiceAccountToken: &core.ServiceAccountTokenProjection{
+							Audience: ManagerTokenAudience,
+							Path:     ManagerTokenFile,
+						},
+					}},
+				},
+			},
+		},
 	}
 
 	if pod == nil {

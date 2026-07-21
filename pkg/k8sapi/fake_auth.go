@@ -1,6 +1,7 @@
 package k8sapi
 
 import (
+	authnv1 "k8s.io/api/authentication/v1"
 	authv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
@@ -29,5 +30,27 @@ func InstallFakeSelfSubjectAccessReviews(client kubernetes.Interface, allowed fu
 		}
 		review.Status = authv1.SubjectAccessReviewStatus{Allowed: allow}
 		return true, review, nil
+	})
+}
+
+// InstallFakeTokenReviews registers a reactor on a fake clientset so
+// AuthenticationV1().TokenReviews().Create works. Without it, client-go
+// fails with "no type found matching: io.k8s.api.authentication.v1.TokenReview".
+//
+// If review is nil, all token reviews are denied.
+func InstallFakeTokenReviews(client kubernetes.Interface, review func(token string, audiences []string) *authnv1.TokenReviewStatus) {
+	cs, ok := client.(*fake.Clientset)
+	if !ok {
+		return
+	}
+	if review == nil {
+		review = func(string, []string) *authnv1.TokenReviewStatus {
+			return &authnv1.TokenReviewStatus{Authenticated: false}
+		}
+	}
+	cs.PrependReactor("create", "tokenreviews", func(action testing.Action) (bool, runtime.Object, error) {
+		tr := action.(testing.CreateAction).GetObject().(*authnv1.TokenReview)
+		tr.Status = *review(tr.Spec.Token, tr.Spec.Audiences)
+		return true, tr, nil
 	})
 }
