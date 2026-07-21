@@ -30,7 +30,7 @@ func TestProbeRBAC_AllowAll(t *testing.T) {
 // the cluster-wide render creates (the "traffic-manager-ambassador"
 // ClusterRole/ClusterRoleBinding pair; the namespace-scoped render creates a
 // differently named pair, "traffic-manager-cluster-wide-ambassador", for the
-// same ingress/servicecidr watch). This proves the namespaced fallback
+// servicecidr watch). This proves the namespaced fallback
 // actually re-renders and re-checks rather than reusing the cluster-wide
 // verdict.
 func TestProbeRBAC_ClusterScopedDenied(t *testing.T) {

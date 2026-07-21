@@ -174,6 +174,16 @@ items:
           to the workload, aborting an install wait with someone else's
           error. The prefix match now only accepts Pods and ReplicaSets, the
           kinds a workload owns.
+      - type: change
+        title: Namespaced installs no longer read ingresses cluster-wide
+        body: >-
+          A namespace-scoped traffic-manager install now grants read access
+          to <code>ingresses</code> through the per-namespace Roles instead
+          of the <code>traffic-manager-cluster-wide-&lt;namespace&gt;</code>
+          ClusterRole, which now only covers the cluster-scoped
+          <code>servicecidrs</code> resource. The manager already watches
+          ingresses per managed namespace in this mode, so no functionality
+          changes.
   - version: 2.30.1
     date: 2026-07-17
     notes:

@@ -32,7 +32,6 @@ func classifyProvider(nodes []corev1.Node) string {
 		if provider, ok := providerSchemes[u.Scheme]; ok {
 			return provider
 		}
-		return "unknown"
 	}
 	return "unknown"
 }

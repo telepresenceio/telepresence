@@ -60,3 +60,13 @@ func TestProbeQuic_NodesDenied(t *testing.T) {
 	facts := p.probeQuic(context.Background(), nil, errors.New("denied"), "unknown")
 	assert.Equal(t, VerdictUnknown, facts.NodePort.Verdict)
 }
+
+func TestClassifyProvider_SkipsUnrecognizedSchemes(t *testing.T) {
+	nodes := []corev1.Node{
+		{Spec: corev1.NodeSpec{ProviderID: "virtual-node://edge/node-1"}},
+		{Spec: corev1.NodeSpec{ProviderID: "gce://proj/us-central1-a/node-2"}},
+	}
+	assert.Equal(t, "gke", classifyProvider(nodes))
+	assert.Equal(t, "unknown", classifyProvider(nodes[:1]))
+	assert.Equal(t, "unknown", classifyProvider(nil))
+}

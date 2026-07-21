@@ -63,6 +63,12 @@ The TTY progress renderer's stop signal only worked for the first start/stop cyc
 The event watch that explains why a workload fails to become ready matched any object whose name starts with the workload's name and a dash, so warnings for an unrelated sibling (for example a Service named <code>traffic-manager-something</code>) could be attributed to the workload, aborting an install wait with someone else's error. The prefix match now only accepts Pods and ReplicaSets, the kinds a workload owns.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
+<div style="margin-left: 15px">
+
+A namespace-scoped traffic-manager install now grants read access to <code>ingresses</code> through the per-namespace Roles instead of the <code>traffic-manager-cluster-wide-&lt;namespace&gt;</code> ClusterRole, which now only covers the cluster-scoped <code>servicecidrs</code> resource. The manager already watches ingresses per managed namespace in this mode, so no functionality changes.
+</div>
+
 ## Version 2.30.1 <span style="font-size: 16px;">(July 17)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Enabling node-agent mode makes it the client default](reference/node-agent)</div></div>
 <div style="margin-left: 15px">
