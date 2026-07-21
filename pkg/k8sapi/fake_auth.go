@@ -33,6 +33,30 @@ func InstallFakeSelfSubjectAccessReviews(client kubernetes.Interface, allowed fu
 	})
 }
 
+// InstallFakeSubjectAccessReviews registers a reactor on a fake clientset so
+// AuthorizationV1().SubjectAccessReviews().Create works. Without it, client-go
+// fails with "no type found matching: io.k8s.api.authorization.v1.SubjectAccessReview".
+//
+// If allowed is nil, all access reviews are denied.
+func InstallFakeSubjectAccessReviews(client kubernetes.Interface, allowed func(user string, ra *authv1.ResourceAttributes) bool) {
+	cs, ok := client.(*fake.Clientset)
+	if !ok {
+		return
+	}
+	if allowed == nil {
+		allowed = func(string, *authv1.ResourceAttributes) bool { return false }
+	}
+	cs.PrependReactor("create", "subjectaccessreviews", func(action testing.Action) (bool, runtime.Object, error) {
+		review := action.(testing.CreateAction).GetObject().(*authv1.SubjectAccessReview)
+		allow := false
+		if review.Spec.ResourceAttributes != nil {
+			allow = allowed(review.Spec.User, review.Spec.ResourceAttributes)
+		}
+		review.Status = authv1.SubjectAccessReviewStatus{Allowed: allow}
+		return true, review, nil
+	})
+}
+
 // InstallFakeTokenReviews registers a reactor on a fake clientset so
 // AuthenticationV1().TokenReviews().Create works. Without it, client-go
 // fails with "no type found matching: io.k8s.api.authentication.v1.TokenReview".

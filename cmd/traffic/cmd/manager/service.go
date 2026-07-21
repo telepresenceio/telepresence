@@ -71,6 +71,7 @@ type service struct {
 	state              *state.State
 	clusterInfo        cluster.Info
 	configWatcher      config.Watcher
+	authorizer         *auth.Authorizer
 	activeHttpRequests int32
 	activeGrpcRequests int32
 	serviceNameNs      string
@@ -108,6 +109,7 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 	ret := &service{
 		id:            uuid.New().String(),
 		configWatcher: configWatcher,
+		authorizer:    auth.NewAuthorizer(k8sapi.GetK8sInterface(ctx)),
 	}
 
 	// These are context-dependent, so build them once the pool is up
@@ -1167,6 +1169,10 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, status.Error(codes.InvalidArgument, val)
 	}
 
+	if err := s.authorizeIntercept(ctx, namespace, spec); err != nil {
+		clog.Warnf(ctx, "intercept %q in namespace %s: %v (not enforced)", spec.Name, namespace, err)
+	}
+
 	client, interceptInfo, err := s.state.AddIntercept(ctx, ciReq)
 	if err != nil {
 		return nil, err
@@ -1181,6 +1187,54 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	return interceptInfo, nil
+}
+
+// authorizeIntercept returns nil when the caller may intercept in namespace, a
+// PermissionDenied error when its RBAC disallows it, and an Unavailable error
+// when authorization could not be determined. An unauthenticated caller is
+// skipped: there is no identity to review.
+func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
+	p := auth.PrincipalFrom(ctx)
+	if p == nil {
+		clog.Debugf(ctx, "caller is unauthenticated; skipping intercept authorization")
+		return nil
+	}
+	podNames, err := workloadPodNames(ctx, spec.Agent, namespace)
+	if err != nil {
+		clog.Debugf(ctx, "unable to list pods for %s.%s; checking namespace-wide access only: %v", spec.Agent, namespace, err)
+	}
+	allowed, err := s.authorizer.CanPortForward(ctx, p, namespace, podNames)
+	if err != nil {
+		return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create pods/portforward in namespace %s: %v", p.Username, namespace, err)
+	}
+	if !allowed {
+		return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create pods/portforward in namespace %s", p.Username, namespace)
+	}
+	return nil
+}
+
+// workloadPodNames returns the names of the current pods of the workload
+// called name in namespace.
+func workloadPodNames(ctx context.Context, name, namespace string) ([]string, error) {
+	wl, err := k8sapi.GetWorkload(ctx, name, namespace, "")
+	if err != nil {
+		return nil, err
+	}
+	selector, err := wl.Selector()
+	if err != nil {
+		return nil, err
+	}
+	pods, err := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: selector.String(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, len(pods.Items))
+	for i := range pods.Items {
+		names[i] = pods.Items[i].Name
+	}
+	return names, nil
 }
 
 func (s *service) MakeInterceptID(ctx context.Context, sessionID string, name string) (string, error) {

@@ -19,6 +19,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -559,6 +560,68 @@ func TestClientSessionBinding(t *testing.T) {
 		req.Error(err)
 		req.Equal(codes.PermissionDenied, status.Code(err))
 	})
+}
+
+// TestCreateIntercept_AuthorizationIsAuditOnly covers that a caller whose RBAC
+// denies pods/portforward in the target namespace still has its intercept
+// created: SubjectAccessReview authorization is observed, not yet enforced.
+func TestCreateIntercept_AuthorizationIsAuditOnly(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	const ns = "default"
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test-agent"}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{ContainerPort: 8080}}}},
+				},
+			},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent-abc123", Namespace: ns, Labels: map[string]string{"app": "test-agent"}},
+		Spec:       corev1.PodSpec{NodeName: "node-1"},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{dep, pod}, func(e *managerutil.Env) {
+		e.AgentArrivalTimeout = 5 * time.Second
+	})
+
+	// Every SubjectAccessReview -- namespace-wide and pod-scoped alike -- is denied.
+	k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), nil)
+
+	alice := &auth.Principal{Username: "alice", UID: "alice-uid"}
+	aliceInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
+	sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, alice), aliceInfo)
+	req.NoError(err)
+
+	agentInfo := proto.Clone(testdata.GetTestAgents(t)["hello"]).(*rpc.AgentInfo)
+	agentInfo.Name = "test-agent"
+	agentInfo.Namespace = ns
+	agentInfo.NodeAgent = true
+	_, err = mgr.ArriveAsAgent(sctx, agentInfo)
+	req.NoError(err)
+
+	ii, err := mgr.CreateIntercept(auth.WithPrincipal(sctx, alice), &rpc.CreateInterceptRequest{
+		Session: sess,
+		InterceptSpec: &rpc.InterceptSpec{
+			Name:         "ic1",
+			Client:       aliceInfo.Name,
+			Agent:        "test-agent",
+			Namespace:    ns,
+			WorkloadKind: string(k8sapi.DeploymentKind),
+			NodeAgent:    true,
+			Mechanism:    "tcp",
+		},
+	})
+	req.NoError(err)
+	req.NotNil(ii)
 }
 
 // TestGetQuicTunnelEndpoint_Gating covers the three cases "Zero-configuration endpoint
