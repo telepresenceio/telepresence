@@ -170,7 +170,7 @@ agents listen only on their pod IPs and are reachable solely through the forward
 
 The forwarder is the architecture's single exposed component and its foundation: a
 stateless QUIC *packet* router that owns the one UDP entry point into the cluster.
-Every QUIC connection -- client<->manager and client<->agent alike -- passes through
+Every QUIC connection -- `client<->manager` and `client<->agent` alike -- passes through
 it, encrypted end to end. The forwarder never terminates TLS, holds no keys, and
 sees no plaintext; the manager and the agents run QUIC listeners on their pod IPs,
 reachable only through it.
@@ -249,7 +249,7 @@ keys: reaching a backend still requires completing its mTLS handshake.
 **Failure modes.** The forwarder dying kills every QUIC connection at once --
 immediately and unambiguously (connection error, never a hang) -- and every consumer
 falls back to its port-forward path, which does not involve the forwarder. QUIC is
-retried on the next connect. The manager dying no longer affects the client<->agent
+retried on the next connect. The manager dying no longer affects the `client<->agent`
 *data path*: the forwarder routes packets and the agents terminate their own TLS, so
 cluster-originated traffic to an intercepted workload keeps tunneling to the laptop
 handler through a manager outage. This is the decisive advantage over relaying agent
