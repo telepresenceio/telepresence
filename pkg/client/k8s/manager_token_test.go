@@ -55,34 +55,58 @@ func TestNewManagerTokenSource_AuthProviderUnsupported(t *testing.T) {
 	require.Nil(t, newManagerTokenSource(kc))
 }
 
-// writeExecScript writes a fake exec credential plugin to t.TempDir() that
-// echoes an ExecCredential JSON for token/expiry and records how many times
-// it has run in a counter file.
-func writeExecScript(t *testing.T, counterPath, token, expiry string) string {
-	t.Helper()
-	scriptPath := filepath.Join(t.TempDir(), "kubeauth-stub.sh")
-	script := fmt.Sprintf(`#!/bin/sh
-n=0
-if [ -f %q ]; then n=$(cat %q); fi
-n=$((n+1))
-echo "$n" > %q
-cat <<JSON
-{"kind":"ExecCredential","apiVersion":"client.authentication.k8s.io/v1","status":{"token":%q,"expirationTimestamp":%q}}
-JSON
-`, counterPath, counterPath, counterPath, token, expiry)
-	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
-	return scriptPath
+const execHelperSentinel = "TELEPRESENCE_TEST_EXEC_HELPER"
+
+// TestManagerTokenExecHelper is not a real test. When the sentinel env var is
+// set it is re-executed as a fake exec credential plugin: it prints an
+// ExecCredential JSON built from env vars, optionally bumping a counter file,
+// and exits before the test runner emits anything else, so the captured stdout
+// is exactly the JSON. Using the test binary itself keeps the fixture portable
+// (a shell script is not executable on Windows).
+func TestManagerTokenExecHelper(t *testing.T) {
+	if os.Getenv(execHelperSentinel) != "1" {
+		return
+	}
+	if cp := os.Getenv("EXEC_HELPER_COUNTER"); cp != "" {
+		n := 0
+		if b, err := os.ReadFile(cp); err == nil {
+			_, _ = fmt.Sscanf(string(b), "%d", &n)
+		}
+		_ = os.WriteFile(cp, []byte(fmt.Sprintf("%d\n", n+1)), 0o600)
+	}
+	if os.Getenv("EXEC_HELPER_NO_TOKEN") == "1" {
+		fmt.Println(`{"kind":"ExecCredential","apiVersion":"client.authentication.k8s.io/v1","status":{"clientCertificateData":"cert-data"}}`)
+	} else {
+		fmt.Printf(`{"kind":"ExecCredential","apiVersion":"client.authentication.k8s.io/v1","status":{"token":%q,"expirationTimestamp":%q}}`+"\n",
+			os.Getenv("EXEC_HELPER_TOKEN"), os.Getenv("EXEC_HELPER_EXPIRY"))
+	}
+	os.Exit(0)
+}
+
+// execHelperConfig returns an ExecConfig that re-runs the test binary as the
+// fake plugin in TestManagerTokenExecHelper, controlled by the given env vars.
+func execHelperConfig(env map[string]string) *clientcmdapi.ExecConfig {
+	ev := []clientcmdapi.ExecEnvVar{{Name: execHelperSentinel, Value: "1"}}
+	for k, v := range env {
+		ev = append(ev, clientcmdapi.ExecEnvVar{Name: k, Value: v})
+	}
+	return &clientcmdapi.ExecConfig{
+		Command: os.Args[0],
+		Args:    []string{"-test.run=^TestManagerTokenExecHelper$"},
+		Env:     ev,
+	}
 }
 
 func TestExecTokenSource_CachesUntilExpiry(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 
-	dir := t.TempDir()
-	counterPath := filepath.Join(dir, "count")
+	counterPath := filepath.Join(t.TempDir(), "count")
 	expiry := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
-	script := writeExecScript(t, counterPath, "future-token", expiry)
-
-	src := newExecTokenSource(&clientcmdapi.ExecConfig{Command: script})
+	src := newExecTokenSource(execHelperConfig(map[string]string{
+		"EXEC_HELPER_TOKEN":   "future-token",
+		"EXEC_HELPER_EXPIRY":  expiry,
+		"EXEC_HELPER_COUNTER": counterPath,
+	}))
 
 	tok, err := src.Token(ctx)
 	require.NoError(t, err)
@@ -100,12 +124,13 @@ func TestExecTokenSource_CachesUntilExpiry(t *testing.T) {
 func TestExecTokenSource_ExpiredTokenTriggersReExecution(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 
-	dir := t.TempDir()
-	counterPath := filepath.Join(dir, "count")
+	counterPath := filepath.Join(t.TempDir(), "count")
 	expiry := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)
-	script := writeExecScript(t, counterPath, "expired-token", expiry)
-
-	src := newExecTokenSource(&clientcmdapi.ExecConfig{Command: script})
+	src := newExecTokenSource(execHelperConfig(map[string]string{
+		"EXEC_HELPER_TOKEN":   "expired-token",
+		"EXEC_HELPER_EXPIRY":  expiry,
+		"EXEC_HELPER_COUNTER": counterPath,
+	}))
 
 	_, err := src.Token(ctx)
 	require.NoError(t, err)
@@ -120,15 +145,7 @@ func TestExecTokenSource_ExpiredTokenTriggersReExecution(t *testing.T) {
 func TestExecTokenSource_NoBearerToken(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 
-	scriptPath := filepath.Join(t.TempDir(), "kubeauth-stub.sh")
-	script := `#!/bin/sh
-cat <<'JSON'
-{"kind":"ExecCredential","apiVersion":"client.authentication.k8s.io/v1","status":{"clientCertificateData":"cert-data"}}
-JSON
-`
-	require.NoError(t, os.WriteFile(scriptPath, []byte(script), 0o755))
-
-	src := newExecTokenSource(&clientcmdapi.ExecConfig{Command: scriptPath})
+	src := newExecTokenSource(execHelperConfig(map[string]string{"EXEC_HELPER_NO_TOKEN": "1"}))
 	tok, err := src.Token(ctx)
 	require.Empty(t, tok)
 	require.ErrorIs(t, err, errNoBearerToken)
