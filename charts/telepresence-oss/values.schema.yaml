@@ -725,6 +725,24 @@ properties:
     description: Specify a scheduler for Traffic Manager Pod and hooks Pod
     type: string
 
+  security:
+    description: Security-related configuration of the traffic-manager
+    type: object
+    additionalProperties: false
+    properties:
+      authentication:
+        description: How the traffic-manager authenticates and authorizes its callers
+        type: object
+        additionalProperties: false
+        properties:
+          mode:
+            description: >-
+              disabled performs no token validation, permissive (the default) validates
+              tokens and logs authorization decisions without rejecting any call, and
+              enforcing rejects unauthenticated or unauthorized calls.
+            type: string
+            enum: ["disabled", "permissive", "enforcing"]
+
   securityContext:
     description: The Kubernetes SecurityContext for the traffic-manager container
     $ref: "#/$defs/securityContext"
