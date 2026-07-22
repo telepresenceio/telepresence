@@ -19,6 +19,9 @@ for a full list of available configuration settings.
 ### Values
 To add configuration, create a yaml file with the configuration values and then use it executing `telepresence helm install [--upgrade] --values <values yaml>`
 
+See [Authentication and authorization](authentication.md) for the `security.authentication.mode`
+value that controls how strictly the traffic-manager verifies caller identity.
+
 ## Client Configuration
 
 It is possible for the Traffic Manager to automatically push config to all

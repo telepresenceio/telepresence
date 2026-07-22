@@ -267,6 +267,8 @@
       link: reference/restapi
     - title: RBAC
       link: reference/rbac
+    - title: Authentication and authorization
+      link: reference/authentication
     - title: Telepresence and VPNs
       link: reference/vpn
     - title: Connection Routing

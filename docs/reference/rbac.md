@@ -19,6 +19,10 @@ RBAC objects without the traffic-manager itself. See
 [Installing RBAC only](../install/manager.md#installing-rbac-only). This page documents the
 permissions those objects grant, for administrators who audit them or manage RBAC themselves.
 
+The traffic-manager also uses the identity behind these permissions to authenticate and
+authorize callers; see [Authentication and authorization](authentication.md) for how a user's
+`pods/portforward` access doubles as the RBAC check for intercept creation.
+
 ## Requirements
 
 - Cluster admin privileges to apply RBAC

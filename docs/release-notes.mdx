@@ -9,6 +9,18 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.31.0
 <Note>
+	<Title type="security" docs="reference/authentication">Traffic-manager authentication and authorization</Title>
+	<Body>
+The traffic-manager now authenticates every caller against the cluster's Kubernetes identities: traffic-agents present a projected, audience-bound ServiceAccount token, and clients forward the bearer token that their kubeconfig credentials resolve to (a static token, a token file, or an exec credential plugin). A session is bound to the identity that created it, so a caller can no longer act on another client's or agent's session regardless of mode, and creating an intercept now requires the caller's Kubernetes identity to hold RBAC access (<code>pods/portforward</code>) in the target namespace. This closes <a href="https://github.com/telepresenceio/telepresence/security/advisories/GHSA-j8j4-rw65-56r6">GHSA-j8j4-rw65-56r6</a> and <a href="https://github.com/telepresenceio/telepresence/security/advisories/GHSA-6j3h-rp73-6rvf">GHSA-6j3h-rp73-6rvf</a>.
+  </Body>
+</Note>
+<Note>
+	<Title type="feature" docs="reference/authentication">An authentication mode with opt-in enforcement</Title>
+	<Body>
+The new Helm value <code>security.authentication.mode</code> controls how strictly the traffic-manager enforces the caller authentication above: <code>disabled</code> performs no token validation at all, <code>permissive</code> (the default) validates tokens and logs authorization decisions without ever rejecting a call, and <code>enforcing</code> rejects calls that present no valid token and intercepts the caller is not authorized for. Enforcement is an explicit opt-in so that upgrading the traffic-manager never breaks an existing installation; enable it once your client and agent fleet is running this release or later.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Opt-in QUIC transport for the tunnel</Title>
 	<Body>
 The traffic-manager can now expose a QUIC endpoint for the tunnel (Helm chart value <code>quicTunnel.enabled</code>). When the endpoint is reachable, the client automatically upgrades new tunneled connections to it, removing the head-of-line blocking that the shared port-forwarded gRPC connection imposes across flows. The port-forwarded gRPC transport remains the default and is used as the fallback whenever the QUIC endpoint is disabled or unreachable, and <code>telepresence status</code> now reports which transport is active.

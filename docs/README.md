@@ -134,6 +134,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Volume mounts](reference/volume.md)
   - [RESTful API service](reference/restapi.md)
   - [RBAC](reference/rbac.md)
+  - [Authentication and authorization](reference/authentication.md)
   - [Telepresence and VPNs](reference/vpn.md)
   - [Connection Routing](reference/routing.md)
   - [QUIC Tunnel Transport](reference/quic-transport.md)
