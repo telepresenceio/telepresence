@@ -73,6 +73,12 @@ func (s *managerAuthSuite) TearDownSuite() {
 	s.TelepresenceConnect(ctx)
 }
 
+func (s *managerAuthSuite) SetupTest() {
+	// The suite harness may be connected to the shared manager; every test
+	// here drives its own connection, so start from a quiesced daemon.
+	itest.TelepresenceQuitOk(s.Context())
+}
+
 func (s *managerAuthSuite) TearDownTest() {
 	itest.TelepresenceQuitOk(s.Context())
 }
@@ -81,7 +87,9 @@ func (s *managerAuthSuite) TearDownTest() {
 // admin context against the enforcing manager and expects the client to
 // refuse the connection before ever reaching the manager's RPCs.
 func (s *managerAuthSuite) Test_EnforcingRejectsTokenlessClient() {
-	ctx := s.Context()
+	// The suite context carries an impersonation user; this test needs the
+	// plain cert-only admin context.
+	ctx := itest.WithUser(s.Context(), "default")
 	_, stderr, err := itest.Telepresence(ctx, "connect", "--namespace", s.appNS, "--manager-namespace", s.mgrNS)
 	s.Error(err)
 	s.Contains(stderr, "requires an authenticated client")
@@ -94,7 +102,8 @@ func (s *managerAuthSuite) Test_EnforcingRejectsTokenlessClient() {
 // the connect Role in the manager namespace and the intercept Role in the
 // app namespace. Both connect and intercept are expected to succeed.
 func (s *managerAuthSuite) Test_EnforcingAcceptsAuthenticatedClientAndIntercepts() {
-	ctx := s.Context()
+	// The token, not the suite's impersonation user, must be the identity.
+	ctx := itest.WithUser(s.Context(), "default")
 	rq := s.Require()
 
 	tok, err := itest.KubectlOut(ctx, s.mgrNS, "create", "token", itest.TestUser)
@@ -117,7 +126,8 @@ func (s *managerAuthSuite) Test_EnforcingAcceptsAuthenticatedClientAndIntercepts
 // The manager's SubjectAccessReview-based intercept authorization is expected
 // to deny the intercept.
 func (s *managerAuthSuite) Test_EnforcingDeniesUnauthorizedIntercept() {
-	ctx := s.Context()
+	// The token, not the suite's impersonation user, must be the identity.
+	ctx := itest.WithUser(s.Context(), "default")
 	rq := s.Require()
 
 	tok, err := itest.KubectlOut(ctx, s.mgrNS, "create", "token", "manager-auth-connect-only")
@@ -167,7 +177,7 @@ func (s *managerAuthSuite) Test_SessionBoundToAuthenticatedIdentity() {
 	})
 	rq.NoError(err)
 	defer func() {
-		_, _ = mc.Depart(ctx, si)
+		_, _ = mc.Depart(authCtx, si)
 	}()
 
 	_, err = mc.Remain(ctx, &manager.RemainRequest{Session: si})
