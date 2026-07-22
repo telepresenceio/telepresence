@@ -7,8 +7,8 @@ require (
 	github.com/docker/go-plugins-helpers v0.0.0-20240701071450-45e2431495c8
 	github.com/puzpuzpuz/xsync/v4 v4.5.0
 	github.com/telepresenceio/clog v0.0.0-20260114221933-287514cf9831
-	github.com/telepresenceio/telepresence/rpc/v2 v2.29.3
-	google.golang.org/grpc v1.82.0
+	github.com/telepresenceio/telepresence/rpc/v2 v2.31.0
+	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11
 )
 
@@ -19,7 +19,7 @@ require (
 	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260720211330-0afa2a65878a // indirect
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
