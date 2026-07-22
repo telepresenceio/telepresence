@@ -1188,7 +1188,7 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
-    - mountPath: /var/run/secrets/telepresence.io
+    - mountPath: /var/run/telepresence.io
       name: traffic-manager-token
       readOnly: true
 - op: replace
@@ -1293,7 +1293,7 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
-    - mountPath: /var/run/secrets/telepresence.io
+    - mountPath: /var/run/telepresence.io
       name: traffic-manager-token
       readOnly: true
 - op: replace
@@ -1453,7 +1453,7 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
-    - mountPath: /var/run/secrets/telepresence.io
+    - mountPath: /var/run/telepresence.io
       name: traffic-manager-token
       readOnly: true
 - op: replace
@@ -1579,7 +1579,7 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
-    - mountPath: /var/run/secrets/telepresence.io
+    - mountPath: /var/run/telepresence.io
       name: traffic-manager-token
       readOnly: true
 - op: replace
@@ -1705,7 +1705,7 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
-    - mountPath: /var/run/secrets/telepresence.io
+    - mountPath: /var/run/telepresence.io
       name: traffic-manager-token
       readOnly: true
 - op: replace
@@ -2019,7 +2019,7 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
-    - mountPath: /var/run/secrets/telepresence.io
+    - mountPath: /var/run/telepresence.io
       name: traffic-manager-token
       readOnly: true
 - op: add
