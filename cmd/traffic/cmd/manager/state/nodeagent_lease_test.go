@@ -69,7 +69,7 @@ func TestNodeAgentWanted(t *testing.T) {
 	t.Run("lease with live session only", func(t *testing.T) {
 		t.Parallel()
 		s := newLeaseTestState(context.Background())
-		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, time.Now())
+		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, nil, time.Now())
 		s.addLease(sid, name, namespace)
 		assert.True(t, s.nodeAgentWanted(name, namespace))
 	})
@@ -85,7 +85,7 @@ func TestNodeAgentWanted(t *testing.T) {
 	t.Run("lease for a different workload does not leak", func(t *testing.T) {
 		t.Parallel()
 		s := newLeaseTestState(context.Background())
-		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, time.Now())
+		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, nil, time.Now())
 		s.addLease(sid, "other-agent", "other-namespace")
 		assert.False(t, s.nodeAgentWanted(name, namespace))
 	})
@@ -138,7 +138,7 @@ func TestReleaseAgent(t *testing.T) {
 	t.Run("reaps when last claim", func(t *testing.T) {
 		t.Parallel()
 		s, ctx, ci := setup(t)
-		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, time.Now())
+		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, nil, time.Now())
 		s.addLease(sid, name, workloadNs)
 
 		require.NoError(t, s.ReleaseAgent(ctx, sid, name, workloadNs))
@@ -148,7 +148,7 @@ func TestReleaseAgent(t *testing.T) {
 	t.Run("does not reap while a node-agent intercept lives", func(t *testing.T) {
 		t.Parallel()
 		s, ctx, ci := setup(t)
-		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, time.Now())
+		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, nil, time.Now())
 		s.addLease(sid, name, workloadNs)
 		storeLiveNodeAgentIntercept(s, "c1:ic1", name, workloadNs)
 
@@ -192,7 +192,7 @@ func TestEnsureAgent_SidecarRejectedByNodeAgentClaim(t *testing.T) {
 	t.Run("node-agent lease with live session", func(t *testing.T) {
 		t.Parallel()
 		s := newLeaseTestState(context.Background())
-		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, time.Now())
+		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, nil, time.Now())
 		s.addLease(sid, name, namespace)
 
 		_, err := s.EnsureAgent(context.Background(), tunnel.SessionID("other-session"), name, namespace, false)
@@ -234,7 +234,7 @@ func TestReconcileNodeAgentJobs_Leases(t *testing.T) {
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: ns})
 
 	s := newLeaseTestState(ctx)
-	sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, time.Now())
+	sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, nil, time.Now())
 	s.addLease(sid, "ingest-agent", "ns1")
 	s.addLease(tunnel.SessionID("dead-session"), "gone-ingest-agent", "ns1")
 
@@ -285,7 +285,7 @@ func TestNodeAgentReapFinalizer_LeaseSurvivesInterceptRemoval(t *testing.T) {
 	s := newLeaseTestState(ctx)
 
 	// An ingest lease on the workload, held by a live session.
-	sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, time.Now())
+	sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, nil, time.Now())
 	s.addLease(sid, name, workloadNs)
 
 	// A node-agent intercept on the same workload, carrying the same reap

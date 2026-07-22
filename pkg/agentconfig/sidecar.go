@@ -38,6 +38,23 @@ const (
 	UpstreamTLSVolumeName   = "upstream-tls"
 	UpstreamTLSVolumePath   = "/upstream-tls"
 
+	// ManagerTokenAudience is the audience of the ServiceAccount token that the
+	// traffic-agent presents to the traffic-manager. Tokens bound to this audience
+	// are not valid against the Kubernetes API server.
+	ManagerTokenAudience = "traffic-manager"
+
+	// ManagerTokenVolumeName is the projected volume holding the traffic-agent's
+	// manager-audience ServiceAccount token.
+	ManagerTokenVolumeName = "traffic-manager-token"
+
+	// ManagerTokenMountPath is where ManagerTokenVolumeName is mounted in the
+	// traffic-agent container. Deliberately outside /var/run/secrets, whose
+	// subdirectories the agent exposes to the intercepting client.
+	ManagerTokenMountPath = "/var/run/telepresence.io"
+
+	// ManagerTokenFile is the name of the token file within ManagerTokenMountPath.
+	ManagerTokenFile = "manager-token"
+
 	// EnvAgentConfig is the environment variable where the traffic-agent finds its own config.
 	EnvAgentConfig = "AGENT_CONFIG"
 

@@ -18,10 +18,26 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 )
 
+// combinedNotePrefix starts the note of the aggregated duplicates the API
+// server emits for recurring events.
+const combinedNotePrefix = "(combined from similar events):"
+
+// regardingMatches reports whether e concerns the named object: either e's
+// Regarding.Name is an exact match for name, or e's Regarding.Kind is Pod or
+// ReplicaSet and its Regarding.Name has the nd ("name-") prefix.
+func regardingMatches(e *events.Event, name, nd string) bool {
+	n := e.Regarding.Name
+	if n == name {
+		return true
+	}
+	return (e.Regarding.Kind == "Pod" || e.Regarding.Kind == "ReplicaSet") && strings.HasPrefix(n, nd)
+}
+
 // WatchWarnings streams Warning events (type != "Normal") for the object named
-// name, or any pod it owns (matched by the "name-" prefix), in namespace. Only
-// events created at or after the call are delivered. The returned channel stops
-// receiving when ctx is done or the underlying watch ends.
+// name, or any Pod or ReplicaSet it owns (matched by the "name-" prefix), in
+// namespace. Only events created at or after the call are delivered. The
+// returned channel stops receiving when ctx is done or the underlying watch
+// ends.
 //
 // The kubernetes.Interface is passed explicitly so the watcher works both in the
 // traffic-manager (in-cluster) and in the client (against the user's kubeconfig).
@@ -53,12 +69,10 @@ func WatchWarnings(ctx context.Context, ki kubernetes.Interface, namespace, name
 				// Using negated Before when comparing the timestamps here is relevant. They will often be equal and still relevant
 				if e, ok := eo.Object.(*events.Event); ok &&
 					!e.CreationTimestamp.Time.Before(start) &&
-					!strings.HasPrefix(e.Note, "(combined from similar events):") {
-					n := e.Regarding.Name
-					if strings.HasPrefix(n, nd) || n == name {
-						clog.Infof(ctx, "%s %s %s", e.Type, e.Reason, e.Note)
-						ec <- e
-					}
+					!strings.HasPrefix(e.Note, combinedNotePrefix) &&
+					regardingMatches(e, name, nd) {
+					clog.Infof(ctx, "%s %s %s", e.Type, e.Reason, e.Note)
+					ec <- e
 				}
 			}
 		}

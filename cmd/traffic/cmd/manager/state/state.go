@@ -23,6 +23,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
@@ -431,18 +432,18 @@ func (s *State) SessionDone(id tunnel.SessionID) (<-chan struct{}, error) {
 
 // Sessions: Clients ///////////////////////////////////////////////////////////////////////////////
 
-func (s *State) AddClient(client *rpc.ClientInfo, now time.Time) tunnel.SessionID {
+func (s *State) AddClient(client *rpc.ClientInfo, principal *auth.Principal, now time.Time) tunnel.SessionID {
 	// Use non-sequential things (i.e., UUIDs, not just a counter) as the session ID, because
 	// the session ID also exists in external systems (the client, SystemA), so it's confusing
 	// (to both humans and computers) if the manager restarts and those existing session IDs
 	// suddenly refer to different sessions.
 	sessionID := tunnel.SessionID(uuid.New().String())
-	s.addClient(sessionID, client, now)
+	s.addClient(sessionID, client, principal, now)
 	return sessionID
 }
 
-func (s *State) RestoreClient(sessionID tunnel.SessionID, client *rpc.ClientInfo, now time.Time) {
-	s.addClient(sessionID, client, now)
+func (s *State) RestoreClient(sessionID tunnel.SessionID, client *rpc.ClientInfo, principal *auth.Principal, now time.Time) {
+	s.addClient(sessionID, client, principal, now)
 }
 
 func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
@@ -498,8 +499,11 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 }
 
 // addClient is like AddClient but takes a sessionID, for testing purposes.
-func (s *State) addClient(id tunnel.SessionID, client *rpc.ClientInfo, now time.Time) {
+func (s *State) addClient(id tunnel.SessionID, client *rpc.ClientInfo, principal *auth.Principal, now time.Time) {
 	cs := newClientSessionState(s.backgroundCtx, id, client, now)
+	if principal != nil {
+		cs.SetPrincipal(principal)
+	}
 	if oldClient, hasConflict := s.clients.LoadOrStore(id, cs); hasConflict {
 		panic(fmt.Errorf("duplicate id %q, existing %+v, new %+v", id, oldClient, client))
 	}
@@ -508,6 +512,26 @@ func (s *State) addClient(id tunnel.SessionID, client *rpc.ClientInfo, now time.
 func (s *State) GetClient(id tunnel.SessionID) *ClientSession {
 	ret, _ := s.clients.Load(id)
 	return ret
+}
+
+// ClientOwnershipError returns an error when client is bound to a verified
+// principal and the caller's principal (carried by ctx) doesn't match it (see
+// auth.Principal.SameAs). Returns nil when the session is unowned (an older
+// client) or the caller is the bound identity. A caller whose token couldn't
+// be verified for infrastructure reasons gets Unavailable instead of
+// PermissionDenied, since ownership could not be established either way.
+func ClientOwnershipError(ctx context.Context, sessionID tunnel.SessionID, client *ClientSession) error {
+	bound := client.Principal()
+	if bound == nil {
+		return nil
+	}
+	if p := auth.PrincipalFrom(ctx); p != nil && bound.SameAs(p) {
+		return nil
+	}
+	if auth.AuthUnavailable(ctx) {
+		return grpcErrors.Errorf(codes.Unavailable, "cannot verify session ownership: authentication unavailable")
+	}
+	return grpcErrors.Errorf(codes.PermissionDenied, "client session %q is bound to another identity", sessionID)
 }
 
 func (s *State) EachClient(f func(tunnel.SessionID, *ClientSession) bool) {
@@ -566,15 +590,18 @@ func (s *State) IsInterceptedBy(agentName, namespace string, client tunnel.Sessi
 
 // Sessions: Agents ////////////////////////////////////////////////////////////////////////////////
 
-func (s *State) AddAgent(ctx context.Context, agent *rpc.AgentInfo, now time.Time) (tunnel.SessionID, error) {
+func (s *State) AddAgent(ctx context.Context, agent *rpc.AgentInfo, principal *auth.Principal, now time.Time) (tunnel.SessionID, error) {
 	if mutator.GetMap(ctx).IsInactive(types.UID(agent.PodUid)) {
 		return "", status.Error(codes.Aborted, "inactivated pod")
 	}
-	return s.RestoreAgent(ctx, tunnel.SessionID(AgentSessionIDPrefix+agent.PodUid), agent, now)
+	return s.RestoreAgent(ctx, tunnel.SessionID(AgentSessionIDPrefix+agent.PodUid), agent, principal, now)
 }
 
-func (s *State) RestoreAgent(ctx context.Context, id tunnel.SessionID, agent *rpc.AgentInfo, now time.Time) (tunnel.SessionID, error) {
+func (s *State) RestoreAgent(ctx context.Context, id tunnel.SessionID, agent *rpc.AgentInfo, principal *auth.Principal, now time.Time) (tunnel.SessionID, error) {
 	as := newAgentSessionState(s.backgroundCtx, id, agent, now)
+	if principal != nil {
+		as.SetPrincipal(principal)
+	}
 	if _, exists := s.agents.LoadOrStore(id, as); exists {
 		return "", nil
 	}
@@ -738,6 +765,9 @@ func (s *State) WatchIntercepts(
 func (s *State) Tunnel(ctx context.Context, stream tunnel.Stream) error {
 	id := stream.SessionID()
 	if cs, ok := s.clients.Load(id); ok {
+		if err := ClientOwnershipError(ctx, id, cs); err != nil {
+			return err
+		}
 		return s.clientTunnel(ctx, cs, stream)
 	}
 	return grpcErrors.Errorf(codes.NotFound, "Session %q not found", id)

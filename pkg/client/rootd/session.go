@@ -1811,16 +1811,24 @@ func (s *session) IncomingDialError() {
 }
 
 func (s *service) ActivityWatcher(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.Activity]) error {
+	// Pin the session for the lifetime of the stream: a Disconnect may nil
+	// out s.session while this stream is still being served.
+	s.sessionLock.RLock()
+	session := s.session
+	s.sessionLock.RUnlock()
+	if session == nil {
+		return nil
+	}
 	for {
 		select {
 		case <-stream.Context().Done():
 			return nil
-		case <-s.session.Done():
+		case <-session.Done():
 			// Emit one terminal Activity carrying the session totals so
 			// the user daemon can report them before the session goes
 			// away. Best-effort: a send failure here just means the
 			// client already gave up listening.
-			_ = stream.Send(s.session.sessionEndActivity())
+			_ = stream.Send(session.sessionEndActivity())
 			return nil
 		case at := <-s.activity:
 			err := stream.Send(&rpc.Activity{Activity: timestamppb.New(at)})

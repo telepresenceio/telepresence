@@ -517,6 +517,16 @@ message TelepresenceAPIInfo {
 message VersionInfo2 {
   string name = 1;
   string version = 2;
+
+  // Whether the responding server authenticates bearer tokens presented in
+  // gRPC metadata. Only the traffic-manager populates this.
+  bool auth_supported = 3;
+
+  // Whether the responding server rejects calls that carry no valid bearer
+  // token. Only the traffic-manager populates this. Clients whose kubeconfig
+  // credentials cannot produce a token should surface a clear error instead
+  // of connecting.
+  bool auth_required = 4;
 }
 
 // TunnelMessage is a message sent over a Tunnel. First byte indicates type of message

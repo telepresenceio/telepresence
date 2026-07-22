@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json/v2"
+	"errors"
 	"net"
 	"net/netip"
 	"testing"
@@ -12,10 +13,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +33,7 @@ import (
 	fakeargorollouts "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned/fake"
 	"github.com/telepresenceio/clog/testutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
@@ -41,6 +46,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
@@ -69,6 +75,10 @@ func TestConnect(t *testing.T) {
 	ver, err := client.Version(ctx, &empty.Empty{})
 	require.NoError(err)
 	require.Equal(version.Version, ver.Version)
+	// The test harness's Env leaves AuthenticationMode at its zero value, which
+	// behaves as ModePermissive: authentication is supported but not required.
+	require.True(ver.AuthSupported)
+	require.False(ver.AuthRequired)
 
 	// Alice arrives and departs
 
@@ -364,6 +374,379 @@ func TestGetQuicAgentCert(t *testing.T) {
 	})
 }
 
+// TestVersion_AuthFlags covers that VersionInfo2's AuthSupported and AuthRequired
+// reflect the manager's configured authentication mode.
+func TestVersion_AuthFlags(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+
+	tests := []struct {
+		name          string
+		mode          auth.Mode
+		authSupported bool
+		authRequired  bool
+	}{
+		{"disabled", auth.ModeDisabled, false, false},
+		{"permissive", auth.ModePermissive, true, false},
+		{"enforcing", auth.ModeEnforcing, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := require.New(t)
+			_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
+				e.AuthenticationMode = tt.mode
+			})
+			ver, err := mgr.Version(sctx, &empty.Empty{})
+			req.NoError(err)
+			req.Equal(tt.authSupported, ver.AuthSupported)
+			req.Equal(tt.authRequired, ver.AuthRequired)
+		})
+	}
+}
+
+// agentPrincipal returns the Principal a bound projected ServiceAccount token for
+// agent would produce, as auth.NewInterceptor would inject it into ctx.
+func agentPrincipal(agent *rpc.AgentInfo) *auth.Principal {
+	return &auth.Principal{
+		Username: "system:serviceaccount:" + agent.Namespace + ":traffic-agent",
+		PodName:  agent.PodName,
+		PodUID:   agent.PodUid,
+	}
+}
+
+// TestAgentSessionBinding covers the pod-identity binding established at agent
+// arrival and enforced by ensureAgentSession on later agent-session RPCs: matching
+// claims bind the session and lock out every other identity (including no identity
+// at all); mismatched claims leave the session unbound, so it keeps working
+// permissively, the same as an agent that presents no token at all.
+func TestAgentSessionBinding(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testAgents := testdata.GetTestAgents(t)
+
+	t.Run("matching claims bind the session", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		agent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+		principal := agentPrincipal(agent)
+		sess, err := mgr.ArriveAsAgent(auth.WithPrincipal(sctx, principal), agent)
+		req.NoError(err)
+
+		bound := mgr.State().GetAgent(tunnel.SessionID(sess.SessionId)).Principal()
+		req.NotNil(bound)
+		req.Equal(principal.PodUID, bound.PodUID)
+
+		// The bound pod itself keeps working.
+		_, err = mgr.Remain(auth.WithPrincipal(sctx, principal), &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		// A different pod UID is denied, even though it presents a valid token.
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{
+			Username: principal.Username,
+			PodName:  "some-other-pod",
+			PodUID:   "some-other-uid",
+		})
+		_, err = mgr.Remain(otherCtx, &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+
+		// No principal at all is denied too: a bound session requires claims.
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("mismatched claims leave the session unbound and permissive", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		agent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+		mismatched := &auth.Principal{
+			Username: "system:serviceaccount:" + agent.Namespace + ":traffic-agent",
+			PodName:  "not-" + agent.PodName,
+			PodUID:   "not-" + agent.PodUid,
+		}
+		sess, err := mgr.ArriveAsAgent(auth.WithPrincipal(sctx, mismatched), agent)
+		req.NoError(err)
+		req.Nil(mgr.State().GetAgent(tunnel.SessionID(sess.SessionId)).Principal())
+
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+	})
+
+	t.Run("old agent with no token anywhere works as before", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		agent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+		sess, err := mgr.ArriveAsAgent(sctx, agent)
+		req.NoError(err)
+		req.Nil(mgr.State().GetAgent(tunnel.SessionID(sess.SessionId)).Principal())
+
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		_, err = mgr.GetQuicAgentCert(sctx, sess)
+		req.NoError(err)
+	})
+}
+
+// TestAgentSessionBinding_Enforcing covers that ModeEnforcing rejects an agent
+// arrival whose bound-token pod claims don't match the presented AgentInfo,
+// instead of the permissive warn-and-leave-unbound behavior TestAgentSessionBinding
+// exercises for the other modes.
+func TestAgentSessionBinding_Enforcing(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testAgents := testdata.GetTestAgents(t)
+	req := require.New(t)
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
+		e.AuthenticationMode = auth.ModeEnforcing
+	})
+
+	agent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+	mismatched := &auth.Principal{
+		Username: "system:serviceaccount:" + agent.Namespace + ":traffic-agent",
+		PodName:  "not-" + agent.PodName,
+		PodUID:   "not-" + agent.PodUid,
+	}
+	_, err := mgr.ArriveAsAgent(auth.WithPrincipal(sctx, mismatched), agent)
+	req.Error(err)
+	req.Equal(codes.PermissionDenied, status.Code(err))
+}
+
+// TestClientSessionBinding covers the caller-identity binding established at
+// client arrival and enforced on later client-session RPCs: a session bound to
+// one principal can't be driven by another, even across a token rotation that
+// keeps the same username and UID; a caller whose token couldn't be verified
+// for infrastructure reasons gets Unavailable rather than PermissionDenied,
+// since ownership could not be established either way; and a session that
+// arrived without a principal (an older client) keeps working permissively.
+func TestClientSessionBinding(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testClients := testdata.GetTestClients(t)
+
+	t.Run("owned session locks out every other identity", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		bound := mgr.State().GetClient(tunnel.SessionID(sess.SessionId)).Principal()
+		req.NotNil(bound)
+		req.Equal(principal.Username, bound.Username)
+
+		// The bound caller itself keeps working.
+		_, err = mgr.Remain(auth.WithPrincipal(sctx, principal), &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		// A token rotation that keeps the same username and UID still passes:
+		// SameAs compares values, not the Principal instance.
+		rotated := &auth.Principal{Username: principal.Username, UID: principal.UID}
+		_, err = mgr.Remain(auth.WithPrincipal(sctx, rotated), &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		// A different identity is denied.
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.Remain(otherCtx, &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+
+		// No principal at all is denied too: a bound session requires claims.
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+
+		// A caller whose token couldn't be verified for infrastructure reasons
+		// gets Unavailable instead: ownership could not be established either way.
+		_, err = mgr.Remain(auth.WithAuthUnavailable(sctx), &rpc.RemainRequest{Session: sess})
+		req.Error(err)
+		req.Equal(codes.Unavailable, status.Code(err))
+	})
+
+	t.Run("unowned session stays permissive", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		bob := proto.Clone(testClients["bob"]).(*rpc.ClientInfo)
+		sess, err := mgr.ArriveAsClient(sctx, bob)
+		req.NoError(err)
+		req.Nil(mgr.State().GetClient(tunnel.SessionID(sess.SessionId)).Principal())
+
+		_, err = mgr.Remain(sctx, &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.Remain(otherCtx, &rpc.RemainRequest{Session: sess})
+		req.NoError(err)
+	})
+
+	t.Run("ReconnectClient by a non-owner is denied", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.ReconnectClient(otherCtx, &rpc.ReconnectClientRequest{Session: sess, Client: alice})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("GetQuicTunnelEndpoint by a non-owner is denied", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
+			e.TunnelQuicPort = 7778
+			e.TunnelQuicExternalHost = "quic.example.com"
+		})
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.GetQuicTunnelEndpoint(otherCtx, sess)
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+	})
+}
+
+// TestCreateIntercept_AuthorizationIsAuditOnly covers that a caller whose RBAC
+// denies pods/portforward in the target namespace still has its intercept
+// created: SubjectAccessReview authorization is observed, not yet enforced.
+func TestCreateIntercept_AuthorizationIsAuditOnly(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	const ns = "default"
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test-agent"}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{ContainerPort: 8080}}}},
+				},
+			},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent-abc123", Namespace: ns, Labels: map[string]string{"app": "test-agent"}},
+		Spec:       corev1.PodSpec{NodeName: "node-1"},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{dep, pod}, func(e *managerutil.Env) {
+		e.AgentArrivalTimeout = 5 * time.Second
+	})
+
+	// Every SubjectAccessReview -- namespace-wide and pod-scoped alike -- is denied.
+	k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), nil)
+
+	alice := &auth.Principal{Username: "alice", UID: "alice-uid"}
+	aliceInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
+	sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, alice), aliceInfo)
+	req.NoError(err)
+
+	agentInfo := proto.Clone(testdata.GetTestAgents(t)["hello"]).(*rpc.AgentInfo)
+	agentInfo.Name = "test-agent"
+	agentInfo.Namespace = ns
+	agentInfo.NodeAgent = true
+	_, err = mgr.ArriveAsAgent(sctx, agentInfo)
+	req.NoError(err)
+
+	ii, err := mgr.CreateIntercept(auth.WithPrincipal(sctx, alice), &rpc.CreateInterceptRequest{
+		Session: sess,
+		InterceptSpec: &rpc.InterceptSpec{
+			Name:         "ic1",
+			Client:       aliceInfo.Name,
+			Agent:        "test-agent",
+			Namespace:    ns,
+			WorkloadKind: string(k8sapi.DeploymentKind),
+			NodeAgent:    true,
+			Mechanism:    "tcp",
+		},
+	})
+	req.NoError(err)
+	req.NotNil(ii)
+}
+
+// TestCreateIntercept_Enforcing covers that ModeEnforcing rejects an intercept
+// whose caller RBAC denies pods/portforward in the target namespace, instead of
+// the audit-only behavior TestCreateIntercept_AuthorizationIsAuditOnly exercises
+// for the other modes.
+func TestCreateIntercept_Enforcing(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	const ns = "default"
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test-agent"}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{ContainerPort: 8080}}}},
+				},
+			},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent-abc123", Namespace: ns, Labels: map[string]string{"app": "test-agent"}},
+		Spec:       corev1.PodSpec{NodeName: "node-1"},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{dep, pod}, func(e *managerutil.Env) {
+		e.AgentArrivalTimeout = 5 * time.Second
+		e.AuthenticationMode = auth.ModeEnforcing
+	})
+
+	// Every SubjectAccessReview -- namespace-wide and pod-scoped alike -- is denied.
+	k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), nil)
+
+	alice := &auth.Principal{Username: "alice", UID: "alice-uid"}
+	aliceInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
+	sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, alice), aliceInfo)
+	req.NoError(err)
+
+	agentInfo := proto.Clone(testdata.GetTestAgents(t)["hello"]).(*rpc.AgentInfo)
+	agentInfo.Name = "test-agent"
+	agentInfo.Namespace = ns
+	agentInfo.NodeAgent = true
+	_, err = mgr.ArriveAsAgent(sctx, agentInfo)
+	req.NoError(err)
+
+	_, err = mgr.CreateIntercept(auth.WithPrincipal(sctx, alice), &rpc.CreateInterceptRequest{
+		Session: sess,
+		InterceptSpec: &rpc.InterceptSpec{
+			Name:         "ic1",
+			Client:       aliceInfo.Name,
+			Agent:        "test-agent",
+			Namespace:    ns,
+			WorkloadKind: string(k8sapi.DeploymentKind),
+			NodeAgent:    true,
+			Mechanism:    "tcp",
+		},
+	})
+	req.Error(err)
+	req.Equal(codes.PermissionDenied, status.Code(err))
+}
+
 // TestGetQuicTunnelEndpoint_Gating covers the three cases "Zero-configuration endpoint
 // discovery" (docs/reference/quic-transport-architecture.md) distinguishes: an explicit
 // externalHost override always wins and bypasses discovery outright; discovery
@@ -579,7 +962,10 @@ matchExpressions:
 	})
 	t.Cleanup(func() {
 		s.GracefulStop()
-		if err := g.Wait(); err != nil {
+		// Serve races harmlessly with GracefulStop when a test never dials the
+		// listener (e.g. it calls the Service's methods directly): the server
+		// goroutine may not have reached Serve yet when GracefulStop runs.
+		if err := g.Wait(); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			t.Error(err)
 		}
 	})

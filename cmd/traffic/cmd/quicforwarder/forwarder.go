@@ -88,7 +88,9 @@ func (f *Forwarder) Addr() net.Addr {
 func (f *Forwarder) Serve(ctx context.Context) error {
 	clog.Infof(ctx, "quic-forwarder: front socket buffers: rcv=%d snd=%d (asked for %d each), gro=%t, gso=%t",
 		f.frontRcvBuf, f.frontSndBuf, desiredSocketBuffer, f.frontGRO, gsoSupported())
+	frontClosed := make(chan struct{})
 	go func() {
+		defer close(frontClosed)
 		<-ctx.Done()
 		_ = f.front.Close()
 	}()
@@ -119,6 +121,10 @@ func (f *Forwarder) Serve(ctx context.Context) error {
 	f.runIngress(ctx)
 
 	<-sweepDone
+	// Wait for the front socket to be fully closed so that a caller which
+	// observes Serve returning can rebind the same port without racing the
+	// close.
+	<-frontClosed
 	f.flows.closeAll()
 	return nil
 }

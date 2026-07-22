@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -51,7 +53,16 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	tokenPath := filepath.Join(agentconfig.ManagerTokenMountPath, agentconfig.ManagerTokenFile)
+	if _, err := os.Stat(tokenPath); err == nil {
+		clog.Debug(ctx, "attaching manager token to traffic-manager connection")
+		opts = append(opts, grpc.WithPerRPCCredentials(newManagerTokenCredentials(tokenPath)))
+	} else {
+		clog.Debug(ctx, "no manager token file present, connecting without a manager token")
+	}
+
+	conn, err := grpc.NewClient(address, opts...)
 	if err != nil {
 		return err
 	}

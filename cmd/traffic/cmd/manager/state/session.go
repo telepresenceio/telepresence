@@ -6,6 +6,7 @@ import (
 	"time"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
@@ -16,6 +17,7 @@ type sessionState struct {
 	doneCh    <-chan struct{}
 	cancel    context.CancelFunc
 	timestamp int64
+	principal atomic.Pointer[auth.Principal]
 }
 
 func (s *sessionState) sessionID() tunnel.SessionID {
@@ -49,6 +51,17 @@ func newSessionState(ctx context.Context, id tunnel.SessionID, now time.Time) se
 		cancel:    cancel,
 		timestamp: now.UnixNano(),
 	}
+}
+
+// SetPrincipal binds p as this session's verified identity.
+func (s *sessionState) SetPrincipal(p *auth.Principal) {
+	s.principal.Store(p)
+}
+
+// Principal returns this session's verified identity, or nil if the session
+// was established without one (e.g. an older client or agent).
+func (s *sessionState) Principal() *auth.Principal {
+	return s.principal.Load()
 }
 
 type ClientSession struct {

@@ -280,7 +280,7 @@ func TestNodeAgentPodWatchLoop_ExitsWhenNotWanted_Lease(t *testing.T) {
 	ctx = managerutil.WithEnv(ctx, &managerutil.Env{ManagerNamespace: "ambassador"})
 
 	s := newNodeAgentWatchTestState(ctx)
-	sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, time.Now())
+	sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, nil, time.Now())
 	s.addLease(sid, name, namespace)
 
 	s.startNodeAgentPodWatch(name, namespace)

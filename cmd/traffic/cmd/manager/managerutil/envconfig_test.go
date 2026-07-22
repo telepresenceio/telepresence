@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -68,6 +69,7 @@ func TestEnvconfig(t *testing.T) {
 		UsageReportingEnabled:        true,
 		MutatorWebhookPort:           8443,
 		TunnelQuicAgentPort:          7787,
+		AuthenticationMode:           auth.ModePermissive,
 	}
 
 	testcases := map[string]struct {
@@ -181,6 +183,22 @@ func TestEnvconfig(t *testing.T) {
 			},
 			Output: func(e *managerutil.Env) {
 				e.PodHostIp = netip.AddrFrom4([4]byte{192, 168, 56, 2})
+			},
+		},
+		"authentication-mode-enforcing": {
+			Input: map[string]string{
+				"AUTHENTICATION_MODE": "enforcing",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AuthenticationMode = auth.ModeEnforcing
+			},
+		},
+		"authentication-mode-disabled": {
+			Input: map[string]string{
+				"AUTHENTICATION_MODE": "disabled",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AuthenticationMode = auth.ModeDisabled
 			},
 		},
 	}

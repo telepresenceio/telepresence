@@ -2541,9 +2541,17 @@ func (x *TelepresenceAPIInfo) GetPort() int32 {
 // VersionInfo2 is different than telepresence.common.VersionInfo in
 // that it is limited to just name and version.
 type VersionInfo2 struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Name    string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// Whether the responding server authenticates bearer tokens presented in
+	// gRPC metadata. Only the traffic-manager populates this.
+	AuthSupported bool `protobuf:"varint,3,opt,name=auth_supported,json=authSupported,proto3" json:"auth_supported,omitempty"`
+	// Whether the responding server rejects calls that carry no valid bearer
+	// token. Only the traffic-manager populates this. Clients whose kubeconfig
+	// credentials cannot produce a token should surface a clear error instead
+	// of connecting.
+	AuthRequired  bool `protobuf:"varint,4,opt,name=auth_required,json=authRequired,proto3" json:"auth_required,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2590,6 +2598,20 @@ func (x *VersionInfo2) GetVersion() string {
 		return x.Version
 	}
 	return ""
+}
+
+func (x *VersionInfo2) GetAuthSupported() bool {
+	if x != nil {
+		return x.AuthSupported
+	}
+	return false
+}
+
+func (x *VersionInfo2) GetAuthRequired() bool {
+	if x != nil {
+		return x.AuthRequired
+	}
+	return false
 }
 
 // TunnelMessage is a message sent over a Tunnel. First byte indicates type of message
@@ -5215,10 +5237,12 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\")\n" +
 	"\x13TelepresenceAPIInfo\x12\x12\n" +
-	"\x04port\x18\x01 \x01(\x05R\x04port\"<\n" +
+	"\x04port\x18\x01 \x01(\x05R\x04port\"\x88\x01\n" +
 	"\fVersionInfo2\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\")\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12%\n" +
+	"\x0eauth_supported\x18\x03 \x01(\bR\rauthSupported\x12#\n" +
+	"\rauth_required\x18\x04 \x01(\bR\fauthRequired\")\n" +
 	"\rTunnelMessage\x12\x18\n" +
 	"\apayload\x18\x01 \x01(\fR\apayload\"\xbd\x02\n" +
 	"\x12QuicTunnelEndpoint\x12\x18\n" +

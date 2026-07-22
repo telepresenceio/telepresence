@@ -1188,6 +1188,9 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
+    - mountPath: /var/run/telepresence.io
+      name: traffic-manager-token
+      readOnly: true
 - op: replace
   path: /spec/volumes
   value:
@@ -1201,6 +1204,12 @@ matchExpressions:
     name: export-volume
   - emptyDir: {}
     name: tel-agent-tmp
+  - name: traffic-manager-token
+    projected:
+      sources:
+      - serviceAccountToken:
+          audience: traffic-manager
+          path: manager-token
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
@@ -1284,6 +1293,9 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
+    - mountPath: /var/run/telepresence.io
+      name: traffic-manager-token
+      readOnly: true
 - op: replace
   path: /spec/volumes
   value:
@@ -1297,6 +1309,12 @@ matchExpressions:
     name: export-volume
   - emptyDir: {}
     name: tel-agent-tmp
+  - name: traffic-manager-token
+    projected:
+      sources:
+      - serviceAccountToken:
+          audience: traffic-manager
+          path: manager-token
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
@@ -1435,6 +1453,9 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
+    - mountPath: /var/run/telepresence.io
+      name: traffic-manager-token
+      readOnly: true
 - op: replace
   path: /spec/volumes
   value:
@@ -1448,6 +1469,12 @@ matchExpressions:
     name: export-volume
   - emptyDir: {}
     name: tel-agent-tmp
+  - name: traffic-manager-token
+    projected:
+      sources:
+      - serviceAccountToken:
+          audience: traffic-manager
+          path: manager-token
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http
@@ -1552,6 +1579,9 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
+    - mountPath: /var/run/telepresence.io
+      name: traffic-manager-token
+      readOnly: true
 - op: replace
   path: /spec/volumes
   value:
@@ -1565,6 +1595,12 @@ matchExpressions:
     name: export-volume
   - emptyDir: {}
     name: tel-agent-tmp
+  - name: traffic-manager-token
+    projected:
+      sources:
+      - serviceAccountToken:
+          audience: traffic-manager
+          path: manager-token
 - op: replace
   path: /metadata/annotations
   value:
@@ -1669,6 +1705,9 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
+    - mountPath: /var/run/telepresence.io
+      name: traffic-manager-token
+      readOnly: true
 - op: replace
   path: /spec/volumes
   value:
@@ -1682,6 +1721,12 @@ matchExpressions:
     name: export-volume
   - emptyDir: {}
     name: tel-agent-tmp
+  - name: traffic-manager-token
+    projected:
+      sources:
+      - serviceAccountToken:
+          audience: traffic-manager
+          path: manager-token
 - op: replace
   path: /metadata/annotations
   value:
@@ -1824,6 +1869,11 @@ matchExpressions:
 									Name:      agentconfig.TempVolumeName,
 									MountPath: agentconfig.TempMountPoint,
 								},
+								{
+									Name:      agentconfig.ManagerTokenVolumeName,
+									MountPath: agentconfig.ManagerTokenMountPath,
+									ReadOnly:  true,
+								},
 							},
 							ReadinessProbe: &core.Probe{
 								TimeoutSeconds: 6,
@@ -1847,6 +1897,19 @@ matchExpressions:
 							Name: agentconfig.TempVolumeName,
 							VolumeSource: core.VolumeSource{
 								EmptyDir: &core.EmptyDirVolumeSource{},
+							},
+						},
+						{
+							Name: agentconfig.ManagerTokenVolumeName,
+							VolumeSource: core.VolumeSource{
+								Projected: &core.ProjectedVolumeSource{
+									Sources: []core.VolumeProjection{{
+										ServiceAccountToken: &core.ServiceAccountTokenProjection{
+											Audience: agentconfig.ManagerTokenAudience,
+											Path:     agentconfig.ManagerTokenFile,
+										},
+									}},
+								},
 							},
 						},
 					},
@@ -1956,6 +2019,9 @@ matchExpressions:
       name: export-volume
     - mountPath: /tmp
       name: tel-agent-tmp
+    - mountPath: /var/run/telepresence.io
+      name: traffic-manager-token
+      readOnly: true
 - op: add
   path: /spec/volumes/-
   value:
@@ -1975,6 +2041,15 @@ matchExpressions:
   value:
     emptyDir: {}
     name: tel-agent-tmp
+- op: add
+  path: /spec/volumes/-
+  value:
+    name: traffic-manager-token
+    projected:
+      sources:
+      - serviceAccountToken:
+          audience: traffic-manager
+          path: manager-token
 - op: replace
   path: /spec/containers/0/ports/0/name
   value: tm-http

@@ -66,9 +66,22 @@ func jsonError(err error) error {
 	return err
 }
 
+// Interceptors is a unary/stream interceptor pair installed by NewWithAuth.
+type Interceptors struct {
+	Unary  grpc.UnaryServerInterceptor
+	Stream grpc.StreamServerInterceptor
+}
+
 // New creates a gRPC server which has no service registered and has not started to accept requests yet. Values
 // in the provided context will be included in the context passed to both unary and stream calls.
 func New(valCtx context.Context, options ...grpc.ServerOption) *grpc.Server {
+	return NewWithAuth(valCtx, nil, options...)
+}
+
+// NewWithAuth is like New, but when auth is non-nil, auth.Unary and auth.Stream are installed as the
+// innermost interceptor in their respective chains, running after the context and error/logging
+// interceptors have already prepared the request.
+func NewWithAuth(valCtx context.Context, auth *Interceptors, options ...grpc.ServerOption) *grpc.Server {
 	requestCount := uint64(0)
 	unaryContextInterceptor := func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		return handler(&mergedCtx{Context: ctx, valCtx: callCtx(valCtx, info.FullMethod, &requestCount)}, req)
@@ -102,30 +115,42 @@ func New(valCtx context.Context, options ...grpc.ServerOption) *grpc.Server {
 			logging.WithLogOnEvents(logging.StartCall, logging.FinishCall),
 			// Add any other option (check functions starting with logging.With).
 		}
+		unaryInterceptors := []grpc.UnaryServerInterceptor{
+			unaryContextInterceptor,
+			logging.UnaryServerInterceptor(interceptorLogger(), opts...),
+			unaryErrorInterceptor,
+		}
+		streamInterceptors := []grpc.StreamServerInterceptor{
+			streamContextInterceptor,
+			logging.StreamServerInterceptor(interceptorLogger(), opts...),
+			streamErrorInterceptor,
+		}
+		if auth != nil {
+			unaryInterceptors = append(unaryInterceptors, auth.Unary)
+			streamInterceptors = append(streamInterceptors, auth.Stream)
+		}
 		options = append(
 			options,
-			grpc.ChainUnaryInterceptor(
-				unaryContextInterceptor,
-				logging.UnaryServerInterceptor(interceptorLogger(), opts...),
-				unaryErrorInterceptor,
-			),
-			grpc.ChainStreamInterceptor(
-				streamContextInterceptor,
-				logging.StreamServerInterceptor(interceptorLogger(), opts...),
-				streamErrorInterceptor,
-			),
+			grpc.ChainUnaryInterceptor(unaryInterceptors...),
+			grpc.ChainStreamInterceptor(streamInterceptors...),
 		)
 	} else {
+		unaryInterceptors := []grpc.UnaryServerInterceptor{
+			unaryContextInterceptor,
+			unaryErrorInterceptor,
+		}
+		streamInterceptors := []grpc.StreamServerInterceptor{
+			streamContextInterceptor,
+			streamErrorInterceptor,
+		}
+		if auth != nil {
+			unaryInterceptors = append(unaryInterceptors, auth.Unary)
+			streamInterceptors = append(streamInterceptors, auth.Stream)
+		}
 		options = append(
 			options,
-			grpc.ChainUnaryInterceptor(
-				unaryContextInterceptor,
-				unaryErrorInterceptor,
-			),
-			grpc.ChainStreamInterceptor(
-				streamContextInterceptor,
-				streamErrorInterceptor,
-			),
+			grpc.ChainUnaryInterceptor(unaryInterceptors...),
+			grpc.ChainStreamInterceptor(streamInterceptors...),
 		)
 	}
 	return grpc.NewServer(options...)
