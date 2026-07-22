@@ -45,8 +45,10 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 		return nil, "", semver.Version{}, err
 	}
 
+	src := newManagerTokenSource(kc.Kubeconfig)
+	hasTokenSource := src != nil
 	var extra []grpc.DialOption
-	if src := newManagerTokenSource(kc.Kubeconfig); src != nil {
+	if hasTokenSource {
 		clog.Debugf(kc, "manager calls will carry the kubeconfig's bearer credentials")
 		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(src)))
 	} else {
@@ -69,12 +71,33 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 	if err != nil {
 		return conn, "", ver, client.CheckTimeout(dialCtx, fmt.Errorf("dial manager: %w", err))
 	}
+	if err = managerAuthError(vi, hasTokenSource); err != nil {
+		return conn, "", ver, err
+	}
+	if vi.GetAuthSupported() && !vi.GetAuthRequired() && !hasTokenSource {
+		clog.Debugf(kc, "traffic-manager %s supports authentication, but the current kubeconfig yields no bearer token", vi.GetName())
+	}
 	verStr := strings.TrimPrefix(vi.Version, "v")
 	ver, err = semver.Parse(verStr)
 	if err != nil {
 		err = fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
 	}
 	return conn, vi.Name, ver, err
+}
+
+// managerAuthError returns a user-facing error when vi reports that the
+// manager requires an authenticated client but hasTokenSource is false,
+// meaning the kubeconfig's credentials cannot produce a bearer token. It
+// returns nil when no error applies.
+func managerAuthError(vi *manager.VersionInfo2, hasTokenSource bool) error {
+	if !vi.GetAuthRequired() || hasTokenSource {
+		return nil
+	}
+	return errcat.User.Newf(
+		"traffic-manager %s requires an authenticated client, but the current kubeconfig context's credentials "+
+			"cannot produce a bearer token (client-certificate credentials); use a context with token or "+
+			"exec-plugin credentials, or set the Helm value security.authentication.mode to permissive",
+		vi.GetName())
 }
 
 type versionAPI interface {

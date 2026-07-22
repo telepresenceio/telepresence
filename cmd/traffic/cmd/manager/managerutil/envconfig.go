@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
@@ -144,6 +145,10 @@ type Env struct {
 
 	InterceptAllowGlobal          bool `default:"true"`
 	InterceptInactiveBlockTimeout time.Duration
+
+	// AuthenticationMode controls how strictly the traffic-manager enforces
+	// caller authentication (disabled, permissive, or enforcing).
+	AuthenticationMode auth.Mode `default:"permissive"`
 
 	// Anonymous usage reporting. The manager produces reports whose only
 	// identifier is the UUID stored in the traffic-manager-install-id

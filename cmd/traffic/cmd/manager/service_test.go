@@ -75,6 +75,10 @@ func TestConnect(t *testing.T) {
 	ver, err := client.Version(ctx, &empty.Empty{})
 	require.NoError(err)
 	require.Equal(version.Version, ver.Version)
+	// The test harness's Env leaves AuthenticationMode at its zero value, which
+	// behaves as ModePermissive: authentication is supported but not required.
+	require.True(ver.AuthSupported)
+	require.False(ver.AuthRequired)
 
 	// Alice arrives and departs
 
@@ -370,6 +374,36 @@ func TestGetQuicAgentCert(t *testing.T) {
 	})
 }
 
+// TestVersion_AuthFlags covers that VersionInfo2's AuthSupported and AuthRequired
+// reflect the manager's configured authentication mode.
+func TestVersion_AuthFlags(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+
+	tests := []struct {
+		name          string
+		mode          auth.Mode
+		authSupported bool
+		authRequired  bool
+	}{
+		{"disabled", auth.ModeDisabled, false, false},
+		{"permissive", auth.ModePermissive, true, false},
+		{"enforcing", auth.ModeEnforcing, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := require.New(t)
+			_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
+				e.AuthenticationMode = tt.mode
+			})
+			ver, err := mgr.Version(sctx, &empty.Empty{})
+			req.NoError(err)
+			req.Equal(tt.authSupported, ver.AuthSupported)
+			req.Equal(tt.authRequired, ver.AuthRequired)
+		})
+	}
+}
+
 // agentPrincipal returns the Principal a bound projected ServiceAccount token for
 // agent would produce, as auth.NewInterceptor would inject it into ctx.
 func agentPrincipal(agent *rpc.AgentInfo) *auth.Principal {
@@ -456,6 +490,31 @@ func TestAgentSessionBinding(t *testing.T) {
 		_, err = mgr.GetQuicAgentCert(sctx, sess)
 		req.NoError(err)
 	})
+}
+
+// TestAgentSessionBinding_Enforcing covers that ModeEnforcing rejects an agent
+// arrival whose bound-token pod claims don't match the presented AgentInfo,
+// instead of the permissive warn-and-leave-unbound behavior TestAgentSessionBinding
+// exercises for the other modes.
+func TestAgentSessionBinding_Enforcing(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testAgents := testdata.GetTestAgents(t)
+	req := require.New(t)
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
+		e.AuthenticationMode = auth.ModeEnforcing
+	})
+
+	agent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+	mismatched := &auth.Principal{
+		Username: "system:serviceaccount:" + agent.Namespace + ":traffic-agent",
+		PodName:  "not-" + agent.PodName,
+		PodUID:   "not-" + agent.PodUid,
+	}
+	_, err := mgr.ArriveAsAgent(auth.WithPrincipal(sctx, mismatched), agent)
+	req.Error(err)
+	req.Equal(codes.PermissionDenied, status.Code(err))
 }
 
 // TestClientSessionBinding covers the caller-identity binding established at
@@ -622,6 +681,70 @@ func TestCreateIntercept_AuthorizationIsAuditOnly(t *testing.T) {
 	})
 	req.NoError(err)
 	req.NotNil(ii)
+}
+
+// TestCreateIntercept_Enforcing covers that ModeEnforcing rejects an intercept
+// whose caller RBAC denies pods/portforward in the target namespace, instead of
+// the audit-only behavior TestCreateIntercept_AuthorizationIsAuditOnly exercises
+// for the other modes.
+func TestCreateIntercept_Enforcing(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	const ns = "default"
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test-agent"}},
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{ContainerPort: 8080}}}},
+				},
+			},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent-abc123", Namespace: ns, Labels: map[string]string{"app": "test-agent"}},
+		Spec:       corev1.PodSpec{NodeName: "node-1"},
+		Status:     corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{dep, pod}, func(e *managerutil.Env) {
+		e.AgentArrivalTimeout = 5 * time.Second
+		e.AuthenticationMode = auth.ModeEnforcing
+	})
+
+	// Every SubjectAccessReview -- namespace-wide and pod-scoped alike -- is denied.
+	k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), nil)
+
+	alice := &auth.Principal{Username: "alice", UID: "alice-uid"}
+	aliceInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
+	sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, alice), aliceInfo)
+	req.NoError(err)
+
+	agentInfo := proto.Clone(testdata.GetTestAgents(t)["hello"]).(*rpc.AgentInfo)
+	agentInfo.Name = "test-agent"
+	agentInfo.Namespace = ns
+	agentInfo.NodeAgent = true
+	_, err = mgr.ArriveAsAgent(sctx, agentInfo)
+	req.NoError(err)
+
+	_, err = mgr.CreateIntercept(auth.WithPrincipal(sctx, alice), &rpc.CreateInterceptRequest{
+		Session: sess,
+		InterceptSpec: &rpc.InterceptSpec{
+			Name:         "ic1",
+			Client:       aliceInfo.Name,
+			Agent:        "test-agent",
+			Namespace:    ns,
+			WorkloadKind: string(k8sapi.DeploymentKind),
+			NodeAgent:    true,
+			Mechanism:    "tcp",
+		},
+	})
+	req.Error(err)
+	req.Equal(codes.PermissionDenied, status.Code(err))
 }
 
 // TestGetQuicTunnelEndpoint_Gating covers the three cases "Zero-configuration endpoint

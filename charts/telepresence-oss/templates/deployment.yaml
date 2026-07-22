@@ -90,6 +90,14 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
+          {{- with .security }}
+          {{- with .authentication }}
+          {{- if .mode }}
+          - name: AUTHENTICATION_MODE
+            value: {{ .mode }}
+          {{- end }}
+          {{- end }}
+          {{- end }}
           {{- if .workloads }}
           {{- with .workloads }}
           - name: ENABLED_WORKLOAD_KINDS

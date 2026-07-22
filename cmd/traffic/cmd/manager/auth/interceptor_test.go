@@ -10,7 +10,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	authnv1 "k8s.io/api/authentication/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
@@ -28,7 +30,7 @@ func loggingContext(buf *bytes.Buffer) context.Context {
 }
 
 func newTestInterceptor(ci *fake.Clientset) *auth.Interceptor {
-	return auth.NewInterceptor(auth.NewAuthenticator(ci))
+	return auth.NewInterceptor(auth.NewAuthenticator(ci), auth.ModePermissive)
 }
 
 func TestInterceptor_Unary(t *testing.T) {
@@ -167,5 +169,89 @@ func TestInterceptor_LogsNeverContainToken(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotContains(t, buf.String(), secretUnavailable)
 		assert.Contains(t, buf.String(), "unavailable")
+	})
+}
+
+func TestInterceptor_ModeDisabled(t *testing.T) {
+	ci := fake.NewClientset()
+	k8sapi.InstallFakeTokenReviews(ci, func(token string, audiences []string) *authnv1.TokenReviewStatus {
+		return authenticatedStatus("u", "1")
+	})
+
+	i := auth.NewInterceptor(auth.NewAuthenticator(ci), auth.ModeDisabled)
+	unary := i.Unary()
+	info := &grpc.UnaryServerInfo{FullMethod: "/telepresence.manager.Manager/Connect"}
+	handler := func(ctx context.Context, _ any) (any, error) {
+		return auth.PrincipalFrom(ctx), nil
+	}
+
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer good"))
+	resp, err := unary(ctx, nil, info, handler)
+	require.NoError(t, err)
+	assert.Nil(t, resp)
+	// Disabled mode never reads metadata or reviews the token: no TokenReview call is made.
+	assert.Empty(t, ci.Actions())
+}
+
+func TestInterceptor_ModeEnforcing(t *testing.T) {
+	ci := fake.NewClientset()
+	k8sapi.InstallFakeTokenReviews(ci, func(token string, audiences []string) *authnv1.TokenReviewStatus {
+		if token == "good" {
+			return authenticatedStatus("u", "1")
+		}
+		return &authnv1.TokenReviewStatus{Authenticated: false}
+	})
+
+	i := auth.NewInterceptor(auth.NewAuthenticator(ci), auth.ModeEnforcing)
+	unary := i.Unary()
+	info := &grpc.UnaryServerInfo{FullMethod: "/telepresence.manager.Manager/Connect"}
+	handler := func(ctx context.Context, _ any) (any, error) {
+		return auth.PrincipalFrom(ctx), nil
+	}
+
+	t.Run("no token is rejected", func(t *testing.T) {
+		resp, err := unary(context.Background(), nil, info, handler)
+		require.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Equal(t, codes.Unauthenticated, status.Code(err))
+	})
+
+	t.Run("invalid token is rejected", func(t *testing.T) {
+		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer bad"))
+		resp, err := unary(ctx, nil, info, handler)
+		require.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Equal(t, codes.Unauthenticated, status.Code(err))
+	})
+
+	t.Run("infrastructure error yields Unavailable", func(t *testing.T) {
+		failCi := fake.NewClientset()
+		failure := errors.New("connection refused")
+		failCi.PrependReactor("create", "tokenreviews", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, failure
+		})
+		fi := auth.NewInterceptor(auth.NewAuthenticator(failCi), auth.ModeEnforcing)
+		funary := fi.Unary()
+		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer whatever"))
+		resp, err := funary(ctx, nil, info, handler)
+		require.Error(t, err)
+		assert.Nil(t, resp)
+		assert.Equal(t, codes.Unavailable, status.Code(err))
+	})
+
+	t.Run("valid token reaches the handler", func(t *testing.T) {
+		ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("authorization", "Bearer good"))
+		resp, err := unary(ctx, nil, info, handler)
+		require.NoError(t, err)
+		p, _ := resp.(*auth.Principal)
+		require.NotNil(t, p)
+		assert.Equal(t, "u", p.Username)
+	})
+
+	t.Run("Version is exempt even without a token", func(t *testing.T) {
+		versionInfo := &grpc.UnaryServerInfo{FullMethod: "/telepresence.manager.Manager/Version"}
+		resp, err := unary(context.Background(), nil, versionInfo, handler)
+		require.NoError(t, err)
+		assert.Nil(t, resp)
 	})
 }

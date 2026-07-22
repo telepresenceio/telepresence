@@ -54,6 +54,20 @@ grpc:
   # manager will service.
   maxReceiveSize: 4Mi
 
+# security configures the traffic-manager's caller-authentication behavior.
+security:
+  authentication:
+    # mode controls how strictly the traffic-manager enforces caller authentication:
+    #
+    #  disabled    no token validation at all.
+    #  permissive  tokens are validated and the resulting identity is used for
+    #              authorization checks and session binding, but no call is ever
+    #              rejected for lacking or failing authentication.
+    #  enforcing   calls without a valid token are rejected.
+    #
+    # Default: permissive
+    mode: permissive
+
 # podCIDRStrategy controls what strategy the traffic-manager will use for finding out what
 # CIDRs the cluster is using for its pods. Valid values are:
 #

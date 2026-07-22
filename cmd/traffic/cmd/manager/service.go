@@ -72,6 +72,7 @@ type service struct {
 	clusterInfo        cluster.Info
 	configWatcher      config.Watcher
 	authorizer         *auth.Authorizer
+	authMode           auth.Mode
 	activeHttpRequests int32
 	activeGrpcRequests int32
 	serviceNameNs      string
@@ -121,6 +122,7 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 	}
 	env := managerutil.GetEnv(ctx)
 	ns := env.ManagerNamespace
+	ret.authMode = env.AuthenticationMode
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
@@ -160,8 +162,13 @@ func (s *service) InstallID() string {
 }
 
 // Version returns the version information of the Manager.
-func (*service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
-	return &rpc.VersionInfo2{Name: DisplayName, Version: version.Version}, nil
+func (s *service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
+	return &rpc.VersionInfo2{
+		Name:          DisplayName,
+		Version:       version.Version,
+		AuthSupported: s.authMode != auth.ModeDisabled,
+		AuthRequired:  s.authMode == auth.ModeEnforcing,
+	}, nil
 }
 
 func (s *service) GetAgentImageFQN(ctx context.Context, _ *empty.Empty) (*rpc.AgentImageFQN, error) {
@@ -286,7 +293,11 @@ func (s *service) ArriveAsAgent(ctx context.Context, agent *rpc.AgentInfo) (*rpc
 		s.removeExcludedEnvVars(cn.Environment)
 	}
 
-	principal := verifiedAgentPrincipal(ctx, agent)
+	principal, mismatch := verifiedAgentPrincipal(ctx, agent)
+	if mismatch && s.authMode == auth.ModeEnforcing {
+		return nil, errors.Errorf(codes.PermissionDenied,
+			"bound token does not match the presented agent identity %s.%s", agent.PodName, agent.Namespace)
+	}
 	sessionID, err := s.state.AddAgent(ctx, agent, principal, time.Now())
 	if err != nil {
 		return nil, err
@@ -304,25 +315,31 @@ func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequ
 	if _, _, err := s.ensureAgentSession(ctx, rq.Session); err != nil && status.Code(err) != codes.NotFound {
 		return nil, err
 	}
-	principal := verifiedAgentPrincipal(ctx, rq.Agent)
+	principal, mismatch := verifiedAgentPrincipal(ctx, rq.Agent)
+	if mismatch && s.authMode == auth.ModeEnforcing {
+		return nil, errors.Errorf(codes.PermissionDenied,
+			"bound token does not match the presented agent identity %s.%s", rq.Agent.PodName, rq.Agent.Namespace)
+	}
 	_, err := s.state.RestoreAgent(ctx, sessionID, rq.Agent, principal, time.Now())
 	return &empty.Empty{}, err
 }
 
 // verifiedAgentPrincipal returns the caller's principal when its bound-token pod
-// claims match the presented AgentInfo, nil otherwise.
-func verifiedAgentPrincipal(ctx context.Context, agent *rpc.AgentInfo) *auth.Principal {
+// claims match the presented AgentInfo, and whether a presented principal failed
+// to match (mismatch). mismatch is always false when the caller had no principal
+// at all -- an old, tokenless agent -- which is a distinct, permitted case.
+func verifiedAgentPrincipal(ctx context.Context, agent *rpc.AgentInfo) (principal *auth.Principal, mismatch bool) {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
 		clog.Debugf(ctx, "agent %s.%s arrived without a bound token", agent.PodName, agent.Namespace)
-		return nil
+		return nil, false
 	}
 	if p.PodName == agent.PodName && p.PodUID == agent.PodUid && strings.HasPrefix(p.Username, "system:serviceaccount:"+agent.Namespace+":") {
-		return p
+		return p, false
 	}
 	clog.Warnf(ctx, "bound token for pod %s (uid %s) does not match presented agent identity %s.%s (uid %s); not binding the session",
 		p.PodName, p.PodUID, agent.PodName, agent.Namespace, agent.PodUid)
-	return nil
+	return nil, true
 }
 
 // agentOwnershipError returns a PermissionDenied error when agent is bound to a
@@ -1170,6 +1187,9 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	if err := s.authorizeIntercept(ctx, namespace, spec); err != nil {
+		if s.authMode == auth.ModeEnforcing {
+			return nil, err
+		}
 		clog.Warnf(ctx, "intercept %q in namespace %s: %v (not enforced)", spec.Name, namespace, err)
 	}
 
@@ -1192,10 +1212,16 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 // authorizeIntercept returns nil when the caller may intercept in namespace, a
 // PermissionDenied error when its RBAC disallows it, and an Unavailable error
 // when authorization could not be determined. An unauthenticated caller is
-// skipped: there is no identity to review.
+// skipped -- there is no identity to review -- unless the manager is in
+// ModeEnforcing, where a nil principal can only mean the interceptor let a
+// tokenless call through for an exempt method; treat it as Unauthenticated
+// rather than silently skipping the review.
 func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
+		if s.authMode == auth.ModeEnforcing {
+			return errors.Errorf(codes.Unauthenticated, "intercept creation requires an authenticated caller")
+		}
 		clog.Debugf(ctx, "caller is unauthenticated; skipping intercept authorization")
 		return nil
 	}
