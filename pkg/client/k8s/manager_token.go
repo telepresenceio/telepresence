@@ -147,6 +147,32 @@ func (e *execTokenSource) Token(ctx context.Context) (string, error) {
 	return e.token, e.tokErr
 }
 
+// managerAuthTokenSource composes a bearer-token source with an x509
+// handshake source. The bearer source is tried first; the x509 source is
+// consulted when the bearer source is absent, yields no token, or yields
+// errNoBearerToken (an exec plugin whose credential carries only a client
+// certificate).
+type managerAuthTokenSource struct {
+	bearer managerTokenSource
+	x509   managerTokenSource
+}
+
+func (c *managerAuthTokenSource) Token(ctx context.Context) (string, error) {
+	if c.bearer != nil {
+		token, err := c.bearer.Token(ctx)
+		if err == nil && token != "" {
+			return token, nil
+		}
+		if err != nil && !errors.Is(err, errNoBearerToken) {
+			return "", err
+		}
+	}
+	if c.x509 != nil {
+		return c.x509.Token(ctx)
+	}
+	return "", nil
+}
+
 // managerTokenCredentials is a credentials.PerRPCCredentials that attaches the
 // kubeconfig's bearer token to every RPC to the traffic-manager.
 type managerTokenCredentials struct {

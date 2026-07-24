@@ -742,6 +742,26 @@ properties:
               enforcing rejects unauthenticated or unauthorized calls.
             type: string
             enum: ["disabled", "permissive", "enforcing"]
+          x509:
+            description: >-
+              Client-certificate authentication: an additional, opt-in mechanism for
+              identifying clients whose kubeconfig credentials are a client certificate
+              and therefore never produce a bearer token.
+            type: object
+            additionalProperties: false
+            properties:
+              enabled:
+                description: >-
+                  Enable the traffic-manager's auth-only TLS listener. Also makes the
+                  chart create a RoleBinding in kube-system to the stock
+                  extension-apiserver-authentication-reader Role, needed to read the
+                  cluster's client CA. Only takes effect when
+                  security.authentication.mode is "enforcing"; defaults to true, so
+                  set this to false to opt out. Has no effect under any other mode.
+                type: boolean
+              port:
+                description: The container port the auth-only TLS listener binds to.
+                type: integer
 
   securityContext:
     description: The Kubernetes SecurityContext for the traffic-manager container

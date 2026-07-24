@@ -64,6 +64,7 @@ type Service interface {
 	serveHTTP(context.Context) error
 	servePrometheus(context.Context) error
 	serveQuicTunnel(context.Context) error
+	serveX509Auth(context.Context) error
 }
 
 type service struct {
@@ -92,6 +93,22 @@ type service struct {
 	// do. quicCandidates checks for nil before calling Candidates.
 	quicDiscovery *quictunnel.Discovery
 
+	// mintedTokens holds the bearer tokens the x509 auth listener has issued, shared
+	// with the Authenticator constructed in serveHTTP so a token minted there is
+	// accepted on the regular gRPC channel. It exists regardless of whether the
+	// listener is enabled; an always-empty store is harmless.
+	mintedTokens *auth.MintedTokens
+
+	// x509ClientCA is non-nil only when AUTH_X509_PORT != 0 and authMode is
+	// enforcing, so that a manually set port can't add attack surface in a
+	// permissive cluster.
+	x509ClientCA *auth.ClientCAPool
+
+	// x509Listener is bound in NewService, before the gRPC server starts, so that
+	// Version never advertises the auth port until the listener accepts connections.
+	// Non-nil exactly when x509ClientCA is.
+	x509Listener *auth.X509Listener
+
 	rpc.UnsafeManagerServer
 }
 
@@ -111,6 +128,7 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 		id:            uuid.New().String(),
 		configWatcher: configWatcher,
 		authorizer:    auth.NewAuthorizer(k8sapi.GetK8sInterface(ctx)),
+		mintedTokens:  auth.NewMintedTokens(),
 	}
 
 	// These are context-dependent, so build them once the pool is up
@@ -141,6 +159,20 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 		}
 	}
 
+	if env.AuthX509Port != 0 && ret.authMode == auth.ModeEnforcing {
+		ret.x509ClientCA = auth.NewClientCAPool(ctx, k8sapi.GetK8sInterface(ctx))
+		ret.x509ClientCA.OnChange(ret.mintedTokens.InvalidateAll)
+		// OnChange only fires on a later reload, so record the initial load's
+		// generation (0 if it failed) here.
+		_, generation := ret.x509ClientCA.Snapshot()
+		ret.mintedTokens.InvalidateAll(generation)
+		ret.x509Listener, err = auth.NewX509Listener(env.AuthX509Port, ret.x509ClientCA, ret.mintedTokens)
+		if err != nil {
+			clog.Errorf(ctx, "unable to start x509 auth listener: %v", err)
+			return nil, err
+		}
+	}
+
 	ret.state = state.NewState(ctx, g, configWatcher.AdminCommandChannel())
 	return ret, nil
 }
@@ -162,13 +194,20 @@ func (s *service) InstallID() string {
 }
 
 // Version returns the version information of the Manager.
-func (s *service) Version(context.Context, *empty.Empty) (*rpc.VersionInfo2, error) {
-	return &rpc.VersionInfo2{
+func (s *service) Version(ctx context.Context, _ *empty.Empty) (*rpc.VersionInfo2, error) {
+	vi := &rpc.VersionInfo2{
 		Name:          DisplayName,
 		Version:       version.Version,
 		AuthSupported: s.authMode != auth.ModeDisabled,
 		AuthRequired:  s.authMode == auth.ModeEnforcing,
-	}, nil
+	}
+	// The port is advertised only when the listener is up and accepting
+	// connections, which NewService guarantees by binding it before any server
+	// starts.
+	if s.x509Listener != nil {
+		vi.AuthX509Port = uint32(managerutil.GetEnv(ctx).AuthX509Port)
+	}
+	return vi, nil
 }
 
 func (s *service) GetAgentImageFQN(ctx context.Context, _ *empty.Empty) (*rpc.AgentImageFQN, error) {

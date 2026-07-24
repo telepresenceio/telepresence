@@ -83,17 +83,44 @@ func (s *managerAuthSuite) TearDownTest() {
 	itest.TelepresenceQuitOk(s.Context())
 }
 
-// Test_EnforcingRejectsTokenlessClient connects with the plain, cert-only
-// admin context against the enforcing manager and expects the client to
-// refuse the connection before ever reaching the manager's RPCs.
-func (s *managerAuthSuite) Test_EnforcingRejectsTokenlessClient() {
+// Test_EnforcingAcceptsCertOnlyClient connects with the plain, cert-only
+// admin context against the enforcing manager. The manager's x509 auth
+// listener, enabled by default under enforcing mode, authenticates the
+// kubeconfig's client certificate, so the connect succeeds and the derived
+// identity passes the intercept authorization.
+func (s *managerAuthSuite) Test_EnforcingAcceptsCertOnlyClient() {
 	// The suite context carries an impersonation user; this test needs the
 	// plain cert-only admin context.
 	ctx := itest.WithUser(s.Context(), "default")
+	stdout := itest.TelepresenceOk(ctx, "connect", "--namespace", s.appNS, "--manager-namespace", s.mgrNS)
+	s.Contains(stdout, "Connected to context")
+
+	defer itest.TelepresenceOk(ctx, "detach", s.ServiceName())
+	stdout = itest.TelepresenceOk(ctx, "intercept", "--mount", "false", s.ServiceName(), "--port", "9090")
+	s.Contains(stdout, "Using Deployment "+s.ServiceName())
+	stdout = itest.TelepresenceOk(ctx, "list", "--namespace", s.appNS, "--intercepts")
+	s.Contains(stdout, s.ServiceName()+": intercepted")
+}
+
+// Test_EnforcingRejectsCertOnlyClientWhenX509Disabled upgrades the manager
+// with security.authentication.x509.enabled=false and expects the cert-only
+// admin context to be refused before ever reaching the manager's RPCs, since
+// the kubeconfig can produce neither a bearer token nor an x509 path.
+func (s *managerAuthSuite) Test_EnforcingRejectsCertOnlyClientWhenX509Disabled() {
+	ctx := itest.WithUser(s.Context(), "default")
+	hctx := itest.WithNamespaces(ctx, &itest.Namespaces{
+		Namespace: s.mgrNS,
+		Selector:  labels.SelectorFromNames(s.appNS),
+	})
+	s.TelepresenceHelmInstallOK(hctx, true,
+		"--set", "security.authentication.mode=enforcing",
+		"--set", "security.authentication.x509.enabled=false")
+	defer s.TelepresenceHelmInstallOK(hctx, true, "--set", "security.authentication.mode=enforcing")
+
 	_, stderr, err := itest.Telepresence(ctx, "connect", "--namespace", s.appNS, "--manager-namespace", s.mgrNS)
 	s.Error(err)
 	s.Contains(stderr, "requires an authenticated client")
-	s.Contains(stderr, "security.authentication.mode")
+	s.Contains(stderr, "security.authentication.x509.enabled")
 }
 
 // Test_EnforcingAcceptsAuthenticatedClientAndIntercepts connects with a

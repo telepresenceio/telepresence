@@ -468,6 +468,11 @@ func (s *session) reconnectManager() (returnedErr error) {
 		return fmt.Errorf("unable to reconnect client: %w", err)
 	}
 
+	// The replaced connection is pinned to a manager pod that is gone or no
+	// longer accepts this client; close it so its transport stops redialing.
+	if old := s.managerConn; old != nil {
+		_ = old.Close()
+	}
 	s.managerConn = conn
 	s.managerName = managerName
 	s.managerVersion = managerVersion

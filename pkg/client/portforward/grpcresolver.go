@@ -3,11 +3,7 @@ package portforward
 import (
 	"context"
 	"fmt"
-	"strings"
-	"sync"
-	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/resolver"
 	"google.golang.org/grpc/serviceconfig"
 )
@@ -16,13 +12,17 @@ const (
 	K8sPFScheme = "k8spf"
 )
 
+// resolverBuilder is a grpc resolver.Builder for the k8spf scheme. A target
+// is resolved to a pod address exactly once, when the ClientConn is built,
+// and the connection stays pinned to that pod for its entire lifetime. When
+// the pod goes away, the connection dies with it; establishing a new
+// connection, against a fresh resolution, is the caller's responsibility.
 type resolverBuilder struct {
 	context.Context
-	knownPod *PodAddress
 }
 
-func NewResolver(ctx context.Context, knownPod *PodAddress) resolver.Builder {
-	return resolverBuilder{Context: ctx, knownPod: knownPod}
+func NewResolver(ctx context.Context) resolver.Builder {
+	return resolverBuilder{Context: ctx}
 }
 
 func (p resolverBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (rs resolver.Resolver, err error) {
@@ -32,21 +32,6 @@ func (p resolverBuilder) Build(target resolver.Target, cc resolver.ClientConn, _
 	if target.URL.Scheme != K8sPFScheme {
 		return nil, fmt.Errorf("invalid scheme: %v", target.URL.Scheme)
 	}
-	if strings.HasPrefix(target.Endpoint(), "svc/") {
-		ctx, cancel := context.WithCancel(p.Context)
-		rs := &svcResolver{
-			ctx:      ctx,
-			cancel:   cancel,
-			cc:       cc,
-			rn:       make(chan struct{}),
-			endPoint: target.Endpoint(),
-			lastPA:   p.knownPod,
-		}
-		rs.wg.Add(1)
-		go rs.watcher()
-		return rs, nil
-	}
-
 	var state resolver.State
 	pa, err := resolve(p.Context, target.Endpoint())
 	if err == nil {
@@ -66,73 +51,3 @@ type noopResolver struct{}
 func (noopResolver) ResolveNow(_ resolver.ResolveNowOptions) {}
 
 func (noopResolver) Close() {}
-
-type svcResolver struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
-	endPoint string
-	cc       resolver.ClientConn
-	wg       sync.WaitGroup
-	rn       chan struct{}
-	lastPA   *PodAddress
-}
-
-// ResolveNow invoke an immediate resolution of the target that this
-// dnsResolver watches.
-func (d *svcResolver) ResolveNow(resolver.ResolveNowOptions) {
-	select {
-	case d.rn <- struct{}{}:
-	default:
-	}
-}
-
-func (d *svcResolver) Close() {
-	d.cancel()
-	d.wg.Wait()
-}
-
-func (d *svcResolver) watcher() {
-	defer d.wg.Done()
-	if d.lastPA != nil {
-		err := d.cc.UpdateState(d.lastPA.state())
-		if err == nil {
-			// Wait for next ResolveNow
-			select {
-			case <-d.ctx.Done():
-				return
-			case <-d.rn:
-			}
-		}
-	}
-	ebo := backoff.NewExponentialBackOff(
-		backoff.WithInitialInterval(2*time.Second),
-		backoff.WithMaxInterval(7*time.Second),
-		backoff.WithMaxElapsedTime(120*time.Second),
-	)
-	for {
-		pa, err := resolve(d.ctx, d.endPoint)
-		if err != nil {
-			// Report error to the underlying grpc.ClientConn.
-			d.cc.ReportError(err)
-		} else if d.lastPA == nil || *pa != *d.lastPA {
-			err = d.cc.UpdateState(pa.state())
-		}
-
-		if err == nil {
-			// Success resolving, wait for the next ResolveNow.
-			d.lastPA = pa
-			select {
-			case <-d.ctx.Done():
-				return
-			case <-d.rn:
-				ebo.Reset()
-				continue
-			}
-		}
-		select {
-		case <-d.ctx.Done():
-			return
-		case <-time.After(ebo.NextBackOff()):
-		}
-	}
-}

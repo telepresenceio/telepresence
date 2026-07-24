@@ -93,8 +93,23 @@ type session struct {
 
 	teleroute teleroute.Server
 
+	// managerConnMu guards managerConn, ownsManagerConn, and managerVersion.
+	// The connection is pinned to one manager pod; when that pod goes away,
+	// reconnectManager replaces it with a connection to a freshly resolved pod.
+	managerConnMu sync.Mutex
+
 	// managerConn is the connection to the traffic-manager.
 	managerConn *grpc.ClientConn
+
+	// ownsManagerConn is false when managerConn was borrowed from the user
+	// daemon (the in-process root session); a borrowed connection is never
+	// closed by reconnectManager. Connections created by reconnectManager are
+	// always owned.
+	ownsManagerConn bool
+
+	// managerNamespace is the namespace the traffic-manager is installed in,
+	// needed to resolve a new manager pod on reconnect.
+	managerNamespace string
 
 	// agentClients provides direct gRPC tunnels to traffic-agents in namespaces where the client can port-forward.
 	agentClients agentpf.Clients
@@ -349,7 +364,7 @@ func createSession(
 	if err != nil {
 		return nil, err
 	}
-	return newSession(cl, mi, conn, ver, activity, false)
+	return newSession(cl, mi, conn, true, ver, activity, false)
 }
 
 func nope() bool { return false }
@@ -358,6 +373,7 @@ func newSession(
 	cluster *k8s.Cluster,
 	mi *rpc.NetworkConfig,
 	managerConn *grpc.ClientConn,
+	ownsManagerConn bool,
 	ver semver.Version,
 	activity chan<- time.Time,
 	isPodDaemon bool,
@@ -371,6 +387,8 @@ func newSession(
 		rndSource:             rand.NewSource(time.Now().UnixNano()),
 		session:               mi.Session,
 		managerConn:           managerConn,
+		ownsManagerConn:       ownsManagerConn,
+		managerNamespace:      mi.ManagerNamespace,
 		managerVersion:        ver,
 		subnetViaWorkloads:    mi.SubnetViaWorkloads,
 		agentPodNamespaces:    mi.AgentPodNamespaces,
@@ -434,8 +452,55 @@ func newSession(
 // both A and AAAA lookups for the same name.
 const lookupSequencerTTL = 500 * time.Millisecond
 
+// currentManagerConn is a grpc.ClientConnInterface that delegates every call
+// to the session's current manager connection, so that a manager.ManagerClient
+// captured at session start transparently follows a connection replaced by
+// reconnectManager. Streams in flight on a replaced connection die with it;
+// their retry loops pick up the current connection.
+type currentManagerConn struct {
+	s *session
+}
+
+func (c currentManagerConn) Invoke(ctx context.Context, method string, args, reply any, opts ...grpc.CallOption) error {
+	return c.s.getManagerConn().Invoke(ctx, method, args, reply, opts...)
+}
+
+func (c currentManagerConn) NewStream(ctx context.Context, desc *grpc.StreamDesc, method string, opts ...grpc.CallOption) (grpc.ClientStream, error) {
+	return c.s.getManagerConn().NewStream(ctx, desc, method, opts...)
+}
+
+func (s *session) getManagerConn() *grpc.ClientConn {
+	s.managerConnMu.Lock()
+	conn := s.managerConn
+	s.managerConnMu.Unlock()
+	return conn
+}
+
 func (s *session) managerClient() manager.ManagerClient {
-	return manager.NewManagerClient(s.managerConn)
+	return manager.NewManagerClient(currentManagerConn{s: s})
+}
+
+// reconnectManager replaces the session's manager connection with one pinned to a
+// freshly resolved manager pod. The old connection is closed unless it was borrowed
+// from the user daemon.
+func (s *session) reconnectManager() error {
+	tc, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerConnect)
+	defer cancel()
+	conn, _, ver, err := s.ConnectToManager(tc, s.managerNamespace)
+	if err != nil {
+		return err
+	}
+	s.managerConnMu.Lock()
+	old, owned := s.managerConn, s.ownsManagerConn
+	s.managerConn = conn
+	s.ownsManagerConn = true
+	s.managerVersion = ver
+	s.managerConnMu.Unlock()
+	if old != nil && owned {
+		_ = old.Close()
+	}
+	clog.Infof(s, "Reconnected to traffic-manager %s", ver)
+	return nil
 }
 
 func (s *session) lookupSequencerGC() {
@@ -841,10 +906,12 @@ func (s *session) watchClusterInfo(teleroutePort uint16) error {
 			}
 			return nil
 		},
-		// The user daemon will restore the session, and our managerClient will reconnect automatically
-		// thanks to the built-in resilience in the port-forward logic, so there's no need for a repair
-		// function here.
-		nil,
+		// The manager connection is pinned to one pod; when that pod goes away
+		// the watch cannot recover on its own, so the repair establishes a
+		// connection to a freshly resolved pod. The user daemon restores the
+		// session itself, so a repair that races that restoration simply fails
+		// and runs again on the next retry.
+		s.reconnectManager,
 	)
 }
 
@@ -1534,12 +1601,12 @@ func (s *session) stop() {
 	<-cc.Done()
 	atomic.StoreInt32(&s.closing, 2)
 
-	if s.managerConn != nil {
+	if conn := s.getManagerConn(); conn != nil {
 		clog.Debug(s, "Closing port-forward to traffic-manager")
 		// Avoid sporadic hang when the client connection is torn down.
 		cc, cancel = context.WithTimeout(context.WithoutCancel(s), time.Second)
 		go func() {
-			_ = s.managerConn.Close()
+			_ = conn.Close()
 			cancel()
 		}()
 		<-cc.Done()
@@ -1768,7 +1835,10 @@ func (s *session) applyAgentPodsDelta(delta *rpc.AgentPodsDelta) error {
 }
 
 func (s *session) ManagerVersion() semver.Version {
-	return s.managerVersion
+	s.managerConnMu.Lock()
+	ver := s.managerVersion
+	s.managerConnMu.Unlock()
+	return ver
 }
 
 func (s *session) DialTCP(ctx context.Context, addr netip.AddrPort) (conn net.Conn, err error) {

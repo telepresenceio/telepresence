@@ -96,6 +96,12 @@ spec:
           - name: AUTHENTICATION_MODE
             value: {{ .mode }}
           {{- end }}
+          {{- with .x509 }}
+          {{- if include "telepresence.x509AuthEnabled" $ }}
+          - name: AUTH_X509_PORT
+            value: {{ .port | quote }}
+          {{- end }}
+          {{- end }}
           {{- end }}
           {{- end }}
           {{- if .workloads }}
@@ -368,6 +374,10 @@ spec:
             containerPort: {{ .apiPort }}
           - name: https
             containerPort: {{ .agentInjector.webhook.port }}
+          {{- if include "telepresence.x509AuthEnabled" $ }}
+          - name: authx509
+            containerPort: {{ .security.authentication.x509.port }}
+          {{- end }}
           {{- if .prometheus.port }}  # 0 is false
           - name: prometheus
             containerPort: {{ .prometheus.port }}

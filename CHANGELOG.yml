@@ -24,6 +24,30 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.31.1
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Client-certificate authentication for cert-only kubeconfigs
+        body: >-
+          The traffic-manager can now authenticate clients whose kubeconfig
+          credentials are a client certificate and therefore never produce a
+          bearer token. An auth-only TLS listener on the manager, reachable
+          through the client's existing port-forward, lets such a client
+          present its certificate and be issued a short-lived session token;
+          identity is derived from the certificate exactly as the Kubernetes
+          API server would. This lets <code>enforcing</code> mode
+          (<code>security.authentication.mode</code>) work on clusters, such
+          as bare-metal and <code>kubeadm</code> installs, whose kubeconfigs
+          are cert-only. It is enabled automatically whenever
+          <code>security.authentication.mode</code> is
+          <code>enforcing</code>, and can be turned off with the Helm value
+          <code>security.authentication.x509.enabled: false</code>; it has no
+          effect under any other mode. When active, the chart also creates a
+          <code>RoleBinding</code> in <code>kube-system</code> to the stock
+          <code>extension-apiserver-authentication-reader</code>
+          <code>Role</code>, needed to read the cluster's client CA.
+        docs: reference/authentication
   - version: 2.31.0
     date: 2026-07-22
     notes:

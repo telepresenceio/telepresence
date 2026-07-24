@@ -135,6 +135,17 @@ roleRef:
   kind: ClusterRole
 ```
 
+> [!NOTE]
+> x509 client-certificate authentication (see
+> [Authentication and authorization](authentication.md#client-certificate-only-kubeconfigs))
+> adds one more binding, in the `kube-system` namespace rather than the
+> traffic-manager's own: a `RoleBinding` to the stock
+> `extension-apiserver-authentication-reader` `Role`, which lets the manager
+> read the cluster's client CA to verify client certificates. x509 auth is on
+> by default once `security.authentication.mode` is `enforcing` (disable it
+> with `security.authentication.x509.enabled: false`; it has no effect under
+> any other mode), and this binding is created whenever it is active, as
+> long as `managerRbac.create` is also `true`.
 
 ### Installation with static namespace selection
 

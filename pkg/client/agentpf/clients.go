@@ -191,7 +191,7 @@ func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.Agen
 
 	conn, err := grpcClient.DialGRPC(dialCtx, portforward.K8sPFScheme+":///"+grpcAddr,
 		grpc.WithContextDialer(dialer),
-		grpc.WithResolvers(portforward.NewResolver(ac.Cluster, nil)),
+		grpc.WithResolvers(portforward.NewResolver(ac.Cluster)),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
 		grpc.WithIdleTimeout(0),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))

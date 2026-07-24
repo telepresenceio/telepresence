@@ -90,8 +90,8 @@ func dialTrafficManager(ctx context.Context, cfg *rest.Config, managerNamespace 
 		clog.Errorf(ctx, "cannot resolve svc/traffic-manager.%s:8081: %v", managerNamespace, err)
 		return nil, err
 	}
-	return grpcClient.DialGRPC(ctx, fmt.Sprintf(portforward.K8sPFScheme+":///svc/traffic-manager.%s:8081", managerNamespace),
-		grpc.WithResolvers(portforward.NewResolver(ctx, pap)),
+	return grpcClient.DialGRPC(ctx, fmt.Sprintf(portforward.K8sPFScheme+":///pod/%s.%s:%d#%s", pap.Name, pap.Namespace, pap.Port, pap.PodID),
+		grpc.WithResolvers(portforward.NewResolver(ctx)),
 		grpc.WithContextDialer(portforward.Dialer(ctx)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
