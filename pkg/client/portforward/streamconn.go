@@ -230,8 +230,14 @@ func (pc *portConn) RemoteAddr() net.Addr {
 }
 
 func (pc *portConn) Close() error {
+	// Close sends a FIN on each stream. The Reset that follows unblocks local
+	// reads pending on the streams (the net.Conn contract for Close) and
+	// drops the streams from the spdystream connection's stream map; after
+	// the FIN it sends nothing on the wire.
 	pc.dataStream.Close()
 	pc.errorStream.Close()
+	_ = pc.dataStream.Reset()
+	_ = pc.errorStream.Reset()
 	pc.dialer.streamConn.RemoveStreams(pc.dataStream, pc.errorStream)
 	if atomic.AddInt64(&pc.dialer.refCount, -1) == 0 {
 		return pc.dialer.Close()
@@ -239,23 +245,20 @@ func (pc *portConn) Close() error {
 	return nil
 }
 
-func (pc *portConn) SetDeadline(t time.Time) error {
-	if dataConn, ok := pc.dataStream.(net.Conn); ok {
-		return dataConn.SetDeadline(t)
-	}
+// Deadlines are accepted and ignored. The spdystream layer has no per-stream
+// deadlines: a deadline set on a stream lands on the underlying network
+// connection, shared by every stream pair on the pod, so forwarding it would
+// let one consumer break all other streams (crypto/tls.Conn.Close, for one,
+// sets a write deadline in the past). Callers that need to bound an operation
+// must close the conn instead.
+func (pc *portConn) SetDeadline(time.Time) error {
 	return nil
 }
 
-func (pc *portConn) SetReadDeadline(t time.Time) error {
-	if dataConn, ok := pc.dataStream.(net.Conn); ok {
-		return dataConn.SetReadDeadline(t)
-	}
+func (pc *portConn) SetReadDeadline(time.Time) error {
 	return nil
 }
 
-func (pc *portConn) SetWriteDeadline(t time.Time) error {
-	if dataConn, ok := pc.dataStream.(net.Conn); ok {
-		return dataConn.SetWriteDeadline(t)
-	}
+func (pc *portConn) SetWriteDeadline(time.Time) error {
 	return nil
 }
