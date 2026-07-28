@@ -165,6 +165,13 @@ transition — why code was moved, what it replaced, or how it differs from an
 earlier version. The reader sees only the current code, so such comments carry
 no information for them. Keep comments short; avoid long explanations.
 
+On internal (unexported) functions and methods, keep doc comments minimal: a
+few lines stating only what the code cannot show, such as a locking-order or
+publication-order invariant. With well-named code, the details live in the
+code itself; a reader who wants them will read it. Multi-paragraph comments
+that justify design decisions belong in review discussions, not in the
+source.
+
 ## Code Generation
 
 ```bash
