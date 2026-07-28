@@ -59,6 +59,35 @@ func TestCanPortForward_AllDenied(t *testing.T) {
 	assert.False(t, allowed)
 }
 
+// TestCanPortForward_PropagatesUIDAndExtra verifies that a Principal's UID and Extra
+// claims (e.g. the x509 authenticator's credential-id) reach the SubjectAccessReview,
+// matching what the API server itself would have set for the same identity.
+func TestCanPortForward_PropagatesUIDAndExtra(t *testing.T) {
+	var reviews []*authv1.SubjectAccessReviewSpec
+	ci := fake.NewClientset()
+	ci.PrependReactor("create", "subjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		review := action.(k8stesting.CreateAction).GetObject().(*authv1.SubjectAccessReview)
+		reviews = append(reviews, &review.Spec)
+		review.Status = authv1.SubjectAccessReviewStatus{Allowed: true}
+		return true, review, nil
+	})
+
+	a := auth.NewAuthorizer(ci)
+	p := &auth.Principal{
+		Username: "alice",
+		UID:      "uid-1",
+		Groups:   []string{"g"},
+		Extra:    map[string][]string{"authentication.kubernetes.io/credential-id": {"X509SHA256=abc"}},
+	}
+	allowed, err := a.CanPortForward(context.Background(), p, "ns1", nil)
+	require.NoError(t, err)
+	assert.True(t, allowed)
+
+	require.Len(t, reviews, 1)
+	assert.Equal(t, "uid-1", reviews[0].UID)
+	assert.Equal(t, authv1.ExtraValue{"X509SHA256=abc"}, reviews[0].Extra["authentication.kubernetes.io/credential-id"])
+}
+
 func TestCanPortForward_APIError(t *testing.T) {
 	ci := fake.NewClientset()
 	failure := errors.New("connection refused")

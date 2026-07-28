@@ -49,6 +49,7 @@ func (a *Authorizer) canI(ctx context.Context, p *Principal, namespace, podName 
 			User:   p.Username,
 			UID:    p.UID,
 			Groups: p.Groups,
+			Extra:  extraValues(p.Extra),
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
 				Namespace:   namespace,
 				Verb:        "create",
@@ -63,4 +64,17 @@ func (a *Authorizer) canI(ctx context.Context, p *Principal, namespace, podName 
 		return false, fmt.Errorf("subject access review: %w", err)
 	}
 	return result.Status.Allowed, nil
+}
+
+// extraValues converts a Principal's Extra claims to the type SubjectAccessReviewSpec
+// requires. Returns nil for an empty map so an unset Extra doesn't marshal as {}.
+func extraValues(extra map[string][]string) map[string]authorizationv1.ExtraValue {
+	if len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]authorizationv1.ExtraValue, len(extra))
+	for k, v := range extra {
+		out[k] = authorizationv1.ExtraValue(v)
+	}
+	return out
 }

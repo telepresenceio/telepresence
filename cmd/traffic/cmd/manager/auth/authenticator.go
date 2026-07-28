@@ -27,20 +27,43 @@ const (
 	failureCacheTTL = 10 * time.Second
 )
 
-// Authenticator validates bearer tokens using cached Kubernetes TokenReviews.
+// Authenticator validates bearer tokens using cached Kubernetes TokenReviews, or,
+// first, a store of tokens minted by the x509 auth listener.
 type Authenticator struct {
-	token authenticator.Token
+	token  authenticator.Token
+	minted *MintedTokens
 }
 
-// NewAuthenticator creates an Authenticator that validates tokens with the TokenReview API of ci.
-func NewAuthenticator(ci kubernetes.Interface) *Authenticator {
-	return &Authenticator{
-		token: cache.New(&tokenReviewer{client: ci}, true, successCacheTTL, failureCacheTTL),
+// Option configures an Authenticator constructed by NewAuthenticator.
+type Option func(*Authenticator)
+
+// WithMintedTokens makes the Authenticator recognize tokens minted by the x509 auth
+// listener, ahead of the TokenReview path.
+func WithMintedTokens(m *MintedTokens) Option {
+	return func(a *Authenticator) {
+		a.minted = m
 	}
 }
 
-// Authenticate validates a bearer token and returns the caller's Principal.
+// NewAuthenticator creates an Authenticator that validates tokens with the TokenReview API of ci.
+func NewAuthenticator(ci kubernetes.Interface, opts ...Option) *Authenticator {
+	a := &Authenticator{
+		token: cache.New(&tokenReviewer{client: ci}, true, successCacheTTL, failureCacheTTL),
+	}
+	for _, opt := range opts {
+		opt(a)
+	}
+	return a
+}
+
+// Authenticate validates a bearer token and returns the caller's Principal. A token
+// minted by the x509 auth listener is recognized without a TokenReview call.
 func (a *Authenticator) Authenticate(ctx context.Context, token string) (*Principal, error) {
+	if a.minted != nil {
+		if p, ok := a.minted.Lookup(token); ok {
+			return p, nil
+		}
+	}
 	resp, ok, err := a.token.AuthenticateToken(authenticator.WithAudiences(ctx, authenticator.Audiences{agentconfig.ManagerTokenAudience}), token)
 	if err != nil {
 		return nil, fmt.Errorf("token review: %w", err)
@@ -66,6 +89,9 @@ func principalFromInfo(info user.Info) *Principal {
 		Groups:   info.GetGroups(),
 	}
 	extra := info.GetExtra()
+	if len(extra) > 0 {
+		p.Extra = extra
+	}
 	if v := extra[podNameExtraKey]; len(v) > 0 {
 		p.PodName = v[0]
 	}

@@ -188,6 +188,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 		g.Go("config", namespaces.Listen)
 		g.Go("prometheus", mgr.servePrometheus)
 		g.Go("quictunnel", mgr.serveQuicTunnel)
+		g.Go("x509auth", mgr.serveX509Auth)
 
 		// reapNodeAgentJobs is the callback the uninstall endpoint runs, in
 		// addition to the agent injector's sidecar rollback, to delete every
@@ -380,6 +381,19 @@ func (s *service) serveQuicTunnel(ctx context.Context) error {
 	return ln.Serve(ctx)
 }
 
+// serveX509Auth serves the x509 auth-only TLS listener that NewService bound, when
+// there is one. It blocks, minting bearer tokens for verified client certificates
+// into s.mintedTokens, until ctx is done.
+func (s *service) serveX509Auth(ctx context.Context) error {
+	if s.x509Listener == nil {
+		return nil
+	}
+	go s.x509ClientCA.Start(ctx)
+	clog.Infof(ctx, "x509 auth listener started on %s", s.x509Listener.Addr())
+	defer clog.Info(ctx, "x509 auth listener stopped")
+	return s.x509Listener.Serve(ctx)
+}
+
 func (s *service) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
@@ -398,7 +412,7 @@ func (s *service) serveHTTP(ctx context.Context) error {
 	if mz, ok := env.GrpcMaxReceiveSize.AsInt64(); ok {
 		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 	}
-	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx)), env.AuthenticationMode)
+	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithMintedTokens(s.mintedTokens)), env.AuthenticationMode)
 	svc := server.NewWithAuth(ctx, &server.Interceptors{Unary: ai.Unary(), Stream: ai.Stream()}, opts...)
 	s.RegisterServers(svc)
 	clog.Debugf(ctx, "Serving client connections on %s using idle TTL %s", l.Addr(), env.ClientConnectionTTL)

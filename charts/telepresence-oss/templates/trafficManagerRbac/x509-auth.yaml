@@ -1,0 +1,26 @@
+{{- if and .Values.managerRbac.create (include "telepresence.x509AuthEnabled" $) }}
+{{- /*
+The manager's x509 auth listener verifies presented client certificates
+against the cluster's client CA, published in the
+extension-apiserver-authentication ConfigMap in kube-system. That ConfigMap
+is not readable by all authenticated identities by default, so the manager
+needs the same binding every aggregated API server ships: the stock
+extension-apiserver-authentication-reader Role in kube-system.
+*/}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traffic-manager-x509-auth-{{ include "traffic-manager.namespace" $ }}
+  namespace: kube-system
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: extension-apiserver-authentication-reader
+subjects:
+- kind: ServiceAccount
+  name: traffic-manager
+  namespace: {{ include "traffic-manager.namespace" $ }}
+{{- end }}

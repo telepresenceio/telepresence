@@ -146,9 +146,13 @@ credentials can produce one, so they are unaffected by the switch.
 
 With `security.authentication.mode: enforcing`:
 
-- Every caller must present a bearer token that a `TokenReview` accepts. See
-  [Client-certificate-only kubeconfigs](#client-certificate-only-kubeconfigs)
-  for the one case where a client cannot.
+- Every caller must present one of:
+  - a bearer token that a `TokenReview` accepts, or
+  - a client certificate that the manager can verify against the cluster's
+    client CA. This path is enabled by default under `enforcing` mode and can
+    be turned off with `security.authentication.x509.enabled`; see
+    [Client-certificate-only kubeconfigs](#client-certificate-only-kubeconfigs)
+    for how it works and what it requires.
 - Creating an intercept requires the caller's Kubernetes identity to have
   `create` access on `pods/portforward` in the target namespace — the same
   permission described in [RBAC](rbac.md). A grant scoped with `resourceNames`
@@ -164,11 +168,64 @@ With `security.authentication.mode: enforcing`:
 A kubeconfig whose active context authenticates with a client certificate and
 no token — common for bare-metal or `kubeadm`-provisioned clusters — cannot
 produce a bearer token to present to the traffic-manager, and the
-port-forwarded connection to the manager does not carry the client
-certificate either. Against an `enforcing` manager, such a client fails with a
-clear error rather than a string of rejected calls, pointing back to this
-section: use a context with token or exec-plugin credentials, or set the
-Helm value `security.authentication.mode` to `permissive`.
+port-forwarded connection used for the gRPC API does not carry the client
+certificate either.
+
+x509 client-certificate authentication closes this gap, and is active by
+default whenever `security.authentication.mode` is `enforcing`: the manager
+opens a second, auth-only TLS listener on a dedicated container port,
+reachable through the same `pods/portforward` grant the client already used
+to reach the gRPC port — no additional client RBAC is needed. A cert-only
+client performs a one-shot TLS handshake against that port, presenting the
+same client certificate its kubeconfig would otherwise send to the API
+server. The manager verifies the certificate chain against the cluster's
+client CA — published in the `extension-apiserver-authentication` ConfigMap
+in `kube-system`, the same mechanism aggregated API servers use — and derives
+the caller's identity from the certificate exactly as the API server would:
+username, groups (including `system:authenticated`), UID, and credential
+identifier. On success the manager issues a short-lived bearer token, scoped
+to the presented certificate, that the client presents on the normal gRPC
+channel, refreshing it with a new handshake as needed. A token never
+outlives the certificate chain's validity, and every outstanding token is
+invalidated when the manager restarts or the cluster's client CA bundle
+changes. The auth listener is reachable on the manager's pod IP inside the
+cluster, so the network-level restrictions described in
+[This does not replace network controls](#this-does-not-replace-network-controls)
+apply to it as well.
+
+The identity conversion follows the Kubernetes library semantics compiled
+into the traffic-manager (currently those of Kubernetes 1.36): notably, the
+UID is parsed from the certificate's x509 UID attribute, which the API
+server itself only does on Kubernetes 1.33 or later and only when its
+`AllowParsingUserUIDFromCertAuth` feature gate is enabled. On clusters that
+diverge from those defaults, the manager may attribute a UID (or extra
+attributes) that the API server would not; standard RBAC keys on username
+and groups and is unaffected, but custom webhook authorizers that inspect
+the UID may see a difference.
+
+Set the Helm value `security.authentication.x509.enabled` to `false` to opt
+out of this under `enforcing` mode. The value has no effect under any other
+mode: x509 client-certificate authentication is only ever active when `mode`
+is `enforcing`.
+
+This requires the traffic-manager's ServiceAccount to read the
+`extension-apiserver-authentication` ConfigMap, so whenever x509 auth is
+active — the default under `enforcing` — the chart also creates a
+RoleBinding in `kube-system` to the stock
+`extension-apiserver-authentication-reader` Role (see
+[Traffic-manager RBAC](rbac.md#traffic-manager-permissions)), provided
+`managerRbac.create` is `true`. That RoleBinding is the only touch this
+feature makes outside the manager's own namespace.
+
+x509 authentication has no revocation: a certificate is valid until it
+expires, and the manager has no way to learn that a certificate was revoked
+early. Tokens remain the primary mechanism; x509 composes as an additional
+one for the clients that cannot produce a token at all. It also does not
+help every cert-only cluster: if the cluster is fronted by an authenticating
+proxy that signs user certificates with a CA other than the one published in
+`client-ca-file`, the manager cannot verify those certificates, and such
+clients still need a context with token or exec-plugin credentials, or must
+run with `security.authentication.mode` set to `permissive`.
 
 ### Environment access implied by portforward
 

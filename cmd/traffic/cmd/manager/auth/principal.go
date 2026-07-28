@@ -7,26 +7,23 @@ type Principal struct {
 	Username string
 	UID      string
 	Groups   []string
+	// Extra carries additional authenticator-supplied claims (e.g. the x509
+	// authenticator's credential-id) to be forwarded into SubjectAccessReviews.
+	Extra map[string][]string
 	// PodName and PodUID are the pod-binding claims of a bound (projected)
 	// ServiceAccount token. Empty for user tokens.
 	PodName string
 	PodUID  string
 }
 
-// SameAs reports whether p and o represent the same principal. Tokens rotate,
-// so identity is established by username; UIDs are compared only when both
-// are known.
+// SameAs reports whether p and o represent the same principal: the same username and
+// exactly the same UID (two empty UIDs are equal to each other, but an empty UID is
+// never equal to a non-empty one).
 func (p *Principal) SameAs(o *Principal) bool {
 	if p == nil || o == nil {
 		return false
 	}
-	if p.Username != o.Username {
-		return false
-	}
-	if p.UID == "" || o.UID == "" {
-		return true
-	}
-	return p.UID == o.UID
+	return p.Username == o.Username && p.UID == o.UID
 }
 
 type principalKey struct{}

@@ -191,7 +191,7 @@ func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.Agen
 
 	conn, err := grpcClient.DialGRPC(dialCtx, portforward.K8sPFScheme+":///"+grpcAddr,
 		grpc.WithContextDialer(dialer),
-		grpc.WithResolvers(portforward.NewResolver(ac.Cluster, nil)),
+		grpc.WithResolvers(portforward.NewResolver(ac.Cluster)),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
 		grpc.WithIdleTimeout(0),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -375,12 +375,9 @@ type Clients interface {
 	SetPreferredQuicAddr(func() string)
 
 	// ResetQuicEndpoint clears the cached QUIC tunnel endpoint descriptor and every
-	// agent's quicDead latch, so the next agent dial re-fetches a fresh descriptor
-	// (new CA, new session-scoped client certificate) and is willing to try QUIC
-	// again rather than going straight to the port-forward fallback. Called by the
-	// rootd session once its own manager-bound QUIC re-probe recovers after a
-	// manager restart, since agent connections are dialed against the same
-	// manager-issued descriptor.
+	// agent's quicDead latch, so the next agent dial fetches a fresh descriptor and
+	// is willing to try QUIC again rather than going straight to the port-forward
+	// fallback.
 	ResetQuicEndpoint()
 
 	// Transports returns the current transport ("quic" or "grpc") for every agent pod

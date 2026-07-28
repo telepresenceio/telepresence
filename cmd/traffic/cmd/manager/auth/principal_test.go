@@ -21,7 +21,7 @@ func TestPrincipal_SameAs(t *testing.T) {
 		{"different usernames", &auth.Principal{Username: "u1", UID: "1"}, &auth.Principal{Username: "u2", UID: "1"}, false},
 		{"same username and uid", &auth.Principal{Username: "u", UID: "1"}, &auth.Principal{Username: "u", UID: "1"}, true},
 		{"same username, different uid", &auth.Principal{Username: "u", UID: "1"}, &auth.Principal{Username: "u", UID: "2"}, false},
-		{"same username, one uid empty", &auth.Principal{Username: "u", UID: ""}, &auth.Principal{Username: "u", UID: "2"}, true},
+		{"same username, one uid empty", &auth.Principal{Username: "u", UID: ""}, &auth.Principal{Username: "u", UID: "2"}, false},
 		{"same username, both uid empty", &auth.Principal{Username: "u"}, &auth.Principal{Username: "u"}, true},
 	}
 	for _, tt := range tests {

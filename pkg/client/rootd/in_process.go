@@ -147,7 +147,7 @@ func NewInProcSession(
 	activity chan<- time.Time,
 	isPodDaemon bool,
 ) (*InProcSession, error) {
-	session, err := newSession(kc, mi, mc, ver, activity, isPodDaemon)
+	session, err := newSession(kc, mi, mc, false, ver, activity, isPodDaemon)
 	if err != nil {
 		return nil, err
 	}

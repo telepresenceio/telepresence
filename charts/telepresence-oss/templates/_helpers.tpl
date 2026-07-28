@@ -255,6 +255,19 @@ RBAC rules required to create an intercept in a namespace; excludes any rules th
 {{- end }}
 {{- end }}
 
+{{- /*
+telepresence.x509AuthEnabled yields the string "true" when the manager's x509
+client-certificate auth listener (and its supporting kube-system RoleBinding)
+should be enabled, or "" otherwise. x509 auth only ever takes effect under
+security.authentication.mode "enforcing", and even then only when
+security.authentication.x509.enabled (default true) is not set to false.
+*/}}
+{{- define "telepresence.x509AuthEnabled" }}
+  {{- if and (eq .Values.security.authentication.mode "enforcing") .Values.security.authentication.x509.enabled }}
+    {{- true }}
+  {{- end }}
+{{- end }}
+
 {{/*
 Kubernetes version
 */}}

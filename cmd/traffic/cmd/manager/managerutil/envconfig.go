@@ -98,6 +98,11 @@ type Env struct {
 	// binds to on all interfaces. Zero (the default) disables the listener.
 	TunnelQuicPort uint16
 
+	// AuthX509Port is the TCP port the traffic-manager's x509 auth-only TLS
+	// listener binds to on all interfaces. Zero (the default) disables the
+	// listener.
+	AuthX509Port uint16
+
 	// TunnelQuicExternalHost is the externally reachable host or IP advertised to
 	// clients for the QUIC tunnel endpoint, overriding candidate discovery
 	// entirely (see "Zero-configuration endpoint discovery" in

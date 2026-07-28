@@ -2551,7 +2551,14 @@ type VersionInfo2 struct {
 	// token. Only the traffic-manager populates this. Clients whose kubeconfig
 	// credentials cannot produce a token should surface a clear error instead
 	// of connecting.
-	AuthRequired  bool `protobuf:"varint,4,opt,name=auth_required,json=authRequired,proto3" json:"auth_required,omitempty"`
+	AuthRequired bool `protobuf:"varint,4,opt,name=auth_required,json=authRequired,proto3" json:"auth_required,omitempty"`
+	// Container port of the traffic-manager's x509 authentication listener, or
+	// zero when disabled. A client whose kubeconfig credentials are a client
+	// certificate can perform a TLS handshake against this port, presenting
+	// that certificate, and receives a short-lived manager-issued bearer token
+	// to use as per-RPC authorization metadata. Only the traffic-manager
+	// populates this.
+	AuthX509Port  uint32 `protobuf:"varint,5,opt,name=auth_x509_port,json=authX509Port,proto3" json:"auth_x509_port,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2612,6 +2619,13 @@ func (x *VersionInfo2) GetAuthRequired() bool {
 		return x.AuthRequired
 	}
 	return false
+}
+
+func (x *VersionInfo2) GetAuthX509Port() uint32 {
+	if x != nil {
+		return x.AuthX509Port
+	}
+	return 0
 }
 
 // TunnelMessage is a message sent over a Tunnel. First byte indicates type of message
@@ -5237,12 +5251,13 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\")\n" +
 	"\x13TelepresenceAPIInfo\x12\x12\n" +
-	"\x04port\x18\x01 \x01(\x05R\x04port\"\x88\x01\n" +
+	"\x04port\x18\x01 \x01(\x05R\x04port\"\xae\x01\n" +
 	"\fVersionInfo2\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12%\n" +
 	"\x0eauth_supported\x18\x03 \x01(\bR\rauthSupported\x12#\n" +
-	"\rauth_required\x18\x04 \x01(\bR\fauthRequired\")\n" +
+	"\rauth_required\x18\x04 \x01(\bR\fauthRequired\x12$\n" +
+	"\x0eauth_x509_port\x18\x05 \x01(\rR\fauthX509Port\")\n" +
 	"\rTunnelMessage\x12\x18\n" +
 	"\apayload\x18\x01 \x01(\fR\apayload\"\xbd\x02\n" +
 	"\x12QuicTunnelEndpoint\x12\x18\n" +

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -28,8 +27,6 @@ import (
 )
 
 func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
-	grpcAddr := net.JoinHostPort("svc/traffic-manager."+namespace, "api")
-
 	dialCtx, cancel := client.GetConfig(kc).Timeouts().TimeoutContext(dialCtx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
@@ -45,17 +42,32 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 		return nil, "", semver.Version{}, err
 	}
 
-	src := newManagerTokenSource(kc.Kubeconfig)
-	hasTokenSource := src != nil
-	var extra []grpc.DialOption
-	if hasTokenSource {
-		clog.Debugf(kc, "manager calls will carry the kubeconfig's bearer credentials")
-		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(src)))
-	} else {
-		clog.Debugf(kc, "the kubeconfig yields no bearer token for the traffic-manager connection")
-	}
+	// The connection is pinned to the resolved pod for its entire lifetime.
+	// When the pod goes away, the connection dies with it, and the session's
+	// reconnect logic establishes a new connection against a fresh
+	// resolution.
+	grpcAddr := fmt.Sprintf("pod/%s.%s:%d#%s", pap.Name, pap.Namespace, pap.Port, pap.PodID)
 
-	conn, err = kc.dialGRPC(dialCtx, grpcAddr, pap, extra...)
+	bearerSrc := newManagerTokenSource(kc.Kubeconfig)
+	x509Src := newX509TokenSource(kc.Kubeconfig)
+	hasBearerSource := bearerSrc != nil
+	hasX509Source := x509Src != nil
+
+	var extra []grpc.DialOption
+	switch {
+	case hasBearerSource && hasX509Source:
+		clog.Debugf(kc, "manager calls will carry the kubeconfig's bearer credentials, falling back to x509 client-certificate credentials")
+		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(&managerAuthTokenSource{bearer: bearerSrc, x509: x509Src})))
+	case hasBearerSource:
+		clog.Debugf(kc, "manager calls will carry the kubeconfig's bearer credentials")
+		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(bearerSrc)))
+	case hasX509Source:
+		clog.Debugf(kc, "manager calls will carry x509 client-certificate credentials, if the manager supports it")
+		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(x509Src)))
+	default:
+		clog.Debugf(kc, "the kubeconfig yields no bearer token or client certificate for the traffic-manager connection")
+	}
+	conn, err = kc.dialGRPC(dialCtx, grpcAddr, extra...)
 	if err != nil {
 		return nil, "", ver, err
 	}
@@ -71,11 +83,25 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 	if err != nil {
 		return conn, "", ver, client.CheckTimeout(dialCtx, fmt.Errorf("dial manager: %w", err))
 	}
-	if err = managerAuthError(vi, hasTokenSource); err != nil {
+
+	hasX509Path := false
+	if hasX509Source {
+		if authPort := vi.GetAuthX509Port(); authPort != 0 {
+			// The exchange targets the same pinned pod, over the same shared
+			// per-pod stream connection as the gRPC channel, so the pod that
+			// mints the token is the pod that receives it.
+			x509Src.activate(portforward.Dialer(kc),
+				fmt.Sprintf("pod/%s.%s:%d#%s", pap.Name, pap.Namespace, authPort, pap.PodID))
+			hasX509Path = true
+			clog.Debugf(kc, "manager calls will carry x509 client-certificate credentials via the manager's auth port %d", authPort)
+		}
+	}
+
+	if err = managerAuthError(vi, hasBearerSource, hasX509Path); err != nil {
 		return conn, "", ver, err
 	}
-	if vi.GetAuthSupported() && !vi.GetAuthRequired() && !hasTokenSource {
-		clog.Debugf(kc, "traffic-manager %s supports authentication, but the current kubeconfig yields no bearer token", vi.GetName())
+	if vi.GetAuthSupported() && !vi.GetAuthRequired() && !hasBearerSource && !hasX509Path {
+		clog.Debugf(kc, "traffic-manager %s supports authentication, but the current kubeconfig yields no bearer token or usable client certificate", vi.GetName())
 	}
 	verStr := strings.TrimPrefix(vi.Version, "v")
 	ver, err = semver.Parse(verStr)
@@ -86,17 +112,19 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 }
 
 // managerAuthError returns a user-facing error when vi reports that the
-// manager requires an authenticated client but hasTokenSource is false,
-// meaning the kubeconfig's credentials cannot produce a bearer token. It
-// returns nil when no error applies.
-func managerAuthError(vi *manager.VersionInfo2, hasTokenSource bool) error {
-	if !vi.GetAuthRequired() || hasTokenSource {
+// manager requires an authenticated client but neither a bearer token nor
+// an x509 client-certificate path (hasX509Path: a client certificate plus a
+// manager-advertised auth port) is available. It returns nil when no error
+// applies.
+func managerAuthError(vi *manager.VersionInfo2, hasBearerSource, hasX509Path bool) error {
+	if !vi.GetAuthRequired() || hasBearerSource || hasX509Path {
 		return nil
 	}
 	return errcat.User.Newf(
 		"traffic-manager %s requires an authenticated client, but the current kubeconfig context's credentials "+
 			"cannot produce a bearer token (client-certificate credentials); use a context with token or "+
-			"exec-plugin credentials, or set the Helm value security.authentication.mode to permissive",
+			"exec-plugin credentials, set the Helm value security.authentication.mode to permissive, or have the "+
+			"manager enable x509 client-certificate authentication (Helm value security.authentication.x509.enabled)",
 		vi.GetName())
 }
 
@@ -117,7 +145,7 @@ func (kc *Cluster) ConnectToAgent(
 	} else {
 		grpcAddr = fmt.Sprintf("pod/%s.%s:%d#%s", podName, namespace, port, podID)
 	}
-	conn, err := kc.dialGRPC(dialCtx, grpcAddr, nil)
+	conn, err := kc.dialGRPC(dialCtx, grpcAddr)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -130,10 +158,10 @@ func (kc *Cluster) ConnectToAgent(
 	return conn, mClient, vi, err
 }
 
-func (kc *Cluster) dialGRPC(dialCtx context.Context, address string, knownPod *portforward.PodAddress, extra ...grpc.DialOption) (*grpc.ClientConn, error) {
+func (kc *Cluster) dialGRPC(dialCtx context.Context, address string, extra ...grpc.DialOption) (*grpc.ClientConn, error) {
 	opts := append(make([]grpc.DialOption, 0, 5+len(extra)),
 		grpc.WithContextDialer(portforward.Dialer(kc)),
-		grpc.WithResolvers(portforward.NewResolver(kc, knownPod)),
+		grpc.WithResolvers(portforward.NewResolver(kc)),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
 		grpc.WithIdleTimeout(0),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

@@ -68,6 +68,28 @@ security:
     # Default: permissive
     mode: permissive
 
+    # x509 configures client-certificate authentication: an additional,
+    # opt-in mechanism for identifying clients whose kubeconfig credentials
+    # are a client certificate and therefore never produce a bearer token
+    # (see mode above and docs/reference/authentication.md). Enabling it
+    # lets enforcing mode accept such clients instead of rejecting them.
+    x509:
+      # enabled turns on the traffic-manager's auth-only TLS listener and,
+      # since the manager needs to read the cluster's client CA to verify
+      # presented certificates, makes the chart create a RoleBinding in
+      # kube-system to the stock extension-apiserver-authentication-reader
+      # Role. This only has an effect when mode above is "enforcing" --
+      # x509 client-certificate authentication is active whenever mode is
+      # "enforcing", unless this is set to false. It has no effect under
+      # any other mode.
+      #
+      # Default: true
+      enabled: true
+
+      # port is the container port the auth-only TLS listener binds to.
+      # Default: 8083
+      port: 8083
+
 # podCIDRStrategy controls what strategy the traffic-manager will use for finding out what
 # CIDRs the cluster is using for its pods. Valid values are:
 #
