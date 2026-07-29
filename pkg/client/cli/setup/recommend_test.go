@@ -389,6 +389,89 @@ func TestRecommendWithInput_ValidationDoesNotAbortOnPrivilegeDenial(t *testing.T
 	})
 }
 
+func TestX509AuthEnabled(t *testing.T) {
+	sec := func(mode string, x509 map[string]any) map[string]any {
+		auth := map[string]any{"mode": mode}
+		if x509 != nil {
+			auth["x509"] = x509
+		}
+		return map[string]any{"security": map[string]any{"authentication": auth}}
+	}
+	tests := []struct {
+		name   string
+		values map[string]any
+		want   bool
+	}{
+		{"no values", nil, false},
+		{"no security block", map[string]any{}, false},
+		{"permissive mode", sec("permissive", nil), false},
+		{"enforcing, x509 block absent", sec("enforcing", nil), true},
+		{"enforcing, x509 enabled true", sec("enforcing", map[string]any{"enabled": true}), true},
+		{"enforcing, x509 enabled false", sec("enforcing", map[string]any{"enabled": false}), false},
+		{"enforcing, x509 present without enabled key", sec("enforcing", map[string]any{}), true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, x509AuthEnabled(tt.values))
+		})
+	}
+}
+
+// x509Input pins security.authentication.mode to "enforcing" via the input
+// values document, since the decision engine itself never sets it.
+func x509Input() map[string]any {
+	return map[string]any{"security": map[string]any{"authentication": map[string]any{"mode": "enforcing"}}}
+}
+
+func TestRecommendWithInput_X509PrivilegeDenial(t *testing.T) {
+	facts := recFacts(func(f *ClusterFacts) {
+		f.Privileges.X509KubeSystem = Finding{
+			Verdict:  VerdictNo,
+			Evidence: []string{"create rolebindings.rbac.authorization.k8s.io in namespace kube-system"},
+		}
+	})
+
+	t.Run("apply mode errors", func(t *testing.T) {
+		_, err := RecommendWithInput(facts, recAnswers(), x509Input(), nil, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "rolebindings.rbac.authorization.k8s.io")
+	})
+
+	t.Run("validation mode warns and hands off instead of aborting", func(t *testing.T) {
+		p, err := RecommendWithInput(facts, recAnswers(), x509Input(), nil, false)
+		require.NoError(t, err)
+		text := notesText(p)
+		assert.Contains(t, text, "rolebindings.rbac.authorization.k8s.io")
+		assert.Contains(t, text, "missing privileges listed above")
+	})
+}
+
+func TestRecommendWithInput_X509PrivilegeUnknown(t *testing.T) {
+	facts := recFacts(func(f *ClusterFacts) {
+		f.Privileges.X509KubeSystem = Finding{Verdict: VerdictUnknown, Evidence: []string{"denied listing"}}
+	})
+	p, err := RecommendWithInput(facts, recAnswers(), x509Input(), nil, true)
+	require.NoError(t, err)
+	assert.Contains(t, notesText(p), "could not be verified")
+}
+
+// TestRecommend_X509NotEnabledSkipsPrivilegeCheck covers the case where the
+// values never enable x509 auth: a denied kube-system grant then has no
+// effect, since the decision engine's own values never request it.
+func TestRecommend_X509NotEnabledSkipsPrivilegeCheck(t *testing.T) {
+	facts := recFacts(func(f *ClusterFacts) {
+		f.Privileges.X509KubeSystem = Finding{
+			Verdict:  VerdictNo,
+			Evidence: []string{"create rolebindings.rbac.authorization.k8s.io in namespace kube-system"},
+		}
+	})
+	p, err := Recommend(facts, recAnswers())
+	require.NoError(t, err)
+	for _, n := range p.Notes {
+		assert.NotContains(t, n.Text, "x509")
+	}
+}
+
 func TestPrivilegeDenial(t *testing.T) {
 	facts := recFacts(func(f *ClusterFacts) {
 		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}

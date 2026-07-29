@@ -197,7 +197,24 @@ func RecommendWithInput(facts *ClusterFacts, answers *Answers, input map[string]
 	}
 
 	decideAction(facts, &a, vals, p, info, warn)
+	if err := checkX509Privileges(facts, p.Values, applying, info, warn); err != nil {
+		return nil, err
+	}
 	return p, nil
+}
+
+// x509AuthEnabled reports whether values activate the traffic-manager's x509
+// client-certificate auth listener: security.authentication.mode is
+// "enforcing" and security.authentication.x509.enabled is not explicitly
+// false (absent means enabled). It mirrors the chart's
+// telepresence.x509AuthEnabled helper.
+func x509AuthEnabled(values map[string]any) bool {
+	mode, _ := valueAt(values, "security", "authentication", "mode")
+	if s, ok := mode.(string); !ok || s != "enforcing" {
+		return false
+	}
+	enabled, present := boolAt(values, "security", "authentication", "x509", "enabled")
+	return !present || enabled
 }
 
 // agentMachinery resolves the decision table for the agent deployment mode:
@@ -303,6 +320,41 @@ func checkPrivileges(facts *ClusterFacts, scope ManagedScope, applying bool, inf
 	case VerdictYes, VerdictProbable:
 	}
 	return nil
+}
+
+// checkX509Privileges is checkPrivileges for the kube-system RoleBinding
+// x509 client-certificate authentication needs: a no-op unless values enable
+// x509 auth, in which case a denial becomes an error when applying, a
+// warning note (with the same handoff instructions as checkPrivileges) when
+// only validating, and an unverifiable result becomes an info note.
+func checkX509Privileges(facts *ClusterFacts, values map[string]any, applying bool, info, warn func(string, ...any)) error {
+	if !x509AuthEnabled(values) {
+		return nil
+	}
+	finding := facts.Privileges.X509KubeSystem
+	switch finding.Verdict {
+	case VerdictNo:
+		err := x509PrivilegeDeniedError(finding)
+		if applying {
+			return err
+		}
+		warn("%s", err.Error())
+		info("an admin can complete this install: hand them the missing privileges listed above so they can be granted, " +
+			"plus this file (run 'telepresence setup --output FILE' to produce it), then have them run " +
+			"'telepresence setup --input FILE --apply'")
+	case VerdictUnknown:
+		info("the kube-system RoleBinding needed for x509 client-certificate authentication could not be verified: %s",
+			strings.Join(finding.Evidence, "; "))
+	case VerdictYes, VerdictProbable:
+	}
+	return nil
+}
+
+// x509PrivilegeDeniedError names the missing kube-system RoleBinding
+// privilege x509 client-certificate authentication needs.
+func x509PrivilegeDeniedError(finding Finding) error {
+	return errcat.User.New("insufficient privileges for x509 client-certificate authentication; missing:\n  " +
+		strings.Join(finding.Evidence, "\n  "))
 }
 
 // privilegeDeniedError names the missing-privilege error for the given

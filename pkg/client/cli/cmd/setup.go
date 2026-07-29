@@ -212,7 +212,7 @@ func (sc *setupCommand) applyAndVerify(cl *setupCluster, p *setup.Proposal, out 
 	if err := setup.Apply(cl.cluster, cl.cluster.Kubeconfig, cl.managerNamespace, p, out); err != nil {
 		return "", nil, err
 	}
-	return setup.ApplyOutcome(p.Action), setup.VerifyInstall(cl.cluster, cl.ki, cl.managerNamespace, p.Values), nil
+	return setup.ApplyOutcome(p.Action), setup.VerifyInstall(cl.cluster, cl.ki, cl.managerNamespace, p.Values, cl.facts.ClientAuth), nil
 }
 
 // setupCluster is the probed cluster together with the handles the apply and

@@ -28,14 +28,14 @@ const (
 // VerifyInstall performs the best-effort post-apply checks that Atomic/Wait
 // does not cover: the QUIC endpoint and the agent-injector Service. Findings
 // are notes, never errors, and the whole verification is capped in time.
-func VerifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any) []Note {
-	return verifyInstall(ctx, ki, managerNamespace, values, quicGoDial)
+func VerifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts) []Note {
+	return verifyInstall(ctx, ki, managerNamespace, values, auth, quicGoDial)
 }
 
 // verifyInstall is VerifyInstall with the QUIC reachability dialer factored
 // out as a parameter so tests can exercise the classification logic without
 // opening real sockets.
-func verifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, dial quicDialer) []Note {
+func verifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts, dial quicDialer) []Note {
 	ctx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
 
@@ -46,7 +46,28 @@ func verifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespac
 	if enabled, present := boolAt(values, "agentInjector", "enabled"); present && enabled {
 		notes = append(notes, noteFromFinding(injectorEndpointsFinding(ctx, ki, managerNamespace)))
 	}
+	if mode, _ := valueAt(values, "security", "authentication", "mode"); mode == "enforcing" {
+		notes = append(notes, authEnforcedNote(values, auth))
+	}
 	return notes
+}
+
+// authEnforcedNote reports how this client will authenticate against a
+// manager that enforces authentication: its bearer token when it has one,
+// the manager's x509 listener when the values leave it enabled, or a
+// warning when the client has no credential the manager will accept.
+func authEnforcedNote(values map[string]any, auth ClientAuthFacts) Note {
+	switch {
+	case auth.Bearer:
+		return Note{Level: NoteInfo, Text: "authentication is enforced; this client authenticates with its kubeconfig's bearer token"}
+	case auth.X509 && x509AuthEnabled(values):
+		return Note{Level: NoteInfo, Text: "authentication is enforced; this client authenticates with its kubeconfig's client certificate via the manager's x509 listener"}
+	case auth.X509:
+		return Note{Level: NoteWarning, Text: "authentication is enforced, but this client's kubeconfig only produces " +
+			"a client certificate and x509 client authentication is disabled; it will be rejected"}
+	default:
+		return Note{Level: NoteWarning, Text: "authentication is enforced, but this client's kubeconfig produces neither a bearer token nor a client certificate; it will be rejected"}
+	}
 }
 
 // noteFromFinding renders a shared check's finding as a post-apply

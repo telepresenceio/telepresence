@@ -37,6 +37,7 @@ type HealthFacts struct {
 	Certificate       *Finding `json:"certificate,omitempty"`
 	InjectorEndpoints *Finding `json:"injectorEndpoints,omitempty"`
 	Quic              *Finding `json:"quic,omitempty"`
+	X509ClientAuth    *Finding `json:"x509ClientAuth,omitempty"`
 	VersionSkew       Finding  `json:"versionSkew"`
 }
 
@@ -46,7 +47,7 @@ func (h *HealthFacts) Clean() bool {
 	if h == nil {
 		return true
 	}
-	for _, f := range []*Finding{&h.ManagerReady, h.Webhook, h.Certificate, h.InjectorEndpoints, h.Quic, &h.VersionSkew} {
+	for _, f := range []*Finding{&h.ManagerReady, h.Webhook, h.Certificate, h.InjectorEndpoints, h.Quic, h.X509ClientAuth, &h.VersionSkew} {
 		if f != nil && f.Verdict == VerdictNo {
 			return false
 		}
@@ -56,7 +57,7 @@ func (h *HealthFacts) Clean() bool {
 
 // probeHealth runs the read-only doctor checks over the installed release.
 // Every check is one-shot and tolerates denials as VerdictUnknown.
-func (p *Prober) probeHealth(ctx context.Context, rel *ReleaseFacts) *HealthFacts {
+func (p *Prober) probeHealth(ctx context.Context, rel *ReleaseFacts, auth ClientAuthFacts) *HealthFacts {
 	h := &HealthFacts{
 		ManagerReady: p.healthManager(ctx),
 		VersionSkew:  healthVersionSkew(rel),
@@ -73,6 +74,10 @@ func (p *Prober) probeHealth(ctx context.Context, rel *ReleaseFacts) *HealthFact
 	if enabled, present := boolAt(rel.Values, "quicTunnel", "enabled"); present && enabled {
 		quic, _, _ := quicServiceFinding(ctx, p.KubeClient, p.ManagerNamespace)
 		h.Quic = &quic
+	}
+	if mode, _ := valueAt(rel.Values, "security", "authentication", "mode"); mode == "enforcing" {
+		x509 := healthX509ClientAuth(rel, auth)
+		h.X509ClientAuth = &x509
 	}
 	return h
 }
@@ -154,6 +159,29 @@ func certificateFinding(caBundle []byte, now time.Time) Finding {
 		return Finding{Verdict: VerdictNo, Evidence: []string{"the webhook certificate expires within 30 days: " + notAfter}}
 	default:
 		return Finding{Verdict: VerdictYes, Evidence: []string{"the webhook certificate is valid until " + notAfter}}
+	}
+}
+
+// healthX509ClientAuth checks, under enforcing mode, whether this client's
+// own credentials remain usable: a bearer token always is, a client
+// certificate needs the manager's x509 listener enabled, and a kubeconfig
+// producing neither is rejected outright.
+func healthX509ClientAuth(rel *ReleaseFacts, auth ClientAuthFacts) Finding {
+	x509Enabled, present := boolAt(rel.Values, "security", "authentication", "x509", "enabled")
+	switch {
+	case auth.Bearer:
+		return Finding{Verdict: VerdictYes}
+	case auth.X509 && (!present || x509Enabled):
+		return Finding{Verdict: VerdictYes}
+	case auth.X509:
+		return Finding{Verdict: VerdictNo, Evidence: []string{
+			"this kubeconfig authenticates with a client certificate, but the installed traffic-manager enforces " +
+				"authentication with x509 client authentication disabled; this client will be rejected",
+		}}
+	default:
+		return Finding{Verdict: VerdictNo, Evidence: []string{
+			"this kubeconfig produces neither a bearer token nor a client certificate, and the installed traffic-manager enforces authentication; this client will be rejected",
+		}}
 	}
 }
 

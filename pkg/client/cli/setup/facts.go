@@ -221,7 +221,7 @@ func (p *Prober) GatherFacts(ctx context.Context) (*ClusterFacts, error) {
 	facts.Release = p.probeRelease(ctx)
 	p.progress("Checking installation health")
 	if facts.Release.Installed {
-		facts.Health = p.probeHealth(ctx, &facts.Release)
+		facts.Health = p.probeHealth(ctx, &facts.Release, p.ClientAuth)
 	}
 	p.progress("Checking for a client update")
 	facts.ClientUpdate = p.probeUpdate(ctx)

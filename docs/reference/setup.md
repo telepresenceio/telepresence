@@ -37,7 +37,7 @@ runs a set of read-only probes before asking anything:
 | Namespace scale | How many namespaces exist, presented as evidence when the managed-scope question is asked. |
 | Existing installation | Whether a `traffic-manager` Helm release already exists, its version, and its current values. |
 | Client update | A best-effort check of the latest released client, advisory only. |
-| Existing-install health | When a release is found: Deployment readiness and recent warning events, webhook presence and certificate expiry, agent-injector endpoint readiness, QUIC endpoint state, and client/manager version skew. |
+| Existing-install health | When a release is found: Deployment readiness and recent warning events, webhook presence and certificate expiry, agent-injector endpoint readiness, QUIC endpoint state, client/manager version skew, and — under enforcing authentication — whether this client's kubeconfig credentials will be accepted. |
 | Routing conflicts | Whether the workstation's local routes overlap the cluster's pod/service subnets (read from the local route table; the remedy is always cluster-side). |
 
 Every probe tolerates denied permissions — a probe that cannot get an
@@ -221,7 +221,8 @@ report. In text mode it has up to three sections:
   node-agent, webhook, namespaces, routing, release, and — when an existing
   release was found — a health subsection covering the traffic-manager
   Deployment, the webhook and its certificate, agent-injector endpoints, the
-  QUIC endpoint, and version skew) plus supporting evidence.
+  QUIC endpoint, version skew and, under enforcing authentication, whether
+  this client's credentials will be accepted) plus supporting evidence.
 - **Proposed configuration**: the generated values document verbatim, plus,
   when upgrading an existing release, the list of keys that would change.
 - **Notes**: warnings and informational notes explaining any decision that

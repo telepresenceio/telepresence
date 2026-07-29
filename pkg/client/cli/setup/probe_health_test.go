@@ -80,7 +80,7 @@ func webhookConfiguration(caBundle []byte) *admissionv1.MutatingWebhookConfigura
 func TestProbeHealth_ManagerReadiness(t *testing.T) {
 	t.Run("ready", func(t *testing.T) {
 		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil))
+		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
 		assert.Equal(t, VerdictYes, h.ManagerReady.Verdict)
 		assert.Contains(t, h.ManagerReady.Evidence[0], "1 of 1 replicas ready")
 	})
@@ -108,7 +108,7 @@ func TestProbeHealth_ManagerReadiness(t *testing.T) {
 			},
 		)
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil))
+		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
 		require.Equal(t, VerdictNo, h.ManagerReady.Verdict)
 		assert.Contains(t, h.ManagerReady.Evidence[0], "0 of 1 replicas ready")
 		require.Len(t, h.ManagerReady.Evidence, 2)
@@ -116,13 +116,13 @@ func TestProbeHealth_ManagerReadiness(t *testing.T) {
 	})
 	t.Run("scaled to zero", func(t *testing.T) {
 		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(0, 0)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil))
+		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
 		require.Equal(t, VerdictNo, h.ManagerReady.Verdict)
 		assert.Contains(t, h.ManagerReady.Evidence[0], "scaled to zero")
 	})
 	t.Run("deployment missing", func(t *testing.T) {
 		p := &Prober{KubeClient: fake.NewClientset(), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil))
+		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
 		assert.Equal(t, VerdictNo, h.ManagerReady.Verdict)
 	})
 	t.Run("denial is unknown", func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestProbeHealth_ManagerReadiness(t *testing.T) {
 			return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, managerDeploymentName, nil)
 		})
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil))
+		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
 		assert.Equal(t, VerdictUnknown, h.ManagerReady.Verdict)
 	})
 }
@@ -142,7 +142,7 @@ func TestProbeHealth_Webhook(t *testing.T) {
 	t.Run("present with a healthy certificate", func(t *testing.T) {
 		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(300*24*time.Hour))))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues))
+		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Webhook)
 		assert.Equal(t, VerdictYes, h.Webhook.Verdict)
 		require.NotNil(t, h.Certificate)
@@ -154,7 +154,7 @@ func TestProbeHealth_Webhook(t *testing.T) {
 	t.Run("expired certificate", func(t *testing.T) {
 		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(-time.Hour))))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues))
+		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Certificate)
 		assert.Equal(t, VerdictNo, h.Certificate.Verdict)
 		assert.Contains(t, h.Certificate.Evidence[0], "expired")
@@ -162,7 +162,7 @@ func TestProbeHealth_Webhook(t *testing.T) {
 	t.Run("certificate expiring within 30 days", func(t *testing.T) {
 		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(10*24*time.Hour))))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues))
+		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Certificate)
 		assert.Equal(t, VerdictNo, h.Certificate.Verdict)
 		assert.Contains(t, h.Certificate.Evidence[0], "expires within 30 days")
@@ -170,21 +170,21 @@ func TestProbeHealth_Webhook(t *testing.T) {
 	t.Run("unparseable bundle", func(t *testing.T) {
 		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration([]byte("not a pem")))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues))
+		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Certificate)
 		assert.Equal(t, VerdictUnknown, h.Certificate.Verdict)
 	})
 	t.Run("missing configuration", func(t *testing.T) {
 		client := fake.NewClientset(managerDeployment(1, 1))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues))
+		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Webhook)
 		assert.Equal(t, VerdictNo, h.Webhook.Verdict)
 		assert.Nil(t, h.Certificate)
 	})
 	t.Run("injector not enabled by the release skips the checks", func(t *testing.T) {
 		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil))
+		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
 		assert.Nil(t, h.Webhook)
 		assert.Nil(t, h.Certificate)
 		assert.Nil(t, h.InjectorEndpoints)
@@ -197,13 +197,13 @@ func TestProbeHealth_QuicAndEndpoints(t *testing.T) {
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "quic", Port: 7778, NodePort: 31234}}
 		}))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"quicTunnel": map[string]any{"enabled": true}}))
+		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"quicTunnel": map[string]any{"enabled": true}}), ClientAuthFacts{})
 		require.NotNil(t, h.Quic)
 		assert.Equal(t, VerdictYes, h.Quic.Verdict)
 	})
 	t.Run("quic service missing", func(t *testing.T) {
 		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"quicTunnel": map[string]any{"enabled": true}}))
+		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"quicTunnel": map[string]any{"enabled": true}}), ClientAuthFacts{})
 		require.NotNil(t, h.Quic)
 		assert.Equal(t, VerdictNo, h.Quic.Verdict)
 	})
@@ -211,9 +211,49 @@ func TestProbeHealth_QuicAndEndpoints(t *testing.T) {
 		client := fake.NewClientset(managerDeployment(1, 1),
 			webhookConfiguration(pemCert(t, time.Now().Add(300*24*time.Hour))), injectorSlice(true))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"agentInjector": map[string]any{"enabled": true}}))
+		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"agentInjector": map[string]any{"enabled": true}}), ClientAuthFacts{})
 		require.NotNil(t, h.InjectorEndpoints)
 		assert.Equal(t, VerdictYes, h.InjectorEndpoints.Verdict)
+	})
+}
+
+func TestProbeHealth_X509ClientAuth(t *testing.T) {
+	enforcingX509Disabled := map[string]any{"security": map[string]any{"authentication": map[string]any{
+		"mode": "enforcing", "x509": map[string]any{"enabled": false},
+	}}}
+
+	t.Run("cert-only client rejected", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
+		h := p.probeHealth(context.Background(), installedRelease(enforcingX509Disabled), ClientAuthFacts{X509: true})
+		require.NotNil(t, h.X509ClientAuth)
+		assert.Equal(t, VerdictNo, h.X509ClientAuth.Verdict)
+		assert.Contains(t, h.X509ClientAuth.Evidence[0], "this client will be rejected")
+	})
+	t.Run("bearer-capable client is unaffected", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
+		h := p.probeHealth(context.Background(), installedRelease(enforcingX509Disabled), ClientAuthFacts{Bearer: true, X509: true})
+		require.NotNil(t, h.X509ClientAuth)
+		assert.Equal(t, VerdictYes, h.X509ClientAuth.Verdict)
+	})
+	t.Run("x509 not explicitly disabled", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
+		enforcing := map[string]any{"security": map[string]any{"authentication": map[string]any{"mode": "enforcing"}}}
+		h := p.probeHealth(context.Background(), installedRelease(enforcing), ClientAuthFacts{X509: true})
+		require.NotNil(t, h.X509ClientAuth)
+		assert.Equal(t, VerdictYes, h.X509ClientAuth.Verdict)
+	})
+	t.Run("client with no usable credentials rejected", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
+		enforcing := map[string]any{"security": map[string]any{"authentication": map[string]any{"mode": "enforcing"}}}
+		h := p.probeHealth(context.Background(), installedRelease(enforcing), ClientAuthFacts{})
+		require.NotNil(t, h.X509ClientAuth)
+		assert.Equal(t, VerdictNo, h.X509ClientAuth.Verdict)
+		assert.Contains(t, h.X509ClientAuth.Evidence[0], "neither a bearer token nor a client certificate")
+	})
+	t.Run("not in enforcing mode skips the check", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
+		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{X509: true})
+		assert.Nil(t, h.X509ClientAuth)
 	})
 }
 
@@ -221,27 +261,27 @@ func TestProbeHealth_VersionSkew(t *testing.T) {
 	p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
 
 	t.Run("equal", func(t *testing.T) {
-		h := p.probeHealth(context.Background(), installedRelease(nil))
+		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
 		assert.Equal(t, VerdictYes, h.VersionSkew.Verdict)
 	})
 	t.Run("older release", func(t *testing.T) {
 		rel := installedRelease(nil)
 		rel.Version = olderVersion()
-		h := p.probeHealth(context.Background(), rel)
+		h := p.probeHealth(context.Background(), rel, ClientAuthFacts{})
 		require.Equal(t, VerdictNo, h.VersionSkew.Verdict)
 		assert.Contains(t, h.VersionSkew.Evidence[0], "older than this client")
 	})
 	t.Run("newer release", func(t *testing.T) {
 		rel := installedRelease(nil)
 		rel.Version = newerVersion()
-		h := p.probeHealth(context.Background(), rel)
+		h := p.probeHealth(context.Background(), rel, ClientAuthFacts{})
 		require.Equal(t, VerdictNo, h.VersionSkew.Verdict)
 		assert.Contains(t, h.VersionSkew.Evidence[0], "upgrade the client instead")
 	})
 	t.Run("unparseable release version", func(t *testing.T) {
 		rel := installedRelease(nil)
 		rel.Version = "not-a-version"
-		h := p.probeHealth(context.Background(), rel)
+		h := p.probeHealth(context.Background(), rel, ClientAuthFacts{})
 		assert.Equal(t, VerdictUnknown, h.VersionSkew.Verdict)
 	})
 }

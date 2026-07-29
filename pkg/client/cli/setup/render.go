@@ -160,6 +160,7 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 		healthArea(w, "webhook certificate", h.Certificate)
 		healthArea(w, "agent-injector endpoints", h.InjectorEndpoints)
 		healthArea(w, "quic endpoint", h.Quic)
+		healthArea(w, "x509 client auth", h.X509ClientAuth)
 		healthArea(w, "version skew", &h.VersionSkew)
 	}
 
