@@ -2,18 +2,139 @@ name: "Integration Tests"
 on:
   pull_request:
     types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
       - labeled
 
 permissions:
   contents: read
   pull-requests: write
+  actions: read
+  checks: read
 
 env:
   TELEPRESENCE_REGISTRY: local
 
+# A new push cancels the still-running jobs of the previous push. The label
+# name is part of the group so that a push does not cancel an in-flight
+# labeled run of a different kind (e.g. "compatibility test").
+concurrency:
+  group: "integration-${{ github.event.pull_request.number }}-${{ github.event.label.name || 'push' }}"
+  cancel-in-progress: true
+
+# build_and_test runs without a label for non-draft PRs whose head branch is
+# in this repository; the "ok to test"/"compatibility test" labels remain the
+# gate for PRs from forks. The three jobs below repeat that condition because
+# workflow files cannot share expressions.
+#
+# Required-status-check semantics shape this workflow: a job skipped through
+# its if-condition reports conclusion "skipped", which SATISFIES a required
+# check. That is intended when preflight reports a docs-only change or a
+# prerequisite has failed (the failed prerequisite is itself required, so the
+# merge stays blocked), but it must never happen for an unlabeled fork PR --
+# which is why build_and_test renders a different job name in that case,
+# leaving the required "build_and_test (ubuntu-latest)" context unreported
+# and the merge blocked as "expected".
 jobs:
+  # Gatekeeper for the expensive jobs: removes the triggering label so a
+  # maintainer can re-add it, decides whether the change is docs-only, and
+  # waits for the other required checks so a DCO or unit-test failure is
+  # never followed by a pointless integration run.
+  preflight:
+    if: >-
+      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) ||
+      github.event.label.name == 'ok to test' ||
+      github.event.label.name == 'compatibility test'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      docs_only: ${{ steps.skip.outputs.should_skip }}
+    steps:
+      # For PRs from a fork the GITHUB_TOKEN is read-only and this call
+      # fails; continue-on-error keeps that from aborting the job (the
+      # maintainer removes the label by hand instead). The label name and PR
+      # number are passed via env (not interpolated into the script) to
+      # avoid command injection.
+      - name: Remove triggering label
+        if: github.event.action == 'labeled'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          LABEL: ${{ github.event.label.name }}
+        run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
+      # docs_only=true when every change since the last successful run of
+      # this workflow matches paths_ignore; build_and_test is then skipped
+      # and its required check is satisfied without a run. When no prior
+      # successful run can be found the answer is false, so the fail-safe
+      # direction is a full run.
+      - name: Check for a docs-only change
+        id: skip
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          cancel_others: false
+          paths_ignore: '["docs/**", "**.md", "CHANGELOG.yml"]'
+      # The list is the branch protection's required contexts minus this
+      # workflow's own build_and_test; reading it from the API would need
+      # admin scope the GITHUB_TOKEN does not have, so it is spelled out
+      # here. Keep it in sync with the branch protection settings.
+      - name: Wait for the other required checks
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          required=(
+            'DCO'
+            'Linux: Verify use of forbidden licenses'
+            'unit (ubuntu-latest)'
+            'unit (macos-latest)'
+            'unit (windows-latest)'
+          )
+          deadline=$((SECONDS + 2100))
+          while :; do
+            runs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?per_page=100" \
+              --jq '[.check_runs[] | {name, status, conclusion, started_at}] | group_by(.name) | map(max_by(.started_at))')
+            pending=()
+            for name in "${required[@]}"; do
+              row=$(jq -r --arg n "$name" '.[] | select(.name == $n) | "\(.status)/\(.conclusion)"' <<<"$runs")
+              case "$row" in
+                completed/success|completed/neutral|completed/skipped) ;;
+                completed/*)
+                  echo "prerequisite check '$name' concluded: ${row#completed/}"
+                  exit 1
+                  ;;
+                '') pending+=("$name (not reported yet)") ;;
+                *) pending+=("$name ($row)") ;;
+              esac
+            done
+            if [ ${#pending[@]} -eq 0 ]; then
+              echo "all prerequisite checks green"
+              exit 0
+            fi
+            if [ $SECONDS -ge $deadline ]; then
+              printf 'timed out waiting for: %s\n' "${pending[@]}"
+              exit 1
+            fi
+            printf 'waiting for: %s\n' "${pending[@]}"
+            sleep 60
+          done
+
   build_and_test:
-    if: ${{ github.event.label.name == 'ok to test' || github.event.label.name == 'compatibility test' }}
+    needs: preflight
+    # A docs-only change skips the run except when the "compatibility test"
+    # label asked for a suite that has not run for this content.
+    if: >-
+      needs.preflight.result == 'success' &&
+      (needs.preflight.outputs.docs_only != 'true' || github.event.label.name == 'compatibility test')
+    name: >-
+      ${{ ((github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) ||
+           github.event.label.name == 'ok to test' ||
+           github.event.label.name == 'compatibility test')
+          && format('build_and_test ({0})', matrix.runners)
+          || 'build_and_test (awaiting ok-to-test)' }}
     strategy:
       fail-fast: false
       matrix:
@@ -25,19 +146,6 @@ jobs:
           # - windows-latest
     runs-on: ${{ matrix.runners }}
     steps:
-      # Remove the label that triggered this run so a maintainer can re-add
-      # it to re-trigger. For PRs from a fork the GITHUB_TOKEN is read-only and
-      # this call fails; continue-on-error keeps that from aborting the job so
-      # the tests still run (the maintainer removes the label by hand instead).
-      # The label name and PR number are passed via env (not interpolated into
-      # the script) to avoid command injection.
-      - name: Remove triggering label
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR: ${{ github.event.pull_request.number }}
-          LABEL: ${{ github.event.label.name }}
-        run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
@@ -70,7 +178,7 @@ jobs:
           minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
           minikube image load ${{env.TELEPRESENCE_REGISTRY}}/route-controller:${{env.TELEPRESENCE_SEMVER}}
       - name: Run integration tests
-        if: github.event.label.name == 'ok to test'
+        if: github.event.action != 'labeled' || github.event.label.name == 'ok to test'
         timeout-minutes: 150
         shell: bash
         run: |
@@ -119,7 +227,11 @@ jobs:
   # rather than left to minikube's default, which flips to containerd in
   # v1.39.
   node_agent_docker_runtime:
-    if: ${{ github.event.label.name == 'ok to test' }}
+    needs: preflight
+    if: >-
+      needs.preflight.result == 'success' &&
+      needs.preflight.outputs.docs_only != 'true' &&
+      (github.event.action != 'labeled' || github.event.label.name == 'ok to test')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

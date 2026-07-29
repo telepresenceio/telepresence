@@ -3,8 +3,28 @@ on:
   pull_request:
 env:
   HOMEBREW_NO_INSTALL_FROM_API:
+permissions:
+  contents: read
+  actions: read
 jobs:
+  # Reports docs_only=true when every change since the last successful run of
+  # this workflow matches paths_ignore. The unit matrix is skipped in that
+  # case; a job skipped through its if-condition still satisfies its required
+  # status check. When no prior successful run can be found the answer is
+  # docs_only=false, so the fail-safe direction is to run the tests.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.skip.outputs.should_skip }}
+    steps:
+      - id: skip
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          cancel_others: false
+          paths_ignore: '["docs/**", "**.md", "CHANGELOG.yml"]'
   unit:
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     strategy:
       fail-fast: false
       matrix:
