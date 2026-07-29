@@ -43,8 +43,10 @@ func verifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespac
 	if enabled, present := boolAt(values, "quicTunnel", "enabled"); present && enabled {
 		notes = append(notes, noteFromFinding(verifyQuic(ctx, ki, managerNamespace, dial)))
 	}
-	if enabled, present := boolAt(values, "agentInjector", "enabled"); present && enabled {
-		notes = append(notes, noteFromFinding(injectorEndpointsFinding(ctx, ki, managerNamespace)))
+	// The chart enables the agent-injector by default, so the check runs
+	// unless the values disable it explicitly.
+	if enabled, present := boolAt(values, "agentInjector", "enabled"); !present || enabled {
+		notes = append(notes, noteFromFinding(injectorEndpointsFinding(ctx, ki, managerNamespace, injectorName(values))))
 	}
 	if mode, _ := valueAt(values, "security", "authentication", "mode"); mode == "enforcing" {
 		notes = append(notes, authEnforcedNote(values, auth))
@@ -150,28 +152,39 @@ func quicServiceFinding(ctx context.Context, ki kubernetes.Interface, namespace 
 	}
 }
 
+// injectorName returns the agent-injector Service name the values select,
+// the chart's default when unset.
+func injectorName(values map[string]any) string {
+	if v, ok := valueAt(values, "agentInjector", "name"); ok {
+		if s, ok := v.(string); ok && s != "" {
+			return s
+		}
+	}
+	return injectorServiceName
+}
+
 // injectorEndpointsFinding checks that the agent-injector Service has ready
 // endpoints. An injector canary (an annotated dry-run pod) is deliberately
 // not attempted: the injector skips any pod without a supported workload
 // owner, so a standalone canary always comes back unmutated regardless of
 // webhook health.
-func injectorEndpointsFinding(ctx context.Context, ki kubernetes.Interface, namespace string) Finding {
+func injectorEndpointsFinding(ctx context.Context, ki kubernetes.Interface, namespace, name string) Finding {
 	slices, err := ki.DiscoveryV1().EndpointSlices(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: discoveryv1.LabelServiceName + "=" + injectorServiceName,
+		LabelSelector: discoveryv1.LabelServiceName + "=" + name,
 	})
 	if err != nil {
 		return Finding{Verdict: VerdictUnknown, Evidence: []string{fmt.Sprintf(
 			"the %s service endpoints could not be read (%v); the webhook's failurePolicy Ignore means a broken injector degrades silently",
-			injectorServiceName, err)}}
+			name, err)}}
 	}
 	for _, slice := range slices.Items {
 		for _, ep := range slice.Endpoints {
 			if r := ep.Conditions.Ready; (r == nil || *r) && len(ep.Addresses) > 0 {
-				return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("the %s service has ready endpoints", injectorServiceName)}}
+				return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("the %s service has ready endpoints", name)}}
 			}
 		}
 	}
 	return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf(
 		"the %s service has no ready endpoints yet; the webhook's failurePolicy Ignore means a broken injector degrades silently",
-		injectorServiceName)}}
+		name)}}
 }

@@ -62,13 +62,15 @@ func (p *Prober) probeHealth(ctx context.Context, rel *ReleaseFacts, auth Client
 		ManagerReady: p.healthManager(ctx),
 		VersionSkew:  healthVersionSkew(rel),
 	}
-	if enabled, present := boolAt(rel.Values, "agentInjector", "enabled"); present && enabled {
+	// The chart enables the agent-injector by default, so the checks run
+	// unless the release's values disable it explicitly.
+	if enabled, present := boolAt(rel.Values, "agentInjector", "enabled"); !present || enabled {
 		webhook, certificate := p.healthWebhook(ctx)
 		h.Webhook = &webhook
 		if certificate != nil {
 			h.Certificate = certificate
 		}
-		endpoints := injectorEndpointsFinding(ctx, p.KubeClient, p.ManagerNamespace)
+		endpoints := injectorEndpointsFinding(ctx, p.KubeClient, p.ManagerNamespace, injectorName(rel.Values))
 		h.InjectorEndpoints = &endpoints
 	}
 	if enabled, present := boolAt(rel.Values, "quicTunnel", "enabled"); present && enabled {

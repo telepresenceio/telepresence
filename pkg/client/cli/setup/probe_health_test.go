@@ -182,12 +182,20 @@ func TestProbeHealth_Webhook(t *testing.T) {
 		assert.Equal(t, VerdictNo, h.Webhook.Verdict)
 		assert.Nil(t, h.Certificate)
 	})
-	t.Run("injector not enabled by the release skips the checks", func(t *testing.T) {
+	t.Run("injector disabled by the release skips the checks", func(t *testing.T) {
 		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
+		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"agentInjector": map[string]any{"enabled": false}}), ClientAuthFacts{})
 		assert.Nil(t, h.Webhook)
 		assert.Nil(t, h.Certificate)
 		assert.Nil(t, h.InjectorEndpoints)
+	})
+	t.Run("injector absent from the values runs the checks", func(t *testing.T) {
+		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(300*24*time.Hour))))
+		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
+		require.NotNil(t, h.Webhook)
+		assert.Equal(t, VerdictYes, h.Webhook.Verdict)
+		require.NotNil(t, h.InjectorEndpoints)
 	})
 }
 

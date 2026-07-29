@@ -17,7 +17,10 @@ import (
 )
 
 func quicValuesEnabled() map[string]any {
-	return map[string]any{"quicTunnel": map[string]any{"enabled": true}}
+	return map[string]any{
+		"quicTunnel":    map[string]any{"enabled": true},
+		"agentInjector": map[string]any{"enabled": false},
+	}
 }
 
 func injectorValuesEnabled() map[string]any {
@@ -187,6 +190,23 @@ func TestVerifyInstall_InjectorService(t *testing.T) {
 		require.Len(t, notes, 1)
 		assert.Equal(t, NoteWarning, notes[0].Level)
 	})
+	t.Run("injector absent from the values runs the check", func(t *testing.T) {
+		client := fake.NewClientset(injectorSlice(true))
+		notes := VerifyInstall(context.Background(), client, "ambassador", map[string]any{}, ClientAuthFacts{})
+		require.Len(t, notes, 1)
+		assert.Equal(t, NoteInfo, notes[0].Level)
+		assert.Contains(t, notes[0].Text, "ready endpoints")
+	})
+	t.Run("custom injector name is honored", func(t *testing.T) {
+		slice := injectorSlice(true)
+		slice.Labels[discoveryv1.LabelServiceName] = "my-injector"
+		client := fake.NewClientset(slice)
+		values := map[string]any{"agentInjector": map[string]any{"name": "my-injector"}}
+		notes := VerifyInstall(context.Background(), client, "ambassador", values, ClientAuthFacts{})
+		require.Len(t, notes, 1)
+		assert.Equal(t, NoteInfo, notes[0].Level)
+		assert.Contains(t, notes[0].Text, "my-injector service has ready endpoints")
+	})
 }
 
 func TestVerifyInstall_NothingEnabled(t *testing.T) {
@@ -199,14 +219,20 @@ func TestVerifyInstall_NothingEnabled(t *testing.T) {
 }
 
 func x509ValuesEnabled() map[string]any {
-	return map[string]any{"security": map[string]any{"authentication": map[string]any{"mode": "enforcing"}}}
+	return map[string]any{
+		"agentInjector": map[string]any{"enabled": false},
+		"security":      map[string]any{"authentication": map[string]any{"mode": "enforcing"}},
+	}
 }
 
 func x509ValuesDisabled() map[string]any {
-	return map[string]any{"security": map[string]any{"authentication": map[string]any{
-		"mode": "enforcing",
-		"x509": map[string]any{"enabled": false},
-	}}}
+	return map[string]any{
+		"agentInjector": map[string]any{"enabled": false},
+		"security": map[string]any{"authentication": map[string]any{
+			"mode": "enforcing",
+			"x509": map[string]any{"enabled": false},
+		}},
+	}
 }
 
 func TestVerifyInstall_X509ClientAuth(t *testing.T) {
@@ -244,7 +270,8 @@ func TestVerifyInstall_X509ClientAuth(t *testing.T) {
 		assert.Contains(t, notes[0].Text, "bearer token")
 	})
 	t.Run("authentication not enforced by the values", func(t *testing.T) {
-		notes := VerifyInstall(context.Background(), client, "ambassador", map[string]any{}, ClientAuthFacts{})
+		values := map[string]any{"agentInjector": map[string]any{"enabled": false}}
+		notes := VerifyInstall(context.Background(), client, "ambassador", values, ClientAuthFacts{})
 		assert.Empty(t, notes)
 	})
 }
