@@ -96,7 +96,7 @@ jobs:
           deadline=$((SECONDS + 2100))
           while :; do
             runs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/check-runs?per_page=100" \
-              --jq '[.check_runs[] | {name, status, conclusion, started_at}] | group_by(.name) | map(max_by(.started_at))')
+              --jq '[.check_runs[] | {name, status, conclusion, started_at, created_at}] | group_by(.name) | map(max_by(.started_at // .created_at))')
             pending=()
             for name in "${required[@]}"; do
               row=$(jq -r --arg n "$name" '.[] | select(.name == $n) | "\(.status)/\(.conclusion)"' <<<"$runs")
