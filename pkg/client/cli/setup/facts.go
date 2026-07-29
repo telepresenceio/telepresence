@@ -39,19 +39,20 @@ type Finding struct {
 // ClusterFacts is the result of probing a cluster; it carries no client
 // handles and is safe to marshal, diff, or hand to a pure decision function.
 type ClusterFacts struct {
-	Context          string         `json:"context,omitempty"`
-	Server           string         `json:"server,omitempty"`
-	ManagerNamespace string         `json:"managerNamespace"`
-	NamespaceExists  bool           `json:"namespaceExists"`
-	Privileges       PrivilegeFacts `json:"privileges"`
-	Quic             QuicFacts      `json:"quic"`
-	NodeAgent        NodeAgentFacts `json:"nodeAgent"`
-	Webhook          WebhookFacts   `json:"webhook"`
-	Namespaces       NamespaceFacts `json:"namespaces"`
-	Release          ReleaseFacts   `json:"release"`
-	Health           *HealthFacts   `json:"health,omitempty"` // read-only doctor checks; only when a release is installed
-	ClientUpdate     UpdateFacts    `json:"clientUpdate"`
-	Routing          RoutingFacts   `json:"routing"`
+	Context          string          `json:"context,omitempty"`
+	Server           string          `json:"server,omitempty"`
+	ManagerNamespace string          `json:"managerNamespace"`
+	NamespaceExists  bool            `json:"namespaceExists"`
+	Privileges       PrivilegeFacts  `json:"privileges"`
+	Quic             QuicFacts       `json:"quic"`
+	NodeAgent        NodeAgentFacts  `json:"nodeAgent"`
+	Webhook          WebhookFacts    `json:"webhook"`
+	Namespaces       NamespaceFacts  `json:"namespaces"`
+	Release          ReleaseFacts    `json:"release"`
+	ClientAuth       ClientAuthFacts `json:"clientAuth"`       // the client's own credential kinds, as supplied by the caller
+	Health           *HealthFacts    `json:"health,omitempty"` // read-only doctor checks; only when a release is installed
+	ClientUpdate     UpdateFacts     `json:"clientUpdate"`
+	Routing          RoutingFacts    `json:"routing"`
 }
 
 type PrivilegeFacts struct {
@@ -61,6 +62,17 @@ type PrivilegeFacts struct {
 	MissingNamespaced           []string          `json:"missingNamespaced,omitempty"`
 	MissingAttributes           []DeniedAttribute `json:"missingAttributes,omitempty"`           // structured form of Missing
 	MissingNamespacedAttributes []DeniedAttribute `json:"missingNamespacedAttributes,omitempty"` // structured form of MissingNamespaced
+	// X509KubeSystem is whether the caller can create the kube-system
+	// RoleBinding x509 client auth needs; consulted only when the decision
+	// enables x509 auth.
+	X509KubeSystem Finding `json:"x509KubeSystem"`
+}
+
+// ClientAuthFacts records which credential kinds the connecting client's own
+// kubeconfig can produce.
+type ClientAuthFacts struct {
+	Bearer bool `json:"bearer"`
+	X509   bool `json:"x509"`
 }
 
 type QuicFacts struct {
@@ -138,12 +150,13 @@ func DefaultCandidateValues() map[string]any {
 type Prober struct {
 	KubeClient       kubernetes.Interface
 	ManagerNamespace string
-	Context          string         // kubeconfig context name, recorded in the facts
-	Server           string         // API server URL, recorded in the facts
-	CandidateValues  map[string]any // values for the P1 chart render; nil means DefaultCandidateValues()
-	UpdateCheckHost  string         // default "app.getambassador.io"
-	HTTPClient       *http.Client   // default a client with a short timeout
-	Progress         func(string)   // called with a phase description as each probe starts; nil is silent
+	Context          string          // kubeconfig context name, recorded in the facts
+	Server           string          // API server URL, recorded in the facts
+	CandidateValues  map[string]any  // values for the P1 chart render; nil means DefaultCandidateValues()
+	UpdateCheckHost  string          // default "app.getambassador.io"
+	HTTPClient       *http.Client    // default a client with a short timeout
+	Progress         func(string)    // called with a phase description as each probe starts; nil is silent
+	ClientAuth       ClientAuthFacts // the client's own credential kinds, recorded verbatim into the facts
 
 	// ReleaseLookup finds an existing traffic-manager Helm release; nil disables
 	// P6 and ReleaseFacts stays zero.
@@ -192,6 +205,7 @@ func (p *Prober) GatherFacts(ctx context.Context) (*ClusterFacts, error) {
 		Server:           p.Server,
 		ManagerNamespace: p.ManagerNamespace,
 		NamespaceExists:  nsExists,
+		ClientAuth:       p.ClientAuth,
 	}
 	p.progress("Probing install privileges")
 	facts.Privileges = p.probeRBAC(ctx, nsExists)

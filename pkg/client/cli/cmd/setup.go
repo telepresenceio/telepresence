@@ -281,11 +281,13 @@ func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, erro
 	}
 	pctx := ctx
 	var lastPhase string
+	bearer, x509 := k8s.ClientAuthMethods(cluster.Kubeconfig)
 	prober := &setup.Prober{
 		KubeClient:       ki,
 		ManagerNamespace: cl.managerNamespace,
 		Context:          cluster.KubeContext,
 		Server:           cluster.Server,
+		ClientAuth:       setup.ClientAuthFacts{Bearer: bearer, X509: x509},
 		Progress: func(phase string) {
 			if lastPhase != "" {
 				progress.Done(progress.WithEventId(pctx, lastPhase))

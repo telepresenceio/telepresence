@@ -56,6 +56,14 @@ type DeniedAttribute struct {
 func (p *Prober) probeRBAC(ctx context.Context, nsExists bool) PrivilegeFacts {
 	facts := PrivilegeFacts{}
 
+	facts.X509KubeSystem = p.singleAccessCheck(ctx, &authv1.ResourceAttributes{
+		Verb:      "create",
+		Group:     "rbac.authorization.k8s.io",
+		Resource:  "rolebindings",
+		Namespace: "kube-system",
+		Name:      fmt.Sprintf("traffic-manager-x509-auth-%s", p.ManagerNamespace),
+	})
+
 	clusterWide, missing, attrs := p.evaluateChartAccess(ctx, nsExists, p.candidateValues())
 	facts.ClusterWide = clusterWide
 	facts.Missing = missing

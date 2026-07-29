@@ -93,6 +93,33 @@ func TestProbeRBAC_NamespacedAttributes(t *testing.T) {
 	}
 }
 
+func TestProbeRBAC_X509KubeSystemAllowed(t *testing.T) {
+	client := fake.NewClientset()
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*authv1.ResourceAttributes) bool { return true })
+
+	p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+	facts := p.probeRBAC(context.Background(), true)
+
+	assert.Equal(t, VerdictYes, facts.X509KubeSystem.Verdict)
+}
+
+func TestProbeRBAC_X509KubeSystemDenied(t *testing.T) {
+	const deniedName = "traffic-manager-x509-auth-ambassador"
+	client := fake.NewClientset()
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(ra *authv1.ResourceAttributes) bool {
+		if ra.Resource == "rolebindings" && ra.Namespace == "kube-system" && ra.Name == deniedName {
+			return false
+		}
+		return true
+	})
+
+	p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+	facts := p.probeRBAC(context.Background(), true)
+
+	require.Equal(t, VerdictNo, facts.X509KubeSystem.Verdict)
+	assert.NotEmpty(t, facts.X509KubeSystem.Evidence)
+}
+
 func TestProbeRBAC_ReviewCallError(t *testing.T) {
 	client := fake.NewClientset()
 	// No InstallFakeSelfSubjectAccessReviews: the fake clientset has no reactor
