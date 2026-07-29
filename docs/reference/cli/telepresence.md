@@ -62,6 +62,7 @@ result in a password prompt.
 | [replace](telepresence_replace) | Replace a container |
 | [revoke](telepresence_revoke) | Revoke an intercept by intercept ID. The intercept ID must be in the format &lt;session_id&gt;:&lt;intercept_name&gt; |
 | [serve](telepresence_serve) | Start the browser on a remote service |
+| [setup](telepresence_setup) | Analyze the cluster and propose or apply a traffic-manager configuration |
 | [status](telepresence_status) | Show connectivity status |
 | [uninstall](telepresence_uninstall) | Uninstall telepresence agents |
 | [version](telepresence_version) | Show version |

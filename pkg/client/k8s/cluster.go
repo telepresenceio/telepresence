@@ -170,7 +170,8 @@ func (kc *Cluster) CheckTrafficManagerService(ctx context.Context, namespace str
 		if errors.As(err, &se) {
 			if se.Status().Code == http.StatusNotFound {
 				clog.Error(ctx, msg)
-				msg = "traffic manager not found, if it is not installed, please run 'telepresence helm install'. " +
+				msg = "traffic manager not found, if it is not installed, please run 'telepresence setup' to configure and install it, " +
+					"or 'telepresence helm install' for a plain install. " +
 					"If it is installed, try connecting with a --manager-namespace to point telepresence to the namespace it's installed in."
 			}
 		}

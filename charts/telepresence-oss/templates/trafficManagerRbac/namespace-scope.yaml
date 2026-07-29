@@ -51,6 +51,14 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - "networking.k8s.io"
+  resources:
+  - ingresses
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - ""
   resources:
   - configmaps
@@ -144,7 +152,6 @@ rules:
   - apiGroups:
       - "networking.k8s.io"
     resources:
-      - ingresses
       - servicecidrs
     verbs:
       - get

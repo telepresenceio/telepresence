@@ -44,6 +44,7 @@ type ttyWriter struct {
 	mtx             sync.Mutex
 	skipChildEvents bool
 	progressTitle   string
+	total           int
 }
 
 func newTTYWriter(out io.Writer) Writer {
@@ -66,6 +67,7 @@ func (w *ttyWriter) Start(ctx context.Context, progressTitle string) {
 	w.done = make(chan struct{})
 	w.skipChildEvents = false
 	w.progressTitle = progressTitle
+	w.total = 0
 	done := w.done
 	go func() {
 		for {
@@ -125,6 +127,12 @@ func (w *ttyWriter) TriggerRefresh() {
 	w.ticker.Reset(333 * time.Millisecond)
 }
 
+func (w *ttyWriter) SetTotal(total int) {
+	w.mtx.Lock()
+	w.total = total
+	w.mtx.Unlock()
+}
+
 func (w *ttyWriter) print() {
 	w.mtx.Lock()
 	defer w.mtx.Unlock()
@@ -153,10 +161,12 @@ func (w *ttyWriter) print() {
 	}()
 
 	numLines := 0
-	withID := len(w.eventIDs) > 1
+	withID := len(w.eventIDs) > 1 || w.total > 0
 	if withID {
-		firstLine := fmt.Sprintf("[+] %s %d/%d", w.progressTitle, numDone(w.events), len(w.events))
-		if numDone(w.events) == len(w.events) {
+		total := max(w.total, len(w.events))
+		done := numDone(w.events)
+		firstLine := fmt.Sprintf("[+] %s %d/%d", w.progressTitle, done, total)
+		if done == total {
 			firstLine = doneColor.Apply(firstLine)
 		}
 		firstLine += aec.EraseLine(aec.EraseModes.Tail).String()

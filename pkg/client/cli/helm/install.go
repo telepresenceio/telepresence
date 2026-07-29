@@ -467,7 +467,7 @@ func ensureIsInstalled(
 
 	switch {
 	case existing == nil && req.Type == Upgrade: // fresh install
-		err = fmt.Errorf("%s is not installed, use 'telepresence helm install' to install it", releaseName)
+		err = fmt.Errorf("%s is not installed, use 'telepresence setup' to configure and install it, or 'telepresence helm install' for a plain install", releaseName)
 	case existing == nil:
 		clog.Infof(ctx, "ensureIsInstalled(namespace=%q): performing fresh install...", namespace)
 		err = installNew(ctx, ki, chrt, helmConfig, releaseName, namespace, req, vals)

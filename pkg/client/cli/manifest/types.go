@@ -24,6 +24,7 @@ type Connection struct {
 	AlsoProxy               []string          `json:"alsoProxy,omitempty"`
 	NeverProxy              []string          `json:"neverProxy,omitempty"`
 	AllowConflictingSubnets []string          `json:"allowConflictingSubnets,omitempty"`
+	Vnat                    []string          `json:"vnat,omitempty"`
 	ProxyVia                []ProxyVia        `json:"proxyVia,omitempty"`
 	RerouteLocal            []string          `json:"rerouteLocal,omitempty"`
 	RerouteRemote           []string          `json:"rerouteRemote,omitempty"`

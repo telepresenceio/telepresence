@@ -1,0 +1,5 @@
+apiVersion: telepresence.io/v1alpha1
+kind: WorkstationState
+connection:
+  context: kind-dev
+  vnat: [not-a-subnet]

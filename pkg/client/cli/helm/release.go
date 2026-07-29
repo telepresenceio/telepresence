@@ -7,7 +7,18 @@ import (
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/release"
+	"k8s.io/cli-runtime/pkg/genericclioptions"
 )
+
+// GetTrafficManagerRelease returns the traffic-manager Helm release in the given
+// namespace, or nil when no release exists.
+func GetTrafficManagerRelease(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, namespace string) (*release.Release, error) {
+	helmConfig, err := getHelmConfig(ctx, clientGetter, namespace)
+	if err != nil {
+		return nil, err
+	}
+	return getHelmRelease(ctx, trafficManagerReleaseName, helmConfig)
+}
 
 // getHelmRelease gets the traffic-manager helm release; if it is not found, it will return nil.
 func getHelmRelease(ctx context.Context, releaseName string, helmConfig *action.Configuration) (*release.Release, error) {
