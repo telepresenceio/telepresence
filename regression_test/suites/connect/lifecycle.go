@@ -59,13 +59,20 @@ func freeDefaultConnection(t *testing.T, ns string) {
 }
 
 // ConnectLifecycle proves the basic connect -> status -> disconnect ->
-// connect -> quit cycle against the shared default connection.
+// connect -> quit cycle against the shared default connection. Carries
+// CompatCore: Test_Lifecycle exercises WatchClusterInfo (rootd's persistent
+// watch) and ReconnectClient (the live session's reconnect path); see
+// framework/compat/manifest.go.
 type ConnectLifecycle struct {
 	rt.Suite
 }
 
 func init() {
-	rt.Register(&ConnectLifecycle{}, rt.InArea("connect"), rt.NeedsManager(managers.Default))
+	rt.Register(&ConnectLifecycle{},
+		rt.InArea("connect"),
+		rt.NeedsManager(managers.Default),
+		rt.WithLabels(rt.CompatCore),
+	)
 }
 
 // Test_Lifecycle drives connect -> status -> disconnect (session only,

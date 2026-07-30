@@ -24,6 +24,10 @@ import (
 
 // InterceptRouting proves routing behavior across replica counts, multiple
 // service ports, the localShortcut config on/off, and h2c preservation.
+// Carries CompatCore: Test_MultiReplica's repeated requests to
+// wl.ServiceURL() resolve through the manager's Lookup RPC (until a
+// dedicated dns-area single-resolution test exists, per m4-spec section 2);
+// see framework/compat/manifest.go.
 type InterceptRouting struct {
 	rt.Suite
 }
@@ -32,6 +36,7 @@ func init() {
 	rt.Register(&InterceptRouting{},
 		rt.InArea("intercept"),
 		rt.NeedsManager(managers.Default),
+		rt.WithLabels(rt.CompatCore),
 	)
 }
 

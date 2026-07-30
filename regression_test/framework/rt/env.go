@@ -16,14 +16,15 @@ import (
 // envConfig is the parsed, resolved set of RTEST_* environment inputs for
 // one run. See the M1 contract's Environment table for the full var list.
 type envConfig struct {
-	kubeconfig string
-	context    string
-	registry   string
-	executable string
+	kubeconfig      string
+	context         string
+	registry        string
+	managerRegistry string
+	executable      string
 
-	clientVersion  string // RTEST_CLIENT_VERSION override, empty if unset
-	managerVersion string // RTEST_MANAGER_VERSION override, empty if unset
-	agentVersion   string // RTEST_AGENT_VERSION override, empty if unset
+	clientVersionOverride  string // RTEST_CLIENT_VERSION, empty if unset
+	managerVersionOverride string // RTEST_MANAGER_VERSION, empty if unset
+	agentVersionOverride   string // RTEST_AGENT_VERSION, empty if unset
 
 	labels     map[Label]bool
 	skipLabels map[Label]bool
@@ -48,6 +49,15 @@ func loadEnv(root string) envConfig {
 		registry = "ghcr.io/telepresenceio"
 	}
 
+	// managerRegistry sources a pinned RTEST_MANAGER_VERSION's manager/agent
+	// images: deliberately independent of RTEST_REGISTRY/TELEPRESENCE_REGISTRY,
+	// which usually names a local or cluster-loaded registry that never holds
+	// a released version's images.
+	managerRegistry := os.Getenv("RTEST_MANAGER_REGISTRY")
+	if managerRegistry == "" {
+		managerRegistry = "ghcr.io/telepresenceio"
+	}
+
 	exe := os.Getenv("RTEST_EXECUTABLE")
 	if exe == "" {
 		name := "telepresence"
@@ -58,20 +68,21 @@ func loadEnv(root string) envConfig {
 	}
 
 	return envConfig{
-		kubeconfig:     os.Getenv("RTEST_KUBECONFIG"),
-		context:        os.Getenv("RTEST_CONTEXT"),
-		registry:       registry,
-		executable:     exe,
-		clientVersion:  os.Getenv("RTEST_CLIENT_VERSION"),
-		managerVersion: os.Getenv("RTEST_MANAGER_VERSION"),
-		agentVersion:   os.Getenv("RTEST_AGENT_VERSION"),
-		labels:         parseLabelSet(os.Getenv("RTEST_LABELS")),
-		skipLabels:     parseLabelSet(os.Getenv("RTEST_SKIP_LABELS")),
-		ci:             ci,
-		fresh:          ci || os.Getenv("RTEST_FRESH") == "1",
-		teardown:       ci || os.Getenv("RTEST_TEARDOWN") == "1",
-		tailLogs:       os.Getenv("RTEST_TAIL_LOGS") == "1",
-		cover:          os.Getenv("RTEST_COVER") == "1",
+		kubeconfig:             os.Getenv("RTEST_KUBECONFIG"),
+		context:                os.Getenv("RTEST_CONTEXT"),
+		registry:               registry,
+		managerRegistry:        managerRegistry,
+		executable:             exe,
+		clientVersionOverride:  os.Getenv("RTEST_CLIENT_VERSION"),
+		managerVersionOverride: os.Getenv("RTEST_MANAGER_VERSION"),
+		agentVersionOverride:   os.Getenv("RTEST_AGENT_VERSION"),
+		labels:                 parseLabelSet(os.Getenv("RTEST_LABELS")),
+		skipLabels:             parseLabelSet(os.Getenv("RTEST_SKIP_LABELS")),
+		ci:                     ci,
+		fresh:                  ci || os.Getenv("RTEST_FRESH") == "1",
+		teardown:               ci || os.Getenv("RTEST_TEARDOWN") == "1",
+		tailLogs:               os.Getenv("RTEST_TAIL_LOGS") == "1",
+		cover:                  os.Getenv("RTEST_COVER") == "1",
 	}
 }
 

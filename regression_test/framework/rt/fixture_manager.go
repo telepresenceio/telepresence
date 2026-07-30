@@ -94,16 +94,53 @@ func ManagerFixture(spec managers.Spec) *Fixture[*ManagerHandle] {
 }
 
 // mergedManagerValues layers spec's overlay on top of the runtime's
-// baseline (registry/tag/pullPolicy derived from the version under test),
-// then, in coverage mode (RTEST_COVER=1), adds the GOCOVERDIR env var and
-// hostPath volume defined in cover.go.
+// baseline (registry/tag/pullPolicy derived from the manager version under
+// test), then, in coverage mode (RTEST_COVER=1), adds the GOCOVERDIR env
+// var and hostPath volume defined in cover.go.
 func mergedManagerValues(r *Runtime, spec managers.Spec) managers.Values {
-	base := managers.Baseline(r.Registry(), r.Version().String(), pullPolicyFor(r.Registry()), "true")
+	registry := r.Registry()
+	pullPolicy := pullPolicyFor(registry)
+	if r.managerVersionPinned() {
+		// A pinned compat manager pulls a released chart from
+		// oci://ghcr.io/telepresenceio/telepresence-oss; its images come from
+		// RTEST_MANAGER_REGISTRY (default the public ghcr.io/telepresenceio),
+		// not this run's own registry, and Never is never forced: a released
+		// image was never loaded into a local/kind registry, so forcing Never
+		// would leave the release stuck ImagePullBackOff.
+		registry = r.managerRegistry
+		pullPolicy = pullPolicyFor(registry)
+		if pullPolicy == "Never" {
+			pullPolicy = ""
+		}
+	}
+	base := managers.Baseline(registry, r.ManagerVersion().String(), pullPolicy, "true")
 	values := managers.Merge(base, spec.Values)
 	if r.cover {
 		values = applyCoverManagerValues(values)
 	}
 	return values
+}
+
+// marshalManagerValues marshals values to YAML for the helm values file and
+// the state-file hash. When RTEST_MANAGER_VERSION pins a released version
+// (managerVersionPinned), keys the old chart's values.schema.yaml doesn't
+// know about yet are pruned first (managers.PruneForVersion): its
+// additionalProperties:false schema rejects an unrecognized key outright
+// rather than ignoring it.
+func marshalManagerValues(r *Runtime, values managers.Values) ([]byte, error) {
+	data, err := yaml.Marshal(values)
+	if err != nil {
+		return nil, err
+	}
+	if !r.managerVersionPinned() {
+		return data, nil
+	}
+	var m map[string]any
+	if err := yaml.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("rtest: re-decoding manager values for pruning: %w", err)
+	}
+	managers.PruneForVersion(m, r.ManagerVersion())
+	return yaml.Marshal(m)
 }
 
 func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
@@ -114,7 +151,7 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 	}
 
 	values := mergedManagerValues(r, spec)
-	valuesYAML, err := yaml.Marshal(values)
+	valuesYAML, err := marshalManagerValues(r, values)
 	if err != nil {
 		return nil, fmt.Errorf("manager/%s: marshaling values: %w", spec.Key, err)
 	}
@@ -130,11 +167,15 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 	}
 	// Spec switching relies on the values file fully defining the release:
 	// --reset-values keeps a previous spec's values from leaking into this one.
-	args := []string{"helm", "install", "-n", ns, "-f", valuesPath}
+	verArgs := r.helmVersionArgs()
+	args := make([]string, 0, 7+len(verArgs))
 	if exists {
-		args = []string{"helm", "upgrade", "--reset-values", "-n", ns, "-f", valuesPath}
+		args = append(args, "helm", "upgrade", "--reset-values", "-n", ns, "-f", valuesPath)
+	} else {
+		args = append(args, "helm", "install", "-n", ns, "-f", valuesPath)
 	}
-	if _, stderr, err := r.CLI().Run(e.Ctx, args...); err != nil {
+	args = append(args, verArgs...)
+	if _, stderr, err := r.helmCLI().Run(e.Ctx, args...); err != nil {
 		return nil, fmt.Errorf("%s: %w: %s", strings.Join(args[:2], " "), err, stderr)
 	}
 	if _, err := r.Kubectl(e.Ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=180s"); err != nil {
@@ -181,7 +222,7 @@ func adoptManager(e Env, spec managers.Spec) (*ManagerHandle, bool) {
 		return nil, false
 	}
 	values := mergedManagerValues(r, spec)
-	valuesYAML, err := yaml.Marshal(values)
+	valuesYAML, err := marshalManagerValues(r, values)
 	if err != nil || sha256Hex(valuesYAML) != st.ValuesHash {
 		return nil, false
 	}
@@ -195,7 +236,7 @@ func destroyManager(e Env, h *ManagerHandle) error {
 	if h == nil {
 		return nil
 	}
-	_, stderr, err := e.R.CLI().Run(e.Ctx, "helm", "uninstall", "--manager-namespace", h.Namespace)
+	_, stderr, err := e.R.helmCLI().Run(e.Ctx, "helm", "uninstall", "--manager-namespace", h.Namespace)
 	if err != nil && !strings.Contains(strings.ToLower(stderr), "not found") &&
 		!strings.Contains(strings.ToLower(err.Error()), "not found") {
 		return fmt.Errorf("helm uninstall: %w: %s", err, stderr)
@@ -263,7 +304,7 @@ func waitOldManagerGone(e Env, ns string) error {
 // end of a keep-resources run.
 func (r *Runtime) parkManagerOnDefault() {
 	values := mergedManagerValues(r, managers.Default)
-	data, err := yaml.Marshal(values)
+	data, err := marshalManagerValues(r, values)
 	if err != nil {
 		return
 	}

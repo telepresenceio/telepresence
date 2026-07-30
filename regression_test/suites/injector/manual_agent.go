@@ -106,7 +106,7 @@ func (s *ManualAgent) Test_HandBuiltAgentIntercepts() {
 	deployPath := filepath.Join(dir, "deployment.yaml")
 	writeFile(t, deployPath, fmt.Sprintf(manualAgentDeploymentManifest, manualAgentName, ns))
 
-	agentImage := fmt.Sprintf("%s/tel2:%s", s.R().Registry(), s.R().Version().String())
+	agentImage := fmt.Sprintf("%s/tel2:%s", s.R().Registry(), s.R().ManagerVersion().String())
 	cfgYAML := s.genYAML(t, "config",
 		"--agent-image", agentImage,
 		"--manager-namespace", managers.ManagerNamespace,

@@ -7,13 +7,20 @@ import (
 )
 
 // SmokeConnected checks CLI commands against a live connection: status,
-// version, and list.
+// version, and list. Carries CompatCore: Test_Status and Test_Version
+// exercise the manager's session lifecycle (ArriveAsClient, Remain, Depart,
+// GetClientConfig, Version, GetAgentImageFQN) that every other compat-core
+// test's Connect implicitly relies on; see framework/compat/manifest.go.
 type SmokeConnected struct {
 	rt.Suite
 }
 
 func init() {
-	rt.Register(&SmokeConnected{}, rt.InArea("smoke"), rt.NeedsManager(managers.Default))
+	rt.Register(&SmokeConnected{},
+		rt.InArea("smoke"),
+		rt.NeedsManager(managers.Default),
+		rt.WithLabels(rt.CompatCore),
+	)
 }
 
 // Test_Status checks that `status --format json` reports both daemons and

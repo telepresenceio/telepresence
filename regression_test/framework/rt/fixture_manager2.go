@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"sigs.k8s.io/yaml"
-
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 )
@@ -51,10 +49,17 @@ func provisionSecondaryManager(e Env, spec managers.Spec, ns string) (*ManagerHa
 	}
 
 	values := mergedManagerValues(r, spec)
+	// Expression form for the same reason as managers.Baseline: released
+	// charts up to 2.31.x crash on a matchLabels-only selector when any
+	// LATER install runs its overlap validation (findings.md #1).
 	values.NamespaceSelector = &labels.Selector{
-		MatchLabels: map[string]string{labels.NameLabelKey: ns},
+		MatchExpressions: []*labels.Requirement{{
+			Key:      labels.NameLabelKey,
+			Operator: labels.OperatorIn,
+			Values:   []string{ns},
+		}},
 	}
-	valuesYAML, err := yaml.Marshal(values)
+	valuesYAML, err := marshalManagerValues(r, values)
 	if err != nil {
 		return nil, fmt.Errorf("secondary-manager/%s: marshaling values: %w", ns, err)
 	}
@@ -63,8 +68,11 @@ func provisionSecondaryManager(e Env, spec managers.Spec, ns string) (*ManagerHa
 		return nil, fmt.Errorf("secondary-manager/%s: writing values: %w", ns, err)
 	}
 
-	args := []string{"helm", "install", "-n", ns, "-f", valuesPath}
-	if _, stderr, err := r.CLI().Run(e.Ctx, args...); err != nil {
+	verArgs := r.helmVersionArgs()
+	args := make([]string, 0, 6+len(verArgs))
+	args = append(args, "helm", "install", "-n", ns, "-f", valuesPath)
+	args = append(args, verArgs...)
+	if _, stderr, err := r.helmCLI().Run(e.Ctx, args...); err != nil {
 		return nil, fmt.Errorf("%s: %w: %s", strings.Join(args[:2], " "), err, stderr)
 	}
 	if _, err := r.Kubectl(e.Ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=180s"); err != nil {
@@ -77,10 +85,15 @@ func destroySecondaryManager(e Env, h *ManagerHandle) error {
 	if h == nil {
 		return nil
 	}
-	_, stderr, err := e.R.CLI().Run(e.Ctx, "helm", "uninstall", "--manager-namespace", h.Namespace)
+	_, stderr, err := e.R.helmCLI().Run(e.Ctx, "helm", "uninstall", "--manager-namespace", h.Namespace)
 	if err != nil && !strings.Contains(strings.ToLower(stderr), "not found") &&
 		!strings.Contains(strings.ToLower(err.Error()), "not found") {
 		return fmt.Errorf("helm uninstall: %w: %s", err, stderr)
 	}
+	// The webhook configuration is cluster-scoped: if a previous run died
+	// before its uninstall, deleting the namespace alone left it behind, and
+	// a stray one poisons every later chart install's overlap validation.
+	_, _ = e.R.Kubectl(e.Ctx, "", "delete", "mutatingwebhookconfiguration",
+		"agent-injector-webhook-"+h.Namespace, "--ignore-not-found")
 	return nil
 }

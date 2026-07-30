@@ -17,13 +17,18 @@ import (
 // file list the way gather_logs_test.go's matrix expects, deduped: its
 // TestGatherLogs_NoPodYamlUnlessLogs and TestGatherLogs_NoK8sLogs cases are
 // byte-identical (same args, same assertions), ported once here as
-// no-pod-yaml-unless-logs.
+// no-pod-yaml-unless-logs. Carries CompatCore: Test_Matrix's default case
+// exercises the manager's GetLogs RPC; see framework/compat/manifest.go.
 type GatherLogs struct {
 	rt.Suite
 }
 
 func init() {
-	rt.Register(&GatherLogs{}, rt.InArea("session"), rt.NeedsManager(managers.Default))
+	rt.Register(&GatherLogs{},
+		rt.InArea("session"),
+		rt.NeedsManager(managers.Default),
+		rt.WithLabels(rt.CompatCore),
+	)
 }
 
 // gatherLogsCase is one cell of the deduped matrix: extraArgs beyond

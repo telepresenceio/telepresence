@@ -200,6 +200,18 @@ func UsageTo(addr string) Spec {
 	}
 }
 
+// Compat returns a manager spec with compatibility.version set to version:
+// for testing only, it makes the manager return Unimplemented for every RPC
+// introduced after that version (see checkCompat in
+// cmd/traffic/cmd/manager/service.go), exercising the client's fallback
+// paths against a manager that never shipped the newer RPC surface.
+func Compat(version string) Spec {
+	return Spec{
+		Key:    "compat/" + version,
+		Values: Values{Compatibility: Compatibility{Version: version}},
+	}
+}
+
 // ClientConfig returns a manager spec identified by key, applying v as the
 // full overlay: a generic constructor for cluster-served client.* config
 // combinations (dns.includeSuffixes, routing.*, nodeAgent.enabled,

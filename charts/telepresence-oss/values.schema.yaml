@@ -330,6 +330,15 @@ properties:
         items:
           $ref: "#/$defs/subject"
 
+  compatibility:
+    description: For testing only. Makes the manager behave like the given older version by returning Unimplemented for newer RPCs.
+    type: object
+    additionalProperties: false
+    properties:
+      version:
+        description: The traffic-manager version to emulate
+        type: string
+
   extraEnv:
     description: Extra environment variables added to the traffic-manager container
     type: array

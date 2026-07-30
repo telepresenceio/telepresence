@@ -46,6 +46,10 @@ type Values struct {
 	// Security is the chart's security.* shape: traffic-manager caller
 	// authentication/authorization.
 	Security Security `json:"security,omitzero"`
+	// Compatibility is the chart's compatibility.* shape: for testing only,
+	// makes the manager emulate an older version (see checkCompat in
+	// cmd/traffic/cmd/manager/service.go).
+	Compatibility Compatibility `json:"compatibility,omitzero"`
 	// TelepresenceAPI is the chart's telepresenceAPI.* shape.
 	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitzero"`
 	// Namespaces and NamespaceSelector are mutually exclusive per the chart
@@ -214,6 +218,13 @@ type X509 struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
+// Compatibility is the chart's compatibility.* shape (for testing only).
+type Compatibility struct {
+	// Version makes the manager behave like this older version, returning
+	// Unimplemented for RPCs introduced after it.
+	Version string `json:"version,omitempty"`
+}
+
 // TelepresenceAPI is the chart's telepresenceAPI.* shape, restricted to the
 // port the catalog configures.
 type TelepresenceAPI struct {
@@ -271,8 +282,17 @@ func Baseline(reg, tag, pullPolicy, selectorLabel string) Values {
 		},
 		ManagerRbac: ManagerRbac{Create: true},
 		Timeouts:    Timeouts{AgentArrival: "60s"},
+		// Expressed as a matchExpressions requirement rather than the
+		// equivalent matchLabels form: released charts up to 2.31.x crash on
+		// a matchLabels-only selector during any LATER manager install's
+		// overlap validation (findings.md #1, fixed in this branch), and the
+		// compat runs install those released charts.
 		NamespaceSelector: &labels.Selector{
-			MatchLabels: map[string]string{ManagedNamespaceLabel: selectorLabel},
+			MatchExpressions: []*labels.Requirement{{
+				Key:      ManagedNamespaceLabel,
+				Operator: labels.OperatorIn,
+				Values:   []string{selectorLabel},
+			}},
 		},
 		Usage: Usage{Enabled: false},
 	}
@@ -306,6 +326,9 @@ func Merge(base, over Values) Values {
 	m.Client = mergeClient(m.Client, over.Client)
 	m.QuicTunnel = mergeQuicTunnel(m.QuicTunnel, over.QuicTunnel)
 	m.Security = mergeSecurity(m.Security, over.Security)
+	if over.Compatibility.Version != "" {
+		m.Compatibility.Version = over.Compatibility.Version
+	}
 	if over.TelepresenceAPI.Port != 0 {
 		m.TelepresenceAPI.Port = over.TelepresenceAPI.Port
 	}

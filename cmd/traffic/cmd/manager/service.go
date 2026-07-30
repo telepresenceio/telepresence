@@ -714,7 +714,11 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 }
 
 func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchAgentPodsDelta", "2.26.0"); err != nil {
+		return err
+	}
+	ctx, clientInfo, err := s.ensureClientSession(ctx, session)
 	if err != nil {
 		return err
 	}
@@ -726,7 +730,11 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 }
 
 func (s *service) WatchAgentPodsInNamespacesDelta(request *rpc.AgentsRequest, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), request.Session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchAgentPodsInNamespacesDelta", "2.28.0"); err != nil {
+		return err
+	}
+	ctx, clientInfo, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
 		return err
 	}
@@ -919,7 +927,11 @@ func (s *service) watchAgents(ctx context.Context, includeAgent func(tunnel.Sess
 }
 
 func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentInfoDelta]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchAgentsDelta", "2.26.0"); err != nil {
+		return err
+	}
+	ctx, clientInfo, err := s.ensureClientSession(ctx, session)
 	if err != nil {
 		return err
 	}
@@ -1046,7 +1058,11 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream grpc.ServerSt
 }
 
 func (s *service) WatchInterceptsDelta(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.InterceptInfoDelta]) error {
-	ctx := managerutil.WithSessionInfo(stream.Context(), session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchInterceptsDelta", "2.26.0"); err != nil {
+		return err
+	}
+	ctx = managerutil.WithSessionInfo(ctx, session)
 	deltaCh, sessionDone, err := s.watchIntercepts(ctx, session)
 	if err != nil {
 		return err
@@ -1079,7 +1095,11 @@ func (s *service) WatchInterceptsDelta(session *rpc.SessionInfo, stream grpc.Ser
 // semantics as watchAgentPodsDelta) and this client's own intercepts onto a
 // single stream.
 func (s *service) WatchSessionEvents(request *rpc.SessionEventsRequest, stream grpc.ServerStreamingServer[rpc.SessionEventsDelta]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), request.Session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchSessionEvents", "2.31.0"); err != nil {
+		return err
+	}
+	ctx, clientInfo, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
 		return err
 	}
@@ -1425,6 +1445,9 @@ func (s *service) Tunnel(server grpc.BidiStreamingServer[rpc.TunnelMessage, rpc.
 // (see "Zero-configuration endpoint discovery" in docs/reference/quic-transport-architecture.md);
 // otherwise the client is told to keep using the port-forwarded gRPC transport.
 func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicTunnelEndpoint, error) {
+	if err := checkCompat(ctx, "GetQuicTunnelEndpoint", "2.31.0"); err != nil {
+		return nil, err
+	}
 	if s.quicCA == nil {
 		return &rpc.QuicTunnelEndpoint{Enabled: false}, nil
 	}
@@ -1496,6 +1519,9 @@ func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandid
 // and thus no SNI name to mint for, and GetQuicAgentCert never validates a client
 // session's SessionInfo, whether or not the QUIC CA is enabled.
 func (s *service) GetQuicAgentCert(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicAgentCert, error) {
+	if err := checkCompat(ctx, "GetQuicAgentCert", "2.31.0"); err != nil {
+		return nil, err
+	}
 	_, agent, err := s.ensureAgentSession(ctx, session)
 	if err != nil {
 		return nil, err
@@ -1564,6 +1590,9 @@ func (s *service) quicManagerBackends(ctx context.Context) []*rpc.QuicBackend {
 // reconnect) produces one snapshot instead of one per event.
 func (s *service) WatchQuicBackends(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.QuicBackendSnapshot]) error {
 	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchQuicBackends", "2.31.0"); err != nil {
+		return err
+	}
 	managerBackends := s.quicManagerBackends(ctx)
 	agentsCh := s.state.WatchAgents(ctx, nil)
 	m := mutator.GetMap(ctx)

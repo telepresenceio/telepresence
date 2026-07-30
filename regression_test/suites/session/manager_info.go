@@ -13,13 +13,19 @@ import (
 // the streaming WatchClusterInfo -- confirmed against
 // integration_test/manager_grpc_test.go's Test_ClusterInfo) reports a
 // service subnet consistent with what a connected client's
-// `status --format json` actually routes.
+// `status --format json` actually routes. Carries CompatCore:
+// Test_ServiceSubnetMatchesStatus exercises WatchClusterInfo directly; see
+// framework/compat/manifest.go.
 type ManagerInfo struct {
 	rt.Suite
 }
 
 func init() {
-	rt.Register(&ManagerInfo{}, rt.InArea("session"), rt.NeedsManager(managers.Default))
+	rt.Register(&ManagerInfo{},
+		rt.InArea("session"),
+		rt.NeedsManager(managers.Default),
+		rt.WithLabels(rt.CompatCore),
+	)
 }
 
 func (s *ManagerInfo) Test_ServiceSubnetMatchesStatus() {

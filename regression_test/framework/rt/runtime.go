@@ -31,20 +31,45 @@ import (
 type Runtime struct {
 	ctx context.Context
 
-	exe      string
-	version  semver.Version
-	registry string
+	// exe is the CLI binary used for every `telepresence` invocation except
+	// `telepresence helm ...`: the built binary, or (RTEST_CLIENT_VERSION
+	// set to something else) a released binary downloaded by downloadBinary.
+	exe string
+	// helmExe drives `telepresence helm ...` specifically: always the built
+	// binary, regardless of RTEST_CLIENT_VERSION, mirroring
+	// integration_test/itest/helm.go:296's reasoning (an old client binary
+	// may not even understand --version).
+	helmExe string
+	// version is the effective CLIENT version: RTEST_CLIENT_VERSION,
+	// parsed, or builtVersion. Matches what Exe() reports.
+	version semver.Version
+	// mgrVersion is the effective MANAGER/chart version: RTEST_MANAGER_VERSION,
+	// parsed, or builtVersion. Independent of version (mirrors itest's
+	// separate ClientVersion/ManagerVersion defaults, both of which fall
+	// back to the built version, not to each other).
+	mgrVersion semver.Version
+	// builtVersion is the version this run's own built binary reports,
+	// detected once at startup. Used to decide whether RTEST_MANAGER_VERSION
+	// names a real override (managerVersionPinned) worth pulling a released
+	// chart and images for.
+	builtVersion semver.Version
+	registry     string
+	// managerRegistry sources a pinned RTEST_MANAGER_VERSION's manager/agent
+	// images (RTEST_MANAGER_REGISTRY, default ghcr.io/telepresenceio);
+	// unused unless managerVersionPinned.
+	managerRegistry string
 
 	kubeconfig string
 	kubeCtx    string
 
-	// clientVersion/managerVersion/agentVersion hold the RTEST_*_VERSION
-	// compat overrides, parsed but not yet acted on: full old-version
-	// support (downloading a released client, pulling an older chart/image)
-	// is M4 work.
-	clientVersion  string
-	managerVersion string
-	agentVersion   string
+	// clientVersionOverride/managerVersionOverride/agentVersionOverride hold
+	// the raw RTEST_*_VERSION strings, empty if unset. clientVersionOverride
+	// and managerVersionOverride are resolved into version/mgrVersion at
+	// startup (newRuntime); agentVersionOverride is parsed but not yet acted
+	// on (no independent agent-image path exists in the catalog yet).
+	clientVersionOverride  string
+	managerVersionOverride string
+	agentVersionOverride   string
 
 	ci    bool
 	fresh bool
@@ -118,28 +143,30 @@ func newRuntime(ctx context.Context) (*Runtime, error) {
 	}
 
 	r := &Runtime{
-		ctx:            ctx,
-		exe:            env.executable,
-		registry:       env.registry,
-		kubeconfig:     env.kubeconfig,
-		kubeCtx:        env.context,
-		clientVersion:  env.clientVersion,
-		managerVersion: env.managerVersion,
-		agentVersion:   env.agentVersion,
-		ci:             env.ci,
-		fresh:          env.fresh,
-		teardown:       env.teardown,
-		tailLogs:       env.tailLogs,
-		cover:          env.cover,
-		labels:         env.labels,
-		skipLabels:     env.skipLabels,
-		root:           root,
-		buildOutput:    buildOutput,
-		runID:          runID,
-		artifactDir:    artifactDir,
-		configDir:      configDir,
-		logDir:         logDir,
-		logFile:        logFile,
+		ctx:                    ctx,
+		exe:                    env.executable,
+		helmExe:                env.executable,
+		registry:               env.registry,
+		managerRegistry:        env.managerRegistry,
+		kubeconfig:             env.kubeconfig,
+		kubeCtx:                env.context,
+		clientVersionOverride:  env.clientVersionOverride,
+		managerVersionOverride: env.managerVersionOverride,
+		agentVersionOverride:   env.agentVersionOverride,
+		ci:                     env.ci,
+		fresh:                  env.fresh,
+		teardown:               env.teardown,
+		tailLogs:               env.tailLogs,
+		cover:                  env.cover,
+		labels:                 env.labels,
+		skipLabels:             env.skipLabels,
+		root:                   root,
+		buildOutput:            buildOutput,
+		runID:                  runID,
+		artifactDir:            artifactDir,
+		configDir:              configDir,
+		logDir:                 logDir,
+		logFile:                logFile,
 	}
 	r.engine = newEngine()
 	r.manifest = newManifestState(runID)
@@ -147,11 +174,42 @@ func newRuntime(ctx context.Context) (*Runtime, error) {
 	if err := r.writeBaselineConfig(); err != nil {
 		return nil, err
 	}
-	v, err := detectVersion(ctx, r.exe, r.childEnv())
+
+	// builtVersion is always detected against the built binary (helmExe),
+	// never a downloaded one: it is the anchor every "is this actually an
+	// override" comparison (managerVersionPinned, helmVersionArgs) is made
+	// against.
+	built, err := detectVersion(ctx, r.helmExe, r.childEnv())
 	if err != nil {
 		return nil, err
 	}
-	r.version = v
+	r.builtVersion = built
+
+	r.version = built
+	if r.clientVersionOverride != "" {
+		v, err := semver.Parse(strings.TrimPrefix(r.clientVersionOverride, "v"))
+		if err != nil {
+			return nil, fmt.Errorf("rtest: parsing RTEST_CLIENT_VERSION %q: %w", r.clientVersionOverride, err)
+		}
+		r.version = v
+	}
+	if !r.version.EQ(built) {
+		exe, err := downloadBinary(ctx, buildOutput, r.version)
+		if err != nil {
+			return nil, fmt.Errorf("rtest: downloading client %s: %w", r.version, err)
+		}
+		r.Infof("[rtest] RTEST_CLIENT_VERSION=%s: using downloaded binary %s", r.version, exe)
+		r.exe = exe
+	}
+
+	r.mgrVersion = built
+	if r.managerVersionOverride != "" {
+		v, err := semver.Parse(strings.TrimPrefix(r.managerVersionOverride, "v"))
+		if err != nil {
+			return nil, fmt.Errorf("rtest: parsing RTEST_MANAGER_VERSION %q: %w", r.managerVersionOverride, err)
+		}
+		r.mgrVersion = v
+	}
 
 	st, err := loadStateFile(r.stateFilePath())
 	if err != nil {
@@ -181,11 +239,41 @@ func repoRoot() (string, error) {
 	}
 }
 
-// Exe returns the path to the telepresence binary under test.
+// Exe returns the path to the telepresence binary under test: the built
+// binary, or a downloaded release when RTEST_CLIENT_VERSION names a
+// different version.
 func (r *Runtime) Exe() string { return r.exe }
 
-// Version returns the parsed semver of the client binary under test.
+// Version returns the effective semver of the client binary under test
+// (RTEST_CLIENT_VERSION, or the built binary's own version).
 func (r *Runtime) Version() semver.Version { return r.version }
+
+// ManagerVersion returns the effective semver of the traffic-manager
+// chart/images under test (RTEST_MANAGER_VERSION, or the built binary's own
+// version). Independent of Version: RTEST_CLIENT_VERSION alone does not
+// change which manager gets installed.
+func (r *Runtime) ManagerVersion() semver.Version { return r.mgrVersion }
+
+// managerVersionPinned reports whether RTEST_MANAGER_VERSION names a
+// version other than this run's own built version: the condition for
+// pulling the released chart (helmVersionArgs) and sourcing manager/agent
+// images from RTEST_MANAGER_REGISTRY instead of the run's normal
+// registry/tag (mergedManagerValues).
+func (r *Runtime) managerVersionPinned() bool {
+	return r.managerVersionOverride != "" && !r.mgrVersion.EQ(r.builtVersion)
+}
+
+// helmVersionArgs returns the ["--version", v] pair to append to a helm
+// install/upgrade invocation when managerVersionPinned, or nil otherwise:
+// `telepresence helm install/upgrade --version` pulls the released chart
+// from oci://ghcr.io/telepresenceio/telepresence-oss (pkg/client/cli/helm/
+// chart.go's loadOrPullChart) instead of the client's built-in chart.
+func (r *Runtime) helmVersionArgs() []string {
+	if !r.managerVersionPinned() {
+		return nil
+	}
+	return []string{"--version", r.mgrVersion.String()}
+}
 
 // Registry returns the image registry used for manager/agent images.
 func (r *Runtime) Registry() string { return r.registry }
@@ -331,6 +419,21 @@ func (r *Runtime) KubectlJSON(ctx context.Context, ns string, out any, args ...s
 func (r *Runtime) CLI() *cli.TP {
 	return &cli.TP{
 		Exe:  r.exe,
+		Env:  r.childEnv(),
+		Dir:  r.buildOutput,
+		Logf: r.Infof,
+	}
+}
+
+// helmCLI returns a cli.TP bound to the BUILT binary, never a downloaded
+// RTEST_CLIENT_VERSION release, for `telepresence helm ...` invocations.
+// Mirrors integration_test/itest/helm.go:296's reasoning for always driving
+// helm through the built executable, simplified: unconditional rather than
+// gated on version divergence, which costs nothing extra when the built and
+// effective client versions already match.
+func (r *Runtime) helmCLI() *cli.TP {
+	return &cli.TP{
+		Exe:  r.helmExe,
 		Env:  r.childEnv(),
 		Dir:  r.buildOutput,
 		Logf: r.Infof,

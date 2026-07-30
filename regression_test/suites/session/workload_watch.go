@@ -27,13 +27,20 @@ const (
 // --format json-stream` both surface a workload's lifecycle (added, agent
 // installed, intercepted) as it happens. Ported from workload_watch_test.go's
 // essentials, with batching/ordering tolerated: Eventually polls collected
-// event state rather than asserting a fixed Recv sequence.
+// event state rather than asserting a fixed Recv sequence. Carries
+// CompatCore: Test_ManagerWatchSeesLifecycle directly exercises
+// WatchWorkloads plus, via its real CLI connection, WatchSessionEvents; see
+// framework/compat/manifest.go.
 type WorkloadWatch struct {
 	rt.Suite
 }
 
 func init() {
-	rt.Register(&WorkloadWatch{}, rt.InArea("session"), rt.NeedsManager(managers.Default))
+	rt.Register(&WorkloadWatch{},
+		rt.InArea("session"),
+		rt.NeedsManager(managers.Default),
+		rt.WithLabels(rt.CompatCore),
+	)
 }
 
 // workloadEvents collects, thread-safely, the essential lifecycle booleans

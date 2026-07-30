@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"sigs.k8s.io/yaml"
@@ -131,6 +132,15 @@ func CleanAll(ctx context.Context) error {
 	if _, err := r.Kubectl(ctx, "", "delete", kinds,
 		"-l", purposeLabelKey+"="+purposeLabelValue, "--ignore-not-found", "--wait=false"); err != nil {
 		r.Infof("[rtest-clean] kubectl delete: %v", err)
+	}
+	// Chart-created webhook configurations carry no rtest label but are
+	// cluster-scoped, so a died run's are not removed with their namespace.
+	if out, err := r.Kubectl(ctx, "", "get", "mutatingwebhookconfigurations", "-o", "name"); err == nil {
+		for _, name := range strings.Fields(out) {
+			if strings.Contains(name, "agent-injector-webhook-rtest-") {
+				_, _ = r.Kubectl(ctx, "", "delete", name, "--ignore-not-found")
+			}
+		}
 	}
 	return nil
 }
