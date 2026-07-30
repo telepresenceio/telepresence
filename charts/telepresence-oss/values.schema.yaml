@@ -330,6 +330,24 @@ properties:
         items:
           $ref: "#/$defs/subject"
 
+  extraEnv:
+    description: Extra environment variables added to the traffic-manager container
+    type: array
+    items:
+      $ref: "#/$defs/envVar"
+
+  extraVolumeMounts:
+    description: Extra volumeMounts added to the traffic-manager container
+    type: array
+    items:
+      $ref: "#/$defs/volumeMount"
+
+  extraVolumes:
+    description: Extra volumes added to the traffic-manager pod
+    type: array
+    items:
+      $ref: "#/$defs/volume"
+
   global:
     type: object
     additionalProperties: true
@@ -881,3 +899,9 @@ $defs:
     $ref: "#/definitions/io.k8s.api.rbac.v1.Subject"
   toleration:
     $ref: "#/definitions/io.k8s.api.core.v1.Toleration"
+  envVar:
+    $ref: "#/definitions/io.k8s.api.core.v1.EnvVar"
+  volume:
+    $ref: "#/definitions/io.k8s.api.core.v1.Volume"
+  volumeMount:
+    $ref: "#/definitions/io.k8s.api.core.v1.VolumeMount"

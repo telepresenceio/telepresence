@@ -369,6 +369,9 @@ spec:
             value: {{ .version }}
           {{- end }}
           {{- end }}
+          {{- with .extraEnv }}
+          {{ toYaml . | nindent 10 }}
+          {{- end }}
           ports:
           - name: api
             containerPort: {{ .apiPort }}
@@ -409,12 +412,15 @@ spec:
           resources:
             {{ toYaml . | nindent 12 }}
           {{- end }}
-      {{- if eq .agentInjector.certificate.accessMethod "mount" }}
+      {{- if or (eq .agentInjector.certificate.accessMethod "mount") .extraVolumeMounts }}
           volumeMounts:
-          {{- if .agentInjector.enabled }}
+          {{- if and (eq .agentInjector.certificate.accessMethod "mount") .agentInjector.enabled }}
             - name: tls
               mountPath: /var/run/secrets/tls
               readOnly: true
+          {{- end }}
+          {{- with .extraVolumeMounts }}
+          {{ toYaml . | nindent 12 }}
           {{- end }}
       {{- end }}
       {{- with .schedulerName }}
@@ -435,13 +441,16 @@ spec:
       {{- with .priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}
-  {{- if eq .agentInjector.certificate.accessMethod "mount" }}
+  {{- if or (eq .agentInjector.certificate.accessMethod "mount") .extraVolumes }}
       volumes:
-        {{- if .agentInjector.enabled }}
+        {{- if and (eq .agentInjector.certificate.accessMethod "mount") .agentInjector.enabled }}
         - name: tls
           secret:
             defaultMode: 420
             secretName: {{ .agentInjector.secret.name }}
+        {{- end }}
+        {{- with .extraVolumes }}
+        {{ toYaml . | nindent 8 }}
         {{- end }}
   {{- end }}
       serviceAccountName: traffic-manager

@@ -32,6 +32,7 @@ type envConfig struct {
 	fresh    bool
 	teardown bool
 	tailLogs bool
+	cover    bool
 }
 
 // loadEnv resolves envConfig from the process environment. The shell
@@ -70,6 +71,7 @@ func loadEnv(root string) envConfig {
 		fresh:          ci || os.Getenv("RTEST_FRESH") == "1",
 		teardown:       ci || os.Getenv("RTEST_TEARDOWN") == "1",
 		tailLogs:       os.Getenv("RTEST_TAIL_LOGS") == "1",
+		cover:          os.Getenv("RTEST_COVER") == "1",
 	}
 }
 

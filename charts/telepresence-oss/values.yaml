@@ -29,6 +29,20 @@ securityContext:
   runAsNonRoot: true
   runAsUser: 1000
 
+# extraEnv, extraVolumes, and extraVolumeMounts add to (never replace) the
+# traffic-manager container/pod. Useful for things like mounting a
+# coverage hostPath in test clusters or injecting a sidecar's shared
+# volume.
+# extraEnv:
+#   - name: EXTRA_ENV_EXAMPLE
+#     value: "some-value"
+# extraVolumes:
+#   - name: extra-volume-example
+#     emptyDir: {}
+# extraVolumeMounts:
+#   - name: extra-volume-example
+#     mountPath: /var/run/extra-volume-example
+
 ################################################################################
 ## Traffic Manager Service Configuration
 ################################################################################

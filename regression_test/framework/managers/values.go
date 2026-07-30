@@ -1,6 +1,7 @@
 package managers
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
@@ -31,6 +32,13 @@ type Values struct {
 	ManagerRbac       ManagerRbac      `json:"managerRbac,omitzero"`
 	Timeouts          Timeouts         `json:"timeouts,omitzero"`
 	NamespaceSelector *labels.Selector `json:"namespaceSelector,omitempty"`
+	// ExtraEnv/ExtraVolumes/ExtraVolumeMounts mirror the chart's own
+	// extraEnv/extraVolumes/extraVolumeMounts passthrough values, applied to
+	// the traffic-manager container/pod. cover.go appends to these in
+	// coverage mode (RTEST_COVER=1) to mount the GOCOVERDIR hostPath.
+	ExtraEnv          []corev1.EnvVar      `json:"extraEnv,omitempty"`
+	ExtraVolumes      []corev1.Volume      `json:"extraVolumes,omitempty"`
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 	// Usage has no omit option: usage.enabled=false must always reach the
 	// chart, whose own default is true.
 	Usage Usage `json:"usage"`
@@ -123,6 +131,15 @@ func Merge(base, over Values) Values {
 	}
 	if over.NamespaceSelector != nil {
 		m.NamespaceSelector = over.NamespaceSelector
+	}
+	if over.ExtraEnv != nil {
+		m.ExtraEnv = over.ExtraEnv
+	}
+	if over.ExtraVolumes != nil {
+		m.ExtraVolumes = over.ExtraVolumes
+	}
+	if over.ExtraVolumeMounts != nil {
+		m.ExtraVolumeMounts = over.ExtraVolumeMounts
 	}
 	if over.Usage.Enabled {
 		m.Usage.Enabled = true

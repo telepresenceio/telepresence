@@ -200,6 +200,14 @@ ifeq ($(DOCKER_BUILD),1)
 BUILD_TAGS=-tags docker
 endif
 
+# TELEPRESENCE_COVER=1 builds the client binary with code-coverage
+# instrumentation (see regression_test/framework/rt/cover.go and `make
+# rtest-coverage`).
+COVER_FLAG=
+ifneq ($(TELEPRESENCE_COVER),)
+COVER_FLAG=-cover
+endif
+
 pkg/client/cli/docker/compose/dc-cli.json: go.mod go.mod cmd/cobraparser/main.go
 	go mod tidy
 	(cd cmd/cobraparser && go mod tidy) && GOOS= GOARCH= go run cmd/cobraparser/main.go docker compose > $@
@@ -251,10 +259,10 @@ $(TELEPRESENCE): build-deps $(BINDIR)/wintun.dll FORCE
 endif
 	mkdir -p $(@D)
 ifeq ($(DOCKER_BUILD),1)
-	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -trimpath -ldflags="$(LDFLAGS)" -o $@ ./cmd/telepresence
+	CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) $(COVER_FLAG) -trimpath -ldflags="$(LDFLAGS)" -o $@ ./cmd/telepresence
 else
 # -buildmode=pie enables PIE compilation for binary harderning. Default on darwin and windows (since 1.23) but not in linux.
-	$(BUILD_ENV) CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) -buildmode=pie -trimpath -ldflags="$(LDFLAGS)" -o $@ ./cmd/telepresence
+	$(BUILD_ENV) CGO_ENABLED=$(CGO_ENABLED) $(sdkroot) go build $(BUILD_TAGS) $(COVER_FLAG) -buildmode=pie -trimpath -ldflags="$(LDFLAGS)" -o $@ ./cmd/telepresence
 endif
 
 ifeq ($(GOOS),windows)
@@ -289,7 +297,8 @@ images-deps: build-deps setup-build-dir
 .PHONY: tel2-image
 tel2-image: images-deps
 	$(eval PLATFORM_ARG := $(if $(TELEPRESENCE_TEL2_IMAGE_PLATFORM), --platform=$(TELEPRESENCE_TEL2_IMAGE_PLATFORM),))
-	docker build $(PLATFORM_ARG) --target tel2 --tag tel2 --tag $(TEL2_IMAGE_FQN) -f build-aux/docker/images/Dockerfile.traffic .
+	$(eval COVER_BUILD_ARG := $(if $(TELEPRESENCE_COVER), --build-arg TEL_COVER=-cover,))
+	docker build $(PLATFORM_ARG) $(COVER_BUILD_ARG) --target tel2 --tag tel2 --tag $(TEL2_IMAGE_FQN) -f build-aux/docker/images/Dockerfile.traffic .
 
 .PHONY: client-image
 client-image: images-deps
@@ -534,6 +543,18 @@ check-regression: build-deps ## (QA) Run the regression-test framework suite (pl
 .PHONY: rtest-clean
 rtest-clean: ## (QA) Remove regression-test resources left in the cluster
 	go run ./regression_test/framework/rtclean
+
+RTEST_COVERAGE_DIR=$(BUILDDIR)/rtest/coverage
+
+.PHONY: rtest-coverage
+rtest-coverage: ## (QA) Merge client+manager coverage from a RTEST_COVER=1 run and print/export a profile
+	$(eval RTEST_COVERAGE_DIRS := $(shell find $(RTEST_COVERAGE_DIR) -mindepth 1 -maxdepth 1 -type d 2>/dev/null | paste -sd, -))
+	@if [ -z "$(RTEST_COVERAGE_DIRS)" ]; then \
+		echo "no coverage data under $(RTEST_COVERAGE_DIR); run 'make check-regression' with RTEST_COVER=1 first" >&2; \
+		exit 1; \
+	fi
+	go tool covdata percent -i=$(RTEST_COVERAGE_DIRS)
+	go tool covdata textfmt -i=$(RTEST_COVERAGE_DIRS) -o=$(RTEST_COVERAGE_DIR)/coverage.out
 
 .PHONY: perf
 perf: ## (QA) Run the QUIC performance experiments (needs a cluster; see perf/README.md)

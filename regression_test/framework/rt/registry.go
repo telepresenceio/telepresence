@@ -220,6 +220,16 @@ func Main(m *testing.M) {
 
 	code := m.Run()
 
+	if r.cover {
+		// Daemons flush their coverage counters on exit, so a cover run
+		// always quits them, even in dev keep mode (the next run simply
+		// reconnects).
+		if _, _, err := r.CLI().Run(r.ctx, "quit", "-s"); err != nil {
+			r.Infof("[rtest] cover: quit -s: %v", err)
+		}
+		r.collectManagerCoverage()
+	}
+
 	if r.teardown {
 		r.teardownFixtures()
 	} else {

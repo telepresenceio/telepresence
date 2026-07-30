@@ -49,6 +49,7 @@ type Runtime struct {
 	fresh    bool
 	teardown bool
 	tailLogs bool
+	cover    bool
 
 	labels     map[Label]bool
 	skipLabels map[Label]bool
@@ -124,6 +125,7 @@ func newRuntime(ctx context.Context) (*Runtime, error) {
 		fresh:          env.fresh,
 		teardown:       env.teardown,
 		tailLogs:       env.tailLogs,
+		cover:          env.cover,
 		labels:         env.labels,
 		skipLabels:     env.skipLabels,
 		root:           root,
@@ -237,7 +239,9 @@ func (r *Runtime) childEnv() []string {
 		"DEV_TELEPRESENCE_LOG_DIR="+r.logDir,
 		"TELEPRESENCE_PROGRESS=plain",
 	)
-	if gcd := os.Getenv("GOCOVERDIR"); gcd != "" {
+	if dir, ok := r.coverClientDir(); ok {
+		env = append(env, "GOCOVERDIR="+dir)
+	} else if gcd := os.Getenv("GOCOVERDIR"); gcd != "" {
 		env = append(env, "GOCOVERDIR="+gcd)
 	}
 	if runtime.GOOS == "windows" {

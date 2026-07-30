@@ -93,10 +93,16 @@ func ManagerFixture(spec managers.Spec) *Fixture[*ManagerHandle] {
 }
 
 // mergedManagerValues layers spec's overlay on top of the runtime's
-// baseline (registry/tag/pullPolicy derived from the version under test).
+// baseline (registry/tag/pullPolicy derived from the version under test),
+// then, in coverage mode (RTEST_COVER=1), adds the GOCOVERDIR env var and
+// hostPath volume defined in cover.go.
 func mergedManagerValues(r *Runtime, spec managers.Spec) managers.Values {
 	base := managers.Baseline(r.Registry(), r.Version().String(), pullPolicyFor(r.Registry()), "true")
-	return managers.Merge(base, spec.Values)
+	values := managers.Merge(base, spec.Values)
+	if r.cover {
+		values = applyCoverManagerValues(values)
+	}
+	return values
 }
 
 func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
