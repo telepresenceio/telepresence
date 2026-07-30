@@ -63,6 +63,12 @@ type InterceptInfo struct {
 	ContainerPort int32 `json:"container_port,omitempty"`
 	Replace       bool  `json:"replace,omitempty"`
 	Wiretap       bool  `json:"wiretap,omitempty"`
+	// Environment carries the intercepted container's environment plus the
+	// TELEPRESENCE_ROOT/TELEPRESENCE_INTERCEPT_ID/TELEPRESENCE_API_HOST
+	// entries the CLI adds locally before printing (pkg/client/cli/
+	// intercept/info.go's Info.Environment, json tag "environment"; see
+	// rt.MountRoot's doc comment for how those additions reach here).
+	Environment map[string]string `json:"environment,omitempty"`
 }
 
 // IngestInfo mirrors the fields the framework asserts on in the JSON object

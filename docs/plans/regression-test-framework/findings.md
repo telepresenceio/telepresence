@@ -48,6 +48,13 @@ code): `quit -s` ignores `--use` and stops all daemons; bare `list`/`detach`
 with no daemon implicitly connects to namespace "default"; `genyaml
 volume`'s `--agent`/`--input` flags are accepted but unused.
 
+Open flake: quic/Relay and quic/Disabled's intercept round trip
+occasionally time out when the quic area runs last in a full 15-area run
+(green when run scoped or in wave-3-sized runs); appears to be residual
+session/cluster churn sensitivity, same family as the reconnect races the
+framework already guards. Needs a dedicated look together with the outage
+gap below.
+
 Open test gap (skipped, not failing): quic/Outage's forwarder-outage
 fallback — the `grpc (fallback)` tunnel status was never observed on the
 kind dev cluster during a quic-forwarder outage, neither with an active

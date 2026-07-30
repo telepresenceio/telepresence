@@ -1,3 +1,13 @@
+{{- if not .ConfigVolume.IsZero }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .ConfigVolume.Name }}
+  namespace: {{ .Namespace }}
+data:
+  {{ .ConfigVolume.Key }}: {{ printf "%q" .ConfigVolume.Content }}
+---
+{{- end }}
 {{- if not .NoService }}
 apiVersion: v1
 kind: Service
@@ -80,6 +90,12 @@ spec:
             - name: PORTS
               value: "{{ .PortsEnv }}"
 {{- end }}
+{{- if not .ConfigVolume.IsZero }}
+          volumeMounts:
+            - name: rtest-config
+              mountPath: {{ .ConfigVolume.MountPath }}
+              readOnly: true
+{{- end }}
 {{- if not .Resources.IsZero }}
           resources:
 {{- if or .Resources.Requests.CPU .Resources.Requests.Memory }}
@@ -100,4 +116,10 @@ spec:
               memory: {{ .Resources.Limits.Memory }}
 {{- end }}
 {{- end }}
+{{- end }}
+{{- if not .ConfigVolume.IsZero }}
+      volumes:
+        - name: rtest-config
+          configMap:
+            name: {{ .ConfigVolume.Name }}
 {{- end }}

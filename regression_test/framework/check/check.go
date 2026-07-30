@@ -4,6 +4,7 @@ package check
 import (
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -83,4 +84,34 @@ func BodyContains(s string) func(int, string) bool {
 	return func(status int, body string) bool {
 		return status == http.StatusOK && strings.Contains(body, s)
 	}
+}
+
+// EventuallyFile polls path until it is readable and want(content) returns
+// true, or fails t once timeout elapses. A FUSE/SFTP intercept mount's
+// content appears asynchronously (the mount is wired up after the intercept
+// itself is confirmed, and the mounted directory may not exist yet), so a
+// single read right after Conn.Intercept/Ingest can race it.
+func EventuallyFile(t testing.TB, path string, want func([]byte) bool, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	var lastContent []byte
+	for {
+		content, err := os.ReadFile(path)
+		lastErr = err
+		if err == nil {
+			lastContent = content
+			if want(content) {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(pollInterval)
+	}
+	if lastErr != nil {
+		t.Fatalf("EventuallyFile %s: timed out after %s: %v", path, timeout, lastErr)
+	}
+	t.Fatalf("EventuallyFile %s: timed out after %s: content %q did not match", path, timeout, lastContent)
 }

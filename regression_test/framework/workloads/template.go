@@ -49,7 +49,45 @@ type Template struct {
 	// appProtocol field. Ignored when NoService is set, since there is no
 	// service port to annotate.
 	AppProtocol string
+	// ConfigVolume, when non-zero, adds a ConfigMap (rendered as its own
+	// manifest document ahead of the workload) and mounts it read-only into
+	// the app container. Set by EchoWithConfigVolume; zero value renders no
+	// ConfigMap and no extra volume.
+	ConfigVolume ConfigVolume
 }
+
+// ConfigVolume describes a ConfigMap a Template mounts as a volume: a
+// ConfigMap object holding one key/value pair, mounted at a directory in
+// the app container. The mounted file's name is Key and its content is
+// Content.
+type ConfigVolume struct {
+	Name      string // ConfigMap object name
+	Key       string // ConfigMap data key; also the mounted file's name
+	Content   string // ConfigMap data value; also the mounted file's content
+	MountPath string // directory the volume is mounted at
+}
+
+// IsZero reports whether v is the zero value, used by Render to skip
+// emitting a ConfigMap and volume mount.
+func (v ConfigVolume) IsZero() bool {
+	return v == ConfigVolume{}
+}
+
+const (
+	// ConfigVolumeMountPath is the well-known directory EchoWithConfigVolume
+	// mounts its ConfigMap volume at in the app container (and, once
+	// intercepted with mounts enabled, under the local FUSE/SFTP mount
+	// root).
+	ConfigVolumeMountPath = "/etc/rtest-config"
+	// ConfigVolumeFileName is the ConfigMap data key, which is also the
+	// mounted file's name: <mount root><ConfigVolumeMountPath>/<ConfigVolumeFileName>.
+	ConfigVolumeFileName = "rtest.conf"
+	// ConfigVolumeContent is the fixed, distinctive content suites assert on
+	// after reading the mounted file. It contains no trailing newline: a
+	// ConfigMap value is stored and mounted byte-for-byte, so the file's
+	// content is exactly this string.
+	ConfigVolumeContent = "rtest-config-volume-marker"
+)
 
 // NamedPort is an additional container/service port beyond Template.Port.
 type NamedPort struct {
@@ -142,6 +180,22 @@ func EchoMultiPort(name string) Template {
 func EchoReplicas(name string, n int) Template {
 	t := Echo(name)
 	t.Replicas = n
+	return t
+}
+
+// EchoWithConfigVolume is Echo with an additional ConfigMap (named
+// name+"-config") mounted read-only at ConfigVolumeMountPath: the ConfigMap
+// holds one key, ConfigVolumeFileName, whose value is ConfigVolumeContent.
+// Mounts-area suites intercept it and assert the local mount surfaces that
+// file unchanged.
+func EchoWithConfigVolume(name string) Template {
+	t := Echo(name)
+	t.ConfigVolume = ConfigVolume{
+		Name:      name + "-config",
+		Key:       ConfigVolumeFileName,
+		Content:   ConfigVolumeContent,
+		MountPath: ConfigVolumeMountPath,
+	}
 	return t
 }
 

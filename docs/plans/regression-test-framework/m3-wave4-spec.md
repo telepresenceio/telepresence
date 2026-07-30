@@ -23,6 +23,51 @@
    calls) in the routing suite package — never reference the old testdata
    paths at runtime.
 
+### veth mechanism notes (for item 4 / the routing suite agent)
+
+Source: integration_test/testdata/scripts/veth-up.sh, veth-down.sh, and
+their one caller, integration_test/cidr_conflict_test.go
+(cidrConflictSuite).
+
+- **Up** (`veth-up.sh <cidr>...`, run via `sudo`): creates a veth pair
+  `vm1`/`vm2`, brings `vm1` up, adds a tap device `tapm` and brings it up,
+  creates a bridge `brm`, and enslaves both `tapm` and `vm1` to it. For
+  each CIDR argument (e.g. `10.96.0.0/16`), it rewrites the trailing `.0`
+  octet to `.1` and adds that address to `brm`, and to `.2` and adds that
+  address to `vm2`. Finally brings `brm` and `vm2` up. Net effect: a local
+  interface (`brm`) now owns an address inside the given subnet, so the
+  kernel's routing table has a local, non-cluster route for it —
+  reproducing the "veth/local subnet collides with a cluster subnet"
+  condition the auto-conflict-resolution and `--allow-conflicting-subnets`
+  code paths need to prove out.
+- **Down** (`veth-down.sh <cidr>...`, run via `sudo`): brings `vm2` and
+  `brm` down, deletes the `.1`/`.2` addresses added above, deletes `brm`,
+  brings `tapm` down and removes it, brings `vm1` down and removes the veth
+  pair. Exact reverse of veth-up.sh; idempotent enough to be a safe defer,
+  but a `--ignore-errors`-style caller isn't provided — errors from the
+  down script should be logged, not fatal, since a partially-failed up
+  leaves partial state.
+- **Caller pattern**: `cidrConflictSuite.SetupSuite` connects once first,
+  reads `status`'s `RootDaemon.Subnets` (the client's routed cluster
+  subnets), quits, then runs `sudo veth-up.sh <subnet0> <subnet1>` using
+  two of those real cluster subnets as the CIDR arguments — so the
+  collision is guaranteed to be a subnet telepresence would otherwise
+  route natively. `TearDownSuite` runs `sudo veth-down.sh` with the same
+  arguments. Individual tests then connect (with or without
+  `--allow-conflicting-subnets`) and assert on `status`'s subnet list
+  (translated to a virtual subnet vs. left as the raw, now-conflicting
+  CIDR) and on `ip route get` for a test address in that subnet.
+- **Requires root** (`sudo`) and Linux (`ip link`/`ip tuntap`); skip on
+  non-Linux and when not running as/with passwordless sudo, matching this
+  wave's routing-suite `Requires(Sudo), On("linux")` gating for the
+  Conflicts test.
+- **Naming collision risk**: the script hard-codes interface names
+  (`vm1`, `vm2`, `tapm`, `brm`), so two suite runs (or a suite test and a
+  leftover from a prior failed run) can't overlap; the routing suite's own
+  embedded scripts should parameterize or randomize these names (per the
+  m3-wave4-spec's "Conflicts" bullet: "unique names") rather than reusing
+  the fixed ones verbatim.
+
 ## Suites
 
 ### dns area (suites/dns/, area "dns", NeedsManager(Default))

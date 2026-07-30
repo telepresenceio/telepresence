@@ -64,6 +64,11 @@ func WorkloadFixture(ns string, tpl workloads.Template) *Fixture[*Workload] {
 			return provisionWorkload(e, ns, tpl)
 		},
 		DestroyFn: destroyWorkload,
+		// Workloads are cheap to recreate (~2-3s apply+rollout) and a full
+		// run touches dozens of them: keeping them across runs marches the
+		// node toward kubelet's pod limit. The warm-start win lives in the
+		// manager/connection fixtures, so workloads are always torn down.
+		AlwaysDestroy: true,
 	}
 }
 
@@ -83,11 +88,12 @@ func workloadKey(ns string, tpl workloads.Template) string {
 		annos[i] = fmt.Sprintf("%s=%s", k, tpl.Annotations[k])
 	}
 	return fmt.Sprintf("workload|%s|%s|%s|%d|%s|%s|headless=%t|noservice=%t|extra=%s|annotations=%s|"+
-		"resources=%s,%s,%s,%s|appprotocol=%s",
+		"resources=%s,%s,%s,%s|appprotocol=%s|configvolume=%s,%s,%s,%s",
 		ns, tpl.Name, tpl.Kind, tpl.Replicas, tpl.Image, tpl.SvcName,
 		tpl.Headless, tpl.NoService, strings.Join(extra, ","), strings.Join(annos, ","),
 		tpl.Resources.Requests.CPU, tpl.Resources.Requests.Memory,
-		tpl.Resources.Limits.CPU, tpl.Resources.Limits.Memory, tpl.AppProtocol)
+		tpl.Resources.Limits.CPU, tpl.Resources.Limits.Memory, tpl.AppProtocol,
+		tpl.ConfigVolume.Name, tpl.ConfigVolume.Key, tpl.ConfigVolume.Content, tpl.ConfigVolume.MountPath)
 }
 
 func provisionWorkload(e Env, ns string, tpl workloads.Template) (*Workload, error) {

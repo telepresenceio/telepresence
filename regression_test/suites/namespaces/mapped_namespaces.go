@@ -1,7 +1,6 @@
 package namespaces
 
 import (
-	"github.com/telepresenceio/telepresence/v2/regression_test/framework/cli"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
@@ -12,13 +11,11 @@ import (
 // shared manager itself manages: a namespace the manager would happily serve
 // is invisible to list once it falls outside the flag's value.
 //
-// rt.ConnOpt has no constructor for --mapped-namespaces: fixture_connection.go's
-// connSpec (the type every ConnOpt closes over) is unexported, so a suite
-// package can't add one from the outside, and rt.ConnWithConfig is the wrong
-// tool (--mapped-namespaces is a connect flag, not a client config field).
-// This suite drives connect via a raw CLI invocation instead, like several
-// suites/connect tests already do; see docs/plans/regression-test-framework/
-// m3-wave2-spec.md's namespaces-area entry for the gap.
+// Drives connect through rt.ConnExtraArgs("--mapped-namespaces", ns): the
+// framework has no dedicated ConnOpt for --mapped-namespaces, and
+// ConnWithConfig is the wrong tool (it's a connect flag, not a client
+// config field), but ConnExtraArgs (added in m3 wave 4) covers any connect
+// flag verbatim, folded into the fixture hash like every other ConnOpt.
 type MappedNamespaces struct {
 	rt.Suite
 }
@@ -49,16 +46,12 @@ func (s *MappedNamespaces) Test_ScopedToMappedNamespaces() {
 	freeDefaultConnection(t, appNS)
 	quitDefensively(t, r, ctx, "MappedNamespaces")
 
-	args := append(rawConnectArgs(appNS), "--mapped-namespaces", appNS)
-	_, stderr, err := r.CLI().Run(ctx, args...)
-	s.Require().NoError(err, "connect --mapped-namespaces %s: %s", appNS, stderr)
+	conn := rt.Mutate(t, rt.ConnectionFixture(appNS, rt.ConnExtraArgs("--mapped-namespaces", appNS)))
 
-	var appEntries []cli.ListEntry
-	s.Require().NoError(r.CLI().JSON(ctx, &appEntries, "list", "--format", "json"))
+	appEntries := conn.List(t)
 	s.True(present(appEntries, wlApp.Name, wlApp.Namespace), "app namespace's workload should be listed")
 
-	var otherEntries []cli.ListEntry
-	s.Require().NoError(r.CLI().JSON(ctx, &otherEntries, "list", "--format", "json", "-n", otherNS))
+	otherEntries := conn.ListNamespace(t, otherNS)
 	s.Empty(otherEntries, "namespace %s outside --mapped-namespaces should list empty (workload %s)",
 		otherNS, wlOther.Name)
 }

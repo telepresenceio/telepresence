@@ -59,9 +59,15 @@ type connSpec struct {
 
 // isDefault reports whether no ConnOpt changed anything: the plain
 // `Connect()` case, whose fixture hash and adoption behavior must match the
-// pre-M3 framework exactly.
+// pre-M3 framework exactly. len(cs.args) == 0 both covers ConnNamed/
+// ConnDocker (already caught by name/docker below) and ConnExtraArgs, which
+// touches only args/hashKey: without this check, a connection carrying
+// verbatim extra arguments would be misidentified as the plain default and
+// become eligible for AdoptFn, silently reusing an already-running plain
+// connection instead of one actually started with those arguments.
 func (cs *connSpec) isDefault() bool {
-	return cs.name == "" && !cs.docker && cs.configDir == "" && len(cs.env) == 0 && cs.managerNamespace == ""
+	return cs.name == "" && !cs.docker && cs.configDir == "" && len(cs.env) == 0 &&
+		cs.managerNamespace == "" && len(cs.args) == 0
 }
 
 func newConnSpec(opts []ConnOpt) *connSpec {
@@ -112,6 +118,18 @@ func ConnWithKubeconfig(path string) ConnOpt {
 	}
 }
 
+// ConnExtraArgs appends args verbatim to the connect invocation, folded into
+// the fixture hash so a connection using them is never adopted from, or
+// memo-shared with, a plain or differently configured connect. Use it for
+// connect flags the framework has no dedicated ConnOpt for (e.g.
+// --proxy-via, --allow-conflicting-subnets, --mapped-namespaces).
+func ConnExtraArgs(args ...string) ConnOpt {
+	return func(cs *connSpec) {
+		cs.args = append(cs.args, args...)
+		cs.hashKey = append(cs.hashKey, "extra-args="+strings.Join(args, "\x1f"))
+	}
+}
+
 // ConnManagerNamespace overrides --manager-namespace on the connect
 // invocation, so the connection targets a manager release living in ns
 // instead of the shared one in managers.ManagerNamespace: a SecondaryManager
@@ -152,24 +170,31 @@ func ConnWithConfig(delta func(client.Config)) ConnOpt {
 // any stale daemon at startup. Guarded by the engine's serial execution
 // (M1): suites run one at a time, so no lock is needed.
 //
-// ensureHostDaemon quits any running host daemon before a host connection
-// is provisioned. Provisioning means "make it fresh": a running daemon may
+// ensureHostDaemon quits any conflicting daemon before a connection is
+// provisioned. Provisioning means "make it fresh": a running daemon may
 // hold a different configuration (config dir, KUBECONFIG, namespace) or a
 // degraded session — `connect` against it would silently reuse both. The
-// healthy-daemon fast path is adoption, which never reaches this. Docker
-// daemons are containerized and independent, so this is a no-op for them.
+// healthy-daemon fast path is adoption, which never reaches this. A named
+// connection (host or docker) only quits a same-named stale session, so
+// establishing it never disturbs another connection (host or docker) that
+// happens to already be live; the plain, unnamed host default has no name
+// to scope by, so it quits every local daemon instead.
 //
 //nolint:gochecknoglobals // single, serial test run; see M1 contract
 func ensureHostDaemon(e Env, cs *connSpec) {
-	if cs.docker {
-		// A containerized daemon left over from an earlier run would be
-		// silently reused by name; quit its session so the connect starts
-		// fresh. No -s: that flag stops ALL daemons and ignores --use.
-		if cs.name != "" {
-			if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "--use", cs.name); err != nil {
-				e.R.Infof("[rtest] quit before docker connect %s: %v: %s", cs.name, err, stderr)
-			}
+	if cs.name != "" {
+		// A daemon left over from an earlier run would be silently reused by
+		// name; quit its session so the connect starts fresh. No -s: that
+		// flag stops ALL daemons, host and docker alike, and ignores --use,
+		// which would also stop any other named connection already live.
+		if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "--use", cs.name); err != nil {
+			e.R.Infof("[rtest] quit before connect %s: %v: %s", cs.name, err, stderr)
 		}
+		return
+	}
+	if cs.docker {
+		// An anonymous docker connection has no stale session to target by
+		// name, so there is nothing to quit up front.
 		return
 	}
 	if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "-s"); err != nil {
@@ -240,6 +265,14 @@ func provisionConnection(e Env, ns string, args []string, cs *connSpec) (*Conn, 
 		overrides[k] = v
 	}
 	stdout, stderr, err := e.R.CLIWithEnv(overrides).Run(e.Ctx, args...)
+	if err != nil && strings.Contains(stderr, "failed to connect to root daemon") {
+		// Rapid quit+connect cycles can race the previous root daemon's VIF
+		// teardown ("failed to retrieve TAP link: Link not found"); one
+		// retry after the device settles is enough.
+		e.R.Infof("[rtest] connect %s: transient root-daemon failure, retrying: %s", ns, strings.TrimSpace(stderr))
+		time.Sleep(3 * time.Second)
+		stdout, stderr, err = e.R.CLIWithEnv(overrides).Run(e.Ctx, args...)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("connect: %w: %s", err, stderr)
 	}
@@ -458,6 +491,46 @@ func (a *Attach) Detach(t testing.TB) {
 	if stdout, stderr, err := a.conn.r.CLI().Run(a.conn.ctx, args...); err != nil {
 		t.Fatalf("detach %s: %v\nstdout:\n%s\nstderr:\n%s", a.name, err, stdout, stderr)
 	}
+}
+
+// MountRoot returns the local mount root path recorded in a's captured
+// info (whichever of Intercept/Replace/Wiretap/Ingest is set): the
+// TELEPRESENCE_ROOT entry the CLI adds to the attach's environment before
+// printing it (pkg/client/cli/intercept/state.go's create():
+// s.env["TELEPRESENCE_ROOT"] = intercept.ClientMountPoint;
+// pkg/client/cli/ingest/state.go's run(): env["TELEPRESENCE_ROOT"] =
+// s.info.ClientMountPoint). It is the same directory `--mount` names or
+// telepresence auto-picks, and matches os.Getenv("TELEPRESENCE_ROOT") in a
+// `--run`/`--run-shell` child.
+//
+// ok is false when a carries no captured info, or its Environment is nil.
+// For intercept/replace/wiretap specifically, a nil Environment is possible
+// even though TELEPRESENCE_ROOT was set: state.go aliases s.env onto the
+// intercepted container's own (manager-reported) environment map before
+// mutating it (s.env = intercept.Environment; s.env["TELEPRESENCE_ROOT"] =
+// ...), so the addition only lands in the JSON output's "environment" field
+// (pkg/client/cli/intercept/info.go's Info.Environment) when that map was
+// already non-nil, i.e. the intercepted container itself reported at least
+// one env var. Ingest has no such gap: ingest/state.go reassigns the map
+// back onto Info.Environment even when it started nil, so TELEPRESENCE_ROOT
+// is always present there.
+func MountRoot(a *Attach) (string, bool) {
+	var env map[string]string
+	switch {
+	case a.Intercept != nil:
+		env = a.Intercept.Environment
+	case a.Replace != nil:
+		env = a.Replace.Environment
+	case a.Wiretap != nil:
+		env = a.Wiretap.Environment
+	case a.Ingest != nil:
+		env = a.Ingest.Environment
+	}
+	if env == nil {
+		return "", false
+	}
+	root, ok := env["TELEPRESENCE_ROOT"]
+	return root, ok
 }
 
 // routeCheckTimeout bounds RoutedToLocal/RoutedToCluster.
