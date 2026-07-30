@@ -9,6 +9,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/attach"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/connect"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/intercept"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/smoke"
 )
@@ -21,6 +22,13 @@ func TestMain(m *testing.M) {
 // assume no prior suite has left a connection behind.
 func TestSmoke(t *testing.T) {
 	rt.RunArea(t, "smoke")
+}
+
+// TestConnect runs the "connect" area. It runs before the areas that hold a
+// long-lived shared connection: its suites churn connections (quit, named,
+// docker) and would otherwise invalidate theirs.
+func TestConnect(t *testing.T) {
+	rt.RunArea(t, "connect")
 }
 
 // TestAttach runs the "attach" area.

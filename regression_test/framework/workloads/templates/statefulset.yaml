@@ -1,3 +1,4 @@
+{{- if not .NoService }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -6,13 +7,33 @@ metadata:
   labels:
     app: {{ .Name }}
 spec:
+{{- if .Headless }}
+  clusterIP: None
+{{- end }}
   selector:
     app: {{ .Name }}
   ports:
+{{- if .Headless }}
+    - name: http
+      port: {{ .Port }}
+      targetPort: {{ .Port }}
+{{- range .ExtraPorts }}
+    - name: {{ .Name }}
+      port: {{ .Port }}
+      targetPort: {{ .Port }}
+{{- end }}
+{{- else }}
     - name: http
       port: {{ .Port }}
       targetPort: http
+{{- range .ExtraPorts }}
+    - name: {{ .Name }}
+      port: {{ .Port }}
+      targetPort: {{ .Name }}
+{{- end }}
+{{- end }}
 ---
+{{- end }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -30,6 +51,12 @@ spec:
     metadata:
       labels:
         app: {{ .Name }}
+{{- if .Annotations }}
+      annotations:
+{{- range $k, $v := .Annotations }}
+        {{ $k }}: "{{ $v }}"
+{{- end }}
+{{- end }}
     spec:
       containers:
         - name: {{ .Name }}
@@ -38,3 +65,12 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Port }}
+{{- range .ExtraPorts }}
+            - name: {{ .Name }}
+              containerPort: {{ .Port }}
+{{- end }}
+{{- if .ExtraPorts }}
+          env:
+            - name: PORTS
+              value: "{{ .PortsEnv }}"
+{{- end }}

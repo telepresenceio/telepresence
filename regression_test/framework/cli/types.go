@@ -44,13 +44,17 @@ type Version struct {
 }
 
 // InterceptInfo mirrors the fields the framework asserts on in the JSON
-// object produced by `telepresence intercept --format json`
-// (pkg/client/cli/intercept/info.go: Info).
+// object produced by `telepresence intercept|replace|wiretap --format json
+// --detailed-output` (pkg/client/cli/intercept/info.go: Info). replace and
+// wiretap share this same output type with intercept, distinguished by the
+// Replace/Wiretap flags.
 type InterceptInfo struct {
 	ID           string `json:"id,omitempty"`
 	Name         string `json:"name,omitempty"`
 	Disposition  string `json:"disposition,omitempty"`
 	WorkloadKind string `json:"workload_kind,omitempty"`
+	Replace      bool   `json:"replace,omitempty"`
+	Wiretap      bool   `json:"wiretap,omitempty"`
 }
 
 // IngestInfo mirrors the fields the framework asserts on in the JSON object

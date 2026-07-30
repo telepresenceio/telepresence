@@ -24,7 +24,7 @@ already managed by some other traffic-manager.
   {{- /* Validate that no selector overlaps with another */}}
   {{- $allManagedNamespaces := dict }}
   {{- range $configNs, $config := $configs }}
-    {{- $rqs := $config.matchExpressions }}
+    {{- $rqs := $config.matchExpressions | default list }}
     {{- /* Normalise the selector, i.e. turn each matchLabel into a machRequirement */}}
     {{- range $key, $value := $config.matchLabels }}
       {{- $rqs = append $rqs (dict "key" $key "operator" "In" "values" (list $value))}}

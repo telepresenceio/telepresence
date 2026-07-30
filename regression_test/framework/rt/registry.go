@@ -231,8 +231,9 @@ func Main(m *testing.M) {
 	}
 
 	if r.teardown {
-		r.teardownFixtures()
+		r.teardownFixtures(true)
 	} else {
+		r.teardownFixtures(false)
 		r.Infof("[rtest] keeping resources for adoption (dev mode); run `make rtest-clean` to remove them")
 	}
 	if err := r.writeManifest(); err != nil {

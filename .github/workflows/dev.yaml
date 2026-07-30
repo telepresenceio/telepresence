@@ -274,9 +274,9 @@ jobs:
 
   # Runs the new regression_test/ framework (see
   # docs/plans/regression-test-framework/plan.md) side by side with the
-  # integration suite, on the same minikube setup build_and_test uses. Only
-  # the manager/agent image is needed: the framework drives the client
-  # binary directly rather than through the client container image.
+  # integration suite, on the same minikube setup build_and_test uses. The
+  # manager/agent image is loaded into minikube; the client image is only
+  # needed by the host docker daemon, for the docker-mode tests.
   regression:
     needs: preflight
     if: >-
@@ -304,7 +304,7 @@ jobs:
       - name: Build client
         run: make build
       - name: Build images
-        run: make tel2-image
+        run: make tel2-image client-image
       - name: Load images into minikube
         run: minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
       - name: Run regression tests

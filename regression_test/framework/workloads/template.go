@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"strconv"
+	"strings"
 	"text/template"
 )
 
@@ -26,6 +28,36 @@ type Template struct {
 	Image    string
 	Port     int32
 	SvcName  string
+	// Headless sets the Service's clusterIP to None (StatefulSet variants).
+	Headless bool
+	// NoService omits the Service object: the workload is reachable only via
+	// pod IP/container port.
+	NoService bool
+	// ExtraPorts are additional named container/service ports beyond Port
+	// ("http"), served by the same container via the echo-server's PORTS
+	// env var (EchoMultiPort).
+	ExtraPorts []NamedPort
+	// Annotations are rendered onto the pod template's metadata.annotations,
+	// e.g. telepresence.io/inject-container-ports for no-service workloads.
+	Annotations map[string]string
+}
+
+// NamedPort is an additional container/service port beyond Template.Port.
+type NamedPort struct {
+	Name string
+	Port int32
+}
+
+// PortsEnv is the echo-server PORTS env var value for a multi-port
+// template: Port followed by each ExtraPorts entry, comma-separated.
+// Render emits it only when ExtraPorts is non-empty.
+func (t Template) PortsEnv() string {
+	ports := make([]string, 0, 1+len(t.ExtraPorts))
+	ports = append(ports, strconv.Itoa(int(t.Port)))
+	for _, p := range t.ExtraPorts {
+		ports = append(ports, strconv.Itoa(int(p.Port)))
+	}
+	return strings.Join(ports, ",")
 }
 
 // Echo returns a single-replica Deployment+Service template running the
@@ -45,6 +77,41 @@ func Echo(name string) Template {
 func EchoStatefulSet(name string) Template {
 	t := Echo(name)
 	t.Kind = "StatefulSet"
+	return t
+}
+
+// EchoHeadless is EchoStatefulSet with a headless (clusterIP: None) service,
+// exercising per-pod StatefulSet DNS.
+func EchoHeadless(name string) Template {
+	t := EchoStatefulSet(name)
+	t.Headless = true
+	return t
+}
+
+// EchoNoService is Echo without a Service: the workload is reachable only
+// via pod IP/container port, exercising no-service attach paths. It sets
+// the inject-container-ports annotation, required for a service-less
+// workload to be interceptable (pkg/annotation/annotation.go).
+func EchoNoService(name string) Template {
+	t := Echo(name)
+	t.NoService = true
+	t.SvcName = ""
+	t.Annotations = map[string]string{"telepresence.io/inject-container-ports": "http"}
+	return t
+}
+
+// EchoMultiPort is Echo with a second named HTTP port ("http2") on the same
+// pod, both served by the one echo-server container.
+func EchoMultiPort(name string) Template {
+	t := Echo(name)
+	t.ExtraPorts = []NamedPort{{Name: "http2", Port: echoPort + 1}}
+	return t
+}
+
+// EchoReplicas is Echo scaled to n replicas.
+func EchoReplicas(name string, n int) Template {
+	t := Echo(name)
+	t.Replicas = n
 	return t
 }
 

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -142,7 +143,6 @@ func newRuntime(ctx context.Context) (*Runtime, error) {
 	if err := r.writeBaselineConfig(); err != nil {
 		return nil, err
 	}
-
 	v, err := detectVersion(ctx, r.exe, r.childEnv())
 	if err != nil {
 		return nil, err
@@ -333,6 +333,52 @@ func (r *Runtime) CLI() *cli.TP {
 	}
 }
 
+// CLIWithEnv is like CLI, but applies overrides (KEY -> value) on top of the
+// run's base child environment for this one *cli.TP. Used by connection
+// options (ConnWithConfig, ConnWithKubeconfig) that need a different
+// KUBECONFIG or config dir for a single `connect` invocation.
+func (r *Runtime) CLIWithEnv(overrides map[string]string) *cli.TP {
+	return &cli.TP{
+		Exe:  r.exe,
+		Env:  r.envWithOverrides(overrides),
+		Dir:  r.buildOutput,
+		Logf: r.Infof,
+	}
+}
+
+// envWithOverrides returns childEnv with overrides applied: existing
+// KEY=value entries are replaced in place; new keys are appended in sorted
+// order so the result is deterministic.
+func (r *Runtime) envWithOverrides(overrides map[string]string) []string {
+	base := r.childEnv()
+	if len(overrides) == 0 {
+		return base
+	}
+	remaining := make(map[string]string, len(overrides))
+	for k, v := range overrides {
+		remaining[k] = v
+	}
+	out := make([]string, 0, len(base)+len(remaining))
+	for _, kv := range base {
+		k, _, _ := strings.Cut(kv, "=")
+		if v, ok := remaining[k]; ok {
+			out = append(out, k+"="+v)
+			delete(remaining, k)
+		} else {
+			out = append(out, kv)
+		}
+	}
+	keys := make([]string, 0, len(remaining))
+	for k := range remaining {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		out = append(out, k+"="+remaining[k])
+	}
+	return out
+}
+
 // Infof writes a progress line to stdout and to the run's run.log.
 func (r *Runtime) Infof(format string, args ...any) {
 	line := fmt.Sprintf(format, args...)
@@ -345,10 +391,15 @@ func (r *Runtime) Infof(format string, args ...any) {
 	}
 }
 
-// writeBaselineConfig writes the per-run client config.yml: debug log
-// levels, usage reporting disabled, and the timeout set the old
-// integration_test/itest/cluster.go:430 withBasicConfig pinned.
-func (r *Runtime) writeBaselineConfig() error {
+// baselineConfig returns the per-run client config: debug log levels, usage
+// reporting disabled, the timeouts the old integration_test/itest/
+// cluster.go:430 withBasicConfig pinned, and the root daemon's local
+// shortcut turned off (it bypasses the traffic-agent for requests
+// originating on this host, which would defeat every assertion about
+// agent-side behavior). writeBaselineConfig persists this as the run's
+// primary config; ConnWithConfig variants (fixture_connection.go) start
+// from a fresh copy and apply a delta on top.
+func (r *Runtime) baselineConfig() client.Config {
 	cfg := client.GetDefaultConfig()
 
 	ll := cfg.LogLevels()
@@ -370,13 +421,22 @@ func (r *Runtime) writeBaselineConfig() error {
 
 	cfg.Usage().Enabled = false
 
-	// The root daemon's local shortcut bypasses the traffic-agent for
-	// requests originating on this host, which would defeat every assertion
-	// about agent-side behavior (HTTP filters in particular).
+	// Docker-mode connections pull the containerized daemon image from the
+	// configured images registry; point it at the test registry so locally
+	// built images are used.
+	cfg.Images().PrivateRegistry = r.registry
+
 	ic := cfg.Intercept()
 	ic.LocalShortcut = false
 	ic.LocalShortcutIsGlobal = false
 
+	return cfg
+}
+
+// writeBaselineConfig writes the per-run client config.yml (see
+// baselineConfig) and quits any daemon left running under a different one.
+func (r *Runtime) writeBaselineConfig() error {
+	cfg := r.baselineConfig()
 	data, err := cfg.MarshalYAML()
 	if err != nil {
 		return fmt.Errorf("rtest: marshaling baseline config: %w", err)
@@ -387,6 +447,30 @@ func (r *Runtime) writeBaselineConfig() error {
 		return fmt.Errorf("rtest: writing %s: %w", path, err)
 	}
 	return r.quitOnConfigChange(data)
+}
+
+// variantConfigDir writes a config directory for a ConnWithConfig delta,
+// applied on top of the run's baseline config, and returns its path plus a
+// content fingerprint that changes whenever the resulting config would. The
+// directory is content-addressed, so two connections requesting an
+// equivalent delta share one.
+func (r *Runtime) variantConfigDir(delta func(client.Config)) (dir, fingerprint string, err error) {
+	cfg := r.baselineConfig()
+	delta(cfg)
+	data, err := cfg.MarshalYAML()
+	if err != nil {
+		return "", "", fmt.Errorf("rtest: marshaling config variant: %w", err)
+	}
+	fingerprint = sha256Hex(data)
+	dir = filepath.Join(r.buildOutput, "rtest", "home", "config-"+fingerprint[:16])
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", "", fmt.Errorf("rtest: creating %s: %w", dir, err)
+	}
+	path := filepath.Join(dir, client.ConfigFile)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return "", "", fmt.Errorf("rtest: writing %s: %w", path, err)
+	}
+	return dir, fingerprint, nil
 }
 
 // quitOnConfigChange quits any running daemons when the baseline config

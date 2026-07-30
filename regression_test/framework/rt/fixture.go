@@ -26,6 +26,12 @@ type Fixture[T any] struct {
 	ProvisionFn func(Env) (T, error)
 	AdoptFn     func(Env) (T, bool)
 	DestroyFn   func(Env, T) error
+	// AlwaysDestroy marks a fixture whose DestroyFn runs at the end of every
+	// run, even in dev mode where KeepResources() would otherwise leave it
+	// for adoption. Used for per-test ephemera (PrivateNamespace,
+	// SecondaryManager) that must never accumulate across runs since they
+	// are never adopted anyway.
+	AlwaysDestroy bool
 }
 
 // memoEntry is the type-erased record the engine keeps per fixture hash.
@@ -36,6 +42,7 @@ type memoEntry struct {
 	hash    string
 	value   any
 	failed  error
+	always  bool
 	destroy func(Env) error
 }
 
@@ -138,9 +145,10 @@ func getOrProvision[T any](t testing.TB, f *Fixture[T]) T {
 		return zero
 	}
 	r.engine.store(&memoEntry{
-		name:  f.Name,
-		hash:  f.Hash,
-		value: value,
+		name:   f.Name,
+		hash:   f.Hash,
+		value:  value,
+		always: f.AlwaysDestroy,
 		destroy: func(e Env) error {
 			if f.DestroyFn == nil {
 				return nil
@@ -153,15 +161,20 @@ func getOrProvision[T any](t testing.TB, f *Fixture[T]) T {
 	return value
 }
 
-// teardownFixtures destroys every live fixture in LIFO (reverse provision)
-// order. Called once at the end of Main, only when a teardown is due
-// (IsCI() or RTEST_TEARDOWN=1); otherwise resources are kept for adoption by
-// the next run.
-func (r *Runtime) teardownFixtures() {
+// teardownFixtures destroys live fixtures in LIFO (reverse provision) order.
+// Called once at the end of Main. When force is true (IsCI() or
+// RTEST_TEARDOWN=1) every fixture is destroyed; otherwise only ones marked
+// AlwaysDestroy are, so dev-mode's keep-for-adoption still cleans up
+// per-test ephemera (PrivateNamespace, SecondaryManager) that are never
+// adopted anyway.
+func (r *Runtime) teardownFixtures(force bool) {
 	entries := r.engine.snapshot()
 	tb := &runTB{r: r}
 	for i := len(entries) - 1; i >= 0; i-- {
 		en := entries[i]
+		if !force && !en.always {
+			continue
+		}
 		if en.destroy == nil {
 			continue
 		}

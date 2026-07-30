@@ -1,6 +1,7 @@
 package rt
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -76,4 +77,79 @@ func appNamespaceFixture() *Fixture[string] {
 
 func managerNamespaceFixture() *Fixture[string] {
 	return namespaceFixture(managers.ManagerNamespace)
+}
+
+// PrivateNamespace provisions a namespace named rtest-<prefix>-<4hex>,
+// carrying the same managed label as AppNamespace/the manager namespace, so
+// a namespaceSelector matching that label picks it up. Unlike those shared
+// namespaces, it is never shared across suites or adopted across runs: each
+// call creates a fresh one, and it is always destroyed at run end, even in
+// dev keep mode (AlwaysDestroy).
+func PrivateNamespace(e Env, prefix string) string {
+	e.T.Helper()
+	name := fmt.Sprintf("rtest-%s-%s", prefix, randomHex(4))
+	fx := &Fixture[string]{
+		Name:          "namespace/" + name,
+		Hash:          sha256Hex([]byte("private-namespace/" + name)),
+		AlwaysDestroy: true,
+		ProvisionFn: func(e Env) (string, error) {
+			manifest := fmt.Sprintf(namespaceManifest, name)
+			if err := e.R.applyManifest(e.Ctx, "", "namespace-"+name, manifest); err != nil {
+				return "", err
+			}
+			return name, nil
+		},
+		DestroyFn: func(e Env, ns string) error {
+			_, err := e.R.Kubectl(e.Ctx, "", "delete", "namespace", ns, "--ignore-not-found", "--wait=false")
+			return err
+		},
+	}
+	return Get(e.T, fx)
+}
+
+// unmanagedNamespaceManifest is namespaceManifest without the
+// rtest.telepresence.io/managed label, so a namespaceSelector matching that
+// label (the shared manager's) doesn't pick the namespace up.
+const unmanagedNamespaceManifest = `apiVersion: v1
+kind: Namespace
+metadata:
+  name: %[1]s
+  labels:
+    purpose: tp-rtest
+    app.kubernetes.io/name: %[1]s
+`
+
+// PrivateUnmanagedNamespace is PrivateNamespace without the
+// rtest.telepresence.io/managed label, for a namespace that must stay
+// unmanaged by the shared manager (e.g. one about to get its own
+// SecondaryManager, whose namespaceSelector would otherwise conflict with
+// the shared manager's over that label). Same lifecycle: fresh every call,
+// always destroyed at run end (AlwaysDestroy).
+func PrivateUnmanagedNamespace(e Env, prefix string) string {
+	e.T.Helper()
+	name := fmt.Sprintf("rtest-%s-%s", prefix, randomHex(4))
+	fx := &Fixture[string]{
+		Name:          "namespace/" + name,
+		Hash:          sha256Hex([]byte("private-unmanaged-namespace/" + name)),
+		AlwaysDestroy: true,
+		ProvisionFn: func(e Env) (string, error) {
+			manifest := fmt.Sprintf(unmanagedNamespaceManifest, name)
+			if err := e.R.applyManifest(e.Ctx, "", "namespace-"+name, manifest); err != nil {
+				return "", err
+			}
+			return name, nil
+		},
+		DestroyFn: func(e Env, ns string) error {
+			_, err := e.R.Kubectl(e.Ctx, "", "delete", "namespace", ns, "--ignore-not-found", "--wait=false")
+			return err
+		},
+	}
+	return Get(e.T, fx)
+}
+
+// randomHex returns n lowercase hex characters from crypto/rand.
+func randomHex(n int) string {
+	b := make([]byte, (n+1)/2)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)[:n]
 }

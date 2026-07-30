@@ -51,13 +51,11 @@ spec:
 `
 
 // coverClientDir returns build-output/rtest/coverage/client, creating it,
-// when coverage mode (RTEST_COVER=1) is active. ok is false when coverage
-// mode is off or the directory can't be created, in which case the caller
-// falls back to any ambient GOCOVERDIR.
+// regardless of RTEST_COVER: a cover-instrumented client binary warns on
+// stderr when GOCOVERDIR is unset, so the variable is always provided and a
+// plain binary simply ignores it. ok is false only when the directory can't
+// be created, in which case the caller falls back to any ambient GOCOVERDIR.
 func (r *Runtime) coverClientDir() (string, bool) {
-	if !r.cover {
-		return "", false
-	}
 	dir := filepath.Join(r.buildOutput, "rtest", "coverage", "client")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		r.Infof("[rtest] cover: creating %s: %v", dir, err)

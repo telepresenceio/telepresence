@@ -63,7 +63,7 @@ func (s *Suite) AppNamespace() string {
 
 // Connect returns a live connection to the suite's manager, in the app
 // namespace, provisioning both on first use.
-func (s *Suite) Connect(opts ...cli.ConnectOpt) *Conn {
+func (s *Suite) Connect(opts ...ConnOpt) *Conn {
 	s.Manager()
 	ns := s.AppNamespace()
 	return Get(s.T(), ConnectionFixture(ns, opts...))
