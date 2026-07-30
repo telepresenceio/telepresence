@@ -3,6 +3,7 @@ package rt
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -82,6 +83,21 @@ func (e *engine) invalidate(hash string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	delete(e.entries, hash)
+}
+
+// invalidateSiblings removes memo entries whose name starts with prefix but
+// whose hash differs from keepHash: fixtures describing the same underlying
+// resource in a different configuration. Provisioning one manager spec makes
+// every other spec's memoized handle stale, since they all share one
+// release.
+func (e *engine) invalidateSiblings(prefix, keepHash string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for h, en := range e.entries {
+		if h != keepHash && strings.HasPrefix(en.name, prefix) {
+			delete(e.entries, h)
+		}
+	}
 }
 
 func (e *engine) snapshot() []*memoEntry {

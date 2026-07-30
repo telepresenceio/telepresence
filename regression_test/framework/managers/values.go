@@ -25,13 +25,23 @@ const (
 // manager catalog. Field names and JSON tags mirror charts/telepresence-oss's
 // values.schema.yaml.
 type Values struct {
-	LogLevel          string           `json:"logLevel,omitempty"`
-	Image             Image            `json:"image,omitzero"`
-	Agent             AgentValues      `json:"agent,omitzero"`
-	ClientRbac        Rbac             `json:"clientRbac,omitzero"`
-	ManagerRbac       ManagerRbac      `json:"managerRbac,omitzero"`
-	Timeouts          Timeouts         `json:"timeouts,omitzero"`
+	LogLevel      string        `json:"logLevel,omitempty"`
+	Image         Image         `json:"image,omitzero"`
+	Agent         AgentValues   `json:"agent,omitzero"`
+	AgentInjector AgentInjector `json:"agentInjector,omitzero"`
+	ClientRbac    Rbac          `json:"clientRbac,omitzero"`
+	ManagerRbac   ManagerRbac   `json:"managerRbac,omitzero"`
+	Timeouts      Timeouts      `json:"timeouts,omitzero"`
+	// Namespaces and NamespaceSelector are mutually exclusive per the chart
+	// (values.schema.yaml's namespaces/namespaceSelector descriptions):
+	// setting a static Namespaces list must null NamespaceSelector, and
+	// Merge does so (see the Namespaces handling below).
+	Namespaces        []string         `json:"namespaces,omitempty"`
 	NamespaceSelector *labels.Selector `json:"namespaceSelector,omitempty"`
+	// PodCIDRs is only meaningful when PodCIDRStrategy is "environment"
+	// (values.schema.yaml's podCIDRs description).
+	PodCIDRs        []string `json:"podCIDRs,omitempty"`
+	PodCIDRStrategy string   `json:"podCIDRStrategy,omitempty"`
 	// ExtraEnv/ExtraVolumes/ExtraVolumeMounts mirror the chart's own
 	// extraEnv/extraVolumes/extraVolumeMounts passthrough values, applied to
 	// the traffic-manager container/pod. cover.go appends to these in
@@ -42,6 +52,33 @@ type Values struct {
 	// Usage has no omit option: usage.enabled=false must always reach the
 	// chart, whose own default is true.
 	Usage Usage `json:"usage"`
+}
+
+// AgentInjector is the chart's agentInjector.* shape, restricted to the
+// fields the catalog configures: whether the webhook is enabled at all, the
+// injection policy, and the mutating webhook's certificate/reinvocation
+// settings.
+type AgentInjector struct {
+	// Enabled is a pointer so InjectorDisabled() can force it to false: a
+	// plain bool can't be distinguished from "not set" by Merge, which would
+	// make agentInjector.enabled=false unreachable through the overlay.
+	Enabled      *bool       `json:"enabled,omitempty"`
+	InjectPolicy string      `json:"injectPolicy,omitempty"`
+	Certificate  Certificate `json:"certificate,omitzero"`
+	Webhook      Webhook     `json:"webhook,omitzero"`
+}
+
+// Certificate is the chart's agentInjector.certificate.* shape, restricted
+// to the fields the catalog configures.
+type Certificate struct {
+	AccessMethod string `json:"accessMethod,omitempty"`
+	Regenerate   bool   `json:"regenerate,omitempty"`
+}
+
+// Webhook is the chart's agentInjector.webhook.* shape, restricted to the
+// field the catalog configures.
+type Webhook struct {
+	ReinvocationPolicy string `json:"reinvocationPolicy,omitempty"`
 }
 
 // Image is the chart's image.* and agent.image.* shape.
@@ -122,6 +159,7 @@ func Merge(base, over Values) Values {
 	}
 	m.Image = mergeImage(m.Image, over.Image)
 	m.Agent.Image = mergeImage(m.Agent.Image, over.Agent.Image)
+	m.AgentInjector = mergeAgentInjector(m.AgentInjector, over.AgentInjector)
 	m.ClientRbac = mergeRbac(m.ClientRbac, over.ClientRbac)
 	if over.ManagerRbac.Create {
 		m.ManagerRbac.Create = true
@@ -131,6 +169,19 @@ func Merge(base, over Values) Values {
 	}
 	if over.NamespaceSelector != nil {
 		m.NamespaceSelector = over.NamespaceSelector
+	}
+	if over.Namespaces != nil {
+		// namespaces and namespaceSelector are mutually exclusive in the
+		// chart: a static list always wins over (and nulls) the selector,
+		// regardless of the order the two overlays are declared in.
+		m.Namespaces = over.Namespaces
+		m.NamespaceSelector = nil
+	}
+	if over.PodCIDRs != nil {
+		m.PodCIDRs = over.PodCIDRs
+	}
+	if over.PodCIDRStrategy != "" {
+		m.PodCIDRStrategy = over.PodCIDRStrategy
 	}
 	if over.ExtraEnv != nil {
 		m.ExtraEnv = over.ExtraEnv
@@ -169,6 +220,35 @@ func mergeRbac(base, over Rbac) Rbac {
 	}
 	if over.Subjects != nil {
 		base.Subjects = over.Subjects
+	}
+	return base
+}
+
+func mergeAgentInjector(base, over AgentInjector) AgentInjector {
+	if over.Enabled != nil {
+		base.Enabled = over.Enabled
+	}
+	if over.InjectPolicy != "" {
+		base.InjectPolicy = over.InjectPolicy
+	}
+	base.Certificate = mergeCertificate(base.Certificate, over.Certificate)
+	base.Webhook = mergeWebhook(base.Webhook, over.Webhook)
+	return base
+}
+
+func mergeCertificate(base, over Certificate) Certificate {
+	if over.AccessMethod != "" {
+		base.AccessMethod = over.AccessMethod
+	}
+	if over.Regenerate {
+		base.Regenerate = true
+	}
+	return base
+}
+
+func mergeWebhook(base, over Webhook) Webhook {
+	if over.ReinvocationPolicy != "" {
+		base.ReinvocationPolicy = over.ReinvocationPolicy
 	}
 	return base
 }

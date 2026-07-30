@@ -49,7 +49,10 @@ func (w *Workload) ServiceURLNamed(name string) (url string, ok bool) {
 
 // WorkloadFixture renders tpl in ns, applies it, and waits for the rollout.
 // Keyed by (namespace, template), so two suites requesting the identical
-// workload share it.
+// workload share it. Exported so a suite needing a workload outside the
+// shared AppNamespace (a PrivateNamespace, or a SecondaryManager's) can call
+// rt.Get(t, rt.WorkloadFixture(ns, tpl)) directly; Suite.Workload only
+// covers AppNamespace, so no separate arbitrary-namespace accessor exists.
 func WorkloadFixture(ns string, tpl workloads.Template) *Fixture[*Workload] {
 	h := sha256.Sum256([]byte(workloadKey(ns, tpl)))
 	hash := hex.EncodeToString(h[:])
@@ -79,9 +82,12 @@ func workloadKey(ns string, tpl workloads.Template) string {
 	for i, k := range annoKeys {
 		annos[i] = fmt.Sprintf("%s=%s", k, tpl.Annotations[k])
 	}
-	return fmt.Sprintf("workload|%s|%s|%s|%d|%s|%s|headless=%t|noservice=%t|extra=%s|annotations=%s",
+	return fmt.Sprintf("workload|%s|%s|%s|%d|%s|%s|headless=%t|noservice=%t|extra=%s|annotations=%s|"+
+		"resources=%s,%s,%s,%s|appprotocol=%s",
 		ns, tpl.Name, tpl.Kind, tpl.Replicas, tpl.Image, tpl.SvcName,
-		tpl.Headless, tpl.NoService, strings.Join(extra, ","), strings.Join(annos, ","))
+		tpl.Headless, tpl.NoService, strings.Join(extra, ","), strings.Join(annos, ","),
+		tpl.Resources.Requests.CPU, tpl.Resources.Requests.Memory,
+		tpl.Resources.Limits.CPU, tpl.Resources.Limits.Memory, tpl.AppProtocol)
 }
 
 func provisionWorkload(e Env, ns string, tpl workloads.Template) (*Workload, error) {

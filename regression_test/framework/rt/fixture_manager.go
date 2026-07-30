@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"sigs.k8s.io/yaml"
 
@@ -117,7 +118,8 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("manager/%s: marshaling values: %w", spec.Key, err)
 	}
-	valuesPath := filepath.Join(r.ArtifactDir("manager"), "values-"+spec.Key+".yaml")
+	fileKey := strings.ReplaceAll(spec.Key, "/", "-")
+	valuesPath := filepath.Join(r.ArtifactDir("manager"), "values-"+fileKey+".yaml")
 	if err := os.WriteFile(valuesPath, valuesYAML, 0o644); err != nil {
 		return nil, fmt.Errorf("manager/%s: writing values: %w", spec.Key, err)
 	}
@@ -139,8 +141,15 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 		return nil, err
 	}
 
+	// All manager specs share one release: installing this spec makes every
+	// other spec's memoized handle stale.
+	r.engine.invalidateSiblings("manager/", spec.Hash())
+
 	valuesHash := sha256Hex(valuesYAML)
-	if err := r.state.record(r.clusterKey(e.Ctx), spec.Hash(), &fixtureState{
+	// One record for the release, not one per spec: the release can only be
+	// in one configuration, and adoption must compare against whatever the
+	// LAST provision left installed, no matter which spec that was.
+	if err := r.state.record(r.clusterKey(e.Ctx), managerStateKey, &fixtureState{
 		Kind:       "manager",
 		Names:      []string{helmReleaseName},
 		ValuesHash: valuesHash,
@@ -150,6 +159,9 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 	return &ManagerHandle{Namespace: ns, Spec: spec}, nil
 }
 
+// managerStateKey is the state-file key for the single shared release.
+const managerStateKey = "manager-current"
+
 func adoptManager(e Env, spec managers.Spec) (*ManagerHandle, bool) {
 	r := e.R
 	ns := managers.ManagerNamespace
@@ -157,7 +169,7 @@ func adoptManager(e Env, spec managers.Spec) (*ManagerHandle, bool) {
 	if err != nil || !exists {
 		return nil, false
 	}
-	st := r.state.lookup(r.clusterKey(e.Ctx), spec.Hash())
+	st := r.state.lookup(r.clusterKey(e.Ctx), managerStateKey)
 	if st == nil {
 		return nil, false
 	}
@@ -201,6 +213,61 @@ func ensureManagerRBAC(e Env, ns string) error {
 	}
 	rbac := fmt.Sprintf(clientRBACManifest, managers.TestServiceAccount, ns)
 	return e.R.applyManifest(e.Ctx, "", "client-rbac", rbac)
+}
+
+// RestartManager restarts the shared manager's Deployment and waits for the
+// rollout to finish. A newly created or newly labeled namespace only enters
+// the manager's namespaceSelector-managed set once its pod restarts and
+// re-lists namespaces; there is no live pickup (product gap #4 in
+// docs/plans/regression-test-framework/findings.md). Callers that create or
+// label a namespace after the manager is already running must call this
+// before anything that depends on the manager seeing it.
+func RestartManager(e Env) error {
+	ns := managers.ManagerNamespace
+	if _, err := e.R.Kubectl(e.Ctx, ns, "rollout", "restart", "deploy/"+helmReleaseName); err != nil {
+		return err
+	}
+	if _, err := e.R.Kubectl(e.Ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=120s"); err != nil {
+		return err
+	}
+	// rollout status returns while the old pod may still be terminating, and
+	// the webhook service can route admissions to it — with its pre-restart
+	// namespace view. Wait until only one manager pod remains.
+	for i := 0; i < 60; i++ {
+		out, err := e.R.Kubectl(e.Ctx, ns, "get", "pods", "-l", "app=traffic-manager", "-o", "name")
+		if err != nil {
+			return err
+		}
+		if len(strings.Fields(out)) <= 1 {
+			return nil
+		}
+		time.Sleep(time.Second)
+	}
+	return fmt.Errorf("old traffic-manager pod still present after restart")
+}
+
+// parkManagerOnDefault re-provisions the shared release with the Default
+// spec when the state file says something else is installed. Called at the
+// end of a keep-resources run.
+func (r *Runtime) parkManagerOnDefault() {
+	values := mergedManagerValues(r, managers.Default)
+	data, err := yaml.Marshal(values)
+	if err != nil {
+		return
+	}
+	st := r.state.lookup(r.clusterKey(r.ctx), managerStateKey)
+	if st != nil && st.ValuesHash == sha256Hex(data) {
+		return
+	}
+	if ok, _ := managerReleaseExists(r.ctx, r, managers.ManagerNamespace); !ok {
+		return
+	}
+	tb := &runTB{r: r}
+	if _, err := provisionManager(Env{Ctx: r.ctx, T: tb, R: r}, managers.Default); err != nil {
+		r.Infof("[rtest] parking manager on the default spec: %v", err)
+		return
+	}
+	r.Infof("[rtest] parked manager on the default spec")
 }
 
 func sha256Hex(b []byte) string {

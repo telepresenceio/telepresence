@@ -20,9 +20,9 @@ import (
 
 // connectAs reconstructs rt's private connectAs identity from exported
 // pieces: the --as value the manager's clientRbac ClusterRoleBinding grants
-// access to. Needed here because a few tests in this package issue raw
-// `connect` invocations that rt.ConnectionFixture can't express (see
-// freeDefaultConnection and ConnectMulti's beta connection).
+// access to. Needed here because Test_Lifecycle's second `connect` call is a
+// raw CLI invocation (proving reconnection under a fresh session, not
+// something a Conn/ConnectionFixture round trip would exercise).
 const connectAs = "system:serviceaccount:" + managers.ManagerNamespace + ":" + managers.TestServiceAccount
 
 // listContains reports whether entries contains a workload named name in ns.

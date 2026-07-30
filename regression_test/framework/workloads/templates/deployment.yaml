@@ -16,6 +16,9 @@ spec:
     - name: http
       port: {{ .Port }}
       targetPort: http
+{{- if .AppProtocol }}
+      appProtocol: {{ .AppProtocol }}
+{{- end }}
 {{- range .ExtraPorts }}
     - name: {{ .Name }}
       port: {{ .Port }}
@@ -61,4 +64,25 @@ spec:
           env:
             - name: PORTS
               value: "{{ .PortsEnv }}"
+{{- end }}
+{{- if not .Resources.IsZero }}
+          resources:
+{{- if or .Resources.Requests.CPU .Resources.Requests.Memory }}
+            requests:
+{{- if .Resources.Requests.CPU }}
+              cpu: {{ .Resources.Requests.CPU }}
+{{- end }}
+{{- if .Resources.Requests.Memory }}
+              memory: {{ .Resources.Requests.Memory }}
+{{- end }}
+{{- end }}
+{{- if or .Resources.Limits.CPU .Resources.Limits.Memory }}
+            limits:
+{{- if .Resources.Limits.CPU }}
+              cpu: {{ .Resources.Limits.CPU }}
+{{- end }}
+{{- if .Resources.Limits.Memory }}
+              memory: {{ .Resources.Limits.Memory }}
+{{- end }}
+{{- end }}
 {{- end }}

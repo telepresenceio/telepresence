@@ -78,7 +78,10 @@ func (s *AttachConflicts) Test_IngestThenIntercept() {
 	ig := conn.Ingest(t, wl, cli.MountFalse())
 	ic := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
 
-	s.True(listContains(conn.List(t), wl.Name, wl.Namespace), "list should show %s.%s", wl.Name, wl.Namespace)
+	e := listEntry(conn.List(t), wl.Name, wl.Namespace)
+	s.Require().NotNil(e, "list should show %s.%s", wl.Name, wl.Namespace)
+	s.True(len(e.IngestInfo) > 0, "list should show the ingest as attached")
+	s.True(len(e.InterceptInfo) > 0, "list should show the intercept as attached")
 
 	// Detach the intercept before the ingest: `detach <name>` resolves an
 	// exact intercept-spec-name match before falling back to an ingest
@@ -102,7 +105,10 @@ func (s *AttachConflicts) Test_InterceptThenIngest() {
 	ic := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
 	ig := conn.Ingest(t, wl, cli.MountFalse())
 
-	s.True(listContains(conn.List(t), wl.Name, wl.Namespace), "list should show %s.%s", wl.Name, wl.Namespace)
+	e := listEntry(conn.List(t), wl.Name, wl.Namespace)
+	s.Require().NotNil(e, "list should show %s.%s", wl.Name, wl.Namespace)
+	s.True(len(e.InterceptInfo) > 0, "list should show the intercept as attached")
+	s.True(len(e.IngestInfo) > 0, "list should show the ingest as attached")
 
 	ic.Detach(t)
 	ig.Detach(t)

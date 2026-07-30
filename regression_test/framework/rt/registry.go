@@ -234,6 +234,11 @@ func Main(m *testing.M) {
 		r.teardownFixtures(true)
 	} else {
 		r.teardownFixtures(false)
+		// The last test may have left the shared release on a non-default
+		// spec, possibly referencing namespaces that were just destroyed —
+		// a manager in that state crashloops until something re-provisions
+		// it. Park the kept release on the default spec.
+		r.parkManagerOnDefault()
 		r.Infof("[rtest] keeping resources for adoption (dev mode); run `make rtest-clean` to remove them")
 	}
 	if err := r.writeManifest(); err != nil {

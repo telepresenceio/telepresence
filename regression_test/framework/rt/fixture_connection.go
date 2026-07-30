@@ -47,20 +47,21 @@ const connectAs = "system:serviceaccount:" + managers.ManagerNamespace + ":" + m
 // `connect` invocation's extra arguments and environment, and the metadata
 // (name, docker mode, config dir) the fixture and the resulting Conn need.
 type connSpec struct {
-	args      []string
-	env       []string
-	name      string
-	docker    bool
-	configDir string
-	hashKey   []string
-	configErr error
+	args             []string
+	env              []string
+	name             string
+	docker           bool
+	configDir        string
+	managerNamespace string
+	hashKey          []string
+	configErr        error
 }
 
 // isDefault reports whether no ConnOpt changed anything: the plain
 // `Connect()` case, whose fixture hash and adoption behavior must match the
 // pre-M3 framework exactly.
 func (cs *connSpec) isDefault() bool {
-	return cs.name == "" && !cs.docker && cs.configDir == "" && len(cs.env) == 0
+	return cs.name == "" && !cs.docker && cs.configDir == "" && len(cs.env) == 0 && cs.managerNamespace == ""
 }
 
 func newConnSpec(opts []ConnOpt) *connSpec {
@@ -108,6 +109,21 @@ func ConnWithKubeconfig(path string) ConnOpt {
 	return func(cs *connSpec) {
 		cs.env = append(cs.env, "KUBECONFIG="+path)
 		cs.hashKey = append(cs.hashKey, "kubeconfig="+path)
+	}
+}
+
+// ConnManagerNamespace overrides --manager-namespace on the connect
+// invocation, so the connection targets a manager release living in ns
+// instead of the shared one in managers.ManagerNamespace: a SecondaryManager
+// (fixture_manager2.go), whose release lives in the namespace it manages
+// rather than the shared manager's namespace. Every subsequent CLI call
+// against the resulting Conn (list, intercept, ...) needs no equivalent
+// override: --manager-namespace only matters at connect time, and the
+// daemon keeps talking to whichever manager it connected to.
+func ConnManagerNamespace(ns string) ConnOpt {
+	return func(cs *connSpec) {
+		cs.managerNamespace = ns
+		cs.hashKey = append(cs.hashKey, "manager-namespace="+ns)
 	}
 }
 
@@ -162,11 +178,15 @@ func ensureHostDaemon(e Env, cs *connSpec) {
 }
 
 func connectArgs(ns string, cs *connSpec) []string {
+	mgrNS := managers.ManagerNamespace
+	if cs.managerNamespace != "" {
+		mgrNS = cs.managerNamespace
+	}
 	args := make([]string, 0, 7+len(cs.args))
 	args = append(args,
 		"connect",
 		"--namespace", ns,
-		"--manager-namespace", managers.ManagerNamespace,
+		"--manager-namespace", mgrNS,
 		"--as", connectAs,
 	)
 	return append(args, cs.args...)
@@ -259,6 +279,25 @@ func destroyConnection(e Env, c *Conn) error {
 	return nil
 }
 
+// Reconnect issues a raw, unmemoized `connect` to ns and returns the
+// resulting *Conn. Unlike Mutate(ConnectionFixture(ns)), it always runs the
+// connect command: a fixture only reprovisions after the test that Mutated
+// it ends, so a second Mutate on the same (ns, no-opts) hash within one
+// test would just return the already-memoized Conn (see
+// docs/plans/regression-test-framework/plan.md's "Mutate is single-shot per
+// test" note). Callers typically call this right after
+// Mutate(ConnectionFixture(ns)).Disconnect(t) to free whatever was
+// previously connected.
+func Reconnect(t testing.TB, ctx context.Context, ns string) *Conn {
+	t.Helper()
+	r := R()
+	args := connectArgs(ns, &connSpec{})
+	if _, stderr, err := r.CLI().Run(ctx, args...); err != nil {
+		t.Fatalf("connect: %v: %s", err, stderr)
+	}
+	return &Conn{r: r, ctx: ctx, namespace: ns}
+}
+
 // Name returns the connection's --name, or "" for the default, unnamed
 // connection.
 func (c *Conn) Name() string { return c.name }
@@ -287,8 +326,24 @@ func (c *Conn) Status(t testing.TB) *cli.Status {
 // List returns the current `telepresence list` entries.
 func (c *Conn) List(t testing.TB) []cli.ListEntry {
 	t.Helper()
+	return c.list(t, nil)
+}
+
+// ListNamespace is List scoped to ns (`list -n <ns>`), for a workload
+// outside the connection's default namespace: e.g. one of several
+// namespaces a StaticNamespaces-scoped manager manages.
+func (c *Conn) ListNamespace(t testing.TB, ns string) []cli.ListEntry {
+	t.Helper()
+	return c.list(t, []string{"-n", ns})
+}
+
+func (c *Conn) list(t testing.TB, extra []string) []cli.ListEntry {
+	t.Helper()
 	var entries []cli.ListEntry
-	args := append([]string{"list", "--format", "json"}, c.useArgs()...)
+	args := make([]string, 0, 2+len(extra)+len(c.useArgs()))
+	args = append(args, "list", "--format", "json")
+	args = append(args, extra...)
+	args = append(args, c.useArgs()...)
 	if err := c.r.CLI().JSON(c.ctx, &entries, args...); err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -298,32 +353,45 @@ func (c *Conn) List(t testing.TB) []cli.ListEntry {
 // Intercept attaches an intercept to wl.
 func (c *Conn) Intercept(t testing.TB, wl *Workload, opts ...cli.InterceptOpt) *Attach {
 	t.Helper()
-	return c.attach(t, "intercept", wl, opts)
+	return c.attach(t, "intercept", wl.Name, wl.Namespace, opts)
+}
+
+// InterceptNamed attaches an intercept named name to wl, instead of the
+// workload's own name Conn.Intercept always reuses as the intercept's
+// positional name: for two intercepts sharing one workload, each needs a
+// name distinct from the other and from the workload, so --workload takes
+// over identifying the target.
+func (c *Conn) InterceptNamed(t testing.TB, name string, wl *Workload, opts ...cli.InterceptOpt) *Attach {
+	t.Helper()
+	named := make([]cli.InterceptOpt, 0, 1+len(opts))
+	named = append(named, cli.WorkloadFlag(wl.Name))
+	named = append(named, opts...)
+	return c.attach(t, "intercept", name, wl.Namespace, named)
 }
 
 // Ingest attaches an ingest to wl.
 func (c *Conn) Ingest(t testing.TB, wl *Workload, opts ...cli.InterceptOpt) *Attach {
 	t.Helper()
-	return c.attach(t, "ingest", wl, opts)
+	return c.attach(t, "ingest", wl.Name, wl.Namespace, opts)
 }
 
 // Replace attaches a replace to wl: the traffic-agent replaces the
 // application container instead of running alongside it.
 func (c *Conn) Replace(t testing.TB, wl *Workload, opts ...cli.InterceptOpt) *Attach {
 	t.Helper()
-	return c.attach(t, "replace", wl, opts)
+	return c.attach(t, "replace", wl.Name, wl.Namespace, opts)
 }
 
 // Wiretap attaches a wiretap to wl: the local handler receives a copy of
 // traffic while the cluster's own handler keeps serving it.
 func (c *Conn) Wiretap(t testing.TB, wl *Workload, opts ...cli.InterceptOpt) *Attach {
 	t.Helper()
-	return c.attach(t, "wiretap", wl, opts)
+	return c.attach(t, "wiretap", wl.Name, wl.Namespace, opts)
 }
 
-func (c *Conn) attach(t testing.TB, verb string, wl *Workload, opts []cli.InterceptOpt) *Attach {
+func (c *Conn) attach(t testing.TB, verb, name, namespace string, opts []cli.InterceptOpt) *Attach {
 	t.Helper()
-	args := []string{verb, wl.Name, "--namespace", wl.Namespace, "--format", "json"}
+	args := []string{verb, name, "--namespace", namespace, "--format", "json"}
 	switch verb {
 	case "intercept", "replace", "wiretap":
 		args = append(args, "--detailed-output")
@@ -336,11 +404,11 @@ func (c *Conn) attach(t testing.TB, verb string, wl *Workload, opts []cli.Interc
 	if err != nil {
 		// A client-side attach timeout can leave the intercept behind on the
 		// manager, where it would block every later attach to the workload.
-		dArgs := append([]string{"detach", wl.Name, "-n", wl.Namespace}, c.useArgs()...)
+		dArgs := append([]string{"detach", name, "-n", namespace}, c.useArgs()...)
 		_, _, _ = c.r.CLI().Run(c.ctx, dArgs...)
-		t.Fatalf("%s %s: %v\nstdout:\n%s\nstderr:\n%s", verb, wl.Name, err, stdout, stderr)
+		t.Fatalf("%s %s: %v\nstdout:\n%s\nstderr:\n%s", verb, name, err, stdout, stderr)
 	}
-	a := &Attach{conn: c, namespace: wl.Namespace, name: wl.Name}
+	a := &Attach{conn: c, namespace: namespace, name: name}
 	switch verb {
 	case "intercept":
 		var info cli.InterceptInfo

@@ -10,7 +10,10 @@ import (
 
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/attach"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/connect"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/injector"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/install"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/intercept"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/namespaces"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/smoke"
 )
 
@@ -39,4 +42,20 @@ func TestAttach(t *testing.T) {
 // TestIntercept runs the "intercept" area.
 func TestIntercept(t *testing.T) {
 	rt.RunArea(t, "intercept")
+}
+
+// TestInstall runs the "install" area. It churns the shared release's spec
+// and installs secondary releases; it runs after the data-plane areas.
+func TestInstall(t *testing.T) {
+	rt.RunArea(t, "install")
+}
+
+// TestInjector runs the "injector" area.
+func TestInjector(t *testing.T) {
+	rt.RunArea(t, "injector")
+}
+
+// TestNamespaces runs the "namespaces" area.
+func TestNamespaces(t *testing.T) {
+	rt.RunArea(t, "namespaces")
 }

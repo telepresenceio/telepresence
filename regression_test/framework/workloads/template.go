@@ -40,12 +40,42 @@ type Template struct {
 	// Annotations are rendered onto the pod template's metadata.annotations,
 	// e.g. telepresence.io/inject-container-ports for no-service workloads.
 	Annotations map[string]string
+	// Resources sets the app container's resource requests/limits, e.g. for
+	// LimitRange-default assertions. Zero value renders no resources block.
+	Resources Resources
+	// AppProtocol sets appProtocol on the service's "http" port (e.g.
+	// "kubernetes.io/h2c"), so the agent preserves the port's application
+	// protocol instead of treating it as opaque TCP. Empty renders no
+	// appProtocol field. Ignored when NoService is set, since there is no
+	// service port to annotate.
+	AppProtocol string
 }
 
 // NamedPort is an additional container/service port beyond Template.Port.
 type NamedPort struct {
 	Name string
 	Port int32
+}
+
+// Resources is a workload's app container resources.requests/limits,
+// rendered in Kubernetes quantity syntax (e.g. "100m", "64Mi"). A field left
+// empty is omitted from the rendered manifest.
+type Resources struct {
+	Requests ResourceQuantities
+	Limits   ResourceQuantities
+}
+
+// ResourceQuantities is a cpu/memory pair, as used by Resources.Requests and
+// Resources.Limits.
+type ResourceQuantities struct {
+	CPU    string
+	Memory string
+}
+
+// IsZero reports whether r sets no requests and no limits, used by the
+// templates to skip rendering an empty resources block.
+func (r Resources) IsZero() bool {
+	return r == Resources{}
 }
 
 // PortsEnv is the echo-server PORTS env var value for a multi-port

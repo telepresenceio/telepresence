@@ -1,6 +1,19 @@
 package intercept
 
 import (
+	"context"
+	"crypto/rand"
+	"crypto/tls"
+	"encoding/hex"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"golang.org/x/net/http2"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/check"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/cli"
@@ -109,13 +122,133 @@ func (s *InterceptRouting) Test_LocalShortcut() {
 	rt.RoutedToCluster(t, url)
 }
 
-// Test_H2C would prove that an h2c (HTTP/2 prior-knowledge) request to an
-// intercepted service reaches a local h2c server. It can't be implemented
-// yet: workloads.Template has no way to declare `appProtocol:
-// kubernetes.io/h2c` on the generated Service port, which the agent needs
-// to preserve h2c framing instead of downgrading to HTTP/1.1 (see
-// integration_test/h2c_intercept_test.go). API gap.
+// h2cMarkerPrefix begins the body every h2cServer responds with, mirroring
+// rt.LocalService's marker convention (regression_test/framework/rt/
+// fixture_localservice.go).
+const h2cMarkerPrefix = "rtest-h2c:"
+
+// h2cHeaderKey/h2cHeaderVal filters Test_H2C's intercept. An unfiltered
+// (global) intercept uses mechanism "tcp" (pkg/client/cli/intercept/
+// info.go's Info.Global: spec.Mechanism == "tcp"), a raw byte tunnel that
+// would preserve any framing trivially and prove nothing about h2c
+// handling. A header filter forces mechanism "http", the agent's HTTP-aware
+// reverse proxy (cmd/traffic/cmd/agent/fwd/http.go's serveHTTPIntercept)
+// that negotiates the workstation-bound connection's protocol from both the
+// inbound request's own protocol and the service's appProtocol.
+const (
+	h2cHeaderKey = "x-rtest-h2c"
+	h2cHeaderVal = "match"
+)
+
+// h2cRouteTimeout bounds Test_H2C's request poll.
+const h2cRouteTimeout = 30 * time.Second
+
+// h2cServer is a suite-local, h2c-only (prior-knowledge, cleartext HTTP/2)
+// server: golang.org/x/net/http2.Server.ServeConn speaks HTTP/2 directly on
+// every accepted connection, with no HTTP/1.1 fallback, so a response only
+// arrives if whatever proxied the connection preserved HTTP/2 framing
+// end-to-end rather than reinterpreting the bytes as HTTP/1.1. It is kept
+// local to this suite rather than added to rt.LocalService, which is a
+// plain HTTP/1.1 server.
+type h2cServer struct {
+	listener net.Listener
+	marker   string
+}
+
+// newH2CServer starts an h2cServer and registers its shutdown as a test
+// cleanup.
+func newH2CServer(t testing.TB) *h2cServer {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("h2cServer: listen: %v", err)
+	}
+	srv := &h2cServer{listener: l, marker: h2cMarkerPrefix + randomH2CID()}
+	h2s := &http2.Server{}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(srv.marker))
+	})
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return // listener closed (t.Cleanup below)
+			}
+			go h2s.ServeConn(conn, &http2.ServeConnOpts{Handler: handler})
+		}
+	}()
+	t.Cleanup(func() { _ = l.Close() })
+	return srv
+}
+
+// Port returns the local TCP port the server is bound to.
+func (s *h2cServer) Port() int {
+	return s.listener.Addr().(*net.TCPAddr).Port //nolint:forcetypeassert // always tcp, see net.Listen above
+}
+
+func randomH2CID() string {
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// newH2CClient returns an http.Client that issues prior-knowledge,
+// cleartext HTTP/2 requests: no TLS, no HTTP/1.1 upgrade. AllowHTTP plus a
+// DialTLSContext that dials a plain (non-TLS) connection is the documented
+// way to get this from golang.org/x/net/http2.Transport; net/http's own
+// client transport only ever speaks h2c when negotiated over TLS ALPN,
+// which prior-knowledge h2c (kubernetes.io/h2c) does not use.
+func newH2CClient() *http.Client {
+	return &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http2.Transport{
+			AllowHTTP: true,
+			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, network, addr)
+			},
+		},
+	}
+}
+
+// Test_H2C proves that a real h2c (HTTP/2 prior-knowledge, cleartext)
+// request to a header-filtered intercept reaches a local h2c-only server.
+// The service port declares appProtocol: kubernetes.io/h2c
+// (workloads.Template.AppProtocol), and the probe itself uses genuine HTTP/2
+// prior knowledge (newH2CClient); an h2c-only local server only answers if
+// the agent's reverse proxy preserved h2c framing all the way to the
+// workstation instead of downgrading to HTTP/1.1. Mirrors the intercepted
+// path of integration_test/h2c_intercept_test.go's
+// Test_H2CInterceptPreservesProtocol.
 func (s *InterceptRouting) Test_H2C() {
-	s.T().Skip("api gap: workloads.Template lacks appProtocol support, needed to " +
-		"declare kubernetes.io/h2c on the service port")
+	t := s.T()
+	conn := s.Connect()
+	tpl := workloads.Echo("h2c-intercept")
+	tpl.AppProtocol = "kubernetes.io/h2c"
+	wl := s.Workload(tpl)
+	srv := newH2CServer(t)
+
+	a := conn.Intercept(t, wl,
+		cli.Port(srv.Port(), "http"), cli.MountFalse(), cli.HTTPHeader(h2cHeaderKey, h2cHeaderVal))
+	defer a.Detach(t)
+
+	client := newH2CClient()
+	url := wl.ServiceURL()
+	s.Eventually(func() bool {
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			return false
+		}
+		req.Header.Set(h2cHeaderKey, h2cHeaderVal)
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return false
+		}
+		return resp.StatusCode == http.StatusOK && strings.Contains(string(body), srv.marker)
+	}, h2cRouteTimeout, 250*time.Millisecond, "h2c request should reach the local h2c server")
 }

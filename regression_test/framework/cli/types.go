@@ -45,16 +45,24 @@ type Version struct {
 
 // InterceptInfo mirrors the fields the framework asserts on in the JSON
 // object produced by `telepresence intercept|replace|wiretap --format json
-// --detailed-output` (pkg/client/cli/intercept/info.go: Info). replace and
-// wiretap share this same output type with intercept, distinguished by the
-// Replace/Wiretap flags.
+// --detailed-output` (pkg/client/cli/intercept/info.go: Info; field names
+// verified against that file's json tags). replace and wiretap share this
+// same output type with intercept, distinguished by the Replace/Wiretap
+// flags.
 type InterceptInfo struct {
 	ID           string `json:"id,omitempty"`
 	Name         string `json:"name,omitempty"`
 	Disposition  string `json:"disposition,omitempty"`
 	WorkloadKind string `json:"workload_kind,omitempty"`
-	Replace      bool   `json:"replace,omitempty"`
-	Wiretap      bool   `json:"wiretap,omitempty"`
+	// PortID identifies the service port the intercept targets (name or
+	// number, pkg/client/cli/intercept/info.go's Info.PortID, spec.PortIdentifier).
+	PortID string `json:"port_id,omitempty"`
+	// TargetPort/ContainerPort are the intercept's local port and the
+	// container port it replaces, respectively.
+	TargetPort    int32 `json:"target_port,omitempty"`
+	ContainerPort int32 `json:"container_port,omitempty"`
+	Replace       bool  `json:"replace,omitempty"`
+	Wiretap       bool  `json:"wiretap,omitempty"`
 }
 
 // IngestInfo mirrors the fields the framework asserts on in the JSON object
@@ -69,11 +77,39 @@ type IngestInfo struct {
 
 // ListEntry mirrors the fields the framework asserts on in one element of the
 // JSON array produced by `telepresence list --format json`
-// (pkg/client/cli/cmd/list.go, rpc/connector.WorkloadInfo).
+// (pkg/client/cli/cmd/list.go, rpc/connector.WorkloadInfo; field names
+// verified against rpc/connector/connector.pb.go's WorkloadInfo json tags:
+// intercept_info, ingest_info).
 type ListEntry struct {
 	Name                   string `json:"name,omitempty"`
 	Namespace              string `json:"namespace,omitempty"`
 	WorkloadResourceType   string `json:"workload_resource_type,omitempty"`
 	AgentVersion           string `json:"agent_version,omitempty"`
 	NotInterceptableReason string `json:"not_interceptable_reason,omitempty"`
+	// InterceptInfo/IngestInfo are non-empty exactly when the workload
+	// currently carries an intercept/replace/wiretap or an ingest,
+	// respectively: a suite can assert attach/detach visibility by checking
+	// their length, and (via ListEntryIntercept.Spec.Name/ListEntryIngest.
+	// Workload) which attachment.
+	InterceptInfo []ListEntryIntercept `json:"intercept_info,omitempty"`
+	IngestInfo    []ListEntryIngest    `json:"ingest_info,omitempty"`
+}
+
+// ListEntryIntercept mirrors the fields the framework asserts on in one
+// element of ListEntry.InterceptInfo: rpc/manager.InterceptInfo, whose Name
+// is nested under Spec (rpc/manager/manager.pb.go's InterceptInfo/
+// InterceptSpec json tags: id, spec.name).
+type ListEntryIntercept struct {
+	ID   string `json:"id,omitempty"`
+	Spec struct {
+		Name string `json:"name,omitempty"`
+	} `json:"spec"`
+}
+
+// ListEntryIngest mirrors the fields the framework asserts on in one element
+// of ListEntry.IngestInfo: rpc/connector.IngestInfo (rpc/connector/
+// connector.pb.go's json tags: workload, container).
+type ListEntryIngest struct {
+	Workload  string `json:"workload,omitempty"`
+	Container string `json:"container,omitempty"`
 }

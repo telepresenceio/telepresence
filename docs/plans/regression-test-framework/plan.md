@@ -460,3 +460,14 @@ Three tiers, cheapest first:
 - The author-facing content of this plan is captured in
   `regression_test/README.md` (milestone 6), and the "Testing" section body
   in `AGENTS.md` is replaced by a reference to it.
+
+## Framework note: Mutate is single-shot per test
+
+`rt.Mutate` only re-provisions a fixture once the test that Mutated it ends
+(by design: it marks the memo entry for invalidation in `t.Cleanup`). A
+second `rt.Mutate` on the same fixture hash within the same test is a cache
+hit, not a fresh provision. Code that must reconnect mid-test (after
+quitting a connection, or after a manager release change whose cluster-info
+a stale session won't reflect) uses `rt.Reconnect`, which bypasses the memo
+and always issues a fresh `connect`. See also findings.md's product-gap
+notes, which `rt.RestartManager` works around similarly.

@@ -89,9 +89,15 @@ func (s *Suite) CLI() *cli.TP {
 	return R().CLI()
 }
 
-// SetupTest records the test's start time for the manifest.
+// SetupTest records the test's start time for the manifest and guarantees
+// the suite's declared manager spec is the one installed: an earlier suite
+// may have Mutated the shared release to a different spec, and a suite that
+// never touches Manager()/Connect() would otherwise run against it.
 func (s *Suite) SetupTest() {
 	s.testStart = time.Now()
+	if s.reg != nil && s.reg.hasSpec {
+		Get(s.T(), ManagerFixture(s.reg.managerSpec))
+	}
 }
 
 // TearDownTest records the test's outcome and duration for the manifest,

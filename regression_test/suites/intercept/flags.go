@@ -147,38 +147,22 @@ func assertEnvJSONHasKeys(t testing.TB, path string, keys []string) {
 	}
 }
 
-// detailedInfo adds the port_id field that the real `intercept
-// --detailed-output --format json` output carries but cli.InterceptInfo
-// (the framework's minimal mirror; regression_test/framework/cli/types.go)
-// doesn't expose.
-type detailedInfo struct {
-	cli.InterceptInfo
-	PortID string `json:"port_id,omitempty"`
-}
-
 // Test_DetailedJSON proves --detailed-output --format json parses into the
 // documented shape, with the intercept's name and port populated.
+// cli.InterceptInfo mirrors port_id directly (regression_test/framework/cli/
+// types.go), so the response Conn.Intercept already parses is enough; no
+// raw-stdout parsing needed.
 func (s *InterceptFlags) Test_DetailedJSON() {
 	t := s.T()
-	s.Connect()
+	conn := s.Connect()
 	wl := s.Workload(workloads.Echo("detailed-json"))
 	ls := s.LocalEcho()
-	tp, ctx := s.CLI(), s.Ctx()
 
-	stdout, stderr, err := namedIntercept(t, tp, ctx, wl, wl.Name, rt.ToLocal(ls, "http"), cli.MountFalse())
-	if err != nil {
-		t.Fatalf("intercept %s: %v\nstdout:\n%s\nstderr:\n%s", wl.Name, err, stdout, stderr)
-	}
-	defer detachNamed(t, tp, ctx, wl.Name, wl.Namespace)
+	a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
+	defer a.Detach(t)
 
-	var info detailedInfo
-	if err := json.Unmarshal([]byte(stdout), &info); err != nil {
-		t.Fatalf("unmarshal intercept JSON: %v\noutput:\n%s", err, stdout)
-	}
-	if info.Name != wl.Name {
-		t.Fatalf("expected name %q, got %q", wl.Name, info.Name)
-	}
-	if info.PortID == "" {
-		t.Fatalf("expected a populated port_id in the detailed JSON output")
-	}
+	info := a.Intercept
+	s.Require().NotNil(info, "intercept response should include InterceptInfo")
+	s.Equal(wl.Name, info.Name)
+	s.NotEmpty(info.PortID, "expected a populated port_id in the detailed JSON output")
 }

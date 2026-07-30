@@ -117,28 +117,23 @@ func (s *HeaderFilter) Test_Combined() {
 // distinct local service, and proves both serve their own traffic while
 // unmatched requests still reach the cluster. Conn.Intercept always derives
 // the intercept's positional name from the workload's name, so two
-// intercepts sharing one workload need namedIntercept instead (distinct
+// intercepts sharing one workload need Conn.InterceptNamed instead (distinct
 // name, common --workload).
 func (s *HeaderFilter) Test_Coexistence() {
 	t := s.T()
-	s.Connect()
+	conn := s.Connect()
 	wl := s.Workload(workloads.Echo("coexist"))
 	lsA := s.LocalEcho()
 	lsB := s.LocalEcho()
-	tp, ctx := s.CLI(), s.Ctx()
 
 	nameA, nameB := wl.Name+"-a", wl.Name+"-b"
-	if stdout, stderr, err := namedIntercept(t, tp, ctx, wl, nameA,
-		rt.ToLocal(lsA, "http"), cli.MountFalse(), cli.HTTPHeader(headerKey, coexistHeaderA)); err != nil {
-		t.Fatalf("intercept %s: %v\nstdout:\n%s\nstderr:\n%s", nameA, err, stdout, stderr)
-	}
-	defer detachNamed(t, tp, ctx, nameA, wl.Namespace)
+	a := conn.InterceptNamed(t, nameA, wl,
+		rt.ToLocal(lsA, "http"), cli.MountFalse(), cli.HTTPHeader(headerKey, coexistHeaderA))
+	defer a.Detach(t)
 
-	if stdout, stderr, err := namedIntercept(t, tp, ctx, wl, nameB,
-		rt.ToLocal(lsB, "http"), cli.MountFalse(), cli.HTTPHeader(headerKey, coexistHeaderB)); err != nil {
-		t.Fatalf("intercept %s: %v\nstdout:\n%s\nstderr:\n%s", nameB, err, stdout, stderr)
-	}
-	defer detachNamed(t, tp, ctx, nameB, wl.Namespace)
+	b := conn.InterceptNamed(t, nameB, wl,
+		rt.ToLocal(lsB, "http"), cli.MountFalse(), cli.HTTPHeader(headerKey, coexistHeaderB))
+	defer b.Detach(t)
 
 	url := wl.ServiceURL()
 	rt.RoutedToLocal(t, url, lsA, check.WithHeader(headerKey, coexistHeaderA))
@@ -160,11 +155,22 @@ func (s *HeaderFilter) Test_TCPPortConflict() {
 	a := conn.Intercept(t, wl, rt.ToLocal(ls1, "http"), cli.MountFalse())
 	defer a.Detach(t)
 
-	tp, ctx := s.CLI(), s.Ctx()
+	// Conn.InterceptNamed calls t.Fatalf on a non-zero exit, which this test
+	// (expecting failure) can't use; invoke the CLI directly instead, as
+	// attach/conflicts.go's rawInterceptArgs does for the same reason.
 	name2 := wl.Name + "-2"
-	stdout, stderr, err := namedIntercept(t, tp, ctx, wl, name2, rt.ToLocal(ls2, "http"), cli.MountFalse())
+	args := []string{
+		"intercept", name2, "--namespace", wl.Namespace, "--format", "json",
+		"--workload", wl.Name,
+	}
+	for _, o := range []cli.InterceptOpt{rt.ToLocal(ls2, "http"), cli.MountFalse()} {
+		args = append(args, o()...)
+	}
+	stdout, stderr, err := s.CLI().Run(s.Ctx(), args...)
 	if err == nil {
-		detachNamed(t, tp, ctx, name2, wl.Namespace)
+		if _, _, derr := s.CLI().Run(s.Ctx(), "detach", name2, "-n", wl.Namespace); derr != nil {
+			s.R().Infof("[rtest] Test_TCPPortConflict: detach %s: %v", name2, derr)
+		}
 		t.Fatalf("expected an unfiltered second intercept on the same port to fail with a conflict")
 	}
 	// --format json puts the error on stdout, not stderr; check both.
