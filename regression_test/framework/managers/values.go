@@ -32,6 +32,22 @@ type Values struct {
 	ClientRbac    Rbac          `json:"clientRbac,omitzero"`
 	ManagerRbac   ManagerRbac   `json:"managerRbac,omitzero"`
 	Timeouts      Timeouts      `json:"timeouts,omitzero"`
+	// NodeAgent is the chart's top-level nodeAgent.* shape (node-hosted
+	// traffic-agent mode, cluster-wide). Not to be confused with Client's
+	// nested client.nodeAgent.enabled, the client-side default served to
+	// connecting clients.
+	NodeAgent NodeAgentValues `json:"nodeAgent,omitzero"`
+	// Client is the chart's client.* shape: cluster-served defaults handed
+	// to connecting clients, restricted to the keys wave 3 suites configure.
+	Client Client `json:"client,omitzero"`
+	// QuicTunnel is the chart's quicTunnel.* shape, restricted to the keys
+	// quic_test.go's install used.
+	QuicTunnel QuicTunnel `json:"quicTunnel,omitzero"`
+	// Security is the chart's security.* shape: traffic-manager caller
+	// authentication/authorization.
+	Security Security `json:"security,omitzero"`
+	// TelepresenceAPI is the chart's telepresenceAPI.* shape.
+	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitzero"`
 	// Namespaces and NamespaceSelector are mutually exclusive per the chart
 	// (values.schema.yaml's namespaces/namespaceSelector descriptions):
 	// setting a static Namespaces list must null NamespaceSelector, and
@@ -93,6 +109,115 @@ type Image struct {
 // the catalog configures.
 type AgentValues struct {
 	Image Image `json:"image,omitzero"`
+	// EnableH2cProbing is a pointer so NodeAgent() can force it to false:
+	// node-agent Jobs enter an existing pod's namespaces and have no
+	// sidecar of their own to h2c-probe, so node-agent specs disable it
+	// explicitly (see node_agent_test.go's nodeAgentSuite install). A plain
+	// bool couldn't be distinguished from "not set" by Merge.
+	EnableH2cProbing *bool `json:"enableH2cProbing,omitempty"`
+}
+
+// NodeAgentValues is the chart's top-level nodeAgent.* shape, restricted to
+// the enabled flag: node-hosted traffic-agent mode, cluster-wide.
+type NodeAgentValues struct {
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+// Client is the chart's client.* shape: cluster-served config a connecting
+// client starts from, restricted to the keys wave 3 suites configure.
+// Unlike most of the chart's top-level objects, client.* is NOT
+// additionalProperties:false in values.schema.yaml, so keys the schema
+// doesn't spell out under properties (client.logLevels.*,
+// client.routing.autoResolveConflicts) still validate; both are genuine
+// pkg/client/config.go fields (LogLevels, Routing.AutoResolveConflicts) the
+// manager pushes down to clients, mirrored here as typed fields rather than
+// left to an untyped escape hatch.
+type Client struct {
+	NodeAgent ClientNodeAgent `json:"nodeAgent,omitzero"`
+	LogLevels ClientLogLevels `json:"logLevels,omitzero"`
+	Routing   ClientRouting   `json:"routing,omitzero"`
+	DNS       ClientDNS       `json:"dns,omitzero"`
+}
+
+// ClientNodeAgent is the chart's client.nodeAgent.* shape: the cluster-wide
+// default for a connecting client's --node-agent flag.
+type ClientNodeAgent struct {
+	Enabled bool `json:"enabled,omitempty"`
+}
+
+// ClientLogLevels is the chart's client.logLevels.* shape (open passthrough,
+// not enumerated in values.schema.yaml's client.properties, but a real
+// pkg/client/config.go LogLevels field): the cluster-served default log
+// level for each daemon, expressed as one of the chart's logLevel enum
+// strings ("error", "warning"/"warn", "info", "debug", "trace").
+type ClientLogLevels struct {
+	RootDaemon string `json:"rootDaemon,omitempty"`
+	UserDaemon string `json:"userDaemon,omitempty"`
+}
+
+// ClientRouting is the chart's client.routing.* shape.
+type ClientRouting struct {
+	AlsoProxySubnets        []string `json:"alsoProxySubnets,omitempty"`
+	NeverProxySubnets       []string `json:"neverProxySubnets,omitempty"`
+	AllowConflictingSubnets []string `json:"allowConflictingSubnets,omitempty"`
+	// AutoResolveConflicts is a pointer since its client-side default is
+	// true (pkg/client/config.go's defaultAutoResolveConflicts): a plain
+	// bool could not express "push down false" through Merge.
+	AutoResolveConflicts *bool `json:"autoResolveConflicts,omitempty"`
+}
+
+// ClientDNS is the chart's client.dns.* shape, restricted to the key wave 3
+// suites configure.
+type ClientDNS struct {
+	IncludeSuffixes []string `json:"includeSuffixes,omitempty"`
+}
+
+// QuicTunnel is the chart's quicTunnel.* shape, restricted to the keys
+// quic_test.go's install used: whether the listener is enabled, the Service
+// front-ending it, and the externally advertised host/port (unset lets the
+// traffic-manager self-discover both, the zero-configuration path
+// quic_test.go's Test_ZZDiscoveryNodePort covers).
+type QuicTunnel struct {
+	Enabled      bool              `json:"enabled,omitempty"`
+	Service      QuicTunnelService `json:"service,omitzero"`
+	ExternalHost string            `json:"externalHost,omitempty"`
+	ExternalPort int               `json:"externalPort,omitempty"`
+}
+
+// QuicTunnelService is the chart's quicTunnel.service.* shape, restricted to
+// the keys quic_test.go's install used.
+type QuicTunnelService struct {
+	Type     string `json:"type,omitempty"`
+	NodePort int    `json:"nodePort,omitempty"`
+}
+
+// Security is the chart's security.* shape: traffic-manager caller
+// authentication/authorization.
+type Security struct {
+	Authentication Authentication `json:"authentication,omitzero"`
+}
+
+// Authentication is the chart's security.authentication.* shape.
+type Authentication struct {
+	Mode string `json:"mode,omitempty"`
+	X509 X509   `json:"x509,omitzero"`
+}
+
+// X509 is the chart's security.authentication.x509.* shape, restricted to
+// the enabled flag.
+type X509 struct {
+	// Enabled is a pointer so AuthEnforcing-derived specs can force it to
+	// false (manager_auth_test.go's
+	// Test_EnforcingRejectsCertOnlyClientWhenX509Disabled): the chart
+	// default is true, which a plain bool couldn't override to false
+	// through Merge.
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// TelepresenceAPI is the chart's telepresenceAPI.* shape, restricted to the
+// port the catalog configures.
+type TelepresenceAPI struct {
+	Port int `json:"port,omitempty"`
 }
 
 // Rbac is the chart's clientRbac shape.
@@ -112,10 +237,15 @@ type Timeouts struct {
 	AgentArrival string `json:"agentArrival,omitempty"`
 }
 
-// Usage is the chart's usage.* shape, restricted to the enabled flag: no
-// rtest spec ever points usage at a real collector.
+// Usage is the chart's usage.* shape. Enabled has no omit option: usage
+// reporting must be reachable through the overlay whether it's being turned
+// on or (Baseline's case) kept off. CollectorAddress/Insecure matter only
+// once a spec (UsageTo) turns Enabled on, so they're safe to omit when
+// unset.
 type Usage struct {
-	Enabled bool `json:"enabled"`
+	Enabled          bool   `json:"enabled"`
+	CollectorAddress string `json:"collectorAddress,omitempty"`
+	Insecure         bool   `json:"insecure,omitempty"`
 }
 
 // Baseline returns the manager values every rtest spec starts from: debug
@@ -159,6 +289,9 @@ func Merge(base, over Values) Values {
 	}
 	m.Image = mergeImage(m.Image, over.Image)
 	m.Agent.Image = mergeImage(m.Agent.Image, over.Agent.Image)
+	if over.Agent.EnableH2cProbing != nil {
+		m.Agent.EnableH2cProbing = over.Agent.EnableH2cProbing
+	}
 	m.AgentInjector = mergeAgentInjector(m.AgentInjector, over.AgentInjector)
 	m.ClientRbac = mergeRbac(m.ClientRbac, over.ClientRbac)
 	if over.ManagerRbac.Create {
@@ -166,6 +299,15 @@ func Merge(base, over Values) Values {
 	}
 	if over.Timeouts.AgentArrival != "" {
 		m.Timeouts.AgentArrival = over.Timeouts.AgentArrival
+	}
+	if over.NodeAgent.Enabled {
+		m.NodeAgent.Enabled = true
+	}
+	m.Client = mergeClient(m.Client, over.Client)
+	m.QuicTunnel = mergeQuicTunnel(m.QuicTunnel, over.QuicTunnel)
+	m.Security = mergeSecurity(m.Security, over.Security)
+	if over.TelepresenceAPI.Port != 0 {
+		m.TelepresenceAPI.Port = over.TelepresenceAPI.Port
 	}
 	if over.NamespaceSelector != nil {
 		m.NamespaceSelector = over.NamespaceSelector
@@ -194,6 +336,12 @@ func Merge(base, over Values) Values {
 	}
 	if over.Usage.Enabled {
 		m.Usage.Enabled = true
+	}
+	if over.Usage.CollectorAddress != "" {
+		m.Usage.CollectorAddress = over.Usage.CollectorAddress
+	}
+	if over.Usage.Insecure {
+		m.Usage.Insecure = true
 	}
 	return m
 }
@@ -249,6 +397,63 @@ func mergeCertificate(base, over Certificate) Certificate {
 func mergeWebhook(base, over Webhook) Webhook {
 	if over.ReinvocationPolicy != "" {
 		base.ReinvocationPolicy = over.ReinvocationPolicy
+	}
+	return base
+}
+
+func mergeClient(base, over Client) Client {
+	if over.NodeAgent.Enabled {
+		base.NodeAgent.Enabled = true
+	}
+	if over.LogLevels.RootDaemon != "" {
+		base.LogLevels.RootDaemon = over.LogLevels.RootDaemon
+	}
+	if over.LogLevels.UserDaemon != "" {
+		base.LogLevels.UserDaemon = over.LogLevels.UserDaemon
+	}
+	if over.Routing.AlsoProxySubnets != nil {
+		base.Routing.AlsoProxySubnets = over.Routing.AlsoProxySubnets
+	}
+	if over.Routing.NeverProxySubnets != nil {
+		base.Routing.NeverProxySubnets = over.Routing.NeverProxySubnets
+	}
+	if over.Routing.AllowConflictingSubnets != nil {
+		base.Routing.AllowConflictingSubnets = over.Routing.AllowConflictingSubnets
+	}
+	if over.Routing.AutoResolveConflicts != nil {
+		base.Routing.AutoResolveConflicts = over.Routing.AutoResolveConflicts
+	}
+	if over.DNS.IncludeSuffixes != nil {
+		base.DNS.IncludeSuffixes = over.DNS.IncludeSuffixes
+	}
+	return base
+}
+
+func mergeQuicTunnel(base, over QuicTunnel) QuicTunnel {
+	if over.Enabled {
+		base.Enabled = true
+	}
+	if over.Service.Type != "" {
+		base.Service.Type = over.Service.Type
+	}
+	if over.Service.NodePort != 0 {
+		base.Service.NodePort = over.Service.NodePort
+	}
+	if over.ExternalHost != "" {
+		base.ExternalHost = over.ExternalHost
+	}
+	if over.ExternalPort != 0 {
+		base.ExternalPort = over.ExternalPort
+	}
+	return base
+}
+
+func mergeSecurity(base, over Security) Security {
+	if over.Authentication.Mode != "" {
+		base.Authentication.Mode = over.Authentication.Mode
+	}
+	if over.Authentication.X509.Enabled != nil {
+		base.Authentication.X509.Enabled = over.Authentication.X509.Enabled
 	}
 	return base
 }

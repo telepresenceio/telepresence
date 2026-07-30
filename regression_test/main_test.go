@@ -9,11 +9,15 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/attach"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/auth"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/connect"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/injector"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/install"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/intercept"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/namespaces"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/nodeagent"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/quic"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/session"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/smoke"
 )
 
@@ -58,4 +62,25 @@ func TestInjector(t *testing.T) {
 // TestNamespaces runs the "namespaces" area.
 func TestNamespaces(t *testing.T) {
 	rt.RunArea(t, "namespaces")
+}
+
+// TestSession runs the "session" area.
+func TestSession(t *testing.T) {
+	rt.RunArea(t, "session")
+}
+
+// TestNodeAgent runs the "nodeagent" area.
+func TestNodeAgent(t *testing.T) {
+	rt.RunArea(t, "nodeagent")
+}
+
+// TestAuth runs the "auth" area.
+func TestAuth(t *testing.T) {
+	rt.RunArea(t, "auth")
+}
+
+// TestQuic runs the "quic" area. It runs last: transport experiments are
+// the most invasive spec churn.
+func TestQuic(t *testing.T) {
+	rt.RunArea(t, "quic")
 }

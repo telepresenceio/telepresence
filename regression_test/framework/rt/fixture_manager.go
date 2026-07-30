@@ -140,10 +140,17 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 	if _, err := r.Kubectl(e.Ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=180s"); err != nil {
 		return nil, err
 	}
+	if err := waitOldManagerGone(e, ns); err != nil {
+		return nil, err
+	}
 
 	// All manager specs share one release: installing this spec makes every
-	// other spec's memoized handle stale.
+	// other spec's memoized handle stale. The rollout also replaced the
+	// manager pod, so every live connection's session now port-forwards to a
+	// dead pod — invalidate them all; the next Connect re-provisions fresh.
 	r.engine.invalidateSiblings("manager/", spec.Hash())
+	r.engine.invalidateSiblings("connection/", "")
+	r.managerRolled = true
 
 	valuesHash := sha256Hex(valuesYAML)
 	// One record for the release, not one per spec: the release can only be
@@ -230,10 +237,15 @@ func RestartManager(e Env) error {
 	if _, err := e.R.Kubectl(e.Ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=120s"); err != nil {
 		return err
 	}
-	// rollout status returns while the old pod may still be terminating, and
-	// the webhook service can route admissions to it — with its pre-restart
-	// namespace view. Wait until only one manager pod remains.
-	for i := 0; i < 60; i++ {
+	return waitOldManagerGone(e, ns)
+}
+
+// waitOldManagerGone waits until only one traffic-manager pod remains.
+// rollout status returns while the old pod may still be terminating; both
+// the webhook service and a service-to-pod resolution done for a fresh
+// session can still land on it, with its pre-rollout configuration.
+func waitOldManagerGone(e Env, ns string) error {
+	for range 60 {
 		out, err := e.R.Kubectl(e.Ctx, ns, "get", "pods", "-l", "app=traffic-manager", "-o", "name")
 		if err != nil {
 			return err
@@ -243,7 +255,7 @@ func RestartManager(e Env) error {
 		}
 		time.Sleep(time.Second)
 	}
-	return fmt.Errorf("old traffic-manager pod still present after restart")
+	return fmt.Errorf("old traffic-manager pod still present after rollout")
 }
 
 // parkManagerOnDefault re-provisions the shared release with the Default

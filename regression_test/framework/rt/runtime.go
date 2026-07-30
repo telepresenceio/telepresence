@@ -46,11 +46,15 @@ type Runtime struct {
 	managerVersion string
 	agentVersion   string
 
-	ci       bool
-	fresh    bool
-	teardown bool
-	tailLogs bool
-	cover    bool
+	ci    bool
+	fresh bool
+	// managerRolled is set once a manager provision replaces the release's
+	// pod within this run: connection adoption would re-bless a daemon whose
+	// session still targets the dead pod, so it is disabled from then on.
+	managerRolled bool
+	teardown      bool
+	tailLogs      bool
+	cover         bool
 
 	labels     map[Label]bool
 	skipLabels map[Label]bool

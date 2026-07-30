@@ -218,7 +218,7 @@ func ConnectionFixture(ns string, opts ...ConnOpt) *Fixture[*Conn] {
 			return provisionConnection(e, ns, args, cs)
 		},
 		AdoptFn: func(e Env) (*Conn, bool) {
-			if !cs.isDefault() {
+			if !cs.isDefault() || e.R.managerRolled {
 				return nil, false
 			}
 			return adoptConnection(e, ns)

@@ -47,3 +47,11 @@ Also worth a look (not product bugs, but sharp edges the suite documents in
 code): `quit -s` ignores `--use` and stops all daemons; bare `list`/`detach`
 with no daemon implicitly connects to namespace "default"; `genyaml
 volume`'s `--agent`/`--input` flags are accepted but unused.
+
+Open test gap (skipped, not failing): quic/Outage's forwarder-outage
+fallback — the `grpc (fallback)` tunnel status was never observed on the
+kind dev cluster during a quic-forwarder outage, neither with an active
+intercept nor with the old suite's agentless-namespace flow. The old
+integration test passes in CI on minikube; whether the difference is
+cluster-environmental or a framework-flow subtlety needs a dedicated
+debugging session with daemon logs from the outage window.
