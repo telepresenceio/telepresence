@@ -527,6 +527,14 @@ check-integration: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the
 check-integration-ci: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the integration suite with up to 3 attempts, each retry scoped to the previous attempt's failures
 	build-aux/check-integration-retry.sh $(tools/test-report)
 
+.PHONY: check-regression
+check-regression: build-deps ## (QA) Run the regression-test framework suite (plain output)
+	go test -count=1 -timeout=60m ./regression_test/...
+
+.PHONY: rtest-clean
+rtest-clean: ## (QA) Remove regression-test resources left in the cluster
+	go run ./regression_test/framework/rtclean
+
 .PHONY: perf
 perf: ## (QA) Run the QUIC performance experiments (needs a cluster; see perf/README.md)
 	# Behind the 'perf' build tag so it never runs in check-unit/check-integration.
