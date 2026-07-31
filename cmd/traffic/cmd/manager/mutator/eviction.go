@@ -268,16 +268,21 @@ func evictPod(ctx context.Context, pod *core.Pod) error {
 	err := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(pod.Namespace).EvictV1(ctx, &v1.Eviction{
 		ObjectMeta: meta.ObjectMeta{Name: pod.Name, Namespace: pod.Namespace},
 	})
-	if err == nil {
-		store := informer.GetK8sFactory(ctx, pod.Namespace).Core().V1().Pods().Informer().GetStore()
-		_ = store.Delete(pod)
+	switch {
+	case err == nil:
 		clog.Debugf(ctx, "Successfully evicted pod %s", pod.Name)
-		return nil
+	case k8sErrors.IsNotFound(err):
+		// The pod is already gone, which is the objective of the eviction.
+		clog.Debugf(ctx, "Pod %s no longer exists", pod.Name)
+	default:
+		if strings.Contains(err.Error(), "disruption budget") {
+			err = disruptionBudgetError{error: err, podName: pod.Name}
+		}
+		return err
 	}
-	if strings.Contains(err.Error(), "disruption budget") {
-		err = disruptionBudgetError{error: err, podName: pod.Name}
-	}
-	return err
+	store := informer.GetK8sFactory(ctx, pod.Namespace).Core().V1().Pods().Informer().GetStore()
+	_ = store.Delete(pod)
+	return nil
 }
 
 func podIsPendingOrRunning(pod *core.Pod) bool {
