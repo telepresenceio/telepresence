@@ -172,6 +172,10 @@ func newRuntime(ctx context.Context) (*Runtime, error) {
 	r.engine = newEngine()
 	r.manifest = newManifestState(runID)
 
+	if err := r.pinContextKubeconfig(); err != nil {
+		return nil, err
+	}
+
 	if err := r.writeBaselineConfig(); err != nil {
 		return nil, err
 	}

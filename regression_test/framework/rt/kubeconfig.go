@@ -11,6 +11,35 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
+// pinContextKubeconfig makes RTEST_CONTEXT reach the telepresence child
+// processes, which take their context from KUBECONFIG's current-context
+// rather than from the --context flag the kubectl invocations get. When the
+// run's kubeconfig has a different current-context, a flattened copy with
+// RTEST_CONTEXT as current-context is written under the artifact dir and
+// becomes the run's kubeconfig, so childEnv passes it to every child.
+func (r *Runtime) pinContextKubeconfig() error {
+	if r.kubeCtx == "" {
+		return nil
+	}
+	cfg, err := loadRunKubeConfig(r)
+	if err != nil {
+		return fmt.Errorf("rtest: loading kubeconfig: %w", err)
+	}
+	if _, ok := cfg.Contexts[r.kubeCtx]; !ok {
+		return fmt.Errorf("rtest: RTEST_CONTEXT %q not found in kubeconfig", r.kubeCtx)
+	}
+	if cfg.CurrentContext == r.kubeCtx {
+		return nil
+	}
+	cfg.CurrentContext = r.kubeCtx
+	path := filepath.Join(r.artifactDir, "kubeconfig-pinned.yaml")
+	if err := clientcmd.WriteToFile(*cfg, path); err != nil {
+		return fmt.Errorf("rtest: writing %s: %w", path, err)
+	}
+	r.kubeconfig = path
+	return nil
+}
+
 // KubeConfigCopy loads the run's kubeconfig, applies mutate to an in-memory
 // copy of it, writes the result under ArtifactDir("kubeconfig"), and returns
 // its path. Callers pass the path to ConnWithKubeconfig; connect has no
