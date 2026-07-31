@@ -25,7 +25,7 @@ type TP struct {
 // context has no deadline of its own. The CLI's internal timeouts normally
 // fire well before this; the bound exists so a wedged daemon turns into a
 // fast test failure instead of stalling the run until go test's timeout.
-const defaultInvocationTimeout = 5 * time.Minute
+const defaultInvocationTimeout = 2 * time.Minute
 
 // Run executes the binary with args and returns its captured stdout and
 // stderr.
