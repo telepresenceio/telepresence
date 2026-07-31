@@ -24,6 +24,53 @@ const coverVolumeName = "rtest-coverage"
 // off the node after the traffic-manager pod has flushed it on shutdown.
 const coverScraperPod = "rtest-coverage-scraper"
 
+// coverChmodManifest is a one-shot root pod that makes coverHostPath
+// world-writable: kubelet creates a hostPath as root:root 0755, and the
+// traffic-manager runs as uid 1000, so without this every exit-time counter
+// flush fails silently. It runs once, at the first cover-mode manager
+// provision, so mid-run manager restarts flush too.
+const coverChmodManifest = `apiVersion: v1
+kind: Pod
+metadata:
+  name: %[1]s
+  namespace: %[2]s
+  labels:
+    purpose: tp-rtest
+spec:
+  restartPolicy: Never
+  containers:
+    - name: chmod
+      image: busybox
+      command: ["chmod", "0777", "%[3]s"]
+      securityContext:
+        runAsUser: 0
+      volumeMounts:
+        - name: coverage
+          mountPath: %[3]s
+  volumes:
+    - name: coverage
+      hostPath:
+        path: %[3]s
+        type: DirectoryOrCreate
+`
+
+// ensureCoverDirWritable runs the chmod pod once per run, before the first
+// cover-instrumented manager pod could ever exit and try to flush.
+func (r *Runtime) ensureCoverDirWritable(e Env, ns string) {
+	if r.coverDirReady {
+		return
+	}
+	r.coverDirReady = true
+	name := "rtest-cover-chmod"
+	manifest := fmt.Sprintf(coverChmodManifest, name, ns, coverHostPath)
+	if err := r.applyManifest(e.Ctx, ns, "cover-chmod", manifest); err != nil {
+		r.Infof("[rtest] cover: chmod pod: %v", err)
+		return
+	}
+	_, _ = r.Kubectl(e.Ctx, ns, "wait", "pod/"+name, "--for=jsonpath={.status.phase}=Succeeded", "--timeout=60s")
+	_, _ = r.Kubectl(e.Ctx, ns, "delete", "pod", name, "--ignore-not-found", "--wait=false")
+}
+
 // coverScraperManifest is a minimal pod that mounts coverHostPath so its
 // contents can be `kubectl cp`'d out. busybox provides the `tar` binary
 // kubectl cp needs and is already used by this chart's own hooks.

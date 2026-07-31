@@ -161,6 +161,10 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 		return nil, fmt.Errorf("manager/%s: writing values: %w", spec.Key, err)
 	}
 
+	if r.cover {
+		r.ensureCoverDirWritable(e, ns)
+	}
+
 	exists, err := managerReleaseExists(e.Ctx, r, ns)
 	if err != nil {
 		return nil, err

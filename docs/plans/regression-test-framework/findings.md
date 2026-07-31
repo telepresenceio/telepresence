@@ -48,6 +48,14 @@ code): `quit -s` ignores `--use` and stops all daemons; bare `list`/`detach`
 with no daemon implicitly connects to namespace "default"; `genyaml
 volume`'s `--agent`/`--input` flags are accepted but unused.
 
+Open flake: after many runs on a long-lived host, a freshly connected user
+daemon occasionally wedges on its first `list` (no log output, process
+hangs; observed twice on 2026-07-31, absent in the preceding day's runs).
+The framework now bounds every CLI invocation at 5 minutes so this
+surfaces as a fast fixture failure rather than a stalled run; the daemon
+state at wedge time still needs capturing (goroutine dump) next time it
+occurs.
+
 Open flake: quic/Relay and quic/Disabled's intercept round trip
 occasionally time out when the quic area runs last in a full 15-area run
 (green when run scoped or in wave-3-sized runs); appears to be residual

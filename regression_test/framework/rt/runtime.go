@@ -80,6 +80,7 @@ type Runtime struct {
 	teardown      bool
 	tailLogs      bool
 	cover         bool
+	coverDirReady bool
 
 	labels     map[Label]bool
 	skipLabels map[Label]bool

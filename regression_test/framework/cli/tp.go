@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TP wraps the binary under test: env-scrubbed subprocess, stdout/stderr
@@ -20,9 +21,20 @@ type TP struct {
 	Logf func(string, ...any)
 }
 
+// defaultInvocationTimeout bounds a single CLI invocation when the caller's
+// context has no deadline of its own. The CLI's internal timeouts normally
+// fire well before this; the bound exists so a wedged daemon turns into a
+// fast test failure instead of stalling the run until go test's timeout.
+const defaultInvocationTimeout = 5 * time.Minute
+
 // Run executes the binary with args and returns its captured stdout and
 // stderr.
 func (tp *TP) Run(ctx context.Context, args ...string) (stdout, stderr string, err error) {
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultInvocationTimeout)
+		defer cancel()
+	}
 	cmd := exec.CommandContext(ctx, tp.Exe, args...)
 	cmd.Env = tp.Env
 	cmd.Dir = tp.Dir
