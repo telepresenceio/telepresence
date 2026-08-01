@@ -182,12 +182,11 @@ every `Unimplemented` fallback chain without real old images.
 `TELEPRESENCE_COVER=1 make build tel2-image` instruments both binaries;
 `RTEST_COVER=1` runs point `GOCOVERDIR` at
 `build-output/rtest/coverage/client`, add a hostPath covdata volume to the
-manager, quit the daemons at run end (counters flush on exit), scrape the
-manager's covdata through a throwaway pod, and `make rtest-coverage`
-merges everything into one report. Injected agents are not instrumented
-yet (no env/volume passthrough exists for them; see
-docs/plans/regression-test-framework/m2-agent-coverage-notes.md while it
-exists, thereafter the git history of this paragraph).
+manager (whose injector propagates the same wiring into every generated
+traffic-agent and init container), quit the daemons at run end (counters
+flush on exit), scrape the cluster's covdata through a throwaway pod after
+fixture teardown, and `make rtest-coverage` merges everything into one
+report.
 
 ## Areas
 

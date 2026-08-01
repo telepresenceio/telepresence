@@ -10,10 +10,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 )
 
-// coverHostPath is the node-local directory the traffic-manager (and, once
-// wired, the traffic-agent) writes GOCOVERDIR counter data to. It is a
-// hostPath volume because rtest clusters are single-node kind/minikube; see
-// "Code coverage" in docs/plans/regression-test-framework/plan.md.
+// coverHostPath is the node-local directory the traffic-manager and the
+// traffic-agents write GOCOVERDIR counter data to. It is a hostPath volume
+// because rtest clusters are single-node kind/minikube; see "Code coverage"
+// in docs/plans/regression-test-framework/plan.md.
 const coverHostPath = "/rtest-coverage"
 
 // coverVolumeName is the volume/volumeMount name for coverHostPath on the
@@ -130,60 +130,63 @@ func applyCoverManagerValues(v managers.Values) managers.Values {
 	return v
 }
 
-// collectManagerCoverage runs at the end of a coverage-mode run, before
-// fixture teardown: it deletes the traffic-manager pod so Go's runtime
-// flushes counter data to the node on its graceful SIGTERM shutdown, waits
-// for the replacement (or a scale-down) to settle, then scrapes the
-// hostPath through a throwaway busybox pod into
-// build-output/rtest/coverage/manager. Every step logs and returns on
+// collectClusterCoverage runs at the end of a coverage-mode run, after
+// fixture teardown: torn-down agent pods (and, in teardown mode, the
+// manager) have already flushed their counters to the node on their
+// graceful SIGTERM shutdown. In dev keep mode the manager deployment is
+// still live, so its pod is deleted first to flush it too. The hostPath is
+// then scraped through a throwaway busybox pod into
+// build-output/rtest/coverage/cluster. Every step logs and returns on
 // error rather than failing the run: coverage collection is best-effort.
-func (r *Runtime) collectManagerCoverage() {
+func (r *Runtime) collectClusterCoverage() {
 	ctx := r.ctx
 	ns := managers.ManagerNamespace
 
 	if _, err := r.Kubectl(ctx, ns, "get", "deploy", helmReleaseName); err != nil {
-		r.Infof("[rtest] cover: no manager release in %s, skipping manager coverage collection", ns)
-		return
+		r.Infof("[rtest] cover: no live manager release in %s, scraping already-flushed data", ns)
+	} else {
+		r.Infof("[rtest] cover: deleting traffic-manager pod to flush coverage data")
+		if _, err := r.Kubectl(ctx, ns, "delete", "pod", "-l", "app=traffic-manager", "--wait"); err != nil {
+			r.Infof("[rtest] cover: deleting traffic-manager pod: %v", err)
+			return
+		}
+		if _, err := r.Kubectl(ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=120s"); err != nil {
+			r.Infof("[rtest] cover: waiting for traffic-manager rollout: %v", err)
+			return
+		}
 	}
 
-	r.Infof("[rtest] cover: deleting traffic-manager pod to flush coverage data")
-	if _, err := r.Kubectl(ctx, ns, "delete", "pod", "-l", "app=traffic-manager", "--wait"); err != nil {
-		r.Infof("[rtest] cover: deleting traffic-manager pod: %v", err)
-		return
-	}
-	if _, err := r.Kubectl(ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=120s"); err != nil {
-		r.Infof("[rtest] cover: waiting for traffic-manager rollout: %v", err)
-		return
-	}
-
-	dstDir := filepath.Join(r.buildOutput, "rtest", "coverage", "manager")
+	dstDir := filepath.Join(r.buildOutput, "rtest", "coverage", "cluster")
 	if err := os.MkdirAll(dstDir, 0o755); err != nil {
 		r.Infof("[rtest] cover: creating %s: %v", dstDir, err)
 		return
 	}
 
+	// The scraper only mounts the hostPath, so it runs in the default
+	// namespace, which still exists when a teardown run removed ns.
+	const scrNs = "default"
 	r.Infof("[rtest] cover: starting coverage scraper pod")
-	manifest := fmt.Sprintf(coverScraperManifest, coverScraperPod, ns, coverHostPath)
-	if err := r.applyManifest(ctx, ns, "coverage-scraper", manifest); err != nil {
+	manifest := fmt.Sprintf(coverScraperManifest, coverScraperPod, scrNs, coverHostPath)
+	if err := r.applyManifest(ctx, scrNs, "coverage-scraper", manifest); err != nil {
 		r.Infof("[rtest] cover: starting scraper pod: %v", err)
 		return
 	}
 	defer func() {
-		if _, err := r.Kubectl(ctx, ns, "delete", "pod", coverScraperPod, "--ignore-not-found", "--wait=false"); err != nil {
+		if _, err := r.Kubectl(ctx, scrNs, "delete", "pod", coverScraperPod, "--ignore-not-found", "--wait=false"); err != nil {
 			r.Infof("[rtest] cover: deleting scraper pod: %v", err)
 		}
 	}()
 
 	waitArgs := []string{"wait", "pod/" + coverScraperPod, "--for=condition=Ready", "--timeout=60s"}
-	if _, err := r.Kubectl(ctx, ns, waitArgs...); err != nil {
+	if _, err := r.Kubectl(ctx, scrNs, waitArgs...); err != nil {
 		r.Infof("[rtest] cover: waiting for scraper pod: %v", err)
 		return
 	}
 
-	r.Infof("[rtest] cover: copying manager coverage data to %s", dstDir)
-	if _, err := r.Kubectl(ctx, ns, "cp", coverScraperPod+":"+coverHostPath, dstDir); err != nil {
+	r.Infof("[rtest] cover: copying cluster coverage data to %s", dstDir)
+	if _, err := r.Kubectl(ctx, scrNs, "cp", coverScraperPod+":"+coverHostPath, dstDir); err != nil {
 		r.Infof("[rtest] cover: kubectl cp: %v", err)
 		return
 	}
-	r.Infof("[rtest] cover: manager coverage collected")
+	r.Infof("[rtest] cover: cluster coverage collected")
 }

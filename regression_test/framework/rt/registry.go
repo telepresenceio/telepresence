@@ -227,7 +227,6 @@ func Main(m *testing.M) {
 		if _, _, err := r.CLI().Run(r.ctx, "quit", "-s"); err != nil {
 			r.Infof("[rtest] cover: quit -s: %v", err)
 		}
-		r.collectManagerCoverage()
 	}
 
 	if r.teardown {
@@ -240,6 +239,11 @@ func Main(m *testing.M) {
 		// it. Park the kept release on the default spec.
 		r.parkManagerOnDefault()
 		r.Infof("[rtest] keeping resources for adoption (dev mode); run `make rtest-clean` to remove them")
+	}
+	if r.cover {
+		// After fixture teardown, so terminated agent pods have flushed
+		// their counters to the node before the scrape.
+		r.collectClusterCoverage()
 	}
 	if err := r.writeManifest(); err != nil {
 		r.Infof("[rtest] writing manifest: %v", err)
