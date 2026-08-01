@@ -85,10 +85,16 @@ spec:
             - name: {{ .Name }}
               containerPort: {{ .Port }}
 {{- end }}
-{{- if .ExtraPorts }}
+{{- if or .ExtraPorts .Env }}
           env:
+{{- if .ExtraPorts }}
             - name: PORTS
               value: "{{ .PortsEnv }}"
+{{- end }}
+{{- range $k, $v := .Env }}
+            - name: {{ $k }}
+              value: {{ $v | printf "%q" }}
+{{- end }}
 {{- end }}
 {{- if not .ConfigVolume.IsZero }}
           volumeMounts:

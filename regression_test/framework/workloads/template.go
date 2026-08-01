@@ -18,6 +18,14 @@ const (
 	// echoImage is the test echo-server image; it always listens on echoPort.
 	echoImage = "ghcr.io/telepresenceio/echo-server:0.3.1"
 	echoPort  = 8080
+
+	// udpEchoImage is the UDP-echo test image; it always listens on
+	// udpEchoPort/UDP (integration_test/quic_test.go's
+	// Test_AUDPEchoDatagrams exposed it on service port 80, target-port
+	// 8080; UDPEcho keeps both ends at udpEchoPort, since nothing depends
+	// on a distinct external port here).
+	udpEchoImage = "ghcr.io/telepresenceio/udp-echo:latest"
+	udpEchoPort  = 8080
 )
 
 // Template describes a workload manifest to render.
@@ -54,6 +62,27 @@ type Template struct {
 	// the app container. Set by EchoWithConfigVolume; zero value renders no
 	// ConfigMap and no extra volume.
 	ConfigVolume ConfigVolume
+	// UDP marks the primary port ("http" by default) as UDP instead of TCP.
+	// Set by UDPEcho; ExtraPorts stay TCP-only, since no template currently
+	// needs a mixed-protocol workload.
+	UDP bool
+	// Env are additional declared container env vars, name to value. Unlike
+	// PortsEnv's PORTS var (implied by ExtraPorts), these are opt-in: a
+	// suite that needs to assert on a workload's own declared env (as
+	// opposed to a kubelet/container-runtime-injected var such as
+	// HOSTNAME, which telepresence ingest never captures, since it only
+	// mirrors a container's declared env) sets this directly. Rendered
+	// after PORTS, sorted by key for a deterministic manifest.
+	Env map[string]string
+}
+
+// PortName is the primary port's name: "udp" when UDP is set (naming it
+// "http" would misdescribe the protocol), "http" otherwise.
+func (t Template) PortName() string {
+	if t.UDP {
+		return "udp"
+	}
+	return "http"
 }
 
 // ConfigVolume describes a ConfigMap a Template mounts as a volume: a
@@ -197,6 +226,22 @@ func EchoWithConfigVolume(name string) Template {
 		MountPath: ConfigVolumeMountPath,
 	}
 	return t
+}
+
+// UDPEcho returns a single-replica Deployment+Service template running the
+// UDP-echo test image, the quic area's Datagrams test's UDP round-trip
+// target (integration_test/quic_test.go's Test_AUDPEchoDatagrams, which
+// this replaces). Unlike Echo, the Service exposes a UDP port.
+func UDPEcho(name string) Template {
+	return Template{
+		Name:     name,
+		Kind:     "Deployment",
+		Replicas: 1,
+		Image:    udpEchoImage,
+		Port:     udpEchoPort,
+		SvcName:  name,
+		UDP:      true,
+	}
 }
 
 // Render executes the embedded template matching t.Kind in namespace and

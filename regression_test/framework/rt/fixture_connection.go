@@ -321,10 +321,10 @@ func destroyConnection(e Env, c *Conn) error {
 // test" note). Callers typically call this right after
 // Mutate(ConnectionFixture(ns)).Disconnect(t) to free whatever was
 // previously connected.
-func Reconnect(t testing.TB, ctx context.Context, ns string) *Conn {
+func Reconnect(t testing.TB, ctx context.Context, ns string, opts ...ConnOpt) *Conn {
 	t.Helper()
 	r := R()
-	args := connectArgs(ns, &connSpec{})
+	args := connectArgs(ns, newConnSpec(opts))
 	if _, stderr, err := r.CLI().Run(ctx, args...); err != nil {
 		t.Fatalf("connect: %v: %s", err, stderr)
 	}

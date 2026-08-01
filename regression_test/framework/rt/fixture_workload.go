@@ -87,13 +87,23 @@ func workloadKey(ns string, tpl workloads.Template) string {
 	for i, k := range annoKeys {
 		annos[i] = fmt.Sprintf("%s=%s", k, tpl.Annotations[k])
 	}
-	return fmt.Sprintf("workload|%s|%s|%s|%d|%s|%s|headless=%t|noservice=%t|extra=%s|annotations=%s|"+
-		"resources=%s,%s,%s,%s|appprotocol=%s|configvolume=%s,%s,%s,%s",
+	envKeys := make([]string, 0, len(tpl.Env))
+	for k := range tpl.Env {
+		envKeys = append(envKeys, k)
+	}
+	sort.Strings(envKeys)
+	env := make([]string, len(envKeys))
+	for i, k := range envKeys {
+		env[i] = fmt.Sprintf("%s=%s", k, tpl.Env[k])
+	}
+	return fmt.Sprintf("workload|%s|%s|%s|%d|%s|%s|headless=%t|noservice=%t|udp=%t|extra=%s|annotations=%s|"+
+		"resources=%s,%s,%s,%s|appprotocol=%s|configvolume=%s,%s,%s,%s|env=%s",
 		ns, tpl.Name, tpl.Kind, tpl.Replicas, tpl.Image, tpl.SvcName,
-		tpl.Headless, tpl.NoService, strings.Join(extra, ","), strings.Join(annos, ","),
+		tpl.Headless, tpl.NoService, tpl.UDP, strings.Join(extra, ","), strings.Join(annos, ","),
 		tpl.Resources.Requests.CPU, tpl.Resources.Requests.Memory,
 		tpl.Resources.Limits.CPU, tpl.Resources.Limits.Memory, tpl.AppProtocol,
-		tpl.ConfigVolume.Name, tpl.ConfigVolume.Key, tpl.ConfigVolume.Content, tpl.ConfigVolume.MountPath)
+		tpl.ConfigVolume.Name, tpl.ConfigVolume.Key, tpl.ConfigVolume.Content, tpl.ConfigVolume.MountPath,
+		strings.Join(env, ","))
 }
 
 func provisionWorkload(e Env, ns string, tpl workloads.Template) (*Workload, error) {

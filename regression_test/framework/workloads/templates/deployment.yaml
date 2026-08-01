@@ -23,11 +23,14 @@ spec:
   selector:
     app: {{ .Name }}
   ports:
-    - name: http
+    - name: {{ .PortName }}
       port: {{ .Port }}
-      targetPort: http
+      targetPort: {{ .PortName }}
 {{- if .AppProtocol }}
       appProtocol: {{ .AppProtocol }}
+{{- end }}
+{{- if .UDP }}
+      protocol: UDP
 {{- end }}
 {{- range .ExtraPorts }}
     - name: {{ .Name }}
@@ -64,16 +67,25 @@ spec:
           image: {{ .Image }}
           imagePullPolicy: IfNotPresent
           ports:
-            - name: http
+            - name: {{ .PortName }}
               containerPort: {{ .Port }}
+{{- if .UDP }}
+              protocol: UDP
+{{- end }}
 {{- range .ExtraPorts }}
             - name: {{ .Name }}
               containerPort: {{ .Port }}
 {{- end }}
-{{- if .ExtraPorts }}
+{{- if or .ExtraPorts .Env }}
           env:
+{{- if .ExtraPorts }}
             - name: PORTS
               value: "{{ .PortsEnv }}"
+{{- end }}
+{{- range $k, $v := .Env }}
+            - name: {{ $k }}
+              value: {{ $v | printf "%q" }}
+{{- end }}
 {{- end }}
 {{- if not .ConfigVolume.IsZero }}
           volumeMounts:

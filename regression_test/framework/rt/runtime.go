@@ -300,6 +300,55 @@ func (r *Runtime) ArtifactDir(sub ...string) string {
 	return dir
 }
 
+// UserCacheDir returns the directory a CLI-under-test child process resolves
+// as its user cache (pkg/filelocation.AppUserCacheDir), given the env
+// childEnv actually passes it: HOME (and, on windows, LOCALAPPDATA/
+// USERPROFILE) pass through unchanged, but no cache-dir override is set the
+// way DEV_TELEPRESENCE_CONFIG_DIR/DEV_TELEPRESENCE_LOG_DIR pin the config
+// and log dirs, so every daemon this run starts writes cache state --
+// including apply/delete's handler records,
+// pkg/client/cli/manifest/handler.go's handlers/<daemon-info>/<name>.json --
+// to the host's normal telepresence cache location rather than under
+// build-output/rtest/home. Consumed by the state area's Handler test
+// (integration_test/state_manifest_test.go's Test_ApplyHandlerCommand) to
+// read a handler's recorded pid/argv without importing client internals.
+func (r *Runtime) UserCacheDir() string {
+	env := r.childEnv()
+	home, _ := lookupEnvValue(env, "HOME")
+	switch runtime.GOOS {
+	case "darwin":
+		// pkg/filelocation/osfile_darwin.go's userCacheDir: always
+		// $HOME/Library/Caches, XDG_CACHE_HOME is a Linux-only convention.
+		return filepath.Join(home, "Library", "Caches", "telepresence")
+	case "windows":
+		// pkg/filelocation/osfile_windows.go's userCacheDir: LocalAppData if
+		// set (childEnv passes it through), else $USERPROFILE/AppData/Local.
+		if dir, ok := lookupEnvValue(env, "LOCALAPPDATA"); ok && dir != "" {
+			return filepath.Join(dir, "Telepresence")
+		}
+		userProfile, _ := lookupEnvValue(env, "USERPROFILE")
+		return filepath.Join(userProfile, "AppData", "Local", "Telepresence")
+	default:
+		// pkg/filelocation/osfile_linux.go's userCacheDir checks
+		// XDG_CACHE_HOME first, but childEnv never sets it, so this always
+		// falls back to $HOME/.cache regardless of the host's own
+		// XDG_CACHE_HOME.
+		return filepath.Join(home, ".cache", "telepresence")
+	}
+}
+
+// lookupEnvValue returns the value of key in a childEnv-shaped "KEY=value"
+// slice.
+func lookupEnvValue(env []string, key string) (string, bool) {
+	prefix := key + "="
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, prefix); ok {
+			return v, true
+		}
+	}
+	return "", false
+}
+
 // stateFilePath returns build-output/rtest/state.yaml.
 func (r *Runtime) stateFilePath() string {
 	return filepath.Join(r.buildOutput, "rtest", "state.yaml")
