@@ -82,9 +82,26 @@ names files in `integration_test/`.
 | routing/Subnets | also/never-proxy, conflicting proxies, CIDR conflicts via veth (sudo), allow-conflicting, proxy-via, podCIDR strategies | also_proxy_test.go, cidr_conflict_test.go, proxy_via_test.go, pod_cidr_test.go (values part) | Drops the also-proxy duplicate |
 | mounts/FUSE | read/write, read-only, ftp vs sshfs, large files (slow label), agent-content match, scale-to-zero survival | mounts_test.go, intercept_mount_test.go, podscaling_test.go, large_files_test.go | |
 | docker/Daemon | containerized daemon lifecycle, host+docker coexistence, cache ownership, subnet non-conflict, gather-logs from container | docker_daemon_test.go | requires docker |
-| docker/Run | --docker-run handler matrix, REST API suite | docker_run_test.go, restapi_test.go | |
-| docker/Compose | compose extension verbs | compose_test.go | |
+| docker/Run | --docker-run handler matrix, REST API suite | docker_run_test.go, restapi_test.go | handler matrix landed in wave 5 (RunLifecycle, DockerConnRun) |
+| docker/Compose | compose extension verbs | compose_test.go | landed in wave 5 (Compose, ComposeLifecycle) |
 | session/Throughput | TUN throughput, repeated-connect stress | multiple_services_test.go | stress label for the 90-subtest loop |
+
+### Wave 5 — docker-run lifecycle, compose, state manifests, quic depth (m5)
+
+| Area/Suite | Validates | Supersedes | Notes |
+|---|---|---|---|
+| docker/RunLifecycle | --docker-run handler + four-way teardown (SIGINT, detach, disconnect, quit) | docker_run_test.go (host-daemon matrix) | requires docker |
+| docker/DockerConnRun | bare docker-run network/DNS join, external DNS, telemount volume | docker_run_test.go (dockerDaemonSuite tests) | requires docker |
+| docker/Compose | one test per x-tele verb (connect, proxy, ingest, intercept, replace, wiretap, dns) | compose_test.go | requires docker |
+| docker/ComposeLifecycle | named-volume down/-v semantics, default-network subnet non-conflict | compose_test.go | slow label |
+| state/Apply | dry-run, create/reuse/unchanged, attachment drift, connection drift | state_manifest_test.go | new area; owns its connection lifecycle |
+| state/Delete | reverse-order teardown, absent, no-connection variants | state_manifest_test.go | |
+| state/Handler | handler command pid lifecycle across apply/delete | state_manifest_test.go | not on windows |
+| quic/Datagrams | RFC 9221 datagram carriage over UDP echo | quic_test.go (Test_AUDPEchoDatagrams) | slow label; inline ExtraEnv spec |
+| quic/ForwarderRestart | transport rides out forwarder pod deletion without fallback | quic_test.go (Test_ForwarderRestartSurvival) | |
+| quic/ManagerOutage | attachment survives manager scale-to-zero | quic_test.go (Test_ZManagerOutageAttachmentSurvival) | slow label |
+| quic NodePort endpoint discovery | discovered `<nodeIP>:<nodePort>` endpoints (no externalHost) | quic_test.go (Test_ZZDiscoveryNodePort) | deferred: telepresenceio/telepresence#4227 |
+| nodeagent quic transport | node-hosted agent transport is quic | quic_test.go (Test_NodeAgentTransport) | deferred: telepresenceio/telepresence#4227 |
 
 Deliberately dropped (with reasons recorded here rather than silently):
 `otel_test.go` (dead: env-gated stress never run in CI), `cli_test.go::Test_Help`

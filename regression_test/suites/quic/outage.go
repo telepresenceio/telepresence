@@ -47,7 +47,7 @@ func (s *Outage) Test_ForwarderOutageFallsBackAndRecovers() {
 	// fresh to ns: the manager restart above would invalidate a connection
 	// made before it.
 	rt.Mutate(t, rt.ConnectionFixture(s.AppNamespace())).Disconnect(t)
-	conn := awaitTransportPrefix(t, ctx, tp, ns, rt.Reconnect(t, ctx, ns), quicPrefix)
+	conn := awaitTransportPrefix(t, ctx, tp, ns, rt.Reconnect(t, ctx, ns))
 
 	scaleQuicForwarderDown(t, ctx, r)
 	restored := false

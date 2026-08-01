@@ -23,6 +23,7 @@ import (
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/routing"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/session"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/smoke"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/state"
 )
 
 func TestMain(m *testing.M) {
@@ -101,6 +102,14 @@ func TestNodeAgent(t *testing.T) {
 // TestAuth runs the "auth" area.
 func TestAuth(t *testing.T) {
 	rt.RunArea(t, "auth")
+}
+
+// TestState runs the "state" area. Its apply/delete manifests own their
+// connection lifecycle and quit every daemon between tests, so it runs
+// after the areas that hold a long-lived shared connection; quic follows
+// because its suites reconnect per suite anyway.
+func TestState(t *testing.T) {
+	rt.RunArea(t, "state")
 }
 
 // TestQuic runs the "quic" area. It runs last: transport experiments are

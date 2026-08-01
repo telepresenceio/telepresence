@@ -2,8 +2,12 @@ package quic
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -69,7 +73,11 @@ const (
 	quicForwarderTermTimeout = 60 * time.Second
 	// quicFallbackTimeout/quicRecoveryTimeout bound the outage suite's two
 	// post-scale polls, matching quic_test.go's own 150s ceilings for the
-	// same transitions.
+	// same transitions. quicRecoveryTimeout is also reused by
+	// ManagerOutage's post-recovery poll, which needs the same 150s budget
+	// (quic_test.go's Test_ZManagerOutageAttachmentSurvival) for the same
+	// reason: the client re-fetches a fresh endpoint descriptor and
+	// re-probes quic on its own interval after the manager pod is replaced.
 	quicFallbackTimeout = 150 * time.Second
 	quicRecoveryTimeout = 150 * time.Second
 )
@@ -151,30 +159,33 @@ func awaitAgentTransport(t testing.TB, ctx context.Context, tp *cli.TP, workload
 }
 
 // awaitTransportPrefix reconnects (quit + connect) to ns until status
-// reports a root_daemon.tunnel_transport beginning with prefix, or fails t.
-// Used only before any attachment exists: reconnecting quits the daemon,
-// which would drop a live intercept. Mirrors quic_test.go's
+// reports a root_daemon.tunnel_transport beginning with quicPrefix, or
+// fails t. Used only before any attachment exists: reconnecting quits the
+// daemon, which would drop a live intercept. Mirrors quic_test.go's
 // reconnectUntilQuic -- the opportunistic quic dial runs once per connect
 // and never retries mid-session after an initial miss, and a freshly rolled
 // manager pod's forwarder needs a moment to relearn its IP for its backend
-// allowlist.
+// allowlist. Every caller in this area is establishing the quic transport
+// specifically, so the prefix is quicPrefix rather than a parameter. opts
+// carry connection flags (e.g. Datagrams' --mapped-namespaces isolation)
+// into every reconnect attempt, not just the caller's first connect.
 func awaitTransportPrefix(
-	t testing.TB, ctx context.Context, tp *cli.TP, ns string, conn *rt.Conn, prefix string,
+	t testing.TB, ctx context.Context, tp *cli.TP, ns string, conn *rt.Conn, opts ...rt.ConnOpt,
 ) *rt.Conn {
 	t.Helper()
 	deadline := time.Now().Add(quicDiscoveryTimeout)
 	for {
 		time.Sleep(quicDialSettle)
 		st := fetchStatus(t, ctx, tp)
-		if strings.HasPrefix(st.RootDaemon.TunnelTransport, prefix) {
+		if strings.HasPrefix(st.RootDaemon.TunnelTransport, quicPrefix) {
 			return conn
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("root_daemon.tunnel_transport never began with %q (last: %q)",
-				prefix, st.RootDaemon.TunnelTransport)
+				quicPrefix, st.RootDaemon.TunnelTransport)
 		}
 		conn.Disconnect(t)
-		conn = rt.Reconnect(t, ctx, ns)
+		conn = rt.Reconnect(t, ctx, ns, opts...)
 	}
 }
 
@@ -283,5 +294,147 @@ func scaleQuicForwarderUp(t testing.TB, ctx context.Context, r *rt.Runtime) {
 	_, err := r.Kubectl(ctx, mgrNS, "rollout", "status", "deploy/"+quicForwarderDeployment, "--timeout=90s")
 	if err != nil {
 		t.Fatalf("rollout status %s: %v", quicForwarderDeployment, err)
+	}
+}
+
+// deleteQuicForwarderPods deletes every quic-forwarder pod and waits for the
+// Deployment to report a ready replacement. Unlike scaleQuicForwarderDown/Up
+// (a planned outage, used by Outage), this simulates an unplanned pod loss
+// that the Deployment's own controller repairs on its own, matching
+// quic_test.go's Test_ForwarderRestartSurvival.
+func deleteQuicForwarderPods(t testing.TB, ctx context.Context, r *rt.Runtime) {
+	t.Helper()
+	mgrNS := managers.ManagerNamespace
+	if _, err := r.Kubectl(ctx, mgrNS, "delete", "pod", "-l", quicForwarderSelector); err != nil {
+		t.Fatalf("delete %s pod(s): %v", quicForwarderDeployment, err)
+	}
+	if _, err := r.Kubectl(ctx, mgrNS, "rollout", "status", "deploy/"+quicForwarderDeployment, "--timeout=90s"); err != nil {
+		t.Fatalf("rollout status %s: %v", quicForwarderDeployment, err)
+	}
+}
+
+// quicForwarderRestartTimeout bounds the wait for traffic to recover after
+// deleting the quic-forwarder pod(s), matching quic_test.go's
+// Test_ForwarderRestartSurvival 60s ceiling: kube-proxy's UDP conntrack can
+// keep pinning the client's existing flow to the deleted pod's address for a
+// while, and the client's 15s keep-alives are what eventually punch a fresh
+// flow through to the replacement pod.
+const quicForwarderRestartTimeout = 60 * time.Second
+
+// awaitRecoveryNeverLeavingQuic polls a plain in-cluster round trip against
+// url until it succeeds, failing t immediately (not merely timing out) the
+// moment status ever reports a tunnel_transport that doesn't start with
+// quicPrefix: the stateless-router property under test is that the
+// transport rides out the forwarder's replacement without ever falling
+// back, not just that it eventually recovers. Mirrors quic_test.go's
+// Test_ForwarderRestartSurvival, whose own poll treats an observed "grpc"
+// the same way -- never a passing state.
+func awaitRecoveryNeverLeavingQuic(t testing.TB, ctx context.Context, tp *cli.TP, url string) {
+	t.Helper()
+	deadline := time.Now().Add(quicForwarderRestartTimeout)
+	for {
+		st := fetchStatus(t, ctx, tp)
+		if !strings.HasPrefix(st.RootDaemon.TunnelTransport, quicPrefix) {
+			t.Fatalf("tunnel_transport left %q during forwarder recovery (observed %q): the quic-forwarder "+
+				"is supposed to be a stateless router the client rides out",
+				quicPrefix, st.RootDaemon.TunnelTransport)
+		}
+		if probeCluster(url) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("traffic never recovered after the quic-forwarder pod(s) were deleted")
+		}
+		time.Sleep(quicPollInterval)
+	}
+}
+
+// udpEchoDialTimeout/udpEchoDialInterval/udpEchoSettle/udpEchoReadTimeout
+// bound udpEchoRoundTrip's dial retry, the post-dial settle (a UDP Dial
+// succeeds immediately without confirming anything is listening yet), and
+// the echoed-response read. Mirrors quic_test.go's udpEchoRoundTrip.
+const (
+	udpEchoDialTimeout  = 12 * time.Second
+	udpEchoDialInterval = 3 * time.Second
+	udpEchoSettle       = 2 * time.Second
+	udpEchoReadTimeout  = 5 * time.Second
+)
+
+// udpEchoRoundTrip sends msg to wl's UDP-echo Service (workloads.UDPEcho)
+// through the VPN and requires the echoed payload back, proving tunneled
+// UDP traffic actually round-trips over whichever transport is currently
+// active. Mirrors quic_test.go's udpEchoRoundTrip.
+func udpEchoRoundTrip(t testing.TB, ctx context.Context, wl *rt.Workload, msg string) {
+	t.Helper()
+	addr := fmt.Sprintf("%s.%s:%d", wl.SvcName, wl.Namespace, wl.Port)
+
+	var conn net.Conn
+	var d net.Dialer
+	deadline := time.Now().Add(udpEchoDialTimeout)
+	for {
+		var err error
+		conn, err = d.DialContext(ctx, "udp", addr)
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("dial udp %s: %v", addr, err)
+		}
+		time.Sleep(udpEchoDialInterval)
+	}
+	defer conn.Close()
+
+	// A UDP Dial succeeds immediately without confirming anything is
+	// listening yet.
+	time.Sleep(udpEchoSettle)
+
+	if _, err := conn.Write([]byte(msg)); err != nil {
+		t.Fatalf("write to %s: %v", addr, err)
+	}
+	if err := conn.SetReadDeadline(time.Now().Add(udpEchoReadTimeout)); err != nil {
+		t.Fatalf("set read deadline on %s: %v", addr, err)
+	}
+	buf := make([]byte, 0x10000)
+	n, err := conn.Read(buf)
+	if err != nil && !errors.Is(err, io.EOF) {
+		t.Fatalf("read from %s: %v", addr, err)
+	}
+	if !strings.Contains(string(buf[:n]), msg) {
+		t.Fatalf("echoed payload %q from %s does not contain %q", string(buf[:n]), addr, msg)
+	}
+}
+
+// datagramCountersLogRE extracts the "received" total from the manager's
+// periodic datagram-counters log line (cmd/traffic/cmd/manager/
+// quictunnel/listener.go's logDatagramStatsLoop, formatted by
+// pkg/tunnel.DatagramCounters.String). Mirrors quic_test.go's
+// datagramCountersLogRE.
+var datagramCountersLogRE = regexp.MustCompile(`datagram counters: sent \d+, received (\d+),`)
+
+// quicDatagramCountersTimeout bounds the wait for the manager's periodic
+// datagram-counters log line to report a nonzero received count, matching
+// quic_test.go's Test_AUDPEchoDatagrams.
+const quicDatagramCountersTimeout = 45 * time.Second
+
+// awaitNonzeroDatagramsReceived polls the traffic-manager Deployment's logs
+// until a datagramCountersLogRE match reports a nonzero received count, or
+// fails t after quicDatagramCountersTimeout.
+func awaitNonzeroDatagramsReceived(t testing.TB, ctx context.Context, r *rt.Runtime) {
+	t.Helper()
+	mgrNS := managers.ManagerNamespace
+	deadline := time.Now().Add(quicDatagramCountersTimeout)
+	for {
+		out, err := r.Kubectl(ctx, mgrNS, "logs", "deploy/"+trafficManagerDeployment)
+		if err == nil {
+			for _, m := range datagramCountersLogRE.FindAllStringSubmatch(out, -1) {
+				if m[1] != "0" {
+					return
+				}
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("manager never logged a nonzero datagram received count")
+		}
+		time.Sleep(quicPollInterval)
 	}
 }

@@ -31,7 +31,7 @@ func (s *Enabled) Test_QuicTransport() {
 	wl := s.Workload(workloads.Echo("quic-enabled"))
 	ls := s.LocalEcho()
 
-	conn := awaitTransportPrefix(t, ctx, tp, ns, freshConnect(t, ctx, ns), quicPrefix)
+	conn := awaitTransportPrefix(t, ctx, tp, ns, freshConnect(t, ctx, ns))
 
 	a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
 	defer a.Detach(t)
