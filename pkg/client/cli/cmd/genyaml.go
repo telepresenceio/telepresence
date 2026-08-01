@@ -388,7 +388,7 @@ func (g *genInitContainerInfo) run(*cobra.Command, map[string]string) error {
 	for _, cc := range cm.Containers {
 		for _, ic := range cc.Intercepts {
 			if ic.Headless || ic.TargetPortNumeric {
-				return g.writeObjToOutput(agentconfig.InitContainer(cm, cm.SecurityContext))
+				return g.writeObjToOutput(agentconfig.InitContainer(cm, cm.SecurityContext, ""))
 			}
 		}
 	}
@@ -457,7 +457,7 @@ func genVolumeSubCommand(yamlInfo *genYAMLCommand) *cobra.Command {
 }
 
 func (g *genVolumeInfo) run() error {
-	volumes, err := agentconfig.AgentVolumes(g.workloadName, nil)
+	volumes, err := agentconfig.AgentVolumes(g.workloadName, nil, "")
 	if err != nil {
 		return err
 	}

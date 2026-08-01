@@ -82,6 +82,9 @@ type Env struct {
 	AgentMaxIdleTime           time.Duration
 	AgentWatchRetryInterval    time.Duration `default:"10s"`
 
+	// GoCoverDir is the manager's own GOCOVERDIR, propagated into generated agent containers.
+	GoCoverDir string `env:"GOCOVERDIR"`
+
 	// NodeAgentEnabled controls whether this traffic-manager will provision
 	// node-hosted traffic-agents (manager-created Jobs that enter the target
 	// pod's namespaces) when requested by a client. Defaults to false.

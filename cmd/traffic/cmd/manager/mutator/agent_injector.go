@@ -190,7 +190,7 @@ func createPatch(ctx context.Context, config *agentconfig.Sidecar, pod *core.Pod
 		return nil, err
 	}
 	patches = addPullSecrets(pod, config, patches)
-	patches, err = addAgentVolumes(config.AgentName, pod, patches)
+	patches, err = addAgentVolumes(config.AgentName, pod, managerutil.GetEnv(ctx).GoCoverDir, patches)
 	if err != nil {
 		return nil, err
 	}
@@ -272,14 +272,15 @@ func addInitContainer(ctx context.Context, pod *core.Pod, wlTpl *core.PodTemplat
 
 	pis := pod.Spec.InitContainers
 	ab := agentconfig.ContainerBuilder{
-		Pod:    wlTpl,
-		Config: config,
+		Pod:      wlTpl,
+		Config:   config,
+		CoverDir: managerutil.GetEnv(ctx).GoCoverDir,
 	}
 	agentSecurityContext, err := ab.AgentSecurityContext()
 	if err != nil {
 		return nil, err
 	}
-	ic := agentconfig.InitContainer(config, agentSecurityContext)
+	ic := agentconfig.InitContainer(config, agentSecurityContext, managerutil.GetEnv(ctx).GoCoverDir)
 	if len(pis) == 0 {
 		return append(patches, PatchOperation{
 			Op:    "replace",
@@ -313,13 +314,13 @@ func addInitContainer(ctx context.Context, pod *core.Pod, wlTpl *core.PodTemplat
 	}), nil
 }
 
-func addAgentVolumes(agentName string, pod *core.Pod, patches PatchOps) (PatchOps, error) {
+func addAgentVolumes(agentName string, pod *core.Pod, coverDir string, patches PatchOps) (PatchOps, error) {
 	for _, vol := range pod.Spec.Volumes {
 		if vol.Name == agentconfig.ExportsVolumeName {
 			return patches, nil
 		}
 	}
-	avs, err := agentconfig.AgentVolumes(agentName, pod)
+	avs, err := agentconfig.AgentVolumes(agentName, pod, coverDir)
 	if err != nil {
 		return nil, fmt.Errorf("unable to create agent volumes: %w", err)
 	}
@@ -449,6 +450,7 @@ func addAgentContainer(
 		MountPolicies: managerutil.GetEnv(ctx).AgentMountPolicies,
 		Pod:           wlTpl,
 		Config:        config,
+		CoverDir:      managerutil.GetEnv(ctx).GoCoverDir,
 	}
 	acn, replaceAnnotations, err := ab.AgentContainer(ctx)
 	if err != nil {
