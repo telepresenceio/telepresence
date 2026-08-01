@@ -14,6 +14,12 @@ The new <code>telepresence setup</code> command analyzes the cluster (install pr
 A namespace-scoped traffic-manager install now grants read access to <code>ingresses</code> through the per-namespace Roles instead of the <code>traffic-manager-cluster-wide-&lt;namespace&gt;</code> ClusterRole, which now only covers the cluster-scoped <code>servicecidrs</code> resource. The manager already watches ingresses per managed namespace in this mode, so no functionality changes.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">telepresence apply and delete no longer panic with formatted output</div></div>
+<div style="margin-left: 15px">
+
+Running <code>telepresence apply</code> or <code>telepresence delete</code> with <code>--format json</code> panicked whenever an attachment was actually created or removed: the inner intercept or ingest operation emitted its own command-level output object, and the command's summary then collided with it. The summary is now the command's only output object.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Attach commands no longer fail when the pod to evict is already gone</div></div>
 <div style="margin-left: 15px">
 

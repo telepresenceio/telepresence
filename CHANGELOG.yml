@@ -24,6 +24,57 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.32.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Guided traffic-manager setup with telepresence setup
+        body: >-
+          The new <code>telepresence setup</code> command analyzes the
+          cluster (install privileges, QUIC and node-agent viability,
+          webhook reachability, namespace scale, routing conflicts, and any
+          existing installation), asks only the questions the findings leave
+          open, and then validates, writes, or applies a fully configured
+          traffic-manager Helm install. <code>--output</code> produces a
+          normal Helm values file for GitOps, <code>--input</code> re-runs
+          without repeating prior decisions (and is also how every answer
+          can be preset, keeping the command's own flag surface small), and
+          <code>--apply</code> installs or upgrades with post-apply
+          verification, including a real QUIC reachability check. When
+          install privileges are missing, the report itemizes exactly what
+          to hand to a cluster admin instead of a dead end, and
+          <code>telepresence setup --format json</code> is a convenient
+          attachment for bug reports.
+        docs: reference/setup
+      - type: change
+        title: Namespaced installs no longer read ingresses cluster-wide
+        body: >-
+          A namespace-scoped traffic-manager install now grants read access
+          to <code>ingresses</code> through the per-namespace Roles instead
+          of the <code>traffic-manager-cluster-wide-&lt;namespace&gt;</code>
+          ClusterRole, which now only covers the cluster-scoped
+          <code>servicecidrs</code> resource. The manager already watches
+          ingresses per managed namespace in this mode, so no functionality
+          changes.
+      - type: bugfix
+        title: telepresence apply and delete no longer panic with formatted output
+        body: >-
+          Running <code>telepresence apply</code> or <code>telepresence
+          delete</code> with <code>--format json</code> panicked whenever an
+          attachment was actually created or removed: the inner intercept or
+          ingest operation emitted its own command-level output object, and
+          the command's summary then collided with it. The summary is now
+          the command's only output object.
+      - type: bugfix
+        title: Attach commands no longer fail when the pod to evict is already gone
+        body: >-
+          The traffic-manager evicts pods that lack an up-to-date
+          traffic-agent so that the mutating webhook can inject one on
+          recreation. When such a pod was replaced concurrently, for
+          instance by a rollout that was still in flight, the eviction
+          returned a "not found" error and commands like
+          <code>telepresence intercept</code> failed. The traffic-manager
+          now treats an already deleted pod as a successful eviction.
   - version: 2.31.1
     date: 2026-07-28
     notes:
@@ -155,16 +206,6 @@ items:
           to the workload, aborting an install wait with someone else's
           error. The prefix match now only accepts Pods and ReplicaSets, the
           kinds a workload owns.
-      - type: change
-        title: Namespaced installs no longer read ingresses cluster-wide
-        body: >-
-          A namespace-scoped traffic-manager install now grants read access
-          to <code>ingresses</code> through the per-namespace Roles instead
-          of the <code>traffic-manager-cluster-wide-&lt;namespace&gt;</code>
-          ClusterRole, which now only covers the cluster-scoped
-          <code>servicecidrs</code> resource. The manager already watches
-          ingresses per managed namespace in this mode, so no functionality
-          changes.
   - version: 2.30.1
     date: 2026-07-17
     notes:

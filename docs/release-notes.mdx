@@ -21,6 +21,12 @@ A namespace-scoped traffic-manager install now grants read access to <code>ingre
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix">telepresence apply and delete no longer panic with formatted output</Title>
+	<Body>
+Running <code>telepresence apply</code> or <code>telepresence delete</code> with <code>--format json</code> panicked whenever an attachment was actually created or removed: the inner intercept or ingest operation emitted its own command-level output object, and the command's summary then collided with it. The summary is now the command's only output object.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Attach commands no longer fail when the pod to evict is already gone</Title>
 	<Body>
 The traffic-manager evicts pods that lack an up-to-date traffic-agent so that the mutating webhook can inject one on recreation. When such a pod was replaced concurrently, for instance by a rollout that was still in flight, the eviction returned a "not found" error and commands like <code>telepresence intercept</code> failed. The traffic-manager now treats an already deleted pod as a successful eviction.
