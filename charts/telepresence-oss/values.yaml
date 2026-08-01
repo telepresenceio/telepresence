@@ -30,7 +30,8 @@ securityContext:
   runAsUser: 1000
 
 # extraEnv, extraVolumes, and extraVolumeMounts add to (never replace) the
-# traffic-manager container/pod. Useful for things like mounting a
+# traffic-manager container/pod and, when quicTunnel is enabled, the
+# quic-forwarder container/pod. Useful for things like mounting a
 # coverage hostPath in test clusters or injecting a sidecar's shared
 # volume.
 # extraEnv:
