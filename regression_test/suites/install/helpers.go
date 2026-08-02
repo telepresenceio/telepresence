@@ -107,14 +107,3 @@ func managerLogLevel(t testing.TB, ctx context.Context, r *rt.Runtime, ns string
 	}
 	return ""
 }
-
-// releaseExists reports whether a traffic-manager helm release secret exists
-// in ns: the same check rt's own manager fixtures use internally
-// (fixture_manager.go's managerReleaseExists, unexported there).
-func releaseExists(ctx context.Context, r *rt.Runtime, ns string) bool {
-	out, err := r.Kubectl(ctx, ns, "get", "secret", "-l", "owner=helm", "-o", "name")
-	if err != nil {
-		return false
-	}
-	return strings.Contains(out, "sh.helm.release.v1."+managerReleaseName+".")
-}
