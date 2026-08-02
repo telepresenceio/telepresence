@@ -15,6 +15,7 @@ post, conference talk, or case study. Sign off your commit
 | [Bitnami](https://bitnami.com) | [Case study](https://telepresence.io/case-studies/bitnami) |
 | [BlackRock](https://www.blackrock.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
 | [Cisco](https://www.cisco.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
+| [Displate](https://displate.com) | [Maintainer affiliation](https://github.com/telepresenceio/telepresence/blob/release/v2/MAINTAINERS.md) |
 | [Engel & Völkers](https://www.engelvoelkers.com) | [Case study](https://telepresence.io/case-studies/engel-volkers) |
 | [HelloFresh](https://www.hellofresh.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
 | [IBM](https://www.ibm.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
