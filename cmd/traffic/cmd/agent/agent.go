@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/sftp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
@@ -22,6 +21,7 @@ import (
 	ftp "github.com/telepresenceio/go-ftpserver"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/sftpserver"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
@@ -104,8 +104,9 @@ func appEnvironment(osEnv []string, ag *agentconfig.Container) map[string]string
 }
 
 // sftpServer creates a listener on the next available port, writes that port on the
-// given channel, and then starts accepting connections on that port. Each connection
-// starts a sftp-server that communicates with that connection using its stdin and stdout.
+// given channel, and then starts accepting connections on that port. Each connection is
+// served by a sftpserver.Server confined to agentconfig.ExportsMountPoint and
+// agentconfig.MountPrefixApp.
 func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 	defer close(sftpPortCh)
 
@@ -129,6 +130,11 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 	}
 	sftpPortCh <- ap.Port()
 
+	srv, err := sftpserver.New(agentconfig.ExportsMountPoint, agentconfig.MountPrefixApp)
+	if err != nil {
+		return err
+	}
+
 	clog.Infof(ctx, "Listening at: %s", l.Addr())
 	for {
 		conn, err := l.Accept()
@@ -139,12 +145,8 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 			return nil
 		}
 		go func() {
-			s, err := sftp.NewServer(conn)
-			if err != nil {
-				clog.Error(ctx, err)
-			}
 			clog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
-			if err = s.Serve(); err != nil {
+			if err := srv.Serve(ctx, conn); err != nil {
 				if !errors.Is(err, io.EOF) {
 					clog.Errorf(ctx, "sftp server completed with error %v", err)
 				}
