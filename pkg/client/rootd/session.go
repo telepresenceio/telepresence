@@ -41,6 +41,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/vip"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/sessioncred"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
@@ -113,6 +114,10 @@ type session struct {
 
 	// agentClients provides direct gRPC tunnels to traffic-agents in namespaces where the client can port-forward.
 	agentClients agentpf.Clients
+
+	// sessionCredential caches the session-scoped credential fetched from the manager;
+	// see sessionCredentialToken, which agentClients uses as its per-RPC token provider.
+	sessionCredential sessioncred.Cache
 
 	// managerVersion is the version of the connected traffic-manager
 	managerVersion semver.Version
@@ -1464,7 +1469,7 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 			})
 		}
 		if len(agentNamespaces) > 0 {
-			s.agentClients = agentpf.NewClients(s.Cluster, s.session, agentNamespaces)
+			s.agentClients = agentpf.NewClients(s.Cluster, s.session, agentNamespaces, s.sessionCredentialToken)
 			// Receive a callback per dial accepted from the dial watchers,
 			// so we can report incoming-dial counters to the user daemon
 			// at session end (see daemon.Activity).

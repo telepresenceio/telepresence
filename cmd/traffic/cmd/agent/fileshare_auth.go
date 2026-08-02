@@ -8,17 +8,24 @@ import (
 	"sync/atomic"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/sessiontoken"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // fileShareAuth is a late-populated holder that the agent's file-sharing listeners (FTP
-// and SFTP) consult per connection. It starts out empty -- no manager has yet supplied
-// credential material -- in which case every connection is accepted, exactly as before
-// this credential existed. RefreshQuicAgentListener populates it once the manager
-// reports a session credential. The holder backs the FTP password validator and the mode
-// consulted by the SFTP source gate; see "Enforcement follows the manager's
-// authentication mode" in docs/plans/auth-hardening/file-sharing-auth.md.
+// and SFTP) and its gRPC surface (WatchDial, Tunnel) consult per connection or call. It
+// starts out empty -- no manager has yet supplied credential material -- in which case
+// every connection or call is accepted, exactly as before this credential existed.
+// RefreshQuicAgentListener populates it once the manager reports a session credential.
+// The holder backs the FTP password validator, the mode consulted by the SFTP source
+// gate, and verifySession, which binds WatchDial/Tunnel calls to their session; see
+// "Enforcement follows the manager's authentication mode" and "Item 5 hook" in
+// docs/plans/auth-hardening/file-sharing-auth.md.
 type fileShareAuth struct {
 	v atomic.Pointer[fileShareAuthSnapshot]
 }
@@ -68,6 +75,57 @@ func (a *fileShareAuth) validatePassword(ctx context.Context, user, password str
 			user, s.mode, err)
 	}
 	return nil
+}
+
+// verifySession authenticates a WatchDial or Tunnel call against the session token
+// carried in ctx's incoming gRPC metadata (sessiontoken.MetadataKey), which the client
+// attaches as per-RPC credentials on the plaintext, port-forwarded transport (see
+// agentpf's tokenCredentials). It reports whether the token verified, and if so whether
+// the session it names matches declared -- the session ID the caller's request itself
+// claims.
+//
+// A nil snapshot means this agent has never heard from a manager new enough to issue
+// credentials: there is nothing to verify against, so the call is treated exactly as
+// before this check existed. A token that verifies but names a session other than
+// declared is rejected in every mode -- WatchDial/Tunnel each bind one channel to one
+// session, so a foreign token is never ambiguous, only wrong -- and the returned error
+// names neither the token nor the session it actually verified for. An absent or invalid
+// token is rejected only in enforcing mode; permissive/disabled log it (debug for
+// absent, warn for invalid) and let the call through unverified, exactly like
+// validatePassword.
+func (a *fileShareAuth) verifySession(ctx context.Context, declared tunnel.SessionID) (verified bool, err error) {
+	s := a.v.Load()
+	if s == nil {
+		return false, nil
+	}
+	var token string
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		if vs := md.Get(sessiontoken.MetadataKey); len(vs) > 0 {
+			token = vs[0]
+		}
+	}
+	if token != "" {
+		sessionID, vErr := sessiontoken.Verify(s.pub, token, time.Now())
+		if vErr == nil {
+			if sessionID != string(declared) {
+				return false, status.Errorf(codes.PermissionDenied,
+					"fileshareauth: session token does not authorize session %q", declared)
+			}
+			return true, nil
+		}
+		err = vErr
+	}
+	if s.mode == "enforcing" {
+		return false, status.Error(codes.Unauthenticated, "fileshareauth: this agent requires a session credential")
+	}
+	if err == nil {
+		clog.Debugf(ctx, "fileshareauth: call for session %q presented no session token; accepted (mode %q)",
+			declared, s.mode)
+	} else {
+		clog.Warnf(ctx, "fileshareauth: call for session %q presented an invalid session token, accepted (mode %q): %v",
+			declared, s.mode, err)
+	}
+	return false, nil
 }
 
 // fromOwnPod reports whether remote is a connection delivered through the tunnel:

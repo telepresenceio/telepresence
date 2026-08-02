@@ -2,100 +2,65 @@ package trafficmgr
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
-func TestSessionCredentialCacheFetchesOnce(t *testing.T) {
-	ctx := context.Background()
-	calls := 0
-	c := &sessionCredentialCache{}
-	fetch := func(context.Context) (*manager.SessionCredential, error) {
-		calls++
-		return &manager.SessionCredential{
-			Token:  "tok-1",
-			Expiry: timestamppb.New(time.Now().Add(time.Hour)),
-		}, nil
-	}
-
-	cred := c.get(ctx, fetch)
-	require.NotNil(t, cred)
-	assert.Equal(t, "tok-1", cred.Token)
-	assert.Equal(t, 1, calls)
-
-	// A second call within the credential's lifetime uses the cache.
-	cred = c.get(ctx, fetch)
-	require.NotNil(t, cred)
-	assert.Equal(t, "tok-1", cred.Token)
-	assert.Equal(t, 1, calls)
+// fakeSessionCredentialManager is a minimal manager.ManagerServer stand-in that answers
+// GetSessionCredential and counts calls, so the test below can assert that
+// session.SessionCredential both delegates to, and is cached by, the sessioncred.Cache
+// it now wraps.
+type fakeSessionCredentialManager struct {
+	manager.UnimplementedManagerServer
+	calls int
 }
 
-func TestSessionCredentialCacheRefetchesNearExpiry(t *testing.T) {
-	ctx := context.Background()
-	calls := 0
-	c := &sessionCredentialCache{
-		cred: &manager.SessionCredential{
-			Token: "stale",
-			// Within the expiry margin: due for a refresh.
-			Expiry: timestamppb.New(time.Now().Add(30 * time.Second)),
-		},
-	}
-	fetch := func(context.Context) (*manager.SessionCredential, error) {
-		calls++
-		return &manager.SessionCredential{
-			Token:  "fresh",
-			Expiry: timestamppb.New(time.Now().Add(time.Hour)),
-		}, nil
-	}
+func (f *fakeSessionCredentialManager) GetSessionCredential(
+	context.Context, *manager.SessionInfo,
+) (*manager.SessionCredential, error) {
+	f.calls++
+	return &manager.SessionCredential{
+		Token:  "tok-1",
+		Expiry: timestamppb.New(time.Now().Add(time.Hour)),
+	}, nil
+}
 
-	cred := c.get(ctx, fetch)
+// TestSessionCredentialDelegatesToCache covers session.SessionCredential's contract
+// after the move to sessioncred.Cache: it fetches through the manager client on first
+// use and reuses the cached credential for a later call within its lifetime.
+func TestSessionCredentialDelegatesToCache(t *testing.T) {
+	ctx := context.Background()
+	fm := &fakeSessionCredentialManager{}
+
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	svc := grpc.NewServer()
+	manager.RegisterManagerServer(svc, fm)
+	go func() { _ = svc.Serve(lis) }()
+	t.Cleanup(svc.Stop)
+
+	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	s := &session{managerConn: conn, sessionInfo: &manager.SessionInfo{SessionId: "session-a"}}
+
+	cred := s.SessionCredential(ctx)
 	require.NotNil(t, cred)
-	assert.Equal(t, "fresh", cred.Token)
-	assert.Equal(t, 1, calls)
-}
+	require.Equal(t, "tok-1", cred.Token)
+	require.Equal(t, 1, fm.calls)
 
-func TestSessionCredentialCacheUnimplementedSticks(t *testing.T) {
-	ctx := context.Background()
-	calls := 0
-	c := &sessionCredentialCache{}
-	fetch := func(context.Context) (*manager.SessionCredential, error) {
-		calls++
-		return nil, status.Error(codes.Unimplemented, "GetSessionCredential not implemented")
-	}
-
-	cred := c.get(ctx, fetch)
-	assert.Nil(t, cred)
-	assert.Equal(t, 1, calls)
-
-	// Once marked unsupported, fetch is never called again.
-	cred = c.get(ctx, fetch)
-	assert.Nil(t, cred)
-	assert.Equal(t, 1, calls)
-}
-
-func TestSessionCredentialCacheOtherErrorRetriesEveryCall(t *testing.T) {
-	ctx := context.Background()
-	calls := 0
-	c := &sessionCredentialCache{}
-	fetch := func(context.Context) (*manager.SessionCredential, error) {
-		calls++
-		return nil, status.Error(codes.Unavailable, "manager unreachable")
-	}
-
-	cred := c.get(ctx, fetch)
-	assert.Nil(t, cred)
-	assert.Equal(t, 1, calls)
-
-	// Not marked unsupported, so a later call retries the fetch.
-	cred = c.get(ctx, fetch)
-	assert.Nil(t, cred)
-	assert.Equal(t, 2, calls)
+	// A second call within the credential's lifetime is served from the cache.
+	cred = s.SessionCredential(ctx)
+	require.NotNil(t, cred)
+	require.Equal(t, "tok-1", cred.Token)
+	require.Equal(t, 1, fm.calls)
 }

@@ -38,6 +38,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/sessioncred"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
@@ -114,7 +115,7 @@ type session struct {
 
 	// sessionCredential caches the session-scoped credential fetched from the
 	// manager; see SessionCredential.
-	sessionCredential sessionCredentialCache
+	sessionCredential sessioncred.Cache
 
 	workloadsLock sync.Mutex
 

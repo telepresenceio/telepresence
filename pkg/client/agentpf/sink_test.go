@@ -25,7 +25,7 @@ func newTestClients(ctx context.Context, namespace string) *clients {
 			Namespace: namespace,
 		},
 	}
-	cs := NewClients(cl, &manager.SessionInfo{SessionId: "s"}, []string{namespace})
+	cs := NewClients(cl, &manager.SessionInfo{SessionId: "s"}, []string{namespace}, nil)
 	return cs.(*clients)
 }
 

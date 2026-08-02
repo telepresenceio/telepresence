@@ -21,7 +21,10 @@ import (
 	"github.com/pkg/sftp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/clog/testutil"
 	agentrpc "github.com/telepresenceio/telepresence/rpc/v2/agent"
@@ -32,6 +35,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/sessiontoken"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // generateTestKey returns a fresh ECDSA P-256 key, independent of any quictunnel.CA, so
@@ -129,6 +133,100 @@ func TestFileShareAuth_ValidatePassword_NilSnapshotAcceptsAnything(t *testing.T)
 	require.False(t, a.enforcing())
 	require.NoError(t, a.validatePassword(ctx, "u", "not-a-token"))
 	require.NoError(t, a.validatePassword(ctx, "u", "anonymous"))
+}
+
+// TestFileShareAuth_VerifySession_ValidMatch covers verifySession's success path: a
+// token that verifies and names the same session as declared is accepted regardless of
+// mode.
+func TestFileShareAuth_VerifySession_ValidMatch(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	key := generateTestKey(t)
+	tok, err := sessiontoken.Mint(key, "session-1", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	for _, mode := range []string{"permissive", "enforcing"} {
+		t.Run(mode, func(t *testing.T) {
+			a := &fileShareAuth{}
+			a.set(&key.PublicKey, mode)
+			mdCtx := metadata.NewIncomingContext(ctx, metadata.Pairs(sessiontoken.MetadataKey, tok))
+			verified, err := a.verifySession(mdCtx, tunnel.SessionID("session-1"))
+			require.NoError(t, err)
+			require.True(t, verified)
+		})
+	}
+}
+
+// TestFileShareAuth_VerifySession_ValidMismatch covers verifySession's rejection of a
+// token that verifies but names a session other than the one the call declares: this is
+// rejected in every mode, since WatchDial/Tunnel each bind one channel to one session.
+func TestFileShareAuth_VerifySession_ValidMismatch(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	key := generateTestKey(t)
+	tok, err := sessiontoken.Mint(key, "session-1", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	for _, mode := range []string{"permissive", "enforcing"} {
+		t.Run(mode, func(t *testing.T) {
+			a := &fileShareAuth{}
+			a.set(&key.PublicKey, mode)
+			mdCtx := metadata.NewIncomingContext(ctx, metadata.Pairs(sessiontoken.MetadataKey, tok))
+			verified, err := a.verifySession(mdCtx, tunnel.SessionID("session-2"))
+			require.False(t, verified)
+			require.Equal(t, codes.PermissionDenied, status.Code(err))
+		})
+	}
+}
+
+// TestFileShareAuth_VerifySession_Absent covers a call with no session token at all:
+// rejected only in enforcing mode; permissive lets it through unverified.
+func TestFileShareAuth_VerifySession_Absent(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	key := generateTestKey(t)
+
+	permissive := &fileShareAuth{}
+	permissive.set(&key.PublicKey, "permissive")
+	verified, err := permissive.verifySession(ctx, tunnel.SessionID("session-1"))
+	require.NoError(t, err)
+	require.False(t, verified)
+
+	enforcing := &fileShareAuth{}
+	enforcing.set(&key.PublicKey, "enforcing")
+	verified, err = enforcing.verifySession(ctx, tunnel.SessionID("session-1"))
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.False(t, verified)
+}
+
+// TestFileShareAuth_VerifySession_Invalid covers a call presenting a malformed token:
+// rejected only in enforcing mode, exactly like the absent case, but logged at warn
+// instead of debug (not independently observable here; only the return values are
+// asserted).
+func TestFileShareAuth_VerifySession_Invalid(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	key := generateTestKey(t)
+	mdCtx := metadata.NewIncomingContext(ctx, metadata.Pairs(sessiontoken.MetadataKey, "not-a-token"))
+
+	permissive := &fileShareAuth{}
+	permissive.set(&key.PublicKey, "permissive")
+	verified, err := permissive.verifySession(mdCtx, tunnel.SessionID("session-1"))
+	require.NoError(t, err)
+	require.False(t, verified)
+
+	enforcing := &fileShareAuth{}
+	enforcing.set(&key.PublicKey, "enforcing")
+	verified, err = enforcing.verifySession(mdCtx, tunnel.SessionID("session-1"))
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+	require.False(t, verified)
+}
+
+// TestFileShareAuth_VerifySession_NilSnapshot covers the state before any manager has
+// ever supplied credential material: there is nothing to verify against, so the call is
+// treated exactly as before this check existed.
+func TestFileShareAuth_VerifySession_NilSnapshot(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	a := &fileShareAuth{}
+	verified, err := a.verifySession(ctx, tunnel.SessionID("session-1"))
+	require.NoError(t, err)
+	require.False(t, verified)
 }
 
 // TestFromOwnPod covers fromOwnPod's classification of a connection's remote address:

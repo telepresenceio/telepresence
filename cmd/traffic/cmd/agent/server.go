@@ -73,6 +73,11 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 	if err != nil {
 		return errors.FromError(err, codes.FailedPrecondition, err.Error())
 	}
+	// The session this gate lets through is the one every use of stream.SessionID()
+	// below (including the ClientSessionId reported to ReportMetrics) relies on.
+	if _, err := s.fileShareAuth.verifySession(ctx, stream.SessionID()); err != nil {
+		return err
+	}
 	if awc, ok := s.awaitingForwards.Load(stream.SessionID()); ok {
 		if awf, ok := awc.LoadAndDelete(stream.ID()); ok {
 			awf.streamCh <- stream
@@ -103,13 +108,44 @@ func (s *state) Tunnel(server agent.Agent_TunnelServer) error {
 
 func (s *state) WatchDial(session *rpc.SessionInfo, server agent.Agent_WatchDialServer) error {
 	ctx := server.Context()
+	sid := tunnel.SessionID(session.SessionId)
+	verified, err := s.fileShareAuth.verifySession(ctx, sid)
+	if err != nil {
+		return err
+	}
 	clog.Debugf(ctx, "WatchDial called from client %s", session.SessionId)
 	defer clog.Debugf(ctx, "WatchDial ended from client %s", session.SessionId)
 	drCh := make(chan *rpc.DialRequest)
-	sid := tunnel.SessionID(session.SessionId)
-	s.dialWatchers.Store(sid, drCh)
+
+	// Displacement policy: a verified caller always takes over the slot, even from a
+	// live watcher (verified or not) -- WatchDial exists to bind one channel to one
+	// session, and a verified caller has proven it is that session's client. An
+	// unverified caller may only take the slot when nothing is registered yet (e.g. an
+	// old client racing to be first against a permissive agent); finding a live
+	// watcher, it is refused rather than displacing something it hasn't proven it owns.
+	if verified {
+		displaced := false
+		s.dialWatchers.Compute(sid, func(_ chan *rpc.DialRequest, loaded bool) (chan *rpc.DialRequest, xsync.ComputeOp) {
+			displaced = loaded
+			return drCh, xsync.UpdateOp
+		})
+		if displaced {
+			clog.Debugf(ctx, "WatchDial for client %s displaced an existing dial watcher", session.SessionId)
+		}
+	} else if _, loaded := s.dialWatchers.LoadOrStore(sid, drCh); loaded {
+		return status.Error(codes.AlreadyExists, "a dial watcher for this session is already active")
+	}
 	defer func() {
-		s.dialWatchers.Delete(sid)
+		// Delete only this handler's own registration: if a verified caller has since
+		// displaced it, the stored channel is no longer drCh, and Compute leaves the
+		// successor's entry alone.
+		s.dialWatchers.Compute(sid,
+			func(oldValue chan *rpc.DialRequest, loaded bool) (chan *rpc.DialRequest, xsync.ComputeOp) {
+				if loaded && oldValue == drCh {
+					return nil, xsync.DeleteOp
+				}
+				return oldValue, xsync.CancelOp
+			})
 	}()
 
 	for {

@@ -29,6 +29,11 @@ const version = "v1"
 // can never be confused with a signature over some other format.
 const signingDomain = "telepresence-session-token/v1"
 
+// MetadataKey is the gRPC metadata key a token rides under when a client attaches it as
+// per-RPC credentials on a plaintext, port-forwarded channel; see "Item 5 hook" in
+// docs/plans/auth-hardening/file-sharing-auth.md.
+const MetadataKey = "x-telepresence-session-token"
+
 // Mint returns a bearer token naming sessionID, signed by key, that Verify accepts
 // until expiry.
 func Mint(key *ecdsa.PrivateKey, sessionID string, expiry time.Time) (string, error) {

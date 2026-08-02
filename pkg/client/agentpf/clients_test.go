@@ -22,7 +22,7 @@ func TestWaitForIPUnavailableForUnwatchedNamespace(t *testing.T) {
 			Namespace: "alpha",
 		},
 	}
-	cs := NewClients(cl, &manager.SessionInfo{SessionId: "session"}, []string{"alpha"})
+	cs := NewClients(cl, &manager.SessionInfo{SessionId: "session"}, []string{"alpha"}, nil)
 
 	err := cs.WaitForIP(context.Background(), time.Millisecond, "beta", netip.MustParseAddr("10.0.0.1"))
 	require.Equal(t, codes.Unavailable, status.Code(err))
@@ -39,7 +39,7 @@ func TestClients_PreferredQuicAddr(t *testing.T) {
 			Namespace: "alpha",
 		},
 	}
-	cs := NewClients(cl, &manager.SessionInfo{SessionId: "session"}, []string{"alpha"})
+	cs := NewClients(cl, &manager.SessionInfo{SessionId: "session"}, []string{"alpha"}, nil)
 	css, ok := cs.(*clients)
 	require.True(t, ok)
 
@@ -69,7 +69,7 @@ func TestTransportsConcurrentWithRefresh(t *testing.T) {
 		},
 	}
 	session := &manager.SessionInfo{SessionId: "session"}
-	cs := NewClients(cl, session, []string{"alpha"})
+	cs := NewClients(cl, session, []string{"alpha"}, nil)
 	css, ok := cs.(*clients)
 	require.True(t, ok)
 
@@ -111,7 +111,7 @@ func TestGetRandomAgentSkipsNodeAgent(t *testing.T) {
 		},
 	}
 	session := &manager.SessionInfo{SessionId: "session"}
-	cs := NewClients(cl, session, []string{"alpha"})
+	cs := NewClients(cl, session, []string{"alpha"}, nil)
 	css, ok := cs.(*clients)
 	require.True(t, ok)
 
