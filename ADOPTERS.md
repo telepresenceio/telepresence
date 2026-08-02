@@ -23,6 +23,7 @@ post, conference talk, or case study. Sign off your commit
 | [Manhattan Associates](https://www.manh.com) | |
 | [monday.com](https://monday.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
 | [OpenAI](https://openai.com) | |
+| [Polar Sky](https://polarsky.ai) | [Maintainer affiliation](https://github.com/telepresenceio/telepresence/blob/release/v2/MAINTAINERS.md) |
 | [Sight Machine](https://sightmachine.com) | [Case study](https://telepresence.io/case-studies/sight-machine) |
 | [Unity](https://unity.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
 | [Verloop](https://verloop.io) | [Case study](https://telepresence.io/case-studies/verloop) |
