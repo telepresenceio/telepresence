@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.31.2
-    date: (TBD)
+    date: 2026-08-02
     notes:
       - type: change
         title: Namespaced installs no longer read ingresses cluster-wide
