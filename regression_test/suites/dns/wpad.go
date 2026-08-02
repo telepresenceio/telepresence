@@ -8,12 +8,10 @@ import (
 )
 
 // Wpad proves wpad.* name lookups fail while connected, instead of being
-// forwarded to the cluster resolver. Mirrors the name forms
-// integration_test/wpad_test.go's Test_WpadNotForwarded exercises for its
-// "not forwarded" cases (its "wpad.bogus.nu" case is commented out there
-// too), asserting the externally observable effect -- the lookup never
-// resolves -- rather than that test's daemon.log NXDOMAIN/no-forward line
-// inspection.
+// forwarded to the cluster resolver. It asserts the externally observable
+// effect -- the lookup never resolves -- rather than inspecting daemon.log
+// for the no-forward decision, so it holds regardless of how the daemon
+// logs it.
 type Wpad struct {
 	rt.Suite
 }

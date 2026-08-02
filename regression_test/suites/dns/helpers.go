@@ -21,10 +21,9 @@ const (
 )
 
 // lookupSucceeds reports whether host currently resolves from the test
-// process: the same net.DefaultResolver.LookupHost call
-// integration_test/subdomain_test.go's lookupHost and
-// integration_test/svcdomain_test.go's Test_SvcDomain use to prove a cluster
-// name resolves while connected.
+// process, via net.DefaultResolver.LookupHost: the same path any program on
+// the connected host takes, so it proves the daemon's DNS is reachable
+// rather than just that the cluster knows the name.
 func lookupSucceeds(ctx context.Context, host string) bool {
 	lctx, cancel := context.WithTimeout(ctx, lookupProbeTimeout)
 	defer cancel()

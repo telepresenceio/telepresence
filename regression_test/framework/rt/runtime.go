@@ -309,8 +309,7 @@ func (r *Runtime) ArtifactDir(sub ...string) string {
 // including apply/delete's handler records,
 // pkg/client/cli/manifest/handler.go's handlers/<daemon-info>/<name>.json --
 // to the host's normal telepresence cache location rather than under
-// build-output/rtest/home. Consumed by the state area's Handler test
-// (integration_test/state_manifest_test.go's Test_ApplyHandlerCommand) to
+// build-output/rtest/home. Consumed by the state area's Handler test to
 // read a handler's recorded pid/argv without importing client internals.
 func (r *Runtime) UserCacheDir() string {
 	env := r.childEnv()

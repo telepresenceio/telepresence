@@ -7,14 +7,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
 )
 
-// Delete ports state_manifest_test.go's `telepresence delete -f` coverage
+// Delete proves the teardown behaviour of `telepresence delete -f`
 // (pkg/client/cli/manifest/delete.go): reverse-manifest-order teardown, a
 // manually detached attachment reporting absent, the "not connected"/"not
 // running; nothing to tear down" variants, and a connection-less manifest
-// both requiring and preserving an already established session. Supersedes
-// Test_Delete, Test_DeleteAbsentAttachment,
-// Test_ApplyDeleteNoConnectionRequiresSession,
-// Test_ApplyDeleteWithoutConnectionKeepsSession.
+// both requiring and preserving an already established session.
 type Delete struct {
 	rt.Suite
 }
@@ -26,7 +23,7 @@ func init() {
 	)
 }
 
-// Test_Delete ports Test_Delete: delete tears down attachments in reverse
+// Test_Delete proves that delete tears down attachments in reverse
 // manifest order (ingest before intercept) and disconnects; repeating it
 // against the now session-less daemon reports "not connected", and again
 // after a full quit reports "not running".
@@ -64,7 +61,7 @@ func (s *Delete) Test_Delete() {
 	s.Equal("not running; nothing to tear down", res.Connection)
 }
 
-// Test_DeleteAbsentAttachment ports Test_DeleteAbsentAttachment: an
+// Test_DeleteAbsentAttachment proves that an
 // attachment detached out-of-band (`telepresence detach`, not `delete -f`)
 // reports absent instead of removed, while its sibling still reports
 // removed normally.
@@ -88,10 +85,9 @@ func (s *Delete) Test_DeleteAbsentAttachment() {
 	s.Equal("disconnected", res.Connection)
 }
 
-// Test_ApplyDeleteNoConnectionRequiresSession ports
-// Test_ApplyDeleteNoConnectionRequiresSession: a connection-less manifest
-// against a clean workstation errors, for both apply and delete, instead of
-// connecting implicitly.
+// Test_ApplyDeleteNoConnectionRequiresSession proves that a connection-less
+// manifest against a clean workstation errors, for both apply and delete,
+// instead of connecting implicitly.
 func (s *Delete) Test_ApplyDeleteNoConnectionRequiresSession() {
 	t := s.T()
 	ctx := s.Ctx()
@@ -116,9 +112,8 @@ func (s *Delete) Test_ApplyDeleteNoConnectionRequiresSession() {
 	s.False(st.RootDaemon.Running)
 }
 
-// Test_ApplyDeleteWithoutConnectionKeepsSession ports
-// Test_ApplyDeleteWithoutConnectionKeepsSession: apply/delete against a
-// connection-less manifest never print a connection line and never
+// Test_ApplyDeleteWithoutConnectionKeepsSession proves that apply/delete
+// against a connection-less manifest never print a connection line and never
 // disconnect the session they depend on. Establishes the connection through
 // the shared framework fixture (Mutate, since this test disturbs and then
 // quits it) rather than a manifest, specifically to prove the manifest-driven

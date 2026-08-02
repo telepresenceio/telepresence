@@ -46,7 +46,7 @@ names files in `integration_test/`.
 | smoke/Connected | status/version/list once connected | connected_test.go | JSON asserts |
 | connect/Lifecycle | connect, disconnect, quit, reconnect after API-server drop (requires sudo) | not_connected_test.go, reconnect_session_test.go | |
 | connect/Errors | bad kubeconfig, bad context, unmanaged namespace refusal | not_connected_test.go, helm_test.go (partly) | |
-| connect/Contexts | --context, kubeconfig extension (also/never-proxy, dns), exec-credential auth | kubeconfig_extension_test.go, kubeauth_test.go, uhn_dns_test.go (flags part) | |
+| connect/Contexts | --context, kubeconfig extension (also/never-proxy, dns), exec-credential auth | kubeconfig_extension_test.go, kubeauth_test.go | |
 | connect/Multi | two managers, named connections, --use, inactivity takeover | multi_connect_test.go, inactive_client_test.go | requires docker |
 | attach/Modes | THE core table: {intercept, ingest, replace, wiretap} x {Deployment, ReplicaSet, StatefulSet, headless, no-service, no-volumes, Rollout} — attach, list, traffic round-trip, detach, uninstall | workloads_test.go (10 tests), replace_test.go, wiretap_test.go, ingest_test.go (core), argo_rollouts_test.go, headless_test.go | Collapses overlap clusters A and J; argo variant keeps its CRD-install fixture + label |
 | attach/Conflicts | ingest/intercept conflict matrix, repeat idempotence | ingest_test.go | |
@@ -78,7 +78,7 @@ names files in `integration_test/`.
 
 | Area/Suite | Validates | Supersedes | Notes |
 |---|---|---|---|
-| dns/Resolution | subdomain, svc domain, unqualified names, excludes/mappings, WPAD suppression | subdomain_test.go, svcdomain_test.go, uhn_dns_test.go, wpad_test.go | |
+| dns/Resolution | subdomain, svc domain, unqualified names, excludes/mappings, WPAD suppression | retired (M7) | |
 | routing/Subnets | also/never-proxy, conflicting proxies, CIDR conflicts via veth (sudo), allow-conflicting, proxy-via, podCIDR strategies | also_proxy_test.go, cidr_conflict_test.go, proxy_via_test.go, pod_cidr_test.go (values part) | Drops the also-proxy duplicate |
 | mounts/FUSE | read/write, read-only, ftp vs sshfs, large files (slow label), agent-content match, scale-to-zero survival | mounts_test.go, intercept_mount_test.go, podscaling_test.go, large_files_test.go | |
 | docker/Daemon | containerized daemon lifecycle, host+docker coexistence, cache ownership, subnet non-conflict, gather-logs from container | docker_daemon_test.go | requires docker |
@@ -94,9 +94,9 @@ names files in `integration_test/`.
 | docker/DockerConnRun | bare docker-run network/DNS join, external DNS, telemount volume | docker_run_test.go (dockerDaemonSuite tests) | requires docker |
 | docker/Compose | one test per x-tele verb (connect, proxy, ingest, intercept, replace, wiretap, dns) | compose_test.go | requires docker |
 | docker/ComposeLifecycle | named-volume down/-v semantics, default-network subnet non-conflict | compose_test.go | slow label |
-| state/Apply | dry-run, create/reuse/unchanged, attachment drift, connection drift | state_manifest_test.go | new area; owns its connection lifecycle |
-| state/Delete | reverse-order teardown, absent, no-connection variants | state_manifest_test.go | |
-| state/Handler | handler command pid lifecycle across apply/delete | state_manifest_test.go | not on windows |
+| state/Apply | dry-run, create/reuse/unchanged, attachment drift, connection drift | retired (M7) | new area; owns its connection lifecycle |
+| state/Delete | reverse-order teardown, absent, no-connection variants | retired (M7) | |
+| state/Handler | handler command pid lifecycle across apply/delete | retired (M7) | not on windows |
 | quic/Datagrams | RFC 9221 datagram carriage over UDP echo | quic_test.go (Test_AUDPEchoDatagrams) | slow label; inline ExtraEnv spec |
 | quic/ForwarderRestart | transport rides out forwarder pod deletion without fallback | quic_test.go (Test_ForwarderRestartSurvival) | |
 | quic/ManagerOutage | attachment survives manager scale-to-zero | quic_test.go (Test_ZManagerOutageAttachmentSurvival) | slow label |
