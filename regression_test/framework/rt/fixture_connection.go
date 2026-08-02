@@ -265,10 +265,11 @@ func provisionConnection(e Env, ns string, args []string, cs *connSpec) (*Conn, 
 		overrides[k] = v
 	}
 	stdout, stderr, err := e.R.CLIWithEnv(overrides).Run(e.Ctx, args...)
-	if err != nil && strings.Contains(stderr, "failed to connect to root daemon") {
+	if err != nil && transientRootDaemonFailure(stderr) {
 		// Rapid quit+connect cycles can race the previous root daemon's VIF
-		// teardown ("failed to retrieve TAP link: Link not found"); one
-		// retry after the device settles is enough.
+		// teardown ("failed to retrieve TAP link: Link not found") or catch
+		// the user daemon before its root-daemon client is back; one retry
+		// after the device settles is enough.
 		e.R.Infof("[rtest] connect %s: transient root-daemon failure, retrying: %s", ns, strings.TrimSpace(stderr))
 		time.Sleep(3 * time.Second)
 		stdout, stderr, err = e.R.CLIWithEnv(overrides).Run(e.Ctx, args...)
@@ -280,6 +281,13 @@ func provisionConnection(e Env, ns string, args []string, cs *connSpec) (*Conn, 
 		e.R.Infof("[rtest] connect %s: %s", ns, s)
 	}
 	return &Conn{r: e.R, ctx: e.Ctx, namespace: ns, name: cs.name, docker: cs.docker}, nil
+}
+
+// transientRootDaemonFailure reports whether stderr names a root-daemon
+// state that clears on its own.
+func transientRootDaemonFailure(stderr string) bool {
+	return strings.Contains(stderr, "failed to connect to root daemon") ||
+		strings.Contains(stderr, "root daemon is reconnecting")
 }
 
 func adoptConnection(e Env, ns string) (*Conn, bool) {

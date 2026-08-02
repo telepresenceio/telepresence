@@ -303,10 +303,8 @@ jobs:
           container-runtime: containerd
       - name: Build client
         run: make build
-      - name: Build images
-        run: make tel2-image client-image
-      - name: Load images into minikube
-        run: minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
+      - name: Build and load images into minikube
+        run: make load-images
       - name: Run regression tests
         timeout-minutes: 45
         shell: bash

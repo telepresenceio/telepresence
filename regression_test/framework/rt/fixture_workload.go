@@ -56,7 +56,7 @@ func (w *Workload) ServiceURLNamed(name string) (url string, ok bool) {
 func WorkloadFixture(ns string, tpl workloads.Template) *Fixture[*Workload] {
 	h := sha256.Sum256([]byte(workloadKey(ns, tpl)))
 	hash := hex.EncodeToString(h[:])
-	name := fmt.Sprintf("workload/%s/%s", ns, tpl.Name)
+	name := fmt.Sprintf("%s%s/%s", workloadFixturePrefix, ns, tpl.Name)
 	return &Fixture[*Workload]{
 		Name: name,
 		Hash: hash,
