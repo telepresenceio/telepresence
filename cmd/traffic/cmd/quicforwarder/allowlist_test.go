@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/stretchr/testify/assert"
@@ -181,4 +183,55 @@ func TestAllowlist_AgentPortZeroIsDropped(t *testing.T) {
 	assert.False(t, allowlist.Contains(agentIP))
 	_, _, ok := allowlist.AgentBackend("some-uid")
 	assert.False(t, ok)
+}
+
+// TestWatchAllowlist_SucceedsThroughEnforcingAuthInterceptor proves WatchAllowlist
+// works against a manager whose stream interceptor rejects every method except
+// Version and WatchQuicBackends with codes.Unauthenticated, i.e. the traffic-manager's
+// ModeEnforcing auth.Interceptor with the WatchQuicBackends exemption in place.
+func TestWatchAllowlist_SucceedsThroughEnforcingAuthInterceptor(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+
+	snapshots := make(chan *rpc.QuicBackendSnapshot, 4)
+	enforceAuth := func(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+		switch info.FullMethod {
+		case "/telepresence.manager.Manager/Version", "/telepresence.manager.Manager/WatchQuicBackends":
+			return handler(srv, ss)
+		default:
+			return status.Error(codes.Unauthenticated, "this traffic-manager requires an authenticated caller")
+		}
+	}
+	srv := grpc.NewServer(grpc.StreamInterceptor(enforceAuth))
+	rpc.RegisterManagerServer(srv, &fakeQuicBackendsServer{snapshots: snapshots})
+	go func() { _ = srv.Serve(lis) }()
+	defer srv.Stop()
+
+	allowlist := NewAllowlist(0)
+	require.False(t, allowlist.Ready())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = WatchAllowlist(ctx, lis.Addr().String(), allowlist) }()
+
+	managerIP := netip.MustParseAddr("10.1.1.1")
+	agentIP := netip.MustParseAddr("10.2.2.2")
+	snapshots <- &rpc.QuicBackendSnapshot{
+		Backends: []*rpc.QuicBackend{
+			{Ip: managerIP.AsSlice(), Kind: "manager", Port: 7778},
+			{Ip: agentIP.AsSlice(), Kind: "agent", Port: 7787, PodUid: "agent-pod-uid"},
+		},
+	}
+
+	waitForCondition(t, 2*time.Second, allowlist.Ready)
+
+	got, port, ok := allowlist.ManagerBackend()
+	require.True(t, ok)
+	assert.Equal(t, managerIP, got)
+	assert.Equal(t, uint16(7778), port)
+
+	agentGot, agentPort, ok := allowlist.AgentBackend("agent-pod-uid")
+	require.True(t, ok)
+	assert.Equal(t, agentIP, agentGot)
+	assert.Equal(t, uint16(7787), agentPort)
 }
