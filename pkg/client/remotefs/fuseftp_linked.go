@@ -21,6 +21,9 @@ import (
 type ftpMounter struct {
 	ftpClient fs.FTPClient
 	iceptWG   *sync.WaitGroup
+	// tokenProvider yields the current session credential token to use as the FTP
+	// password, or "" to log in anonymously. Read once, when ftpClient is created.
+	tokenProvider func() string
 }
 
 type fuseFtpMgr struct{}
@@ -41,8 +44,8 @@ func (s *fuseFtpMgr) GetFuseFTPClient(_ context.Context) rpc.FuseFTPClient {
 	return rpc.NewFuseFTPClient(nil)
 }
 
-func NewFTPMounter(_ rpc.FuseFTPClient, iceptWG *sync.WaitGroup) Mounter {
-	return &ftpMounter{iceptWG: iceptWG}
+func NewFTPMounter(_ rpc.FuseFTPClient, iceptWG *sync.WaitGroup, tokenProvider func() string) Mounter {
+	return &ftpMounter{iceptWG: iceptWG, tokenProvider: tokenProvider}
 }
 
 func (m *ftpMounter) Start(ctx context.Context, workload, container, clientMountPoint, mountPoint string, podAddrPort netip.AddrPort, ro bool) error {
@@ -63,9 +66,21 @@ func (m *ftpMounter) Start(ctx context.Context, workload, container, clientMount
 		bc.InitialInterval = 100 * time.Millisecond
 		bc.MaxInterval = 3 * time.Second
 		bc.MaxElapsedTime = cfg.Timeouts().Get(client.TimeoutIntercept)
+		var token string
+		if m.tokenProvider != nil {
+			token = m.tokenProvider()
+		}
 		err := backoff.Retry(func() error {
 			var err error
-			ftpClient, err = fs.NewFTPClient(ctx.Done(), podAddrPort, rmp, ro, cfg.Timeouts().Get(client.TimeoutFtpReadWrite))
+			readTimeout := cfg.Timeouts().Get(client.TimeoutFtpReadWrite)
+			if token != "" {
+				// Username is deliberately "anonymous": an old agent's FTP server only
+				// knows that user, and its wildcard password accepts the token, so this
+				// keeps working against old agents too.
+				ftpClient, err = fs.NewFTPClientWithAuth(ctx.Done(), podAddrPort, rmp, ro, readTimeout, "anonymous", token)
+			} else {
+				ftpClient, err = fs.NewFTPClient(ctx.Done(), podAddrPort, rmp, ro, readTimeout)
+			}
 			if err != nil {
 				clog.Debugf(ctx, "FTP connection to %s failed (%v), retrying", podAddrPort, err)
 			}

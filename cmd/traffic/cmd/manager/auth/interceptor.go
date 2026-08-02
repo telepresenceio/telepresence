@@ -14,11 +14,14 @@ import (
 )
 
 const (
-	versionMethod       = "/telepresence.manager.Manager/Version"
-	healthMethodPrefix  = "/grpc.health.v1.Health/"
-	authorizationHeader = "authorization"
-	bearerPrefix        = "bearer "
-	bearerPrefixLen     = len(bearerPrefix)
+	versionMethod = "/telepresence.manager.Manager/Version"
+	// watchQuicBackendsMethod is consumed by the quic-forwarder, which runs without
+	// cluster credentials.
+	watchQuicBackendsMethod = "/telepresence.manager.Manager/WatchQuicBackends"
+	healthMethodPrefix      = "/grpc.health.v1.Health/"
+	authorizationHeader     = "authorization"
+	bearerPrefix            = "bearer "
+	bearerPrefixLen         = len(bearerPrefix)
 )
 
 // unauthenticatedMessage is returned to callers rejected in ModeEnforcing for
@@ -69,7 +72,7 @@ func (i *Interceptor) Stream() grpc.StreamServerInterceptor {
 }
 
 func skipAuth(method string) bool {
-	return method == versionMethod || strings.HasPrefix(method, healthMethodPrefix)
+	return method == versionMethod || method == watchQuicBackendsMethod || strings.HasPrefix(method, healthMethodPrefix)
 }
 
 // authenticate reads the bearer token from ctx's incoming metadata and returns a context carrying

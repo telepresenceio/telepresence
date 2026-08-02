@@ -76,65 +76,31 @@ Windows builds use `build-aux\winmake.bat` instead of `make` directly. Pass the 
 ## Testing
 
 ```bash
-# Run unit tests
+# Unit tests
 make check-unit
 
-# Run all integration tests (requires Kubernetes cluster)
+# Regression tests (requires a Kubernetes cluster; see the guide below)
+make check-regression
+
+# One regression area / suite / test — plain go test selection:
+go test ./regression_test -run 'TestIntercept/HeaderFilter/Test_PathPrefix'
+
+# Chart-value combinations, clusterless:
+go test ./regression_test/golden
+
+# Legacy integration tests (being retired area by area)
 make check-integration
-
-# Run a single integration test
-go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
-
-# Run an integration test suite
-TEST_SUITE='^WorkloadConfiguration$' go test ./integration_test/... -v
-
-# Build tests without running (useful for caching)
-make build-tests
 ```
 
-Integration tests use testify suites. The test harness is in `integration_test/itest/`. Use `-testify.m=<pattern>` to filter tests by name. Verbose output (`-v`) is recommended as tests produce human-readable output with timestamps that correlate with log files.
-
-### Integration Test Environment Variables
-
-| Environment Name           | Description                                   | Default                   |
-|----------------------------|-----------------------------------------------|---------------------------|
-| `DEV_KUBECONFIG`           | Cluster configuration used by the tests       | Kubernetes default        |
-| `DEV_CLIENT_REGISTRY`      | Docker registry for the client image          | ${TELEPRESENCE_REGISTRY}  |
-| `DEV_MANAGER_REGISTRY`     | Docker registry for the traffic-manager image | ${TELEPRESENCE_REGISTRY}  |
-| `DEV_AGENT_REGISTRY`       | Docker registry for the traffic-agent image   | Traffic-manager registry  |
-| `DEV_CLIENT_IMAGE`         | Name of the client image                      | "telepresence"            |
-| `DEV_MANAGER_IMAGE`        | Name of the traffic-manager image             | "tel2"                    |
-| `DEV_AGENT_IMAGE`          | Name of the traffic-agent image               | Traffic-manager image     |
-| `DEV_CLIENT_VERSION`       | Client version                                | ${TELEPRESENCE_VERSION#v} |
-| `DEV_MANAGER_VERSION`      | Traffic-manager version                       | ${TELEPRESENCE_VERSION#v} |
-| `DEV_AGENT_VERSION`        | Traffic-agent image version                   | Traffic-manager version   |
-| `DEV_USERD_PROFILING_PORT` | Start user daemon with pprof enabled          |                           |
-| `DEV_ROOTD_PROFILING_PORT` | Start root daemon with pprof enabled          |                           |
-| `TEST_SUITE`               | Regexp matching test suite name(s)            |                           |
-
-These can also be provided in an `itest.yml` file placed next to `config.yml`:
-
-```yaml
-Env:
-  DEV_CLIENT_VERSION: v2.x.x-alpha.0
-  DEV_KUBECONFIG: /path/to/kubeconfig
-Config:
-  docker:
-    addHostGateway: false
-```
-
-**Important:** Environment values in `itest.yml` win over shell environment variables (the test harness merges the file's `Env` map *on top of* the process env). When you build/push tel2 or client images at a new version, update `TELEPRESENCE_VERSION` (or the per-component `DEV_*_VERSION`) in `itest.yml` before running the tests — exporting the var in your shell has no effect.
-
-### Using Docker Desktop with Kubernetes
-
-Using Kubernetes bundled with Docker Desktop is the quickest way to run tests. No need to push images to a registry - Kubernetes finds them in Docker's local cache. Integration tests automatically use `pullPolicy=Never` when `DEV_CLIENT_REGISTRY` is set to "local".
-
-```bash
-export TELEPRESENCE_VERSION=v2.x.x-alpha.0
-export TELEPRESENCE_REGISTRY=local
-make build client-image tel2-image
-go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
-```
+The regression suite in `regression_test/` is the primary integration-test
+package: declarative memoized fixtures, warm-cluster adoption for fast
+scoped runs, coverage instrumentation, and a bidirectional
+compatibility subset. **Read `regression_test/README.md` before writing or
+debugging these tests** — it documents the fixture engine's rules (lazy
+accessors, Mutate discipline, spec declarations), the RTEST_* environment,
+the manager/workload catalogs, labels and platform constraints, coverage,
+compat runs, and how to run the legacy `integration_test/` suite that still
+exists until parity is reached.
 
 ## Linting
 

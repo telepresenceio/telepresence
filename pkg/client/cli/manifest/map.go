@@ -13,7 +13,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ingest"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/intercept"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/mount"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -168,7 +167,9 @@ func buildInterceptCommand(cmd *cobra.Command, a *Attachment) (*intercept.Comman
 		HTTPPathPrefixFilters: append([]string(nil), a.HTTPPathPrefixes...),
 		HTTPPathRegexFilters:  append([]string(nil), a.HTTPPathRegexps...),
 		Plaintext:             a.Plaintext,
-		FormattedOutput:       output.WantsFormatted(cmd),
+		// printSummary emits the command's single output object; an inner
+		// attachment operation must never emit its own.
+		FormattedOutput: false,
 	}
 	return c, nil
 }
@@ -202,20 +203,22 @@ func buildReplaceCommand(cmd *cobra.Command, a *Attachment) (*intercept.Command,
 		return nil, err
 	}
 	c := &intercept.Command{
-		EnvFlags:        ef,
-		MountFlags:      mf,
-		Name:            name,
-		AgentName:       agentName,
-		Namespace:       a.Namespace,
-		Ports:           ports,
-		Address:         a.Address,
-		ContainerName:   a.Container,
-		Replace:         true,
-		NodeAgent:       desiredNodeAgent(cmd, a),
-		ToPod:           append([]string(nil), a.ToPod...),
-		Mechanism:       "tcp",
-		NoDefaultPort:   true,
-		FormattedOutput: output.WantsFormatted(cmd),
+		EnvFlags:      ef,
+		MountFlags:    mf,
+		Name:          name,
+		AgentName:     agentName,
+		Namespace:     a.Namespace,
+		Ports:         ports,
+		Address:       a.Address,
+		ContainerName: a.Container,
+		Replace:       true,
+		NodeAgent:     desiredNodeAgent(cmd, a),
+		ToPod:         append([]string(nil), a.ToPod...),
+		Mechanism:     "tcp",
+		NoDefaultPort: true,
+		// printSummary emits the command's single output object; an inner
+		// attachment operation must never emit its own.
+		FormattedOutput: false,
 	}
 	return c, nil
 }
@@ -240,14 +243,16 @@ func buildIngestCommand(cmd *cobra.Command, a *Attachment) (*ingest.Command, err
 		return nil, err
 	}
 	c := &ingest.Command{
-		EnvFlags:        ef,
-		MountFlags:      mf,
-		WorkloadName:    a.Name,
-		ContainerName:   a.Container,
-		Namespace:       a.Namespace,
-		ToPod:           append([]string(nil), a.ToPod...),
-		NodeAgent:       desiredNodeAgent(cmd, a),
-		FormattedOutput: output.WantsFormatted(cmd),
+		EnvFlags:      ef,
+		MountFlags:    mf,
+		WorkloadName:  a.Name,
+		ContainerName: a.Container,
+		Namespace:     a.Namespace,
+		ToPod:         append([]string(nil), a.ToPod...),
+		NodeAgent:     desiredNodeAgent(cmd, a),
+		// printSummary emits the command's single output object; an inner
+		// attachment operation must never emit its own.
+		FormattedOutput: false,
 	}
 	return c, nil
 }

@@ -20,6 +20,9 @@ type ContainerBuilder struct {
 	MountPolicies types.MountPolicies
 	Pod           *core.PodTemplateSpec
 	Config        *Sidecar
+
+	// CoverDir, when set, is mirrored into the agent's GOCOVERDIR env and mounted at the same path.
+	CoverDir string
 }
 
 // AgentContainer will return a configured traffic-agent.
@@ -116,6 +119,9 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 				},
 			},
 		})
+	if a.CoverDir != "" {
+		evs = append(evs, core.EnvVar{Name: "GOCOVERDIR", Value: a.CoverDir})
+	}
 
 	mounts := make([]core.VolumeMount, 0, len(a.Config.Containers)*3)
 	a.eachConfiguredContainer(confCns, func(app *core.Container, cc *Container) {
@@ -140,6 +146,9 @@ func (a *ContainerBuilder) AgentContainer(ctx context.Context) (*core.Container,
 			MountPath: ManagerTokenMountPath,
 		},
 	)
+	if a.CoverDir != "" {
+		mounts = append(mounts, core.VolumeMount{Name: CoverVolumeName, MountPath: a.CoverDir})
+	}
 
 	anns := make(map[string]string)
 	var err error

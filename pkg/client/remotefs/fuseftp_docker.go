@@ -11,7 +11,7 @@ import (
 )
 
 // NewFTPMounter returns nil. It's here to satisfy the linker.
-func NewFTPMounter(rpc.FuseFTPClient, *sync.WaitGroup) Mounter {
+func NewFTPMounter(rpc.FuseFTPClient, *sync.WaitGroup, func() string) Mounter {
 	return nil
 }
 

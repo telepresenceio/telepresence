@@ -9,7 +9,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 )
 
-func InitContainer(config *Sidecar, agentSecurityContext *core.SecurityContext) *core.Container {
+func InitContainer(config *Sidecar, agentSecurityContext *core.SecurityContext, coverDir string) *core.Container {
 	ic := &core.Container{
 		Name:  InitContainerName,
 		Image: config.AgentImage,
@@ -57,6 +57,10 @@ func InitContainer(config *Sidecar, agentSecurityContext *core.SecurityContext) 
 				Value: strconv.FormatInt(*gid, 10),
 			})
 		}
+	}
+	if coverDir != "" {
+		ic.Env = append(ic.Env, core.EnvVar{Name: "GOCOVERDIR", Value: coverDir})
+		ic.VolumeMounts = append(ic.VolumeMounts, core.VolumeMount{Name: CoverVolumeName, MountPath: coverDir})
 	}
 	if r := config.InitResources; r != nil {
 		ic.Resources = *r

@@ -427,7 +427,15 @@ func launchDockerDaemon(ctx context.Context, daemonID *daemon.Identifier, cr *da
 }
 
 func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connectorDaemon string, cr *daemon.Request) (context.Context, error) {
-	args := []string{connectorDaemon, client.UserDaemonName, "--" + global.FlagConfig, client.GetConfigFile(ctx)}
+	// The daemon is started without this process's environment, so it cannot
+	// resolve the log directory the way this process did; naming the file here
+	// keeps both on the same directory, the way the root daemon is given its
+	// own log file.
+	args := []string{
+		connectorDaemon, client.UserDaemonName,
+		"--" + global.FlagConfig, client.GetConfigFile(ctx),
+		"--logfile", filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log"),
+	}
 	if cr.UserDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.UserDaemonProfilingPort)))
 	}

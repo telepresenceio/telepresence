@@ -73,6 +73,9 @@ spec:
             port below.
             */}}
             value: "8080"
+          {{- with .extraEnv }}
+          {{ toYaml . | nindent 10 }}
+          {{- end }}
           ports:
           - name: quic
             containerPort: {{ .quicTunnel.port }}
@@ -90,5 +93,13 @@ spec:
           resources:
             {{ toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .extraVolumeMounts }}
+          volumeMounts:
+          {{ toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .extraVolumes }}
+      volumes:
+        {{ toYaml . | nindent 8 }}
+      {{- end }}
 {{- end }}
 {{- end }}

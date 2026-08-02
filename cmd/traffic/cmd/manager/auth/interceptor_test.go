@@ -255,3 +255,36 @@ func TestInterceptor_ModeEnforcing(t *testing.T) {
 		assert.Nil(t, resp)
 	})
 }
+
+func TestInterceptor_Stream_ModeEnforcing(t *testing.T) {
+	ci := fake.NewClientset()
+	k8sapi.InstallFakeTokenReviews(ci, nil)
+
+	i := auth.NewInterceptor(auth.NewAuthenticator(ci), auth.ModeEnforcing)
+	stream := i.Stream()
+
+	t.Run("WatchQuicBackends is exempt even without a token", func(t *testing.T) {
+		info := &grpc.StreamServerInfo{FullMethod: "/telepresence.manager.Manager/WatchQuicBackends"}
+		var called bool
+		handler := func(_ any, ss grpc.ServerStream) error {
+			called = true
+			return nil
+		}
+		err := stream(nil, &fakeServerStream{ctx: context.Background()}, info, handler)
+		require.NoError(t, err)
+		assert.True(t, called)
+	})
+
+	t.Run("non-exempt method without a token is rejected", func(t *testing.T) {
+		info := &grpc.StreamServerInfo{FullMethod: "/telepresence.manager.Manager/WatchAgentPods"}
+		var called bool
+		handler := func(_ any, ss grpc.ServerStream) error {
+			called = true
+			return nil
+		}
+		err := stream(nil, &fakeServerStream{ctx: context.Background()}, info, handler)
+		require.Error(t, err)
+		assert.Equal(t, codes.Unauthenticated, status.Code(err))
+		assert.False(t, called)
+	})
+}

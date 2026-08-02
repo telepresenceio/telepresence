@@ -376,6 +376,7 @@ func ensureNodeAgentTarget(
 		criSocket:    criSocket,
 		podName:      target.podName,
 		podIP:        target.podIP,
+		coverDir:     managerutil.GetEnv(ctx).GoCoverDir,
 	})
 	if err != nil {
 		return err
@@ -710,6 +711,10 @@ type nodeAgentJobOpts struct {
 	// netfilter ruleset with this as the PodIP, into the target's own network
 	// namespace.
 	podIP string
+
+	// coverDir, when set, is mirrored into the node-agent's GOCOVERDIR env
+	// and mounted at the same path from a hostPath volume.
+	coverDir string
 }
 
 // buildNodeAgentJob returns a Job that runs a node-hosted traffic-agent
@@ -785,6 +790,9 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 			Value: strconv.Itoa(int(cfg.QuicPort)),
 		})
 	}
+	if opts.coverDir != "" {
+		env = append(env, core.EnvVar{Name: "GOCOVERDIR", Value: opts.coverDir})
+	}
 
 	// With a configured CRI socket, only that socket is mounted, at its host
 	// path. Without one, the node's /run is mounted instead and the agent
@@ -830,6 +838,19 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 			MountPath: agentconfig.ExportsMountPoint,
 		},
 		criMount,
+	}
+	if opts.coverDir != "" {
+		hostPathDirOrCreate := core.HostPathDirectoryOrCreate
+		volumes = append(volumes, core.Volume{
+			Name: agentconfig.CoverVolumeName,
+			VolumeSource: core.VolumeSource{
+				HostPath: &core.HostPathVolumeSource{
+					Path: opts.coverDir,
+					Type: &hostPathDirOrCreate,
+				},
+			},
+		})
+		mounts = append(mounts, core.VolumeMount{Name: agentconfig.CoverVolumeName, MountPath: opts.coverDir})
 	}
 
 	backoffLimit := int32(0)

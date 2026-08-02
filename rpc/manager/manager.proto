@@ -476,6 +476,10 @@ message LogLevelRequest {
   // The time that this log-level will be in effect before
   // falling back to the configured log-level.
   google.protobuf.Duration duration = 2;
+
+  // The session of the client requesting the change. Unset in requests
+  // from older clients.
+  SessionInfo session = 3;
 }
 
 // Deprecated.
@@ -587,6 +591,28 @@ message QuicEndpointCandidate {
   int32 port = 2;
 }
 
+// SessionCredential is the response to GetSessionCredential: the session-scoped
+// credential -- in both its certificate and bearer-token forms -- used to
+// authenticate against a traffic-agent's file-sharing and gRPC ports. See
+// "Traffic-agent ports" in docs/reference/authentication.md.
+message SessionCredential {
+  // CA bundle (PEM) that signed the client certificate and the token.
+  bytes ca_pem = 1;
+
+  // Client certificate (PEM) whose CommonName is the session ID.
+  bytes client_cert_pem = 2;
+
+  // Private key (PEM) for client_cert_pem.
+  bytes client_key_pem = 3;
+
+  // Signed bearer token naming the session; rides where a certificate
+  // cannot (the FTP password, gRPC metadata).
+  string token = 4;
+
+  // Expiry shared by the certificate and the token.
+  google.protobuf.Timestamp expiry = 5;
+}
+
 // QuicBackend identifies one live pod IP that the QUIC forwarder (a separate
 // stateless packet router; see docs/reference/quic-transport-architecture.md) may
 // route traffic to.
@@ -626,8 +652,9 @@ message DialRequest {
 // name, so the agent can run a QUIC listener behind the forwarder. See
 // docs/reference/quic-transport-architecture.md, "Agent connections over QUIC".
 message QuicAgentCert {
-  // false when the manager has no QUIC CA (the QUIC tunnel listener is
-  // disabled); the remaining fields are only meaningful when this is true.
+  // false only for a manager predating the unconditional CA (see NewService):
+  // the CA is now always present, so the remaining fields are only absent when
+  // talking to one of those older managers.
   bool enabled = 1;
 
   // Server certificate (PEM) for the agent's SNI name.
@@ -642,6 +669,11 @@ message QuicAgentCert {
 
   // The SNI name the certificate was minted for (quicfwd.AgentSNI(pod UID)).
   string sni = 5;
+
+  // The manager's security.authentication.mode. Agents mirror it when deciding
+  // whether to require the session credential (see "Traffic-agent ports" in
+  // docs/reference/authentication.md).
+  string authentication_mode = 6;
 }
 
 message LookupRequest {
@@ -1104,6 +1136,11 @@ service Manager {
   // dial it directly instead of tunneling over this port-forwarded connection. The
   // returned descriptor has enabled == false when no QUIC endpoint is exposed.
   rpc GetQuicTunnelEndpoint(SessionInfo) returns (QuicTunnelEndpoint);
+
+  // GetSessionCredential returns the session-scoped credential used to authenticate
+  // against a traffic-agent's file-sharing and gRPC ports, in both its certificate
+  // and bearer-token forms. It is only served to the session's owner.
+  rpc GetSessionCredential(SessionInfo) returns (SessionCredential);
 
   // GetQuicAgentCert mints a QUIC server certificate for the calling agent's
   // own SNI name (quicfwd.AgentSNI(pod UID)), so it can run a QUIC listener

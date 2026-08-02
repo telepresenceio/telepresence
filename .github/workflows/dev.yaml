@@ -271,3 +271,118 @@ jobs:
         env:
           LOG_SUFFIX: "${{ runner.os }}-${{ runner.arch }}-docker-runtime"
         if: ${{ always() }}
+
+  # Runs the new regression_test/ framework (see
+  # docs/plans/regression-test-framework/plan.md) side by side with the
+  # integration suite, on the same minikube setup build_and_test uses. The
+  # manager/agent image is loaded into minikube; the client image is only
+  # needed by the host docker daemon, for the docker-mode tests.
+  regression:
+    needs: preflight
+    if: >-
+      needs.preflight.result == 'success' &&
+      needs.preflight.outputs.docs_only != 'true' &&
+      (github.event.action != 'labeled' || github.event.label.name == 'ok to test')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
+      - name: Get Telepresence Version
+        run: |
+          v=$(go run build-aux/genversion/main.go ${{github.run_id}})
+          echo "TELEPRESENCE_VERSION=$v" >> "$GITHUB_ENV"
+          echo "TELEPRESENCE_SEMVER=${v#v}" >> "$GITHUB_ENV"
+      - name: Start minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: v1.33.5
+          container-runtime: containerd
+      - name: Build client
+        run: make build
+      - name: Build images
+        run: make tel2-image client-image
+      - name: Load images into minikube
+        run: minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
+      - name: Run regression tests
+        timeout-minutes: 45
+        shell: bash
+        env:
+          RTEST_REGISTRY: local
+        run: |
+          set -ex
+          make check-regression
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: regression-logs-${{ runner.os }}-${{ runner.arch }}
+          path: build-output/rtest/logs/
+
+  # Bidirectional compatibility of the compat-core subset: the labeled tests
+  # collectively cover most of the manager.Manager RPC surface (guarded by
+  # regression_test/framework/compat's manifest test). The counterpart
+  # version is the latest release tag, not a hand-pinned literal.
+  regression_compat:
+    needs: preflight
+    if: >-
+      needs.preflight.result == 'success' &&
+      needs.preflight.outputs.docs_only != 'true' &&
+      github.event.label.name == 'compatibility test'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
+      - name: Get Telepresence Version
+        run: |
+          v=$(go run build-aux/genversion/main.go ${{github.run_id}})
+          echo "TELEPRESENCE_VERSION=$v" >> "$GITHUB_ENV"
+          echo "TELEPRESENCE_SEMVER=${v#v}" >> "$GITHUB_ENV"
+      - name: Determine counterpart version
+        run: |
+          git fetch --tags --quiet
+          c=$(git tag --sort=-v:refname | grep -E '^v2\.[0-9]+\.[0-9]+$' | head -1)
+          echo "COMPAT_VERSION=${c#v}" >> "$GITHUB_ENV"
+          echo "counterpart version: $c"
+      - name: Start minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: v1.33.5
+          container-runtime: containerd
+      - name: Build client
+        run: make build
+      - name: Build images
+        run: make tel2-image client-image
+      - name: Load images into minikube
+        run: minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
+      - name: Compat-core against the released manager
+        timeout-minutes: 30
+        shell: bash
+        env:
+          RTEST_REGISTRY: local
+          RTEST_MANAGER_VERSION: ${{ env.COMPAT_VERSION }}
+          RTEST_LABELS: compat-core
+        run: |
+          set -ex
+          make check-regression
+      - name: Compat-core with the released client
+        timeout-minutes: 30
+        shell: bash
+        env:
+          RTEST_REGISTRY: local
+          RTEST_CLIENT_VERSION: ${{ env.COMPAT_VERSION }}
+          RTEST_LABELS: compat-core
+        run: |
+          set -ex
+          make check-regression
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: regression-compat-logs-${{ runner.os }}-${{ runner.arch }}
+          path: build-output/rtest/logs/

@@ -48,6 +48,10 @@ func startInBackgroundAsRoot(ctx context.Context, args ...string) error {
 	if isAdmin() {
 		return startInBackground(false, args...)
 	}
+	// sudo resets the environment; env(1) restores GOCOVERDIR after the transition.
+	if v, ok := os.LookupEnv("GOCOVERDIR"); ok {
+		args = slices.Insert(args, 0, "env", "GOCOVERDIR="+v)
+	}
 	// Run sudo with a prompt explaining why root credentials are needed.
 	const promptContext = "telepresence network daemon"
 	err := exec.Command("sudo", append([]string{"-b", "-p", fmt.Sprintf("[sudo: %s] Password: ", promptContext)}, args...)...).Run()

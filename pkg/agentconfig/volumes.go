@@ -12,7 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
-func AgentVolumes(agentName string, pod *core.Pod) (volumes []core.Volume, err error) {
+func AgentVolumes(agentName string, pod *core.Pod, coverDir string) (volumes []core.Volume, err error) {
 	volumes = []core.Volume{
 		{
 			Name: PodInfoVolumeName,
@@ -55,6 +55,18 @@ func AgentVolumes(agentName string, pod *core.Pod) (volumes []core.Volume, err e
 				},
 			},
 		},
+	}
+	if coverDir != "" {
+		hostPathDirOrCreate := core.HostPathDirectoryOrCreate
+		volumes = append(volumes, core.Volume{
+			Name: CoverVolumeName,
+			VolumeSource: core.VolumeSource{
+				HostPath: &core.HostPathVolumeSource{
+					Path: coverDir,
+					Type: &hostPathDirOrCreate,
+				},
+			},
+		})
 	}
 
 	if pod == nil {

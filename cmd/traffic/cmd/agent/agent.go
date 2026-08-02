@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"path/filepath"
 	"runtime/debug"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/pkg/sftp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
@@ -22,6 +22,7 @@ import (
 	ftp "github.com/telepresenceio/go-ftpserver"
 	"github.com/telepresenceio/telepresence/rpc/v2/agent"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/sftpserver"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/dos"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
@@ -104,9 +105,11 @@ func appEnvironment(osEnv []string, ag *agentconfig.Container) map[string]string
 }
 
 // sftpServer creates a listener on the next available port, writes that port on the
-// given channel, and then starts accepting connections on that port. Each connection
-// starts a sftp-server that communicates with that connection using its stdin and stdout.
-func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
+// given channel, and then starts accepting connections on that port. Each connection is
+// screened by serveSftpConn's tunnel-source gate and, once past that, served by a
+// sftpserver.Server confined to agentconfig.ExportsMountPoint and
+// agentconfig.MountPrefixApp.
+func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAuth, podIP netip.Addr) error {
 	defer close(sftpPortCh)
 
 	// start an sftp-server for remote sshfs mounts
@@ -129,6 +132,11 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 	}
 	sftpPortCh <- ap.Port()
 
+	srv, err := sftpserver.New(agentconfig.ExportsMountPoint, agentconfig.MountPrefixApp)
+	if err != nil {
+		return err
+	}
+
 	clog.Infof(ctx, "Listening at: %s", l.Addr())
 	for {
 		conn, err := l.Accept()
@@ -138,18 +146,26 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16) error {
 			}
 			return nil
 		}
-		go func() {
-			s, err := sftp.NewServer(conn)
-			if err != nil {
-				clog.Error(ctx, err)
-			}
-			clog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
-			if err = s.Serve(); err != nil {
-				if !errors.Is(err, io.EOF) {
-					clog.Errorf(ctx, "sftp server completed with error %v", err)
-				}
-			}
-		}()
+		go serveSftpConn(ctx, conn, srv, auth, podIP)
+	}
+}
+
+// serveSftpConn gates conn on its source address before serving it: every legitimate
+// consumer reaches this port through the telepresence tunnel, which the agent itself
+// dials, so its connections carry the pod's own source address (or loopback); anything
+// else is a direct connection that bypassed the tunnel, refused once auth.enforcing()
+// and served as before otherwise. See fromOwnPod.
+func serveSftpConn(ctx context.Context, conn net.Conn, srv *sftpserver.Server, auth *fileShareAuth, podIP netip.Addr) {
+	defer conn.Close()
+	clog.Debugf(ctx, "Serving sftp connection from %s", conn.RemoteAddr())
+
+	if auth.enforcing() && !fromOwnPod(conn.RemoteAddr(), podIP) {
+		clog.Warnf(ctx, "sftp: closing direct connection from %s; a direct connection to the SFTP port requires the tunnel",
+			conn.RemoteAddr())
+		return
+	}
+	if err := srv.Serve(ctx, conn); err != nil && !errors.Is(err, io.EOF) {
+		clog.Errorf(ctx, "sftp server completed with error %v", err)
 	}
 }
 
@@ -274,14 +290,17 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 	ftpPortCh := make(chan uint16)
 	if config.HasRemoteMounts() {
 		g.Go("sftp-server", func(ctx context.Context) error {
-			return sftpServer(ctx, sftpPortCh)
+			return sftpServer(ctx, sftpPortCh, srv.FileShareAuth(), config.PodIP())
 		})
 		g.Go("ftp-server", func(ctx context.Context) error {
 			publicHost := ""
 			if !config.PodIP().Is6() {
 				publicHost = config.PodIP().String()
 			}
-			return ftp.Start(ctx, publicHost, agentconfig.ExportsMountPoint, ftpPortCh)
+			// MountPrefixApp is the only tree the exports symlinks may lead into;
+			// see addAppMounts, which creates them.
+			return ftp.StartWithValidator(ctx, publicHost, agentconfig.ExportsMountPoint, ftpPortCh,
+				srv.FileShareAuth().validatePassword, agentconfig.MountPrefixApp)
 		})
 	} else {
 		close(sftpPortCh)

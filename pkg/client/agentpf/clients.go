@@ -189,11 +189,15 @@ func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.Agen
 		ac.owner.quicEndpointFor, ac.dialAgentQUIC, pfDialer,
 		func(err error) { clog.Infof(ac, "%s: QUIC dial failed, falling back to port-forward: %v", ac, err) })
 
+	// tokenCredentials attaches the session token, if any, as gRPC metadata on every
+	// call this connection makes -- both the QUIC and port-forward transports share
+	// this one *grpc.ClientConn, so this single DialOption covers both.
 	conn, err := grpcClient.DialGRPC(dialCtx, portforward.K8sPFScheme+":///"+grpcAddr,
 		grpc.WithContextDialer(dialer),
 		grpc.WithResolvers(portforward.NewResolver(ac.Cluster)),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
 		grpc.WithIdleTimeout(0),
+		grpc.WithPerRPCCredentials(tokenCredentials{provider: ac.owner.tokenProvider}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, nil, err
@@ -452,19 +456,31 @@ type clients struct {
 	// to the descriptor's own host/port.
 	preferredAddrMu sync.RWMutex
 	preferredAddr   func() string
+
+	// tokenProvider returns the session token attached to every agent gRPC call as
+	// per-RPC credentials (see tokenCredentials); nil, or a provider returning "",
+	// means no token is attached, exactly as before this credential existed.
+	tokenProvider func(ctx context.Context) string
 }
 
-func NewClients(cl *k8s.Cluster, session *manager.SessionInfo, namespaces []string) Clients {
+// NewClients returns the Clients implementation that manages direct gRPC connections to
+// this session's traffic-agents. tokenProvider is attached to every agent connection as
+// its per-RPC session token (see tokenCredentials); pass nil where no session credential
+// is available (e.g. tests).
+func NewClients(
+	cl *k8s.Cluster, session *manager.SessionInfo, namespaces []string, tokenProvider func(ctx context.Context) string,
+) Clients {
 	if len(namespaces) == 0 {
 		namespaces = []string{cl.Namespace}
 	}
 	cs := &clients{
-		Cluster:   cl,
-		session:   session,
-		clients:   xsync.NewMap[string, *client](),
-		ipWaiters: xsync.NewMap[ipWaitKey, chan struct{}](),
-		wlWaiters: xsync.NewMap[string, chan struct{}](),
-		proxyVias: xsync.NewMap[string, struct{}](),
+		Cluster:       cl,
+		session:       session,
+		clients:       xsync.NewMap[string, *client](),
+		ipWaiters:     xsync.NewMap[ipWaitKey, chan struct{}](),
+		wlWaiters:     xsync.NewMap[string, chan struct{}](),
+		proxyVias:     xsync.NewMap[string, struct{}](),
+		tokenProvider: tokenProvider,
 	}
 	// One TLS session cache for every agent QUIC dial this connector session ever makes:
 	// tls.ClientSessionCache is keyed by ServerName, so a single LRU instance shared

@@ -1,0 +1,131 @@
+{{- if not .ConfigVolume.IsZero }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .ConfigVolume.Name }}
+  namespace: {{ .Namespace }}
+data:
+  {{ .ConfigVolume.Key }}: {{ printf "%q" .ConfigVolume.Content }}
+---
+{{- end }}
+{{- if not .NoService }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .SvcName }}
+  namespace: {{ .Namespace }}
+  labels:
+    app: {{ .Name }}
+spec:
+{{- if .Headless }}
+  clusterIP: None
+{{- end }}
+  selector:
+    app: {{ .Name }}
+  ports:
+{{- if .Headless }}
+    - name: http
+      port: {{ .Port }}
+      targetPort: {{ .Port }}
+{{- if .AppProtocol }}
+      appProtocol: {{ .AppProtocol }}
+{{- end }}
+{{- range .ExtraPorts }}
+    - name: {{ .Name }}
+      port: {{ .Port }}
+      targetPort: {{ .Port }}
+{{- end }}
+{{- else }}
+    - name: http
+      port: {{ .Port }}
+      targetPort: http
+{{- if .AppProtocol }}
+      appProtocol: {{ .AppProtocol }}
+{{- end }}
+{{- range .ExtraPorts }}
+    - name: {{ .Name }}
+      port: {{ .Port }}
+      targetPort: {{ .Name }}
+{{- end }}
+{{- end }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+  labels:
+    app: {{ .Name }}
+spec:
+  serviceName: {{ .SvcName }}
+  replicas: {{ .Replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Name }}
+{{- if .Annotations }}
+      annotations:
+{{- range $k, $v := .Annotations }}
+        {{ $k }}: "{{ $v }}"
+{{- end }}
+{{- end }}
+    spec:
+      containers:
+        - name: {{ .Name }}
+          image: {{ .Image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: {{ .Port }}
+{{- range .ExtraPorts }}
+            - name: {{ .Name }}
+              containerPort: {{ .Port }}
+{{- end }}
+{{- if or .ExtraPorts .Env }}
+          env:
+{{- if .ExtraPorts }}
+            - name: PORTS
+              value: "{{ .PortsEnv }}"
+{{- end }}
+{{- range $k, $v := .Env }}
+            - name: {{ $k }}
+              value: {{ $v | printf "%q" }}
+{{- end }}
+{{- end }}
+{{- if not .ConfigVolume.IsZero }}
+          volumeMounts:
+            - name: rtest-config
+              mountPath: {{ .ConfigVolume.MountPath }}
+              readOnly: true
+{{- end }}
+{{- if not .Resources.IsZero }}
+          resources:
+{{- if or .Resources.Requests.CPU .Resources.Requests.Memory }}
+            requests:
+{{- if .Resources.Requests.CPU }}
+              cpu: {{ .Resources.Requests.CPU }}
+{{- end }}
+{{- if .Resources.Requests.Memory }}
+              memory: {{ .Resources.Requests.Memory }}
+{{- end }}
+{{- end }}
+{{- if or .Resources.Limits.CPU .Resources.Limits.Memory }}
+            limits:
+{{- if .Resources.Limits.CPU }}
+              cpu: {{ .Resources.Limits.CPU }}
+{{- end }}
+{{- if .Resources.Limits.Memory }}
+              memory: {{ .Resources.Limits.Memory }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if not .ConfigVolume.IsZero }}
+      volumes:
+        - name: rtest-config
+          configMap:
+            name: {{ .ConfigVolume.Name }}
+{{- end }}

@@ -39,11 +39,11 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	github.com/telepresenceio/clog v0.0.0-20260114221933-287514cf9831
-	github.com/telepresenceio/go-ftpserver v1.2.1
-	github.com/telepresenceio/go-fuseftp v1.0.1
+	github.com/telepresenceio/go-ftpserver v1.3.0
+	github.com/telepresenceio/go-fuseftp v1.1.0
 	github.com/telepresenceio/go-fuseftp/rpc v1.0.1
 	github.com/telepresenceio/telepresence/cmd/cobraparser/v2 v2.0.0-20260722072334-c3b1600e0763
-	github.com/telepresenceio/telepresence/rpc/v2 v2.31.1
+	github.com/telepresenceio/telepresence/rpc/v2 v2.31.2
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
 	golang.org/x/crypto v0.54.0

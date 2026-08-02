@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
@@ -81,10 +82,12 @@ type service struct {
 	dotClusterDomain   string
 	tmConfigMapUpdated atomic.Bool
 
-	// quicCA is non-nil only when the QUIC tunnel listener is enabled
-	// (TUNNEL_QUIC_PORT != 0). It is generated once in NewService and never
-	// persisted; a manager restart mints a new CA and implicitly revokes every
-	// client certificate the previous one signed.
+	// quicCA is always non-nil: it backs both the QUIC tunnel's mTLS trust (gated
+	// separately by the QUIC listener) and the session credential minted by
+	// GetSessionCredential, which works regardless of whether QUIC is enabled. It is
+	// generated once in NewService and never persisted; a manager restart mints a
+	// new CA and implicitly revokes every client certificate and session token the
+	// previous one signed.
 	quicCA *quictunnel.CA
 
 	// quicDiscovery is non-nil only when the QUIC tunnel listener is enabled AND no
@@ -145,12 +148,12 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
 
+	ret.quicCA, err = quictunnel.NewCA()
+	if err != nil {
+		clog.Errorf(ctx, "unable to initialize QUIC tunnel CA: %v", err)
+		return nil, err
+	}
 	if env.TunnelQuicPort != 0 {
-		ret.quicCA, err = quictunnel.NewCA()
-		if err != nil {
-			clog.Errorf(ctx, "unable to initialize QUIC tunnel CA: %v", err)
-			return nil, err
-		}
 		// An explicit externalHost bypasses discovery entirely (see
 		// GetQuicTunnelEndpoint), so there is no reason to start it.
 		if env.TunnelQuicExternalHost == "" && env.TunnelQuicServiceName != "" {
@@ -714,7 +717,11 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 }
 
 func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchAgentPodsDelta", "2.26.0"); err != nil {
+		return err
+	}
+	ctx, clientInfo, err := s.ensureClientSession(ctx, session)
 	if err != nil {
 		return err
 	}
@@ -726,7 +733,11 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 }
 
 func (s *service) WatchAgentPodsInNamespacesDelta(request *rpc.AgentsRequest, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), request.Session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchAgentPodsInNamespacesDelta", "2.28.0"); err != nil {
+		return err
+	}
+	ctx, clientInfo, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
 		return err
 	}
@@ -919,7 +930,11 @@ func (s *service) watchAgents(ctx context.Context, includeAgent func(tunnel.Sess
 }
 
 func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentInfoDelta]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchAgentsDelta", "2.26.0"); err != nil {
+		return err
+	}
+	ctx, clientInfo, err := s.ensureClientSession(ctx, session)
 	if err != nil {
 		return err
 	}
@@ -1046,7 +1061,11 @@ func (s *service) WatchIntercepts(session *rpc.SessionInfo, stream grpc.ServerSt
 }
 
 func (s *service) WatchInterceptsDelta(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.InterceptInfoDelta]) error {
-	ctx := managerutil.WithSessionInfo(stream.Context(), session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchInterceptsDelta", "2.26.0"); err != nil {
+		return err
+	}
+	ctx = managerutil.WithSessionInfo(ctx, session)
 	deltaCh, sessionDone, err := s.watchIntercepts(ctx, session)
 	if err != nil {
 		return err
@@ -1079,7 +1098,11 @@ func (s *service) WatchInterceptsDelta(session *rpc.SessionInfo, stream grpc.Ser
 // semantics as watchAgentPodsDelta) and this client's own intercepts onto a
 // single stream.
 func (s *service) WatchSessionEvents(request *rpc.SessionEventsRequest, stream grpc.ServerStreamingServer[rpc.SessionEventsDelta]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), request.Session)
+	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchSessionEvents", "2.31.0"); err != nil {
+		return err
+	}
+	ctx, clientInfo, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
 		return err
 	}
@@ -1425,10 +1448,16 @@ func (s *service) Tunnel(server grpc.BidiStreamingServer[rpc.TunnelMessage, rpc.
 // (see "Zero-configuration endpoint discovery" in docs/reference/quic-transport-architecture.md);
 // otherwise the client is told to keep using the port-forwarded gRPC transport.
 func (s *service) GetQuicTunnelEndpoint(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicTunnelEndpoint, error) {
-	if s.quicCA == nil {
+	if err := checkCompat(ctx, "GetQuicTunnelEndpoint", "2.31.0"); err != nil {
+		return nil, err
+	}
+	env := managerutil.GetEnv(ctx)
+	if env.TunnelQuicPort == 0 {
+		// The QUIC CA now always exists (see NewService), but the tunnel listener
+		// itself is still gated on this port; behavior here is unchanged.
 		return &rpc.QuicTunnelEndpoint{Enabled: false}, nil
 	}
-	candidates := s.quicCandidates(managerutil.GetEnv(ctx))
+	candidates := s.quicCandidates(env)
 	if len(candidates) == 0 {
 		return &rpc.QuicTunnelEndpoint{Enabled: false}, nil
 	}
@@ -1496,11 +1525,15 @@ func (s *service) quicCandidates(env *managerutil.Env) []*rpc.QuicEndpointCandid
 // and thus no SNI name to mint for, and GetQuicAgentCert never validates a client
 // session's SessionInfo, whether or not the QUIC CA is enabled.
 func (s *service) GetQuicAgentCert(ctx context.Context, session *rpc.SessionInfo) (*rpc.QuicAgentCert, error) {
+	if err := checkCompat(ctx, "GetQuicAgentCert", "2.31.0"); err != nil {
+		return nil, err
+	}
 	_, agent, err := s.ensureAgentSession(ctx, session)
 	if err != nil {
 		return nil, err
 	}
 	if s.quicCA == nil {
+		// Defensive only: NewService always creates the CA now.
 		return &rpc.QuicAgentCert{Enabled: false}, nil
 	}
 	sni := quicfwd.AgentSNI(agent.PodUid)
@@ -1513,11 +1546,48 @@ func (s *service) GetQuicAgentCert(ctx context.Context, session *rpc.SessionInfo
 		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to encode QUIC agent certificate: %v", err))
 	}
 	return &rpc.QuicAgentCert{
-		Enabled: true,
-		CertPem: certPEM,
-		KeyPem:  keyPEM,
-		CaPem:   s.quicCA.CertPEM(),
-		Sni:     sni,
+		Enabled:            true,
+		CertPem:            certPEM,
+		KeyPem:             keyPEM,
+		CaPem:              s.quicCA.CertPEM(),
+		Sni:                sni,
+		AuthenticationMode: s.authMode.String(),
+	}, nil
+}
+
+// GetSessionCredential returns the session-scoped credential -- a client certificate
+// and a signed bearer token, both naming the caller's session -- used to authenticate
+// against a traffic-agent's file-sharing and gRPC ports. See "Traffic-agent ports" in
+// docs/reference/authentication.md. Unlike GetQuicTunnelEndpoint, this works regardless
+// of whether the QUIC tunnel listener is enabled: the QUIC CA now always exists (see
+// NewService), and the credential this mints is used by transports that have nothing to
+// do with the QUIC tunnel.
+func (s *service) GetSessionCredential(ctx context.Context, session *rpc.SessionInfo) (*rpc.SessionCredential, error) {
+	if err := checkCompat(ctx, "GetSessionCredential", "2.31.2"); err != nil {
+		return nil, err
+	}
+	sessionID := tunnel.SessionID(session.GetSessionId())
+	client := s.state.GetClient(sessionID)
+	if client == nil {
+		return nil, errors.Errorf(codes.NotFound, "Session %q not found", sessionID)
+	}
+	if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
+		return nil, err
+	}
+	certPEM, keyPEM, err := s.quicCA.MintClientCert(string(sessionID))
+	if err != nil {
+		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to mint session client certificate: %v", err))
+	}
+	token, expiry, err := s.quicCA.MintSessionToken(string(sessionID))
+	if err != nil {
+		return nil, errors.FromError(err, codes.Internal, fmt.Sprintf("failed to mint session token: %v", err))
+	}
+	return &rpc.SessionCredential{
+		CaPem:         s.quicCA.CertPEM(),
+		ClientCertPem: certPEM,
+		ClientKeyPem:  keyPEM,
+		Token:         token,
+		Expiry:        timestamppb.New(expiry),
 	}, nil
 }
 
@@ -1564,6 +1634,9 @@ func (s *service) quicManagerBackends(ctx context.Context) []*rpc.QuicBackend {
 // reconnect) produces one snapshot instead of one per event.
 func (s *service) WatchQuicBackends(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.QuicBackendSnapshot]) error {
 	ctx := stream.Context()
+	if err := checkCompat(ctx, "WatchQuicBackends", "2.31.0"); err != nil {
+		return err
+	}
 	managerBackends := s.quicManagerBackends(ctx)
 	agentsCh := s.state.WatchAgents(ctx, nil)
 	m := mutator.GetMap(ctx)
@@ -1880,7 +1953,27 @@ func (s *service) GetLogs(_ context.Context, _ *rpc.GetLogsRequest) (*rpc.LogsRe
 	}, nil
 }
 
+// SetLogLevel applies a temporary log-level change. A request that carries a
+// session has its ownership verified; a nil principal on that session is
+// rejected in ModeEnforcing, since it can only mean an exempt method let a
+// tokenless call through. A request without a session is rejected outright in
+// ModeEnforcing, and allowed, with a debug log, otherwise.
 func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (*empty.Empty, error) {
+	if session := request.GetSession(); session != nil {
+		var err error
+		ctx, _, err = s.ensureClientSession(ctx, session)
+		if err != nil {
+			return nil, err
+		}
+		if auth.PrincipalFrom(ctx) == nil && s.authMode == auth.ModeEnforcing {
+			return nil, errors.Errorf(codes.Unauthenticated, "setting the log level requires an authenticated caller")
+		}
+	} else if s.authMode == auth.ModeEnforcing {
+		return nil, errors.Errorf(codes.Unauthenticated, "setting the log level requires a client session")
+	} else {
+		clog.Debugf(ctx, "unauthenticated log level request allowed; manager is not in enforcing mode")
+	}
+
 	err := s.state.SetTempLogLevel(ctx, request)
 	if err != nil {
 		err = errors.FromError(err, codes.InvalidArgument, err.Error())

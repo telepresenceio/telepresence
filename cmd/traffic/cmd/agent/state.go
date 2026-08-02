@@ -41,18 +41,27 @@ type State interface {
 	SetGRPCServer(svc *grpc.Server)
 
 	// RefreshQuicAgentListener is called after every (re-)established manager
-	// session. It does nothing unless AGENT_QUIC_PORT is set; otherwise it fetches
-	// this agent's QUIC server certificate over the just-(re)established session
-	// (fetchCtx bounds that RPC) and either starts the QUIC listener -- the first
-	// time this is called with a manager that has QUIC enabled -- or, if the
-	// listener is already running, atomically swaps in the freshly fetched TLS
-	// material. processCtx bounds the listener's own lifetime, which spans manager
-	// reconnects; it is not the same context as fetchCtx. See "Agent connections
-	// over QUIC" in docs/reference/quic-transport-architecture.md.
+	// session. It always fetches this agent's QUIC agent certificate over the
+	// just-(re)established session (fetchCtx bounds that RPC), which -- when the
+	// manager has QUIC enabled -- also carries the session-credential material
+	// FileShareAuth uses to authenticate FTP and SFTP connections, and the manager's
+	// current authentication mode. Only when AGENT_QUIC_PORT is set does it go on to
+	// either start the QUIC listener -- the first time this is called with a manager
+	// that has QUIC enabled -- or, if the listener is already running, atomically
+	// swap in the freshly fetched TLS material. processCtx bounds the listener's own
+	// lifetime, which spans manager reconnects; it is not the same context as
+	// fetchCtx. See "Agent connections over QUIC" in
+	// docs/reference/quic-transport-architecture.md and "Traffic-agent ports" in
+	// docs/reference/authentication.md.
 	RefreshQuicAgentListener(processCtx, fetchCtx context.Context)
 
 	FtpPort() uint16
 	SftpPort() uint16
+
+	// FileShareAuth returns the holder StartServices passes to the FTP and SFTP
+	// listeners so they can authenticate connections against the session credential
+	// RefreshQuicAgentListener keeps populated.
+	FileShareAuth() *fileShareAuth
 	TLSManager() tls.Manager
 	NewInterceptState(forwarder fwd.Interceptor, target agentconfig.InterceptTarget, container string) InterceptState
 	NewContainerState(s State, cn *agentconfig.Container, mountPoint string, env map[string]string) ContainerState
@@ -105,6 +114,10 @@ type state struct {
 	// RefreshQuicAgentListener call.
 	quicAgent *quicAgentState
 
+	// fileShareAuth holds the session-credential material the FTP and SFTP listeners
+	// authenticate connections against; populated by RefreshQuicAgentListener.
+	fileShareAuth *fileShareAuth
+
 	interceptStates []InterceptState
 	containerStates map[string]ContainerState
 	agent.UnimplementedAgentServer
@@ -139,6 +152,7 @@ func NewState(ctx context.Context, config Config) (State, error) {
 		dialWatchers:     xsync.NewMap[tunnel.SessionID, chan *rpc.DialRequest](),
 		awaitingForwards: xsync.NewMap[tunnel.SessionID, *xsync.Map[tunnel.ConnID, *awaitingForward]](),
 		quicAgent:        &quicAgentState{},
+		fileShareAuth:    &fileShareAuth{},
 	}, nil
 }
 
@@ -231,4 +245,8 @@ func (s *state) FtpPort() uint16 {
 
 func (s *state) SftpPort() uint16 {
 	return s.sftpPort
+}
+
+func (s *state) FileShareAuth() *fileShareAuth {
+	return s.fileShareAuth
 }

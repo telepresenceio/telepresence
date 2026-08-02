@@ -190,6 +190,22 @@ func WatchAllowlist(ctx context.Context, address string, allowlist *Allowlist) e
 	defer conn.Close()
 	manager := rpc.NewManagerClient(conn)
 
+	// retries counts repair invocations, i.e. attempts after the first. While
+	// allowlist has never received a snapshot, this warns on the 3rd retry and
+	// roughly once a minute thereafter (every 12th retry, at the 5 second
+	// allowlistWatchRetryInterval), so a persistently unreachable manager is
+	// visible instead of silently dropping every datagram. Once a snapshot has
+	// been received, it never warns again: further retries are ordinary
+	// reconnects already logged by the watcher.
+	retries := 0
+	repair := func() error {
+		retries++
+		if !allowlist.Ready() && retries%12 == 3 {
+			clog.Warnf(ctx, "quic-forwarder: still no backend allowlist snapshot after %d attempts; all datagrams are dropped until one arrives", retries)
+		}
+		return nil
+	}
+
 	return watcher.WatchWithRetry(ctx, "WatchQuicBackends", allowlistWatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[rpc.QuicBackendSnapshot], error) {
 			return manager.WatchQuicBackends(ctx, &empty.Empty{})
@@ -198,6 +214,6 @@ func WatchAllowlist(ctx context.Context, address string, allowlist *Allowlist) e
 			allowlist.update(ctx, snap.Backends)
 			return nil
 		},
-		nil,
+		repair,
 	)
 }
