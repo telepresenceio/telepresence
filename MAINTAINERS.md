@@ -11,7 +11,7 @@ Maintainers are listed in alphabetical order.
 |-----------------|-------------------------------------------|-------------|
 | Blazej Gruszka  | [bgruszka](https://github.com/bgruszka)   | Displate    |
 | Nick Powell     | [njayp](https://github.com/njayp)         |             |
-| Thomas Hallgren | [thallgren](https://github.com/thallgren) |             |
+| Thomas Hallgren | [thallgren](https://github.com/thallgren) | Polar Sky   |
 
 ## Maintainers Emeriti
 
