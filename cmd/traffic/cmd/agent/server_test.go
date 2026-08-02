@@ -51,8 +51,8 @@ func (f *fakeWatchDialServer) Send(dr *rpc.DialRequest) error {
 }
 
 // TestWatchDial_Displacement drives the real (*state).WatchDial through the
-// displacement policy described in "Item 5 hook" in
-// docs/plans/auth-hardening/file-sharing-auth.md: an unverified caller may register only
+// displacement policy described in "Agent gRPC: tunnel and dial-watcher calls" in
+// docs/reference/authentication.md: an unverified caller may register only
 // when no watcher is live for the session; a verified caller always displaces whatever
 // was there; and a displaced handler's own exit must not remove its successor's
 // registration.

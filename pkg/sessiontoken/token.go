@@ -2,8 +2,8 @@
 // Telepresence session. It is minted by the traffic-manager with the QUIC CA's
 // ECDSA P-256 private key (cmd/traffic/cmd/manager/quictunnel) and verified offline,
 // without a round-trip to the manager, against the CA certificate the verifier
-// already holds. See "The credential" in
-// docs/plans/auth-hardening/file-sharing-auth.md.
+// already holds. See "The session credential" in
+// docs/reference/authentication.md.
 //
 // A token rides anywhere a certificate cannot: the FTP PASS command and gRPC
 // metadata on a plaintext, port-forwarded channel.
@@ -30,8 +30,8 @@ const version = "v1"
 const signingDomain = "telepresence-session-token/v1"
 
 // MetadataKey is the gRPC metadata key a token rides under when a client attaches it as
-// per-RPC credentials on a plaintext, port-forwarded channel; see "Item 5 hook" in
-// docs/plans/auth-hardening/file-sharing-auth.md.
+// per-RPC credentials on a plaintext, port-forwarded channel; see "Agent gRPC: tunnel and
+// dial-watcher calls" in docs/reference/authentication.md.
 const MetadataKey = "x-telepresence-session-token"
 
 // Mint returns a bearer token naming sessionID, signed by key, that Verify accepts

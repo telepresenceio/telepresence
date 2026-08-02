@@ -1557,11 +1557,11 @@ func (s *service) GetQuicAgentCert(ctx context.Context, session *rpc.SessionInfo
 
 // GetSessionCredential returns the session-scoped credential -- a client certificate
 // and a signed bearer token, both naming the caller's session -- used to authenticate
-// against a traffic-agent's file-sharing and gRPC ports. See "The credential" in
-// docs/plans/auth-hardening/file-sharing-auth.md. Unlike GetQuicTunnelEndpoint, this
-// works regardless of whether the QUIC tunnel listener is enabled: the QUIC CA now
-// always exists (see NewService), and the credential this mints is used by transports
-// that have nothing to do with the QUIC tunnel.
+// against a traffic-agent's file-sharing and gRPC ports. See "Traffic-agent ports" in
+// docs/reference/authentication.md. Unlike GetQuicTunnelEndpoint, this works regardless
+// of whether the QUIC tunnel listener is enabled: the QUIC CA now always exists (see
+// NewService), and the credential this mints is used by transports that have nothing to
+// do with the QUIC tunnel.
 func (s *service) GetSessionCredential(ctx context.Context, session *rpc.SessionInfo) (*rpc.SessionCredential, error) {
 	if err := checkCompat(ctx, "GetSessionCredential", "2.31.2"); err != nil {
 		return nil, err

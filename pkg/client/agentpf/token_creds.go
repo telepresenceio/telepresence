@@ -11,8 +11,8 @@ import (
 // tokenCredentials implements credentials.PerRPCCredentials, attaching the session
 // token provider returns, if any, as gRPC metadata on every call. Both the QUIC and
 // port-forward dial paths for one agent share the same *grpc.ClientConn (see dialAgent),
-// so wiring this in once as a DialOption there covers both transports. See "Item 5 hook"
-// in docs/plans/auth-hardening/file-sharing-auth.md.
+// so wiring this in once as a DialOption there covers both transports. See "Agent gRPC:
+// tunnel and dial-watcher calls" in docs/reference/authentication.md.
 type tokenCredentials struct {
 	provider func(ctx context.Context) string
 }

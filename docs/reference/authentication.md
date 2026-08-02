@@ -142,6 +142,112 @@ token and is always rejected once the manager enforces authentication.
 Clients and agents at this release or later always send a token when their
 credentials can produce one, so they are unaffected by the switch.
 
+## Traffic-agent ports
+
+A traffic-agent listens on more than the gRPC port that carries intercepted
+traffic: it also runs an FTP and an SFTP server for remote file mounts, and
+its gRPC surface accepts tunnel and dial-watcher calls from the client's root
+daemon. All three ports are reachable by anything with network access to the
+agent's pod — the same "any pod in the cluster" reachability described
+above — and none of them used to check who was calling: a caller that could
+merely reach the pod could drive another client's tunnel, register as its
+dial watcher, or read and write its mounted files. The traffic-manager and
+agent close that gap the same way the manager's own gRPC surface does: every
+caller presents a session credential, and the agent verifies it.
+
+### The session credential
+
+The credential is rooted in the traffic-manager's in-memory QUIC CA (the same
+CA that signs the QUIC tunnel's certificates), regenerated on every manager
+restart, which revokes every outstanding credential at once. It takes two
+forms, both minted by a single `GetSessionCredential` call and sharing the
+same 24-hour expiry:
+
+- A **client certificate**, CommonName set to the session ID, used wherever
+  the transport is already TLS — the QUIC tunnel's mutual-TLS handshake.
+- A **signed bearer token**, verified offline against the CA certificate
+  without a round trip to the manager, used wherever the transport can't
+  carry a certificate: the FTP password, and gRPC metadata on tunnel and
+  dial-watcher calls (the QUIC and port-forwarded paths to one agent share a
+  single gRPC connection, so the same metadata covers both).
+
+`GetSessionCredential` mints both forms only for the calling session's own
+owner, the same ownership check the manager's other session-scoped RPCs use.
+
+### Enforcement mirrors the authentication mode
+
+An agent has no way to tell an old client from an attacker, so it can't
+require a credential unconditionally without breaking every client that
+predates this feature. Enforcement therefore mirrors the manager's
+`security.authentication.mode`, which is propagated to each agent on every
+reconnect:
+
+| Mode | Behavior |
+|------|----------|
+| `disabled` / `permissive` | A credential is verified when presented and a failure is logged; a connection or call without one is still served. |
+| `enforcing` | No valid session credential, no file access and no tunnel or dial-watcher call. |
+
+### FTP
+
+The FTP password is the signed token. The agent's password validator checks
+its signature and expiry against the CA; disabled/permissive modes accept an
+invalid or absent password too (logged), enforcing mode does not.
+
+### Agent gRPC: tunnel and dial-watcher calls
+
+The client attaches the token as gRPC metadata on every tunnel and
+dial-watcher call. The agent verifies it and compares the session it names
+against the session the call declares: a mismatch is refused in every mode,
+not only enforcing — a caller proving ownership of a different session is
+never ambiguous, only wrong. An absent or unverifiable token is refused only
+in enforcing mode. The dial watcher adds one more rule on top: a verified
+caller may always displace whatever watcher is currently registered for its
+session (a reconnect), but an unverified caller may only register when none
+is registered yet — it can never take over a live one.
+
+### SFTP
+
+SFTP carries no credential of its own. Two things protect it instead:
+
+- **Confinement.** The server is confined to the agent's exports tree; it
+  cannot open a path outside it regardless of what the client requests.
+- **A source gate, active in enforcing mode only.** Every legitimate
+  consumer — sshfs, the IPv6 mount path, and the `--local-mount-port` bridge
+  used by docker-volume-telemount — reaches the SFTP port through the
+  telepresence tunnel, and the agent dials that connection itself, so it
+  always arrives from the pod's own address or loopback. In enforcing mode
+  the agent refuses any SFTP connection arriving from anywhere else;
+  disabled/permissive modes serve every connection as before (logged).
+  Session authentication is therefore transitive: the client proves its
+  session at the tunnel, the agent dials its own SFTP listener from that
+  tunnel, and the listener trusts only connections that arrived that way.
+
+SFTP is deliberately not wrapped in its own TLS layer: the QUIC tunnel is
+already TLS 1.3 end-to-end, and the port-forward path is already TLS on its
+client-to-manager leg, so an SFTP-level TLS wrap would double-encrypt the
+bulkiest data path telepresence carries for no real confidentiality gain.
+
+Two weaknesses remain, accepted as improvements over the previous, fully
+open listener rather than as complete mitigations:
+
+- An agent injected into a `hostNetwork` workload shares its pod address with
+  every other workload on that node, so the source gate degrades to
+  same-node granularity there.
+- A pod CIDR that is routable but never proxied through the tunnel can still
+  reach the SFTP port directly; only enforcing mode cuts it off.
+
+### Version skew
+
+An old client presents no credential at all and is served normally by
+disabled/permissive agents; only enforcing mode requires it to be upgraded
+first. A new client talking to an old agent gets no benefit from its
+credential — the old agent has no verification code path, so its ports stay
+exactly as open as before — but nothing breaks. Talking through a manager
+that predates `GetSessionCredential`, a new agent never receives credential
+material to verify against, so it falls back to accepting every connection
+and call unauthenticated, the same as before this feature existed. Every
+combination keeps working outside enforcing mode.
+
 ## Requirements under enforcement
 
 With `security.authentication.mode: enforcing`:

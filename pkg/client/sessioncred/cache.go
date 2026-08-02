@@ -1,9 +1,8 @@
 // Package sessioncred caches the session-scoped credential returned by the manager's
-// GetSessionCredential RPC; see "The credential" in
-// docs/plans/auth-hardening/file-sharing-auth.md. It is shared by every client-side
-// consumer that needs the credential: the FTP mount password
-// (pkg/client/userd/trafficmgr) and the per-RPC token attached to agent gRPC calls on
-// the plaintext port-forward transport (pkg/client/agentpf).
+// GetSessionCredential RPC; see "The session credential" in docs/reference/authentication.md.
+// It is shared by every client-side consumer that needs the credential: the FTP mount
+// password (pkg/client/userd/trafficmgr) and the per-RPC token attached to agent gRPC
+// calls on the plaintext port-forward transport (pkg/client/agentpf).
 package sessioncred
 
 import (

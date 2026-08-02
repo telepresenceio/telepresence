@@ -2865,8 +2865,8 @@ func (x *QuicEndpointCandidate) GetPort() int32 {
 
 // SessionCredential is the response to GetSessionCredential: the session-scoped
 // credential -- in both its certificate and bearer-token forms -- used to
-// authenticate against a traffic-agent's file-sharing and gRPC ports. See "The
-// credential" in docs/plans/auth-hardening/file-sharing-auth.md.
+// authenticate against a traffic-agent's file-sharing and gRPC ports. See
+// "Traffic-agent ports" in docs/reference/authentication.md.
 type SessionCredential struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// CA bundle (PEM) that signed the client certificate and the token.
@@ -3154,8 +3154,8 @@ type QuicAgentCert struct {
 	// The SNI name the certificate was minted for (quicfwd.AgentSNI(pod UID)).
 	Sni string `protobuf:"bytes,5,opt,name=sni,proto3" json:"sni,omitempty"`
 	// The manager's security.authentication.mode. Agents mirror it when deciding
-	// whether to require the session credential (see "Enforcement follows the
-	// manager's authentication mode" in docs/plans/auth-hardening/file-sharing-auth.md).
+	// whether to require the session credential (see "Traffic-agent ports" in
+	// docs/reference/authentication.md).
 	AuthenticationMode string `protobuf:"bytes,6,opt,name=authentication_mode,json=authenticationMode,proto3" json:"authentication_mode,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache

@@ -593,8 +593,8 @@ message QuicEndpointCandidate {
 
 // SessionCredential is the response to GetSessionCredential: the session-scoped
 // credential -- in both its certificate and bearer-token forms -- used to
-// authenticate against a traffic-agent's file-sharing and gRPC ports. See "The
-// credential" in docs/plans/auth-hardening/file-sharing-auth.md.
+// authenticate against a traffic-agent's file-sharing and gRPC ports. See
+// "Traffic-agent ports" in docs/reference/authentication.md.
 message SessionCredential {
   // CA bundle (PEM) that signed the client certificate and the token.
   bytes ca_pem = 1;
@@ -671,8 +671,8 @@ message QuicAgentCert {
   string sni = 5;
 
   // The manager's security.authentication.mode. Agents mirror it when deciding
-  // whether to require the session credential (see "Enforcement follows the
-  // manager's authentication mode" in docs/plans/auth-hardening/file-sharing-auth.md).
+  // whether to require the session credential (see "Traffic-agent ports" in
+  // docs/reference/authentication.md).
   string authentication_mode = 6;
 }
 

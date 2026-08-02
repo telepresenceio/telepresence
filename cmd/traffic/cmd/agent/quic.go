@@ -26,9 +26,9 @@ type quicAgentState struct {
 // RefreshQuicAgentListener implements the State method of the same name and serves two
 // purposes on every (re-)established manager session, regardless of whether this pod
 // runs a QUIC listener: it keeps s.fileShareAuth's session-credential material current
-// for the FTP and SFTP listeners (see docs/plans/auth-hardening/file-sharing-auth.md),
-// and, only when AGENT_QUIC_PORT is set, it also starts or refreshes the QUIC listener
-// itself. See "Agent connections over QUIC" in
+// for the FTP and SFTP listeners (see "Traffic-agent ports" in
+// docs/reference/authentication.md), and, only when AGENT_QUIC_PORT is set, it also
+// starts or refreshes the QUIC listener itself. See "Agent connections over QUIC" in
 // docs/reference/quic-transport-architecture.md.
 func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) {
 	resp, err := s.manager.GetQuicAgentCert(fetchCtx, s.sessionInfo)

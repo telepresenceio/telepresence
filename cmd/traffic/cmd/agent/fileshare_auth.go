@@ -24,8 +24,7 @@ import (
 // RefreshQuicAgentListener populates it once the manager reports a session credential.
 // The holder backs the FTP password validator, the mode consulted by the SFTP source
 // gate, and verifySession, which binds WatchDial/Tunnel calls to their session; see
-// "Enforcement follows the manager's authentication mode" and "Item 5 hook" in
-// docs/plans/auth-hardening/file-sharing-auth.md.
+// "Traffic-agent ports" in docs/reference/authentication.md.
 type fileShareAuth struct {
 	v atomic.Pointer[fileShareAuthSnapshot]
 }
