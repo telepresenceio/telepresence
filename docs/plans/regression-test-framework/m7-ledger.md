@@ -188,9 +188,9 @@ most scrutiny; it retires last.
 
 | old file | tests | covered by | verdict | conf |
 |---|---|---|---|---|
-| docker_daemon_test.go | 8 | docker/Coexist, CacheFiles, ConnRun, docker/Test_DefaultNetworkNoSubnetConflict | partial: confirm the `alsoProxy32`, `singleNameLookup`, and `GatherLogsTrafficManager` cells landed | grep |
-| docker_run_test.go | 5 | docker/RunLifecycle, docker/ConnRun | superseded | grep |
-| restapi_test.go | 4 | docker/RestAPI (Test_ConsumeHere and its neighbours) | partial: the four global/filtered x consume/info cells collapse to fewer new tests; confirm the filtered-info path is asserted | grep |
+| docker_daemon_test.go | 8 | docker/Coexist (hostDaemonNoConflict, daemonHostNotConflict), docker/CacheFiles (cacheFiles) | partial: `status`'s daemon-name shape (`<ns>-cn`, Connected); `alsoProxy32` (`--docker --also-proxy` + STREAM_INFO in connector.log); `singleNameLookup` (`connect --docker -- <cmd>`, then no daemon left running); `GatherLogsTrafficManager` (gather-logs over a docker connection; session/GatherLogs is host-only); `networkNoSubnetConflict` (three teleroute networks vs cluster CIDRs -- ComposeLifecycle checks a compose *default* network, a different object) | read |
+| docker_run_test.go | 5 | docker/DockerRun + docker/RunLifecycle (HostDaemon, incl. the four-way teardown), docker/DockerConnRun (DockerRunCommand, ExternalDNS, VolumePresent) | partial: Test_DockerRun_DockerDaemon -- the `--docker-run` traffic round-trip and its four-way teardown over a *docker* connection. DockerConnRun covers that connection's network, DNS, and mounts, never its traffic or teardown | read |
+| restapi_test.go | 4 | docker/RestAPI Test_ConsumeHere (the filtered consume-here axis, plus an unintercepted baseline) | partial: the two global (unfiltered) cells, the whole `/intercept-info` endpoint, and the restapi.HeaderCallerInterceptID axis -- the new suite's own doc says its probes never send that header | read |
 | compose_test.go | 9 | docker/Compose (7 verbs), docker/ComposeLifecycle (2) | superseded | read |
 | state_manifest_test.go | 9 | state/Apply, state/Delete, state/Handler | **retired** — the only 1:1 area in the ledger | read |
 
@@ -249,6 +249,16 @@ matrix axis) in `regression_test/`, not a change to the old suite.
 18. agent image from config, env prefix interpolation, TLS annotations
 19. `telepresence.io/enabled=false` across workload kinds
 
+**Blocks `docker`:**
+
+19a. the REST API's `/intercept-info` endpoint, its global (unfiltered)
+     cells, and the caller-intercept-id header axis
+19b. `--docker-run` traffic and teardown over a docker connection
+19c. gather-logs over a docker connection
+19d. teleroute networks (not just a compose default network) checked against
+     the cluster's CIDRs
+19e. `connect --docker -- <command>`, and the docker daemon's status shape
+
 **Blocks `routing` / `mounts` / `session`:**
 
 20. CIDR auto-conflict resolution and its two disables, allow-conflict, local-DNS reachability
@@ -272,7 +282,7 @@ matrix axis) in `regression_test/`, not a change to the old suite.
 |---|---|---|
 | dns | **retired** | — |
 | state | **retired** | — |
-| docker | near | 3 grep-confidence rows to upgrade to read |
+| docker | no | 3 files partial after the read pass (see gap list) |
 | quic | near | 2 tests + issue #4227 |
 | session | no | Throughput never built; cloud-config 5:1 collapse |
 | nodeagent | no | 4 assertions |
