@@ -44,6 +44,7 @@ func quitDefensively(t *testing.T, r *rt.Runtime, ctx context.Context, who strin
 		if _, _, err := r.CLI().Run(ctx, "quit", "-s"); err != nil {
 			r.Infof("[rtest] %s: quit -s: %v", who, err)
 		}
+		r.ForgetConnections()
 	})
 }
 
@@ -71,6 +72,7 @@ func probeConnectAs(t *testing.T, r *rt.Runtime, ctx context.Context, ns, asIden
 	if _, _, err := r.CLI().Run(ctx, "quit", "-s"); err != nil {
 		r.Infof("[rtest] auth: quit -s before connect probe to %s as %s: %v", ns, asIdentity, err)
 	}
+	r.ForgetConnections()
 	_, stderr, err := r.CLI().Run(ctx, rawConnectArgsAs(ns, asIdentity)...)
 	return err == nil, stderr
 }
