@@ -200,6 +200,13 @@ func ensureHostDaemon(e Env, cs *connSpec) {
 	if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "-s"); err != nil {
 		e.R.Infof("[rtest] quit before host connect: %v: %s", err, stderr)
 	}
+	// That -s took every other live connection with it, host and docker
+	// alike, so any memoized elsewhere now names a session that is gone.
+	// Forgetting them costs a reconnect on next use; keeping them hands out
+	// a dead handle. The connection being provisioned here is not memoized
+	// yet -- the engine stores it only once ProvisionFn returns -- so it is
+	// not among the entries dropped.
+	e.R.ForgetConnections()
 }
 
 func connectArgs(ns string, cs *connSpec) []string {
@@ -497,6 +504,12 @@ func (c *Conn) Disconnect(t testing.TB) {
 	}
 	if stdout, stderr, err := c.r.CLI().Run(c.ctx, args...); err != nil {
 		t.Fatalf("%s: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), err, stdout, stderr)
+	}
+	if c.name == "" {
+		// -s stopped every daemon, not just this connection's, so every
+		// memoized connection is now stale -- including ones this caller
+		// never touched and so never invalidated through Mutate.
+		c.r.ForgetConnections()
 	}
 }
 
