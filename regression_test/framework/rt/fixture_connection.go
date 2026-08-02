@@ -550,6 +550,25 @@ func RoutedToCluster(t testing.TB, url string, opts ...check.ReqOpt) {
 	check.EventuallyHTTP(t, url, notLocalMarker, routeCheckTimeout, opts...)
 }
 
+// RoutedToClusterAndTapped asserts that url keeps being served by the cluster
+// while a wiretap copies it to ls, by probing until one response satisfies
+// RoutedToCluster's condition and ls has observed at least one copy.
+//
+// Both halves have to be polled together. Attaching evicts the workload's pod
+// so the webhook can inject the traffic-agent, and a Deployment's replacement
+// pod becomes ready while the original -- which has no agent, and so copies
+// nothing -- is still serving, so a probe answered during that window produces
+// no copy at all. The copy is also async and lossy: the agent sends it on a
+// background goroutine independent of the real request and response (see
+// cmd/traffic/cmd/agent/fwd/http.go's handleHTTPRequest), so it can lag the
+// response that triggered it.
+func RoutedToClusterAndTapped(t testing.TB, url string, ls *LocalService, timeout time.Duration, opts ...check.ReqOpt) {
+	t.Helper()
+	check.EventuallyHTTP(t, url, func(status int, body string) bool {
+		return notLocalMarker(status, body) && len(ls.Requests()) > 0
+	}, timeout, opts...)
+}
+
 func notLocalMarker(status int, body string) bool {
 	return status == http.StatusOK && !strings.Contains(body, localMarkerPrefix)
 }

@@ -10,13 +10,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
 )
 
-// wiretapObserveTimeout bounds how long a wiretap cell waits for its local
-// service to observe a copied request: a wiretap is async and best-effort
-// (cmd/traffic/cmd/agent/fwd/http.go's handleHTTPRequest sends tap copies on
-// a background goroutine, never blocking the real request), so the local
-// side effect can lag the response check.WithHeader/RoutedToCluster already
-// waited for.
-const wiretapObserveTimeout = 10 * time.Second
+// wiretapObserveTimeout bounds a wiretap cell's whole probe: repeated
+// requests until one is both served by the cluster and observed as a copy by
+// the local service. It covers the pod eviction that injects the
+// traffic-agent as well as the copy's own lag, so it is generous compared
+// with the plain routing checks (see rt.RoutedToClusterAndTapped).
+const wiretapObserveTimeout = 60 * time.Second
 
 // wiretapHeaderKey/wiretapHeaderVal is the filter every wiretap cell in
 // this package uses. A filter isn't required to place a wiretap at all
@@ -85,16 +84,12 @@ func runCell(s *rt.Suite, verb string, tpl workloads.Template) {
 			rt.RoutedToLocal(t, wl.ServiceURL(), ls)
 		case "wiretap":
 			// A wiretap copies traffic, it never diverts it: the cluster
-			// keeps serving header-matching requests while tapped.
-			rt.RoutedToCluster(t, wl.ServiceURL(), check.WithHeader(wiretapHeaderKey, wiretapHeaderVal))
-			// The copy is async and lossy (the agent sends tap copies on a
-			// background goroutine independent of the real request/response,
-			// see fwd/http.go's handleHTTPRequest), so poll for it rather
-			// than asserting immediately after the request above.
-			s.Eventually(func() bool {
-				return len(ls.Requests()) > 0
-			}, wiretapObserveTimeout, 250*time.Millisecond,
-				"local wiretap copy of %s.%s should have observed at least one request", wl.Name, wl.Namespace)
+			// keeps serving header-matching requests while tapped. Both the
+			// pass-through and the copy are asserted by one polling probe;
+			// see RoutedToClusterAndTapped for why a single request can
+			// legitimately produce no copy.
+			rt.RoutedToClusterAndTapped(t, wl.ServiceURL(), ls, wiretapObserveTimeout,
+				check.WithHeader(wiretapHeaderKey, wiretapHeaderVal))
 		}
 	}
 
