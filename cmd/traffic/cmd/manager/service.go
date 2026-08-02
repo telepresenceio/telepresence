@@ -1909,7 +1909,27 @@ func (s *service) GetLogs(_ context.Context, _ *rpc.GetLogsRequest) (*rpc.LogsRe
 	}, nil
 }
 
+// SetLogLevel applies a temporary log-level change. A request that carries a
+// session has its ownership verified; a nil principal on that session is
+// rejected in ModeEnforcing, since it can only mean an exempt method let a
+// tokenless call through. A request without a session is rejected outright in
+// ModeEnforcing, and allowed, with a debug log, otherwise.
 func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (*empty.Empty, error) {
+	if session := request.GetSession(); session != nil {
+		var err error
+		ctx, _, err = s.ensureClientSession(ctx, session)
+		if err != nil {
+			return nil, err
+		}
+		if auth.PrincipalFrom(ctx) == nil && s.authMode == auth.ModeEnforcing {
+			return nil, errors.Errorf(codes.Unauthenticated, "setting the log level requires an authenticated caller")
+		}
+	} else if s.authMode == auth.ModeEnforcing {
+		return nil, errors.Errorf(codes.Unauthenticated, "setting the log level requires a client session")
+	} else {
+		clog.Debugf(ctx, "unauthenticated log level request allowed; manager is not in enforcing mode")
+	}
+
 	err := s.state.SetTempLogLevel(ctx, request)
 	if err != nil {
 		err = errors.FromError(err, codes.InvalidArgument, err.Error())

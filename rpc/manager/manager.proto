@@ -476,6 +476,10 @@ message LogLevelRequest {
   // The time that this log-level will be in effect before
   // falling back to the configured log-level.
   google.protobuf.Duration duration = 2;
+
+  // The session of the client requesting the change. Unset in requests
+  // from older clients.
+  SessionInfo session = 3;
 }
 
 // Deprecated.

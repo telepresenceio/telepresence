@@ -18,6 +18,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -618,6 +619,81 @@ func TestClientSessionBinding(t *testing.T) {
 		_, err = mgr.GetQuicTunnelEndpoint(otherCtx, sess)
 		req.Error(err)
 		req.Equal(codes.PermissionDenied, status.Code(err))
+	})
+}
+
+// TestSetLogLevel_SessionBinding covers session-based authorization on SetLogLevel:
+// a request without a session keeps working for an older client in permissive mode;
+// a request that carries a session is denied for a caller that doesn't own it and
+// accepted for the owner; a session that doesn't exist is NotFound; and a request
+// without a session is Unauthenticated in ModeEnforcing.
+func TestSetLogLevel_SessionBinding(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testClients := testdata.GetTestClients(t)
+
+	llReq := func(session *rpc.SessionInfo) *rpc.LogLevelRequest {
+		return &rpc.LogLevelRequest{
+			LogLevel: "debug",
+			Duration: durationpb.New(50 * time.Millisecond),
+			Session:  session,
+		}
+	}
+
+	t.Run("no session succeeds in permissive mode", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		_, err := mgr.SetLogLevel(sctx, llReq(nil))
+		req.NoError(err)
+	})
+
+	t.Run("session owned by another identity is denied", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.SetLogLevel(otherCtx, llReq(sess))
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("owning identity succeeds", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		_, err = mgr.SetLogLevel(auth.WithPrincipal(sctx, principal), llReq(sess))
+		req.NoError(err)
+	})
+
+	t.Run("unknown session is not found", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		_, err := mgr.SetLogLevel(sctx, llReq(&rpc.SessionInfo{SessionId: "does-not-exist"}))
+		req.Error(err)
+		req.Equal(codes.NotFound, status.Code(err))
+	})
+
+	t.Run("no session is unauthenticated in enforcing mode", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
+			e.AuthenticationMode = auth.ModeEnforcing
+		})
+
+		_, err := mgr.SetLogLevel(sctx, llReq(nil))
+		req.Error(err)
+		req.Equal(codes.Unauthenticated, status.Code(err))
 	})
 }
 

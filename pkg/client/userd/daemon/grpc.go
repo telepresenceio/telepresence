@@ -363,6 +363,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 	}
 	setRemote := func() {
 		err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
+			mrq.Session = session.SessionInfo()
 			_, err := session.ManagerClient().SetLogLevel(ctx, mrq)
 			return err
 		})
