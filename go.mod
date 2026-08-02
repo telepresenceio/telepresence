@@ -39,8 +39,8 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	github.com/telepresenceio/clog v0.0.0-20260114221933-287514cf9831
-	github.com/telepresenceio/go-ftpserver v1.2.1
-	github.com/telepresenceio/go-fuseftp v1.0.1
+	github.com/telepresenceio/go-ftpserver v1.3.0
+	github.com/telepresenceio/go-fuseftp v1.1.0
 	github.com/telepresenceio/go-fuseftp/rpc v1.0.1
 	github.com/telepresenceio/telepresence/cmd/cobraparser/v2 v2.0.0-20260722072334-c3b1600e0763
 	github.com/telepresenceio/telepresence/rpc/v2 v2.31.1
@@ -205,12 +205,6 @@ require (
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
 
 replace github.com/telepresenceio/telepresence/cmd/cobraparser/v2 => ./cmd/cobraparser
-
-// Pending a go-ftpserver release.
-replace github.com/telepresenceio/go-ftpserver => ../go-ftpserver
-
-// Pending a go-fuseftp release.
-replace github.com/telepresenceio/go-fuseftp => ../go-fuseftp
 
 // Awaits https://github.com/caarlos0/env/pull/401
 replace github.com/caarlos0/env/v11 => github.com/thallgren/env/v11 v11.0.0-20260107112108-5d5593a09332
