@@ -13,10 +13,25 @@ post, conference talk, or case study. Sign off your commit
 | Organization | Reference |
 |--------------|-----------|
 | [Bitnami](https://bitnami.com) | [Case study](https://telepresence.io/case-studies/bitnami) |
+| [BlackRock](https://www.blackrock.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
+| [Cisco](https://www.cisco.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
 | [Engel & Völkers](https://www.engelvoelkers.com) | [Case study](https://telepresence.io/case-studies/engel-volkers) |
+| [HelloFresh](https://www.hellofresh.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
+| [IBM](https://www.ibm.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
 | [IRIS.TV](https://www.iris.tv) | [Case study](https://telepresence.io/case-studies/iris-tv) |
+| [Manhattan Associates](https://www.manh.com) | |
+| [monday.com](https://monday.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
+| [OpenAI](https://openai.com) | |
 | [Sight Machine](https://sightmachine.com) | [Case study](https://telepresence.io/case-studies/sight-machine) |
+| [Unity](https://unity.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
 | [Verloop](https://verloop.io) | [Case study](https://telepresence.io/case-studies/verloop) |
+| [VMware](https://www.vmware.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
+| [Walmart](https://www.walmart.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
+| [Wellframe](https://www.wellframe.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
+| [Zipcar](https://www.zipcar.com) | [Featured customer](https://www.linkedin.com/products/ambassadorlabs-telepresence/) |
 
 The initial entries were seeded from the case studies published on
-[telepresence.io](https://telepresence.io/case-studies/).
+[telepresence.io](https://telepresence.io/case-studies/), the featured
+customers on the
+[Telepresence product page](https://www.linkedin.com/products/ambassadorlabs-telepresence/)
+on LinkedIn, and users known to the maintainers.
