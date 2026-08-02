@@ -1,4 +1,4 @@
-# M7 parity ledger (pass 1)
+# M7 parity ledger (pass 2)
 
 Per-file verdicts for the 81 `integration_test/*_test.go` files, against the
 suites in `regression_test/suites/`. Companion to `m7-spec.md`.
@@ -26,12 +26,21 @@ search alone); upgrading those changed verdicts, so search alone is not
 enough to retire on. `docker_run_test.go` went from superseded to partial,
 and the docker area from "near ready" to blocked.
 
+Pass 2 (2026-08-03) rechecked the pass-1 gap list against the reviewed
+milestone specs (m3 waves 1-4, m5, m7's own exit criteria). Three row
+corrections came out of it — `pod_cidr_test.go` to superseded, one
+`http_intercepts_test.go` gap removed, `uninstall_test.go` to partial —
+and the gap list was rebuilt: a delta that a reviewed spec deliberately
+scoped out is a decision already made, not pending work. The rebuilt list
+separates mandated work (m7 exit criteria: two coverages, three verdicts)
+from promised-but-missed items (six, all small) and from recorded drops.
+
 ## Summary
 
 | | files | notes |
 |---|---|---|
-| superseded | 24 | ready to delete once their area's partials are closed |
-| partial | 49 | see gap list |
+| superseded | 24 | ready to delete once their area's partials are closed (pass 2 moved pod_cidr in, uninstall out; net unchanged) |
+| partial | 49 | see gap list; most partials resolve by recording a drop, not by writing a test |
 | unclaimed | 5 | 2 are real coverage loss |
 | dropped | 1 | otel_test.go; individual dropped tests inside kept files are listed separately |
 | infrastructure | 2 | integration_test.go (entrypoint), single_service_test.go (scaffolding) |
@@ -43,6 +52,13 @@ every area.** It was written before the suites existed and records intent.
 Roughly half the claimed-superseded files have at least one assertion with no
 home in the new suite. None of that is surprising for a port done in waves,
 but it means no area can retire on the catalog's word alone.
+
+The pass-2 counter-headline: **most of those deltas are not pending work.**
+The reviewed wave specs narrowed the catalog deliberately, and the m7 parity
+rule accepts a recorded drop as full parity. After sorting, the work that
+remains is the two m7-mandated coverages, six small promised-but-missed
+items (one of them install/Setup, the only multi-test miss), and four
+decisions — everything else retires by recording the disposition.
 
 Two areas were claimed and never built at all: `install/Setup` (7 tests) and
 `session/Throughput` (5 tests). Two more are deferred by an open issue
@@ -67,7 +83,7 @@ most scrutiny; it retires last.
 
 | old file | tests | covered by | verdict | conf |
 |---|---|---|---|---|
-| http_intercepts_test.go | 10 | intercept/Filters (Header, PathPrefix, Combined, Coexistence, TCPPortConflict) | partial: Test_BackwardCompatibility, Test_HTTPManySimultaneous, Test_HTTPManyClientsSimultaneous | read |
+| http_intercepts_test.go | 10 | intercept/Filters (Header, PathPrefix, Combined, Coexistence, TCPPortConflict); Test_BackwardCompatibility is a plain unfiltered TCP intercept — overlap cluster A, any plain attach/Modes cell | partial: Test_HTTPManySimultaneous, Test_HTTPManyClientsSimultaneous (concurrency; see the Concurrent disposition) | read |
 | intercept_flags_test.go | 1 | — | partial: Test_ContainerReplace is `--container` + replace; same gap as container_test.go | read |
 | multiple_port_intercept_test.go | 3 | intercept/Routing Test_MultiPort (one named port intercepted, the other left on the cluster) | partial: MultiPortIntercept intercepts *two* ports on one workload with two --port flags and asserts the mapping in status -- the new test uses a single --port; MultiPortLocalConflict ("N is already in use by intercept X"); MultiPortRemoteConflict ("one intercept has no filters") | read |
 | multi_replica_intercept_test.go | 2 | intercept/Routing Test_MultiReplica (global) | partial: the personal/filtered all-replicas variant | read |
@@ -102,9 +118,9 @@ most scrutiny; it retires last.
 |---|---|---|---|---|
 | install_test.go | 8 | install/HelmLifecycle (uninstall, failed-install tolerance, absence), install/HelmValues Test_ReuseThenResetValues (UpgradeRetainsValues), golden/ (HelmTemplateInstall) | partial: Test_HelmSubChart, Test_No_Upgrade, Test_findTrafficManager_differentNamespace_present | read |
 | helm_test.go | 7 | install/HelmLifecycle Test_CollidingInstall, connect/Test_UnmanagedNamespace, and the attach area for the managed-namespace intercept | partial: HelmWebhookInjectsInManagedNamespace and its doesn't-inject twin (injection scoped by managed namespace), Test_HelmMultipleInstalls, Test_HelmInstallReportsPodFailureReason (BrokenInstallThenCorrected asserts the failure, not the reported pod reason) | read |
-| uninstall_test.go | 1 | install/Test_InstallUninstallReinstall | superseded | read |
-| pod_cidr_test.go | 1 | install/Test_ExplicitCIDRsReachStatus | partial: only the explicit-CIDR strategy; the other podCIDR strategies are unasserted | read |
-| setup_test.go | 7 | — | **partial: install/Setup does not exist.** Apply idempotence, round-trip, streaming output, upgrade merge, non-admin handoff, client-RBAC input round-trip, and validation. Deferred with the `setup` verb to 2.32.0 | read |
+| uninstall_test.go | 1 | install/Test_InstallUninstallReinstall (release install/uninstall/reinstall, presence/absence) | partial: the old test also asserts the webhook-injected agent is scrubbed from workload pods on `helm uninstall`; the new lifecycle test asserts only the manager Deployment. Folds into the uninstall-verb disposition | read |
+| pod_cidr_test.go | 1 | install/Test_ExplicitCIDRsReachStatus | superseded — the old file's single test drives exactly one strategy (environment + explicit podCIDRs); its `tests` table has one entry, so no other strategy was ever asserted. Pass 1 read the catalog's "podCIDR strategies" plural as old coverage; it was aspiration | read |
+| setup_test.go | 7 | — | **partial: install/Setup does not exist.** Apply idempotence, round-trip, streaming output, upgrade merge, non-admin handoff, client-RBAC input round-trip, and validation. Pass 1 called this "deferred with the `setup` verb to 2.32.0"; wrong — the verb landed 2026-07-19, before wave 2 was built (2026-07-30). A wave-2 promise that was not delivered and has no recorded reason | read |
 | limitrange_test.go | 1 | injector/Test_AgentGetsDefaultedResources | superseded | read |
 
 ## injector
@@ -181,7 +197,7 @@ most scrutiny; it retires last.
 | mounts_test.go | 3 | mounts/Content (read side), intercept/Concurrent (colliding — never built) | partial: Test_MountWrite is an **explicit, documented skip** in `mounts/content.go` (needs a PVC-backed writable volume); Test_MountReadOnly and Test_CollidingMounts have no home | read |
 | intercept_mount_test.go | 4 | intercept/Test_DetailedJSON, mounts/Content (which reads content under the mount root, subsuming Test_InterceptMount's "mount point is a directory") | partial: Test_InterceptMountRelative (a relative --mount path), Test_NoInterceptorResponse | read |
 | podscaling_test.go | 2 | mounts/Podscaling Test_MountSurvivesPodScaling (scale to zero and back; the suite doc names Test_RestartInterceptedPod) | partial: Test_StopInterceptedPodOfMany -- killing one pod of several, where the attachment must move to a surviving pod | read |
-| large_files_test.go | 2 | — | partial: large-file transfer across the mount under both backends (fuseftp and sshfs). Nothing under regression_test moves a large file; the catalog claimed mounts/FUSE with a `slow` label | read |
+| large_files_test.go | 2 | mounts/ftp_vs_fuse.go covers the two backends (intercept.useFtp true/false content check — pass 1 missed it) | partial: only the large-file transfer itself is unported; nothing under regression_test moves a large file | read |
 
 ## docker and state
 
@@ -209,88 +225,187 @@ most scrutiny; it retires last.
 |---|---|---|
 | integration_test.go | 1 | entrypoint; disappears with the package |
 | single_service_test.go | 0 | scaffolding only |
-| container_test.go | 2 | **port** — `--container` is real, unported coverage |
-| workload_configuration_test.go | 4 | **port** — `telepresence.io/enabled=false` is real, unported coverage |
-| intercept_env_test.go | 1 | port `--env-excludes` into intercept/Flags |
-| udp_test.go | 1 | port into routing, or record why quic/Datagrams suffices |
-| istio_test.go | 2 | port behind `rt.Requires`, or drop. Self-skips without an Istio install, so it has probably never run in CI |
+| container_test.go | 2 | **port** — `--container` is real, unported coverage (m7 exit criterion) |
+| workload_configuration_test.go | 4 | **port** — `telepresence.io/enabled=false` is real, unported coverage (m7 exit criterion) |
+| intercept_env_test.go | 1 | port: `--env-excludes` is a few lines inside intercept/Flags' existing env round-trip |
+| udp_test.go | 1 | port: plain UDP through the TUN over grpc transport is otherwise uncovered (quic/Datagrams is a different path), and `workloads.UDPEcho` already exists (built for m5), so this is ~30 lines in routing |
+| istio_test.go | 2 | drop: self-skips without an Istio install with DNS capture, so it has likely never run in CI; record that as the reason |
 
-## Gap list
+## Gap list (pass 2)
 
-Ordered by what blocks the most retirement. Each item is a new test (or
-matrix axis) in `regression_test/`, not a change to the old suite.
+Pass 1 framed ~35 items as new tests. That framing was wrong in two ways.
+First, m7-spec's exit criteria mandate exactly two new coverages
+(`--container`, `telepresence.io/enabled=false`) plus recorded *verdicts*
+for the three undecided unclaimed files — and its ledger rule accepts
+"explicitly dropped with a recorded reason" as full parity. Second, the
+reviewed wave specs deliberately narrowed the catalog (the catalog records
+pre-implementation intent; the wave specs record what review actually
+approved), so a delta the wave spec scoped out is a decision already made.
+Pass 2 sorts every pass-1 item into the four buckets below.
 
-**Blocks `attach` (the largest area):**
+### Mandated by m7-spec exit criteria
 
-1. ReplicaSet workload template + matrix kind (2 old cells)
-2. Rollout kind behind an Argo CRD fixture (2 old tests) — or a recorded drop
-3. `--container` attach, covering container_test.go and intercept_flags_test.go
-4. `telepresence uninstall <workload>` after detach — asserted by all 10 workloads_test.go tests, absent everywhere
-5. PodDisruptionBudget re-intercept
-6. replace on a multiport workload asserts *both* ports route local
-7. multiple wiretaps on one port
-8. the ingest extras: FTP, proxy-via, `--command`, container+command, detach-without-container, list format
+M1. `--container` attach (container_test.go + intercept_flags_test.go's
+    ContainerReplace) — one test or axis; the flag appears nowhere under
+    regression_test
+M2. `telepresence.io/enabled=false` across workload kinds
+    (workload_configuration_test.go) — natural home injector/
+M3. Recorded verdicts for udp_test.go (recommend: port, ~30 lines,
+    template exists), intercept_env_test.go (recommend: port, a few lines
+    in intercept/Flags), istio_test.go (recommend: drop, never ran in CI)
 
-**Blocks `intercept`:**
+### Promised by a reviewed spec, not delivered, no recorded skip
 
-9. intercept/Concurrent (never built): 3 simultaneous intercepts + colliding mounts
-10. `--to-pod` TCP and UDP
-11. pod-IP bind
-12. custom localhost address
-13. the four multiport service-shape edge cases
-14. `--env-excludes`
+Each is one test or axis in an existing suite. Together they are small.
 
-**Blocks `install` / `injector`:**
+P1. `--to-pod` TCP — wave-1 promised it in intercept/Flags; the flag is
+    absent from every suite (the framework's ToPod fields serve compose
+    and state specs, not the intercept flag)
+P2. exec-credential kubeauth (kubeauth_test.go) — wave-1 explicitly moved
+    it to wave 4 ("moved to wave 4 docker area"); wave 4 never picked it
+    up. The only coverage of the kubeauth daemon path
+P3. node-agent HTTP-filtered wiretap — wave-3 promised "+ HTTP-filtered
+    variants"; filtered intercept and plain wiretap exist, their
+    combination does not
+P4. REST API `/intercept-info` — wave-4 promised it alongside
+    /consume-here; the suite delivered consume-here only. The global cells
+    and header axis can ride along or be dropped (restapi.go's doc already
+    explains why the header never drives the current probes)
+P5. one bulk-transfer test — wave-4's trimmed Throughput promised "one
+    bulk-transfer check and N=30 connect cycles". Recommend the bulk check
+    only: connect-cycle stability is exercised by the framework's own
+    fixture churn every run (record that as RepeatedConnect's verdict),
+    and outbound proxying is asserted implicitly by every routing/dns test
+P6. install/Setup (setup_test.go, 7 tests) — wave-2 promised it; the verb
+    existed before wave 2 was built. The largest single miss. Alternative:
+    retire setup_test.go last, the same holding pattern as quic #4227
 
-15. install/Setup (never built, 7 tests) — gated on the `setup` verb shipping in 2.32.0
-16. webhook injection scoped by managed namespace
-17. failed-inject resync
-18. agent image from config, env prefix interpolation, TLS annotations
-19. `telepresence.io/enabled=false` across workload kinds
+### Scope decisions already made in reviewed specs — record as drops
 
-**Blocks `docker`:**
+No code; recording these dispositions here is what the m7 parity rule
+requires. Spec citations inline.
 
-19a. the REST API's `/intercept-info` endpoint, its global (unfiltered)
-     cells, and the caller-intercept-id header axis
-19b. `--docker-run` traffic and teardown over a docker connection
-19c. gather-logs over a docker connection
-19d. teleroute networks (not just a compose default network) checked against
-     the cluster's CIDRs
-19e. `connect --docker -- <command>`, and the docker daemon's status shape
+- attach cell contract: wave-1 built {intercept, ingest, replace, wiretap}
+  x {deployment, statefulset, headless, no-service, multiport}. ReplicaSet
+  cells, the no-volumes variant, PodDisruptionBudget re-intercept, the
+  replace both-ports assertion, multiple wiretaps on one port, and the
+  agent-count==replicas assertion were not in the reviewed table. (M2's
+  enabled=false work touches ReplicaSet handling anyway; fold if
+  convenient)
+- ingest extras (FTP, proxy-via, `--command`, container+command,
+  detach-without-container, list format): wave-1 promised the ingest core
+  plus the conflict matrix, nothing more
+- intercept/Concurrent: in the catalog, absent from the reviewed wave-1
+  spec; connect/ConnectMulti already runs concurrent intercepts (one per
+  connection). Test_HTTPManySimultaneous / ManyClients and colliding
+  mounts fold in here. The local-port-clash error message is the one
+  piece with no cousin; cheap to add to Filters if wanted
+- pod-IP bind: wave-1 pre-authorized the skip ("skip if too deep, note
+  it"); this entry is the note
+- custom localhost address, the four multiport service-shape edge cases
+  (each needs a new workload template): not in the reviewed wave-1 spec
+- connect area extras (empty config file tolerated,
+  VersionWithInvalidKubeContext, `connect -- <cmd>`,
+  CreateAndRunIndividualPod, APIServerIsProxied, ConflictingProxies,
+  AlsoNeverProxyDocker, same-namespace double connect): none promised by
+  wave-1's connect bullets
+- helm extras (sub-chart, No_Upgrade, findTrafficManager variants,
+  multiple installs, webhook-scoped-by-managed-namespace): wave-2's
+  install bullets promise none of these. Pod-failure surfacing IS
+  delivered — Test_BrokenInstallThenCorrected asserts "traffic-manager
+  pod is not ready"; the old test's extra detail is the literal reason
+  string
+- injector extras (failed-inject resync, agent image from config, env
+  prefix interpolation, TLS annotations, multi-workload OnDemand):
+  catalog-only; wave-2's six injector bullets scope them all out
+- namespaces cluster-wide manager + simultaneous multi-namespace attach:
+  not in wave-2's three bullets (cluster-wide is the one worth a second
+  look — see decisions). AllowsUnmanagedMappedNamespace likewise: wave-4's
+  trimmed Throughput bullet did not carry it, and mapping-scope semantics
+  live in namespaces/MappedNamespaces
+- cloud agent-arrival, cloud log levels, rootd log level: wave-3 promised
+  "cloud_config_test.go's core" only
+- auth x509 (cert-only client, x509.enabled=false rejection): wave-3 said
+  "port only what is assertable through the CLI + ManagerClient";
+  enforcing.go's doc comment records the drop with that reason — already
+  a recorded drop under the m7 rule
+- enforcing-rejects-legacy-client: a version-compat concern; the m4
+  compat job is its natural home, not regression
+- nodeagent shared-Job semantics, ingest-without-injector, Job reaping on
+  uninstall: wave-3's five nodeagent bullets scope them out
+- quic VPN-only outbound + traffic-agent coexistence: wave-3 omitted them
+  from the portable core; both are thin variants of asserted behaviour
+  (VPN-only = outbound reachability with quic transport, coexistence = a
+  sidecar attach under a quic manager)
+- CIDR refusal variants (autoResolveConflicts=false both flavors),
+  config-driven allow-conflict route check, local-DNS-inside-conflict:
+  wave-4's Conflicts bullet promised auto-resolve + allow-conflicting
+  exactly, and delivered exactly that
+- proxy-via loopback and proxy-via + mounts: wave-4: "mirror
+  proxy_via_test.go's core, skip the mounts variant"
+- mounts write round-trip (documented in-suite as needing a PVC),
+  read-only mount, relative --mount path, NoInterceptorResponse:
+  not in wave-4's mounts bullets
+- large-file transfer: catalog-only; wave-4's mounts bullets dropped it
+  (the backend axis itself is covered by mounts/ftp_vs_fuse.go)
+- docker extras (daemon status shape, alsoProxy32, singleNameLookup,
+  teleroute-network subnet check, gather-logs over docker): wave-4
+  promised the Coexist/CacheFiles "essentials"; m5's DockerConnRun listed
+  exactly the three tests it ports
+- `telepresence uninstall <wl>` / agent scrub on helm uninstall: one
+  behaviour behind one helper, asserted 10x in workloads_test.go plus
+  once in uninstall_test.go — overlap-collapse territory. The m4 compat
+  manifest already records the exemption with a reason ("no compat-core
+  test runs that command"). Accept that record, or close it with one
+  ~20-line test (attach, uninstall, gone from `list --agents`) — the one
+  drop here worth reconsidering, since it is the verb's only integration
+  coverage
 
-**Blocks `routing` / `mounts` / `session`:**
+### Genuine open decisions (not promised anywhere; user call)
 
-20. CIDR auto-conflict resolution and its two disables, allow-conflict, local-DNS reachability
-21. proxy-via loopback, proxy-via + mounts
-22. mount write round-trip (needs a PVC fixture), read-only mount, colliding mounts
-23. large-file transfer under both FUSE backends (`slow`)
-24. session/Throughput (never built): large request, repeated connect, outbound proxying
-25. cloud-served agent arrival and log levels; root-daemon log level
+D1. Argo Rollout kind (argo_rollouts_test.go) — a real supported feature
+    (workloads.argoRollouts.enabled) needing a CRD fixture; port (medium)
+    or drop with the reason that it needs an Argo install
+D2. cluster-wide manager (Test_NamespacesClusterWide) — the unrestricted
+    config is common in production and no new suite runs one; medium
+    (invasive on a shared cluster)
+D3. inactive-client takeover (inactive_client_test.go, 2 tests) — real
+    feature, catalog-claimed, silently dropped by wave-1; medium
+D4. `--docker-run` traffic/teardown over a docker connection
+    (Test_DockerRun_DockerDaemon) — sits between m5's explicit per-test
+    list (excludes it) and its "supersedes the dockerDaemonSuite
+    docker-run tests" summary (includes it); the one genuinely ambiguous
+    m5 scope line
 
-**Blocks `auth` / `nodeagent` / `quic`:**
+### Deferred by open issue (blocks deletion only, no work)
 
-26. x509 cert-only client and the `x509.enabled=false` rejection (declared unported in the suite's own doc)
-27. enforcing rejects a legacy client
-28. node-agent filtered wiretap, shared-Job semantics, ingest without injector, Job reaping on uninstall
-29. quic VPN-only transport, traffic-agent coexistence
-30. quic NodePort discovery + node-agent transport — blocked on telepresenceio/telepresence#4227
+- quic Test_ZZDiscoveryNodePort + Test_NodeAgentTransport:
+  telepresenceio/telepresence#4227; quic_test.go keeps these two until it
+  closes
 
-## Retirement readiness
+## Retirement readiness (pass 2)
 
-| area | ready? | blocking |
+"drops" means recording the dispositions above in the retirement commit —
+no code. Small = one test or axis in an existing suite.
+
+| area | ready? | remaining before retirement |
 |---|---|---|
 | dns | **retired** | — |
 | state | **retired** | — |
-| docker | no | 3 files partial after the read pass (see gap list) |
-| quic | near | 2 tests + issue #4227 |
-| session | no | Throughput never built; cloud-config 5:1 collapse |
-| nodeagent | no | 4 assertions |
-| auth | no | x509 path declared unported |
-| namespaces | no | cluster-wide + multi-namespace |
-| injector | no | 5 assertions |
-| install | no | Setup never built |
-| intercept | no | 6 assertions incl. a whole unbuilt suite |
-| attach | no | 8 assertions; retires last by design |
+| smoke | yes | drops only |
+| mounts | yes | drops only |
+| routing | yes | drops + the udp verdict (recommended small port) |
+| auth | yes | drops only (x509 already recorded in-suite; legacy-client points at the m4 compat job) |
+| session | near | P5 (one bulk test) + drops |
+| nodeagent | near | P3 (filtered wiretap) + drops |
+| quic | near | drops; 2 files' tests wait on #4227 |
+| connect | near | P2 (kubeauth) + drops; D3 decision |
+| docker | near | P4 (/intercept-info) + drops; D4 decision |
+| namespaces | near | drops; D2 decision |
+| injector | no | M2 (enabled=false, mandated) + drops |
+| intercept | no | M1 (--container, mandated) + P1 (--to-pod) + M3 env-excludes + drops |
+| install | no | P6 (Setup: build, or hold setup_test.go back like #4227) |
+| attach | no | M1 + drops; D1 decision; retires last by design |
 
 `dns` and `state` retired first, as the two areas where the parity argument
 is not in dispute. That commit establishes the mechanics every later area
