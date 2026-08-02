@@ -135,8 +135,8 @@ following Free and Open Source software:
     github.com/spf13/pflag                                                    v1.0.10                                 3-clause BSD license
     github.com/stretchr/testify                                               v1.11.1                                 MIT license
     github.com/telepresenceio/clog                                            v0.0.0-20260114221933-287514cf9831      Apache License 2.0
-    github.com/telepresenceio/go-ftpserver                                    v1.2.1                                  Apache License 2.0
-    github.com/telepresenceio/go-fuseftp                                      v1.0.1                                  Apache License 2.0
+    github.com/telepresenceio/go-ftpserver                                    v1.3.0                                  Apache License 2.0
+    github.com/telepresenceio/go-fuseftp                                      v1.1.0                                  Apache License 2.0
     github.com/telepresenceio/go-fuseftp/rpc                                  v1.0.1                                  Apache License 2.0
     github.com/telepresenceio/telepresence/cmd/cobraparser/v2                 (modified)                              Apache License 2.0
     github.com/telepresenceio/telepresence/rpc/v2                             (modified)                              Apache License 2.0
