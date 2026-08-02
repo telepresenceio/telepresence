@@ -39,6 +39,12 @@ var exemptions = []exemption{
 	// is enabled, which no compat-core test does yet.
 	{"GetQuicTunnelEndpoint", "client-invoked only when the QUIC tunnel is enabled (pkg/client/rootd/quic.go, pkg/client/agentpf/quic.go); exempt until a compat-core QUIC cell lands (see m4-spec section 1's note on version-gated features)"},
 
+	// Session credential: client-invoked lazily, and every failure path
+	// (Unimplemented from an older manager, any fetch error) degrades to a
+	// credential-less mount or agent call, so no compat-core cell fails
+	// without it.
+	{"GetSessionCredential", "client-invoked lazily on first mount/agent connection (pkg/client/sessioncred, pkg/client/userd/trafficmgr/session_credential.go, pkg/client/rootd/session_credential.go); degrades to credential-less operation on any error, so no compat-core cell claims it yet"},
+
 	// Legacy/dead: the manager implements these, but no client anywhere in
 	// the repo (pkg/client, cmd/traffic/cmd/agent) calls them.
 	{"GetTelepresenceAPI", "dead: implemented by cmd/traffic/cmd/manager/service.go, but no caller anywhere in pkg/client or cmd/traffic/cmd/agent"},

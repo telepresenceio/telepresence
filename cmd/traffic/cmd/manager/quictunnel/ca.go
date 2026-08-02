@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"math/big"
 	"time"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/sessiontoken"
 )
 
 // ServerName is the DNS name embedded in the traffic-manager's QUIC server
@@ -195,6 +197,22 @@ func (ca *CA) MintClientCert(sessionID string) (certPEM, keyPEM []byte, err erro
 	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 	return certPEM, keyPEM, nil
+}
+
+// MintSessionToken mints a signed bearer token naming sessionID, valid until the
+// returned expiry -- the same clientCertValidity window MintClientCert uses, so the
+// two halves of a session credential expire together. The token is the
+// password-form of the session credential: it rides where a certificate cannot (the
+// FTP PASS command, gRPC metadata), and is verified by a traffic-agent offline,
+// against the CA certificate, via sessiontoken.Verify and
+// sessiontoken.PublicKeyFromCertPEM.
+func (ca *CA) MintSessionToken(sessionID string) (token string, expiry time.Time, err error) {
+	expiry = time.Now().Add(clientCertValidity)
+	token, err = sessiontoken.Mint(ca.key, sessionID, expiry)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("quictunnel: mint session token: %w", err)
+	}
+	return token, expiry, nil
 }
 
 func randomSerial() (*big.Int, error) {

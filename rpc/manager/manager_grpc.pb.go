@@ -60,6 +60,7 @@ const (
 	Manager_WatchLogLevel_FullMethodName                   = "/telepresence.manager.Manager/WatchLogLevel"
 	Manager_Tunnel_FullMethodName                          = "/telepresence.manager.Manager/Tunnel"
 	Manager_GetQuicTunnelEndpoint_FullMethodName           = "/telepresence.manager.Manager/GetQuicTunnelEndpoint"
+	Manager_GetSessionCredential_FullMethodName            = "/telepresence.manager.Manager/GetSessionCredential"
 	Manager_GetQuicAgentCert_FullMethodName                = "/telepresence.manager.Manager/GetQuicAgentCert"
 	Manager_WatchQuicBackends_FullMethodName               = "/telepresence.manager.Manager/WatchQuicBackends"
 	Manager_ReportMetrics_FullMethodName                   = "/telepresence.manager.Manager/ReportMetrics"
@@ -189,6 +190,10 @@ type ManagerClient interface {
 	// dial it directly instead of tunneling over this port-forwarded connection. The
 	// returned descriptor has enabled == false when no QUIC endpoint is exposed.
 	GetQuicTunnelEndpoint(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*QuicTunnelEndpoint, error)
+	// GetSessionCredential returns the session-scoped credential used to authenticate
+	// against a traffic-agent's file-sharing and gRPC ports, in both its certificate
+	// and bearer-token forms. It is only served to the session's owner.
+	GetSessionCredential(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*SessionCredential, error)
 	// GetQuicAgentCert mints a QUIC server certificate for the calling agent's
 	// own SNI name (quicfwd.AgentSNI(pod UID)), so it can run a QUIC listener
 	// behind the forwarder. The caller's session must be an agent session
@@ -681,6 +686,16 @@ func (c *managerClient) GetQuicTunnelEndpoint(ctx context.Context, in *SessionIn
 	return out, nil
 }
 
+func (c *managerClient) GetSessionCredential(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*SessionCredential, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SessionCredential)
+	err := c.cc.Invoke(ctx, Manager_GetSessionCredential_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) GetQuicAgentCert(ctx context.Context, in *SessionInfo, opts ...grpc.CallOption) (*QuicAgentCert, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(QuicAgentCert)
@@ -853,6 +868,10 @@ type ManagerServer interface {
 	// dial it directly instead of tunneling over this port-forwarded connection. The
 	// returned descriptor has enabled == false when no QUIC endpoint is exposed.
 	GetQuicTunnelEndpoint(context.Context, *SessionInfo) (*QuicTunnelEndpoint, error)
+	// GetSessionCredential returns the session-scoped credential used to authenticate
+	// against a traffic-agent's file-sharing and gRPC ports, in both its certificate
+	// and bearer-token forms. It is only served to the session's owner.
+	GetSessionCredential(context.Context, *SessionInfo) (*SessionCredential, error)
 	// GetQuicAgentCert mints a QUIC server certificate for the calling agent's
 	// own SNI name (quicfwd.AgentSNI(pod UID)), so it can run a QUIC listener
 	// behind the forwarder. The caller's session must be an agent session
@@ -990,6 +1009,9 @@ func (UnimplementedManagerServer) Tunnel(grpc.BidiStreamingServer[TunnelMessage,
 }
 func (UnimplementedManagerServer) GetQuicTunnelEndpoint(context.Context, *SessionInfo) (*QuicTunnelEndpoint, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetQuicTunnelEndpoint not implemented")
+}
+func (UnimplementedManagerServer) GetSessionCredential(context.Context, *SessionInfo) (*SessionCredential, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSessionCredential not implemented")
 }
 func (UnimplementedManagerServer) GetQuicAgentCert(context.Context, *SessionInfo) (*QuicAgentCert, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetQuicAgentCert not implemented")
@@ -1584,6 +1606,24 @@ func _Manager_GetQuicTunnelEndpoint_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_GetSessionCredential_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SessionInfo)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).GetSessionCredential(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_GetSessionCredential_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).GetSessionCredential(ctx, req.(*SessionInfo))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_GetQuicAgentCert_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SessionInfo)
 	if err := dec(in); err != nil {
@@ -1751,6 +1791,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetQuicTunnelEndpoint",
 			Handler:    _Manager_GetQuicTunnelEndpoint_Handler,
+		},
+		{
+			MethodName: "GetSessionCredential",
+			Handler:    _Manager_GetSessionCredential_Handler,
 		},
 		{
 			MethodName: "GetQuicAgentCert",

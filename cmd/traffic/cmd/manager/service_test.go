@@ -47,6 +47,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
+	"github.com/telepresenceio/telepresence/v2/pkg/sessiontoken"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -301,12 +302,13 @@ func TestWatchQuicBackends(t *testing.T) {
 	req.Equal("manager", snap.Backends[0].Kind)
 }
 
-// TestGetQuicAgentCert covers the three cases the RPC's contract distinguishes,
-// per "Agent connections over QUIC" in docs/reference/quic-transport-architecture.md: an agent
+// TestGetQuicAgentCert covers the cases the RPC's contract distinguishes, per "Agent
+// connections over QUIC" in docs/reference/quic-transport-architecture.md: an agent
 // session gets a certificate that verifies against the manager's QUIC CA for exactly
-// its own SNI name; a manager with no QUIC CA reports enabled=false rather than
-// erroring; and a client (non-agent) session is rejected outright, regardless of
-// whether the QUIC CA exists.
+// its own SNI name and carries the manager's authentication mode; the QUIC CA is now
+// unconditional (see NewService), so a manager with no QUIC tunnel port still returns
+// Enabled true and usable material; and a client (non-agent) session is rejected
+// outright, regardless of the QUIC tunnel port.
 func TestGetQuicAgentCert(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -314,20 +316,10 @@ func TestGetQuicAgentCert(t *testing.T) {
 	testAgents := testdata.GetTestAgents(t)
 	testClients := testdata.GetTestClients(t)
 
-	t.Run("agent session with QUIC CA", func(t *testing.T) {
+	verifyCert := func(t *testing.T, cert *rpc.QuicAgentCert, wantSNI string) {
+		t.Helper()
 		req := require.New(t)
-		conn := getTestClientConn(ctx, t, nil, func(e *managerutil.Env) { e.TunnelQuicPort = 7778 })
-		defer conn.Close()
-		client := rpc.NewManagerClient(conn)
-
-		helloAgent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
-		agentSess, err := client.ArriveAsAgent(ctx, helloAgent)
-		req.NoError(err)
-
-		cert, err := client.GetQuicAgentCert(ctx, agentSess)
-		req.NoError(err)
 		req.True(cert.Enabled)
-		wantSNI := quicfwd.AgentSNI(helloAgent.PodUid)
 		req.Equal(wantSNI, cert.Sni)
 
 		roots := x509.NewCertPool()
@@ -342,12 +334,32 @@ func TestGetQuicAgentCert(t *testing.T) {
 			KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		})
 		req.NoError(err, "minted agent certificate must verify against the manager's QUIC CA for its own SNI name")
+	}
+
+	t.Run("agent session with QUIC tunnel port", func(t *testing.T) {
+		req := require.New(t)
+		conn := getTestClientConn(ctx, t, nil, func(e *managerutil.Env) {
+			e.TunnelQuicPort = 7778
+			e.AuthenticationMode = auth.ModePermissive
+		})
+		defer conn.Close()
+		client := rpc.NewManagerClient(conn)
+
+		helloAgent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+		agentSess, err := client.ArriveAsAgent(ctx, helloAgent)
+		req.NoError(err)
+
+		cert, err := client.GetQuicAgentCert(ctx, agentSess)
+		req.NoError(err)
+		verifyCert(t, cert, quicfwd.AgentSNI(helloAgent.PodUid))
+		req.Equal("permissive", cert.AuthenticationMode)
 	})
 
-	t.Run("no QUIC CA", func(t *testing.T) {
+	t.Run("agent session without a quic tunnel port", func(t *testing.T) {
 		req := require.New(t)
-		// TunnelQuicPort defaults to 0 here, so NewService never creates a
-		// QUIC CA at all (see service.go's NewService).
+		// TunnelQuicPort defaults to 0 here, gating only the QUIC tunnel
+		// listener; the QUIC CA itself is unconditional (see NewService), so
+		// this RPC still returns Enabled true and usable material.
 		conn := getTestClientConn(ctx, t, nil)
 		defer conn.Close()
 		client := rpc.NewManagerClient(conn)
@@ -358,7 +370,7 @@ func TestGetQuicAgentCert(t *testing.T) {
 
 		cert, err := client.GetQuicAgentCert(ctx, agentSess)
 		req.NoError(err)
-		req.False(cert.Enabled)
+		verifyCert(t, cert, quicfwd.AgentSNI(helloAgent.PodUid))
 	})
 
 	t.Run("non-agent session", func(t *testing.T) {
@@ -902,6 +914,76 @@ func TestGetQuicTunnelEndpoint_Gating(t *testing.T) {
 
 		ep := arriveAndFetch(t, conn)
 		require.False(t, ep.Enabled)
+	})
+}
+
+// TestGetSessionCredential covers GetSessionCredential's contract: the session's
+// owner receives a credential -- client certificate and signed token -- that both
+// name the session and verify against the returned CA, and this works with no QUIC
+// tunnel port configured, since the QUIC CA is now unconditional (see NewService); a
+// caller bound to a different identity is denied; and an unknown session is NotFound.
+func TestGetSessionCredential(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testClients := testdata.GetTestClients(t)
+
+	t.Run("owner receives a usable credential with no quic tunnel port", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		before := time.Now()
+		cred, err := mgr.GetSessionCredential(auth.WithPrincipal(sctx, principal), sess)
+		req.NoError(err)
+		req.True(cred.Expiry.AsTime().After(before), "expiry must be in the future")
+
+		pair, err := tls.X509KeyPair(cred.ClientCertPem, cred.ClientKeyPem)
+		req.NoError(err)
+		leaf, err := x509.ParseCertificate(pair.Certificate[0])
+		req.NoError(err)
+		req.Equal(sess.SessionId, leaf.Subject.CommonName)
+
+		roots := x509.NewCertPool()
+		req.True(roots.AppendCertsFromPEM(cred.CaPem))
+		_, err = leaf.Verify(x509.VerifyOptions{
+			Roots:     roots,
+			KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		})
+		req.NoError(err, "minted client certificate must verify against the returned CA")
+
+		pub, err := sessiontoken.PublicKeyFromCertPEM(cred.CaPem)
+		req.NoError(err)
+		sessionID, err := sessiontoken.Verify(pub, cred.Token, time.Now())
+		req.NoError(err)
+		req.Equal(sess.SessionId, sessionID)
+	})
+
+	t.Run("caller with a different bound identity is denied", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		alice := proto.Clone(testClients["alice"]).(*rpc.ClientInfo)
+		principal := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, principal), alice)
+		req.NoError(err)
+
+		otherCtx := auth.WithPrincipal(sctx, &auth.Principal{Username: "mallory", UID: "mallory-uid"})
+		_, err = mgr.GetSessionCredential(otherCtx, sess)
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+	})
+
+	t.Run("unknown session is not found", func(t *testing.T) {
+		req := require.New(t)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+		_, err := mgr.GetSessionCredential(sctx, &rpc.SessionInfo{SessionId: "does-not-exist"})
+		req.Error(err)
+		req.Equal(codes.NotFound, status.Code(err))
 	})
 }
 

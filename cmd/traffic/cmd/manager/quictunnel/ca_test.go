@@ -4,10 +4,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/sessiontoken"
 )
 
 func TestCA_MintClientCert(t *testing.T) {
@@ -106,6 +108,23 @@ func TestCA_ServerCertToPEM_RoundTrips(t *testing.T) {
 		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	})
 	require.NoError(t, err, "PEM-round-tripped server certificate must still verify against the CA")
+}
+
+func TestCA_MintSessionToken(t *testing.T) {
+	ca, err := quictunnel.NewCA()
+	require.NoError(t, err)
+
+	before := time.Now()
+	token, expiry, err := ca.MintSessionToken("session-1234")
+	require.NoError(t, err)
+	require.True(t, expiry.After(before), "expiry must be in the future")
+
+	pub, err := sessiontoken.PublicKeyFromCertPEM(ca.CertPEM())
+	require.NoError(t, err)
+
+	sessionID, err := sessiontoken.Verify(pub, token, time.Now())
+	require.NoError(t, err)
+	require.Equal(t, "session-1234", sessionID)
 }
 
 func TestCA_DifferentInstancesDoNotCrossTrust(t *testing.T) {
