@@ -20,12 +20,11 @@ Verdicts:
 | dropped | deliberately not ported, reason recorded |
 | unclaimed | no new suite names it; needs a decision |
 
-Confidence: rows marked `read` were verified by reading both sides. Rows
-marked `grep` were verified by locating (or failing to locate) the flag,
-verb, or field under test in `regression_test/`. A `grep` row that says
-"absent" is a strong negative — the token appears nowhere under
-`regression_test/` — but a `grep` row that says "present" is weaker and
-should be upgraded to `read` before its area retires.
+Confidence: every row is now `read` — both sides were read. The first pass
+marked some rows `grep` (the flag, verb, or field was located, or not, by
+search alone); upgrading those changed verdicts, so search alone is not
+enough to retire on. `docker_run_test.go` went from superseded to partial,
+and the docker area from "near ready" to blocked.
 
 ## Summary
 
@@ -57,9 +56,9 @@ Two areas were claimed and never built at all: `install/Setup` (7 tests) and
 | replace_test.go | 1 | attach/Matrix replace/multiport | partial: old asserts BOTH service ports route local under replace; `runCell` checks the primary port only, and its extra-port check is gated to `verb == "intercept"` | read |
 | wiretap_test.go | 2 | attach/Matrix wiretap cells | partial: Test_MultipleTapsOnOnePort (two wiretaps on one port) has no home | read |
 | ingest_test.go | 11 | attach/Matrix ingest cells + attach/Conflicts | partial: IngestFTP, IngestProxyVia, IngestWithCommand, IngestWithContainerAndCommand, LeaveIngestWithoutContainer, IngestListFormat, IngestIngestConflict | read |
-| argo_rollouts_test.go | 2 | — | partial: no Rollout kind exists. `argo` appears nowhere under `regression_test/`; the catalog's "argo variant keeps its CRD-install fixture + label" was never built | grep |
+| argo_rollouts_test.go | 2 | — | partial: intercepting a Rollout with workloads.argoRollouts.enabled=true and the Argo CRDs installed, plus listing the underlying ReplicaSet when rollout support is off. `argo` appears nowhere under regression_test; the catalog's "argo variant keeps its CRD-install fixture + label" was never built | read |
 | headless_test.go | 1 | attach/Matrix headless cells | superseded | read |
-| container_test.go | 2 | — | unclaimed: `--container` appears nowhere under `regression_test/` | grep |
+| container_test.go | 2 | — | unclaimed: intercepting a named container in a multi-container pod (`--container`), and `--container` combined with replace. The flag appears nowhere under regression_test | read |
 
 `attach` is the biggest collapse and the least ready. Its ledger needs the
 most scrutiny; it retires last.
@@ -70,14 +69,14 @@ most scrutiny; it retires last.
 |---|---|---|---|---|
 | http_intercepts_test.go | 10 | intercept/Filters (Header, PathPrefix, Combined, Coexistence, TCPPortConflict) | partial: Test_BackwardCompatibility, Test_HTTPManySimultaneous, Test_HTTPManyClientsSimultaneous | read |
 | intercept_flags_test.go | 1 | — | partial: Test_ContainerReplace is `--container` + replace; same gap as container_test.go | read |
-| multiple_port_intercept_test.go | 3 | intercept/Routing Test_MultiPort | partial: MultiPortLocalConflict, MultiPortRemoteConflict | grep |
+| multiple_port_intercept_test.go | 3 | intercept/Routing Test_MultiPort (one named port intercepted, the other left on the cluster) | partial: MultiPortIntercept intercepts *two* ports on one workload with two --port flags and asserts the mapping in status -- the new test uses a single --port; MultiPortLocalConflict ("N is already in use by intercept X"); MultiPortRemoteConflict ("one intercept has no filters") | read |
 | multi_replica_intercept_test.go | 2 | intercept/Routing Test_MultiReplica (global) | partial: the personal/filtered all-replicas variant | read |
-| local_shortcut_test.go | 3 | intercept/Routing Test_LocalShortcut | partial: 3 old variants (active traffic, disabled, not-global) collapse to 1 new test; confirm all three semantics are asserted | grep |
-| multiport_test.go | 4 | — | partial: unnamed service ports, no container port, unnamed UDP+TCP, same container port — four service-shape edge cases with no home | grep |
-| to_pod_test.go | 2 | — | partial: `--to-pod` appears nowhere under `regression_test/` | grep |
-| bind_to_podip_test.go | 1 | — | partial: pod-IP bind appears nowhere | grep |
-| intercept_localhost_test.go | 1 | — | partial: custom localhost address has no home | grep |
-| multiple_intercepts_test.go | 2 | intercept/Filters Test_TCPPortConflict (conflict half only) | partial: **intercept/Concurrent was never built** — no file, no 3-simultaneous-intercept test | grep |
+| local_shortcut_test.go | 3 | intercept/Routing Test_LocalShortcut (shortcut on+global, and off) | partial: Test_ShortcutNotGlobal -- localShortcut=true with localShortcutIsGlobal=false, where a filtered intercept is exempted from the shortcut. The suite's two config deltas set both fields together, so the middle case cannot occur. Old also asserts the shortcut applies to the pod address as well as the service address | read |
+| multiport_test.go | 4 | — | partial: four service-shape edge cases with no home -- multiple *unnamed* service ports, a workload with no container port, UDP and TCP services on the same port, and two services on one container port. workloads.Template only renders named ports (ExtraPorts []NamedPort), so each needs a new template, not just a new test | read |
+| to_pod_test.go | 2 | — | partial: `--to-pod` TCP and UDP port forwarding; the flag appears nowhere under regression_test | read |
+| bind_to_podip_test.go | 1 | — | partial: the intercept binding to the pod IP rather than loopback; no equivalent under regression_test | read |
+| intercept_localhost_test.go | 1 | — | partial: a custom localhost address for the intercept handler, including that plain localhost does *not* answer; no equivalent under regression_test | read |
+| multiple_intercepts_test.go | 2 | — | partial: **intercept/Concurrent was never built**. Test_Intercepts drives N simultaneous intercepts with concurrent traffic to each; Test_ReportsPortConflict asserts the *local* port clash ("port 127.0.0.1:N is already in use by intercept X"), which is a different path from intercept/Filters' Test_TCPPortConflict (a manager-side global-intercept conflict) | read |
 | h2c_intercept_test.go | 3 | intercept/Routing Test_H2C | superseded | read |
 | ignored_mounts_test.go | 1 | mounts/Ignored, mounts/NotIgnored | superseded | read |
 | intercept_env_test.go | 1 | — | unclaimed: `--env-excludes` filtering. intercept/Flags does `--env-file`/`--env-json` round-trip but not exclusion | read |
@@ -92,41 +91,41 @@ most scrutiny; it retires last.
 | not_connected_test.go | 6 | connect/Errors, connect/Lifecycle, smoke/StatusNotRunning | partial: Test_ConnectWithCommand (`connect -- <cmd>`), Test_CreateAndRunIndividualPod | read |
 | reconnect_session_test.go | 1 | connect/Test_ReconnectAfterApiServerDrop | superseded | read |
 | kubeconfig_extension_test.go | 5 | connect/Contexts (AlsoNeverProxy, DNSIncludeSuffixes) | partial: Test_APIServerIsProxied, Test_ConflictingProxies, Test_AlsoNeverProxyDocker | read |
-| kubeauth_test.go | 1 | — | partial: exec-credential kubeconfig auth has no home; the catalog claimed connect/Contexts | grep |
+| kubeauth_test.go | 1 | — | partial: an exec-credential kubeconfig, driven over both a host and a docker connection, asserting the authenticator ran (connector.log for host, kubeauth.log for docker, where it runs as its own host process). No exec-credential plumbing exists in regression_test | read |
 | uhn_dns_test.go | 2 | dns/Excludes, dns/Mappings | **retired** | read |
-| multi_connect_test.go | 3 | connect/Test_TwoDockerConnections | partial: named connections and same-namespace multi-connect | grep |
-| inactive_client_test.go | 2 | — | partial: inactivity takeover has no home; `inactiv` appears nowhere under `regression_test/` | grep |
+| multi_connect_test.go | 3 | connect/ConnectMulti Test_TwoDockerConnections -- two *named* docker connections to different namespaces, list isolation both ways, concurrent intercepts, quit-one-keeps-the-other | partial: Test_MultipleConnect_sameNamespace, two connections into the *same* namespace | read |
+| inactive_client_test.go | 2 | — | partial: taking over a connection whose owning client has gone inactive, and the sleeping-client variant; `inactiv` appears nowhere under regression_test | read |
 
 ## install
 
 | old file | tests | covered by | verdict | conf |
 |---|---|---|---|---|
-| install_test.go | 8 | install/Lifecycle, install/Values, golden/ | partial: Test_HelmSubChart, Test_No_Upgrade, Test_findTrafficManager_differentNamespace_present | grep |
-| helm_test.go | 7 | install/Lifecycle Test_CollidingInstall, connect/Test_UnmanagedNamespace | partial: webhook injects/doesn't-inject per managed namespace, Test_HelmMultipleInstalls, Test_HelmInstallReportsPodFailureReason | grep |
+| install_test.go | 8 | install/HelmLifecycle (uninstall, failed-install tolerance, absence), install/HelmValues Test_ReuseThenResetValues (UpgradeRetainsValues), golden/ (HelmTemplateInstall) | partial: Test_HelmSubChart, Test_No_Upgrade, Test_findTrafficManager_differentNamespace_present | read |
+| helm_test.go | 7 | install/HelmLifecycle Test_CollidingInstall, connect/Test_UnmanagedNamespace, and the attach area for the managed-namespace intercept | partial: HelmWebhookInjectsInManagedNamespace and its doesn't-inject twin (injection scoped by managed namespace), Test_HelmMultipleInstalls, Test_HelmInstallReportsPodFailureReason (BrokenInstallThenCorrected asserts the failure, not the reported pod reason) | read |
 | uninstall_test.go | 1 | install/Test_InstallUninstallReinstall | superseded | read |
 | pod_cidr_test.go | 1 | install/Test_ExplicitCIDRsReachStatus | partial: only the explicit-CIDR strategy; the other podCIDR strategies are unasserted | read |
-| setup_test.go | 7 | — | **partial: `install/Setup` does not exist.** Deferred with the `setup` verb to 2.32.0 | grep |
+| setup_test.go | 7 | — | **partial: install/Setup does not exist.** Apply idempotence, round-trip, streaming output, upgrade merge, non-admin handoff, client-RBAC input round-trip, and validation. Deferred with the `setup` verb to 2.32.0 | read |
 | limitrange_test.go | 1 | injector/Test_AgentGetsDefaultedResources | superseded | read |
 
 ## injector
 
 | old file | tests | covered by | verdict | conf |
 |---|---|---|---|---|
-| webhook_test.go | 2 | injector/Test_AnnotationDrivesInjection | partial: Test_AgentImageFromConfig | grep |
-| inject_policy_test.go | 3 | injector/Test_Policies | partial: Test_MultiOnDemandInjectOnInstall, Test_MultiOnDemandInjectOnApply | grep |
+| webhook_test.go | 2 | injector/AutoInject Test_AnnotationDrivesInjection | partial: Test_AgentImageFromConfig. The only `--agent-image` use in regression_test is manual_agent.go's genyaml invocation, which is the CLI flag, not the cluster config driving the injected image | read |
+| inject_policy_test.go | 3 | injector/InjectPolicies Test_Policies (OnDemand and WhenEnabled semantics, annotated vs plain) | partial: Test_MultiOnDemandInjectOnInstall and Test_MultiOnDemandInjectOnApply -- several workloads under OnDemand, at install time and at apply time | read |
 | injector_test.go | 3 | injector/Test_AccessMethods (both secret-upgrade tests) | partial: Test_InterceptOperationRestoredAfterFailingInject (failed-inject resync) | read |
 | agent_injector_disabled_test.go | 3 | injector/Test_InterceptFailsVersionAndListStillWork, Test_HandBuiltAgentIntercepts | superseded | read |
 | manual_agent_test.go | 1 | injector/Test_HandBuiltAgentIntercepts | superseded | read |
-| env_interpolate_test.go | 1 | — | partial: `interpolat` appears nowhere under `regression_test/` | grep |
-| tls_test.go | 1 | — | partial: TLS *annotations* on a workload; the `tls`/`TLS` hits under `regression_test/` are cert-regen and h2c, not annotations | grep |
+| env_interpolate_test.go | 1 | — | partial: prefixed env-var interpolation in the injected agent's environment; `interpolat` appears nowhere under regression_test | read |
+| tls_test.go | 1 | — | partial: the workload's TLS annotations driving the agent's TLS config. The `tls`/`TLS` hits under regression_test are webhook cert-regen and h2c, a different surface | read |
 | workload_configuration_test.go | 4 | — | unclaimed: `telepresence.io/enabled=false` across workload kinds | read |
 
 ## namespaces
 
 | old file | tests | covered by | verdict | conf |
 |---|---|---|---|---|
-| namespaces_test.go | 5 | namespaces/StaticList, MappedNamespaces, SelectorSemantics | partial: Test_NamespacesClusterWide, Test_MultiNamespaceHTTPIntercepts, Test_MultiNamespaceIngests | grep |
-| multiple_services_test.go | 5 | session/compat_sim Test_ListAndIntercept (the `Test_List` half) | partial: **`session/Throughput` was never built** — LargeRequest, RepeatedConnect, ProxiesOutboundTraffic, AllowsUnmanagedMappedNamespace | grep |
+| namespaces_test.go | 5 | namespaces/StaticList (Static), SelectorSemantics Test_LabelToggle (Dynamic), MappedNamespaces | partial: Test_NamespacesClusterWide (a manager managing every namespace), Test_MultiNamespaceHTTPIntercepts and Test_MultiNamespaceIngests (attaching across two namespaces at once) | read |
+| multiple_services_test.go | 5 | session/compat_sim Test_ListAndIntercept (the Test_List half) | partial: **session/Throughput was never built** -- LargeRequest, RepeatedConnect, ProxiesOutboundTraffic, and AllowsUnmanagedMappedNamespace (MappedNamespaces proves scoping, not that an *unmanaged* namespace may be mapped) | read |
 
 ## nodeagent
 
@@ -156,7 +155,7 @@ most scrutiny; it retires last.
 | old file | tests | covered by | verdict | conf |
 |---|---|---|---|---|
 | cloud_config_test.go | 5 | session/ClientConfig Test_ServedConfigReflectsOnConnect | partial: five old tests collapse to one. CloudAgentArrival, and both cloud log-level tests, have no home; the new test's own comment says it ports "cloud_config_test.go's core" | read |
-| loglevel_test.go | 1 | — | partial: root-daemon log level has no home | grep |
+| loglevel_test.go | 1 | — | partial: asserts the configured level actually reaches rootd's logger (` DEBUG +rootd/server` lines in daemon.log). Nothing in regression_test inspects daemon log content | read |
 | gather_logs_test.go | 7 | session/GatherLogs Test_Matrix | superseded (catalog's dedup of the two byte-identical tests is legitimate) | read |
 | usage_reporting_test.go | 1 | session/Test_ReportedFromClientAndManager | superseded | read |
 | workload_watch_test.go | 1 | session/Test_ManagerWatchSeesLifecycle | superseded | read |
@@ -171,7 +170,7 @@ most scrutiny; it retires last.
 | svcdomain_test.go | 1 | dns/Test_ServiceNameForms | **retired** | read |
 | wpad_test.go | 1 | dns/Test_NotForwarded | **retired** | read |
 | also_proxy_test.go | 1 | connect/Test_AlsoNeverProxy, routing/Test_SubCIDRExcludedFromRoutedSubnets | superseded (the catalog's "drops the also-proxy duplicate" holds) | read |
-| cidr_conflict_test.go | 6 | routing/Test_SubnetConflict | partial: auto-resolution, auto-avoidance, the cloud- and client-side disables, allow-conflict, and local-DNS-stays-reachable — five of six have no home | grep |
+| cidr_conflict_test.go | 6 | routing/Test_SubnetConflict subtests (auto-resolve to the virtual subnet; --allow-conflicting-subnets) | partial: 4 of 6 have no home -- the cluster-served and client-side `autoResolveConflicts=false` refusals, the config-driven AllowConflicting route check (`ip route get` via brm), and local-DNS-stays-reachable inside a conflicting subnet | read |
 | proxy_via_test.go | 5 | routing/Test_AllSubnetsRouteThroughWorkload, Test_SubCIDRExcludedFromRoutedSubnets | partial: Test_ProxyViaLoopBack, Test_ProxyViaAllAndMounts (the suite doc comment already says the mounts variant "is left to the mounts area", where it does not exist) | read |
 | udp_test.go | 1 | — | unclaimed: plain UDP echo through the TUN. quic/Datagrams covers UDP over QUIC datagrams, a different path | read |
 
@@ -180,9 +179,9 @@ most scrutiny; it retires last.
 | old file | tests | covered by | verdict | conf |
 |---|---|---|---|---|
 | mounts_test.go | 3 | mounts/Content (read side), intercept/Concurrent (colliding — never built) | partial: Test_MountWrite is an **explicit, documented skip** in `mounts/content.go` (needs a PVC-backed writable volume); Test_MountReadOnly and Test_CollidingMounts have no home | read |
-| intercept_mount_test.go | 4 | intercept/Test_DetailedJSON | partial: Test_InterceptMount, Test_InterceptMountRelative, Test_NoInterceptorResponse | grep |
-| podscaling_test.go | 2 | mounts/Test_MountSurvivesPodScaling | partial: Test_StopInterceptedPodOfMany | grep |
-| large_files_test.go | 2 | — | partial: `LargeFile` appears nowhere under `regression_test/`; the catalog claimed mounts/FUSE with a `slow` label | grep |
+| intercept_mount_test.go | 4 | intercept/Test_DetailedJSON, mounts/Content (which reads content under the mount root, subsuming Test_InterceptMount's "mount point is a directory") | partial: Test_InterceptMountRelative (a relative --mount path), Test_NoInterceptorResponse | read |
+| podscaling_test.go | 2 | mounts/Podscaling Test_MountSurvivesPodScaling (scale to zero and back; the suite doc names Test_RestartInterceptedPod) | partial: Test_StopInterceptedPodOfMany -- killing one pod of several, where the attachment must move to a surviving pod | read |
+| large_files_test.go | 2 | — | partial: large-file transfer across the mount under both backends (fuseftp and sshfs). Nothing under regression_test moves a large file; the catalog claimed mounts/FUSE with a `slow` label | read |
 
 ## docker and state
 
