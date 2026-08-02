@@ -40,3 +40,6 @@ func (p noopWriter) Stop() {
 
 func (p noopWriter) TriggerRefresh() {
 }
+
+func (p noopWriter) SetTotal(int) {
+}

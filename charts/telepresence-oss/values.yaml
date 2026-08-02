@@ -334,6 +334,10 @@ hooks:
     pullPolicy: IfNotPresent
 
 client:
+  # cluster:
+  #   # Namespaces delivered to connecting clients as their mapped-namespaces default.
+  #   # A client's local --mapped-namespaces flag or config.yml setting overrides it.
+  #   mappedNamespaces: []
   dns:
     # Tell client's DNS resolver to never send names with these suffixes to the cluster side resolver
     excludeSuffixes: [".com", ".io", ".net", ".org", ".ru"]

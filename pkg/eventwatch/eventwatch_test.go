@@ -1,6 +1,7 @@
 package eventwatch
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	core "k8s.io/api/core/v1"
 	events "k8s.io/api/events/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestIsTerminal(t *testing.T) {
@@ -39,25 +41,50 @@ func TestIsTerminal(t *testing.T) {
 	}
 }
 
-func TestRegardingMatches(t *testing.T) {
-	tests := []struct {
-		name string
-		kind string
-		obj  string
-		want bool
-	}{
-		{"exact name match is kind-agnostic", "Deployment", "traffic-manager", true},
-		{"owned pod matches by prefix", "Pod", "traffic-manager-abc", true},
-		{"owned replicaset matches by prefix", "ReplicaSet", "traffic-manager-abc", true},
-		{"same-prefix service does not match", "Service", "traffic-manager-quic", false},
-		{"unrelated pod does not match", "Pod", "agent-injector-abc", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e := &events.Event{Regarding: core.ObjectReference{Kind: tt.kind, Name: tt.obj}}
-			assert.Equal(t, tt.want, regardingMatches(e, "traffic-manager", "traffic-manager-"))
-		})
-	}
+func TestListWarnings(t *testing.T) {
+	client := fake.NewClientset(
+		&events.Event{
+			ObjectMeta: meta.ObjectMeta{Name: "e1", Namespace: "ns"},
+			Regarding:  core.ObjectReference{Kind: "Pod", Name: "traffic-manager-abc"},
+			Type:       "Warning",
+			Reason:     "BackOff",
+			Note:       "Back-off restarting failed container",
+		},
+		&events.Event{
+			ObjectMeta: meta.ObjectMeta{Name: "e2", Namespace: "ns"},
+			Regarding:  core.ObjectReference{Kind: "Pod", Name: "traffic-manager-abc"},
+			Type:       "Warning",
+			Reason:     "BackOff",
+			Note:       "(combined from similar events): Back-off restarting failed container",
+		},
+		&events.Event{
+			ObjectMeta: meta.ObjectMeta{Name: "e3", Namespace: "ns"},
+			Regarding:  core.ObjectReference{Kind: "Pod", Name: "other-abc"},
+			Type:       "Warning",
+			Reason:     "BackOff",
+			Note:       "Back-off restarting failed container",
+		},
+		&events.Event{
+			ObjectMeta: meta.ObjectMeta{Name: "e4", Namespace: "ns"},
+			Regarding:  core.ObjectReference{Kind: "Service", Name: "traffic-manager-quic"},
+			Type:       "Warning",
+			Reason:     "SomeReason",
+			Note:       "unrelated service sharing the name prefix",
+		},
+		&events.Event{
+			ObjectMeta: meta.ObjectMeta{Name: "e5", Namespace: "ns"},
+			Regarding:  core.ObjectReference{Kind: "ReplicaSet", Name: "traffic-manager-abc"},
+			Type:       "Warning",
+			Reason:     "FailedCreate",
+			Note:       "create Pod failed: forbidden",
+		},
+	)
+	es, err := ListWarnings(context.Background(), client, "ns", "traffic-manager")
+	require.NoError(t, err)
+	require.Len(t, es, 2, "the combined duplicate, the unrelated object, and the same-prefix Service must be excluded")
+	names := []string{es[0].Name, es[1].Name}
+	assert.Contains(t, names, "e1")
+	assert.Contains(t, names, "e5")
 }
 
 func TestWriteList(t *testing.T) {

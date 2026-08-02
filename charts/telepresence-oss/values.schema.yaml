@@ -243,6 +243,17 @@ properties:
   client:
     type: object
     properties:
+      cluster:
+        type: object
+        properties:
+          mappedNamespaces:
+            description: >-
+              Namespaces the traffic-manager delivers to connecting clients as their
+              mapped-namespaces default. A client's local --mapped-namespaces flag or
+              config.yml setting overrides it.
+            type: array
+            items:
+              type: string
       connectionTTL:
         description: Deprecated use grpc.connectionTTL
         deprecated: true
