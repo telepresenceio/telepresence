@@ -15,8 +15,7 @@ import (
 // vethNames holds one veth-up/veth-down cycle's interface names, randomized
 // per invocation: integration_test/testdata/scripts/veth-up.sh hard-codes
 // vm1/vm2/tapm/brm, so two overlapping runs (or a leftover from a prior
-// failed one) collide (docs/plans/regression-test-framework/m3-wave4-spec.md's
-// veth mechanism notes, "Naming collision risk").
+// failed one) would collide.
 type vethNames struct {
 	veth1, veth2, tap, bridge string
 }

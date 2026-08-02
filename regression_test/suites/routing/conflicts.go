@@ -20,10 +20,9 @@ import (
 // slice.AsStrings(sns), ...)`). The conflict is manufactured by bringing up
 // a local veth/bridge pair that owns an address inside the cluster's first
 // service subnet, exactly as integration_test/testdata/scripts/veth-up.sh
-// does for cidrConflictSuite (see
-// docs/plans/regression-test-framework/m3-wave4-spec.md's veth mechanism
-// notes) -- reimplemented in veth.go with randomized interface names so two
-// runs (or a leftover from a prior failed one) never collide.
+// does for cidrConflictSuite -- reimplemented in veth.go with randomized
+// interface names so two runs (or a leftover from a prior failed one) never
+// collide.
 type Conflicts struct {
 	rt.Suite
 }

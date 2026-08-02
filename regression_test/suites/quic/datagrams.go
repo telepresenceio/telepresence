@@ -23,13 +23,11 @@ const quicDatagramsEnvVar = "TELEPRESENCE_QUIC_ENABLE_DATAGRAMS"
 // (managers.Values.ExtraEnv) -- the sanctioned inline-Spec pattern this area
 // already uses for a forced-endpoint overlay (fallback.go's
 // quicUnreachableSpec). Built inline (managers.Spec{Key: "quic-datagrams",
-// ...}) rather than as a separate managers catalog entry, per
-// docs/plans/regression-test-framework/m5-spec.md's "quic area additions"
-// section. Unlike quic_test.go, which toggled the env var mid-suite with a
-// `kubectl set env` + reconnect, this spec starts the manager process with
-// the opt-in already set: the datagram counters this suite asserts on then
-// start at zero for the whole release, with no risk of a stale nonzero
-// count left by an earlier test.
+// ...}) rather than as a separate managers catalog entry, since no other
+// suite needs it. The spec starts the manager process with the opt-in
+// already set rather than toggling it mid-suite, so the datagram counters
+// this suite asserts on start at zero for the whole release, with no risk
+// of a stale nonzero count left by an earlier test.
 func quicDatagramsSpec() managers.Spec {
 	v := managers.QuicNodePort().Values
 	v.ExtraEnv = append(v.ExtraEnv, corev1.EnvVar{Name: quicDatagramsEnvVar, Value: "true"})

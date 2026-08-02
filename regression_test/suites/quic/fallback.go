@@ -18,8 +18,7 @@ const quicUnreachableHost = "192.0.2.1"
 // endpoint QuicNodePort's own doc comment describes -- exactly the escape
 // hatch that comment names for a suite needing a specific, forced endpoint.
 // Built inline (managers.Spec{Key: "quic-unreachable", ...}) rather than as
-// a separate managers catalog entry, per m3-wave3-spec.md's "quic area"
-// section.
+// a separate managers catalog entry, since no other suite needs it.
 func quicUnreachableSpec() managers.Spec {
 	v := managers.QuicNodePort().Values
 	v.QuicTunnel.ExternalHost = quicUnreachableHost
