@@ -63,7 +63,19 @@ func (pa *podAccess) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGr
 			session := getSession(ctx)
 			m = remotefs.NewBridgeMounter(tunnel.SessionID(session.SessionInfo().SessionId), session.ManagerClient(), uint16(pa.localMountPort))
 		case useFtp:
-			m = remotefs.NewFTPMounter(fuseftp, iceptWG)
+			// The provider reads the session credential at the time the FTP client is
+			// constructed, not on every call: go-fuseftp seeds user/password into its
+			// connection pool once, at construction, so a token refreshed after that (or
+			// picked up by a later Start on a pod switch, which just calls SetAddress on
+			// the existing client) never reaches it. Sessions are typically far shorter
+			// than the token's 24h lifetime, so this is not a practical problem.
+			tokenProvider := func() string {
+				if cred := getSession(ctx).SessionCredential(ctx); cred != nil {
+					return cred.Token
+				}
+				return ""
+			}
+			m = remotefs.NewFTPMounter(fuseftp, iceptWG, tokenProvider)
 		default:
 			m = remotefs.NewSFTPMounter(iceptWG, podWG)
 		}

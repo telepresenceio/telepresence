@@ -209,5 +209,8 @@ replace github.com/telepresenceio/telepresence/cmd/cobraparser/v2 => ./cmd/cobra
 // Pending a go-ftpserver release.
 replace github.com/telepresenceio/go-ftpserver => ../go-ftpserver
 
+// Pending a go-fuseftp release.
+replace github.com/telepresenceio/go-fuseftp => ../go-fuseftp
+
 // Awaits https://github.com/caarlos0/env/pull/401
 replace github.com/caarlos0/env/v11 => github.com/thallgren/env/v11 v11.0.0-20260107112108-5d5593a09332

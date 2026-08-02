@@ -112,6 +112,10 @@ type session struct {
 
 	sessionInfo *manager.SessionInfo // sessionInfo returned by the traffic-manager
 
+	// sessionCredential caches the session-scoped credential fetched from the
+	// manager; see SessionCredential.
+	sessionCredential sessionCredentialCache
+
 	workloadsLock sync.Mutex
 
 	// Map of manager.WorkloadInfo split into namespace, key of kind and name, and workloadInfo
