@@ -36,8 +36,7 @@ const (
 
 	// stateInterceptWL/stateIngestWL name the two echo workloads every
 	// manifest in this package attaches to: an intercept target and a
-	// sibling ingest target, mirroring integration_test/
-	// state_manifest_test.go's smInterceptWL/smIngestWL.
+	// sibling ingest target, so one manifest covers both attachment kinds.
 	stateInterceptWL = "state-intercept"
 	stateIngestWL    = "state-ingest"
 
@@ -87,9 +86,8 @@ func (r manifestResult) attachment(t testing.TB, name string) attachmentResult {
 
 // stateAttachments returns the intercept (mount disabled, local port
 // localPort) and sibling ingest (mount disabled) attachment pair shared by
-// every connection-bearing manifest in this package, mirroring
-// state_manifest_test.go's attachmentsYAML. The intercept's local port is
-// the only field a drift variant ever changes.
+// every connection-bearing manifest in this package. The intercept's local
+// port is the only field a drift variant ever changes.
 func stateAttachments(localPort int) []state.Attachment {
 	ic := state.Intercept(stateInterceptWL)
 	ic.Ports = []string{fmt.Sprintf("%d:http", localPort)}
@@ -174,11 +172,19 @@ func deleteJSON(t testing.TB, tp *cli.TP, ctx context.Context, path string) mani
 // nothing is running (smoke.SmokeCLI's Test_StatusNotRunning relies on the
 // same guarantee), so a failure here is a genuine error worth failing the
 // test over.
+//
+// The daemons go away behind the fixture engine's back, so any memoized
+// connection is now a handle to a dead session: ForgetConnections drops
+// them, and the next Get or Mutate connects afresh. Without it, a test in
+// this package that quits and a later one that takes the shared connection
+// fixture pass or fail depending on whether some earlier area populated
+// that memo.
 func quitAll(t testing.TB, tp *cli.TP, ctx context.Context) {
 	t.Helper()
 	if _, stderr, err := tp.Run(ctx, "quit", "-s"); err != nil {
 		t.Fatalf("quit -s: %v\n%s", err, stderr)
 	}
+	rt.R().ForgetConnections()
 }
 
 // listHasWorkload reports whether entries contains a workload named name.

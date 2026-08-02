@@ -223,6 +223,17 @@ func connectionHash(args, extra []string) string {
 	return hex.EncodeToString(h[:])
 }
 
+// ForgetConnections drops every memoized connection fixture, so the next Get
+// or Mutate connects afresh. A test that stops the daemons out of band --
+// `quit -s` rather than Conn.Disconnect -- must call it: the memo entry
+// otherwise survives the daemon and hands the next caller a handle to a
+// session that no longer exists, which fails only when some earlier suite
+// happened to populate the memo first. Mirrors the invalidation a manager
+// roll performs (fixture_manager.go's rollManager).
+func (r *Runtime) ForgetConnections() {
+	r.engine.invalidateSiblings("connection/", "")
+}
+
 // ConnectionFixture is a `telepresence connect` session to ns, keyed by
 // (namespace, opts). Owns quit-on-teardown.
 func ConnectionFixture(ns string, opts ...ConnOpt) *Fixture[*Conn] {
