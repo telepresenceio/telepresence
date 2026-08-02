@@ -46,6 +46,9 @@ items:
           <code>telepresence setup --format json</code> is a convenient
           attachment for bug reports.
         docs: reference/setup
+  - version: 2.31.2
+    date: (TBD)
+    notes:
       - type: change
         title: Namespaced installs no longer read ingresses cluster-wide
         body: >-
