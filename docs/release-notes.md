@@ -27,6 +27,30 @@ Running <code>telepresence apply</code> or <code>telepresence delete</code> with
 The traffic-manager evicts pods that lack an up-to-date traffic-agent so that the mutating webhook can inject one on recreation. When such a pod was replaced concurrently, for instance by a rollout that was still in flight, the eviction returned a "not found" error and commands like <code>telepresence intercept</code> failed. The traffic-manager now treats an already deleted pod as a successful eviction.
 </div>
 
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[The traffic-agent verifies the caller's session on its network ports](reference/authentication.md)</div></div>
+<div style="margin-left: 15px">
+
+A traffic-agent's gRPC, FTP, and SFTP ports were reachable by any pod in the cluster, and a caller declaring another client's session ID could receive that client's intercepted traffic. The traffic-manager now mints a session-scoped credential that the client presents on every agent connection, and the agent refuses a caller whose credential names a different session. With <code>security.authentication.mode=enforcing</code>, connections without a valid credential are rejected outright; in the other modes they are verified and logged, so existing clients are unaffected.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[The traffic-agent's SFTP server is confined to the exports tree](reference/authentication.md)</div></div>
+<div style="margin-left: 15px">
+
+The SFTP server that backs <code>telepresence mount</code> resolved absolute paths against the whole traffic-agent container filesystem, so any peer that could reach the port could read files like <code>/etc/passwd</code>. It now serves only the tree of volumes exported for mounting, the same confinement the FTP server has always had, and symbolic links can no longer escape it.
+</div>
+
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Changing the log level requires an owned session](reference/authentication.md)</div></div>
+<div style="margin-left: 15px">
+
+The traffic-manager's <code>SetLogLevel</code> call accepted any caller, although the new level propagated to the manager and every traffic-agent. The request now carries the client's session, whose ownership the manager verifies. Requests from older clients without a session are still honored unless <code>security.authentication.mode=enforcing</code>.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The QUIC forwarder becomes ready under enforcing authentication</div></div>
+<div style="margin-left: 15px">
+
+With <code>security.authentication.mode=enforcing</code> and the QUIC tunnel enabled, the quic-forwarder's backend watch was rejected as unauthenticated, its allowlist never became ready, and clients silently fell back to port-forward transport. The watch is now exempt from authentication, like <code>Version</code> and the health checks, and the forwarder warns when its allowlist stays empty.
+</div>
+
 ## Version 2.31.1 <span style="font-size: 16px;">(July 28)</span>
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Client-certificate authentication for cert-only kubeconfigs](reference/authentication)</div></div>
 <div style="margin-left: 15px">
