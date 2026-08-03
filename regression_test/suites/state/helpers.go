@@ -101,10 +101,13 @@ func stateAttachments(localPort int) []state.Attachment {
 
 // connectionManifest returns a WorkstationState declaring the shared
 // connection (stateConnName, in ns) plus the intercept+ingest attachment
-// pair, with mappedNamespaces drifted from the live session's implicit
-// (namespace-scoped) mapping when mappedNS is set -- a namespace-scoped
-// session maps exactly its own namespace, so the two-entry list can never
-// align with it. Mirrors writeManifestWithConnection.
+// pair, with mappedNamespaces drifted from the live session's mapping when
+// mappedNS is set. The drifted list deliberately excludes the connection's
+// own namespace: a request without mapped namespaces follows the manager's
+// managed set (session.CheckStatus compares against the session's effective
+// mapping), and that set always contains the connection's namespace, so
+// this list can never coincide with it. Mirrors
+// writeManifestWithConnection.
 func connectionManifest(ns string, localPort int, mappedNS bool) *state.State {
 	conn := &state.Connection{
 		Name:             stateConnName,
@@ -112,7 +115,7 @@ func connectionManifest(ns string, localPort int, mappedNS bool) *state.State {
 		ManagerNamespace: managers.ManagerNamespace,
 	}
 	if mappedNS {
-		conn.MappedNamespaces = []string{ns, managers.ManagerNamespace}
+		conn.MappedNamespaces = []string{managers.ManagerNamespace}
 	}
 	return &state.State{Connection: conn, Attachments: stateAttachments(localPort)}
 }
