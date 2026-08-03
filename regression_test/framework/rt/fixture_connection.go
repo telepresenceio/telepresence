@@ -342,9 +342,8 @@ func destroyConnection(e Env, c *Conn) error {
 // resulting *Conn. Unlike Mutate(ConnectionFixture(ns)), it always runs the
 // connect command: a fixture only reprovisions after the test that Mutated
 // it ends, so a second Mutate on the same (ns, no-opts) hash within one
-// test would just return the already-memoized Conn (see
-// docs/plans/regression-test-framework/plan.md's "Mutate is single-shot per
-// test" note). Callers typically call this right after
+// test would just return the already-memoized Conn: Mutate is single-shot
+// per test. Callers typically call this right after
 // Mutate(ConnectionFixture(ns)).Disconnect(t) to free whatever was
 // previously connected.
 func Reconnect(t testing.TB, ctx context.Context, ns string, opts ...ConnOpt) *Conn {

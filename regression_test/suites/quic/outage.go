@@ -28,7 +28,7 @@ func init() {
 func (s *Outage) Test_ForwarderOutageFallsBackAndRecovers() {
 	t := s.T()
 	t.Skip("under investigation: the mid-outage grpc (fallback) status was never observed on the kind dev " +
-		"cluster even with the agentless-namespace flow; see docs/plans/regression-test-framework/findings.md")
+		"cluster, even with the agentless-namespace flow")
 	ctx := s.Ctx()
 	r := s.R()
 	tp := s.CLI()

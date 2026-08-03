@@ -1,8 +1,7 @@
 // Package compat holds the regression-test framework's compat-core support:
 // effective-version accessors, version gates, and the RPC manifest guard
 // (manifest.go/manifest_test.go) that keeps the compat-core test set honest
-// about which manager.Manager RPCs it exercises. See
-// docs/plans/regression-test-framework/m4-spec.md.
+// about which manager.Manager RPCs it exercises.
 package compat
 
 import (

@@ -121,8 +121,7 @@ var clientVersionLine = regexp.MustCompile(`(?m)^(?:\S+\s+)?Client\s*:\s*v?(\S+)
 // detectVersion determines the version under test: $TELEPRESENCE_VERSION if
 // set, else parsed from the client-line of `<exe> version` plain text
 // output. `--output json` wraps that same text in a {cmd,stdout} envelope
-// rather than a structured client field, so plain text is parsed directly;
-// see docs/plans/regression-test-framework/m1-contract.md.
+// rather than a structured client field, so plain text is parsed directly.
 func detectVersion(ctx context.Context, exe string, env []string) (semver.Version, error) {
 	if v := os.Getenv("TELEPRESENCE_VERSION"); v != "" {
 		return semver.Parse(strings.TrimPrefix(v, "v"))

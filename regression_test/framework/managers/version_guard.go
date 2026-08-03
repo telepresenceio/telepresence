@@ -10,8 +10,7 @@ import (
 // Baseline spec (or a catalog entry a compat-core suite might use) emits to
 // the telepresence-oss chart release it first appeared in. A dotted path
 // (e.g. "client.nodeAgent") names a nested key. Sourced from `git log
-// -S'<key>' -- charts/telepresence-oss/values.schema.yaml`; see
-// docs/plans/regression-test-framework/m4-spec.md section 1.
+// -S'<key>' -- charts/telepresence-oss/values.schema.yaml`.
 //
 // Only keys newer than the schema's own introduction need an entry: the
 // schema file itself first appeared in v2.22.0 (f52b17220, "Add json-schema

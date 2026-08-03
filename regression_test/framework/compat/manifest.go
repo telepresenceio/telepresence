@@ -5,8 +5,7 @@ package compat
 // traffic-manager. manifest_test.go walks manager.Manager_ServiceDesc
 // (rpc/manager) and fails when a method is neither claimed here nor listed
 // in manifest_test.go's exemption table: the guard that keeps the
-// compat-core test set (rt.CompatCore) honest about RPC coverage. See
-// docs/plans/regression-test-framework/m4-spec.md section 3.
+// compat-core test set (rt.CompatCore) honest about RPC coverage.
 //
 // Every claim below was verified by reading the actual client call chain
 // the test drives against the CURRENT (built) traffic-manager -- not
