@@ -13,8 +13,7 @@ import (
 // Ignored proves the telepresence.io/inject-ignore-volume-mounts annotation
 // (pkg/annotation/annotation.go's InjectIgnoreVolumeMounts) excludes a named
 // volume from both TELEPRESENCE_MOUNTS (the attach's reported environment)
-// and the local mount, trimmed from integration_test/ignored_mounts_test.go's
-// Test_IgnoredMounts 4-case table to the two cases that isolate the
+// and the local mount, trimmed to the two cases that isolate the
 // annotation's own effect: ignored and not-ignored.
 type Ignored struct {
 	rt.Suite

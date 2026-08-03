@@ -13,9 +13,8 @@ import (
 )
 
 // vethNames holds one veth-up/veth-down cycle's interface names, randomized
-// per invocation: integration_test/testdata/scripts/veth-up.sh hard-codes
-// vm1/vm2/tapm/brm, so two overlapping runs (or a leftover from a prior
-// failed one) would collide.
+// per invocation: hard-coded names would collide across two overlapping
+// runs (or a leftover from a prior failed one).
 type vethNames struct {
 	veth1, veth2, tap, bridge string
 }
@@ -37,9 +36,8 @@ func newVethNames() vethNames {
 
 // conflictAddrs returns the ".1" (bridge) and ".2" (veth2) addresses inside
 // cidr: cidr's network address with its last octet set to 1 and 2
-// respectively, matching veth-up.sh's ".0"->".1"/".2" address rewrite. Only
-// IPv4 is supported: neither this area nor the framework at large handles
-// IPv6 clusters yet.
+// respectively. Only IPv4 is supported: neither this area nor the framework
+// at large handles IPv6 clusters yet.
 func conflictAddrs(cidr netip.Prefix) (bridge, veth2 netip.Prefix, err error) {
 	addr := cidr.Addr()
 	if !addr.Is4() {
@@ -67,9 +65,7 @@ func runSudo(ctx context.Context, args ...string) error {
 // a bridge (n.bridge) enslaving both, then assigns an address inside cidr to
 // the bridge and another to n.veth2: a local interface now owns an address
 // inside cidr, so the kernel routing table gets a local, non-cluster route
-// for it. Reproduces veth-up.sh's effect (see the spec's veth mechanism
-// notes) with randomized interface names instead of the script's hard-coded
-// ones.
+// for it.
 func vethUp(ctx context.Context, cidr string, n vethNames) error {
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
@@ -100,11 +96,10 @@ func vethUp(ctx context.Context, cidr string, n vethNames) error {
 	return nil
 }
 
-// vethDown reverses vethUp, exactly mirroring veth-down.sh's role for
-// cidrConflictSuite. Errors are logged, not returned: this is meant to run
-// as a defer after a possibly-partial vethUp, and every step must still be
-// attempted (see the spec's veth mechanism notes: "a --ignore-errors-style
-// caller isn't provided").
+// vethDown reverses vethUp. Errors are logged, not returned: this is meant
+// to run as a defer after a possibly-partial vethUp, and every step must
+// still be attempted since there is no way to skip steps that a partial
+// vethUp never reached.
 func vethDown(ctx context.Context, r *rt.Runtime, cidr string, n vethNames) {
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {

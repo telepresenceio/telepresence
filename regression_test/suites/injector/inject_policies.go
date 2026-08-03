@@ -14,12 +14,11 @@ import (
 // (charts/telepresence-oss/values.schema.yaml).
 var injectPolicies = []string{"OnDemand", "WhenEnabled"} //nolint:gochecknoglobals // catalog-like constant list
 
-// InjectPolicies proves the two injectPolicy values' documented semantics
-// (integration_test/inject_policy_test.go): OnDemand injects a plain
-// (unannotated) workload only once it is intercepted; WhenEnabled never
-// injects a plain workload at all, only one carrying the enabled
-// annotation. An annotated workload is always injected in advance,
-// regardless of policy.
+// InjectPolicies proves the two injectPolicy values' documented semantics:
+// OnDemand injects a plain (unannotated) workload only once it is
+// intercepted; WhenEnabled never injects a plain workload at all, only one
+// carrying the enabled annotation. An annotated workload is always injected
+// in advance, regardless of policy.
 type InjectPolicies struct {
 	rt.Suite
 }

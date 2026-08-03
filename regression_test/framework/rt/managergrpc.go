@@ -28,8 +28,7 @@ import (
 // compat work) to drive a session against a manager the CLI under test can't
 // talk to.
 //
-// Modeled on integration_test/itest/traffic_manager.go's
-// dialTrafficManager: it resolves the traffic-manager Service to a backing
+// It resolves the traffic-manager Service to a backing
 // pod (portforward.ResolveSvcToPod) and dials it through the k8spf://
 // resolver scheme (portforward.NewResolver/Dialer), which port-forwards
 // under the hood rather than requiring the Service to be otherwise

@@ -77,17 +77,14 @@ var restAPISpec = managers.Spec{
 // inside the cluster, queried with `kubectl exec ... wget` from the
 // workload's own app container: it shares the pod's network namespace with
 // the traffic-agent, so localhost:<port> reaches the sidecar directly. This
-// is simpler than restapi_test.go's /forward-based round trip, which needed
-// the target's own TELEPRESENCE_API_HOST/PORT env plumbing that this
-// framework's plain workloads.Echo template doesn't carry, and exercises the
-// same agent-side consume-here decision restapi_test.go's
-// Test_RestAPI_FilteredConsume "query-remote-*" cases did
-// (integration_test/restapi_test.go). The workload carries
-// annotation.InjectTrafficAgent so the agent (and its API server) is present
-// from the pod's first rollout: the default OnDemand injectPolicy would
-// otherwise leave the pod agent-less, and every probe below would find
-// nothing listening on restAPIPort, until something actually requests an
-// intercept.
+// is simpler than a /forward-based round trip, which would need the
+// target's own TELEPRESENCE_API_HOST/PORT env plumbing that this
+// framework's plain workloads.Echo template doesn't carry. The workload
+// carries annotation.InjectTrafficAgent so the agent (and its API server) is
+// present from the pod's first rollout: the default OnDemand injectPolicy
+// would otherwise leave the pod agent-less, and every probe below would
+// find nothing listening on restAPIPort, until something actually requests
+// an intercept.
 type RestAPI struct {
 	rt.Suite
 }

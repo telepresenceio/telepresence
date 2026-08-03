@@ -21,10 +21,8 @@ const (
 	echoPort  = 8080
 
 	// udpEchoImage is the UDP-echo test image; it always listens on
-	// udpEchoPort/UDP (integration_test/quic_test.go's
-	// Test_AUDPEchoDatagrams exposed it on service port 80, target-port
-	// 8080; UDPEcho keeps both ends at udpEchoPort, since nothing depends
-	// on a distinct external port here).
+	// udpEchoPort/UDP. UDPEcho keeps both the service and target port at
+	// udpEchoPort, since nothing depends on a distinct external port here.
 	udpEchoImage = "ghcr.io/telepresenceio/udp-echo:latest"
 	udpEchoPort  = 8080
 )
@@ -284,8 +282,7 @@ func EchoWithConfigVolume(name string) Template {
 
 // UDPEcho returns a single-replica Deployment+Service template running the
 // UDP-echo test image, the quic area's Datagrams test's UDP round-trip
-// target (integration_test/quic_test.go's Test_AUDPEchoDatagrams, which
-// this replaces). Unlike Echo, the Service exposes a UDP port.
+// target. Unlike Echo, the Service exposes a UDP port.
 func UDPEcho(name string) Template {
 	return Template{
 		Name:     name,

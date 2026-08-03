@@ -39,8 +39,7 @@ type agentTransport struct {
 }
 
 // quicPrefix begins the tunnel_transport value status reports once the quic
-// transport is active ("quic (<endpoint>)", quic_test.go's
-// requireQuicTransport/awaitQuicOrSkip): the endpoint varies with the
+// transport is active ("quic (<endpoint>)"): the endpoint varies with the
 // cluster (self-discovered by the manager, see managers.QuicNodePort's doc
 // comment), so this area matches the prefix rather than a specific
 // endpoint.
@@ -48,36 +47,31 @@ const quicPrefix = "quic "
 
 // grpcFallback is the exact tunnel_transport value status reports once an
 // already-established quic connection has tripped and fallen back
-// mid-session (quic_test.go's Test_AZForwarderOutageFallsBackAndRecovers,
-// line ~655): distinct from the plain "grpc" a session that never
-// completed a quic dial in the first place reports (quic_test.go's
-// Test_ZYUnreachableEndpointFallsBack, line ~423: "an initial dial that
-// fails quietly is not a fallback event").
+// mid-session: distinct from the plain "grpc" a session that never
+// completed a quic dial in the first place reports -- an initial dial that
+// fails quietly is not a fallback event.
 const grpcFallback = "grpc (fallback)"
 
 const (
 	quicPollInterval = 2 * time.Second
 	// quicDialSettle is double the opportunistic quic dial's own budget
-	// (quicDialTimeout, pkg/client/rootd/quic.go), the margin quic_test.go's
-	// Test_ZYUnreachableEndpointFallsBack itself waits before treating an
-	// observed transport as settled rather than a probe still in flight.
+	// (quicDialTimeout, pkg/client/rootd/quic.go): the margin this area
+	// waits before treating an observed transport as settled rather than a
+	// probe still in flight.
 	quicDialSettle = 6 * time.Second
 	// quicStatusTimeout bounds a plain (non-reconnecting) status poll.
 	quicStatusTimeout = 30 * time.Second
-	// quicDiscoveryTimeout bounds the reconnect loop in awaitTransportPrefix:
-	// quic_test.go's reconnectUntilQuic uses the same 90s ceiling.
+	// quicDiscoveryTimeout bounds the reconnect loop in awaitTransportPrefix.
 	quicDiscoveryTimeout = 90 * time.Second
 	// quicForwarderTermTimeout bounds the wait for the quic-forwarder's
-	// pod(s) to actually terminate after scaling to zero, matching
-	// quic_test.go's Test_AZForwarderOutageFallsBackAndRecovers.
+	// pod(s) to actually terminate after scaling to zero.
 	quicForwarderTermTimeout = 60 * time.Second
 	// quicFallbackTimeout/quicRecoveryTimeout bound the outage suite's two
-	// post-scale polls, matching quic_test.go's own 150s ceilings for the
-	// same transitions. quicRecoveryTimeout is also reused by
-	// ManagerOutage's post-recovery poll, which needs the same 150s budget
-	// (quic_test.go's Test_ZManagerOutageAttachmentSurvival) for the same
-	// reason: the client re-fetches a fresh endpoint descriptor and
-	// re-probes quic on its own interval after the manager pod is replaced.
+	// post-scale polls for the same transitions. quicRecoveryTimeout is also
+	// reused by ManagerOutage's post-recovery poll, which needs the same
+	// 150s budget for the same reason: the client re-fetches a fresh
+	// endpoint descriptor and re-probes quic on its own interval after the
+	// manager pod is replaced.
 	quicFallbackTimeout = 150 * time.Second
 	quicRecoveryTimeout = 150 * time.Second
 )
@@ -140,10 +134,10 @@ func awaitStatusTransportPrefix(
 // root_daemon.agent_transports entry for workload reports the "quic"
 // transport, or fails t after quicStatusTimeout. The agent_transports list
 // is populated only while an attachment to workload is live
-// (pkg/client/cli/cmd/status.go's toStatusAgentTransports), mirroring
-// quic_test.go's requireAgentTransport. Every caller in this area waits for
-// the quic agent transport specifically on the plain status-poll budget, so
-// neither is a parameter, like awaitTransportPrefix's quicPrefix.
+// (pkg/client/cli/cmd/status.go's toStatusAgentTransports). Every caller in
+// this area waits for the quic agent transport specifically on the plain
+// status-poll budget, so neither is a parameter, like
+// awaitTransportPrefix's quicPrefix.
 func awaitAgentTransport(t testing.TB, ctx context.Context, tp *cli.TP, workload string) {
 	t.Helper()
 	deadline := time.Now().Add(quicStatusTimeout)
@@ -164,14 +158,14 @@ func awaitAgentTransport(t testing.TB, ctx context.Context, tp *cli.TP, workload
 // awaitTransportPrefix reconnects (quit + connect) to ns until status
 // reports a root_daemon.tunnel_transport beginning with quicPrefix, or
 // fails t. Used only before any attachment exists: reconnecting quits the
-// daemon, which would drop a live intercept. Mirrors quic_test.go's
-// reconnectUntilQuic -- the opportunistic quic dial runs once per connect
-// and never retries mid-session after an initial miss, and a freshly rolled
-// manager pod's forwarder needs a moment to relearn its IP for its backend
-// allowlist. Every caller in this area is establishing the quic transport
-// specifically, so the prefix is quicPrefix rather than a parameter. opts
-// carry connection flags (e.g. Datagrams' --mapped-namespaces isolation)
-// into every reconnect attempt, not just the caller's first connect.
+// daemon, which would drop a live intercept. The opportunistic quic dial
+// runs once per connect and never retries mid-session after an initial
+// miss, and a freshly rolled manager pod's forwarder needs a moment to
+// relearn its IP for its backend allowlist. Every caller in this area is
+// establishing the quic transport specifically, so the prefix is
+// quicPrefix rather than a parameter. opts carry connection flags (e.g.
+// Datagrams' --mapped-namespaces isolation) into every reconnect attempt,
+// not just the caller's first connect.
 func awaitTransportPrefix(
 	t testing.TB, ctx context.Context, tp *cli.TP, ns string, conn *rt.Conn, opts ...rt.ConnOpt,
 ) *rt.Conn {
@@ -229,12 +223,11 @@ func probeCluster(url string) bool {
 
 // awaitFallbackWithTraffic polls url and status together until a plain
 // in-cluster round trip succeeds AND status simultaneously reports
-// grpcFallback, or fails t after timeout. Mirrors quic_test.go's combined
-// poll in Test_AZForwarderOutageFallsBackAndRecovers: in the zombie window
-// before the dead quic connection's idle timeout expires, tunnel streams
-// open locally and hang, so the probe fails -- this rides that out -- and
-// each attempt is also the stream open that, once the connection has died,
-// trips the provider into fallback.
+// grpcFallback, or fails t after timeout. In the zombie window before the
+// dead quic connection's idle timeout expires, tunnel streams open locally
+// and hang, so the probe fails -- this rides that out -- and each attempt
+// is also the stream open that, once the connection has died, trips the
+// provider into fallback.
 func awaitFallbackWithTraffic(t testing.TB, ctx context.Context, tp *cli.TP, url string) {
 	t.Helper()
 	deadline := time.Now().Add(quicFallbackTimeout)
@@ -303,8 +296,7 @@ func scaleQuicForwarderUp(t testing.TB, ctx context.Context, r *rt.Runtime) {
 // deleteQuicForwarderPods deletes every quic-forwarder pod and waits for the
 // Deployment to report a ready replacement. Unlike scaleQuicForwarderDown/Up
 // (a planned outage, used by Outage), this simulates an unplanned pod loss
-// that the Deployment's own controller repairs on its own, matching
-// quic_test.go's Test_ForwarderRestartSurvival.
+// that the Deployment's own controller repairs on its own.
 func deleteQuicForwarderPods(t testing.TB, ctx context.Context, r *rt.Runtime) {
 	t.Helper()
 	mgrNS := managers.ManagerNamespace
@@ -317,9 +309,8 @@ func deleteQuicForwarderPods(t testing.TB, ctx context.Context, r *rt.Runtime) {
 }
 
 // quicForwarderRestartTimeout bounds the wait for traffic to recover after
-// deleting the quic-forwarder pod(s), matching quic_test.go's
-// Test_ForwarderRestartSurvival 60s ceiling: kube-proxy's UDP conntrack can
-// keep pinning the client's existing flow to the deleted pod's address for a
+// deleting the quic-forwarder pod(s): kube-proxy's UDP conntrack can keep
+// pinning the client's existing flow to the deleted pod's address for a
 // while, and the client's 15s keep-alives are what eventually punch a fresh
 // flow through to the replacement pod.
 const quicForwarderRestartTimeout = 60 * time.Second
@@ -329,9 +320,7 @@ const quicForwarderRestartTimeout = 60 * time.Second
 // moment status ever reports a tunnel_transport that doesn't start with
 // quicPrefix: the stateless-router property under test is that the
 // transport rides out the forwarder's replacement without ever falling
-// back, not just that it eventually recovers. Mirrors quic_test.go's
-// Test_ForwarderRestartSurvival, whose own poll treats an observed "grpc"
-// the same way -- never a passing state.
+// back, not just that it eventually recovers.
 func awaitRecoveryNeverLeavingQuic(t testing.TB, ctx context.Context, tp *cli.TP, url string) {
 	t.Helper()
 	deadline := time.Now().Add(quicForwarderRestartTimeout)
@@ -355,7 +344,7 @@ func awaitRecoveryNeverLeavingQuic(t testing.TB, ctx context.Context, tp *cli.TP
 // udpEchoDialTimeout/udpEchoDialInterval/udpEchoSettle/udpEchoReadTimeout
 // bound udpEchoRoundTrip's dial retry, the post-dial settle (a UDP Dial
 // succeeds immediately without confirming anything is listening yet), and
-// the echoed-response read. Mirrors quic_test.go's udpEchoRoundTrip.
+// the echoed-response read.
 const (
 	udpEchoDialTimeout  = 12 * time.Second
 	udpEchoDialInterval = 3 * time.Second
@@ -366,7 +355,7 @@ const (
 // udpEchoRoundTrip sends msg to wl's UDP-echo Service (workloads.UDPEcho)
 // through the VPN and requires the echoed payload back, proving tunneled
 // UDP traffic actually round-trips over whichever transport is currently
-// active. Mirrors quic_test.go's udpEchoRoundTrip.
+// active.
 func udpEchoRoundTrip(t testing.TB, ctx context.Context, wl *rt.Workload, msg string) {
 	t.Helper()
 	addr := fmt.Sprintf("%s.%s:%d", wl.SvcName, wl.Namespace, wl.Port)
@@ -410,13 +399,11 @@ func udpEchoRoundTrip(t testing.TB, ctx context.Context, wl *rt.Workload, msg st
 // datagramCountersLogRE extracts the "received" total from the manager's
 // periodic datagram-counters log line (cmd/traffic/cmd/manager/
 // quictunnel/listener.go's logDatagramStatsLoop, formatted by
-// pkg/tunnel.DatagramCounters.String). Mirrors quic_test.go's
-// datagramCountersLogRE.
+// pkg/tunnel.DatagramCounters.String).
 var datagramCountersLogRE = regexp.MustCompile(`datagram counters: sent \d+, received (\d+),`)
 
 // quicDatagramCountersTimeout bounds the wait for the manager's periodic
-// datagram-counters log line to report a nonzero received count, matching
-// quic_test.go's Test_AUDPEchoDatagrams.
+// datagram-counters log line to report a nonzero received count.
 const quicDatagramCountersTimeout = 45 * time.Second
 
 // awaitNonzeroDatagramsReceived polls the traffic-manager Deployment's logs

@@ -13,8 +13,7 @@ import (
 // with managers.QuicNodePort() installed (a NodePort Service whose
 // advertised endpoint the manager self-discovers, see the catalog's doc
 // comment), "telepresence status" settles on the quic transport and a
-// regular intercept round-trips over it. Mirrors the core of quic_test.go's
-// Test_VPNOnlyTransport/Test_TrafficAgentCoexistence.
+// regular intercept round-trips over it.
 type Enabled struct {
 	rt.Suite
 }

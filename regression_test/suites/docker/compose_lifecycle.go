@@ -31,12 +31,10 @@ const (
 
 // ComposeLifecycle proves two `telepresence compose` teardown/network
 // properties orthogonal to the per-verb Compose suite: a named volume
-// survives a plain `compose down` and is removed only by `down -v`
-// (compose_test.go's Test_ComposeDownPreservesNamedVolumes), and a
+// survives a plain `compose down` and is removed only by `down -v`, and a
 // three-connection project's default network never lands on a subnet that
-// overlaps the cluster's own (compose_test.go's
-// Test_ComposeDefaultNetworkNoSubnetConflict). Labeled Slow: each test
-// brings a compose project up twice, or juggles three connections.
+// overlaps the cluster's own. Labeled Slow: each test brings a compose
+// project up twice, or juggles three connections.
 type ComposeLifecycle struct {
 	rt.Suite
 }
@@ -108,8 +106,7 @@ type composeLifecycleStatus struct {
 }
 
 // Test_NamedVolumeSurvivesDown proves a compose service's named volume
-// survives `compose down` without -v, and is only removed by `down -v`:
-// compose_test.go's Test_ComposeDownPreservesNamedVolumes.
+// survives `compose down` without -v, and is only removed by `down -v`.
 func (s *ComposeLifecycle) Test_NamedVolumeSurvivesDown() {
 	t := s.T()
 	ctx := s.Ctx()
@@ -171,12 +168,11 @@ func (s *ComposeLifecycle) Test_NamedVolumeSurvivesDown() {
 }
 
 // Test_DefaultNetworkNoSubnetConflict proves a three-connection project's
-// default network never lands on a subnet overlapping the cluster's own:
-// compose_test.go's Test_ComposeDefaultNetworkNoSubnetConflict. Each named
-// connection runs its own containerized daemon with its own teleroute
-// network, pushing Docker's sequential IPAM allocation toward the cluster's
-// service CIDR; this asserts the fix that steers the compose project's
-// default network away from it.
+// default network never lands on a subnet overlapping the cluster's own.
+// Each named connection runs its own containerized daemon with its own
+// teleroute network, pushing Docker's sequential IPAM allocation toward the
+// cluster's service CIDR; this asserts the fix that steers the compose
+// project's default network away from it.
 func (s *ComposeLifecycle) Test_DefaultNetworkNoSubnetConflict() {
 	t := s.T()
 	ctx := s.Ctx()

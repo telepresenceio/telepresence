@@ -65,9 +65,7 @@ spec:
 // ManualAgent proves that an agent built by hand from telepresence genyaml's
 // output (config, container, initcontainer, volume, annotations) and patched
 // into a workload's manifest intercepts with no webhook involved at all: the
-// shared release keeps the injector disabled throughout. Mirrors
-// integration_test/manual_agent_test.go, as run under
-// agent_injector_disabled_test.go's suite there.
+// shared release keeps the injector disabled throughout.
 //
 // The Service's one port is left unnamed, so Kubernetes defaults its
 // targetPort to the same numeric value as port: agentconfig marks that
@@ -75,9 +73,8 @@ spec:
 // makes genyaml's initcontainer step (pkg/client/cli/cmd/genyaml.go's
 // genInitContainerInfo.run) produce an init container instead of erroring
 // that none is needed. It also means the app container needs no port
-// renamed before the agent's own "http"-named port is appended (the old
-// integration test's renameHttpPort step, needed there because its service
-// targeted a named "http" container port).
+// renamed before the agent's own "http"-named port is appended, since the
+// service targets the port by number rather than by an "http" name.
 type ManualAgent struct {
 	rt.Suite
 }

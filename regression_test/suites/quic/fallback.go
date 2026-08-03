@@ -8,8 +8,7 @@ import (
 
 // quicUnreachableHost is an RFC 5737 TEST-NET-1 address: guaranteed
 // non-routable, so a quicTunnel.externalHost pointed at it can never be
-// reached. The same manufactured-unreachable endpoint quic_test.go's
-// Test_ZYUnreachableEndpointFallsBack uses.
+// reached.
 const quicUnreachableHost = "192.0.2.1"
 
 // quicUnreachableSpec is managers.QuicNodePort() with an unreachable,
@@ -29,8 +28,7 @@ func quicUnreachableSpec() managers.Spec {
 // Fallback proves the silent-fallback property for an endpoint that is
 // advertised but never reachable: connect succeeds, status settles on the
 // plain "grpc" transport (never "grpc (fallback)" -- an initial dial that
-// fails quietly is not a fallback event, quic_test.go's
-// Test_ZYUnreachableEndpointFallsBack), and traffic still works.
+// fails quietly is not a fallback event), and traffic still works.
 type Fallback struct {
 	rt.Suite
 }

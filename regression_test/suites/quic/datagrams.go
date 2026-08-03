@@ -13,9 +13,7 @@ import (
 // quicDatagramsEnvVar is the manager-process opt-in for RFC 9221 datagram
 // carriage on the quic tunnel transport (cmd/traffic/cmd/manager/
 // quictunnel/listener.go), OFF by default -- no better than stream carriage,
-// see "Current limitations" in docs/reference/quic-transport.md. Same
-// variable integration_test/quic_test.go's Test_AUDPEchoDatagrams set on
-// deploy/traffic-manager.
+// see "Current limitations" in docs/reference/quic-transport.md.
 const quicDatagramsEnvVar = "TELEPRESENCE_QUIC_ENABLE_DATAGRAMS"
 
 // quicDatagramsSpec is managers.QuicNodePort() with the datagrams opt-in
@@ -42,8 +40,7 @@ func quicDatagramsSpec() managers.Spec {
 // tunneled UDP traffic once opted into: a UDP echo round-trips over the
 // quic transport and the manager's own periodic datagram-counters log line
 // (cmd/traffic/cmd/manager/quictunnel/listener.go's logDatagramStatsLoop)
-// reports a nonzero received count. Supersedes quic_test.go's
-// Test_AUDPEchoDatagrams.
+// reports a nonzero received count.
 //
 // Only manager-bound flows can ride datagrams: once any traffic-agent is
 // reachable from the session, agentpf routes destinations through the

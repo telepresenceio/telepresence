@@ -24,8 +24,7 @@ func ClientVersion() semver.Version { return rt.R().Version() }
 func ManagerVersion() semver.Version { return rt.R().ManagerVersion() }
 
 // isFinalIncluded reports whether v's finalized version (pre-release and
-// build metadata stripped) satisfies the blang semver range vr. Mirrors
-// integration_test/itest/cluster.go:579's isFinalIncluded.
+// build metadata stripped) satisfies the blang semver range vr.
 func isFinalIncluded(vr string, v semver.Version) bool {
 	return semver.MustParseRange(vr)(semver.MustParse(v.FinalizeVersion()))
 }

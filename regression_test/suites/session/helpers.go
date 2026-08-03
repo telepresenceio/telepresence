@@ -60,11 +60,10 @@ func freeDefaultConnection(t *testing.T, ns string) {
 
 // arriveAsClient establishes a raw manager session in ns, independent of any
 // `telepresence connect` session, for suites that talk to the manager
-// directly via rt.ManagerClient (WorkloadWatch, ManagerInfo). It mirrors
-// integration_test/itest/traffic_manager.go's DoWithTrafficManager: a
-// background goroutine calls Remain every 5s to keep the session alive and
-// Departs once ctx is done. Callers pass a context.WithCancel they cancel
-// via defer, well before the suite's own context ends.
+// directly via rt.ManagerClient (WorkloadWatch, ManagerInfo): a background
+// goroutine calls Remain every 5s to keep the session alive and Departs once
+// ctx is done. Callers pass a context.WithCancel they cancel via defer, well
+// before the suite's own context ends.
 func arriveAsClient(
 	t testing.TB, ctx context.Context, mc manager.ManagerClient, name, ns string,
 ) *manager.SessionInfo {

@@ -67,8 +67,7 @@ func KubeConfigCopy(e Env, mutate func(*api.Config)) (string, error) {
 // "telepresence.io" extension object on the current context's cluster entry:
 // the client accepts also-proxy, never-proxy, dns.include-suffixes/
 // exclude-suffixes, and manager.namespace keys there (see
-// pkg/client/k8s/config.go's kubeconfigExtension), mirroring the extension
-// integration_test/itest/cluster.go:1207 used to write.
+// pkg/client/k8s/config.go's kubeconfigExtension).
 func WithKubeConfigExtension(e Env, ext map[string]any) (string, error) {
 	e.T.Helper()
 	raw, err := json.Marshal(ext)

@@ -36,8 +36,7 @@ metadata:
 `
 
 // clientRBACManifest grants the identity connections use with --as
-// (managers.TestServiceAccount) the RBAC a telepresence user needs: modeled
-// on the now-deleted integration_test/testdata/k8s/client_rbac.yaml. It is
+// (managers.TestServiceAccount) the RBAC a telepresence user needs. It is
 // broader than the chart's own clientRbac feature (which, as of this
 // writing, omits deployments/replicasets/statefulsets/services access), so
 // it is granted independently rather than relied upon.

@@ -108,12 +108,10 @@ func (c *UsageCollector) Close() {
 
 // ProbeUsageCollectorReachable determines whether the cluster can reach c
 // the way a real workstation would appear to it: via host.docker.internal.
-// It mirrors usage_reporting_test.go's skip probe exactly --
-// resolveHostFromCluster's nslookup, then a reachability check against c's
-// actual port -- so a suite can self-skip on environments (e.g. non-Docker
-// Linux container runtimes) where that address doesn't exist, exactly as
-// the superseded suite did, rather than fail. Both probe pods run in ns
-// (typically managers.ManagerNamespace, matching the old suite).
+// It runs an nslookup, then a reachability check against c's actual port,
+// so a suite can self-skip on environments (e.g. non-Docker Linux container
+// runtimes) where that address doesn't exist, rather than fail. Both probe
+// pods run in ns (typically managers.ManagerNamespace).
 //
 // On success it returns the address the traffic-manager should be pointed
 // at (managers.UsageTo) -- host.docker.internal's cluster-resolved IP,
@@ -134,8 +132,7 @@ func ProbeUsageCollectorReachable(e Env, ns string, c *UsageCollector) (addr str
 
 // resolveHostDockerInternal runs a short-lived busybox pod in ns that asks
 // cluster DNS to resolve host.docker.internal, and returns the first IPv4
-// address in the reply. Mirrors usage_reporting_test.go's
-// resolveHostFromCluster.
+// address in the reply.
 func resolveHostDockerInternal(e Env, ns string) (string, error) {
 	out, err := e.R.Kubectl(e.Ctx, ns,
 		"run", "usg-host-probe-"+randomHex(6),
@@ -175,7 +172,7 @@ func resolveHostDockerInternal(e Env, ns string) (string, error) {
 
 // probeHostPortReachable runs a short-lived busybox pod in ns that attempts
 // a TCP connect to hostIP:port, failing (a non-nil error) if it can't
-// connect within 2s. Mirrors usage_reporting_test.go's reach probe.
+// connect within 2s.
 func probeHostPortReachable(e Env, ns, hostIP string, port int) error {
 	_, err := e.R.Kubectl(e.Ctx, ns,
 		"run", "usg-reach-probe-"+randomHex(6),

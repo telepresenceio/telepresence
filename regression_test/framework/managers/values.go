@@ -41,7 +41,7 @@ type Values struct {
 	// to connecting clients, restricted to the keys wave 3 suites configure.
 	Client Client `json:"client,omitzero"`
 	// QuicTunnel is the chart's quicTunnel.* shape, restricted to the keys
-	// quic_test.go's install used.
+	// the catalog configures.
 	QuicTunnel QuicTunnel `json:"quicTunnel,omitzero"`
 	// Security is the chart's security.* shape: traffic-manager caller
 	// authentication/authorization.
@@ -122,8 +122,8 @@ type AgentValues struct {
 	// EnableH2cProbing is a pointer so NodeAgent() can force it to false:
 	// node-agent Jobs enter an existing pod's namespaces and have no
 	// sidecar of their own to h2c-probe, so node-agent specs disable it
-	// explicitly (see node_agent_test.go's nodeAgentSuite install). A plain
-	// bool couldn't be distinguished from "not set" by Merge.
+	// explicitly. A plain bool couldn't be distinguished from "not set" by
+	// Merge.
 	EnableH2cProbing *bool `json:"enableH2cProbing,omitempty"`
 }
 
@@ -182,11 +182,10 @@ type ClientDNS struct {
 	IncludeSuffixes []string `json:"includeSuffixes,omitempty"`
 }
 
-// QuicTunnel is the chart's quicTunnel.* shape, restricted to the keys
-// quic_test.go's install used: whether the listener is enabled, the Service
+// QuicTunnel is the chart's quicTunnel.* shape, restricted to the keys the
+// catalog configures: whether the listener is enabled, the Service
 // front-ending it, and the externally advertised host/port (unset lets the
-// traffic-manager self-discover both, the zero-configuration path
-// quic_test.go's Test_ZZDiscoveryNodePort covers).
+// traffic-manager self-discover both).
 type QuicTunnel struct {
 	Enabled      bool              `json:"enabled,omitempty"`
 	Service      QuicTunnelService `json:"service,omitzero"`
@@ -195,7 +194,7 @@ type QuicTunnel struct {
 }
 
 // QuicTunnelService is the chart's quicTunnel.service.* shape, restricted to
-// the keys quic_test.go's install used.
+// the keys the catalog configures.
 type QuicTunnelService struct {
 	Type     string `json:"type,omitempty"`
 	NodePort int    `json:"nodePort,omitempty"`
@@ -217,10 +216,8 @@ type Authentication struct {
 // the enabled flag.
 type X509 struct {
 	// Enabled is a pointer so AuthEnforcing-derived specs can force it to
-	// false (manager_auth_test.go's
-	// Test_EnforcingRejectsCertOnlyClientWhenX509Disabled): the chart
-	// default is true, which a plain bool couldn't override to false
-	// through Merge.
+	// false: the chart default is true, which a plain bool couldn't
+	// override to false through Merge.
 	Enabled *bool `json:"enabled,omitempty"`
 }
 

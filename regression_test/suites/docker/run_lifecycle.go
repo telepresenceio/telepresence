@@ -35,15 +35,14 @@ const (
 )
 
 // RunLifecycle is the four-way teardown matrix for `intercept --docker-run`
-// on the shared host daemon: docker_run_test.go's Test_DockerRun_HostDaemon.
-// Each subtest starts a fresh handler (the published echo-server image,
-// docker_run.go's conventions) against the same workload, waits for cluster
-// traffic to reach it, then ends the attachment a different way -- SIGINT,
-// `detach`, `disconnect` (a session-only `quit`), and `quit -s` (all local
-// daemons) -- asserting the CLI process behind --docker-run (cli.TP.Start's
-// Proc) always exits within 10s and traffic reverts to the cluster pod
-// afterward. Runs `-i`, never `-t`: a TTY changes how the child process
-// handles signals.
+// on the shared host daemon. Each subtest starts a fresh handler (the
+// published echo-server image, docker_run.go's conventions) against the
+// same workload, waits for cluster traffic to reach it, then ends the
+// attachment a different way -- SIGINT, `detach`, `disconnect` (a
+// session-only `quit`), and `quit -s` (all local daemons) -- asserting the
+// CLI process behind --docker-run (cli.TP.Start's Proc) always exits
+// within 10s and traffic reverts to the cluster pod afterward. Runs `-i`,
+// never `-t`: a TTY changes how the child process handles signals.
 type RunLifecycle struct {
 	rt.Suite
 }

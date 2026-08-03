@@ -15,10 +15,8 @@ import (
 // phase needs VPN flows riding the manager-bound tunnel, which requires no
 // traffic-agent in the connected namespace, so this suite connects to its
 // own fresh, agentless PrivateNamespace rather than the shared rtest-app
-// one. Mirrors (in miniature) quic_test.go's
-// Test_AZForwarderOutageFallsBackAndRecovers. Labeled Slow: it waits through
-// a full quic idle-timeout-driven fallback plus the client's background
-// re-probe.
+// one. Labeled Slow: it waits through a full quic idle-timeout-driven
+// fallback plus the client's background re-probe.
 type Outage struct {
 	rt.Suite
 }

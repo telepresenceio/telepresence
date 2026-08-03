@@ -63,8 +63,7 @@ func composeEchoArgs() []string {
 // Compose is one test per `x-tele` service-extension verb, each a
 // builder-generated project (framework/compose) brought up with
 // `telepresence compose up -d`, polled through `telepresence compose exec`,
-// and torn down with `compose down`. Supersedes compose_test.go's
-// Test_Compose{DNS,Connect,Proxy,Ingest,Intercept,Replace,Wiretap}.
+// and torn down with `compose down`.
 type Compose struct {
 	rt.Suite
 }
@@ -107,9 +106,7 @@ func (s *Compose) composeExec(path, service string, args ...string) (stdout, std
 }
 
 // Test_Connect proves a `type: connect` compose service reaches a cluster
-// service by its namespace-qualified, port-qualified URL:
-// compose_test.go's Test_ComposeConnect used a bare name against a Service
-// it created on port 80 (s.ApplyEchoService(ctx, svc, 80)); workloads.Echo
+// service by its namespace-qualified, port-qualified URL: workloads.Echo
 // always exposes port 8080 (no port-80 override), so this uses wl.
 // ServiceURL() rather than a bare "http://"+wl.SvcName, for two reasons
 // live-tested independently: (1) the port - a bare URL defaults to 80,
@@ -154,17 +151,16 @@ func (s *Compose) Test_Connect() {
 }
 
 // Test_Proxy proves a `type: proxy` compose service is replaced by a proxy
-// redirecting to the cluster service of the same name: compose_test.go's
-// Test_ComposeProxy. wl.ServiceURL(): see Test_Connect's doc comment (the
-// proxy's own tester side-car is a plain `type: connect` service, subject
-// to the same port and GetRandomAgent-namespace issues). Proxy.Name is set
-// namespace-qualified for the same GetRandomAgent reason: activating a
-// proxy attachment itself resolves this name (pkg/client/cli/docker/
-// compose/connection.go's resolveProxies), and a bare name defaulting to
-// the compose service's own key would hit the identical bare-single-label
-// lookup live-tested to fail in Test_Connect - live-tested here too
-// (`telepresence compose up` itself failed with "unable to resolve name
-// compose-proxy" before this field was set).
+// redirecting to the cluster service of the same name. wl.ServiceURL(): see
+// Test_Connect's doc comment (the proxy's own tester side-car is a plain
+// `type: connect` service, subject to the same port and GetRandomAgent-
+// namespace issues). Proxy.Name is set namespace-qualified for the same
+// GetRandomAgent reason: activating a proxy attachment itself resolves this
+// name (pkg/client/cli/docker/compose/connection.go's resolveProxies), and
+// a bare name defaulting to the compose service's own key would hit the
+// identical bare-single-label lookup live-tested to fail in Test_Connect -
+// live-tested here too (`telepresence compose up` itself failed with
+// "unable to resolve name compose-proxy" before this field was set).
 func (s *Compose) Test_Proxy() {
 	t := s.T()
 	ns := s.AppNamespace()
@@ -198,15 +194,14 @@ const (
 )
 
 // Test_Ingest proves a `type: ingest` compose service inherits the remote
-// container's own declared environment: compose_test.go's
-// Test_ComposeIngest, which asserted a bespoke INGEST_TEST_VAR. This
-// originally asserted HOSTNAME instead, on the assumption that every pod
-// carries it; live-testing showed the ingest env only mirrors a
-// container's own declared spec.containers[].env (and, incidentally, the
-// service-discovery vars kubelet injects for existing Services), never
-// HOSTNAME or other purely kubelet/container-runtime-set vars, so a
-// declared var (workloads.Template.Env, rendered like PORTS) is asserted
-// instead, matching the itest's own approach.
+// container's own declared environment. This originally asserted HOSTNAME
+// instead, on the assumption that every pod carries it; live-testing showed
+// the ingest env only mirrors a container's own declared
+// spec.containers[].env (and, incidentally, the service-discovery vars
+// kubelet injects for existing Services), never HOSTNAME or other purely
+// kubelet/container-runtime-set vars, so a declared var
+// (workloads.Template.Env, rendered like PORTS) is asserted instead,
+// matching the itest's own approach.
 func (s *Compose) Test_Ingest() {
 	t := s.T()
 	ns := s.AppNamespace()
@@ -234,8 +229,7 @@ func (s *Compose) Test_Ingest() {
 }
 
 // Test_Intercept proves a `type: intercept` compose service receives
-// cluster traffic destined for the workload it names: compose_test.go's
-// Test_ComposeIntercept.
+// cluster traffic destined for the workload it names.
 func (s *Compose) Test_Intercept() {
 	t := s.T()
 	ns := s.AppNamespace()
@@ -266,8 +260,7 @@ func (s *Compose) Test_Intercept() {
 }
 
 // Test_Replace proves a `type: replace` compose service serves cluster
-// traffic in place of the workload's own container: compose_test.go's
-// Test_ComposeReplace.
+// traffic in place of the workload's own container.
 func (s *Compose) Test_Replace() {
 	t := s.T()
 	ns := s.AppNamespace()
@@ -299,13 +292,12 @@ func (s *Compose) Test_Replace() {
 }
 
 // Test_Wiretap proves a `type: wiretap` compose service receives copies of
-// cluster traffic while the cluster's own container keeps serving it:
-// compose_test.go's Test_ComposeWiretap. wl.ServiceURL(): see
-// Test_Connect's doc comment for the port issue; the namespace
-// qualification it also provides is required here for its own reason too
-// - Docker's embedded DNS would otherwise resolve a bare service name to
-// the local wiretap-receiver container itself, bypassing the cluster
-// entirely.
+// cluster traffic while the cluster's own container keeps serving it.
+// wl.ServiceURL(): see Test_Connect's doc comment for the port issue; the
+// namespace qualification it also provides is required here for its own
+// reason too - Docker's embedded DNS would otherwise resolve a bare service
+// name to the local wiretap-receiver container itself, bypassing the
+// cluster entirely.
 func (s *Compose) Test_Wiretap() {
 	t := s.T()
 	ns := s.AppNamespace()
@@ -350,7 +342,7 @@ func (s *Compose) Test_Wiretap() {
 }
 
 // Test_DNS proves cluster DNS resolves from within a `type: replace`
-// compose container: compose_test.go's Test_ComposeDNS.
+// compose container.
 func (s *Compose) Test_DNS() {
 	t := s.T()
 	ns := s.AppNamespace()

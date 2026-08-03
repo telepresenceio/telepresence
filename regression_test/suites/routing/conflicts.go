@@ -11,16 +11,10 @@ import (
 
 // Conflicts proves the two ways telepresence handles a cluster subnet that
 // collides with a local, already-routed one: auto-resolution replaces the
-// conflicting subnet with the virtual subnet (mirrors cidr_conflict_test.go's
-// Test_AutoConflictResolution, lines 94-123: `sns := st.RootDaemon.Subnets`,
-// then `rq.NotContains(sns, c, ...)` + `rq.Contains(sns,
-// virtualSubnetFor(c.Addr()), ...)`), and --allow-conflicting-subnets keeps
-// the raw subnet routed as-is (mirrors its Test_AutoConflictAvoidance, lines
-// 153-160: `s.Require().Equal(slice.AsStrings(s.subnets),
-// slice.AsStrings(sns), ...)`). The conflict is manufactured by bringing up
-// a local veth/bridge pair that owns an address inside the cluster's first
-// service subnet, exactly as integration_test/testdata/scripts/veth-up.sh
-// does for cidrConflictSuite -- reimplemented in veth.go with randomized
+// conflicting subnet with the virtual subnet, and --allow-conflicting-subnets
+// keeps the raw subnet routed as-is. The conflict is manufactured by
+// bringing up a local veth/bridge pair that owns an address inside the
+// cluster's first service subnet, reimplemented in veth.go with randomized
 // interface names so two runs (or a leftover from a prior failed one) never
 // collide.
 type Conflicts struct {
@@ -37,8 +31,8 @@ func init() {
 // auto-resolve and --allow-conflicting-subnets cases as subtests sharing
 // that one conflict. The veth pair always comes down via a defer (logged,
 // not failed, on error -- a partially-failed vethUp can leave partial
-// state, matching cidrConflictSuite's TearDownSuite contract), and every
-// connection this test opens is explicitly quit before it returns.
+// state), and every connection this test opens is explicitly quit before it
+// returns.
 func (s *Conflicts) Test_SubnetConflict() {
 	t := s.T()
 	ctx := s.Ctx()
@@ -70,7 +64,7 @@ func (s *Conflicts) Test_SubnetConflict() {
 
 	// vs is the range activateProxyViaWorkloads (pkg/client/rootd/session.go)
 	// replaces a conflicting subnet with when routing.VirtualSubnet isn't
-	// overridden, matching cidr_conflict_test.go's s.vipSubnet.
+	// overridden.
 	vs := client.DefaultVirtualSubnet().String()
 
 	s.Run("auto_resolves_to_virtual_subnet", func() {

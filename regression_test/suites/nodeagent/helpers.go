@@ -70,10 +70,8 @@ func freshWorkload(t *testing.T, ctx context.Context, r *rt.Runtime, ns string, 
 }
 
 // nodeAgentJobNames lists the node-agent Jobs backing wl in the manager
-// namespace: one per targeted pod. Mirrors integration_test/
-// node_agent_test.go's nodeAgentBase.nodeAgentJobNames (same selector
-// labels: app=traffic-node-agent plus the workload's own agentName/
-// workloadNamespace).
+// namespace: one per targeted pod, selected by app=traffic-node-agent plus
+// the workload's own agentName/workloadNamespace labels.
 func nodeAgentJobNames(ctx context.Context, r *rt.Runtime, wl *rt.Workload) []string {
 	selector := fmt.Sprintf(
 		"app=traffic-node-agent,telepresence.io/agentName=%s,telepresence.io/workloadNamespace=%s",

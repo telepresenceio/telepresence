@@ -12,9 +12,8 @@ import (
 // serviceaccount token -- present on any pod -- is readable through the same
 // mount.
 //
-// The write round-trip integration_test/mounts_test.go's Test_MountWrite
-// exercises needs a PersistentVolumeClaim-backed writable volume: a separate
-// PV/PVC plus its own "hello" Deployment, not anything
+// A write round-trip needs a PersistentVolumeClaim-backed writable volume: a
+// separate PV/PVC plus its own "hello" Deployment, not anything
 // workloads.EchoWithConfigVolume mounts (its only extra volume is a
 // read-only ConfigMap). Reproducing that PVC setup is out of this suite's
 // scope (EchoWithConfigVolume + its exported constants only), so the write

@@ -14,9 +14,8 @@ import (
 // ProxyVia proves --proxy-via all=<workload> routes every cluster subnet
 // through that workload's traffic-agent instead of the manager-bound
 // tunnel: the workload's own service still round-trips, and every routed
-// subnet in `status` lands inside the virtual subnet (mirrors
-// proxy_via_test.go's Test_ProxyViaAll/Test_ProxyViaEverything core; the
-// --proxy-via-and-mounts variant is left to the mounts area).
+// subnet in `status` lands inside the virtual subnet. The
+// --proxy-via-and-mounts variant is left to the mounts area.
 type ProxyVia struct {
 	rt.Suite
 }
@@ -32,10 +31,8 @@ func init() {
 // proxy-via session). It then checks that every routed subnet in `status`
 // lands inside client.DefaultVirtualSubnet(): the same range
 // activateProxyViaWorkloads draws proxy-via virtual IPs from
-// (pkg/client/rootd/session.go), and the containment check
-// proxy_via_test.go's assertVirtualSubnets and cidr_conflict_test.go's
-// virtualSubnetFor/isVirtual also use -- and that the workload's service
-// still answers.
+// (pkg/client/rootd/session.go) -- and that the workload's service still
+// answers.
 func (s *ProxyVia) Test_AllSubnetsRouteThroughWorkload() {
 	t := s.T()
 	ctx := s.Ctx()

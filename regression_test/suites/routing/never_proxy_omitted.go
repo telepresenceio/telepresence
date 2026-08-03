@@ -18,25 +18,24 @@ const neverProxySubCIDRBits = 28
 // subnet is honored, not silently dropped as pointless, without disturbing
 // the parent subnet's own routing.
 //
-// Mirrors proxy_via_test.go's Test_NeverProxySubnetIsOmitted (lines 251-326),
-// adapted from a whole-subnet never-proxy to a strict sub-CIDR. The old test
-// never-proxies an entire routed subnet verbatim: pkg/client/rootd/
-// session.go's shouldProxySubnet (827-849) then excludes that subnet from
-// `subnets` altogether (it's wholly *covered* by the never-proxy entry), so
-// by the time computeNeverProxyOverrides (1165-1180) checks whether any
-// remaining routed subnet overlaps it, none does, and the entry is dropped
-// as redundant -- logged "Dropping never-proxy %q because it is not
-// routed" (session.go:1173), which is what the old test greps daemon.log
-// for. A strict sub-CIDR is different: shouldProxySubnet's cover check
-// requires the never-proxy entry to cover the *candidate* subnet, and a
-// narrower sub-CIDR can never cover its own (wider) parent, so the parent
-// stays in `subnets` and stays fully routed; computeNeverProxyOverrides then
-// finds the parent *overlaps* the sub-CIDR, so the sub-CIDR survives into
+// This test exercises a strict sub-CIDR of an already-routed subnet, not the
+// whole subnet, because the two take different code paths. Never-proxying
+// an entire routed subnet verbatim makes pkg/client/rootd/session.go's
+// shouldProxySubnet (827-849) exclude that subnet from `subnets` altogether
+// (it's wholly *covered* by the never-proxy entry), so by the time
+// computeNeverProxyOverrides (1165-1180) checks whether any remaining routed
+// subnet overlaps it, none does, and the entry is dropped as redundant --
+// logged "Dropping never-proxy %q because it is not routed" (session.go:1173).
+// A strict sub-CIDR is different: shouldProxySubnet's cover check requires
+// the never-proxy entry to cover the *candidate* subnet, and a narrower
+// sub-CIDR can never cover its own (wider) parent, so the parent stays in
+// `subnets` and stays fully routed; computeNeverProxyOverrides then finds
+// the parent *overlaps* the sub-CIDR, so the sub-CIDR survives into
 // status.root_daemon.never_proxy_subnets instead of being dropped. This
 // framework exposes no daemon.log access (rt.Runtime's log directory is
-// unexported), so the old test's log-line assertion is ported onto that
-// status field instead: the meaningful proof that the sub-CIDR was honored,
-// not silently discarded.
+// unexported), so this test reads that status field instead of a log line:
+// the meaningful proof that the sub-CIDR was honored, not silently
+// discarded.
 type NeverProxyOmitted struct {
 	rt.Suite
 }

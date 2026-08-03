@@ -14,11 +14,11 @@ import (
 
 // GatherLogs proves `telepresence gather-logs`'s --traffic-manager/
 // --traffic-agents/--get-pod-yaml combinations shape the resulting zip's
-// file list the way gather_logs_test.go's matrix expects, deduped: its
-// TestGatherLogs_NoPodYamlUnlessLogs and TestGatherLogs_NoK8sLogs cases are
-// byte-identical (same args, same assertions), ported once here as
-// no-pod-yaml-unless-logs. Carries CompatCore: Test_Matrix's default case
-// exercises the manager's GetLogs RPC; see framework/compat/manifest.go.
+// file list correctly, deduped: two of the matrix's cases are
+// byte-identical (same args, same assertions), so only one
+// (no-pod-yaml-unless-logs) is kept. Carries CompatCore: Test_Matrix's
+// default case exercises the manager's GetLogs RPC; see
+// framework/compat/manifest.go.
 type GatherLogs struct {
 	rt.Suite
 }
@@ -113,8 +113,7 @@ func (s *GatherLogs) Test_Matrix() {
 }
 
 // podLogPattern matches a gather-logs zip entry for a pod whose name starts
-// with namePrefix, running in ns: "<namePrefix>-<hash-suffix>.<ns>.<ext>",
-// mirroring gather_logs_test.go's getZipData regexes.
+// with namePrefix, running in ns: "<namePrefix>-<hash-suffix>.<ns>.<ext>".
 func podLogPattern(namePrefix, ns, ext string) *regexp.Regexp {
 	pat := `^` + regexp.QuoteMeta(namePrefix) + `-[0-9a-z-]+\.` + regexp.QuoteMeta(ns) + `\.` + ext + `$`
 	return regexp.MustCompile(pat)

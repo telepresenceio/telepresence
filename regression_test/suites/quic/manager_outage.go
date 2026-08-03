@@ -19,13 +19,11 @@ import (
 const trafficManagerDeployment = "traffic-manager"
 
 // quicManagerOutageTermTimeout bounds the wait for the traffic-manager pod
-// to actually terminate after scaling to zero, matching quic_test.go's
-// Test_ZManagerOutageAttachmentSurvival 60s ceiling.
+// to actually terminate after scaling to zero.
 const quicManagerOutageTermTimeout = 60 * time.Second
 
 // quicOutageProbeTimeout/quicOutageProbeInterval bound the in-cluster curl
-// poll against the intercepted workload while the manager is down, matching
-// quic_test.go's Test_ZManagerOutageAttachmentSurvival 30s/3s budget.
+// poll against the intercepted workload while the manager is down.
 const (
 	quicOutageProbeTimeout  = 30 * time.Second
 	quicOutageProbeInterval = 3 * time.Second
@@ -48,8 +46,7 @@ const (
 // quic, it scales the traffic-manager Deployment to zero, confirms the
 // intercepted round trip keeps working while the manager is entirely gone,
 // then scales the manager back up and confirms both the manager-bound
-// tunnel and the agent attachment recover. Supersedes quic_test.go's
-// Test_ZManagerOutageAttachmentSurvival.
+// tunnel and the agent attachment recover.
 //
 // The client session's own connection to the manager is expected to error
 // out and reconnect around this outage on its own (session keepalives,
@@ -143,7 +140,7 @@ func (s *ManagerOutage) Test_AttachmentSurvivesManagerOutage() {
 	// through the client's VPN, whose DNS resolution and subnet routing run
 	// over the manager-bound tunnel and so legitimately cannot work while
 	// the manager is gone. Driven from an in-cluster pod instead
-	// (curlimages/curl), the same pattern quic_test.go used.
+	// (curlimages/curl).
 	awaitInClusterRouteToLocal(t, ctx, r, ns, wl.ServiceURL(), ls)
 
 	scaleManagerUp(t, ctx, r)
@@ -151,8 +148,7 @@ func (s *ManagerOutage) Test_AttachmentSurvivesManagerOutage() {
 
 	// Recovery, same session: no quit/reconnect (see the type doc). Bound
 	// comfortably above the client's own re-probe interval to also absorb
-	// the forwarder's relearning delay, matching quic_test.go's 150s
-	// ceiling.
+	// the forwarder's relearning delay.
 	awaitStatusTransportPrefix(t, ctx, tp, quicPrefix, quicRecoveryTimeout)
 
 	// The client<->agent attachment's own QUIC connection is independent of
@@ -203,9 +199,7 @@ func scaleManagerUp(t testing.TB, ctx context.Context, r *rt.Runtime) {
 }
 
 // inClusterProbeImage is the ephemeral pod image the in-cluster outage
-// probe curls from, matching quic_test.go's
-// Test_ZManagerOutageAttachmentSurvival (curlimages/curl, the same pattern
-// integration_test/not_connected_test.go used).
+// probe curls from.
 const inClusterProbeImage = "curlimages/curl"
 
 // awaitInClusterRouteToLocal polls an in-cluster curl (`kubectl run --rm
@@ -238,8 +232,7 @@ func awaitInClusterRouteToLocal(t testing.TB, ctx context.Context, r *rt.Runtime
 // ResolveSvcToPod, done fresh on every dial rather than cached). A plain
 // one-shot detach attempted in that window fails with "no running pods with
 // accessible ports found for service"; retrying absorbs it without
-// weakening what the test actually asserts. Mirrors quic_test.go's
-// detachRetrying.
+// weakening what the test actually asserts.
 func detachRetrying(t testing.TB, ctx context.Context, tp *cli.TP, workload, ns string) {
 	t.Helper()
 	deadline := time.Now().Add(quicManagerOutageDetachTimeout)
