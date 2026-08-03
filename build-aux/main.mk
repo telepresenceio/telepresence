@@ -512,9 +512,29 @@ else
 	CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./pkg/... | $(tools/test-report)
 endif
 
+# Shards for check-regression: three area groups balanced by measured
+# duration (~17 min each), grouping the areas that share node-agent/quic
+# manager specs so the shared release switches as little as possible.
+# Every shard needs a cluster of its own -- the framework allows one run
+# per cluster at a time -- so running shards in parallel locally requires
+# a distinct RTEST_CONTEXT/RTEST_KUBECONFIG per shard.
+RTEST_SHARD_AREAS_1 = TestQuic|TestNodeAgent|TestAuth|TestSession|TestState
+RTEST_SHARD_AREAS_2 = TestSmoke|TestIntercept|TestInstall|TestDns|TestRouting|TestMounts|TestDocker
+RTEST_SHARD_AREAS_3 = TestConnect|TestAttach|TestInjector|TestNamespaces
+
 .PHONY: check-regression
-check-regression: build-deps ## (QA) Run the regression-test framework suite (plain output)
+check-regression: build-deps ## (QA) Run the regression-test framework suite; SHARD=1|2|3 runs one shard
+ifdef SHARD
+	go test -count=1 -timeout=45m \
+		-run '^($(or $(RTEST_SHARD_AREAS_$(SHARD)),$(error unknown SHARD "$(SHARD)": use 1, 2 or 3)))$$' \
+		./regression_test
+	# The clusterless packages (golden chart rendering, framework unit
+	# tests) run only under check-regression, so a sharded CI still needs
+	# them once; they cost seconds, so every shard runs them.
+	go test -count=1 -timeout=10m ./regression_test/framework/... ./regression_test/golden
+else
 	go test -count=1 -timeout=90m ./regression_test/...
+endif
 
 .PHONY: rtest-clean
 rtest-clean: ## (QA) Remove regression-test resources left in the cluster

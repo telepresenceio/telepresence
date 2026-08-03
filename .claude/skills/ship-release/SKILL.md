@@ -71,7 +71,7 @@ Confirm the label is set: `gh pr view "$tp_branch" --json labels`.
 
 ### 1.4 Wait for `regression` to be green
 
-The regression suite runs about an hour; the node-agent job runs beside it. Use `ScheduleWakeup` with `delaySeconds` in the **1200-1800** range. Poll with the same `gh pr checks` query, looking at the `regression` and `node_agent_docker_runtime` rows.
+The regression suite runs as three parallel shards (~30 min including cluster setup), summed into the single `regression` context; the node-agent job runs beside them. Use `ScheduleWakeup` with `delaySeconds` around **900**. Poll with the same `gh pr checks` query, looking at the `regression` and `node_agent_docker_runtime` rows.
 
 - Success → continue to Phase 2.
 - Failure / cancellation → **stop and report**. Pull failed-step logs with `gh run view <run-id> --log-failed`.

@@ -124,7 +124,8 @@ This runs in the main thread, so do NOT Read or `tail` the whole log.
 ## Don't
 
 - Don't run the full suite unscoped without explicit user instruction — it is
-  roughly an hour.
+  roughly an hour serial; `make check-regression SHARD=1|2|3` runs a third of
+  it (the shard/area mapping lives in build-aux/main.mk).
 - Don't run `go test -list` or a deliberately non-matching `-run` to "check
   what exists": the harness provisions real cluster resources before selection,
   so it costs a full setup cycle. Grep the suite files instead.

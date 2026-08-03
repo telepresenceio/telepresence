@@ -20,6 +20,12 @@ kind load docker-image local/tel2:2.x.x-test.0 --name <cluster>
 RTEST_KUBECONFIG=~/.kube/my-test-cluster.yaml RTEST_REGISTRY=local \
   make check-regression
 
+# A third of it: three area shards balanced by duration (mapping in
+# build-aux/main.mk). One rtest run per cluster at a time, so parallel
+# shards need a cluster (RTEST_CONTEXT/RTEST_KUBECONFIG) each; CI gives
+# every shard its own runner.
+make check-regression SHARD=2
+
 # One area, one suite, or one test:
 go test ./regression_test -run '^TestIntercept$'
 go test ./regression_test -run 'TestIntercept/HeaderFilter'
