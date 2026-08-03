@@ -69,11 +69,13 @@ func runLifecycleInterceptIDPattern(wl *rt.Workload) *regexp.Regexp {
 }
 
 // runLifecycleServedWithEnv is the "response identity" predicate: the body
-// must carry both this suite's handler's --hostname marker (proving the
-// cluster pod isn't answering) and the intercept-id line above (proving the
-// env file reached it).
-func runLifecycleServedWithEnv(wl *rt.Workload) func(status int, body string) bool {
-	hostMarker := "Request served by " + runLifecycleHostname
+// must carry both the handler's --hostname marker (proving the cluster pod
+// isn't answering) and the intercept-id line above (proving the env file
+// reached it). hostname is the caller's own --hostname value, so a suite
+// running the matrix over a different connection can use its own handler
+// container's identity.
+func runLifecycleServedWithEnv(wl *rt.Workload, hostname string) func(status int, body string) bool {
+	hostMarker := "Request served by " + hostname
 	idPattern := runLifecycleInterceptIDPattern(wl)
 	return func(status int, body string) bool {
 		return status == http.StatusOK && strings.Contains(body, hostMarker) && idPattern.MatchString(body)
@@ -117,7 +119,7 @@ func (s *RunLifecycle) awaitServing(conn *rt.Conn, wl *rt.Workload) {
 	t.Helper()
 	s.Eventually(func() bool { return attached(conn.List(t), wl.Name, wl.Namespace) },
 		dockerRunAttachTimeout, attachPollInterval, "docker-run intercept did not appear in list")
-	check.EventuallyHTTP(t, wl.ServiceURL(), runLifecycleServedWithEnv(wl), dockerRunRouteTimeout)
+	check.EventuallyHTTP(t, wl.ServiceURL(), runLifecycleServedWithEnv(wl, runLifecycleHostname), dockerRunRouteTimeout)
 }
 
 // awaitGone waits for wl's service URL to revert to the cluster pod, no
