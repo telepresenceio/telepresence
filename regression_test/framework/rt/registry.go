@@ -202,7 +202,9 @@ func RunArea(t *testing.T, area string) {
 				return
 			}
 			r.Infof("[rtest] suite %s: start", reg.name)
+			mark := r.engine.mark()
 			suite.Run(t, reg.suite)
+			r.evictIdleWorkloads(mark)
 		})
 	}
 }

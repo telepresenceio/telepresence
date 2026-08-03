@@ -1,8 +1,10 @@
 package rt
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -45,6 +47,9 @@ type memoEntry struct {
 	failed  error
 	always  bool
 	destroy func(Env) error
+	// used is the engine clock reading of this entry's most recent Get,
+	// which orders eviction candidates.
+	used uint64
 }
 
 // engine is the single, mutex-guarded fixture store owned by Runtime. It
@@ -54,24 +59,76 @@ type engine struct {
 	mu       sync.Mutex
 	entries  map[string]*memoEntry
 	sequence []*memoEntry // provision order, for LIFO teardown
+	clock    uint64       // ticks on every Get, stamping memoEntry.used
 }
 
 func newEngine() *engine {
 	return &engine{entries: map[string]*memoEntry{}}
 }
 
+// tick advances the engine clock and returns the new reading. Caller holds
+// e.mu.
+func (e *engine) tick() uint64 {
+	e.clock++
+	return e.clock
+}
+
 func (e *engine) lookup(hash string) (*memoEntry, bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	en, ok := e.entries[hash]
+	if ok {
+		en.used = e.tick()
+	}
 	return en, ok
 }
 
 func (e *engine) store(en *memoEntry) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	en.used = e.tick()
 	e.entries[en.hash] = en
 	e.sequence = append(e.sequence, en)
+}
+
+// mark returns the current clock reading, which callers pass to evictIdle as
+// the boundary before which an entry counts as idle.
+func (e *engine) mark() uint64 {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.clock
+}
+
+// evictIdle removes the workload memo entries whose last Get predates since,
+// keeping the keep most recently used among them, and returns them for the
+// caller to destroy. Entries are dropped from sequence as well: unlike
+// invalidate, eviction does destroy the resource, so the final teardown has
+// nothing left to do for them.
+//
+// Bounding by since is what makes eviction safe: an entry the running suite
+// touched is stamped at or after the mark taken when that suite began, so
+// only fixtures no live suite is holding are ever considered.
+func (e *engine) evictIdle(since uint64, keep int) []*memoEntry {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var idle []*memoEntry
+	for _, en := range e.entries {
+		if en.used <= since && en.destroy != nil && strings.HasPrefix(en.name, workloadFixturePrefix) {
+			idle = append(idle, en)
+		}
+	}
+	slices.SortFunc(idle, func(a, b *memoEntry) int { return cmp.Compare(b.used, a.used) })
+	if len(idle) <= keep {
+		return nil
+	}
+	evicted := idle[keep:]
+	for _, en := range evicted {
+		delete(e.entries, en.hash)
+	}
+	e.sequence = slices.DeleteFunc(e.sequence, func(en *memoEntry) bool {
+		return slices.Contains(evicted, en)
+	})
+	return evicted
 }
 
 // invalidate removes the memo entry for hash, used by Mutate's t.Cleanup so
@@ -175,6 +232,38 @@ func getOrProvision[T any](t testing.TB, f *Fixture[T]) T {
 	r.manifest.recordFixture(f.Name, f.Hash, action, dur)
 	r.Infof("[rtest] fixture %s: %s %s", f.Name, action, dur.Round(time.Millisecond))
 	return value
+}
+
+// workloadFixturePrefix opens the Name of every WorkloadFixture, which is
+// what makes workload entries identifiable as eviction candidates.
+const workloadFixturePrefix = "workload/"
+
+// maxLiveWorkloads bounds how many workload fixtures stay provisioned once a
+// suite ends. Every workload is a running pod, and a memo entry lives until
+// the run ends, so without a bound a long run holds every workload any suite
+// ever touched: past a single node's pod capacity, later managers cannot be
+// scheduled at all. The bound is well above any one suite's usage, so
+// fixtures a neighbouring suite reuses are still served from the memo.
+const maxLiveWorkloads = 25
+
+// evictIdleWorkloads destroys workload fixtures untouched since mark, past
+// maxLiveWorkloads. Called at suite boundaries, where mark is the reading
+// taken before the suite ran. Destroy runs outside the engine lock.
+//
+// This applies in dev mode too: WorkloadFixture is AlwaysDestroy, so a
+// workload is never a candidate for adoption by the next run and evicting it
+// early costs only its own re-provision.
+func (r *Runtime) evictIdleWorkloads(mark uint64) {
+	evicted := r.engine.evictIdle(mark, maxLiveWorkloads)
+	tb := &runTB{r: r}
+	for _, en := range evicted {
+		start := time.Now()
+		if err := en.destroy(Env{Ctx: r.ctx, T: tb, R: r}); err != nil {
+			r.Infof("[rtest] fixture %s: evict error: %v", en.name, err)
+			continue
+		}
+		r.Infof("[rtest] fixture %s: evicted %s", en.name, time.Since(start).Round(time.Millisecond))
+	}
 }
 
 // teardownFixtures destroys live fixtures in LIFO (reverse provision) order.
