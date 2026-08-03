@@ -88,8 +88,11 @@ func (wf *workloadInfoWatcher) Watch(ctx context.Context, stream grpc.ServerStre
 		case <-sessionDone:
 			return nil
 		case wes, ok := <-workloadsCh:
-			if !ok {
-				clog.Debug(ctx, "Workloads channel closed")
+			// A nil batch is the subscription's end sentinel (see
+			// Subscribe); the channel itself is never closed, but the ok
+			// check stays as a guard against a future closer.
+			if !ok || wes == nil {
+				clog.Debug(ctx, "Workloads subscription ended")
 				return nil
 			}
 			wf.handleWorkloadEvents(ctx, wes, initial)
