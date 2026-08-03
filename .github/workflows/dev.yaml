@@ -1,4 +1,4 @@
-name: "Integration Tests"
+name: "Regression Tests"
 on:
   pull_request:
     types:
@@ -21,7 +21,7 @@ env:
 # name is part of the group so that a push does not cancel an in-flight
 # labeled run of a different kind (e.g. "compatibility test").
 concurrency:
-  group: "integration-${{ github.event.pull_request.number }}-${{ github.event.label.name || 'push' }}"
+  group: "regression-${{ github.event.pull_request.number }}-${{ github.event.label.name || 'push' }}"
   cancel-in-progress: true
 
 # regression runs without a label for non-draft PRs whose head branch is
