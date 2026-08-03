@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
 )
@@ -96,14 +97,29 @@ func workloadKey(ns string, tpl workloads.Template) string {
 	for i, k := range envKeys {
 		env[i] = fmt.Sprintf("%s=%s", k, tpl.Env[k])
 	}
+	extraContainers := make([]string, len(tpl.ExtraContainers))
+	for i, c := range tpl.ExtraContainers {
+		ceKeys := make([]string, 0, len(c.Env))
+		for k := range c.Env {
+			ceKeys = append(ceKeys, k)
+		}
+		sort.Strings(ceKeys)
+		ce := make([]string, len(ceKeys))
+		for j, k := range ceKeys {
+			ce[j] = fmt.Sprintf("%s=%s", k, c.Env[k])
+		}
+		extraContainers[i] = fmt.Sprintf("%s:%d:%s:%s,%s,%s,%s",
+			c.Name, c.Port, strings.Join(ce, ","),
+			c.ConfigVolume.Name, c.ConfigVolume.Key, c.ConfigVolume.Content, c.ConfigVolume.MountPath)
+	}
 	return fmt.Sprintf("workload|%s|%s|%s|%d|%s|%s|headless=%t|noservice=%t|udp=%t|extra=%s|annotations=%s|"+
-		"resources=%s,%s,%s,%s|appprotocol=%s|configvolume=%s,%s,%s,%s|env=%s",
+		"resources=%s,%s,%s,%s|appprotocol=%s|configvolume=%s,%s,%s,%s|env=%s|extracontainers=%s",
 		ns, tpl.Name, tpl.Kind, tpl.Replicas, tpl.Image, tpl.SvcName,
 		tpl.Headless, tpl.NoService, tpl.UDP, strings.Join(extra, ","), strings.Join(annos, ","),
 		tpl.Resources.Requests.CPU, tpl.Resources.Requests.Memory,
 		tpl.Resources.Limits.CPU, tpl.Resources.Limits.Memory, tpl.AppProtocol,
 		tpl.ConfigVolume.Name, tpl.ConfigVolume.Key, tpl.ConfigVolume.Content, tpl.ConfigVolume.MountPath,
-		strings.Join(env, ","))
+		strings.Join(env, ","), strings.Join(extraContainers, ";"))
 }
 
 func provisionWorkload(e Env, ns string, tpl workloads.Template) (*Workload, error) {
@@ -135,7 +151,7 @@ func provisionWorkload(e Env, ns string, tpl workloads.Template) (*Workload, err
 			return nil, fmt.Errorf("workload %s: %w", tpl.Name, err)
 		}
 	}
-	if _, err := e.R.Kubectl(e.Ctx, ns, "rollout", "status", kindPath, "--timeout=120s"); err != nil {
+	if err := waitWorkloadReady(e, ns, tpl, kindPath); err != nil {
 		return nil, fmt.Errorf("workload %s: %w", tpl.Name, err)
 	}
 	return &Workload{
@@ -146,6 +162,34 @@ func provisionWorkload(e Env, ns string, tpl workloads.Template) (*Workload, err
 		SvcName:    tpl.SvcName,
 		ExtraPorts: tpl.ExtraPorts,
 	}, nil
+}
+
+// waitWorkloadReady blocks until the workload's pods are ready. Deployments
+// and StatefulSets go through `kubectl rollout status`, which understands
+// their rollout semantics; a bare ReplicaSet and an Argo Rollout have no
+// rollout-status support, so those kinds wait for their app-labeled pods to
+// reach Ready instead, retrying while no pod exists yet (an Argo Rollout's
+// pods appear only once its controller reconciles the resource, and
+// `kubectl wait` errors immediately when the selector matches nothing).
+func waitWorkloadReady(e Env, ns string, tpl workloads.Template, kindPath string) error {
+	switch tpl.Kind {
+	case "ReplicaSet", "Rollout":
+		deadline := time.Now().Add(120 * time.Second)
+		for {
+			_, err := e.R.Kubectl(e.Ctx, ns, "wait", "--for=condition=ready", "pod",
+				"-l", "app="+tpl.Name, "--timeout=10s")
+			if err == nil {
+				return nil
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("pods for %s never became ready: %w", kindPath, err)
+			}
+			time.Sleep(2 * time.Second)
+		}
+	default:
+		_, err := e.R.Kubectl(e.Ctx, ns, "rollout", "status", kindPath, "--timeout=120s")
+		return err
+	}
 }
 
 func destroyWorkload(e Env, w *Workload) error {

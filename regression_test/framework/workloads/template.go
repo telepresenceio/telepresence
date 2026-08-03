@@ -1,5 +1,6 @@
-// Package workloads renders test workload manifests (Deployment/StatefulSet +
-// Service) from embedded templates.
+// Package workloads renders test workload manifests
+// (Deployment/ReplicaSet/StatefulSet/Rollout + Service) from embedded
+// templates.
 package workloads
 
 import (
@@ -31,7 +32,7 @@ const (
 // Template describes a workload manifest to render.
 type Template struct {
 	Name     string
-	Kind     string // "Deployment" or "StatefulSet"
+	Kind     string // "Deployment", "ReplicaSet", "StatefulSet", or "Rollout"
 	Replicas int
 	Image    string
 	Port     int32
@@ -74,6 +75,13 @@ type Template struct {
 	// mirrors a container's declared env) sets this directly. Rendered
 	// after PORTS, sorted by key for a deterministic manifest.
 	Env map[string]string
+	// ExtraContainers are additional containers sharing the pod with the
+	// app container, each running the echo image on its own port. Rendered
+	// only for Deployment and ReplicaSet kinds (the shared deployment.yaml
+	// template); ignored for StatefulSet and Rollout, whose templates carry
+	// no equivalent block, since no suite needs a multi-container workload
+	// of those kinds yet.
+	ExtraContainers []ExtraContainer
 }
 
 // PortName is the primary port's name: "udp" when UDP is set (naming it
@@ -118,6 +126,24 @@ const (
 	ConfigVolumeContent = "rtest-config-volume-marker"
 )
 
+// ExtraContainer is an additional container in a Deployment/ReplicaSet pod,
+// alongside the app container: the same echo image, listening on Port (via
+// the same PORTS env mechanism Template's own ports use), its own Env vars,
+// and, when ConfigVolume is non-zero, its own ConfigMap and read-only mount.
+type ExtraContainer struct {
+	Name         string
+	Port         int32
+	Env          map[string]string
+	ConfigVolume ConfigVolume
+}
+
+// VolumeName is the pod volume name c's ConfigVolume mounts under: distinct
+// per container name, so the app container's own "rtest-config" volume and
+// other ExtraContainers' volumes never collide.
+func (c ExtraContainer) VolumeName() string {
+	return "rtest-config-" + c.Name
+}
+
 // NamedPort is an additional container/service port beyond Template.Port.
 type NamedPort struct {
 	Name string
@@ -157,6 +183,18 @@ func (t Template) PortsEnv() string {
 	return strings.Join(ports, ",")
 }
 
+// HasExtraConfigVolumes reports whether any ExtraContainers entry sets
+// ConfigVolume, used by deployment.yaml to decide whether to open the pod's
+// volumes: block even when the app container's own ConfigVolume is unset.
+func (t Template) HasExtraConfigVolumes() bool {
+	for _, c := range t.ExtraContainers {
+		if !c.ConfigVolume.IsZero() {
+			return true
+		}
+	}
+	return false
+}
+
 // Echo returns a single-replica Deployment+Service template running the
 // echo-server test image on one HTTP port.
 func Echo(name string) Template {
@@ -182,6 +220,22 @@ func EchoStatefulSet(name string) Template {
 func EchoHeadless(name string) Template {
 	t := EchoStatefulSet(name)
 	t.Headless = true
+	return t
+}
+
+// EchoReplicaSet is Echo, rendered as a bare ReplicaSet (apps/v1, no
+// rollout controller of its own) instead of a Deployment.
+func EchoReplicaSet(name string) Template {
+	t := Echo(name)
+	t.Kind = "ReplicaSet"
+	return t
+}
+
+// EchoRollout is Echo, rendered as an Argo Rollout (argoproj.io/v1alpha1)
+// with an empty canary strategy instead of a Deployment.
+func EchoRollout(name string) Template {
+	t := Echo(name)
+	t.Kind = "Rollout"
 	return t
 }
 
@@ -249,10 +303,12 @@ func UDPEcho(name string) Template {
 func (t Template) Render(namespace string) (string, error) {
 	var file string
 	switch t.Kind {
-	case "Deployment":
+	case "Deployment", "ReplicaSet":
 		file = "templates/deployment.yaml"
 	case "StatefulSet":
 		file = "templates/statefulset.yaml"
+	case "Rollout":
+		file = "templates/rollout.yaml"
 	default:
 		return "", fmt.Errorf("workloads: unknown kind %q", t.Kind)
 	}

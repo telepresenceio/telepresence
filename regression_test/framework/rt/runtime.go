@@ -336,6 +336,14 @@ func (r *Runtime) UserCacheDir() string {
 	}
 }
 
+// LogDir returns the directory a CLI-under-test child process resolves as
+// its log directory (pkg/filelocation.AppUserLogDir): unlike UserCacheDir,
+// childEnv always sets DEV_TELEPRESENCE_LOG_DIR to this exact path, so every
+// daemon this run starts writes its log files here -- including a docker
+// connection's host-side kubeauth daemon (pkg/client/docker/kubeauth/
+// cmd.go), which is not itself containerized.
+func (r *Runtime) LogDir() string { return r.logDir }
+
 // lookupEnvValue returns the value of key in a childEnv-shaped "KEY=value"
 // slice.
 func lookupEnvValue(env []string, key string) (string, bool) {

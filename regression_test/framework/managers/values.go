@@ -52,6 +52,12 @@ type Values struct {
 	Compatibility Compatibility `json:"compatibility,omitzero"`
 	// TelepresenceAPI is the chart's telepresenceAPI.* shape.
 	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitzero"`
+	// Workloads is the chart's workloads.* shape: whether each workload
+	// kind is recognized by the traffic-manager and injector.
+	Workloads Workloads `json:"workloads,omitzero"`
+	// Intercept is the chart's intercept.* shape, restricted to the keys
+	// the catalog configures.
+	Intercept Intercept `json:"intercept,omitzero"`
 	// Namespaces and NamespaceSelector are mutually exclusive per the chart
 	// (values.schema.yaml's namespaces/namespaceSelector descriptions):
 	// setting a static Namespaces list must null NamespaceSelector, and
@@ -231,6 +237,44 @@ type TelepresenceAPI struct {
 	Port int `json:"port,omitempty"`
 }
 
+// Workloads is the chart's workloads.* shape: which workload kinds the
+// traffic-manager watches and the injector mutates
+// (values.yaml: deployments/replicaSets/statefulSets default to true,
+// argoRollouts defaults to false).
+type Workloads struct {
+	Deployments  WorkloadKind `json:"deployments,omitzero"`
+	ReplicaSets  WorkloadKind `json:"replicaSets,omitzero"`
+	StatefulSets WorkloadKind `json:"statefulSets,omitzero"`
+	ArgoRollouts WorkloadKind `json:"argoRollouts,omitzero"`
+}
+
+// WorkloadKind is one workloads.<kind>.* entry.
+type WorkloadKind struct {
+	// Enabled is a pointer since a plain bool can't be distinguished from
+	// "not set" by Merge, and the chart's own per-kind default varies
+	// (true for Deployments/ReplicaSets/StatefulSets, false for
+	// ArgoRollouts).
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// Intercept is the chart's intercept.* shape, restricted to the keys the
+// catalog configures.
+type Intercept struct {
+	Environment InterceptEnvironment `json:"environment,omitzero"`
+	// InactiveBlockTimeout is the chart's intercept.inactiveBlockTimeout
+	// duration string (values.schema.yaml's "duration" $def), overriding
+	// the chart's own 10m default: the maximum time an intercept may be
+	// held by a client that is unreachable or inactive.
+	InactiveBlockTimeout string `json:"inactiveBlockTimeout,omitempty"`
+}
+
+// InterceptEnvironment is the chart's intercept.environment.* shape.
+type InterceptEnvironment struct {
+	// Excluded lists environment variable names withheld from the client
+	// at attachment time.
+	Excluded []string `json:"excluded,omitempty"`
+}
+
 // Rbac is the chart's clientRbac shape.
 type Rbac struct {
 	Create   bool             `json:"create"`
@@ -332,6 +376,8 @@ func Merge(base, over Values) Values {
 	if over.TelepresenceAPI.Port != 0 {
 		m.TelepresenceAPI.Port = over.TelepresenceAPI.Port
 	}
+	m.Workloads = mergeWorkloads(m.Workloads, over.Workloads)
+	m.Intercept = mergeIntercept(m.Intercept, over.Intercept)
 	if over.NamespaceSelector != nil {
 		m.NamespaceSelector = over.NamespaceSelector
 	}
@@ -467,6 +513,32 @@ func mergeQuicTunnel(base, over QuicTunnel) QuicTunnel {
 	}
 	if over.ExternalPort != 0 {
 		base.ExternalPort = over.ExternalPort
+	}
+	return base
+}
+
+func mergeWorkloads(base, over Workloads) Workloads {
+	if over.Deployments.Enabled != nil {
+		base.Deployments.Enabled = over.Deployments.Enabled
+	}
+	if over.ReplicaSets.Enabled != nil {
+		base.ReplicaSets.Enabled = over.ReplicaSets.Enabled
+	}
+	if over.StatefulSets.Enabled != nil {
+		base.StatefulSets.Enabled = over.StatefulSets.Enabled
+	}
+	if over.ArgoRollouts.Enabled != nil {
+		base.ArgoRollouts.Enabled = over.ArgoRollouts.Enabled
+	}
+	return base
+}
+
+func mergeIntercept(base, over Intercept) Intercept {
+	if over.Environment.Excluded != nil {
+		base.Environment.Excluded = over.Environment.Excluded
+	}
+	if over.InactiveBlockTimeout != "" {
+		base.InactiveBlockTimeout = over.InactiveBlockTimeout
 	}
 	return base
 }
