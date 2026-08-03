@@ -42,66 +42,66 @@ names files in `integration_test/`.
 
 | Area/Suite | Validates | Supersedes | Notes |
 |---|---|---|---|
-| smoke/CLI | version/status/config text + JSON shape, no daemons | cli_test.go, parts of connected_test.go, config_test.go | Only place that asserts on text output shape |
-| smoke/Connected | status/version/list once connected | connected_test.go | JSON asserts |
-| connect/Lifecycle | connect, disconnect, quit, reconnect after API-server drop (requires sudo) | not_connected_test.go, reconnect_session_test.go | |
-| connect/Errors | bad kubeconfig, bad context, unmanaged namespace refusal | not_connected_test.go, helm_test.go (partly) | |
-| connect/Contexts | --context, kubeconfig extension (also/never-proxy, dns), exec-credential auth | kubeconfig_extension_test.go, kubeauth_test.go | |
-| connect/Multi | two managers, named connections, --use, inactivity takeover | multi_connect_test.go, inactive_client_test.go | requires docker |
-| attach/Modes | THE core table: {intercept, ingest, replace, wiretap} x {Deployment, ReplicaSet, StatefulSet, headless, no-service, no-volumes, Rollout} — attach, list, traffic round-trip, detach, uninstall | workloads_test.go (10 tests), replace_test.go, wiretap_test.go, ingest_test.go (core), argo_rollouts_test.go, headless_test.go | Collapses overlap clusters A and J; argo variant keeps its CRD-install fixture + label |
-| attach/Conflicts | ingest/intercept conflict matrix, repeat idempotence | ingest_test.go | |
-| intercept/Filters | header/path/combined filters **with traffic through the filter**, coexistence, TCP conflict | http_intercepts_test.go | Fixes the exit-0-only gap |
-| intercept/Flags | pairwise matrix: port forms x mount x replace x docker-run x env-output | intercept_flags_test.go, multiple_port_intercept_test.go, ignored_mounts_test.go (flags part), intercept_localhost_test.go | rt.Matrix |
-| intercept/Routing | multi-replica, multi-port services, --to-pod TCP/UDP, pod-IP bind, local shortcut | multi_replica_intercept_test.go, multiport_test.go, to_pod_test.go, bind_to_podip_test.go, local_shortcut_test.go | |
-| intercept/Concurrent | 3 simultaneous intercepts, duplicate-port conflict, colliding mounts | multiple_intercepts_test.go, mounts_test.go (collision) | |
+| smoke/CLI | version/status/config text + JSON shape, no daemons | retired (M7) | Only place that asserts on text output shape |
+| smoke/Connected | status/version/list once connected | retired (M7) | JSON asserts |
+| connect/Lifecycle | connect, disconnect, quit, reconnect after API-server drop (requires sudo) | retired (M7) | |
+| connect/Errors | bad kubeconfig, bad context, unmanaged namespace refusal | retired (M7) | |
+| connect/Contexts | --context, kubeconfig extension (also/never-proxy, dns), exec-credential auth | retired (M7) | |
+| connect/Multi | two managers, named connections, --use, inactivity takeover | retired (M7) | requires docker |
+| attach/Modes | THE core table: {intercept, ingest, replace, wiretap} x {Deployment, ReplicaSet, StatefulSet, headless, no-service, no-volumes, Rollout} — attach, list, traffic round-trip, detach, uninstall | retired (M7) | Collapses overlap clusters A and J; argo variant keeps its CRD-install fixture + label |
+| attach/Conflicts | ingest/intercept conflict matrix, repeat idempotence | retired (M7) | |
+| intercept/Filters | header/path/combined filters **with traffic through the filter**, coexistence, TCP conflict | retired (M7) | Fixes the exit-0-only gap |
+| intercept/Flags | pairwise matrix: port forms x mount x replace x docker-run x env-output | retired (M7) | rt.Matrix |
+| intercept/Routing | multi-replica, multi-port services, --to-pod TCP/UDP, pod-IP bind, local shortcut | retired (M7) | |
+| intercept/Concurrent | 3 simultaneous intercepts, duplicate-port conflict, colliding mounts | retired (M7) | |
 
 ### Wave 2 — install, injector, namespaces
 
 | Area/Suite | Validates | Supersedes | Notes |
 |---|---|---|---|
-| install/Helm | install/upgrade/uninstall semantics, reuse/reset-values, failed-install tolerance, multi-namespace installs, collision detection | install_test.go, helm_test.go, uninstall_test.go, pod_cidr_test.go | |
-| install/Setup | setup verb: apply, round-trip, streaming, non-admin handoff, validation | setup_test.go | |
+| install/Helm | install/upgrade/uninstall semantics, reuse/reset-values, failed-install tolerance, multi-namespace installs, collision detection | retired (M7) | |
+| install/Setup | setup verb: apply, round-trip, streaming, non-admin handoff, validation | retired (M7) | |
 | install/Golden | helm-template golden matrix over chart values | (new capability) | No cluster |
-| injector/Webhook | annotation auto-inject, inject policies, reinvocation + LimitRange, cert regenerate (watch/mount), failed-inject resync, disabled injector, manual agent via genyaml | webhook_test.go, inject_policy_test.go, limitrange_test.go, injector_test.go, agent_injector_disabled_test.go, manual_agent_test.go, env_interpolate_test.go, tls_test.go (annotations) | Private namespaces per policy |
-| namespaces/Selector | static list vs label selector, cross-namespace attach, mapped-namespaces | namespaces_test.go, gather_logs (mapped part), multiple_services_test.go (mapped part) | |
+| injector/Webhook | annotation auto-inject, inject policies, reinvocation + LimitRange, cert regenerate (watch/mount), failed-inject resync, disabled injector, manual agent via genyaml | retired (M7) | Private namespaces per policy |
+| namespaces/Selector | static list vs label selector, cross-namespace attach, mapped-namespaces | retired (M7) | |
 
 ### Wave 3 — nodeagent, quic, auth, session
 
 | Area/Suite | Validates | Supersedes | Notes |
 |---|---|---|---|
-| nodeagent/Matrix | node-agent x {injector on/off, cluster-default, filters, multi-replica, replace-refusal, job reaping} | node_agent_test.go, node_agent_multi_test.go, node_agent_no_injector_test.go, node_agent_cluster_default_test.go | One config family, 4 installs collapse to upgrades |
-| quic/Transport | discovery, fallback, datagrams, outage/recovery, relay, coexistence | quic_test.go, quic_disabled_test.go | slow label for outage tests |
-| auth/Modes | enforcing/permissive, x509 toggles, identity-bound sessions, legacy-client compat | manager_auth_test.go, compat_auth_test.go | |
-| session/Lifecycle | cluster-served client config, log levels, gather-logs (deduped matrix), usage reporting, workload watch stream | cloud_config_test.go, loglevel_test.go, gather_logs_test.go, usage_reporting_test.go, workload_watch_test.go, list_watch_test.go, manager_grpc_test.go | Drops the two byte-identical gather-logs tests |
+| nodeagent/Matrix | node-agent x {injector on/off, cluster-default, filters, multi-replica, replace-refusal, job reaping} | retired (M7) | One config family, 4 installs collapse to upgrades |
+| quic/Transport | discovery, fallback, datagrams, outage/recovery, relay, coexistence | retired (M7) | slow label for outage tests |
+| auth/Modes | enforcing/permissive, x509 toggles, identity-bound sessions, legacy-client compat | retired (M7) | |
+| session/Lifecycle | cluster-served client config, log levels, gather-logs (deduped matrix), usage reporting, workload watch stream | retired (M7) | Drops the two byte-identical gather-logs tests |
 
 ### Wave 4 — dns, routing, mounts, docker
 
 | Area/Suite | Validates | Supersedes | Notes |
 |---|---|---|---|
 | dns/Resolution | subdomain, svc domain, unqualified names, excludes/mappings, WPAD suppression | retired (M7) | |
-| routing/Subnets | also/never-proxy, conflicting proxies, CIDR conflicts via veth (sudo), allow-conflicting, proxy-via, podCIDR strategies | also_proxy_test.go, cidr_conflict_test.go, proxy_via_test.go, pod_cidr_test.go (values part) | Drops the also-proxy duplicate |
-| mounts/FUSE | read/write, read-only, ftp vs sshfs, large files (slow label), agent-content match, scale-to-zero survival | mounts_test.go, intercept_mount_test.go, podscaling_test.go, large_files_test.go | |
-| docker/Daemon | containerized daemon lifecycle, host+docker coexistence, cache ownership, subnet non-conflict, gather-logs from container | docker_daemon_test.go | requires docker |
-| docker/Run | --docker-run handler matrix, REST API suite | docker_run_test.go, restapi_test.go | handler matrix landed in wave 5 (RunLifecycle, DockerConnRun) |
-| docker/Compose | compose extension verbs | compose_test.go | landed in wave 5 (Compose, ComposeLifecycle) |
-| session/Throughput | TUN throughput, repeated-connect stress | multiple_services_test.go | stress label for the 90-subtest loop |
+| routing/Subnets | also/never-proxy, conflicting proxies, CIDR conflicts via veth (sudo), allow-conflicting, proxy-via, podCIDR strategies | retired (M7) | Drops the also-proxy duplicate |
+| mounts/FUSE | read/write, read-only, ftp vs sshfs, large files (slow label), agent-content match, scale-to-zero survival | retired (M7) | |
+| docker/Daemon | containerized daemon lifecycle, host+docker coexistence, cache ownership, subnet non-conflict, gather-logs from container | retired (M7) | requires docker |
+| docker/Run | --docker-run handler matrix, REST API suite | retired (M7) | handler matrix landed in wave 5 (RunLifecycle, DockerConnRun) |
+| docker/Compose | compose extension verbs | retired (M7) | landed in wave 5 (Compose, ComposeLifecycle) |
+| session/Throughput | TUN throughput, repeated-connect stress | retired (M7) | stress label for the 90-subtest loop |
 
 ### Wave 5 — docker-run lifecycle, compose, state manifests, quic depth (m5)
 
 | Area/Suite | Validates | Supersedes | Notes |
 |---|---|---|---|
-| docker/RunLifecycle | --docker-run handler + four-way teardown (SIGINT, detach, disconnect, quit) | docker_run_test.go (host-daemon matrix) | requires docker |
-| docker/DockerConnRun | bare docker-run network/DNS join, external DNS, telemount volume | docker_run_test.go (dockerDaemonSuite tests) | requires docker |
-| docker/Compose | one test per x-tele verb (connect, proxy, ingest, intercept, replace, wiretap, dns) | compose_test.go | requires docker |
-| docker/ComposeLifecycle | named-volume down/-v semantics, default-network subnet non-conflict | compose_test.go | slow label |
+| docker/RunLifecycle | --docker-run handler + four-way teardown (SIGINT, detach, disconnect, quit) | retired (M7) | requires docker |
+| docker/DockerConnRun | bare docker-run network/DNS join, external DNS, telemount volume | retired (M7) | requires docker |
+| docker/Compose | one test per x-tele verb (connect, proxy, ingest, intercept, replace, wiretap, dns) | retired (M7) | requires docker |
+| docker/ComposeLifecycle | named-volume down/-v semantics, default-network subnet non-conflict | retired (M7) | slow label |
 | state/Apply | dry-run, create/reuse/unchanged, attachment drift, connection drift | retired (M7) | new area; owns its connection lifecycle |
 | state/Delete | reverse-order teardown, absent, no-connection variants | retired (M7) | |
 | state/Handler | handler command pid lifecycle across apply/delete | retired (M7) | not on windows |
-| quic/Datagrams | RFC 9221 datagram carriage over UDP echo | quic_test.go (Test_AUDPEchoDatagrams) | slow label; inline ExtraEnv spec |
-| quic/ForwarderRestart | transport rides out forwarder pod deletion without fallback | quic_test.go (Test_ForwarderRestartSurvival) | |
-| quic/ManagerOutage | attachment survives manager scale-to-zero | quic_test.go (Test_ZManagerOutageAttachmentSurvival) | slow label |
-| quic NodePort endpoint discovery | discovered `<nodeIP>:<nodePort>` endpoints (no externalHost) | quic_test.go (Test_ZZDiscoveryNodePort) | deferred: telepresenceio/telepresence#4227 |
-| nodeagent quic transport | node-hosted agent transport is quic | quic_test.go (Test_NodeAgentTransport) | deferred: telepresenceio/telepresence#4227 |
+| quic/Datagrams | RFC 9221 datagram carriage over UDP echo | retired (M7) | slow label; inline ExtraEnv spec |
+| quic/ForwarderRestart | transport rides out forwarder pod deletion without fallback | retired (M7) | |
+| quic/ManagerOutage | attachment survives manager scale-to-zero | retired (M7) | slow label |
+| quic NodePort endpoint discovery | discovered `<nodeIP>:<nodePort>` endpoints (no externalHost) | retired (M7) | deferred: telepresenceio/telepresence#4227 |
+| nodeagent quic transport | node-hosted agent transport is quic | retired (M7) | deferred: telepresenceio/telepresence#4227 |
 
 Deliberately dropped (with reasons recorded here rather than silently):
 `otel_test.go` (dead: env-gated stress never run in CI), `cli_test.go::Test_Help`

@@ -87,20 +87,16 @@ go test ./regression_test -run 'TestIntercept/HeaderFilter/Test_PathPrefix'
 
 # Chart-value combinations, clusterless:
 go test ./regression_test/golden
-
-# Legacy integration tests (being retired area by area)
-make check-integration
 ```
 
-The regression suite in `regression_test/` is the primary integration-test
+The regression suite in `regression_test/` is the integration-test
 package: declarative memoized fixtures, warm-cluster adoption for fast
 scoped runs, coverage instrumentation, and a bidirectional
 compatibility subset. **Read `regression_test/README.md` before writing or
 debugging these tests** — it documents the fixture engine's rules (lazy
 accessors, Mutate discipline, spec declarations), the RTEST_* environment,
 the manager/workload catalogs, labels and platform constraints, coverage,
-compat runs, and how to run the legacy `integration_test/` suite that still
-exists until parity is reached.
+and compat runs.
 
 ## Linting
 

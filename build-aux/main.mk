@@ -98,7 +98,7 @@ generate: protoc $(tools/go-mkopensource) $(BUILDDIR)/$(shell go env GOVERSION |
 	cd ./cmd/teleroute && $(MAKE) rpc/teleroute/.rsync-stamp
 	cd ./cmd/teleroute && go mod tidy
 	cd ./cmd/teleroute/rpc && go mod tidy
-	cd ./integration_test/testdata/echo-server && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
+	cd ./regression_test/testdata/echo-server && export GOFLAGS=-mod=mod && go mod tidy && go mod vendor && rm -rf vendor
 
 	export GOFLAGS=-mod=mod && go mod tidy && go mod vendor
 
@@ -460,7 +460,6 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./packaging/windows-package.sh
-shellscripts += ./build-aux/check-integration-retry.sh
 .PHONY: lint lint-rpc lint-go lint-docs
 
 lint: lint-rpc lint-go lint-docs
@@ -473,7 +472,7 @@ lint-go: lint-deps ## (QA) Run the golangci-lint
 ifeq ($(GOOS),windows)
 	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
 	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
-	run --timeout 8m ./cmd/cobraparser/... ./cmd/telepresence/... ./integration_test/... ./pkg/...
+	run --timeout 8m ./cmd/cobraparser/... ./cmd/telepresence/... ./pkg/...
 else
 	# libfuse-dev provides fuse.h, which cgofuse needs to typecheck the linked
 	# fuseftp file system on Linux.
@@ -493,7 +492,7 @@ format: lint-deps ## (QA) Automatically fix linter complaints
 ifeq ($(GOHOSTOS),windows)
 	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
 	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
-	run --timeout 8m --fix ./cmd/telepresence/... ./integration_test/... ./pkg/...
+	run --timeout 8m --fix ./cmd/telepresence/... ./pkg/...
 else
 	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
 	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
@@ -502,7 +501,7 @@ endif
 	$(tools/protolint) lint --fix rpc || true
 
 .PHONY: check-all
-check-all: check-integration check-unit ## (QA) Run the test suite
+check-all: check-regression check-unit ## (QA) Run the test suite
 
 .PHONY: check-unit
 check-unit: build-deps $(tools/test-report) ## (QA) Run the test suite
@@ -512,29 +511,6 @@ ifeq ($(GOOS),linux)
 else
 	CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./pkg/... | $(tools/test-report)
 endif
-
-# TEST_FAILFAST=false lets check-integration run past a failing test instead
-# of aborting the suite; check-integration-ci uses this to collect the full
-# failure set on each attempt. Local `make check-integration` is unaffected.
-TEST_FAILFAST ?= true
-
-.PHONY: check-integration
-check-integration: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the test suite
-	# We run the test suite with TELEPRESENCE_LOGIN_DOMAIN set to localhost since that value
-	# is only used for extensions. Therefore, we want to validate that our tests, and
-	# telepresence, run without requiring any outside dependencies.
-	#
-	# Scope the run with TEST_SUITE (a regexp matched against suite names) and/or
-	# TEST_NAME (a regexp matched against test-method names), e.g.
-	#   TEST_SUITE='^WorkloadConfiguration$$' make check-integration
-	#   TEST_NAME='^Test_InterceptDetailedOutput$$' make check-integration
-	set -o pipefail
-	TELEPRESENCE_MAX_LOGFILES=300 TELEPRESENCE_LOGIN_DOMAIN=127.0.0.1 CGO_ENABLED=$(CGO_ENABLED) go test $(BUILD_TAGS) \
- 		-count=1 $(if $(filter true,$(TEST_FAILFAST)),-failfast) -json -timeout=80m ./integration_test/... $(if $(TEST_NAME),-testify.m='$(TEST_NAME)') | $(tools/test-report)
-
-.PHONY: check-integration-ci
-check-integration-ci: build-deps $(tools/test-report) $(tools/helm) ## (QA) Run the integration suite with up to 3 attempts, each retry scoped to the previous attempt's failures
-	build-aux/check-integration-retry.sh $(tools/test-report)
 
 .PHONY: check-regression
 check-regression: build-deps ## (QA) Run the regression-test framework suite (plain output)
@@ -558,7 +534,7 @@ rtest-coverage: ## (QA) Merge client+manager coverage from a RTEST_COVER=1 run a
 
 .PHONY: perf
 perf: ## (QA) Run the QUIC performance experiments (needs a cluster; see perf/README.md)
-	# Behind the 'perf' build tag so it never runs in check-unit/check-integration.
+	# Behind the 'perf' build tag so it never runs in check-unit/check-regression.
 	# Reinstalls the traffic-manager and needs a QUIC-reachable endpoint plus, for
 	# the head-of-line result, PERF_NETEM_IFACE and passwordless 'sudo tc'.
 	go test -tags perf -count=1 -v -timeout=30m ./perf/... $(if $(TEST_NAME),-run '$(TEST_NAME)')
@@ -600,14 +576,14 @@ push-test-images: push-echo-server push-udp-echo
 
 .PHONY: push-echo-server
 push-echo-server:
-	(cd integration_test/testdata/echo-server && \
+	(cd regression_test/testdata/echo-server && \
  		docker buildx build --platform=linux/amd64,linux/arm64 --push \
  		 --tag ghcr.io/telepresenceio/echo-server:latest \
  		 --tag ghcr.io/telepresenceio/echo-server:0.3.1 .)
 
 .PHONY: push-udp-echo
 push-udp-echo:
-	(cd integration_test/testdata/udp-echo && \
+	(cd regression_test/testdata/udp-echo && \
 		docker buildx build --platform=linux/amd64,linux/arm64 --push \
 		 --tag ghcr.io/telepresenceio/udp-echo:latest \
 		 --tag ghcr.io/telepresenceio/udp-echo:0.1.0 .)

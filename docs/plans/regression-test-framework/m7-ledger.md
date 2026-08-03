@@ -384,29 +384,45 @@ chart already grants the manager nodes read
 already runs discovery mode (no externalHost) — what was missing was only
 the endpoint-shape assertion and the node-agent attach itself.
 
-## Retirement readiness (pass 3, after the M/P/D implementation round)
+## Retirement (complete)
 
-Every M-, P-, and D-item is implemented. "drops" means recording the
-dispositions above in the retirement commit — no code.
+Every M-, P-, and D-item is implemented, and every area has retired.
+`integration_test/` no longer exists: 74 files across thirteen areas were
+deleted in one commit each, in confidence order with `attach` last, plus
+`otel_test.go` and `istio_test.go` dropped without porting and the harness
+(`itest/`, `testdata/`, the `Test_Integration` entrypoint, the
+`single_service` scaffolding) removed with them. The `echo-server` and
+`udp-echo` image sources moved to `regression_test/testdata/`.
 
-| area | ready? | remaining before retirement |
-|---|---|---|
-| dns | **retired** | — |
-| state | **retired** | — |
-| smoke | yes | drops only |
-| mounts | yes | drops only |
-| routing | yes | drops only |
-| auth | yes | drops only (x509 recorded in-suite; legacy-client points at the m4 compat job) |
-| session | yes | drops only |
-| nodeagent | yes | drops only |
-| connect | yes | drops only |
-| docker | yes | drops only |
-| intercept | yes | drops only |
-| install | yes | drops only |
-| injector | yes | drops only (its partials were all wave-2 scope decisions) |
-| quic | yes | drops only (#4227 ported: quic/Discovery, quic/NodeAgentTransport) |
-| namespaces | yes | drops only (D2 ported: namespaces/ClusterWide) |
-| attach | yes | drops only; retires last by design for ledger scrutiny |
+| area | retired in |
+|---|---|
+| dns | "Retire the dns and state integration suites" |
+| state | same commit |
+| session | "Retire the session integration suites" |
+| mounts | "Retire the mounts integration suites" |
+| routing | "Retire the routing integration suites" |
+| docker | "Retire the docker integration suites" |
+| injector | "Retire the injector integration suites" |
+| install | "Retire the install integration suites" |
+| namespaces | "Retire the namespaces integration suites" |
+| nodeagent | "Retire the nodeagent integration suites" |
+| auth | "Retire the auth integration suites" |
+| quic | "Retire the quic integration suites" |
+| smoke + connect | "Retire the smoke and connect integration suites" |
+| intercept | "Retire the intercept integration suites" |
+| attach | "Retire the attach integration suites" (last, by design) |
+
+CI follows: `build_and_test`, `check-integration`, `check-integration-ci`,
+`check-integration-retry.sh`, and the `upload-logs` action are gone, and
+`regression` is the integration-level gate. `test-report` stays — it still
+renders `check-unit`.
+
+**Needs a repo admin, in the same window as the merge:** promote
+`regression` to a required status check and drop
+`build_and_test (ubuntu-latest)` from the required contexts. `preflight`'s
+own required list is already updated in `dev.yaml`; branch protection is a
+settings change no commit can make. Until both happen, PRs block on a
+context that can never report.
 
 `dns` and `state` retired first, as the two areas where the parity argument
 is not in dispute. That commit establishes the mechanics every later area

@@ -1,12 +1,11 @@
 # The regression test framework
 
 `regression_test/` protects the code base from regressions. It drives the
-real `telepresence` CLI against a real cluster, like `integration_test/`
-does, but is built around declarative, memoized fixtures instead of a fixed
-harness tree: a test declares the resources it needs, the framework
-provisions each one on first use, reuses it for every later test that
-declares the same spec, and (in dev mode) adopts what a previous run left
-behind. A single scoped test on a warm cluster runs in seconds.
+real `telepresence` CLI against a real cluster, and is built around
+declarative, memoized fixtures: a test declares the resources it needs,
+the framework provisions each one on first use, reuses it for every later
+test that declares the same spec, and (in dev mode) adopts what a previous
+run left behind. A single scoped test on a warm cluster runs in seconds.
 
 ## Quick start
 
@@ -21,7 +20,7 @@ kind load docker-image local/tel2:2.x.x-test.0 --name <cluster>
 RTEST_KUBECONFIG=~/.kube/my-test-cluster.yaml RTEST_REGISTRY=local \
   make check-regression
 
-# One area, one suite, or one test — plain go test, no TEST_SUITE:
+# One area, one suite, or one test:
 go test ./regression_test -run '^TestIntercept$'
 go test ./regression_test -run 'TestIntercept/HeaderFilter'
 go test ./regression_test -run 'TestIntercept/HeaderFilter/Test_PathPrefix'
@@ -218,23 +217,3 @@ build-output/bin/telepresence status
 
 One rtest run per cluster at a time: resource names are stable by design
 (that is what makes adoption work).
-
-## The legacy integration tests
-
-`integration_test/` still exists and runs in CI until this package reaches
-full parity (see docs/plans/regression-test-framework/suite-catalog.md
-while it exists). To run it:
-
-```bash
-make check-integration                          # everything (~70 min)
-TEST_SUITE='^WorkloadConfiguration$' go test ./integration_test/... -v
-go test ./integration_test/... -v -testify.m=Test_InterceptDetailedOutput
-```
-
-It is configured through `DEV_*` environment variables
-(`DEV_KUBECONFIG`, `DEV_{CLIENT,MANAGER,AGENT}_{REGISTRY,IMAGE,VERSION}`,
-`TEST_SUITE`, `TEST_NAME`) and an optional `itest.yml` next to
-`config.yml` — whose `Env` map wins **over** the shell environment, the
-opposite of this framework's rule. `TELEPRESENCE_VERSION` is mandatory
-there. See the git history of AGENTS.md's Testing section for the full
-table.
