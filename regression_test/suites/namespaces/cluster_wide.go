@@ -56,6 +56,10 @@ func (s *ClusterWide) Test_ManagesEveryNamespace() {
 	ns := rt.PrivateUnmanagedNamespace(env, "cluster-wide")
 
 	freeDefaultConnection(t, s.AppNamespace())
+	// Earlier areas leave their SecondaryManager releases memoized for the
+	// rest of the run, and any one of them blocks the unrestricted install
+	// below.
+	rt.DestroySecondaryManagers(env)
 	rt.Mutate(t, rt.ManagerFixture(managers.ClusterWide()))
 	quitDefensively(t, r, ctx, "ClusterWide")
 

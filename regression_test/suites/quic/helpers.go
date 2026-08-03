@@ -61,6 +61,12 @@ const (
 	quicDialSettle = 6 * time.Second
 	// quicStatusTimeout bounds a plain (non-reconnecting) status poll.
 	quicStatusTimeout = 30 * time.Second
+	// quicAgentTransportTimeout bounds the wait for an agent to report the
+	// quic transport. It is longer than quicStatusTimeout because it waits
+	// on more than a status refresh: the agent has just been injected into
+	// a freshly rolled workload and dials its own quic connection, which on
+	// a loaded single-node cluster outlasts the plain status budget.
+	quicAgentTransportTimeout = 90 * time.Second
 	// quicDiscoveryTimeout bounds the reconnect loop in awaitTransportPrefix.
 	quicDiscoveryTimeout = 90 * time.Second
 	// quicForwarderTermTimeout bounds the wait for the quic-forwarder's
@@ -132,24 +138,35 @@ func awaitStatusTransportPrefix(
 
 // awaitAgentTransport polls status (no reconnect) until the
 // root_daemon.agent_transports entry for workload reports the "quic"
-// transport, or fails t after quicStatusTimeout. The agent_transports list
-// is populated only while an attachment to workload is live
-// (pkg/client/cli/cmd/status.go's toStatusAgentTransports). Every caller in
-// this area waits for the quic agent transport specifically on the plain
-// status-poll budget, so neither is a parameter, like
-// awaitTransportPrefix's quicPrefix.
+// transport, or fails t after quicAgentTransportTimeout. The
+// agent_transports list is populated only while an attachment to workload
+// is live (pkg/client/cli/cmd/status.go's toStatusAgentTransports). Every
+// caller in this area waits for the quic agent transport specifically, so
+// the transport is not a parameter, like awaitTransportPrefix's quicPrefix.
+//
+// The failure names the transport the agent actually settled on: "never
+// reported quic" alone cannot distinguish an agent still dialing from one
+// that fell back to grpc for the whole session.
 func awaitAgentTransport(t testing.TB, ctx context.Context, tp *cli.TP, workload string) {
 	t.Helper()
-	deadline := time.Now().Add(quicStatusTimeout)
+	deadline := time.Now().Add(quicAgentTransportTimeout)
 	for {
+		observed := ""
 		st := fetchStatus(t, ctx, tp)
 		for _, at := range st.RootDaemon.AgentTransports {
-			if at.Workload == workload && at.Transport == "quic" {
+			if at.Workload != workload {
+				continue
+			}
+			if at.Transport == "quic" {
 				return
 			}
+			observed = at.Transport
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("agent transport for workload %q never reported %q", workload, "quic")
+			if observed == "" {
+				t.Fatalf("workload %q never appeared in agent_transports", workload)
+			}
+			t.Fatalf("agent transport for workload %q settled on %q, never %q", workload, observed, "quic")
 		}
 		time.Sleep(quicPollInterval)
 	}

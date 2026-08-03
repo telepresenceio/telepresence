@@ -42,6 +42,29 @@ const (
 	inactiveTakeoverWait = inactiveBlockTimeout + inactivePingInterval
 )
 
+// containerRemovalTimeout/containerRemovalInterval bound the wait for a
+// quit daemon's container to disappear.
+const (
+	containerRemovalTimeout  = 30 * time.Second
+	containerRemovalInterval = time.Second
+)
+
+// containerGone polls until no container named name remains, reporting
+// whether it disappeared within containerRemovalTimeout.
+func containerGone(name string) bool {
+	deadline := time.Now().Add(containerRemovalTimeout)
+	for {
+		out, err := exec.Command("docker", "ps", "-aq", "-f", "name=^"+name+"$").Output()
+		if err == nil && strings.TrimSpace(string(out)) == "" {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(containerRemovalInterval)
+	}
+}
+
 // inactiveClientSpec overlays intercept.inactiveBlockTimeout (the chart's
 // 10m default) down to inactiveBlockTimeout, so Test_ConflictOverride*
 // don't wait out the production default. Built inline rather than added to
@@ -127,12 +150,13 @@ func (s *InactiveClient) setupConflict(nameOne, nameTwo string) conflictPair {
 	t.Cleanup(func() {
 		// Runs last (Cleanup is LIFO): both connections have been quit by
 		// then, and docker run --rm (pkg/client/docker/daemon.go's
-		// LaunchDaemon) auto-removes a container when its daemon process
-		// exits, so neither should still exist.
+		// LaunchDaemon) removes a container once its daemon process exits.
+		// That removal is asynchronous -- the daemon's exit and the
+		// container's disappearance are separate events -- so poll instead
+		// of reading once.
 		for _, c := range []string{containerOne, containerTwo} {
-			out, err := exec.Command("docker", "ps", "-aq", "-f", "name=^"+c+"$").Output()
-			if err == nil && strings.TrimSpace(string(out)) != "" {
-				t.Errorf("container %s still exists after disconnect", c)
+			if !containerGone(c) {
+				t.Errorf("container %s still exists %s after disconnect", c, containerRemovalTimeout)
 			}
 		}
 	})

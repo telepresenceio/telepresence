@@ -131,6 +131,28 @@ func (e *engine) evictIdle(since uint64, keep int) []*memoEntry {
 	return evicted
 }
 
+// evictByPrefix removes the memo entries whose name starts with prefix and
+// returns them for the caller to destroy. Like evictIdle, and unlike
+// invalidate, it drops them from sequence too: eviction destroys the
+// resource, so the final teardown has nothing left to do for them.
+func (e *engine) evictByPrefix(prefix string) []*memoEntry {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var evicted []*memoEntry
+	for _, en := range e.entries {
+		if en.destroy != nil && strings.HasPrefix(en.name, prefix) {
+			evicted = append(evicted, en)
+		}
+	}
+	for _, en := range evicted {
+		delete(e.entries, en.hash)
+	}
+	e.sequence = slices.DeleteFunc(e.sequence, func(en *memoEntry) bool {
+		return slices.Contains(evicted, en)
+	})
+	return evicted
+}
+
 // invalidate removes the memo entry for hash, used by Mutate's t.Cleanup so
 // the next Get re-provisions. It does not run DestroyFn: the resource is in
 // unknown state, not necessarily gone. The sequence entry is kept so a final
