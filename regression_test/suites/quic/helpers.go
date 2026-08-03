@@ -137,22 +137,25 @@ func awaitStatusTransportPrefix(
 }
 
 // awaitAgentTransport polls status (no reconnect) until the
-// root_daemon.agent_transports entry for workload reports transport want, or
-// fails t after timeout. The agent_transports list is populated only while
-// an attachment to workload is live (pkg/client/cli/cmd/status.go's
-// toStatusAgentTransports), mirroring quic_test.go's requireAgentTransport.
-func awaitAgentTransport(t testing.TB, ctx context.Context, tp *cli.TP, workload, want string, timeout time.Duration) {
+// root_daemon.agent_transports entry for workload reports the "quic"
+// transport, or fails t after quicStatusTimeout. The agent_transports list
+// is populated only while an attachment to workload is live
+// (pkg/client/cli/cmd/status.go's toStatusAgentTransports), mirroring
+// quic_test.go's requireAgentTransport. Every caller in this area waits for
+// the quic agent transport specifically on the plain status-poll budget, so
+// neither is a parameter, like awaitTransportPrefix's quicPrefix.
+func awaitAgentTransport(t testing.TB, ctx context.Context, tp *cli.TP, workload string) {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(quicStatusTimeout)
 	for {
 		st := fetchStatus(t, ctx, tp)
 		for _, at := range st.RootDaemon.AgentTransports {
-			if at.Workload == workload && at.Transport == want {
+			if at.Workload == workload && at.Transport == "quic" {
 				return
 			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("agent transport for workload %q never reported %q", workload, want)
+			t.Fatalf("agent transport for workload %q never reported %q", workload, "quic")
 		}
 		time.Sleep(quicPollInterval)
 	}

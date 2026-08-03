@@ -121,7 +121,7 @@ func (s *ManagerOutage) Test_AttachmentSurvivesManagerOutage() {
 	// Baseline: intercepted traffic works and the agent attachment is
 	// already on quic before the outage starts.
 	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
-	awaitAgentTransport(t, ctx, tp, wl.Name, "quic", quicStatusTimeout)
+	awaitAgentTransport(t, ctx, tp, wl.Name)
 
 	// Manager churn: declare it through Mutate before touching the
 	// Deployment directly, so a later suite's Get re-provisions instead of
@@ -159,7 +159,7 @@ func (s *ManagerOutage) Test_AttachmentSurvivesManagerOutage() {
 	// the manager (see the decisive assertion above) and is not expected to
 	// have tripped at all during the outage; confirm it is still serving
 	// quic once the manager-bound tunnel has also recovered.
-	awaitAgentTransport(t, ctx, tp, wl.Name, "quic", quicStatusTimeout)
+	awaitAgentTransport(t, ctx, tp, wl.Name)
 
 	detachRetrying(t, ctx, tp, wl.Name, ns)
 	mustDetach = false

@@ -40,7 +40,7 @@ from promised-but-missed items (six, all small) and from recorded drops.
 | | files | notes |
 |---|---|---|
 | superseded | 39 | pass 3 closed 15 more: the M/P items, D1/D3/D4, and the uninstall verb |
-| partial | 38 | every remaining partial resolves by recording a drop in the retirement commit — except quic_test.go's #4227 hold |
+| partial | 38 | every remaining partial resolves by recording a drop in the retirement commit |
 | unclaimed | 0 | all five resolved: four ported, istio dropped |
 | dropped | 2 | otel_test.go, istio_test.go; individual dropped tests inside kept files are listed separately |
 | infrastructure | 2 | integration_test.go (entrypoint), single_service_test.go (scaffolding) |
@@ -64,11 +64,11 @@ uninstall verb, and all four decisions (Argo Rollouts, inactive-client,
 docker-run over a docker connection, and — decided PORT after the pass-3
 round — the cluster-wide manager), fifteen new tests across eleven suites
 plus the framework support they needed. quic's two #4227-deferred tests
-are the one external hold.
+were then ported as well (quic/Discovery, quic/NodeAgentTransport),
+closing telepresenceio/telepresence#4227 and the last external hold.
 
 Two areas were claimed and never built at all: `install/Setup` (7 tests) and
-`session/Throughput` (5 tests). Two more are deferred by an open issue
-(telepresenceio/telepresence#4227).
+`session/Throughput` (5 tests). Both were built in pass 3.
 
 ## attach
 
@@ -162,7 +162,7 @@ most scrutiny; it retires last.
 
 | old file | tests | covered by | verdict | conf |
 |---|---|---|---|---|
-| quic_test.go | 10 | quic/Enabled, Fallback, Relay, Datagrams, Outage, ForwarderRestart, ManagerOutage | partial: Test_VPNOnlyTransport, Test_TrafficAgentCoexistence. Test_ZZDiscoveryNodePort and Test_NodeAgentTransport are deferred by telepresenceio/telepresence#4227 and must not be deleted until it closes | read |
+| quic_test.go | 10 | quic/Enabled, Fallback, Relay, Datagrams, Outage, ForwarderRestart, ManagerOutage, Discovery (Test_ZZDiscoveryNodePort, closing #4227), NodeAgentTransport (Test_NodeAgentTransport, closing #4227) | partial: Test_VPNOnlyTransport, Test_TrafficAgentCoexistence — recorded drops (wave-3 omitted them; both are thin variants of asserted behaviour) | read |
 | quic_disabled_test.go | 2 | quic/Disabled (GRPCTransport, InterceptRoundTrips) | superseded | read |
 
 ## auth
@@ -373,11 +373,16 @@ helm release (rt.ManagerFixture), so the unrestricted release never
 coexists with another manager — it only occupies the shared release for
 its own suite's window, like every other spec switch.
 
-### Deferred by open issue (blocks deletion only, no work)
+### Deferred by open issue
 
-- quic Test_ZZDiscoveryNodePort + Test_NodeAgentTransport:
-  telepresenceio/telepresence#4227; quic_test.go keeps these two until it
-  closes
+None remaining. quic Test_ZZDiscoveryNodePort + Test_NodeAgentTransport
+(telepresenceio/telepresence#4227) were ported as quic/Discovery and
+quic/NodeAgentTransport. The issue's two machinery premises had gone
+stale: the framework's dynamic-selector install is cluster-scoped, so the
+chart already grants the manager nodes read
+(trafficManagerRbac/cluster-scope.yaml), and the area's QuicNodePort spec
+already runs discovery mode (no externalHost) — what was missing was only
+the endpoint-shape assertion and the node-agent attach itself.
 
 ## Retirement readiness (pass 3, after the M/P/D implementation round)
 
@@ -399,7 +404,7 @@ dispositions above in the retirement commit — no code.
 | intercept | yes | drops only |
 | install | yes | drops only |
 | injector | yes | drops only (its partials were all wave-2 scope decisions) |
-| quic | blocked | 2 tests in quic_test.go wait on telepresenceio/telepresence#4227; everything else drops |
+| quic | yes | drops only (#4227 ported: quic/Discovery, quic/NodeAgentTransport) |
 | namespaces | yes | drops only (D2 ported: namespaces/ClusterWide) |
 | attach | yes | drops only; retires last by design for ledger scrutiny |
 

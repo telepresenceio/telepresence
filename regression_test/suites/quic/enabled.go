@@ -39,7 +39,7 @@ func (s *Enabled) Test_QuicTransport() {
 
 	// The client-to-agent attachment itself rides quic too (agents get the
 	// same QUIC listener plumbing as the manager-bound tunnel).
-	awaitAgentTransport(t, ctx, tp, wl.Name, "quic", quicStatusTimeout)
+	awaitAgentTransport(t, ctx, tp, wl.Name)
 
 	st := fetchStatus(t, ctx, tp)
 	s.True(strings.HasPrefix(st.RootDaemon.TunnelTransport, quicPrefix),
