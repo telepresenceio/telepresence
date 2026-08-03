@@ -55,6 +55,20 @@ func StaticNamespaces(ns ...string) Spec {
 	}
 }
 
+// ClusterWide returns a manager spec with no namespace restriction at all:
+// the non-nil empty Namespaces list makes Merge null Baseline's
+// namespaceSelector, and omitempty then keeps the empty list itself out of
+// the values file, so neither key reaches the chart and the manager manages
+// every namespace in the cluster except kube-system and kube-node-lease,
+// which the chart's dynamic selector always rejects (_helpers.tpl's
+// traffic-manager.namespaceSelector).
+func ClusterWide() Spec {
+	return Spec{
+		Key:    "cluster-wide",
+		Values: Values{Namespaces: []string{}},
+	}
+}
+
 // NodeAgent returns a manager spec with node-hosted traffic-agent mode
 // enabled (nodeAgent.enabled=true) and the sidecar's H2C probing turned off
 // (agent.enableH2cProbing=false: a node-agent Job enters an existing pod's

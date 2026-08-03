@@ -40,7 +40,7 @@ from promised-but-missed items (six, all small) and from recorded drops.
 | | files | notes |
 |---|---|---|
 | superseded | 39 | pass 3 closed 15 more: the M/P items, D1/D3/D4, and the uninstall verb |
-| partial | 38 | every remaining partial resolves by recording a drop in the retirement commit — except namespaces_test.go's D2 and quic_test.go's #4227 hold |
+| partial | 38 | every remaining partial resolves by recording a drop in the retirement commit — except quic_test.go's #4227 hold |
 | unclaimed | 0 | all five resolved: four ported, istio dropped |
 | dropped | 2 | otel_test.go, istio_test.go; individual dropped tests inside kept files are listed separately |
 | infrastructure | 2 | integration_test.go (entrypoint), single_service_test.go (scaffolding) |
@@ -60,11 +60,11 @@ remained was the two m7-mandated coverages, six small promised-but-missed
 items, and four decisions.
 
 Pass 3 (2026-08-03) implemented all of it — the M-items, P1-P6, the
-uninstall verb, and three of the four decisions (Argo Rollouts,
-inactive-client, docker-run over a docker connection), fourteen new tests
-across ten suites plus the framework support they needed. D2 (cluster-wide
-manager) is the one decision still open, and quic's two #4227-deferred
-tests the one external hold.
+uninstall verb, and all four decisions (Argo Rollouts, inactive-client,
+docker-run over a docker connection, and — decided PORT after the pass-3
+round — the cluster-wide manager), fifteen new tests across eleven suites
+plus the framework support they needed. quic's two #4227-deferred tests
+are the one external hold.
 
 Two areas were claimed and never built at all: `install/Setup` (7 tests) and
 `session/Throughput` (5 tests). Two more are deferred by an open issue
@@ -146,7 +146,7 @@ most scrutiny; it retires last.
 
 | old file | tests | covered by | verdict | conf |
 |---|---|---|---|---|
-| namespaces_test.go | 5 | namespaces/StaticList (Static), SelectorSemantics Test_LabelToggle (Dynamic), MappedNamespaces | partial: Test_NamespacesClusterWide (a manager managing every namespace — the one remaining open decision, D2), Test_MultiNamespaceHTTPIntercepts and Test_MultiNamespaceIngests (simultaneous two-namespace attach — recorded drop, wave-2 scope) | read |
+| namespaces_test.go | 5 | namespaces/StaticList (Static), SelectorSemantics Test_LabelToggle (Dynamic), MappedNamespaces, ClusterWide (Test_NamespacesClusterWide, D2 decided PORT) | partial: Test_MultiNamespaceHTTPIntercepts and Test_MultiNamespaceIngests (simultaneous two-namespace attach — recorded drop, wave-2 scope) | read |
 | multiple_services_test.go | 5 | session/compat_sim Test_ListAndIntercept (the Test_List half); session/Throughput Test_LargeBodyRoundTrip (the bulk-transfer axis) | superseded — RepeatedConnect (the framework's own fixture churn connect/quits dozens of times per run), ProxiesOutboundTraffic (implicit in every routing/dns assertion), and AllowsUnmanagedMappedNamespace (wave-4 scope) are recorded drops | read |
 
 ## nodeagent
@@ -317,9 +317,9 @@ requires. Spec citations inline.
 - injector extras (failed-inject resync, agent image from config, env
   prefix interpolation, TLS annotations, multi-workload OnDemand):
   catalog-only; wave-2's six injector bullets scope them all out
-- namespaces cluster-wide manager + simultaneous multi-namespace attach:
-  not in wave-2's three bullets (cluster-wide is the one worth a second
-  look — see decisions). AllowsUnmanagedMappedNamespace likewise: wave-4's
+- namespaces simultaneous multi-namespace attach: not in wave-2's three
+  bullets (cluster-wide got its second look and was ported — see
+  decisions). AllowsUnmanagedMappedNamespace likewise: wave-4's
   trimmed Throughput bullet did not carry it, and mapping-scope semantics
   live in namespaces/MappedNamespaces
 - cloud agent-arrival, cloud log levels, rootd log level: wave-3 promised
@@ -366,10 +366,12 @@ attach/ArgoRollouts, connect/InactiveClient, docker/RunLifecycleDocker.
 The uninstall-verb drop was likewise reconsidered and closed with
 attach/Uninstall.
 
-D2. cluster-wide manager (Test_NamespacesClusterWide) — **still open**,
-    the one remaining decision: the unrestricted config is common in
-    production and no new suite runs one; testing it is invasive on a
-    shared cluster
+D2 (cluster-wide manager) was decided PORT and is closed:
+namespaces/ClusterWide, over a managers.ClusterWide() spec. The
+invasiveness concern dissolved on inspection: all manager specs share ONE
+helm release (rt.ManagerFixture), so the unrestricted release never
+coexists with another manager — it only occupies the shared release for
+its own suite's window, like every other spec switch.
 
 ### Deferred by open issue (blocks deletion only, no work)
 
@@ -379,8 +381,8 @@ D2. cluster-wide manager (Test_NamespacesClusterWide) — **still open**,
 
 ## Retirement readiness (pass 3, after the M/P/D implementation round)
 
-Every M-, P-, and D-item except D2 is implemented. "drops" means recording
-the dispositions above in the retirement commit — no code.
+Every M-, P-, and D-item is implemented. "drops" means recording the
+dispositions above in the retirement commit — no code.
 
 | area | ready? | remaining before retirement |
 |---|---|---|
@@ -398,7 +400,7 @@ the dispositions above in the retirement commit — no code.
 | install | yes | drops only |
 | injector | yes | drops only (its partials were all wave-2 scope decisions) |
 | quic | blocked | 2 tests in quic_test.go wait on telepresenceio/telepresence#4227; everything else drops |
-| namespaces | decision | D2 (cluster-wide manager) — port or record the drop |
+| namespaces | yes | drops only (D2 ported: namespaces/ClusterWide) |
 | attach | yes | drops only; retires last by design for ledger scrutiny |
 
 `dns` and `state` retired first, as the two areas where the parity argument
