@@ -514,7 +514,7 @@ endif
 
 .PHONY: check-regression
 check-regression: build-deps ## (QA) Run the regression-test framework suite (plain output)
-	go test -count=1 -timeout=60m ./regression_test/...
+	go test -count=1 -timeout=90m ./regression_test/...
 
 .PHONY: rtest-clean
 rtest-clean: ## (QA) Remove regression-test resources left in the cluster

@@ -124,7 +124,7 @@ This runs in the main thread, so do NOT Read or `tail` the whole log.
 ## Don't
 
 - Don't run the full suite unscoped without explicit user instruction — it is
-  roughly 40 minutes.
+  roughly an hour.
 - Don't run `go test -list` or a deliberately non-matching `-run` to "check
   what exists": the harness provisions real cluster resources before selection,
   so it costs a full setup cycle. Grep the suite files instead.

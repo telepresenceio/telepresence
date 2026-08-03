@@ -219,7 +219,7 @@ jobs:
       - name: Build and load images into minikube
         run: make load-images
       - name: Run regression tests
-        timeout-minutes: 45
+        timeout-minutes: 95
         shell: bash
         env:
           RTEST_REGISTRY: local
