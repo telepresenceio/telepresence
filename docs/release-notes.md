@@ -14,10 +14,10 @@ The new <code>telepresence setup</code> command analyzes the cluster (install pr
 With <code>agentInjector.enabled=false</code>, the traffic-manager only watched the namespaces that existed when its pod started. A managed namespace created later never got watchers, so every intercept of a workload there failed with <code>has no interceptable port</code> until the manager was restarted, and Service changes never refreshed already-generated agent configurations. The manager now follows namespace changes and keeps agent configurations up to date even when the agent-injector is disabled.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Workload watching no longer races a disconnecting client</div></div>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Crossing between namespace-selector and cluster-wide scope restarts the traffic-manager</div></div>
 <div style="margin-left: 15px">
 
-The traffic-manager keeps one workload watcher per namespace for its whole lifetime, and delivering events to its subscribers could race a client disconnect: the send could panic on the closed subscription channel, restarting the traffic-manager, or block on it forever, stalling workload events for every other connected client in the namespace. A disconnected client's subscription is now abandoned instead of closed, and delivery skips it.
+A <code>helm upgrade</code> that added or removed the <code>namespaceSelector</code> of a live installation kept the running pod, which continued with the informer topology of its old scope and left workload watching -- and with it <code>telepresence list</code> and agent-config generation -- broken until a manual restart. The scope is now stamped into the pod template, so an upgrade crossing that boundary rolls the deployment, exactly as a change to the static <code>namespaces</code> list always has. Changes within a selector are still picked up live, without a restart.
 </div>
 
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>

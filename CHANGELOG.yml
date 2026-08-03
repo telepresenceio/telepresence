@@ -58,6 +58,19 @@ items:
           configurations. The manager now follows namespace changes and
           keeps agent configurations up to date even when the
           agent-injector is disabled.
+      - type: bugfix
+        title: Crossing between namespace-selector and cluster-wide scope restarts the traffic-manager
+        body: >-
+          A <code>helm upgrade</code> that added or removed the
+          <code>namespaceSelector</code> of a live installation kept the
+          running pod, which continued with the informer topology of its
+          old scope and left workload watching -- and with it
+          <code>telepresence list</code> and agent-config generation --
+          broken until a manual restart. The scope is now stamped into the
+          pod template, so an upgrade crossing that boundary rolls the
+          deployment, exactly as a change to the static
+          <code>namespaces</code> list always has. Changes within a
+          selector are still picked up live, without a restart.
   - version: 2.31.2
     date: 2026-08-02
     notes:

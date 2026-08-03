@@ -296,6 +296,16 @@ spec:
           - name: NOT_USED_NSS
             value: {{ toJson . | quote }}
           {{- end }}
+          {{- if $.Values.namespaceSelector }}
+          {{- /*
+           This environment variable is not used, it is here to force a redeploy of the traffic manager when a
+           namespace selector is added or removed, because crossing between selector-scoped and cluster-wide changes
+           the manager's whole informer topology. The value is deliberately constant: edits WITHIN a selector are
+           picked up live and must not restart the pod.
+           */}}
+          - name: NOT_USED_SCOPE
+            value: "namespace-selector"
+          {{- end }}
       {{- end }}
         {{- with .prometheus }}
           {{- if .port }}  # 0 is false
