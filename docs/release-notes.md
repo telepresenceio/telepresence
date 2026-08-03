@@ -8,6 +8,18 @@
 The new <code>telepresence setup</code> command analyzes the cluster (install privileges, QUIC and node-agent viability, webhook reachability, namespace scale, routing conflicts, and any existing installation), asks only the questions the findings leave open, and then validates, writes, or applies a fully configured traffic-manager Helm install. <code>--output</code> produces a normal Helm values file for GitOps, <code>--input</code> re-runs without repeating prior decisions (and is also how every answer can be preset, keeping the command's own flag surface small), and <code>--apply</code> installs or upgrades with post-apply verification, including a real QUIC reachability check. When install privileges are missing, the report itemizes exactly what to hand to a cluster admin instead of a dead end, and <code>telepresence setup --format json</code> is a convenient attachment for bug reports.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Intercepts work in namespaces created after a no-injector manager started</div></div>
+<div style="margin-left: 15px">
+
+With <code>agentInjector.enabled=false</code>, the traffic-manager only watched the namespaces that existed when its pod started. A managed namespace created later never got watchers, so every intercept of a workload there failed with <code>has no interceptable port</code> until the manager was restarted, and Service changes never refreshed already-generated agent configurations. The manager now follows namespace changes and keeps agent configurations up to date even when the agent-injector is disabled.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Workload watching no longer races a disconnecting client</div></div>
+<div style="margin-left: 15px">
+
+The traffic-manager keeps one workload watcher per namespace for its whole lifetime, and delivering events to its subscribers could race a client disconnect: the send could panic on the closed subscription channel, restarting the traffic-manager, or block on it forever, stalling workload events for every other connected client in the namespace. A disconnected client's subscription is now abandoned instead of closed, and delivery skips it.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">
