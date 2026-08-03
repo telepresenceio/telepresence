@@ -36,6 +36,7 @@ func (s *SmokeCLI) Test_StatusNotRunning() {
 	if _, stderr, err := s.CLI().Run(s.Ctx(), "quit", "-s"); err != nil {
 		t.Fatalf("quit -s: %v\n%s", err, stderr)
 	}
+	s.R().ForgetConnections()
 	var st cli.Status
 	s.Require().NoError(s.CLI().JSON(s.Ctx(), &st, "status", "--format", "json"))
 	s.False(st.UserDaemon.Running)

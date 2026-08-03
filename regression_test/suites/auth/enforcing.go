@@ -20,12 +20,11 @@ import (
 // reaches a session, and the manager's raw gRPC surface itself requires and
 // binds a verified bearer-token identity per session.
 //
-// Two scenarios manager_auth_test.go also covered are intentionally out of
-// scope: a cert-only client authenticating over the manager's dedicated x509
-// auth port, and the security.authentication.x509.enabled=false rejection of
-// that same client. Both need the old suite's client-certificate kubeconfig
-// plumbing, which this framework has not ported ("x509 client-cert plumbing
-// not ported").
+// Two scenarios are intentionally out of scope: a cert-only client
+// authenticating over the manager's dedicated x509 auth port, and the
+// security.authentication.x509.enabled=false rejection of that same client.
+// Both need client-certificate kubeconfig plumbing, which this framework has
+// not ported ("x509 client-cert plumbing not ported").
 type AuthEnforcing struct {
 	rt.Suite
 }
@@ -83,9 +82,7 @@ func (s *AuthEnforcing) Test_UnauthorizedIdentityDeniedAtConnect() {
 // outright (enforcing mode requires a bearer token on every call), a bearer
 // token for the clientRbac-granted identity establishes a session, and a
 // later call presenting a different identity's token against that same
-// session is rejected as bound to another identity. Ports the essential
-// identity assertion of manager_auth_test.go's
-// Test_SessionBoundToAuthenticatedIdentity using bearer tokens only
+// session is rejected as bound to another identity. Uses bearer tokens only
 // (`kubectl create token`), with no x509 client-certificate plumbing.
 func (s *AuthEnforcing) Test_SessionRequiresAndBindsVerifiedIdentity() {
 	t := s.T()

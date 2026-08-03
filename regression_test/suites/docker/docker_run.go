@@ -20,10 +20,10 @@ const (
 	dockerRunImage = "ghcr.io/telepresenceio/echo-server:0.3.1"
 
 	// dockerRunLocalPort/dockerRunContainerPort are the intercept's --port
-	// <local>:<container> pair (docker_run_test.go's exact shape): the
-	// handler container's port 8080 (the workload's own container port,
-	// workloads.Echo's default) gets published to localPort on the host,
-	// and traffic to the workload's service is redirected there.
+	// <local>:<container> pair: the handler container's port 8080 (the
+	// workload's own container port, workloads.Echo's default) gets
+	// published to localPort on the host, and traffic to the workload's
+	// service is redirected there.
 	dockerRunLocalPort     = 9070
 	dockerRunContainerPort = 8080
 
@@ -41,9 +41,8 @@ const (
 
 // DockerRun proves `intercept --docker-run` routes cluster traffic to the
 // handler container it starts, and that detaching hands the workload back
-// to the cluster: docker_run_test.go's Test_DockerRun_HostDaemon
-// essentials, against the published echo-server image instead of a locally
-// built one.
+// to the cluster, using the published echo-server image instead of a
+// locally built one.
 type DockerRun struct {
 	rt.Suite
 }
@@ -79,9 +78,9 @@ func notServedByHostname(hostname string) func(status int, body string) bool {
 
 // Test_HandlerServesIntercept starts `intercept --docker-run` against the
 // echo-server image with its port published to the intercept (--port
-// <local>:<container>, docker_run_test.go's exact shape), waits for it to
-// appear in `list`, and asserts the service URL is served by the handler
-// container -- distinguished from the cluster pod by its --hostname, since
+// <local>:<container>), waits for it to appear in `list`, and asserts the
+// service URL is served by the handler container -- distinguished from the
+// cluster pod by its --hostname, since
 // echo-server's response line names os.Hostname(). Detaching ends the
 // handler and hands the workload back to the cluster.
 func (s *DockerRun) Test_HandlerServesIntercept() {

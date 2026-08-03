@@ -82,6 +82,7 @@ func (s *SelectorSemantics) Test_LabelToggle() {
 			if _, _, err := r.CLI().Run(ctx, "quit", "-s"); err != nil {
 				r.Infof("[rtest] SelectorSemantics: quit -s after unexpected connect success: %v", err)
 			}
+			r.ForgetConnections()
 			return false
 		}
 		lastStderr = stderr

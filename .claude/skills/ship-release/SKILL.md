@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 End-to-end driver for releasing Telepresence. Picks up where `prepare-release` left off and carries the change through:
 
-1. Telepresence release PR (CI green + `ok to test` + `build_and_test` green)
+1. Telepresence release PR (CI green + `ok to test` + `regression` green)
 2. Docs PR in `../telepresence.io`
 3. Tag push, Releases workflow, merge of both PRs.
 
@@ -43,7 +43,7 @@ Capture once and reuse throughout:
 
 ### 1.1 Verify branch and PR (already done in preconditions)
 
-### 1.2 Wait for all checks except `build_and_test` to be green
+### 1.2 Wait for all checks except `regression` to be green
 
 Use:
 
@@ -51,7 +51,7 @@ Use:
 gh pr checks "$tp_branch" --json name,state,conclusion
 ```
 
-Filter out the row whose name matches `build_and_test` (it has not been triggered yet — the label triggers it). For every remaining row:
+Filter out the rows whose name is exactly `regression` or `node_agent_docker_runtime` (neither has been triggered yet — the label triggers them). Match the name exactly: `regression_compat` is a different job, and it only runs behind the `compatibility test` label. For every remaining row:
 
 - `state == "COMPLETED"` and `conclusion == "SUCCESS"` → green
 - `conclusion ∈ {"FAILURE","CANCELLED","TIMED_OUT","ACTION_REQUIRED"}` → **stop**. Report the failing check name and a short excerpt from `gh run view <run-id> --log-failed`. Do not advance.
@@ -59,9 +59,9 @@ Filter out the row whose name matches `build_and_test` (it has not been triggere
 
 **Polling cadence:** these checks (lint, unit tests, license, image-scan) typically finish in 5-15 min. Use `ScheduleWakeup` with `delaySeconds=180` while any check is still running. Do not tight-loop with sleeps.
 
-### 1.3 Trigger `build_and_test`
+### 1.3 Trigger `regression`
 
-Once every non-`build_and_test` check is green:
+Once every non-`regression` check is green:
 
 ```
 gh pr edit "$tp_branch" --add-label "ok to test"
@@ -69,13 +69,13 @@ gh pr edit "$tp_branch" --add-label "ok to test"
 
 Confirm the label is set: `gh pr view "$tp_branch" --json labels`.
 
-### 1.4 Wait for `build_and_test` to be green
+### 1.4 Wait for `regression` to be green
 
-This job can take up to two hours. Use `ScheduleWakeup` with `delaySeconds` in the **1200-1800** range (cache miss is fine because the wait is long). Poll with the same `gh pr checks` query, looking specifically at the `build_and_test` row.
+The regression suite runs as three parallel shards (~30 min including cluster setup), summed into the single `regression` context; the node-agent job runs beside them. Use `ScheduleWakeup` with `delaySeconds` around **900**. Poll with the same `gh pr checks` query, looking at the `regression` and `node_agent_docker_runtime` rows.
 
 - Success → continue to Phase 2.
 - Failure / cancellation → **stop and report**. Pull failed-step logs with `gh run view <run-id> --log-failed`.
-- Still running after ~2.5 hours → tell the user and stop (workflow may be stuck).
+- Still running after ~90 minutes → tell the user and stop (workflow may be stuck).
 
 ## Phase 2 — Create the docs PR
 
@@ -234,8 +234,8 @@ Verify each merged: `gh pr view "$tp_branch" --json state` should report `MERGED
 ## Long-wait strategy
 
 - Anything under 5 min → don't sleep; just poll once.
-- 5-30 min waits (Phase 1.2 non-build_and_test checks) → `ScheduleWakeup` with `delaySeconds=180`.
-- 30 min-2h waits (Phase 1.4 `build_and_test`) → `ScheduleWakeup` with `delaySeconds=1200`.
+- 5-30 min waits (Phase 1.2 non-regression checks) → `ScheduleWakeup` with `delaySeconds=180`.
+- 30-60 min waits (Phase 1.4 `regression`) → `ScheduleWakeup` with `delaySeconds=1200`.
 - Hours-to-overnight (Phase 3.2 macOS signing approval) → `ScheduleWakeup` with `delaySeconds=1800` or longer.
 
 Each wake-up: re-fetch state, decide green/red/still-waiting, schedule the next wake or advance.
@@ -253,6 +253,6 @@ Each wake-up: re-fetch state, decide green/red/still-waiting, schedule the next 
 - Push tags before all required PR checks are green (Phase 1 must complete first).
 - Merge the release PR or the docs PR for a pre-release (`-test.*`/`-rc.*`) version — both stay open until GA (see 3.3).
 - Merge PRs as squash or rebase — both repos require merge commits.
-- Skip `ok to test` and try to trigger `build_and_test` some other way.
+- Skip `ok to test` and try to trigger `regression` some other way.
 - Approve the `macos-signing` environment programmatically — that requires a human reviewer.
 - Force-push or delete the release branch.

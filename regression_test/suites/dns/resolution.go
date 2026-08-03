@@ -31,9 +31,7 @@ func init() {
 
 // Test_ServiceNameForms proves <svc>.<ns>, <svc>.<ns>.svc, and the
 // single-label <svc> form all resolve and serve the echo response while
-// connected to the workload's namespace. Mirrors the name forms
-// integration_test/svcdomain_test.go's Test_SvcDomain
-// ("echo.<ns>.svc") and its Deployment-domain counterpart exercise.
+// connected to the workload's namespace.
 func (s *Resolution) Test_ServiceNameForms() {
 	wl := s.Workload(workloads.Echo("dns-resolution-echo"))
 	s.Connect()
@@ -100,8 +98,7 @@ func (s *Resolution) Test_ServiceNameForms() {
 
 // Test_HeadlessPodSubdomain proves a headless StatefulSet pod's per-pod
 // subdomain form (<pod>.<svc>.<ns>) resolves and serves the echo response.
-// Mirrors integration_test/subdomain_test.go's Test_PodWithSubdomain name
-// shape. workloads.EchoHeadless names the workload and its headless Service
+// workloads.EchoHeadless names the workload and its headless Service
 // identically, so the sole replica's pod is <name>-0.
 func (s *Resolution) Test_HeadlessPodSubdomain() {
 	wl := s.Workload(workloads.EchoHeadless("dns-headless-echo"))

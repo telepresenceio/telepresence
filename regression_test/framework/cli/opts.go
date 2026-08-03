@@ -25,6 +25,12 @@ func HTTPHeader(k, v string) InterceptOpt {
 	return func() []string { return []string{"--http-header", k + "=" + v} }
 }
 
+// Metadata adds a --metadata key=value pair, retrievable through the
+// Telepresence API server's /intercept-info endpoint.
+func Metadata(k, v string) InterceptOpt {
+	return func() []string { return []string{"--metadata", k + "=" + v} }
+}
+
 // HTTPPathPrefix adds an --http-path-prefix filter.
 func HTTPPathPrefix(p string) InterceptOpt {
 	return func() []string { return []string{"--http-path-prefix", p} }
@@ -36,6 +42,11 @@ func Replace() InterceptOpt {
 	return func() []string { return []string{"--replace"} }
 }
 
+// Container sets --container name.
+func Container(name string) InterceptOpt {
+	return func() []string { return []string{"--container", name} }
+}
+
 // WorkloadFlag sets --workload name.
 func WorkloadFlag(name string) InterceptOpt {
 	return func() []string { return []string{"--workload", name} }
@@ -44,4 +55,10 @@ func WorkloadFlag(name string) InterceptOpt {
 // EnvFile sets --env-file path.
 func EnvFile(path string) InterceptOpt {
 	return func() []string { return []string{"--env-file", path} }
+}
+
+// ToPod adds a --to-pod spec, forwarding an additional pod port to the
+// workstation's localhost while the attach is active.
+func ToPod(spec string) InterceptOpt {
+	return func() []string { return []string{"--to-pod", spec} }
 }

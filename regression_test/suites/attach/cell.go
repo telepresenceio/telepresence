@@ -20,12 +20,10 @@ const wiretapObserveTimeout = 60 * time.Second
 // wiretapHeaderKey/wiretapHeaderVal is the filter every wiretap cell in
 // this package uses. A filter isn't required to place a wiretap at all
 // (cmd/traffic/cmd/manager/state/intercept.go:369 exempts wiretaps from
-// every conflict check regardless of filters, and
-// integration_test/wiretap_test.go's Test_MultipleTapsOnOnePort taps
-// unfiltered), but using one here lets each cell prove the documented
-// pass-through semantic: a request carrying the header still reaches the
-// cluster, because a wiretap copies traffic rather than diverting it
-// (integration_test/wiretap_test.go's Test_HTTPFilteredWiretap).
+// every conflict check regardless of filters), but using one here lets each
+// cell prove the documented pass-through semantic: a request carrying the
+// header still reaches the cluster, because a wiretap copies traffic rather
+// than diverting it.
 const (
 	wiretapHeaderKey = "x-rtest-wiretap"
 	wiretapHeaderVal = "match"
@@ -38,9 +36,7 @@ const (
 // tpl.NoService workloads have no cluster Service and hence no URL for
 // check.EventuallyHTTP to probe, so their cells exercise attach/list/detach
 // only; this is a limitation of this suite's URL-based routing checks, not
-// of the CLI, which attaches to service-less workloads just fine (see
-// integration_test/workloads_test.go's
-// Test_SuccessfullyIntercepts/IngestsDeploymentWithoutService). ingest
+// of the CLI, which attaches to service-less workloads just fine. ingest
 // never touches traffic (pkg/client/userd/trafficmgr/ingest.go's Ingest
 // RPC never registers a port with the manager), so it never gets a routing
 // check either, regardless of tpl.

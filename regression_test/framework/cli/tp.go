@@ -66,7 +66,7 @@ type Proc struct {
 // without waiting for it to exit: for an invocation a test needs to signal
 // or otherwise interact with while it keeps running, e.g. an `intercept
 // --docker-run` handed off to a container and torn down by SIGINT/detach/
-// disconnect/quit (integration_test/docker_run_test.go:17's runDockerRun).
+// disconnect/quit.
 // Mirrors Run's env/dir/logging and defaultInvocationTimeout safety net;
 // the timeout bounds the whole Start-to-Wait lifetime (released by Wait),
 // so a Proc nobody ever waits on still gets killed instead of leaking.

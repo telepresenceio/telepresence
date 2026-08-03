@@ -24,18 +24,29 @@ import (
 // ...) }`), independent of whether an intercept is active.
 const restAPIPort = 9980
 
-// restAPIHeaderKey/restAPIHeaderVal filter the intercept Test_ConsumeHere
-// creates. A probe request carrying this header is one that would match the
-// intercept; a probe without it would not. The agent-side consume-here
-// decision (cmd/traffic/cmd/agent/fwdstate.go's InterceptInfo) only skips an
+// restAPIHeaderKey/restAPIHeaderVal filter the intercepts this suite's tests
+// create (Test_ConsumeHere, Test_InterceptInfo). A probe request carrying
+// this header is one that would match the intercept; a probe without it
+// would not. The agent-side consume-here/intercept-info decision
+// (cmd/traffic/cmd/agent/fwdstate.go's InterceptInfo) only skips an
 // intercept when the caller sends a non-empty
 // restapi.HeaderCallerInterceptID that doesn't match that intercept's ID;
 // since this suite's probes never send that header and only ever have one
 // active intercept to consider, the header filter alone is enough to drive
-// the decision.
+// the decision. Every probe below queries the agent's own API server;
+// the client-side API server a local `telepresence intercept` handler also
+// runs is a different axis, out of scope for this suite.
 const (
 	restAPIHeaderKey = "x-rtest-restapi"
 	restAPIHeaderVal = "match"
+)
+
+// restAPIMetadataKey/restAPIMetadataVal are the --metadata key/value pair
+// Test_InterceptInfo attaches to its intercept: the /intercept-info probe
+// asserts they come back in the response's metadata map.
+const (
+	restAPIMetadataKey = "my"
+	restAPIMetadataVal = "data"
 )
 
 // apiPollTimeout/apiPollInterval bound every consume-here probe poll below:
@@ -62,20 +73,18 @@ var restAPISpec = managers.Spec{
 }
 
 // RestAPI proves the traffic-agent sidecar's embedded REST API server
-// (telepresenceAPI.port) answers /consume-here from inside the cluster,
-// queried with `kubectl exec ... wget` from the workload's own app
-// container: it shares the pod's network namespace with the traffic-agent,
-// so localhost:<port> reaches the sidecar directly. This is simpler than
-// restapi_test.go's /forward-based round trip, which needed the target's
-// own TELEPRESENCE_API_HOST/PORT env plumbing that this framework's plain
-// workloads.Echo template doesn't carry, and exercises the same agent-side
-// consume-here decision restapi_test.go's Test_RestAPI_FilteredConsume
-// "query-remote-*" cases did (integration_test/restapi_test.go). The
-// workload carries annotation.InjectTrafficAgent so the agent (and its API
-// server) is present from the pod's first rollout: the default OnDemand
-// injectPolicy would otherwise leave the pod agent-less, and every probe
-// below would find nothing listening on restAPIPort, until something
-// actually requests an intercept.
+// (telepresenceAPI.port) answers /consume-here and /intercept-info from
+// inside the cluster, queried with `kubectl exec ... wget` from the
+// workload's own app container: it shares the pod's network namespace with
+// the traffic-agent, so localhost:<port> reaches the sidecar directly. This
+// is simpler than a /forward-based round trip, which would need the
+// target's own TELEPRESENCE_API_HOST/PORT env plumbing that this
+// framework's plain workloads.Echo template doesn't carry. The workload
+// carries annotation.InjectTrafficAgent so the agent (and its API server) is
+// present from the pod's first rollout: the default OnDemand injectPolicy
+// would otherwise leave the pod agent-less, and every probe below would
+// find nothing listening on restAPIPort, until something actually requests
+// an intercept.
 type RestAPI struct {
 	rt.Suite
 }
@@ -132,6 +141,37 @@ func queryConsumeHere(
 	return consume, nil
 }
 
+// wgetInterceptInfoArgs builds a `wget` command probing the sidecar's
+// intercept-info endpoint on restAPIPort, carrying headers (nil for none)
+// and scoped to containerPort via the endpoint's own query parameter (api.go's
+// containerPort FormValue).
+func wgetInterceptInfoArgs(headers map[string]string, containerPort int) []string {
+	args := []string{"wget", "-q", "-O", "-"}
+	for k, v := range headers {
+		args = append(args, "--header", k+": "+v)
+	}
+	url := fmt.Sprintf("http://127.0.0.1:%d%s?containerPort=%d", restAPIPort, restapi.EndPointInterceptInfo, containerPort)
+	return append(args, url)
+}
+
+// queryInterceptInfo runs the wget probe against podName's own app container
+// and decodes the JSON object the sidecar's intercept-info endpoint returns
+// (pkg/restapi.InterceptInfo).
+func queryInterceptInfo(
+	ctx context.Context, r *rt.Runtime, podName string, wl *rt.Workload, headers map[string]string,
+) (*restapi.InterceptInfo, error) {
+	args := append([]string{"exec", podName, "-c", wl.Name, "--"}, wgetInterceptInfoArgs(headers, wl.Port)...)
+	out, err := r.Kubectl(ctx, wl.Namespace, args...)
+	if err != nil {
+		return nil, fmt.Errorf("kubectl exec wget intercept-info: %w: %s", err, out)
+	}
+	var info restapi.InterceptInfo
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &info); err != nil {
+		return nil, fmt.Errorf("intercept-info body %q: %w", out, err)
+	}
+	return &info, nil
+}
+
 // Test_ConsumeHere connects, creates a header-filtered intercept, and polls
 // the sidecar's consume-here decision from inside the pod: a probe request
 // that doesn't carry the filter header should be consumed by the agent
@@ -174,4 +214,55 @@ func (s *RestAPI) Test_ConsumeHere() {
 	probe(nil, true, "a non-matching probe should still be consumed by the agent")
 	probe(map[string]string{restAPIHeaderKey: restAPIHeaderVal}, false,
 		"a probe matching the intercept's filter should not be consumed by the agent")
+}
+
+// Test_InterceptInfo connects, probes /intercept-info with no intercept
+// active, then creates a header-filtered intercept carrying a --metadata
+// key/value pair and polls the sidecar's intercept-info decision from inside
+// the pod: a probe that doesn't carry the filter header should see
+// Intercepted=false, while one that does should see Intercepted=true and
+// find the CLI-supplied pair in the response's metadata map.
+func (s *RestAPI) Test_InterceptInfo() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	conn := s.Connect()
+
+	tpl := workloads.Echo("restapi")
+	tpl.Annotations = map[string]string{annotation.InjectTrafficAgent: "enabled"}
+	wl := s.Workload(tpl)
+
+	podName := firstPodName(t, ctx, r, wl.Namespace, wl.Name)
+
+	// probe polls queryInterceptInfo until its Intercepted field settles on
+	// want, capturing the last result/error for the failure message so a
+	// still-broken next run is diagnosable.
+	probe := func(headers map[string]string, want bool, msg string) *restapi.InterceptInfo {
+		t.Helper()
+		var last *restapi.InterceptInfo
+		var lastErr error
+		s.Eventually(func() bool {
+			last, lastErr = queryInterceptInfo(ctx, r, podName, wl, headers)
+			return lastErr == nil && last != nil && last.Intercepted == want
+		}, apiPollTimeout, apiPollInterval, "%s (last result %+v, last error %v)", msg, last, lastErr)
+		return last
+	}
+
+	probe(nil, false, "a probe with no intercept active should report Intercepted=false")
+
+	ls := s.LocalEcho()
+	filter := cli.HTTPHeader(restAPIHeaderKey, restAPIHeaderVal)
+	meta := cli.Metadata(restAPIMetadataKey, restAPIMetadataVal)
+	a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse(), filter, meta)
+	defer a.Detach(t)
+	s.Eventually(func() bool { return attached(conn.List(t), wl.Name, wl.Namespace) },
+		attachTimeout, attachPollInterval, "intercept did not appear in list")
+
+	info := probe(map[string]string{restAPIHeaderKey: restAPIHeaderVal}, true,
+		"a probe matching the intercept's filter should report Intercepted=true")
+	if got := info.Metadata[restAPIMetadataKey]; got != restAPIMetadataVal {
+		t.Fatalf("intercept-info metadata[%q] = %q, want %q", restAPIMetadataKey, got, restAPIMetadataVal)
+	}
+
+	probe(nil, false, "a non-matching probe should report Intercepted=false")
 }

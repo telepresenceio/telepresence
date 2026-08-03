@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"net"
 	"net/http"
 	"sync"
@@ -22,10 +23,11 @@ const localMarkerPrefix = "rtest-local:"
 // over a long-lived local service.
 const maxObservedRequests = 50
 
-// LocalService is an in-process HTTP server bound to 127.0.0.1:0. It
-// responds to every request with a body carrying a marker unique to this
-// instance, which RoutedToLocal asserts on. It is never memoized or
-// adopted: every call to Suite.LocalEcho starts a fresh listener.
+// LocalService is an in-process HTTP server bound to 127.0.0.1:0. A GET (or
+// any other method carrying no body) gets a response body carrying a marker
+// unique to this instance, which RoutedToLocal asserts on; a PUT or POST
+// gets its request body echoed back verbatim instead. It is never memoized
+// or adopted: every call to Suite.LocalEcho starts a fresh listener.
 type LocalService struct {
 	id       string
 	listener net.Listener
@@ -52,6 +54,10 @@ func newLocalService(t testing.TB) *LocalService {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		ls.recordRequest(r)
+		if r.Method == http.MethodPut || r.Method == http.MethodPost {
+			_, _ = io.Copy(w, r.Body)
+			return
+		}
 		_, _ = w.Write([]byte(ls.marker))
 	})
 	ls.srv = &http.Server{Handler: mux}

@@ -30,10 +30,9 @@ var clientConfigSpec = managers.ClientConfig("dns-routing", managers.Values{
 })
 
 // ClientConfig proves the shared release's cluster-served client.* config
-// (cloud_config_test.go's core) reaches a fresh connection: ported onto
-// `status --format json`'s root_daemon fields instead of the text "Never
-// Proxy" count cloud_config_test.go polled for, since this framework's
-// workloads give no distinctive live IP to make an actual routing probe
+// reaches a fresh connection, asserting against `status --format json`'s
+// root_daemon fields rather than an actual routing probe, since this
+// framework's workloads give no distinctive live IP to make one
 // meaningful.
 type ClientConfig struct {
 	rt.Suite

@@ -75,8 +75,7 @@ func listContains(entries []cli.ListEntry, name, ns string) bool {
 // switchManagerSpec frees (quits) whatever connection to ns is currently
 // memoized while the release still runs its previous spec, switches the
 // shared release to spec via rt.Mutate (so a later area re-provisions
-// whatever spec it needs next, per docs/plans/regression-test-framework/
-// m3-wave2-spec.md's ordering note), and reconnects to ns, returning the
+// whatever spec it needs next), and reconnects to ns, returning the
 // live *rt.Conn. The reconnect goes through rt.Reconnect rather than a
 // second Mutate(ConnectionFixture(ns)): see fixture_connection.go's doc.
 func switchManagerSpec(t *testing.T, ctx context.Context, spec managers.Spec, ns string) *rt.Conn {

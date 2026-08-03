@@ -12,8 +12,7 @@ import (
 // the gRPC transport. With the connection already established and the
 // manager-bound tunnel on quic, it deletes every quic-forwarder pod and
 // requires traffic to recover -- while "telepresence status" reports the
-// quic transport throughout, never grpc. Supersedes quic_test.go's
-// Test_ForwarderRestartSurvival.
+// quic transport throughout, never grpc.
 //
 // Either the client's QUIC connection survives the restart outright (CID
 // routing plus path validation to the replacement pod's new address) or, at

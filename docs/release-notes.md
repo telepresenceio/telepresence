@@ -8,6 +8,18 @@
 The new <code>telepresence setup</code> command analyzes the cluster (install privileges, QUIC and node-agent viability, webhook reachability, namespace scale, routing conflicts, and any existing installation), asks only the questions the findings leave open, and then validates, writes, or applies a fully configured traffic-manager Helm install. <code>--output</code> produces a normal Helm values file for GitOps, <code>--input</code> re-runs without repeating prior decisions (and is also how every answer can be preset, keeping the command's own flag surface small), and <code>--apply</code> installs or upgrades with post-apply verification, including a real QUIC reachability check. When install privileges are missing, the report itemizes exactly what to hand to a cluster admin instead of a dead end, and <code>telepresence setup --format json</code> is a convenient attachment for bug reports.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Intercepts work in namespaces created after a no-injector manager started</div></div>
+<div style="margin-left: 15px">
+
+With <code>agentInjector.enabled=false</code>, the traffic-manager only watched the namespaces that existed when its pod started. A managed namespace created later never got watchers, so every intercept of a workload there failed with <code>has no interceptable port</code> until the manager was restarted, and Service changes never refreshed already-generated agent configurations. The manager now follows namespace changes and keeps agent configurations up to date even when the agent-injector is disabled.
+</div>
+
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Crossing between namespace-selector and cluster-wide scope restarts the traffic-manager</div></div>
+<div style="margin-left: 15px">
+
+A <code>helm upgrade</code> that added or removed the <code>namespaceSelector</code> of a live installation kept the running pod, which continued with the informer topology of its old scope and left workload watching -- and with it <code>telepresence list</code> and agent-config generation -- broken until a manual restart. The scope is now stamped into the pod template, so an upgrade crossing that boundary rolls the deployment, exactly as a change to the static <code>namespaces</code> list always has. Changes within a selector are still picked up live, without a restart.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">

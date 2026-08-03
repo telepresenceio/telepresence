@@ -41,7 +41,7 @@ type Values struct {
 	// to connecting clients, restricted to the keys wave 3 suites configure.
 	Client Client `json:"client,omitzero"`
 	// QuicTunnel is the chart's quicTunnel.* shape, restricted to the keys
-	// quic_test.go's install used.
+	// the catalog configures.
 	QuicTunnel QuicTunnel `json:"quicTunnel,omitzero"`
 	// Security is the chart's security.* shape: traffic-manager caller
 	// authentication/authorization.
@@ -52,6 +52,12 @@ type Values struct {
 	Compatibility Compatibility `json:"compatibility,omitzero"`
 	// TelepresenceAPI is the chart's telepresenceAPI.* shape.
 	TelepresenceAPI TelepresenceAPI `json:"telepresenceAPI,omitzero"`
+	// Workloads is the chart's workloads.* shape: whether each workload
+	// kind is recognized by the traffic-manager and injector.
+	Workloads Workloads `json:"workloads,omitzero"`
+	// Intercept is the chart's intercept.* shape, restricted to the keys
+	// the catalog configures.
+	Intercept Intercept `json:"intercept,omitzero"`
 	// Namespaces and NamespaceSelector are mutually exclusive per the chart
 	// (values.schema.yaml's namespaces/namespaceSelector descriptions):
 	// setting a static Namespaces list must null NamespaceSelector, and
@@ -116,8 +122,8 @@ type AgentValues struct {
 	// EnableH2cProbing is a pointer so NodeAgent() can force it to false:
 	// node-agent Jobs enter an existing pod's namespaces and have no
 	// sidecar of their own to h2c-probe, so node-agent specs disable it
-	// explicitly (see node_agent_test.go's nodeAgentSuite install). A plain
-	// bool couldn't be distinguished from "not set" by Merge.
+	// explicitly. A plain bool couldn't be distinguished from "not set" by
+	// Merge.
 	EnableH2cProbing *bool `json:"enableH2cProbing,omitempty"`
 }
 
@@ -176,11 +182,10 @@ type ClientDNS struct {
 	IncludeSuffixes []string `json:"includeSuffixes,omitempty"`
 }
 
-// QuicTunnel is the chart's quicTunnel.* shape, restricted to the keys
-// quic_test.go's install used: whether the listener is enabled, the Service
+// QuicTunnel is the chart's quicTunnel.* shape, restricted to the keys the
+// catalog configures: whether the listener is enabled, the Service
 // front-ending it, and the externally advertised host/port (unset lets the
-// traffic-manager self-discover both, the zero-configuration path
-// quic_test.go's Test_ZZDiscoveryNodePort covers).
+// traffic-manager self-discover both).
 type QuicTunnel struct {
 	Enabled      bool              `json:"enabled,omitempty"`
 	Service      QuicTunnelService `json:"service,omitzero"`
@@ -189,7 +194,7 @@ type QuicTunnel struct {
 }
 
 // QuicTunnelService is the chart's quicTunnel.service.* shape, restricted to
-// the keys quic_test.go's install used.
+// the keys the catalog configures.
 type QuicTunnelService struct {
 	Type     string `json:"type,omitempty"`
 	NodePort int    `json:"nodePort,omitempty"`
@@ -211,10 +216,8 @@ type Authentication struct {
 // the enabled flag.
 type X509 struct {
 	// Enabled is a pointer so AuthEnforcing-derived specs can force it to
-	// false (manager_auth_test.go's
-	// Test_EnforcingRejectsCertOnlyClientWhenX509Disabled): the chart
-	// default is true, which a plain bool couldn't override to false
-	// through Merge.
+	// false: the chart default is true, which a plain bool couldn't
+	// override to false through Merge.
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
@@ -229,6 +232,44 @@ type Compatibility struct {
 // port the catalog configures.
 type TelepresenceAPI struct {
 	Port int `json:"port,omitempty"`
+}
+
+// Workloads is the chart's workloads.* shape: which workload kinds the
+// traffic-manager watches and the injector mutates
+// (values.yaml: deployments/replicaSets/statefulSets default to true,
+// argoRollouts defaults to false).
+type Workloads struct {
+	Deployments  WorkloadKind `json:"deployments,omitzero"`
+	ReplicaSets  WorkloadKind `json:"replicaSets,omitzero"`
+	StatefulSets WorkloadKind `json:"statefulSets,omitzero"`
+	ArgoRollouts WorkloadKind `json:"argoRollouts,omitzero"`
+}
+
+// WorkloadKind is one workloads.<kind>.* entry.
+type WorkloadKind struct {
+	// Enabled is a pointer since a plain bool can't be distinguished from
+	// "not set" by Merge, and the chart's own per-kind default varies
+	// (true for Deployments/ReplicaSets/StatefulSets, false for
+	// ArgoRollouts).
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// Intercept is the chart's intercept.* shape, restricted to the keys the
+// catalog configures.
+type Intercept struct {
+	Environment InterceptEnvironment `json:"environment,omitzero"`
+	// InactiveBlockTimeout is the chart's intercept.inactiveBlockTimeout
+	// duration string (values.schema.yaml's "duration" $def), overriding
+	// the chart's own 10m default: the maximum time an intercept may be
+	// held by a client that is unreachable or inactive.
+	InactiveBlockTimeout string `json:"inactiveBlockTimeout,omitempty"`
+}
+
+// InterceptEnvironment is the chart's intercept.environment.* shape.
+type InterceptEnvironment struct {
+	// Excluded lists environment variable names withheld from the client
+	// at attachment time.
+	Excluded []string `json:"excluded,omitempty"`
 }
 
 // Rbac is the chart's clientRbac shape.
@@ -332,6 +373,8 @@ func Merge(base, over Values) Values {
 	if over.TelepresenceAPI.Port != 0 {
 		m.TelepresenceAPI.Port = over.TelepresenceAPI.Port
 	}
+	m.Workloads = mergeWorkloads(m.Workloads, over.Workloads)
+	m.Intercept = mergeIntercept(m.Intercept, over.Intercept)
 	if over.NamespaceSelector != nil {
 		m.NamespaceSelector = over.NamespaceSelector
 	}
@@ -467,6 +510,32 @@ func mergeQuicTunnel(base, over QuicTunnel) QuicTunnel {
 	}
 	if over.ExternalPort != 0 {
 		base.ExternalPort = over.ExternalPort
+	}
+	return base
+}
+
+func mergeWorkloads(base, over Workloads) Workloads {
+	if over.Deployments.Enabled != nil {
+		base.Deployments.Enabled = over.Deployments.Enabled
+	}
+	if over.ReplicaSets.Enabled != nil {
+		base.ReplicaSets.Enabled = over.ReplicaSets.Enabled
+	}
+	if over.StatefulSets.Enabled != nil {
+		base.StatefulSets.Enabled = over.StatefulSets.Enabled
+	}
+	if over.ArgoRollouts.Enabled != nil {
+		base.ArgoRollouts.Enabled = over.ArgoRollouts.Enabled
+	}
+	return base
+}
+
+func mergeIntercept(base, over Intercept) Intercept {
+	if over.Environment.Excluded != nil {
+		base.Environment.Excluded = over.Environment.Excluded
+	}
+	if over.InactiveBlockTimeout != "" {
+		base.InactiveBlockTimeout = over.InactiveBlockTimeout
 	}
 	return base
 }

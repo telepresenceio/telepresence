@@ -22,8 +22,7 @@ func disableAgentPortForward(c client.Config) {
 // reachable, forced to relay agent-bound traffic through the manager -- and
 // therefore over the quic transport, since QuicRelay's manager spec is the
 // same managers.QuicNodePort() install every other suite in this area uses.
-// Mirrors quic_test.go's Test_AgentPortForwardDisabledRelaysOverQuic:
-// intercepts themselves are unavailable with agentPortForward=false
+// Intercepts themselves are unavailable with agentPortForward=false
 // (pkg/client/userd/trafficmgr/intercept.go's requireAgentPortForward), so
 // the sidecar is injected up front by a short-lived intercept on a normal
 // connection, detached, and only then does the suite reconnect under the

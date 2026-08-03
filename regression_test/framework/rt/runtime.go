@@ -36,9 +36,8 @@ type Runtime struct {
 	// set to something else) a released binary downloaded by downloadBinary.
 	exe string
 	// helmExe drives `telepresence helm ...` specifically: always the built
-	// binary, regardless of RTEST_CLIENT_VERSION, mirroring
-	// integration_test/itest/helm.go:296's reasoning (an old client binary
-	// may not even understand --version).
+	// binary, regardless of RTEST_CLIENT_VERSION (an old client binary may
+	// not even understand --version).
 	helmExe string
 	// version is the effective CLIENT version: RTEST_CLIENT_VERSION,
 	// parsed, or builtVersion. Matches what Exe() reports.
@@ -309,8 +308,7 @@ func (r *Runtime) ArtifactDir(sub ...string) string {
 // including apply/delete's handler records,
 // pkg/client/cli/manifest/handler.go's handlers/<daemon-info>/<name>.json --
 // to the host's normal telepresence cache location rather than under
-// build-output/rtest/home. Consumed by the state area's Handler test
-// (integration_test/state_manifest_test.go's Test_ApplyHandlerCommand) to
+// build-output/rtest/home. Consumed by the state area's Handler test to
 // read a handler's recorded pid/argv without importing client internals.
 func (r *Runtime) UserCacheDir() string {
 	env := r.childEnv()
@@ -336,6 +334,14 @@ func (r *Runtime) UserCacheDir() string {
 		return filepath.Join(home, ".cache", "telepresence")
 	}
 }
+
+// LogDir returns the directory a CLI-under-test child process resolves as
+// its log directory (pkg/filelocation.AppUserLogDir): unlike UserCacheDir,
+// childEnv always sets DEV_TELEPRESENCE_LOG_DIR to this exact path, so every
+// daemon this run starts writes its log files here -- including a docker
+// connection's host-side kubeauth daemon (pkg/client/docker/kubeauth/
+// cmd.go), which is not itself containerized.
+func (r *Runtime) LogDir() string { return r.logDir }
 
 // lookupEnvValue returns the value of key in a childEnv-shaped "KEY=value"
 // slice.
@@ -480,11 +486,11 @@ func (r *Runtime) CLI() *cli.TP {
 }
 
 // helmCLI returns a cli.TP bound to the BUILT binary, never a downloaded
-// RTEST_CLIENT_VERSION release, for `telepresence helm ...` invocations.
-// Mirrors integration_test/itest/helm.go:296's reasoning for always driving
-// helm through the built executable, simplified: unconditional rather than
-// gated on version divergence, which costs nothing extra when the built and
-// effective client versions already match.
+// RTEST_CLIENT_VERSION release, for `telepresence helm ...` invocations: an
+// old client binary may not understand the chart flags this framework
+// passes. Unconditional rather than gated on version divergence, which
+// costs nothing extra when the built and effective client versions already
+// match.
 func (r *Runtime) helmCLI() *cli.TP {
 	return &cli.TP{
 		Exe:  r.helmExe,
@@ -553,8 +559,7 @@ func (r *Runtime) Infof(format string, args ...any) {
 }
 
 // baselineConfig returns the per-run client config: debug log levels, usage
-// reporting disabled, the timeouts the old integration_test/itest/
-// cluster.go:430 withBasicConfig pinned, and the root daemon's local
+// reporting disabled, generous test timeouts, and the root daemon's local
 // shortcut turned off (it bypasses the traffic-agent for requests
 // originating on this host, which would defeat every assertion about
 // agent-side behavior). writeBaselineConfig persists this as the run's

@@ -7,10 +7,34 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 )
+
+// secondaryManagerPrefix names every SecondaryManager fixture, so they can
+// be found as a group.
+const secondaryManagerPrefix = "secondary-manager/"
+
+// DestroySecondaryManagers uninstalls every SecondaryManager release
+// provisioned so far and drops it from the memo, so a later Get
+// re-provisions. A release that manages every namespace cannot be installed
+// while any other traffic-manager exists in the cluster (the overlap
+// validation in charts/telepresence-oss/templates/agentInjectorWebhook.yaml),
+// and a SecondaryManager stays memoized for the rest of the run once a suite
+// has used one, so a suite installing an unrestricted manager has to clear
+// them first.
+func DestroySecondaryManagers(e Env) {
+	for _, en := range e.R.engine.evictByPrefix(secondaryManagerPrefix) {
+		start := time.Now()
+		if err := en.destroy(e); err != nil {
+			e.R.Infof("[rtest] fixture %s: destroy error: %v", en.name, err)
+			continue
+		}
+		e.R.Infof("[rtest] fixture %s: destroyed %s", en.name, time.Since(start).Round(time.Millisecond))
+	}
+}
 
 // SecondaryManager is a full traffic-manager release in ns (a namespace of
 // its own, typically from PrivateNamespace), independent of the single
@@ -31,7 +55,7 @@ func SecondaryManager(spec managers.Spec, ns string) *Fixture[*ManagerHandle] {
 	h := sha256.Sum256([]byte("secondary-manager|" + ns + "|" + spec.Hash()))
 	hash := hex.EncodeToString(h[:])
 	return &Fixture[*ManagerHandle]{
-		Name:          "secondary-manager/" + ns,
+		Name:          secondaryManagerPrefix + ns,
 		Hash:          hash,
 		AlwaysDestroy: true,
 		ProvisionFn: func(e Env) (*ManagerHandle, error) {

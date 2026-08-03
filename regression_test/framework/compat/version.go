@@ -1,8 +1,7 @@
 // Package compat holds the regression-test framework's compat-core support:
 // effective-version accessors, version gates, and the RPC manifest guard
 // (manifest.go/manifest_test.go) that keeps the compat-core test set honest
-// about which manager.Manager RPCs it exercises. See
-// docs/plans/regression-test-framework/m4-spec.md.
+// about which manager.Manager RPCs it exercises.
 package compat
 
 import (
@@ -24,8 +23,7 @@ func ClientVersion() semver.Version { return rt.R().Version() }
 func ManagerVersion() semver.Version { return rt.R().ManagerVersion() }
 
 // isFinalIncluded reports whether v's finalized version (pre-release and
-// build metadata stripped) satisfies the blang semver range vr. Mirrors
-// integration_test/itest/cluster.go:579's isFinalIncluded.
+// build metadata stripped) satisfies the blang semver range vr.
 func isFinalIncluded(vr string, v semver.Version) bool {
 	return semver.MustParseRange(vr)(semver.MustParse(v.FinalizeVersion()))
 }

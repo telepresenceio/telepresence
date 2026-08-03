@@ -208,15 +208,36 @@ func MainWithEnv(ctx context.Context) (err error) {
 				}
 				return mutator.ServeMutator(ctx, g, injectorCertGetter, reapNodeAgentJobs)
 			})
-		} else if env.NodeAgentEnabled {
-			// The webhook server never runs without the injector, so the
-			// pre-delete hook -- which the chart's agent-injector Service
-			// and Job now render for a node-agent-only install too -- has
-			// nothing to reach unless this plain-HTTP /uninstall-only server
-			// stands in for it.
-			g.Go("node-agent-uninstall", func(ctx context.Context) error {
-				return mutator.ServeNodeAgentUninstall(ctx, reapNodeAgentJobs)
-			})
+		} else {
+			// The agent-injector server drives the config watchers while it
+			// runs; without it they must be driven from here. Wait starts the
+			// service, workload, and pod watchers and follows namespace
+			// changes, and a namespace that appears after startup gets its
+			// informers only through that follower -- without it, agent-config
+			// generation for such a namespace reads a Services lister that was
+			// never started, silently finds no services, and every intercept
+			// there fails with "has no interceptable port".
+			//
+			// Gated on the retriever exactly like ServeMutator's own watcher
+			// driver: the watchers' regeneration paths resolve the agent
+			// image, which panics without a retriever -- and without one no
+			// agent config can ever be generated, so there is nothing for
+			// the watchers to maintain.
+			if managerutil.GetAgentImageRetriever(ctx) != nil {
+				g.Go("agent-configs", func(ctx context.Context) error {
+					return watcher.Wait(ctx)
+				})
+			}
+			if env.NodeAgentEnabled {
+				// The webhook server never runs without the injector, so the
+				// pre-delete hook -- which the chart's agent-injector Service
+				// and Job render for a node-agent-only install too -- has
+				// nothing to reach unless this plain-HTTP /uninstall-only
+				// server stands in for it.
+				g.Go("node-agent-uninstall", func(ctx context.Context) error {
+					return mutator.ServeNodeAgentUninstall(ctx, reapNodeAgentJobs)
+				})
+			}
 		}
 
 		if managerutil.GetEnv(ctx).AgentMaxIdleTime != 0 {

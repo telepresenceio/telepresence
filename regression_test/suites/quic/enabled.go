@@ -13,8 +13,7 @@ import (
 // with managers.QuicNodePort() installed (a NodePort Service whose
 // advertised endpoint the manager self-discovers, see the catalog's doc
 // comment), "telepresence status" settles on the quic transport and a
-// regular intercept round-trips over it. Mirrors the core of quic_test.go's
-// Test_VPNOnlyTransport/Test_TrafficAgentCoexistence.
+// regular intercept round-trips over it.
 type Enabled struct {
 	rt.Suite
 }
@@ -33,13 +32,11 @@ func (s *Enabled) Test_QuicTransport() {
 
 	conn := awaitTransportPrefix(t, ctx, tp, ns, freshConnect(t, ctx, ns))
 
-	a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
-	defer a.Detach(t)
-	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
-
 	// The client-to-agent attachment itself rides quic too (agents get the
 	// same QUIC listener plumbing as the manager-bound tunnel).
-	awaitAgentTransport(t, ctx, tp, wl.Name, "quic", quicStatusTimeout)
+	a := interceptUntilAgentQuic(t, ctx, tp, conn, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
+	defer a.Detach(t)
+	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
 
 	st := fetchStatus(t, ctx, tp)
 	s.True(strings.HasPrefix(st.RootDaemon.TunnelTransport, quicPrefix),

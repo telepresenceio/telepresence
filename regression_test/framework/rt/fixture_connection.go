@@ -200,6 +200,13 @@ func ensureHostDaemon(e Env, cs *connSpec) {
 	if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "-s"); err != nil {
 		e.R.Infof("[rtest] quit before host connect: %v: %s", err, stderr)
 	}
+	// That -s took every other live connection with it, host and docker
+	// alike, so any memoized elsewhere now names a session that is gone.
+	// Forgetting them costs a reconnect on next use; keeping them hands out
+	// a dead handle. The connection being provisioned here is not memoized
+	// yet -- the engine stores it only once ProvisionFn returns -- so it is
+	// not among the entries dropped.
+	e.R.ForgetConnections()
 }
 
 func connectArgs(ns string, cs *connSpec) []string {
@@ -221,6 +228,17 @@ func connectionHash(args, extra []string) string {
 	parts := append(append([]string{}, args...), extra...)
 	h := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return hex.EncodeToString(h[:])
+}
+
+// ForgetConnections drops every memoized connection fixture, so the next Get
+// or Mutate connects afresh. A test that stops the daemons out of band --
+// `quit -s` rather than Conn.Disconnect -- must call it: the memo entry
+// otherwise survives the daemon and hands the next caller a handle to a
+// session that no longer exists, which fails only when some earlier suite
+// happened to populate the memo first. Mirrors the invalidation a manager
+// roll performs (fixture_manager.go's rollManager).
+func (r *Runtime) ForgetConnections() {
+	r.engine.invalidateSiblings("connection/", "")
 }
 
 // ConnectionFixture is a `telepresence connect` session to ns, keyed by
@@ -324,9 +342,8 @@ func destroyConnection(e Env, c *Conn) error {
 // resulting *Conn. Unlike Mutate(ConnectionFixture(ns)), it always runs the
 // connect command: a fixture only reprovisions after the test that Mutated
 // it ends, so a second Mutate on the same (ns, no-opts) hash within one
-// test would just return the already-memoized Conn (see
-// docs/plans/regression-test-framework/plan.md's "Mutate is single-shot per
-// test" note). Callers typically call this right after
+// test would just return the already-memoized Conn: Mutate is single-shot
+// per test. Callers typically call this right after
 // Mutate(ConnectionFixture(ns)).Disconnect(t) to free whatever was
 // previously connected.
 func Reconnect(t testing.TB, ctx context.Context, ns string, opts ...ConnOpt) *Conn {
@@ -486,6 +503,12 @@ func (c *Conn) Disconnect(t testing.TB) {
 	}
 	if stdout, stderr, err := c.r.CLI().Run(c.ctx, args...); err != nil {
 		t.Fatalf("%s: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), err, stdout, stderr)
+	}
+	if c.name == "" {
+		// -s stopped every daemon, not just this connection's, so every
+		// memoized connection is now stale -- including ones this caller
+		// never touched and so never invalidated through Mutate.
+		c.r.ForgetConnections()
 	}
 }
 

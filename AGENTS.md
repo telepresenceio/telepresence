@@ -87,20 +87,16 @@ go test ./regression_test -run 'TestIntercept/HeaderFilter/Test_PathPrefix'
 
 # Chart-value combinations, clusterless:
 go test ./regression_test/golden
-
-# Legacy integration tests (being retired area by area)
-make check-integration
 ```
 
-The regression suite in `regression_test/` is the primary integration-test
+The regression suite in `regression_test/` is the integration-test
 package: declarative memoized fixtures, warm-cluster adoption for fast
 scoped runs, coverage instrumentation, and a bidirectional
 compatibility subset. **Read `regression_test/README.md` before writing or
 debugging these tests** — it documents the fixture engine's rules (lazy
 accessors, Mutate discipline, spec declarations), the RTEST_* environment,
 the manager/workload catalogs, labels and platform constraints, coverage,
-compat runs, and how to run the legacy `integration_test/` suite that still
-exists until parity is reached.
+and compat runs.
 
 ## Linting
 
@@ -304,7 +300,7 @@ kubectl config use-context telepresence-test-developer
 
 To create a release, set `TELEPRESENCE_VERSION` and run `make prepare-release`. This creates two annotated tags (`vX.Y.Z` and `rpc/vX.Y.Z`) and a commit updating go.mod references. Pushing the tags and branch triggers the release workflow.
 
-**Important:** A tag push publishes the release and cannot be taken back. Never push the tags directly after `make prepare-release`. Push only the branch, open a PR for it, and follow `/ship-release` (`.claude/skills/ship-release`), which drives the release PR's CI (including `ok to test` and `build_and_test`), creates the docs PR in the telepresence.io repository, and pushes the tags only after everything is green. The command blocks below show the mechanics, not the order.
+**Important:** A tag push publishes the release and cannot be taken back. Never push the tags directly after `make prepare-release`. Push only the branch, open a PR for it, and follow `/ship-release` (`.claude/skills/ship-release`), which drives the release PR's CI (including `ok to test` and `regression`), creates the docs PR in the telepresence.io repository, and pushes the tags only after everything is green. The command blocks below show the mechanics, not the order.
 
 ```bash
 # Test release (marked as pre-release, not promoted to latest)

@@ -16,9 +16,8 @@ import (
 // downloadBinary fetches the released telepresence CLI binary for v from
 // its GitHub release and returns the path to the executable, caching it
 // under build-output/rtest/downloads so repeated runs against the same
-// RTEST_CLIENT_VERSION skip the network round trip. Mirrors
-// integration_test/itest/cluster.go:327's downloadBinary: same URL shape,
-// same zip handling on Windows.
+// RTEST_CLIENT_VERSION skip the network round trip. Releases ship as a
+// bare binary except on Windows, where the download is a zip.
 func downloadBinary(ctx context.Context, buildOutput string, v semver.Version) (string, error) {
 	dir := filepath.Join(buildOutput, "rtest", "downloads")
 	if err := os.MkdirAll(dir, 0o755); err != nil {

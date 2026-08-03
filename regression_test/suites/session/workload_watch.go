@@ -25,12 +25,11 @@ const (
 
 // WorkloadWatch proves the manager's WatchWorkloads RPC and the CLI's `list
 // --format json-stream` both surface a workload's lifecycle (added, agent
-// installed, intercepted) as it happens. Ported from workload_watch_test.go's
-// essentials, with batching/ordering tolerated: Eventually polls collected
-// event state rather than asserting a fixed Recv sequence. Carries
-// CompatCore: Test_ManagerWatchSeesLifecycle directly exercises
-// WatchWorkloads plus, via its real CLI connection, WatchSessionEvents; see
-// framework/compat/manifest.go.
+// installed, intercepted) as it happens, with batching/ordering tolerated:
+// Eventually polls collected event state rather than asserting a fixed Recv
+// sequence. Carries CompatCore: Test_ManagerWatchSeesLifecycle directly
+// exercises WatchWorkloads plus, via its real CLI connection,
+// WatchSessionEvents; see framework/compat/manifest.go.
 type WorkloadWatch struct {
 	rt.Suite
 }

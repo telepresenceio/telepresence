@@ -73,6 +73,7 @@ func (s *ConnectErrors) Test_UnmanagedNamespace() {
 		if _, _, err := s.CLI().Run(ctx, "quit", "-s"); err != nil {
 			s.R().Infof("[rtest] Test_UnmanagedNamespace: quit -s: %v", err)
 		}
+		s.R().ForgetConnections()
 	})
 
 	args := []string{"connect", "--namespace", ns, "--manager-namespace", managers.ManagerNamespace, "--as", connectAs}

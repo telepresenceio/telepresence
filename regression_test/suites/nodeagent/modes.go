@@ -153,3 +153,56 @@ func (s *NodeAgentModes) Test_Wiretap() {
 	mustDetach = false
 	waitJobCount(&s.Suite, ctx, wl, 0)
 }
+
+// Test_HTTPFilteredWiretap attaches a node-agent wiretap with an
+// --http-header filter: a header-matching request keeps reaching the
+// cluster while a copy of it lands on the local tap, a non-matching
+// request also keeps reaching the cluster but is never copied, the pod
+// stays untouched, and detach reaps the Job.
+func (s *NodeAgentModes) Test_HTTPFilteredWiretap() {
+	t := s.T()
+	ctx := s.Ctx()
+	conn := s.Connect()
+	wl := freshWorkload(t, ctx, s.R(), s.AppNamespace(), workloads.Echo("na-modes-http-wiretap"))
+	ls := s.LocalEcho()
+
+	a := conn.Wiretap(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse(), nodeAgentFlag(),
+		cli.HTTPHeader(httpFilterHeaderKey, httpFilterHeaderVal))
+	mustDetach := true
+	defer func() {
+		if mustDetach {
+			a.Detach(t)
+		}
+	}()
+	s.True(a.Wiretap != nil && a.Wiretap.Wiretap, "wiretap response should report wiretap=true")
+
+	url := wl.ServiceURL()
+	rt.RoutedToClusterAndTapped(t, url, ls, wiretapObserveTimeout,
+		check.WithHeader(httpFilterHeaderKey, httpFilterHeaderVal))
+
+	waitJobCount(&s.Suite, ctx, wl, 1)
+	s.False(hasAgentContainer(ctx, s.R(), wl.Namespace, wl.Name),
+		"a node-agent wiretap must not inject a traffic-agent sidecar")
+
+	// The header-matching phase above may still have a copy in flight (the
+	// agent sends it from a background goroutine independent of the
+	// request/response it copies, see cmd/traffic/cmd/agent/fwd/http.go's
+	// handleHTTPRequest), so reset the log before checking the negative.
+	// Non-matching traffic is then re-issued for as long as the positive
+	// check above was willing to wait for a genuine copy: a clean run over
+	// the same window is as conclusive as that positive result was.
+	ls.ResetRequests()
+	deadline := time.Now().Add(wiretapObserveTimeout)
+	for time.Now().Before(deadline) {
+		rt.RoutedToCluster(t, url)
+		if n := len(ls.Requests()); n > 0 {
+			t.Fatalf("non-matching traffic should not be copied to the local wiretap of %s.%s, got %d observed request(s)",
+				wl.Name, wl.Namespace, n)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	a.Detach(t)
+	mustDetach = false
+	waitJobCount(&s.Suite, ctx, wl, 0)
+}

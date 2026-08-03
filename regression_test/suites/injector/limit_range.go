@@ -12,10 +12,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
 )
 
-// limitRangeManifest mirrors integration_test/testdata/k8s/memory-constraints.yaml:
-// a min/max-only LimitRange with no explicit default/defaultRequest, so the
-// LimitRanger admission controller derives both the default limit (from
-// max) and the default request (from that default) at 100Mi.
+// limitRangeManifest is a min/max-only LimitRange with no explicit
+// default/defaultRequest, so the LimitRanger admission controller derives
+// both the default limit (from max) and the default request (from that
+// default) at 100Mi.
 const limitRangeManifest = `apiVersion: v1
 kind: LimitRange
 metadata:
@@ -36,7 +36,7 @@ const limitRangeDefaultMemory = "100Mi"
 // LimitRange proves that a namespace's LimitRange defaults reach the
 // injected traffic-agent container: an annotated workload with no
 // resources of its own still ends up with the LimitRange's defaulted
-// requests/limits (mirrors integration_test/limitrange_test.go).
+// requests/limits.
 type LimitRange struct {
 	rt.Suite
 }

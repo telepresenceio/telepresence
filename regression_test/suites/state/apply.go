@@ -7,14 +7,12 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
 )
 
-// Apply ports state_manifest_test.go's dry-run/create/reuse/drift coverage
-// of `telepresence apply -f` (pkg/client/cli/manifest/apply.go): a dry run
+// Apply proves the dry-run, create, reuse, and drift behaviour of
+// `telepresence apply -f` (pkg/client/cli/manifest/apply.go): a dry run
 // against a clean workstation touches nothing, a real apply creates and a
 // re-apply reuses/leaves things unchanged, a local-port change re-creates
 // just the drifted attachment while its sibling stays unchanged, and a
 // connection-shape change errors without touching the live session.
-// Supersedes Test_ApplyDryRunConnectionMissing, Test_ApplyCreatesReusesUnchanged,
-// Test_ApplyAttachmentDrift, Test_ApplyConnectionDrift.
 type Apply struct {
 	rt.Suite
 }
@@ -26,8 +24,7 @@ func init() {
 	)
 }
 
-// Test_ApplyDryRunConnectionMissing ports Test_ApplyDryRunConnectionMissing:
-// a dry-run apply against a clean workstation (no daemon running at all)
+// Test_ApplyDryRunConnectionMissing proves that a dry-run apply against a clean workstation (no daemon running at all)
 // reports what it would do without starting either daemon.
 func (s *Apply) Test_ApplyDryRunConnectionMissing() {
 	t := s.T()
@@ -54,8 +51,7 @@ func (s *Apply) Test_ApplyDryRunConnectionMissing() {
 	s.False(st.RootDaemon.Running, "root daemon should stay down after a dry-run apply")
 }
 
-// Test_ApplyCreatesReusesUnchanged ports Test_ApplyCreatesReusesUnchanged: a
-// first apply connects and creates both attachments, a re-apply reuses the
+// Test_ApplyCreatesReusesUnchanged proves that a first apply connects and creates both attachments, a re-apply reuses the
 // connection and leaves both unchanged (dry-run and real alike), and delete
 // disconnects.
 func (s *Apply) Test_ApplyCreatesReusesUnchanged() {
@@ -91,7 +87,7 @@ func (s *Apply) Test_ApplyCreatesReusesUnchanged() {
 	s.Equal("disconnected", res.Connection)
 }
 
-// Test_ApplyAttachmentDrift ports Test_ApplyAttachmentDrift: changing the
+// Test_ApplyAttachmentDrift proves that changing the
 // intercept attachment's local port re-creates just that attachment (dry-run
 // reports would-re-create with a drift Detail, a real apply re-creates it),
 // while the sibling ingest attachment -- unaffected by the change -- stays
@@ -128,7 +124,7 @@ func (s *Apply) Test_ApplyAttachmentDrift() {
 	deleteJSON(t, s.CLI(), ctx, driftMf)
 }
 
-// Test_ApplyConnectionDrift ports Test_ApplyConnectionDrift: once a
+// Test_ApplyConnectionDrift proves that once a
 // manifest's connection is live, re-applying a manifest whose connection
 // block has drifted (mappedNamespaces changed) errors both as a dry run and
 // for real, and leaves the live session and its attachments untouched.

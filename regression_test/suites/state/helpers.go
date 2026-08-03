@@ -36,8 +36,7 @@ const (
 
 	// stateInterceptWL/stateIngestWL name the two echo workloads every
 	// manifest in this package attaches to: an intercept target and a
-	// sibling ingest target, mirroring integration_test/
-	// state_manifest_test.go's smInterceptWL/smIngestWL.
+	// sibling ingest target, so one manifest covers both attachment kinds.
 	stateInterceptWL = "state-intercept"
 	stateIngestWL    = "state-ingest"
 
@@ -87,9 +86,8 @@ func (r manifestResult) attachment(t testing.TB, name string) attachmentResult {
 
 // stateAttachments returns the intercept (mount disabled, local port
 // localPort) and sibling ingest (mount disabled) attachment pair shared by
-// every connection-bearing manifest in this package, mirroring
-// state_manifest_test.go's attachmentsYAML. The intercept's local port is
-// the only field a drift variant ever changes.
+// every connection-bearing manifest in this package. The intercept's local
+// port is the only field a drift variant ever changes.
 func stateAttachments(localPort int) []state.Attachment {
 	ic := state.Intercept(stateInterceptWL)
 	ic.Ports = []string{fmt.Sprintf("%d:http", localPort)}
@@ -103,10 +101,13 @@ func stateAttachments(localPort int) []state.Attachment {
 
 // connectionManifest returns a WorkstationState declaring the shared
 // connection (stateConnName, in ns) plus the intercept+ingest attachment
-// pair, with mappedNamespaces drifted from the live session's implicit
-// (namespace-scoped) mapping when mappedNS is set -- a namespace-scoped
-// session maps exactly its own namespace, so the two-entry list can never
-// align with it. Mirrors writeManifestWithConnection.
+// pair, with mappedNamespaces drifted from the live session's mapping when
+// mappedNS is set. The drifted list deliberately excludes the connection's
+// own namespace: a request without mapped namespaces follows the manager's
+// managed set (session.CheckStatus compares against the session's effective
+// mapping), and that set always contains the connection's namespace, so
+// this list can never coincide with it. Mirrors
+// writeManifestWithConnection.
 func connectionManifest(ns string, localPort int, mappedNS bool) *state.State {
 	conn := &state.Connection{
 		Name:             stateConnName,
@@ -114,7 +115,7 @@ func connectionManifest(ns string, localPort int, mappedNS bool) *state.State {
 		ManagerNamespace: managers.ManagerNamespace,
 	}
 	if mappedNS {
-		conn.MappedNamespaces = []string{ns, managers.ManagerNamespace}
+		conn.MappedNamespaces = []string{managers.ManagerNamespace}
 	}
 	return &state.State{Connection: conn, Attachments: stateAttachments(localPort)}
 }
@@ -174,11 +175,19 @@ func deleteJSON(t testing.TB, tp *cli.TP, ctx context.Context, path string) mani
 // nothing is running (smoke.SmokeCLI's Test_StatusNotRunning relies on the
 // same guarantee), so a failure here is a genuine error worth failing the
 // test over.
+//
+// The daemons go away behind the fixture engine's back, so any memoized
+// connection is now a handle to a dead session: ForgetConnections drops
+// them, and the next Get or Mutate connects afresh. Without it, a test in
+// this package that quits and a later one that takes the shared connection
+// fixture pass or fail depending on whether some earlier area populated
+// that memo.
 func quitAll(t testing.TB, tp *cli.TP, ctx context.Context) {
 	t.Helper()
 	if _, stderr, err := tp.Run(ctx, "quit", "-s"); err != nil {
 		t.Fatalf("quit -s: %v\n%s", err, stderr)
 	}
+	rt.R().ForgetConnections()
 }
 
 // listHasWorkload reports whether entries contains a workload named name.

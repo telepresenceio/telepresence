@@ -8,6 +8,18 @@ data:
   {{ .ConfigVolume.Key }}: {{ printf "%q" .ConfigVolume.Content }}
 ---
 {{- end }}
+{{- range .ExtraContainers }}
+{{- if not .ConfigVolume.IsZero }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .ConfigVolume.Name }}
+  namespace: {{ $.Namespace }}
+data:
+  {{ .ConfigVolume.Key }}: {{ printf "%q" .ConfigVolume.Content }}
+---
+{{- end }}
+{{- end }}
 {{- if not .NoService }}
 apiVersion: v1
 kind: Service
@@ -40,7 +52,7 @@ spec:
 ---
 {{- end }}
 apiVersion: apps/v1
-kind: Deployment
+kind: {{ .Kind }}
 metadata:
   name: {{ .Name }}
   namespace: {{ .Namespace }}
@@ -114,9 +126,38 @@ spec:
 {{- end }}
 {{- end }}
 {{- end }}
+{{- range .ExtraContainers }}
+        - name: {{ .Name }}
+          image: {{ $.Image }}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: {{ .Port }}
+          env:
+            - name: PORTS
+              value: "{{ .Port }}"
+{{- range $k, $v := .Env }}
+            - name: {{ $k }}
+              value: {{ $v | printf "%q" }}
+{{- end }}
 {{- if not .ConfigVolume.IsZero }}
+          volumeMounts:
+            - name: {{ .VolumeName }}
+              mountPath: {{ .ConfigVolume.MountPath }}
+              readOnly: true
+{{- end }}
+{{- end }}
+{{- if or (not .ConfigVolume.IsZero) .HasExtraConfigVolumes }}
       volumes:
+{{- if not .ConfigVolume.IsZero }}
         - name: rtest-config
           configMap:
             name: {{ .ConfigVolume.Name }}
+{{- end }}
+{{- range .ExtraContainers }}
+{{- if not .ConfigVolume.IsZero }}
+        - name: {{ .VolumeName }}
+          configMap:
+            name: {{ .ConfigVolume.Name }}
+{{- end }}
+{{- end }}
 {{- end }}

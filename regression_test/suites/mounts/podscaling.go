@@ -16,9 +16,8 @@ import (
 // workload's pods to actually terminate: `rollout status` alone would report
 // success as soon as the scale-to-zero is accepted, before the old pod (and
 // its traffic-agent sidecar) is actually gone (mirrors suites/quic/
-// helpers.go's scaleQuicForwarderDown). Generous, since pod eviction can take
-// a while, per integration_test/podscaling_test.go's
-// Test_RestartInterceptedPod (up to 2 minutes there).
+// helpers.go's scaleQuicForwarderDown). Generous, since pod eviction can
+// take up to 2 minutes.
 const (
 	podTermTimeout      = 2 * time.Minute
 	podTermPollInterval = 5 * time.Second
@@ -26,16 +25,13 @@ const (
 
 // mountRecoveryTimeout bounds the post-scale-up EventuallyFile/RoutedToLocal
 // checks: re-establishing the FUSE/SFTP mount and routing to the restarted
-// agent both take longer than the ordinary mountTimeout, per
-// integration_test/podscaling_test.go's Test_RestartInterceptedPod (a 30s
-// grace period there for the mount alone).
+// agent both take longer than the ordinary mountTimeout -- the mount alone
+// needs a 30s grace period, so 60s covers both.
 const mountRecoveryTimeout = 60 * time.Second
 
 // Podscaling proves a suite-long intercept+mount survives its workload being
 // scaled to zero and back: the mount recovers and its content is readable
-// again, and routing to the local handler keeps working -- mirrors
-// integration_test/podscaling_test.go's Test_RestartInterceptedPod
-// essentials.
+// again, and routing to the local handler keeps working.
 type Podscaling struct {
 	rt.Suite
 }

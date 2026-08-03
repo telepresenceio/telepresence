@@ -57,8 +57,9 @@ func Command(ctx context.Context) *cobra.Command {
 	}
 	flags := c.Flags()
 	flags.StringVar(&as.portFile, "portfile", "", "File where server existence is announced.")
-	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "kubeauth.log"),
-		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
+	flags.String(logfileFlag, "",
+		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }. `+
+			`Defaults to "kubeauth.log" in the user's log directory.`)
 	as.kubeFlags.AddFlags(flags)
 	return c
 }
@@ -82,7 +83,14 @@ func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) er
 		return errcat.NoDaemonLogs.Errorf(err, "unable to open a port on localhost")
 	}
 
+	// Resolved here rather than as the flag's default: the command is built
+	// during InitContext, before Main applies the DEV_TELEPRESENCE_LOG_DIR
+	// override to the context, so a default baked at registration time would
+	// ignore the override that this run context carries.
 	logFile := flags.Lookup(logfileFlag).Value.String()
+	if logFile == "" {
+		logFile = filepath.Join(filelocation.AppUserLogDir(ctx), "kubeauth.log")
+	}
 	ctx, err = logging.InitContext(ctx, logFile, cfg.LogLevels().KubeAuthDaemon, logging.RotateNever, false)
 	if err != nil {
 		return err

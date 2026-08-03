@@ -222,9 +222,7 @@ func newH2CClient() *http.Client {
 // (workloads.Template.AppProtocol), and the probe itself uses genuine HTTP/2
 // prior knowledge (newH2CClient); an h2c-only local server only answers if
 // the agent's reverse proxy preserved h2c framing all the way to the
-// workstation instead of downgrading to HTTP/1.1. Mirrors the intercepted
-// path of integration_test/h2c_intercept_test.go's
-// Test_H2CInterceptPreservesProtocol.
+// workstation instead of downgrading to HTTP/1.1.
 func (s *InterceptRouting) Test_H2C() {
 	t := s.T()
 	conn := s.Connect()

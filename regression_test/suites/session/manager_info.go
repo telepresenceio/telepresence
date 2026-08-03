@@ -10,12 +10,10 @@ import (
 
 // ManagerInfo proves the manager's cluster-info RPC (the "GetClusterInfo"
 // the wave-3 spec refers to; the manager has no unary GetClusterInfo, only
-// the streaming WatchClusterInfo -- confirmed against
-// integration_test/manager_grpc_test.go's Test_ClusterInfo) reports a
-// service subnet consistent with what a connected client's
-// `status --format json` actually routes. Carries CompatCore:
-// Test_ServiceSubnetMatchesStatus exercises WatchClusterInfo directly; see
-// framework/compat/manifest.go.
+// the streaming WatchClusterInfo) reports a service subnet consistent with
+// what a connected client's `status --format json` actually routes. Carries
+// CompatCore: Test_ServiceSubnetMatchesStatus exercises WatchClusterInfo
+// directly; see framework/compat/manifest.go.
 type ManagerInfo struct {
 	rt.Suite
 }

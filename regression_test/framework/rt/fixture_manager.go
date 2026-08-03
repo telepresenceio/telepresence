@@ -36,8 +36,7 @@ metadata:
 `
 
 // clientRBACManifest grants the identity connections use with --as
-// (managers.TestServiceAccount) the RBAC a telepresence user needs: modeled
-// on the now-deleted integration_test/testdata/k8s/client_rbac.yaml. It is
+// (managers.TestServiceAccount) the RBAC a telepresence user needs. It is
 // broader than the chart's own clientRbac feature (which, as of this
 // writing, omits deployments/replicasets/statefulsets/services access), so
 // it is granted independently rather than relied upon.
@@ -270,8 +269,7 @@ func ensureManagerRBAC(e Env, ns string) error {
 // RestartManager restarts the shared manager's Deployment and waits for the
 // rollout to finish. A newly created or newly labeled namespace only enters
 // the manager's namespaceSelector-managed set once its pod restarts and
-// re-lists namespaces; there is no live pickup (product gap #4 in
-// docs/plans/regression-test-framework/findings.md). Callers that create or
+// re-lists namespaces; there is no live pickup. Callers that create or
 // label a namespace after the manager is already running must call this
 // before anything that depends on the manager seeing it.
 func RestartManager(e Env) error {

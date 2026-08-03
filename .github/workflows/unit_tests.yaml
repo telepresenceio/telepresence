@@ -56,7 +56,7 @@ jobs:
           CGO_ENABLED: "0"
         uses: golangci/golangci-lint-action@v9
         with:
-          args: --timeout 8m ./cmd/telepresence/... ./integration_test/... ./pkg/...
+          args: --timeout 8m ./cmd/telepresence/... ./pkg/...
       - name: Build
         run: make build
       - name: Run tests

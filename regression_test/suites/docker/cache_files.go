@@ -24,8 +24,7 @@ const cacheFilesConnName = "rtest-cachefiles"
 const cacheFileTimeout = 15 * time.Second
 
 // CacheFiles proves a containerized daemon's writes to the shared cache
-// directory land on the host owned by the invoking user, not root:
-// docker_daemon_test.go's Test_DockerDaemon_cacheFiles essentials.
+// directory land on the host owned by the invoking user, not root.
 //
 // The framework isolates the connect config/log dirs under the run's own
 // home (DEV_TELEPRESENCE_CONFIG_DIR/DEV_TELEPRESENCE_LOG_DIR -- see

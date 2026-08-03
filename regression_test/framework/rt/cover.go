@@ -12,8 +12,7 @@ import (
 
 // coverHostPath is the node-local directory the traffic-manager and the
 // traffic-agents write GOCOVERDIR counter data to. It is a hostPath volume
-// because rtest clusters are single-node kind/minikube; see "Code coverage"
-// in docs/plans/regression-test-framework/plan.md.
+// because rtest clusters are single-node kind/minikube.
 const coverHostPath = "/rtest-coverage"
 
 // coverVolumeName is the volume/volumeMount name for coverHostPath on the

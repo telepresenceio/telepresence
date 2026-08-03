@@ -30,10 +30,7 @@ const (
 	connRunPollInterval = time.Second
 )
 
-// DockerConnRun exercises the containerized-daemon side of --docker-run:
-// docker_run_test.go's Test_DockerRunCommand, Test_DockerRunExternalDNS,
-// and Test_DockerRun_VolumePresent, all originally on dockerDaemonSuite's
-// `--docker` connection. Supersedes the dockerDaemonSuite docker-run tests.
+// DockerConnRun exercises the containerized-daemon side of --docker-run.
 type DockerConnRun struct {
 	rt.Suite
 }
@@ -99,9 +96,7 @@ func dockerNetworkIP(ctx context.Context, container, network string) (string, er
 // exactly its --name (pkg/client/cli/daemon/identifier.go's NewIdentifier),
 // so connRunName is both the network to look for and the container whose
 // own IP is the expected DNS server (pkg/client/docker/daemon.go's
-// GetDaemonContainerNetworkInfo). Supersedes docker_run_test.go's
-// Test_DockerRunCommand, replacing its `ip r` / "dev tpd-0" text scrape
-// with `docker inspect`.
+// GetDaemonContainerNetworkInfo).
 func (s *DockerConnRun) Test_JoinsDaemonNetwork() {
 	t := s.T()
 	ctx := s.Ctx()
@@ -139,8 +134,7 @@ func (s *DockerConnRun) Test_JoinsDaemonNetwork() {
 }
 
 // Test_ExternalDNSResolves proves a bare `telepresence docker-run` container
-// resolves external names through the daemon's own DNS: docker_run_test.go's
-// Test_DockerRunExternalDNS.
+// resolves external names through the daemon's own DNS.
 func (s *DockerConnRun) Test_ExternalDNSResolves() {
 	ctx := s.Ctx()
 	s.ensureConn()
@@ -167,10 +161,8 @@ const connRunVolumeLocalPort = 9072
 // into the handed-off container at the same absolute path
 // (pkg/client/cli/docker/runner.go's adjustMounts: `--mount
 // type=bind,src=...,dst=<path>`), listing the serviceaccount secret's
-// "namespace" entry. Supersedes docker_run_test.go's
-// Test_DockerRun_VolumePresent, replacing its bespoke
-// testdata/k8s/hello-w-volumes.goyaml secret mount with the serviceaccount
-// token every pod already carries.
+// "namespace" entry, using the serviceaccount token every pod already
+// carries instead of a bespoke secret mount.
 func (s *DockerConnRun) Test_ServiceAccountMountPresent() {
 	ctx := s.Ctx()
 	s.ensureConn()

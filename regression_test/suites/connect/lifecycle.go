@@ -137,11 +137,9 @@ func init() {
 
 // Test_ReconnectAfterApiServerDrop drops tcp traffic to the Kubernetes API
 // server for a while, restores it, and asserts an active intercept's
-// session recovers on its own. Mirrors
-// integration_test/reconnect_session_test.go's iptables invocation shape,
-// but targets the API server address directly through a single tagged
-// OUTPUT rule instead of a redirect chain, so cleanup can delete precisely
-// by comment and always runs, even on failure.
+// session recovers on its own. It targets the API server address directly
+// through a single tagged OUTPUT rule instead of a redirect chain, so
+// cleanup can delete precisely by comment and always runs, even on failure.
 func (s *ConnectReconnect) Test_ReconnectAfterApiServerDrop() {
 	t := s.T()
 	ctx := s.Ctx()

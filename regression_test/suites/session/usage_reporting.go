@@ -21,9 +21,9 @@ const (
 // UsageReporting proves the traffic-manager and a connected client both send
 // usage reports to a collector reachable from the cluster, once the shared
 // release is pointed at it (managers.UsageTo) and the client's own config
-// also points usage at it. Ported from usage_reporting_test.go, whose skip
-// probe (host.docker.internal unresolvable from the cluster)
-// rt.ProbeUsageCollectorReachable mirrors exactly.
+// also points usage at it. It self-skips (via
+// rt.ProbeUsageCollectorReachable) when host.docker.internal is
+// unresolvable from the cluster.
 //
 // It declares no NeedsManager: the collector's address is only known once
 // rt.NewUsageCollector has bound a port at runtime, so the manager spec

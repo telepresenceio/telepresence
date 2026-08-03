@@ -41,8 +41,8 @@ mcp-tools.json
 .wintools
 .gocache
 
-# Don't accidentally add binaries built byintegration tests
-/integration_test/testdata/echo-server/echo-server
+# Don't accidentally add binaries built by the regression tests
+/regression_test/testdata/echo-server/echo-server
 /build-aux/genversion/genversion
 
 # Vagrant

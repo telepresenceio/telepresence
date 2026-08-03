@@ -129,7 +129,7 @@ func NewState(ctx context.Context, g log.Group, adminCommandCh <-chan tmconfig.A
 		agents:               cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, 5*time.Millisecond, xsync.WithGrowOnly()),
 		clients:              xsync.NewMap[tunnel.SessionID, *ClientSession](xsync.WithGrowOnly()),
 		leases:               xsync.NewMap[leaseKey, struct{}](),
-		workloadWatchers:     xsync.NewMap[string, Watcher](xsync.WithGrowOnly()),
+		workloadWatchers:     xsync.NewMap[string, Watcher](),
 		nodeAgentPodWatchers: xsync.NewMap[nodeAgentWatchKey, struct{}](),
 		timedLogLevel:        log.NewTimedLevel(loglevel, clog.SetTreeLevel),
 		llSubs:               newLoglevelSubscribers(),
@@ -201,9 +201,32 @@ func (s *State) pruneSessionGCLoop(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
+			// Watchers first: closing them stops event delivery before the
+			// session pruning below ends the streams that subscribe to them.
+			s.pruneWorkloadWatchers(ctx)
 			s.pruneSessions(ctx)
 		}
 	}
+}
+
+// pruneWorkloadWatchers closes and removes the workload watchers of
+// namespaces that are no longer managed: a closed watcher's informer event
+// handlers are removed, so it stops consuming events for a namespace nothing
+// watches anymore, and the next WatchWorkloads for a re-managed namespace
+// creates a fresh one.
+func (s *State) pruneWorkloadWatchers(ctx context.Context) {
+	nss := namespaces.Get(ctx)
+	if nss == nil {
+		// Cluster-global scope: every namespace is managed.
+		return
+	}
+	s.workloadWatchers.Range(func(ns string, ww Watcher) bool {
+		if !slices.Contains(nss, ns) {
+			s.workloadWatchers.Delete(ns)
+			ww.Close()
+		}
+		return true
+	})
 }
 
 // pruneSessions will remove all sessions that belong to namespaces that are no longer managed.

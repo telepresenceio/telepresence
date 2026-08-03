@@ -20,10 +20,9 @@ const (
 )
 
 // Coexist proves a host (non-docker) connection and a docker connection can
-// be live at the same time, regardless of which is established first:
-// docker_daemon_test.go's hostDaemonNoConflict/daemonHostNotConflict
-// essentials, plus a concurrent list from both and a check that the host
-// connection survives the docker one quitting.
+// be live at the same time, regardless of which is established first, plus
+// a concurrent list from both and a check that the host connection survives
+// the docker one quitting.
 type Coexist struct {
 	rt.Suite
 }

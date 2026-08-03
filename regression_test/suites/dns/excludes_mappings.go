@@ -17,8 +17,8 @@ const dnsMappingAlias = "dns-mappings-alias"
 // ExcludesMappings proves the kubeconfig telepresence.io extension's
 // dns.excludes and dns.mappings reach a live session: an excluded name never
 // resolves, and a mapped alias resolves to (and serves) the name it
-// aliases. Mirrors integration_test/uhn_dns_test.go's Test_UHNExcludes/
-// Test_UHNMappings semantics, narrowed to one excluded/mapped name each.
+// aliases. One excluded and one mapped name each is enough: the extension
+// applies the same rule to every entry in either list.
 // Each test connects fresh under its own derived kubeconfig (rt.Mutate +
 // rt.ConnWithKubeconfig) and disconnects before returning, so no area
 // running after this one adopts a connection scoped to these extensions.

@@ -21,10 +21,9 @@ const (
 	axisUsageEnabled    = "usage.enabled"
 )
 
-// matrixAxes are the manager-value dimensions the plan's "Golden chart
-// rendering" tier calls out by name (docs/plans/regression-test-framework/
-// plan.md), drawn from the same chart keys the managers catalog
-// (framework/managers) configures live installs with.
+// matrixAxes are the manager-value dimensions this tier renders, drawn from
+// the same chart keys the managers catalog (framework/managers) configures
+// live installs with.
 func matrixAxes() []rt.Axis {
 	return []rt.Axis{
 		{Name: axisInjectorEnabled, Values: []string{"true", "false"}},

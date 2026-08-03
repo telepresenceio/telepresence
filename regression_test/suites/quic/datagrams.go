@@ -13,9 +13,7 @@ import (
 // quicDatagramsEnvVar is the manager-process opt-in for RFC 9221 datagram
 // carriage on the quic tunnel transport (cmd/traffic/cmd/manager/
 // quictunnel/listener.go), OFF by default -- no better than stream carriage,
-// see "Current limitations" in docs/reference/quic-transport.md. Same
-// variable integration_test/quic_test.go's Test_AUDPEchoDatagrams set on
-// deploy/traffic-manager.
+// see "Current limitations" in docs/reference/quic-transport.md.
 const quicDatagramsEnvVar = "TELEPRESENCE_QUIC_ENABLE_DATAGRAMS"
 
 // quicDatagramsSpec is managers.QuicNodePort() with the datagrams opt-in
@@ -23,13 +21,11 @@ const quicDatagramsEnvVar = "TELEPRESENCE_QUIC_ENABLE_DATAGRAMS"
 // (managers.Values.ExtraEnv) -- the sanctioned inline-Spec pattern this area
 // already uses for a forced-endpoint overlay (fallback.go's
 // quicUnreachableSpec). Built inline (managers.Spec{Key: "quic-datagrams",
-// ...}) rather than as a separate managers catalog entry, per
-// docs/plans/regression-test-framework/m5-spec.md's "quic area additions"
-// section. Unlike quic_test.go, which toggled the env var mid-suite with a
-// `kubectl set env` + reconnect, this spec starts the manager process with
-// the opt-in already set: the datagram counters this suite asserts on then
-// start at zero for the whole release, with no risk of a stale nonzero
-// count left by an earlier test.
+// ...}) rather than as a separate managers catalog entry, since no other
+// suite needs it. The spec starts the manager process with the opt-in
+// already set rather than toggling it mid-suite, so the datagram counters
+// this suite asserts on start at zero for the whole release, with no risk
+// of a stale nonzero count left by an earlier test.
 func quicDatagramsSpec() managers.Spec {
 	v := managers.QuicNodePort().Values
 	v.ExtraEnv = append(v.ExtraEnv, corev1.EnvVar{Name: quicDatagramsEnvVar, Value: "true"})
@@ -44,8 +40,7 @@ func quicDatagramsSpec() managers.Spec {
 // tunneled UDP traffic once opted into: a UDP echo round-trips over the
 // quic transport and the manager's own periodic datagram-counters log line
 // (cmd/traffic/cmd/manager/quictunnel/listener.go's logDatagramStatsLoop)
-// reports a nonzero received count. Supersedes quic_test.go's
-// Test_AUDPEchoDatagrams.
+// reports a nonzero received count.
 //
 // Only manager-bound flows can ride datagrams: once any traffic-agent is
 // reachable from the session, agentpf routes destinations through the

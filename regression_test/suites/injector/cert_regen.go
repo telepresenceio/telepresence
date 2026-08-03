@@ -18,9 +18,7 @@ const injectorTLSSecretName = "mutator-webhook-tls"
 // either way the webhook can access the cert (accessMethod watch/mount),
 // and that deleting the live TLS secret doesn't permanently break
 // injection: a fresh workload created afterward still gets its agent once
-// the webhook recovers. Mirrors integration_test/injector_test.go's
-// Test_HelmUpgradeWebhookSecret/Test_HelmUpgradeMountedWebhookSecret, plus
-// an explicit secret deletion.
+// the webhook recovers.
 type CertRegen struct {
 	rt.Suite
 }

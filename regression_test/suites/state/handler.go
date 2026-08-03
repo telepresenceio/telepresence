@@ -22,11 +22,11 @@ import (
 // take effect.
 const handlerMarkerTimeout = 15 * time.Second
 
-// Handler ports Test_ApplyHandlerCommand: an intercept attachment's
-// `command:` handler (pkg/client/cli/manifest/handler.go) sees
-// TELEPRESENCE_INTERCEPT_ID, its pid stays stable across a no-op apply,
+// Handler proves an intercept attachment's `command:` handler
+// (pkg/client/cli/manifest/handler.go) sees TELEPRESENCE_INTERCEPT_ID,
+// that its pid stays stable across a no-op apply,
 // restarts on an argv change, and is killed by delete. sh-based, so it does
-// not run on windows. Supersedes Test_ApplyHandlerCommand.
+// not run on windows.
 type Handler struct {
 	rt.Suite
 }
@@ -70,8 +70,7 @@ func readHandlerRecord(t testing.TB, path string) handlerRecord {
 // into markerFile and then sleeping, so the test can observe both that the
 // handler saw the attachment's environment and that it is still running.
 // variant only changes the handler's argv (a no-op ":" marker), leaving the
-// attachment's spec -- and hence drift detection -- untouched. Mirrors
-// state_manifest_test.go's handlerManifest.
+// attachment's spec -- and hence drift detection -- untouched.
 func handlerManifest(ns, markerFile, variant string) *state.State {
 	ic := state.Intercept(stateInterceptWL)
 	ic.Ports = []string{fmt.Sprintf("%d:http", stateLocalPort)}
@@ -86,7 +85,8 @@ func handlerManifest(ns, markerFile, variant string) *state.State {
 	return &state.State{Connection: conn, Attachments: []state.Attachment{ic}}
 }
 
-// Test_ApplyHandlerCommand ports Test_ApplyHandlerCommand.
+// Test_ApplyHandlerCommand exercises the handler lifecycle the suite
+// doc describes, in one pass.
 func (s *Handler) Test_ApplyHandlerCommand() {
 	t := s.T()
 	ctx := s.Ctx()

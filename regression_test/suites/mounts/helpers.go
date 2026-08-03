@@ -17,8 +17,7 @@ const mountTimeout = 30 * time.Second
 // tokenRelPath is the serviceaccount token's path under a pod's filesystem
 // root, present on any pod that hasn't disabled automountServiceAccountToken
 // -- a reliable anchor for "the mount is actually up", independent of the
-// ConfigVolume this package's suites add (mirrors integration_test/
-// mounts_test.go's Test_CollidingMounts, which stats the same path).
+// ConfigVolume this package's suites add.
 const tokenRelPath = "var/run/secrets/kubernetes.io/serviceaccount/token"
 
 // configVolumeK8sName is the Kubernetes Volume name workloads.
