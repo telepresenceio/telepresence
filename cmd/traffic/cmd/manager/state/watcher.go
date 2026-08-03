@@ -52,6 +52,17 @@ func (e EventType) String() string {
 
 type Watcher interface {
 	Subscribe(ctx context.Context) <-chan []Event
+	// Close removes the watcher's informer event handlers and stops its
+	// delivery timer. Subscribers are not signaled; they stop on their own
+	// context.
+	Close()
+}
+
+// handlerReg pairs an informer with the registration of the event handler
+// this watcher added to it, so Close can remove exactly that handler.
+type handlerReg struct {
+	informer cache.SharedIndexInformer
+	reg      cache.ResourceEventHandlerRegistration
 }
 
 type watcher struct {
@@ -61,6 +72,8 @@ type watcher struct {
 	timer                *time.Timer
 	events               []Event
 	enabledWorkloadKinds k8sapi.Kinds
+	// regs is populated by NewWatcher only, before the watcher is shared.
+	regs []handlerReg
 }
 
 func NewWatcher(ctx context.Context, ns string, enabledWorkloadKinds k8sapi.Kinds) (Watcher, error) {
@@ -202,8 +215,18 @@ func compareOptions() []cmp.Option {
 	}
 }
 
+// Close stops the flow of events into the watcher: the informer event
+// handlers are removed first, so nothing rearms the timer, and the timer is
+// stopped last to kill a pending delivery.
+func (w *watcher) Close() {
+	for _, hr := range w.regs {
+		_ = hr.informer.RemoveEventHandler(hr.reg)
+	}
+	w.timer.Stop()
+}
+
 func (w *watcher) watch(ix cache.SharedIndexInformer, ns string, hasValidController func(k8sapi.Workload) bool) error {
-	_, err := ix.AddEventHandler(
+	reg, err := ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				if wl, ok := workload.FromAny(obj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
@@ -239,6 +262,9 @@ func (w *watcher) watch(ix cache.SharedIndexInformer, ns string, hasValidControl
 				}
 			},
 		})
+	if err == nil {
+		w.regs = append(w.regs, handlerReg{informer: ix, reg: reg})
+	}
 	return err
 }
 
