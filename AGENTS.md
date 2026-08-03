@@ -300,7 +300,7 @@ kubectl config use-context telepresence-test-developer
 
 To create a release, set `TELEPRESENCE_VERSION` and run `make prepare-release`. This creates two annotated tags (`vX.Y.Z` and `rpc/vX.Y.Z`) and a commit updating go.mod references. Pushing the tags and branch triggers the release workflow.
 
-**Important:** A tag push publishes the release and cannot be taken back. Never push the tags directly after `make prepare-release`. Push only the branch, open a PR for it, and follow `/ship-release` (`.claude/skills/ship-release`), which drives the release PR's CI (including `ok to test` and `build_and_test`), creates the docs PR in the telepresence.io repository, and pushes the tags only after everything is green. The command blocks below show the mechanics, not the order.
+**Important:** A tag push publishes the release and cannot be taken back. Never push the tags directly after `make prepare-release`. Push only the branch, open a PR for it, and follow `/ship-release` (`.claude/skills/ship-release`), which drives the release PR's CI (including `ok to test` and `regression`), creates the docs PR in the telepresence.io repository, and pushes the tags only after everything is green. The command blocks below show the mechanics, not the order.
 
 ```bash
 # Test release (marked as pre-release, not promoted to latest)

@@ -13,7 +13,7 @@
 //     UDP in general, not QUIC -- every UDP flow that terminates at the VIF shares
 //     those buffers, and the fix (if any) helps both tunnel transports equally.
 //
-// The experiments are NOT part of `make check-integration` or `go test ./...`:
+// The experiments are NOT part of `make check-regression` or `go test ./...`:
 // every file that carries an experiment is behind the `perf` build tag, so a
 // normal build or vet skips them. Run them explicitly, on a cluster, with:
 //

@@ -4,7 +4,7 @@ Standalone experiments that quantify how the telepresence data path behaves unde
 adverse conditions — the opt-in QUIC tunnel transport
 (`docs/reference/quic-transport-architecture.md`) versus the default port-forwarded
 gRPC transport, and the client-side VIF netstack that terminates tunneled TCP/UDP.
-They are **not** run by `make check-integration` or `go test ./...` — every
+They are **not** run by `make check-regression` or `go test ./...` — every
 experiment file is behind the `perf` build tag.
 
 ```
