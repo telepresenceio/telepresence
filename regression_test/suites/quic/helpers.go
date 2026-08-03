@@ -61,12 +61,16 @@ const (
 	quicDialSettle = 6 * time.Second
 	// quicStatusTimeout bounds a plain (non-reconnecting) status poll.
 	quicStatusTimeout = 30 * time.Second
-	// quicAgentTransportTimeout bounds the wait for an agent to report the
-	// quic transport. It is longer than quicStatusTimeout because it waits
-	// on more than a status refresh: the agent has just been injected into
-	// a freshly rolled workload and dials its own quic connection, which on
-	// a loaded single-node cluster outlasts the plain status budget.
+	// quicAgentTransportTimeout bounds the whole wait for a quic agent
+	// transport, across every re-attachment interceptUntilAgentQuic makes.
 	quicAgentTransportTimeout = 90 * time.Second
+	// quicAgentAttemptTimeout bounds one attachment's wait for its agent to
+	// report the quic transport. The agent's opportunistic quic dial runs
+	// once per attach, within its own short budget, and never retries after
+	// a miss (pkg/client/rootd/quic.go), so an attachment still on grpc
+	// well past that budget has settled there for good: waiting longer
+	// cannot help, only re-attaching can.
+	quicAgentAttemptTimeout = 20 * time.Second
 	// quicDiscoveryTimeout bounds the reconnect loop in awaitTransportPrefix.
 	quicDiscoveryTimeout = 90 * time.Second
 	// quicForwarderTermTimeout bounds the wait for the quic-forwarder's
@@ -136,39 +140,74 @@ func awaitStatusTransportPrefix(
 		func(tt string) bool { return strings.HasPrefix(tt, prefix) }, fmt.Sprintf("began with %q", prefix))
 }
 
-// awaitAgentTransport polls status (no reconnect) until the
+// pollAgentTransport polls status (no reconnect) until the
 // root_daemon.agent_transports entry for workload reports the "quic"
-// transport, or fails t after quicAgentTransportTimeout. The
+// transport, reporting the transport last observed instead when timeout
+// runs out: "never reported quic" alone cannot distinguish an agent still
+// dialing from one that fell back to grpc for the whole attachment. The
 // agent_transports list is populated only while an attachment to workload
-// is live (pkg/client/cli/cmd/status.go's toStatusAgentTransports). Every
-// caller in this area waits for the quic agent transport specifically, so
-// the transport is not a parameter, like awaitTransportPrefix's quicPrefix.
-//
-// The failure names the transport the agent actually settled on: "never
-// reported quic" alone cannot distinguish an agent still dialing from one
-// that fell back to grpc for the whole session.
-func awaitAgentTransport(t testing.TB, ctx context.Context, tp *cli.TP, workload string) {
+// is live (pkg/client/cli/cmd/status.go's toStatusAgentTransports).
+func pollAgentTransport(t testing.TB, ctx context.Context, tp *cli.TP, workload string, timeout time.Duration) string {
 	t.Helper()
-	deadline := time.Now().Add(quicAgentTransportTimeout)
+	deadline := time.Now().Add(timeout)
+	observed := ""
 	for {
-		observed := ""
 		st := fetchStatus(t, ctx, tp)
 		for _, at := range st.RootDaemon.AgentTransports {
 			if at.Workload != workload {
 				continue
 			}
 			if at.Transport == "quic" {
-				return
+				return "quic"
 			}
 			observed = at.Transport
 		}
 		if time.Now().After(deadline) {
-			if observed == "" {
-				t.Fatalf("workload %q never appeared in agent_transports", workload)
-			}
-			t.Fatalf("agent transport for workload %q settled on %q, never %q", workload, observed, "quic")
+			return observed
 		}
 		time.Sleep(quicPollInterval)
+	}
+}
+
+// interceptUntilAgentQuic attaches an intercept to wl until the
+// attachment's agent transport reports quic, detaching and re-attaching
+// after every attempt that settles on another transport, and failing t
+// once quicAgentTransportTimeout is spent. The re-attach is what retries
+// the agent's once-per-attach quic dial, exactly as awaitTransportPrefix's
+// reconnect retries the tunnel's once-per-connect dial.
+func interceptUntilAgentQuic(
+	t testing.TB, ctx context.Context, tp *cli.TP, conn *rt.Conn, wl *rt.Workload, opts ...cli.InterceptOpt,
+) *rt.Attach {
+	t.Helper()
+	deadline := time.Now().Add(quicAgentTransportTimeout)
+	for {
+		a := conn.Intercept(t, wl, opts...)
+		observed := pollAgentTransport(t, ctx, tp, wl.Name, quicAgentAttemptTimeout)
+		if observed == "quic" {
+			return a
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("agent transport for %s settled on %q in every attachment, never %q",
+				wl.Name, observed, "quic")
+		}
+		a.Detach(t)
+	}
+}
+
+// awaitAgentTransport fails t unless the agent transport for workload
+// reports "quic" within quicAgentTransportTimeout. Used mid-session, on an
+// attachment that must stay live, where interceptUntilAgentQuic's re-attach
+// would defeat the assertion. Every caller in this area waits for the quic
+// agent transport specifically, so the transport is not a parameter, like
+// awaitTransportPrefix's quicPrefix.
+func awaitAgentTransport(t testing.TB, ctx context.Context, tp *cli.TP, workload string) {
+	t.Helper()
+	switch observed := pollAgentTransport(t, ctx, tp, workload, quicAgentTransportTimeout); observed {
+	case "quic":
+	case "":
+		t.Fatalf("workload %q never appeared in agent_transports", workload)
+	default:
+		t.Fatalf("agent transport for workload %q settled on %q, never %q", workload, observed, "quic")
 	}
 }
 

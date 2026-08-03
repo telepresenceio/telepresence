@@ -32,13 +32,11 @@ func (s *Enabled) Test_QuicTransport() {
 
 	conn := awaitTransportPrefix(t, ctx, tp, ns, freshConnect(t, ctx, ns))
 
-	a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
-	defer a.Detach(t)
-	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
-
 	// The client-to-agent attachment itself rides quic too (agents get the
 	// same QUIC listener plumbing as the manager-bound tunnel).
-	awaitAgentTransport(t, ctx, tp, wl.Name)
+	a := interceptUntilAgentQuic(t, ctx, tp, conn, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
+	defer a.Detach(t)
+	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
 
 	st := fetchStatus(t, ctx, tp)
 	s.True(strings.HasPrefix(st.RootDaemon.TunnelTransport, quicPrefix),

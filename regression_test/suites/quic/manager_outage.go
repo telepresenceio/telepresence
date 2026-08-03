@@ -107,7 +107,7 @@ func (s *ManagerOutage) Test_AttachmentSurvivesManagerOutage() {
 	// doc for why a plain one-shot detach right after this test's outage is
 	// brittle. The captured *Attach carries nothing this test needs, so its
 	// return value is discarded.
-	conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
+	interceptUntilAgentQuic(t, ctx, tp, conn, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
 	mustDetach := true
 	defer func() {
 		if mustDetach {
@@ -115,10 +115,9 @@ func (s *ManagerOutage) Test_AttachmentSurvivesManagerOutage() {
 		}
 	}()
 
-	// Baseline: intercepted traffic works and the agent attachment is
-	// already on quic before the outage starts.
+	// Baseline: the agent attachment is on quic and intercepted traffic
+	// works before the outage starts.
 	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
-	awaitAgentTransport(t, ctx, tp, wl.Name)
 
 	// Manager churn: declare it through Mutate before touching the
 	// Deployment directly, so a later suite's Get re-provisions instead of

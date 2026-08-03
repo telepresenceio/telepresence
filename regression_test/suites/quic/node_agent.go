@@ -41,13 +41,11 @@ func (s *NodeAgentTransport) Test_NodeAgentTransport() {
 
 	conn := awaitTransportPrefix(t, ctx, tp, ns, freshConnect(t, ctx, ns))
 
-	a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse(), nodeAgentFlag())
+	// The client-to-agent attachment rides quic too, whether the agent is
+	// a node-hosted Job or an injected sidecar.
+	a := interceptUntilAgentQuic(t, ctx, tp, conn, wl, rt.ToLocal(ls, "http"), cli.MountFalse(), nodeAgentFlag())
 	defer a.Detach(t)
 	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
-
-	// The client-to-agent attachment itself rides quic too, whether the
-	// agent is a node-hosted Job or an injected sidecar.
-	awaitAgentTransport(t, ctx, tp, wl.Name)
 
 	st := fetchStatus(t, ctx, tp)
 	s.True(strings.HasPrefix(st.RootDaemon.TunnelTransport, quicPrefix),
