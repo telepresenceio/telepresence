@@ -10,6 +10,7 @@ Maintainers are listed in alphabetical order.
 | Maintainer      | GitHub ID                                 | Affiliation |
 |-----------------|-------------------------------------------|-------------|
 | Blazej Gruszka  | [bgruszka](https://github.com/bgruszka)   | Displate    |
+| Breland Miley   | [breland-openai](https://github.com/breland-openai) | OpenAI |
 | Nick Powell     | [njayp](https://github.com/njayp)         |             |
 | Thomas Hallgren | [thallgren](https://github.com/thallgren) | Polar Sky   |
 
