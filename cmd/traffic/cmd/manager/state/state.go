@@ -221,6 +221,10 @@ func (s *State) pruneWorkloadWatchers(ctx context.Context) {
 		return
 	}
 	s.workloadWatchers.Range(func(ns string, ww Watcher) bool {
+		if ns == "" {
+			// The cluster-wide watcher lives as long as the process.
+			return true
+		}
 		if !slices.Contains(nss, ns) {
 			s.workloadWatchers.Delete(ns)
 			ww.Close()
@@ -697,14 +701,22 @@ func (s *State) WatchAgents(
 }
 
 func (s *State) WatchWorkloads(ctx context.Context, ns string) (ch <-chan []Event, err error) {
-	ww, _ := s.workloadWatchers.LoadOrCompute(ns, func() (ww Watcher, rm bool) {
-		ww, err = NewWatcher(s.backgroundCtx, ns, managerutil.GetEnv(ctx).EnabledWorkloadKinds)
+	// Cluster-wide scope: informers are already cluster-wide (informer.GetFactory
+	// returns the "" factory for every namespace), so one watcher and one handler
+	// set serves every subscription; each subscription filters to its own
+	// namespace at delivery time (see watcher.go).
+	key := ns
+	if namespaces.Get(ctx) == nil {
+		key = ""
+	}
+	ww, _ := s.workloadWatchers.LoadOrCompute(key, func() (ww Watcher, rm bool) {
+		ww, err = NewWatcher(s.backgroundCtx, key, managerutil.GetEnv(ctx).EnabledWorkloadKinds)
 		return ww, err != nil // delete if error.
 	})
 	if err != nil {
 		return nil, err
 	}
-	return ww.Subscribe(ctx), nil
+	return ww.Subscribe(ctx, ns), nil
 }
 
 // UpdateIntercept applies a given mutator function to the stored intercept with interceptID;

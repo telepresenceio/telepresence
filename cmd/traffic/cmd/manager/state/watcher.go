@@ -51,7 +51,7 @@ func (e EventType) String() string {
 }
 
 type Watcher interface {
-	Subscribe(ctx context.Context) <-chan []Event
+	Subscribe(ctx context.Context, namespace string) <-chan []Event
 	// Close removes the watcher's informer event handlers and stops its
 	// delivery timer. Subscribers are not signaled; they stop on their own
 	// context.
@@ -65,10 +65,24 @@ type handlerReg struct {
 	reg      cache.ResourceEventHandlerRegistration
 }
 
+// subscriptionBacklog is the event-channel buffer of one subscription. The
+// receiver drains promptly, so more than one slot is rarely occupied; the
+// depth exists so that deliveries racing an unsubscribe land in the buffer
+// instead of parking a delivery goroutine, and so the end sentinel almost
+// always fits.
+const subscriptionBacklog = 8
+
+// subscription is a single Subscribe call: the channel events are delivered
+// on, and the namespace they're filtered to.
+type subscription struct {
+	ch        chan<- []Event
+	namespace string
+}
+
 type watcher struct {
 	sync.Mutex
 	namespace            string
-	subscriptions        map[uuid.UUID]chan<- []Event
+	subscriptions        map[uuid.UUID]subscription
 	timer                *time.Timer
 	events               []Event
 	enabledWorkloadKinds k8sapi.Kinds
@@ -76,14 +90,18 @@ type watcher struct {
 	regs []handlerReg
 }
 
+// NewWatcher creates a watcher backed by the informer factory for ns: a
+// namespace-scoped factory for a scoped watcher, or the cluster-wide factory
+// when ns is "". Namespace selection for a subscriber is not decided here;
+// see Subscribe.
 func NewWatcher(ctx context.Context, ns string, enabledWorkloadKinds k8sapi.Kinds) (Watcher, error) {
 	w := new(watcher)
 	w.namespace = ns
 	w.enabledWorkloadKinds = enabledWorkloadKinds
-	w.subscriptions = make(map[uuid.UUID]chan<- []Event)
+	w.subscriptions = make(map[uuid.UUID]subscription)
 	w.timer = time.AfterFunc(time.Duration(math.MaxInt64), func() {
 		w.Lock()
-		ss := make([]chan<- []Event, len(w.subscriptions))
+		ss := make([]subscription, len(w.subscriptions))
 		i := 0
 		for _, sub := range w.subscriptions {
 			ss[i] = sub
@@ -93,15 +111,24 @@ func NewWatcher(ctx context.Context, ns string, enabledWorkloadKinds k8sapi.Kind
 		w.events = nil
 		w.Unlock()
 		for _, s := range ss {
+			var filtered []Event
+			for _, e := range events {
+				if e.Workload.GetNamespace() == s.namespace {
+					filtered = append(filtered, e)
+				}
+			}
+			if len(filtered) == 0 {
+				continue
+			}
 			select {
 			case <-ctx.Done():
 				return
-			case s <- events:
+			case s.ch <- events:
 			}
 		}
 	})
 
-	err := w.addEventHandler(ctx, ns)
+	err := w.addEventHandler(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -121,15 +148,22 @@ func hasValidReplicasetOwner(wl k8sapi.Workload, enabledKinds k8sapi.Kinds) bool
 	return false
 }
 
-func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
-	ch := make(chan []Event, 1)
+// Subscribe registers a subscriber scoped to namespace and returns its event
+// channel, seeded with an initial snapshot of the currently known workloads
+// in that namespace. The watcher's own factory (w.namespace) may be the
+// cluster-wide informer; namespace is only used to scope this subscription's
+// listing and delivery, and is never empty.
+func (w *watcher) Subscribe(ctx context.Context, namespace string) <-chan []Event {
+	ch := make(chan []Event, subscriptionBacklog)
+	// Deliberately non-nil even when empty: nil on this channel is the
+	// end-of-subscription sentinel.
 	initialEvents := make([]Event, 0, 100)
 	id := uuid.New()
 	kf := informer.GetFactory(ctx, w.namespace)
 	ai := kf.GetK8sInformerFactory().Apps().V1()
-	clog.Debugf(ctx, "workload.Watcher producing initial events for namespace %s", w.namespace)
+	clog.Debugf(ctx, "workload.Watcher producing initial events for namespace %s", namespace)
 	if w.enabledWorkloadKinds.Contains(k8sapi.DeploymentKind) {
-		if dps, err := ai.Deployments().Lister().Deployments(w.namespace).List(labels.Everything()); err == nil {
+		if dps, err := ai.Deployments().Lister().Deployments(namespace).List(labels.Everything()); err == nil {
 			for _, obj := range dps {
 				if wl, ok := workload.FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) && !agentmap.TrafficManagerSelector.Matches(labels.Set(obj.Labels)) {
 					initialEvents = append(initialEvents, Event{
@@ -141,7 +175,7 @@ func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
 		}
 	}
 	if w.enabledWorkloadKinds.Contains(k8sapi.ReplicaSetKind) {
-		if rps, err := ai.ReplicaSets().Lister().ReplicaSets(w.namespace).List(labels.Everything()); err == nil {
+		if rps, err := ai.ReplicaSets().Lister().ReplicaSets(namespace).List(labels.Everything()); err == nil {
 			for _, obj := range rps {
 				if wl, ok := workload.FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) {
 					initialEvents = append(initialEvents, Event{
@@ -153,7 +187,7 @@ func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
 		}
 	}
 	if w.enabledWorkloadKinds.Contains(k8sapi.StatefulSetKind) {
-		if sps, err := ai.StatefulSets().Lister().StatefulSets(w.namespace).List(labels.Everything()); err == nil {
+		if sps, err := ai.StatefulSets().Lister().StatefulSets(namespace).List(labels.Everything()); err == nil {
 			for _, obj := range sps {
 				if wl, ok := workload.FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) {
 					initialEvents = append(initialEvents, Event{
@@ -166,7 +200,7 @@ func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
 	}
 	if w.enabledWorkloadKinds.Contains(k8sapi.RolloutKind) {
 		ri := kf.GetArgoRolloutsInformerFactory().Argoproj().V1alpha1()
-		if sps, err := ri.Rollouts().Lister().Rollouts(w.namespace).List(labels.Everything()); err == nil {
+		if sps, err := ri.Rollouts().Lister().Rollouts(namespace).List(labels.Everything()); err == nil {
 			for _, obj := range sps {
 				if wl, ok := workload.FromAny(obj); ok && !hasValidReplicasetOwner(wl, w.enabledWorkloadKinds) {
 					initialEvents = append(initialEvents, Event{
@@ -180,14 +214,22 @@ func (w *watcher) Subscribe(ctx context.Context) <-chan []Event {
 	ch <- initialEvents
 
 	w.Lock()
-	w.subscriptions[id] = ch
+	w.subscriptions[id] = subscription{ch: ch, namespace: namespace}
 	w.Unlock()
 	go func() {
 		<-ctx.Done()
-		close(ch)
 		w.Lock()
 		delete(w.subscriptions, id)
 		w.Unlock()
+		// A nil batch tells the receiver the subscription has ended. The
+		// send is a best-effort courtesy -- the receiver's own context is
+		// already done -- so a full backlog just skips it; the channel is
+		// never closed, keeping an in-flight delivery free of any
+		// send-on-closed hazard.
+		select {
+		case ch <- nil:
+		default:
+		}
 	}()
 	return ch
 }
@@ -225,27 +267,32 @@ func (w *watcher) Close() {
 	w.timer.Stop()
 }
 
-func (w *watcher) watch(ix cache.SharedIndexInformer, ns string, hasValidController func(k8sapi.Workload) bool) error {
+// watch registers an event handler on ix that forwards every add/update/
+// delete of a workload without a valid replicaset owner. The informer is
+// already scoped to whatever namespace this watcher covers (a single
+// namespace, or the whole cluster), so no namespace check is needed here;
+// per-subscription namespace filtering happens at delivery time.
+func (w *watcher) watch(ix cache.SharedIndexInformer, hasValidController func(k8sapi.Workload) bool) error {
 	reg, err := ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
-				if wl, ok := workload.FromAny(obj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
+				if wl, ok := workload.FromAny(obj); ok && !hasValidController(wl) {
 					w.handleEvent(Event{Type: EventTypeAdd, Workload: wl})
 				}
 			},
 			DeleteFunc: func(obj any) {
 				if wl, ok := workload.FromAny(obj); ok {
-					if ns == wl.GetNamespace() && !hasValidController(wl) {
+					if !hasValidController(wl) {
 						w.handleEvent(Event{Type: EventTypeDelete, Workload: wl})
 					}
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
-					if wl, ok = workload.FromAny(dfsu.Obj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
+					if wl, ok = workload.FromAny(dfsu.Obj); ok && !hasValidController(wl) {
 						w.handleEvent(Event{Type: EventTypeDelete, Workload: wl})
 					}
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
-				if wl, ok := workload.FromAny(newObj); ok && ns == wl.GetNamespace() && !hasValidController(wl) {
+				if wl, ok := workload.FromAny(newObj); ok && !hasValidController(wl) {
 					if oldWl, ok := workload.FromAny(oldObj); ok {
 						if cmp.Equal(wl, oldWl, compareOptions()...) {
 							return
@@ -268,8 +315,8 @@ func (w *watcher) watch(ix cache.SharedIndexInformer, ns string, hasValidControl
 	return err
 }
 
-func (w *watcher) addEventHandler(ctx context.Context, ns string) error {
-	kf := informer.GetFactory(ctx, ns)
+func (w *watcher) addEventHandler(ctx context.Context) error {
+	kf := informer.GetFactory(ctx, w.namespace)
 	hvc := func(wl k8sapi.Workload) bool {
 		return hasValidReplicasetOwner(wl, w.enabledWorkloadKinds)
 	}
@@ -291,7 +338,7 @@ func (w *watcher) addEventHandler(ctx context.Context, ns string) error {
 			continue
 		}
 
-		if err := w.watch(ssi, ns, hvc); err != nil {
+		if err := w.watch(ssi, hvc); err != nil {
 			return err
 		}
 	}
