@@ -77,6 +77,7 @@ const subscriptionBacklog = 8
 type subscription struct {
 	ch        chan<- []Event
 	namespace string
+	done      <-chan struct{}
 }
 
 type watcher struct {
@@ -100,32 +101,7 @@ func NewWatcher(ctx context.Context, ns string, enabledWorkloadKinds k8sapi.Kind
 	w.enabledWorkloadKinds = enabledWorkloadKinds
 	w.subscriptions = make(map[uuid.UUID]subscription)
 	w.timer = time.AfterFunc(time.Duration(math.MaxInt64), func() {
-		w.Lock()
-		ss := make([]subscription, len(w.subscriptions))
-		i := 0
-		for _, sub := range w.subscriptions {
-			ss[i] = sub
-			i++
-		}
-		events := w.events
-		w.events = nil
-		w.Unlock()
-		for _, s := range ss {
-			var filtered []Event
-			for _, e := range events {
-				if e.Workload.GetNamespace() == s.namespace {
-					filtered = append(filtered, e)
-				}
-			}
-			if len(filtered) == 0 {
-				continue
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case s.ch <- events:
-			}
-		}
+		w.dispatch(ctx)
 	})
 
 	err := w.addEventHandler(ctx)
@@ -133,6 +109,34 @@ func NewWatcher(ctx context.Context, ns string, enabledWorkloadKinds k8sapi.Kind
 		return nil, err
 	}
 	return w, nil
+}
+
+func (w *watcher) dispatch(ctx context.Context) {
+	w.Lock()
+	ss := make([]subscription, 0, len(w.subscriptions))
+	for _, sub := range w.subscriptions {
+		ss = append(ss, sub)
+	}
+	events := w.events
+	w.events = nil
+	w.Unlock()
+	for _, s := range ss {
+		filtered := make([]Event, 0, len(events))
+		for _, event := range events {
+			if event.Workload.GetNamespace() == s.namespace {
+				filtered = append(filtered, event)
+			}
+		}
+		if len(filtered) == 0 {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.done:
+		case s.ch <- filtered:
+		}
+	}
 }
 
 func hasValidReplicasetOwner(wl k8sapi.Workload, enabledKinds k8sapi.Kinds) bool {
@@ -214,7 +218,7 @@ func (w *watcher) Subscribe(ctx context.Context, namespace string) <-chan []Even
 	ch <- initialEvents
 
 	w.Lock()
-	w.subscriptions[id] = subscription{ch: ch, namespace: namespace}
+	w.subscriptions[id] = subscription{ch: ch, namespace: namespace, done: ctx.Done()}
 	w.Unlock()
 	go func() {
 		<-ctx.Done()
