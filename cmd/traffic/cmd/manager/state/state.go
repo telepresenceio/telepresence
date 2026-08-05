@@ -630,7 +630,11 @@ func (s *State) RestoreAgent(ctx context.Context, id tunnel.SessionID, agent *rp
 		as.SetPrincipal(principal)
 	}
 	if _, exists := s.agents.LoadOrStore(id, as); exists {
-		return "", nil
+		as.cancel()
+		// ArriveAsAgent can be retried after the manager committed this session
+		// but the response was lost or timed out. Return the stable pod-UID based
+		// session ID so that the retry remains idempotent.
+		return id, nil
 	}
 
 	s.intercepts.Range(func(interceptID string, intercept *Intercept) bool {
