@@ -135,10 +135,21 @@ type NodeAgentReaper func(ctx context.Context) error
 // logged rather than surfaced to the caller -- the hook already treats the
 // request as best-effort (`|| exit 0`).
 func uninstallHandler(ai AgentInjector, reap NodeAgentReaper) http.HandlerFunc {
+	return uninstallHandlerWithContext(nil, ai, reap) //nolint:staticcheck // nil keeps teardown bound to the request context
+}
+
+// uninstallHandlerWithContext keeps teardown attached to managerCtx when it
+// is provided. The Helm hook can disconnect before sidecars finish rolling
+// back, and request cancellation must not abandon that reconciliation.
+func uninstallHandlerWithContext(managerCtx context.Context, ai AgentInjector, reap NodeAgentReaper) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := r.Context()
-		clog.Debug(ctx, "Received uninstall request...")
-		statusCode, err := serveRequest(ctx, r, http.MethodDelete, func(ctx context.Context) {
+		requestCtx := r.Context()
+		actionCtx := requestCtx
+		if managerCtx != nil {
+			actionCtx = managerCtx
+		}
+		clog.Debug(requestCtx, "Received uninstall request...")
+		statusCode, err := serveRequest(actionCtx, r, http.MethodDelete, func(ctx context.Context) {
 			if ai != nil {
 				ai.Uninstall(ctx)
 			}
@@ -149,11 +160,11 @@ func uninstallHandler(ai AgentInjector, reap NodeAgentReaper) http.HandlerFunc {
 			}
 		})
 		if err != nil {
-			clog.Errorf(ctx, "error handling uninstall request: %v", err)
+			clog.Errorf(requestCtx, "error handling uninstall request: %v", err)
 			w.WriteHeader(statusCode)
 			_, _ = w.Write([]byte(err.Error()))
 		} else {
-			clog.Debug(ctx, "uninstall request handled successfully")
+			clog.Debug(requestCtx, "uninstall request handled successfully")
 			w.WriteHeader(http.StatusOK)
 		}
 	}
@@ -184,7 +195,7 @@ func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorC
 			clog.Errorf(ctx, "could not write response: %v", err)
 		}
 	})
-	mux.HandleFunc("/uninstall", uninstallHandler(ai, reapNodeAgentJobs))
+	mux.HandleFunc("/uninstall", uninstallHandlerWithContext(ctx, ai, reapNodeAgentJobs))
 	mux.HandleFunc("/healthz", healthzHandler)
 
 	port := managerutil.GetEnv(ctx).MutatorWebhookPort
@@ -228,7 +239,7 @@ func ServeMutator(ctx context.Context, g log.Group, injectorCertGetter InjectorC
 // regardless of which mode created the listening process).
 func ServeNodeAgentUninstall(ctx context.Context, reapNodeAgentJobs NodeAgentReaper) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/uninstall", uninstallHandler(nil, reapNodeAgentJobs))
+	mux.HandleFunc("/uninstall", uninstallHandlerWithContext(ctx, nil, reapNodeAgentJobs))
 	mux.HandleFunc("/healthz", healthzHandler)
 
 	port := managerutil.GetEnv(ctx).MutatorWebhookPort
