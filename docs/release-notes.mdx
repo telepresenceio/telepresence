@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.33.0
 <Note>
+	<Title type="feature" docs="reference/attachments/cli">HTTP intercepts can follow every workload selected by one Service</Title>
+	<Body>
+A Kubernetes Service can route requests to more than one workload, such as stable and canary Deployments, while an intercept previously followed only the workload named by the user. HTTP intercepts without <code>--replace</code> now let each selected workload participate in one logical intercept, so filtered traffic reaches the same local handler regardless of which selected workload receives it. If the selected workloads or their traffic-agents cannot support shared interception, Telepresence warns and keeps the historical single-workload behavior instead of failing the intercept.
+  </Body>
+</Note>
+<Note>
 	<Title type="security">Daemons listen on the loopback interface only</Title>
 	<Body>
 The root daemon and the user daemon accepted connections on every network interface, so any host on the same network could reach their gRPC APIs. Both daemons now listen on 127.0.0.1 only. The managed root daemon installed by the macOS, Linux and Windows installers is bound the same way.

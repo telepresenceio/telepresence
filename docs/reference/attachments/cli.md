@@ -79,6 +79,25 @@ intercepted
     Volume Mount Point     : /tmp/telfs-893700837
 ```
 
+## Intercepting a Service shared by multiple workloads
+
+A Service can select pods owned by more than one workload, such as stable and canary
+Deployments behind one traffic-splitting Service. For an HTTP intercept without
+`--replace`, Telepresence lets every selected workload participate in one logical
+intercept. Filtered requests then reach the same local handler regardless of which
+selected workload receives the request.
+
+The traffic-manager can install traffic-agents in additional selected workloads when
+they are needed for this shared intercept. Removing the intercept does not uninstall
+those agents; use the normal uninstall command when they are no longer wanted. If a
+participating workload has no available agent, for example while it is scaled to zero,
+the whole intercept moves to `NO_AGENT` until that participant returns.
+
+Shared expansion is intentionally limited to HTTP intercepts without `--replace`.
+For TCP, `--replace`, older traffic-agents that do not advertise Service targets, or
+Service selectors that cannot be resolved safely, Telepresence logs a warning and
+uses only the workload named by the user.
+
 ## Port-forwarding an intercepted container's sidecars
 
 Sidecars are containers that sit in the same pod as an application
