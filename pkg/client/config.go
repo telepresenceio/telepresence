@@ -352,8 +352,10 @@ type Timeouts struct {
 	PrivateEndpointDial          time.Duration `json:"endpointDial,format:units"`
 	PrivateHelm                  time.Duration `json:"helm,format:units"`
 	PrivateIntercept             time.Duration `json:"intercept,format:units"`
+	PrivateInterceptEndpointDial time.Duration `json:"interceptEndpointDial,format:units"`
 	PrivateRoundtripLatency      time.Duration `json:"roundtripLatency,format:units"`
 	PrivateProxyDial             time.Duration `json:"proxyDial,format:units"`
+	PrivateTrafficAgentConnect   time.Duration `json:"trafficAgentConnect,format:units"`
 	PrivateTrafficManagerAPI     time.Duration `json:"trafficManagerAPI,format:units"`
 	PrivateTrafficManagerConnect time.Duration `json:"trafficManagerConnect,format:units"`
 	PrivateTrafficAgentArrival   time.Duration `json:"trafficAgentArrival,format:units"` // Deprecated.
@@ -380,11 +382,17 @@ const (
 	// TimeoutIntercept is the time to wait for an intercept after the agents has been installed.
 	TimeoutIntercept
 
+	// TimeoutInterceptEndpointDial is how long an intercepted agent should wait for the client to dial the local endpoint.
+	TimeoutInterceptEndpointDial
+
 	// TimeoutProxyDial is how long to wait for the proxy to establish an outbound connection.
 	TimeoutProxyDial
 
 	// TimeoutRoundtripLatency is how much to add to the EndpointDial timeout when establishing a remote connection.
 	TimeoutRoundtripLatency
+
+	// TimeoutTrafficAgentConnect is how long to wait for a direct connection to an agent pod.
+	TimeoutTrafficAgentConnect
 
 	// TimeoutTrafficManagerAPI is how long to wait for the traffic-manager API to connect.
 	TimeoutTrafficManagerAPI
@@ -434,10 +442,14 @@ func (t *Timeouts) Get(timeoutID TimeoutID) time.Duration {
 		timeoutVal = t.PrivateHelm
 	case TimeoutIntercept:
 		timeoutVal = t.PrivateIntercept
+	case TimeoutInterceptEndpointDial:
+		timeoutVal = t.PrivateInterceptEndpointDial
 	case TimeoutProxyDial:
 		timeoutVal = t.PrivateProxyDial
 	case TimeoutRoundtripLatency:
 		timeoutVal = t.PrivateRoundtripLatency
+	case TimeoutTrafficAgentConnect:
+		timeoutVal = t.PrivateTrafficAgentConnect
 	case TimeoutTrafficManagerAPI:
 		timeoutVal = t.PrivateTrafficManagerAPI
 	case TimeoutTrafficManagerConnect:
@@ -495,12 +507,18 @@ func (e timeoutError) Error() string {
 	case TimeoutIntercept:
 		yamlName = "intercept"
 		humanName = "intercept"
+	case TimeoutInterceptEndpointDial:
+		yamlName = "interceptEndpointDial"
+		humanName = "intercept local endpoint dial"
 	case TimeoutProxyDial:
 		yamlName = "proxyDial"
 		humanName = "proxy dial"
 	case TimeoutRoundtripLatency:
 		yamlName = "roundtripDelay"
 		humanName = "additional delay for tunnel roundtrip"
+	case TimeoutTrafficAgentConnect:
+		yamlName = "trafficAgentConnect"
+		humanName = "port-forward connection to a traffic agent"
 	case TimeoutTrafficManagerAPI:
 		yamlName = "trafficManagerAPI"
 		humanName = "traffic manager gRPC API"
@@ -537,11 +555,13 @@ func CheckTimeout(ctx context.Context, err error) error {
 const (
 	defaultTimeoutsClusterConnect        = 20 * time.Second
 	defaultTimeoutsConnectivityCheck     = 500 * time.Millisecond
-	defaultTimeoutsEndpointDial          = 3 * time.Second
+	defaultTimeoutsEndpointDial          = 15 * time.Second
 	defaultTimeoutsHelm                  = 30 * time.Second
 	defaultTimeoutsIntercept             = 30 * time.Second
+	defaultTimeoutsInterceptEndpointDial = 15 * time.Second
 	defaultTimeoutsProxyDial             = 5 * time.Second
 	defaultTimeoutsRoundtripLatency      = 2 * time.Second
+	defaultTimeoutsTrafficAgentConnect   = 15 * time.Second
 	defaultTimeoutsTrafficManagerAPI     = 15 * time.Second
 	defaultTimeoutsTrafficManagerConnect = 60 * time.Second
 	defaultTimeoutsFtpReadWrite          = 1 * time.Minute
@@ -556,8 +576,10 @@ var defaultTimeouts = Timeouts{ //nolint:gochecknoglobals // constant
 	PrivateEndpointDial:          defaultTimeoutsEndpointDial,
 	PrivateHelm:                  defaultTimeoutsHelm,
 	PrivateIntercept:             defaultTimeoutsIntercept,
+	PrivateInterceptEndpointDial: defaultTimeoutsInterceptEndpointDial,
 	PrivateProxyDial:             defaultTimeoutsProxyDial,
 	PrivateRoundtripLatency:      defaultTimeoutsRoundtripLatency,
+	PrivateTrafficAgentConnect:   defaultTimeoutsTrafficAgentConnect,
 	PrivateTrafficManagerAPI:     defaultTimeoutsTrafficManagerAPI,
 	PrivateTrafficManagerConnect: defaultTimeoutsTrafficManagerConnect,
 	PrivateFtpReadWrite:          defaultTimeoutsFtpReadWrite,
