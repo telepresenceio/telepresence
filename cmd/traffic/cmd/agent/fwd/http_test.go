@@ -127,6 +127,20 @@ func TestHTTPInterceptor_noFilters(t *testing.T) {
 	assert.True(t, result)
 }
 
+func TestObservedResponseWriterTracksStatusAndBytes(t *testing.T) {
+	rec := httptest.NewRecorder()
+	writer := &observedResponseWriter{ResponseWriter: rec}
+
+	writer.WriteHeader(http.StatusCreated)
+	n, err := writer.Write([]byte("hello"))
+
+	require.NoError(t, err)
+	require.Equal(t, 5, n)
+	require.Equal(t, http.StatusCreated, writer.statusCode)
+	require.EqualValues(t, 5, writer.bytes)
+	require.Same(t, rec, writer.Unwrap())
+}
+
 // fakeTapStream is a minimal tunnel.Stream that records everything sent to it.
 type fakeTapStream struct {
 	mu   sync.Mutex
