@@ -27,6 +27,14 @@ items:
   - version: 2.32.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Improve selected-intercept tunnel stability
+        body: >-
+          Selected-intercept tunnels now reconnect agent dial watchers with
+          backoff, clean up abandoned forwards more carefully, use separate
+          timeouts for agent connections and intercepted endpoints, and reject
+          dial requests when responder capacity is full instead of letting
+          work accumulate.
       - type: feature
         title: Guided traffic-manager setup with telepresence setup
         body: >-
