@@ -12,6 +12,8 @@ import (
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"sync/atomic"
+	"time"
 
 	"golang.org/x/net/http2"
 
@@ -21,6 +23,41 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
+
+const (
+	httpInterceptSlowAfter = 2 * time.Second
+	httpInterceptVerySlow  = 10 * time.Second
+)
+
+type observedResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	bytes      int64
+}
+
+func (w *observedResponseWriter) Header() http.Header {
+	return w.ResponseWriter.Header()
+}
+
+func (w *observedResponseWriter) WriteHeader(statusCode int) {
+	if w.statusCode == 0 {
+		w.statusCode = statusCode
+	}
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *observedResponseWriter) Write(p []byte) (int, error) {
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+	n, err := w.ResponseWriter.Write(p)
+	w.bytes += int64(n)
+	return n, err
+}
+
+func (w *observedResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
 
 func (f *tcp) protocols(ctx context.Context, plainText bool) *http.Protocols {
 	pr := new(http.Protocols)
@@ -237,6 +274,33 @@ func (f *tcp) serveHTTPIntercept(
 	f.mu.Lock()
 	sp := f.streamProvider
 	f.mu.Unlock()
+	requestID := f.httpRequestID.Add(1)
+	requestStart := time.Now()
+	method := request.Method
+	path := request.URL.RequestURI()
+	if path == "" {
+		path = request.URL.Path
+	}
+	host := request.Host
+	var slowLogged atomic.Bool
+	slowTimer := time.AfterFunc(httpInterceptSlowAfter, func() {
+		slowLogged.Store(true)
+		clog.Warnf(
+			ctx,
+			"HTTP selected intercept request still active after %s: request=%d intercept=%s clientSession=%s method=%s host=%q path=%q src=%s target=%s:%d",
+			time.Since(requestStart).Round(time.Millisecond),
+			requestID,
+			ii.Id,
+			ii.ClientSession.SessionId,
+			method,
+			host,
+			path,
+			src,
+			spec.TargetHost,
+			spec.TargetPort,
+		)
+	})
+	defer slowTimer.Stop()
 
 	metricsEnabled := sp != nil && sp.MetricsEnabled()
 	var ingressBytes, egressBytes *tunnel.CounterProbe
@@ -287,14 +351,43 @@ func (f *tcp) serveHTTPIntercept(
 	targetProxy := httputil.NewSingleHostReverseProxy(trg)
 	targetProxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
 		if errors.Is(err, errClientStream) {
-			clog.Warnf(ctx, "Intercept tunnel unavailable for %s %s; failing open to app container: %v", req.Method, req.URL.Path, err)
+			clog.Warnf(ctx, "HTTP selected intercept tunnel unavailable for request=%d %s %s; failing open to app container: %v", requestID, req.Method, req.URL.Path, err)
 			defaultHandler.ServeHTTP(rw, req)
 			return
 		}
+		clog.Warnf(ctx, "HTTP selected intercept proxy error for request=%d %s %s: %v", requestID, req.Method, req.URL.Path, err)
 		proxyErrorHandler(rw, req, err)
 	}
 	targetProxy.Transport = trn
-	targetProxy.ServeHTTP(writer, request)
+	observedWriter := &observedResponseWriter{ResponseWriter: writer}
+	targetProxy.ServeHTTP(observedWriter, request)
+
+	duration := time.Since(requestStart)
+	statusCode := observedWriter.statusCode
+	if statusCode == 0 {
+		statusCode = -1
+	}
+	if slowLogged.Load() || duration > httpInterceptSlowAfter || statusCode == -1 {
+		logFn := clog.Infof
+		if duration > httpInterceptVerySlow || statusCode == -1 {
+			logFn = clog.Warnf
+		}
+		logFn(
+			ctx,
+			"HTTP selected intercept request finished after %s: request=%d intercept=%s clientSession=%s method=%s host=%q path=%q src=%s target=%s status=%d responseBytes=%d",
+			duration.Round(time.Millisecond),
+			requestID,
+			ii.Id,
+			ii.ClientSession.SessionId,
+			method,
+			host,
+			path,
+			src,
+			trg,
+			statusCode,
+			observedWriter.bytes,
+		)
+	}
 
 	if metricsEnabled {
 		clog.Debugf(ctx, "Connection to %s ended. IngressBytes: %d, egressBytes: %d", trg, ingressBytes.GetValue(), egressBytes.GetValue())

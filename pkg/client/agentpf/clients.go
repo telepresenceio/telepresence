@@ -92,11 +92,16 @@ func (ac *client) Tunnel(ctx context.Context, opts ...grpc.CallOption) (tunnel.G
 	if err != nil {
 		return nil, err
 	}
+	start := time.Now()
 	clog.Tracef(ctx, "%s(%s) creating Tunnel over gRPC", ac, net.IP(ac.info.PodIp))
 	tc, err := cli.Tunnel(ctx, opts...)
+	elapsed := time.Since(start)
 	if err != nil {
-		clog.Tracef(ctx, "%s(%s) failed to create Tunnel over gRPC: %v", ac, net.IP(ac.info.PodIp), err)
+		clog.Warnf(ctx, "%s(%s) failed to create Tunnel over gRPC after %s: %v", ac, net.IP(ac.info.PodIp), elapsed.Round(time.Millisecond), err)
 		return nil, err
+	}
+	if elapsed > time.Second {
+		clog.Warnf(ctx, "%s(%s) created Tunnel over gRPC slowly in %s", ac, net.IP(ac.info.PodIp), elapsed.Round(time.Millisecond))
 	}
 	atomic.AddInt32(&ac.tunnelCount, 1)
 	clog.Tracef(ctx, "%s(%s) have %d active tunnels", ac, net.IP(ac.info.PodIp), atomic.LoadInt32(&ac.tunnelCount))
@@ -798,7 +803,7 @@ func (s *clients) teardown() {
 		}
 		return true
 	})
-	clog.Debugf(s, "WatchAgentPods ending with %d clients still active", activeCount)
+	clog.Infof(s, "WatchAgentPods ending with %d clients still active", activeCount)
 	s.disabled.Store(true)
 }
 
