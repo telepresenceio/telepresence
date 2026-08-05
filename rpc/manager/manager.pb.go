@@ -337,14 +337,17 @@ func (WorkloadEvent_Type) EnumDescriptor() ([]byte, []int) {
 // Telepresence client reports whenever it connects to the in-cluster
 // Manager.
 type ClientInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`           // user@hostname
-	Namespace     string                 `protobuf:"bytes,6,opt,name=namespace,proto3" json:"namespace,omitempty"` // namespace that the client is connected to
-	InstallId     string                 `protobuf:"bytes,2,opt,name=install_id,json=installId,proto3" json:"install_id,omitempty"`
-	Product       string                 `protobuf:"bytes,3,opt,name=product,proto3" json:"product,omitempty"` // "telepresence"
-	Version       string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`           // user@hostname
+	Namespace string                 `protobuf:"bytes,6,opt,name=namespace,proto3" json:"namespace,omitempty"` // namespace that the client is connected to
+	InstallId string                 `protobuf:"bytes,2,opt,name=install_id,json=installId,proto3" json:"install_id,omitempty"`
+	Product   string                 `protobuf:"bytes,3,opt,name=product,proto3" json:"product,omitempty"` // "telepresence"
+	Version   string                 `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	// Clients that set this can receive lightweight AgentInfo updates from the
+	// watch streams and fetch full container environments only when needed.
+	SupportsCompactAgentInfo bool `protobuf:"varint,7,opt,name=supports_compact_agent_info,json=supportsCompactAgentInfo,proto3" json:"supports_compact_agent_info,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *ClientInfo) Reset() {
@@ -412,6 +415,13 @@ func (x *ClientInfo) GetVersion() string {
 	return ""
 }
 
+func (x *ClientInfo) GetSupportsCompactAgentInfo() bool {
+	if x != nil {
+		return x.SupportsCompactAgentInfo
+	}
+	return false
+}
+
 // AgentInfo is the self-reported metadata that an Agent (app-sidecar)
 // reports at boot-up when it connects to the Telepresence Manager.
 type AgentInfo struct {
@@ -438,9 +448,13 @@ type AgentInfo struct {
 	// UDP port of this agent's QUIC listener, reachable only through the QUIC
 	// forwarder (see docs/reference/quic-transport-architecture.md, "Agent connections
 	// over QUIC"). 0 means this agent has no QUIC listener.
-	QuicPort      int32 `protobuf:"varint,16,opt,name=quic_port,json=quicPort,proto3" json:"quic_port,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	QuicPort int32 `protobuf:"varint,16,opt,name=quic_port,json=quicPort,proto3" json:"quic_port,omitempty"`
+	// True when this AgentInfo came from a lightweight watch snapshot and its
+	// container environment maps were intentionally omitted. Callers that need
+	// those maps must fetch a full AgentInfo through EnsureAgent.
+	ContainerEnvironmentOmitted bool `protobuf:"varint,17,opt,name=container_environment_omitted,json=containerEnvironmentOmitted,proto3" json:"container_environment_omitted,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *AgentInfo) Reset() {
@@ -576,6 +590,13 @@ func (x *AgentInfo) GetQuicPort() int32 {
 		return x.QuicPort
 	}
 	return 0
+}
+
+func (x *AgentInfo) GetContainerEnvironmentOmitted() bool {
+	if x != nil {
+		return x.ContainerEnvironmentOmitted
+	}
+	return false
 }
 
 // PortMapping describes a mapping from a port number in the intercepted container to
@@ -5102,7 +5123,7 @@ var File_manager_manager_proto protoreflect.FileDescriptor
 
 const file_manager_manager_proto_rawDesc = "" +
 	"\n" +
-	"\x15manager/manager.proto\x12\x14telepresence.manager\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x97\x01\n" +
+	"\x15manager/manager.proto\x12\x14telepresence.manager\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd6\x01\n" +
 	"\n" +
 	"ClientInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
@@ -5110,7 +5131,8 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\n" +
 	"install_id\x18\x02 \x01(\tR\tinstallId\x12\x18\n" +
 	"\aproduct\x18\x03 \x01(\tR\aproduct\x12\x18\n" +
-	"\aversion\x18\x04 \x01(\tR\aversionJ\x04\b\x05\x10\x06\"\xa7\b\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\x12=\n" +
+	"\x1bsupports_compact_agent_info\x18\a \x01(\bR\x18supportsCompactAgentInfoJ\x04\b\x05\x10\x06\"\xeb\b\n" +
 	"\tAgentInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04kind\x18\r \x01(\tR\x04kind\x12\x1c\n" +
@@ -5132,7 +5154,8 @@ const file_manager_manager_proto_rawDesc = "" +
 	"containers\x12\x1d\n" +
 	"\n" +
 	"node_agent\x18\x0f \x01(\bR\tnodeAgent\x12\x1b\n" +
-	"\tquic_port\x18\x10 \x01(\x05R\bquicPort\x1aS\n" +
+	"\tquic_port\x18\x10 \x01(\x05R\bquicPort\x12B\n" +
+	"\x1dcontainer_environment_omitted\x18\x11 \x01(\bR\x1bcontainerEnvironmentOmitted\x1aS\n" +
 	"\tMechanism\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aproduct\x18\x02 \x01(\tR\aproduct\x12\x18\n" +

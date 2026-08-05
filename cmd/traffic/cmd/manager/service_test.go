@@ -57,6 +57,137 @@ func dumps(o any) string {
 	return string(bs)
 }
 
+func onlyAgent(t *testing.T, agents map[string]*rpc.AgentInfo) *rpc.AgentInfo {
+	t.Helper()
+	require.Len(t, agents, 1)
+	for _, agent := range agents {
+		return agent
+	}
+	t.Fatal("agent map was unexpectedly empty")
+	return nil
+}
+
+func TestAgentInfoForWatchCompactsContainerEnvironments(t *testing.T) {
+	full := &rpc.AgentInfo{
+		Name:      "echo",
+		Namespace: "default",
+		Containers: map[string]*rpc.AgentInfo_ContainerInfo{
+			"app": {
+				Environment: map[string]string{"TOKEN": "large-value"},
+				MountPoint:  "/tel_app_mounts/app",
+				Mounts:      map[string]int32{"/tmp": 1},
+			},
+		},
+	}
+
+	require.Same(t, full, agentInfoForWatch(full, false))
+	compact := agentInfoForWatch(full, true)
+	require.True(t, compact.ContainerEnvironmentOmitted)
+	require.Nil(t, compact.Containers["app"].Environment)
+	require.Equal(t, full.Containers["app"].MountPoint, compact.Containers["app"].MountPoint)
+	require.Equal(t, full.Containers["app"].Mounts, compact.Containers["app"].Mounts)
+	require.Equal(t, map[string]string{"TOKEN": "large-value"}, full.Containers["app"].Environment)
+	require.Less(t, proto.Size(compact), proto.Size(full))
+}
+
+func TestWatchAgentsCompactCompatibility(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	conn := getTestClientConn(ctx, t, nil)
+	defer conn.Close()
+
+	client := rpc.NewManagerClient(conn)
+	clients := testdata.GetTestClients(t)
+	oldClient := proto.Clone(clients["alice"]).(*rpc.ClientInfo)
+	oldClient.Name = "old-client"
+	oldClient.InstallId = "old-client"
+	oldSession, err := client.ArriveAsClient(ctx, oldClient)
+	require.NoError(t, err)
+	oldWatch, err := client.WatchAgentsDelta(ctx, oldSession)
+	require.NoError(t, err)
+	_, err = oldWatch.Recv()
+	require.NoError(t, err)
+
+	newClient := proto.Clone(clients["alice"]).(*rpc.ClientInfo)
+	newClient.Name = "new-client"
+	newClient.InstallId = "new-client"
+	newClient.SupportsCompactAgentInfo = true
+	newSession, err := client.ArriveAsClient(ctx, newClient)
+	require.NoError(t, err)
+	newWatch, err := client.WatchAgentsDelta(ctx, newSession)
+	require.NoError(t, err)
+	_, err = newWatch.Recv()
+	require.NoError(t, err)
+
+	fullAgent := proto.Clone(testdata.GetTestAgents(t)["hello"]).(*rpc.AgentInfo)
+	fullAgent.Containers = map[string]*rpc.AgentInfo_ContainerInfo{
+		"app": {Environment: map[string]string{"TOKEN": "large-value"}},
+	}
+	agentSession, err := client.ArriveAsAgent(ctx, fullAgent)
+	require.NoError(t, err)
+
+	oldDelta, err := oldWatch.Recv()
+	require.NoError(t, err)
+	oldAgent := onlyAgent(t, oldDelta.Upserts)
+	require.False(t, oldAgent.ContainerEnvironmentOmitted)
+	require.Equal(t, map[string]string{"TOKEN": "large-value"}, oldAgent.Containers["app"].Environment)
+
+	newDelta, err := newWatch.Recv()
+	require.NoError(t, err)
+	compactAgent := onlyAgent(t, newDelta.Upserts)
+	require.True(t, compactAgent.ContainerEnvironmentOmitted)
+	require.Nil(t, compactAgent.Containers["app"].Environment)
+
+	_, err = client.Depart(ctx, agentSession)
+	require.NoError(t, err)
+	_, err = client.Depart(ctx, oldSession)
+	require.NoError(t, err)
+	_, err = client.Depart(ctx, newSession)
+	require.NoError(t, err)
+}
+
+func TestReconnectClientSkipsCompactAgentRestore(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	conn := getTestClientConn(ctx, t, nil)
+	defer conn.Close()
+
+	client := rpc.NewManagerClient(conn)
+	clientInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
+	clientInfo.Name = "reconnecting-client"
+	clientInfo.InstallId = "reconnecting-client"
+	session := &rpc.SessionInfo{SessionId: "reconnecting-client-session"}
+
+	fullAgent := proto.Clone(testdata.GetTestAgents(t)["hello"]).(*rpc.AgentInfo)
+	fullAgent.Name = "full"
+	fullAgent.PodName = "full-pod"
+	fullAgent.PodUid = "full-pod-uid"
+	fullAgent.Containers = map[string]*rpc.AgentInfo_ContainerInfo{
+		"app": {Environment: map[string]string{"TOKEN": "large-value"}},
+	}
+	compactAgent := proto.Clone(fullAgent).(*rpc.AgentInfo)
+	compactAgent.Name = "compact"
+	compactAgent.PodName = "compact-pod"
+	compactAgent.PodUid = "compact-pod-uid"
+	compactAgent.ContainerEnvironmentOmitted = true
+	compactAgent.Containers["app"].Environment = nil
+
+	_, err := client.ReconnectClient(ctx, &rpc.ReconnectClientRequest{
+		Session: session,
+		Client:  clientInfo,
+		Agents:  []*rpc.AgentInfo{compactAgent, fullAgent},
+	})
+	require.NoError(t, err)
+
+	watch, err := client.WatchAgentsDelta(ctx, session)
+	require.NoError(t, err)
+	delta, err := watch.Recv()
+	require.NoError(t, err)
+	restored := onlyAgent(t, delta.Upserts)
+	require.Equal(t, fullAgent.Name, restored.Name)
+	require.Equal(t, map[string]string{"TOKEN": "large-value"}, restored.Containers["app"].Environment)
+}
+
 func TestConnect(t *testing.T) {
 	// The fake clientset doesn't support the WatchListClient feature (no bookmark events),
 	// which is enabled by default in client-go v0.35+. Disable it for this test.
