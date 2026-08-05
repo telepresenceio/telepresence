@@ -630,7 +630,7 @@ func (s *State) RestoreAgent(ctx context.Context, id tunnel.SessionID, agent *rp
 		as.SetPrincipal(principal)
 	}
 	if _, exists := s.agents.LoadOrStore(id, as); exists {
-		return "", nil
+		return id, nil
 	}
 
 	s.intercepts.Range(func(interceptID string, intercept *Intercept) bool {
