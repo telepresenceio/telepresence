@@ -103,7 +103,7 @@ func (s *session) getSingleContainerName(ai *manager.AgentInfo) (name string, er
 
 func (s *session) validateAgentForIngest(ai *manager.AgentInfo) error {
 	if len(ai.Containers) == 0 {
-		return status.Error(codes.Unimplemented, fmt.Sprintf("traffic-manager %s has no support for ingest", s.managerVersion))
+		return status.Error(codes.Unimplemented, fmt.Sprintf("traffic-manager %s has no support for ingest", s.ManagerVersion()))
 	}
 	return nil
 }
@@ -127,7 +127,7 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 		return nil, err
 	}
 	if rq.NodeAgent && s.compareFinalizedManagerVersion(2, 30, 0) < 0 {
-		return nil, errcat.User.Newf("traffic-manager version %s has no support for node-agents", s.managerVersion)
+		return nil, errcat.User.Newf("traffic-manager version %s has no support for node-agents", s.ManagerVersion())
 	}
 	id := rq.Identifier
 	ns := id.Namespace

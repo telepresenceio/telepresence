@@ -139,9 +139,12 @@ func (s *session) watchInterceptsHandler(ctx context.Context) error {
 func (s *session) watchInterceptsLoop(ctx context.Context) error {
 	pat := newPodAccessTracker()
 	snapMap := make(map[string]*manager.InterceptInfo)
+	var managerGeneration uint64
 	err := watcher.WatchWithRetry(ctx, "WatchInterceptsDelta", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.InterceptInfoDelta], error) {
-			return s.ManagerClient().WatchInterceptsDelta(s, s.SessionInfo())
+			mClient, generation := s.managerClient()
+			managerGeneration = generation
+			return mClient.WatchInterceptsDelta(s, s.SessionInfo())
 		},
 		func(delta *manager.InterceptInfoDelta) error {
 			maps.DeltaUpdate(snapMap, delta.Upserts, delta.Removals)
@@ -149,19 +152,23 @@ func (s *session) watchInterceptsLoop(ctx context.Context) error {
 			return nil
 		}, func() error {
 			clear(snapMap)
-			return s.reconnectManager()
+			return s.reconnectManager(managerGeneration)
 		})
 	if err != nil && status.Code(err) == codes.Unimplemented {
 		// Fall back to streaming all intercepts if the traffic manager doesn't support delta updates.'
 		clog.Warnf(ctx, "WatchInterceptsDelta is not implemented by the traffic-manager, falling back to WatchIntercepts and full snapshots")
 		err = watcher.WatchWithRetry(ctx, "WatchIntercepts", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 			func(ctx context.Context) (grpc.ServerStreamingClient[manager.InterceptInfoSnapshot], error) {
-				return s.ManagerClient().WatchIntercepts(s, s.SessionInfo())
+				mClient, generation := s.managerClient()
+				managerGeneration = generation
+				return mClient.WatchIntercepts(s, s.SessionInfo())
 			},
 			func(snapshot *manager.InterceptInfoSnapshot) error {
 				s.handleInterceptSnapshot(pat, snapshot.Intercepts)
 				return nil
-			}, s.reconnectManager)
+			}, func() error {
+				return s.reconnectManager(managerGeneration)
+			})
 	}
 	// Handle as if we had an empty snapshot. This will ensure that port forwards and volume mounts are cancelled correctly.
 	s.handleInterceptSnapshot(pat, nil)
@@ -465,7 +472,7 @@ func (s *session) ensureNoPortConflict(spec *manager.InterceptSpec, ir *manager.
 
 //nolint:unparam // keep the full (major, minor, patch) form so version gates read uniformly
 func (s *session) compareFinalizedManagerVersion(major, minor, patch uint64) int {
-	mv := s.managerVersion
+	mv := s.ManagerVersion()
 	n := mv.Major - major
 	if n == 0 {
 		if n = mv.Minor - minor; n == 0 {
@@ -518,15 +525,15 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	}
 
 	if spec.Wiretap && s.compareFinalizedManagerVersion(2, 23, 0) < 0 {
-		return nil, errcat.User.Newf("traffic-manager version %s has no support for wiretaps", s.managerVersion)
+		return nil, errcat.User.Newf("traffic-manager version %s has no support for wiretaps", s.ManagerVersion())
 	}
 
 	if (spec.PortIdentifier == "all" || len(spec.PodPorts) > 0) && s.compareFinalizedManagerVersion(2, 22, 0) < 0 {
-		return nil, errcat.User.Newf("traffic-manager version %s has no support for multi-port intercepts", s.managerVersion)
+		return nil, errcat.User.Newf("traffic-manager version %s has no support for multi-port intercepts", s.ManagerVersion())
 	}
 
 	if spec.NodeAgent && s.compareFinalizedManagerVersion(2, 30, 0) < 0 {
-		return nil, errcat.User.Newf("traffic-manager version %s has no support for node-agents", s.managerVersion)
+		return nil, errcat.User.Newf("traffic-manager version %s has no support for node-agents", s.ManagerVersion())
 	}
 
 	_, err := netip.ParseAddr(spec.TargetHost)
@@ -550,7 +557,8 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	defer cancel()
 	var pi *manager.PreparedIntercept
 	for retry := 0; retry < 2; retry++ {
-		pi, err = s.ManagerClient().PrepareIntercept(timeoutCtx, mgrIr)
+		mClient, managerGeneration := s.managerClient()
+		pi, err = mClient.PrepareIntercept(timeoutCtx, mgrIr)
 		if err == nil {
 			break
 		}
@@ -563,7 +571,7 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 				if strings.HasPrefix(st.Message(), "Client session ") {
 					// The manager is not aware of this session. This can happen if the manager is restarted and
 					// none of our watchers have yet detected and remedied the situation.
-					err = s.reconnectManager()
+					err = s.reconnectManager(managerGeneration)
 					if err == nil {
 						continue
 					}

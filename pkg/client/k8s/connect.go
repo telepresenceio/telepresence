@@ -163,7 +163,7 @@ func (kc *Cluster) dialGRPC(dialCtx context.Context, address string, extra ...gr
 	opts := append(make([]grpc.DialOption, 0, 5+len(extra)),
 		grpc.WithContextDialer(portforward.Dialer(kc)),
 		grpc.WithResolvers(portforward.NewResolver(kc)),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 5 * time.Minute, Timeout: 20 * time.Second}),
 		grpc.WithIdleTimeout(0),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
