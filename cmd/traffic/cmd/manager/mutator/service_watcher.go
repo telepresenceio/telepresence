@@ -24,7 +24,7 @@ type affectedConfig struct {
 	sc  *agentconfig.Sidecar
 }
 
-func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Service, trustUID bool) []affectedConfig {
+func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Service, includeSelectorMatches bool) []affectedConfig {
 	references := func(ac *agentconfig.Sidecar) (k8sapi.Workload, error, bool) {
 		for _, cn := range ac.Containers {
 			for _, ic := range cn.Intercepts {
@@ -33,8 +33,15 @@ func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Serv
 				}
 			}
 		}
-		if trustUID {
+		if !includeSelectorMatches {
 			// A deleted service will only affect configs that matches its UID
+			return nil, nil, false
+		}
+		if len(svc.Spec.Selector) == 0 {
+			// A selectorless Service does not select pods by label. Existing
+			// UID claimants above still need regeneration when a selector is
+			// removed, but it must not make every workload in the namespace
+			// look newly selected.
 			return nil, nil, false
 		}
 
@@ -60,8 +67,8 @@ func (c *configWatcher) configsAffectedBySvc(ctx context.Context, svc *core.Serv
 	return affected
 }
 
-func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, trustUID bool) []affectedConfig {
-	return c.configsAffectedBySvc(ctx, svc, trustUID)
+func (c *configWatcher) affectedConfigs(ctx context.Context, svc *core.Service, includeSelectorMatches bool) []affectedConfig {
+	return c.configsAffectedBySvc(ctx, svc, includeSelectorMatches)
 }
 
 func (c *configWatcher) startServices(ctx context.Context, ns string) cache.SharedIndexInformer {
@@ -88,15 +95,15 @@ func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexI
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
 				if svc, ok := obj.(*core.Service); ok {
-					c.updateSvc(ctx, svc, false)
+					c.updateSvc(ctx, svc, true)
 				}
 			},
 			DeleteFunc: func(obj any) {
 				if svc, ok := obj.(*core.Service); ok {
-					c.updateSvc(ctx, svc, true)
+					c.updateSvc(ctx, svc, false)
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
 					if svc, ok := dfsu.Obj.(*core.Service); ok {
-						c.updateSvc(ctx, svc, true)
+						c.updateSvc(ctx, svc, false)
 					}
 				}
 			},
@@ -108,7 +115,7 @@ func (c *configWatcher) watchServices(ctx context.Context, ix cache.SharedIndexI
 		})
 }
 
-func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustUID bool) {
+func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, includeSelectorMatches bool) {
 	// Does the snapshot contain workloads that we didn't find using the service's Spec.Selector?
 	// If so, include them, or if workload for the config entry isn't found, delete that entry
 	img := managerutil.GetAgentImage(ctx)
@@ -120,7 +127,7 @@ func (c *configWatcher) updateSvc(ctx context.Context, svc *core.Service, trustU
 		clog.Error(ctx, err)
 		return
 	}
-	for _, ax := range c.affectedConfigs(ctx, svc, trustUID) {
+	for _, ax := range c.affectedConfigs(ctx, svc, includeSelectorMatches) {
 		ac := ax.sc
 		wl := ax.wl
 		if wl == nil {
