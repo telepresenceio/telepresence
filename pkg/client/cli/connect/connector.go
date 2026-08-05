@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -43,6 +44,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
+
+type LocalClientRedirect struct {
+	Remote    types.AddrPortProto
+	LocalPort uint16
+}
 
 //nolint:gochecknoglobals // extension point
 var QuitDaemonFuncs = []func(context.Context){
@@ -226,6 +232,7 @@ func EnsureSession(ctx context.Context, useLine string, required bool) (context.
 			return ctx, err
 		}
 	}
+
 	return daemon.WithSession(ctx, s), nil
 }
 
@@ -275,6 +282,75 @@ func ResolveRemoteReroute(ctx context.Context, ds *daemon.Session, pm string) (e
 		SrcPort:     uint32(newPort.Port),
 	})
 	return tpGrpc.FromGRPC(err)
+}
+
+func ResolveLocalClientRedirect(ctx context.Context, ds *daemon.Session, pm string) (err error) {
+	ix := strings.LastIndexByte(pm, ':')
+	if ix < 3 {
+		return fmt.Errorf("invalid local client redirect %s", pm)
+	}
+	localPort, err := types.ParsePortAndProto(pm[ix+1:])
+	if err != nil {
+		return fmt.Errorf("invalid local client redirect %s: local port %w", pm, err)
+	}
+	hostPort, err := resolveHostPort(ctx, ds, localPort.Proto, pm[:ix])
+	if err != nil {
+		return err
+	}
+	hpb, err := hostPort.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	_, err = ds.AddLocalClientRedirect(ctx, &daemonRpc.ReroutePortRequest{
+		DstHostPort: hpb,
+		SrcPort:     uint32(localPort.Port),
+	})
+	return tpGrpc.FromGRPC(err)
+}
+
+func RemoveLocalClientRedirect(ctx context.Context, ds *daemon.Session, hp string) (err error) {
+	proto := types.ProtoTCP
+	if ix := strings.LastIndexByte(hp, types.ProtoSeparator); ix > 0 {
+		proto, err = types.ParseProto(hp[ix+1:])
+		if err != nil {
+			return fmt.Errorf("invalid local client redirect %s: protocol %w", hp, err)
+		}
+		hp = hp[:ix]
+	}
+	hostPort, err := resolveHostPort(ctx, ds, proto, hp)
+	if err != nil {
+		return err
+	}
+	hpb, err := hostPort.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	_, err = ds.RemoveLocalClientRedirect(ctx, &daemonRpc.ReroutePortRequest{
+		DstHostPort: hpb,
+	})
+	return tpGrpc.FromGRPC(err)
+}
+
+func ListLocalClientRedirects(ctx context.Context, ds *daemon.Session) ([]LocalClientRedirect, error) {
+	rsp, err := ds.ListLocalClientRedirects(ctx, &emptypb.Empty{})
+	if err != nil {
+		return nil, tpGrpc.FromGRPC(err)
+	}
+	redirects := make([]LocalClientRedirect, 0, len(rsp.Redirects))
+	for _, redirect := range rsp.Redirects {
+		var remote types.AddrPortProto
+		if err := remote.UnmarshalBinary(redirect.DstHostPort); err != nil {
+			return nil, err
+		}
+		if redirect.LocalPort > math.MaxUint16 {
+			return nil, fmt.Errorf("invalid local client redirect local port %d", redirect.LocalPort)
+		}
+		redirects = append(redirects, LocalClientRedirect{
+			Remote:    remote,
+			LocalPort: uint16(redirect.LocalPort),
+		})
+	}
+	return redirects, nil
 }
 
 func resolveHostPort(ctx context.Context, ds *daemon.Session, proto types.Proto, hostPortStr string) (hostPort types.AddrPortProto, err error) {

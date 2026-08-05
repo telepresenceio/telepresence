@@ -23,43 +23,46 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Connector_Version_FullMethodName                 = "/telepresence.connector.Connector/Version"
-	Connector_RootDaemonVersion_FullMethodName       = "/telepresence.connector.Connector/RootDaemonVersion"
-	Connector_TrafficManagerVersion_FullMethodName   = "/telepresence.connector.Connector/TrafficManagerVersion"
-	Connector_AgentImageFQN_FullMethodName           = "/telepresence.connector.Connector/AgentImageFQN"
-	Connector_GetIntercept_FullMethodName            = "/telepresence.connector.Connector/GetIntercept"
-	Connector_Connect_FullMethodName                 = "/telepresence.connector.Connector/Connect"
-	Connector_CheckConnect_FullMethodName            = "/telepresence.connector.Connector/CheckConnect"
-	Connector_Disconnect_FullMethodName              = "/telepresence.connector.Connector/Disconnect"
-	Connector_GetClusterSubnets_FullMethodName       = "/telepresence.connector.Connector/GetClusterSubnets"
-	Connector_Status_FullMethodName                  = "/telepresence.connector.Connector/Status"
-	Connector_CanIntercept_FullMethodName            = "/telepresence.connector.Connector/CanIntercept"
-	Connector_Ingest_FullMethodName                  = "/telepresence.connector.Connector/Ingest"
-	Connector_GetIngest_FullMethodName               = "/telepresence.connector.Connector/GetIngest"
-	Connector_LeaveIngest_FullMethodName             = "/telepresence.connector.Connector/LeaveIngest"
-	Connector_CreateIntercept_FullMethodName         = "/telepresence.connector.Connector/CreateIntercept"
-	Connector_RemoveIntercept_FullMethodName         = "/telepresence.connector.Connector/RemoveIntercept"
-	Connector_RevokeIntercept_FullMethodName         = "/telepresence.connector.Connector/RevokeIntercept"
-	Connector_Uninstall_FullMethodName               = "/telepresence.connector.Connector/Uninstall"
-	Connector_List_FullMethodName                    = "/telepresence.connector.Connector/List"
-	Connector_WatchWorkloads_FullMethodName          = "/telepresence.connector.Connector/WatchWorkloads"
-	Connector_SetLogLevel_FullMethodName             = "/telepresence.connector.Connector/SetLogLevel"
-	Connector_Quit_FullMethodName                    = "/telepresence.connector.Connector/Quit"
-	Connector_GatherLogs_FullMethodName              = "/telepresence.connector.Connector/GatherLogs"
-	Connector_AddInterceptor_FullMethodName          = "/telepresence.connector.Connector/AddInterceptor"
-	Connector_RemoveInterceptor_FullMethodName       = "/telepresence.connector.Connector/RemoveInterceptor"
-	Connector_GetNamespaces_FullMethodName           = "/telepresence.connector.Connector/GetNamespaces"
-	Connector_GetKnownWorkloadKinds_FullMethodName   = "/telepresence.connector.Connector/GetKnownWorkloadKinds"
-	Connector_RemoteMountAvailability_FullMethodName = "/telepresence.connector.Connector/RemoteMountAvailability"
-	Connector_GetConfig_FullMethodName               = "/telepresence.connector.Connector/GetConfig"
-	Connector_SetDNSExcludes_FullMethodName          = "/telepresence.connector.Connector/SetDNSExcludes"
-	Connector_SetDNSMappings_FullMethodName          = "/telepresence.connector.Connector/SetDNSMappings"
-	Connector_GetAgentConfig_FullMethodName          = "/telepresence.connector.Connector/GetAgentConfig"
-	Connector_ResolveSyntheticIP_FullMethodName      = "/telepresence.connector.Connector/ResolveSyntheticIP"
-	Connector_LookupIP_FullMethodName                = "/telepresence.connector.Connector/LookupIP"
-	Connector_ResolvePort_FullMethodName             = "/telepresence.connector.Connector/ResolvePort"
-	Connector_RerouteLocalPort_FullMethodName        = "/telepresence.connector.Connector/RerouteLocalPort"
-	Connector_RerouteRemotePort_FullMethodName       = "/telepresence.connector.Connector/RerouteRemotePort"
+	Connector_Version_FullMethodName                   = "/telepresence.connector.Connector/Version"
+	Connector_RootDaemonVersion_FullMethodName         = "/telepresence.connector.Connector/RootDaemonVersion"
+	Connector_TrafficManagerVersion_FullMethodName     = "/telepresence.connector.Connector/TrafficManagerVersion"
+	Connector_AgentImageFQN_FullMethodName             = "/telepresence.connector.Connector/AgentImageFQN"
+	Connector_GetIntercept_FullMethodName              = "/telepresence.connector.Connector/GetIntercept"
+	Connector_Connect_FullMethodName                   = "/telepresence.connector.Connector/Connect"
+	Connector_CheckConnect_FullMethodName              = "/telepresence.connector.Connector/CheckConnect"
+	Connector_Disconnect_FullMethodName                = "/telepresence.connector.Connector/Disconnect"
+	Connector_GetClusterSubnets_FullMethodName         = "/telepresence.connector.Connector/GetClusterSubnets"
+	Connector_Status_FullMethodName                    = "/telepresence.connector.Connector/Status"
+	Connector_CanIntercept_FullMethodName              = "/telepresence.connector.Connector/CanIntercept"
+	Connector_Ingest_FullMethodName                    = "/telepresence.connector.Connector/Ingest"
+	Connector_GetIngest_FullMethodName                 = "/telepresence.connector.Connector/GetIngest"
+	Connector_LeaveIngest_FullMethodName               = "/telepresence.connector.Connector/LeaveIngest"
+	Connector_CreateIntercept_FullMethodName           = "/telepresence.connector.Connector/CreateIntercept"
+	Connector_RemoveIntercept_FullMethodName           = "/telepresence.connector.Connector/RemoveIntercept"
+	Connector_RevokeIntercept_FullMethodName           = "/telepresence.connector.Connector/RevokeIntercept"
+	Connector_Uninstall_FullMethodName                 = "/telepresence.connector.Connector/Uninstall"
+	Connector_List_FullMethodName                      = "/telepresence.connector.Connector/List"
+	Connector_WatchWorkloads_FullMethodName            = "/telepresence.connector.Connector/WatchWorkloads"
+	Connector_SetLogLevel_FullMethodName               = "/telepresence.connector.Connector/SetLogLevel"
+	Connector_Quit_FullMethodName                      = "/telepresence.connector.Connector/Quit"
+	Connector_GatherLogs_FullMethodName                = "/telepresence.connector.Connector/GatherLogs"
+	Connector_AddInterceptor_FullMethodName            = "/telepresence.connector.Connector/AddInterceptor"
+	Connector_RemoveInterceptor_FullMethodName         = "/telepresence.connector.Connector/RemoveInterceptor"
+	Connector_GetNamespaces_FullMethodName             = "/telepresence.connector.Connector/GetNamespaces"
+	Connector_GetKnownWorkloadKinds_FullMethodName     = "/telepresence.connector.Connector/GetKnownWorkloadKinds"
+	Connector_RemoteMountAvailability_FullMethodName   = "/telepresence.connector.Connector/RemoteMountAvailability"
+	Connector_GetConfig_FullMethodName                 = "/telepresence.connector.Connector/GetConfig"
+	Connector_SetDNSExcludes_FullMethodName            = "/telepresence.connector.Connector/SetDNSExcludes"
+	Connector_SetDNSMappings_FullMethodName            = "/telepresence.connector.Connector/SetDNSMappings"
+	Connector_GetAgentConfig_FullMethodName            = "/telepresence.connector.Connector/GetAgentConfig"
+	Connector_ResolveSyntheticIP_FullMethodName        = "/telepresence.connector.Connector/ResolveSyntheticIP"
+	Connector_LookupIP_FullMethodName                  = "/telepresence.connector.Connector/LookupIP"
+	Connector_ResolvePort_FullMethodName               = "/telepresence.connector.Connector/ResolvePort"
+	Connector_RerouteLocalPort_FullMethodName          = "/telepresence.connector.Connector/RerouteLocalPort"
+	Connector_RerouteRemotePort_FullMethodName         = "/telepresence.connector.Connector/RerouteRemotePort"
+	Connector_AddLocalClientRedirect_FullMethodName    = "/telepresence.connector.Connector/AddLocalClientRedirect"
+	Connector_RemoveLocalClientRedirect_FullMethodName = "/telepresence.connector.Connector/RemoveLocalClientRedirect"
+	Connector_ListLocalClientRedirects_FullMethodName  = "/telepresence.connector.Connector/ListLocalClientRedirects"
 )
 
 // ConnectorClient is the client API for Connector service.
@@ -161,6 +164,12 @@ type ConnectorClient interface {
 	RerouteLocalPort(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
 	RerouteRemotePort(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// AddLocalClientRedirect redirects traffic for a netip.AddrPort to localhost on a different port.
+	AddLocalClientRedirect(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// RemoveLocalClientRedirect stops redirecting traffic for a netip.AddrPort to localhost.
+	RemoveLocalClientRedirect(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// ListLocalClientRedirects lists active local client redirects.
+	ListLocalClientRedirects(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*daemon.LocalClientRedirects, error)
 }
 
 type connectorClient struct {
@@ -550,6 +559,36 @@ func (c *connectorClient) RerouteRemotePort(ctx context.Context, in *daemon.Rero
 	return out, nil
 }
 
+func (c *connectorClient) AddLocalClientRedirect(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Connector_AddLocalClientRedirect_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) RemoveLocalClientRedirect(ctx context.Context, in *daemon.ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Connector_RemoveLocalClientRedirect_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *connectorClient) ListLocalClientRedirects(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*daemon.LocalClientRedirects, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(daemon.LocalClientRedirects)
+	err := c.cc.Invoke(ctx, Connector_ListLocalClientRedirects_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ConnectorServer is the server API for Connector service.
 // All implementations must embed UnimplementedConnectorServer
 // for forward compatibility.
@@ -649,6 +688,12 @@ type ConnectorServer interface {
 	RerouteLocalPort(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error)
 	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
 	RerouteRemotePort(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error)
+	// AddLocalClientRedirect redirects traffic for a netip.AddrPort to localhost on a different port.
+	AddLocalClientRedirect(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error)
+	// RemoveLocalClientRedirect stops redirecting traffic for a netip.AddrPort to localhost.
+	RemoveLocalClientRedirect(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error)
+	// ListLocalClientRedirects lists active local client redirects.
+	ListLocalClientRedirects(context.Context, *emptypb.Empty) (*daemon.LocalClientRedirects, error)
 	mustEmbedUnimplementedConnectorServer()
 }
 
@@ -769,6 +814,15 @@ func (UnimplementedConnectorServer) RerouteLocalPort(context.Context, *daemon.Re
 }
 func (UnimplementedConnectorServer) RerouteRemotePort(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method RerouteRemotePort not implemented")
+}
+func (UnimplementedConnectorServer) AddLocalClientRedirect(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method AddLocalClientRedirect not implemented")
+}
+func (UnimplementedConnectorServer) RemoveLocalClientRedirect(context.Context, *daemon.ReroutePortRequest) (*emptypb.Empty, error) {
+	return nil, status.Error(codes.Unimplemented, "method RemoveLocalClientRedirect not implemented")
+}
+func (UnimplementedConnectorServer) ListLocalClientRedirects(context.Context, *emptypb.Empty) (*daemon.LocalClientRedirects, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListLocalClientRedirects not implemented")
 }
 func (UnimplementedConnectorServer) mustEmbedUnimplementedConnectorServer() {}
 func (UnimplementedConnectorServer) testEmbeddedByValue()                   {}
@@ -1450,6 +1504,60 @@ func _Connector_RerouteRemotePort_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Connector_AddLocalClientRedirect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(daemon.ReroutePortRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).AddLocalClientRedirect(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_AddLocalClientRedirect_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).AddLocalClientRedirect(ctx, req.(*daemon.ReroutePortRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_RemoveLocalClientRedirect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(daemon.ReroutePortRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).RemoveLocalClientRedirect(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_RemoveLocalClientRedirect_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).RemoveLocalClientRedirect(ctx, req.(*daemon.ReroutePortRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Connector_ListLocalClientRedirects_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(emptypb.Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ConnectorServer).ListLocalClientRedirects(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Connector_ListLocalClientRedirects_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ConnectorServer).ListLocalClientRedirects(ctx, req.(*emptypb.Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Connector_ServiceDesc is the grpc.ServiceDesc for Connector service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1600,6 +1708,18 @@ var Connector_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RerouteRemotePort",
 			Handler:    _Connector_RerouteRemotePort_Handler,
+		},
+		{
+			MethodName: "AddLocalClientRedirect",
+			Handler:    _Connector_AddLocalClientRedirect_Handler,
+		},
+		{
+			MethodName: "RemoveLocalClientRedirect",
+			Handler:    _Connector_RemoveLocalClientRedirect_Handler,
+		},
+		{
+			MethodName: "ListLocalClientRedirects",
+			Handler:    _Connector_ListLocalClientRedirects_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

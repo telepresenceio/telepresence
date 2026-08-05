@@ -1,0 +1,25 @@
+---
+title: telepresence local-client-redirect add
+description: Redirect client traffic for a remote host and port to localhost
+hide_table_of_contents: true
+---
+
+Redirect client traffic for a remote host and port to localhost
+
+### Usage:
+```
+  telepresence local-client-redirect add &lt;host&gt;:&lt;port&gt;:&lt;local-port&gt;[/{tcp,udp}] [flags]
+```
+
+### Flags:
+```
+  -h, --help   help for add
+```
+
+### Global Flags:
+```
+      --config string     Path to the Telepresence configuration file
+      --format string     Set the output format, supported values are 'json', 'yaml', 'json-stream', and 'default' (default &quot;default&quot;)
+      --progress string   Set type of progress output (auto, tty, plain, json, quiet) (default &quot;auto&quot;)
+      --use string        Match expression that uniquely identifies the daemon container
+```

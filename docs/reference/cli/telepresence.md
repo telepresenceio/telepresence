@@ -56,6 +56,7 @@ result in a password prompt.
 | [list](telepresence_list) | List current intercepts |
 | [list-contexts](telepresence_list-contexts) | Show all contexts |
 | [list-namespaces](telepresence_list-namespaces) | Show all namespaces |
+| [local-client-redirect](telepresence_local-client-redirect) | Manage local client redirects |
 | [loglevel](telepresence_loglevel) | Temporarily change the log-level of the traffic-manager, traffic-agent, and user and root daemons |
 | [mcp](telepresence_mcp) | MCP server management |
 | [quit](telepresence_quit) | Tell telepresence daemons to quit |

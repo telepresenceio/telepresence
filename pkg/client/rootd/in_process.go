@@ -114,6 +114,28 @@ func (rd *InProcSession) RerouteRemotePort(_ context.Context, request *rpc.Rerou
 	return &empty.Empty{}, nil
 }
 
+func (rd *InProcSession) AddLocalClientRedirect(_ context.Context, request *rpc.ReroutePortRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	var ap types.AddrPortProto
+	if err := ap.UnmarshalBinary(request.DstHostPort); err != nil {
+		return nil, err
+	}
+	rd.addLocalClientRedirect(ap, uint16(request.SrcPort))
+	return &empty.Empty{}, nil
+}
+
+func (rd *InProcSession) RemoveLocalClientRedirect(_ context.Context, request *rpc.ReroutePortRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
+	var ap types.AddrPortProto
+	if err := ap.UnmarshalBinary(request.DstHostPort); err != nil {
+		return nil, err
+	}
+	rd.removeLocalClientRedirect(ap)
+	return &empty.Empty{}, nil
+}
+
+func (rd *InProcSession) ListLocalClientRedirects(context.Context, *empty.Empty, ...grpc.CallOption) (*rpc.LocalClientRedirects, error) {
+	return &rpc.LocalClientRedirects{Redirects: rd.listLocalClientRedirects()}, nil
+}
+
 func (rd *InProcSession) WaitForAgentIP(ctx context.Context, request *rpc.WaitForAgentIPRequest, _ ...grpc.CallOption) (*rpc.WaitForAgentIPResponse, error) {
 	return rd.waitForAgentIP(ctx, request)
 }
