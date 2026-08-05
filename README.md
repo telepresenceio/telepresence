@@ -55,7 +55,7 @@ Thank you to the sponsors who support the development of Telepresence:
 
 - [OpenAI](https://openai.com)
 
-You can support the project too, via [GitHub Sponsors](https://github.com/sponsors/thallgren).
+You can support the project too, via [GitHub Sponsors](https://github.com/sponsors/telepresenceio).
 
 ## Contributing
 
