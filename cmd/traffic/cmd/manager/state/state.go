@@ -720,8 +720,9 @@ func (s *State) WatchWorkloads(ctx context.Context, ns string) (ch <-chan []Even
 }
 
 // UpdateIntercept applies a given mutator function to the stored intercept with interceptID;
-// storing and returning the result.  If the given intercept does not exist, then the mutator
-// function is not run, and nil is returned.
+// storing and returning the result. If the mutator leaves the intercept semantically unchanged,
+// the current value is returned without updating ModifiedAt. If the given intercept does not
+// exist, then the mutator function is not run, and nil is returned.
 //
 // This does not lock; but instead uses CAS and may therefore call the mutator function multiple
 // times.  So: it is safe to perform blocking operations in your mutator function, but you must take
@@ -736,6 +737,9 @@ func (s *State) UpdateIntercept(interceptID string, apply func(*Intercept)) *Int
 
 		newInfo := cur.Clone()
 		apply(newInfo)
+		if interceptEqual(cur, newInfo) {
+			return cur
+		}
 		newInfo.ModifiedAt = timestamppb.Now()
 
 		swapped := s.intercepts.CompareAndSwap(newInfo.Id, cur, newInfo)
