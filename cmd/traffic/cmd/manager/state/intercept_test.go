@@ -724,8 +724,10 @@ func TestWaitForAgents_AccumulatesToExpectedCount(t *testing.T) {
 }
 
 // TestAddIntercept_NodeAgent_ReportsAttach verifies that a successful
-// node-agent AddIntercept emits a "manager.attach" usage report carrying
-// agent.type=node and the intercept's mechanism.
+// node-agent AddIntercept stays scoped to its requested workload even when
+// PrepareIntercept supplied a shared-Service target, and emits a
+// "manager.attach" usage report carrying agent.type=node and the intercept's
+// mechanism.
 func TestAddIntercept_NodeAgent_ReportsAttach(t *testing.T) {
 	t.Parallel()
 
@@ -781,25 +783,38 @@ func TestAddIntercept_NodeAgent_ReportsAttach(t *testing.T) {
 
 	// The node-agent Job's own agent session is already registered by the
 	// time AddIntercept waits for it, mirroring waitForAgents' immediate-wait
-	// property exercised elsewhere in this file.
-	s.agents.Store(sessionID, &AgentSession{AgentInfo: &rpc.AgentInfo{
-		Name: "test-agent", Namespace: ns, NodeAgent: true, PodUid: "uid-1", PodName: "test-agent-abc123",
-	}})
+	// property exercised elsewhere in this file. A sidecar for another
+	// workload already claims the same Service target; it must not join this
+	// requested-workload-only node-agent intercept.
+	nodeAgent := serviceAgent("test-agent", "test-agent-abc123", "10.0.0.1")
+	nodeAgent.NodeAgent = true
+	s.agents.Store(sessionID, nodeAgent)
+	sibling := serviceAgent("test-agent-canary", "test-agent-canary-abc123", "10.0.0.2")
+	s.agents.Store(tunnel.SessionID("sibling"), sibling)
 
 	cir := &rpc.CreateInterceptRequest{
 		Session: &rpc.SessionInfo{SessionId: string(sessionID)},
 		InterceptSpec: &rpc.InterceptSpec{
 			Name: "ic1", Client: "userA@hostA", Agent: "test-agent", Namespace: ns,
-			WorkloadKind: string(k8sapi.DeploymentKind), NodeAgent: true, Wiretap: true, Mechanism: "tcp",
+			WorkloadKind: string(k8sapi.DeploymentKind), NodeAgent: true, Wiretap: true, Mechanism: "http",
+			ServiceUid: "shared-service-uid", ServiceName: "example-service", ServicePort: 80, Protocol: "TCP",
 		},
 	}
 	_, ii, err := s.AddIntercept(ctx, cir)
 	require.NoError(t, err)
 	require.NotNil(t, ii)
+	require.False(t, serviceScopedIntercept(ii.Spec))
+	require.Empty(t, ii.Spec.ServiceUid)
+	require.Zero(t, ii.Spec.ServicePort)
+	require.Empty(t, ii.Spec.ServicePortName)
+	require.Equal(t, "example-service", ii.Spec.ServiceName)
+	require.Empty(t, ii.ServiceWorkloads)
+	require.True(t, AgentMatchesIntercept(nodeAgent.AgentInfo, ii.Spec))
+	require.False(t, AgentMatchesIntercept(sibling.AgentInfo, ii.Spec))
 
 	reports := sink.Drain(0)
 	require.Len(t, reports, 1)
 	assert.Equal(t, "manager.attach", reports[0].Topic)
 	assert.Equal(t, "node", reports[0].Entries["agent.type"])
-	assert.Equal(t, "tcp", reports[0].Entries["mechanism"])
+	assert.Equal(t, "http", reports[0].Entries["mechanism"])
 }

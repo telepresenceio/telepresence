@@ -21,6 +21,12 @@ The agent injector reused a cached sidecar config across concurrent pod admissio
   </Body>
 </Note>
 <Note>
+	<Title type="feature" docs="reference/attachments/cli">HTTP intercepts can follow every workload selected by one Service</Title>
+	<Body>
+A Kubernetes Service can route requests to more than one workload, such as stable and canary Deployments, while an intercept previously followed only the workload named by the user. HTTP intercepts without <code>--replace</code> now let each selected workload participate in one logical intercept, so filtered traffic reaches the same local handler regardless of which selected workload receives it. If the selected workloads or their traffic-agents cannot support shared interception, Telepresence warns and keeps the historical single-workload behavior instead of failing the intercept.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="reference/setup">Guided traffic-manager setup with telepresence setup</Title>
 	<Body>
 The new <code>telepresence setup</code> command analyzes the cluster (install privileges, QUIC and node-agent viability, webhook reachability, namespace scale, routing conflicts, and any existing installation), asks only the questions the findings leave open, and then validates, writes, or applies a fully configured traffic-manager Helm install. <code>--output</code> produces a normal Helm values file for GitOps, <code>--input</code> re-runs without repeating prior decisions (and is also how every answer can be preset, keeping the command's own flag surface small), and <code>--apply</code> installs or upgrades with post-apply verification, including a real QUIC reachability check. When install privileges are missing, the report itemizes exactly what to hand to a cluster admin instead of a dead end, and <code>telepresence setup --format json</code> is a convenient attachment for bug reports.

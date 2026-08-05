@@ -196,6 +196,13 @@ func TestIsInterceptedBy(t *testing.T) {
 	}
 
 	clientID := tunnel.SessionID("client")
+	agent := func(ip, name, namespace string) *AgentSession {
+		return &AgentSession{AgentInfo: &manager.AgentInfo{
+			Name:      name,
+			Namespace: namespace,
+			PodIp:     ip,
+		}}
+	}
 
 	st.intercepts.Store("http", &Intercept{InterceptInfo: &manager.InterceptInfo{
 		Id:          "http",
@@ -241,17 +248,14 @@ func TestIsInterceptedBy(t *testing.T) {
 		},
 	}})
 
-	// Any ACTIVE intercept of the workload marks it intercepted by its
-	// client, regardless of mechanism or filters.
-	require.True(t, st.IsInterceptedBy("demo", "default", clientID))
-	require.True(t, st.IsInterceptedBy("api", "default", clientID))
-
-	// A different workload, a different namespace, a different client, or a
-	// non-ACTIVE disposition does not.
-	require.False(t, st.IsInterceptedBy("other", "default", clientID))
-	require.False(t, st.IsInterceptedBy("demo", "other", clientID))
-	require.False(t, st.IsInterceptedBy("demo", "default", tunnel.SessionID("other-client")))
-	require.False(t, st.IsInterceptedBy("queued", "default", clientID))
+	require.True(t, st.IsInterceptedBy(agent("10.0.0.1", "demo", "default"), clientID))
+	require.True(t, st.IsInterceptedBy(agent("10.0.0.2", "demo", "default"), clientID))
+	require.True(t, st.IsInterceptedBy(agent("10.0.0.3", "api", "default"), clientID))
+	require.True(t, st.IsInterceptedBy(agent("10.0.0.4", "api", "default"), clientID))
+	require.False(t, st.IsInterceptedBy(agent("10.0.0.2", "other", "default"), clientID))
+	require.False(t, st.IsInterceptedBy(agent("10.0.0.2", "demo", "other"), clientID))
+	require.False(t, st.IsInterceptedBy(agent("10.0.0.1", "demo", "default"), tunnel.SessionID("other-client")))
+	require.False(t, st.IsInterceptedBy(agent("10.0.0.5", "queued", "default"), clientID))
 }
 
 func TestSuiteState(testing *testing.T) {

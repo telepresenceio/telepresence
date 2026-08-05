@@ -39,9 +39,28 @@ func NewInterceptTarget(ics []*Intercept) InterceptTarget {
 }
 
 func (cp InterceptTarget) MatchForSpec(spec *manager.InterceptSpec) bool {
+	proto := types.FromK8sProtocol(core.Protocol(spec.Protocol))
+	if spec.ServiceUid != "" {
+		for _, ic := range cp {
+			if string(ic.ServiceUID) != spec.ServiceUid || ic.Protocol != proto {
+				continue
+			}
+			switch {
+			case spec.ServicePort > 0:
+				if ic.ServicePort == uint16(spec.ServicePort) {
+					return true
+				}
+			case spec.ServicePortName != "":
+				if ic.ServicePortName == spec.ServicePortName {
+					return true
+				}
+			}
+		}
+		return false
+	}
 	ic := cp[0]
 	cnPort := uint16(spec.ContainerPort)
-	return cnPort == ic.ContainerPort && ic.Protocol == types.FromK8sProtocol(core.Protocol(spec.Protocol))
+	return cnPort == ic.ContainerPort && ic.Protocol == proto
 }
 
 func (cp InterceptTarget) AgentPort() uint16 {

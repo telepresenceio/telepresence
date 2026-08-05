@@ -86,12 +86,23 @@ func (pm *ProviderMux) CreateClientStream(ctx context.Context, tag tunnel.Tag, s
 	return pm.AgentProvider.CreateClientStream(ctx, tag, sessionID, id, roundTripLatency, dialTimeout)
 }
 
+// containerForIntercept returns the local container that should review and
+// serve an intercept. A service-scoped intercept can be shared by workloads
+// whose matching containers have different names, so the matched forwarder
+// target wins over the primary workload's container name in that case.
+func (fs *fwdState) containerForIntercept(spec *manager.InterceptSpec) string {
+	if spec.ServiceUid != "" && fs.intercept.MatchForSpec(spec) {
+		return fs.container
+	}
+	if spec.ContainerName != "" {
+		return spec.ContainerName
+	}
+	return fs.container
+}
+
 // processWiretapIntercept handles wiretap intercepts which can always be active alongside others.
 func (fs *fwdState) processWiretapIntercept(ii *manager.InterceptInfo) *manager.ReviewInterceptRequest {
-	container := ii.Spec.ContainerName
-	if container == "" {
-		container = fs.container
-	}
+	container := fs.containerForIntercept(ii.Spec)
 	cs := fs.containerStates[container]
 	if cs == nil {
 		return &manager.ReviewInterceptRequest{
@@ -158,10 +169,7 @@ func (fs *fwdState) processRegularIntercept(
 	}
 
 	// No conflict detected, allow this intercept to become active
-	container := ii.Spec.ContainerName
-	if container == "" {
-		container = fs.container
-	}
+	container := fs.containerForIntercept(ii.Spec)
 	cs := fs.containerStates[container]
 	if cs == nil {
 		return &manager.ReviewInterceptRequest{
