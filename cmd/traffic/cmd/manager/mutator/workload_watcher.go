@@ -18,6 +18,14 @@ import (
 )
 
 func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndexInformer) (cache.ResourceEventHandlerRegistration, error) {
+	deleteWorkload := func(wl k8sapi.Workload) {
+		c.Delete(wl.GetName(), wl.GetNamespace())
+		c.deleteEvictionState(WorkloadKey{
+			Name:      wl.GetName(),
+			Namespace: wl.GetNamespace(),
+			Kind:      wl.GetKind(),
+		})
+	}
 	return ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
@@ -28,11 +36,11 @@ func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndex
 			DeleteFunc: func(obj any) {
 				if wl, ok := workload.FromAny(obj); ok {
 					if len(wl.GetOwnerReferences()) == 0 {
-						c.Delete(wl.GetName(), wl.GetNamespace())
+						deleteWorkload(wl)
 					}
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
 					if wl, ok = workload.FromAny(dfsu.Obj); ok && len(wl.GetOwnerReferences()) == 0 {
-						c.Delete(wl.GetName(), wl.GetNamespace())
+						deleteWorkload(wl)
 					}
 				}
 			},
@@ -60,7 +68,10 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		cmpopts.IgnoreMapEntries(func(k, _ string) bool {
 			return k == annotation.RestartedAt
 		})) {
-		return
+		if !workloadUpdateInProgress(oldWl) || workloadUpdateInProgress(wl) {
+			return
+		}
+		clog.Debugf(ctx, "Reconciling agent config after %s finished updating", wl)
 	}
 
 	switch ia {
