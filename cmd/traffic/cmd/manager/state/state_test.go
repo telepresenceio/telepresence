@@ -254,6 +254,42 @@ func TestIsInterceptedBy(t *testing.T) {
 	require.False(t, st.IsInterceptedBy("queued", "default", clientID))
 }
 
+func TestUpdateInterceptSkipsSemanticNoOp(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.NewContext(t, false)
+	st := &State{
+		backgroundCtx: ctx,
+		intercepts:    cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+	}
+	current := &Intercept{InterceptInfo: &manager.InterceptInfo{
+		Id:          "client:demo",
+		Disposition: manager.InterceptDispositionType_ACTIVE,
+		Spec:        &manager.InterceptSpec{Name: "demo"},
+	}}
+	st.intercepts.Store(current.Id, current)
+
+	applyCalls := 0
+	updated := st.UpdateIntercept(current.Id, func(intercept *Intercept) {
+		applyCalls++
+		intercept.Disposition = manager.InterceptDispositionType_ACTIVE
+	})
+
+	require.Equal(t, 1, applyCalls)
+	require.Same(t, current, updated)
+	stored, ok := st.GetIntercept(current.Id)
+	require.True(t, ok)
+	require.Same(t, current, stored)
+	require.Nil(t, stored.ModifiedAt)
+
+	updated = st.UpdateIntercept(current.Id, func(intercept *Intercept) {
+		intercept.Message = "updated"
+	})
+
+	require.NotSame(t, current, updated)
+	require.NotNil(t, updated.ModifiedAt)
+}
+
 func TestSuiteState(testing *testing.T) {
 	suite.Run(testing, new(suiteState))
 }
