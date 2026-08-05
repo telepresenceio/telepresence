@@ -23,6 +23,8 @@ func TestGetConfig(t *testing.T) {
 timeouts:
   clusterConnect: 25s
   proxyDial: 17s
+  trafficAgentConnect: 19s
+  interceptEndpointDial: 21s
 logLevels:
   rootDaemon: trace
 dns:
@@ -60,8 +62,10 @@ routing:
 
 	cfg = GetConfig(c)
 	to := cfg.Timeouts()
-	assert.Equal(t, 25*time.Second, to.PrivateClusterConnect)    // from user
-	assert.Equal(t, 17*time.Second, to.PrivateProxyDial)         // from user
+	assert.Equal(t, 25*time.Second, to.PrivateClusterConnect) // from user
+	assert.Equal(t, 17*time.Second, to.PrivateProxyDial)      // from user
+	assert.Equal(t, 19*time.Second, to.PrivateTrafficAgentConnect)
+	assert.Equal(t, 21*time.Second, to.PrivateInterceptEndpointDial)
 	assert.Equal(t, clog.LevelTrace, cfg.LogLevels().RootDaemon) // from user
 
 	assert.Equal(t, "testregistry.io", cfg.Images().PrivateRegistry)                             // from user
