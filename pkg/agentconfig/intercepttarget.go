@@ -57,6 +57,10 @@ func (cp InterceptTarget) TargetPortNumeric() bool {
 	return false
 }
 
+func (cp InterceptTarget) InactivePort() uint16 {
+	return cp[0].InactivePort
+}
+
 func (cp InterceptTarget) ContainerPort() uint16 {
 	return cp[0].ContainerPort
 }

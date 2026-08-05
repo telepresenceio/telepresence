@@ -182,6 +182,9 @@ type Intercept struct {
 	// The number of the intercepted container port
 	ContainerPort uint16 `json:"containerPort,omitzero"`
 
+	// Port used to reach the application when no intercept matches, when non-zero.
+	InactivePort uint16 `json:"inactivePort,omitzero"`
+
 	// Number of intercepted service port
 	ServicePort uint16 `json:"servicePort,omitzero"`
 
@@ -324,8 +327,8 @@ func (s *Sidecar) InterceptTarget(containerPort uint16, proto types.Proto) (*Con
 }
 
 // InterceptorInactivePort returns the port that the interceptor should write to when it isn't serving
-// an intercept. The port will be the container port unless some service uses a numeric target port
-// that targets the container port.
+// an intercept. An explicit inactive port takes precedence. Otherwise, the port will be the container
+// port unless some service uses a numeric target port that targets the container port.
 //
 // When a numeric target port is specified, the init-container sets up an iptables NAT PREROUTING rule
 // to redirect all traffic destined for the container port to the corresponding port where the agent's
@@ -335,8 +338,13 @@ func (s *Sidecar) InterceptTarget(containerPort uint16, proto types.Proto) (*Con
 // which is redirected to the container port via an iptables NAT OUTPUT rule.
 func (s *Sidecar) InterceptorInactivePort(containerPort uint16, proto types.Proto) uint16 {
 	_, it := s.InterceptTarget(containerPort, proto)
-	if it != nil && it.TargetPortNumeric() {
-		return s.ProxyPort(it.AgentPort())
+	if it != nil {
+		if inactivePort := it.InactivePort(); inactivePort != 0 {
+			return inactivePort
+		}
+		if it.TargetPortNumeric() {
+			return s.ProxyPort(it.AgentPort())
+		}
 	}
 	return containerPort
 }

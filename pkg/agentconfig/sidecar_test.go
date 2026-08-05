@@ -7,6 +7,36 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
+func TestInterceptorInactivePort(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		numericTarget bool
+		inactivePort  uint16
+		want          uint16
+	}{
+		{name: "named target", want: 8000},
+		{name: "numeric target", numericTarget: true, want: 9912},
+		{name: "explicit inactive port", numericTarget: true, inactivePort: 8399, want: 8399},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc := &Sidecar{Containers: []*Container{{
+				Name: "app",
+				Intercepts: []*Intercept{{
+					ContainerPort:     8000,
+					InactivePort:      tc.inactivePort,
+					AgentPort:         9900,
+					Protocol:          types.ProtoTCP,
+					TargetPortNumeric: tc.numericTarget,
+				}},
+			}}}
+
+			if got := sc.InterceptorInactivePort(8000, types.ProtoTCP); got != tc.want {
+				t.Fatalf("InterceptorInactivePort() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAgentGIDFromEnv(t *testing.T) {
 	t.Run("unset", func(t *testing.T) {
 		gid, ok, err := AgentGIDFromEnv()
