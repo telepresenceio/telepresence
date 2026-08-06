@@ -3,15 +3,72 @@ package eventwatch
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	core "k8s.io/api/core/v1"
 	events "k8s.io/api/events/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
+
+type recordingWatch struct {
+	result   chan watch.Event
+	stopped  chan struct{}
+	stopOnce sync.Once
+}
+
+func newRecordingWatch() *recordingWatch {
+	return &recordingWatch{
+		result:  make(chan watch.Event, 1),
+		stopped: make(chan struct{}),
+	}
+}
+
+func (w *recordingWatch) Stop() {
+	w.stopOnce.Do(func() { close(w.stopped) })
+}
+
+func (w *recordingWatch) ResultChan() <-chan watch.Event {
+	return w.result
+}
+
+func TestWatchWarningsStopsWhenDeliveryIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	w := newRecordingWatch()
+	ki := fake.NewSimpleClientset()
+	ki.PrependWatchReactor("events", func(k8stesting.Action) (bool, watch.Interface, error) {
+		return true, w, nil
+	})
+
+	_, err := WatchWarnings(ctx, ki, "default", "echo")
+	require.NoError(t, err)
+
+	// Do not receive from the returned channel. This reproduces waitForAgents
+	// returning while a matching event is in flight.
+	w.result <- watch.Event{Type: watch.Added, Object: &events.Event{
+		ObjectMeta: meta.ObjectMeta{CreationTimestamp: meta.Now()},
+		Regarding:  core.ObjectReference{Name: "echo"},
+		Type:       "Warning",
+		Reason:     "FailedCreate",
+		Note:       "quota exceeded",
+	}}
+	require.Eventually(t, func() bool { return len(w.result) == 0 }, time.Second, time.Millisecond)
+
+	cancel()
+	select {
+	case <-w.stopped:
+	case <-time.After(time.Second):
+		t.Fatal("underlying watch was not stopped after cancellation")
+	}
+}
 
 func TestIsTerminal(t *testing.T) {
 	tests := []struct {
