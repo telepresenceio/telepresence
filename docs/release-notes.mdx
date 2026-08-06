@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.32.0
 <Note>
+	<Title type="bugfix">Preserve agent images during concurrent pod injection</Title>
+	<Body>
+The agent injector reused a cached sidecar config across concurrent pod admissions while serializing that config temporarily cleared creation-only fields such as the traffic-agent image. A concurrent admission could observe the cleared image and produce invalid traffic-agent and init-container patches with empty image fields. Serialization now strips those fields from a local copy, so parallel pod creation cannot corrupt the cached config or block a workload rollout.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="reference/setup">Guided traffic-manager setup with telepresence setup</Title>
 	<Body>
 The new <code>telepresence setup</code> command analyzes the cluster (install privileges, QUIC and node-agent viability, webhook reachability, namespace scale, routing conflicts, and any existing installation), asks only the questions the findings leave open, and then validates, writes, or applies a fully configured traffic-manager Helm install. <code>--output</code> produces a normal Helm values file for GitOps, <code>--input</code> re-runs without repeating prior decisions (and is also how every answer can be preset, keeping the command's own flag surface small), and <code>--apply</code> installs or upgrades with post-apply verification, including a real QUIC reachability check. When install privileges are missing, the report itemizes exactly what to hand to a cluster admin instead of a dead end, and <code>telepresence setup --format json</code> is a convenient attachment for bug reports.
