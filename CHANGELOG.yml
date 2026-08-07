@@ -27,6 +27,11 @@ items:
   - version: 2.32.0
     date: (TBD)
     notes:
+      - type: feature
+        title: Completion for use flag
+        body: >-
+          Automcompletion for <code>use</code> flag now dynamically generates
+          completions based on existing daemons.
       - type: bugfix
         title: Preserve agent images during concurrent pod injection
         body: >-
