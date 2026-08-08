@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"slices"
 	"sort"
 	"strings"
@@ -24,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
@@ -38,6 +40,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
@@ -75,6 +78,7 @@ type service struct {
 	configWatcher      config.Watcher
 	authorizer         *auth.Authorizer
 	authMode           auth.Mode
+	authGate           auth.Gate
 	activeHttpRequests int32
 	activeGrpcRequests int32
 	serviceNameNs      string
@@ -144,6 +148,7 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 	env := managerutil.GetEnv(ctx)
 	ns := env.ManagerNamespace
 	ret.authMode = env.AuthenticationMode
+	ret.authGate = env.AuthorizationGate
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
@@ -271,6 +276,13 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 		return nil, status.Error(codes.InvalidArgument, val)
 	}
 
+	if err := s.authorizeConnect(ctx); err != nil {
+		if s.authMode == auth.ModeEnforcing {
+			return nil, err
+		}
+		clog.Warnf(ctx, "connect: %v (not enforced)", err)
+	}
+
 	installId := client.GetInstallId()
 
 	IncrementCounter(ctx, s.state.GetConnectCounter(), client.Name, client.InstallId)
@@ -302,6 +314,18 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	if val := validateClient(client); val != "" {
 		return nil, status.Error(codes.InvalidArgument, val)
 	}
+
+	// The session is unknown, i.e. manager state was lost (a restart) and the
+	// client is restoring it. Reauthorize the connection itself: a caller
+	// whose grant was revoked while the state was gone must not get it back
+	// for free.
+	if err := s.authorizeConnect(ctx); err != nil {
+		if s.authMode == auth.ModeEnforcing {
+			return nil, err
+		}
+		clog.Warnf(ctx, "reconnect: %v (not enforced)", err)
+	}
+
 	now := time.Now()
 	st.RestoreClient(sessionID, client, auth.PrincipalFrom(ctx), now)
 	agents := slices.DeleteFunc(slices.Clone(info.Agents), func(agent *rpc.AgentInfo) bool {
@@ -311,17 +335,79 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 		clog.Debugf(ctx, "Not restoring agent %s.%s because its namespace is not managed", agent.Name, agent.Namespace)
 		return true
 	})
-	intercepts := slices.DeleteFunc(slices.Clone(info.Intercepts), func(intercept *rpc.InterceptInfo) bool {
-		spec := intercept.GetSpec()
-		if spec != nil && st.ManagesNamespace(ctx, spec.Namespace) {
-			return false
-		}
-		clog.Debugf(ctx, "Not restoring intercept %s because its namespace is not managed", intercept.GetId())
-		return true
-	})
 	st.RestoreAgents(agents, now)
+
+	intercepts, err := s.reviewRestoredIntercepts(ctx, sessionID, info, now)
+	if err != nil {
+		return nil, err
+	}
 	st.RestoreIntercepts(ctx, intercepts, now)
 	return &empty.Empty{}, nil
+}
+
+// reviewRestoredIntercepts turns the client-supplied intercepts of a
+// ReconnectClientRequest into the list RestoreIntercepts stores. The
+// InterceptInfo the client sends is desired specification only: this
+// rebuilds each accepted entry from its Spec alone, so a forged Id,
+// ClientSession, disposition, or runtime state in the payload -- pod
+// identity, environment, mounts, agent-populated ports, messages -- never
+// reaches manager state. A spec is dropped instead of restored when its
+// namespace is no longer managed, it fails validateIntercept, it is a child
+// intercept (RestoreIntercepts regenerates those from the parent's Spec), or
+// -- in ModeEnforcing only -- authorizeIntercept denies it; outside
+// ModeEnforcing an authorization error is logged and the intercept is kept,
+// the same posture every other authorization call site in this file uses.
+// Within ModeEnforcing, an Unavailable review -- authorization could not be
+// determined at all -- fails the whole reconnect instead of silently
+// dropping the intercept, since the caller must retry rather than have a
+// real grant discarded as a denial.
+func (s *service) reviewRestoredIntercepts(
+	ctx context.Context, sessionID tunnel.SessionID, info *rpc.ReconnectClientRequest, now time.Time,
+) ([]*rpc.InterceptInfo, error) {
+	accepted := make([]*rpc.InterceptInfo, 0, len(info.Intercepts))
+	for _, intercept := range info.Intercepts {
+		spec := intercept.GetSpec()
+		if spec == nil {
+			continue
+		}
+		if state.IsChildIntercept(spec) {
+			// Never sent to a client in the first place (WatchIntercepts
+			// filters it out) and regenerated by RestoreIntercepts from the
+			// parent's Spec.PodPorts.
+			clog.Debugf(ctx, "Not restoring intercept %s: a child intercept is regenerated from its parent", intercept.GetId())
+			continue
+		}
+		if !s.state.ManagesNamespace(ctx, spec.Namespace) {
+			clog.Debugf(ctx, "Not restoring intercept %s because its namespace is not managed", spec.Name)
+			continue
+		}
+		if val := validateIntercept(spec); val != "" {
+			clog.Infof(ctx, "Not restoring intercept %s: %s", spec.Name, val)
+			continue
+		}
+		if err := s.authorizeIntercept(ctx, spec.Namespace, spec); err != nil {
+			switch {
+			case s.authMode != auth.ModeEnforcing:
+				clog.Warnf(ctx, "intercept %q in namespace %s: %v (not enforced)", spec.Name, spec.Namespace, err)
+			case status.Code(err) == codes.Unavailable:
+				// Infrastructure failure, not a denial: fail the whole
+				// reconnect so the client retries instead of losing the
+				// intercept.
+				return nil, err
+			default:
+				clog.Infof(ctx, "Not restoring intercept %s: %v", spec.Name, err)
+				continue
+			}
+		}
+		accepted = append(accepted, &rpc.InterceptInfo{
+			Id:            fmt.Sprintf("%s:%s", sessionID, spec.Name),
+			Spec:          spec,
+			Disposition:   rpc.InterceptDispositionType_WAITING,
+			ClientSession: info.Session,
+			ModifiedAt:    timestamppb.New(now),
+		})
+	}
+	return accepted, nil
 }
 
 // ArriveAsAgent establishes a session between an agent and the Manager.
@@ -1167,6 +1253,14 @@ func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 		return nil, err
 	}
 	request.InterceptSpec.Namespace = namespace
+
+	if err := s.authorizeIntercept(ctx, namespace, request.InterceptSpec); err != nil {
+		if s.authMode == auth.ModeEnforcing {
+			return nil, err
+		}
+		clog.Warnf(ctx, "intercept %q in namespace %s: %v (not enforced)", request.InterceptSpec.Name, namespace, err)
+	}
+
 	return s.state.PrepareIntercept(ctx, request, client)
 }
 
@@ -1183,6 +1277,15 @@ func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.Sessio
 	return &rpc.KnownWorkloadKinds{Kinds: kinds}, nil
 }
 
+// EnsureAgent resolves request.Name (and, if given, request.WorkloadKind) to
+// a specific workload in the target namespace, authorizes the caller against
+// attachments/<kind> for that resolved kind, and ensures a traffic-agent for
+// it. The kind reviewed by authorization is always the kind that
+// s.state.EnsureAgent goes on to mutate: request.WorkloadKind, when set, is
+// resolved and used as-is; when it's empty, every enabled workload kind that
+// matches request.Name is a candidate, and an ambiguous match is reviewed
+// per candidate rather than resolved by priority order, so that an
+// unauthorized caller never learns which underlying kinds exist.
 func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentRequest) (*rpc.AgentInfoSnapshot, error) {
 	ctx, client, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
@@ -1192,7 +1295,34 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 	if err != nil {
 		return nil, err
 	}
-	as, err := s.state.EnsureAgent(ctx, managerutil.GetSessionID(ctx), request.Name, ns, request.NodeAgent)
+
+	kind := k8sapi.Kind(request.WorkloadKind)
+	if kind == "" {
+		kind, err = s.resolveEnsureAgentKind(ctx, ns, request.Name)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if err := s.authorizeEnsureAgent(ctx, ns, string(kind), request.Name); err != nil {
+		if s.authMode == auth.ModeEnforcing {
+			return nil, err
+		}
+		clog.Warnf(ctx, "ensure agent for %s in namespace %s: %v (not enforced)", request.Name, ns, err)
+	}
+
+	// The existence check follows the review so that a caller whose review is
+	// denied cannot distinguish existing from nonexisting workloads.
+	if kind != "" {
+		if _, err := agentmap.GetWorkload(ctx, request.Name, ns, kind); err != nil {
+			if k8sErrors.IsNotFound(err) {
+				return nil, errors.Errorf(codes.NotFound, "workload %s not found in namespace %s", request.Name, ns)
+			}
+			return nil, errors.Errorf(codes.Unavailable, "unable to determine whether %s %s exists in namespace %s: %v", kind, request.Name, ns, err)
+		}
+	}
+
+	as, err := s.state.EnsureAgent(ctx, managerutil.GetSessionID(ctx), request.Name, ns, request.NodeAgent, kind)
 	if err != nil {
 		return nil, status.Convert(err).Err()
 	}
@@ -1271,34 +1401,271 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return interceptInfo, nil
 }
 
-// authorizeIntercept returns nil when the caller may intercept in namespace, a
+// authorizeConnect returns nil when the caller may establish a session, a
 // PermissionDenied error when its RBAC disallows it, and an Unavailable error
 // when authorization could not be determined. An unauthenticated caller is
 // skipped -- there is no identity to review -- unless the manager is in
 // ModeEnforcing, where a nil principal can only mean the interceptor let a
 // tokenless call through for an exempt method; treat it as Unauthenticated
 // rather than silently skipping the review.
-func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
+//
+// Dispatch follows s.authGate: GatePortForward reviews pods/portforward
+// against the manager's own pod; GateTelepresence reviews create on
+// connections.telepresence.io in the manager namespace; GateAny tries the
+// telepresence.io review first and falls back to pods/portforward when that
+// review is denied (not when it errors), logging a warning naming the caller
+// when the fallback is what authorized the session.
+func (s *service) authorizeConnect(ctx context.Context) error {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
 		if s.authMode == auth.ModeEnforcing {
-			return errors.Errorf(codes.Unauthenticated, "intercept creation requires an authenticated caller")
+			return errors.Errorf(codes.Unauthenticated, "connecting requires an authenticated caller")
 		}
-		clog.Debugf(ctx, "caller is unauthenticated; skipping intercept authorization")
+		clog.Debugf(ctx, "caller is unauthenticated; skipping connect authorization")
 		return nil
 	}
-	podNames, err := workloadPodNames(ctx, spec.Agent, namespace)
-	if err != nil {
-		clog.Debugf(ctx, "unable to list pods for %s.%s; checking namespace-wide access only: %v", spec.Agent, namespace, err)
+	namespace := managerutil.GetEnv(ctx).ManagerNamespace
+
+	portForward := func() error {
+		podName, err := os.Hostname()
+		if err != nil {
+			return errors.Errorf(codes.Unavailable, "unable to determine this pod's name: %v", err)
+		}
+		allowed, err := s.authorizer.CanPortForward(ctx, p, namespace, []string{podName})
+		if err != nil {
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create pods/portforward in namespace %s: %v", p.Username, namespace, err)
+		}
+		if !allowed {
+			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create pods/portforward in namespace %s", p.Username, namespace)
+		}
+		return nil
 	}
-	allowed, err := s.authorizer.CanPortForward(ctx, p, namespace, podNames)
-	if err != nil {
-		return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create pods/portforward in namespace %s: %v", p.Username, namespace, err)
+
+	switch s.authGate {
+	case auth.GatePortForward:
+		return portForward()
+	case auth.GateTelepresence:
+		allowed, err := s.authorizer.CanConnect(ctx, p, namespace)
+		if err != nil {
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create connections.telepresence.io in namespace %s: %v", p.Username, namespace, err)
+		}
+		if !allowed {
+			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create connections.telepresence.io in namespace %s", p.Username, namespace)
+		}
+		return nil
+	default: // auth.GateAny
+		allowed, err := s.authorizer.CanConnect(ctx, p, namespace)
+		if err != nil {
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create connections.telepresence.io in namespace %s: %v", p.Username, namespace, err)
+		}
+		if allowed {
+			return nil
+		}
+		if err := portForward(); err != nil {
+			return err
+		}
+		clog.Warnf(ctx,
+			"%s authorized to connect only via the legacy pods/portforward grant; its Role should migrate to "+
+				"create connections.telepresence.io before the enforcing-mode default flips", p.Username)
+		return nil
 	}
-	if !allowed {
-		return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create pods/portforward in namespace %s", p.Username, namespace)
+}
+
+// authorizeAttachment returns nil when the caller may perform verb ("create"
+// for an intercept, "get" for an ingest) on the attachment identified by
+// workloadKind and workloadName in namespace, a PermissionDenied error when
+// its RBAC disallows it, and an Unavailable error when authorization could
+// not be determined. An unauthenticated caller is skipped -- there is no
+// identity to review -- unless the manager is in ModeEnforcing, where a nil
+// principal can only mean the interceptor let a tokenless call through for an
+// exempt method; treat it as Unauthenticated rather than silently skipping
+// the review.
+//
+// Dispatch follows s.authGate: GatePortForward reviews pods/portforward
+// against the workload's current pod names; GateTelepresence reviews verb on
+// attachments.telepresence.io, resolving workloadKind via k8sapi.GetWorkload
+// when it is empty; GateAny tries the telepresence.io review first and falls
+// back to pods/portforward when that review is denied (not when it errors),
+// logging a warning naming the caller when the fallback is what authorized
+// the attachment.
+func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadKind, workloadName, verb string) error {
+	p := auth.PrincipalFrom(ctx)
+	if p == nil {
+		if s.authMode == auth.ModeEnforcing {
+			return errors.Errorf(codes.Unauthenticated, "attaching to %s requires an authenticated caller", workloadName)
+		}
+		clog.Debugf(ctx, "caller is unauthenticated; skipping attachment authorization")
+		return nil
 	}
-	return nil
+
+	portForward := func() error {
+		podNames, err := workloadPodNames(ctx, workloadName, namespace)
+		if err != nil {
+			clog.Debugf(ctx, "unable to list pods for %s.%s; checking namespace-wide access only: %v", workloadName, namespace, err)
+		}
+		allowed, err := s.authorizer.CanPortForward(ctx, p, namespace, podNames)
+		if err != nil {
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create pods/portforward in namespace %s: %v", p.Username, namespace, err)
+		}
+		if !allowed {
+			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create pods/portforward in namespace %s", p.Username, namespace)
+		}
+		return nil
+	}
+
+	// telepresenceAllowed resolves workloadKind when empty and reviews verb on
+	// attachments/<kind> for workloadName. It returns the resolved subresource
+	// alongside the review result so callers can report it in error messages.
+	telepresenceAllowed := func() (string, bool, error) {
+		kind := workloadKind
+		if kind == "" {
+			wl, err := k8sapi.GetWorkload(ctx, workloadName, namespace, "")
+			if err != nil {
+				return "", false, err
+			}
+			kind = string(wl.GetKind())
+		}
+		sub := pluralLowerKind(kind)
+		allowed, err := s.authorizer.CanAttach(ctx, p, namespace, sub, workloadName, verb)
+		return sub, allowed, err
+	}
+
+	switch s.authGate {
+	case auth.GatePortForward:
+		return portForward()
+	case auth.GateTelepresence:
+		sub, allowed, err := telepresenceAllowed()
+		if err != nil {
+			if k8sErrors.IsNotFound(err) {
+				return errors.Errorf(codes.NotFound, "workload %s not found in namespace %s", workloadName, namespace)
+			}
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may %s attachments/%s %s in namespace %s: %v", p.Username, verb, sub, workloadName, namespace, err)
+		}
+		if !allowed {
+			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to %s attachments/%s %s in namespace %s", p.Username, verb, sub, workloadName, namespace)
+		}
+		return nil
+	default: // auth.GateAny
+		sub, allowed, err := telepresenceAllowed()
+		if err != nil && !k8sErrors.IsNotFound(err) {
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may %s attachments/%s %s in namespace %s: %v", p.Username, verb, sub, workloadName, namespace, err)
+		}
+		if err == nil && allowed {
+			return nil
+		}
+		// The telepresence.io review was denied, or the workload could not be
+		// resolved to qualify the kind. The portforward review degrades to a
+		// namespace-wide check when pods cannot be listed, so it handles the
+		// unresolvable-workload case the same way.
+		if err := portForward(); err != nil {
+			return err
+		}
+		if err == nil {
+			clog.Warnf(ctx,
+				"%s authorized attachment to %s in namespace %s only via the legacy pods/portforward grant; its Role "+
+					"should migrate to create attachments.telepresence.io before the enforcing-mode default flips",
+				p.Username, workloadName, namespace)
+		}
+		return nil
+	}
+}
+
+// authorizeEnsureAgent authorizes an EnsureAgent call, which serves both an
+// intercepting client (which holds create on attachments) and an ingest
+// client (which holds get), by succeeding when either verb's attachment
+// review passes. workloadKind qualifies workloadName; when it is empty,
+// authorizeAttachment resolves it (under GateTelepresence and the
+// telepresence.io leg of GateAny) via k8sapi.GetWorkload.
+func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadKind, workloadName string) error {
+	createErr := s.authorizeAttachment(ctx, namespace, workloadKind, workloadName, "create")
+	if createErr == nil {
+		return nil
+	}
+	if status.Code(createErr) == codes.Unavailable {
+		return createErr
+	}
+	getErr := s.authorizeAttachment(ctx, namespace, workloadKind, workloadName, "get")
+	if getErr == nil {
+		return nil
+	}
+	if status.Code(getErr) == codes.Unavailable {
+		return getErr
+	}
+	return createErr
+}
+
+// resolveEnsureAgentKind resolves name in namespace to a single enabled
+// workload kind for a request that didn't specify one. It probes every kind
+// in managerutil.GetEnv(ctx).EnabledWorkloadKinds through the informer-backed
+// agentmap.GetWorkload. Zero matches returns an empty kind, leaving the
+// workload to be resolved (and, if it doesn't exist, rejected) further down
+// the EnsureAgent call exactly as it would be for a request that never named
+// a kind. A single match resolves outright. Multiple matches are ambiguous:
+// each candidate kind is authorized individually, and only once at least one
+// of them passes does the response name the matching kinds -- an
+// authorization error is returned instead when none pass, so an unauthorized
+// caller never learns which kinds exist.
+func (s *service) resolveEnsureAgentKind(ctx context.Context, namespace, name string) (k8sapi.Kind, error) {
+	enabledWorkloadKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
+	matches := make([]k8sapi.Kind, 0, len(enabledWorkloadKinds))
+	for _, kind := range enabledWorkloadKinds {
+		if _, err := agentmap.GetWorkload(ctx, name, namespace, kind); err != nil {
+			if !k8sErrors.IsNotFound(err) {
+				return "", errors.Errorf(codes.Unavailable, "unable to determine workload kind for %s in namespace %s: %v", name, namespace, err)
+			}
+			continue
+		}
+		matches = append(matches, kind)
+	}
+	switch len(matches) {
+	case 0:
+		return "", nil
+	case 1:
+		return matches[0], nil
+	}
+
+	names := make([]string, len(matches))
+	var authErr error
+	authorized := false
+	for i, kind := range matches {
+		names[i] = string(kind)
+		if err := s.authorizeEnsureAgent(ctx, namespace, string(kind), name); err != nil {
+			if authErr == nil {
+				authErr = err
+			}
+			continue
+		}
+		authorized = true
+	}
+	if !authorized {
+		// Outside ModeEnforcing a review never blocks, and naming the
+		// matching kinds to a caller that failed every review would reveal
+		// what exists, so the denial itself is the answer only when it is
+		// enforced.
+		if s.authMode == auth.ModeEnforcing {
+			return "", authErr
+		}
+		clog.Warnf(ctx, "ensure agent for %s in namespace %s: %v (not enforced)", name, namespace, authErr)
+	}
+	return "", errors.Errorf(codes.InvalidArgument,
+		"%s in namespace %s matches multiple workload kinds (%s); set the workload kind to disambiguate",
+		name, namespace, strings.Join(names, ", "))
+}
+
+// pluralLowerKind converts a workload kind ("Deployment", "StatefulSet",
+// "ReplicaSet", "Rollout") to the plural lowercase form used as the
+// attachments.telepresence.io subresource ("deployments", "statefulsets",
+// "replicasets", "rollouts").
+func pluralLowerKind(kind string) string {
+	return strings.ToLower(kind) + "s"
+}
+
+// authorizeIntercept reviews whether the caller may create an intercept on
+// spec.Agent (spec.WorkloadKind, defaulting to a search when empty) in
+// namespace. It dispatches through authorizeAttachment with verb "create";
+// see authorizeAttachment for the gate dispatch.
+func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
+	return s.authorizeAttachment(ctx, namespace, spec.WorkloadKind, spec.Agent, "create")
 }
 
 // workloadPodNames returns the names of the current pods of the workload

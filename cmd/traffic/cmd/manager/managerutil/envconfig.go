@@ -158,6 +158,12 @@ type Env struct {
 	// caller authentication (disabled, permissive, or enforcing).
 	AuthenticationMode auth.Mode `default:"permissive"`
 
+	// AuthorizationGate controls which grant the manager accepts as
+	// authorization to connect and to attach to a workload: pods/portforward
+	// alone, the telepresence.io group's own attributes alone, or either
+	// (portforward, telepresence, or any).
+	AuthorizationGate auth.Gate `default:"any"`
+
 	// Anonymous usage reporting. The manager produces reports whose only
 	// identifier is the UUID stored in the traffic-manager-install-id
 	// ConfigMap. UsageReportingEnabled is opt-out (default true). An empty

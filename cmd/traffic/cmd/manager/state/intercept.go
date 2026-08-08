@@ -461,31 +461,14 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 	}
 
 	// Add one child intercept for each pod-port.
-	for _, pms := range spec.PodPorts {
-		pm := types.PortMapping(pms)
-		from, to, err := pm.FromNumberAndTo()
-		if err != nil {
-			// Did PrepareIntercept create an invalid pod_port?
-			return nil, nil, grpcErrors.Errorf(codes.Internal, "invalid pod_port %q: %v", pm, err)
-		}
+	childSpecs, err := childInterceptSpecs(spec)
+	if err != nil {
+		// Did PrepareIntercept create an invalid pod_port?
+		return nil, nil, grpcErrors.Errorf(codes.Internal, "%v", err)
+	}
+	for _, pmSpec := range childSpecs {
 		pmCir := proto.Clone(cir).(*rpc.CreateInterceptRequest)
-		pmSpec := pmCir.InterceptSpec
-		pmSpec.Name = fmt.Sprintf("%s-%d-%s", spec.Name, from, strings.ToLower(string(to.Proto)))
-		pmSpec.PodPorts = nil
-		pmSpec.LocalPorts = nil
-
-		// This intercept targets a pod-port (container port) directly. A container name
-		// is not necessary because container ports must be unique within the pod.
-		pmSpec.ServiceUid = ""
-		pmSpec.ServicePortName = ""
-		pmSpec.ServicePort = 0
-		pmSpec.Protocol = string(to.Proto)
-		pmSpec.ContainerPort = int32(from)
-		pmSpec.PortIdentifier = pm.From().String()
-		pmSpec.TargetPort = int32(pm.ToAsNumeric().Port)
-
-		// The Client field helps IsChildIntercept identify the child.
-		pmSpec.Client = fmt.Sprintf("child %s %s %s", pm, spec.Name, spec.Client)
+		pmCir.InterceptSpec = pmSpec
 
 		pmInterceptID := fmt.Sprintf("%s:%s", sessionID, pmSpec.Name)
 		_, err = s.addIntercept(pmInterceptID, pmCir)
@@ -533,12 +516,42 @@ func IsChildIntercept(spec *rpc.InterceptSpec) bool {
 	return strings.HasPrefix(spec.Client, "child ")
 }
 
-func (s *State) GetParentIntercept(sessionID tunnel.SessionID, spec *rpc.InterceptSpec) (*Intercept, bool) {
-	childCols := strings.Split(spec.Client, " ")
-	if len(childCols) != 4 {
-		return nil, false
+// childInterceptSpecs derives the pod-port child spec implied by each of
+// spec's PodPorts entries. Each returned spec targets a pod-port (container
+// port) directly, carries no PodPorts or LocalPorts of its own, and has its
+// Client field set to a value IsChildIntercept recognizes, identifying it as
+// a child of spec.
+func childInterceptSpecs(spec *rpc.InterceptSpec) ([]*rpc.InterceptSpec, error) {
+	if len(spec.PodPorts) == 0 {
+		return nil, nil
 	}
-	return s.intercepts.Load(fmt.Sprintf("%s:%s", sessionID, childCols[2]))
+	specs := make([]*rpc.InterceptSpec, len(spec.PodPorts))
+	for i, pms := range spec.PodPorts {
+		pm := types.PortMapping(pms)
+		from, to, err := pm.FromNumberAndTo()
+		if err != nil {
+			return nil, fmt.Errorf("invalid pod_port %q: %w", pm, err)
+		}
+		pmSpec := proto.Clone(spec).(*rpc.InterceptSpec)
+		pmSpec.Name = fmt.Sprintf("%s-%d-%s", spec.Name, from, strings.ToLower(string(to.Proto)))
+		pmSpec.PodPorts = nil
+		pmSpec.LocalPorts = nil
+
+		// This intercept targets a pod-port (container port) directly. A container name
+		// is not necessary because container ports must be unique within the pod.
+		pmSpec.ServiceUid = ""
+		pmSpec.ServicePortName = ""
+		pmSpec.ServicePort = 0
+		pmSpec.Protocol = string(to.Proto)
+		pmSpec.ContainerPort = int32(from)
+		pmSpec.PortIdentifier = pm.From().String()
+		pmSpec.TargetPort = int32(pm.ToAsNumeric().Port)
+
+		// The Client field helps IsChildIntercept identify the child.
+		pmSpec.Client = fmt.Sprintf("child %s %s %s", pm, spec.Name, spec.Client)
+		specs[i] = pmSpec
+	}
+	return specs, nil
 }
 
 func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest) (*Intercept, error) {
@@ -587,15 +600,17 @@ func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFin
 	return nil
 }
 
-// EnsureAgent ensures that an agent exists for the workload named n in
-// namespace ns and waits for it to become available. When nodeAgent is
-// requested, it provisions (or reuses) a node-hosted traffic-agent Job
-// instead of injecting a sidecar, and takes a lease on it under sessionID so
-// that the Job outlives this call for as long as the session does, until
-// ReleaseAgent is called or the session ends. A sidecar request is rejected
-// while a node-agent intercept or lease already claims the workload, since
-// injecting a sidecar would restart the pod the node-agent depends on.
-func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, ns string, nodeAgent bool) (as []*AgentSession, err error) {
+// EnsureAgent ensures that an agent exists for the workload named n and of
+// kind wk in namespace ns and waits for it to become available. wk may be
+// empty, in which case the workload is resolved by priority order across the
+// known workload kinds. When nodeAgent is requested, it provisions (or
+// reuses) a node-hosted traffic-agent Job instead of injecting a sidecar, and
+// takes a lease on it under sessionID so that the Job outlives this call for
+// as long as the session does, until ReleaseAgent is called or the session
+// ends. A sidecar request is rejected while a node-agent intercept or lease
+// already claims the workload, since injecting a sidecar would restart the
+// pod the node-agent depends on.
+func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, ns string, nodeAgent bool, wk k8sapi.Kind) (as []*AgentSession, err error) {
 	if !nodeAgent && s.nodeAgentWanted(n, ns) {
 		// Checked before resolving the workload: a sidecar request against a
 		// workload a node-agent already claims is rejected outright, so
@@ -608,7 +623,7 @@ func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, 
 	}
 
 	var wl k8sapi.Workload
-	wl, err = agentmap.GetWorkload(ctx, n, ns, "")
+	wl, err = agentmap.GetWorkload(ctx, n, ns, wk)
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
 			err = errcat.User.New(err)

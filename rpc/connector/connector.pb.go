@@ -770,7 +770,11 @@ type IngestIdentifier struct {
 	// than one container candidate.
 	ContainerName string `protobuf:"bytes,2,opt,name=container_name,json=containerName,proto3" json:"container_name,omitempty"`
 	// Namespace containing the workload. Defaults to the connected namespace when empty.
-	Namespace     string `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Namespace string `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// Qualifies workload_name when several enabled workload kinds have a workload with
+	// that name in the namespace. An empty value is accepted only while workload_name
+	// is unambiguous among the enabled workload kinds.
+	WorkloadKind  string `protobuf:"bytes,4,opt,name=workload_kind,json=workloadKind,proto3" json:"workload_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -822,6 +826,13 @@ func (x *IngestIdentifier) GetContainerName() string {
 func (x *IngestIdentifier) GetNamespace() string {
 	if x != nil {
 		return x.Namespace
+	}
+	return ""
+}
+
+func (x *IngestIdentifier) GetWorkloadKind() string {
+	if x != nil {
+		return x.WorkloadKind
 	}
 	return ""
 }
@@ -1895,11 +1906,12 @@ const file_connector_connector_proto_rawDesc = "" +
 	"\bWIRETAPS\x10\b\x12\x14\n" +
 	"\x10INSTALLED_AGENTS\x10\x10\x12\x0e\n" +
 	"\n" +
-	"EVERYTHING\x10\x1f\"|\n" +
+	"EVERYTHING\x10\x1f\"\xa1\x01\n" +
 	"\x10IngestIdentifier\x12#\n" +
 	"\rworkload_name\x18\x01 \x01(\tR\fworkloadName\x12%\n" +
 	"\x0econtainer_name\x18\x02 \x01(\tR\rcontainerName\x12\x1c\n" +
-	"\tnamespace\x18\x03 \x01(\tR\tnamespace\"\xe4\x01\n" +
+	"\tnamespace\x18\x03 \x01(\tR\tnamespace\x12#\n" +
+	"\rworkload_kind\x18\x04 \x01(\tR\fworkloadKind\"\xe4\x01\n" +
 	"\rIngestRequest\x12H\n" +
 	"\n" +
 	"identifier\x18\x01 \x01(\v2(.telepresence.connector.IngestIdentifierR\n" +

@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	appsv1 "k8s.io/api/apps/v1"
+	authv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -825,8 +826,15 @@ func TestCreateIntercept_Enforcing(t *testing.T) {
 		e.AuthenticationMode = auth.ModeEnforcing
 	})
 
-	// Every SubjectAccessReview -- namespace-wide and pod-scoped alike -- is denied.
-	k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), nil)
+	// Every SubjectAccessReview in the target namespace -- namespace-wide and
+	// pod-scoped pods/portforward, and the telepresence.io attachment review
+	// alike -- is denied. The connect review, in the manager's own namespace,
+	// is allowed so ArriveAsClient succeeds and the test can reach the
+	// intercept-authorization denial it means to cover.
+	mgrNs := managerutil.GetEnv(sctx).ManagerNamespace
+	k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), func(_ string, ra *authv1.ResourceAttributes) bool {
+		return ra.Namespace == mgrNs
+	})
 
 	alice := &auth.Principal{Username: "alice", UID: "alice-uid"}
 	aliceInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
@@ -854,6 +862,173 @@ func TestCreateIntercept_Enforcing(t *testing.T) {
 	})
 	req.Error(err)
 	req.Equal(codes.PermissionDenied, status.Code(err))
+}
+
+// ambiguousWorkloadKindObjects returns a Deployment and a StatefulSet sharing
+// name in namespace, plus a running pod matching both of their selectors, so
+// that "test-agent" is ambiguous among the enabled workload kinds unless the
+// caller names one.
+func ambiguousWorkloadKindObjects(namespace, name string) (*appsv1.Deployment, *appsv1.StatefulSet, *corev1.Pod) {
+	labelSel := map[string]string{"app": name}
+	podTemplate := corev1.PodTemplateSpec{
+		ObjectMeta: metav1.ObjectMeta{Labels: labelSel},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app", Ports: []corev1.ContainerPort{{ContainerPort: 8080}}}},
+		},
+	}
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: labelSel},
+			Template: podTemplate,
+		},
+	}
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Spec: appsv1.StatefulSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: labelSel},
+			Template: podTemplate,
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: name + "-abc123", Namespace: namespace, Labels: labelSel},
+		Spec:       corev1.PodSpec{NodeName: "node-1"},
+		Status: corev1.PodStatus{
+			Phase:      corev1.PodRunning,
+			PodIP:      "10.42.0.5",
+			Conditions: []corev1.PodCondition{{Type: corev1.PodReady, Status: corev1.ConditionTrue}},
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: "app", ContainerID: "containerd://abc123"},
+			},
+		},
+	}
+	return dep, sts, pod
+}
+
+// TestEnsureAgent_AmbiguousWorkloadKind covers the disambiguation EnsureAgent
+// performs before ensuring an agent: a Deployment and a StatefulSet sharing a
+// name in the same namespace make an unqualified call ambiguous. The kind
+// used to authorize the caller is always the kind that ends up mutated: an
+// ambiguous, authorized call is told which kinds matched instead of picking
+// one; an ambiguous call nobody is authorized for learns nothing about which
+// kinds exist; and naming the workload kind resolves it outright.
+func TestEnsureAgent_AmbiguousWorkloadKind(t *testing.T) {
+	const ns = "default"
+	const name = "test-agent"
+
+	t.Run("ambiguous and authorized names the matching kinds", func(t *testing.T) {
+		clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+		ctx := testutil.NewContext(t, true)
+		req := require.New(t)
+
+		dep, sts, pod := ambiguousWorkloadKindObjects(ns, name)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{dep, sts, pod}, func(e *managerutil.Env) {
+			e.AgentArrivalTimeout = 5 * time.Second
+			e.NodeAgentEnabled = true
+			e.NodeAgentCRISocket = "/run/containerd/containerd.sock"
+			e.EnabledWorkloadKinds = k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind}
+		})
+		// alice is authorized to attach to both candidate kinds, so the
+		// ambiguity can't be resolved on her behalf; she's told what
+		// matched instead.
+		k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), func(string, *authv1.ResourceAttributes) bool {
+			return true
+		})
+
+		alice := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		aliceInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, alice), aliceInfo)
+		req.NoError(err)
+
+		_, err = mgr.EnsureAgent(auth.WithPrincipal(sctx, alice), &rpc.EnsureAgentRequest{
+			Session:   sess,
+			Name:      name,
+			Namespace: ns,
+			NodeAgent: true,
+		})
+		req.Error(err)
+		req.Equal(codes.InvalidArgument, status.Code(err))
+		req.Contains(err.Error(), "Deployment")
+		req.Contains(err.Error(), "StatefulSet")
+	})
+
+	t.Run("ambiguous and denied names nothing", func(t *testing.T) {
+		clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+		ctx := testutil.NewContext(t, true)
+		req := require.New(t)
+
+		dep, sts, pod := ambiguousWorkloadKindObjects(ns, name)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{dep, sts, pod}, func(e *managerutil.Env) {
+			e.AgentArrivalTimeout = 5 * time.Second
+			e.NodeAgentEnabled = true
+			e.NodeAgentCRISocket = "/run/containerd/containerd.sock"
+			e.EnabledWorkloadKinds = k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind}
+			e.AuthenticationMode = auth.ModeEnforcing
+		})
+		// Every review outside the manager's own namespace is denied --
+		// including both candidate kinds and the legacy pods/portforward
+		// fallback -- so alice is authorized for neither. The connect
+		// review, in the manager's own namespace, is allowed so
+		// ArriveAsClient succeeds and the test can reach the EnsureAgent
+		// denial it means to cover.
+		mgrNs := managerutil.GetEnv(sctx).ManagerNamespace
+		k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), func(_ string, ra *authv1.ResourceAttributes) bool {
+			return ra.Namespace == mgrNs
+		})
+
+		alice := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		aliceInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, alice), aliceInfo)
+		req.NoError(err)
+
+		_, err = mgr.EnsureAgent(auth.WithPrincipal(sctx, alice), &rpc.EnsureAgentRequest{
+			Session:   sess,
+			Name:      name,
+			Namespace: ns,
+			NodeAgent: true,
+		})
+		req.Error(err)
+		req.Equal(codes.PermissionDenied, status.Code(err))
+		req.NotContains(err.Error(), "Deployment")
+		req.NotContains(err.Error(), "StatefulSet")
+	})
+
+	t.Run("naming the workload kind resolves it", func(t *testing.T) {
+		clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+		ctx := testutil.NewContext(t, true)
+		req := require.New(t)
+
+		dep, sts, pod := ambiguousWorkloadKindObjects(ns, name)
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{dep, sts, pod}, func(e *managerutil.Env) {
+			e.AgentArrivalTimeout = 5 * time.Second
+			e.NodeAgentEnabled = true
+			e.NodeAgentCRISocket = "/run/containerd/containerd.sock"
+			e.EnabledWorkloadKinds = k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind}
+		})
+		sctx = managerutil.WithResolvedAgentImageRetriever(sctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
+
+		alice := &auth.Principal{Username: "alice", UID: "alice-uid"}
+		aliceInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
+		sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, alice), aliceInfo)
+		req.NoError(err)
+
+		agentInfo := proto.Clone(testdata.GetTestAgents(t)["hello"]).(*rpc.AgentInfo)
+		agentInfo.Name = name
+		agentInfo.Namespace = ns
+		agentInfo.NodeAgent = true
+		_, err = mgr.ArriveAsAgent(sctx, agentInfo)
+		req.NoError(err)
+
+		as, err := mgr.EnsureAgent(auth.WithPrincipal(sctx, alice), &rpc.EnsureAgentRequest{
+			Session:      sess,
+			Name:         name,
+			Namespace:    ns,
+			NodeAgent:    true,
+			WorkloadKind: string(k8sapi.DeploymentKind),
+		})
+		req.NoError(err)
+		req.NotNil(as)
+	})
 }
 
 // TestGetQuicTunnelEndpoint_Gating covers the three cases "Zero-configuration endpoint
@@ -1098,6 +1273,8 @@ matchExpressions:
 	f.Core().V1().ConfigMaps().Informer()
 	f.Core().V1().Pods().Informer()
 	f.Apps().V1().Deployments().Informer()
+	f.Apps().V1().StatefulSets().Informer()
+	f.Apps().V1().ReplicaSets().Informer()
 	f.Start(ctx.Done())
 	f.WaitForCacheSync(ctx.Done())
 

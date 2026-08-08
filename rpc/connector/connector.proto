@@ -265,6 +265,11 @@ message IngestIdentifier {
 
   // Namespace containing the workload. Defaults to the connected namespace when empty.
   string namespace = 3;
+
+  // Qualifies workload_name when several enabled workload kinds have a workload with
+  // that name in the namespace. An empty value is accepted only while workload_name
+  // is unambiguous among the enabled workload kinds.
+  string workload_kind = 4;
 }
 
 message IngestRequest {

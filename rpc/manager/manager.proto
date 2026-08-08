@@ -397,6 +397,11 @@ message EnsureAgentRequest {
   // than by a sidecar injected into the workload. Requires the
   // traffic-manager to have node-agent mode enabled.
   bool node_agent = 4;
+
+  // Qualifies name when several enabled workload kinds have a workload with
+  // that name in the namespace. An empty value is accepted only while name
+  // is unambiguous among the enabled workload kinds.
+  string workload_kind = 5;
 }
 
 message ReleaseAgentRequest {

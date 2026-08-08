@@ -100,6 +100,12 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
+          {{- with .authorization }}
+          {{- if .gate }}
+          - name: AUTHORIZATION_GATE
+            value: {{ .gate }}
+          {{- end }}
+          {{- end }}
           {{- end }}
           {{- if .workloads }}
           {{- with .workloads }}

@@ -204,6 +204,15 @@ type QuicTunnelService struct {
 // authentication/authorization.
 type Security struct {
 	Authentication Authentication `json:"authentication,omitzero"`
+	Authorization  Authorization  `json:"authorization,omitzero"`
+}
+
+// Authorization is the chart's security.authorization.* shape.
+type Authorization struct {
+	// Gate is one of "portforward", "telepresence", or "any" -- which grant
+	// satisfies the traffic-manager's authorization review at connect and
+	// attach time (values.yaml's security.authorization.gate).
+	Gate string `json:"gate,omitempty"`
 }
 
 // Authentication is the chart's security.authentication.* shape.
@@ -546,6 +555,9 @@ func mergeSecurity(base, over Security) Security {
 	}
 	if over.Authentication.X509.Enabled != nil {
 		base.Authentication.X509.Enabled = over.Authentication.X509.Enabled
+	}
+	if over.Authorization.Gate != "" {
+		base.Authorization.Gate = over.Authorization.Gate
 	}
 	return base
 }

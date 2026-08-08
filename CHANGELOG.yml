@@ -87,6 +87,33 @@ items:
           deployment, exactly as a change to the static
           <code>namespaces</code> list always has. Changes within a
           selector are still picked up live, without a restart.
+      - type: feature
+        title: Authorization gate for Telepresence-specific RBAC grants
+        body: >-
+          The new Helm setting <code>security.authorization.gate</code>
+          (<code>portforward</code>, <code>telepresence</code>, or
+          <code>any</code>; default <code>any</code>) selects which RBAC
+          grant the traffic-manager accepts when it authorizes a caller:
+          the legacy <code>pods/portforward</code> permission, Telepresence's
+          own policy attributes -- <code>create</code> on
+          <code>connections.telepresence.io</code> to connect, and
+          <code>create</code> or <code>get</code> on kind-qualified
+          <code>attachments</code> such as
+          <code>attachments/deployments</code> to intercept or ingest a
+          named workload -- or either. The chart renders client Roles to
+          match, the manager logs a migration warning whenever a caller
+          authorizes only via the legacy grant, and sessions and intercepts
+          restored after a manager restart are re-authorized and rebuilt
+          from their specifications.
+        docs: reference/rbac
+      - type: change
+        title: Ambiguous workload names must state their kind
+        body: >-
+          When several enabled workload kinds have a workload with the same
+          name in a namespace, the traffic-manager now rejects an agent
+          request that does not state the intended kind instead of silently
+          picking one in priority order. <code>telepresence ingest</code>
+          gained a <code>--workload-kind</code> flag to qualify such names.
   - version: 2.31.2
     date: 2026-08-02
     notes:

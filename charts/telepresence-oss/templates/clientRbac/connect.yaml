@@ -2,8 +2,11 @@
 {{- if .create }}
 {{- /*
 Client must have the following RBAC in the traffic-manager.namespace to establish
-a port-forward to the traffic-manager pod.
+a session. The discovery and port-forward rules are the client's only transport
+to the manager and render for every gate value; security.authorization.gate only
+adds the telepresence.io connect grant that the manager reviews.
 */}}
+{{- $gate := $.Values.security.authorization.gate | default "any" }}
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -23,6 +26,11 @@ rules:
   - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]
+{{- if ne $gate "portforward" }}
+  - apiGroups: ["telepresence.io"]
+    resources: ["connections"]
+    verbs: ["create"]
+{{- end }}
 ---
 
 apiVersion: rbac.authorization.k8s.io/v1

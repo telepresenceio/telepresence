@@ -3,6 +3,7 @@ package golden
 import (
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
@@ -17,6 +18,7 @@ const (
 	axisNodeAgent       = "nodeAgent.enabled"
 	axisQuicTunnel      = "quicTunnel.enabled"
 	axisAuthMode        = "security.authentication.mode"
+	axisAuthGate        = "security.authorization.gate"
 	axisAPIPort         = "telepresenceAPI.port"
 	axisUsageEnabled    = "usage.enabled"
 )
@@ -31,6 +33,7 @@ func matrixAxes() []rt.Axis {
 		{Name: axisNodeAgent, Values: []string{"true", "false"}},
 		{Name: axisQuicTunnel, Values: []string{"true", "false"}},
 		{Name: axisAuthMode, Values: []string{"permissive", "enforcing"}},
+		{Name: axisAuthGate, Values: []string{"portforward", "telepresence", "any"}},
 		{Name: axisAPIPort, Values: []string{"0", "9980"}},
 		{Name: axisUsageEnabled, Values: []string{"false", "true"}},
 	}
@@ -54,9 +57,21 @@ func valuesFromCombo(c map[string]string) map[string]any {
 		"quicTunnel": map[string]any{"enabled": c[axisQuicTunnel] == "true"},
 		"security": map[string]any{
 			"authentication": map[string]any{"mode": c[axisAuthMode]},
+			"authorization":  map[string]any{"gate": c[axisAuthGate]},
 		},
 		"telepresenceAPI": map[string]any{"port": port},
 		"usage":           map[string]any{"enabled": c[axisUsageEnabled] == "true"},
+		// clientRbac isn't itself an axis (its shape doesn't vary with the
+		// combo), but it must be enabled for the assertions below to see the
+		// client Role content the gate axis controls.
+		"clientRbac": map[string]any{
+			"create": true,
+			"subjects": []map[string]any{{
+				"kind":      "ServiceAccount",
+				"name":      "rtest-golden",
+				"namespace": releaseNamespace,
+			}},
+		},
 	}
 }
 
@@ -170,6 +185,51 @@ func TestChartMatrix(t *testing.T) {
 			if v := env["USAGE_REPORTING_ENABLED"]; v != strconv.FormatBool(usageEnabled) {
 				t.Errorf("USAGE_REPORTING_ENABLED = %q, want %q", v, strconv.FormatBool(usageEnabled))
 			}
+
+			// AUTHORIZATION_GATE always carries the configured gate.
+			gate := c[axisAuthGate]
+			if v := env["AUTHORIZATION_GATE"]; v != gate {
+				t.Errorf("AUTHORIZATION_GATE = %q, want %q", v, gate)
+			}
+
+			assertClientRoleRules(t, out, gate)
 		})
+	}
+}
+
+// assertClientRoleRules checks the gate-dependent client Role rendering. The
+// connect Role's discovery and port-forward rules are the client's only
+// transport to the manager and render for every gate value; the gate only
+// adds the telepresence.io connections rule (absent for "portforward"). The
+// per-namespace Role gates its own pods/portforward vs. attachments rule the
+// same way; pods get/list and pods/log get are unaffected by the gate.
+func assertClientRoleRules(t *testing.T, out map[string]string, gate string) {
+	t.Helper()
+	if !rendered(out, clientConnectTpl) {
+		t.Fatalf("%s did not render", clientConnectTpl)
+	}
+	connectDoc := out[clientConnectTpl]
+	wantConnect := gate != "portforward"
+	if !strings.Contains(connectDoc, `resources: ["pods/portforward"]`) {
+		t.Errorf("%s pods/portforward rule missing under gate=%q; the transport rules render for every gate", clientConnectTpl, gate)
+	}
+	if got := strings.Contains(connectDoc, `resources: ["connections"]`); got != wantConnect {
+		t.Errorf("%s connections rule present=%v, want gate=%q -> %v", clientConnectTpl, got, gate, wantConnect)
+	}
+
+	if !rendered(out, clientClusterScopeTpl) {
+		t.Fatalf("%s did not render", clientClusterScopeTpl)
+	}
+	clusterScopeDoc := out[clientClusterScopeTpl]
+	if got := strings.Contains(clusterScopeDoc, `resources: ["pods/portforward"]`); got != (gate != "telepresence") {
+		t.Errorf("%s pods/portforward rule present=%v, want gate=%q -> %v", clientClusterScopeTpl, got, gate, gate != "telepresence")
+	}
+	if got := strings.Contains(clusterScopeDoc, "attachments/deployments"); got != wantConnect {
+		t.Errorf("%s attachments rule present=%v, want gate=%q -> %v", clientClusterScopeTpl, got, gate, wantConnect)
+	}
+	for _, want := range []string{`resources: ["pods"]`, `resources: ["pods/log"]`} {
+		if !strings.Contains(clusterScopeDoc, want) {
+			t.Errorf("%s: %q not rendered regardless of gate=%q", clientClusterScopeTpl, want, gate)
+		}
 	}
 }

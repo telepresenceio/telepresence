@@ -44,19 +44,49 @@ func (a *Authorizer) CanPortForward(ctx context.Context, p *Principal, namespace
 }
 
 func (a *Authorizer) canI(ctx context.Context, p *Principal, namespace, podName string) (bool, error) {
+	return a.review(ctx, p, &authorizationv1.ResourceAttributes{
+		Namespace:   namespace,
+		Verb:        "create",
+		Resource:    "pods",
+		Subresource: "portforward",
+		Name:        podName,
+	})
+}
+
+// CanConnect reports whether p may create connections.telepresence.io in
+// namespace -- the review that authorizes establishing a session.
+func (a *Authorizer) CanConnect(ctx context.Context, p *Principal, namespace string) (bool, error) {
+	return a.review(ctx, p, &authorizationv1.ResourceAttributes{
+		Namespace: namespace,
+		Verb:      "create",
+		Group:     "telepresence.io",
+		Resource:  "connections",
+	})
+}
+
+// CanAttach reports whether p may perform verb on the attachments.telepresence.io
+// resource named workloadName, qualified by kindSubresource (the plural lowercase
+// workload kind, e.g. "deployments"), in namespace. verb is "create" to authorize an
+// intercept or "get" to authorize an ingest.
+func (a *Authorizer) CanAttach(ctx context.Context, p *Principal, namespace, kindSubresource, workloadName, verb string) (bool, error) {
+	return a.review(ctx, p, &authorizationv1.ResourceAttributes{
+		Namespace:   namespace,
+		Verb:        verb,
+		Group:       "telepresence.io",
+		Resource:    "attachments",
+		Subresource: kindSubresource,
+		Name:        workloadName,
+	})
+}
+
+func (a *Authorizer) review(ctx context.Context, p *Principal, ra *authorizationv1.ResourceAttributes) (bool, error) {
 	review := &authorizationv1.SubjectAccessReview{
 		Spec: authorizationv1.SubjectAccessReviewSpec{
-			User:   p.Username,
-			UID:    p.UID,
-			Groups: p.Groups,
-			Extra:  extraValues(p.Extra),
-			ResourceAttributes: &authorizationv1.ResourceAttributes{
-				Namespace:   namespace,
-				Verb:        "create",
-				Resource:    "pods",
-				Subresource: "portforward",
-				Name:        podName,
-			},
+			User:               p.Username,
+			UID:                p.UID,
+			Groups:             p.Groups,
+			Extra:              extraValues(p.Extra),
+			ResourceAttributes: ra,
 		},
 	}
 	result, err := a.client.AuthorizationV1().SubjectAccessReviews().Create(ctx, review, metav1.CreateOptions{})

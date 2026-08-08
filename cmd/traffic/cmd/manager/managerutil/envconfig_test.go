@@ -70,6 +70,7 @@ func TestEnvconfig(t *testing.T) {
 		MutatorWebhookPort:           8443,
 		TunnelQuicAgentPort:          7787,
 		AuthenticationMode:           auth.ModePermissive,
+		AuthorizationGate:            auth.GateAny,
 	}
 
 	testcases := map[string]struct {
@@ -199,6 +200,22 @@ func TestEnvconfig(t *testing.T) {
 			},
 			Output: func(e *managerutil.Env) {
 				e.AuthenticationMode = auth.ModeDisabled
+			},
+		},
+		"authorization-gate-portforward": {
+			Input: map[string]string{
+				"AUTHORIZATION_GATE": "portforward",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AuthorizationGate = auth.GatePortForward
+			},
+		},
+		"authorization-gate-telepresence": {
+			Input: map[string]string{
+				"AUTHORIZATION_GATE": "telepresence",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AuthorizationGate = auth.GateTelepresence
 			},
 		},
 	}

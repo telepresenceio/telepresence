@@ -105,6 +105,21 @@ security:
       # Default: 8083
       port: 8083
 
+  authorization:
+    # gate controls which grant satisfies the traffic-manager's authorization
+    # review at connect and attach time:
+    #
+    #  portforward   the caller must hold the pods/portforward grant against
+    #                the target (today's proxy).
+    #  telepresence  the caller must hold the corresponding telepresence.io
+    #                grant (connections to connect, attachments to attach).
+    #  any           either grant satisfies the review.
+    #
+    # The chart renders client Roles to match this setting.
+    #
+    # Default: any
+    gate: any
+
 # podCIDRStrategy controls what strategy the traffic-manager will use for finding out what
 # CIDRs the cluster is using for its pods. Valid values are:
 #

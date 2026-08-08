@@ -805,6 +805,20 @@ properties:
               port:
                 description: The container port the auth-only TLS listener binds to.
                 type: integer
+      authorization:
+        description: >-
+          Which grant satisfies the traffic-manager's authorization review at
+          connect and attach time. The chart renders client Roles to match.
+        type: object
+        additionalProperties: false
+        properties:
+          gate:
+            description: >-
+              portforward requires the pods/portforward grant (today's proxy),
+              telepresence requires the corresponding telepresence.io grant,
+              and any (the default) accepts either.
+            type: string
+            enum: ["portforward", "telepresence", "any"]
 
   securityContext:
     description: The Kubernetes SecurityContext for the traffic-manager container

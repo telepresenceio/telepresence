@@ -173,10 +173,11 @@ func (s *session) handleAgentPodSnapshot(ctx context.Context, pods []agentPod, c
 		// AgentInfo so replacement failover works for cross-namespace ingests too.
 		timeoutCtx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerAPI)
 		as, err := s.ManagerClient().EnsureAgent(timeoutCtx, &manager.EnsureAgentRequest{
-			Session:   s.sessionInfo,
-			Name:      key.workload,
-			Namespace: key.namespace,
-			NodeAgent: ig.NodeAgent,
+			Session:      s.sessionInfo,
+			Name:         key.workload,
+			Namespace:    key.namespace,
+			NodeAgent:    ig.NodeAgent,
+			WorkloadKind: ig.Kind,
 		})
 		cancel()
 		if err != nil {

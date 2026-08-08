@@ -32,6 +32,18 @@ With <code>agentInjector.enabled=false</code>, the traffic-manager only watched 
 A <code>helm upgrade</code> that added or removed the <code>namespaceSelector</code> of a live installation kept the running pod, which continued with the informer topology of its old scope and left workload watching -- and with it <code>telepresence list</code> and agent-config generation -- broken until a manual restart. The scope is now stamped into the pod template, so an upgrade crossing that boundary rolls the deployment, exactly as a change to the static <code>namespaces</code> list always has. Changes within a selector are still picked up live, without a restart.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Authorization gate for Telepresence-specific RBAC grants](reference/rbac)</div></div>
+<div style="margin-left: 15px">
+
+The new Helm setting <code>security.authorization.gate</code> (<code>portforward</code>, <code>telepresence</code>, or <code>any</code>; default <code>any</code>) selects which RBAC grant the traffic-manager accepts when it authorizes a caller: the legacy <code>pods/portforward</code> permission, Telepresence's own policy attributes -- <code>create</code> on <code>connections.telepresence.io</code> to connect, and <code>create</code> or <code>get</code> on kind-qualified <code>attachments</code> such as <code>attachments/deployments</code> to intercept or ingest a named workload -- or either. The chart renders client Roles to match, the manager logs a migration warning whenever a caller authorizes only via the legacy grant, and sessions and intercepts restored after a manager restart are re-authorized and rebuilt from their specifications.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ambiguous workload names must state their kind</div></div>
+<div style="margin-left: 15px">
+
+When several enabled workload kinds have a workload with the same name in a namespace, the traffic-manager now rejects an agent request that does not state the intended kind instead of silently picking one in priority order. <code>telepresence ingest</code> gained a <code>--workload-kind</code> flag to qualify such names.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">

@@ -247,9 +247,35 @@ RBAC rules for workload kinds enabled via values.workloads.*.enabled
 {{- end }}
 
 {{- /*
+Plural lowercase resource names for the workload kinds enabled via
+values.workloads.*.enabled, used to build the attachments/<resource> RBAC
+resource strings for the security.authorization.gate "telepresence" rule.
+Returns a JSON array; callers do `fromJsonArray (include "telepresence.enabledWorkloadResources" $)`.
+*/}}
+{{- define "telepresence.enabledWorkloadResources" -}}
+{{- $workloadKinds := list
+  (dict "key" "deployments" "resource" "deployments" "defaultEnabled" true)
+  (dict "key" "replicaSets" "resource" "replicasets" "defaultEnabled" true)
+  (dict "key" "statefulSets" "resource" "statefulsets" "defaultEnabled" true)
+  (dict "key" "argoRollouts" "resource" "rollouts" "defaultEnabled" false)
+}}
+{{- $resources := list }}
+{{- range $workloadKinds }}
+{{- if dig .key "enabled" .defaultEnabled $.Values.workloads }}
+{{- $resources = append $resources .resource }}
+{{- end }}
+{{- end }}
+{{- $resources | toJson }}
+{{- end }}
+
+{{- /*
 RBAC rules required to create an intercept in a namespace; excludes any rules that are always cluster wide.
+The pods/portforward rule and the telepresence.io attachments rule are gated by
+security.authorization.gate: "portforward" keeps pods/portforward only, "telepresence"
+replaces it with the attachments rule, and "any" (the default) renders both.
 */}}
 {{- define "telepresence.clientRbacInterceptRules" -}}
+{{- $gate := .Values.security.authorization.gate | default "any" }}
 {{- /* Mandatory. Controls namespace access command completion experience */}}
 - apiGroups: [""]
   resources: ["pods"]
@@ -257,10 +283,21 @@ RBAC rules required to create an intercept in a namespace; excludes any rules th
 - apiGroups: [""]
   resources: ["pods/log"]
   verbs: ["get"]
+{{- if ne $gate "telepresence" }}
 {{- /* All traffic will be routed via the traffic-manager unless a portforward can be created directly to a pod */}}
 - apiGroups: [""]
   resources: ["pods/portforward"]
   verbs: ["create"]
+{{- end }}
+{{- if ne $gate "portforward" }}
+{{- /* Authorizes attaching (intercepting or ingesting) to a workload of an enabled kind */}}
+- apiGroups: ["telepresence.io"]
+  resources:
+  {{- range fromJsonArray (include "telepresence.enabledWorkloadResources" $) }}
+  - attachments/{{ . }}
+  {{- end }}
+  verbs: ["create", "get"]
+{{- end }}
 {{- if and .Values.clientRbac .Values.clientRbac.ruleExtras }}
 {{ template "clientRbac-ruleExtras" . }}
 {{- end }}

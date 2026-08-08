@@ -1665,6 +1665,8 @@ func (s *session) activateProxyViaWorkloads() error {
 			return errcat.User.Newf("Agent port-forwards are disabled. Client is not permitted to do proxy-via %s", wlName)
 		}
 		clog.Debugf(s, "Ensuring proxy-via agent in %s", wlName)
+		// wlName has no associated kind here; an ambiguous name is rejected
+		// by the manager rather than resolved on this path.
 		_, err := s.managerClient().EnsureAgent(s, &manager.EnsureAgentRequest{
 			Session: s.session,
 			Name:    wlName,
