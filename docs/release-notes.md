@@ -62,6 +62,12 @@ The traffic-manager Deployment is now a single-replica StatefulSet whose pod is 
 The client now port-forwards directly to the <code>traffic-manager-0</code> pod, so the only Kubernetes permission a connection needs is <code>create</code> on <code>pods/portforward</code> for that one pod name. The previous discovery grants (get services, list pods) remain available as a fallback and are rendered while the new Helm setting <code>clientRbac.legacyAccess</code> is true (the default); pre-2.33 clients and installs that override <code>apiPort</code> still need them.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[External control endpoint for clients without Kubernetes API access](reference/external-endpoint)</div></div>
+<div style="margin-left: 15px">
+
+The new Helm setting <code>externalEndpoint</code> publishes a TLS gRPC listener that serves only the traffic-manager's client-facing RPC surface, with per-method session-ownership enforcement and admission controls in front of token validation. A client configured with <code>cluster.managerAddress</code> (and optionally <code>cluster.managerServerCA</code>) dials it directly and makes no Kubernetes API requests at all; it authenticates with its kubeconfig's bearer token, or with its client certificate directly in the TLS handshake when no bearer source exists. Publishing the endpoint requires <code>security.authentication.mode: enforcing</code> and a persisted server certificate, from an existing TLS Secret or cert-manager.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">
@@ -96,7 +102,7 @@ The SFTP server that backs <code>telepresence mount</code> resolved absolute pat
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Changing the log level requires an owned session](reference/authentication.md)</div></div>
 <div style="margin-left: 15px">
 
-The traffic-manager's <code>SetLogLevel</code> call accepted any caller, although the new level propagated to the manager and every traffic-agent. The request now carries the client's session, whose ownership the manager verifies. Requests from older clients without a session are still honored unless <code>security.authentication.mode=enforcing</code>.
+The traffic-manager accepted a log-level change from any caller, although the new level propagated to the manager and every traffic-agent. The request now carries the client's session, whose ownership the manager verifies. Requests from older clients without a session are still honored unless <code>security.authentication.mode=enforcing</code>.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The QUIC forwarder becomes ready under enforcing authentication</div></div>

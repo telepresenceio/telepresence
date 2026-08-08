@@ -46,6 +46,10 @@ type Values struct {
 	// Security is the chart's security.* shape: traffic-manager caller
 	// authentication/authorization.
 	Security Security `json:"security,omitzero"`
+	// ExternalEndpoint is the chart's externalEndpoint.* shape: the opt-in
+	// external TLS gRPC listener that lets a client connect without ever
+	// contacting the Kubernetes API server.
+	ExternalEndpoint ExternalEndpoint `json:"externalEndpoint,omitzero"`
 	// Compatibility is the chart's compatibility.* shape: for testing only,
 	// makes the manager emulate an older version (see checkCompat in
 	// cmd/traffic/cmd/manager/service.go).
@@ -230,6 +234,31 @@ type X509 struct {
 	Enabled *bool `json:"enabled,omitempty"`
 }
 
+// ExternalEndpoint is the chart's externalEndpoint.* shape, restricted to
+// the keys the catalog configures: whether the listener is enabled, the
+// container port it binds to, the Service fronting it, and the Secret its
+// certificate is terminated from.
+type ExternalEndpoint struct {
+	Enabled bool                    `json:"enabled,omitempty"`
+	Port    int                     `json:"port,omitempty"`
+	Service ExternalEndpointService `json:"service,omitzero"`
+	TLS     ExternalEndpointTLS     `json:"tls,omitzero"`
+}
+
+// ExternalEndpointService is the chart's externalEndpoint.service.* shape,
+// restricted to the keys the catalog configures.
+type ExternalEndpointService struct {
+	Type string `json:"type,omitempty"`
+	Port int    `json:"port,omitempty"`
+}
+
+// ExternalEndpointTLS is the chart's externalEndpoint.tls.* shape,
+// restricted to secretName: the catalog only exercises the
+// existing-Secret form, never certManager.
+type ExternalEndpointTLS struct {
+	SecretName string `json:"secretName,omitempty"`
+}
+
 // Compatibility is the chart's compatibility.* shape (for testing only).
 type Compatibility struct {
 	// Version makes the manager behave like this older version, returning
@@ -376,6 +405,7 @@ func Merge(base, over Values) Values {
 	m.Client = mergeClient(m.Client, over.Client)
 	m.QuicTunnel = mergeQuicTunnel(m.QuicTunnel, over.QuicTunnel)
 	m.Security = mergeSecurity(m.Security, over.Security)
+	m.ExternalEndpoint = mergeExternalEndpoint(m.ExternalEndpoint, over.ExternalEndpoint)
 	if over.Compatibility.Version != "" {
 		m.Compatibility.Version = over.Compatibility.Version
 	}
@@ -545,6 +575,25 @@ func mergeIntercept(base, over Intercept) Intercept {
 	}
 	if over.InactiveBlockTimeout != "" {
 		base.InactiveBlockTimeout = over.InactiveBlockTimeout
+	}
+	return base
+}
+
+func mergeExternalEndpoint(base, over ExternalEndpoint) ExternalEndpoint {
+	if over.Enabled {
+		base.Enabled = true
+	}
+	if over.Port != 0 {
+		base.Port = over.Port
+	}
+	if over.Service.Type != "" {
+		base.Service.Type = over.Service.Type
+	}
+	if over.Service.Port != 0 {
+		base.Service.Port = over.Service.Port
+	}
+	if over.TLS.SecretName != "" {
+		base.TLS.SecretName = over.TLS.SecretName
 	}
 	return base
 }

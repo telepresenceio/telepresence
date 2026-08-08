@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net/http"
@@ -73,6 +74,12 @@ func (r connectResult) get() (*grpc.ClientConn, string, semver.Version, error) {
 func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
 	dialCtx, cancel := client.GetConfig(kc).Timeouts().TimeoutContext(dialCtx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
+
+	if cc := client.GetConfig(kc).Cluster(); usesExternalTransport(cc) {
+		// An external control endpoint is dialed directly: no known-name
+		// probe, no service discovery, no port-forward.
+		return kc.connectExternal(dialCtx, cc.ManagerAddress)
+	}
 
 	knownPap := &portforward.PodAddress{Name: trafficManagerPodName, Namespace: namespace, Port: trafficManagerAPIPort}
 	return connectSequence(
@@ -226,13 +233,13 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 	switch {
 	case hasBearerSource && hasX509Source:
 		clog.Debugf(kc, "manager calls will carry the kubeconfig's bearer credentials, falling back to x509 client-certificate credentials")
-		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(&managerAuthTokenSource{bearer: bearerSrc, x509: x509Src})))
+		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(&managerAuthTokenSource{bearer: bearerSrc, x509: x509Src}, false)))
 	case hasBearerSource:
 		clog.Debugf(kc, "manager calls will carry the kubeconfig's bearer credentials")
-		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(bearerSrc)))
+		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(bearerSrc, false)))
 	case hasX509Source:
 		clog.Debugf(kc, "manager calls will carry x509 client-certificate credentials, if the manager supports it")
-		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(x509Src)))
+		extra = append(extra, grpc.WithPerRPCCredentials(newManagerTokenCredentials(x509Src, false)))
 	default:
 		clog.Debugf(kc, "the kubeconfig yields no bearer token or client certificate for the traffic-manager connection")
 	}
@@ -270,6 +277,76 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 	}
 	if vi.GetAuthSupported() && !vi.GetAuthRequired() && !hasBearerSource && !hasX509Path {
 		clog.Debugf(kc, "traffic-manager %s supports authentication, but the current kubeconfig yields no bearer token or usable client certificate", vi.GetName())
+	}
+	verStr := strings.TrimPrefix(vi.Version, "v")
+	ver, err = semver.Parse(verStr)
+	if err != nil {
+		err = fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
+	}
+	return conn, vi.Name, ver, err
+}
+
+// connectExternal dials the traffic-manager directly at the admin-configured
+// external address (cluster.managerAddress) instead of through a Kubernetes
+// port-forward. No Kubernetes API calls are made: there is no known-name
+// probe and no service discovery. The client presents exactly one
+// credential: the kubeconfig's bearer token whenever a bearer source
+// exists, and otherwise its client certificate, directly in the TLS
+// handshake (the port-forward transport's x509 auth-port token exchange has
+// no equivalent here). The external listener rejects a call carrying both.
+func (kc *Cluster) connectExternal(dialCtx context.Context, addr string) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
+	hostPort, serverName, err := parseManagerAddress(addr)
+	if err != nil {
+		return nil, "", ver, err
+	}
+
+	bearerSrc := newManagerTokenSource(kc.Kubeconfig)
+	hasBearerSource := bearerSrc != nil
+	var getClientCert func(*tls.CertificateRequestInfo) (*tls.Certificate, error)
+	hasClientCert := false
+	if !hasBearerSource {
+		if getClientCert = externalClientCertificate(kc.Kubeconfig); getClientCert != nil {
+			hasClientCert = true
+		}
+	}
+	creds, err := managerServerCredentials(serverName, client.GetConfig(kc).Cluster().ManagerServerCA, getClientCert)
+	if err != nil {
+		return nil, "", ver, err
+	}
+
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{Time: 24 * time.Hour, Timeout: 20 * time.Second}),
+		grpc.WithIdleTimeout(0),
+	}
+	switch {
+	case hasBearerSource:
+		clog.Debugf(kc, "manager calls will carry the kubeconfig's bearer credentials")
+		opts = append(opts, grpc.WithPerRPCCredentials(newManagerTokenCredentials(bearerSrc, true)))
+	case hasClientCert:
+		clog.Debugf(kc, "the external traffic-manager connection authenticates with the kubeconfig's client certificate")
+	default:
+		clog.Debugf(kc, "the kubeconfig yields no bearer token or client certificate for the external traffic-manager connection")
+	}
+
+	conn, err = grpcClient.DialGRPC(dialCtx, "dns:///"+hostPort, opts...)
+	if err != nil {
+		return nil, "", ver, err
+	}
+	defer func() {
+		if err != nil {
+			conn.Close()
+		} else {
+			clog.Infof(kc, "Connected to Manager %s", ver)
+		}
+	}()
+
+	vi, err := getVersion(dialCtx, manager.NewManagerClient(conn))
+	if err != nil {
+		return conn, "", ver, client.CheckTimeout(dialCtx, fmt.Errorf("dial manager: %w", err))
+	}
+	if err = managerAuthError(vi, hasBearerSource, hasClientCert); err != nil {
+		return conn, "", ver, err
 	}
 	verStr := strings.TrimPrefix(vi.Version, "v")
 	ver, err = semver.Parse(verStr)

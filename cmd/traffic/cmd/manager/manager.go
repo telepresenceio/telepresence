@@ -195,6 +195,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 		g.Go("prometheus", mgr.servePrometheus)
 		g.Go("quictunnel", mgr.serveQuicTunnel)
 		g.Go("x509auth", mgr.serveX509Auth)
+		g.Go("external", func(ctx context.Context) error { return serveExternal(ctx, mgr) })
 
 		// reapNodeAgentJobs is the callback the uninstall endpoint runs, in
 		// addition to the agent injector's sidecar rollback, to delete every

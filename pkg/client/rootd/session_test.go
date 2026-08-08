@@ -1,12 +1,17 @@
 package rootd
 
 import (
+	"context"
 	"net/netip"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 )
 
@@ -72,4 +77,25 @@ func TestManagerIPInPodSubnets(t *testing.T) {
 			require.Equal(t, tt.want, managerIPInPodSubnets(tt.info))
 		})
 	}
+}
+
+// TestResolvePort_ExternalModeRejectsSymbolicPort verifies that resolvePort
+// refuses a symbolic service port with a user-facing error instead of
+// calling the Kubernetes API when the manager transport is external
+// (cluster.managerAddress set).
+func TestResolvePort_ExternalModeRejectsSymbolicPort(t *testing.T) {
+	cfg := client.GetDefaultConfig()
+	cfg.Cluster().ManagerAddress = "tls://tm.example.com:8443"
+	ctx := client.WithConfig(context.Background(), cfg)
+
+	s := &session{
+		Cluster: &k8s.Cluster{
+			Kubeconfig: &k8s.Kubeconfig{Context: ctx, Namespace: "default"},
+		},
+	}
+
+	_, err := s.resolvePort(ctx, "my-service", "http")
+	require.Error(t, err)
+	assert.Equal(t, errcat.User, errcat.GetCategory(err))
+	assert.ErrorContains(t, err, "numeric port")
 }

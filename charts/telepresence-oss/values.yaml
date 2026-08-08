@@ -388,6 +388,64 @@ quicTunnel:
       limits:
         memory: 512Mi
 
+################################################################################
+## External Endpoint Configuration
+################################################################################
+# externalEndpoint controls the opt-in external TLS gRPC listener that lets a
+# client connect without ever contacting the Kubernetes API server. Publishing
+# it requires security.authentication.mode: enforcing -- in permissive or
+# disabled mode the listener would have no access control -- and exactly one
+# of tls.secretName / tls.certManager.enabled, both enforced at chart render.
+# Publishing it also drops the pods/portforward rule from the rendered
+# clientRbac connect Role -- external clients never port-forward -- unless
+# the authorization gate is "portforward", where possession of that grant
+# is itself the connect policy.
+externalEndpoint:
+  enabled: false
+
+  # port is the container port the external TLS listener binds to. 8444
+  # avoids colliding with the agent-injector webhook's 8443 container port.
+  # Default: 8444
+  port: 8444
+
+  # service configures the Service that fronts the external listener.
+  service:
+    # type of the Service. LoadBalancer and NodePort are the typical choices
+    # for a listener meant to be reached from outside the cluster; ClusterIP
+    # is useful behind a separately managed ingress/gateway.
+    type: LoadBalancer
+    # port the Service listens on.
+    port: 443
+    # annotations to add to the Service, e.g. cloud-provider load-balancer
+    # settings.
+    annotations: {}
+
+  # tls configures the certificate the external listener terminates with.
+  # Exactly one of secretName or certManager.enabled must be set: the
+  # in-memory QUIC CA is ephemeral by design and cannot anchor an
+  # admin-distributed pin, so the external listener requires a certificate
+  # backed by persistent Secret material.
+  tls:
+    # secretName is an existing kubernetes.io/tls Secret, in the
+    # traffic-manager's namespace, to terminate the listener with.
+    secretName: ""
+
+    # certManager has the chart provision the certificate via cert-manager
+    # instead of a pre-existing Secret.
+    certManager:
+      # enabled turns on a cert-manager Certificate for the external
+      # listener, issued into the traffic-manager-external-tls Secret.
+      enabled: false
+
+      # dnsNames are the Subject Alternative Names for the issued
+      # certificate, e.g. the DNS name clients use to reach the external
+      # Service.
+      dnsNames: []
+
+      # issuerRef is the cert-manager issuer to request the certificate
+      # from, e.g. {name: my-issuer, kind: ClusterIssuer}.
+      issuerRef: {}
+
 # Values specific to the helm chart hooks for managing upgrade/deleting
 hooks:
   busybox:

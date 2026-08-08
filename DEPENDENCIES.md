@@ -79,6 +79,7 @@ following Free and Open Source software:
     github.com/jmoiron/sqlx                                                   v1.4.0                                  MIT license
     github.com/json-iterator/go                                               v1.1.12                                 MIT license
     github.com/kr/fs                                                          v0.1.0                                  3-clause BSD license
+    github.com/kylelemons/godebug                                             v1.1.0                                  Apache License 2.0
     github.com/lann/builder                                                   v0.0.0-20180802200727-47ae307949d0      MIT license
     github.com/lann/ps                                                        v0.0.0-20150810152359-62de8c46ede0      MIT license
     github.com/lib/pq                                                         v1.12.3                                 MIT license

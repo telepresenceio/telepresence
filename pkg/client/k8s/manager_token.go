@@ -178,13 +178,20 @@ func (c *managerAuthTokenSource) Token(ctx context.Context) (string, error) {
 type managerTokenCredentials struct {
 	source   managerTokenSource
 	warnOnce sync.Once
+
+	// requireTransportSecurity is true when these credentials ride a TLS
+	// transport (the external cluster.managerAddress dial) and false for the
+	// port-forwarded h2c socket used by the classic transport.
+	requireTransportSecurity bool
 }
 
 var _ credentials.PerRPCCredentials = (*managerTokenCredentials)(nil)
 
-// newManagerTokenCredentials returns credentials backed by source.
-func newManagerTokenCredentials(source managerTokenSource) *managerTokenCredentials {
-	return &managerTokenCredentials{source: source}
+// newManagerTokenCredentials returns credentials backed by source. secure
+// must match the transport: true for TLS, false for the port-forwarded h2c
+// socket.
+func newManagerTokenCredentials(source managerTokenSource, secure bool) *managerTokenCredentials {
+	return &managerTokenCredentials{source: source, requireTransportSecurity: secure}
 }
 
 // GetRequestMetadata returns the bearer authorization header for the current
@@ -206,8 +213,9 @@ func (c *managerTokenCredentials) GetRequestMetadata(ctx context.Context, _ ...s
 	return map[string]string{"authorization": "Bearer " + token}, nil
 }
 
-// RequireTransportSecurity is false: the connection to the traffic-manager is
-// a port-forwarded h2c socket.
+// RequireTransportSecurity reports whether these credentials require a
+// secure transport: true for the external TLS dial, false for the
+// port-forwarded h2c socket used by the classic transport.
 func (c *managerTokenCredentials) RequireTransportSecurity() bool {
-	return false
+	return c.requireTransportSecurity
 }

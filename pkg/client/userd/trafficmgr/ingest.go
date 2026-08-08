@@ -126,6 +126,9 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 	if err = requireAgentPortForward(ctx, "ingest"); err != nil {
 		return nil, err
 	}
+	if err = requireQuicTunnelAvailable(ctx, s.ManagerClient(), s.SessionInfo(), "ingest"); err != nil {
+		return nil, err
+	}
 	if rq.NodeAgent && s.compareFinalizedManagerVersion(2, 30, 0) < 0 {
 		return nil, errcat.User.Newf("traffic-manager version %s has no support for node-agents", s.managerVersion)
 	}

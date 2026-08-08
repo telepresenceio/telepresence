@@ -222,6 +222,16 @@ func TestEnvconfig(t *testing.T) {
 				e.AuthorizationGate = auth.GateTelepresence
 			},
 		},
+		"external-listener": {
+			Input: map[string]string{
+				"EXTERNAL_PORT":         "8443",
+				"EXTERNAL_TLS_CERT_DIR": "/var/run/secrets/telepresence.io/external-tls",
+			},
+			Output: func(e *managerutil.Env) {
+				e.ExternalPort = 8443
+				e.ExternalTLSCertDir = "/var/run/secrets/telepresence.io/external-tls"
+			},
+		},
 	}
 
 	for tcName, tc := range testcases {

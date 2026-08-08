@@ -155,6 +155,23 @@ items:
           pre-2.33 clients and installs that override <code>apiPort</code>
           still need them.
         docs: reference/rbac
+      - type: feature
+        title: External control endpoint for clients without Kubernetes API access
+        body: >-
+          The new Helm setting <code>externalEndpoint</code> publishes a TLS
+          gRPC listener that serves only the traffic-manager's client-facing
+          RPC surface, with per-method session-ownership enforcement and
+          admission controls in front of token validation. A client
+          configured with <code>cluster.managerAddress</code> (and
+          optionally <code>cluster.managerServerCA</code>) dials it directly
+          and makes no Kubernetes API requests at all; it authenticates with
+          its kubeconfig's bearer token, or with its client certificate
+          directly in the TLS handshake when no bearer source exists.
+          Publishing the endpoint requires
+          <code>security.authentication.mode: enforcing</code> and a
+          persisted server certificate, from an existing TLS Secret or
+          cert-manager.
+        docs: reference/external-endpoint
   - version: 2.31.2
     date: 2026-08-02
     notes:

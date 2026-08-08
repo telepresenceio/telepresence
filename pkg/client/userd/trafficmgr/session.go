@@ -202,7 +202,18 @@ type session struct {
 // independently.
 func (s *session) agentPodWatchNamespaces() []string {
 	s.agentPodWatchNamespacesOnce.Do(func() {
-		if !client.GetConfig(s).Cluster().AgentPortForward {
+		cc := client.GetConfig(s).Cluster()
+		if !cc.AgentPortForward {
+			return
+		}
+		if cc.ManagerAddress != "" {
+			// External manager transport: no Kubernetes API access, so the
+			// CanPortForward SSAR can't run. Every mapped namespace is kept:
+			// the agent-pod watch is relayed through the manager, and agent
+			// streams ride the QUIC tunnel rather than a Kubernetes
+			// port-forward. The manager reviews what the identity may attach
+			// to; a per-namespace port-forward probe has no meaning here.
+			s.agentPodWatchNamespacesValue = s.GetCurrentNamespaces(true)
 			return
 		}
 		s.agentPodWatchNamespacesValue = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
@@ -213,6 +224,10 @@ func (s *session) agentPodWatchNamespaces() []string {
 }
 
 func (s *session) RevokeIntercept(ctx context.Context, interceptID string) error {
+	if client.GetConfig(s).Cluster().ManagerAddress != "" {
+		return errcat.User.New("revoking an intercept requires cluster access to the traffic-manager's ConfigMap, " +
+			"which this external connection does not have")
+	}
 	return tmconfig.AddCommand(s, k8s.GetManagerNamespace(ctx), tmconfig.AdminCommand{
 		Name:      tmconfig.RemoveIntercept,
 		Args:      []string{interceptID},
@@ -999,23 +1014,35 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 		// We do not want to override the local config with the traffic-manager's config even if the local config is empty.
 		cfg.Cluster().MappedNamespaces = clientMappedNamespaces
 		namespaces = effectiveMappedNamespaces(namespaces, clientMappedNamespaces, tmMappedNamespaces)
-		if s.SetMappedNamespaces(namespaces) {
-			if len(namespaces) == 0 {
-				s.namespaceWatchOnce.Do(func() {
-					switch {
-					case s.managerSupportsWatchNamespaces():
-						clog.Infof(s, "Will watch all namespaces using the traffic-manager's WatchNamespaces RPC")
-						s.StartNamespacesFromManager(s.ManagerClient(), s.sessionInfo)
-					case k8sapi.CanWatchNamespaces(s):
-						clog.Infof(s, "Will watch all namespaces")
-						s.StartNamespaceWatcher()
-					default:
-						clog.Warnf(s, "Unable to watch all namespaces")
-					}
-				})
-			} else {
-				clog.Infof(s, "Will use mapped namespaces %s", namespaces)
-			}
+		changed := s.SetMappedNamespaces(namespaces)
+		switch {
+		case len(namespaces) == 0:
+			// The watcher selection must not depend on SetMappedNamespaces
+			// reporting a change: a fresh session's mapped set is already
+			// empty, so watching everything is not a change -- and over an
+			// external manager transport the WatchNamespaces stream is the
+			// only namespace source there is.
+			s.namespaceWatchOnce.Do(func() {
+				external := client.GetConfig(s).Cluster().ManagerAddress != ""
+				switch {
+				case s.managerSupportsWatchNamespaces():
+					clog.Infof(s, "Will watch all namespaces using the traffic-manager's WatchNamespaces RPC")
+					s.StartNamespacesFromManager(s.ManagerClient(), s.sessionInfo)
+				case external:
+					// No cluster API access over an external manager
+					// transport, and this manager predates
+					// WatchNamespaces: the Kubernetes namespace watcher
+					// is not an option.
+					clog.Warnf(s, "Unable to watch all namespaces: the traffic-manager does not support the WatchNamespaces RPC")
+				case k8sapi.CanWatchNamespaces(s):
+					clog.Infof(s, "Will watch all namespaces")
+					s.StartNamespaceWatcher()
+				default:
+					clog.Warnf(s, "Unable to watch all namespaces")
+				}
+			})
+		case changed:
+			clog.Infof(s, "Will use mapped namespaces %s", namespaces)
 		}
 		rt := cfg.Routing()
 		rt.NeverProxy = subnet.Unique(append(rt.NeverProxy, tmCfg.Routing().NeverProxy...))

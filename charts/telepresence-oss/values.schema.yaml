@@ -360,6 +360,64 @@ properties:
         description: The traffic-manager version to emulate
         type: string
 
+  externalEndpoint:
+    description: >-
+      Configuration for the opt-in external TLS gRPC listener that lets a client connect without ever
+      contacting the Kubernetes API server. Publishing it requires security.authentication.mode:
+      enforcing and exactly one of tls.secretName / tls.certManager.enabled, both enforced at chart
+      render.
+    type: object
+    additionalProperties: false
+    properties:
+      enabled:
+        description: Enable the traffic-manager's external TLS gRPC listener.
+        type: boolean
+      port:
+        description: The container port the external TLS listener binds to.
+        type: integer
+      service:
+        description: Configuration for the Service that fronts the external listener.
+        type: object
+        additionalProperties: false
+        properties:
+          type:
+            description: The type of Service for the external listener.
+            type: string
+          port:
+            description: The port the Service listens on.
+            type: integer
+          annotations:
+            description: Annotations to add to the external Service.
+            type: object
+      tls:
+        description: >-
+          The certificate the external listener terminates with. Exactly one of secretName or
+          certManager.enabled must be set.
+        type: object
+        additionalProperties: false
+        properties:
+          secretName:
+            description: An existing kubernetes.io/tls Secret, in the traffic-manager's namespace.
+            type: string
+          certManager:
+            description: Have the chart provision the certificate via cert-manager.
+            type: object
+            additionalProperties: false
+            properties:
+              enabled:
+                description: >-
+                  Provision a cert-manager Certificate for the external listener, issued into the
+                  traffic-manager-external-tls Secret.
+                type: boolean
+              dnsNames:
+                description: Subject Alternative Names for the issued certificate.
+                type: array
+                items:
+                  type: string
+              issuerRef:
+                description: 'The cert-manager issuer to request the certificate from, e.g. {name: my-issuer, kind: ClusterIssuer}.'
+                type: object
+
   extraEnv:
     description: Extra environment variables added to the traffic-manager container
     type: array

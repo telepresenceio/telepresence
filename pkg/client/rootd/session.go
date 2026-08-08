@@ -543,6 +543,10 @@ func (s *session) resolvePort(ctx context.Context, host, portStr string) (ap typ
 	if err == nil {
 		return ap, errors.New("a symbolic port must be used with a service name, not an IP address")
 	}
+	if client.GetConfig(s).Cluster().ManagerAddress != "" {
+		return ap, errcat.User.New("symbolic service-port resolution requires cluster access; " +
+			"use a numeric port with an external manager address")
+	}
 	return portforward.ResolveServiceAndPort(ctx, host, s.Namespace, portStr, proto)
 }
 
@@ -1461,9 +1465,14 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 		// WatchAgentPods instead of this daemon watching the traffic-manager itself.
 		relayMode := len(s.agentPodNamespaces) > 0
 		var agentNamespaces []string
-		if relayMode {
+		switch {
+		case relayMode:
 			agentNamespaces = s.agentPodNamespaces
-		} else {
+		case clusterCfg.ManagerAddress != "":
+			// No relay list and no cluster API access: direct agent
+			// port-forwards are unavailable over an external manager
+			// transport, and CanPortForward would be a Kubernetes API call.
+		default:
 			agentNamespaces = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
 				return !k8s.CanPortForward(s, ns)
 			})

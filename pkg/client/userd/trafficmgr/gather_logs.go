@@ -22,7 +22,9 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
@@ -131,6 +133,10 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 	exportDir := filepath.Join(filelocation.AppUserCacheDir(ctx), request.ExportDir)
 	if s.managerSupportsStreamLogs() {
 		return gatherLogsViaStream(ctx, s.ManagerClient(), s.SessionInfo(), exportDir, request)
+	}
+	if client.GetConfig(s).Cluster().ManagerAddress != "" {
+		return nil, errcat.User.New("the traffic-manager does not support the StreamLogs RPC (upgrade required); " +
+			"direct log collection through the Kubernetes API is unavailable over this external connection")
 	}
 	return s.gatherLogsDirect(ctx, exportDir, request)
 }

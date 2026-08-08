@@ -203,14 +203,20 @@ func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
 	ret := &Cluster{Kubeconfig: kubeFlags}
 
 	cfg := client.GetConfig(ret)
-	timedC, cancel := cfg.Timeouts().TimeoutContext(kubeFlags, client.TimeoutClusterConnect)
-	defer cancel()
-	if err := ret.check(timedC); err != nil {
-		return nil, err
+	external := cfg.Cluster().ManagerAddress != ""
+	if external {
+		// An external manager address means the client never talks to the
+		// Kubernetes API server: skip the discovery ServerVersion probe.
+		clog.Infof(ret, "Manager address: %s (external, no cluster API access)", cfg.Cluster().ManagerAddress)
+	} else {
+		timedC, cancel := cfg.Timeouts().TimeoutContext(kubeFlags, client.TimeoutClusterConnect)
+		defer cancel()
+		if err := ret.check(timedC); err != nil {
+			return nil, err
+		}
+		clog.Infof(ret, "Context: %s", ret.KubeContext)
+		clog.Infof(ret, "Server: %s", ret.Server)
 	}
-
-	clog.Infof(ret, "Context: %s", ret.KubeContext)
-	clog.Infof(ret, "Server: %s", ret.Server)
 
 	if len(namespaces) == 1 && namespaces[0] == "all" {
 		namespaces = nil
@@ -228,11 +234,17 @@ func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
 		ret.SetMappedNamespaces(namespaces)
 	}
 	if GetManagerNamespace(ret) == "" {
-		tns, err := ret.determineTrafficManagerNamespace()
-		if err != nil {
-			return nil, err
+		if external {
+			// The manager namespace is irrelevant to an external dial; keep
+			// a value for display purposes only.
+			cfg.Cluster().DefaultManagerNamespace = defaultManagerNamespace
+		} else {
+			tns, err := ret.determineTrafficManagerNamespace()
+			if err != nil {
+				return nil, err
+			}
+			cfg.Cluster().DefaultManagerNamespace = tns
 		}
-		cfg.Cluster().DefaultManagerNamespace = tns
 	}
 	clog.Infof(ret, "Will look for traffic manager in namespace %s", GetManagerNamespace(ret))
 	return ret, nil
@@ -533,11 +545,20 @@ func (kc *Cluster) refreshNamespaces() {
 			i++
 		}
 	}
+	// Over an external manager transport there is no Kubernetes API to probe
+	// with canAccessNS; the manager reviews namespace access itself, so every
+	// entry is taken as accessible, exactly as for a manager-fed snapshot.
+	// GetConfigNoDefault: a Cluster context always carries a config in
+	// production; tests exercising the snapshot machinery may not set one.
+	external := false
+	if cfg := client.GetConfigNoDefault(kc); cfg != nil {
+		external = usesExternalTransport(cfg.Cluster())
+	}
 	namespaces := make(map[string]bool, len(nss))
 	for _, ns := range nss {
 		if kc.shouldBeWatched(ns) {
 			accessOk := true
-			if !kc.namespacesFromManager {
+			if !(kc.namespacesFromManager || external) {
 				var ok bool
 				accessOk, ok = kc.currentMappedNamespaces[ns]
 				if !ok {

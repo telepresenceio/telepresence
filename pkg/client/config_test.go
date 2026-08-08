@@ -95,6 +95,59 @@ nodeAgent:
 	assert.True(t, cfg.NodeAgent().Enabled)
 }
 
+// TestClusterManagerAddressConfig verifies that cluster.managerAddress and
+// cluster.managerServerCA parse and round-trip through YAML marshaling.
+func TestClusterManagerAddressConfig(t *testing.T) {
+	cfg, err := ParseConfigYAML(testutil.NewContext(t, true), "", []byte(`
+cluster:
+  managerAddress: tls://tm.example.com:8443
+  managerServerCA: /etc/tm/ca.pem
+`))
+	require.NoError(t, err)
+	assert.Equal(t, "tls://tm.example.com:8443", cfg.Cluster().ManagerAddress)
+	assert.Equal(t, "/etc/tm/ca.pem", cfg.Cluster().ManagerServerCA)
+
+	cfgBytes, err := cfg.MarshalYAML()
+	require.NoError(t, err)
+	cfg2, err := ParseConfigYAML(testutil.NewContext(t, true), "", cfgBytes)
+	require.NoError(t, err)
+	assert.Equal(t, cfg.Cluster().ManagerAddress, cfg2.Cluster().ManagerAddress)
+	assert.Equal(t, cfg.Cluster().ManagerServerCA, cfg2.Cluster().ManagerServerCA)
+}
+
+// TestLoadConfig_ClusterManagerAddressMerge verifies that cluster.managerAddress
+// follows the same system/user merge precedence as other Cluster fields: a
+// system's non-default value survives when the user doesn't override it.
+func TestLoadConfig_ClusterManagerAddressMerge(t *testing.T) {
+	tmp := t.TempDir()
+	sys := filepath.Join(tmp, "system")
+	user := filepath.Join(tmp, "user")
+	require.NoError(t, os.MkdirAll(sys, 0o755))
+	require.NoError(t, os.MkdirAll(user, 0o700))
+
+	require.NoError(t, os.WriteFile(filepath.Join(sys, ConfigFile),
+		[]byte("cluster:\n  managerAddress: tls://tm.example.com:8443\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(user, ConfigFile), []byte("timeouts:\n  clusterConnect: 30s\n"), 0o600))
+
+	c := testutil.NewContext(t, false)
+	c = filelocation.WithAppSystemConfigDir(c, sys)
+	c = filelocation.WithAppUserConfigDir(c, user)
+	env, err := LoadEnv()
+	require.NoError(t, err)
+	c = WithEnv(c, &env)
+
+	cfg, err := LoadConfig(c)
+	require.NoError(t, err)
+	// System non-default value survives when the user doesn't override it.
+	assert.Equal(t, "tls://tm.example.com:8443", cfg.Cluster().ManagerAddress)
+	// A user override takes priority.
+	require.NoError(t, os.WriteFile(filepath.Join(user, ConfigFile),
+		[]byte("cluster:\n  managerAddress: tls://override.example.com:8443\n"), 0o600))
+	cfg, err = LoadConfig(c)
+	require.NoError(t, err)
+	assert.Equal(t, "tls://override.example.com:8443", cfg.Cluster().ManagerAddress)
+}
+
 // TestLoadConfig_NodeAgentMerge verifies that nodeAgent.enabled follows the
 // same system/user merge precedence as other sections: a system's non-default
 // value survives when the user doesn't override it. Like every other

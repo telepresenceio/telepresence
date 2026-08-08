@@ -910,6 +910,17 @@ type Cluster struct {
 	ForceSPDY               bool     `json:"forceSPDY"`
 	AgentPortForward        bool     `json:"agentPortForward"`
 
+	// ManagerAddress, when set, is an external control-plane endpoint dialed
+	// directly instead of through a Kubernetes port-forward, e.g.
+	// tls://tm.example.com:8443. Empty means the classic port-forward
+	// transport.
+	ManagerAddress string `json:"managerAddress"`
+
+	// ManagerServerCA pins the external ManagerAddress endpoint's server
+	// certificate: a PEM block, a base64-encoded PEM block, or a path to a
+	// file containing one. Empty means the system trust roots.
+	ManagerServerCA string `json:"managerServerCA"`
+
 	// deprecated, use Routing.VirtualSubnet
 	OldVirtualIPSubnet string `json:"virtualIPSubnet"`
 }
@@ -1258,6 +1269,15 @@ func GetConfig(ctx context.Context) Config {
 		return cfg
 	}
 	panic("no Config has been set")
+}
+
+// GetConfigNoDefault returns the Config carried by ctx, or nil when none has
+// been stored. Unlike GetConfig it never panics.
+func GetConfigNoDefault(ctx context.Context) Config {
+	if cfg, ok := ctx.Value(configKey{}).(*config); ok {
+		return cfg
+	}
+	return nil
 }
 
 // ReplaceConfig replaces the config last stored using WithConfig with the given Config.

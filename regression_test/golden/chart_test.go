@@ -99,4 +99,5 @@ const (
 	clientClusterScopeTpl = "telepresence-oss/templates/clientRbac/cluster-scope.yaml"
 	clientNamespaceTpl    = "telepresence-oss/templates/clientRbac/namespace-scope.yaml"
 	preUpgradeHookTpl     = "telepresence-oss/templates/pre-upgrade-hook.yaml"
+	externalEndpointTpl   = "telepresence-oss/templates/external-endpoint.yaml"
 )

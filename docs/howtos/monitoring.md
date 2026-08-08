@@ -49,6 +49,12 @@ To enable Prometheus metrics for your traffic manager, follow these steps:
    | `telepresence_connect_active_status`     | Gauge    | Flag to indicate when a connect is active. 1 for active, 0 for not active.    | `client`, `install_id`                   |
    | `telepresence_intercept_count`           | Counter  | The total number of intercepts by user.                                       | `client`, `install_id`, `intercept_type` |
    | `telepresence_intercept_active_status`   | Gauge    | Flag to indicate when an intercept is active. 1 for active, 0 for not active. | `client`, `install_id`, `workload`       |
+   | `telepresence_external_auth_cache_hits`  | Counter  | Bearer-token authentications on the external listener resolved from cache.   |                                          |
+   | `telepresence_external_auth_first_reviews` | Counter | Manager-audience `TokenReview` calls made by the external listener.          |                                          |
+   | `telepresence_external_auth_fallback_reviews` | Counter | No-audience fallback `TokenReview` calls made by the external listener.   |                                          |
+   | `telepresence_external_auth_rate_limited` | Counter | Requests the external listener rejected before any `TokenReview` could run.  |                                          |
+   | `telepresence_external_auth_invalid_tokens` | Counter | Bearer tokens the API server rejected on the external listener.            |                                          |
+   | `telepresence_external_auth_api_failures` | Counter | `TokenReview` calls that failed for infrastructure reasons.                  |                                          |
 
 4. **Enable Scraping for Traffic Manager Metrics**
    To ensure that these metrics are collected regularly by your Prometheus server and to maintain a historical record, it's essential to enable scraping. If you're using the default Prometheus configuration, you can achieve this by specifying specific pod annotations as follows:
@@ -63,6 +69,27 @@ To enable Prometheus metrics for your traffic manager, follow these steps:
    ```
 
    These annotations instruct Prometheus to scrape metrics from the Traffic Manager pod, allowing you to track consumption metrics and other important data over time.
+
+## External Endpoint Authentication Metrics
+
+The `telepresence_external_auth_*` counters exist only when the
+traffic-manager publishes an
+[external control endpoint](../reference/external-endpoint.md). That
+listener authenticates callers the Kubernetes API server has not vetted:
+anyone with network access to it can submit a bearer token, and each
+previously unseen invalid token can cost the manager up to two `TokenReview`
+calls against the API server. The counters make that load, and the
+admission controls that bound it, observable:
+
+- The ratio of `cache_hits` to `first_reviews` shows how well the token
+  cache absorbs repeat authentications.
+- `fallback_reviews` counts the deliberate second, no-audience review that
+  ordinary kubeconfig tokens need.
+- A rising `rate_limited` means the admission controls are absorbing a
+  flood before it reaches the API server; a rising `invalid_tokens` means
+  something is probing the endpoint with garbage credentials. Both are
+  worth alerting on.
+- `api_failures` separates API-server trouble from bad callers.
 
 ## Grafana Integration
 

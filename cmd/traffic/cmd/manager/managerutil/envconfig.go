@@ -106,6 +106,21 @@ type Env struct {
 	// listener.
 	AuthX509Port uint16
 
+	// ExternalPort is the TCP port the traffic-manager's external client-only
+	// TLS gRPC listener binds to on all interfaces. Zero (the default)
+	// disables the listener. Enabling it (chart value
+	// externalEndpoint.enabled) requires AuthenticationMode to be enforcing
+	// and ExternalTLSCertDir to be set; the manager refuses to start
+	// otherwise.
+	ExternalPort uint16
+
+	// ExternalTLSCertDir is the directory containing tls.crt and tls.key for
+	// the external listener's server certificate, mounted from the Secret
+	// named by externalEndpoint.tls (chart values). The listener re-reads
+	// the files on change, so certificate rotation never requires a manager
+	// restart.
+	ExternalTLSCertDir string
+
 	// TunnelQuicExternalHost is the externally reachable host or IP advertised to
 	// clients for the QUIC tunnel endpoint, overriding candidate discovery
 	// entirely (see "Zero-configuration endpoint discovery" in

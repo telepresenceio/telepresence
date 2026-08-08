@@ -191,6 +191,14 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
+          {{- with .externalEndpoint }}
+          {{- if .enabled }}
+          - name: EXTERNAL_PORT
+            value: {{ .port | quote }}
+          - name: EXTERNAL_TLS_CERT_DIR
+            value: /var/run/secrets/telepresence.io/external-tls
+          {{- end }}
+          {{- end }}
       {{- if or .agentInjector.enabled .nodeAgent.enabled }}
         {{- /*
         Agent arrival timeout, image resolution, and every setting that is
@@ -407,6 +415,10 @@ spec:
           - name: prometheus
             containerPort: {{ .prometheus.port }}
           {{- end }}
+          {{- if .externalEndpoint.enabled }}
+          - name: external
+            containerPort: {{ .externalEndpoint.port }}
+          {{- end }}
           {{- /*
           No "quic" containerPort here: the manager's QUIC listener (governed by
           TUNNEL_QUIC_PORT below) is reachable only via the forwarder's SNI/connection-ID
@@ -434,11 +446,16 @@ spec:
           resources:
             {{ toYaml . | nindent 12 }}
           {{- end }}
-      {{- if or (eq .agentInjector.certificate.accessMethod "mount") .extraVolumeMounts }}
+      {{- if or (eq .agentInjector.certificate.accessMethod "mount") .externalEndpoint.enabled .extraVolumeMounts }}
           volumeMounts:
           {{- if and (eq .agentInjector.certificate.accessMethod "mount") .agentInjector.enabled }}
             - name: tls
               mountPath: /var/run/secrets/tls
+              readOnly: true
+          {{- end }}
+          {{- if .externalEndpoint.enabled }}
+            - name: external-tls
+              mountPath: /var/run/secrets/telepresence.io/external-tls
               readOnly: true
           {{- end }}
           {{- with .extraVolumeMounts }}
@@ -463,13 +480,18 @@ spec:
       {{- with .priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}
-  {{- if or (eq .agentInjector.certificate.accessMethod "mount") .extraVolumes }}
+  {{- if or (eq .agentInjector.certificate.accessMethod "mount") .externalEndpoint.enabled .extraVolumes }}
       volumes:
         {{- if and (eq .agentInjector.certificate.accessMethod "mount") .agentInjector.enabled }}
         - name: tls
           secret:
             defaultMode: 420
             secretName: {{ .agentInjector.secret.name }}
+        {{- end }}
+        {{- if .externalEndpoint.enabled }}
+        - name: external-tls
+          secret:
+            secretName: {{ .externalEndpoint.tls.secretName | default "traffic-manager-external-tls" }}
         {{- end }}
         {{- with .extraVolumes }}
         {{ toYaml . | nindent 8 }}

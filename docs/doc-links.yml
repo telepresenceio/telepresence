@@ -273,6 +273,8 @@
       link: reference/rbac
     - title: Authentication and authorization
       link: reference/authentication
+    - title: External control endpoint
+      link: reference/external-endpoint
     - title: Telepresence and VPNs
       link: reference/vpn
     - title: Connection Routing
