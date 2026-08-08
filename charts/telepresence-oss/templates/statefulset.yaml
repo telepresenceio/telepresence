@@ -1,25 +1,21 @@
 {{- with .Values }}
 {{- if not (and .rbac .rbac.only) }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "traffic-manager.name" $ }}
   namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
     {{ include "telepresence.labels" $ | nindent 4 }}
 spec:
-{{- if and .quicTunnel .quicTunnel.enabled (gt (int .replicaCount) 1) }}
-{{- fail "quicTunnel.enabled requires replicaCount 1: the traffic-manager's QUIC certificate authority and session state are process-local, so a second replica breaks the QUIC handshake (see the QUIC Tunnel Transport reference)" }}
+{{- if gt (int .replicaCount) 1 }}
+{{- fail "replicaCount must be 1: the traffic-manager's CA and session state are process-local, and the client's known-name pods/portforward connect path dials pod traffic-manager-0 specifically" }}
 {{- end }}
-  replicas: {{ .replicaCount }}
+  replicas: 1
+  serviceName: {{ include "traffic-manager.headlessServiceName" $ }}
   selector:
     matchLabels:
       {{ include "telepresence.selectorLabels" $ | nindent 6 }}
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1        # Allows creating one extra pod during the update
-      maxUnavailable: 0  # Ensures no pods are terminated until new ones are ready
   template:
     metadata:
     {{- with .podAnnotations }}

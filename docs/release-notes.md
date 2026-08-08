@@ -50,6 +50,18 @@ When several enabled workload kinds have a workload with the same name in a name
 <code>telepresence gather-logs</code> now streams traffic-manager and traffic-agent logs (and, with <code>--get-pod-yaml</code>, pod manifests) through the traffic-manager, which reads them on the client's behalf, and a client watching all namespaces receives the manager's managed-namespace list the same way. A client therefore no longer needs Kubernetes permissions to list pods, read <code>pods/log</code>, or list namespaces; log access is instead authorized by <code>get</code> on the <code>logs</code> and <code>logs/yaml</code> resources in <code>telepresence.io</code>, which the chart's client Roles grant. The streaming bounds are tunable through the new Helm setting <code>logStreaming</code>, and both features fall back to the old direct Kubernetes API access when the traffic-manager predates them.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The traffic-manager runs as a StatefulSet with a fixed pod name</div></div>
+<div style="margin-left: 15px">
+
+The traffic-manager Deployment is now a single-replica StatefulSet whose pod is always named <code>traffic-manager-0</code>. A pre-upgrade hook migrates an existing Deployment install automatically; rolling back to an older chart requires uninstall and reinstall. Because a one-replica StatefulSet cannot surge a replacement pod, an image update includes a brief window with no ready manager -- client sessions survive it and re-establish with their intercepts intact.
+</div>
+
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Clients connect to the traffic-manager by its fixed pod name](reference/rbac)</div></div>
+<div style="margin-left: 15px">
+
+The client now port-forwards directly to the <code>traffic-manager-0</code> pod, so the only Kubernetes permission a connection needs is <code>create</code> on <code>pods/portforward</code> for that one pod name. The previous discovery grants (get services, list pods) remain available as a fallback and are rendered while the new Helm setting <code>clientRbac.legacyAccess</code> is true (the default); pre-2.33 clients and installs that override <code>apiPort</code> still need them.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">

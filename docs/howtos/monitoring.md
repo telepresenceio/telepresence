@@ -25,7 +25,7 @@ To enable Prometheus metrics for your traffic manager, follow these steps:
    After configuring the Prometheus port, you can validate its exposure by port-forwarding the port using Kubernetes:
 
    ```shell
-   kubectl port-forward deploy/traffic-manager 9090:9090 -n ambassador
+   kubectl port-forward statefulset/traffic-manager 9090:9090 -n ambassador
    ```
 
 3. **Access Prometheus Dashboard**

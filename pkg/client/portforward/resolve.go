@@ -161,8 +161,15 @@ func resolve(ctx context.Context, addr string) (pa *PodAddress, err error) {
 	if p, err := strconv.ParseUint(port, 10, 16); err == nil {
 		pn = uint16(p)
 	}
-	if pn != 0 && podID != "" {
-		return &PodAddress{Name: name, Namespace: namespace, Port: pn, PodID: podID}, nil
+	if pn != 0 {
+		switch podID {
+		case NoLookupMarker:
+			// Known-name dial: no Kubernetes read at all.
+			return &PodAddress{Name: name, Namespace: namespace, Port: pn}, nil
+		case "":
+		default:
+			return &PodAddress{Name: name, Namespace: namespace, Port: pn, PodID: podID}, nil
+		}
 	}
 
 	// Get the pod.

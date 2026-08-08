@@ -22,6 +22,12 @@ image:
   name: tel2
   pullPolicy: IfNotPresent
 
+# apiPort is part of the known-name connect contract: a client dials pod
+# traffic-manager-0 on this port directly to establish its session (see
+# docs/reference/rbac.md). Overriding it takes clients off that path onto
+# the discovery fallback, which requires clientRbac.legacyAccess.
+#
+# Default: 8081
 apiPort: 8081
 
 securityContext:
@@ -139,6 +145,30 @@ maxNamespaceSpecificWatchers: 10
 managerRbac:
   # Default: true
   create: true
+
+clientRbac:
+  # legacyAccess controls the mechanical (non-policy) rules the chart
+  # renders into client Roles:
+  #
+  #  true   the connect Role's discovery rules (services get, pods
+  #         get/list) and unscoped pods/portforward create, plus the
+  #         per-namespace/cluster-scope Roles' legacy diagnostic grants
+  #         (pods get/list, pods/log get, namespaces get/list/watch) --
+  #         everything a pre-2.33 client needs to resolve the
+  #         traffic-manager Service to a pod and gather logs directly.
+  #  false  the connect Role's single pods/portforward rule, scoped to
+  #         the StatefulSet's known pod name, and no legacy diagnostic
+  #         grants.
+  #
+  # Only pre-2.33 clients, or an install that overrides apiPort's
+  # default (see apiPort below), need the legacy grants. Default flips
+  # to false two minor releases after 2.32, and the toggle -- along with
+  # the rules it guards and the Deployment-to-StatefulSet migration hook
+  # -- is removed four minors after 2.32. Both changes get release-note
+  # entries.
+  #
+  # Default: true
+  legacyAccess: true
 
 timeouts:
   # The duration the traffic manager should wait for an agent to arrive (i.e., to be registered in the traffic manager's state)

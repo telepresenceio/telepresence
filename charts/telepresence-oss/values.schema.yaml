@@ -237,7 +237,10 @@ properties:
             type: string
 
   apiPort:
-    description: The port used by the Traffic Manager gRPC API
+    description: >-
+      The port used by the Traffic Manager gRPC API. Part of the known-name connect
+      contract (clients dial pod traffic-manager-0 on this port directly); overriding it
+      requires clientRbac.legacyAccess.
     type: integer
 
   client:
@@ -326,6 +329,13 @@ properties:
     properties:
       create:
         description: Create RBAC resources for non-admin users with this release
+        type: boolean
+      legacyAccess:
+        description: >-
+          Render the legacy discovery and diagnostic grants (services get, pods get/list,
+          pods/log get, namespaces get/list/watch) alongside the minimal, name-scoped
+          pods/portforward connect rule. Only pre-2.33 clients, or an install that overrides
+          apiPort, need them.
         type: boolean
       namespaces:
         description: The namespaces to give users access to. Defaults to Traffic Manager's namespaces (unless dynamic)

@@ -181,7 +181,7 @@ func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.Agen
 	if podID == "" {
 		grpcAddr = fmt.Sprintf("pod/%s.%s:%d", ai.PodName, ns, ai.ApiPort)
 	} else {
-		grpcAddr = fmt.Sprintf("pod/%s.%s:%d#%s", ai.PodName, ns, ai.ApiPort, podID)
+		grpcAddr = fmt.Sprintf("pod/%s.%s:%d%s%s", ai.PodName, ns, ai.ApiPort, portforward.UIDSeparator, podID)
 	}
 
 	pfDialer := portforward.Dialer(ac.Cluster)

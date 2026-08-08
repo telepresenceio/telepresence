@@ -22,12 +22,27 @@ type PodAddress struct {
 	PodID     k8sTypes.UID
 }
 
+// NoLookupMarker replaces the pod UID in an address that must resolve with
+// no Kubernetes API call at all — the known-name manager dial. The SPDY
+// port-forward POST only needs the pod name and namespace; a real UID is a
+// liveness refinement, not a requirement. A pod that dies mid-dial or gets
+// replaced is detected by connection death on the resulting conn, not by
+// UID mismatch.
+const NoLookupMarker = "!"
+
+// UIDSeparator separates the pod UID (or NoLookupMarker) from the address.
+// It is a RFC 3986 unreserved character, so the full address survives the
+// url.Parse the grpc resolver machinery applies to its target.
+const UIDSeparator = "~"
+
 func parseAddr(fullAddr string) (kind, name, namespace, port string, podID k8sTypes.UID, err error) {
 	addr := fullAddr
-	if hash := strings.LastIndex(fullAddr, "#"); hash > 0 {
-		id := addr[hash+1:]
-		addr = addr[:hash]
-		if _, err := uuid.Parse(id); err == nil {
+	if sep := strings.LastIndex(fullAddr, UIDSeparator); sep > 0 {
+		id := addr[sep+1:]
+		addr = addr[:sep]
+		if id == NoLookupMarker {
+			podID = NoLookupMarker
+		} else if _, err := uuid.Parse(id); err == nil {
 			podID = k8sTypes.UID(id)
 		}
 	}
@@ -45,13 +60,16 @@ func parseAddr(fullAddr string) (kind, name, namespace, port string, podID k8sTy
 		}
 		return kind, name, namespace, port, podID, nil
 	}
-	return "", "", "", "", "", fmt.Errorf("%q is not a valid [<kind>/]<name[.namespace]>:<port-number>[#<uid>]", fullAddr)
+	return "", "", "", "", "", fmt.Errorf("%q is not a valid [<kind>/]<name[.namespace]>:<port-number>[~<uid>]", fullAddr)
 }
 
 func parsePodAddr(addr string) (PodAddress, error) {
 	kind, name, namespace, port, podId, err := parseAddr(addr)
 	if err != nil {
 		return PodAddress{}, err
+	}
+	if podId == NoLookupMarker {
+		podId = ""
 	}
 	if kind == "pod" {
 		if pn, err := strconv.ParseUint(port, 10, 16); err == nil {
@@ -67,7 +85,18 @@ func parsePodAddr(addr string) (PodAddress, error) {
 }
 
 func (pa *PodAddress) String() string {
-	return fmt.Sprintf("%s.%s:%d#%s", pa.Name, pa.Namespace, pa.Port, pa.PodID)
+	return pa.AddrFor(pa.Port)
+}
+
+// AddrFor formats a k8spf dial address for port, reusing pa's pod identity.
+// A PodAddress with no PodID (the known-name, no-lookup form) formats with
+// NoLookupMarker so the resolver short-circuits for it too.
+func (pa *PodAddress) AddrFor(port uint16) string {
+	id := pa.PodID
+	if id == "" {
+		id = NoLookupMarker
+	}
+	return fmt.Sprintf("pod/%s.%s:%d%s%s", pa.Name, pa.Namespace, port, UIDSeparator, id)
 }
 
 func (pa *PodAddress) state() resolver.State {

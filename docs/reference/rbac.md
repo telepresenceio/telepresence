@@ -168,6 +168,12 @@ of the `ClusterRole`/`ClusterRoleBinding` pair.
 A Telepresence client requires just a small set of RBAC permissions. The bare minimum to connect is the ability to
 create a port-forward to the traffic-manager.
 
+The traffic-manager runs as a single-replica StatefulSet, so its pod is always named
+`traffic-manager-0` and its gRPC API always listens on port `apiPort` (default `8081`). A client
+dials that pod name and port directly to connect; the discovery rules further down (resolving the
+`traffic-manager` Service to a pod by label) exist only as a fallback for clients that predate this,
+or for installs that override `apiPort`.
+
 The following configuration assumes that a ServiceAccount "tp-user" has been created in the traffic-manager's default
 "ambassador" namespace.
 
@@ -208,11 +214,37 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
+A client can therefore skip resolving the `traffic-manager` Service to a pod and create the
+port-forward directly, against the known pod name:
+
+```yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name:  traffic-manager-connect
+  namespace: ambassador
+rules:
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    resourceNames: ["traffic-manager-0"]
+    verbs: ["create"]
+```
+
+This is the entire mandatory client role; the `RoleBinding` above still applies. The chart
+renders it when `clientRbac.legacyAccess` is `false`; the discovery rules above (`services`
+get, `pods` get/list) are the default and are only still needed for clients older than 2.33, or
+for an install that overrides `apiPort` away from its default `8081` -- both break the known-name
+port-forward and fall back to resolving the Service. See `clientRbac.legacyAccess` in
+`values.yaml` for the toggle's default and removal schedule.
+
 Once connected, it is desirable, but not necessary that the client can create port-forwards directly to Traffic Agents
 in the namespace that it is connected to. The lack of this permission will cause all traffic to be routed via the
 Traffic Manager, which will have a slightly negative impact on throughput.
 
-It's recommended that the client also has the following permissions in a dynamic namespaces installation:
+It's recommended that the client also has the following permissions in a dynamic namespaces installation.
+Of these, the `namespaces` watch and the `pods` get/list/`pods/log` get diagnostic grants are the
+legacy discovery/diagnostic rules controlled by `clientRbac.legacyAccess` (see above); the
+`pods/portforward` grant is unrelated to that toggle and stays recommended regardless.
 
 ```yaml
 kind: ClusterRole

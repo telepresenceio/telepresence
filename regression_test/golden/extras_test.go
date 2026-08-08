@@ -22,7 +22,7 @@ func TestExtraValuesReachManagerAndForwarder(t *testing.T) {
 			"mountPath": "/rtest-extra",
 		}},
 	})
-	for _, tpl := range []string{deploymentTpl, quicFwdTpl} {
+	for _, tpl := range []string{statefulsetTpl, quicFwdTpl} {
 		doc := out[tpl]
 		for _, want := range []string{"EXTRA_ENV_RTEST", "extra-vol-rtest", "/rtest-extra"} {
 			if !strings.Contains(doc, want) {
@@ -47,7 +47,7 @@ func TestLogStreamingEnv(t *testing.T) {
 				"deadline":       "2m",
 			},
 		})
-		env := parseEnv(out[deploymentTpl])
+		env := parseEnv(out[statefulsetTpl])
 		want := map[string]string{
 			"LOG_STREAM_CHUNK_SIZE":      "128Ki",
 			"LOG_STREAM_POD_CONCURRENCY": "8",
@@ -63,7 +63,7 @@ func TestLogStreamingEnv(t *testing.T) {
 
 	t.Run("absent", func(t *testing.T) {
 		out := renderChart(t, map[string]any{})
-		env := parseEnv(out[deploymentTpl])
+		env := parseEnv(out[statefulsetTpl])
 		want := map[string]string{
 			"LOG_STREAM_CHUNK_SIZE":      "64Ki",
 			"LOG_STREAM_POD_CONCURRENCY": "4",

@@ -131,6 +131,30 @@ items:
           and both features fall back to the old direct Kubernetes API
           access when the traffic-manager predates them.
         docs: reference/rbac
+      - type: change
+        title: The traffic-manager runs as a StatefulSet with a fixed pod name
+        body: >-
+          The traffic-manager Deployment is now a single-replica StatefulSet
+          whose pod is always named <code>traffic-manager-0</code>. A
+          pre-upgrade hook migrates an existing Deployment install
+          automatically; rolling back to an older chart requires uninstall
+          and reinstall. Because a one-replica StatefulSet cannot surge a
+          replacement pod, an image update includes a brief window with no
+          ready manager -- client sessions survive it and re-establish with
+          their intercepts intact.
+      - type: feature
+        title: Clients connect to the traffic-manager by its fixed pod name
+        body: >-
+          The client now port-forwards directly to the
+          <code>traffic-manager-0</code> pod, so the only Kubernetes
+          permission a connection needs is <code>create</code> on
+          <code>pods/portforward</code> for that one pod name. The previous
+          discovery grants (get services, list pods) remain available as a
+          fallback and are rendered while the new Helm setting
+          <code>clientRbac.legacyAccess</code> is true (the default);
+          pre-2.33 clients and installs that override <code>apiPort</code>
+          still need them.
+        docs: reference/rbac
   - version: 2.31.2
     date: 2026-08-02
     notes:

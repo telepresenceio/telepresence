@@ -76,17 +76,17 @@ func valuesFromCombo(c map[string]string) map[string]any {
 }
 
 // envLineRE matches one `- name: KEY` / `value: VAL` pair from a rendered
-// Deployment's env list (deployment.yaml's own indentation and quoting).
+// StatefulSet's env list (statefulset.yaml's own indentation and quoting).
 // Entries using `valueFrom:` (MANAGER_NAMESPACE, POD_IP, POD_HOST_IP) don't
 // match: the line after `- name:` isn't `value:`, so they're silently
 // skipped rather than mismatched.
 var envLineRE = regexp.MustCompile(`(?m)^\s*- name:\s*(\S+)\n\s*value:\s*"?([^"\n]*?)"?\s*$`)
 
 // parseEnv extracts the container env vars set via plain `value:` (not
-// `valueFrom:`) from a rendered deployment.yaml, keyed by name.
-func parseEnv(deploymentYAML string) map[string]string {
+// `valueFrom:`) from a rendered statefulset.yaml, keyed by name.
+func parseEnv(statefulsetYAML string) map[string]string {
 	out := map[string]string{}
-	for _, m := range envLineRE.FindAllStringSubmatch(deploymentYAML, -1) {
+	for _, m := range envLineRE.FindAllStringSubmatch(statefulsetYAML, -1) {
 		out[m[1]] = m[2]
 	}
 	return out
@@ -115,9 +115,17 @@ func TestChartMatrix(t *testing.T) {
 
 			out := renderChart(t, valuesFromCombo(c))
 
-			// The deployment renders unconditionally.
-			if !rendered(out, deploymentTpl) {
-				t.Fatalf("%s did not render", deploymentTpl)
+			// The workload renders unconditionally, as a singleton
+			// StatefulSet governed by the headless Service, for every
+			// combo in this matrix.
+			if !rendered(out, statefulsetTpl) {
+				t.Fatalf("%s did not render", statefulsetTpl)
+			}
+			workloadDoc := out[statefulsetTpl]
+			for _, want := range []string{"kind: StatefulSet", "serviceName: traffic-manager-headless", "replicas: 1"} {
+				if !strings.Contains(workloadDoc, want) {
+					t.Errorf("%s: %q not rendered", statefulsetTpl, want)
+				}
 			}
 
 			// The webhook config renders iff the injector is enabled.
@@ -143,7 +151,7 @@ func TestChartMatrix(t *testing.T) {
 				t.Errorf("%s rendered=%v, want security.authentication.mode=enforcing", x509Tpl, got)
 			}
 
-			env := parseEnv(out[deploymentTpl])
+			env := parseEnv(out[statefulsetTpl])
 
 			// AUTHENTICATION_MODE always carries the configured mode.
 			if v := env["AUTHENTICATION_MODE"]; v != authMode {
@@ -212,18 +220,21 @@ func TestChartMatrix(t *testing.T) {
 	}
 }
 
-// assertClientRoleRules checks the gate-dependent client Role rendering. The
-// connect Role's discovery and port-forward rules are the client's only
-// transport to the manager and render for every gate value; the gate only
-// adds the telepresence.io connections rule (absent for "portforward"). The
-// cluster-scope ClusterRole (rendered here because the matrix's combos never
-// set a namespaceSelector or clientRbac.namespaces, so the manager is
-// cluster-wide) gates its own pods/portforward vs. attachments rule the same
-// way; pods get/list, pods/log get, and the telepresence.io logs/logs-yaml
-// diagnostic grant are unaffected by the gate and render identically for
-// every value. TestNamespaceScopeRoleGate covers the same rules for
-// namespace-scope.yaml's per-namespace Role, which this cluster-wide matrix
-// never renders.
+// assertClientRoleRules checks the gate-dependent client Role rendering. None
+// of this matrix's combos set clientRbac.legacyAccess, so every render
+// uses the chart's default (true): the connect Role's discovery and
+// port-forward rules are the client's only transport to the manager and
+// render for every gate value; the gate only adds the telepresence.io
+// connections rule (absent for "portforward"). The cluster-scope ClusterRole
+// (rendered here because the matrix's combos never set a namespaceSelector or
+// clientRbac.namespaces, so the manager is cluster-wide) gates its own
+// pods/portforward vs. attachments rule the same way; pods get/list, pods/log
+// get, and the telepresence.io logs/logs-yaml diagnostic grant are unaffected
+// by the gate and render identically for every value -- the first two
+// because legacyAccess is on, the last unconditionally. TestLegacyAccess
+// covers the legacyAccess=false rendering; TestNamespaceScopeRoleGate
+// covers the same gate-dependent rules for namespace-scope.yaml's
+// per-namespace Role, which this cluster-wide matrix never renders.
 func assertClientRoleRules(t *testing.T, out map[string]string, gate string) {
 	t.Helper()
 	if !rendered(out, clientConnectTpl) {

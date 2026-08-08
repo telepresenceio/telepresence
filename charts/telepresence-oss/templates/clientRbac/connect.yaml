@@ -2,9 +2,18 @@
 {{- if .create }}
 {{- /*
 Client must have the following RBAC in the traffic-manager.namespace to establish
-a session. The discovery and port-forward rules are the client's only transport
-to the manager and render for every gate value; security.authorization.gate only
-adds the telepresence.io connect grant that the manager reviews.
+a session. security.authorization.gate adds the telepresence.io connect grant
+that the manager reviews, on top of whichever mechanical rule below gets the
+client's gRPC connection to the manager pod in the first place.
+
+clientRbac.legacyAccess (default true) picks the mechanical rule:
+  true   the discovery rules (services get, pods get/list) plus an
+         unscoped pods/portforward create, for clients that resolve the
+         manager Service to a pod before connecting.
+  false  a single pods/portforward create scoped to pod
+         traffic-manager-0 -- the StatefulSet's known pod name -- and
+         nothing else. Only pre-2.33 clients, or an apiPort override that
+         breaks the known-name contract, need the discovery rules.
 */}}
 {{- $gate := $.Values.security.authorization.gate | default "any" }}
 kind: Role
@@ -15,6 +24,7 @@ metadata:
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 rules:
+{{- if .legacyAccess }}
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
@@ -26,6 +36,13 @@ rules:
   - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]
+{{- else }}
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    resourceNames:
+      - {{ include "traffic-manager.podName" $ }}
+    verbs: ["create"]
+{{- end }}
 {{- if ne $gate "portforward" }}
   - apiGroups: ["telepresence.io"]
     resources: ["connections"]

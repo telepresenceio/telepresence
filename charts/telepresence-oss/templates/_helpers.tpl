@@ -24,6 +24,25 @@ traffic-manager-quic
 {{- end -}}
 
 {{- /*
+Name of the headless Service that governs the traffic-manager StatefulSet
+(its spec.serviceName), giving pod ordinal 0 the stable identity a client
+dials directly for pods/portforward.
+*/}}
+{{- define "traffic-manager.headlessServiceName" -}}
+traffic-manager-headless
+{{- end -}}
+
+{{- /*
+Name of the traffic-manager StatefulSet's sole pod. Hard-coded off
+traffic-manager.name the same way, so it never varies with nameOverride or
+the release name -- see the connect-role rule in clientRbac/connect.yaml
+and docs/reference/rbac.md.
+*/}}
+{{- define "traffic-manager.podName" -}}
+{{- printf "%s-0" (include "traffic-manager.name" $) }}
+{{- end -}}
+
+{{- /*
 Traffic Manager Namespace
 */}}
 {{- define "traffic-manager.namespace" -}}
@@ -274,16 +293,21 @@ The pods/portforward rule and the telepresence.io attachments rule are gated by
 security.authorization.gate: "portforward" keeps pods/portforward only, "telepresence"
 replaces it with the attachments rule, and "any" (the default) renders both. The
 telepresence.io logs/logs-yaml diagnostic grant is independent of the gate and always renders.
+The legacy pods get/list and pods/log get grants are gated by clientRbac.legacyAccess
+(default true): a modern client resolves the manager by its known pod name and streams
+logs via the StreamLogs RPC, so neither grant is mechanically required.
 */}}
 {{- define "telepresence.clientRbacInterceptRules" -}}
 {{- $gate := .Values.security.authorization.gate | default "any" }}
-{{- /* Mandatory. Controls namespace access command completion experience */}}
+{{- if .Values.clientRbac.legacyAccess }}
+{{- /* Legacy. Namespace access command completion experience and client-side gather-logs discovery. */}}
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get","list"] {{- /* "list" is only necessary if the client should be able to gather the pod logs */}}
 - apiGroups: [""]
   resources: ["pods/log"]
   verbs: ["get"]
+{{- end }}
 {{- /* Diagnostic grants for the traffic-manager's StreamLogs RPC: "logs" authorizes streaming a pod's log, "logs/yaml" authorizes pod-manifest inclusion. Always rendered, independent of the authorization gate. */}}
 - apiGroups: ["telepresence.io"]
   resources: ["logs", "logs/yaml"]

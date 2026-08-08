@@ -99,7 +99,7 @@ func provisionSecondaryManager(e Env, spec managers.Spec, ns string) (*ManagerHa
 	if _, stderr, err := r.helmCLI().Run(e.Ctx, args...); err != nil {
 		return nil, fmt.Errorf("%s: %w: %s", strings.Join(args[:2], " "), err, stderr)
 	}
-	if _, err := r.Kubectl(e.Ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=180s"); err != nil {
+	if _, err := r.Kubectl(e.Ctx, ns, "rollout", "status", managerWorkloadRef(e, ns), "--timeout=180s"); err != nil {
 		return nil, err
 	}
 	return &ManagerHandle{Namespace: ns, Spec: spec}, nil
