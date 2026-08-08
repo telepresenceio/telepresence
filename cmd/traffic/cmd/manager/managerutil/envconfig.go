@@ -154,6 +154,22 @@ type Env struct {
 	InterceptAllowGlobal          bool `default:"true"`
 	InterceptInactiveBlockTimeout time.Duration
 
+	// LogStreamChunkSize is the maximum size of a single LogChunk data frame
+	// StreamLogs sends for one pod.
+	LogStreamChunkSize resource.Quantity `default:"64Ki"`
+
+	// LogStreamPodConcurrency is the maximum number of pods a single
+	// StreamLogs request reads from concurrently.
+	LogStreamPodConcurrency int `default:"4"`
+
+	// LogStreamPodByteLimit is the maximum number of log bytes StreamLogs
+	// reads from a single pod before truncating it and reporting the
+	// truncation as an error frame.
+	LogStreamPodByteLimit resource.Quantity `default:"10Mi"`
+
+	// LogStreamDeadline bounds the total duration of one StreamLogs request.
+	LogStreamDeadline time.Duration `default:"5m"`
+
 	// AuthenticationMode controls how strictly the traffic-manager enforces
 	// caller authentication (disabled, permissive, or enforcing).
 	AuthenticationMode auth.Mode `default:"permissive"`

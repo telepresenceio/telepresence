@@ -96,4 +96,5 @@ const (
 	x509Tpl               = "telepresence-oss/templates/trafficManagerRbac/x509-auth.yaml"
 	clientConnectTpl      = "telepresence-oss/templates/clientRbac/connect.yaml"
 	clientClusterScopeTpl = "telepresence-oss/templates/clientRbac/cluster-scope.yaml"
+	clientNamespaceTpl    = "telepresence-oss/templates/clientRbac/namespace-scope.yaml"
 )

@@ -192,6 +192,21 @@ func TestChartMatrix(t *testing.T) {
 				t.Errorf("AUTHORIZATION_GATE = %q, want %q", v, gate)
 			}
 
+			// LOG_STREAM_* always carry the chart's built-in defaults here:
+			// no combo in this matrix overrides logStreaming, so every
+			// render exercises the "block absent" defaulting path.
+			wantLogStreamEnv := map[string]string{
+				"LOG_STREAM_CHUNK_SIZE":      "64Ki",
+				"LOG_STREAM_POD_CONCURRENCY": "4",
+				"LOG_STREAM_POD_BYTE_LIMIT":  "10Mi",
+				"LOG_STREAM_DEADLINE":        "5m",
+			}
+			for name, want := range wantLogStreamEnv {
+				if v := env[name]; v != want {
+					t.Errorf("%s = %q, want %q", name, v, want)
+				}
+			}
+
 			assertClientRoleRules(t, out, gate)
 		})
 	}
@@ -201,8 +216,14 @@ func TestChartMatrix(t *testing.T) {
 // connect Role's discovery and port-forward rules are the client's only
 // transport to the manager and render for every gate value; the gate only
 // adds the telepresence.io connections rule (absent for "portforward"). The
-// per-namespace Role gates its own pods/portforward vs. attachments rule the
-// same way; pods get/list and pods/log get are unaffected by the gate.
+// cluster-scope ClusterRole (rendered here because the matrix's combos never
+// set a namespaceSelector or clientRbac.namespaces, so the manager is
+// cluster-wide) gates its own pods/portforward vs. attachments rule the same
+// way; pods get/list, pods/log get, and the telepresence.io logs/logs-yaml
+// diagnostic grant are unaffected by the gate and render identically for
+// every value. TestNamespaceScopeRoleGate covers the same rules for
+// namespace-scope.yaml's per-namespace Role, which this cluster-wide matrix
+// never renders.
 func assertClientRoleRules(t *testing.T, out map[string]string, gate string) {
 	t.Helper()
 	if !rendered(out, clientConnectTpl) {
@@ -220,16 +241,59 @@ func assertClientRoleRules(t *testing.T, out map[string]string, gate string) {
 	if !rendered(out, clientClusterScopeTpl) {
 		t.Fatalf("%s did not render", clientClusterScopeTpl)
 	}
-	clusterScopeDoc := out[clientClusterScopeTpl]
-	if got := strings.Contains(clusterScopeDoc, `resources: ["pods/portforward"]`); got != (gate != "telepresence") {
-		t.Errorf("%s pods/portforward rule present=%v, want gate=%q -> %v", clientClusterScopeTpl, got, gate, gate != "telepresence")
+	assertInterceptRules(t, clientClusterScopeTpl, out[clientClusterScopeTpl], gate)
+}
+
+// assertInterceptRules checks the gate-dependent and gate-independent rules
+// that telepresence.clientRbacInterceptRules renders into a client Role
+// (ClusterRole or namespaced Role) doc.
+func assertInterceptRules(t *testing.T, tpl, doc, gate string) {
+	t.Helper()
+	wantAttach := gate != "portforward"
+	if got := strings.Contains(doc, `resources: ["pods/portforward"]`); got != (gate != "telepresence") {
+		t.Errorf("%s pods/portforward rule present=%v, want gate=%q -> %v", tpl, got, gate, gate != "telepresence")
 	}
-	if got := strings.Contains(clusterScopeDoc, "attachments/deployments"); got != wantConnect {
-		t.Errorf("%s attachments rule present=%v, want gate=%q -> %v", clientClusterScopeTpl, got, gate, wantConnect)
+	if got := strings.Contains(doc, "attachments/deployments"); got != wantAttach {
+		t.Errorf("%s attachments rule present=%v, want gate=%q -> %v", tpl, got, gate, wantAttach)
 	}
-	for _, want := range []string{`resources: ["pods"]`, `resources: ["pods/log"]`} {
-		if !strings.Contains(clusterScopeDoc, want) {
-			t.Errorf("%s: %q not rendered regardless of gate=%q", clientClusterScopeTpl, want, gate)
+	for _, want := range []string{`resources: ["pods"]`, `resources: ["pods/log"]`, `resources: ["logs", "logs/yaml"]`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("%s: %q not rendered regardless of gate=%q", tpl, want, gate)
 		}
+	}
+}
+
+// TestNamespaceScopeRoleGate asserts the per-namespace Role
+// (clientRbac/namespace-scope.yaml) renders the same gate-dependent and
+// gate-independent telepresence.clientRbacInterceptRules content as the
+// cluster-scope ClusterRole, in particular that the telepresence.io
+// logs/logs-yaml diagnostic grant renders for every gate value. Setting
+// clientRbac.namespaces makes the manager namespace-scoped (traffic-manager.namespaced),
+// which is what makes namespace-scope.yaml render instead of cluster-scope.yaml.
+func TestNamespaceScopeRoleGate(t *testing.T) {
+	for _, gate := range []string{"portforward", "telepresence", "any"} {
+		t.Run(gate, func(t *testing.T) {
+			out := renderChart(t, map[string]any{
+				"security": map[string]any{
+					"authorization": map[string]any{"gate": gate},
+				},
+				"clientRbac": map[string]any{
+					"create":     true,
+					"namespaces": []string{"rtest-app"},
+					"subjects": []map[string]any{{
+						"kind":      "ServiceAccount",
+						"name":      "rtest-golden",
+						"namespace": releaseNamespace,
+					}},
+				},
+			})
+			if !rendered(out, clientNamespaceTpl) {
+				t.Fatalf("%s did not render", clientNamespaceTpl)
+			}
+			if rendered(out, clientClusterScopeTpl) {
+				t.Fatalf("%s rendered while clientRbac.namespaces was set; expected namespace-scope only", clientClusterScopeTpl)
+			}
+			assertInterceptRules(t, clientNamespaceTpl, out[clientNamespaceTpl], gate)
+		})
 	}
 }

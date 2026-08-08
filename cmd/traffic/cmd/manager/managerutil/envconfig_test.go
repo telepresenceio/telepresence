@@ -71,6 +71,10 @@ func TestEnvconfig(t *testing.T) {
 		TunnelQuicAgentPort:          7787,
 		AuthenticationMode:           auth.ModePermissive,
 		AuthorizationGate:            auth.GateAny,
+		LogStreamChunkSize:           resource.MustParse("64Ki"),
+		LogStreamPodConcurrency:      4,
+		LogStreamPodByteLimit:        resource.MustParse("10Mi"),
+		LogStreamDeadline:            5 * time.Minute,
 	}
 
 	testcases := map[string]struct {

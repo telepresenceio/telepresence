@@ -272,7 +272,8 @@ Returns a JSON array; callers do `fromJsonArray (include "telepresence.enabledWo
 RBAC rules required to create an intercept in a namespace; excludes any rules that are always cluster wide.
 The pods/portforward rule and the telepresence.io attachments rule are gated by
 security.authorization.gate: "portforward" keeps pods/portforward only, "telepresence"
-replaces it with the attachments rule, and "any" (the default) renders both.
+replaces it with the attachments rule, and "any" (the default) renders both. The
+telepresence.io logs/logs-yaml diagnostic grant is independent of the gate and always renders.
 */}}
 {{- define "telepresence.clientRbacInterceptRules" -}}
 {{- $gate := .Values.security.authorization.gate | default "any" }}
@@ -282,6 +283,10 @@ replaces it with the attachments rule, and "any" (the default) renders both.
   verbs: ["get","list"] {{- /* "list" is only necessary if the client should be able to gather the pod logs */}}
 - apiGroups: [""]
   resources: ["pods/log"]
+  verbs: ["get"]
+{{- /* Diagnostic grants for the traffic-manager's StreamLogs RPC: "logs" authorizes streaming a pod's log, "logs/yaml" authorizes pod-manifest inclusion. Always rendered, independent of the authorization gate. */}}
+- apiGroups: ["telepresence.io"]
+  resources: ["logs", "logs/yaml"]
   verbs: ["get"]
 {{- if ne $gate "telepresence" }}
 {{- /* All traffic will be routed via the traffic-manager unless a portforward can be created directly to a pod */}}

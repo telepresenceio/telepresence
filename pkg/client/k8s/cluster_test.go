@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"context"
 	"crypto/x509"
 	"errors"
 	"fmt"
@@ -8,8 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 )
 
 func TestClassifyUnreachable(t *testing.T) {
@@ -67,4 +71,46 @@ func TestClassifyUnreachable(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newTestCluster(namespace string, mapped ...string) *Cluster {
+	return &Cluster{
+		Kubeconfig:       &Kubeconfig{Context: context.Background(), Namespace: namespace},
+		MappedNamespaces: mapped,
+	}
+}
+
+// TestApplyNamespaceList_MarksAccessibleWithoutProbing feeds a NamespaceList the way
+// StartNamespacesFromManager's stream handler does, and asserts that every reported
+// namespace ends up in the current-namespace map as accessible. The Cluster carries no
+// Kubernetes interface, so a panic here would mean the update went through canAccessNS
+// (which calls k8sapi.GetK8sInterface) instead of trusting the manager's report.
+func TestApplyNamespaceList_MarksAccessibleWithoutProbing(t *testing.T) {
+	kc := newTestCluster("default")
+	kc.applyNamespaceList(&manager.NamespaceList{Namespaces: []string{"ns-a", "ns-b"}})
+
+	require.True(t, kc.namespacesFromManager)
+	require.Equal(t, []string{"ns-a", "ns-b"}, kc.GetCurrentNamespaces(true))
+	require.Equal(t, []string{"ns-a", "ns-b"}, kc.GetCurrentNamespaces(false))
+}
+
+// TestApplyNamespaceList_FiltersByMappedNamespaces confirms that an explicit
+// --mapped-namespaces filter still narrows the manager-reported set, exactly as it narrows
+// a Kubernetes-sourced snapshot.
+func TestApplyNamespaceList_FiltersByMappedNamespaces(t *testing.T) {
+	kc := newTestCluster("default", "ns-a")
+	kc.applyNamespaceList(&manager.NamespaceList{Namespaces: []string{"ns-a", "ns-b"}})
+
+	require.Equal(t, []string{"ns-a"}, kc.GetCurrentNamespaces(true))
+}
+
+// TestApplyNamespaceList_UpdatesOnSubsequentLists confirms a later list replaces the
+// earlier snapshot rather than merging with it, matching live-watch semantics: a namespace
+// dropped from the manager's managed set disappears from GetCurrentNamespaces.
+func TestApplyNamespaceList_UpdatesOnSubsequentLists(t *testing.T) {
+	kc := newTestCluster("default")
+	kc.applyNamespaceList(&manager.NamespaceList{Namespaces: []string{"ns-a", "ns-b"}})
+	kc.applyNamespaceList(&manager.NamespaceList{Namespaces: []string{"ns-b"}})
+
+	require.Equal(t, []string{"ns-b"}, kc.GetCurrentNamespaces(true))
 }

@@ -39,6 +39,13 @@ var exemptions = []exemption{
 	// is enabled, which no compat-core test does yet.
 	{"GetQuicTunnelEndpoint", "client-invoked only when the QUIC tunnel is enabled (pkg/client/rootd/quic.go, pkg/client/agentpf/quic.go); exempt until a compat-core QUIC cell lands (see m4-spec section 1's note on version-gated features)"},
 
+	// Namespace watching: client-invoked on every session whose mapped
+	// namespace set is empty, but only against a manager >= 2.32.0 (the
+	// managerSupportsWatchNamespaces gate); older managers get the client's
+	// own Kubernetes namespace watcher instead, so no compat-core cell
+	// fails without it.
+	{"WatchNamespaces", "client-invoked for the watch-all-namespaces case (pkg/client/userd/trafficmgr/session.go's updateClientConfig), gated on manager >= 2.32.0 with a client-side namespace watcher as the older-manager path; no compat-core assertion depends on which watcher ran"},
+
 	// Session credential: client-invoked lazily, and every failure path
 	// (Unimplemented from an older manager, any fetch error) degrades to a
 	// credential-less mount or agent call, so no compat-core cell fails

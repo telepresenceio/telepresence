@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -80,6 +81,14 @@ const telepresenceGrantRules = `  - apiGroups: ["telepresence.io"]
     resources: ["attachments"]
     verbs: ["create", "get"]`
 
+// telepresenceGrantWithLogsRules extends telepresenceGrantRules with get on
+// logs.telepresence.io -- what CanGetLogs reviews for StreamLogs, a
+// diagnostic attribute reviewed the same way regardless of Gate.
+const telepresenceGrantWithLogsRules = telepresenceGrantRules + `
+  - apiGroups: ["telepresence.io"]
+    resources: ["logs"]
+    verbs: ["get"]`
+
 // createGateIdentity applies gateIdentityManifest for name with rulesYAML,
 // after deleting any stale leftover of the same name (idempotent against an
 // interrupted earlier run), and registers t.Cleanup to remove it. Mirrors
@@ -141,6 +150,34 @@ func arriveAsClient(t *testing.T, ctx context.Context, r *rt.Runtime, ns, name, 
 		t.Cleanup(func() { _, _ = mc.Depart(tokCtx, si) })
 	}
 	return err
+}
+
+// dialAndArrive is arriveAsClient for a caller that needs the resulting
+// SessionInfo itself, to drive a further RPC on the same session (StreamLogs,
+// WatchNamespaces). Fails the test outright on either the dial or the
+// ArriveAsClient call, since every caller here expects admission to succeed.
+// Registers cleanups for both the connection and the session.
+func dialAndArrive(t *testing.T, ctx context.Context, r *rt.Runtime, ns, name, tok string) (manager.ManagerClient, context.Context, *manager.SessionInfo) {
+	t.Helper()
+	mc, closeFn, err := rt.ManagerClient(rt.Env{Ctx: ctx, T: t, R: r}, managers.ManagerNamespace)
+	if err != nil {
+		t.Fatalf("dialing manager: %v", err)
+	}
+	t.Cleanup(closeFn)
+
+	tokCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+tok)
+	si, err := mc.ArriveAsClient(tokCtx, &manager.ClientInfo{
+		Name:      name,
+		Namespace: ns,
+		InstallId: name,
+		Product:   "telepresence",
+		Version:   "v" + r.Version().String(),
+	})
+	if err != nil {
+		t.Fatalf("ArriveAsClient for %s: %v", name, err)
+	}
+	t.Cleanup(func() { _, _ = mc.Depart(tokCtx, si) })
+	return mc, tokCtx, si
 }
 
 // AuthGate proves security.authorization.gate at the session boundary: under
@@ -221,4 +258,106 @@ func (s *AuthGate) Test_GateAnyAdmitsEitherGrant() {
 	tpTok := kubectlCreateToken(t, ctx, r, tpName)
 	err = arriveAsClient(t, ctx, r, ns, tpName, tpTok)
 	s.Require().NoError(err, "gate=any must admit the telepresence.io grant")
+}
+
+// Test_StreamLogsDeniedNamespaceGetsErrorFrame covers StreamLogs's per-pod
+// authorization behavior: an identity holding the connect/attach grants but
+// no get on logs.telepresence.io is not refused the request outright. It
+// gets a BEGIN frame, an error frame naming the denial, and an END frame for
+// the traffic-manager pod, then the stream ends.
+func (s *AuthGate) Test_StreamLogsDeniedNamespaceGetsErrorFrame() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	ns := s.AppNamespace()
+	s.Manager()
+
+	name := createGateIdentity(t, ctx, r, "rtest-auth-gate-logs-denied", telepresenceGrantRules)
+	tok := kubectlCreateToken(t, ctx, r, name)
+	mc, tokCtx, si := dialAndArrive(t, ctx, r, ns, name, tok)
+
+	stream, err := mc.StreamLogs(tokCtx, &manager.StreamLogsRequest{Session: si, TrafficManager: true})
+	s.Require().NoError(err)
+
+	begin, err := stream.Recv()
+	s.Require().NoError(err)
+	s.Equal(manager.LogChunk_BEGIN, begin.GetFrame())
+	s.Equal(managers.ManagerNamespace, begin.GetPodNamespace())
+
+	errFrame, err := stream.Recv()
+	s.Require().NoError(err)
+	s.Contains(errFrame.GetError(), "not permitted to get logs.telepresence.io")
+
+	end, err := stream.Recv()
+	s.Require().NoError(err)
+	s.Equal(manager.LogChunk_END, end.GetFrame())
+
+	_, err = stream.Recv()
+	s.Require().ErrorIs(err, io.EOF)
+}
+
+// Test_StreamLogsAuthorizedReceivesData covers the matching positive: an
+// identity additionally holding get on logs.telepresence.io streams the
+// traffic-manager pod's log with no denial frame, ending in an END frame.
+func (s *AuthGate) Test_StreamLogsAuthorizedReceivesData() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	ns := s.AppNamespace()
+	s.Manager()
+
+	name := createGateIdentity(t, ctx, r, "rtest-auth-gate-logs-granted", telepresenceGrantWithLogsRules)
+	tok := kubectlCreateToken(t, ctx, r, name)
+	mc, tokCtx, si := dialAndArrive(t, ctx, r, ns, name, tok)
+
+	stream, err := mc.StreamLogs(tokCtx, &manager.StreamLogsRequest{Session: si, TrafficManager: true})
+	s.Require().NoError(err)
+
+	begin, err := stream.Recv()
+	s.Require().NoError(err)
+	s.Equal(manager.LogChunk_BEGIN, begin.GetFrame())
+
+	sawDataOrEnd := false
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		s.Require().NoError(err)
+		s.Empty(chunk.GetError(), "an authorized caller should get no denial frame")
+		if len(chunk.GetData()) > 0 || chunk.GetFrame() == manager.LogChunk_END {
+			sawDataOrEnd = true
+		}
+	}
+	s.True(sawDataOrEnd, "expected at least one data chunk or the END frame for the traffic-manager pod")
+}
+
+// Test_WatchNamespacesBasics covers the plumbing WatchNamespaces relies on: a
+// bound session receives the current managed-namespace set on subscribe, and
+// a session id the manager has never seen is refused outright.
+func (s *AuthGate) Test_WatchNamespacesBasics() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	ns := s.AppNamespace()
+	s.Manager()
+
+	name := createGateIdentity(t, ctx, r, "rtest-auth-gate-watchns", telepresenceGrantRules)
+	tok := kubectlCreateToken(t, ctx, r, name)
+	mc, tokCtx, si := dialAndArrive(t, ctx, r, ns, name, tok)
+
+	stream, err := mc.WatchNamespaces(tokCtx, si)
+	s.Require().NoError(err)
+	list, err := stream.Recv()
+	s.Require().NoError(err)
+	s.Contains(list.GetNamespaces(), ns, "the first NamespaceList should include the app namespace")
+
+	garbage := &manager.SessionInfo{SessionId: "rtest-auth-gate-watchns-garbage-session"}
+	gStream, err := mc.WatchNamespaces(tokCtx, garbage)
+	s.Require().NoError(err)
+	_, err = gStream.Recv()
+	s.Require().Error(err, "WatchNamespaces with an unknown session id should be refused")
+	st, ok := status.FromError(err)
+	s.Require().True(ok)
+	s.Equal(codes.NotFound, st.Code())
 }

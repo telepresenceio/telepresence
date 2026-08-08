@@ -523,6 +523,24 @@ properties:
     description: Define the logging level of the Traffic Manager
     $ref: "#/$defs/logLevel"
 
+  logStreaming:
+    description: Bounds the traffic-manager's StreamLogs RPC, used by `telepresence gather-logs` to fetch manager and agent logs.
+    type: object
+    additionalProperties: false
+    properties:
+      chunkSize:
+        description: Quantity bounding the size of each streamed log chunk.
+        $ref: "#/$defs/quantity"
+      podConcurrency:
+        description: Maximum number of pods a single StreamLogs request reads from concurrently.
+        type: integer
+      podByteLimit:
+        description: Quantity capping the total bytes streamed per pod within a single StreamLogs request.
+        $ref: "#/$defs/quantity"
+      deadline:
+        description: Duration bounding a single StreamLogs request.
+        $ref: "#/$defs/duration"
+
   managerRbac:
     type: object
     additionalProperties: false

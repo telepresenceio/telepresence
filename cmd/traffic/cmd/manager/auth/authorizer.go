@@ -79,6 +79,33 @@ func (a *Authorizer) CanAttach(ctx context.Context, p *Principal, namespace, kin
 	})
 }
 
+// CanGetLogs reports whether p may get logs.telepresence.io in namespace --
+// the review that authorizes streaming that namespace's pod logs. This is a
+// diagnostic attribute, not the connect/attachment gate: it is reviewed the
+// same way regardless of the configured Gate.
+func (a *Authorizer) CanGetLogs(ctx context.Context, p *Principal, namespace string) (bool, error) {
+	return a.review(ctx, p, &authorizationv1.ResourceAttributes{
+		Namespace: namespace,
+		Verb:      "get",
+		Group:     "telepresence.io",
+		Resource:  "logs",
+	})
+}
+
+// CanGetLogsYAML reports whether p may get the yaml subresource of
+// logs.telepresence.io in namespace -- the review that authorizes including
+// a pod's manifest in a StreamLogs response, independent of and in addition
+// to CanGetLogs.
+func (a *Authorizer) CanGetLogsYAML(ctx context.Context, p *Principal, namespace string) (bool, error) {
+	return a.review(ctx, p, &authorizationv1.ResourceAttributes{
+		Namespace:   namespace,
+		Verb:        "get",
+		Group:       "telepresence.io",
+		Resource:    "logs",
+		Subresource: "yaml",
+	})
+}
+
 func (a *Authorizer) review(ctx context.Context, p *Principal, ra *authorizationv1.ResourceAttributes) (bool, error) {
 	review := &authorizationv1.SubjectAccessReview{
 		Spec: authorizationv1.SubjectAccessReviewSpec{

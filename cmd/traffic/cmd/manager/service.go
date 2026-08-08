@@ -37,6 +37,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/config"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -1570,6 +1571,96 @@ func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadKi
 	}
 }
 
+// authorizeNamespace returns nil when the caller may attach to at least one
+// workload in namespace, a PermissionDenied error when its RBAC disallows
+// every attachment there, and an Unavailable error when authorization could
+// not be determined. It backs the authorized-namespace probe: unlike
+// authorizeAttachment, it names no workload, so it answers "can this caller
+// attach to anything here" rather than "can this caller attach to that
+// specific workload". An unauthenticated caller is skipped -- there is no
+// identity to review -- unless the manager is in ModeEnforcing, where a nil
+// principal can only mean the interceptor let a tokenless call through for
+// an exempt method; treat it as Unauthenticated rather than silently
+// skipping the review.
+//
+// Dispatch follows s.authGate: GatePortForward reviews pods/portforward
+// namespace-wide (no pod name); GateTelepresence reviews create on
+// attachments/<kind>, with no object name, for every kind in
+// managerutil.GetEnv(ctx).EnabledWorkloadKinds and is satisfied if any one
+// review passes -- an RBAC rule naming resource "attachments/deployments"
+// never matches a review with no subresource at all, so there is no single
+// namespace-wide "attachments" check to make; GateAny tries the
+// telepresence.io reviews first and falls back to pods/portforward when
+// every one of them is denied (not when any of them errors), logging a
+// warning naming the caller when the fallback is what authorized the
+// namespace.
+func (s *service) authorizeNamespace(ctx context.Context, namespace string) error {
+	p := auth.PrincipalFrom(ctx)
+	if p == nil {
+		if s.authMode == auth.ModeEnforcing {
+			return errors.Errorf(codes.Unauthenticated, "listing workloads in namespace %s requires an authenticated caller", namespace)
+		}
+		clog.Debugf(ctx, "caller is unauthenticated; skipping namespace authorization")
+		return nil
+	}
+
+	portForward := func() error {
+		allowed, err := s.authorizer.CanPortForward(ctx, p, namespace, nil)
+		if err != nil {
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create pods/portforward in namespace %s: %v", p.Username, namespace, err)
+		}
+		if !allowed {
+			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create pods/portforward in namespace %s", p.Username, namespace)
+		}
+		return nil
+	}
+
+	// telepresenceAllowed reviews create on attachments/<kind>, unnamed, for
+	// every enabled workload kind and reports whether any one of them
+	// passed.
+	telepresenceAllowed := func() (bool, error) {
+		for _, kind := range managerutil.GetEnv(ctx).EnabledWorkloadKinds {
+			allowed, err := s.authorizer.CanAttach(ctx, p, namespace, pluralLowerKind(string(kind)), "", "create")
+			if err != nil {
+				return false, err
+			}
+			if allowed {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+
+	switch s.authGate {
+	case auth.GatePortForward:
+		return portForward()
+	case auth.GateTelepresence:
+		allowed, err := telepresenceAllowed()
+		if err != nil {
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create attachments in namespace %s: %v", p.Username, namespace, err)
+		}
+		if !allowed {
+			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create attachments in namespace %s", p.Username, namespace)
+		}
+		return nil
+	default: // auth.GateAny
+		allowed, err := telepresenceAllowed()
+		if err != nil {
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create attachments in namespace %s: %v", p.Username, namespace, err)
+		}
+		if allowed {
+			return nil
+		}
+		if err := portForward(); err != nil {
+			return err
+		}
+		clog.Warnf(ctx,
+			"%s authorized for namespace %s only via the legacy pods/portforward grant; its Role should migrate to "+
+				"create attachments.telepresence.io before the enforcing-mode default flips", p.Username, namespace)
+		return nil
+	}
+}
+
 // authorizeEnsureAgent authorizes an EnsureAgent call, which serves both an
 // intercepting client (which holds create on attachments) and an ingest
 // client (which holds get), by succeeding when either verb's attachment
@@ -2308,18 +2399,6 @@ func (s *service) lookupFromManager(ctx context.Context, sessionID tunnel.Sessio
 	return rrs, rCode
 }
 
-// GetLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
-// GetLogsRequest and returns them to the caller
-//
-// Deprecated: Clients should use the user daemon's GatherLogs method.
-func (s *service) GetLogs(_ context.Context, _ *rpc.GetLogsRequest) (*rpc.LogsResponse, error) {
-	return &rpc.LogsResponse{
-		PodLogs: make(map[string]string),
-		PodYaml: make(map[string]string),
-		ErrMsg:  "traffic-manager.GetLogs is deprecated. Please upgrade your telepresence client",
-	}, nil
-}
-
 // SetLogLevel applies a temporary log-level change. A request that carries a
 // session has its ownership verified; a nil principal on that session is
 // rejected in ModeEnforcing, since it can only mean an exempt method let a
@@ -2348,6 +2427,43 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 	return &empty.Empty{}, err
 }
 
+// StreamLogs is implemented in service_logs.go.
+
+// WatchNamespaces streams the manager's managed-namespace set to a bound
+// client session: the current set on subscribe, and again on every change,
+// until the session or the stream ends. The set is served unfiltered by the
+// caller's own authorization -- it drives DNS search paths and general
+// namespace awareness, not access to any namespace's contents -- so there is
+// no per-namespace review here; WatchWorkloads is where namespace-level
+// authorization is enforced.
+func (s *service) WatchNamespaces(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.NamespaceList]) error {
+	ctx, _, err := s.ensureClientSession(stream.Context(), session)
+	if err != nil {
+		return err
+	}
+	sessionDone, err := s.state.SessionDone(managerutil.GetSessionID(ctx))
+	if err != nil {
+		return err
+	}
+	id, nsChanges := namespaces.Subscribe(ctx)
+	defer namespaces.Unsubscribe(ctx, id)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-sessionDone:
+			return nil
+		case _, ok := <-nsChanges:
+			if !ok {
+				return nil
+			}
+			if err := stream.Send(&rpc.NamespaceList{Namespaces: namespaces.Get(ctx)}); err != nil {
+				return err
+			}
+		}
+	}
+}
+
 func (s *service) UninstallAgents(ctx context.Context, request *rpc.UninstallAgentsRequest) (*empty.Empty, error) {
 	ctx = managerutil.WithSessionInfo(ctx, request.GetSessionInfo())
 	clog.Debugf(ctx, "%s", request.Agents)
@@ -2373,25 +2489,35 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream grpc
 	if err := checkCompat(ctx, "WatchWorkloads", "2.21.0-alpha.4"); err != nil {
 		return err
 	}
-	ctx = managerutil.WithSessionInfo(ctx, request.SessionInfo)
-	clog.Debugf(ctx, "Namespace %q", request.Namespace)
-
 	if request.SessionInfo == nil {
 		return status.Error(codes.InvalidArgument, "SessionInfo is required")
 	}
+	ctx, clientInfo, err := s.ensureClientSession(ctx, request.SessionInfo)
+	if err != nil {
+		return err
+	}
+	clog.Debugf(ctx, "Namespace %q", request.Namespace)
+
 	clientSession := tunnel.SessionID(request.SessionInfo.SessionId)
 	namespace := request.Namespace
 	if namespace == "" {
-		clientInfo := s.state.GetClient(clientSession)
-		if clientInfo == nil {
-			return status.Errorf(codes.NotFound, "Client session %q not found", clientSession)
-		}
-		if err := state.ClientOwnershipError(ctx, clientSession, clientInfo); err != nil {
-			return err
-		}
 		namespace = clientInfo.Namespace
-	} else if !s.State().ManagesNamespace(ctx, namespace) {
-		return status.Error(codes.FailedPrecondition, fmt.Sprintf("namespace %s is not managed", namespace))
+	} else {
+		if !s.State().ManagesNamespace(ctx, namespace) {
+			return status.Error(codes.FailedPrecondition, fmt.Sprintf("namespace %s is not managed", namespace))
+		}
+		// The connected namespace above is implicitly trusted -- the client
+		// arrived there. A namespace named explicitly must pass the
+		// authorized-namespace probe, cached per session so a repeated watch
+		// of the same namespace costs no extra review.
+		if err := clientInfo.AuthorizedNamespace(namespace, func() error {
+			return s.authorizeNamespace(ctx, namespace)
+		}); err != nil {
+			if s.authMode == auth.ModeEnforcing {
+				return err
+			}
+			clog.Warnf(ctx, "watch workloads in namespace %s: %v (not enforced)", namespace, err)
+		}
 	}
 	ww := s.state.NewWorkloadInfoWatcher(clientSession, namespace)
 	return ww.Watch(ctx, stream)

@@ -2,6 +2,7 @@ package trafficmgr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"google.golang.org/grpc"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
@@ -121,9 +124,21 @@ func (s *session) foreachAgentPod(fn func(typed.PodInterface, *core.Pod), filter
 }
 
 // GatherLogs acquires the logs for the traffic-manager and/or traffic-agents specified by the
-// connector.LogsRequest and returns them to the caller.
+// connector.LogsRequest and returns them to the caller. It uses the manager's StreamLogs RPC
+// when the connected manager supports it, and falls back to reading pod logs directly through
+// the Kubernetes API against older managers.
 func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
 	exportDir := filepath.Join(filelocation.AppUserCacheDir(ctx), request.ExportDir)
+	if s.managerSupportsStreamLogs() {
+		return gatherLogsViaStream(ctx, s.ManagerClient(), s.SessionInfo(), exportDir, request)
+	}
+	return s.gatherLogsDirect(ctx, exportDir, request)
+}
+
+// gatherLogsDirect acquires the logs for the traffic-manager and/or traffic-agents specified
+// by the connector.LogsRequest by listing pods and reading pods/log through the Kubernetes
+// API. It is the path used against a traffic-manager that does not implement StreamLogs.
+func (s *session) gatherLogsDirect(ctx context.Context, exportDir string, request *connector.LogsRequest) (*connector.LogsResponse, error) {
 	coreAPI := k8sapi.GetK8sInterface(ctx).CoreV1()
 	resp := &connector.LogsResponse{}
 	result := sync.Map{}
@@ -180,4 +195,142 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 	})
 	resp.PodInfo = pi
 	return resp, nil
+}
+
+// logStreamer is the part of manager.ManagerClient that gatherLogsViaStream needs. Narrowing
+// to this one method lets tests supply a fake manager client without stubbing the rest of the
+// (large) manager.ManagerClient interface.
+type logStreamer interface {
+	StreamLogs(ctx context.Context, in *manager.StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[manager.LogChunk], error)
+}
+
+// gatherLogsViaStream acquires the logs for the traffic-manager and/or traffic-agents
+// specified by the connector.LogsRequest using the manager's StreamLogs RPC: the manager reads
+// the pod logs (and, on request, pod manifests) on the client's behalf and multiplexes the
+// result onto a single stream of LogChunk frames, which gatherLogChunks assembles into the
+// same per-pod files and result map that gatherLogsDirect produces.
+func gatherLogsViaStream(ctx context.Context, mc logStreamer, session *manager.SessionInfo, exportDir string, request *connector.LogsRequest) (*connector.LogsResponse, error) {
+	resp := &connector.LogsResponse{}
+
+	agents := request.Agents
+	if strings.EqualFold(agents, "none") {
+		// connector.LogsRequest uses "none" for "no agent logs wanted"; StreamLogsRequest
+		// uses "" or "false" for the same thing.
+		agents = "false"
+	}
+	stream, err := mc.StreamLogs(ctx, &manager.StreamLogsRequest{
+		Session:        session,
+		TrafficManager: request.TrafficManager,
+		Agents:         agents,
+		GetPodYaml:     request.GetPodYaml,
+	})
+	if err != nil {
+		resp.Error = err.Error()
+		return resp, nil
+	}
+
+	podInfo, err := gatherLogChunks(ctx, exportDir, stream)
+	if err != nil {
+		resp.Error = err.Error()
+	}
+	resp.PodInfo = podInfo
+	return resp, nil
+}
+
+// logChunkReceiver is the part of grpc.ServerStreamingClient[manager.LogChunk] that
+// gatherLogChunks needs. Narrowing to Recv lets tests feed it a scripted frame sequence
+// without implementing the rest of grpc.ClientStream.
+type logChunkReceiver interface {
+	Recv() (*manager.LogChunk, error)
+}
+
+// podLogAssembly is the file gatherLogChunks is writing a pod's log to, and the error text (if
+// any) to record for that file's result-map entry once the pod's END frame arrives. Data
+// received before an error frame is kept on disk, matching gatherLogsDirect's behavior when a
+// read fails partway through.
+type podLogAssembly struct {
+	file    *os.File
+	errText string
+}
+
+// gatherLogChunks reads LogChunk frames from stream until it ends, and assembles them into the
+// same file layout and result map (relative filename -> "ok" or an error string) that
+// gatherLogsDirect produces: one <pod>.<namespace>.log per pod, and a matching .yaml when the
+// request asked for pod manifests. Frames from different pods interleave on the stream, but a
+// given pod's own frames arrive in order: BEGIN, then data/error/pod_yaml, then END.
+func gatherLogChunks(ctx context.Context, exportDir string, stream logChunkReceiver) (map[string]string, error) {
+	result := make(map[string]string)
+	pods := make(map[string]*podLogAssembly)
+	defer func() {
+		// Pods still in the map saw no END frame, so the stream ended prematurely.
+		for _, pl := range pods {
+			if pl.file != nil {
+				pl.file.Close()
+			}
+		}
+	}()
+
+	for {
+		chunk, err := stream.Recv()
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return result, nil
+			}
+			return result, err
+		}
+
+		key := chunk.PodName + "." + chunk.PodNamespace
+		logFile := key + ".log"
+
+		switch chunk.Frame {
+		case manager.LogChunk_BEGIN:
+			pl := &podLogAssembly{}
+			f, err := os.Create(filepath.Join(exportDir, logFile))
+			if err != nil {
+				clog.Error(ctx, err)
+				pl.errText = err.Error()
+			} else {
+				pl.file = f
+			}
+			pods[key] = pl
+
+		case manager.LogChunk_END:
+			if pl, ok := pods[key]; ok {
+				if pl.file != nil {
+					pl.file.Close()
+				}
+				if pl.errText != "" {
+					result[logFile] = pl.errText
+				} else {
+					result[logFile] = "ok"
+				}
+				delete(pods, key)
+			}
+
+		default:
+			pl := pods[key]
+			switch p := chunk.Payload.(type) {
+			case *manager.LogChunk_Data:
+				if pl != nil && pl.file != nil {
+					if _, werr := pl.file.Write(p.Data); werr != nil && pl.errText == "" {
+						pl.errText = werr.Error()
+					}
+				}
+			case *manager.LogChunk_Error:
+				if pl != nil {
+					pl.errText = p.Error
+				} else {
+					result[logFile] = p.Error
+				}
+			case *manager.LogChunk_PodYaml:
+				yamlFile := key + ".yaml"
+				if werr := os.WriteFile(filepath.Join(exportDir, yamlFile), p.PodYaml, 0o666); werr != nil {
+					clog.Error(ctx, werr)
+					result[yamlFile] = werr.Error()
+				} else {
+					result[yamlFile] = "ok"
+				}
+			}
+		}
+	}
 }

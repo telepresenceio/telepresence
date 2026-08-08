@@ -145,6 +145,29 @@ timeouts:
   # Default: 30s
   agentArrival: 30s
 
+# logStreaming bounds the traffic-manager's StreamLogs RPC, which
+# `telepresence gather-logs` uses to fetch manager and agent logs without
+# direct pods/log access. Raise these for installations that need larger or
+# longer-running log collection.
+logStreaming:
+  # chunkSize is a quantity bounding the size of each streamed log chunk.
+  # Default: 64Ki
+  chunkSize: 64Ki
+
+  # podConcurrency is the maximum number of pods a single StreamLogs request
+  # reads from concurrently.
+  # Default: 4
+  podConcurrency: 4
+
+  # podByteLimit is a quantity capping the total bytes streamed per pod
+  # within a single StreamLogs request.
+  # Default: 10Mi
+  podByteLimit: 10Mi
+
+  # deadline bounds the total duration of a single StreamLogs request.
+  # Default: 5m
+  deadline: 5m
+
 ################################################################################
 ## Agent Injector Configuration
 ################################################################################

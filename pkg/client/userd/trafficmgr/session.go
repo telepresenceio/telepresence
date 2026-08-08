@@ -184,6 +184,11 @@ type session struct {
 	// session is constructed.
 	agentPodWatchNamespacesOnce  sync.Once
 	agentPodWatchNamespacesValue []string
+
+	// namespaceWatchOnce guards the choice between the manager's WatchNamespaces RPC and
+	// the client-side Kubernetes namespace watcher: whichever is selected the first time
+	// the client watches all namespaces is the one used for the rest of the session.
+	namespaceWatchOnce sync.Once
 }
 
 // agentPodWatchNamespaces returns the namespaces in which this client watches
@@ -956,6 +961,20 @@ func (s *session) Status(ctx context.Context) (*rpc.ConnectInfo, error) {
 	return s.status(ctx, false)
 }
 
+// managerSupportsWatchNamespaces reports whether the connected traffic-manager implements
+// the WatchNamespaces RPC, so the client can consume it instead of watching namespaces
+// itself.
+func (s *session) managerSupportsWatchNamespaces() bool {
+	return s.compareFinalizedManagerVersion(2, 32, 0) >= 0
+}
+
+// managerSupportsStreamLogs reports whether the connected traffic-manager implements the
+// StreamLogs RPC, so gather-logs can consume it instead of reading pod logs directly through
+// the Kubernetes API.
+func (s *session) managerSupportsStreamLogs() bool {
+	return s.compareFinalizedManagerVersion(2, 32, 0) >= 0
+}
+
 func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 	var tmCfg client.Config
 	cliCfg, err := s.ManagerClient().GetClientConfig(ctx, &empty.Empty{})
@@ -982,12 +1001,18 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 		namespaces = effectiveMappedNamespaces(namespaces, clientMappedNamespaces, tmMappedNamespaces)
 		if s.SetMappedNamespaces(namespaces) {
 			if len(namespaces) == 0 {
-				if k8sapi.CanWatchNamespaces(s) {
-					clog.Infof(s, "Will watch all namespaces")
-					s.StartNamespaceWatcher()
-				} else {
-					clog.Warnf(s, "Unable to watch all namespaces")
-				}
+				s.namespaceWatchOnce.Do(func() {
+					switch {
+					case s.managerSupportsWatchNamespaces():
+						clog.Infof(s, "Will watch all namespaces using the traffic-manager's WatchNamespaces RPC")
+						s.StartNamespacesFromManager(s.ManagerClient(), s.sessionInfo)
+					case k8sapi.CanWatchNamespaces(s):
+						clog.Infof(s, "Will watch all namespaces")
+						s.StartNamespaceWatcher()
+					default:
+						clog.Warnf(s, "Unable to watch all namespaces")
+					}
+				})
 			} else {
 				clog.Infof(s, "Will use mapped namespaces %s", namespaces)
 			}

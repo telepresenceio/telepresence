@@ -107,6 +107,19 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
+          {{- /*
+          Bounds for the StreamLogs RPC (`telepresence gather-logs`). Each
+          var falls back to the default documented in values.yaml's
+          logStreaming block when the corresponding key is omitted.
+          */}}
+          - name: LOG_STREAM_CHUNK_SIZE
+            value: {{ default "64Ki" .logStreaming.chunkSize }}
+          - name: LOG_STREAM_POD_CONCURRENCY
+            value: {{ default 4 .logStreaming.podConcurrency | quote }}
+          - name: LOG_STREAM_POD_BYTE_LIMIT
+            value: {{ default "10Mi" .logStreaming.podByteLimit }}
+          - name: LOG_STREAM_DEADLINE
+            value: {{ quote (default "5m" .logStreaming.deadline) }}
           {{- if .workloads }}
           {{- with .workloads }}
           - name: ENABLED_WORKLOAD_KINDS

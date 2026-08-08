@@ -17,6 +17,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/grpc"
 	auth "k8s.io/api/authorization/v1"
 	core "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,9 +27,11 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -45,11 +48,18 @@ type Cluster struct {
 	*Kubeconfig
 	MappedNamespaces []string
 
-	// nsLock protects namespaceWatcherSnapshot, currentMappedNamespaces and namespaceEventHandlers
+	// nsLock protects namespaceWatcherSnapshot, namespacesFromManager, currentMappedNamespaces
+	// and namespaceEventHandlers
 	nsLock sync.Mutex
 
-	// snapshot maintained by the namespaces watcher.
+	// snapshot maintained by the namespaces watcher or the WatchNamespaces RPC.
 	namespaceWatcherSnapshot map[string]struct{}
+
+	// namespacesFromManager is true once namespaceWatcherSnapshot is fed by the manager's
+	// WatchNamespaces RPC rather than the client-side Kubernetes namespace watch. The
+	// manager has already scoped the stream to the namespaces it manages, so
+	// refreshNamespaces skips the canAccessNS probe and marks every entry accessible.
+	namespacesFromManager bool
 
 	// Current Namespace snapshot, filtered by MappedNamespaces
 	currentMappedNamespaces map[string]bool
@@ -209,12 +219,10 @@ func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
 		namespaces = cfg.Cluster().MappedNamespaces
 	}
 	if len(namespaces) == 0 {
-		if k8sapi.CanWatchNamespaces(ret) {
-			clog.Infof(ret, "Will watch all namespaces")
-			ret.StartNamespaceWatcher()
-		} else {
-			clog.Warnf(ret, "Unable to watch all namespaces")
-		}
+		// Namespace watching starts once the manager connection is established and its
+		// version is known, so that the caller can choose between the WatchNamespaces RPC
+		// and this Kubernetes watch as a fallback.
+		clog.Infof(ret, "Will watch all namespaces")
 	} else {
 		clog.Infof(ret, "Will use mapped namespaces %s", namespaces)
 		ret.SetMappedNamespaces(namespaces)
@@ -293,6 +301,20 @@ func ConnectCluster(cr *rpc.ConnectRequest, config *Kubeconfig) (*Cluster, error
 func (kc *Cluster) determineTrafficManagerNamespace() (string, error) {
 	// Search for the traffic-manager in mapped namespaces
 	nss := kc.GetCurrentNamespaces(true)
+	if len(nss) == 0 {
+		// The namespace snapshot is empty when no explicit mapped set is
+		// configured, because the namespace watcher starts only after the
+		// manager is dialed. A one-shot list keeps the search working for a
+		// client whose RBAC permits it; one without namespace access falls
+		// through to the static defaults below.
+		if nsl, err := k8sapi.GetK8sInterface(kc).CoreV1().Namespaces().List(kc, meta.ListOptions{}); err == nil {
+			for i := range nsl.Items {
+				nss = append(nss, nsl.Items[i].Name)
+			}
+		} else {
+			clog.Debugf(kc, "unable to list namespaces for the traffic-manager search: %v", err)
+		}
+	}
 	for _, ns := range nss {
 		if _, err := k8sapi.GetService(kc, agentconfig.ManagerAppName, ns); err == nil {
 			return ns, nil
@@ -431,6 +453,51 @@ func (kc *Cluster) namespacesEventHandler(evCh <-chan watch.Event, nsSynced chan
 	}
 }
 
+// StartNamespacesFromManager consumes the manager's WatchNamespaces RPC and applies each
+// received NamespaceList the same way the Kubernetes namespace watcher applies a snapshot,
+// so every consumer downstream of GetCurrentNamespaces is agnostic to the source. Namespaces
+// reported this way are marked accessible without the canAccessNS probe: the manager has
+// already scoped the stream to the namespaces it manages, and a reduced-RBAC client may be
+// unable to run the probe at all. The function waits for the first list to arrive before
+// returning.
+func (kc *Cluster) StartNamespacesFromManager(mc manager.ManagerClient, session *manager.SessionInfo) {
+	nsSynced := make(chan struct{})
+	closeSynced := sync.Once{}
+	go func() {
+		_ = watcher.WatchWithRetry(kc, "WatchNamespaces", client.GetConfig(kc).Grpc().WatchRetryInterval,
+			func(ctx context.Context) (grpc.ServerStreamingClient[manager.NamespaceList], error) {
+				return mc.WatchNamespaces(ctx, session)
+			},
+			func(nsl *manager.NamespaceList) error {
+				kc.applyNamespaceList(nsl)
+				closeSynced.Do(func() { close(nsSynced) })
+				return nil
+			},
+			nil,
+		)
+	}()
+	select {
+	case <-kc.Done():
+	case <-nsSynced:
+	}
+}
+
+// applyNamespaceList replaces the namespace snapshot with the manager-reported set and
+// recomputes accessibility, marking the source as the manager so refreshNamespaces skips
+// the canAccessNS probe. It is the update step of StartNamespacesFromManager's stream
+// handler, split out so it can be exercised without a live RPC connection.
+func (kc *Cluster) applyNamespaceList(nsl *manager.NamespaceList) {
+	snapshot := make(map[string]struct{}, len(nsl.Namespaces))
+	for _, ns := range nsl.Namespaces {
+		snapshot[ns] = struct{}{}
+	}
+	kc.nsLock.Lock()
+	kc.namespaceWatcherSnapshot = snapshot
+	kc.namespacesFromManager = true
+	kc.nsLock.Unlock()
+	kc.refreshNamespaces()
+}
+
 func (kc *Cluster) SetMappedNamespaces(namespaces []string) bool {
 	sort.Strings(namespaces)
 	if !slices.Equal(namespaces, kc.MappedNamespaces) {
@@ -469,9 +536,13 @@ func (kc *Cluster) refreshNamespaces() {
 	namespaces := make(map[string]bool, len(nss))
 	for _, ns := range nss {
 		if kc.shouldBeWatched(ns) {
-			accessOk, ok := kc.currentMappedNamespaces[ns]
-			if !ok {
-				accessOk = canAccessNS(kc, ns)
+			accessOk := true
+			if !kc.namespacesFromManager {
+				var ok bool
+				accessOk, ok = kc.currentMappedNamespaces[ns]
+				if !ok {
+					accessOk = canAccessNS(kc, ns)
+				}
 			}
 			namespaces[ns] = accessOk
 		}
