@@ -155,11 +155,16 @@ Implement `security.authorization.gate` (`portforward` | `telepresence` |
 `any`) as described in [Authorization](#authorization-policy-without-mechanism),
 wired through the connect, prepare/ensure, create, and restore reviews
 alike, with the chart rendering client Roles to match. One rendering
-nuance: the connect role's discovery and port-forward rules are transport,
-not policy — until phase 3 reduces them, they render for every gate value,
-and the gate only adds the `telepresence.io` grants. Removing them under
-`gate: telepresence` would leave a pre-phase-4 client with no path to the
-manager at all.
+invariant (decided): the connect Role always carries at least one grant
+the configured gate accepts. The discovery and port-forward rules are
+transport, not policy, and render whenever the port-forward path is in
+use — removing them under `gate: telepresence` would leave a client with
+no path to the manager at all. With an external endpoint published (phase
+4) clients never port-forward, so the mechanical rule is dropped — except
+under `gate: portforward`, where possession of the grant is itself the
+connect policy and the named rule renders even though nothing exercises
+it. The golden chart tests assert the gate × legacy-toggle cross-product,
+including the phase-3 minimal rule and the external-endpoint renderings.
 
 Verification for this phase needs negative cases per gate value: an
 authenticated caller whose Role has been withheld must be refused a
@@ -245,32 +250,39 @@ one (message-size and timeout limits are what killed it):
   `pods/log` RBAC that serves it; the manager does not grow a bespoke
   authentication path for this one endpoint.
 - Pod YAML inclusion is a separate disclosure (metadata, environment
-  references) and gets its own authorization attribute within the same
-  group; decide the exact shape (subresource vs. dedicated resource)
-  during implementation.
+  references) with its own attribute in the same group: `get` on the
+  `yaml` subresource of `logs` (decided), so the chart's diagnostic rule
+  reads `resources: ["logs", "logs/yaml"]`. A caller granted `logs` but
+  denied `logs/yaml` receives the logs with the manifests silently
+  omitted (decided) — the denial is the grant's shape, not an error to
+  report.
 - The manager enumerates agent pods from its pod informer (or an API
   list), not from `AgentSession` state. The session projection misses
   exactly the diagnostically interesting cases: an injected agent that
   crashed, hung, or never completed `ArriveAsAgent`.
 - The stream reports per-component errors (a pod denied or disappeared)
-  instead of aborting the whole collection, and is bounded (decided), with
-  every limit a Helm value: defaults of 64 KiB chunks, at most 4
-  concurrent pod readers per request, 1 active `StreamLogs` per client
-  session, a 10 MiB per-pod byte cap, and a 5-minute request deadline.
-  All tunable because `gather-logs` exists primarily for error
+  instead of aborting the whole collection, and is bounded (decided):
+  defaults of 64 KiB chunks, at most 4 concurrent pod readers per
+  request, a 10 MiB per-pod byte cap, and a 5-minute request deadline,
+  each a Helm value because `gather-logs` exists primarily for error
   reporting — an admin sizing an installation for support workflows must
-  be able to raise the caps rather than fight them.
+  be able to raise the caps rather than fight them. The per-session
+  concurrency is not a value: it is fixed at one active `StreamLogs` per
+  client session (decided) — a client makes one call per collection, so
+  anything more is amplification, not use.
 - Client: `gather-logs` calls the RPC when the manager supports it, writes
   chunks to the existing cache-dir layout, and falls back to the current
   direct-API path against old managers.
 - Remove the deprecated `GetLogs` stub in the same change.
 
-RBAC effect after phase 2: the per-namespace role shrinks to
+RBAC effect after phase 2: the per-namespace role can shrink to
 `pods/portforward` create (still wanted for direct agent dials and as the
 intercept-authz policy bit under `gate: portforward`), plus the
-`telepresence.io` grants the gate setting renders. `pods` get/list and
-`pods/log` get leave the client role; `namespaces` get/list/watch leaves
-the cluster-scope client role.
+`telepresence.io` grants. `pods` get/list, `pods/log` get, and the
+cluster-scope `namespaces` get/list/watch become unnecessary for a
+phase-2 client — but the chart keeps rendering them (the compatibility
+matrix's "old paths intact" depends on it); their removal rides the same
+values toggle and cadence as phase 3's discovery grants.
 
 ## Phase 3: Deterministic manager pod name
 
@@ -333,14 +345,23 @@ exists solely because Deployment pod names are random.
   This rule is on solid ground: `pods/portforward` create is a subresource
   request, the exact case Kubernetes documents as name-scopeable (same
   pattern as locked-down `pods/exec`). The old discovery rules stay
-  available behind a values toggle with a decided cadence: the toggle
-  defaults to legacy-on when phase 3 ships, flips to the minimal role two
-  minor releases later (announced in the phase-3 release notes, giving
-  admins a two-release runway to move clients forward or pin the toggle),
-  and is removed — together with the migration hook — four minors after
-  phase 3. Both events get release-note entries, and the connect error a
-  legacy client sees against a minimal-role install names the toggle
-  explicitly; that error message is the migration UX.
+  available behind a values toggle — `clientRbac.legacyAccess`, named for
+  everything it controls: manager discovery, namespace watching, pod
+  reads, and `pods/log` — with a decided cadence: the toggle defaults to
+  legacy-on when phase 3 ships, flips to the minimal role two minor
+  releases later (announced in the phase-3 release notes, giving admins a
+  two-release runway to move clients forward or pin the toggle), and is
+  removed — together with the migration hook — four minors after phase 3.
+  Both events get release-note entries, and the connect error a legacy
+  client sees against a minimal-role install names the toggle explicitly;
+  that error message is the migration UX. One deprecation consequence
+  must ride the same release notes: disabling the toggle also disables
+  the direct diagnostic fallback, and `StreamLogs` refuses an
+  unauthenticated caller in every mode. Once the toggle is removed,
+  gathering manager and agent logs requires an authentication
+  configuration capable of producing a principal; installations that
+  remain in `disabled` mode, or permissive mode with certificate-only
+  clients, no longer support cluster log gathering through the client.
 - The pod name is a contract (decided): the chart already hard-codes the
   workload name to `traffic-manager` regardless of release name or
   `nameOverride` (`_helpers.tpl`, required since v2.20.3), so the
@@ -406,7 +427,23 @@ quic-forwarder plumbing.
 - After session establishment over the external connection, the existing
   `GetQuicTunnelEndpoint` mechanism moves tunnel streams onto QUIC. The
   TLS gRPC connection is retained for control RPCs and doubles as the
-  tunnel fallback where UDP is blocked (in scope, decided).
+  tunnel fallback where UDP is blocked (in scope, decided). The fallback
+  covers manager tunnels (outbound cluster access) only: agent-bound
+  streams — intercepted-traffic delivery and volume mounts — require a
+  client-to-agent channel, which in external mode is the QUIC tunnel,
+  since there is no Kubernetes port-forward to fall back to and no
+  manager-mediated reverse dial (the same reason `agentPortForward:
+  false` refuses attachments today). An external-only deployment
+  publishes the QUIC endpoint alongside the control endpoint. The client
+  must not silently create an attachment that cannot carry traffic:
+  when the transport is external-only, no Kubernetes agent port-forward
+  is available, and the manager reports that the QUIC tunnel endpoint
+  is disabled or unpublished, intercept and ingest creation fail early
+  with an actionable error, consistent with today's `agentPortForward:
+  false` refusal. A published endpoint that is temporarily unreachable
+  does not block attachment creation; connection failures are handled
+  by the ordinary retry and reprobe machinery, and a mid-session QUIC
+  outage remains a recoverable degraded state.
 - Server trust: the trust material must survive manager restarts. The
   in-memory QUIC CA is ephemeral by design and cannot anchor an
   admin-distributed pin — every restart would invalidate it. The external
@@ -518,17 +555,15 @@ grants exist only as authorization policy read by the manager via SAR.
 
 ### Making the external endpoint the only path
 
-Publishing an endpoint does not by itself disable the port-forward
-bootstrap, and nothing server-side can: the manager's in-cluster gRPC port
-must stay open for agents, and the port-forward is a Kubernetes API
-operation the API server enforces. Disabling it is an RBAC decision, in two
-parts:
+Publishing an endpoint stops the chart from granting the port-forward
+bootstrap (decided): the rendered connect role drops its mechanical
+`pods/portforward` rule, keeping only the grants the gate reviews, since
+external clients never port-forward (the `gate: portforward` exception is
+described under the gate model). Nothing server-side can disable the path
+itself: the manager's in-cluster gRPC port must stay open for agents, and
+the port-forward is a Kubernetes API operation the API server enforces.
+What remains is RBAC granted elsewhere:
 
-- Do not render the connect role (a chart values toggle; by phase 3 the
-  role is the single name-scoped `pods/portforward` rule). The API server
-  then refuses the port-forward for every identity whose Roles the admin
-  controls, which kills the bootstrap outright — clients configured with
-  `managerAddress` never attempt it anyway unless fallback is configured.
 - Set `gate: telepresence`. Identities holding `pods/portforward` on the
   manager namespace for unrelated reasons (narrowly scoped debugging
   roles) can still open the tunnel, but the connect-time review demands
@@ -587,27 +622,32 @@ namespace to connect, an *attachment* review in the target namespace —
 `attachments` being the project's umbrella term for intercepts and
 ingests, which share the `EnsureAgent` surface and its exposure of
 container environment and mounts — and `get` on `logs` for diagnostics.
-The attachment review encodes the workload kind as the subresource and
-the workload as the resource name, with the verb separating the
-traffic-affecting operation from the read-only one, so chart authors can
-write ordinary rules:
+The attachment review names the workload as the resource name, with the
+verb separating the traffic-affecting operation from the read-only one,
+so chart authors can write ordinary rules:
 
 ```yaml
 - apiGroups: ["telepresence.io"]
-  resources: ["attachments/deployments"]
+  resources: ["attachments"]
   resourceNames: ["payments"]
   verbs: ["create"]        # intercept; "get" authorizes ingest
 ```
 
 reviewed as `{group: telepresence.io, resource: attachments,
-subresource: deployments, name: payments, verb: create|get}`. Making the
-kind reviewable has a protocol prerequisite: `EnsureAgentRequest` gains a
-workload-kind field, and an ambiguous same-name workload without one is
-rejected instead of silently resolved to the first matching kind
-(today's behavior); the user-facing ingest identifier gets the same
-disambiguation. No CRD is needed. The RBAC authorizer matches rule strings and never consults
-discovery, so a Role naming a resource the API server has never heard of
-authorizes normally. Verified against a live cluster: a
+name: payments, verb: create|get}`. The review does not qualify the
+workload kind as a subresource (decided): which kinds exist at all is
+governed globally by the `workloads.*.enabled` Helm values, no plausible
+policy admits a user to Deployments but not StatefulSets, and Kubernetes
+RBAC has no `attachments/*` form, so per-kind subresources would force
+every hand-written Role to enumerate them. A Deployment and a StatefulSet
+sharing a name are therefore both covered by one name-scoped grant — an
+accepted imprecision. For the same reason, an ambiguous same-name
+workload keeps resolving by priority order across the enabled kinds
+(decided): the request-level kind disambiguation a kind-qualified review
+would have required goes away with it. No CRD is needed. The RBAC
+authorizer matches rule
+strings and never consults discovery, so a Role naming a resource the API
+server has never heard of authorizes normally. Verified against a live cluster: a
 `SubjectAccessReview` for
 `{group: telepresence.io, resource: intercepts, verb: create}` returns
 `allowed: true` with the granting RoleBinding named in `status.reason`, and
@@ -641,10 +681,7 @@ That buys precision `pods/portforward` cannot express:
 - `resourceNames` can scope to *workload* names, which are stable. The
   current two-step review (namespace-wide, then once per pod) exists only
   because pod names are random; reviewing a Telepresence resource drops
-  both the loop and the requirement that the pods already exist. The
-  reviewed attributes qualify the workload *kind* as well as the name — a
-  Deployment and a StatefulSet can legally share a name in one namespace,
-  and `resourceNames: ["payments"]` alone would be ambiguous between them.
+  both the loop and the requirement that the pods already exist.
 - Intent is legible in the Role instead of inferred from a mechanical
   permission.
 
@@ -732,12 +769,21 @@ Phase-specific assertions:
   duplicate intercepts or agents. This runs alongside the phase-1
   restore-review assertions — a fresh manager must reauthorize restored
   state, not merely accept the client's restoration payload.
-- Phase 4: the blackhole test — API server unreachable from the client,
-  external endpoint reachable, full lifecycle succeeds with zero client
-  API requests; an anonymous probe of the external listener proving the
-  internal-only methods (agent RPCs, `WatchQuicBackends`) are absent; and
-  an authenticated caller lacking the connection grant refused every
-  method except the deliberately public `Version`/health surface.
+- Phase 4, two transport cases. First, the blackhole test — API server
+  unreachable from the client, external control endpoint and QUIC both
+  reachable: the full lifecycle succeeds with zero client API requests,
+  including actual intercepted-traffic delivery before and after a
+  manager restart (the assertion that exercises the client-to-agent
+  QUIC channel), plus agent-sourced environment retrieval through
+  `--env-file` — not merely intercept creation. Second, the UDP-blocked case — external control endpoint
+  reachable, QUIC not published: connect, DNS, workload browsing, log
+  gathering, and manager-mediated outbound traffic all work, and
+  intercept/ingest creation fails clearly with the capability-check
+  error rather than appearing functional. Plus an anonymous probe of the
+  external listener proving the internal-only methods (agent RPCs,
+  `WatchQuicBackends`) are absent, and an authenticated caller lacking
+  the connection grant refused every method except the deliberately
+  public `Version`/health surface.
 - The attachment-review grant matrix: namespace-wide grant, matching and
   non-matching workload name, empty name, wildcard roles.
 
