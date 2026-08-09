@@ -53,7 +53,7 @@ func ManagerClient(e Env, ns string) (manager.ManagerClient, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("rtest: resolving svc/traffic-manager.%s:8081: %w", ns, err)
 	}
-	target := fmt.Sprintf("%s:///pod/%s.%s:%d#%s", portforward.K8sPFScheme, pap.Name, pap.Namespace, pap.Port, pap.PodID)
+	target := portforward.K8sPFScheme + ":///" + pap.String()
 	conn, err := grpcClient.DialGRPC(ctx, target,
 		grpc.WithResolvers(portforward.NewResolver(ctx)),
 		grpc.WithContextDialer(portforward.Dialer(ctx)),

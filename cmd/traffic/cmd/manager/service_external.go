@@ -336,9 +336,6 @@ func (s *externalService) ResolveServicePort(ctx context.Context, request *rpc.R
 	if err := requireAuthenticated(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.ensureOwnedSession(ctx, request.GetSession()); err != nil {
-		return nil, err
-	}
 	return s.inner.ResolveServicePort(ctx, request)
 }
 

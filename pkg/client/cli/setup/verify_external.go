@@ -82,17 +82,21 @@ type externalProber func(ctx context.Context, addr string, caPEM []byte, bearerT
 func verifyExternalEndpoint(
 	ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts, prober externalProber,
 ) []Note {
-	note, retryLB, svc := externalServiceLook(ctx, ki, managerNamespace)
-	if retryLB {
-		ticker := time.NewTicker(quicLBInterval)
-		defer ticker.Stop()
-		for retryLB {
-			select {
-			case <-ctx.Done():
-				return []Note{*note}
-			case <-ticker.C:
-			}
-			note, retryLB, svc = externalServiceLook(ctx, ki, managerNamespace)
+	ticker := time.NewTicker(quicLBInterval)
+	defer ticker.Stop()
+
+	var note *Note
+	var svc *corev1.Service
+	for {
+		var retryLB bool
+		note, retryLB, svc = externalServiceLook(ctx, ki, managerNamespace)
+		if !retryLB {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return []Note{*note}
+		case <-ticker.C:
 		}
 	}
 	if note != nil {
@@ -303,6 +307,12 @@ func clientConfigNote(addr string, caPEM []byte) Note {
 	return Note{Level: NoteInfo, Text: text}
 }
 
+// skippedFinding is a VerdictUnknown Finding for a step that never ran
+// because an earlier step in the same probe did not succeed.
+func skippedFinding(reason string) Finding {
+	return Finding{Verdict: VerdictUnknown, Evidence: []string{"skipped: " + reason}}
+}
+
 // externalGRPCProbe is the production externalProber: a real TLS dial, a
 // real Version call, and -- when bearerToken is non-empty -- a real
 // ArriveAsClient/Depart round trip.
@@ -315,36 +325,36 @@ func externalGRPCProbe(ctx context.Context, addr string, caPEM []byte, bearerTok
 		}
 	}
 
+	res := externalProbeResult{
+		Version: skippedFinding("the TLS handshake did not succeed"),
+		Auth:    skippedFinding("the TLS handshake did not succeed"),
+	}
+
 	dctx, cancel := context.WithTimeout(ctx, externalProbeStepTimeout)
 	defer cancel()
 	conn, err := grpcClient.DialGRPC(dctx, addr, grpc.WithTransportCredentials(credentials.NewTLS(tlsConf)))
 	if err != nil {
-		return externalProbeResult{
-			TLS:     Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("TLS handshake to %s failed: %v", addr, err)}},
-			Version: Finding{Verdict: VerdictUnknown, Evidence: []string{"skipped: the TLS handshake did not succeed"}},
-			Auth:    Finding{Verdict: VerdictUnknown, Evidence: []string{"skipped: the TLS handshake did not succeed"}},
-		}
+		res.TLS = Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("TLS handshake to %s failed: %v", addr, err)}}
+		return res
 	}
 	defer conn.Close()
-	tlsFinding := Finding{Verdict: VerdictYes, Evidence: []string{"TLS handshake to " + addr + " succeeded"}}
+	res.TLS = Finding{Verdict: VerdictYes, Evidence: []string{"TLS handshake to " + addr + " succeeded"}}
+	res.Version = skippedFinding("the Version call did not succeed")
+	res.Auth = skippedFinding("the Version call did not succeed")
 
 	mc := manager.NewManagerClient(conn)
 	vctx, vcancel := context.WithTimeout(ctx, externalProbeStepTimeout)
 	defer vcancel()
 	vi, err := mc.Version(vctx, &empty.Empty{})
 	if err != nil {
-		return externalProbeResult{
-			TLS:     tlsFinding,
-			Version: Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("the Version call failed: %v", err)}},
-			Auth:    Finding{Verdict: VerdictUnknown, Evidence: []string{"skipped: the Version call did not succeed"}},
-		}
+		res.Version = Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("the Version call failed: %v", err)}}
+		return res
 	}
-	versionFinding := Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("Version call succeeded (traffic-manager %s)", vi.GetVersion())}}
+	res.Version = Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("Version call succeeded (traffic-manager %s)", vi.GetVersion())}}
+	res.Auth = skippedFinding("no bearer token available for this probe")
 
 	if bearerToken == "" {
-		return externalProbeResult{TLS: tlsFinding, Version: versionFinding, Auth: Finding{
-			Verdict: VerdictUnknown, Evidence: []string{"skipped: no bearer token available for this probe"},
-		}}
+		return res
 	}
 
 	actx, acancel := context.WithTimeout(ctx, externalProbeStepTimeout)
@@ -357,16 +367,13 @@ func externalGRPCProbe(ctx context.Context, addr string, caPEM []byte, bearerTok
 		Version:   version.Version,
 	})
 	if err != nil {
-		return externalProbeResult{TLS: tlsFinding, Version: versionFinding, Auth: Finding{
-			Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("the authenticated-session probe (ArriveAsClient) failed: %v", err)},
-		}}
+		res.Auth = Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("the authenticated-session probe (ArriveAsClient) failed: %v", err)}}
+		return res
 	}
 	if _, err = mc.Depart(actx, si); err != nil {
-		return externalProbeResult{TLS: tlsFinding, Version: versionFinding, Auth: Finding{
-			Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("the authenticated session was established but Depart failed: %v", err)},
-		}}
+		res.Auth = Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("the authenticated session was established but Depart failed: %v", err)}}
+		return res
 	}
-	return externalProbeResult{TLS: tlsFinding, Version: versionFinding, Auth: Finding{
-		Verdict: VerdictYes, Evidence: []string{"authenticated-session probe succeeded (ArriveAsClient + Depart)"},
-	}}
+	res.Auth = Finding{Verdict: VerdictYes, Evidence: []string{"authenticated-session probe succeeded (ArriveAsClient + Depart)"}}
+	return res
 }

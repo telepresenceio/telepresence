@@ -34,12 +34,12 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: traffic-manager-external-tls
+  name: {{ include "traffic-manager.externalTLSSecretName" $ }}
   namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 spec:
-  secretName: traffic-manager-external-tls
+  secretName: {{ include "traffic-manager.externalTLSSecretName" $ }}
   dnsNames:
   {{- range .tls.certManager.dnsNames }}
   - {{ . }}

@@ -20,12 +20,16 @@ type PodAddress struct {
 	Port      uint16
 	Proto     types.Proto
 	PodID     k8sTypes.UID
+
+	// NoLookup marks an address that must resolve with no Kubernetes API
+	// call (the known-name manager dial). Without it, an address lacking a
+	// PodID resolves through a GetPod lookup.
+	NoLookup bool
 }
 
-// NoLookupMarker replaces the pod UID for an address that must resolve with
-// no Kubernetes API call (the known-name manager dial). The port-forward
-// POST only needs the pod name and namespace; a pod that dies or is
-// replaced is detected by connection death, not UID mismatch.
+// NoLookupMarker replaces the pod UID in a NoLookup address. The
+// port-forward POST only needs the pod name and namespace; a pod that dies
+// or is replaced is detected by connection death, not UID mismatch.
 const NoLookupMarker = "!"
 
 // UIDSeparator separates the pod UID (or NoLookupMarker) from the address.
@@ -86,15 +90,18 @@ func (pa *PodAddress) String() string {
 	return pa.AddrFor(pa.Port)
 }
 
-// AddrFor formats a k8spf dial address for port, reusing pa's pod identity.
-// A PodAddress with no PodID (the known-name, no-lookup form) formats with
-// NoLookupMarker so the resolver short-circuits for it too.
+// AddrFor formats a k8spf dial address for port, reusing pa's pod identity:
+// a UID suffix when the pod is known, the no-lookup marker when NoLookup is
+// set, and a bare address (resolved with a GetPod lookup) otherwise.
 func (pa *PodAddress) AddrFor(port uint16) string {
-	id := pa.PodID
-	if id == "" {
-		id = NoLookupMarker
+	addr := fmt.Sprintf("pod/%s.%s:%d", pa.Name, pa.Namespace, port)
+	switch {
+	case pa.PodID != "":
+		addr += UIDSeparator + string(pa.PodID)
+	case pa.NoLookup:
+		addr += UIDSeparator + NoLookupMarker
 	}
-	return fmt.Sprintf("pod/%s.%s:%d%s%s", pa.Name, pa.Namespace, port, UIDSeparator, id)
+	return addr
 }
 
 func (pa *PodAddress) state() resolver.State {

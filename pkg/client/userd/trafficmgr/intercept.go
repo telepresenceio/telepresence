@@ -503,7 +503,7 @@ type quicTunnelEndpointGetter interface {
 // QUIC tunnel, the only channel to an agent in that mode. An RPC error is treated the
 // same as disabled: the safe default is refusing rather than creating a dead attachment.
 func requireQuicTunnelAvailable(ctx context.Context, mc quicTunnelEndpointGetter, si *manager.SessionInfo, kind string) error {
-	if client.GetConfig(ctx).Cluster().ManagerAddress == "" {
+	if !client.GetConfig(ctx).Cluster().UsesExternalManager() {
 		return nil
 	}
 	ep, err := mc.GetQuicTunnelEndpoint(ctx, si)

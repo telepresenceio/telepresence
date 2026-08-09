@@ -33,8 +33,7 @@ metadata:
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 rules:
-{{- if not $external }}
-{{- if .legacyAccess }}
+{{- if and (not $external) .legacyAccess }}
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
@@ -46,14 +45,7 @@ rules:
   - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]
-{{- else }}
-  - apiGroups: [""]
-    resources: ["pods/portforward"]
-    resourceNames:
-      - {{ include "traffic-manager.podName" $ }}
-    verbs: ["create"]
-{{- end }}
-{{- else if eq $gate "portforward" }}
+{{- else if or (not $external) (eq $gate "portforward") }}
   - apiGroups: [""]
     resources: ["pods/portforward"]
     resourceNames:

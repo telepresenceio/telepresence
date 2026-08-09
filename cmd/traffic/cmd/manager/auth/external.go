@@ -59,8 +59,12 @@ type ExternalInterceptor struct {
 
 // NewExternalInterceptor creates an ExternalInterceptor that authenticates calls using
 // inner's Authenticator for the bearer-token path and caPool's current generation to
-// validate a transport principal, recording outcomes to metrics when non-nil.
+// validate a transport principal, recording outcomes to metrics. A nil metrics defaults
+// to a set of unregistered counters.
 func NewExternalInterceptor(inner *Interceptor, caPool *ClientCAPool, metrics *Metrics) *ExternalInterceptor {
+	if metrics == nil {
+		metrics = unregisteredMetrics()
+	}
 	return &ExternalInterceptor{
 		inner:   inner,
 		caPool:  caPool,
@@ -113,17 +117,13 @@ func (e *ExternalInterceptor) authenticate(ctx context.Context, method string) (
 			return ctx, status.Error(codes.Unauthenticated, unauthenticatedMessage)
 		}
 		if !e.limiter.Allow() {
-			if e.metrics != nil {
-				e.metrics.RateLimited.Inc()
-			}
+			e.metrics.RateLimited.Inc()
 			return ctx, status.Error(codes.ResourceExhausted, "too many authentication attempts")
 		}
 		select {
 		case e.sem <- struct{}{}:
 		default:
-			if e.metrics != nil {
-				e.metrics.RateLimited.Inc()
-			}
+			e.metrics.RateLimited.Inc()
 			return ctx, status.Error(codes.ResourceExhausted, "too many concurrent authentication attempts")
 		}
 		defer func() { <-e.sem }()

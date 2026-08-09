@@ -202,7 +202,7 @@ func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
 	ret := &Cluster{Kubeconfig: kubeFlags}
 
 	cfg := client.GetConfig(ret)
-	external := cfg.Cluster().ManagerAddress != ""
+	external := cfg.Cluster().UsesExternalManager()
 	if external {
 		// An external manager address means the client never talks to the
 		// Kubernetes API server: skip the discovery ServerVersion probe.
@@ -545,7 +545,7 @@ func (kc *Cluster) refreshNamespaces() {
 	// production; tests exercising the snapshot machinery may not set one.
 	external := false
 	if cfg := client.GetConfigNoDefault(kc); cfg != nil {
-		external = usesExternalTransport(cfg.Cluster())
+		external = cfg.Cluster().UsesExternalManager()
 	}
 	namespaces := make(map[string]bool, len(nss))
 	for _, ns := range nss {

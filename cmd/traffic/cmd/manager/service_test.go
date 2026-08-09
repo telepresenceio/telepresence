@@ -1192,6 +1192,10 @@ matchExpressions:
 		AgentInitContainerEnabled: true,
 		AgentMaxIdleTime:          24 * time.Hour,
 		ClientConnectionTTL:       24 * time.Minute,
+		LogStreamChunkSize:        resource.MustParse("64Ki"),
+		LogStreamPodConcurrency:   4,
+		LogStreamPodByteLimit:     resource.MustParse("10Mi"),
+		LogStreamDeadline:         5 * time.Minute,
 	}
 	for _, mod := range envMods {
 		mod(&env)

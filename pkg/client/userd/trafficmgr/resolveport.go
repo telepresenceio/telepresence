@@ -70,7 +70,7 @@ func resolveServicePort(
 	if status.Code(err) != codes.Unimplemented {
 		return ap, err
 	}
-	if client.GetConfig(ctx).Cluster().ManagerAddress != "" {
+	if client.GetConfig(ctx).Cluster().UsesExternalManager() {
 		return ap, errcat.User.New("symbolic service-port resolution requires a traffic-manager that serves the ResolveServicePort RPC; " +
 			"upgrade the traffic-manager or use a numeric port")
 	}

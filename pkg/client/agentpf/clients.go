@@ -176,13 +176,8 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 // grpc's own reconnect machinery makes transparently after a transport failure -- and falls
 // back to the Kubernetes port-forward otherwise.
 func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.AgentPodInfo) (*grpc.ClientConn, agent.AgentClient, error) {
-	podID := types.UID(ai.PodId)
-	var grpcAddr string
-	if podID == "" {
-		grpcAddr = fmt.Sprintf("pod/%s.%s:%d", ai.PodName, ns, ai.ApiPort)
-	} else {
-		grpcAddr = fmt.Sprintf("pod/%s.%s:%d%s%s", ai.PodName, ns, ai.ApiPort, portforward.UIDSeparator, podID)
-	}
+	pap := portforward.PodAddress{Name: ai.PodName, Namespace: ns, PodID: types.UID(ai.PodId)}
+	grpcAddr := pap.AddrFor(uint16(ai.ApiPort))
 
 	pfDialer := portforward.Dialer(ac.Cluster)
 	dialer := agentDialer(ai.QuicSni, &ac.quicDead, &ac.transport,

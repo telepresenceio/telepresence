@@ -424,6 +424,16 @@ func (s *service) serveX509Auth(ctx context.Context) error {
 	return s.x509Listener.Serve(ctx)
 }
 
+// serverOptions appends extra to env's derived gRPC server options, currently
+// just MaxRecvMsgSize when env.GrpcMaxReceiveSize is set.
+func serverOptions(env *managerutil.Env, extra ...grpc.ServerOption) []grpc.ServerOption {
+	opts := append([]grpc.ServerOption{}, extra...)
+	if mz, ok := env.GrpcMaxReceiveSize.AsInt64(); ok {
+		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
+	}
+	return opts
+}
+
 func (s *service) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
@@ -433,15 +443,10 @@ func (s *service) serveHTTP(ctx context.Context) error {
 		return err
 	}
 
-	opts := []grpc.ServerOption{
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    env.ClientConnectionTTL,
-			Timeout: 20 * time.Second,
-		}),
-	}
-	if mz, ok := env.GrpcMaxReceiveSize.AsInt64(); ok {
-		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
-	}
+	opts := serverOptions(env, grpc.KeepaliveParams(keepalive.ServerParameters{
+		Time:    env.ClientConnectionTTL,
+		Timeout: 20 * time.Second,
+	}))
 	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithMintedTokens(s.mintedTokens)), env.AuthenticationMode)
 	svc := server.NewWithAuth(ctx, &server.Interceptors{Unary: ai.Unary(), Stream: ai.Stream()}, opts...)
 	s.RegisterServers(svc)

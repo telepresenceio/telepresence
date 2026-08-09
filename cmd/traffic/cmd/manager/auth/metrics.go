@@ -47,3 +47,17 @@ func NewMetrics() *Metrics {
 		APIFailures:     c("telepresence_external_auth_api_failures", "TokenReview calls that failed for infrastructure reasons on the external listener"),
 	}
 }
+
+// unregisteredMetrics returns a *Metrics of plain, unregistered counters,
+// unlike NewMetrics which registers them with the default registry.
+func unregisteredMetrics() *Metrics {
+	c := func() prometheus.Counter { return prometheus.NewCounter(prometheus.CounterOpts{Name: "c"}) }
+	return &Metrics{
+		CacheHits:       c(),
+		FirstReviews:    c(),
+		FallbackReviews: c(),
+		RateLimited:     c(),
+		InvalidTokens:   c(),
+		APIFailures:     c(),
+	}
+}

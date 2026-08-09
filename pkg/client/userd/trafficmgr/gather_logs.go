@@ -134,7 +134,7 @@ func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest
 	if s.managerSupportsStreamLogs() {
 		return gatherLogsViaStream(ctx, s.ManagerClient(), s.SessionInfo(), exportDir, request)
 	}
-	if client.GetConfig(s).Cluster().ManagerAddress != "" {
+	if client.GetConfig(s).Cluster().UsesExternalManager() {
 		return nil, errcat.User.New("the traffic-manager does not support the StreamLogs RPC (upgrade required); " +
 			"direct log collection through the Kubernetes API is unavailable over this external connection")
 	}

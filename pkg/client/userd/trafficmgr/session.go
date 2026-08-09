@@ -206,7 +206,7 @@ func (s *session) agentPodWatchNamespaces() []string {
 		if !cc.AgentPortForward {
 			return
 		}
-		if cc.ManagerAddress != "" {
+		if cc.UsesExternalManager() {
 			// External manager transport: no Kubernetes API access, so
 			// CanPortForward can't run. Keep every mapped namespace; the
 			// manager reviews attach permissions itself.
@@ -221,7 +221,7 @@ func (s *session) agentPodWatchNamespaces() []string {
 }
 
 func (s *session) RevokeIntercept(ctx context.Context, interceptID string) error {
-	if client.GetConfig(s).Cluster().ManagerAddress != "" {
+	if client.GetConfig(s).Cluster().UsesExternalManager() {
 		return errcat.User.New("revoking an intercept requires cluster access to the traffic-manager's ConfigMap, " +
 			"which this external connection does not have")
 	}
@@ -1017,7 +1017,7 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 			// A fresh session's mapped set is already empty, so watching
 			// everything is not a "change" -- selection can't depend on that.
 			s.namespaceWatchOnce.Do(func() {
-				external := client.GetConfig(s).Cluster().ManagerAddress != ""
+				external := client.GetConfig(s).Cluster().UsesExternalManager()
 				switch {
 				case s.managerSupportsWatchNamespaces():
 					clog.Infof(s, "Will watch all namespaces using the traffic-manager's WatchNamespaces RPC")

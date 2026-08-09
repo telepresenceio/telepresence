@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
-	"time"
 
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -27,16 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
-)
-
-// Fallback values for when an Env's LogStream* field is non-positive (e.g.
-// an Env built directly rather than via managerutil.LoadEnv, as in tests).
-// They match the Helm chart's own defaults.
-const (
-	defaultLogStreamChunkSize      = 64 * 1024
-	defaultLogStreamPodConcurrency = 4
-	defaultLogStreamPodByteLimit   = 10 * 1024 * 1024
-	defaultLogStreamDeadline       = 5 * time.Minute
 )
 
 // logTarget identifies one pod StreamLogs reads from and the container whose
@@ -69,6 +57,29 @@ func (s *logChunkSender) sendError(target logTarget, msg string) error {
 	})
 }
 
+// sendFrame sends a BEGIN or END frame for target, with no payload.
+func (s *logChunkSender) sendFrame(target logTarget, frame rpc.LogChunk_Frame) error {
+	return s.send(&rpc.LogChunk{PodName: target.podName, PodNamespace: target.podNamespace, Frame: frame})
+}
+
+// sendData sends one data chunk for target.
+func (s *logChunkSender) sendData(target logTarget, data []byte) error {
+	return s.send(&rpc.LogChunk{
+		PodName:      target.podName,
+		PodNamespace: target.podNamespace,
+		Payload:      &rpc.LogChunk_Data{Data: data},
+	})
+}
+
+// sendYAML sends target's pod manifest as a pod_yaml frame.
+func (s *logChunkSender) sendYAML(target logTarget, data []byte) error {
+	return s.send(&rpc.LogChunk{
+		PodName:      target.podName,
+		PodNamespace: target.podNamespace,
+		Payload:      &rpc.LogChunk_PodYaml{PodYaml: data},
+	})
+}
+
 // logNamespaceAuth memoizes the per-namespace log SubjectAccessReview
 // outcome for one StreamLogs request. An Unavailable outcome is never
 // cached, so a later pod in the same namespace retries instead of being
@@ -77,62 +88,43 @@ type logNamespaceAuth struct {
 	authorizer *auth.Authorizer
 	principal  *auth.Principal
 
-	mu   sync.Mutex
-	logs map[string]error
-	yaml map[string]error
+	mu       sync.Mutex
+	verdicts map[string]error
 }
 
 func newLogNamespaceAuth(authorizer *auth.Authorizer, principal *auth.Principal) *logNamespaceAuth {
 	return &logNamespaceAuth{
 		authorizer: authorizer,
 		principal:  principal,
-		logs:       make(map[string]error),
-		yaml:       make(map[string]error),
+		verdicts:   make(map[string]error),
 	}
 }
 
-// canGetLogs returns nil when the principal may get logs.telepresence.io in
-// namespace, a PermissionDenied error when it may not, and an Unavailable
-// error when the review could not be performed.
-func (c *logNamespaceAuth) canGetLogs(ctx context.Context, namespace string) error {
+// can returns nil when the principal may get logs.telepresence.io, qualified
+// by subresource, in namespace; a PermissionDenied error when it may not; and
+// an Unavailable error when the review could not be performed.
+func (c *logNamespaceAuth) can(ctx context.Context, namespace, subresource string) error {
+	res := "logs"
+	if subresource != "" {
+		res += "/" + subresource
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err, ok := c.logs[namespace]; ok {
+	key := namespace + "/" + subresource
+	if err, ok := c.verdicts[key]; ok {
 		return err
 	}
-	allowed, sarErr := c.authorizer.CanGetLogs(ctx, c.principal, namespace)
+	allowed, sarErr := c.authorizer.CanGetLogs(ctx, c.principal, namespace, subresource)
 	if sarErr != nil {
 		return errors.Errorf(codes.Unavailable,
-			"unable to determine whether %s may get logs.telepresence.io in namespace %s: %v", c.principal.Username, namespace, sarErr)
+			"unable to determine whether %s may get %s.telepresence.io in namespace %s: %v", c.principal.Username, res, namespace, sarErr)
 	}
 	var result error
 	if !allowed {
 		result = errors.Errorf(codes.PermissionDenied,
-			"%s is not permitted to get logs.telepresence.io in namespace %s", c.principal.Username, namespace)
+			"%s is not permitted to get %s.telepresence.io in namespace %s", c.principal.Username, res, namespace)
 	}
-	c.logs[namespace] = result
-	return result
-}
-
-// canGetLogsYAML is canGetLogs for the yaml subresource, authorizing
-// inclusion of a pod's manifest.
-func (c *logNamespaceAuth) canGetLogsYAML(ctx context.Context, namespace string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err, ok := c.yaml[namespace]; ok {
-		return err
-	}
-	allowed, sarErr := c.authorizer.CanGetLogsYAML(ctx, c.principal, namespace)
-	if sarErr != nil {
-		return errors.Errorf(codes.Unavailable,
-			"unable to determine whether %s may get logs/yaml.telepresence.io in namespace %s: %v", c.principal.Username, namespace, sarErr)
-	}
-	var result error
-	if !allowed {
-		result = errors.Errorf(codes.PermissionDenied,
-			"%s is not permitted to get logs/yaml.telepresence.io in namespace %s", c.principal.Username, namespace)
-	}
-	c.yaml[namespace] = result
+	c.verdicts[key] = result
 	return result
 }
 
@@ -163,11 +155,7 @@ func (s *service) StreamLogs(request *rpc.StreamLogsRequest, stream grpc.ServerS
 	}
 	defer release()
 
-	deadline := env.LogStreamDeadline
-	if deadline <= 0 {
-		deadline = defaultLogStreamDeadline
-	}
-	ctx, cancel := context.WithTimeout(ctx, deadline)
+	ctx, cancel := context.WithTimeout(ctx, env.LogStreamDeadline)
 	defer cancel()
 
 	targets, err := logStreamTargets(ctx, request)
@@ -178,16 +166,11 @@ func (s *service) StreamLogs(request *rpc.StreamLogsRequest, stream grpc.ServerS
 		return nil
 	}
 
-	concurrency := env.LogStreamPodConcurrency
-	if concurrency <= 0 {
-		concurrency = defaultLogStreamPodConcurrency
-	}
-
 	sender := &logChunkSender{stream: stream}
 	nsAuth := newLogNamespaceAuth(s.authorizer, principal)
 
 	g, gCtx := errgroup.WithContext(ctx)
-	g.SetLimit(concurrency)
+	g.SetLimit(env.LogStreamPodConcurrency)
 	for _, target := range targets {
 		g.Go(func() error {
 			return streamPodLog(gCtx, sender, nsAuth, target, request.GetGetPodYaml(), env)
@@ -201,9 +184,9 @@ func (s *service) StreamLogs(request *rpc.StreamLogsRequest, stream grpc.ServerS
 func logStreamTargets(ctx context.Context, request *rpc.StreamLogsRequest) ([]logTarget, error) {
 	var targets []logTarget
 	if request.GetTrafficManager() {
-		podName, err := os.Hostname()
+		podName, err := managerPodName(ctx)
 		if err != nil {
-			return nil, errors.Errorf(codes.Unavailable, "unable to determine this pod's name: %v", err)
+			return nil, err
 		}
 		targets = append(targets, logTarget{
 			podName:      podName,
@@ -264,15 +247,15 @@ func agentPodTargets(ctx context.Context, agentsSel string) ([]logTarget, error)
 // a non-nil error only when the stream itself fails -- every other failure
 // becomes an error frame so one pod's trouble does not abort the others.
 func streamPodLog(ctx context.Context, sender *logChunkSender, nsAuth *logNamespaceAuth, target logTarget, wantYAML bool, env *managerutil.Env) error {
-	if err := sender.send(&rpc.LogChunk{PodName: target.podName, PodNamespace: target.podNamespace, Frame: rpc.LogChunk_BEGIN}); err != nil {
+	if err := sender.sendFrame(target, rpc.LogChunk_BEGIN); err != nil {
 		return err
 	}
 
-	if authErr := nsAuth.canGetLogs(ctx, target.podNamespace); authErr != nil {
+	if authErr := nsAuth.can(ctx, target.podNamespace, ""); authErr != nil {
 		if err := sender.sendError(target, authErr.Error()); err != nil {
 			return err
 		}
-		return sender.send(&rpc.LogChunk{PodName: target.podName, PodNamespace: target.podNamespace, Frame: rpc.LogChunk_END})
+		return sender.sendFrame(target, rpc.LogChunk_END)
 	}
 
 	if err := readPodLog(ctx, sender, target, env); err != nil {
@@ -283,7 +266,7 @@ func streamPodLog(ctx context.Context, sender *logChunkSender, nsAuth *logNamesp
 		// A denied logs/yaml review omits the manifest without an error frame:
 		// the caller's grant simply doesn't include manifests. An Unavailable
 		// review outcome is still reported.
-		switch authErr := nsAuth.canGetLogsYAML(ctx, target.podNamespace); {
+		switch authErr := nsAuth.can(ctx, target.podNamespace, "yaml"); {
 		case authErr == nil:
 			if err := sendPodYAML(ctx, sender, target); err != nil {
 				return err
@@ -295,7 +278,7 @@ func streamPodLog(ctx context.Context, sender *logChunkSender, nsAuth *logNamesp
 		}
 	}
 
-	return sender.send(&rpc.LogChunk{PodName: target.podName, PodNamespace: target.podNamespace, Frame: rpc.LogChunk_END})
+	return sender.sendFrame(target, rpc.LogChunk_END)
 }
 
 // readPodLog reads target's log in chunks up to the configured per-pod byte
@@ -312,13 +295,7 @@ func readPodLog(ctx context.Context, sender *logChunkSender, target logTarget, e
 	defer rc.Close()
 
 	chunkSize := env.LogStreamChunkSize.Value()
-	if chunkSize <= 0 {
-		chunkSize = defaultLogStreamChunkSize
-	}
 	byteLimit := env.LogStreamPodByteLimit.Value()
-	if byteLimit <= 0 {
-		byteLimit = defaultLogStreamPodByteLimit
-	}
 
 	buf := make([]byte, chunkSize)
 	var total int64
@@ -328,19 +305,13 @@ func readPodLog(ctx context.Context, sender *logChunkSender, target logTarget, e
 			data := buf[:n]
 			if remaining := byteLimit - total; int64(n) > remaining {
 				if remaining > 0 {
-					if err := sender.send(&rpc.LogChunk{
-						PodName: target.podName, PodNamespace: target.podNamespace,
-						Payload: &rpc.LogChunk_Data{Data: append([]byte(nil), data[:remaining]...)},
-					}); err != nil {
+					if err := sender.sendData(target, append([]byte(nil), data[:remaining]...)); err != nil {
 						return err
 					}
 				}
 				return sender.sendError(target, fmt.Sprintf("log truncated at the %d-byte per-pod cap", byteLimit))
 			}
-			if err := sender.send(&rpc.LogChunk{
-				PodName: target.podName, PodNamespace: target.podNamespace,
-				Payload: &rpc.LogChunk_Data{Data: append([]byte(nil), data...)},
-			}); err != nil {
+			if err := sender.sendData(target, append([]byte(nil), data...)); err != nil {
 				return err
 			}
 			total += int64(n)
@@ -364,8 +335,5 @@ func sendPodYAML(ctx context.Context, sender *logChunkSender, target logTarget) 
 	if err != nil {
 		return sender.sendError(target, fmt.Sprintf("failed to marshal pod manifest: %v", err))
 	}
-	return sender.send(&rpc.LogChunk{
-		PodName: target.podName, PodNamespace: target.podNamespace,
-		Payload: &rpc.LogChunk_PodYaml{PodYaml: b},
-	})
+	return sender.sendYAML(target, b)
 }

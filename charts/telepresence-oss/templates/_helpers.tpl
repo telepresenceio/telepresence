@@ -43,6 +43,15 @@ and docs/reference/rbac.md.
 {{- end -}}
 
 {{- /*
+The Secret holding the external endpoint's TLS server certificate: the
+user-supplied name, or the name the chart's cert-manager Certificate issues
+into.
+*/}}
+{{- define "traffic-manager.externalTLSSecretName" -}}
+{{- .Values.externalEndpoint.tls.secretName | default "traffic-manager-external-tls" }}
+{{- end -}}
+
+{{- /*
 Traffic Manager Namespace
 */}}
 {{- define "traffic-manager.namespace" -}}

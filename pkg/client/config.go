@@ -925,6 +925,13 @@ type Cluster struct {
 	OldVirtualIPSubnet string `json:"virtualIPSubnet"`
 }
 
+// UsesExternalManager reports whether the traffic-manager is dialed through an
+// external endpoint instead of a Kubernetes port-forward, in which case the
+// client makes no Kubernetes API calls at all.
+func (cc *Cluster) UsesExternalManager() bool {
+	return cc.ManagerAddress != ""
+}
+
 // This is used by a different config -- the k8s_config, which needs to be able to tell if it's overridden at a cluster or environment variable level.
 // Hence, we don't default to "ambassador" but to empty, so that it can check that no default has been given.
 const defaultDefaultManagerNamespace = ""

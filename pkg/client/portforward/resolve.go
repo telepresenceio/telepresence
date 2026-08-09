@@ -130,7 +130,7 @@ func resolve(ctx context.Context, addr string) (pa *PodAddress, err error) {
 		switch podID {
 		case NoLookupMarker:
 			// Known-name dial: no Kubernetes read at all.
-			return &PodAddress{Name: name, Namespace: namespace, Port: pn}, nil
+			return &PodAddress{Name: name, Namespace: namespace, Port: pn, NoLookup: true}, nil
 		case "":
 		default:
 			return &PodAddress{Name: name, Namespace: namespace, Port: pn, PodID: podID}, nil

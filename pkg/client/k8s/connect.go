@@ -16,7 +16,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	empty "google.golang.org/protobuf/types/known/emptypb"
-	authv1 "k8s.io/api/authorization/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -70,13 +69,13 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 	dialCtx, cancel := client.GetConfig(kc).Timeouts().TimeoutContext(dialCtx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	if cc := client.GetConfig(kc).Cluster(); usesExternalTransport(cc) {
+	if cc := client.GetConfig(kc).Cluster(); cc.UsesExternalManager() {
 		// An external control endpoint is dialed directly: no known-name
 		// probe, no service discovery, no port-forward.
 		return kc.connectExternal(dialCtx, cc.ManagerAddress)
 	}
 
-	knownPap := &portforward.PodAddress{Name: trafficManagerPodName, Namespace: namespace, Port: trafficManagerAPIPort}
+	knownPap := &portforward.PodAddress{Name: trafficManagerPodName, Namespace: namespace, Port: trafficManagerAPIPort, NoLookup: true}
 	return connectSequence(
 		dialCtx,
 		knownNameProbeTimeout,
@@ -185,13 +184,7 @@ func knownNameExhaustedError(podName string) error {
 // canPortForwardKnownName uses a SelfSubjectAccessReview, which every
 // authenticated identity may make regardless of its other RBAC grants.
 func (kc *Cluster) canPortForwardKnownName(namespace string) (bool, error) {
-	return k8sapi.CanI(kc, &authv1.ResourceAttributes{
-		Verb:        "create",
-		Resource:    "pods",
-		Subresource: "portforward",
-		Name:        trafficManagerPodName,
-		Namespace:   namespace,
-	})
+	return k8sapi.CanI(kc, portForwardAttributes(namespace, trafficManagerPodName))
 }
 
 // knownNameForbiddenError is the connect refusal for an identity that holds
@@ -232,6 +225,38 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 	if err != nil {
 		return nil, "", ver, err
 	}
+	name, ver, err = kc.finishConnect(dialCtx, conn, func(vi *manager.VersionInfo2) error {
+		hasX509Path := false
+		if hasX509Source {
+			if authPort := vi.GetAuthX509Port(); authPort != 0 {
+				// The exchange targets the same pinned pod, over the same shared
+				// per-pod stream connection as the gRPC channel, so the pod that
+				// mints the token is the pod that receives it.
+				x509Src.activate(portforward.Dialer(kc), pap.AddrFor(uint16(authPort)))
+				hasX509Path = true
+				clog.Debugf(kc, "manager calls will carry x509 client-certificate credentials via the manager's auth port %d", authPort)
+			}
+		}
+		if err := managerAuthError(vi, hasBearerSource, hasX509Path); err != nil {
+			return err
+		}
+		if vi.GetAuthSupported() && !vi.GetAuthRequired() && !hasBearerSource && !hasX509Path {
+			clog.Debugf(kc, "traffic-manager %s supports authentication, but the current kubeconfig yields no bearer token or usable client certificate", vi.GetName())
+		}
+		return nil
+	})
+	return conn, name, ver, err
+}
+
+// finishConnect runs the post-dial handshake shared by both manager
+// transports: fetch the manager's version, apply authCheck to it, and parse
+// the version number. It closes conn on error and logs the connection
+// otherwise.
+func (kc *Cluster) finishConnect(
+	dialCtx context.Context,
+	conn *grpc.ClientConn,
+	authCheck func(vi *manager.VersionInfo2) error,
+) (name string, ver semver.Version, err error) {
 	defer func() {
 		if err != nil {
 			conn.Close()
@@ -239,36 +264,19 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 			clog.Infof(kc, "Connected to Manager %s", ver)
 		}
 	}()
-
 	vi, err := getVersion(dialCtx, manager.NewManagerClient(conn))
 	if err != nil {
-		return conn, "", ver, client.CheckTimeout(dialCtx, fmt.Errorf("dial manager: %w", err))
+		return "", ver, client.CheckTimeout(dialCtx, fmt.Errorf("dial manager: %w", err))
 	}
-
-	hasX509Path := false
-	if hasX509Source {
-		if authPort := vi.GetAuthX509Port(); authPort != 0 {
-			// The exchange targets the same pinned pod, over the same shared
-			// per-pod stream connection as the gRPC channel, so the pod that
-			// mints the token is the pod that receives it.
-			x509Src.activate(portforward.Dialer(kc), pap.AddrFor(uint16(authPort)))
-			hasX509Path = true
-			clog.Debugf(kc, "manager calls will carry x509 client-certificate credentials via the manager's auth port %d", authPort)
-		}
-	}
-
-	if err = managerAuthError(vi, hasBearerSource, hasX509Path); err != nil {
-		return conn, "", ver, err
-	}
-	if vi.GetAuthSupported() && !vi.GetAuthRequired() && !hasBearerSource && !hasX509Path {
-		clog.Debugf(kc, "traffic-manager %s supports authentication, but the current kubeconfig yields no bearer token or usable client certificate", vi.GetName())
+	if err = authCheck(vi); err != nil {
+		return "", ver, err
 	}
 	verStr := strings.TrimPrefix(vi.Version, "v")
 	ver, err = semver.Parse(verStr)
 	if err != nil {
 		err = fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
 	}
-	return conn, vi.Name, ver, err
+	return vi.Name, ver, err
 }
 
 // connectExternal dials cluster.managerAddress directly, with no Kubernetes
@@ -314,27 +322,10 @@ func (kc *Cluster) connectExternal(dialCtx context.Context, addr string) (conn *
 	if err != nil {
 		return nil, "", ver, err
 	}
-	defer func() {
-		if err != nil {
-			conn.Close()
-		} else {
-			clog.Infof(kc, "Connected to Manager %s", ver)
-		}
-	}()
-
-	vi, err := getVersion(dialCtx, manager.NewManagerClient(conn))
-	if err != nil {
-		return conn, "", ver, client.CheckTimeout(dialCtx, fmt.Errorf("dial manager: %w", err))
-	}
-	if err = managerAuthError(vi, hasBearerSource, hasClientCert); err != nil {
-		return conn, "", ver, err
-	}
-	verStr := strings.TrimPrefix(vi.Version, "v")
-	ver, err = semver.Parse(verStr)
-	if err != nil {
-		err = fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
-	}
-	return conn, vi.Name, ver, err
+	name, ver, err = kc.finishConnect(dialCtx, conn, func(vi *manager.VersionInfo2) error {
+		return managerAuthError(vi, hasBearerSource, hasClientCert)
+	})
+	return conn, name, ver, err
 }
 
 // managerAuthError returns a user-facing error when vi reports that the
@@ -365,13 +356,8 @@ func (kc *Cluster) ConnectToAgent(
 	port uint16,
 	podID types.UID,
 ) (*grpc.ClientConn, agent.AgentClient, *manager.VersionInfo2, error) {
-	var grpcAddr string
-	if podID == "" {
-		grpcAddr = fmt.Sprintf("pod/%s.%s:%d", podName, namespace, port)
-	} else {
-		grpcAddr = fmt.Sprintf("pod/%s.%s:%d%s%s", podName, namespace, port, portforward.UIDSeparator, podID)
-	}
-	conn, err := kc.dialGRPC(dialCtx, grpcAddr)
+	pap := portforward.PodAddress{Name: podName, Namespace: namespace, PodID: podID}
+	conn, err := kc.dialGRPC(dialCtx, pap.AddrFor(port))
 	if err != nil {
 		return nil, nil, nil, err
 	}

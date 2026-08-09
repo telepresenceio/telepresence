@@ -11,15 +11,8 @@ import (
 	"google.golang.org/grpc/credentials"
 	"k8s.io/client-go/transport"
 
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
-
-// usesExternalTransport reports whether cc selects the external endpoint
-// (cc.ManagerAddress) instead of the classic port-forward transport.
-func usesExternalTransport(cc *client.Cluster) bool {
-	return cc.ManagerAddress != ""
-}
 
 // externalManagerScheme is the only cluster.managerAddress scheme currently
 // supported.

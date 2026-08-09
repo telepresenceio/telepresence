@@ -491,7 +491,7 @@ spec:
         {{- if .externalEndpoint.enabled }}
         - name: external-tls
           secret:
-            secretName: {{ .externalEndpoint.tls.secretName | default "traffic-manager-external-tls" }}
+            secretName: {{ include "traffic-manager.externalTLSSecretName" $ }}
         {{- end }}
         {{- with .extraVolumes }}
         {{ toYaml . | nindent 8 }}

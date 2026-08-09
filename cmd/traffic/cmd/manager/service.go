@@ -41,9 +41,11 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
 	maps2 "github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -335,7 +337,7 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	})
 	st.RestoreAgents(agents, now)
 
-	intercepts, err := s.reviewRestoredIntercepts(ctx, sessionID, info, now)
+	intercepts, err := s.reviewRestoredIntercepts(ctx, info, now)
 	if err != nil {
 		return nil, err
 	}
@@ -348,8 +350,9 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 // state in the payload. An Unavailable review fails the whole reconnect
 // rather than silently dropping the intercept.
 func (s *service) reviewRestoredIntercepts(
-	ctx context.Context, sessionID tunnel.SessionID, info *rpc.ReconnectClientRequest, now time.Time,
+	ctx context.Context, info *rpc.ReconnectClientRequest, now time.Time,
 ) ([]*rpc.InterceptInfo, error) {
+	sessionID := tunnel.SessionID(info.GetSession().GetSessionId())
 	accepted := make([]*rpc.InterceptInfo, 0, len(info.Intercepts))
 	for _, intercept := range info.Intercepts {
 		spec := intercept.GetSpec()
@@ -1361,6 +1364,16 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return interceptInfo, nil
 }
 
+// managerPodName returns this process's own pod name, mapping a hostname
+// lookup failure to an Unavailable error.
+func managerPodName(_ context.Context) (string, error) {
+	podName, err := os.Hostname()
+	if err != nil {
+		return "", errors.Errorf(codes.Unavailable, "unable to determine this pod's name: %v", err)
+	}
+	return podName, nil
+}
+
 // authorizeConnect authorizes a session per s.authGate, falling back from
 // connections.telepresence.io to legacy pods/portforward under GateAny. A
 // nil principal is treated as Unauthenticated only in ModeEnforcing, since
@@ -1377,9 +1390,9 @@ func (s *service) authorizeConnect(ctx context.Context) error {
 	namespace := managerutil.GetEnv(ctx).ManagerNamespace
 
 	portForward := func() error {
-		podName, err := os.Hostname()
+		podName, err := managerPodName(ctx)
 		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine this pod's name: %v", err)
+			return err
 		}
 		allowed, err := s.authorizer.CanPortForward(ctx, p, namespace, []string{podName})
 		if err != nil {
@@ -1567,15 +1580,26 @@ func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec
 }
 
 // workloadPodNames returns the names of the current pods of the workload
-// called name in namespace.
+// called name in namespace, from the shared informers when available.
 func workloadPodNames(ctx context.Context, name, namespace string) ([]string, error) {
-	wl, err := k8sapi.GetWorkload(ctx, name, namespace, "")
+	wl, err := agentmap.GetWorkload(ctx, name, namespace, "")
 	if err != nil {
 		return nil, err
 	}
 	selector, err := wl.Selector()
 	if err != nil {
 		return nil, err
+	}
+	if f := informer.GetK8sFactory(ctx, namespace); f != nil {
+		pods, err := f.Core().V1().Pods().Lister().Pods(namespace).List(selector)
+		if err != nil {
+			return nil, err
+		}
+		names := make([]string, len(pods))
+		for i, pod := range pods {
+			names[i] = pod.Name
+		}
+		return names, nil
 	}
 	pods, err := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: selector.String(),

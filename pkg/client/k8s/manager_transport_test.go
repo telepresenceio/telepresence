@@ -13,9 +13,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-func TestUsesExternalTransport(t *testing.T) {
-	assert.False(t, usesExternalTransport(&client.Cluster{}))
-	assert.True(t, usesExternalTransport(&client.Cluster{ManagerAddress: "tls://tm.example.com:8443"}))
+func TestUsesExternalManager(t *testing.T) {
+	assert.False(t, (&client.Cluster{}).UsesExternalManager())
+	assert.True(t, (&client.Cluster{ManagerAddress: "tls://tm.example.com:8443"}).UsesExternalManager())
 }
 
 func TestParseManagerAddress(t *testing.T) {

@@ -35,13 +35,10 @@ func (g *Gate) UnmarshalText(text []byte) error {
 		*g = GateAny
 		return nil
 	}
-	switch Gate(strings.ToLower(s)) {
-	case GatePortForward:
-		*g = GatePortForward
-	case GateTelepresence:
-		*g = GateTelepresence
-	case GateAny:
-		*g = GateAny
+	gate := Gate(strings.ToLower(s))
+	switch gate {
+	case GatePortForward, GateTelepresence, GateAny:
+		*g = gate
 	default:
 		return fmt.Errorf("invalid authorization gate %q: valid values are %q, %q, %q", s, GatePortForward, GateTelepresence, GateAny)
 	}

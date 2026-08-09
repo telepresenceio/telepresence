@@ -47,9 +47,14 @@ func TestParsePodAddr_NoLookupMarkerYieldsEmptyPodID(t *testing.T) {
 }
 
 func TestPodAddress_StringAndAddrFor_NoLookup(t *testing.T) {
-	pa := &PodAddress{Name: "traffic-manager-0", Namespace: "ambassador", Port: 8081}
+	pa := &PodAddress{Name: "traffic-manager-0", Namespace: "ambassador", Port: 8081, NoLookup: true}
 	assert.Equal(t, "pod/traffic-manager-0.ambassador:8081~!", pa.String())
 	assert.Equal(t, "pod/traffic-manager-0.ambassador:15007~!", pa.AddrFor(15007))
+
+	// Without NoLookup, a UID-less address formats bare, requesting a GetPod
+	// lookup at resolution time.
+	bare := &PodAddress{Name: "echo-abc123", Namespace: "default", Port: 9900}
+	assert.Equal(t, "pod/echo-abc123.default:9900", bare.String())
 
 	// The String() output round-trips back through parsePodAddr the same
 	// way the k8spf resolver feeds it to the dialer.

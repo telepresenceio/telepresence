@@ -1432,7 +1432,7 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 		switch {
 		case relayMode:
 			agentNamespaces = s.agentPodNamespaces
-		case clusterCfg.ManagerAddress != "":
+		case clusterCfg.UsesExternalManager():
 			// No relay list and no cluster API access: direct agent
 			// port-forwards are unavailable over an external manager
 			// transport, and CanPortForward would be a Kubernetes API call.

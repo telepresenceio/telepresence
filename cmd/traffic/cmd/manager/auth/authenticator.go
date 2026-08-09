@@ -63,6 +63,7 @@ func NewAuthenticator(ci kubernetes.Interface, opts ...Option) *Authenticator {
 	a := &Authenticator{
 		token:    cache.New(reviewer, true, successCacheTTL, failureCacheTTL),
 		reviewer: reviewer,
+		metrics:  unregisteredMetrics(),
 	}
 	for _, opt := range opts {
 		opt(a)
@@ -93,9 +94,7 @@ func (a *Authenticator) Authenticate(ctx context.Context, token string) (*Princi
 			return nil, fmt.Errorf("token review: %w", err)
 		}
 		if !ok {
-			if a.metrics != nil {
-				a.metrics.InvalidTokens.Inc()
-			}
+			a.metrics.InvalidTokens.Inc()
 			return nil, ErrInvalidToken
 		}
 	}
@@ -106,9 +105,6 @@ func (a *Authenticator) Authenticate(ctx context.Context, token string) (*Princi
 // without a new TokenReview. Concurrent calls can mask a hit, so the metric is a
 // proportional signal, not an exact count.
 func (a *Authenticator) reviewCounted(reviewCtx context.Context, token string) (*authenticator.Response, bool, error) {
-	if a.metrics == nil {
-		return a.token.AuthenticateToken(reviewCtx, token)
-	}
 	before := a.reviewer.calls.Load()
 	resp, ok, err := a.token.AuthenticateToken(reviewCtx, token)
 	if a.reviewer.calls.Load() == before {
@@ -139,7 +135,8 @@ func principalFromInfo(info user.Info) *Principal {
 // tokenReviewer implements authenticator.Token by delegating to the Kubernetes TokenReview API.
 type tokenReviewer struct {
 	client kubernetes.Interface
-	// metrics is nil unless the owning Authenticator was built with WithMetrics.
+	// metrics is set by NewAuthenticator once its options have run; it is
+	// never nil.
 	metrics *Metrics
 	// calls counts AuthenticateToken invocations -- i.e. cache misses.
 	calls atomic.Uint64
@@ -155,15 +152,13 @@ func (t *tokenReviewer) AuthenticateToken(ctx context.Context, token string) (*a
 		review.Spec.Audiences = auds
 	}
 	result, err := t.client.AuthenticationV1().TokenReviews().Create(ctx, review, metav1.CreateOptions{})
-	if t.metrics != nil {
-		if hasAuds {
-			t.metrics.FirstReviews.Inc()
-		} else {
-			t.metrics.FallbackReviews.Inc()
-		}
-		if err != nil {
-			t.metrics.APIFailures.Inc()
-		}
+	if hasAuds {
+		t.metrics.FirstReviews.Inc()
+	} else {
+		t.metrics.FallbackReviews.Inc()
+	}
+	if err != nil {
+		t.metrics.APIFailures.Inc()
 	}
 	if err != nil {
 		return nil, false, err
