@@ -27,6 +27,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Enable the QUIC Tunnel Transport](howtos/quic-transport.md)
   - [Run the Telepresence client in a container](howtos/inside-container.md)
   - [Monitor with Prometheus and Grafana](howtos/monitoring.md)
+  - [Minimize the client's cluster permissions](howtos/client-rbac.md)
   - [Use Telepresence with Azure (Microsoft Learn)](https://learn.microsoft.com/en-us/azure/aks/use-telepresence-aks.md)
 - Technical reference
   - [Telepresence CLI](reference/cli/telepresence.md)

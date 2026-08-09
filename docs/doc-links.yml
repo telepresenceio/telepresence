@@ -44,6 +44,8 @@
       link: howtos/inside-container
     - title: Monitor with Prometheus and Grafana
       link: howtos/monitoring
+    - title: Minimize the client's cluster permissions
+      link: howtos/client-rbac
     - title: Use Telepresence with Azure (Microsoft Learn)
       link: https://learn.microsoft.com/en-us/azure/aks/use-telepresence-aks
 - title: Technical reference
