@@ -43,14 +43,11 @@ const (
 	externalKeepaliveTimeout = 20 * time.Second
 )
 
-// serveExternal serves the external client-only TLS gRPC listener when
-// env.ExternalPort != 0. Enabling it requires ModeEnforcing and
-// ExternalTLSCertDir; either missing is a fatal startup error, not a warning.
+// serveExternal serves the external client-only TLS gRPC listener on
+// env.ExternalPort. It requires ModeEnforcing and ExternalTLSCertDir;
+// either missing is a fatal startup error, not a warning.
 func serveExternal(ctx context.Context, svc Service) error {
 	env := managerutil.GetEnv(ctx)
-	if env.ExternalPort == 0 {
-		return nil
-	}
 	if env.AuthenticationMode != auth.ModeEnforcing {
 		return fmt.Errorf(
 			"externalEndpoint.enabled requires security.authentication.mode: enforcing (got %q); "+

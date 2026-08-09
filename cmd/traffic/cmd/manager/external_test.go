@@ -15,11 +15,6 @@ import (
 // rather than merely warn, when AuthenticationMode isn't enforcing or no
 // certificate directory is configured.
 
-func TestServeExternal_Disabled(t *testing.T) {
-	ctx := managerutil.WithEnv(context.Background(), &managerutil.Env{})
-	require.NoError(t, serveExternal(ctx, nil))
-}
-
 func TestServeExternal_RefusesNonEnforcing(t *testing.T) {
 	ctx := managerutil.WithEnv(context.Background(), &managerutil.Env{
 		ExternalPort:       8443,
