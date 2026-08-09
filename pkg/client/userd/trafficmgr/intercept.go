@@ -499,15 +499,9 @@ type quicTunnelEndpointGetter interface {
 	GetQuicTunnelEndpoint(ctx context.Context, in *manager.SessionInfo, opts ...grpc.CallOption) (*manager.QuicTunnelEndpoint, error)
 }
 
-// requireQuicTunnelAvailable fails an attachment (intercept, replace, ingest) early when
-// the client uses the external manager transport (cluster.managerAddress set) and the
-// traffic-manager's QUIC tunnel is not available. External mode has no Kubernetes
-// port-forward, so QUIC is the only channel to a traffic-agent; creating the attachment
-// without it would leave its traffic with nowhere to go. Non-external connections never
-// call mc, since the port-forwarded gRPC channel already reaches the agent. A manager
-// that cannot be asked (RPC error, including an old manager that doesn't implement the
-// RPC) is treated the same as a disabled endpoint: the safe default is to refuse rather
-// than silently create an attachment that may not carry traffic.
+// requireQuicTunnelAvailable fails early when the external manager transport lacks a
+// QUIC tunnel, the only channel to an agent in that mode. An RPC error is treated the
+// same as disabled: the safe default is refusing rather than creating a dead attachment.
 func requireQuicTunnelAvailable(ctx context.Context, mc quicTunnelEndpointGetter, si *manager.SessionInfo, kind string) error {
 	if client.GetConfig(ctx).Cluster().ManagerAddress == "" {
 		return nil

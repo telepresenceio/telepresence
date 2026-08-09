@@ -284,9 +284,9 @@ func RestartManager(e Env) error {
 	return waitOldManagerGone(e, ns)
 }
 
-// managerWorkloadRef returns the kubectl workload reference of the shared
-// manager release: the StatefulSet a 2.32+ chart renders, or the Deployment
-// of an older chart installed by a compat spec (helmVersionArgs).
+// managerWorkloadRef returns the kubectl workload reference for the shared
+// manager release: a StatefulSet if the chart rendered one, else a
+// Deployment.
 func managerWorkloadRef(e Env, ns string) string {
 	if _, err := e.R.Kubectl(e.Ctx, ns, "get", "statefulset", helmReleaseName, "-o", "name"); err == nil {
 		return "statefulset/" + helmReleaseName

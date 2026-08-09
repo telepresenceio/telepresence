@@ -29,11 +29,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-// Fallback values used whenever an Env's LogStream* field is non-positive --
-// a manager whose Env was built directly rather than through
-// managerutil.LoadEnv (unit tests, most notably) never ends up with a
-// zero-duration deadline or a zero-sized worker pool. They match the Helm
-// chart's own defaults for these values.
+// Fallback values for when an Env's LogStream* field is non-positive (e.g.
+// an Env built directly rather than via managerutil.LoadEnv, as in tests).
+// They match the Helm chart's own defaults.
 const (
 	defaultLogStreamChunkSize      = 64 * 1024
 	defaultLogStreamPodConcurrency = 4
@@ -71,12 +69,10 @@ func (s *logChunkSender) sendError(target logTarget, msg string) error {
 	})
 }
 
-// logNamespaceAuth memoizes the diagnostic-log SubjectAccessReview outcome
-// per namespace for the lifetime of one StreamLogs request: a request that
-// gathers agent logs can name many pods in the same namespace, and each one
-// would otherwise repeat the same review. An Unavailable outcome (the review
-// itself could not be performed) is never cached, so a later pod in the same
-// namespace retries it instead of being stuck on a transient failure.
+// logNamespaceAuth memoizes the per-namespace log SubjectAccessReview
+// outcome for one StreamLogs request. An Unavailable outcome is never
+// cached, so a later pod in the same namespace retries instead of being
+// stuck on a transient failure.
 type logNamespaceAuth struct {
 	authorizer *auth.Authorizer
 	principal  *auth.Principal
@@ -141,33 +137,14 @@ func (c *logNamespaceAuth) canGetLogsYAML(ctx context.Context, namespace string)
 }
 
 // StreamLogs streams the traffic-manager's own log and/or its traffic-agents'
-// logs to the caller, framed per pod: a BEGIN frame, zero or more data
-// chunks, an optional trailing error frame (the read failed, or the pod's
-// byte cap truncated it), and an END frame. A pod's manifest, when requested
-// and separately authorized, is sent as its own frame before END. Agent pods
-// are enumerated from the shared pod informer rather than from AgentSession
-// state, so an agent that crashed or never completed ArriveAsAgent is still
-// included.
-//
-// Every other authorization call site in this file admits a nil principal
-// outside ModeEnforcing: session establishment and attachment reviews are
-// skipped, with a debug log, so a permissively configured cluster still
-// serves an unauthenticated caller. StreamLogs does not follow that pattern.
-// It exercises the manager's own pods/log permission against the caller's
-// selection, on an endpoint whose entire payload is pod contents and
-// environment-derived diagnostic data -- a caller who has proven nothing
-// about themselves must not be able to trigger that on the manager's behalf.
-// A nil principal is therefore refused with Unauthenticated in every
-// authentication mode, including ModePermissive and ModeDisabled: where the
-// configured mode cannot produce a principal at all, StreamLogs is simply
-// unavailable, and such installations keep the client-side direct-API
-// fallback.
-//
-// A denied namespace does not abort the request: every pod in that namespace
-// gets a BEGIN, an error frame naming the denial, and an END, while pods in
-// other namespaces stream normally. An Unavailable authorization outcome
-// (the review itself could not be performed) is reported the same way, with
-// an error frame saying so.
+// logs to the caller, framed per pod: BEGIN, data chunks, an optional
+// trailing error frame, and END, with the pod's manifest sent before END
+// when requested and authorized separately. Unlike every other call site in
+// this file, a nil principal is refused with Unauthenticated in every
+// authentication mode -- this endpoint's entire payload is pod contents and
+// diagnostic data, so an unproven caller must not trigger it. A denied or
+// unreviewable namespace does not abort the request: its pods still get
+// BEGIN/END, with an error frame naming the denial in between.
 func (s *service) StreamLogs(request *rpc.StreamLogsRequest, stream grpc.ServerStreamingServer[rpc.LogChunk]) error {
 	ctx, session, err := s.ensureClientSession(stream.Context(), request.GetSession())
 	if err != nil {
@@ -246,13 +223,10 @@ func logStreamTargets(ctx context.Context, request *rpc.StreamLogsRequest) ([]lo
 	return targets, nil
 }
 
-// agentPodTargets enumerates traffic-agent pods from the shared pod informer
-// across the managed namespaces, filtered by agentsSel ("all" matches every
-// pod carrying a traffic-agent container; anything else is a pod-name
-// substring, mirroring pkg/client/userd/trafficmgr/gather_logs.go's
-// client-side filter). Using the informer rather than AgentSession state is
-// deliberate: it also surfaces an injected agent that crashed, hung, or
-// never completed ArriveAsAgent.
+// agentPodTargets enumerates traffic-agent pods via the shared pod informer,
+// filtered by agentsSel ("all" or a pod-name substring). The informer (not
+// AgentSession state) also surfaces an agent that crashed or never
+// completed ArriveAsAgent.
 func agentPodTargets(ctx context.Context, agentsSel string) ([]logTarget, error) {
 	all := strings.EqualFold(agentsSel, "all")
 
@@ -286,12 +260,9 @@ func agentPodTargets(ctx context.Context, agentsSel string) ([]logTarget, error)
 	return targets, nil
 }
 
-// streamPodLog sends the full per-pod frame sequence for target: BEGIN, then
-// either an authorization-denial error or the pod's log data (with a
-// trailing error on a read failure or truncation), then, if requested and
-// authorized, the pod's manifest, then END. It returns a non-nil error only
-// when sending on the stream itself fails -- every other failure becomes an
-// error frame so one pod's trouble does not abort the others.
+// streamPodLog sends the full per-pod frame sequence for target. It returns
+// a non-nil error only when the stream itself fails -- every other failure
+// becomes an error frame so one pod's trouble does not abort the others.
 func streamPodLog(ctx context.Context, sender *logChunkSender, nsAuth *logNamespaceAuth, target logTarget, wantYAML bool, env *managerutil.Env) error {
 	if err := sender.send(&rpc.LogChunk{PodName: target.podName, PodNamespace: target.podNamespace, Frame: rpc.LogChunk_BEGIN}); err != nil {
 		return err
@@ -327,11 +298,9 @@ func streamPodLog(ctx context.Context, sender *logChunkSender, nsAuth *logNamesp
 	return sender.send(&rpc.LogChunk{PodName: target.podName, PodNamespace: target.podNamespace, Frame: rpc.LogChunk_END})
 }
 
-// readPodLog reads target's log via the pods/log subresource and sends it as
-// data chunks no larger than the configured chunk size, up to the configured
-// per-pod byte cap. A read failure or a cap-triggered truncation is reported
-// as a trailing error frame, not a return error -- only a broken response
-// stream is.
+// readPodLog reads target's log in chunks up to the configured per-pod byte
+// cap. A read failure or truncation is reported as a trailing error frame,
+// not a return error -- only a broken response stream is.
 func readPodLog(ctx context.Context, sender *logChunkSender, target logTarget, env *managerutil.Env) error {
 	req := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(target.podNamespace).GetLogs(target.podName, &corev1.PodLogOptions{
 		Container: target.container,

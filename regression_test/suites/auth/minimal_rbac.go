@@ -9,15 +9,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 )
 
-// minimalRBACRules grants exactly the RBAC a phase-3, known-name-only
-// client needs to connect: pods/portforward create scoped to the
-// StatefulSet's known pod (traffic-manager-0) -- no get/list on pods or
-// services at all, so the legacy Service-discovery path is not merely
-// unused but actually forbidden -- plus the telepresence.io connect/attach
-// grants authorizeConnect and authorizeAttachment review. Mirrors
-// telepresenceGrantRules, adding the scoped mechanical portforward grant a
-// real connect (as opposed to gate.go's direct ArriveAsClient calls) also
-// needs.
+// minimalRBACRules grants pods/portforward create scoped to
+// traffic-manager-0, plus the telepresence.io connect/attach grants -- no
+// get/list on pods or services at all.
 const minimalRBACRules = `  - apiGroups: [""]
     resources: ["pods/portforward"]
     resourceNames: ["traffic-manager-0"]
@@ -29,13 +23,9 @@ const minimalRBACRules = `  - apiGroups: [""]
     resources: ["attachments"]
     verbs: ["create", "get"]`
 
-// buildTokenKubeconfig derives a kubeconfig (rt.KubeConfigCopy) whose
-// current context authenticates as tok instead of the run's own identity: a
-// literal different-identity kubeconfig, as opposed to the framework's
-// usual --as (which still dials out using the run's own credentials and
-// relies on the API server's impersonation RBAC). The derived context keeps
-// the original cluster entry (same server, same CA) and only swaps the
-// AuthInfo.
+// buildTokenKubeconfig derives a kubeconfig whose current context
+// authenticates as tok, keeping the original cluster entry and swapping
+// only the AuthInfo.
 func buildTokenKubeconfig(env rt.Env, name, tok string) (string, error) {
 	env.T.Helper()
 	var buildErr error
@@ -62,16 +52,9 @@ func buildTokenKubeconfig(env rt.Env, name, tok string) (string, error) {
 	return path, nil
 }
 
-// MinimalRBAC proves the client-rbac-minimization phase-3 contract at the
-// RBAC boundary: an identity holding only minimalRBACRules -- nothing that
-// would let it list or get pods/services -- can still run a real
-// `telepresence connect`, because the client dials the StatefulSet's known
-// pod name (traffic-manager-0, pkg/client/k8s/connect.go's
-// ConnectToManager) directly rather than discovering it. Connects with a
-// derived kubeconfig carrying the identity's own bearer token (see
-// buildTokenKubeconfig), not --as: --as still authenticates as the run's
-// own identity and merely asks the API server to impersonate another,
-// which needs its own (broader) RBAC this test is not about.
+// MinimalRBAC proves that an identity holding only minimalRBACRules -- no
+// list/get on pods or services -- can still run a real `telepresence
+// connect`, dialing the known pod name directly rather than discovering it.
 type MinimalRBAC struct {
 	rt.Suite
 }

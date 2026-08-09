@@ -79,10 +79,9 @@ func TestManagerIPInPodSubnets(t *testing.T) {
 	}
 }
 
-// TestResolvePort_ExternalModeRejectsSymbolicPort verifies that resolvePort
-// refuses a symbolic service port with a user-facing error instead of
-// calling the Kubernetes API when the manager transport is external
-// (cluster.managerAddress set).
+// TestResolvePort_ExternalModeRejectsSymbolicPort verifies a symbolic
+// service port is rejected with a user-facing error, not a Kubernetes
+// call, when the manager transport is external.
 func TestResolvePort_ExternalModeRejectsSymbolicPort(t *testing.T) {
 	cfg := client.GetDefaultConfig()
 	cfg.Cluster().ManagerAddress = "tls://tm.example.com:8443"

@@ -102,8 +102,7 @@ func createNoGrantsServiceAccount(t *testing.T, ctx context.Context, r *rt.Runti
 }
 
 // kubectlCreateToken runs `kubectl create token <name>` in the manager
-// namespace, where every identity this package mints a token for lives, and
-// returns the trimmed bearer token.
+// namespace and returns the trimmed bearer token.
 func kubectlCreateToken(t *testing.T, ctx context.Context, r *rt.Runtime, name string) string {
 	t.Helper()
 	out, err := r.Kubectl(ctx, managers.ManagerNamespace, "create", "token", name)

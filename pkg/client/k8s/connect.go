@@ -36,17 +36,15 @@ const (
 	trafficManagerServiceName = "traffic-manager"
 
 	// trafficManagerPodName is the deterministic StatefulSet pod name a
-	// phase-3 chart installs (replicaCount pinned to 1). Older charts still
-	// run a Deployment with a random pod name; the known-name dial fails
-	// for those and the discovery path below takes over.
+	// phase-3 chart installs. Older charts run a Deployment with a random
+	// pod name, so the known-name dial fails and discovery takes over.
 	trafficManagerPodName = "traffic-manager-0"
 
 	trafficManagerAPIPort = 8081
 
-	// knownNameProbeTimeout bounds the first known-name connect attempt so
-	// an old Deployment install, with no traffic-manager-0 pod, falls back
-	// to discovery quickly instead of spending the whole
-	// TimeoutTrafficManagerConnect budget on a dial that can't succeed.
+	// knownNameProbeTimeout bounds the first known-name attempt so an old
+	// Deployment install falls back to discovery quickly instead of
+	// spending the whole connect budget on a dial that can't succeed.
 	knownNameProbeTimeout = 5 * time.Second
 )
 
@@ -63,14 +61,11 @@ func (r connectResult) get() (*grpc.ClientConn, string, semver.Version, error) {
 	return r.conn, r.name, r.ver, r.err
 }
 
-// ConnectToManager connects to the traffic-manager. It first tries the
-// deterministic StatefulSet pod name directly, which needs only
-// pods/portforward create on that one pod and no discovery RBAC. On failure
-// it falls back to today's Service-based discovery (services get, pods
-// list/watch). If discovery itself is refused by RBAC, the client has no
-// other path to the manager: during an ordinary StatefulSet rollout the pod
-// is briefly absent, so the known-name dial gets retried with backoff for
-// the remainder of the connect budget instead of failing outright.
+// ConnectToManager tries the deterministic StatefulSet pod name directly,
+// needing only pods/portforward on that one pod, then falls back to
+// Service-based discovery on failure. If discovery is itself forbidden, the
+// known-name dial is retried with backoff instead of failing outright, since
+// a minimal-RBAC client has no other path to the manager.
 func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
 	dialCtx, cancel := client.GetConfig(kc).Timeouts().TimeoutContext(dialCtx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
@@ -107,8 +102,8 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 }
 
 // connectSequence implements the known-name / discovery / forbidden-retry
-// decision flow, factored out of ConnectToManager so it can be unit tested
-// with stub dial/resolve functions instead of a real cluster.
+// decision flow with injectable dial/resolve functions, so it can be unit
+// tested without a real cluster.
 func connectSequence(
 	dialCtx context.Context,
 	probeTimeout time.Duration,
@@ -130,12 +125,9 @@ func connectSequence(
 	pap, dErr := discover()
 	if dErr != nil {
 		if k8serrors.IsForbidden(dErr) {
-			// A minimal-RBAC client has nothing to fall back to, so a failed
-			// known-name dial (the pod briefly absent mid-rollout) warrants a
-			// retry -- but only when the identity is actually permitted to
-			// port-forward to the pod. An identity that is refused by RBAC
-			// gets that refusal now instead of a retry loop that cannot
-			// succeed.
+			// Retry only if the identity can actually port-forward to the pod
+			// (a minimal-RBAC client has no other fallback); otherwise fail
+			// now instead of looping on a retry that cannot succeed.
 			if allowed, aErr := knownNameAllowed(); aErr == nil && !allowed {
 				return connectResult{err: knownNameForbiddenError()}
 			}
@@ -156,11 +148,9 @@ func connectSequence(
 	return connectDiscovered(dialCtx, pap)
 }
 
-// connectKnownNameWithBackoff retries the known-name connect against pap
-// with exponential backoff bounded by dialCtx's remaining deadline. It is
-// only reached when service discovery is itself forbidden: a minimal-RBAC
-// client has nothing to fall back to, so a single known-name failure (the
-// pod briefly absent mid-rollout, for instance) must not be fatal.
+// connectKnownNameWithBackoff retries the known-name connect against pap with
+// exponential backoff bounded by dialCtx's remaining deadline: reached only
+// when discovery is forbidden, so a transient failure must not be fatal.
 func (kc *Cluster) connectKnownNameWithBackoff(dialCtx context.Context, pap *portforward.PodAddress) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
 	b := backoff.ExponentialBackOff{
 		InitialInterval:     500 * time.Millisecond,
@@ -182,9 +172,9 @@ func (kc *Cluster) connectKnownNameWithBackoff(dialCtx context.Context, pap *por
 	return conn, name, ver, nil
 }
 
-// knownNameExhaustedError is returned when the known-name retry loop in
-// connectKnownNameWithBackoff runs out of budget: a minimal-RBAC client
-// could reach neither the manager pod directly nor the discovery service.
+// knownNameExhaustedError means a minimal-RBAC client could reach neither
+// the manager pod directly nor the discovery service before the retry
+// budget ran out.
 func knownNameExhaustedError(podName string) error {
 	return errcat.User.Newf(
 		"could not reach the traffic-manager pod %q directly, and the current kubeconfig lacks the RBAC to discover it via the %q service; "+
@@ -192,10 +182,8 @@ func knownNameExhaustedError(podName string) error {
 		podName, trafficManagerServiceName)
 }
 
-// canPortForwardKnownName reviews (SelfSubjectAccessReview) whether the
-// current identity may create pods/portforward for the known manager pod
-// name. Self-reviews are permitted to every authenticated identity, so this
-// needs no RBAC of its own.
+// canPortForwardKnownName uses a SelfSubjectAccessReview, which every
+// authenticated identity may make regardless of its other RBAC grants.
 func (kc *Cluster) canPortForwardKnownName(namespace string) (bool, error) {
 	return k8sapi.CanI(kc, &authv1.ResourceAttributes{
 		Verb:        "create",
@@ -215,12 +203,9 @@ func knownNameForbiddenError() error {
 		trafficManagerPodName, trafficManagerServiceName)
 }
 
-// connectToPod dials pap and runs the handshake shared by both connect
-// paths: credential wiring, the version probe, x509 auth-port activation,
-// and version parsing. The connection is pinned to pap's pod for its entire
-// lifetime; when the pod goes away, the connection dies with it, and the
-// session's reconnect logic establishes a new connection against a fresh
-// resolution.
+// connectToPod dials pap and runs the shared connect handshake. The
+// connection is pinned to pap's pod for its lifetime; when the pod goes
+// away, the connection dies with it and reconnect resolves a fresh one.
 func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAddress) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
 	grpcAddr := pap.AddrFor(pap.Port)
 
@@ -286,14 +271,10 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 	return conn, vi.Name, ver, err
 }
 
-// connectExternal dials the traffic-manager directly at the admin-configured
-// external address (cluster.managerAddress) instead of through a Kubernetes
-// port-forward. No Kubernetes API calls are made: there is no known-name
-// probe and no service discovery. The client presents exactly one
-// credential: the kubeconfig's bearer token whenever a bearer source
-// exists, and otherwise its client certificate, directly in the TLS
-// handshake (the port-forward transport's x509 auth-port token exchange has
-// no equivalent here). The external listener rejects a call carrying both.
+// connectExternal dials cluster.managerAddress directly, with no Kubernetes
+// API calls. It presents exactly one credential in the TLS handshake --
+// bearer token if available, otherwise a client certificate -- since the
+// external listener rejects a call carrying both.
 func (kc *Cluster) connectExternal(dialCtx context.Context, addr string) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
 	hostPort, serverName, err := parseManagerAddress(addr)
 	if err != nil {

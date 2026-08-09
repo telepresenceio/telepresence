@@ -13,39 +13,24 @@ import (
 )
 
 // managerStatefulSet is the chart-created StatefulSet name for the shared
-// traffic-manager release (rt/fixture_manager.go's unexported
-// helmReleaseName; the chart converted the manager from a Deployment to a
-// single-replica StatefulSet so the client can dial its pod by a known
-// name, traffic-manager-0).
+// traffic-manager release.
 const managerStatefulSet = "traffic-manager"
 
 // rolloutAgentContainer is the traffic-agent's container name inside an
-// injected pod (agentconfig.ContainerName), duplicated from injector/
-// nodeagent's identically named consts: this package has no dependency on
-// either.
+// injected pod.
 const rolloutAgentContainer = "traffic-agent"
 
-// rolloutRecoveryTimeout bounds every post-rollout Eventually poll: the
-// client's reconnect (known-name pod dial, then session/intercept
-// restoration) is asynchronous and a StatefulSet rollout plus a fresh pod
-// becoming ready can itself take the better part of a minute.
-// rolloutPollInterval is the poll tick between attempts.
+// rolloutRecoveryTimeout/rolloutPollInterval bound every post-rollout
+// Eventually poll: a StatefulSet rollout plus client reconnect can take the
+// better part of a minute.
 const (
 	rolloutRecoveryTimeout = 2 * time.Minute
 	rolloutPollInterval    = 3 * time.Second
 )
 
-// ManagerRollout proves the client-rbac-minimization phase-3 contract from a
-// live client's perspective: a connected session with an active intercept
-// survives a real traffic-manager StatefulSet rollout. The client
-// reconnects (dialing the known pod name, traffic-manager-0, before falling
-// back to discovery), and the fresh manager restores exactly the prior
-// state -- no duplicate intercept, no duplicate agent. This runs alongside
-// the auth area's restore-review coverage (AuthGate/AuthEnforcing): what
-// this suite adds is the end-to-end client view of the same restart.
-//
-// Labeled Slow: it waits through a full StatefulSet rollout plus the
-// client's own multi-step, asynchronous recovery.
+// ManagerRollout proves that a connected session with an active intercept
+// survives a real traffic-manager StatefulSet rollout, reconnecting with no
+// duplicate intercept and no duplicate agent.
 type ManagerRollout struct {
 	rt.Suite
 }
@@ -118,10 +103,8 @@ func (s *ManagerRollout) Test_ManagerRolloutSurvivesWithIntercept() {
 		"pod for %s should carry exactly one traffic-agent container after the rollout", wl.Name)
 }
 
-// statusHealthy reports whether `telepresence status` currently shows a
-// running user daemon connected to a traffic manager. Used only inside
-// Eventually predicates: an error is expected while the client is still
-// reconnecting and simply means "not yet", never a hard failure.
+// statusHealthy reports whether `telepresence status` shows a running user
+// daemon connected to a traffic manager.
 func statusHealthy(ctx context.Context, tp *cli.TP) bool {
 	var st cli.Status
 	if err := tp.JSON(ctx, &st, "status", "--format", "json"); err != nil {

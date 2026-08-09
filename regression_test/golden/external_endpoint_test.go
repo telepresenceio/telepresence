@@ -5,10 +5,8 @@ import (
 	"testing"
 )
 
-// TestExternalEndpointDisabledByDefault asserts that a default render (no
-// externalEndpoint values) produces no external Service/Certificate, no
-// external containerPort or env, and no external-tls volume/mount --
-// externalEndpoint.enabled defaults to false.
+// TestExternalEndpointDisabledByDefault asserts that a default render omits
+// the external Service/Certificate, containerPort/env, and volume/mount.
 func TestExternalEndpointDisabledByDefault(t *testing.T) {
 	out := renderChart(t, map[string]any{})
 	if rendered(out, externalEndpointTpl) {
@@ -22,10 +20,9 @@ func TestExternalEndpointDisabledByDefault(t *testing.T) {
 	}
 }
 
-// TestExternalEndpointSecretName asserts that externalEndpoint.enabled with
-// an explicit tls.secretName, under enforcing auth mode, renders the
-// external Service, the manager's EXTERNAL_PORT/EXTERNAL_TLS_CERT_DIR env
-// and containerPort, and a volume/mount sourced from the given Secret.
+// TestExternalEndpointSecretName asserts that an explicit tls.secretName
+// renders the external Service, env/containerPort, and a volume sourced
+// from that Secret.
 func TestExternalEndpointSecretName(t *testing.T) {
 	out := renderChart(t, map[string]any{
 		"security": map[string]any{
@@ -77,11 +74,9 @@ func TestExternalEndpointSecretName(t *testing.T) {
 	}
 }
 
-// TestExternalEndpointCertManager asserts that
-// externalEndpoint.tls.certManager.enabled renders a cert-manager
-// Certificate for the traffic-manager-external-tls Secret, with the
-// configured dnsNames/issuerRef, and that the StatefulSet's volume falls
-// back to that same Secret name.
+// TestExternalEndpointCertManager asserts that tls.certManager.enabled
+// renders a Certificate with the configured dnsNames/issuerRef, and that
+// the StatefulSet volume falls back to its Secret name.
 func TestExternalEndpointCertManager(t *testing.T) {
 	out := renderChart(t, map[string]any{
 		"security": map[string]any{
@@ -119,12 +114,8 @@ func TestExternalEndpointCertManager(t *testing.T) {
 }
 
 // TestExternalEndpointOmitsConnectPortForward asserts that with an external
-// endpoint published, the connect Role drops its mechanical pods/portforward
-// rule (external clients never port-forward) while keeping the gate-driven
-// connections policy grant -- except under gate "portforward", where
-// possession of pods/portforward is itself the connect policy, so the named
-// grant renders even though nothing exercises it. The Role always carries at
-// least one grant the manager's connect review accepts.
+// endpoint published, the connect Role drops the pods/portforward rule under
+// gate "telepresence" but keeps it under gate "portforward".
 func TestExternalEndpointOmitsConnectPortForward(t *testing.T) {
 	subjects := []map[string]any{{
 		"kind":      "ServiceAccount",
@@ -180,9 +171,7 @@ func TestExternalEndpointOmitsConnectPortForward(t *testing.T) {
 }
 
 // TestExternalEndpointRequiresEnforcing asserts that externalEndpoint.enabled
-// under any auth mode other than enforcing fails the render -- the plan
-// mandates a hard failure since permissive/disabled would leave the public
-// listener with no access control.
+// fails the render under any auth mode other than enforcing.
 func TestExternalEndpointRequiresEnforcing(t *testing.T) {
 	for _, mode := range []string{"permissive", "disabled"} {
 		t.Run(mode, func(t *testing.T) {
@@ -205,10 +194,9 @@ func TestExternalEndpointRequiresEnforcing(t *testing.T) {
 	}
 }
 
-// TestExternalEndpointRequiresExactlyOneTLSSource asserts that
-// externalEndpoint.enabled fails the render unless exactly one of
-// tls.secretName / tls.certManager.enabled is set: neither leaves the
-// listener without a certificate, and both is an ambiguous configuration.
+// TestExternalEndpointRequiresExactlyOneTLSSource asserts that the render
+// fails unless exactly one of tls.secretName / tls.certManager.enabled is
+// set.
 func TestExternalEndpointRequiresExactlyOneTLSSource(t *testing.T) {
 	base := map[string]any{
 		"security": map[string]any{

@@ -32,11 +32,8 @@ func TestExtraValuesReachManagerAndForwarder(t *testing.T) {
 	}
 }
 
-// TestLogStreamingEnv pins the LOG_STREAM_* env vars the traffic-manager
-// reads to bound the StreamLogs RPC (`telepresence gather-logs`): a custom
-// logStreaming block overrides every value, and an absent block (values.yaml
-// isn't touched by this render) falls back to the chart's documented
-// defaults.
+// TestLogStreamingEnv asserts that a custom logStreaming block overrides
+// every LOG_STREAM_* env var, and an absent block falls back to defaults.
 func TestLogStreamingEnv(t *testing.T) {
 	t.Run("custom", func(t *testing.T) {
 		out := renderChart(t, map[string]any{

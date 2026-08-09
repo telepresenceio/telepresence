@@ -18,9 +18,7 @@ import (
 )
 
 // authGateSpec returns managers.AuthEnforcing() with
-// security.authorization.gate layered on top to gate ("telepresence" or
-// "any"), built inline (mirrors suites/quic/fallback.go's
-// quicUnreachableSpec) since no other suite needs a non-default gate value.
+// security.authorization.gate set to gate.
 func authGateSpec(gate string) managers.Spec {
 	v := managers.AuthEnforcing().Values
 	v.Security.Authorization.Gate = gate
@@ -28,11 +26,8 @@ func authGateSpec(gate string) managers.Spec {
 }
 
 // gateIdentityManifest creates a ServiceAccount, a Role granting exactly
-// %[3]s (an indented rules list, no leading "rules:" key), and a
-// RoleBinding wiring the two together, all named %[1]s in namespace %[2]s.
-// Applying it grants name exactly those RBAC rules -- in particular, none
-// of clientRbac's own Roles, which reference managers.TestServiceAccount
-// only.
+// %[3]s, and a RoleBinding wiring them together, all named %[1]s in
+// namespace %[2]s.
 const gateIdentityManifest = `apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -69,13 +64,9 @@ const portForwardOnlyRules = `  - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]`
 
-// telepresenceGrantRules grants create on connections.telepresence.io (what
-// authorizeConnect reviews under gate=telepresence) and create/get on
-// kind-qualified attachments.telepresence.io (what authorizeAttachment
-// reviews for an intercept or ingest -- a bare "attachments" rule would
-// never match those subresource reviews), with no pods/portforward at all:
-// the RBAC shape a minimal-RBAC client is meant to hold once the mechanics
-// move manager-side.
+// telepresenceGrantRules grants create on connections.telepresence.io and
+// create/get on attachments/deployment (a bare "attachments" rule never
+// matches the kind-qualified reviews), with no pods/portforward at all.
 const telepresenceGrantRules = `  - apiGroups: ["telepresence.io"]
     resources: ["connections"]
     verbs: ["create"]
@@ -84,17 +75,14 @@ const telepresenceGrantRules = `  - apiGroups: ["telepresence.io"]
     verbs: ["create", "get"]`
 
 // telepresenceGrantWithLogsRules extends telepresenceGrantRules with get on
-// logs.telepresence.io -- what CanGetLogs reviews for StreamLogs, a
-// diagnostic attribute reviewed the same way regardless of Gate.
+// logs.telepresence.io.
 const telepresenceGrantWithLogsRules = telepresenceGrantRules + `
   - apiGroups: ["telepresence.io"]
     resources: ["logs"]
     verbs: ["get"]`
 
 // createGateIdentity applies gateIdentityManifest for name with rulesYAML,
-// after deleting any stale leftover of the same name (idempotent against an
-// interrupted earlier run), and registers t.Cleanup to remove it. Mirrors
-// createNoGrantsServiceAccount, parameterized on the granted rules.
+// deleting any stale leftover first, and registers t.Cleanup to remove it.
 func createGateIdentity(t *testing.T, ctx context.Context, r *rt.Runtime, name, rulesYAML string) string {
 	t.Helper()
 	mgrNS := managers.ManagerNamespace
@@ -124,14 +112,10 @@ func deleteGateIdentity(t *testing.T, ctx context.Context, r *rt.Runtime, name s
 	}
 }
 
-// arriveAsClient dials the shared manager directly (bypassing the CLI's own
-// port-forward transport, which the run's operator credentials establish,
-// not the identity under test) and calls ArriveAsClient with tok as the
-// caller's bearer token, isolating the manager's own authorization decision
-// from the Kubernetes API server's port-forward admission --
-// AuthEnforcing.Test_UnauthorizedIdentityDeniedAtConnect already covers the
-// latter. Registers a Depart cleanup on success; returns the error either
-// way, since every caller here only asserts admission or denial.
+// arriveAsClient dials the shared manager directly -- isolating the manager's
+// own authorization decision from the API server's port-forward admission --
+// and calls ArriveAsClient with tok as the bearer token. Registers a Depart
+// cleanup on success; returns the error either way.
 func arriveAsClient(t *testing.T, ctx context.Context, r *rt.Runtime, ns, name, tok string) error {
 	t.Helper()
 	mc, closeFn, err := rt.ManagerClient(rt.Env{Ctx: ctx, T: t, R: r}, managers.ManagerNamespace)
@@ -155,10 +139,8 @@ func arriveAsClient(t *testing.T, ctx context.Context, r *rt.Runtime, ns, name, 
 }
 
 // dialAndArrive is arriveAsClient for a caller that needs the resulting
-// SessionInfo itself, to drive a further RPC on the same session (StreamLogs,
-// WatchNamespaces). Fails the test outright on either the dial or the
-// ArriveAsClient call, since every caller here expects admission to succeed.
-// Registers cleanups for both the connection and the session.
+// SessionInfo to drive a further RPC on the same session. Fails the test
+// outright if either call errors.
 func dialAndArrive(t *testing.T, ctx context.Context, r *rt.Runtime, ns, name, tok string) (manager.ManagerClient, context.Context, *manager.SessionInfo) {
 	t.Helper()
 	mc, closeFn, err := rt.ManagerClient(rt.Env{Ctx: ctx, T: t, R: r}, managers.ManagerNamespace)
@@ -183,18 +165,9 @@ func dialAndArrive(t *testing.T, ctx context.Context, r *rt.Runtime, ns, name, t
 }
 
 // AuthGate proves security.authorization.gate at the session boundary: under
-// gate=telepresence, an identity whose Role carries only pods/portforward is
-// refused a SESSION -- not merely an intercept, the distinguishing negative
-// phase 1 introduces -- while an identity whose Role carries the
-// telepresence.io connect/attach grants is admitted; under gate=any, both
-// grants admit a session.
-//
-// The manager namespace's transport-only pods/portforward Role
-// (traffic-manager-connect, rendered for every gate value) has no bearing
-// on either identity here: both dial the manager directly via
-// rt.ManagerClient, never through a real port-forward, so what a
-// PermissionDenied SubjectAccessReview would deny at the API server is not
-// in scope for this suite -- see AuthEnforcing for that boundary.
+// gate=telepresence, a pods/portforward-only identity is refused a session
+// while a telepresence.io connect/attach identity is admitted; under
+// gate=any, both are admitted.
 type AuthGate struct {
 	rt.Suite
 }
@@ -203,10 +176,9 @@ func init() {
 	rt.Register(&AuthGate{}, rt.InArea("auth"), rt.NeedsManager(authGateSpec("telepresence")))
 }
 
-// Test_PortForwardOnlyGrantRefusedSessionUnderTelepresenceGate covers the
-// plan's negative case: an authenticated caller holding only
-// pods/portforward is refused a session (PermissionDenied on ArriveAsClient
-// itself), not merely denied later at intercept time.
+// Test_PortForwardOnlyGrantRefusedSessionUnderTelepresenceGate asserts that
+// a caller holding only pods/portforward is refused a session with
+// PermissionDenied.
 func (s *AuthGate) Test_PortForwardOnlyGrantRefusedSessionUnderTelepresenceGate() {
 	t := s.T()
 	ctx := s.Ctx()
@@ -262,11 +234,9 @@ func (s *AuthGate) Test_GateAnyAdmitsEitherGrant() {
 	s.Require().NoError(err, "gate=any must admit the telepresence.io grant")
 }
 
-// Test_StreamLogsDeniedNamespaceGetsErrorFrame covers StreamLogs's per-pod
-// authorization behavior: an identity holding the connect/attach grants but
-// no get on logs.telepresence.io is not refused the request outright. It
-// gets a BEGIN frame, an error frame naming the denial, and an END frame for
-// the traffic-manager pod, then the stream ends.
+// Test_StreamLogsDeniedNamespaceGetsErrorFrame asserts that an identity
+// without logs.telepresence.io access still gets BEGIN, a denial error
+// frame, and END, rather than an outright refusal.
 func (s *AuthGate) Test_StreamLogsDeniedNamespaceGetsErrorFrame() {
 	t := s.T()
 	ctx := s.Ctx()

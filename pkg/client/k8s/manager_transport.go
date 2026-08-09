@@ -15,11 +15,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
 
-// usesExternalTransport reports whether ConnectToManager should dial the
-// admin-configured external endpoint (cc.ManagerAddress) instead of the
-// classic port-forward transport. Factored out of ConnectToManager so the
-// decision is unit-testable without a live cluster, the same way
-// connectSequence is.
+// usesExternalTransport reports whether cc selects the external endpoint
+// (cc.ManagerAddress) instead of the classic port-forward transport.
 func usesExternalTransport(cc *client.Cluster) bool {
 	return cc.ManagerAddress != ""
 }
@@ -46,13 +43,9 @@ func parseManagerAddress(addr string) (hostPort, serverName string, err error) {
 	return u.Host, u.Hostname(), nil
 }
 
-// managerServerCredentials builds the TLS transport credentials for dialing
-// an external cluster.managerAddress: system trust roots unless caSpec pins
-// one, per resolveManagerServerCA's three accepted forms. getClientCert,
-// when non-nil, presents the kubeconfig's client certificate for direct
-// mTLS -- the credential of a client with no bearer source. The single
-// -credential rule: bearer whenever a bearer source exists, certificate
-// only otherwise, so a call never presents both.
+// managerServerCredentials builds TLS credentials trusting caSpec's CA when
+// set, else system roots. getClientCert, when non-nil, presents the client
+// certificate directly since no bearer token is available.
 func managerServerCredentials(
 	serverName, caSpec string,
 	getClientCert func(*tls.CertificateRequestInfo) (*tls.Certificate, error),
@@ -76,11 +69,9 @@ func managerServerCredentials(
 	return credentials.NewTLS(tlsConfig), nil
 }
 
-// externalClientCertificate returns a GetClientCertificate callback backed
-// by kc's client-certificate credentials, or nil when the kubeconfig has
-// none. Unlike the port-forward transport's x509 token exchange, the
-// certificate is presented directly in the external listener's TLS
-// handshake.
+// externalClientCertificate returns a GetClientCertificate callback from
+// kc's client-certificate credentials, or nil when it has none, for direct
+// presentation in the external TLS handshake.
 func externalClientCertificate(kc *Kubeconfig) func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 	if kc == nil || kc.RestConfig == nil {
 		return nil

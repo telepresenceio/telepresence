@@ -207,12 +207,9 @@ func (s *session) agentPodWatchNamespaces() []string {
 			return
 		}
 		if cc.ManagerAddress != "" {
-			// External manager transport: no Kubernetes API access, so the
-			// CanPortForward SSAR can't run. Every mapped namespace is kept:
-			// the agent-pod watch is relayed through the manager, and agent
-			// streams ride the QUIC tunnel rather than a Kubernetes
-			// port-forward. The manager reviews what the identity may attach
-			// to; a per-namespace port-forward probe has no meaning here.
+			// External manager transport: no Kubernetes API access, so
+			// CanPortForward can't run. Keep every mapped namespace; the
+			// manager reviews attach permissions itself.
 			s.agentPodWatchNamespacesValue = s.GetCurrentNamespaces(true)
 			return
 		}
@@ -1017,11 +1014,8 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 		changed := s.SetMappedNamespaces(namespaces)
 		switch {
 		case len(namespaces) == 0:
-			// The watcher selection must not depend on SetMappedNamespaces
-			// reporting a change: a fresh session's mapped set is already
-			// empty, so watching everything is not a change -- and over an
-			// external manager transport the WatchNamespaces stream is the
-			// only namespace source there is.
+			// A fresh session's mapped set is already empty, so watching
+			// everything is not a "change" -- selection can't depend on that.
 			s.namespaceWatchOnce.Do(func() {
 				external := client.GetConfig(s).Cluster().ManagerAddress != ""
 				switch {
@@ -1029,10 +1023,8 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 					clog.Infof(s, "Will watch all namespaces using the traffic-manager's WatchNamespaces RPC")
 					s.StartNamespacesFromManager(s.ManagerClient(), s.sessionInfo)
 				case external:
-					// No cluster API access over an external manager
-					// transport, and this manager predates
-					// WatchNamespaces: the Kubernetes namespace watcher
-					// is not an option.
+					// No Kubernetes API access, and this manager predates
+					// WatchNamespaces: no watcher option remains.
 					clog.Warnf(s, "Unable to watch all namespaces: the traffic-manager does not support the WatchNamespaces RPC")
 				case k8sapi.CanWatchNamespaces(s):
 					clog.Infof(s, "Will watch all namespaces")

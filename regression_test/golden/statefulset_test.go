@@ -9,9 +9,8 @@ import (
 	"helm.sh/helm/v3/pkg/engine"
 )
 
-// renderChartAs is renderChart with a caller-chosen release name/namespace,
-// for the pod-name contract test below: renderChart's releaseName constant
-// is fixed, but this test needs to vary it.
+// renderChartAs is renderChart with a caller-chosen release name/namespace
+// instead of the fixed releaseName/releaseNamespace constants.
 func renderChartAs(t *testing.T, vals map[string]any, relName, relNamespace string) map[string]string {
 	t.Helper()
 	chrt, err := loadChart()
@@ -32,7 +31,7 @@ func renderChartAs(t *testing.T, vals map[string]any, relName, relNamespace stri
 }
 
 // renderErr is renderChart but returns a render/coalesce error instead of
-// failing the test, for the replicaCount>1 guard below.
+// failing the test.
 func renderErr(t *testing.T, vals map[string]any) error {
 	t.Helper()
 	chrt, err := loadChart()
@@ -49,13 +48,8 @@ func renderErr(t *testing.T, vals map[string]any) error {
 	return err
 }
 
-// TestPodNameContract pins that the StatefulSet is always named
-// "traffic-manager" -- the client's known-name pods/portforward connect
-// path dials pod traffic-manager-0 directly, so the helper that names the
-// workload (traffic-manager.name in _helpers.tpl) must never start honoring
-// nameOverride or the release name. This chart has no fullnameOverride
-// value to vary; nameOverride and the release name are its only naming
-// inputs.
+// TestPodNameContract asserts the StatefulSet is always named
+// "traffic-manager", regardless of nameOverride or the release name.
 func TestPodNameContract(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -80,10 +74,8 @@ func TestPodNameContract(t *testing.T) {
 	}
 }
 
-// TestReplicaCountRejected asserts that replicaCount > 1 fails the render
-// unconditionally -- the manager is a singleton (CA and session state are
-// process-local) and the known-name connect path assumes exactly one pod,
-// traffic-manager-0.
+// TestReplicaCountRejected asserts that replicaCount > 1 always fails the
+// render.
 func TestReplicaCountRejected(t *testing.T) {
 	err := renderErr(t, map[string]any{"replicaCount": 2})
 	if err == nil {
@@ -94,13 +86,8 @@ func TestReplicaCountRejected(t *testing.T) {
 	}
 }
 
-// TestPreUpgradeMigrationHook asserts the pre-upgrade hook Job that deletes
-// a pre-StatefulSet Deployment named traffic-manager renders along with its
-// scoped ServiceAccount/Role/RoleBinding. engine.Render (used by
-// renderChart) has no notion of Helm's hook lifecycle -- it renders every
-// template unconditionally -- so the "helm.sh/hook": pre-upgrade annotation
-// is what makes a real `helm upgrade` skip this Job on install, not a
-// template-level IsInstall guard.
+// TestPreUpgradeMigrationHook asserts the migration hook Job and its scoped
+// ServiceAccount/Role/RoleBinding render, annotated "helm.sh/hook": pre-upgrade.
 func TestPreUpgradeMigrationHook(t *testing.T) {
 	out := renderChart(t, map[string]any{})
 	if !rendered(out, preUpgradeHookTpl) {
@@ -128,12 +115,9 @@ func TestPreUpgradeMigrationHook(t *testing.T) {
 	}
 }
 
-// TestClientRbacLegacyAccess asserts clientRbac.legacyAccess's two
-// renderings: true (the chart default) keeps the discovery and diagnostic
-// grants that a pre-2.33 client needs; false reduces the connect Role to the
-// single name-scoped pods/portforward rule and drops the legacy grants from
-// the cluster-scope ClusterRole, leaving only the gate-driven and
-// gate-independent telepresence.io rules.
+// TestClientRbacLegacyAccess asserts that legacyAccess=false reduces the
+// connect Role to the name-scoped pods/portforward rule and drops the
+// legacy discovery grants, while true (the default) keeps them.
 func TestClientRbacLegacyAccess(t *testing.T) {
 	subjects := []map[string]any{{
 		"kind":      "ServiceAccount",
@@ -202,13 +186,9 @@ func TestClientRbacLegacyAccess(t *testing.T) {
 	}
 }
 
-// TestClientRbacGateLegacyAccessCrossProduct asserts the connect Role's
-// transport-vs-policy invariant over the full {gate, legacyAccess}
-// cross-product: the mechanical pods/portforward transport rule renders for
-// every gate value regardless of legacyAccess (scoped to traffic-manager-0
-// when false, unscoped alongside the discovery rules when true), while the
-// telepresence.io connections rule is purely gate-driven -- present iff
-// gate != "portforward" -- in both legacyAccess states.
+// TestClientRbacGateLegacyAccessCrossProduct asserts, across every
+// {gate, legacyAccess} combination, that pods/portforward always renders
+// while the connections rule renders only when gate != "portforward".
 func TestClientRbacGateLegacyAccessCrossProduct(t *testing.T) {
 	subjects := []map[string]any{{
 		"kind":      "ServiceAccount",

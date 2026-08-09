@@ -516,11 +516,8 @@ func IsChildIntercept(spec *rpc.InterceptSpec) bool {
 	return strings.HasPrefix(spec.Client, "child ")
 }
 
-// childInterceptSpecs derives the pod-port child spec implied by each of
-// spec's PodPorts entries. Each returned spec targets a pod-port (container
-// port) directly, carries no PodPorts or LocalPorts of its own, and has its
-// Client field set to a value IsChildIntercept recognizes, identifying it as
-// a child of spec.
+// childInterceptSpecs derives one pod-port child spec per spec.PodPorts
+// entry, each carrying a Client value IsChildIntercept recognizes.
 func childInterceptSpecs(spec *rpc.InterceptSpec) ([]*rpc.InterceptSpec, error) {
 	if len(spec.PodPorts) == 0 {
 		return nil, nil
@@ -601,15 +598,13 @@ func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFin
 }
 
 // EnsureAgent ensures that an agent exists for the workload named n and of
-// kind wk in namespace ns and waits for it to become available. wk may be
-// empty, in which case the workload is resolved by priority order across the
-// known workload kinds. When nodeAgent is requested, it provisions (or
-// reuses) a node-hosted traffic-agent Job instead of injecting a sidecar, and
-// takes a lease on it under sessionID so that the Job outlives this call for
-// as long as the session does, until ReleaseAgent is called or the session
-// ends. A sidecar request is rejected while a node-agent intercept or lease
-// already claims the workload, since injecting a sidecar would restart the
-// pod the node-agent depends on.
+// kind wk (resolved by priority order across known kinds when empty) in
+// namespace ns, and waits for it to become available. When nodeAgent is
+// requested, it provisions a node-hosted traffic-agent Job instead of
+// injecting a sidecar, and takes a lease on it under sessionID until
+// ReleaseAgent is called or the session ends. A sidecar request is rejected
+// while a node-agent lease already claims the workload, since injecting a
+// sidecar would restart the pod the node-agent depends on.
 func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, ns string, nodeAgent bool, wk k8sapi.Kind) (as []*AgentSession, err error) {
 	if !nodeAgent && s.nodeAgentWanted(n, ns) {
 		// Checked before resolving the workload: a sidecar request against a

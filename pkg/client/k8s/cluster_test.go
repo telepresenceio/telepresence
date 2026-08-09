@@ -80,11 +80,9 @@ func newTestCluster(namespace string, mapped ...string) *Cluster {
 	}
 }
 
-// TestApplyNamespaceList_MarksAccessibleWithoutProbing feeds a NamespaceList the way
-// StartNamespacesFromManager's stream handler does, and asserts that every reported
-// namespace ends up in the current-namespace map as accessible. The Cluster carries no
-// Kubernetes interface, so a panic here would mean the update went through canAccessNS
-// (which calls k8sapi.GetK8sInterface) instead of trusting the manager's report.
+// TestApplyNamespaceList_MarksAccessibleWithoutProbing asserts every reported namespace
+// is marked accessible without probing: the Cluster carries no Kubernetes interface, so
+// a panic here would mean canAccessNS ran instead of trusting the manager's report.
 func TestApplyNamespaceList_MarksAccessibleWithoutProbing(t *testing.T) {
 	kc := newTestCluster("default")
 	kc.applyNamespaceList(&manager.NamespaceList{Namespaces: []string{"ns-a", "ns-b"}})

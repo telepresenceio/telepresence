@@ -175,10 +175,8 @@ func nodePortReadyNode() *corev1.Node {
 	}
 }
 
-// externalTLSSecret is the tls.secretName Secret a fully-configured
-// externalValuesWithTLS names, so the CA-resolution step succeeds and does
-// not add its own warning note to the tests below that are exercising the
-// probe-result composition instead.
+// externalTLSSecret is the Secret externalValuesWithTLS names, so CA
+// resolution succeeds without adding its own warning note.
 func externalTLSSecret() *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "tm-tls", Namespace: "ambassador"},

@@ -220,21 +220,8 @@ func TestChartMatrix(t *testing.T) {
 	}
 }
 
-// assertClientRoleRules checks the gate-dependent client Role rendering. None
-// of this matrix's combos set clientRbac.legacyAccess, so every render
-// uses the chart's default (true): the connect Role's discovery and
-// port-forward rules are the client's only transport to the manager and
-// render for every gate value; the gate only adds the telepresence.io
-// connections rule (absent for "portforward"). The cluster-scope ClusterRole
-// (rendered here because the matrix's combos never set a namespaceSelector or
-// clientRbac.namespaces, so the manager is cluster-wide) gates its own
-// pods/portforward vs. attachments rule the same way; pods get/list, pods/log
-// get, and the telepresence.io logs/logs-yaml diagnostic grant are unaffected
-// by the gate and render identically for every value -- the first two
-// because legacyAccess is on, the last unconditionally. TestLegacyAccess
-// covers the legacyAccess=false rendering; TestNamespaceScopeRoleGate
-// covers the same gate-dependent rules for namespace-scope.yaml's
-// per-namespace Role, which this cluster-wide matrix never renders.
+// assertClientRoleRules checks the gate-dependent client Role rules on both
+// connect.yaml and the cluster-scope ClusterRole for the given gate.
 func assertClientRoleRules(t *testing.T, out map[string]string, gate string) {
 	t.Helper()
 	if !rendered(out, clientConnectTpl) {
@@ -274,13 +261,9 @@ func assertInterceptRules(t *testing.T, tpl, doc, gate string) {
 	}
 }
 
-// TestNamespaceScopeRoleGate asserts the per-namespace Role
-// (clientRbac/namespace-scope.yaml) renders the same gate-dependent and
-// gate-independent telepresence.clientRbacInterceptRules content as the
-// cluster-scope ClusterRole, in particular that the telepresence.io
-// logs/logs-yaml diagnostic grant renders for every gate value. Setting
-// clientRbac.namespaces makes the manager namespace-scoped (traffic-manager.namespaced),
-// which is what makes namespace-scope.yaml render instead of cluster-scope.yaml.
+// TestNamespaceScopeRoleGate asserts that clientRbac.namespaces renders the
+// namespace-scoped Role with the same gate-dependent rules as the
+// cluster-scope ClusterRole, for every gate value.
 func TestNamespaceScopeRoleGate(t *testing.T) {
 	for _, gate := range []string{"portforward", "telepresence", "any"} {
 		t.Run(gate, func(t *testing.T) {

@@ -100,10 +100,9 @@ func yamlChunk(pod, ns string, yaml string) *manager.LogChunk {
 	return &manager.LogChunk{PodName: pod, PodNamespace: ns, Payload: &manager.LogChunk_PodYaml{PodYaml: []byte(yaml)}}
 }
 
-// TestGatherLogChunks_Assembly scripts an interleaved multi-pod frame sequence -- a pod whose
-// log completes normally, a pod whose read fails partway through, and a pod whose manifest is
-// requested -- and asserts that gatherLogChunks reproduces the file layout and result map that
-// gatherLogsDirect produces for the same logical outcome.
+// TestGatherLogChunks_Assembly scripts interleaved multi-pod frames -- one pod completes
+// normally, one fails partway through, one includes a manifest -- and asserts the resulting
+// file layout and result map.
 func TestGatherLogChunks_Assembly(t *testing.T) {
 	exportDir := t.TempDir()
 
@@ -194,10 +193,8 @@ func requireFileContent(t *testing.T, dir, name, want string) {
 	require.Equal(t, want, string(b))
 }
 
-// TestGatherLogsViaStream_RequestMapping asserts that the connector.LogsRequest fields are
-// translated into the StreamLogsRequest the manager expects -- in particular, the "none"
-// sentinel connector.LogsRequest.Agents uses for "no agent logs" is translated to "false",
-// which is what StreamLogsRequest.Agents uses for the same thing.
+// TestGatherLogsViaStream_RequestMapping asserts connector.LogsRequest fields translate
+// into StreamLogsRequest, including the "none" Agents sentinel becoming "false".
 func TestGatherLogsViaStream_RequestMapping(t *testing.T) {
 	exportDir := t.TempDir()
 	session := &manager.SessionInfo{SessionId: "test-session"}

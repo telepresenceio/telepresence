@@ -113,11 +113,9 @@ func loggingContext(ctx context.Context, buf *bytes.Buffer) context.Context {
 	return clog.WithLogger(ctx, slog.New(h))
 }
 
-// gateFixtures seeds the Deployment, Service, and Pod that
-// authorizeAttachment's kind-resolution (GateTelepresence) and pod listing
-// (GatePortForward) need for a workload named "test-agent" in
-// gateTestNamespace, and that a successful PrepareIntercept needs to resolve
-// an interceptable port.
+// gateFixtures seeds the Deployment, Service, and Pod for a workload named
+// "test-agent" in gateTestNamespace that both gate kinds and PrepareIntercept
+// need to resolve.
 func gateFixtures() []runtime.Object {
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: gateTestNamespace},
@@ -153,11 +151,9 @@ func gateFixtures() []runtime.Object {
 	return []runtime.Object{dep, svc, pod}
 }
 
-// interceptRequest builds a CreateInterceptRequest for the "test-agent"
-// Deployment, node-agent mode so PrepareIntercept never needs an agent
-// session to have arrived. Wiretap avoids the global-intercept restriction
-// that would otherwise reject a plain TCP intercept, keeping the request
-// focused on the authorization gate under test.
+// interceptRequest builds a node-agent CreateInterceptRequest for the
+// "test-agent" Deployment, so PrepareIntercept never needs an agent session
+// to have arrived.
 func interceptRequest(sess *rpc.SessionInfo, clientName, name string) *rpc.CreateInterceptRequest {
 	return &rpc.CreateInterceptRequest{
 		Session: sess,
@@ -174,10 +170,8 @@ func interceptRequest(sess *rpc.SessionInfo, clientName, name string) *rpc.Creat
 	}
 }
 
-// writeActions returns the write actions (create/update/patch/delete)
-// recorded on cs since the since'th action, excluding the authorization
-// reviews themselves, so a test can assert that a denied call produced no
-// side effect beyond the fixture and session setup that preceded it.
+// writeActions returns the write actions recorded on cs since the since'th
+// action, excluding the authorization reviews themselves.
 func writeActions(cs *fake.Clientset, since int) []k8stesting.Action {
 	var out []k8stesting.Action
 	for _, a := range cs.Actions()[since:] {
@@ -224,12 +218,9 @@ func TestGate_Connect_Denied(t *testing.T) {
 	}
 }
 
-// TestGate_PrepareIntercept_DeniedBeforeMutation covers that, for every gate
-// value in ModeEnforcing, a caller authorized to connect (the manager
-// namespace grant passes) but not to attach (every review in the target
-// namespace is denied) is refused at PrepareIntercept, and that the refusal
-// happens before PrepareIntercept's mutating side effects: no writes reach
-// the fake clientset beyond the authorization reviews themselves.
+// TestGate_PrepareIntercept_DeniedBeforeMutation: a caller authorized to
+// connect but denied on attach is refused at PrepareIntercept before any
+// mutating side effect reaches the fake clientset, for every gate.
 func TestGate_PrepareIntercept_DeniedBeforeMutation(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -244,10 +235,8 @@ func TestGate_PrepareIntercept_DeniedBeforeMutation(t *testing.T) {
 			})
 			mgrNs := managerutil.GetEnv(sctx).ManagerNamespace
 
-			// Every review in the manager's own namespace (what connect
-			// reviews, whichever gate is in play) is allowed; every review in
-			// the target namespace (what the attachment review needs) is
-			// denied, so the session establishes but the attachment does not.
+			// Allow only reviews in the manager's own namespace, so the
+			// session establishes but the attachment review is denied.
 			k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), func(_ string, ra *authv1.ResourceAttributes) bool {
 				return ra.Namespace == mgrNs
 			})
@@ -271,10 +260,8 @@ func TestGate_PrepareIntercept_DeniedBeforeMutation(t *testing.T) {
 	}
 }
 
-// TestGate_Selectivity covers that a grant satisfying one gate does not
-// satisfy another: under GatePortForward, a pods/portforward-only grant
-// passes connect and PrepareIntercept, and a telepresence.io-only grant is
-// refused; under GateTelepresence, the reverse.
+// TestGate_Selectivity: a grant satisfying one gate does not satisfy
+// another (portforward-only vs. telepresence.io-only, under each gate).
 func TestGate_Selectivity(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -346,12 +333,9 @@ func TestGate_Selectivity(t *testing.T) {
 	}
 }
 
-// TestGate_Any_AcceptsEither covers GateAny's accept-either behavior end to
-// end: a caller authorized only via the legacy pods/portforward grant still
-// gets a session and an intercept, with a warning naming the caller logged
-// at both connect and attachment time, and the SAR sequence shows the
-// telepresence.io review attempted first; a caller authorized via the
-// telepresence.io grant alone also passes, with no fallback and no warning.
+// TestGate_Any_AcceptsEither: under GateAny, a legacy portforward-only grant
+// still passes (with a warning logged and the telepresence.io review tried
+// first), and a telepresence.io-only grant passes with no warning.
 func TestGate_Any_AcceptsEither(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)

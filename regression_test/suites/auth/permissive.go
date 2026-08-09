@@ -11,11 +11,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
 )
 
-// AuthPermissive proves that security.authentication.mode=permissive (the
-// chart's own default, set explicitly here so the spec is named for what it
-// tests) leaves the standard test-developer connect/intercept flow
-// unaffected: permissive mode validates a bearer token when one is present,
-// but never rejects a call for lacking one.
+// AuthPermissive proves that security.authentication.mode=permissive leaves
+// the standard connect/intercept flow unaffected, and never rejects a call
+// for lacking a bearer token.
 type AuthPermissive struct {
 	rt.Suite
 }
@@ -40,18 +38,9 @@ func (s *AuthPermissive) Test_ConnectAndInterceptWork() {
 	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
 }
 
-// Test_StreamLogsRefusesUnauthenticatedCaller covers the one exception to
-// permissive mode's usual "never reject a call" contract: an unowned session
-// (established without a bearer token, which permissive mode admits) still
-// gets Unauthenticated from StreamLogs when the call carries no token
-// either. service_logs.go refuses a nil principal there in every
-// authentication mode -- unlike the rest of the manager's RPC surface, which
-// only rejects a nil principal under enforcing mode. The session must be
-// tokenless too: a session bound to a principal already refuses a
-// principal-less caller with PermissionDenied in ensureClientSession's
-// ownership check, before StreamLogs's own refusal is reached. The RPC call
-// itself returns no error, only opening the stream; the refusal surfaces on
-// the first Recv.
+// Test_StreamLogsRefusesUnauthenticatedCaller asserts that a tokenless
+// session still gets Unauthenticated from StreamLogs on the first Recv when
+// the call itself carries no token.
 func (s *AuthPermissive) Test_StreamLogsRefusesUnauthenticatedCaller() {
 	t := s.T()
 	ctx := s.Ctx()

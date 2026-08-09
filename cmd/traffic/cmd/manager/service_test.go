@@ -826,11 +826,8 @@ func TestCreateIntercept_Enforcing(t *testing.T) {
 		e.AuthenticationMode = auth.ModeEnforcing
 	})
 
-	// Every SubjectAccessReview in the target namespace -- namespace-wide and
-	// pod-scoped pods/portforward, and the telepresence.io attachment review
-	// alike -- is denied. The connect review, in the manager's own namespace,
-	// is allowed so ArriveAsClient succeeds and the test can reach the
-	// intercept-authorization denial it means to cover.
+	// Deny every review in the target namespace but allow the connect
+	// review, so ArriveAsClient succeeds and the intercept is denied.
 	mgrNs := managerutil.GetEnv(sctx).ManagerNamespace
 	k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), func(_ string, ra *authv1.ResourceAttributes) bool {
 		return ra.Namespace == mgrNs
@@ -864,10 +861,9 @@ func TestCreateIntercept_Enforcing(t *testing.T) {
 	req.Equal(codes.PermissionDenied, status.Code(err))
 }
 
-// ambiguousWorkloadKindObjects returns a Deployment and a StatefulSet sharing
-// name in namespace, plus a running pod matching both of their selectors, so
-// that "test-agent" is ambiguous among the enabled workload kinds unless the
-// caller names one.
+// ambiguousWorkloadKindObjects returns a Deployment and a StatefulSet
+// sharing name in namespace, plus a pod matching both selectors, so name is
+// ambiguous unless the caller names a kind.
 func ambiguousWorkloadKindObjects(namespace, name string) (*appsv1.Deployment, *appsv1.StatefulSet, *corev1.Pod) {
 	labelSel := map[string]string{"app": name}
 	podTemplate := corev1.PodTemplateSpec{
@@ -905,13 +901,9 @@ func ambiguousWorkloadKindObjects(namespace, name string) (*appsv1.Deployment, *
 	return dep, sts, pod
 }
 
-// TestEnsureAgent_AmbiguousWorkloadKind covers the disambiguation EnsureAgent
-// performs before ensuring an agent: a Deployment and a StatefulSet sharing a
-// name in the same namespace make an unqualified call ambiguous. The kind
-// used to authorize the caller is always the kind that ends up mutated: an
-// ambiguous, authorized call is told which kinds matched instead of picking
-// one; an ambiguous call nobody is authorized for learns nothing about which
-// kinds exist; and naming the workload kind resolves it outright.
+// TestEnsureAgent_AmbiguousWorkloadKind: an ambiguous, authorized call is
+// told which kinds matched; an unauthorized one learns nothing; naming the
+// kind resolves it outright.
 func TestEnsureAgent_AmbiguousWorkloadKind(t *testing.T) {
 	const ns = "default"
 	const name = "test-agent"
@@ -965,12 +957,8 @@ func TestEnsureAgent_AmbiguousWorkloadKind(t *testing.T) {
 			e.EnabledWorkloadKinds = k8sapi.Kinds{k8sapi.DeploymentKind, k8sapi.StatefulSetKind}
 			e.AuthenticationMode = auth.ModeEnforcing
 		})
-		// Every review outside the manager's own namespace is denied --
-		// including both candidate kinds and the legacy pods/portforward
-		// fallback -- so alice is authorized for neither. The connect
-		// review, in the manager's own namespace, is allowed so
-		// ArriveAsClient succeeds and the test can reach the EnsureAgent
-		// denial it means to cover.
+		// Deny every review outside the manager's own namespace, so alice
+		// is authorized for neither candidate kind.
 		mgrNs := managerutil.GetEnv(sctx).ManagerNamespace
 		k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), func(_ string, ra *authv1.ResourceAttributes) bool {
 			return ra.Namespace == mgrNs

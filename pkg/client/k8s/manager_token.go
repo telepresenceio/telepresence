@@ -179,9 +179,8 @@ type managerTokenCredentials struct {
 	source   managerTokenSource
 	warnOnce sync.Once
 
-	// requireTransportSecurity is true when these credentials ride a TLS
-	// transport (the external cluster.managerAddress dial) and false for the
-	// port-forwarded h2c socket used by the classic transport.
+	// requireTransportSecurity is true for the external TLS dial, false for
+	// the port-forwarded h2c socket.
 	requireTransportSecurity bool
 }
 

@@ -28,12 +28,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-// This file covers StreamLogs: per-pod BEGIN/data/END framing, the
-// gate-independent logs.telepresence.io authorization applied per namespace
-// (denial produces error frames rather than aborting the request), the
-// unconditional nil-principal refusal that is StreamLogs' one deviation from
-// this file's usual permissive-mode posture, the per-session concurrent-
-// stream limit, and per-pod byte-cap truncation.
+// This file covers StreamLogs: per-pod framing, per-namespace authorization,
+// nil-principal refusal, session concurrency limit, and byte-cap truncation.
 
 // allowLogsReview allows every logs.telepresence.io SubjectAccessReview,
 // regardless of namespace or subresource.
@@ -50,10 +46,8 @@ func isLogsReviewFor(ns string) func(string, *authv1.ResourceAttributes) bool {
 }
 
 // drainLogStream runs StreamLogs to completion and returns every frame it
-// sent. fakeServerStream's channel is buffered well beyond any of this
-// file's frame counts, so by the time StreamLogs returns every frame it sent
-// is already sitting in the channel, ready to be drained without racing the
-// handler.
+// sent; the fake stream's channel is buffered well beyond any test's frame
+// count, so nothing races the handler.
 func drainLogStream(t *testing.T, mgr Service, request *rpc.StreamLogsRequest, stream *fakeServerStream[rpc.LogChunk]) []*rpc.LogChunk {
 	t.Helper()
 	errCh := make(chan error, 1)
@@ -125,10 +119,9 @@ func TestStreamLogs_ManagerPod_BeginDataEnd(t *testing.T) {
 	req.True(gotData, "expected at least one non-empty data frame")
 }
 
-// TestStreamLogs_YamlDenied_LogsStreamWithoutErrorOrManifest covers the
-// logs-without-manifests grant: with logs.telepresence.io allowed but its
-// yaml subresource denied, the pod's log streams normally and the manifest
-// is omitted without an error frame.
+// TestStreamLogs_YamlDenied_LogsStreamWithoutErrorOrManifest: with logs
+// allowed but logs/yaml denied, the log streams and the manifest is
+// omitted without an error frame.
 func TestStreamLogs_YamlDenied_LogsStreamWithoutErrorOrManifest(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -166,10 +159,9 @@ func TestStreamLogs_YamlDenied_LogsStreamWithoutErrorOrManifest(t *testing.T) {
 	req.True(gotData, "the log itself must still stream")
 }
 
-// TestStreamLogs_NamespaceDenied_OtherNamespaceStillStreams covers that a
-// denied logs.telepresence.io review in one namespace produces error frames
-// for that namespace's pods without aborting pods in an authorized
-// namespace.
+// TestStreamLogs_NamespaceDenied_OtherNamespaceStillStreams: a denied
+// review in one namespace produces error frames there without aborting
+// pods in an authorized namespace.
 func TestStreamLogs_NamespaceDenied_OtherNamespaceStillStreams(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -228,10 +220,9 @@ func TestStreamLogs_NamespaceDenied_OtherNamespaceStillStreams(t *testing.T) {
 	req.True(gotDenialError, "the denied namespace's pod must carry an error frame instead of data")
 }
 
-// TestStreamLogs_NilPrincipal_RefusedEvenInPermissiveMode covers StreamLogs'
-// deviation from every other authorization call site in this file: a
-// session established without a principal (permitted under ModePermissive)
-// is still refused Unauthenticated when it tries to stream logs.
+// TestStreamLogs_NilPrincipal_RefusedEvenInPermissiveMode: a session
+// established without a principal under ModePermissive is still refused
+// Unauthenticated when it tries to stream logs.
 func TestStreamLogs_NilPrincipal_RefusedEvenInPermissiveMode(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)

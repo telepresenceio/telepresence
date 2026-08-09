@@ -483,15 +483,11 @@ func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
 }
 
 // RestoreIntercepts stores each entry in intercepts as manager state, keyed
-// by its own Id, and wires the finalizers a running intercept needs
-// (restoreAppContainer for a sidecar target, node-agent reap and pod watches
-// for a node-agent one). A pod-port intercept's children are never taken
-// from intercepts: a spec for which IsChildIntercept is true is skipped, and
-// every non-child entry has its children derived from its own
-// Spec.PodPorts, the same derivation AddIntercept performs when the parent
-// is first created. This mirrors WatchIntercepts, which never sends a child
-// intercept to a client in the first place, so a caller-supplied child spec
-// is never the authoritative one.
+// by its own Id, and wires the finalizers a running intercept needs. A
+// pod-port intercept's children are never taken from intercepts -- a spec
+// for which IsChildIntercept is true is skipped -- since WatchIntercepts
+// never sends a child to a client; every non-child entry has its children
+// re-derived instead from its own Spec.PodPorts.
 func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) {
 	nodeAgentWatches := make(map[nodeAgentWatchKey]struct{})
 	for _, intercept := range intercepts {
@@ -523,10 +519,8 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 	}
 }
 
-// restoreChildIntercepts regenerates parent's pod-port children from its own
-// Spec.PodPorts and wires a finalizer on parent that removes each child once
-// parent's own finalizers run, mirroring the finalizer AddIntercept adds for
-// the same purpose.
+// restoreChildIntercepts regenerates parent's pod-port children and wires a
+// finalizer that removes each child once parent's own finalizers run.
 func (s *State) restoreChildIntercepts(parent *Intercept, now time.Time) {
 	childSpecs, err := childInterceptSpecs(parent.Spec)
 	if err != nil {

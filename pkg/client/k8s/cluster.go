@@ -55,10 +55,9 @@ type Cluster struct {
 	// snapshot maintained by the namespaces watcher or the WatchNamespaces RPC.
 	namespaceWatcherSnapshot map[string]struct{}
 
-	// namespacesFromManager is true once namespaceWatcherSnapshot is fed by the manager's
-	// WatchNamespaces RPC rather than the client-side Kubernetes namespace watch. The
-	// manager has already scoped the stream to the namespaces it manages, so
-	// refreshNamespaces skips the canAccessNS probe and marks every entry accessible.
+	// namespacesFromManager is true once the snapshot is fed by the manager's
+	// WatchNamespaces RPC instead of the client-side watch; refreshNamespaces then
+	// skips the canAccessNS probe since the manager already scoped the stream.
 	namespacesFromManager bool
 
 	// Current Namespace snapshot, filtered by MappedNamespaces
@@ -314,11 +313,9 @@ func (kc *Cluster) determineTrafficManagerNamespace() (string, error) {
 	// Search for the traffic-manager in mapped namespaces
 	nss := kc.GetCurrentNamespaces(true)
 	if len(nss) == 0 {
-		// The namespace snapshot is empty when no explicit mapped set is
-		// configured, because the namespace watcher starts only after the
-		// manager is dialed. A one-shot list keeps the search working for a
-		// client whose RBAC permits it; one without namespace access falls
-		// through to the static defaults below.
+		// The watcher hasn't started yet at this point, so fetch a one-shot list
+		// for clients whose RBAC permits it; others fall through to the static
+		// defaults below.
 		if nsl, err := k8sapi.GetK8sInterface(kc).CoreV1().Namespaces().List(kc, meta.ListOptions{}); err == nil {
 			for i := range nsl.Items {
 				nss = append(nss, nsl.Items[i].Name)
@@ -465,13 +462,11 @@ func (kc *Cluster) namespacesEventHandler(evCh <-chan watch.Event, nsSynced chan
 	}
 }
 
-// StartNamespacesFromManager consumes the manager's WatchNamespaces RPC and applies each
-// received NamespaceList the same way the Kubernetes namespace watcher applies a snapshot,
-// so every consumer downstream of GetCurrentNamespaces is agnostic to the source. Namespaces
-// reported this way are marked accessible without the canAccessNS probe: the manager has
-// already scoped the stream to the namespaces it manages, and a reduced-RBAC client may be
-// unable to run the probe at all. The function waits for the first list to arrive before
-// returning.
+// StartNamespacesFromManager applies each WatchNamespaces list the way the Kubernetes
+// namespace watcher applies a snapshot, keeping namespace access agnostic to its
+// source. Entries are marked accessible without the canAccessNS probe, since the
+// manager already scoped the stream and a reduced-RBAC client may not be able to run
+// that probe itself.
 func (kc *Cluster) StartNamespacesFromManager(mc manager.ManagerClient, session *manager.SessionInfo) {
 	nsSynced := make(chan struct{})
 	closeSynced := sync.Once{}
@@ -494,10 +489,8 @@ func (kc *Cluster) StartNamespacesFromManager(mc manager.ManagerClient, session 
 	}
 }
 
-// applyNamespaceList replaces the namespace snapshot with the manager-reported set and
-// recomputes accessibility, marking the source as the manager so refreshNamespaces skips
-// the canAccessNS probe. It is the update step of StartNamespacesFromManager's stream
-// handler, split out so it can be exercised without a live RPC connection.
+// applyNamespaceList replaces the snapshot with the manager-reported set and marks
+// the source as the manager, so refreshNamespaces skips the canAccessNS probe.
 func (kc *Cluster) applyNamespaceList(nsl *manager.NamespaceList) {
 	snapshot := make(map[string]struct{}, len(nsl.Namespaces))
 	for _, ns := range nsl.Namespaces {

@@ -412,12 +412,9 @@ func TestActiveNodeAgentIntercept(t *testing.T) {
 	assert.Equal(t, "c4:ic4", found.Id)
 }
 
-// TestRestoreIntercepts_RegeneratesChildrenFromPodPorts covers the restore-time
-// child-intercept invariant: a child spec present in the input is never
-// stored directly (it is untrusted, and RestoreIntercepts's caller in
-// service.go drops it from the payload before this is ever reached), while a
-// restored parent's own PodPorts regenerates its child the same way
-// AddIntercept would have derived it when the parent was first created.
+// TestRestoreIntercepts_RegeneratesChildrenFromPodPorts: a child spec in the
+// input is never stored directly; the restored parent's own PodPorts
+// regenerates its child instead.
 func TestRestoreIntercepts_RegeneratesChildrenFromPodPorts(t *testing.T) {
 	t.Parallel()
 	ctx := k8sapi.WithK8sInterface(context.Background(), fake.NewClientset())

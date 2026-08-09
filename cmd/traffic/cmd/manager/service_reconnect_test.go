@@ -26,12 +26,9 @@ import (
 // failure distinct from an ordinary denial.
 var errCanned = errors.New("subject access review: canned failure")
 
-// TestReconnectClient_ForgedPayloadNormalization covers the restore-time
-// normalization ReconnectClient applies to a lost session's intercepts: the
-// stored intercept is rebuilt from the payload's Spec alone, so a forged Id,
-// a foreign ClientSession, a manager/agent-owned disposition, and fabricated
-// runtime state (PodIp, Environment) in the payload are all replaced with
-// their reconstructed or zero values rather than trusted.
+// TestReconnectClient_ForgedPayloadNormalization: a restored intercept is
+// rebuilt from the payload's Spec alone, so a forged Id, ClientSession,
+// disposition, or runtime state is replaced rather than trusted.
 func TestReconnectClient_ForgedPayloadNormalization(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -85,11 +82,9 @@ func TestReconnectClient_ForgedPayloadNormalization(t *testing.T) {
 	req.Empty(stored.Message)
 }
 
-// TestReconnectClient_MixedRestoration_Enforcing covers partial restoration:
-// of three intercepts in the payload, the one whose target the caller's RBAC
-// no longer authorizes is omitted while the session and the other two are
-// restored, and the RPC as a whole succeeds -- a single revoked grant must
-// not wedge the client into retrying the whole reconnect forever.
+// TestReconnectClient_MixedRestoration_Enforcing: of three intercepts, the
+// one no longer authorized is omitted while the other two and the session
+// are restored, and the RPC still succeeds.
 func TestReconnectClient_MixedRestoration_Enforcing(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -159,12 +154,9 @@ func TestReconnectClient_MixedRestoration_Enforcing(t *testing.T) {
 	req.False(ok, "the intercept targeting a revoked grant must be omitted")
 }
 
-// TestReconnectClient_UnavailableReview_Fails covers that an infrastructure
-// failure during the per-intercept review -- the SubjectAccessReview call
-// itself erroring, not merely denying -- fails the whole reconnect rather
-// than being silently treated as a denial: the caller must retry, since a
-// real grant must never be discarded just because authorization could not be
-// determined.
+// TestReconnectClient_UnavailableReview_Fails: a SubjectAccessReview call
+// that errors (not merely denies) fails the whole reconnect rather than
+// being treated as a denial.
 func TestReconnectClient_UnavailableReview_Fails(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)

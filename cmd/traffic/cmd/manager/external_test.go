@@ -11,9 +11,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 )
 
-// This file covers serveExternal's startup validation (external.go): the plan mandates
-// that an external listener refuses to start rather than merely warn when
-// AuthenticationMode isn't enforcing or no certificate directory is configured.
+// This file covers serveExternal's startup validation: it refuses to start,
+// rather than merely warn, when AuthenticationMode isn't enforcing or no
+// certificate directory is configured.
 
 func TestServeExternal_Disabled(t *testing.T) {
 	ctx := managerutil.WithEnv(context.Background(), &managerutil.Env{})

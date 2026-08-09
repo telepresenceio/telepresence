@@ -316,10 +316,8 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 		return nil, status.Error(codes.InvalidArgument, val)
 	}
 
-	// The session is unknown, i.e. manager state was lost (a restart) and the
-	// client is restoring it. Reauthorize the connection itself: a caller
-	// whose grant was revoked while the state was gone must not get it back
-	// for free.
+	// State was lost (a restart) and the client is restoring it; reauthorize
+	// so a revoked grant isn't handed back for free.
 	if err := s.authorizeConnect(ctx); err != nil {
 		if s.authMode == auth.ModeEnforcing {
 			return nil, err
@@ -346,22 +344,10 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	return &empty.Empty{}, nil
 }
 
-// reviewRestoredIntercepts turns the client-supplied intercepts of a
-// ReconnectClientRequest into the list RestoreIntercepts stores. The
-// InterceptInfo the client sends is desired specification only: this
-// rebuilds each accepted entry from its Spec alone, so a forged Id,
-// ClientSession, disposition, or runtime state in the payload -- pod
-// identity, environment, mounts, agent-populated ports, messages -- never
-// reaches manager state. A spec is dropped instead of restored when its
-// namespace is no longer managed, it fails validateIntercept, it is a child
-// intercept (RestoreIntercepts regenerates those from the parent's Spec), or
-// -- in ModeEnforcing only -- authorizeIntercept denies it; outside
-// ModeEnforcing an authorization error is logged and the intercept is kept,
-// the same posture every other authorization call site in this file uses.
-// Within ModeEnforcing, an Unavailable review -- authorization could not be
-// determined at all -- fails the whole reconnect instead of silently
-// dropping the intercept, since the caller must retry rather than have a
-// real grant discarded as a denial.
+// reviewRestoredIntercepts rebuilds each accepted intercept from the
+// client-supplied Spec alone, ignoring any Id, disposition, or other runtime
+// state in the payload. An Unavailable review fails the whole reconnect
+// rather than silently dropping the intercept.
 func (s *service) reviewRestoredIntercepts(
 	ctx context.Context, sessionID tunnel.SessionID, info *rpc.ReconnectClientRequest, now time.Time,
 ) ([]*rpc.InterceptInfo, error) {
@@ -1279,14 +1265,10 @@ func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.Sessio
 }
 
 // EnsureAgent resolves request.Name (and, if given, request.WorkloadKind) to
-// a specific workload in the target namespace, authorizes the caller against
-// attachments/<kind> for that resolved kind, and ensures a traffic-agent for
-// it. The kind reviewed by authorization is always the kind that
-// s.state.EnsureAgent goes on to mutate: request.WorkloadKind, when set, is
-// resolved and used as-is; when it's empty, every enabled workload kind that
-// matches request.Name is a candidate, and an ambiguous match is reviewed
-// per candidate rather than resolved by priority order, so that an
-// unauthorized caller never learns which underlying kinds exist.
+// a specific workload, authorizes the caller against attachments/<kind> for
+// that resolved kind, and ensures a traffic-agent for it. When the kind is
+// ambiguous, each candidate is reviewed individually so an unauthorized
+// caller never learns which underlying kinds exist.
 func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentRequest) (*rpc.AgentInfoSnapshot, error) {
 	ctx, client, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
@@ -1402,20 +1384,10 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	return interceptInfo, nil
 }
 
-// authorizeConnect returns nil when the caller may establish a session, a
-// PermissionDenied error when its RBAC disallows it, and an Unavailable error
-// when authorization could not be determined. An unauthenticated caller is
-// skipped -- there is no identity to review -- unless the manager is in
-// ModeEnforcing, where a nil principal can only mean the interceptor let a
-// tokenless call through for an exempt method; treat it as Unauthenticated
-// rather than silently skipping the review.
-//
-// Dispatch follows s.authGate: GatePortForward reviews pods/portforward
-// against the manager's own pod; GateTelepresence reviews create on
-// connections.telepresence.io in the manager namespace; GateAny tries the
-// telepresence.io review first and falls back to pods/portforward when that
-// review is denied (not when it errors), logging a warning naming the caller
-// when the fallback is what authorized the session.
+// authorizeConnect authorizes a session per s.authGate, falling back from
+// connections.telepresence.io to legacy pods/portforward under GateAny. A
+// nil principal is treated as Unauthenticated only in ModeEnforcing, since
+// it otherwise means an exempt method let a tokenless call through.
 func (s *service) authorizeConnect(ctx context.Context) error {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
@@ -1472,23 +1444,11 @@ func (s *service) authorizeConnect(ctx context.Context) error {
 	}
 }
 
-// authorizeAttachment returns nil when the caller may perform verb ("create"
-// for an intercept, "get" for an ingest) on the attachment identified by
-// workloadKind and workloadName in namespace, a PermissionDenied error when
-// its RBAC disallows it, and an Unavailable error when authorization could
-// not be determined. An unauthenticated caller is skipped -- there is no
-// identity to review -- unless the manager is in ModeEnforcing, where a nil
-// principal can only mean the interceptor let a tokenless call through for an
-// exempt method; treat it as Unauthenticated rather than silently skipping
-// the review.
-//
-// Dispatch follows s.authGate: GatePortForward reviews pods/portforward
-// against the workload's current pod names; GateTelepresence reviews verb on
-// attachments.telepresence.io, resolving workloadKind via k8sapi.GetWorkload
-// when it is empty; GateAny tries the telepresence.io review first and falls
-// back to pods/portforward when that review is denied (not when it errors),
-// logging a warning naming the caller when the fallback is what authorized
-// the attachment.
+// authorizeAttachment authorizes verb ("create" for an intercept, "get" for
+// an ingest) on the attachment named by workloadKind/workloadName, per
+// s.authGate, falling back from attachments.telepresence.io to legacy
+// pods/portforward under GateAny. workloadKind is resolved via
+// k8sapi.GetWorkload when empty.
 func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadKind, workloadName, verb string) error {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
@@ -1571,29 +1531,11 @@ func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadKi
 	}
 }
 
-// authorizeNamespace returns nil when the caller may attach to at least one
-// workload in namespace, a PermissionDenied error when its RBAC disallows
-// every attachment there, and an Unavailable error when authorization could
-// not be determined. It backs the authorized-namespace probe: unlike
-// authorizeAttachment, it names no workload, so it answers "can this caller
-// attach to anything here" rather than "can this caller attach to that
-// specific workload". An unauthenticated caller is skipped -- there is no
-// identity to review -- unless the manager is in ModeEnforcing, where a nil
-// principal can only mean the interceptor let a tokenless call through for
-// an exempt method; treat it as Unauthenticated rather than silently
-// skipping the review.
-//
-// Dispatch follows s.authGate: GatePortForward reviews pods/portforward
-// namespace-wide (no pod name); GateTelepresence reviews create on
-// attachments/<kind>, with no object name, for every kind in
-// managerutil.GetEnv(ctx).EnabledWorkloadKinds and is satisfied if any one
-// review passes -- an RBAC rule naming resource "attachments/deployment"
-// never matches a review with no subresource at all, so there is no single
-// namespace-wide "attachments" check to make; GateAny tries the
-// telepresence.io reviews first and falls back to pods/portforward when
-// every one of them is denied (not when any of them errors), logging a
-// warning naming the caller when the fallback is what authorized the
-// namespace.
+// authorizeNamespace reports whether the caller may attach to anything in
+// namespace, not any specific workload. Under GateTelepresence it reviews
+// every enabled workload kind individually and passes if any one succeeds,
+// since an RBAC rule on "attachments/deployment" never matches a review
+// with no subresource at all.
 func (s *service) authorizeNamespace(ctx context.Context, namespace string) error {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
@@ -1661,12 +1603,8 @@ func (s *service) authorizeNamespace(ctx context.Context, namespace string) erro
 	}
 }
 
-// authorizeEnsureAgent authorizes an EnsureAgent call, which serves both an
-// intercepting client (which holds create on attachments) and an ingest
-// client (which holds get), by succeeding when either verb's attachment
-// review passes. workloadKind qualifies workloadName; when it is empty,
-// authorizeAttachment resolves it (under GateTelepresence and the
-// telepresence.io leg of GateAny) via k8sapi.GetWorkload.
+// authorizeEnsureAgent succeeds if the caller holds either "create" (an
+// intercepting client) or "get" (an ingest client) on the attachment.
 func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadKind, workloadName string) error {
 	createErr := s.authorizeAttachment(ctx, namespace, workloadKind, workloadName, "create")
 	if createErr == nil {
@@ -1685,17 +1623,10 @@ func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadK
 	return createErr
 }
 
-// resolveEnsureAgentKind resolves name in namespace to a single enabled
-// workload kind for a request that didn't specify one. It probes every kind
-// in managerutil.GetEnv(ctx).EnabledWorkloadKinds through the informer-backed
-// agentmap.GetWorkload. Zero matches returns an empty kind, leaving the
-// workload to be resolved (and, if it doesn't exist, rejected) further down
-// the EnsureAgent call exactly as it would be for a request that never named
-// a kind. A single match resolves outright. Multiple matches are ambiguous:
-// each candidate kind is authorized individually, and only once at least one
-// of them passes does the response name the matching kinds -- an
-// authorization error is returned instead when none pass, so an unauthorized
-// caller never learns which kinds exist.
+// resolveEnsureAgentKind resolves name to a single enabled workload kind
+// when a request didn't specify one. Multiple matches are ambiguous: each
+// candidate is authorized individually, and the error names the matching
+// kinds only once at least one review passes.
 func (s *service) resolveEnsureAgentKind(ctx context.Context, namespace, name string) (k8sapi.Kind, error) {
 	enabledWorkloadKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
 	matches := make([]k8sapi.Kind, 0, len(enabledWorkloadKinds))
@@ -1744,9 +1675,7 @@ func (s *service) resolveEnsureAgentKind(ctx context.Context, namespace, name st
 }
 
 // authorizeIntercept reviews whether the caller may create an intercept on
-// spec.Agent (spec.WorkloadKind, defaulting to a search when empty) in
-// namespace. It dispatches through authorizeAttachment with verb "create";
-// see authorizeAttachment for the gate dispatch.
+// spec.Agent in namespace.
 func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
 	return s.authorizeAttachment(ctx, namespace, spec.WorkloadKind, spec.Agent, "create")
 }
@@ -2498,10 +2427,8 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream grpc
 		if !s.State().ManagesNamespace(ctx, namespace) {
 			return status.Error(codes.FailedPrecondition, fmt.Sprintf("namespace %s is not managed", namespace))
 		}
-		// The connected namespace above is implicitly trusted -- the client
-		// arrived there. A namespace named explicitly must pass the
-		// authorized-namespace probe, cached per session so a repeated watch
-		// of the same namespace costs no extra review.
+		// A namespace named explicitly (unlike the connected one) must pass
+		// the authorized-namespace probe, cached per session.
 		if err := clientInfo.AuthorizedNamespace(namespace, func() error {
 			return s.authorizeNamespace(ctx, namespace)
 		}); err != nil {

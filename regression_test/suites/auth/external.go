@@ -51,12 +51,8 @@ const externalEndpointServiceName = "traffic-manager-external"
 const externalEndpointContainerPort = 8444
 
 // externalEndpointSpec returns managers.AuthEnforcing() with the external
-// TLS gRPC listener enabled: container port externalEndpointContainerPort, a
-// NodePort Service (the chart assigns the actual port; callers read it back
-// with externalEndpointNodePort), terminated with secretName -- an existing
-// kubernetes.io/tls Secret the caller must create before mutating onto this
-// spec, since the chart mounts it as a volume and the pod never becomes
-// ready without it.
+// TLS gRPC listener enabled on a NodePort Service, terminated with an
+// existing kubernetes.io/tls Secret named secretName.
 func externalEndpointSpec(secretName string) managers.Spec {
 	v := managers.AuthEnforcing().Values
 	v.ExternalEndpoint = managers.ExternalEndpoint{
@@ -76,10 +72,8 @@ func externalEndpointSpec(secretName string) managers.Spec {
 	return managers.Spec{Key: "external-endpoint", Values: v}
 }
 
-// nodeInternalIP returns the first node's IPv4 InternalIP: on the kind test
-// cluster, a NodePort Service is reachable from the host at this address. A
-// dual-stack node reports several InternalIP addresses (space-separated by
-// the jsonpath expression); the IPv4 one is the host-reachable address.
+// nodeInternalIP returns the first node's IPv4 InternalIP, the address a
+// NodePort Service is reachable at from the host on the kind test cluster.
 func nodeInternalIP(t *testing.T, ctx context.Context, r *rt.Runtime) string {
 	t.Helper()
 	out, err := r.Kubectl(ctx, "", "get", "nodes", "-o",
@@ -212,18 +206,14 @@ func externalEndpointNodePort(t *testing.T, ctx context.Context, r *rt.Runtime) 
 }
 
 // setupExternalEndpoint provisions the external-endpoint manager spec end to
-// end: a CA/cert generated for the node's InternalIP, the TLS Secret it
-// names, the shared release mutated onto externalEndpointSpec, and the
-// resulting NodePort read back. Returns the node IP, NodePort, and the CA
-// PEM's path (for pinning cluster.managerServerCA).
+// end and returns the node IP, NodePort, and CA PEM path.
 func setupExternalEndpoint(t *testing.T, ctx context.Context, r *rt.Runtime) (nodeIP string, nodePort int, caPath string) {
 	t.Helper()
 	return setupExternalEndpointSpec(t, ctx, r, externalEndpointSpec)
 }
 
 // setupExternalEndpointSpec is setupExternalEndpoint parameterized on the
-// manager spec builder, so a variant spec (e.g. externalEndpointSpecNoQuic
-// in external_noquic.go) can reuse the same cert/secret/mutate machinery.
+// manager spec builder.
 func setupExternalEndpointSpec(
 	t *testing.T, ctx context.Context, r *rt.Runtime, specFn func(secretName string) managers.Spec,
 ) (nodeIP string, nodePort int, caPath string) {
@@ -237,16 +227,9 @@ func setupExternalEndpointSpec(
 	return nodeIP, nodePort, caPath
 }
 
-// buildBlackholedExternalKubeconfig derives a kubeconfig (rt.KubeConfigCopy)
-// whose current context authenticates as tok (mirrors buildTokenKubeconfig),
-// then blackholes the Kubernetes API server itself: Server is rewritten to
-// https://127.0.0.1:1, a loopback port nothing listens on, so any API call
-// the client attempted would fail with connection-refused immediately
-// instead of hanging -- InsecureSkipTLSVerify and the cleared CA data are
-// irrelevant defense in depth, since the TCP connect never gets far enough
-// to negotiate TLS. It also carries the telepresence.io extension pointing
-// the client at the external control-plane endpoint (managerAddress/
-// managerServerCA), the only path left for the client to reach the manager.
+// buildBlackholedExternalKubeconfig derives a kubeconfig authenticating as
+// tok, with the Kubernetes API server rewritten to an unreachable address
+// and the telepresence.io extension pointing at the external endpoint.
 func buildBlackholedExternalKubeconfig(env rt.Env, name, tok, managerAddress, caPath string) (string, error) {
 	env.T.Helper()
 	extData, err := json.Marshal(map[string]any{
@@ -297,9 +280,7 @@ func buildBlackholedExternalKubeconfig(env rt.Env, name, tok, managerAddress, ca
 }
 
 // appNamespaceAttachmentRules is the RBAC an identity needs in a namespace
-// it intercepts in: kind-qualified attachments (the manager reviews
-// attachments/<kind> with the workload as resourceName) plus the diagnostic
-// logs attributes for agent-pod log streaming.
+// it intercepts in: kind-qualified attachments plus diagnostic logs access.
 const appNamespaceAttachmentRules = `  - apiGroups: ["telepresence.io"]
     resources: ["attachments/deployment"]
     verbs: ["create", "get"]
@@ -308,9 +289,7 @@ const appNamespaceAttachmentRules = `  - apiGroups: ["telepresence.io"]
     verbs: ["get"]`
 
 // namespaceGrantManifest is a Role and RoleBinding named %[1]s in namespace
-// %[2]s granting %[4]s (an indented rules list) to the ServiceAccount %[1]s
-// in namespace %[3]s -- the identity createGateIdentity creates in the
-// manager namespace.
+// %[2]s granting %[4]s to the ServiceAccount %[1]s in namespace %[3]s.
 const namespaceGrantManifest = `apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -353,32 +332,23 @@ func grantInNamespace(t *testing.T, ctx context.Context, r *rt.Runtime, name, ns
 	})
 }
 
-// externalRolloutTimeout/externalRolloutPoll bound the post-restart recovery
-// polls in Test_ExternalEndpointBlackholedAPIServer, mirroring connect/
-// manager_rollout.go's identically purposed constants (unexported there, in
-// a different package).
+// externalRolloutTimeout/externalRolloutPoll bound post-restart recovery
+// polls.
 const (
 	externalRolloutTimeout = 2 * time.Minute
 	externalRolloutPoll    = 3 * time.Second
 )
 
 // externalBlackholeEnvKey/externalBlackholeEnvValue are a declared env var
-// on the blackhole test's workload, read back through the intercept's
-// --env-file to prove an agent-bound operation beyond intercepted-traffic
-// delivery.
+// read back through the intercept's --env-file.
 const (
 	externalBlackholeEnvKey   = "RTEST_EXTERNAL_MARKER"
 	externalBlackholeEnvValue = "external-blackhole-agent-env"
 )
 
-// ExternalEndpointBlackhole proves the client-rbac-minimization phase-4
-// contract end to end: with the Kubernetes API server blackholed from the
-// client (kubeconfig Server rewritten to an address nothing listens on) and
-// only the external TLS gRPC listener reachable, a full connect/intercept/
-// gather-logs/reconnect/quit lifecycle succeeds. Any Kubernetes API request
-// either daemon made would hit connection-refused and fail the lifecycle
-// step that made it -- that is the proof of zero API access, not a separate
-// assertion.
+// ExternalEndpointBlackhole proves that with the Kubernetes API server
+// unreachable from the client, a full connect/intercept/gather-logs/
+// reconnect/quit lifecycle still succeeds over the external TLS listener.
 type ExternalEndpointBlackhole struct {
 	rt.Suite
 }
@@ -504,9 +474,7 @@ func (s *ExternalEndpointBlackhole) Test_ExternalEndpointBlackholedAPIServer() {
 }
 
 // zipHasManagerLog reports whether the gather-logs zip at path carries a
-// traffic-manager pod log entry (session/gather_logs.go's podLogPattern
-// shape, duplicated loosely here rather than imported: this package has no
-// dependency on the session suite).
+// traffic-manager pod log entry.
 func zipHasManagerLog(t *testing.T, path string) bool {
 	t.Helper()
 	zr, err := zip.OpenReader(path)
@@ -522,13 +490,9 @@ func zipHasManagerLog(t *testing.T, path string) bool {
 	return false
 }
 
-// ExternalEndpointAnonymous proves the external listener's client-facing
-// contract for a caller presenting no credentials at all: the deliberately
-// public pre-session surface (Version) is reachable, an internal-only method
-// (WatchQuicBackends, deliberately exempt from authentication because the
-// quic-forwarder calls it with no cluster credentials of its own) is absent
-// with Unimplemented rather than merely unauthenticated, and an ordinary
-// client method is refused outright by the listener's own auth interceptor.
+// ExternalEndpointAnonymous proves the external listener's contract for an
+// unauthenticated caller: Version is reachable, an internal-only method
+// reports Unimplemented, and an ordinary client method is refused.
 type ExternalEndpointAnonymous struct {
 	rt.Suite
 }

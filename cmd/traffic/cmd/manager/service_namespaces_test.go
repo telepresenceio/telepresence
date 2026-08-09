@@ -59,17 +59,13 @@ func loggingContextSync(ctx context.Context, buf *syncBuffer) context.Context {
 	return clog.WithLogger(ctx, slog.New(h))
 }
 
-// This file covers WatchNamespaces' session validation and streamed set, and
-// the authorized-namespace probe WatchWorkloads applies to an explicitly
-// named namespace: denial in ModeEnforcing, warn-and-serve outside it, and
-// the per-session cache that keeps a repeated probe from costing another
-// SubjectAccessReview.
+// This file covers WatchNamespaces' session validation and streamed set,
+// and the authorized-namespace probe WatchWorkloads applies to an
+// explicitly named namespace, including its per-session cache.
 
-// fakeServerStream is a minimal grpc.ServerStreamingServer[T], letting a
-// test drive a streaming handler directly -- the way service_reconnect_test.go
-// and service_gate_test.go call unary handlers directly -- so the request
-// context (Principal, cancellation) is fully under the test's control rather
-// than whatever a real network round trip through bufconn would carry.
+// fakeServerStream is a minimal grpc.ServerStreamingServer[T], giving a
+// test full control over the request context rather than whatever a real
+// bufconn round trip would carry.
 type fakeServerStream[T any] struct {
 	ctx context.Context
 	ch  chan *T
@@ -168,11 +164,9 @@ func TestWatchNamespaces_StreamsManagedSet(t *testing.T) {
 	req.NoError(<-errCh)
 }
 
-// TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing covers that, when a
-// request names a namespace explicitly, a denied authorized-namespace probe
-// fails the watch with PermissionDenied in ModeEnforcing, and that the probe
-// result is cached: a second request for the same session and namespace
-// produces no additional SubjectAccessReview.
+// TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing: a denied namespace
+// probe fails the watch with PermissionDenied and is then cached, so a
+// repeat request produces no additional SubjectAccessReview.
 func TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -221,10 +215,9 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing(t *testing.T) {
 	req.Equal(1, countAttachReviews(), "a cached denial must not trigger another review")
 }
 
-// TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing covers that,
-// outside ModeEnforcing, a denied authorized-namespace probe is logged as a
-// warning and the watch is served anyway, and that the probe result is still
-// cached across a second request for the same session and namespace.
+// TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing: outside
+// ModeEnforcing, a denied namespace probe is logged and the watch served
+// anyway, with the result still cached.
 func TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)

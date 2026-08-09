@@ -20,11 +20,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-// Per-connection server options for the external listener. These are hardcoded rather
-// than Helm values: the external listener is new attack surface (see the plan's
-// TokenReview-amplification discussion), and the defaults below are chosen to be
-// generous for a legitimate telepresence client while bounding what a single connection
-// can cost the manager.
+// Per-connection server options for the external listener, hardcoded rather
+// than Helm values to bound what a single connection can cost the manager.
 const (
 	// externalMaxConcurrentStreams bounds concurrent RPCs per connection.
 	externalMaxConcurrentStreams = 100
@@ -47,11 +44,8 @@ const (
 )
 
 // serveExternal serves the external client-only TLS gRPC listener when
-// env.ExternalPort != 0, until ctx is done. Enabling the listener requires
-// AuthenticationMode to be enforcing and ExternalTLSCertDir to be set; either is missing
-// this returns a hard error (fatal, causing the whole manager to fail startup), matching
-// the plan's requirement that publishing an unauthenticated external endpoint is refused
-// rather than merely warned about.
+// env.ExternalPort != 0. Enabling it requires ModeEnforcing and
+// ExternalTLSCertDir; either missing is a fatal startup error, not a warning.
 func serveExternal(ctx context.Context, svc Service) error {
 	env := managerutil.GetEnv(ctx)
 	if env.ExternalPort == 0 {

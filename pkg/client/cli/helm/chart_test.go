@@ -32,16 +32,9 @@ func renderCoreChart(t *testing.T, vals map[string]any, withSchema bool) error {
 	return err
 }
 
-// TestQuicTunnelRequiresSingleManagerReplica pins both lines of defense against
-// running more than one traffic-manager replica (unsupported: the CA and
-// session state are process-local, and the known-name connect path dials pod
-// traffic-manager-0 specifically):
-//
-//   - The values schema pins replicaCount to exactly 1 (const), so a packaged
-//     install rejects any scaling attempt before a template renders.
-//   - The StatefulSet template refuses replicaCount > 1 unconditionally, which
-//     is what protects the schema-less render paths (the bare chart directory)
-//     and stays load-bearing if the schema's replicaCount pin is ever relaxed.
+// TestQuicTunnelRequiresSingleManagerReplica pins two defenses against a
+// multi-replica traffic-manager: the values schema pins replicaCount to 1,
+// and the StatefulSet template also refuses replicaCount > 1 without the schema.
 func TestQuicTunnelRequiresSingleManagerReplica(t *testing.T) {
 	require.NoError(t, renderCoreChart(t, map[string]any{
 		"quicTunnel": map[string]any{"enabled": true},

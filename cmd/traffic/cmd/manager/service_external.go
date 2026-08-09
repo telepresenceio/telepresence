@@ -14,20 +14,13 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-// externalService implements rpc.ManagerServer by exposing only the
-// client-facing subset of the wrapped Service, hardening the few methods
-// whose internal request form is broader than an externally reachable
-// listener may accept. Every RPC that only an agent, the quicforwarder, or
-// no caller in the codebase invokes returns codes.Unimplemented, naming the
-// internal listener. Every method here that reaches the wrapped Service
-// starts by requiring an authenticated principal, then either relies on the
-// wrapped method's own ownership check (when it already has one) or performs
-// an equivalent check itself (when it doesn't).
+// externalService exposes only the client-facing subset of the wrapped
+// Service to an externally reachable listener; methods with a broader
+// internal request form return codes.Unimplemented or add an ownership
+// check the wrapped method lacks.
 type externalService struct {
-	// UnsafeManagerServer opts out of the generated
-	// UnimplementedManagerServer default bodies: every rpc.ManagerServer
-	// method must be implemented explicitly below, so a proto change that
-	// adds a method fails the build here until it's classified.
+	// UnsafeManagerServer opts out of the generated default bodies, so a
+	// proto change adding a method fails the build until classified here.
 	rpc.UnsafeManagerServer
 	inner Service
 }
@@ -40,10 +33,8 @@ func newExternalService(inner Service) *externalService {
 	return &externalService{inner: inner}
 }
 
-// requireAuthenticated rejects a call whose context carries no verified
-// principal. The external listener authenticates in enforcing mode, so an
-// unauthenticated call should never reach a handler; this check is defense
-// in depth, not the primary gate.
+// requireAuthenticated rejects a call with no verified principal; defense
+// in depth, since the listener's own interceptor already authenticates.
 func requireAuthenticated(ctx context.Context) error {
 	if auth.PrincipalFrom(ctx) == nil {
 		return status.Error(codes.Unauthenticated, "this method requires an authenticated caller")
@@ -56,12 +47,9 @@ func internalOnly(method string) error {
 	return status.Errorf(codes.Unimplemented, "%s is only served on the traffic-manager's internal listener", method)
 }
 
-// ensureOwnedSession verifies that session names an existing client session
-// bound to the caller's principal. A blank session id is rejected outright:
-// several internal handlers treat a blank id as a request to act on or
-// watch every session, which the external listener must never allow. Use
-// this only for methods whose wrapped implementation does not already
-// perform an equivalent ownership check.
+// ensureOwnedSession verifies session names a client session owned by the
+// caller. A blank id is rejected outright, since several internal handlers
+// treat it as a request to act on every session.
 func (s *externalService) ensureOwnedSession(ctx context.Context, session *rpc.SessionInfo) error {
 	sessionID := session.GetSessionId()
 	if sessionID == "" {
@@ -94,11 +82,9 @@ func (s *externalService) GetAgentConfig(ctx context.Context, request *rpc.Agent
 	return s.inner.GetAgentConfig(ctx, request)
 }
 
-// GetClientConfig takes Empty: there is no session for an ownership check to
-// bind to. The external contract instead requires the caller's principal to
-// already own at least one active client session, so configuration is
-// delivered as part of a successful session rather than to any authenticated
-// caller.
+// GetClientConfig requires the caller's principal to already own at least
+// one active client session, since there's no session argument to check
+// ownership against.
 func (s *externalService) GetClientConfig(ctx context.Context, e *empty.Empty) (*rpc.CLIConfig, error) {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
@@ -210,10 +196,8 @@ func (s *externalService) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc
 }
 
 // WatchIntercepts, given a blank session id, has the wrapped Service watch
-// every non-child intercept in the manager -- a legitimate internal request
-// form (used by the in-cluster agent path) that the external listener must
-// never accept. Require a session and verify the caller owns it before
-// delegating.
+// every non-child intercept in the manager; the external listener must
+// never accept that form, so a session and its ownership are required here.
 func (s *externalService) WatchIntercepts(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.InterceptInfoSnapshot]) error {
 	ctx := stream.Context()
 	if err := requireAuthenticated(ctx); err != nil {
@@ -246,9 +230,7 @@ func (s *externalService) WatchSessionEvents(request *rpc.SessionEventsRequest, 
 }
 
 // WatchWorkloads' wrapped implementation already verifies session ownership
-// and, for an explicitly named namespace, the authorized-namespace probe
-// (service.go's WatchWorkloads, authorizeNamespace) -- no extra check is
-// needed here.
+// and, for an explicitly named namespace, the authorized-namespace probe.
 func (s *externalService) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream grpc.ServerStreamingServer[rpc.WorkloadEventsDelta]) error {
 	if err := requireAuthenticated(stream.Context()); err != nil {
 		return err
@@ -256,8 +238,8 @@ func (s *externalService) WatchWorkloads(request *rpc.WorkloadEventsRequest, str
 	return s.inner.WatchWorkloads(request, stream)
 }
 
-// WatchClusterInfo's internal handler checks that the session exists but not
-// that the caller owns it. Add the ownership check before delegating.
+// WatchClusterInfo's internal handler checks that the session exists but
+// not that the caller owns it.
 func (s *externalService) WatchClusterInfo(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.ClusterInfo]) error {
 	ctx := stream.Context()
 	if err := requireAuthenticated(ctx); err != nil {
@@ -320,7 +302,7 @@ func (s *externalService) ReviewIntercept(ctx context.Context, rIReq *rpc.Review
 }
 
 // GetKnownWorkloadKinds' internal handler never inspects its SessionInfo
-// argument at all. Add the ownership check before delegating.
+// argument at all, so ownership is checked here instead.
 func (s *externalService) GetKnownWorkloadKinds(ctx context.Context, request *rpc.SessionInfo) (*rpc.KnownWorkloadKinds, error) {
 	if err := requireAuthenticated(ctx); err != nil {
 		return nil, err
@@ -340,7 +322,6 @@ func (s *externalService) Lookup(ctx context.Context, request *rpc.LookupRequest
 
 // LookupDNS's internal handler checks ownership only when the session
 // resolves to a known client, and otherwise falls through unrestricted.
-// Require a valid, owned session before delegating.
 func (s *externalService) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.DNSResponse, error) {
 	if err := requireAuthenticated(ctx); err != nil {
 		return nil, err
@@ -355,12 +336,9 @@ func (s *externalService) WatchLogLevel(e *empty.Empty, stream grpc.ServerStream
 	return internalOnly("WatchLogLevel")
 }
 
-// Tunnel's internal handler (state.Tunnel) resolves the first message's
-// declared session against the client-session map only: an agent session id
-// lives in a separate map and is already a NotFound there, and
-// state.ClientOwnershipError is already applied against the declared client
-// session. No extra wrapping is needed to keep agents off this listener or
-// to bind the tunnel to the caller's principal.
+// Tunnel's internal handler resolves the declared session against the
+// client-session map only, already rejecting an agent session id (a
+// separate map) and enforcing ownership, so no extra wrapping is needed.
 func (s *externalService) Tunnel(server grpc.BidiStreamingServer[rpc.TunnelMessage, rpc.TunnelMessage]) error {
 	if err := requireAuthenticated(server.Context()); err != nil {
 		return err
@@ -394,8 +372,8 @@ func (s *externalService) ReportMetrics(ctx context.Context, metrics *rpc.Tunnel
 	return nil, internalOnly("ReportMetrics")
 }
 
-// UninstallAgents' internal handler only checks that the session exists, not
-// that the caller owns it. Add the ownership check before delegating.
+// UninstallAgents' internal handler only checks that the session exists,
+// not that the caller owns it.
 func (s *externalService) UninstallAgents(ctx context.Context, request *rpc.UninstallAgentsRequest) (*empty.Empty, error) {
 	if err := requireAuthenticated(ctx); err != nil {
 		return nil, err

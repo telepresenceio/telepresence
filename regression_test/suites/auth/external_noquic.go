@@ -12,10 +12,7 @@ import (
 )
 
 // externalEndpointSpecNoQuic is externalEndpointSpec without the QuicTunnel
-// block: the external control endpoint is reachable, but agent-bound
-// intercept delivery has no NodePort fallback advertised. A distinct spec
-// Key ("external-endpoint-noquic") keeps this from sharing a release with
-// externalEndpointSpec's "external-endpoint".
+// block, under its own spec Key.
 func externalEndpointSpecNoQuic(secretName string) managers.Spec {
 	v := managers.AuthEnforcing().Values
 	v.ExternalEndpoint = managers.ExternalEndpoint{
@@ -27,13 +24,9 @@ func externalEndpointSpecNoQuic(secretName string) managers.Spec {
 	return managers.Spec{Key: "external-endpoint-noquic", Values: v}
 }
 
-// ExternalEndpointNoQuic proves the client-rbac-minimization phase-4
-// UDP-blocked contract: with the external control endpoint reachable but no
-// QUIC tunnel published, connect, discovery, manager-mediated outbound
-// traffic, and log gathering all work over the TLS control connection alone,
-// while an intercept attempt -- which needs an agent-bound channel this
-// installation has no way to open -- is refused clearly by the capability
-// check rather than appearing to work and then hanging.
+// ExternalEndpointNoQuic proves that with no QUIC tunnel published, connect,
+// discovery, outbound traffic, and log gathering still work over the TLS
+// control connection alone, while an intercept attempt is refused clearly.
 type ExternalEndpointNoQuic struct {
 	rt.Suite
 }

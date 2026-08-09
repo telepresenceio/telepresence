@@ -22,12 +22,10 @@ type PodAddress struct {
 	PodID     k8sTypes.UID
 }
 
-// NoLookupMarker replaces the pod UID in an address that must resolve with
-// no Kubernetes API call at all — the known-name manager dial. The SPDY
-// port-forward POST only needs the pod name and namespace; a real UID is a
-// liveness refinement, not a requirement. A pod that dies mid-dial or gets
-// replaced is detected by connection death on the resulting conn, not by
-// UID mismatch.
+// NoLookupMarker replaces the pod UID for an address that must resolve with
+// no Kubernetes API call (the known-name manager dial). The port-forward
+// POST only needs the pod name and namespace; a pod that dies or is
+// replaced is detected by connection death, not UID mismatch.
 const NoLookupMarker = "!"
 
 // UIDSeparator separates the pod UID (or NoLookupMarker) from the address.

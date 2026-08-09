@@ -210,11 +210,9 @@ type logStreamer interface {
 	StreamLogs(ctx context.Context, in *manager.StreamLogsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[manager.LogChunk], error)
 }
 
-// gatherLogsViaStream acquires the logs for the traffic-manager and/or traffic-agents
-// specified by the connector.LogsRequest using the manager's StreamLogs RPC: the manager reads
-// the pod logs (and, on request, pod manifests) on the client's behalf and multiplexes the
-// result onto a single stream of LogChunk frames, which gatherLogChunks assembles into the
-// same per-pod files and result map that gatherLogsDirect produces.
+// gatherLogsViaStream fetches logs via the manager's StreamLogs RPC, which multiplexes
+// per-pod frames onto one stream; gatherLogChunks assembles them into the same file
+// layout and result map that the direct Kubernetes path produces.
 func gatherLogsViaStream(ctx context.Context, mc logStreamer, session *manager.SessionInfo, exportDir string, request *connector.LogsRequest) (*connector.LogsResponse, error) {
 	resp := &connector.LogsResponse{}
 
@@ -250,20 +248,16 @@ type logChunkReceiver interface {
 	Recv() (*manager.LogChunk, error)
 }
 
-// podLogAssembly is the file gatherLogChunks is writing a pod's log to, and the error text (if
-// any) to record for that file's result-map entry once the pod's END frame arrives. Data
-// received before an error frame is kept on disk, matching gatherLogsDirect's behavior when a
-// read fails partway through.
+// podLogAssembly holds a pod's open log file and the error text to record for
+// its result-map entry once the END frame arrives.
 type podLogAssembly struct {
 	file    *os.File
 	errText string
 }
 
-// gatherLogChunks reads LogChunk frames from stream until it ends, and assembles them into the
-// same file layout and result map (relative filename -> "ok" or an error string) that
-// gatherLogsDirect produces: one <pod>.<namespace>.log per pod, and a matching .yaml when the
-// request asked for pod manifests. Frames from different pods interleave on the stream, but a
-// given pod's own frames arrive in order: BEGIN, then data/error/pod_yaml, then END.
+// gatherLogChunks assembles LogChunk frames into one <pod>.<namespace>.log (and an
+// optional .yaml) per pod, plus a result map. Frames from different pods interleave
+// on the stream, but a given pod's own frames arrive in order: BEGIN, data/error, END.
 func gatherLogChunks(ctx context.Context, exportDir string, stream logChunkReceiver) (map[string]string, error) {
 	result := make(map[string]string)
 	pods := make(map[string]*podLogAssembly)

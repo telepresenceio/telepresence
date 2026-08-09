@@ -189,10 +189,8 @@ func TestConnectSequence_ForbiddenRetriesKnownName(t *testing.T) {
 	assert.Equal(t, "retried-manager", res.name)
 }
 
-// TestConnectSequence_ForbiddenDeniedFailsFast verifies that when discovery
-// is Forbidden and the identity is not permitted to port-forward to the
-// known pod either, the refusal is immediate -- no retry loop -- and the
-// error carries the forbidden wording.
+// TestConnectSequence_ForbiddenDeniedFailsFast fails immediately, with no
+// retry, when discovery is Forbidden and known-name port-forward is also denied.
 func TestConnectSequence_ForbiddenDeniedFailsFast(t *testing.T) {
 	forbidden := k8serrors.NewForbidden(schema.GroupResource{Resource: "services"}, "traffic-manager", errors.New("denied"))
 	res := connectSequence(

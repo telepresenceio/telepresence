@@ -18,14 +18,9 @@ import (
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
 )
 
-// This file covers externalService (service_external.go), the client-only
-// rpc.ManagerServer wrapper intended for the external TLS listener: that an
-// internal-only method is refused regardless of the caller, that the
-// hardened request forms (a blank WatchIntercepts session, a WatchClusterInfo
-// session owned by someone else, GetClientConfig with no owned session) are
-// rejected, that the corresponding legitimate forms succeed, that Version is
-// reachable with no principal at all, and that every other method demands
-// one.
+// This file covers externalService: internal-only methods are refused,
+// hardened request forms are rejected while legitimate ones succeed, Version
+// needs no principal, and every other method demands one.
 
 // TestExternalService_InternalOnly covers that a method only an agent or the
 // quicforwarder calls is refused on the external listener regardless of the
@@ -51,10 +46,8 @@ func TestExternalService_InternalOnly(t *testing.T) {
 	req.Equal(codes.Unimplemented, status.Code(err))
 }
 
-// TestExternalService_WatchIntercepts_EmptySession covers that a blank
-// session id -- the internal request form that watches every non-child
-// intercept in the manager -- is rejected with InvalidArgument rather than
-// reaching the wrapped Service.
+// TestExternalService_WatchIntercepts_EmptySession: a blank session id is
+// rejected with InvalidArgument rather than reaching the wrapped Service.
 func TestExternalService_WatchIntercepts_EmptySession(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -72,10 +65,8 @@ func TestExternalService_WatchIntercepts_EmptySession(t *testing.T) {
 	req.Equal(codes.InvalidArgument, status.Code(err))
 }
 
-// TestExternalService_WatchClusterInfo_Ownership covers that
-// WatchClusterInfo -- whose wrapped implementation checks only that the
-// session exists, not who owns it -- is rejected for a caller other than the
-// session's owner, and accepted for the owner.
+// TestExternalService_WatchClusterInfo_Ownership: rejected for a caller
+// other than the session's owner, accepted for the owner.
 func TestExternalService_WatchClusterInfo_Ownership(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -109,10 +100,8 @@ func TestExternalService_WatchClusterInfo_Ownership(t *testing.T) {
 	req.NoError(<-errCh)
 }
 
-// TestExternalService_GetClientConfig_Ownership covers that GetClientConfig
-// -- which takes Empty, with no session to check -- requires the caller's
-// principal to already own an active client session, and succeeds once it
-// does.
+// TestExternalService_GetClientConfig_Ownership: requires the caller to
+// already own an active client session, and succeeds once it does.
 func TestExternalService_GetClientConfig_Ownership(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)

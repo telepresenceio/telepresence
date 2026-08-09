@@ -43,19 +43,14 @@ const externalPortName = "external"
 // Certificate issues into (externalEndpoint.tls.certManager.enabled).
 const certManagerSecretName = "traffic-manager-external-tls"
 
-// externalProbeStepTimeout bounds each of the TLS dial, Version call, and
-// authenticated-session round trip: long enough for a real handshake and
-// RPC, short enough that a silently-dropping firewall cannot stall
-// verification for long.
+// externalProbeStepTimeout bounds each probe step -- long enough for a real
+// handshake and RPC, short enough that a silently-dropping firewall cannot
+// stall verification for long.
 const externalProbeStepTimeout = 5 * time.Second
 
-// externalRestConfigProvider is implemented by contexts that can also
-// produce a REST config -- concretely *k8s.Cluster, which the setup command
-// passes as VerifyInstall's ctx (it embeds *k8s.Kubeconfig, which is both a
-// context.Context and exposes GetRestConfig). The authenticated-session
-// probe needs it to resolve the kubeconfig's bearer token exactly as a real
-// client would. When ctx does not implement it -- a plain context.Context,
-// as in most unit tests -- the probe is skipped with an explanatory note.
+// externalRestConfigProvider lets a context also yield a REST config, so the
+// authenticated-session probe can resolve the kubeconfig's bearer token. When
+// ctx does not implement it, the probe is skipped with an explanatory note.
 type externalRestConfigProvider interface {
 	GetRestConfig() *rest.Config
 }
@@ -76,20 +71,14 @@ type externalProbeResult struct {
 	Auth    Finding
 }
 
-// externalProber performs the TLS+gRPC handshake, the public Version call,
-// and (when a bearer token is supplied) an authenticated ArriveAsClient +
-// Depart round trip against addr, classifying each step independently.
-// Production wires externalGRPCProbe; tests substitute a fake so the
-// report-composition logic in verifyExternalEndpoint is exercised without
-// opening a real connection.
+// externalProber performs the TLS+gRPC handshake, the Version call, and
+// (given a bearer token) an authenticated ArriveAsClient+Depart round trip,
+// classifying each step independently.
 type externalProber func(ctx context.Context, addr string, caPEM []byte, bearerToken string) externalProbeResult
 
-// verifyExternalEndpoint mirrors verifyQuic's shape for the external TLS
-// control endpoint: it resolves the published address (waiting briefly for
-// a LoadBalancer ingress the same way verifyQuic does), then runs the
-// TLS/Version/authenticated-session probe. A ClusterIP Service is reported
-// and skipped rather than probed: it is not reachable from outside the
-// cluster at all.
+// verifyExternalEndpoint resolves the published address, waiting briefly for
+// a LoadBalancer ingress, then runs the TLS/Version/authenticated-session
+// probe. ClusterIP is reported and skipped: it is not externally reachable.
 func verifyExternalEndpoint(
 	ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts, prober externalProber,
 ) []Note {
@@ -143,11 +132,9 @@ func verifyExternalEndpoint(
 	return notes
 }
 
-// externalServiceLook is a single look at the traffic-manager-external
-// Service. A non-nil note is terminal: nothing more to check yet (a
-// LoadBalancer or NodePort not provisioned, retryLB says whether it is
-// worth looking again), or ever (the Service is missing, unreadable, of an
-// unsupported type, or ClusterIP -- not externally reachable by design).
+// externalServiceLook is a single look at the external Service. A non-nil
+// note is terminal: retryLB says whether it's worth looking again (not yet
+// provisioned) or never (missing, unreadable, unsupported type, or ClusterIP).
 func externalServiceLook(ctx context.Context, ki kubernetes.Interface, namespace string) (note *Note, retryLB bool, svc *corev1.Service) {
 	s, err := ki.CoreV1().Services(namespace).Get(ctx, externalServiceName, metav1.GetOptions{})
 	switch {
@@ -185,10 +172,8 @@ func externalServiceLook(ctx context.Context, ki kubernetes.Interface, namespace
 	}
 }
 
-// externalDialAddr resolves the address to dial for the probe from the
-// external Service's already-confirmed endpoint: a LoadBalancer's ingress
-// address, or a NodePort together with a node address (ExternalIP
-// preferred, InternalIP as fallback, via the QUIC probe's firstNodeAddress).
+// externalDialAddr picks a LoadBalancer ingress address, or a NodePort plus a
+// node address (ExternalIP preferred, InternalIP as fallback).
 func externalDialAddr(ctx context.Context, ki kubernetes.Interface, svc *corev1.Service) (string, error) {
 	switch svc.Spec.Type {
 	case corev1.ServiceTypeLoadBalancer:
@@ -235,10 +220,9 @@ func externalServicePort(svc *corev1.Service) (corev1.ServicePort, bool) {
 	return corev1.ServicePort{}, false
 }
 
-// externalTLSSecretName names the Secret the external listener's
-// certificate lives in, per the values' externalEndpoint.tls setting: the
-// admin-named Secret, or the chart's fixed cert-manager Secret name. Empty
-// when neither is configured (chart render would have failed in that case).
+// externalTLSSecretName returns the admin-named Secret, or the chart's fixed
+// cert-manager Secret name. Empty when neither is configured (chart render
+// would have failed in that case).
 func externalTLSSecretName(values map[string]any) string {
 	if v, ok := valueAt(values, "externalEndpoint", "tls", "secretName"); ok {
 		if s, ok := v.(string); ok && s != "" {
@@ -251,11 +235,8 @@ func externalTLSSecretName(values map[string]any) string {
 	return ""
 }
 
-// externalCA fetches the PEM CA that signs the external listener's
-// certificate, from the Secret externalTLSSecretName names: ca.crt when the
-// Secret carries one, the leaf tls.crt otherwise (a self-signed or
-// otherwise unchained certificate is its own trust anchor). Reading the
-// Secret uses the same admin credentials the rest of setup runs with.
+// externalCA reads ca.crt from the Secret, falling back to the leaf tls.crt
+// (a self-signed or unchained certificate is its own trust anchor).
 func externalCA(ctx context.Context, ki kubernetes.Interface, namespace string, values map[string]any) ([]byte, error) {
 	name := externalTLSSecretName(values)
 	if name == "" {
@@ -274,11 +255,9 @@ func externalCA(ctx context.Context, ki kubernetes.Interface, namespace string, 
 	return nil, fmt.Errorf("secret %s has neither ca.crt nor tls.crt", name)
 }
 
-// externalBearerToken resolves rc's bearer-token credential the same way a
-// connecting client would: a static token, a token file, or an exec
-// credential plugin. It is a one-shot fetch with no caching, since a single
-// verification run only needs the token once -- unlike the client's
-// long-lived per-RPC credentials in pkg/client/k8s.
+// externalBearerToken resolves rc's bearer-token credential (static token,
+// token file, or exec plugin) as a one-shot fetch with no caching -- a single
+// verification run only needs it once.
 func externalBearerToken(ctx context.Context, rc *rest.Config) (string, error) {
 	switch {
 	case rc == nil:
