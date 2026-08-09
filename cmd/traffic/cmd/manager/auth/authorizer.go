@@ -65,17 +65,15 @@ func (a *Authorizer) CanConnect(ctx context.Context, p *Principal, namespace str
 }
 
 // CanAttach reports whether p may perform verb on the attachments.telepresence.io
-// resource named workloadName, qualified by kindSubresource (the singular lowercase
-// workload kind, e.g. "deployment"), in namespace. verb is "create" to authorize an
+// resource named workloadName in namespace. verb is "create" to authorize an
 // intercept or "get" to authorize an ingest.
-func (a *Authorizer) CanAttach(ctx context.Context, p *Principal, namespace, kindSubresource, workloadName, verb string) (bool, error) {
+func (a *Authorizer) CanAttach(ctx context.Context, p *Principal, namespace, workloadName, verb string) (bool, error) {
 	return a.review(ctx, p, &authorizationv1.ResourceAttributes{
-		Namespace:   namespace,
-		Verb:        verb,
-		Group:       "telepresence.io",
-		Resource:    "attachments",
-		Subresource: kindSubresource,
-		Name:        workloadName,
+		Namespace: namespace,
+		Verb:      verb,
+		Group:     "telepresence.io",
+		Resource:  "attachments",
+		Name:      workloadName,
 	})
 }
 

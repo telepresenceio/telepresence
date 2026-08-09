@@ -97,9 +97,8 @@ items:
           the legacy <code>pods/portforward</code> permission, Telepresence's
           own policy attributes -- <code>create</code> on
           <code>connections.telepresence.io</code> to connect, and
-          <code>create</code> or <code>get</code> on kind-qualified
-          <code>attachments</code> such as
-          <code>attachments/deployments</code> to intercept or ingest a
+          <code>create</code> or <code>get</code> on
+          <code>attachments.telepresence.io</code> to intercept or ingest a
           named workload -- or either. The chart renders client Roles to
           match, the manager logs a migration warning whenever a caller
           authorizes only via the legacy grant, and sessions and intercepts

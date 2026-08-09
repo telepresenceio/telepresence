@@ -230,14 +230,12 @@ rules:
     resources: ["pods/portforward"]
     verbs: ["create"]
 
-  # Rendered under every gate except "portforward": the policy grants the
-  # manager's attachment review looks for, one subresource per enabled
-  # workload kind. "create" authorizes intercept, replace, and wiretap;
-  # "get" authorizes ingest. Scope them to individual workloads with
-  # resourceNames if desired.
+  # Rendered under every gate except "portforward": the policy grant the
+  # manager's attachment review looks for. "create" authorizes intercept,
+  # replace, and wiretap; "get" authorizes ingest. Scope it to individual
+  # workloads with resourceNames if desired.
   - apiGroups: ["telepresence.io"]
-    resources: ["attachments/deployment", "attachments/replicaset",
-                "attachments/statefulset"]
+    resources: ["attachments"]
     verbs: ["create", "get"]
 ```
 

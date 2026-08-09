@@ -251,7 +251,7 @@ func assertInterceptRules(t *testing.T, tpl, doc, gate string) {
 	if got := strings.Contains(doc, `resources: ["pods/portforward"]`); got != (gate != "telepresence") {
 		t.Errorf("%s pods/portforward rule present=%v, want gate=%q -> %v", tpl, got, gate, gate != "telepresence")
 	}
-	if got := strings.Contains(doc, "attachments/deployment"); got != wantAttach {
+	if got := strings.Contains(doc, `resources: ["attachments"]`); got != wantAttach {
 		t.Errorf("%s attachments rule present=%v, want gate=%q -> %v", tpl, got, gate, wantAttach)
 	}
 	for _, want := range []string{`resources: ["pods"]`, `resources: ["pods/log"]`, `resources: ["logs", "logs/yaml"]`} {

@@ -65,13 +65,12 @@ const portForwardOnlyRules = `  - apiGroups: [""]
     verbs: ["create"]`
 
 // telepresenceGrantRules grants create on connections.telepresence.io and
-// create/get on attachments/deployment (a bare "attachments" rule never
-// matches the kind-qualified reviews), with no pods/portforward at all.
+// create/get on attachments, with no pods/portforward at all.
 const telepresenceGrantRules = `  - apiGroups: ["telepresence.io"]
     resources: ["connections"]
     verbs: ["create"]
   - apiGroups: ["telepresence.io"]
-    resources: ["attachments/deployment"]
+    resources: ["attachments"]
     verbs: ["create", "get"]`
 
 // telepresenceGrantWithLogsRules extends telepresenceGrantRules with get on

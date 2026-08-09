@@ -280,9 +280,9 @@ func buildBlackholedExternalKubeconfig(env rt.Env, name, tok, managerAddress, ca
 }
 
 // appNamespaceAttachmentRules is the RBAC an identity needs in a namespace
-// it intercepts in: kind-qualified attachments plus diagnostic logs access.
+// it intercepts in: attachments plus diagnostic logs access.
 const appNamespaceAttachmentRules = `  - apiGroups: ["telepresence.io"]
-    resources: ["attachments/deployment"]
+    resources: ["attachments"]
     verbs: ["create", "get"]
   - apiGroups: ["telepresence.io"]
     resources: ["logs", "logs/yaml"]

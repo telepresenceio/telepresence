@@ -266,29 +266,6 @@ RBAC rules for workload kinds enabled via values.workloads.*.enabled
 {{- end }}
 
 {{- /*
-Singular lowercase kind names for the workloads enabled via
-values.workloads.*.enabled, used to build the attachments/<kind> RBAC
-resource strings for the security.authorization.gate "telepresence" rule,
-following the pods/portforward subresource convention.
-Returns a JSON array; callers do `fromJsonArray (include "telepresence.enabledWorkloadResources" $)`.
-*/}}
-{{- define "telepresence.enabledWorkloadResources" -}}
-{{- $workloadKinds := list
-  (dict "key" "deployments" "resource" "deployment" "defaultEnabled" true)
-  (dict "key" "replicaSets" "resource" "replicaset" "defaultEnabled" true)
-  (dict "key" "statefulSets" "resource" "statefulset" "defaultEnabled" true)
-  (dict "key" "argoRollouts" "resource" "rollout" "defaultEnabled" false)
-}}
-{{- $resources := list }}
-{{- range $workloadKinds }}
-{{- if dig .key "enabled" .defaultEnabled $.Values.workloads }}
-{{- $resources = append $resources .resource }}
-{{- end }}
-{{- end }}
-{{- $resources | toJson }}
-{{- end }}
-
-{{- /*
 RBAC rules required to create an intercept in a namespace; excludes any rules that are always cluster wide.
 The pods/portforward rule and the telepresence.io attachments rule are gated by
 security.authorization.gate: "portforward" keeps pods/portforward only, "telepresence"
@@ -320,12 +297,9 @@ logs via the StreamLogs RPC, so neither grant is mechanically required.
   verbs: ["create"]
 {{- end }}
 {{- if ne $gate "portforward" }}
-{{- /* Authorizes attaching (intercepting or ingesting) to a workload of an enabled kind */}}
+{{- /* Authorizes attaching to a workload: "create" for an intercept, "get" for an ingest */}}
 - apiGroups: ["telepresence.io"]
-  resources:
-  {{- range fromJsonArray (include "telepresence.enabledWorkloadResources" $) }}
-  - attachments/{{ . }}
-  {{- end }}
+  resources: ["attachments"]
   verbs: ["create", "get"]
 {{- end }}
 {{- if and .Values.clientRbac .Values.clientRbac.ruleExtras }}

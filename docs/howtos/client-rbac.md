@@ -79,7 +79,7 @@ grants that exist purely as policy, in the `telepresence.io` API group:
 | Grant | Authorizes |
 |-------|------------|
 | `connections` create (manager namespace) | Establishing a session. |
-| `attachments/<kind>` create / get (target namespace) | Attaching to a workload of that kind: create for intercept, replace, and wiretap; get for ingest. |
+| `attachments` create / get (target namespace) | Attaching to a workload: create for intercept, replace, and wiretap; get for ingest. |
 | `logs` and `logs/yaml` get (target namespace) | Gathering that namespace's pod logs (`logs`) and including pod manifests in the result (`logs/yaml`). The two are reviewed independently: a caller granted `logs` alone gets the logs, with the manifests simply omitted. |
 
 These resources are never exercised against the Kubernetes API server —

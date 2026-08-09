@@ -1265,10 +1265,10 @@ func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.Sessio
 }
 
 // EnsureAgent resolves request.Name (and, if given, request.WorkloadKind) to
-// a specific workload, authorizes the caller against attachments/<kind> for
-// that resolved kind, and ensures a traffic-agent for it. When the kind is
-// ambiguous, each candidate is reviewed individually so an unauthorized
-// caller never learns which underlying kinds exist.
+// a specific workload, authorizes the caller against the attachment named
+// request.Name, and ensures a traffic-agent for it. When the kind is
+// ambiguous, the disambiguation error names the matching kinds only to an
+// authorized caller.
 func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentRequest) (*rpc.AgentInfoSnapshot, error) {
 	ctx, client, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
@@ -1287,7 +1287,7 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 		}
 	}
 
-	if err := s.authorizeEnsureAgent(ctx, ns, string(kind), request.Name); err != nil {
+	if err := s.authorizeEnsureAgent(ctx, ns, request.Name); err != nil {
 		if s.authMode == auth.ModeEnforcing {
 			return nil, err
 		}
@@ -1445,11 +1445,10 @@ func (s *service) authorizeConnect(ctx context.Context) error {
 }
 
 // authorizeAttachment authorizes verb ("create" for an intercept, "get" for
-// an ingest) on the attachment named by workloadKind/workloadName, per
-// s.authGate, falling back from attachments.telepresence.io to legacy
-// pods/portforward under GateAny. workloadKind is resolved via
-// k8sapi.GetWorkload when empty.
-func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadKind, workloadName, verb string) error {
+// an ingest) on the attachment named workloadName, per s.authGate, falling
+// back from attachments.telepresence.io to legacy pods/portforward under
+// GateAny.
+func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadName, verb string) error {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
 		if s.authMode == auth.ModeEnforcing {
@@ -1474,68 +1473,40 @@ func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadKi
 		return nil
 	}
 
-	// telepresenceAllowed resolves workloadKind when empty and reviews verb on
-	// attachments/<kind> for workloadName. It returns the resolved subresource
-	// alongside the review result so callers can report it in error messages.
-	telepresenceAllowed := func() (string, bool, error) {
-		kind := workloadKind
-		if kind == "" {
-			wl, err := k8sapi.GetWorkload(ctx, workloadName, namespace, "")
-			if err != nil {
-				return "", false, err
-			}
-			kind = string(wl.GetKind())
-		}
-		sub := strings.ToLower(kind)
-		allowed, err := s.authorizer.CanAttach(ctx, p, namespace, sub, workloadName, verb)
-		return sub, allowed, err
-	}
-
 	switch s.authGate {
 	case auth.GatePortForward:
 		return portForward()
 	case auth.GateTelepresence:
-		sub, allowed, err := telepresenceAllowed()
+		allowed, err := s.authorizer.CanAttach(ctx, p, namespace, workloadName, verb)
 		if err != nil {
-			if k8sErrors.IsNotFound(err) {
-				return errors.Errorf(codes.NotFound, "workload %s not found in namespace %s", workloadName, namespace)
-			}
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may %s attachments/%s %s in namespace %s: %v", p.Username, verb, sub, workloadName, namespace, err)
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may %s attachment %s in namespace %s: %v", p.Username, verb, workloadName, namespace, err)
 		}
 		if !allowed {
-			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to %s attachments/%s %s in namespace %s", p.Username, verb, sub, workloadName, namespace)
+			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to %s attachment %s in namespace %s", p.Username, verb, workloadName, namespace)
 		}
 		return nil
 	default: // auth.GateAny
-		sub, allowed, err := telepresenceAllowed()
-		if err != nil && !k8sErrors.IsNotFound(err) {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may %s attachments/%s %s in namespace %s: %v", p.Username, verb, sub, workloadName, namespace, err)
+		allowed, err := s.authorizer.CanAttach(ctx, p, namespace, workloadName, verb)
+		if err != nil {
+			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may %s attachment %s in namespace %s: %v", p.Username, verb, workloadName, namespace, err)
 		}
-		if err == nil && allowed {
+		if allowed {
 			return nil
 		}
-		// The telepresence.io review was denied, or the workload could not be
-		// resolved to qualify the kind. The portforward review degrades to a
-		// namespace-wide check when pods cannot be listed, so it handles the
-		// unresolvable-workload case the same way.
 		if err := portForward(); err != nil {
 			return err
 		}
-		if err == nil {
-			clog.Warnf(ctx,
-				"%s authorized attachment to %s in namespace %s only via the legacy pods/portforward grant; its Role "+
-					"should migrate to create attachments.telepresence.io before the enforcing-mode default flips",
-				p.Username, workloadName, namespace)
-		}
+		clog.Warnf(ctx,
+			"%s authorized attachment to %s in namespace %s only via the legacy pods/portforward grant; its Role "+
+				"should migrate to create attachments.telepresence.io before the enforcing-mode default flips",
+			p.Username, workloadName, namespace)
 		return nil
 	}
 }
 
 // authorizeNamespace reports whether the caller may attach to anything in
-// namespace, not any specific workload. Under GateTelepresence it reviews
-// every enabled workload kind individually and passes if any one succeeds,
-// since an RBAC rule on "attachments/deployment" never matches a review
-// with no subresource at all.
+// namespace, not any specific workload. Note that a grant scoped with
+// resourceNames never matches this unnamed review.
 func (s *service) authorizeNamespace(ctx context.Context, namespace string) error {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
@@ -1557,20 +1528,9 @@ func (s *service) authorizeNamespace(ctx context.Context, namespace string) erro
 		return nil
 	}
 
-	// telepresenceAllowed reviews create on attachments/<kind>, unnamed, for
-	// every enabled workload kind and reports whether any one of them
-	// passed.
+	// telepresenceAllowed reviews create on attachments with no object name.
 	telepresenceAllowed := func() (bool, error) {
-		for _, kind := range managerutil.GetEnv(ctx).EnabledWorkloadKinds {
-			allowed, err := s.authorizer.CanAttach(ctx, p, namespace, strings.ToLower(string(kind)), "", "create")
-			if err != nil {
-				return false, err
-			}
-			if allowed {
-				return true, nil
-			}
-		}
-		return false, nil
+		return s.authorizer.CanAttach(ctx, p, namespace, "", "create")
 	}
 
 	switch s.authGate {
@@ -1605,15 +1565,15 @@ func (s *service) authorizeNamespace(ctx context.Context, namespace string) erro
 
 // authorizeEnsureAgent succeeds if the caller holds either "create" (an
 // intercepting client) or "get" (an ingest client) on the attachment.
-func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadKind, workloadName string) error {
-	createErr := s.authorizeAttachment(ctx, namespace, workloadKind, workloadName, "create")
+func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadName string) error {
+	createErr := s.authorizeAttachment(ctx, namespace, workloadName, "create")
 	if createErr == nil {
 		return nil
 	}
 	if status.Code(createErr) == codes.Unavailable {
 		return createErr
 	}
-	getErr := s.authorizeAttachment(ctx, namespace, workloadKind, workloadName, "get")
+	getErr := s.authorizeAttachment(ctx, namespace, workloadName, "get")
 	if getErr == nil {
 		return nil
 	}
@@ -1624,9 +1584,9 @@ func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadK
 }
 
 // resolveEnsureAgentKind resolves name to a single enabled workload kind
-// when a request didn't specify one. Multiple matches are ambiguous: each
-// candidate is authorized individually, and the error names the matching
-// kinds only once at least one review passes.
+// when a request didn't specify one. Multiple matches are ambiguous: the
+// error names the matching kinds only when the caller passes the
+// attachment review, so an unauthorized caller never learns what exists.
 func (s *service) resolveEnsureAgentKind(ctx context.Context, namespace, name string) (k8sapi.Kind, error) {
 	enabledWorkloadKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
 	matches := make([]k8sapi.Kind, 0, len(enabledWorkloadKinds))
@@ -1647,21 +1607,12 @@ func (s *service) resolveEnsureAgentKind(ctx context.Context, namespace, name st
 	}
 
 	names := make([]string, len(matches))
-	var authErr error
-	authorized := false
 	for i, kind := range matches {
 		names[i] = string(kind)
-		if err := s.authorizeEnsureAgent(ctx, namespace, string(kind), name); err != nil {
-			if authErr == nil {
-				authErr = err
-			}
-			continue
-		}
-		authorized = true
 	}
-	if !authorized {
+	if authErr := s.authorizeEnsureAgent(ctx, namespace, name); authErr != nil {
 		// Outside ModeEnforcing a review never blocks, and naming the
-		// matching kinds to a caller that failed every review would reveal
+		// matching kinds to a caller that failed the review would reveal
 		// what exists, so the denial itself is the answer only when it is
 		// enforced.
 		if s.authMode == auth.ModeEnforcing {
@@ -1677,7 +1628,7 @@ func (s *service) resolveEnsureAgentKind(ctx context.Context, namespace, name st
 // authorizeIntercept reviews whether the caller may create an intercept on
 // spec.Agent in namespace.
 func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
-	return s.authorizeAttachment(ctx, namespace, spec.WorkloadKind, spec.Agent, "create")
+	return s.authorizeAttachment(ctx, namespace, spec.Agent, "create")
 }
 
 // workloadPodNames returns the names of the current pods of the workload
