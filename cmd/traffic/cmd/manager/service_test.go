@@ -861,6 +861,79 @@ func TestCreateIntercept_Enforcing(t *testing.T) {
 	req.Equal(codes.PermissionDenied, status.Code(err))
 }
 
+// TestResolveServicePort covers resolving a service port by name or number,
+// with protocol disambiguation, and the error mapping for an unknown port,
+// an unknown service, and a headless service.
+func TestResolveServicePort(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	const ns = "default"
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "echo", Namespace: ns},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: "10.0.0.42",
+			Ports: []corev1.ServicePort{
+				{Name: "http", Port: 8080, Protocol: corev1.ProtocolTCP},
+				{Name: "dns", Port: 53, Protocol: corev1.ProtocolUDP},
+			},
+		},
+	}
+	headless := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "headless", Namespace: ns},
+		Spec: corev1.ServiceSpec{
+			ClusterIP: corev1.ClusterIPNone,
+			Ports:     []corev1.ServicePort{{Name: "http", Port: 8080, Protocol: corev1.ProtocolTCP}},
+		},
+	}
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, []runtime.Object{svc, headless})
+
+	alice := &auth.Principal{Username: "alice", UID: "alice-uid"}
+	aliceInfo := proto.Clone(testdata.GetTestClients(t)["alice"]).(*rpc.ClientInfo)
+	sess, err := mgr.ArriveAsClient(auth.WithPrincipal(sctx, alice), aliceInfo)
+	req.NoError(err)
+
+	tests := []struct {
+		name        string
+		service     string
+		port        string
+		protocol    string
+		wantPort    int32
+		wantErrCode codes.Code
+	}{
+		{name: "by name TCP", service: "echo", port: "http", wantPort: 8080},
+		{name: "by number", service: "echo", port: "8080", wantPort: 8080},
+		{name: "by name UDP", service: "echo", port: "dns", protocol: "UDP", wantPort: 53},
+		{name: "unknown port name", service: "echo", port: "nope", wantErrCode: codes.FailedPrecondition},
+		{name: "unknown service", service: "nonexistent", port: "http", wantErrCode: codes.NotFound},
+		{name: "headless service", service: "headless", port: "http", wantErrCode: codes.FailedPrecondition},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			rsp, err := mgr.ResolveServicePort(auth.WithPrincipal(sctx, alice), &rpc.ResolveServicePortRequest{
+				Session:   sess,
+				Namespace: ns,
+				Service:   tt.service,
+				Port:      tt.port,
+				Protocol:  tt.protocol,
+			})
+			if tt.wantErrCode != codes.OK {
+				r.Error(err)
+				r.Equal(tt.wantErrCode, status.Code(err))
+				return
+			}
+			r.NoError(err)
+			var ip netip.Addr
+			r.NoError(ip.UnmarshalBinary(rsp.ClusterIp))
+			r.Equal("10.0.0.42", ip.String())
+			r.Equal(tt.wantPort, rsp.Port)
+		})
+	}
+}
+
 // TestGetQuicTunnelEndpoint_Gating covers the three cases "Zero-configuration endpoint
 // discovery" (docs/reference/quic-transport-architecture.md) distinguishes: an explicit
 // externalHost override always wins and bypasses discovery outright; discovery

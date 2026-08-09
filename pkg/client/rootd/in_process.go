@@ -93,18 +93,6 @@ func (rd *InProcSession) LookupIP(_ context.Context, request *rpc.LookupIPReques
 	return rd.lookupIP(request)
 }
 
-func (rd *InProcSession) ResolvePort(ctx context.Context, request *rpc.ResolvePortRequest, _ ...grpc.CallOption) (*rpc.ResolvePortResponse, error) {
-	ap, err := rd.resolvePort(ctx, request.Host, request.Port)
-	if err != nil {
-		return nil, err
-	}
-	apb, err := ap.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-	return &rpc.ResolvePortResponse{HostPort: apb}, nil
-}
-
 func (rd *InProcSession) RerouteRemotePort(_ context.Context, request *rpc.ReroutePortRequest, _ ...grpc.CallOption) (*empty.Empty, error) {
 	var ap types.AddrPortProto
 	if err := ap.UnmarshalBinary(request.DstHostPort); err != nil {

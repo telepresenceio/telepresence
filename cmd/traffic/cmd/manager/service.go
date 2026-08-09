@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	core "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
@@ -2156,6 +2157,25 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (respo
 	noSearchDomain := s.dotClusterDomain
 	rrs, rCode := s.lookupFromManager(ctx, sessionID, qType, request.Name, noSearchDomain)
 	return dnsproxy.ToRPC(rrs, rCode)
+}
+
+// ResolveServicePort resolves request.Port (a name or a number) against the
+// named service and returns its ClusterIP and numeric port.
+func (s *service) ResolveServicePort(ctx context.Context, request *rpc.ResolveServicePortRequest) (*rpc.ResolveServicePortResponse, error) {
+	ctx, client, err := s.ensureClientSession(ctx, request.Session)
+	if err != nil {
+		return nil, err
+	}
+	ns, err := s.managedTargetNamespace(ctx, client, request.Namespace)
+	if err != nil {
+		return nil, err
+	}
+	ip, sp, err := k8sapi.ResolveServicePort(ctx, request.Service, ns, request.Port, core.Protocol(request.Protocol))
+	if err != nil {
+		return nil, errors.FromError(err, codes.FailedPrecondition, err.Error())
+	}
+	ipb, _ := ip.MarshalBinary()
+	return &rpc.ResolveServicePortResponse{ClusterIp: ipb, Port: sp.Port}, nil
 }
 
 func (s *service) lookupFromManager(ctx context.Context, sessionID tunnel.SessionID, qType uint16, qName, noSearchDomain string) (dnsproxy.RRs, int) {

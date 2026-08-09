@@ -51,10 +51,13 @@ has no way to reach the local workstation.
 
 In external-only mode, features that inherently require client-side
 Kubernetes access are disabled with explicit errors rather than degraded
-silently: symbolic service-port resolution (use a numeric port), the
-ConfigMap-backed admin commands for revoking intercepts, and the legacy
-direct log-gathering path (the manager serves the logs instead). Namespace
-discovery always comes from the manager.
+silently: the ConfigMap-backed admin commands for revoking intercepts, and
+the legacy direct log-gathering path (the manager serves the logs instead).
+Symbolic service ports are resolved by the manager on the client's behalf,
+so they work the same as over a port-forward; only against a
+traffic-manager too old to serve that resolution does the client report an
+error asking for a numeric port. Namespace discovery always comes from the
+manager.
 
 ## A restricted surface
 

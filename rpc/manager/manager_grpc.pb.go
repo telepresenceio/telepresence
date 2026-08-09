@@ -58,6 +58,7 @@ const (
 	Manager_GetKnownWorkloadKinds_FullMethodName           = "/telepresence.manager.Manager/GetKnownWorkloadKinds"
 	Manager_Lookup_FullMethodName                          = "/telepresence.manager.Manager/Lookup"
 	Manager_LookupDNS_FullMethodName                       = "/telepresence.manager.Manager/LookupDNS"
+	Manager_ResolveServicePort_FullMethodName              = "/telepresence.manager.Manager/ResolveServicePort"
 	Manager_WatchLogLevel_FullMethodName                   = "/telepresence.manager.Manager/WatchLogLevel"
 	Manager_Tunnel_FullMethodName                          = "/telepresence.manager.Manager/Tunnel"
 	Manager_GetQuicTunnelEndpoint_FullMethodName           = "/telepresence.manager.Manager/GetQuicTunnelEndpoint"
@@ -183,6 +184,9 @@ type ManagerClient interface {
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(ctx context.Context, in *DNSRequest, opts ...grpc.CallOption) (*DNSResponse, error)
+	// ResolveServicePort resolves a service port given by name or number to
+	// the service's ClusterIP and numeric port.
+	ResolveServicePort(ctx context.Context, in *ResolveServicePortRequest, opts ...grpc.CallOption) (*ResolveServicePortResponse, error)
 	// WatchLogLevel lets an agent receive log-level updates
 	WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLevelRequest], error)
 	// A Tunnel represents one single connection where the client or
@@ -679,6 +683,16 @@ func (c *managerClient) LookupDNS(ctx context.Context, in *DNSRequest, opts ...g
 	return out, nil
 }
 
+func (c *managerClient) ResolveServicePort(ctx context.Context, in *ResolveServicePortRequest, opts ...grpc.CallOption) (*ResolveServicePortResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveServicePortResponse)
+	err := c.cc.Invoke(ctx, Manager_ResolveServicePort_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *managerClient) WatchLogLevel(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (grpc.ServerStreamingClient[LogLevelRequest], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	stream, err := c.cc.NewStream(ctx, &Manager_ServiceDesc.Streams[12], Manager_WatchLogLevel_FullMethodName, cOpts...)
@@ -895,6 +909,9 @@ type ManagerServer interface {
 	// LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
 	// active, the lookup will be performed from the intercepted pods.
 	LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error)
+	// ResolveServicePort resolves a service port given by name or number to
+	// the service's ClusterIP and numeric port.
+	ResolveServicePort(context.Context, *ResolveServicePortRequest) (*ResolveServicePortResponse, error)
 	// WatchLogLevel lets an agent receive log-level updates
 	WatchLogLevel(*emptypb.Empty, grpc.ServerStreamingServer[LogLevelRequest]) error
 	// A Tunnel represents one single connection where the client or
@@ -1044,6 +1061,9 @@ func (UnimplementedManagerServer) Lookup(context.Context, *LookupRequest) (*Look
 }
 func (UnimplementedManagerServer) LookupDNS(context.Context, *DNSRequest) (*DNSResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method LookupDNS not implemented")
+}
+func (UnimplementedManagerServer) ResolveServicePort(context.Context, *ResolveServicePortRequest) (*ResolveServicePortResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveServicePort not implemented")
 }
 func (UnimplementedManagerServer) WatchLogLevel(*emptypb.Empty, grpc.ServerStreamingServer[LogLevelRequest]) error {
 	return status.Error(codes.Unimplemented, "method WatchLogLevel not implemented")
@@ -1618,6 +1638,24 @@ func _Manager_LookupDNS_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Manager_ResolveServicePort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveServicePortRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ManagerServer).ResolveServicePort(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Manager_ResolveServicePort_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ManagerServer).ResolveServicePort(ctx, req.(*ResolveServicePortRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Manager_WatchLogLevel_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(emptypb.Empty)
 	if err := stream.RecvMsg(m); err != nil {
@@ -1831,6 +1869,10 @@ var Manager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LookupDNS",
 			Handler:    _Manager_LookupDNS_Handler,
+		},
+		{
+			MethodName: "ResolveServicePort",
+			Handler:    _Manager_ResolveServicePort_Handler,
 		},
 		{
 			MethodName: "GetQuicTunnelEndpoint",

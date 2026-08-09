@@ -1586,7 +1586,7 @@ const file_daemon_daemon_proto_rawDesc = "" +
 	"\x10outbound_tunnels\x18\x04 \x01(\x03R\x0foutboundTunnels\x124\n" +
 	"\x16outbound_tunnel_errors\x18\x05 \x01(\x03R\x14outboundTunnelErrors\x12%\n" +
 	"\x0eincoming_dials\x18\x06 \x01(\x03R\rincomingDials\x120\n" +
-	"\x14incoming_dial_errors\x18\a \x01(\x03R\x12incomingDialErrors2\x94\f\n" +
+	"\x14incoming_dial_errors\x18\a \x01(\x03R\x12incomingDialErrors2\xb2\v\n" +
 	"\x06Daemon\x12C\n" +
 	"\aVersion\x12\x16.google.protobuf.Empty\x1a .telepresence.common.VersionInfo\x12C\n" +
 	"\x06Status\x12\x16.google.protobuf.Empty\x1a!.telepresence.daemon.DaemonStatus\x12A\n" +
@@ -1602,8 +1602,7 @@ const file_daemon_daemon_proto_rawDesc = "" +
 	"\x0fTranslateEnvIPs\x12 .telepresence.daemon.Environment\x1a .telepresence.daemon.Environment\x12@\n" +
 	"\x0eWaitForNetwork\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12i\n" +
 	"\x0eWaitForAgentIP\x12*.telepresence.daemon.WaitForAgentIPRequest\x1a+.telepresence.daemon.WaitForAgentIPResponse\x12W\n" +
-	"\bLookupIP\x12$.telepresence.daemon.LookupIPRequest\x1a%.telepresence.daemon.LookupIPResponse\x12`\n" +
-	"\vResolvePort\x12'.telepresence.daemon.ResolvePortRequest\x1a(.telepresence.daemon.ResolvePortResponse\x12T\n" +
+	"\bLookupIP\x12$.telepresence.daemon.LookupIPRequest\x1a%.telepresence.daemon.LookupIPResponse\x12T\n" +
 	"\x11RerouteRemotePort\x12'.telepresence.daemon.ReroutePortRequest\x1a\x16.google.protobuf.Empty\x12b\n" +
 	"\x15SetInterceptShortcuts\x121.telepresence.daemon.SetInterceptShortcutsRequest\x1a\x16.google.protobuf.Empty\x12J\n" +
 	"\x0fActivityWatcher\x12\x16.google.protobuf.Empty\x1a\x1d.telepresence.daemon.Activity0\x01\x12O\n" +
@@ -1689,32 +1688,30 @@ var file_daemon_daemon_proto_depIdxs = []int32{
 	31, // 28: telepresence.daemon.Daemon.WaitForNetwork:input_type -> google.protobuf.Empty
 	11, // 29: telepresence.daemon.Daemon.WaitForAgentIP:input_type -> telepresence.daemon.WaitForAgentIPRequest
 	13, // 30: telepresence.daemon.Daemon.LookupIP:input_type -> telepresence.daemon.LookupIPRequest
-	16, // 31: telepresence.daemon.Daemon.ResolvePort:input_type -> telepresence.daemon.ResolvePortRequest
-	18, // 32: telepresence.daemon.Daemon.RerouteRemotePort:input_type -> telepresence.daemon.ReroutePortRequest
-	20, // 33: telepresence.daemon.Daemon.SetInterceptShortcuts:input_type -> telepresence.daemon.SetInterceptShortcutsRequest
-	31, // 34: telepresence.daemon.Daemon.ActivityWatcher:input_type -> google.protobuf.Empty
-	8,  // 35: telepresence.daemon.Daemon.WatchAgentPods:input_type -> telepresence.daemon.AgentPodsDelta
-	26, // 36: telepresence.daemon.Daemon.Version:output_type -> telepresence.common.VersionInfo
-	0,  // 37: telepresence.daemon.Daemon.Status:output_type -> telepresence.daemon.DaemonStatus
-	21, // 38: telepresence.daemon.Daemon.Quit:output_type -> telepresence.daemon.QuitResponse
-	0,  // 39: telepresence.daemon.Daemon.Connect:output_type -> telepresence.daemon.DaemonStatus
-	31, // 40: telepresence.daemon.Daemon.Disconnect:output_type -> google.protobuf.Empty
-	7,  // 41: telepresence.daemon.Daemon.GetNetworkConfig:output_type -> telepresence.daemon.NetworkConfig
-	31, // 42: telepresence.daemon.Daemon.SetDNSTopLevelDomains:output_type -> google.protobuf.Empty
-	31, // 43: telepresence.daemon.Daemon.SetDNSExcludes:output_type -> google.protobuf.Empty
-	31, // 44: telepresence.daemon.Daemon.SetDNSMappings:output_type -> google.protobuf.Empty
-	31, // 45: telepresence.daemon.Daemon.SetLogLevel:output_type -> google.protobuf.Empty
-	15, // 46: telepresence.daemon.Daemon.TranslateEnvIPs:output_type -> telepresence.daemon.Environment
-	31, // 47: telepresence.daemon.Daemon.WaitForNetwork:output_type -> google.protobuf.Empty
-	12, // 48: telepresence.daemon.Daemon.WaitForAgentIP:output_type -> telepresence.daemon.WaitForAgentIPResponse
-	14, // 49: telepresence.daemon.Daemon.LookupIP:output_type -> telepresence.daemon.LookupIPResponse
-	17, // 50: telepresence.daemon.Daemon.ResolvePort:output_type -> telepresence.daemon.ResolvePortResponse
-	31, // 51: telepresence.daemon.Daemon.RerouteRemotePort:output_type -> google.protobuf.Empty
-	31, // 52: telepresence.daemon.Daemon.SetInterceptShortcuts:output_type -> google.protobuf.Empty
-	22, // 53: telepresence.daemon.Daemon.ActivityWatcher:output_type -> telepresence.daemon.Activity
-	31, // 54: telepresence.daemon.Daemon.WatchAgentPods:output_type -> google.protobuf.Empty
-	36, // [36:55] is the sub-list for method output_type
-	17, // [17:36] is the sub-list for method input_type
+	18, // 31: telepresence.daemon.Daemon.RerouteRemotePort:input_type -> telepresence.daemon.ReroutePortRequest
+	20, // 32: telepresence.daemon.Daemon.SetInterceptShortcuts:input_type -> telepresence.daemon.SetInterceptShortcutsRequest
+	31, // 33: telepresence.daemon.Daemon.ActivityWatcher:input_type -> google.protobuf.Empty
+	8,  // 34: telepresence.daemon.Daemon.WatchAgentPods:input_type -> telepresence.daemon.AgentPodsDelta
+	26, // 35: telepresence.daemon.Daemon.Version:output_type -> telepresence.common.VersionInfo
+	0,  // 36: telepresence.daemon.Daemon.Status:output_type -> telepresence.daemon.DaemonStatus
+	21, // 37: telepresence.daemon.Daemon.Quit:output_type -> telepresence.daemon.QuitResponse
+	0,  // 38: telepresence.daemon.Daemon.Connect:output_type -> telepresence.daemon.DaemonStatus
+	31, // 39: telepresence.daemon.Daemon.Disconnect:output_type -> google.protobuf.Empty
+	7,  // 40: telepresence.daemon.Daemon.GetNetworkConfig:output_type -> telepresence.daemon.NetworkConfig
+	31, // 41: telepresence.daemon.Daemon.SetDNSTopLevelDomains:output_type -> google.protobuf.Empty
+	31, // 42: telepresence.daemon.Daemon.SetDNSExcludes:output_type -> google.protobuf.Empty
+	31, // 43: telepresence.daemon.Daemon.SetDNSMappings:output_type -> google.protobuf.Empty
+	31, // 44: telepresence.daemon.Daemon.SetLogLevel:output_type -> google.protobuf.Empty
+	15, // 45: telepresence.daemon.Daemon.TranslateEnvIPs:output_type -> telepresence.daemon.Environment
+	31, // 46: telepresence.daemon.Daemon.WaitForNetwork:output_type -> google.protobuf.Empty
+	12, // 47: telepresence.daemon.Daemon.WaitForAgentIP:output_type -> telepresence.daemon.WaitForAgentIPResponse
+	14, // 48: telepresence.daemon.Daemon.LookupIP:output_type -> telepresence.daemon.LookupIPResponse
+	31, // 49: telepresence.daemon.Daemon.RerouteRemotePort:output_type -> google.protobuf.Empty
+	31, // 50: telepresence.daemon.Daemon.SetInterceptShortcuts:output_type -> google.protobuf.Empty
+	22, // 51: telepresence.daemon.Daemon.ActivityWatcher:output_type -> telepresence.daemon.Activity
+	31, // 52: telepresence.daemon.Daemon.WatchAgentPods:output_type -> google.protobuf.Empty
+	35, // [35:53] is the sub-list for method output_type
+	17, // [17:35] is the sub-list for method input_type
 	17, // [17:17] is the sub-list for extension type_name
 	17, // [17:17] is the sub-list for extension extendee
 	0,  // [0:17] is the sub-list for field type_name

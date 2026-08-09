@@ -532,9 +532,15 @@ service-port resolution also queries Kubernetes directly.
 
 - In external-only mode, client startup bypasses API discovery, namespace
   watching, manager-Service lookup, `CanPortForward` probes, and API-based
-  reconnect entirely. Features that still require client-side Kubernetes
-  lookup — symbolic service-port resolution — move manager-side or are
-  explicitly disabled in that mode.
+  reconnect entirely. Symbolic service-port resolution moves manager-side
+  (decided): a `ResolveServicePort` RPC, served on both listeners, returns
+  the service's ClusterIP and numeric port. The user daemon calls it and
+  keeps the direct Kubernetes lookup only as a fallback when the manager
+  answers `Unimplemented`; in external mode that fallback degrades to the
+  explicit use-a-numeric-port error. The root daemon's `ResolvePort` RPC
+  is removed outright: the user daemon resolves numeric-port hostnames
+  through the root daemon's existing `LookupIP` (the identical local-DNS
+  lookup), so nothing port-related remains in the root daemon.
 - `telepresence setup` is the natural surface for emitting and validating
   the config: it already verifies external QUIC reachability with a real
   handshake after `--apply`, and its facts record which credential kinds

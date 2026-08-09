@@ -734,6 +734,27 @@ message DNSResponse {
   bytes rrs = 2;
 }
 
+// ResolveServicePort request sent from a client.
+message ResolveServicePortRequest {
+  // Client session
+  SessionInfo session = 1;
+  // Namespace of the service.
+  string namespace = 2;
+  // Name of the service.
+  string service = 3;
+  // Service port name or port number.
+  string port = 4;
+  // Port protocol, TCP when empty.
+  string protocol = 5;
+}
+
+message ResolveServicePortResponse {
+  // The service's ClusterIP in netip.Addr binary form.
+  bytes cluster_ip = 1;
+  // Resolved port number.
+  int32 port = 2;
+}
+
 message DNSAgentResponse {
   // Agent session
   SessionInfo session = 1;
@@ -1162,6 +1183,10 @@ service Manager {
   // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.
   rpc LookupDNS(DNSRequest) returns (DNSResponse);
+
+  // ResolveServicePort resolves a service port given by name or number to
+  // the service's ClusterIP and numeric port.
+  rpc ResolveServicePort(ResolveServicePortRequest) returns (ResolveServicePortResponse);
 
   // WatchLogLevel lets an agent receive log-level updates
   rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);

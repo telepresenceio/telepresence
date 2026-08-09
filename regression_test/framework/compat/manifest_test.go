@@ -46,6 +46,11 @@ var exemptions = []exemption{
 	// fails without it.
 	{"WatchNamespaces", "client-invoked for the watch-all-namespaces case (pkg/client/userd/trafficmgr/session.go's updateClientConfig), gated on manager >= 2.32.0 with a client-side namespace watcher as the older-manager path; no compat-core assertion depends on which watcher ran"},
 
+	// Symbolic service-port resolution: client-invoked only for a named
+	// (non-numeric) port, and Unimplemented from an older manager degrades
+	// to a direct Kubernetes service lookup.
+	{"ResolveServicePort", "client-invoked only for symbolic service ports (pkg/client/userd/trafficmgr/resolveport.go); degrades to portforward.ResolveServiceAndPort on Unimplemented, and no compat-core test uses a symbolic port"},
+
 	// Session credential: client-invoked lazily, and every failure path
 	// (Unimplemented from an older manager, any fetch error) degrades to a
 	// credential-less mount or agent call, so no compat-core cell fails
