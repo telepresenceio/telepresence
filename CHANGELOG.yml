@@ -231,8 +231,8 @@ items:
       - type: security
         title: Changing the log level requires an owned session
         body: >-
-          The traffic-manager's <code>SetLogLevel</code> call accepted any
-          caller, although the new level propagated to the manager and every
+          The traffic-manager accepted a log-level change from any caller,
+          although the new level propagated to the manager and every
           traffic-agent. The request now carries the client's session, whose
           ownership the manager verifies. Requests from older clients
           without a session are still honored unless

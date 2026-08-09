@@ -51,12 +51,12 @@ sequenceDiagram
   participant M as traffic-manager
   participant J as node-agent Job
   participant P as target pod
-  C->>M: PrepareIntercept / EnsureAgent (node_agent=true)
+  C->>M: request intercept (node-agent config)
   loop for each admissible Running+Ready pod
     M->>P: select pod, read node & container IDs
     M->>J: create Job pinned to the pod's node
     J->>P: resolve PIDs via CRI, enter namespaces
-    J->>M: ArriveAsAgent (node_agent=true)
+    J->>M: register as node-agent
   end
   M->>C: agent(s) ready
   C->>J: port-forward (manager namespace)
@@ -89,9 +89,9 @@ sequenceDiagram
    workload can never collide. A Job whose target has changed (container
    restart), whose pod failed, or that is still terminating is replaced,
    never reused.
-3. **Registration.** Once inside the target's namespaces the agent calls
-   `ArriveAsAgent` like any traffic-agent, with a `node_agent` flag on its
-   `AgentInfo`. From that point the manager's intercept machinery treats it
+3. **Registration.** Once inside the target's namespaces the agent registers
+   with the manager like any traffic-agent, flagged as a node-agent. From
+   that point the manager's intercept machinery treats it
    like a sidecar, with one twist on the client: the agent's gRPC, SFTP, and
    FTP servers listen in the *Job pod's* own network namespace, so the client
    port-forwards to the Job pod in the manager's namespace rather than to a
