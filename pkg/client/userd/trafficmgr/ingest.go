@@ -202,11 +202,10 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 	timeoutCtx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutIntercept)
 	defer cancel()
 	as, err = s.ManagerClient().EnsureAgent(timeoutCtx, &manager.EnsureAgentRequest{
-		Session:      s.sessionInfo,
-		Name:         ik.workload,
-		Namespace:    ik.namespace,
-		NodeAgent:    nodeAgent,
-		WorkloadKind: id.WorkloadKind,
+		Session:   s.sessionInfo,
+		Name:      ik.workload,
+		Namespace: ik.namespace,
+		NodeAgent: nodeAgent,
 	})
 	if err != nil {
 		return nil, err

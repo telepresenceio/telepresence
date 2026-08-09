@@ -183,7 +183,7 @@ func TestEnsureAgent_SidecarRejectedByNodeAgentClaim(t *testing.T) {
 		s := newLeaseTestState(context.Background())
 		storeLiveNodeAgentIntercept(s, "c1:ic1", name, namespace)
 
-		_, err := s.EnsureAgent(context.Background(), tunnel.SessionID("other-session"), name, namespace, false, "")
+		_, err := s.EnsureAgent(context.Background(), tunnel.SessionID("other-session"), name, namespace, false)
 		require.Error(t, err)
 		assert.Equal(t, errcat.User, errcat.GetCategory(err))
 		assert.Contains(t, err.Error(), "node-agent")
@@ -195,7 +195,7 @@ func TestEnsureAgent_SidecarRejectedByNodeAgentClaim(t *testing.T) {
 		sid := s.AddClient(&rpc.ClientInfo{Name: "ingest-client"}, nil, time.Now())
 		s.addLease(sid, name, namespace)
 
-		_, err := s.EnsureAgent(context.Background(), tunnel.SessionID("other-session"), name, namespace, false, "")
+		_, err := s.EnsureAgent(context.Background(), tunnel.SessionID("other-session"), name, namespace, false)
 		require.Error(t, err)
 		assert.Equal(t, errcat.User, errcat.GetCategory(err))
 		assert.Contains(t, err.Error(), "node-agent")

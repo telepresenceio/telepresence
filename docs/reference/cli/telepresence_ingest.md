@@ -29,7 +29,6 @@ Ingest a container
       --node-agent                     Serve this ingest with a node-hosted traffic-agent (a manager-created Job that enters the target pod's namespaces) instead of injecting a sidecar. Requires the traffic-manager to have node-agent mode enabled.
       --to-pod strings                 An additional port to forward from the ingested pod, will be made available at localhost:PORT Use this to, for example, access proxy/helper sidecars in the ingested pod. The default protocol is TCP. Use &lt;port&gt;/UDP for UDP ports
       --wait-message string            Message to print when ingest handler has started
-      --workload-kind string           Kind of the workload to ingest. Only needed when the workload name is ambiguous among the enabled workload kinds
 ```
 
 ### Global Flags:

@@ -25,7 +25,6 @@ import (
 	"google.golang.org/protobuf/proto"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
@@ -41,7 +40,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/quictunnel"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/state"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
-	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/dnsproxy"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
@@ -1264,11 +1262,8 @@ func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.Sessio
 	return &rpc.KnownWorkloadKinds{Kinds: kinds}, nil
 }
 
-// EnsureAgent resolves request.Name (and, if given, request.WorkloadKind) to
-// a specific workload, authorizes the caller against the attachment named
-// request.Name, and ensures a traffic-agent for it. When the kind is
-// ambiguous, the disambiguation error names the matching kinds only to an
-// authorized caller.
+// EnsureAgent authorizes the caller against the attachment named
+// request.Name and ensures a traffic-agent for that workload.
 func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentRequest) (*rpc.AgentInfoSnapshot, error) {
 	ctx, client, err := s.ensureClientSession(ctx, request.Session)
 	if err != nil {
@@ -1279,14 +1274,6 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 		return nil, err
 	}
 
-	kind := k8sapi.Kind(request.WorkloadKind)
-	if kind == "" {
-		kind, err = s.resolveEnsureAgentKind(ctx, ns, request.Name)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	if err := s.authorizeEnsureAgent(ctx, ns, request.Name); err != nil {
 		if s.authMode == auth.ModeEnforcing {
 			return nil, err
@@ -1294,18 +1281,7 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 		clog.Warnf(ctx, "ensure agent for %s in namespace %s: %v (not enforced)", request.Name, ns, err)
 	}
 
-	// The existence check follows the review so that a caller whose review is
-	// denied cannot distinguish existing from nonexisting workloads.
-	if kind != "" {
-		if _, err := agentmap.GetWorkload(ctx, request.Name, ns, kind); err != nil {
-			if k8sErrors.IsNotFound(err) {
-				return nil, errors.Errorf(codes.NotFound, "workload %s not found in namespace %s", request.Name, ns)
-			}
-			return nil, errors.Errorf(codes.Unavailable, "unable to determine whether %s %s exists in namespace %s: %v", kind, request.Name, ns, err)
-		}
-	}
-
-	as, err := s.state.EnsureAgent(ctx, managerutil.GetSessionID(ctx), request.Name, ns, request.NodeAgent, kind)
+	as, err := s.state.EnsureAgent(ctx, managerutil.GetSessionID(ctx), request.Name, ns, request.NodeAgent)
 	if err != nil {
 		return nil, status.Convert(err).Err()
 	}
@@ -1581,48 +1557,6 @@ func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadN
 		return getErr
 	}
 	return createErr
-}
-
-// resolveEnsureAgentKind resolves name to a single enabled workload kind
-// when a request didn't specify one. Multiple matches are ambiguous: the
-// error names the matching kinds only when the caller passes the
-// attachment review, so an unauthorized caller never learns what exists.
-func (s *service) resolveEnsureAgentKind(ctx context.Context, namespace, name string) (k8sapi.Kind, error) {
-	enabledWorkloadKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
-	matches := make([]k8sapi.Kind, 0, len(enabledWorkloadKinds))
-	for _, kind := range enabledWorkloadKinds {
-		if _, err := agentmap.GetWorkload(ctx, name, namespace, kind); err != nil {
-			if !k8sErrors.IsNotFound(err) {
-				return "", errors.Errorf(codes.Unavailable, "unable to determine workload kind for %s in namespace %s: %v", name, namespace, err)
-			}
-			continue
-		}
-		matches = append(matches, kind)
-	}
-	switch len(matches) {
-	case 0:
-		return "", nil
-	case 1:
-		return matches[0], nil
-	}
-
-	names := make([]string, len(matches))
-	for i, kind := range matches {
-		names[i] = string(kind)
-	}
-	if authErr := s.authorizeEnsureAgent(ctx, namespace, name); authErr != nil {
-		// Outside ModeEnforcing a review never blocks, and naming the
-		// matching kinds to a caller that failed the review would reveal
-		// what exists, so the denial itself is the answer only when it is
-		// enforced.
-		if s.authMode == auth.ModeEnforcing {
-			return "", authErr
-		}
-		clog.Warnf(ctx, "ensure agent for %s in namespace %s: %v (not enforced)", name, namespace, authErr)
-	}
-	return "", errors.Errorf(codes.InvalidArgument,
-		"%s in namespace %s matches multiple workload kinds (%s); set the workload kind to disambiguate",
-		name, namespace, strings.Join(names, ", "))
 }
 
 // authorizeIntercept reviews whether the caller may create an intercept on

@@ -597,15 +597,14 @@ func (s *State) AddInterceptFinalizer(interceptID string, finalizer InterceptFin
 	return nil
 }
 
-// EnsureAgent ensures that an agent exists for the workload named n and of
-// kind wk (resolved by priority order across known kinds when empty) in
+// EnsureAgent ensures that an agent exists for the workload named n in
 // namespace ns, and waits for it to become available. When nodeAgent is
 // requested, it provisions a node-hosted traffic-agent Job instead of
 // injecting a sidecar, and takes a lease on it under sessionID until
 // ReleaseAgent is called or the session ends. A sidecar request is rejected
 // while a node-agent lease already claims the workload, since injecting a
 // sidecar would restart the pod the node-agent depends on.
-func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, ns string, nodeAgent bool, wk k8sapi.Kind) (as []*AgentSession, err error) {
+func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, ns string, nodeAgent bool) (as []*AgentSession, err error) {
 	if !nodeAgent && s.nodeAgentWanted(n, ns) {
 		// Checked before resolving the workload: a sidecar request against a
 		// workload a node-agent already claims is rejected outright, so
@@ -618,7 +617,7 @@ func (s *State) EnsureAgent(ctx context.Context, sessionID tunnel.SessionID, n, 
 	}
 
 	var wl k8sapi.Workload
-	wl, err = agentmap.GetWorkload(ctx, n, ns, wk)
+	wl, err = agentmap.GetWorkload(ctx, n, ns, "")
 	if err != nil {
 		if k8sErrors.IsNotFound(err) {
 			err = errcat.User.New(err)

@@ -59,7 +59,6 @@ func (s *state) CreateRequest() (*rpc.IngestRequest, error) {
 	ir := &rpc.IngestRequest{
 		Identifier: &rpc.IngestIdentifier{
 			WorkloadName:  s.WorkloadName,
-			WorkloadKind:  s.WorkloadKind,
 			ContainerName: s.ContainerName,
 			Namespace:     s.Namespace,
 		},

@@ -1803,11 +1803,7 @@ type EnsureAgentRequest struct {
 	// (a manager-created Job that enters the target pod's namespaces) rather
 	// than by a sidecar injected into the workload. Requires the
 	// traffic-manager to have node-agent mode enabled.
-	NodeAgent bool `protobuf:"varint,4,opt,name=node_agent,json=nodeAgent,proto3" json:"node_agent,omitempty"`
-	// Qualifies name when several enabled workload kinds have a workload with
-	// that name in the namespace. An empty value is accepted only while name
-	// is unambiguous among the enabled workload kinds.
-	WorkloadKind  string `protobuf:"bytes,5,opt,name=workload_kind,json=workloadKind,proto3" json:"workload_kind,omitempty"`
+	NodeAgent     bool `protobuf:"varint,4,opt,name=node_agent,json=nodeAgent,proto3" json:"node_agent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1868,13 +1864,6 @@ func (x *EnsureAgentRequest) GetNodeAgent() bool {
 		return x.NodeAgent
 	}
 	return false
-}
-
-func (x *EnsureAgentRequest) GetWorkloadKind() string {
-	if x != nil {
-		return x.WorkloadKind
-	}
-	return ""
 }
 
 type ReleaseAgentRequest struct {
@@ -5470,14 +5459,13 @@ const file_manager_manager_proto_rawDesc = "" +
 	"intercepts\"\xa7\x01\n" +
 	"\x16CreateInterceptRequest\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12J\n" +
-	"\x0eintercept_spec\x18\x02 \x01(\v2#.telepresence.manager.InterceptSpecR\rinterceptSpecJ\x04\b\x03\x10\x04\"\xc7\x01\n" +
+	"\x0eintercept_spec\x18\x02 \x01(\v2#.telepresence.manager.InterceptSpecR\rinterceptSpecJ\x04\b\x03\x10\x04\"\xa2\x01\n" +
 	"\x12EnsureAgentRequest\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x03 \x01(\tR\tnamespace\x12\x1d\n" +
 	"\n" +
-	"node_agent\x18\x04 \x01(\bR\tnodeAgent\x12#\n" +
-	"\rworkload_kind\x18\x05 \x01(\tR\fworkloadKind\"\x84\x01\n" +
+	"node_agent\x18\x04 \x01(\bR\tnodeAgent\"\x84\x01\n" +
 	"\x13ReleaseAgentRequest\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1c\n" +

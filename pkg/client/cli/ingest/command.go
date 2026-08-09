@@ -23,7 +23,6 @@ type Command struct {
 	DockerFlags     docker.Flags
 	MountFlags      mount.Flags
 	WorkloadName    string // --workload || Command[0] // only valid if !localOnly
-	WorkloadKind    string // --workload-kind
 	ContainerName   string // --container
 	Namespace       string // --namespace
 	WaitMessage     string
@@ -37,7 +36,6 @@ func (c *Command) AddFlags(cmd *cobra.Command) {
 	flagSet := cmd.Flags()
 	flagSet.StringVarP(&c.ContainerName, "container", "c", "", "Name of container that provides the environment and mounts for the ingest")
 	flagSet.StringVarP(&c.Namespace, "namespace", "n", "", "Namespace containing the workload to ingest. Defaults to the connected namespace")
-	flagSet.StringVar(&c.WorkloadKind, "workload-kind", "", "Kind of the workload to ingest. Only needed when the workload name is ambiguous among the enabled workload kinds")
 
 	flagSet.StringSliceVar(&c.ToPod, "to-pod", []string{}, ``+
 		`An additional port to forward from the ingested pod, will be made available at localhost:PORT `+
