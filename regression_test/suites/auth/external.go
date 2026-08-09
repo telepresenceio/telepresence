@@ -301,7 +301,7 @@ func buildBlackholedExternalKubeconfig(env rt.Env, name, tok, managerAddress, ca
 // attachments/<kind> with the workload as resourceName) plus the diagnostic
 // logs attributes for agent-pod log streaming.
 const appNamespaceAttachmentRules = `  - apiGroups: ["telepresence.io"]
-    resources: ["attachments", "attachments/deployments"]
+    resources: ["attachments/deployment"]
     verbs: ["create", "get"]
   - apiGroups: ["telepresence.io"]
     resources: ["logs", "logs/yaml"]

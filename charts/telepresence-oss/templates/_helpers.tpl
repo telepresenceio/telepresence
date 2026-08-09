@@ -266,17 +266,18 @@ RBAC rules for workload kinds enabled via values.workloads.*.enabled
 {{- end }}
 
 {{- /*
-Plural lowercase resource names for the workload kinds enabled via
-values.workloads.*.enabled, used to build the attachments/<resource> RBAC
-resource strings for the security.authorization.gate "telepresence" rule.
+Singular lowercase kind names for the workloads enabled via
+values.workloads.*.enabled, used to build the attachments/<kind> RBAC
+resource strings for the security.authorization.gate "telepresence" rule,
+following the pods/portforward subresource convention.
 Returns a JSON array; callers do `fromJsonArray (include "telepresence.enabledWorkloadResources" $)`.
 */}}
 {{- define "telepresence.enabledWorkloadResources" -}}
 {{- $workloadKinds := list
-  (dict "key" "deployments" "resource" "deployments" "defaultEnabled" true)
-  (dict "key" "replicaSets" "resource" "replicasets" "defaultEnabled" true)
-  (dict "key" "statefulSets" "resource" "statefulsets" "defaultEnabled" true)
-  (dict "key" "argoRollouts" "resource" "rollouts" "defaultEnabled" false)
+  (dict "key" "deployments" "resource" "deployment" "defaultEnabled" true)
+  (dict "key" "replicaSets" "resource" "replicaset" "defaultEnabled" true)
+  (dict "key" "statefulSets" "resource" "statefulset" "defaultEnabled" true)
+  (dict "key" "argoRollouts" "resource" "rollout" "defaultEnabled" false)
 }}
 {{- $resources := list }}
 {{- range $workloadKinds }}

@@ -326,8 +326,8 @@ func TestGate_Selectivity(t *testing.T) {
 
 			if tt.gate == auth.GateTelepresence {
 				// The attachment review the manager sent must qualify the
-				// workload by its plural-lowercase kind as Subresource and
-				// name it as Name.
+				// workload by its singular-lowercase kind as Subresource
+				// and name it as Name.
 				var found *authv1.ResourceAttributes
 				for _, ra := range rec.all() {
 					if isAttachmentReview(&ra) {
@@ -337,7 +337,7 @@ func TestGate_Selectivity(t *testing.T) {
 					}
 				}
 				req.NotNil(found, "an attachments.telepresence.io review must have been sent")
-				req.Equal("deployments", found.Subresource)
+				req.Equal("deployment", found.Subresource)
 				req.Equal("test-agent", found.Name)
 				req.Equal(gateTestNamespace, found.Namespace)
 				req.Equal("create", found.Verb)

@@ -71,14 +71,16 @@ const portForwardOnlyRules = `  - apiGroups: [""]
 
 // telepresenceGrantRules grants create on connections.telepresence.io (what
 // authorizeConnect reviews under gate=telepresence) and create/get on
-// attachments.telepresence.io (what authorizeAttachment reviews for an
-// intercept or ingest), with no pods/portforward at all: the RBAC shape a
-// minimal-RBAC client is meant to hold once the mechanics move manager-side.
+// kind-qualified attachments.telepresence.io (what authorizeAttachment
+// reviews for an intercept or ingest -- a bare "attachments" rule would
+// never match those subresource reviews), with no pods/portforward at all:
+// the RBAC shape a minimal-RBAC client is meant to hold once the mechanics
+// move manager-side.
 const telepresenceGrantRules = `  - apiGroups: ["telepresence.io"]
     resources: ["connections"]
     verbs: ["create"]
   - apiGroups: ["telepresence.io"]
-    resources: ["attachments"]
+    resources: ["attachments/deployment"]
     verbs: ["create", "get"]`
 
 // telepresenceGrantWithLogsRules extends telepresenceGrantRules with get on

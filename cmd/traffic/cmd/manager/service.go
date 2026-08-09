@@ -1526,7 +1526,7 @@ func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadKi
 			}
 			kind = string(wl.GetKind())
 		}
-		sub := pluralLowerKind(kind)
+		sub := strings.ToLower(kind)
 		allowed, err := s.authorizer.CanAttach(ctx, p, namespace, sub, workloadName, verb)
 		return sub, allowed, err
 	}
@@ -1587,7 +1587,7 @@ func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadKi
 // namespace-wide (no pod name); GateTelepresence reviews create on
 // attachments/<kind>, with no object name, for every kind in
 // managerutil.GetEnv(ctx).EnabledWorkloadKinds and is satisfied if any one
-// review passes -- an RBAC rule naming resource "attachments/deployments"
+// review passes -- an RBAC rule naming resource "attachments/deployment"
 // never matches a review with no subresource at all, so there is no single
 // namespace-wide "attachments" check to make; GateAny tries the
 // telepresence.io reviews first and falls back to pods/portforward when
@@ -1620,7 +1620,7 @@ func (s *service) authorizeNamespace(ctx context.Context, namespace string) erro
 	// passed.
 	telepresenceAllowed := func() (bool, error) {
 		for _, kind := range managerutil.GetEnv(ctx).EnabledWorkloadKinds {
-			allowed, err := s.authorizer.CanAttach(ctx, p, namespace, pluralLowerKind(string(kind)), "", "create")
+			allowed, err := s.authorizer.CanAttach(ctx, p, namespace, strings.ToLower(string(kind)), "", "create")
 			if err != nil {
 				return false, err
 			}
@@ -1741,14 +1741,6 @@ func (s *service) resolveEnsureAgentKind(ctx context.Context, namespace, name st
 	return "", errors.Errorf(codes.InvalidArgument,
 		"%s in namespace %s matches multiple workload kinds (%s); set the workload kind to disambiguate",
 		name, namespace, strings.Join(names, ", "))
-}
-
-// pluralLowerKind converts a workload kind ("Deployment", "StatefulSet",
-// "ReplicaSet", "Rollout") to the plural lowercase form used as the
-// attachments.telepresence.io subresource ("deployments", "statefulsets",
-// "replicasets", "rollouts").
-func pluralLowerKind(kind string) string {
-	return strings.ToLower(kind) + "s"
 }
 
 // authorizeIntercept reviews whether the caller may create an intercept on
