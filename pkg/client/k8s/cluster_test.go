@@ -13,7 +13,12 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
+
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
 func TestClassifyUnreachable(t *testing.T) {
@@ -111,4 +116,43 @@ func TestApplyNamespaceList_UpdatesOnSubsequentLists(t *testing.T) {
 	kc.applyNamespaceList(&manager.NamespaceList{Namespaces: []string{"ns-b"}})
 
 	require.Equal(t, []string{"ns-b"}, kc.GetCurrentNamespaces(true))
+}
+
+// TestFindManagerServiceNamespace_PrefersDefault: with the manager present in
+// both a custom and the default namespace, the default is returned.
+func TestFindManagerServiceNamespace_PrefersDefault(t *testing.T) {
+	kc := newTestCluster("default")
+	kc.Context = k8sapi.WithK8sInterface(kc.Context, fake.NewClientset(
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "traffic-manager", Namespace: "custom"}},
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "traffic-manager", Namespace: defaultManagerNamespace}},
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "default"}},
+	))
+	ns, ok := kc.findManagerServiceNamespace()
+	require.True(t, ok)
+	require.Equal(t, defaultManagerNamespace, ns)
+}
+
+// TestFindManagerServiceNamespace_CustomNamespace: with the manager only in a
+// custom namespace, that namespace is returned and unrelated services (the
+// fake ignores the field selector) are skipped by the name re-check.
+func TestFindManagerServiceNamespace_CustomNamespace(t *testing.T) {
+	kc := newTestCluster("default")
+	kc.Context = k8sapi.WithK8sInterface(kc.Context, fake.NewClientset(
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "default"}},
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "traffic-manager", Namespace: "telepresence"}},
+	))
+	ns, ok := kc.findManagerServiceNamespace()
+	require.True(t, ok)
+	require.Equal(t, "telepresence", ns)
+}
+
+// TestFindManagerServiceNamespace_NotInstalled: no traffic-manager Service
+// anywhere yields no namespace.
+func TestFindManagerServiceNamespace_NotInstalled(t *testing.T) {
+	kc := newTestCluster("default")
+	kc.Context = k8sapi.WithK8sInterface(kc.Context, fake.NewClientset(
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "unrelated", Namespace: "default"}},
+	))
+	_, ok := kc.findManagerServiceNamespace()
+	require.False(t, ok)
 }

@@ -60,6 +60,44 @@ func (r connectResult) get() (*grpc.ClientConn, string, semver.Version, error) {
 	return r.conn, r.name, r.ver, r.err
 }
 
+// managerDialer is the set of cluster operations connectSequence needs,
+// factored out so the decision flow can be unit tested with a fake.
+type managerDialer interface {
+	// dialPod connects to pap and returns the outcome.
+	dialPod(ctx context.Context, pap *portforward.PodAddress) connectResult
+	// discoverPod resolves the traffic-manager Service to a pod.
+	discoverPod() (*portforward.PodAddress, error)
+	// retryKnownName re-dials pap with backoff, for the forbidden-discovery
+	// fallback.
+	retryKnownName(ctx context.Context, pap *portforward.PodAddress) connectResult
+	// canReachKnownName reports whether the identity may port-forward to the
+	// known manager pod.
+	canReachKnownName() (bool, error)
+}
+
+// clusterDialer is the production managerDialer, binding a Cluster to the
+// manager namespace the operations need.
+type clusterDialer struct {
+	kc        *Cluster
+	namespace string
+}
+
+func (d clusterDialer) dialPod(ctx context.Context, pap *portforward.PodAddress) connectResult {
+	return d.kc.connectToPod(ctx, pap)
+}
+
+func (d clusterDialer) discoverPod() (*portforward.PodAddress, error) {
+	return portforward.ResolveSvcToPod(d.kc, trafficManagerServiceName, d.namespace, strconv.Itoa(trafficManagerAPIPort))
+}
+
+func (d clusterDialer) retryKnownName(ctx context.Context, pap *portforward.PodAddress) connectResult {
+	return d.kc.connectKnownNameWithBackoff(ctx, pap)
+}
+
+func (d clusterDialer) canReachKnownName() (bool, error) {
+	return d.kc.canPortForwardKnownName(d.namespace)
+}
+
 // ConnectToManager tries the deterministic StatefulSet pod name directly,
 // needing only pods/portforward on that one pod, then falls back to
 // Service-based discovery on failure. If discovery is itself forbidden, the
@@ -76,44 +114,19 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 	}
 
 	knownPap := &portforward.PodAddress{Name: trafficManagerPodName, Namespace: namespace, Port: trafficManagerAPIPort, NoLookup: true}
-	return connectSequence(
-		dialCtx,
-		knownNameProbeTimeout,
-		func(ctx context.Context) connectResult {
-			c, n, v, e := kc.connectToPod(ctx, knownPap)
-			return connectResult{c, n, v, e}
-		},
-		func() (*portforward.PodAddress, error) {
-			return portforward.ResolveSvcToPod(kc, trafficManagerServiceName, namespace, strconv.Itoa(trafficManagerAPIPort))
-		},
-		func(ctx context.Context, pap *portforward.PodAddress) connectResult {
-			c, n, v, e := kc.connectToPod(ctx, pap)
-			return connectResult{c, n, v, e}
-		},
-		func(ctx context.Context) connectResult {
-			c, n, v, e := kc.connectKnownNameWithBackoff(ctx, knownPap)
-			return connectResult{c, n, v, e}
-		},
-		func() (bool, error) {
-			return kc.canPortForwardKnownName(namespace)
-		},
-	).get()
+	return connectSequence(dialCtx, knownNameProbeTimeout, clusterDialer{kc: kc, namespace: namespace}, knownPap).get()
 }
 
 // connectSequence implements the known-name / discovery / forbidden-retry
-// decision flow with injectable dial/resolve functions, so it can be unit
-// tested without a real cluster.
+// decision flow over d, so it can be unit tested with a fake dialer.
 func connectSequence(
 	dialCtx context.Context,
 	probeTimeout time.Duration,
-	tryKnownName func(context.Context) connectResult,
-	discover func() (*portforward.PodAddress, error),
-	connectDiscovered func(context.Context, *portforward.PodAddress) connectResult,
-	retryKnownName func(context.Context) connectResult,
-	knownNameAllowed func() (bool, error),
+	d managerDialer,
+	knownPap *portforward.PodAddress,
 ) connectResult {
 	probeCtx, probeCancel := context.WithTimeout(dialCtx, probeTimeout)
-	res := tryKnownName(probeCtx)
+	res := d.dialPod(probeCtx, knownPap)
 	probeCancel()
 	if res.err == nil {
 		clog.Debugf(dialCtx, "connected to traffic-manager via known pod name %s", trafficManagerPodName)
@@ -121,17 +134,17 @@ func connectSequence(
 	}
 	clog.Debugf(dialCtx, "known-name connect to %s failed, falling back to service discovery: %v", trafficManagerPodName, res.err)
 
-	pap, dErr := discover()
+	pap, dErr := d.discoverPod()
 	if dErr != nil {
 		if k8serrors.IsForbidden(dErr) {
 			// Retry only if the identity can actually port-forward to the pod
 			// (a minimal-RBAC client has no other fallback); otherwise fail
 			// now instead of looping on a retry that cannot succeed.
-			if allowed, aErr := knownNameAllowed(); aErr == nil && !allowed {
+			if allowed, aErr := d.canReachKnownName(); aErr == nil && !allowed {
 				return connectResult{err: knownNameForbiddenError()}
 			}
 			clog.Debugf(dialCtx, "service discovery forbidden, retrying known-name connect to %s with backoff", trafficManagerPodName)
-			return retryKnownName(dialCtx)
+			return d.retryKnownName(dialCtx, knownPap)
 		}
 		se := &k8serrors.StatusError{}
 		if errors.As(dErr, &se) {
@@ -144,13 +157,13 @@ func connectSequence(
 		return connectResult{err: dErr}
 	}
 	clog.Debugf(dialCtx, "connecting to traffic-manager via service discovery, resolved pod %s.%s", pap.Name, pap.Namespace)
-	return connectDiscovered(dialCtx, pap)
+	return d.dialPod(dialCtx, pap)
 }
 
 // connectKnownNameWithBackoff retries the known-name connect against pap with
 // exponential backoff bounded by dialCtx's remaining deadline: reached only
 // when discovery is forbidden, so a transient failure must not be fatal.
-func (kc *Cluster) connectKnownNameWithBackoff(dialCtx context.Context, pap *portforward.PodAddress) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
+func (kc *Cluster) connectKnownNameWithBackoff(dialCtx context.Context, pap *portforward.PodAddress) connectResult {
 	b := backoff.ExponentialBackOff{
 		InitialInterval:     500 * time.Millisecond,
 		RandomizationFactor: backoff.DefaultRandomizationFactor,
@@ -160,15 +173,15 @@ func (kc *Cluster) connectKnownNameWithBackoff(dialCtx context.Context, pap *por
 		Clock:               backoff.SystemClock,
 	}
 	b.Reset()
-	err = backoff.Retry(func() error {
-		var rErr error
-		conn, name, ver, rErr = kc.connectToPod(dialCtx, pap)
-		return rErr
+	var res connectResult
+	err := backoff.Retry(func() error {
+		res = kc.connectToPod(dialCtx, pap)
+		return res.err
 	}, backoff.WithContext(&b, dialCtx))
 	if err != nil {
-		return nil, "", semver.Version{}, knownNameExhaustedError(pap.Name)
+		return connectResult{err: knownNameExhaustedError(pap.Name)}
 	}
-	return conn, name, ver, nil
+	return res
 }
 
 // knownNameExhaustedError means a minimal-RBAC client could reach neither
@@ -199,7 +212,7 @@ func knownNameForbiddenError() error {
 // connectToPod dials pap and runs the shared connect handshake. The
 // connection is pinned to pap's pod for its lifetime; when the pod goes
 // away, the connection dies with it and reconnect resolves a fresh one.
-func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAddress) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
+func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAddress) connectResult {
 	grpcAddr := pap.AddrFor(pap.Port)
 
 	bearerSrc := newManagerTokenSource(kc.Kubeconfig)
@@ -221,11 +234,11 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 	default:
 		clog.Debugf(kc, "the kubeconfig yields no bearer token or client certificate for the traffic-manager connection")
 	}
-	conn, err = kc.dialGRPC(dialCtx, grpcAddr, extra...)
+	conn, err := kc.dialGRPC(dialCtx, grpcAddr, extra...)
 	if err != nil {
-		return nil, "", ver, err
+		return connectResult{err: err}
 	}
-	name, ver, err = kc.finishConnect(dialCtx, conn, func(vi *manager.VersionInfo2) error {
+	name, ver, err := kc.finishConnect(dialCtx, conn, func(vi *manager.VersionInfo2) error {
 		hasX509Path := false
 		if hasX509Source {
 			if authPort := vi.GetAuthX509Port(); authPort != 0 {
@@ -245,7 +258,7 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 		}
 		return nil
 	})
-	return conn, name, ver, err
+	return connectResult{conn: conn, name: name, ver: ver, err: err}
 }
 
 // finishConnect runs the post-dial handshake shared by both manager

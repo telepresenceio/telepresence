@@ -313,20 +313,18 @@ func (kc *Cluster) determineTrafficManagerNamespace() (string, error) {
 	// Search for the traffic-manager in mapped namespaces
 	nss := kc.GetCurrentNamespaces(true)
 	if len(nss) == 0 {
-		// The watcher hasn't started yet at this point, so fetch a one-shot list
-		// for clients whose RBAC permits it; others fall through to the static
-		// defaults below.
-		if nsl, err := k8sapi.GetK8sInterface(kc).CoreV1().Namespaces().List(kc, meta.ListOptions{}); err == nil {
-			for i := range nsl.Items {
-				nss = append(nss, nsl.Items[i].Name)
-			}
-		} else {
-			clog.Debugf(kc, "unable to list namespaces for the traffic-manager search: %v", err)
-		}
-	}
-	for _, ns := range nss {
-		if _, err := k8sapi.GetService(kc, agentconfig.ManagerAppName, ns); err == nil {
+		// The watcher hasn't started yet, so currentMappedNamespaces is empty.
+		// Find the manager with one cross-namespace Service lookup instead of
+		// listing every namespace and probing each; clients whose RBAC forbids
+		// it fall through to the static defaults below.
+		if ns, ok := kc.findManagerServiceNamespace(); ok {
 			return ns, nil
+		}
+	} else {
+		for _, ns := range nss {
+			if _, err := k8sapi.GetService(kc, agentconfig.ManagerAppName, ns); err == nil {
+				return ns, nil
+			}
 		}
 	}
 
@@ -341,6 +339,34 @@ func (kc *Cluster) determineTrafficManagerNamespace() (string, error) {
 		return kc.Namespace, nil
 	}
 	return "", errcat.User.New("unable to determine the traffic-manager namespace")
+}
+
+// findManagerServiceNamespace locates the namespace of an installed
+// traffic-manager with a single name-scoped Service list across namespaces,
+// preferring the default manager namespace. The FieldSelector narrows what
+// the server returns; the name is re-checked so correctness does not depend
+// on the server honoring it.
+func (kc *Cluster) findManagerServiceNamespace() (string, bool) {
+	svcs, err := k8sapi.GetK8sInterface(kc).CoreV1().Services("").List(kc, meta.ListOptions{
+		FieldSelector: "metadata.name=" + agentconfig.ManagerAppName,
+	})
+	if err != nil {
+		clog.Debugf(kc, "unable to search for the traffic-manager service: %v", err)
+		return "", false
+	}
+	fallback := ""
+	for i := range svcs.Items {
+		if svcs.Items[i].Name != agentconfig.ManagerAppName {
+			continue
+		}
+		if svcs.Items[i].Namespace == defaultManagerNamespace {
+			return defaultManagerNamespace, true
+		}
+		if fallback == "" {
+			fallback = svcs.Items[i].Namespace
+		}
+	}
+	return fallback, fallback != ""
 }
 
 // GetCurrentNamespaces returns the names of the namespaces that this client

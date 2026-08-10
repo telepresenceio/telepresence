@@ -94,51 +94,82 @@ func TestKnownNameExhaustedError(t *testing.T) {
 	assert.ErrorContains(t, err, "clientRbac.legacyAccess")
 }
 
+// fakeDialer is a managerDialer whose behaviors are per-test funcs; an
+// unset func fails the test, so a path the test expects not to run is
+// asserted by omission.
+type fakeDialer struct {
+	t        *testing.T
+	dial     func(context.Context, *portforward.PodAddress) connectResult
+	discover func() (*portforward.PodAddress, error)
+	retry    func(context.Context, *portforward.PodAddress) connectResult
+	canReach func() (bool, error)
+}
+
+func (d fakeDialer) dialPod(ctx context.Context, pap *portforward.PodAddress) connectResult {
+	if d.dial == nil {
+		d.t.Fatal("dialPod should not be called")
+	}
+	return d.dial(ctx, pap)
+}
+
+func (d fakeDialer) discoverPod() (*portforward.PodAddress, error) {
+	if d.discover == nil {
+		d.t.Fatal("discoverPod should not be called")
+	}
+	return d.discover()
+}
+
+func (d fakeDialer) retryKnownName(ctx context.Context, pap *portforward.PodAddress) connectResult {
+	if d.retry == nil {
+		d.t.Fatal("retryKnownName should not be called")
+	}
+	return d.retry(ctx, pap)
+}
+
+func (d fakeDialer) canReachKnownName() (bool, error) {
+	if d.canReach == nil {
+		d.t.Fatal("canReachKnownName should not be called")
+	}
+	return d.canReach()
+}
+
+func knownPapFixture() *portforward.PodAddress {
+	return &portforward.PodAddress{Name: "traffic-manager-0", Namespace: "ambassador", NoLookup: true}
+}
+
 // TestConnectSequence_KnownNameSucceeds verifies that a successful known-name
 // attempt short-circuits: discovery and the backoff retry are never invoked.
 func TestConnectSequence_KnownNameSucceeds(t *testing.T) {
-	res := connectSequence(
-		t.Context(),
-		time.Second,
-		func(ctx context.Context) connectResult { return connectResult{name: "known-manager"} },
-		func() (*portforward.PodAddress, error) {
-			t.Fatal("discover should not be called")
-			return nil, nil
+	res := connectSequence(t.Context(), time.Second, fakeDialer{
+		t: t,
+		dial: func(context.Context, *portforward.PodAddress) connectResult {
+			return connectResult{name: "known-manager"}
 		},
-		func(ctx context.Context, pap *portforward.PodAddress) connectResult {
-			t.Fatal("connectDiscovered should not be called")
-			return connectResult{}
-		},
-		func(ctx context.Context) connectResult {
-			t.Fatal("retryKnownName should not be called")
-			return connectResult{}
-		},
-		func() (bool, error) { return true, nil },
-	)
+	}, knownPapFixture())
 	require.NoError(t, res.err)
 	assert.Equal(t, "known-manager", res.name)
 }
 
 // TestConnectSequence_FallsBackToDiscovery verifies that a failed known-name
 // attempt falls back to discovery, and that a successful discovery result is
-// connected to via connectDiscovered.
+// connected to via dialPod.
 func TestConnectSequence_FallsBackToDiscovery(t *testing.T) {
 	wantPap := &portforward.PodAddress{Name: "traffic-manager-xyz", Namespace: "ambassador"}
-	res := connectSequence(
-		t.Context(),
-		time.Second,
-		func(ctx context.Context) connectResult { return connectResult{err: errors.New("dial refused")} },
-		func() (*portforward.PodAddress, error) { return wantPap, nil },
-		func(ctx context.Context, pap *portforward.PodAddress) connectResult {
+	known := knownPapFixture()
+	firstCall := true
+	res := connectSequence(t.Context(), time.Second, fakeDialer{
+		t: t,
+		dial: func(_ context.Context, pap *portforward.PodAddress) connectResult {
+			if firstCall {
+				firstCall = false
+				assert.Same(t, known, pap)
+				return connectResult{err: errors.New("dial refused")}
+			}
 			assert.Same(t, wantPap, pap)
 			return connectResult{name: "discovered-manager"}
 		},
-		func(ctx context.Context) connectResult {
-			t.Fatal("retryKnownName should not be called")
-			return connectResult{}
-		},
-		func() (bool, error) { return true, nil },
-	)
+		discover: func() (*portforward.PodAddress, error) { return wantPap, nil },
+	}, known)
 	require.NoError(t, res.err)
 	assert.Equal(t, "discovered-manager", res.name)
 }
@@ -148,21 +179,13 @@ func TestConnectSequence_FallsBackToDiscovery(t *testing.T) {
 // setup" hint and never triggers the known-name retry.
 func TestConnectSequence_NotFoundKeepsSetupHint(t *testing.T) {
 	notFound := k8serrors.NewNotFound(schema.GroupResource{Resource: "services"}, "traffic-manager")
-	res := connectSequence(
-		t.Context(),
-		time.Second,
-		func(ctx context.Context) connectResult { return connectResult{err: errors.New("dial refused")} },
-		func() (*portforward.PodAddress, error) { return nil, notFound },
-		func(ctx context.Context, pap *portforward.PodAddress) connectResult {
-			t.Fatal("connectDiscovered should not be called")
-			return connectResult{}
+	res := connectSequence(t.Context(), time.Second, fakeDialer{
+		t: t,
+		dial: func(context.Context, *portforward.PodAddress) connectResult {
+			return connectResult{err: errors.New("dial refused")}
 		},
-		func(ctx context.Context) connectResult {
-			t.Fatal("retryKnownName should not be called")
-			return connectResult{}
-		},
-		func() (bool, error) { return true, nil },
-	)
+		discover: func() (*portforward.PodAddress, error) { return nil, notFound },
+	}, knownPapFixture())
 	require.Error(t, res.err)
 	assert.Equal(t, errcat.User, errcat.GetCategory(res.err))
 	assert.ErrorContains(t, res.err, "telepresence setup")
@@ -173,18 +196,17 @@ func TestConnectSequence_NotFoundKeepsSetupHint(t *testing.T) {
 // path instead of failing outright.
 func TestConnectSequence_ForbiddenRetriesKnownName(t *testing.T) {
 	forbidden := k8serrors.NewForbidden(schema.GroupResource{Resource: "services"}, "traffic-manager", errors.New("denied"))
-	res := connectSequence(
-		t.Context(),
-		time.Second,
-		func(ctx context.Context) connectResult { return connectResult{err: errors.New("dial refused")} },
-		func() (*portforward.PodAddress, error) { return nil, forbidden },
-		func(ctx context.Context, pap *portforward.PodAddress) connectResult {
-			t.Fatal("connectDiscovered should not be called")
-			return connectResult{}
+	res := connectSequence(t.Context(), time.Second, fakeDialer{
+		t: t,
+		dial: func(context.Context, *portforward.PodAddress) connectResult {
+			return connectResult{err: errors.New("dial refused")}
 		},
-		func(ctx context.Context) connectResult { return connectResult{name: "retried-manager"} },
-		func() (bool, error) { return true, nil },
-	)
+		discover: func() (*portforward.PodAddress, error) { return nil, forbidden },
+		retry: func(context.Context, *portforward.PodAddress) connectResult {
+			return connectResult{name: "retried-manager"}
+		},
+		canReach: func() (bool, error) { return true, nil },
+	}, knownPapFixture())
 	require.NoError(t, res.err)
 	assert.Equal(t, "retried-manager", res.name)
 }
@@ -193,21 +215,14 @@ func TestConnectSequence_ForbiddenRetriesKnownName(t *testing.T) {
 // retry, when discovery is Forbidden and known-name port-forward is also denied.
 func TestConnectSequence_ForbiddenDeniedFailsFast(t *testing.T) {
 	forbidden := k8serrors.NewForbidden(schema.GroupResource{Resource: "services"}, "traffic-manager", errors.New("denied"))
-	res := connectSequence(
-		t.Context(),
-		time.Second,
-		func(ctx context.Context) connectResult { return connectResult{err: errors.New("dial refused")} },
-		func() (*portforward.PodAddress, error) { return nil, forbidden },
-		func(ctx context.Context, pap *portforward.PodAddress) connectResult {
-			t.Fatal("connectDiscovered should not be called")
-			return connectResult{}
+	res := connectSequence(t.Context(), time.Second, fakeDialer{
+		t: t,
+		dial: func(context.Context, *portforward.PodAddress) connectResult {
+			return connectResult{err: errors.New("dial refused")}
 		},
-		func(ctx context.Context) connectResult {
-			t.Fatal("retryKnownName should not be called")
-			return connectResult{}
-		},
-		func() (bool, error) { return false, nil },
-	)
+		discover: func() (*portforward.PodAddress, error) { return nil, forbidden },
+		canReach: func() (bool, error) { return false, nil },
+	}, knownPapFixture())
 	require.Error(t, res.err)
 	assert.Equal(t, errcat.User, errcat.GetCategory(res.err))
 	assert.ErrorContains(t, res.err, "forbidden")
@@ -218,21 +233,13 @@ func TestConnectSequence_ForbiddenDeniedFailsFast(t *testing.T) {
 // unchanged, matching today's behavior for that case.
 func TestConnectSequence_OtherDiscoveryErrorPassesThrough(t *testing.T) {
 	otherErr := errors.New("some other failure")
-	res := connectSequence(
-		t.Context(),
-		time.Second,
-		func(ctx context.Context) connectResult { return connectResult{err: errors.New("dial refused")} },
-		func() (*portforward.PodAddress, error) { return nil, otherErr },
-		func(ctx context.Context, pap *portforward.PodAddress) connectResult {
-			t.Fatal("connectDiscovered should not be called")
-			return connectResult{}
+	res := connectSequence(t.Context(), time.Second, fakeDialer{
+		t: t,
+		dial: func(context.Context, *portforward.PodAddress) connectResult {
+			return connectResult{err: errors.New("dial refused")}
 		},
-		func(ctx context.Context) connectResult {
-			t.Fatal("retryKnownName should not be called")
-			return connectResult{}
-		},
-		func() (bool, error) { return true, nil },
-	)
+		discover: func() (*portforward.PodAddress, error) { return nil, otherErr },
+	}, knownPapFixture())
 	require.ErrorIs(t, res.err, otherErr)
 }
 
@@ -244,30 +251,28 @@ func TestConnectSequence_ProbeTimeoutBoundsKnownNameOnly(t *testing.T) {
 	defer cancel()
 
 	var probeRemaining, retryRemaining time.Duration
-	res := connectSequence(
-		dialCtx,
-		50*time.Millisecond,
-		func(ctx context.Context) connectResult {
+	firstCall := true
+	res := connectSequence(dialCtx, 50*time.Millisecond, fakeDialer{
+		t: t,
+		dial: func(ctx context.Context, _ *portforward.PodAddress) connectResult {
+			require.True(t, firstCall)
+			firstCall = false
 			dl, ok := ctx.Deadline()
 			require.True(t, ok)
 			probeRemaining = time.Until(dl)
 			return connectResult{err: errors.New("dial refused")}
 		},
-		func() (*portforward.PodAddress, error) {
+		discover: func() (*portforward.PodAddress, error) {
 			return nil, k8serrors.NewForbidden(schema.GroupResource{Resource: "services"}, "traffic-manager", errors.New("denied"))
 		},
-		func(ctx context.Context, pap *portforward.PodAddress) connectResult {
-			t.Fatal("connectDiscovered should not be called")
-			return connectResult{}
-		},
-		func(ctx context.Context) connectResult {
+		retry: func(ctx context.Context, _ *portforward.PodAddress) connectResult {
 			dl, ok := ctx.Deadline()
 			require.True(t, ok)
 			retryRemaining = time.Until(dl)
 			return connectResult{name: "retried-manager"}
 		},
-		func() (bool, error) { return true, nil },
-	)
+		canReach: func() (bool, error) { return true, nil },
+	}, knownPapFixture())
 	require.NoError(t, res.err)
 	assert.Less(t, probeRemaining, 1*time.Second)
 	assert.Greater(t, retryRemaining, 5*time.Second)
