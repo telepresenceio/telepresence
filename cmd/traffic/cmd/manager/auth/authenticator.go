@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -21,6 +23,11 @@ import (
 
 // ErrInvalidToken is returned by Authenticate when the Kubernetes API server rejects the bearer token.
 var ErrInvalidToken = errors.New("invalid bearer token")
+
+// errTooManyReviews is returned when review admission rejects a TokenReview.
+// The token cache stores it for the failure TTL, so a throttled token backs
+// off for those ten seconds instead of re-entering admission per call.
+var errTooManyReviews = errors.New("too many authentication attempts")
 
 const (
 	podNameExtraKey = "authentication.kubernetes.io/pod-name"
@@ -62,6 +69,16 @@ func WithMintedTokens(m *MintedTokens) Option {
 func WithMetrics(m *Metrics) Option {
 	return func(a *Authenticator) {
 		a.metrics = m
+	}
+}
+
+// WithReviewAdmission bounds the rate and concurrency of TokenReviews -- the
+// expensive, API-server-bound step -- with the external admission constants.
+// Cached tokens never enter admission; only a review pays it.
+func WithReviewAdmission() Option {
+	return func(a *Authenticator) {
+		a.reviewer.limiter = rate.NewLimiter(rate.Limit(externalAuthQPS), externalAuthBurst)
+		a.reviewer.sem = make(chan struct{}, externalMaxConcurrentAuth)
 	}
 }
 
@@ -189,10 +206,27 @@ type tokenReviewer struct {
 	metrics *Metrics
 	// calls counts AuthenticateToken invocations -- i.e. cache misses.
 	calls atomic.Uint64
+	// limiter and sem, when set by WithReviewAdmission, bound the rate and
+	// concurrency of reviews.
+	limiter *rate.Limiter
+	sem     chan struct{}
 }
 
 func (t *tokenReviewer) AuthenticateToken(ctx context.Context, token string) (*authenticator.Response, bool, error) {
 	t.calls.Add(1)
+	if t.limiter != nil {
+		if !t.limiter.Allow() {
+			t.metrics.RateLimited.Inc()
+			return nil, false, errTooManyReviews
+		}
+		select {
+		case t.sem <- struct{}{}:
+			defer func() { <-t.sem }()
+		default:
+			t.metrics.RateLimited.Inc()
+			return nil, false, errTooManyReviews
+		}
+	}
 	auds, hasAuds := authenticator.AudiencesFrom(ctx)
 	review := &authenticationv1.TokenReview{
 		Spec: authenticationv1.TokenReviewSpec{Token: token},

@@ -62,36 +62,62 @@ func TestExternalInterceptor_BothCredentialsRejected(t *testing.T) {
 	assert.Contains(t, err.Error(), "present exactly one")
 }
 
-func TestExternalInterceptor_RateLimiter_ResourceExhausted(t *testing.T) {
+func TestReviewAdmission_RateLimit_ResourceExhausted(t *testing.T) {
 	ci := fake.NewClientset()
 	k8sapi.InstallFakeTokenReviews(ci, func(string, []string) *authnv1.TokenReviewStatus {
 		return &authnv1.TokenReviewStatus{Authenticated: false}
 	})
-	ext := NewExternalInterceptor(NewInterceptor(NewAuthenticator(ci), ModeEnforcing), nil, nil)
-	// A burst of exactly one, with no refill, isolates the limiter from real time.
-	ext.limiter = rate.NewLimiter(0, 1)
+	a := NewAuthenticator(ci, WithReviewAdmission())
+	// A burst of exactly two, with no refill, isolates the limiter from real
+	// time: the first bad token consumes both (audience probe + fallback).
+	a.reviewer.limiter = rate.NewLimiter(0, 2)
+	ext := NewExternalInterceptor(NewInterceptor(a, ModeEnforcing), nil, nil)
 
 	_, err1 := ext.authenticate(externalCtxWithBearer("bad-1"), "/m")
 	require.Error(t, err1)
-	assert.Equal(t, codes.Unauthenticated, status.Code(err1), "the first call consumes the only token and reaches the authenticator")
+	assert.Equal(t, codes.Unauthenticated, status.Code(err1), "the first call's reviews consume the budget")
 
 	_, err2 := ext.authenticate(externalCtxWithBearer("bad-2"), "/m")
 	require.Error(t, err2)
-	assert.Equal(t, codes.ResourceExhausted, status.Code(err2), "the second call must be rejected by the limiter before reaching the authenticator")
+	assert.Equal(t, codes.ResourceExhausted, status.Code(err2), "the second call's review must be rejected by admission")
 }
 
-func TestExternalInterceptor_ConcurrencyCap_ResourceExhausted(t *testing.T) {
+func TestReviewAdmission_ConcurrencyCap_ResourceExhausted(t *testing.T) {
 	ci := fake.NewClientset()
 	k8sapi.InstallFakeTokenReviews(ci, func(string, []string) *authnv1.TokenReviewStatus {
 		return &authnv1.TokenReviewStatus{Authenticated: false}
 	})
-	ext := NewExternalInterceptor(NewInterceptor(NewAuthenticator(ci), ModeEnforcing), nil, nil)
-	ext.sem = make(chan struct{}, 1)
-	ext.sem <- struct{}{} // occupy the only slot, as a concurrent authentication would.
+	a := NewAuthenticator(ci, WithReviewAdmission())
+	a.reviewer.sem = make(chan struct{}, 1)
+	a.reviewer.sem <- struct{}{} // occupy the only slot, as a concurrent review would.
+	ext := NewExternalInterceptor(NewInterceptor(a, ModeEnforcing), nil, nil)
 
 	_, err := ext.authenticate(externalCtxWithBearer("any"), "/m")
 	require.Error(t, err)
 	assert.Equal(t, codes.ResourceExhausted, status.Code(err))
+}
+
+// TestReviewAdmission_CachedTokenUnthrottled pins the reason admission lives
+// on the review: a token served from the cache never pays the budget, so
+// steady-state authenticated traffic is not rate-limited.
+func TestReviewAdmission_CachedTokenUnthrottled(t *testing.T) {
+	ci := fake.NewClientset()
+	k8sapi.InstallFakeTokenReviews(ci, func(token string, audiences []string) *authnv1.TokenReviewStatus {
+		if token == "good" && len(audiences) == 0 {
+			return &authnv1.TokenReviewStatus{Authenticated: true, User: authnv1.UserInfo{Username: "alice", UID: "u1"}}
+		}
+		return &authnv1.TokenReviewStatus{Authenticated: false}
+	})
+	a := NewAuthenticator(ci, WithReviewAdmission())
+	// The first call's audience probe and fallback consume the whole budget.
+	a.reviewer.limiter = rate.NewLimiter(0, 2)
+	ext := NewExternalInterceptor(NewInterceptor(a, ModeEnforcing), nil, nil)
+
+	for i := 0; i < 50; i++ {
+		ctx, err := ext.authenticate(externalCtxWithBearer("good"), "/m")
+		require.NoError(t, err)
+		require.NotNil(t, PrincipalFrom(ctx))
+	}
 }
 
 func TestExternalInterceptor_OversizedMetadata(t *testing.T) {

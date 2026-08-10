@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"golang.org/x/time/rate"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -12,18 +11,18 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// Admission-control defaults for the external listener. TokenReview is the expensive,
-// API-server-bound step a hostile caller wants to trigger repeatedly (see the package
-// doc comment on ExternalInterceptor); these bound the work done before it ever runs.
+// Admission-control defaults for the external listener's TokenReviews -- the
+// expensive, API-server-bound step a hostile caller wants to trigger
+// repeatedly (see the package doc comment on ExternalInterceptor). Applied by
+// WithReviewAdmission on a review, never on a cached token.
 const (
-	// externalMaxConcurrentAuth caps the number of authentication attempts (bearer
-	// token validation) in flight at once, so a burst of connections cannot exhaust
-	// goroutines or flood the API server with concurrent TokenReviews.
+	// externalMaxConcurrentAuth caps the TokenReviews in flight at once, so a
+	// burst of connections cannot exhaust goroutines or flood the API server
+	// with concurrent reviews.
 	externalMaxConcurrentAuth = 64
 
-	// externalAuthQPS and externalAuthBurst bound the steady-state and burst rate of
-	// authentication attempts. A request over the limit is rejected before either
-	// TokenReview call runs.
+	// externalAuthQPS and externalAuthBurst bound the steady-state and burst
+	// rate of TokenReviews.
 	externalAuthQPS   = 50
 	externalAuthBurst = 100
 
@@ -47,13 +46,12 @@ const expiredCertMessage = "client certificate has expired"
 // ExternalInterceptor authenticates every call on the external listener: the regular
 // bearer-token path (shared with the internal Interceptor), or the transport principal
 // a verified client certificate produced at handshake time, re-validated on every
-// call. A call presenting both credential forms is rejected, admission controls bound
-// the work an unauthenticated caller can trigger, and there is no permissive mode.
+// call. A call presenting both credential forms is rejected, review admission bounds
+// the TokenReviews an unauthenticated caller can trigger, and there is no permissive
+// mode.
 type ExternalInterceptor struct {
 	inner   *Interceptor
 	caPool  *ClientCAPool
-	sem     chan struct{}
-	limiter *rate.Limiter
 	metrics *Metrics
 }
 
@@ -68,8 +66,6 @@ func NewExternalInterceptor(inner *Interceptor, caPool *ClientCAPool, metrics *M
 	return &ExternalInterceptor{
 		inner:   inner,
 		caPool:  caPool,
-		sem:     make(chan struct{}, externalMaxConcurrentAuth),
-		limiter: rate.NewLimiter(rate.Limit(externalAuthQPS), externalAuthBurst),
 		metrics: metrics,
 	}
 }
@@ -116,18 +112,6 @@ func (e *ExternalInterceptor) authenticate(ctx context.Context, method string) (
 		if authMetadataTooLong(ctx) {
 			return ctx, status.Error(codes.Unauthenticated, unauthenticatedMessage)
 		}
-		if !e.limiter.Allow() {
-			e.metrics.RateLimited.Inc()
-			return ctx, status.Error(codes.ResourceExhausted, "too many authentication attempts")
-		}
-		select {
-		case e.sem <- struct{}{}:
-		default:
-			e.metrics.RateLimited.Inc()
-			return ctx, status.Error(codes.ResourceExhausted, "too many concurrent authentication attempts")
-		}
-		defer func() { <-e.sem }()
-
 		newCtx, err := e.inner.authenticate(ctx, method)
 		if err != nil {
 			return ctx, err

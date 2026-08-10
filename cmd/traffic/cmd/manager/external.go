@@ -69,7 +69,7 @@ func serveExternal(ctx context.Context, svc Service) error {
 	go caPool.Start(ctx)
 
 	metrics := auth.NewMetrics()
-	authenticator := auth.NewAuthenticator(ki, auth.WithMetrics(metrics))
+	authenticator := auth.NewAuthenticator(ki, auth.WithMetrics(metrics), auth.WithReviewAdmission())
 	inner := auth.NewInterceptor(authenticator, auth.ModeEnforcing)
 	extInterceptor := auth.NewExternalInterceptor(inner, caPool, metrics)
 

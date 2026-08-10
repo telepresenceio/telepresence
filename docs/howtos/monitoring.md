@@ -52,7 +52,7 @@ To enable Prometheus metrics for your traffic manager, follow these steps:
    | `telepresence_external_auth_cache_hits`  | Counter  | Bearer-token authentications on the external listener resolved from cache.   |                                          |
    | `telepresence_external_auth_first_reviews` | Counter | Manager-audience `TokenReview` calls made by the external listener.          |                                          |
    | `telepresence_external_auth_fallback_reviews` | Counter | No-audience fallback `TokenReview` calls made by the external listener.   |                                          |
-   | `telepresence_external_auth_rate_limited` | Counter | Requests the external listener rejected before any `TokenReview` could run.  |                                          |
+   | `telepresence_external_auth_rate_limited` | Counter | `TokenReview` attempts rejected by review admission; cached tokens never enter admission. |                                          |
    | `telepresence_external_auth_invalid_tokens` | Counter | Bearer tokens the API server rejected on the external listener.            |                                          |
    | `telepresence_external_auth_api_failures` | Counter | `TokenReview` calls that failed for infrastructure reasons.                  |                                          |
 
