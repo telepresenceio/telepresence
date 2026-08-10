@@ -442,7 +442,12 @@ quic-forwarder plumbing.
   ownership check it performs, the request forms permitted externally, and
   which peers may
   call it (clients only). Pre-session, the deliberately public surface
-  is `Version` and health — nothing else.
+  is `Version` and health — nothing else. Session ownership lives in the
+  inner handlers (decided): every client-only RPC binds its named session
+  via the shared lookup-and-ownership check on both listeners, the
+  systema-era blank-session all-intercepts watch form is removed
+  outright, and the external wrappers add only what is genuinely
+  external — refusing agent-session ids on the intercept watches.
 - After session establishment over the external connection, the existing
   `GetQuicTunnelEndpoint` mechanism moves tunnel streams onto QUIC. The
   TLS gRPC connection is retained for control RPCs and doubles as the

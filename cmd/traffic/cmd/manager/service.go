@@ -1044,62 +1044,57 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 
 func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo) (<-chan cache.Delta[string, *state.Intercept], <-chan struct{}, error) {
 	sessionID := tunnel.SessionID(session.GetSessionId())
-	var sessionDone <-chan struct{}
-	var filter func(id string, info *state.Intercept) bool
 	if sessionID == "" {
-		filter = func(id string, info *state.Intercept) bool {
-			return info.Disposition != rpc.InterceptDispositionType_REMOVED && !state.IsChildIntercept(info.Spec)
-		}
-	} else {
-		var err error
-		if sessionDone, err = s.state.SessionDone(sessionID); err != nil {
-			return nil, nil, err
-		}
-
-		if agent := s.state.GetAgent(sessionID); agent != nil {
-			if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
-				return nil, nil, err
-			}
-			filter = func(id string, info *state.Intercept) bool {
-				if info.Spec.Namespace != agent.Namespace || info.Spec.Agent != agent.Name {
-					// Don't return intercepts for different agents.
-					return false
-				}
-				if as := s.state.GetAgent(sessionID); as == nil {
-					return false
-				}
-				// Don't return intercepts that aren't in a "agent-owned" state.
-				switch info.Disposition {
-				case rpc.InterceptDispositionType_WAITING,
-					rpc.InterceptDispositionType_ACTIVE,
-					rpc.InterceptDispositionType_AGENT_ERROR:
-					// agent-owned state: include the intercept
-					return true
-				case rpc.InterceptDispositionType_REMOVED:
-					return true
-				default:
-					// otherwise: don't return this intercept
-					clog.Debugf(ctx, "Intercept %q is in state %s", info.Spec.Name, info.Disposition)
-					return false
-				}
-			}
-		} else {
-			// sessionID refers to a client session.
-			client := s.state.GetClient(sessionID)
-			if client == nil {
-				return nil, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
-			}
-			if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
-				return nil, nil, err
-			}
-			filter = func(id string, info *state.Intercept) bool {
-				return info.ClientSession.SessionId == string(sessionID) &&
-					info.Disposition != rpc.InterceptDispositionType_REMOVED &&
-					!state.IsChildIntercept(info.Spec)
-			}
-		}
+		return nil, nil, errors.Errorf(codes.InvalidArgument, "a session id is required")
+	}
+	var filter func(id string, info *state.Intercept) bool
+	sessionDone, err := s.state.SessionDone(sessionID)
+	if err != nil {
+		return nil, nil, err
 	}
 
+	if agent := s.state.GetAgent(sessionID); agent != nil {
+		if err := agentOwnershipError(ctx, sessionID, agent); err != nil {
+			return nil, nil, err
+		}
+		filter = func(id string, info *state.Intercept) bool {
+			if info.Spec.Namespace != agent.Namespace || info.Spec.Agent != agent.Name {
+				// Don't return intercepts for different agents.
+				return false
+			}
+			if as := s.state.GetAgent(sessionID); as == nil {
+				return false
+			}
+			// Don't return intercepts that aren't in a "agent-owned" state.
+			switch info.Disposition {
+			case rpc.InterceptDispositionType_WAITING,
+				rpc.InterceptDispositionType_ACTIVE,
+				rpc.InterceptDispositionType_AGENT_ERROR:
+				// agent-owned state: include the intercept
+				return true
+			case rpc.InterceptDispositionType_REMOVED:
+				return true
+			default:
+				// otherwise: don't return this intercept
+				clog.Debugf(ctx, "Intercept %q is in state %s", info.Spec.Name, info.Disposition)
+				return false
+			}
+		}
+	} else {
+		// sessionID refers to a client session.
+		client := s.state.GetClient(sessionID)
+		if client == nil {
+			return nil, nil, errors.Errorf(codes.NotFound, "Client session %q not found", sessionID)
+		}
+		if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
+			return nil, nil, err
+		}
+		filter = func(id string, info *state.Intercept) bool {
+			return info.ClientSession.SessionId == string(sessionID) &&
+				info.Disposition != rpc.InterceptDispositionType_REMOVED &&
+				!state.IsChildIntercept(info.Spec)
+		}
+	}
 	return s.state.WatchIntercepts(ctx, filter), sessionDone, nil
 }
 
@@ -1247,7 +1242,10 @@ func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.Sessio
 	if err := checkCompat(ctx, "GetKnownWorkloadKinds", "2.20.0"); err != nil {
 		return nil, err
 	}
-	ctx = managerutil.WithSessionInfo(ctx, request)
+	ctx, _, err := s.ensureClientSession(ctx, request)
+	if err != nil {
+		return nil, err
+	}
 	enabledWorkloadKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
 	kinds := make([]rpc.WorkloadInfo_Kind, len(enabledWorkloadKinds))
 	for i, wlKind := range enabledWorkloadKinds {
@@ -2027,12 +2025,11 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (respo
 		}
 	}
 
-	sessionID := tunnel.SessionID(request.GetSession().GetSessionId())
-	if client := s.state.GetClient(sessionID); client != nil {
-		if err := state.ClientOwnershipError(ctx, sessionID, client); err != nil {
-			return nil, err
-		}
+	ctx, _, err = s.ensureClientSession(ctx, request.GetSession())
+	if err != nil {
+		return nil, err
 	}
+	sessionID := managerutil.GetSessionID(ctx)
 	noSearchDomain := s.dotClusterDomain
 	rrs, rCode := s.lookupFromManager(ctx, sessionID, qType, request.Name, noSearchDomain)
 	return dnsproxy.ToRPC(rrs, rCode)
@@ -2170,7 +2167,10 @@ func (s *service) WatchNamespaces(session *rpc.SessionInfo, stream grpc.ServerSt
 }
 
 func (s *service) UninstallAgents(ctx context.Context, request *rpc.UninstallAgentsRequest) (*empty.Empty, error) {
-	ctx = managerutil.WithSessionInfo(ctx, request.GetSessionInfo())
+	ctx, _, err := s.ensureClientSession(ctx, request.GetSessionInfo())
+	if err != nil {
+		return nil, err
+	}
 	clog.Debugf(ctx, "%s", request.Agents)
 	return &empty.Empty{}, s.state.UninstallAgents(ctx, request)
 }
@@ -2180,8 +2180,11 @@ func (s *service) WatchLogLevel(_ *empty.Empty, stream grpc.ServerStreamingServe
 }
 
 func (s *service) WatchClusterInfo(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.ClusterInfo]) error {
-	ctx := managerutil.WithSessionInfo(stream.Context(), session)
-	sessionDone, err := s.state.SessionDone(tunnel.SessionID(session.SessionId))
+	ctx, _, err := s.ensureClientSession(stream.Context(), session)
+	if err != nil {
+		return err
+	}
+	sessionDone, err := s.state.SessionDone(managerutil.GetSessionID(ctx))
 	if err != nil {
 		return err
 	}

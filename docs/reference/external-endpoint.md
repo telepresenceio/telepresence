@@ -71,9 +71,8 @@ Pre-session, the deliberately public surface is the version handshake and
 health checking — nothing else. Every other call requires an authenticated
 principal, and every call that names a session verifies that the session
 belongs to the caller's identity; possession of a session ID is never
-sufficient. Request forms that the internal listener accepts for legacy or
-in-cluster reasons — a watch spanning every session, for example — are
-rejected.
+sufficient. Request forms that only in-cluster peers use — an intercept
+watch naming an agent session, for example — are rejected.
 
 ## Admission controls
 

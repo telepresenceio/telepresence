@@ -47,19 +47,19 @@ func internalOnly(method string) error {
 	return status.Errorf(codes.Unimplemented, "%s is only served on the traffic-manager's internal listener", method)
 }
 
-// ensureOwnedSession verifies session names a client session owned by the
-// caller. A blank id is rejected outright, since several internal handlers
-// treat it as a request to act on every session.
-func (s *externalService) ensureOwnedSession(ctx context.Context, session *rpc.SessionInfo) error {
+// requireClientSession rejects a session id that does not name a client
+// session. The internal handler serves agent sessions too, and a
+// pre-upgrade agent session carries no bound identity for its ownership
+// check to refuse an external caller with.
+func (s *externalService) requireClientSession(session *rpc.SessionInfo) error {
 	sessionID := session.GetSessionId()
 	if sessionID == "" {
 		return status.Error(codes.InvalidArgument, "a session id is required")
 	}
-	cs := s.inner.State().GetClient(tunnel.SessionID(sessionID))
-	if cs == nil {
+	if s.inner.State().GetClient(tunnel.SessionID(sessionID)) == nil {
 		return status.Errorf(codes.NotFound, "client session %q not found", sessionID)
 	}
-	return state.ClientOwnershipError(ctx, tunnel.SessionID(sessionID), cs)
+	return nil
 }
 
 // Version is the only method served before a caller is authenticated,
@@ -195,28 +195,23 @@ func (s *externalService) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc
 	return s.inner.WatchAgentsDelta(session, stream)
 }
 
-// WatchIntercepts, given a blank session id, has the wrapped Service watch
-// every non-child intercept in the manager; the external listener must
-// never accept that form, so a session and its ownership are required here.
 func (s *externalService) WatchIntercepts(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.InterceptInfoSnapshot]) error {
 	ctx := stream.Context()
 	if err := requireAuthenticated(ctx); err != nil {
 		return err
 	}
-	if err := s.ensureOwnedSession(ctx, session); err != nil {
+	if err := s.requireClientSession(session); err != nil {
 		return err
 	}
 	return s.inner.WatchIntercepts(session, stream)
 }
 
-// WatchInterceptsDelta shares WatchIntercepts' internal all-intercepts
-// behavior on a blank session id; the same hardening applies.
 func (s *externalService) WatchInterceptsDelta(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.InterceptInfoDelta]) error {
 	ctx := stream.Context()
 	if err := requireAuthenticated(ctx); err != nil {
 		return err
 	}
-	if err := s.ensureOwnedSession(ctx, session); err != nil {
+	if err := s.requireClientSession(session); err != nil {
 		return err
 	}
 	return s.inner.WatchInterceptsDelta(session, stream)
@@ -238,14 +233,9 @@ func (s *externalService) WatchWorkloads(request *rpc.WorkloadEventsRequest, str
 	return s.inner.WatchWorkloads(request, stream)
 }
 
-// WatchClusterInfo's internal handler checks that the session exists but
-// not that the caller owns it.
 func (s *externalService) WatchClusterInfo(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.ClusterInfo]) error {
 	ctx := stream.Context()
 	if err := requireAuthenticated(ctx); err != nil {
-		return err
-	}
-	if err := s.ensureOwnedSession(ctx, session); err != nil {
 		return err
 	}
 	return s.inner.WatchClusterInfo(session, stream)
@@ -301,13 +291,8 @@ func (s *externalService) ReviewIntercept(ctx context.Context, rIReq *rpc.Review
 	return nil, internalOnly("ReviewIntercept")
 }
 
-// GetKnownWorkloadKinds' internal handler never inspects its SessionInfo
-// argument at all, so ownership is checked here instead.
 func (s *externalService) GetKnownWorkloadKinds(ctx context.Context, request *rpc.SessionInfo) (*rpc.KnownWorkloadKinds, error) {
 	if err := requireAuthenticated(ctx); err != nil {
-		return nil, err
-	}
-	if err := s.ensureOwnedSession(ctx, request); err != nil {
 		return nil, err
 	}
 	return s.inner.GetKnownWorkloadKinds(ctx, request)
@@ -320,13 +305,8 @@ func (s *externalService) Lookup(ctx context.Context, request *rpc.LookupRequest
 	return s.inner.Lookup(ctx, request)
 }
 
-// LookupDNS's internal handler checks ownership only when the session
-// resolves to a known client, and otherwise falls through unrestricted.
 func (s *externalService) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (*rpc.DNSResponse, error) {
 	if err := requireAuthenticated(ctx); err != nil {
-		return nil, err
-	}
-	if err := s.ensureOwnedSession(ctx, request.GetSession()); err != nil {
 		return nil, err
 	}
 	return s.inner.LookupDNS(ctx, request)
@@ -379,13 +359,8 @@ func (s *externalService) ReportMetrics(ctx context.Context, metrics *rpc.Tunnel
 	return nil, internalOnly("ReportMetrics")
 }
 
-// UninstallAgents' internal handler only checks that the session exists,
-// not that the caller owns it.
 func (s *externalService) UninstallAgents(ctx context.Context, request *rpc.UninstallAgentsRequest) (*empty.Empty, error) {
 	if err := requireAuthenticated(ctx); err != nil {
-		return nil, err
-	}
-	if err := s.ensureOwnedSession(ctx, request.GetSessionInfo()); err != nil {
 		return nil, err
 	}
 	return s.inner.UninstallAgents(ctx, request)

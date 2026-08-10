@@ -279,3 +279,40 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing(t *testing.T) {
 	req.Equal(1, countAttachReviews(), "a cached verdict must not trigger another review")
 	req.False(buf.Contains("not enforced"), "the cached verdict already warned; a repeat watch must not warn again")
 }
+
+// TestWatchIntercepts_BlankSessionRejected: the all-sessions watch form is
+// gone; a blank session id is refused on every listener.
+func TestWatchIntercepts_BlankSessionRejected(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+	err := mgr.WatchIntercepts(&rpc.SessionInfo{}, newFakeServerStream[rpc.InterceptInfoSnapshot](sctx))
+	req.Error(err)
+	req.Equal(codes.InvalidArgument, status.Code(err))
+}
+
+// TestSessionBoundHandlers_UnknownSession: the handlers hardened to bind to
+// a client session refuse an unknown session id.
+func TestSessionBoundHandlers_UnknownSession(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+	unknown := &rpc.SessionInfo{SessionId: "unknown-session"}
+
+	_, err := mgr.GetKnownWorkloadKinds(sctx, unknown)
+	req.Equal(codes.NotFound, status.Code(err))
+
+	_, err = mgr.LookupDNS(sctx, &rpc.DNSRequest{Session: unknown, Name: "echo.default.", Type: 1})
+	req.Equal(codes.NotFound, status.Code(err))
+
+	_, err = mgr.UninstallAgents(sctx, &rpc.UninstallAgentsRequest{SessionInfo: unknown})
+	req.Equal(codes.NotFound, status.Code(err))
+
+	err = mgr.WatchClusterInfo(unknown, newFakeServerStream[rpc.ClusterInfo](sctx))
+	req.Equal(codes.NotFound, status.Code(err))
+}
