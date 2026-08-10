@@ -46,6 +46,7 @@ func (s *State) NewWorkloadInfoWatcher(clientSession tunnel.SessionID, namespace
 
 func (wf *workloadInfoWatcher) Watch(ctx context.Context, stream grpc.ServerStreamingServer[rpc.WorkloadEventsDelta]) error {
 	wf.start = time.Now()
+	sendCh := make(chan struct{}, 1)
 	defer func() {
 		wf.sendTimer.Stop()
 		wf.stream = nil
@@ -54,7 +55,13 @@ func (wf *workloadInfoWatcher) Watch(ctx context.Context, stream grpc.ServerStre
 	}()
 
 	wf.sendTimer = time.AfterFunc(time.Duration(math.MaxInt64), func() {
-		wf.sendEvents(ctx, false)
+		// Keep stream.Send on the Watch goroutine. A timer callback that calls
+		// Send directly can outlive a canceled RPC while retaining its pending
+		// workload snapshot, and it can race with the initial snapshot send.
+		select {
+		case sendCh <- struct{}{}:
+		default:
+		}
 	})
 
 	wf.stream = stream
@@ -78,8 +85,8 @@ func (wf *workloadInfoWatcher) Watch(ctx context.Context, stream grpc.ServerStre
 		return info.Spec.Namespace == wf.namespace
 	})
 
-	// Everything in this loop happens in sequence, even the firing of the timer. This means
-	// that there's no concurrency and no need for mutexes.
+	// Everything in this loop happens in sequence, including sends requested by
+	// the timer. This means that there's no concurrency and no need for mutexes.
 	initial := true
 	for {
 		select {
@@ -87,6 +94,10 @@ func (wf *workloadInfoWatcher) Watch(ctx context.Context, stream grpc.ServerStre
 			return nil
 		case <-sessionDone:
 			return nil
+		case <-sendCh:
+			if err := wf.sendEvents(ctx, false); err != nil {
+				return err
+			}
 		case wes, ok := <-workloadsCh:
 			// A nil batch is the subscription's end sentinel (see
 			// Subscribe); the channel itself is never closed, but the ok
@@ -95,7 +106,9 @@ func (wf *workloadInfoWatcher) Watch(ctx context.Context, stream grpc.ServerStre
 				clog.Debug(ctx, "Workloads subscription ended")
 				return nil
 			}
-			wf.handleWorkloadEvents(ctx, wes, initial)
+			if err := wf.handleWorkloadEvents(ctx, wes, initial); err != nil {
+				return err
+			}
 			initial = false
 		case agentDelta := <-agentsCh:
 			wf.handleAgentDelta(ctx, agentDelta)
@@ -120,7 +133,7 @@ func (wf *workloadInfoWatcher) getIntercepts(name, namespace string) (iis []*rpc
 	return iis
 }
 
-func (wf *workloadInfoWatcher) sendEvents(ctx context.Context, sendEmpty bool) {
+func (wf *workloadInfoWatcher) sendEvents(ctx context.Context, sendEmpty bool) error {
 	// Time to send what we have
 	evz := wf.workloadEvents.Size()
 	evs := make([]*rpc.WorkloadEvent, 0, evz)
@@ -139,7 +152,7 @@ func (wf *workloadInfoWatcher) sendEvents(ctx context.Context, sendEmpty bool) {
 	wf.lastEvents = evm
 
 	if !sendEmpty && len(evs) == 0 {
-		return
+		return nil
 	}
 	clog.Debugf(ctx, "Sending %d WorkloadEvents", len(evs))
 	err := wf.stream.Send(&rpc.WorkloadEventsDelta{
@@ -148,9 +161,10 @@ func (wf *workloadInfoWatcher) sendEvents(ctx context.Context, sendEmpty bool) {
 	})
 	if err != nil {
 		clog.Warnf(ctx, "failed to send workload events delta: %v", err)
-		return
+		return err
 	}
 	wf.start = time.Now()
+	return nil
 }
 
 func (wf *workloadInfoWatcher) stopSendTimer() {
@@ -191,12 +205,11 @@ func rpcWorkload(ctx context.Context, wl k8sapi.Workload, as rpc.WorkloadInfo_Ag
 	}
 }
 
-func (wf *workloadInfoWatcher) handleWorkloadEvents(ctx context.Context, wes []Event, initial bool) {
+func (wf *workloadInfoWatcher) handleWorkloadEvents(ctx context.Context, wes []Event, initial bool) error {
 	if len(wes) == 0 {
 		if initial {
 			// The initial snapshot may be empty, but must be sent anyway.
-			wf.sendEvents(ctx, true)
-			return
+			return wf.sendEvents(ctx, true)
 		}
 	} else {
 		wf.stopSendTimer()
@@ -234,6 +247,7 @@ func (wf *workloadInfoWatcher) handleWorkloadEvents(ctx context.Context, wes []E
 			return w, xsync.UpdateOp
 		})
 	}
+	return nil
 }
 
 func (wf *workloadInfoWatcher) handleAgentDelta(ctx context.Context, delta cache.Delta[tunnel.SessionID, *AgentSession]) {

@@ -108,6 +108,7 @@ func AddSubCommands(cmd *cobra.Command, markdown bool) {
 		addCompletion(cmd, markdown)
 		addUsageTemplate(cmd, markdown)
 		_ = cmd.RegisterFlagCompletionFunc("context", autocompleteContext)
+		_ = cmd.RegisterFlagCompletionFunc(global.FlagUse, autocompleteUse)
 	}
 }
 
@@ -248,6 +249,22 @@ func autocompleteContext(cmd *cobra.Command, _ []string, toComplete string) ([]s
 		i++
 	}
 	return nss, cobra.ShellCompDirectiveNoFileComp
+}
+
+func autocompleteUse(cmd *cobra.Command, _ []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	ctx := cmd.Context()
+	clog.Debugf(ctx, "use completion: %q", toComplete)
+	il := daemon.NewUserInfoLoader(ctx)
+	infos, err := il.LoadInfos()
+	if err != nil {
+		clog.Errorf(ctx, "LoadInfos: %v", err)
+		return nil, cobra.ShellCompDirectiveError
+	}
+	names := make([]string, len(infos))
+	for i, info := range infos {
+		names[i] = info.DaemonID().String()
+	}
+	return names, cobra.ShellCompDirectiveNoFileComp
 }
 
 type versionFile struct {

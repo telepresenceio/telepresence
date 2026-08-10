@@ -26,7 +26,7 @@ func (s *fuseFtpMgr) LinkedFTP() bool {
 }
 
 func (s *fuseFtpMgr) DeferInit(context.Context) error {
-	return errors.New("fuseftp client is not available")
+	return errors.New("FTP remote mounts are unavailable because this Telepresence client was built without fuseftp support")
 }
 
 func (s *fuseFtpMgr) GetFuseFTPClient(context.Context) rpc.FuseFTPClient {
