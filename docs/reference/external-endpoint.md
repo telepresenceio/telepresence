@@ -77,12 +77,13 @@ watch naming an agent session, for example — are rejected.
 ## Admission controls
 
 The external listener is a `TokenReview` amplification surface: each
-previously unseen invalid token can cost the manager up to two reviews. The
-listener therefore bounds the path before any review runs: a cap on
-concurrent authentication attempts, an authentication rate limiter, a
-maximum credential length, per-connection stream and message-size limits,
-TLS-handshake and unauthenticated-idle deadlines. The
-`telepresence_external_auth_*` counters make this path observable; see
+previously unseen invalid token can cost the manager up to two reviews.
+A cap on concurrent reviews and a rate limiter therefore gate the
+`TokenReview` itself, so a cached token passes freely while only an
+actual review pays the budget; a maximum credential length, per-connection
+stream and message-size limits, and TLS-handshake and
+unauthenticated-idle deadlines bound the work before that. The
+`telepresence_auth_*` counters (labeled `listener="external"`) make this path observable; see
 [External Endpoint Authentication Metrics](../howtos/monitoring.md#external-endpoint-authentication-metrics).
 Network-level restrictions (LoadBalancer source ranges, NetworkPolicy)
 remain recommended defense in depth.

@@ -30,21 +30,40 @@ type Metrics struct {
 	APIFailures prometheus.Counter
 }
 
-// NewMetrics registers and returns the external listener's authentication
-// metrics. Call at most once per process -- a second call panics on duplicate
-// registration with the default Prometheus registry -- which is why the
-// caller only constructs one when the external listener is actually enabled.
-func NewMetrics() *Metrics {
-	c := func(name, help string) prometheus.Counter {
-		return promauto.NewCounter(prometheus.CounterOpts{Name: name, Help: help})
-	}
+// authMetricVecs are the process-wide counter vectors backing NewMetrics,
+// one series per listener label value, registered once.
+var authMetricVecs = struct { //nolint:gochecknoglobals // prometheus vectors registered once at load
+
+	cacheHits       *prometheus.CounterVec
+	firstReviews    *prometheus.CounterVec
+	fallbackReviews *prometheus.CounterVec
+	rateLimited     *prometheus.CounterVec
+	invalidTokens   *prometheus.CounterVec
+	apiFailures     *prometheus.CounterVec
+}{
+	cacheHits:       authMetricVec("telepresence_auth_cache_hits", "Bearer token authentications resolved from cache"),
+	firstReviews:    authMetricVec("telepresence_auth_first_reviews", "Manager-audience TokenReview calls made"),
+	fallbackReviews: authMetricVec("telepresence_auth_fallback_reviews", "No-audience fallback TokenReview calls made"),
+	rateLimited:     authMetricVec("telepresence_auth_rate_limited", "TokenReview attempts rejected by review admission"),
+	invalidTokens:   authMetricVec("telepresence_auth_invalid_tokens", "Bearer tokens the API server rejected"),
+	apiFailures:     authMetricVec("telepresence_auth_api_failures", "TokenReview calls that failed for infrastructure reasons"),
+}
+
+func authMetricVec(name, help string) *prometheus.CounterVec {
+	return promauto.NewCounterVec(prometheus.CounterOpts{Name: name, Help: help}, []string{"listener"})
+}
+
+// NewMetrics returns the authentication metrics for the named listener
+// ("external" or "internal"). Each listener labels its own series of the
+// shared counter vectors, so it is safe to call once per listener.
+func NewMetrics(listener string) *Metrics {
 	return &Metrics{
-		CacheHits:       c("telepresence_external_auth_cache_hits", "Bearer token authentications resolved from cache on the external listener"),
-		FirstReviews:    c("telepresence_external_auth_first_reviews", "Manager-audience TokenReview calls made by the external listener"),
-		FallbackReviews: c("telepresence_external_auth_fallback_reviews", "No-audience fallback TokenReview calls made by the external listener"),
-		RateLimited:     c("telepresence_external_auth_rate_limited", "Requests the external listener rejected before TokenReview could run"),
-		InvalidTokens:   c("telepresence_external_auth_invalid_tokens", "Bearer tokens the API server rejected on the external listener"),
-		APIFailures:     c("telepresence_external_auth_api_failures", "TokenReview calls that failed for infrastructure reasons on the external listener"),
+		CacheHits:       authMetricVecs.cacheHits.WithLabelValues(listener),
+		FirstReviews:    authMetricVecs.firstReviews.WithLabelValues(listener),
+		FallbackReviews: authMetricVecs.fallbackReviews.WithLabelValues(listener),
+		RateLimited:     authMetricVecs.rateLimited.WithLabelValues(listener),
+		InvalidTokens:   authMetricVecs.invalidTokens.WithLabelValues(listener),
+		APIFailures:     authMetricVecs.apiFailures.WithLabelValues(listener),
 	}
 }
 
