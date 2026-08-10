@@ -181,25 +181,25 @@ metadata:
   namespace: ambassador
 rules:
   # Rendered when clients port-forward through the API server (no
-  # external endpoint published), and under the "portforward" gate, which
-  # reviews possession of this grant.
+  # external endpoint published), and when the required grant is
+  # "portforward", which reviews possession of this grant.
   - apiGroups: [""]
     resources: ["pods/portforward"]
     resourceNames: ["traffic-manager-0"]
     verbs: ["create"]
-  # Rendered under every gate except "portforward": the policy grant the
-  # manager's connect review looks for.
+  # Rendered whenever the required grant isn't "portforward": the policy
+  # grant the manager's connect review looks for.
   - apiGroups: ["telepresence.io"]
     resources: ["connections"]
     verbs: ["create"]
 ```
 
 The manager's connect review accepts one of these two grants, depending on
-the authorization gate, and the Role always carries at least one that the
-configured gate accepts. With a published
-[external control endpoint](external-endpoint.md) and the default gate,
-that is the policy grant alone: whether a client may connect is decided
-solely by the gate.
+the configured required grant, and the Role always carries at least one
+that satisfies it. With a published
+[external control endpoint](external-endpoint.md) and the default required
+grant, that is the policy grant alone: whether a client may connect is
+decided solely by that grant.
 
 ### Working in a namespace
 
@@ -222,16 +222,16 @@ rules:
     resources: ["logs", "logs/yaml"]
     verbs: ["get"]
 
-  # Rendered under every gate except "telepresence": lets the client open
-  # port-forwards directly to traffic-agents (better throughput than
-  # routing via the manager), and doubles as the authorization for
-  # attaching when the gate reviews pods/portforward.
+  # Rendered whenever the required grant isn't "telepresence": lets the
+  # client open port-forwards directly to traffic-agents (better
+  # throughput than routing via the manager), and doubles as the
+  # authorization for attaching when the required grant is pods/portforward.
   - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]
 
-  # Rendered under every gate except "portforward": the policy grant the
-  # manager's attachment review looks for. "create" authorizes intercept,
+  # Rendered whenever the required grant isn't "portforward": the policy
+  # grant the manager's attachment review looks for. "create" authorizes intercept,
   # replace, and wiretap; "get" authorizes ingest. Scope it to individual
   # workloads with resourceNames if desired.
   - apiGroups: ["telepresence.io"]

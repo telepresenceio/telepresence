@@ -44,10 +44,10 @@ func (s *ExternalEndpointNoQuic) Test_ExternalEndpointNoQuicUDPBlocked() {
 	nodeIP, nodePort, caPath := setupExternalEndpointSpec(t, ctx, r, externalEndpointSpecNoQuic)
 	managerAddress := "tls://" + net.JoinHostPort(nodeIP, strconv.Itoa(nodePort))
 
-	// telepresenceGrantWithLogsRules (gate.go): connections create,
+	// telepresenceGrantWithLogsRules (grant.go): connections create,
 	// attachments create/get, logs get -- no pods/portforward at all. The
 	// external path must not need it.
-	name := createGateIdentity(t, ctx, r, "rtest-external-noquic", telepresenceGrantWithLogsRules)
+	name := createGrantIdentity(t, ctx, r, "rtest-external-noquic", telepresenceGrantWithLogsRules)
 	// Attachment reviews happen in the WORKLOAD's namespace with the kind as
 	// a subresource, so the identity also needs kind-qualified attachment
 	// (and diagnostic) grants where the Echo Deployment lives.

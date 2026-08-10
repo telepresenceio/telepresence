@@ -213,10 +213,11 @@ type Security struct {
 
 // Authorization is the chart's security.authorization.* shape.
 type Authorization struct {
-	// Gate is one of "portforward", "telepresence", or "any" -- which grant
-	// satisfies the traffic-manager's authorization review at connect and
-	// attach time (values.yaml's security.authorization.gate).
-	Gate string `json:"gate,omitempty"`
+	// RequiredGrant is one of "portforward", "telepresence", or "any" --
+	// which grant a client must hold to pass the traffic-manager's
+	// authorization review at connect and attach time (values.yaml's
+	// security.authorization.requiredGrant).
+	RequiredGrant string `json:"requiredGrant,omitempty"`
 }
 
 // Authentication is the chart's security.authentication.* shape.
@@ -605,8 +606,8 @@ func mergeSecurity(base, over Security) Security {
 	if over.Authentication.X509.Enabled != nil {
 		base.Authentication.X509.Enabled = over.Authentication.X509.Enabled
 	}
-	if over.Authorization.Gate != "" {
-		base.Authorization.Gate = over.Authorization.Gate
+	if over.Authorization.RequiredGrant != "" {
+		base.Authorization.RequiredGrant = over.Authorization.RequiredGrant
 	}
 	return base
 }

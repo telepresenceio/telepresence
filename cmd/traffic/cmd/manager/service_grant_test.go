@@ -32,20 +32,20 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
-// This file covers the authorization-gate dispatch in authorizeConnect and
-// authorizeAttachment (service.go): per-gate denial of a session and of
-// PrepareIntercept, gate selectivity (a grant that satisfies one gate but
-// not another), and GateAny's accept-either behavior including the
+// This file covers the required-grant dispatch in authorizeConnect and
+// authorizeAttachment (service.go): per-grant denial of a session and of
+// PrepareIntercept, grant selectivity (a grant that satisfies one required grant but
+// not another), and GrantAny's accept-either behavior including the
 // legacy-grant fallback it logs.
 
-// gateTestNamespace is the target namespace used by every test in this file
+// grantTestNamespace is the target namespace used by every test in this file
 // for the workload under intercept. It matches the namespace seeded by
 // getTestClientConnAndService.
-const gateTestNamespace = "default"
+const grantTestNamespace = "default"
 
 // sarRecorder records every SubjectAccessReview ResourceAttributes a test
 // observes, in call order, so tests can assert both the shape of individual
-// reviews and the order in which GateAny tries them.
+// reviews and the order in which GrantAny tries them.
 type sarRecorder struct {
 	mu      sync.Mutex
 	reviews []authv1.ResourceAttributes
@@ -113,12 +113,12 @@ func loggingContext(ctx context.Context, buf *bytes.Buffer) context.Context {
 	return clog.WithLogger(ctx, slog.New(h))
 }
 
-// gateFixtures seeds the Deployment, Service, and Pod for a workload named
-// "test-agent" in gateTestNamespace that both gate kinds and PrepareIntercept
+// grantFixtures seeds the Deployment, Service, and Pod for a workload named
+// "test-agent" in grantTestNamespace that both grant kinds and PrepareIntercept
 // need to resolve.
-func gateFixtures() []runtime.Object {
+func grantFixtures() []runtime.Object {
 	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: gateTestNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: grantTestNamespace},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
 			Template: corev1.PodTemplateSpec{
@@ -130,14 +130,14 @@ func gateFixtures() []runtime.Object {
 		},
 	}
 	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: gateTestNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent", Namespace: grantTestNamespace},
 		Spec: corev1.ServiceSpec{
 			Selector: map[string]string{"app": "test-agent"},
 			Ports:    []corev1.ServicePort{{Port: 80, TargetPort: intstr.FromInt(8080)}},
 		},
 	}
 	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-agent-abc123", Namespace: gateTestNamespace, Labels: map[string]string{"app": "test-agent"}},
+		ObjectMeta: metav1.ObjectMeta{Name: "test-agent-abc123", Namespace: grantTestNamespace, Labels: map[string]string{"app": "test-agent"}},
 		Spec:       corev1.PodSpec{NodeName: "node-1"},
 		Status: corev1.PodStatus{
 			Phase:      corev1.PodRunning,
@@ -161,7 +161,7 @@ func interceptRequest(sess *rpc.SessionInfo, clientName, name string) *rpc.Creat
 			Name:         name,
 			Client:       clientName,
 			Agent:        "test-agent",
-			Namespace:    gateTestNamespace,
+			Namespace:    grantTestNamespace,
 			WorkloadKind: string(k8sapi.DeploymentKind),
 			NodeAgent:    true,
 			Wiretap:      true,
@@ -189,21 +189,21 @@ func writeActions(cs *fake.Clientset, since int) []k8stesting.Action {
 	return out
 }
 
-var allGates = []auth.Gate{auth.GatePortForward, auth.GateTelepresence, auth.GateAny}
+var allGrants = []auth.Grant{auth.GrantPortForward, auth.GrantTelepresence, auth.GrantAny}
 
-// TestGate_Connect_Denied covers that, for every gate value in
+// TestGrant_Connect_Denied covers that, for every grant value in
 // ModeEnforcing, an authenticated caller whose RBAC grants nothing is
 // refused a session, and that the refusal leaves no client session behind.
-func TestGate_Connect_Denied(t *testing.T) {
+func TestGrant_Connect_Denied(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
 
-	for _, gate := range allGates {
-		t.Run(string(gate), func(t *testing.T) {
+	for _, grant := range allGrants {
+		t.Run(string(grant), func(t *testing.T) {
 			req := require.New(t)
-			_, mgr, sctx := getTestClientConnAndService(ctx, t, gateFixtures(), func(e *managerutil.Env) {
+			_, mgr, sctx := getTestClientConnAndService(ctx, t, grantFixtures(), func(e *managerutil.Env) {
 				e.AuthenticationMode = auth.ModeEnforcing
-				e.AuthorizationGate = gate
+				e.AuthorizationRequiredGrant = grant
 			})
 			k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), nil)
 
@@ -218,19 +218,19 @@ func TestGate_Connect_Denied(t *testing.T) {
 	}
 }
 
-// TestGate_PrepareIntercept_DeniedBeforeMutation: a caller authorized to
+// TestGrant_PrepareIntercept_DeniedBeforeMutation: a caller authorized to
 // connect but denied on attach is refused at PrepareIntercept before any
-// mutating side effect reaches the fake clientset, for every gate.
-func TestGate_PrepareIntercept_DeniedBeforeMutation(t *testing.T) {
+// mutating side effect reaches the fake clientset, for every grant.
+func TestGrant_PrepareIntercept_DeniedBeforeMutation(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
 
-	for _, gate := range allGates {
-		t.Run(string(gate), func(t *testing.T) {
+	for _, grant := range allGrants {
+		t.Run(string(grant), func(t *testing.T) {
 			req := require.New(t)
-			_, mgr, sctx := getTestClientConnAndService(ctx, t, gateFixtures(), func(e *managerutil.Env) {
+			_, mgr, sctx := getTestClientConnAndService(ctx, t, grantFixtures(), func(e *managerutil.Env) {
 				e.AuthenticationMode = auth.ModeEnforcing
-				e.AuthorizationGate = gate
+				e.AuthorizationRequiredGrant = grant
 				e.AgentArrivalTimeout = 5 * time.Second
 			})
 			mgrNs := managerutil.GetEnv(sctx).ManagerNamespace
@@ -246,7 +246,7 @@ func TestGate_PrepareIntercept_DeniedBeforeMutation(t *testing.T) {
 			aliceInfo := testdata.GetTestClients(t)["alice"]
 
 			sess, err := mgr.ArriveAsClient(pctx, aliceInfo)
-			req.NoError(err, "connect must succeed: the manager-namespace grant authorizes it under every gate")
+			req.NoError(err, "connect must succeed: the manager-namespace grant authorizes it under every required grant")
 
 			cs, ok := k8sapi.GetK8sInterface(sctx).(*fake.Clientset)
 			req.True(ok)
@@ -260,29 +260,29 @@ func TestGate_PrepareIntercept_DeniedBeforeMutation(t *testing.T) {
 	}
 }
 
-// TestGate_Selectivity: a grant satisfying one gate does not satisfy
-// another (portforward-only vs. telepresence.io-only, under each gate).
-func TestGate_Selectivity(t *testing.T) {
+// TestGrant_Selectivity: a grant satisfying one required grant does not satisfy
+// another (portforward-only vs. telepresence.io-only, under each required grant).
+func TestGrant_Selectivity(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
 
 	tests := []struct {
 		name    string
-		gate    auth.Gate
+		grant   auth.Grant
 		allowed func(*authv1.ResourceAttributes) bool
 		passes  bool
 	}{
-		{"portforward gate, portforward-only grant passes", auth.GatePortForward, allowPortForwardOnly, true},
-		{"telepresence gate, telepresence-only grant passes", auth.GateTelepresence, allowTelepresenceOnly, true},
-		{"portforward gate, telepresence-only grant is denied", auth.GatePortForward, allowTelepresenceOnly, false},
-		{"telepresence gate, portforward-only grant is denied", auth.GateTelepresence, allowPortForwardOnly, false},
+		{"requiredGrant portforward, portforward-only grant passes", auth.GrantPortForward, allowPortForwardOnly, true},
+		{"requiredGrant telepresence, telepresence-only grant passes", auth.GrantTelepresence, allowTelepresenceOnly, true},
+		{"requiredGrant portforward, telepresence-only grant is denied", auth.GrantPortForward, allowTelepresenceOnly, false},
+		{"requiredGrant telepresence, portforward-only grant is denied", auth.GrantTelepresence, allowPortForwardOnly, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := require.New(t)
-			_, mgr, sctx := getTestClientConnAndService(ctx, t, gateFixtures(), func(e *managerutil.Env) {
+			_, mgr, sctx := getTestClientConnAndService(ctx, t, grantFixtures(), func(e *managerutil.Env) {
 				e.AuthenticationMode = auth.ModeEnforcing
-				e.AuthorizationGate = tt.gate
+				e.AuthorizationRequiredGrant = tt.grant
 				e.AgentArrivalTimeout = 5 * time.Second
 				e.NodeAgentEnabled = true
 				e.NodeAgentCRISocket = "/run/containerd/containerd.sock"
@@ -311,7 +311,7 @@ func TestGate_Selectivity(t *testing.T) {
 			req.NoError(err)
 			req.Empty(pi.Error, "PrepareIntercept business logic must succeed once authorization passes")
 
-			if tt.gate == auth.GateTelepresence {
+			if tt.grant == auth.GrantTelepresence {
 				// The attachment review the manager sent must name the
 				// workload as Name, with no subresource.
 				var found *authv1.ResourceAttributes
@@ -325,25 +325,25 @@ func TestGate_Selectivity(t *testing.T) {
 				req.NotNil(found, "an attachments.telepresence.io review must have been sent")
 				req.Empty(found.Subresource)
 				req.Equal("test-agent", found.Name)
-				req.Equal(gateTestNamespace, found.Namespace)
+				req.Equal(grantTestNamespace, found.Namespace)
 				req.Equal("create", found.Verb)
 			}
 		})
 	}
 }
 
-// TestGate_Any_AcceptsEither: under GateAny, a legacy portforward-only grant
+// TestGrant_Any_AcceptsEither: under GrantAny, a legacy portforward-only grant
 // still passes (with a warning logged and the telepresence.io review tried
 // first), and a telepresence.io-only grant passes with no warning.
-func TestGate_Any_AcceptsEither(t *testing.T) {
+func TestGrant_Any_AcceptsEither(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
 
 	t.Run("legacy pods/portforward grant passes with a warning", func(t *testing.T) {
 		req := require.New(t)
-		_, mgr, sctx := getTestClientConnAndService(ctx, t, gateFixtures(), func(e *managerutil.Env) {
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, grantFixtures(), func(e *managerutil.Env) {
 			e.AuthenticationMode = auth.ModeEnforcing
-			e.AuthorizationGate = auth.GateAny
+			e.AuthorizationRequiredGrant = auth.GrantAny
 			e.AgentArrivalTimeout = 5 * time.Second
 			e.NodeAgentEnabled = true
 			e.NodeAgentCRISocket = "/run/containerd/containerd.sock"
@@ -384,9 +384,9 @@ func TestGate_Any_AcceptsEither(t *testing.T) {
 
 	t.Run("telepresence.io grant passes with no fallback or warning", func(t *testing.T) {
 		req := require.New(t)
-		_, mgr, sctx := getTestClientConnAndService(ctx, t, gateFixtures(), func(e *managerutil.Env) {
+		_, mgr, sctx := getTestClientConnAndService(ctx, t, grantFixtures(), func(e *managerutil.Env) {
 			e.AuthenticationMode = auth.ModeEnforcing
-			e.AuthorizationGate = auth.GateAny
+			e.AuthorizationRequiredGrant = auth.GrantAny
 			e.AgentArrivalTimeout = 5 * time.Second
 			e.NodeAgentEnabled = true
 			e.NodeAgentCRISocket = "/run/containerd/containerd.sock"

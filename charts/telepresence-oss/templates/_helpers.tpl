@@ -276,16 +276,16 @@ RBAC rules for workload kinds enabled via values.workloads.*.enabled
 
 {{- /*
 RBAC rules required to create an intercept in a namespace; excludes any rules that are always cluster wide.
-The pods/portforward rule and the telepresence.io attachments rule are gated by
-security.authorization.gate: "portforward" keeps pods/portforward only, "telepresence"
+The pods/portforward rule and the telepresence.io attachments rule are controlled by
+security.authorization.requiredGrant: "portforward" keeps pods/portforward only, "telepresence"
 replaces it with the attachments rule, and "any" (the default) renders both. The
-telepresence.io logs/logs-yaml diagnostic grant is independent of the gate and always renders.
+telepresence.io logs/logs-yaml diagnostic grant is independent of the required grant and always renders.
 The legacy pods get/list and pods/log get grants are gated by clientRbac.legacyAccess
 (default true): a modern client resolves the manager by its known pod name and streams
 logs via the StreamLogs RPC, so neither grant is mechanically required.
 */}}
 {{- define "telepresence.clientRbacInterceptRules" -}}
-{{- $gate := .Values.security.authorization.gate | default "any" }}
+{{- $requiredGrant := .Values.security.authorization.requiredGrant | default "any" }}
 {{- if .Values.clientRbac.legacyAccess }}
 {{- /* Legacy. Namespace access command completion experience and client-side gather-logs discovery. */}}
 - apiGroups: [""]
@@ -295,17 +295,17 @@ logs via the StreamLogs RPC, so neither grant is mechanically required.
   resources: ["pods/log"]
   verbs: ["get"]
 {{- end }}
-{{- /* Diagnostic grants for the traffic-manager's StreamLogs RPC: "logs" authorizes streaming a pod's log, "logs/yaml" authorizes pod-manifest inclusion. Always rendered, independent of the authorization gate. */}}
+{{- /* Diagnostic grants for the traffic-manager's StreamLogs RPC: "logs" authorizes streaming a pod's log, "logs/yaml" authorizes pod-manifest inclusion. Always rendered, independent of the required grant. */}}
 - apiGroups: ["telepresence.io"]
   resources: ["logs", "logs/yaml"]
   verbs: ["get"]
-{{- if ne $gate "telepresence" }}
+{{- if ne $requiredGrant "telepresence" }}
 {{- /* All traffic will be routed via the traffic-manager unless a portforward can be created directly to a pod */}}
 - apiGroups: [""]
   resources: ["pods/portforward"]
   verbs: ["create"]
 {{- end }}
-{{- if ne $gate "portforward" }}
+{{- if ne $requiredGrant "portforward" }}
 {{- /* Authorizes attaching to a workload: "create" for an intercept, "get" for an ingest */}}
 - apiGroups: ["telepresence.io"]
   resources: ["attachments"]

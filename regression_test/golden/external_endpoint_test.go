@@ -115,18 +115,18 @@ func TestExternalEndpointCertManager(t *testing.T) {
 
 // TestExternalEndpointOmitsConnectPortForward asserts that with an external
 // endpoint published, the connect Role drops the pods/portforward rule under
-// gate "telepresence" but keeps it under gate "portforward".
+// required grant "telepresence" but keeps it when the grant is "portforward".
 func TestExternalEndpointOmitsConnectPortForward(t *testing.T) {
 	subjects := []map[string]any{{
 		"kind":      "ServiceAccount",
 		"name":      "rtest-golden",
 		"namespace": releaseNamespace,
 	}}
-	vals := func(gate string) map[string]any {
+	vals := func(grant string) map[string]any {
 		return map[string]any{
 			"security": map[string]any{
 				"authentication": map[string]any{"mode": "enforcing"},
-				"authorization":  map[string]any{"gate": gate},
+				"authorization":  map[string]any{"requiredGrant": grant},
 			},
 			"externalEndpoint": map[string]any{
 				"enabled": true,
@@ -136,7 +136,7 @@ func TestExternalEndpointOmitsConnectPortForward(t *testing.T) {
 		}
 	}
 
-	t.Run("gate=telepresence", func(t *testing.T) {
+	t.Run("requiredGrant=telepresence", func(t *testing.T) {
 		out := renderChart(t, vals("telepresence"))
 		if !rendered(out, clientConnectTpl) {
 			t.Fatalf("%s did not render", clientConnectTpl)
@@ -150,17 +150,17 @@ func TestExternalEndpointOmitsConnectPortForward(t *testing.T) {
 		}
 	})
 
-	t.Run("gate=portforward", func(t *testing.T) {
+	t.Run("requiredGrant=portforward", func(t *testing.T) {
 		out := renderChart(t, vals("portforward"))
 		if !rendered(out, clientConnectTpl) {
 			t.Fatalf("%s did not render", clientConnectTpl)
 		}
 		doc := out[clientConnectTpl]
 		if !strings.Contains(doc, "resourceNames:\n      - traffic-manager-0") {
-			t.Errorf("%s: named pods/portforward grant missing; the portforward gate reviews possession of it:\n%s", clientConnectTpl, doc)
+			t.Errorf("%s: named pods/portforward grant missing; the portforward grant reviews possession of it:\n%s", clientConnectTpl, doc)
 		}
 		if strings.Contains(doc, `resources: ["connections"]`) {
-			t.Errorf("%s: connections rule rendered under gate=portforward:\n%s", clientConnectTpl, doc)
+			t.Errorf("%s: connections rule rendered with requiredGrant=portforward:\n%s", clientConnectTpl, doc)
 		}
 		for _, absent := range []string{`resources: ["pods"]`, `resources: ["services"]`} {
 			if strings.Contains(doc, absent) {

@@ -149,25 +149,33 @@ path re-runs the reviews, so the revoked caller is the one that does not
 come back. Against the pre-phase-1 code that mechanism does not exist —
 restoration performs no reviews — which is why it lands here and not later.
 
-### 1c. The gate model
+### 1c. The required-grant model
 
-Implement `security.authorization.gate` (`portforward` | `telepresence` |
-`any`) as described in [Authorization](#authorization-policy-without-mechanism),
-wired through the connect, prepare/ensure, create, and restore reviews
-alike, with the chart rendering client Roles to match. One rendering
-invariant (decided): the connect Role always carries at least one grant
-the configured gate accepts. The discovery and port-forward rules are
+Implement `security.authorization.requiredGrant` (`portforward` |
+`telepresence` | `any`) as described in
+[Authorization](#authorization-policy-without-mechanism), wired through the
+connect, prepare/ensure, create, and restore reviews alike, with the chart
+rendering client Roles to match. The grant is decided in exactly one place
+(decided): `auth.Authorizer.Authorize` consumes a per-operation
+`auth.Review` (attributes, pod grounding, wording) built by constructors,
+and a single service-level wrapper applies the authentication mode — the
+nil-principal policy and the not-enforced warning have one home each,
+and per-session caching of a permissive verdict warns once per session
+rather than per call. One rendering invariant (decided): the
+connect Role always carries at least one grant that satisfies the
+configured required grant. The discovery and port-forward rules are
 transport, not policy, and render whenever the port-forward path is in
-use — removing them under `gate: telepresence` would leave a client with
-no path to the manager at all. With an external endpoint published (phase
-4) clients never port-forward, so the mechanical rule is dropped — except
-under `gate: portforward`, where possession of the grant is itself the
-connect policy and the named rule renders even though nothing exercises
-it. The golden chart tests assert the gate × legacy-toggle cross-product,
-including the phase-3 minimal rule and the external-endpoint renderings.
+use — removing them when the required grant is `telepresence` would leave
+a client with no path to the manager at all. With an external endpoint
+published (phase 4) clients never port-forward, so the mechanical rule is
+dropped — except when the required grant is `portforward`, where
+possession of the grant is itself the connect policy and the named rule
+renders even though nothing exercises it. The golden chart tests assert
+the required-grant × legacy-toggle cross-product, including the phase-3
+minimal rule and the external-endpoint renderings.
 
-Verification for this phase needs negative cases per gate value: an
-authenticated caller whose Role has been withheld must be refused a
+Verification for this phase needs negative cases per required-grant value:
+an authenticated caller whose Role has been withheld must be refused a
 *session*, and must be refused at `PrepareIntercept` — before any
 mutation — not merely at `CreateIntercept`.
 
@@ -235,8 +243,9 @@ one (message-size and timeout limits are what killed it):
   `logs.telepresence.io` in that pod's namespace. Reviewing `pods/log`
   would contradict the phase's own goal — the reduced-RBAC client no
   longer holds it and would fail its own feature. Diagnostic
-  authorization is independent of `security.authorization.gate`: the gate
-  selects the connect/attachment policy and never alters the log review,
+  authorization is independent of `security.authorization.requiredGrant`:
+  the required grant governs the connect/attachment policy and never
+  alters the log review,
   and the chart renders the diagnostic grants independently of it.
 - Log streaming always requires an authenticated client session, in every
   authentication mode. The general permissive-mode posture (admit and skip
@@ -277,7 +286,7 @@ one (message-size and timeout limits are what killed it):
 
 RBAC effect after phase 2: the per-namespace role can shrink to
 `pods/portforward` create (still wanted for direct agent dials and as the
-intercept-authz policy bit under `gate: portforward`), plus the
+intercept-authz policy bit when the required grant is `portforward`), plus the
 `telepresence.io` grants. `pods` get/list, `pods/log` get, and the
 cluster-scope `namespaces` get/list/watch become unnecessary for a
 phase-2 client — but the chart keeps rendering them (the compatibility
@@ -376,7 +385,7 @@ exists solely because Deployment pod names are random.
 RBAC effect after phase 3: mandatory client RBAC is one rule. The
 per-namespace `pods/portforward` grant remains as an optional performance
 feature (direct agent dials) and as the intercept-authz policy declaration
-under `gate: portforward`.
+when the required grant is `portforward`.
 
 ## Phase 4: External control endpoint, zero mechanical RBAC
 
@@ -420,8 +429,9 @@ quic-forwarder plumbing.
   possession of a session ID is not sufficient.
 - Phase 4 records an explicit external RPC contract: for every exposed
   method, whether it is pre- or post-session, its authentication
-  requirement, whether the connect gate applies, the ownership check it
-  performs, the request forms permitted externally, and which peers may
+  requirement, whether the connect authorization review applies, the
+  ownership check it performs, the request forms permitted externally, and
+  which peers may
   call it (clients only). Pre-session, the deliberately public surface
   is `Version` and health — nothing else.
 - After session establishment over the external connection, the existing
@@ -563,14 +573,15 @@ grants exist only as authorization policy read by the manager via SAR.
 
 Publishing an endpoint stops the chart from granting the port-forward
 bootstrap (decided): the rendered connect role drops its mechanical
-`pods/portforward` rule, keeping only the grants the gate reviews, since
-external clients never port-forward (the `gate: portforward` exception is
-described under the gate model). Nothing server-side can disable the path
-itself: the manager's in-cluster gRPC port must stay open for agents, and
-the port-forward is a Kubernetes API operation the API server enforces.
-What remains is RBAC granted elsewhere:
+`pods/portforward` rule, keeping only the grants the required grant
+reviews, since external clients never port-forward (the `portforward`
+required-grant exception is described under the required-grant model).
+Nothing server-side can disable the path itself: the manager's in-cluster
+gRPC port must stay open for agents, and the port-forward is a Kubernetes
+API operation the API server enforces. What remains is RBAC granted
+elsewhere:
 
-- Set `gate: telepresence`. Identities holding `pods/portforward` on the
+- Set `requiredGrant: telepresence`. Identities holding `pods/portforward` on the
   manager namespace for unrelated reasons (narrowly scoped debugging
   roles) can still open the tunnel, but the connect-time review demands
   `create` on `connections.telepresence.io`, so the tunnel yields no
@@ -599,10 +610,10 @@ Two things follow.
 caller's principal on the session, but runs no review — `authorizeIntercept`
 is the manager's only authorization call site. That is sound today only
 because reaching the manager's gRPC port at all requires `pods/portforward`
-on the manager pod: the connect Role *is* the connect gate, enforced by the
-API server.
+on the manager pod: the connect Role *is* the connect control point,
+enforced by the API server.
 
-Phase 4 removes that gate. Without a replacement, any caller holding a valid
+Phase 4 removes that control point. Without a replacement, any caller holding a valid
 cluster identity — an arbitrary ServiceAccount token included — that can
 reach the external endpoint may establish a session and obtain the managed
 namespace list, cluster DNS, and routing. Intercepts would still be denied,
@@ -668,9 +679,9 @@ Two properties of this scheme must be stated plainly rather than assumed:
   allow-only, and wildcard rules match every resource in every group —
   including unregistered ones. `cluster-admin` and similar roles therefore
   pass the SAR for Telepresence's attributes without any Telepresence
-  Role. The gate separates Telepresence access from *narrowly scoped*
-  portforward/debugging roles; it cannot express a denial for an identity
-  that already holds wildcard authorization.
+  Role. The required grant separates Telepresence access from *narrowly
+  scoped* portforward/debugging roles; it cannot express a denial for an
+  identity that already holds wildcard authorization.
 - **Name-scoping `create` here works because the review is synthesized.**
   Kubernetes documents that top-level `create` cannot generally be
   restricted by `resourceNames` because the name is unknown at admission;
@@ -691,26 +702,27 @@ That buys precision `pods/portforward` cannot express:
 - Intent is legible in the Role instead of inferred from a mechanical
   permission.
 
-The cost is real and must be documented rather than glossed: under this gate
-the manager grants pod-level reach — traffic, and the container environment
-including Secret-derived values — to a caller who may hold no
-`pods/portforward` at all. The admin is delegating enforcement of the
-`telepresence.io` group to Telepresence rather than observing the API
-server's.
+The cost is real and must be documented rather than glossed: when the
+required grant is `any` or `telepresence`, the manager grants pod-level
+reach — traffic, and the container environment including Secret-derived
+values — to a caller who may hold no `pods/portforward` at all. The admin
+is delegating enforcement of the `telepresence.io` group to Telepresence
+rather than observing the API server's.
 
-Recommended shape: a `security.authorization.gate` value taking
+Recommended shape: a `security.authorization.requiredGrant` value taking
 `portforward` (today's proxy alone), `telepresence` (review Telepresence
 attributes only), or `any` (either passes). The default is `any`, in
 every authentication mode, from phase 1 on (decided): a non-breaking
 superset of today's behavior that lets `telepresence.io`-only Roles work
-immediately and starts the migration clock. While the gate resolves to
+immediately and starts the migration clock. While the required grant is
 `any` or `portforward`, the manager logs a per-session warning whenever a
 caller authorized only via the legacy `pods/portforward` grant — that log
 is the admin's inventory of hand-rolled Roles still needing migration.
 Connect and attachment reviews follow the same setting, and the chart
 renders client Roles to match; diagnostic (log) authorization is
-independent of the gate, as phase 2 specifies. The enforcing-mode default
-flips to `telepresence` (decided) no earlier than two minor releases
+independent of the required grant, as phase 2 specifies. The
+enforcing-mode default flips to `telepresence` (decided) no earlier than
+two minor releases
 after phase 4, preferentially at the next major version — breaking only
 for hand-rolled Roles that still carry nothing but `pods/portforward`,
 since chart-rendered Roles migrate with the chart upgrade. The
@@ -760,7 +772,7 @@ chart over a value matrix with no cluster.
 
 Phase-specific assertions:
 
-- Phase 1 (`auth`): per gate value, an authenticated caller without the
+- Phase 1 (`auth`): per required-grant value, an authenticated caller without the
   Role is refused a session and refused at `PrepareIntercept` before any
   mutation; a restored session and its intercepts are re-reviewed after a
   manager restart, and a revoked caller's restore is refused. A mixed

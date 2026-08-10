@@ -4,9 +4,14 @@ import (
 	"context"
 	"fmt"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	authorizationv1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 )
 
 // Authorizer checks a Principal's Kubernetes RBAC with SubjectAccessReviews.
@@ -53,28 +58,139 @@ func (a *Authorizer) canI(ctx context.Context, p *Principal, namespace, podName 
 	})
 }
 
-// CanConnect reports whether p may create connections.telepresence.io in
-// namespace -- the review that authorizes establishing a session.
-func (a *Authorizer) CanConnect(ctx context.Context, p *Principal, namespace string) (bool, error) {
-	return a.review(ctx, p, &authorizationv1.ResourceAttributes{
-		Namespace: namespace,
-		Verb:      "create",
-		Group:     "telepresence.io",
-		Resource:  "connections",
-	})
+// Review describes one operation's authorization review: the telepresence.io
+// policy attributes that govern it, the pods that ground its legacy
+// pods/portforward equivalent, and the words used to report the outcome. The
+// configured Grant decides which of the two grants can authorize the
+// operation.
+type Review struct {
+	// Subject is the telepresence.io grant as it reads in errors, e.g.
+	// "create connections.telepresence.io".
+	Subject string
+	// Namespace scopes both reviews.
+	Namespace string
+	// Attributes is the operation's telepresence.io attribute set.
+	Attributes *authorizationv1.ResourceAttributes
+	// PodNames supplies the pods for the pods/portforward review; nil
+	// reviews namespace-wide access only, and an error aborts the review.
+	PodNames func(context.Context) ([]string, error)
+	// Migration is logged when GrantAny authorizes via the legacy grant
+	// alone.
+	Migration string
 }
 
-// CanAttach reports whether p may perform verb on the attachments.telepresence.io
-// resource named workloadName in namespace. verb is "create" to authorize an
-// intercept or "get" to authorize an ingest.
-func (a *Authorizer) CanAttach(ctx context.Context, p *Principal, namespace, workloadName, verb string) (bool, error) {
-	return a.review(ctx, p, &authorizationv1.ResourceAttributes{
+// ConnectReview is the Review authorizing a session in the manager's
+// namespace.
+func ConnectReview(namespace string) *Review {
+	return &Review{
+		Subject:   "create connections.telepresence.io",
 		Namespace: namespace,
-		Verb:      verb,
-		Group:     "telepresence.io",
-		Resource:  "attachments",
-		Name:      workloadName,
-	})
+		Attributes: &authorizationv1.ResourceAttributes{
+			Namespace: namespace,
+			Verb:      "create",
+			Group:     "telepresence.io",
+			Resource:  "connections",
+		},
+		Migration: "authorized to connect only via the legacy pods/portforward grant; its Role should migrate to " +
+			"create connections.telepresence.io before the enforcing-mode default flips",
+	}
+}
+
+// AttachmentReview is the Review authorizing verb ("create" for an
+// intercept, "get" for an ingest) on the attachment named workloadName.
+func AttachmentReview(namespace, workloadName, verb string) *Review {
+	return &Review{
+		Subject:   fmt.Sprintf("%s attachment %s", verb, workloadName),
+		Namespace: namespace,
+		Attributes: &authorizationv1.ResourceAttributes{
+			Namespace: namespace,
+			Verb:      verb,
+			Group:     "telepresence.io",
+			Resource:  "attachments",
+			Name:      workloadName,
+		},
+		Migration: fmt.Sprintf("authorized attachment to %s in namespace %s only via the legacy pods/portforward "+
+			"grant; its Role should migrate to create attachments.telepresence.io before the enforcing-mode "+
+			"default flips", workloadName, namespace),
+	}
+}
+
+// NamespaceReview is the Review authorizing attachment to anything in
+// namespace: an unnamed attachments review, which a grant scoped with
+// resourceNames never matches.
+func NamespaceReview(namespace string) *Review {
+	return &Review{
+		Subject:   "create attachments",
+		Namespace: namespace,
+		Attributes: &authorizationv1.ResourceAttributes{
+			Namespace: namespace,
+			Verb:      "create",
+			Group:     "telepresence.io",
+			Resource:  "attachments",
+		},
+		Migration: fmt.Sprintf("authorized for namespace %s only via the legacy pods/portforward grant; its Role "+
+			"should migrate to create attachments.telepresence.io before the enforcing-mode default flips", namespace),
+	}
+}
+
+// Authorize reviews r for p under required: GrantPortForward consults only
+// the legacy pods/portforward grant, GrantTelepresence only r.Attributes,
+// and GrantAny accepts either, logging r.Migration when only the legacy
+// grant passes. The verdict is nil, PermissionDenied, or Unavailable when a
+// review could not be performed.
+func (a *Authorizer) Authorize(ctx context.Context, required Grant, p *Principal, r *Review) error {
+	switch required {
+	case GrantPortForward:
+		return a.portForwardVerdict(ctx, p, r)
+	case GrantTelepresence:
+		return a.telepresenceVerdict(ctx, p, r)
+	default: // GrantAny
+		err := a.telepresenceVerdict(ctx, p, r)
+		if err == nil || status.Code(err) == codes.Unavailable {
+			return err
+		}
+		if err := a.portForwardVerdict(ctx, p, r); err != nil {
+			return err
+		}
+		clog.Warnf(ctx, "%s %s", p.Username, r.Migration)
+		return nil
+	}
+}
+
+// telepresenceVerdict converts the r.Attributes review into a verdict error.
+func (a *Authorizer) telepresenceVerdict(ctx context.Context, p *Principal, r *Review) error {
+	allowed, err := a.review(ctx, p, r.Attributes)
+	if err != nil {
+		return errors.Errorf(codes.Unavailable,
+			"unable to determine whether %s may %s in namespace %s: %v", p.Username, r.Subject, r.Namespace, err)
+	}
+	if !allowed {
+		return errors.Errorf(codes.PermissionDenied,
+			"%s is not permitted to %s in namespace %s", p.Username, r.Subject, r.Namespace)
+	}
+	return nil
+}
+
+// portForwardVerdict converts the legacy pods/portforward review into a
+// verdict error.
+func (a *Authorizer) portForwardVerdict(ctx context.Context, p *Principal, r *Review) error {
+	var podNames []string
+	if r.PodNames != nil {
+		var err error
+		if podNames, err = r.PodNames(ctx); err != nil {
+			return err
+		}
+	}
+	allowed, err := a.CanPortForward(ctx, p, r.Namespace, podNames)
+	if err != nil {
+		return errors.Errorf(codes.Unavailable,
+			"unable to determine whether %s may create pods/portforward in namespace %s: %v", p.Username, r.Namespace, err)
+	}
+	if !allowed {
+		return errors.Errorf(codes.PermissionDenied,
+			"%s is not permitted to create pods/portforward in namespace %s", p.Username, r.Namespace)
+	}
+	return nil
 }
 
 // CanGetLogs reports whether p may get logs.telepresence.io in namespace,

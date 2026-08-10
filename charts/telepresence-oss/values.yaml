@@ -112,8 +112,8 @@ security:
       port: 8083
 
   authorization:
-    # gate controls which grant satisfies the traffic-manager's authorization
-    # review at connect and attach time:
+    # requiredGrant controls which grant a client must hold to satisfy the
+    # traffic-manager's authorization review at connect and attach time:
     #
     #  portforward   the caller must hold the pods/portforward grant against
     #                the target (today's proxy).
@@ -124,7 +124,7 @@ security:
     # The chart renders client Roles to match this setting.
     #
     # Default: any
-    gate: any
+    requiredGrant: any
 
 # podCIDRStrategy controls what strategy the traffic-manager will use for finding out what
 # CIDRs the cluster is using for its pods. Valid values are:
@@ -398,7 +398,7 @@ quicTunnel:
 # of tls.secretName / tls.certManager.enabled, both enforced at chart render.
 # Publishing it also drops the pods/portforward rule from the rendered
 # clientRbac connect Role -- external clients never port-forward -- unless
-# the authorization gate is "portforward", where possession of that grant
+# the required grant is "portforward", where possession of that grant
 # is itself the connect policy.
 externalEndpoint:
   enabled: false

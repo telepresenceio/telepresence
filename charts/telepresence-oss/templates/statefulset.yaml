@@ -97,9 +97,9 @@ spec:
           {{- end }}
           {{- end }}
           {{- with .authorization }}
-          {{- if .gate }}
-          - name: AUTHORIZATION_GATE
-            value: {{ .gate }}
+          {{- if .requiredGrant }}
+          - name: AUTHORIZATION_REQUIRED_GRANT
+            value: {{ .requiredGrant }}
           {{- end }}
           {{- end }}
           {{- end }}

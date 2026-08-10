@@ -70,7 +70,7 @@ func TestEnvconfig(t *testing.T) {
 		MutatorWebhookPort:           8443,
 		TunnelQuicAgentPort:          7787,
 		AuthenticationMode:           auth.ModePermissive,
-		AuthorizationGate:            auth.GateAny,
+		AuthorizationRequiredGrant:   auth.GrantAny,
 		LogStreamChunkSize:           resource.MustParse("64Ki"),
 		LogStreamPodConcurrency:      4,
 		LogStreamPodByteLimit:        resource.MustParse("10Mi"),
@@ -206,20 +206,20 @@ func TestEnvconfig(t *testing.T) {
 				e.AuthenticationMode = auth.ModeDisabled
 			},
 		},
-		"authorization-gate-portforward": {
+		"authorization-required-grant-portforward": {
 			Input: map[string]string{
-				"AUTHORIZATION_GATE": "portforward",
+				"AUTHORIZATION_REQUIRED_GRANT": "portforward",
 			},
 			Output: func(e *managerutil.Env) {
-				e.AuthorizationGate = auth.GatePortForward
+				e.AuthorizationRequiredGrant = auth.GrantPortForward
 			},
 		},
-		"authorization-gate-telepresence": {
+		"authorization-required-grant-telepresence": {
 			Input: map[string]string{
-				"AUTHORIZATION_GATE": "telepresence",
+				"AUTHORIZATION_REQUIRED_GRANT": "telepresence",
 			},
 			Output: func(e *managerutil.Env) {
-				e.AuthorizationGate = auth.GateTelepresence
+				e.AuthorizationRequiredGrant = auth.GrantTelepresence
 			},
 		},
 		"external-listener": {

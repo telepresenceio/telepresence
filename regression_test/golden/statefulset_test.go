@@ -186,18 +186,19 @@ func TestClientRbacLegacyAccess(t *testing.T) {
 	}
 }
 
-// TestClientRbacGateLegacyAccessCrossProduct asserts, across every
-// {gate, legacyAccess} combination, that pods/portforward always renders
-// while the connections rule renders only when gate != "portforward".
-func TestClientRbacGateLegacyAccessCrossProduct(t *testing.T) {
+// TestClientRbacGrantLegacyAccessCrossProduct asserts, across every
+// {requiredGrant, legacyAccess} combination, that pods/portforward always
+// renders while the connections rule renders only when the required grant
+// is not "portforward".
+func TestClientRbacGrantLegacyAccessCrossProduct(t *testing.T) {
 	subjects := []map[string]any{{
 		"kind":      "ServiceAccount",
 		"name":      "rtest-golden",
 		"namespace": releaseNamespace,
 	}}
 	for _, legacyAccess := range []bool{true, false} {
-		for _, gate := range []string{"portforward", "telepresence", "any"} {
-			name := "gate=" + gate + "/legacyAccess=" + strconv.FormatBool(legacyAccess)
+		for _, grant := range []string{"portforward", "telepresence", "any"} {
+			name := "requiredGrant=" + grant + "/legacyAccess=" + strconv.FormatBool(legacyAccess)
 			t.Run(name, func(t *testing.T) {
 				out := renderChart(t, map[string]any{
 					"clientRbac": map[string]any{
@@ -206,12 +207,12 @@ func TestClientRbacGateLegacyAccessCrossProduct(t *testing.T) {
 						"subjects":     subjects,
 					},
 					"security": map[string]any{
-						"authorization": map[string]any{"gate": gate},
+						"authorization": map[string]any{"requiredGrant": grant},
 					},
 				})
 				connectDoc := out[clientConnectTpl]
 
-				// Transport rule: present under every gate value, in both
+				// Transport rule: present under every required-grant value, in both
 				// toggle states, just scoped differently.
 				if !strings.Contains(connectDoc, `resources: ["pods/portforward"]`) {
 					t.Errorf("%s: pods/portforward rule missing under %s", clientConnectTpl, name)
@@ -237,8 +238,8 @@ func TestClientRbacGateLegacyAccessCrossProduct(t *testing.T) {
 					}
 				}
 
-				// Policy rule: gate-driven only, unaffected by legacyAccess.
-				wantConn := gate != "portforward"
+				// Policy rule: grant-driven only, unaffected by legacyAccess.
+				wantConn := grant != "portforward"
 				if got := strings.Contains(connectDoc, `resources: ["connections"]`); got != wantConn {
 					t.Errorf("%s: connections rule present=%v, want %s -> %v", clientConnectTpl, got, name, wantConn)
 				}

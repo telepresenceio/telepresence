@@ -17,18 +17,18 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 )
 
-// authGateSpec returns managers.AuthEnforcing() with
-// security.authorization.gate set to gate.
-func authGateSpec(gate string) managers.Spec {
+// authGrantSpec returns managers.AuthEnforcing() with
+// security.authorization.requiredGrant set to grant.
+func authGrantSpec(grant string) managers.Spec {
 	v := managers.AuthEnforcing().Values
-	v.Security.Authorization.Gate = gate
-	return managers.Spec{Key: "auth-gate/" + gate, Values: v}
+	v.Security.Authorization.RequiredGrant = grant
+	return managers.Spec{Key: "auth-grant/" + grant, Values: v}
 }
 
-// gateIdentityManifest creates a ServiceAccount, a Role granting exactly
+// grantIdentityManifest creates a ServiceAccount, a Role granting exactly
 // %[3]s, and a RoleBinding wiring them together, all named %[1]s in
 // namespace %[2]s.
-const gateIdentityManifest = `apiVersion: v1
+const grantIdentityManifest = `apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: %[1]s
@@ -58,7 +58,7 @@ roleRef:
 `
 
 // portForwardOnlyRules grants exactly pods/portforward create -- the
-// mechanical transport grant, and (under gate=portforward) the legacy
+// mechanical transport grant, and (when the required grant is portforward) the legacy
 // authorization proxy for it -- with no telepresence.io attribute at all.
 const portForwardOnlyRules = `  - apiGroups: [""]
     resources: ["pods/portforward"]
@@ -80,14 +80,14 @@ const telepresenceGrantWithLogsRules = telepresenceGrantRules + `
     resources: ["logs"]
     verbs: ["get"]`
 
-// createGateIdentity applies gateIdentityManifest for name with rulesYAML,
+// createGrantIdentity applies grantIdentityManifest for name with rulesYAML,
 // deleting any stale leftover first, and registers t.Cleanup to remove it.
-func createGateIdentity(t *testing.T, ctx context.Context, r *rt.Runtime, name, rulesYAML string) string {
+func createGrantIdentity(t *testing.T, ctx context.Context, r *rt.Runtime, name, rulesYAML string) string {
 	t.Helper()
 	mgrNS := managers.ManagerNamespace
-	deleteGateIdentity(t, ctx, r, name)
+	deleteGrantIdentity(t, ctx, r, name)
 
-	manifest := fmt.Sprintf(gateIdentityManifest, name, mgrNS, rulesYAML)
+	manifest := fmt.Sprintf(grantIdentityManifest, name, mgrNS, rulesYAML)
 	path := filepath.Join(t.TempDir(), name+".yaml")
 	if err := os.WriteFile(path, []byte(manifest), 0o644); err != nil {
 		t.Fatalf("writing RBAC manifest for %s: %v", name, err)
@@ -95,13 +95,13 @@ func createGateIdentity(t *testing.T, ctx context.Context, r *rt.Runtime, name, 
 	if _, err := r.Kubectl(ctx, mgrNS, "apply", "-f", path); err != nil {
 		t.Fatalf("applying RBAC manifest for %s: %v", name, err)
 	}
-	t.Cleanup(func() { deleteGateIdentity(t, ctx, r, name) })
+	t.Cleanup(func() { deleteGrantIdentity(t, ctx, r, name) })
 	return name
 }
 
-// deleteGateIdentity removes the RoleBinding, Role, and ServiceAccount
-// createGateIdentity creates, ignoring a missing resource.
-func deleteGateIdentity(t *testing.T, ctx context.Context, r *rt.Runtime, name string) {
+// deleteGrantIdentity removes the RoleBinding, Role, and ServiceAccount
+// createGrantIdentity creates, ignoring a missing resource.
+func deleteGrantIdentity(t *testing.T, ctx context.Context, r *rt.Runtime, name string) {
 	t.Helper()
 	mgrNS := managers.ManagerNamespace
 	for _, kind := range []string{"rolebinding", "role", "serviceaccount"} {
@@ -163,87 +163,87 @@ func dialAndArrive(t *testing.T, ctx context.Context, r *rt.Runtime, ns, name, t
 	return mc, tokCtx, si
 }
 
-// AuthGate proves security.authorization.gate at the session boundary: under
-// gate=telepresence, a pods/portforward-only identity is refused a session
+// AuthGrant proves security.authorization.requiredGrant at the session boundary: with
+// requiredGrant=telepresence, a pods/portforward-only identity is refused a session
 // while a telepresence.io connect/attach identity is admitted; under
-// gate=any, both are admitted.
-type AuthGate struct {
+// requiredGrant=any, both are admitted.
+type AuthGrant struct {
 	rt.Suite
 }
 
 func init() {
-	rt.Register(&AuthGate{}, rt.InArea("auth"), rt.NeedsManager(authGateSpec("telepresence")))
+	rt.Register(&AuthGrant{}, rt.InArea("auth"), rt.NeedsManager(authGrantSpec("telepresence")))
 }
 
-// Test_PortForwardOnlyGrantRefusedSessionUnderTelepresenceGate asserts that
+// Test_PortForwardOnlyGrantRefusedSessionUnderTelepresenceGrant asserts that
 // a caller holding only pods/portforward is refused a session with
 // PermissionDenied.
-func (s *AuthGate) Test_PortForwardOnlyGrantRefusedSessionUnderTelepresenceGate() {
+func (s *AuthGrant) Test_PortForwardOnlyGrantRefusedSessionUnderTelepresenceGrant() {
 	t := s.T()
 	ctx := s.Ctx()
 	r := s.R()
 	ns := s.AppNamespace()
 	s.Manager()
 
-	name := createGateIdentity(t, ctx, r, "rtest-auth-gate-pf-only", portForwardOnlyRules)
+	name := createGrantIdentity(t, ctx, r, "rtest-auth-grant-pf-only", portForwardOnlyRules)
 	tok := kubectlCreateToken(t, ctx, r, name)
 
 	err := arriveAsClient(t, ctx, r, ns, name, tok)
-	s.Require().Error(err, "a pods/portforward-only identity must be refused a session under gate=telepresence")
+	s.Require().Error(err, "a pods/portforward-only identity must be refused a session with requiredGrant=telepresence")
 	st, ok := status.FromError(err)
 	s.Require().True(ok)
 	s.Equal(codes.PermissionDenied, st.Code())
 }
 
-// Test_TelepresenceGrantAdmittedUnderTelepresenceGate covers the matching
+// Test_TelepresenceGrantAdmittedUnderTelepresenceGrant covers the matching
 // positive: an identity holding create on connections.telepresence.io (plus
 // the attachments grant an intercept or ingest would need) is admitted.
-func (s *AuthGate) Test_TelepresenceGrantAdmittedUnderTelepresenceGate() {
+func (s *AuthGrant) Test_TelepresenceGrantAdmittedUnderTelepresenceGrant() {
 	t := s.T()
 	ctx := s.Ctx()
 	r := s.R()
 	ns := s.AppNamespace()
 	s.Manager()
 
-	name := createGateIdentity(t, ctx, r, "rtest-auth-gate-tp-grant", telepresenceGrantRules)
+	name := createGrantIdentity(t, ctx, r, "rtest-auth-grant-tp-grant", telepresenceGrantRules)
 	tok := kubectlCreateToken(t, ctx, r, name)
 
 	err := arriveAsClient(t, ctx, r, ns, name, tok)
-	s.Require().NoError(err, "an identity holding create connections.telepresence.io should be admitted under gate=telepresence")
+	s.Require().NoError(err, "an identity holding create connections.telepresence.io should be admitted with requiredGrant=telepresence")
 }
 
-// Test_GateAnyAdmitsEitherGrant covers gate=any's accept-either contract:
+// Test_GrantAnyAdmitsEitherGrant covers requiredGrant=any's accept-either contract:
 // both the legacy pods/portforward-only identity and the telepresence.io
 // grant identity are admitted against the same release.
-func (s *AuthGate) Test_GateAnyAdmitsEitherGrant() {
+func (s *AuthGrant) Test_GrantAnyAdmitsEitherGrant() {
 	t := s.T()
 	ctx := s.Ctx()
 	r := s.R()
 	ns := s.AppNamespace()
-	rt.Mutate(t, rt.ManagerFixture(authGateSpec("any")))
+	rt.Mutate(t, rt.ManagerFixture(authGrantSpec("any")))
 
-	pfName := createGateIdentity(t, ctx, r, "rtest-auth-gate-any-pf", portForwardOnlyRules)
+	pfName := createGrantIdentity(t, ctx, r, "rtest-auth-grant-any-pf", portForwardOnlyRules)
 	pfTok := kubectlCreateToken(t, ctx, r, pfName)
 	err := arriveAsClient(t, ctx, r, ns, pfName, pfTok)
-	s.Require().NoError(err, "gate=any must admit the legacy pods/portforward grant too")
+	s.Require().NoError(err, "requiredGrant=any must admit the legacy pods/portforward grant too")
 
-	tpName := createGateIdentity(t, ctx, r, "rtest-auth-gate-any-tp", telepresenceGrantRules)
+	tpName := createGrantIdentity(t, ctx, r, "rtest-auth-grant-any-tp", telepresenceGrantRules)
 	tpTok := kubectlCreateToken(t, ctx, r, tpName)
 	err = arriveAsClient(t, ctx, r, ns, tpName, tpTok)
-	s.Require().NoError(err, "gate=any must admit the telepresence.io grant")
+	s.Require().NoError(err, "requiredGrant=any must admit the telepresence.io grant")
 }
 
 // Test_StreamLogsDeniedNamespaceGetsErrorFrame asserts that an identity
 // without logs.telepresence.io access still gets BEGIN, a denial error
 // frame, and END, rather than an outright refusal.
-func (s *AuthGate) Test_StreamLogsDeniedNamespaceGetsErrorFrame() {
+func (s *AuthGrant) Test_StreamLogsDeniedNamespaceGetsErrorFrame() {
 	t := s.T()
 	ctx := s.Ctx()
 	r := s.R()
 	ns := s.AppNamespace()
 	s.Manager()
 
-	name := createGateIdentity(t, ctx, r, "rtest-auth-gate-logs-denied", telepresenceGrantRules)
+	name := createGrantIdentity(t, ctx, r, "rtest-auth-grant-logs-denied", telepresenceGrantRules)
 	tok := kubectlCreateToken(t, ctx, r, name)
 	mc, tokCtx, si := dialAndArrive(t, ctx, r, ns, name, tok)
 
@@ -270,14 +270,14 @@ func (s *AuthGate) Test_StreamLogsDeniedNamespaceGetsErrorFrame() {
 // Test_StreamLogsAuthorizedReceivesData covers the matching positive: an
 // identity additionally holding get on logs.telepresence.io streams the
 // traffic-manager pod's log with no denial frame, ending in an END frame.
-func (s *AuthGate) Test_StreamLogsAuthorizedReceivesData() {
+func (s *AuthGrant) Test_StreamLogsAuthorizedReceivesData() {
 	t := s.T()
 	ctx := s.Ctx()
 	r := s.R()
 	ns := s.AppNamespace()
 	s.Manager()
 
-	name := createGateIdentity(t, ctx, r, "rtest-auth-gate-logs-granted", telepresenceGrantWithLogsRules)
+	name := createGrantIdentity(t, ctx, r, "rtest-auth-grant-logs-granted", telepresenceGrantWithLogsRules)
 	tok := kubectlCreateToken(t, ctx, r, name)
 	mc, tokCtx, si := dialAndArrive(t, ctx, r, ns, name, tok)
 
@@ -306,14 +306,14 @@ func (s *AuthGate) Test_StreamLogsAuthorizedReceivesData() {
 // Test_WatchNamespacesBasics covers the plumbing WatchNamespaces relies on: a
 // bound session receives the current managed-namespace set on subscribe, and
 // a session id the manager has never seen is refused outright.
-func (s *AuthGate) Test_WatchNamespacesBasics() {
+func (s *AuthGrant) Test_WatchNamespacesBasics() {
 	t := s.T()
 	ctx := s.Ctx()
 	r := s.R()
 	ns := s.AppNamespace()
 	s.Manager()
 
-	name := createGateIdentity(t, ctx, r, "rtest-auth-gate-watchns", telepresenceGrantRules)
+	name := createGrantIdentity(t, ctx, r, "rtest-auth-grant-watchns", telepresenceGrantRules)
 	tok := kubectlCreateToken(t, ctx, r, name)
 	mc, tokCtx, si := dialAndArrive(t, ctx, r, ns, name, tok)
 
@@ -323,7 +323,7 @@ func (s *AuthGate) Test_WatchNamespacesBasics() {
 	s.Require().NoError(err)
 	s.Contains(list.GetNamespaces(), ns, "the first NamespaceList should include the app namespace")
 
-	garbage := &manager.SessionInfo{SessionId: "rtest-auth-gate-watchns-garbage-session"}
+	garbage := &manager.SessionInfo{SessionId: "rtest-auth-grant-watchns-garbage-session"}
 	gStream, err := mc.WatchNamespaces(tokCtx, garbage)
 	s.Require().NoError(err)
 	_, err = gStream.Recv()

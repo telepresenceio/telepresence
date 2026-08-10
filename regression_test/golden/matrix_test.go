@@ -18,7 +18,7 @@ const (
 	axisNodeAgent       = "nodeAgent.enabled"
 	axisQuicTunnel      = "quicTunnel.enabled"
 	axisAuthMode        = "security.authentication.mode"
-	axisAuthGate        = "security.authorization.gate"
+	axisAuthGrant       = "security.authorization.requiredGrant"
 	axisAPIPort         = "telepresenceAPI.port"
 	axisUsageEnabled    = "usage.enabled"
 )
@@ -33,7 +33,7 @@ func matrixAxes() []rt.Axis {
 		{Name: axisNodeAgent, Values: []string{"true", "false"}},
 		{Name: axisQuicTunnel, Values: []string{"true", "false"}},
 		{Name: axisAuthMode, Values: []string{"permissive", "enforcing"}},
-		{Name: axisAuthGate, Values: []string{"portforward", "telepresence", "any"}},
+		{Name: axisAuthGrant, Values: []string{"portforward", "telepresence", "any"}},
 		{Name: axisAPIPort, Values: []string{"0", "9980"}},
 		{Name: axisUsageEnabled, Values: []string{"false", "true"}},
 	}
@@ -57,13 +57,13 @@ func valuesFromCombo(c map[string]string) map[string]any {
 		"quicTunnel": map[string]any{"enabled": c[axisQuicTunnel] == "true"},
 		"security": map[string]any{
 			"authentication": map[string]any{"mode": c[axisAuthMode]},
-			"authorization":  map[string]any{"gate": c[axisAuthGate]},
+			"authorization":  map[string]any{"requiredGrant": c[axisAuthGrant]},
 		},
 		"telepresenceAPI": map[string]any{"port": port},
 		"usage":           map[string]any{"enabled": c[axisUsageEnabled] == "true"},
 		// clientRbac isn't itself an axis (its shape doesn't vary with the
 		// combo), but it must be enabled for the assertions below to see the
-		// client Role content the gate axis controls.
+		// client Role content the required-grant axis controls.
 		"clientRbac": map[string]any{
 			"create": true,
 			"subjects": []map[string]any{{
@@ -94,7 +94,7 @@ func parseEnv(statefulsetYAML string) map[string]string {
 
 // TestChartMatrix renders the local chart source over a pairwise matrix of
 // matrixAxes and asserts structural invariants: no combination in the
-// matrix hits a template guard (fail/required), and the axes that gate a
+// matrix hits a template guard (fail/required), and the axes that control a
 // resource's existence or an env var's value do so consistently.
 func TestChartMatrix(t *testing.T) {
 	axes := matrixAxes()
@@ -194,10 +194,10 @@ func TestChartMatrix(t *testing.T) {
 				t.Errorf("USAGE_REPORTING_ENABLED = %q, want %q", v, strconv.FormatBool(usageEnabled))
 			}
 
-			// AUTHORIZATION_GATE always carries the configured gate.
-			gate := c[axisAuthGate]
-			if v := env["AUTHORIZATION_GATE"]; v != gate {
-				t.Errorf("AUTHORIZATION_GATE = %q, want %q", v, gate)
+			// AUTHORIZATION_REQUIRED_GRANT always carries the configured grant.
+			grant := c[axisAuthGrant]
+			if v := env["AUTHORIZATION_REQUIRED_GRANT"]; v != grant {
+				t.Errorf("AUTHORIZATION_REQUIRED_GRANT = %q, want %q", v, grant)
 			}
 
 			// LOG_STREAM_* always carry the chart's built-in defaults here:
@@ -215,61 +215,61 @@ func TestChartMatrix(t *testing.T) {
 				}
 			}
 
-			assertClientRoleRules(t, out, gate)
+			assertClientRoleRules(t, out, grant)
 		})
 	}
 }
 
-// assertClientRoleRules checks the gate-dependent client Role rules on both
-// connect.yaml and the cluster-scope ClusterRole for the given gate.
-func assertClientRoleRules(t *testing.T, out map[string]string, gate string) {
+// assertClientRoleRules checks the grant-dependent client Role rules on both
+// connect.yaml and the cluster-scope ClusterRole for the given required grant.
+func assertClientRoleRules(t *testing.T, out map[string]string, grant string) {
 	t.Helper()
 	if !rendered(out, clientConnectTpl) {
 		t.Fatalf("%s did not render", clientConnectTpl)
 	}
 	connectDoc := out[clientConnectTpl]
-	wantConnect := gate != "portforward"
+	wantConnect := grant != "portforward"
 	if !strings.Contains(connectDoc, `resources: ["pods/portforward"]`) {
-		t.Errorf("%s pods/portforward rule missing under gate=%q; the transport rules render for every gate", clientConnectTpl, gate)
+		t.Errorf("%s pods/portforward rule missing with requiredGrant=%q; the transport rules render for every grant", clientConnectTpl, grant)
 	}
 	if got := strings.Contains(connectDoc, `resources: ["connections"]`); got != wantConnect {
-		t.Errorf("%s connections rule present=%v, want gate=%q -> %v", clientConnectTpl, got, gate, wantConnect)
+		t.Errorf("%s connections rule present=%v, want requiredGrant=%q -> %v", clientConnectTpl, got, grant, wantConnect)
 	}
 
 	if !rendered(out, clientClusterScopeTpl) {
 		t.Fatalf("%s did not render", clientClusterScopeTpl)
 	}
-	assertInterceptRules(t, clientClusterScopeTpl, out[clientClusterScopeTpl], gate)
+	assertInterceptRules(t, clientClusterScopeTpl, out[clientClusterScopeTpl], grant)
 }
 
-// assertInterceptRules checks the gate-dependent and gate-independent rules
+// assertInterceptRules checks the grant-dependent and grant-independent rules
 // that telepresence.clientRbacInterceptRules renders into a client Role
 // (ClusterRole or namespaced Role) doc.
-func assertInterceptRules(t *testing.T, tpl, doc, gate string) {
+func assertInterceptRules(t *testing.T, tpl, doc, grant string) {
 	t.Helper()
-	wantAttach := gate != "portforward"
-	if got := strings.Contains(doc, `resources: ["pods/portforward"]`); got != (gate != "telepresence") {
-		t.Errorf("%s pods/portforward rule present=%v, want gate=%q -> %v", tpl, got, gate, gate != "telepresence")
+	wantAttach := grant != "portforward"
+	if got := strings.Contains(doc, `resources: ["pods/portforward"]`); got != (grant != "telepresence") {
+		t.Errorf("%s pods/portforward rule present=%v, want requiredGrant=%q -> %v", tpl, got, grant, grant != "telepresence")
 	}
 	if got := strings.Contains(doc, `resources: ["attachments"]`); got != wantAttach {
-		t.Errorf("%s attachments rule present=%v, want gate=%q -> %v", tpl, got, gate, wantAttach)
+		t.Errorf("%s attachments rule present=%v, want requiredGrant=%q -> %v", tpl, got, grant, wantAttach)
 	}
 	for _, want := range []string{`resources: ["pods"]`, `resources: ["pods/log"]`, `resources: ["logs", "logs/yaml"]`} {
 		if !strings.Contains(doc, want) {
-			t.Errorf("%s: %q not rendered regardless of gate=%q", tpl, want, gate)
+			t.Errorf("%s: %q not rendered regardless of requiredGrant=%q", tpl, want, grant)
 		}
 	}
 }
 
-// TestNamespaceScopeRoleGate asserts that clientRbac.namespaces renders the
-// namespace-scoped Role with the same gate-dependent rules as the
-// cluster-scope ClusterRole, for every gate value.
-func TestNamespaceScopeRoleGate(t *testing.T) {
-	for _, gate := range []string{"portforward", "telepresence", "any"} {
-		t.Run(gate, func(t *testing.T) {
+// TestNamespaceScopeRoleGrant asserts that clientRbac.namespaces renders the
+// namespace-scoped Role with the same grant-dependent rules as the
+// cluster-scope ClusterRole, for every requiredGrant value.
+func TestNamespaceScopeRoleGrant(t *testing.T) {
+	for _, grant := range []string{"portforward", "telepresence", "any"} {
+		t.Run(grant, func(t *testing.T) {
 			out := renderChart(t, map[string]any{
 				"security": map[string]any{
-					"authorization": map[string]any{"gate": gate},
+					"authorization": map[string]any{"requiredGrant": grant},
 				},
 				"clientRbac": map[string]any{
 					"create":     true,
@@ -287,7 +287,7 @@ func TestNamespaceScopeRoleGate(t *testing.T) {
 			if rendered(out, clientClusterScopeTpl) {
 				t.Fatalf("%s rendered while clientRbac.namespaces was set; expected namespace-scope only", clientClusterScopeTpl)
 			}
-			assertInterceptRules(t, clientNamespaceTpl, out[clientNamespaceTpl], gate)
+			assertInterceptRules(t, clientNamespaceTpl, out[clientNamespaceTpl], grant)
 		})
 	}
 }

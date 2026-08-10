@@ -36,7 +36,7 @@ get/list in the manager's namespace) and the per-namespace diagnostic
 grants (`pods` get/list, `pods/log` get), leaving a connect Role with a
 single rule: `pods/portforward` create, scoped by `resourceNames` to that
 one pod. Namespace discovery and `telepresence gather-logs` keep working —
-the manager serves both, and gates log access per namespace with the
+the manager serves both, and controls log access per namespace with the
 `logs.telepresence.io` grant described below.
 
 This requires clients at the release that introduced known-name connection
@@ -56,7 +56,7 @@ security:
 Steps 3 and 4 move enforcement from the API server to the traffic-manager,
 which only means something when the manager rejects callers it cannot
 authenticate. Under the default `permissive` mode an unauthenticated caller
-is still admitted (and merely logged), so the authorization gate below
+is still admitted (and merely logged), so the required grant below
 would have nothing to bite on. [Authentication and
 authorization](../reference/authentication.md) covers what enforcing mode
 requires — most notably that every client's kubeconfig can produce a bearer
@@ -67,14 +67,15 @@ token or a verifiable client certificate.
 ```yaml
 security:
   authorization:
-    gate: telepresence
+    requiredGrant: telepresence
 ```
 
 By default, the manager authorizes a connection or an attachment by asking
 whether the caller holds `pods/portforward` in the relevant namespace —
 the permission a client historically exercised to reach the manager or an
-agent, doubling as policy. The `telepresence` gate replaces that proxy with
-grants that exist purely as policy, in the `telepresence.io` API group:
+agent, doubling as policy. Requiring the `telepresence` grant replaces that
+proxy with grants that exist purely as policy, in the `telepresence.io` API
+group:
 
 | Grant | Authorizes |
 |-------|------------|
@@ -87,16 +88,17 @@ the manager evaluates them with `SubjectAccessReview`s — so granting them
 confers nothing outside Telepresence. They are ordinary RBAC in every
 other way: bind them with Roles per namespace or a ClusterRole, and scope
 `attachments` down to individual workloads with `resourceNames`. The chart
-renders matching client Roles for whichever gate is configured
+renders matching client Roles for whichever grant is required
 (`clientRbac.subjects` decides who they bind).
 
-With the `telepresence` gate, the per-namespace `pods/portforward` grant
-disappears from the client Roles. Its mechanical use goes with it: the
-client can no longer open direct port-forwards to traffic-agents, so
-attachment traffic routes through the manager — with a modest throughput
-cost — unless the [QUIC transport](../reference/quic-transport.md)
-provides the direct path instead. The intermediate `any` gate (the
-default) accepts either grant during a migration.
+With `telepresence` as the required grant, the per-namespace
+`pods/portforward` grant disappears from the client Roles. Its mechanical
+use goes with it: the client can no longer open direct port-forwards to
+traffic-agents, so attachment traffic routes through the manager — with a
+modest throughput cost — unless the [QUIC
+transport](../reference/quic-transport.md) provides the direct path
+instead. The intermediate `any` setting (the default) accepts either grant
+during a migration.
 
 ## Step 4: no Kubernetes API access at all
 
@@ -118,9 +120,9 @@ QUIC endpoint published alongside.
 
 This mode requires enforcing authentication — without the API server
 vouching for whoever reaches the port, an unauthenticated caller must not
-be admitted — and pairs naturally with the `telepresence` gate and
-`clientRbac.create: false`, so that no Kubernetes grant, held for whatever
-reason, can establish a session. See
+be admitted — and pairs naturally with `telepresence` as the required
+grant and `clientRbac.create: false`, so that no Kubernetes grant, held
+for whatever reason, can establish a session. See
 [External control endpoint](../reference/external-endpoint.md).
 
 ## The ladder
@@ -129,7 +131,7 @@ reason, can establish a session. See
 |---------------------------------|-------------|----------|
 | Discovery, diagnostics, and port-forward grants | defaults | — |
 | One named `pods/portforward` in the manager namespace, `pods/portforward` per attached namespace | `clientRbac.legacyAccess: false` | current clients, default `apiPort` |
-| Policy-only `telepresence.io` grants | + `security.authorization.gate: telepresence` | `security.authentication.mode: enforcing`; QUIC for direct agent traffic |
+| Policy-only `telepresence.io` grants | + `security.authorization.requiredGrant: telepresence` | `security.authentication.mode: enforcing`; QUIC for direct agent traffic |
 | None | + `externalEndpoint`, `clientRbac.create: false` | enforcing mode, a persisted TLS certificate, QUIC for attachments |
 
 `telepresence setup` probes a cluster and generates a values file

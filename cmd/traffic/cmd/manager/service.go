@@ -80,7 +80,7 @@ type service struct {
 	configWatcher      config.Watcher
 	authorizer         *auth.Authorizer
 	authMode           auth.Mode
-	authGate           auth.Gate
+	authGrant          auth.Grant
 	activeHttpRequests int32
 	activeGrpcRequests int32
 	serviceNameNs      string
@@ -150,7 +150,7 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 	env := managerutil.GetEnv(ctx)
 	ns := env.ManagerNamespace
 	ret.authMode = env.AuthenticationMode
-	ret.authGate = env.AuthorizationGate
+	ret.authGrant = env.AuthorizationRequiredGrant
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
@@ -279,10 +279,7 @@ func (s *service) ArriveAsClient(ctx context.Context, client *rpc.ClientInfo) (*
 	}
 
 	if err := s.authorizeConnect(ctx); err != nil {
-		if s.authMode == auth.ModeEnforcing {
-			return nil, err
-		}
-		clog.Warnf(ctx, "connect: %v (not enforced)", err)
+		return nil, err
 	}
 
 	installId := client.GetInstallId()
@@ -375,18 +372,14 @@ func (s *service) reviewRestoredIntercepts(
 			continue
 		}
 		if err := s.authorizeIntercept(ctx, spec.Namespace, spec); err != nil {
-			switch {
-			case s.authMode != auth.ModeEnforcing:
-				clog.Warnf(ctx, "intercept %q in namespace %s: %v (not enforced)", spec.Name, spec.Namespace, err)
-			case status.Code(err) == codes.Unavailable:
+			if status.Code(err) == codes.Unavailable {
 				// Infrastructure failure, not a denial: fail the whole
 				// reconnect so the client retries instead of losing the
 				// intercept.
 				return nil, err
-			default:
-				clog.Infof(ctx, "Not restoring intercept %s: %v", spec.Name, err)
-				continue
 			}
+			clog.Infof(ctx, "Not restoring intercept %s: %v", spec.Name, err)
+			continue
 		}
 		accepted = append(accepted, &rpc.InterceptInfo{
 			Id:            fmt.Sprintf("%s:%s", sessionID, spec.Name),
@@ -1244,10 +1237,7 @@ func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInter
 	request.InterceptSpec.Namespace = namespace
 
 	if err := s.authorizeIntercept(ctx, namespace, request.InterceptSpec); err != nil {
-		if s.authMode == auth.ModeEnforcing {
-			return nil, err
-		}
-		clog.Warnf(ctx, "intercept %q in namespace %s: %v (not enforced)", request.InterceptSpec.Name, namespace, err)
+		return nil, err
 	}
 
 	return s.state.PrepareIntercept(ctx, request, client)
@@ -1279,10 +1269,7 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 	}
 
 	if err := s.authorizeEnsureAgent(ctx, ns, request.Name); err != nil {
-		if s.authMode == auth.ModeEnforcing {
-			return nil, err
-		}
-		clog.Warnf(ctx, "ensure agent for %s in namespace %s: %v (not enforced)", request.Name, ns, err)
+		return nil, err
 	}
 
 	as, err := s.state.EnsureAgent(ctx, managerutil.GetSessionID(ctx), request.Name, ns, request.NodeAgent)
@@ -1342,10 +1329,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	if err := s.authorizeIntercept(ctx, namespace, spec); err != nil {
-		if s.authMode == auth.ModeEnforcing {
-			return nil, err
-		}
-		clog.Warnf(ctx, "intercept %q in namespace %s: %v (not enforced)", spec.Name, namespace, err)
+		return nil, err
 	}
 
 	client, interceptInfo, err := s.state.AddIntercept(ctx, ciReq)
@@ -1374,209 +1358,90 @@ func managerPodName(_ context.Context) (string, error) {
 	return podName, nil
 }
 
-// authorizeConnect authorizes a session per s.authGate, falling back from
-// connections.telepresence.io to legacy pods/portforward under GateAny. A
-// nil principal is treated as Unauthenticated only in ModeEnforcing, since
-// it otherwise means an exempt method let a tokenless call through.
-func (s *service) authorizeConnect(ctx context.Context) error {
-	p := auth.PrincipalFrom(ctx)
-	if p == nil {
-		if s.authMode == auth.ModeEnforcing {
-			return errors.Errorf(codes.Unauthenticated, "connecting requires an authenticated caller")
-		}
-		clog.Debugf(ctx, "caller is unauthenticated; skipping connect authorization")
-		return nil
-	}
-	namespace := managerutil.GetEnv(ctx).ManagerNamespace
-
-	portForward := func() error {
-		podName, err := managerPodName(ctx)
-		if err != nil {
-			return err
-		}
-		allowed, err := s.authorizer.CanPortForward(ctx, p, namespace, []string{podName})
-		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create pods/portforward in namespace %s: %v", p.Username, namespace, err)
-		}
-		if !allowed {
-			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create pods/portforward in namespace %s", p.Username, namespace)
-		}
-		return nil
-	}
-
-	switch s.authGate {
-	case auth.GatePortForward:
-		return portForward()
-	case auth.GateTelepresence:
-		allowed, err := s.authorizer.CanConnect(ctx, p, namespace)
-		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create connections.telepresence.io in namespace %s: %v", p.Username, namespace, err)
-		}
-		if !allowed {
-			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create connections.telepresence.io in namespace %s", p.Username, namespace)
-		}
-		return nil
-	default: // auth.GateAny
-		allowed, err := s.authorizer.CanConnect(ctx, p, namespace)
-		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create connections.telepresence.io in namespace %s: %v", p.Username, namespace, err)
-		}
-		if allowed {
+// authorized applies the authentication mode to operation's review: the
+// review runs only for an authenticated caller, and both a missing
+// principal and a non-nil verdict fail only in enforcing mode -- otherwise
+// they are logged and the operation proceeds.
+func (s *service) authorized(ctx context.Context, operation string, review func(p *auth.Principal) error) error {
+	var err error
+	if p := auth.PrincipalFrom(ctx); p == nil {
+		if s.authMode != auth.ModeEnforcing {
+			clog.Debugf(ctx, "caller is unauthenticated; skipping authorization of %s", operation)
 			return nil
 		}
-		if err := portForward(); err != nil {
-			return err
-		}
-		clog.Warnf(ctx,
-			"%s authorized to connect only via the legacy pods/portforward grant; its Role should migrate to "+
-				"create connections.telepresence.io before the enforcing-mode default flips", p.Username)
-		return nil
+		err = errors.Errorf(codes.Unauthenticated, "%s requires an authenticated caller", operation)
+	} else {
+		err = review(p)
 	}
+	if err == nil || s.authMode == auth.ModeEnforcing {
+		return err
+	}
+	clog.Warnf(ctx, "%s: %v (not enforced)", operation, err)
+	return nil
 }
 
-// authorizeAttachment authorizes verb ("create" for an intercept, "get" for
-// an ingest) on the attachment named workloadName, per s.authGate, falling
-// back from attachments.telepresence.io to legacy pods/portforward under
-// GateAny.
-func (s *service) authorizeAttachment(ctx context.Context, namespace, workloadName, verb string) error {
-	p := auth.PrincipalFrom(ctx)
-	if p == nil {
-		if s.authMode == auth.ModeEnforcing {
-			return errors.Errorf(codes.Unauthenticated, "attaching to %s requires an authenticated caller", workloadName)
-		}
-		clog.Debugf(ctx, "caller is unauthenticated; skipping attachment authorization")
-		return nil
+// managerPodNames grounds the connect review's legacy pods/portforward
+// grant on the manager's own pod.
+func managerPodNames(ctx context.Context) ([]string, error) {
+	podName, err := managerPodName(ctx)
+	if err != nil {
+		return nil, err
 	}
+	return []string{podName}, nil
+}
 
-	portForward := func() error {
+func (s *service) authorizeConnect(ctx context.Context) error {
+	return s.authorized(ctx, "connect", func(p *auth.Principal) error {
+		r := auth.ConnectReview(managerutil.GetEnv(ctx).ManagerNamespace)
+		r.PodNames = managerPodNames
+		return s.authorizer.Authorize(ctx, s.authGrant, p, r)
+	})
+}
+
+// attachmentReview builds the attachment Review with the workload's pods
+// grounding the legacy grant; a failed pod lookup degrades to a
+// namespace-wide review.
+func (s *service) attachmentReview(namespace, workloadName, verb string) *auth.Review {
+	r := auth.AttachmentReview(namespace, workloadName, verb)
+	r.PodNames = func(ctx context.Context) ([]string, error) {
 		podNames, err := workloadPodNames(ctx, workloadName, namespace)
 		if err != nil {
 			clog.Debugf(ctx, "unable to list pods for %s.%s; checking namespace-wide access only: %v", workloadName, namespace, err)
+			return nil, nil
 		}
-		allowed, err := s.authorizer.CanPortForward(ctx, p, namespace, podNames)
-		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create pods/portforward in namespace %s: %v", p.Username, namespace, err)
-		}
-		if !allowed {
-			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create pods/portforward in namespace %s", p.Username, namespace)
-		}
-		return nil
+		return podNames, nil
 	}
-
-	switch s.authGate {
-	case auth.GatePortForward:
-		return portForward()
-	case auth.GateTelepresence:
-		allowed, err := s.authorizer.CanAttach(ctx, p, namespace, workloadName, verb)
-		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may %s attachment %s in namespace %s: %v", p.Username, verb, workloadName, namespace, err)
-		}
-		if !allowed {
-			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to %s attachment %s in namespace %s", p.Username, verb, workloadName, namespace)
-		}
-		return nil
-	default: // auth.GateAny
-		allowed, err := s.authorizer.CanAttach(ctx, p, namespace, workloadName, verb)
-		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may %s attachment %s in namespace %s: %v", p.Username, verb, workloadName, namespace, err)
-		}
-		if allowed {
-			return nil
-		}
-		if err := portForward(); err != nil {
-			return err
-		}
-		clog.Warnf(ctx,
-			"%s authorized attachment to %s in namespace %s only via the legacy pods/portforward grant; its Role "+
-				"should migrate to create attachments.telepresence.io before the enforcing-mode default flips",
-			p.Username, workloadName, namespace)
-		return nil
-	}
+	return r
 }
 
-// authorizeNamespace reports whether the caller may attach to anything in
-// namespace, not any specific workload. Note that a grant scoped with
-// resourceNames never matches this unnamed review.
-func (s *service) authorizeNamespace(ctx context.Context, namespace string) error {
-	p := auth.PrincipalFrom(ctx)
-	if p == nil {
-		if s.authMode == auth.ModeEnforcing {
-			return errors.Errorf(codes.Unauthenticated, "listing workloads in namespace %s requires an authenticated caller", namespace)
-		}
-		clog.Debugf(ctx, "caller is unauthenticated; skipping namespace authorization")
-		return nil
-	}
-
-	portForward := func() error {
-		allowed, err := s.authorizer.CanPortForward(ctx, p, namespace, nil)
-		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create pods/portforward in namespace %s: %v", p.Username, namespace, err)
-		}
-		if !allowed {
-			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create pods/portforward in namespace %s", p.Username, namespace)
-		}
-		return nil
-	}
-
-	// telepresenceAllowed reviews create on attachments with no object name.
-	telepresenceAllowed := func() (bool, error) {
-		return s.authorizer.CanAttach(ctx, p, namespace, "", "create")
-	}
-
-	switch s.authGate {
-	case auth.GatePortForward:
-		return portForward()
-	case auth.GateTelepresence:
-		allowed, err := telepresenceAllowed()
-		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create attachments in namespace %s: %v", p.Username, namespace, err)
-		}
-		if !allowed {
-			return errors.Errorf(codes.PermissionDenied, "%s is not permitted to create attachments in namespace %s", p.Username, namespace)
-		}
-		return nil
-	default: // auth.GateAny
-		allowed, err := telepresenceAllowed()
-		if err != nil {
-			return errors.Errorf(codes.Unavailable, "unable to determine whether %s may create attachments in namespace %s: %v", p.Username, namespace, err)
-		}
-		if allowed {
-			return nil
-		}
-		if err := portForward(); err != nil {
-			return err
-		}
-		clog.Warnf(ctx,
-			"%s authorized for namespace %s only via the legacy pods/portforward grant; its Role should migrate to "+
-				"create attachments.telepresence.io before the enforcing-mode default flips", p.Username, namespace)
-		return nil
-	}
+func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
+	return s.authorized(ctx, fmt.Sprintf("intercept %q in namespace %s", spec.Name, namespace), func(p *auth.Principal) error {
+		return s.authorizer.Authorize(ctx, s.authGrant, p, s.attachmentReview(namespace, spec.Agent, "create"))
+	})
 }
 
 // authorizeEnsureAgent succeeds if the caller holds either "create" (an
 // intercepting client) or "get" (an ingest client) on the attachment.
 func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadName string) error {
-	createErr := s.authorizeAttachment(ctx, namespace, workloadName, "create")
-	if createErr == nil {
-		return nil
-	}
-	if status.Code(createErr) == codes.Unavailable {
+	return s.authorized(ctx, fmt.Sprintf("ensure agent for %s in namespace %s", workloadName, namespace), func(p *auth.Principal) error {
+		createErr := s.authorizer.Authorize(ctx, s.authGrant, p, s.attachmentReview(namespace, workloadName, "create"))
+		if createErr == nil || status.Code(createErr) == codes.Unavailable {
+			return createErr
+		}
+		getErr := s.authorizer.Authorize(ctx, s.authGrant, p, s.attachmentReview(namespace, workloadName, "get"))
+		if getErr == nil || status.Code(getErr) == codes.Unavailable {
+			return getErr
+		}
 		return createErr
-	}
-	getErr := s.authorizeAttachment(ctx, namespace, workloadName, "get")
-	if getErr == nil {
-		return nil
-	}
-	if status.Code(getErr) == codes.Unavailable {
-		return getErr
-	}
-	return createErr
+	})
 }
 
-// authorizeIntercept reviews whether the caller may create an intercept on
-// spec.Agent in namespace.
-func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
-	return s.authorizeAttachment(ctx, namespace, spec.Agent, "create")
+// authorizeNamespace reports whether the caller may attach to anything in
+// namespace, not any specific workload.
+func (s *service) authorizeNamespace(ctx context.Context, namespace string) error {
+	return s.authorized(ctx, fmt.Sprintf("watch workloads in namespace %s", namespace), func(p *auth.Principal) error {
+		return s.authorizer.Authorize(ctx, s.authGrant, p, auth.NamespaceReview(namespace))
+	})
 }
 
 // workloadPodNames returns the names of the current pods of the workload
@@ -2361,10 +2226,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream grpc
 		if err := clientInfo.AuthorizedNamespace(namespace, func() error {
 			return s.authorizeNamespace(ctx, namespace)
 		}); err != nil {
-			if s.authMode == auth.ModeEnforcing {
-				return err
-			}
-			clog.Warnf(ctx, "watch workloads in namespace %s: %v (not enforced)", namespace, err)
+			return err
 		}
 	}
 	ww := s.state.NewWorkloadInfoWatcher(clientSession, namespace)

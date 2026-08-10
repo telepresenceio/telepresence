@@ -898,11 +898,12 @@ properties:
         type: object
         additionalProperties: false
         properties:
-          gate:
+          requiredGrant:
             description: >-
-              portforward requires the pods/portforward grant (today's proxy),
-              telepresence requires the corresponding telepresence.io grant,
-              and any (the default) accepts either.
+              Which grant a client must hold: portforward requires the
+              pods/portforward grant (today's proxy), telepresence requires
+              the corresponding telepresence.io grant, and any (the default)
+              accepts either.
             type: string
             enum: ["portforward", "telepresence", "any"]
 

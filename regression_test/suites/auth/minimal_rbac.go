@@ -70,7 +70,7 @@ func (s *MinimalRBAC) Test_MinimalRBACConnect() {
 	ns := s.AppNamespace()
 	s.Manager()
 
-	name := createGateIdentity(t, ctx, r, "rtest-auth-minimal-rbac", minimalRBACRules)
+	name := createGrantIdentity(t, ctx, r, "rtest-auth-minimal-rbac", minimalRBACRules)
 	tok := kubectlCreateToken(t, ctx, r, name)
 
 	path, err := buildTokenKubeconfig(rt.Env{Ctx: ctx, T: t, R: r}, name, tok)

@@ -366,10 +366,10 @@ func (s *ExternalEndpointBlackhole) Test_ExternalEndpointBlackholedAPIServer() {
 	nodeIP, nodePort, caPath := setupExternalEndpoint(t, ctx, r)
 	managerAddress := "tls://" + net.JoinHostPort(nodeIP, strconv.Itoa(nodePort))
 
-	// telepresenceGrantWithLogsRules (gate.go): connections create,
+	// telepresenceGrantWithLogsRules (grant.go): connections create,
 	// attachments create/get, logs get -- no pods/portforward at all. The
 	// external path must not need it.
-	name := createGateIdentity(t, ctx, r, "rtest-external-blackhole", telepresenceGrantWithLogsRules)
+	name := createGrantIdentity(t, ctx, r, "rtest-external-blackhole", telepresenceGrantWithLogsRules)
 	// Attachment reviews happen in the WORKLOAD's namespace with the kind as
 	// a subresource, so the identity also needs kind-qualified attachment
 	// (and diagnostic) grants where the Echo Deployment lives.

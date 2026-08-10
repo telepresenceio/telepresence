@@ -96,7 +96,7 @@ func TestReconnectClient_MixedRestoration_Enforcing(t *testing.T) {
 
 	// The connect review (create on connections.telepresence.io) always
 	// passes; the attachment review passes for every workload except
-	// "revoked-agent"; pods/portforward -- the GateAny fallback -- is denied
+	// "revoked-agent"; pods/portforward -- the GrantAny fallback -- is denied
 	// throughout, so the revoked workload has no other way to pass.
 	const revokedAgent = "revoked-agent"
 	k8sapi.InstallFakeSubjectAccessReviews(k8sapi.GetK8sInterface(sctx), func(_ string, ra *authv1.ResourceAttributes) bool {

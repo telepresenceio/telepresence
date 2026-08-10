@@ -52,7 +52,7 @@ func (b *syncBuffer) Reset() {
 	b.buf.Reset()
 }
 
-// loggingContextSync is loggingContext (service_gate_test.go) specialized to
+// loggingContextSync is loggingContext (service_grant_test.go) specialized to
 // syncBuffer, for a handler written to from a background goroutine.
 func loggingContextSync(ctx context.Context, buf *syncBuffer) context.Context {
 	h := handler.NewText(handler.Output(buf), handler.EnabledLevel(clog.LevelTrace))
@@ -174,7 +174,7 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing(t *testing.T) {
 
 	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
 		e.AuthenticationMode = auth.ModeEnforcing
-		e.AuthorizationGate = auth.GateTelepresence
+		e.AuthorizationRequiredGrant = auth.GrantTelepresence
 		e.EnabledWorkloadKinds = k8sapi.Kinds{k8sapi.DeploymentKind}
 	})
 
@@ -216,8 +216,9 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing(t *testing.T) {
 }
 
 // TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing: outside
-// ModeEnforcing, a denied namespace probe is logged and the watch served
-// anyway, with the result still cached.
+// ModeEnforcing, a denied namespace probe is logged once and the watch
+// served anyway; the permitted verdict is cached per session, so a repeat
+// watch triggers neither another review nor another warning.
 func TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -225,7 +226,7 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing(t *testing.T) {
 
 	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
 		e.AuthenticationMode = auth.ModePermissive
-		e.AuthorizationGate = auth.GateTelepresence
+		e.AuthorizationRequiredGrant = auth.GrantTelepresence
 		e.EnabledWorkloadKinds = k8sapi.Kinds{k8sapi.DeploymentKind}
 	})
 
@@ -260,17 +261,21 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing(t *testing.T) {
 		stream := newFakeServerStream[rpc.WorkloadEventsDelta](wctx)
 		errCh := make(chan error, 1)
 		go func() { errCh <- mgr.WatchWorkloads(request, stream) }()
-		req.Eventually(func() bool {
-			return buf.Contains("not enforced")
-		}, 5*time.Second, 10*time.Millisecond, "a denied namespace probe must warn rather than block the watch")
+		select {
+		case <-stream.ch:
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for the initial workload delta")
+		}
 		cancel()
 		return <-errCh
 	}
 
 	req.NoError(runWatch(), "a denied probe outside ModeEnforcing must not fail the watch")
+	req.True(buf.Contains("not enforced"), "a denied namespace probe must warn rather than block the watch")
 	req.Equal(1, countAttachReviews(), "one review per enabled workload kind for the first probe")
 
 	buf.Reset()
 	req.NoError(runWatch())
-	req.Equal(1, countAttachReviews(), "a cached denial must not trigger another review")
+	req.Equal(1, countAttachReviews(), "a cached verdict must not trigger another review")
+	req.False(buf.Contains("not enforced"), "the cached verdict already warned; a repeat watch must not warn again")
 }

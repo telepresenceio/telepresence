@@ -9,24 +9,24 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 )
 
-func TestGate_UnmarshalText(t *testing.T) {
+func TestGrant_UnmarshalText(t *testing.T) {
 	tests := []struct {
 		name    string
 		text    string
-		want    auth.Gate
+		want    auth.Grant
 		wantErr bool
 	}{
-		{"empty defaults to any", "", auth.GateAny, false},
-		{"portforward", "portforward", auth.GatePortForward, false},
-		{"telepresence", "telepresence", auth.GateTelepresence, false},
-		{"any", "any", auth.GateAny, false},
-		{"case insensitive", "Telepresence", auth.GateTelepresence, false},
-		{"upper case", "PORTFORWARD", auth.GatePortForward, false},
+		{"empty defaults to any", "", auth.GrantAny, false},
+		{"portforward", "portforward", auth.GrantPortForward, false},
+		{"telepresence", "telepresence", auth.GrantTelepresence, false},
+		{"any", "any", auth.GrantAny, false},
+		{"case insensitive", "Telepresence", auth.GrantTelepresence, false},
+		{"upper case", "PORTFORWARD", auth.GrantPortForward, false},
 		{"unknown value", "bogus", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var g auth.Gate
+			var g auth.Grant
 			err := g.UnmarshalText([]byte(tt.text))
 			if tt.wantErr {
 				require.Error(t, err)

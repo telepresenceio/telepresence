@@ -3,13 +3,13 @@
 {{- /*
 Client must have the following RBAC in the traffic-manager.namespace to
 establish a session. The manager's connect review accepts one of two grants,
-depending on security.authorization.gate, and the Role always carries at
-least one of them: pods/portforward create (also the mechanical means of
-reaching the manager pod over the port-forward path) and/or the
+depending on security.authorization.requiredGrant, and the Role always
+carries at least one of them: pods/portforward create (also the mechanical
+means of reaching the manager pod over the port-forward path) and/or the
 telepresence.io connections grant that exists purely as policy.
 
 With externalEndpoint.enabled, clients dial the published endpoint and never
-port-forward, so pods/portforward renders only when the gate is
+port-forward, so pods/portforward renders only when the required grant is
 "portforward" -- possession of the grant is then itself the connect policy --
 and always in its named form, since the discovery rules below serve only the
 port-forward path.
@@ -23,7 +23,7 @@ clientRbac.legacyAccess (default true) picks the port-forward path's form:
          nothing else. Only pre-2.33 clients, or an apiPort override that
          breaks the known-name contract, need the discovery rules.
 */}}
-{{- $gate := $.Values.security.authorization.gate | default "any" }}
+{{- $requiredGrant := $.Values.security.authorization.requiredGrant | default "any" }}
 {{- $external := $.Values.externalEndpoint.enabled }}
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
@@ -45,14 +45,14 @@ rules:
   - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]
-{{- else if or (not $external) (eq $gate "portforward") }}
+{{- else if or (not $external) (eq $requiredGrant "portforward") }}
   - apiGroups: [""]
     resources: ["pods/portforward"]
     resourceNames:
       - {{ include "traffic-manager.podName" $ }}
     verbs: ["create"]
 {{- end }}
-{{- if ne $gate "portforward" }}
+{{- if ne $requiredGrant "portforward" }}
   - apiGroups: ["telepresence.io"]
     resources: ["connections"]
     verbs: ["create"]

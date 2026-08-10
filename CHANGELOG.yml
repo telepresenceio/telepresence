@@ -88,12 +88,12 @@ items:
           <code>namespaces</code> list always has. Changes within a
           selector are still picked up live, without a restart.
       - type: feature
-        title: Authorization gate for Telepresence-specific RBAC grants
+        title: Required grant for Telepresence-specific RBAC authorization
         body: >-
-          The new Helm setting <code>security.authorization.gate</code>
+          The new Helm setting <code>security.authorization.requiredGrant</code>
           (<code>portforward</code>, <code>telepresence</code>, or
           <code>any</code>; default <code>any</code>) selects which RBAC
-          grant the traffic-manager accepts when it authorizes a caller:
+          grant the traffic-manager requires when it authorizes a caller:
           the legacy <code>pods/portforward</code> permission, Telepresence's
           own policy attributes -- <code>create</code> on
           <code>connections.telepresence.io</code> to connect, and
