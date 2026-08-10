@@ -2,12 +2,16 @@ package manager
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/grpc/test/bufconn"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	clientfeatures "k8s.io/client-go/features"
 	clientfeaturestesting "k8s.io/client-go/features/testing"
@@ -16,6 +20,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	testdata "github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/test"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 )
 
 // This file covers externalService: internal-only methods are refused,
@@ -154,4 +159,64 @@ func TestExternalService_RequiresPrincipal(t *testing.T) {
 	_, err := es.Remain(sctx, &rpc.RemainRequest{Session: &rpc.SessionInfo{SessionId: "does-not-matter"}})
 	req.Error(err)
 	req.Equal(codes.Unauthenticated, status.Code(err))
+}
+
+// TestExternalSurface_UnauthenticatedContract proves the handler-level
+// defense in depth: with no auth interceptor installed at all, every method
+// on the external surface except Version refuses a caller with no
+// principal. A new RPC whose wrapper forgets the check fails here the day
+// it is added.
+func TestExternalSurface_UnauthenticatedContract(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+
+	lis := bufconn.Listen(64 * 1024)
+	gs := server.New(sctx)
+	rpc.RegisterManagerServer(gs, newExternalService(mgr))
+	go func() { _ = gs.Serve(lis) }()
+	defer gs.Stop()
+
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) { return lis.Dial() }),
+		grpc.WithTransportCredentials(insecure.NewCredentials()))
+	req.NoError(err)
+	defer conn.Close()
+
+	refused := func(err error) bool {
+		switch status.Code(err) {
+		case codes.Unauthenticated, codes.Unimplemented:
+			return true
+		default:
+			return false
+		}
+	}
+
+	sd := &rpc.Manager_ServiceDesc
+	req.Greater(len(sd.Methods)+len(sd.Streams), 30, "the manager surface should be fully enumerated")
+
+	for _, m := range sd.Methods {
+		full := "/" + sd.ServiceName + "/" + m.MethodName
+		err := conn.Invoke(sctx, full, &empty.Empty{}, &empty.Empty{})
+		if m.MethodName == "Version" {
+			req.NoError(err, "Version is the deliberately public method")
+			continue
+		}
+		req.True(refused(err), "method %s must refuse an unauthenticated caller, got: %v", m.MethodName, err)
+	}
+
+	for _, s := range sd.Streams {
+		full := "/" + sd.ServiceName + "/" + s.StreamName
+		desc := &grpc.StreamDesc{StreamName: s.StreamName, ServerStreams: s.ServerStreams, ClientStreams: s.ClientStreams}
+		cs, err := conn.NewStream(sctx, desc, full)
+		req.NoError(err, s.StreamName)
+		if !s.ClientStreams {
+			req.NoError(cs.SendMsg(&empty.Empty{}), s.StreamName)
+			req.NoError(cs.CloseSend(), s.StreamName)
+		}
+		err = cs.RecvMsg(&empty.Empty{})
+		req.True(refused(err), "stream %s must refuse an unauthenticated caller, got: %v", s.StreamName, err)
+	}
 }
