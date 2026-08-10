@@ -16,7 +16,7 @@ import (
 const coverHostPath = "/rtest-coverage"
 
 // coverVolumeName is the volume/volumeMount name for coverHostPath on the
-// traffic-manager deployment.
+// traffic-manager StatefulSet.
 const coverVolumeName = "rtest-coverage"
 
 // coverScraperPod is the name of the throwaway pod used to retrieve covdata
