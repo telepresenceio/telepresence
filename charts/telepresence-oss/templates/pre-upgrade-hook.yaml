@@ -78,26 +78,11 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name | quote }}
         helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
-      serviceAccountName: traffic-manager-migrate-hook
-      securityContext:
-        {{- toYaml .Values.hooks.podSecurityContext | nindent 8 }}
-      restartPolicy: Never
-      {{- with .Values.hooks.curl.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "telepresence.hookPodSpecHead" (dict "root" $ "serviceAccountName" "traffic-manager-migrate-hook" "restartPolicy" "Never") | nindent 6 }}
       containers:
         - name: migrate-statefulset
-          securityContext:
-            {{- if .Values.hooks.securityContext }}
-            {{- toYaml .Values.hooks.securityContext | nindent 12 }}
-            {{- else }}
-            {{- toYaml .Values.securityContext | nindent 12 }}
-            {{- end }}
-          image: "{{ .Values.hooks.curl.registry }}/{{ .Values.hooks.curl.image }}:{{ .Values.hooks.curl.tag }}"
-          imagePullPolicy: {{ .Values.hooks.curl.pullPolicy }}
-          resources:
-            {{- toYaml .Values.hooks.resources | nindent 12 }}
+          {{- include "telepresence.hookContainerHead" $ | nindent 10 }}
+          {{- include "telepresence.hookResources" $ | nindent 10 }}
           command:
             - sh
             - -c
@@ -141,19 +126,5 @@ spec:
               done
               echo "timed out waiting for the old traffic-manager Deployment and its pods to be deleted"
               exit 1
-      {{- with .Values.schedulerName }}
-      schedulerName: {{ . }}
-      {{- end }}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "telepresence.hookSchedulingTail" $ | nindent 6 }}
 {{- end }}

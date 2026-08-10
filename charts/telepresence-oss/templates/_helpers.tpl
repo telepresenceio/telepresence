@@ -343,6 +343,85 @@ security.authentication.x509.enabled (default true) is not set to false.
   {{- end }}
 {{- end }}
 
+{{- /*
+telepresence.hookPodSpecHead renders the pod-spec fields shared by the
+pre-upgrade and pre-delete hook Jobs: the optional serviceAccountName, the
+pod securityContext (hooks.podSecurityContext), restartPolicy and the
+optional imagePullSecrets (hooks.curl.imagePullSecrets). serviceAccountName
+and restartPolicy are per-hook, so they're passed in rather than read from
+Values.
+Call with (dict "root" $ "serviceAccountName" "..." "restartPolicy" "...").
+*/}}
+{{- define "telepresence.hookPodSpecHead" -}}
+{{- include "private.hookPodSpecHead" . | trimPrefix "\n" -}}
+{{- end -}}
+
+{{- define "private.hookPodSpecHead" -}}
+{{- with .serviceAccountName }}
+serviceAccountName: {{ . }}
+{{- end }}
+securityContext:
+  {{- toYaml .root.Values.hooks.podSecurityContext | nindent 2 }}
+restartPolicy: {{ .restartPolicy }}
+{{- with .root.Values.hooks.curl.imagePullSecrets }}
+imagePullSecrets:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
+
+{{- /*
+telepresence.hookContainerHead renders the container fields shared by the
+pre-upgrade and pre-delete hook Jobs: the securityContext (falling back from
+hooks.securityContext to the top-level securityContext) and the hooks.curl
+image/imagePullPolicy. Call with the root context.
+*/}}
+{{- define "telepresence.hookContainerHead" -}}
+securityContext:
+  {{- if .Values.hooks.securityContext }}
+  {{- toYaml .Values.hooks.securityContext | nindent 2 }}
+  {{- else }}
+  {{- toYaml .Values.securityContext | nindent 2 }}
+  {{- end }}
+image: "{{ .Values.hooks.curl.registry }}/{{ .Values.hooks.curl.image }}:{{ .Values.hooks.curl.tag }}"
+imagePullPolicy: {{ .Values.hooks.curl.pullPolicy }}
+{{- end -}}
+
+{{- /*
+telepresence.hookResources renders the hooks.resources block shared by the
+pre-upgrade and pre-delete hook Jobs. Call with the root context.
+*/}}
+{{- define "telepresence.hookResources" -}}
+resources:
+  {{- toYaml .Values.hooks.resources | nindent 2 }}
+{{- end -}}
+
+{{- /*
+telepresence.hookSchedulingTail renders the schedulerName/nodeSelector/
+affinity/tolerations tail shared by the pre-upgrade and pre-delete hook Job
+pod specs. Call with the root context.
+*/}}
+{{- define "telepresence.hookSchedulingTail" -}}
+{{- include "private.hookSchedulingTail" . | trimPrefix "\n" -}}
+{{- end -}}
+
+{{- define "private.hookSchedulingTail" -}}
+{{- with .Values.schedulerName }}
+schedulerName: {{ . }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+nodeSelector:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.affinity }}
+affinity:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.tolerations }}
+tolerations:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
+
 {{/*
 Kubernetes version
 */}}
