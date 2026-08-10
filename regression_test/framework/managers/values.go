@@ -3,6 +3,7 @@ package managers
 import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 )
@@ -32,6 +33,9 @@ type Values struct {
 	ClientRbac    Rbac          `json:"clientRbac,omitzero"`
 	ManagerRbac   ManagerRbac   `json:"managerRbac,omitzero"`
 	Timeouts      Timeouts      `json:"timeouts,omitzero"`
+	// Resources is the chart's top-level resources shape: the
+	// traffic-manager container's requests/limits.
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 	// NodeAgent is the chart's top-level nodeAgent.* shape (node-hosted
 	// traffic-agent mode, cluster-wide). Not to be confused with Client's
 	// nested client.nodeAgent.enabled, the client-side default served to
@@ -362,6 +366,15 @@ func Baseline(reg, tag, pullPolicy, selectorLabel string) Values {
 		},
 		ManagerRbac: ManagerRbac{Create: true},
 		Timeouts:    Timeouts{AgentArrival: "60s"},
+		// Requests only, no limits: their purpose is cgroup CPU weight, so
+		// the (otherwise BestEffort) manager cannot be starved when many
+		// test workload pods contend for a single node's CPU at once.
+		Resources: &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+		},
 		// Expressed as a matchExpressions requirement rather than the
 		// equivalent matchLabels form: released charts up to 2.31.x crash on
 		// a matchLabels-only selector during any LATER manager install's
@@ -388,6 +401,9 @@ func Merge(base, over Values) Values {
 		m.LogLevel = over.LogLevel
 	}
 	m.Image = mergeImage(m.Image, over.Image)
+	if over.Resources != nil {
+		m.Resources = over.Resources
+	}
 	m.Agent.Image = mergeImage(m.Agent.Image, over.Agent.Image)
 	if over.Agent.EnableH2cProbing != nil {
 		m.Agent.EnableH2cProbing = over.Agent.EnableH2cProbing
