@@ -8,9 +8,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"net"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -151,18 +149,14 @@ func externalServiceLook(ctx context.Context, ki kubernetes.Interface, namespace
 	}
 	switch s.Spec.Type {
 	case corev1.ServiceTypeLoadBalancer:
-		for _, ing := range s.Status.LoadBalancer.Ingress {
-			if ing.IP != "" || ing.Hostname != "" {
-				return nil, false, s
-			}
+		if firstLoadBalancerIngressAddr(s) != "" {
+			return nil, false, s
 		}
 		return &Note{Level: NoteWarning, Text: "no external endpoint ingress yet (the LoadBalancer may still be " +
 			"provisioning) -- skipping the TLS/gRPC probe"}, true, nil
 	case corev1.ServiceTypeNodePort:
-		for _, p := range s.Spec.Ports {
-			if p.NodePort != 0 {
-				return nil, false, s
-			}
+		if _, ok := firstAllocatedNodePort(s); ok {
+			return nil, false, s
 		}
 		return &Note{Level: NoteWarning, Text: "the external endpoint service has no allocated node port yet -- skipping the TLS/gRPC probe"}, false, nil
 	case corev1.ServiceTypeClusterIP:
@@ -179,49 +173,7 @@ func externalServiceLook(ctx context.Context, ki kubernetes.Interface, namespace
 // externalDialAddr picks a LoadBalancer ingress address, or a NodePort plus a
 // node address (ExternalIP preferred, InternalIP as fallback).
 func externalDialAddr(ctx context.Context, ki kubernetes.Interface, svc *corev1.Service) (string, error) {
-	switch svc.Spec.Type {
-	case corev1.ServiceTypeLoadBalancer:
-		port, ok := externalServicePort(svc)
-		if !ok {
-			return "", errors.New("the external endpoint service has no identifiable external port")
-		}
-		for _, ing := range svc.Status.LoadBalancer.Ingress {
-			addr := ing.IP
-			if addr == "" {
-				addr = ing.Hostname
-			}
-			if addr != "" {
-				return net.JoinHostPort(addr, strconv.Itoa(int(port.Port))), nil
-			}
-		}
-		return "", errors.New("the external endpoint service has no assigned LoadBalancer ingress")
-	case corev1.ServiceTypeNodePort:
-		port, ok := externalServicePort(svc)
-		if !ok || port.NodePort == 0 {
-			return "", errors.New("the external endpoint service has no allocated node port")
-		}
-		addr, err := firstNodeAddress(ctx, ki)
-		if err != nil {
-			return "", err
-		}
-		return net.JoinHostPort(addr, strconv.Itoa(int(port.NodePort))), nil
-	default:
-		return "", fmt.Errorf("service type %s has no externally reachable address", svc.Spec.Type)
-	}
-}
-
-// externalServicePort finds the chart's "external" port on svc, falling
-// back to the sole port when the Service carries exactly one.
-func externalServicePort(svc *corev1.Service) (corev1.ServicePort, bool) {
-	for _, p := range svc.Spec.Ports {
-		if p.Name == externalPortName {
-			return p, true
-		}
-	}
-	if len(svc.Spec.Ports) == 1 {
-		return svc.Spec.Ports[0], true
-	}
-	return corev1.ServicePort{}, false
+	return resolveServiceDialAddr(ctx, ki, svc, externalPortName, "the external endpoint service")
 }
 
 // externalTLSSecretName returns the admin-named Secret, or the chart's fixed

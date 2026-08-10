@@ -132,23 +132,15 @@ func quicServiceFinding(ctx context.Context, ki kubernetes.Interface, namespace 
 	}
 	switch svc.Spec.Type {
 	case corev1.ServiceTypeLoadBalancer:
-		for _, ing := range svc.Status.LoadBalancer.Ingress {
-			addr := ing.IP
-			if addr == "" {
-				addr = ing.Hostname
-			}
-			if addr != "" {
-				return Finding{Verdict: VerdictYes, Evidence: []string{"QUIC endpoint available at " + addr}}, false, svc
-			}
+		if addr := firstLoadBalancerIngressAddr(svc); addr != "" {
+			return Finding{Verdict: VerdictYes, Evidence: []string{"QUIC endpoint available at " + addr}}, false, svc
 		}
 		return Finding{Verdict: VerdictNo, Evidence: []string{
 			"no QUIC endpoint yet — clients will fall back to gRPC (the LoadBalancer may still be provisioning)",
 		}}, true, nil
 	case corev1.ServiceTypeNodePort:
-		for _, p := range svc.Spec.Ports {
-			if p.NodePort != 0 {
-				return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("QUIC endpoint allocated node port %d", p.NodePort)}}, false, svc
-			}
+		if np, ok := firstAllocatedNodePort(svc); ok {
+			return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("QUIC endpoint allocated node port %d", np)}}, false, svc
 		}
 		return Finding{Verdict: VerdictNo, Evidence: []string{
 			"the QUIC service has no allocated node port yet — clients will fall back to gRPC",
