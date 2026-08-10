@@ -11,6 +11,8 @@ import (
 	"sync"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -131,14 +133,38 @@ func (s *session) foreachAgentPod(fn func(typed.PodInterface, *core.Pod), filter
 // the Kubernetes API against older managers.
 func (s *session) GatherLogs(ctx context.Context, request *connector.LogsRequest) (*connector.LogsResponse, error) {
 	exportDir := filepath.Join(filelocation.AppUserCacheDir(ctx), request.ExportDir)
+	external := client.GetConfig(s).Cluster().UsesExternalManager()
 	if s.managerSupportsStreamLogs() {
-		return gatherLogsViaStream(ctx, s.ManagerClient(), s.SessionInfo(), exportDir, request)
-	}
-	if client.GetConfig(s).Cluster().UsesExternalManager() {
+		resp, err := gatherLogsViaStream(ctx, s.ManagerClient(), s.SessionInfo(), exportDir, request)
+		if err == nil {
+			return resp, nil
+		}
+		// The manager refused to serve logs -- typically a permissive install
+		// where the client presents no credential the manager can verify, so
+		// StreamLogs sees no principal. Fall back to reading pod logs with the
+		// client's own RBAC, unless this is an external connection with no
+		// Kubernetes API to fall back to.
+		if external || !isStreamLogsAuthRefusal(err) {
+			return nil, err
+		}
+		clog.Debugf(ctx, "manager refused StreamLogs (%v); gathering logs directly", err)
+	} else if external {
 		return nil, errcat.User.New("the traffic-manager does not support the StreamLogs RPC (upgrade required); " +
 			"direct log collection through the Kubernetes API is unavailable over this external connection")
 	}
 	return s.gatherLogsDirect(ctx, exportDir, request)
+}
+
+// isStreamLogsAuthRefusal reports whether err is the manager declining to
+// serve logs to an unauthenticated or unauthorized caller, which the direct
+// Kubernetes path may still satisfy with the client's own RBAC.
+func isStreamLogsAuthRefusal(err error) bool {
+	switch status.Code(err) {
+	case codes.Unauthenticated, codes.PermissionDenied:
+		return true
+	default:
+		return false
+	}
 }
 
 // gatherLogsDirect acquires the logs for the traffic-manager and/or traffic-agents specified
@@ -229,12 +255,20 @@ func gatherLogsViaStream(ctx context.Context, mc logStreamer, session *manager.S
 		GetPodYaml:     request.GetPodYaml,
 	})
 	if err != nil {
-		resp.Error = err.Error()
-		return resp, nil
+		return nil, err
 	}
 
 	podInfo, err := gatherLogChunks(ctx, exportDir, stream)
 	if err != nil {
+		if len(podInfo) == 0 {
+			// The stream produced nothing before failing. Opening a gRPC
+			// client stream succeeds without waiting for the server, so even
+			// the manager's immediate refusal (an auth error) surfaces here,
+			// on the first Recv -- returned as an error so the caller can
+			// fall back. A failure after data arrived stays in resp.Error,
+			// keeping the partial results.
+			return nil, err
+		}
 		resp.Error = err.Error()
 	}
 	resp.PodInfo = podInfo

@@ -11,7 +11,9 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -42,14 +44,18 @@ func TestManagerSupportsStreamLogs(t *testing.T) {
 }
 
 // fakeLogChunkStream implements grpc.ServerStreamingClient[manager.LogChunk] by returning a
-// scripted sequence of frames, one per Recv call, then io.EOF.
+// scripted sequence of frames, one per Recv call, then err if set, else io.EOF.
 type fakeLogChunkStream struct {
 	chunks []*manager.LogChunk
 	pos    int
+	err    error
 }
 
 func (f *fakeLogChunkStream) Recv() (*manager.LogChunk, error) {
 	if f.pos >= len(f.chunks) {
+		if f.err != nil {
+			return nil, f.err
+		}
 		return nil, io.EOF
 	}
 	c := f.chunks[f.pos]
@@ -229,15 +235,61 @@ func TestGatherLogsViaStream_AgentsPassthrough(t *testing.T) {
 }
 
 // TestGatherLogsViaStream_ConnectError covers a failure to open the stream at all (e.g. the
-// manager is unreachable): it is reported as the response's general Error field, matching
-// gatherLogsDirect's handling of a pod-listing failure.
+// manager is unreachable or refuses the caller): it is returned as an error so GatherLogs can
+// decide whether to fall back to the direct Kubernetes path.
 func TestGatherLogsViaStream_ConnectError(t *testing.T) {
 	exportDir := t.TempDir()
 	session := &manager.SessionInfo{SessionId: "test-session"}
 
 	fc := &fakeManagerLogClient{err: errors.New("manager unreachable")}
 	resp, err := gatherLogsViaStream(context.Background(), fc, session, exportDir, &connector.LogsRequest{TrafficManager: true})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "manager unreachable")
+	require.Nil(t, resp)
+}
+
+// TestGatherLogsViaStream_RefusedOnFirstRecv covers the manager refusing the
+// caller outright: opening a gRPC client stream succeeds without waiting for
+// the server, so the refusal surfaces on the first Recv, and with nothing
+// produced it must be returned as an error for GatherLogs' fallback.
+func TestGatherLogsViaStream_RefusedOnFirstRecv(t *testing.T) {
+	exportDir := t.TempDir()
+	session := &manager.SessionInfo{SessionId: "test-session"}
+
+	refusal := status.Error(codes.Unauthenticated, "streaming logs requires an authenticated caller")
+	fc := &fakeManagerLogClient{stream: &fakeLogChunkStream{err: refusal}}
+	resp, err := gatherLogsViaStream(context.Background(), fc, session, exportDir, &connector.LogsRequest{TrafficManager: true})
+	require.ErrorIs(t, err, refusal)
+	require.Nil(t, resp)
+}
+
+// TestGatherLogsViaStream_MidStreamError covers a stream that fails after
+// delivering data: the partial results are kept and the failure is reported
+// in resp.Error rather than returned, so no fallback discards them.
+func TestGatherLogsViaStream_MidStreamError(t *testing.T) {
+	exportDir := t.TempDir()
+	session := &manager.SessionInfo{SessionId: "test-session"}
+
+	fc := &fakeManagerLogClient{stream: &fakeLogChunkStream{
+		chunks: []*manager.LogChunk{
+			begin("traffic-manager-0", "ambassador"),
+			dataChunk("traffic-manager-0", "ambassador", "tm log line\n"),
+			end("traffic-manager-0", "ambassador"),
+		},
+		err: errors.New("connection reset"),
+	}}
+	resp, err := gatherLogsViaStream(context.Background(), fc, session, exportDir, &connector.LogsRequest{TrafficManager: true})
 	require.NoError(t, err)
-	require.Contains(t, resp.Error, "manager unreachable")
-	require.Empty(t, resp.PodInfo)
+	require.Contains(t, resp.Error, "connection reset")
+	require.Equal(t, map[string]string{"traffic-manager-0.ambassador.log": "ok"}, resp.PodInfo)
+	requireFileContent(t, exportDir, "traffic-manager-0.ambassador.log", "tm log line\n")
+}
+
+// TestIsStreamLogsAuthRefusal covers the classifier that decides whether a
+// StreamLogs failure is an auth refusal the direct path may still satisfy.
+func TestIsStreamLogsAuthRefusal(t *testing.T) {
+	require.True(t, isStreamLogsAuthRefusal(status.Error(codes.Unauthenticated, "no principal")))
+	require.True(t, isStreamLogsAuthRefusal(status.Error(codes.PermissionDenied, "denied")))
+	require.False(t, isStreamLogsAuthRefusal(status.Error(codes.Unavailable, "down")))
+	require.False(t, isStreamLogsAuthRefusal(errors.New("plain")))
 }
