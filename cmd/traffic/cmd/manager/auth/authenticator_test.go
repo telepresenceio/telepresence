@@ -3,6 +3,7 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -221,4 +222,35 @@ func TestAuthenticate_Caching(t *testing.T) {
 	_, err = a.Authenticate(context.Background(), "bad")
 	assert.ErrorIs(t, err, auth.ErrInvalidToken)
 	assert.Equal(t, afterBad, calls.Load())
+}
+
+// TestAuthenticate_AudiencePathMemoized: after a user token authenticates via
+// the no-audience fallback, a repeat Authenticate never re-tries the doomed
+// manager-audience review, since a token's audiences are a property of the
+// token string.
+func TestAuthenticate_AudiencePathMemoized(t *testing.T) {
+	var mu sync.Mutex
+	var audienceScoped, total int
+	ci := fake.NewClientset()
+	k8sapi.InstallFakeTokenReviews(ci, func(token string, audiences []string) *authnv1.TokenReviewStatus {
+		mu.Lock()
+		total++
+		if len(audiences) > 0 {
+			audienceScoped++
+		}
+		mu.Unlock()
+		if len(audiences) == 0 && token == "user-token" {
+			return authenticatedStatus("some-user", "u2")
+		}
+		return &authnv1.TokenReviewStatus{Authenticated: false}
+	})
+
+	a := auth.NewAuthenticator(ci)
+	for range 3 {
+		p, err := a.Authenticate(context.Background(), "user-token")
+		require.NoError(t, err)
+		assert.Equal(t, "some-user", p.Username)
+	}
+	assert.Equal(t, 1, audienceScoped, "the manager-audience review must run only once per token")
+	assert.Equal(t, 2, total, "later calls are served by the token cache")
 }

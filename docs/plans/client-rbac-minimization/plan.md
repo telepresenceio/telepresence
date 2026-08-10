@@ -142,6 +142,15 @@ five forever:
 
 This is what makes the decided revocation story true: reviews run at
 session and intercept creation only — no periodic re-review (decided).
+Verdicts are also cached (decided): allowed for two minutes, denied for
+ten seconds — the TokenReview cache's TTLs — never `Unavailable`, keyed
+by the principal's full identity and the attribute set, so one intercept
+costs one review round instead of three identical ones. The ensure-agent
+review submits its create-or-get attributes as one any-of review with a
+single legacy fallback, per-pod portforward reviews run concurrently
+with an early exit, and the authenticator remembers per token that the
+manager-audience TokenReview cannot succeed (audiences are a property of
+the token string, so the memo never goes stale).
 Revoking a grant does not tear down what is already running; when a
 revocation is time critical, the admin restarts the manager, clients
 re-establish their sessions and intercepts automatically, and the restore

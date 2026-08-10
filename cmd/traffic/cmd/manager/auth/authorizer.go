@@ -2,8 +2,10 @@ package auth
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -14,38 +16,57 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 )
 
+// perPodReviewConcurrency bounds the concurrent per-pod portforward reviews.
+const perPodReviewConcurrency = 4
+
 // Authorizer checks a Principal's Kubernetes RBAC with SubjectAccessReviews.
 type Authorizer struct {
 	client kubernetes.Interface
+	cache  *sarCache
 }
 
 // NewAuthorizer creates an Authorizer that reviews access using ci.
 func NewAuthorizer(ci kubernetes.Interface) *Authorizer {
-	return &Authorizer{client: ci}
+	return &Authorizer{client: ci, cache: newSARCache()}
 }
 
+// errPodAllowed short-circuits the per-pod review group on the first allow.
+var errPodAllowed = stderrors.New("a pod-scoped grant allowed the review")
+
 // CanPortForward reports whether p may create pods/portforward in namespace.
-// It first checks namespace-wide access and falls back to checking each of
-// podNames, so grants scoped to specific pod names -- which an empty-name SAR
-// never matches -- are honored too.
+// It first checks namespace-wide access and falls back to reviewing each of
+// podNames concurrently, so grants scoped to specific pod names -- which an
+// empty-name SAR never matches -- are honored too.
 func (a *Authorizer) CanPortForward(ctx context.Context, p *Principal, namespace string, podNames []string) (bool, error) {
 	allowed, err := a.canI(ctx, p, namespace, "")
 	if err != nil {
 		return false, err
 	}
-	if allowed {
-		return true, nil
+	if allowed || len(podNames) == 0 {
+		return allowed, nil
 	}
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(perPodReviewConcurrency)
 	for _, pod := range podNames {
-		allowed, err = a.canI(ctx, p, namespace, pod)
-		if err != nil {
-			return false, err
-		}
-		if allowed {
-			return true, nil
-		}
+		g.Go(func() error {
+			allowed, err := a.canI(gCtx, p, namespace, pod)
+			if err != nil {
+				return err
+			}
+			if allowed {
+				return errPodAllowed
+			}
+			return nil
+		})
 	}
-	return false, nil
+	switch err := g.Wait(); {
+	case err == nil:
+		return false, nil
+	case stderrors.Is(err, errPodAllowed):
+		return true, nil
+	default:
+		return false, err
+	}
 }
 
 func (a *Authorizer) canI(ctx context.Context, p *Principal, namespace, podName string) (bool, error) {
@@ -69,8 +90,9 @@ type Review struct {
 	Subject string
 	// Namespace scopes both reviews.
 	Namespace string
-	// Attributes is the operation's telepresence.io attribute set.
-	Attributes *authorizationv1.ResourceAttributes
+	// Attributes are the operation's telepresence.io attribute sets; any
+	// one of them being allowed authorizes the operation.
+	Attributes []*authorizationv1.ResourceAttributes
 	// PodNames supplies the pods for the pods/portforward review; nil
 	// reviews namespace-wide access only, and an error aborts the review.
 	PodNames func(context.Context) ([]string, error)
@@ -85,12 +107,12 @@ func ConnectReview(namespace string) *Review {
 	return &Review{
 		Subject:   "create connections.telepresence.io",
 		Namespace: namespace,
-		Attributes: &authorizationv1.ResourceAttributes{
+		Attributes: []*authorizationv1.ResourceAttributes{{
 			Namespace: namespace,
 			Verb:      "create",
 			Group:     "telepresence.io",
 			Resource:  "connections",
-		},
+		}},
 		Migration: "authorized to connect only via the legacy pods/portforward grant; its Role should migrate to " +
 			"create connections.telepresence.io before the enforcing-mode default flips",
 	}
@@ -102,17 +124,29 @@ func AttachmentReview(namespace, workloadName, verb string) *Review {
 	return &Review{
 		Subject:   fmt.Sprintf("%s attachment %s", verb, workloadName),
 		Namespace: namespace,
-		Attributes: &authorizationv1.ResourceAttributes{
+		Attributes: []*authorizationv1.ResourceAttributes{{
 			Namespace: namespace,
 			Verb:      verb,
 			Group:     "telepresence.io",
 			Resource:  "attachments",
 			Name:      workloadName,
-		},
+		}},
 		Migration: fmt.Sprintf("authorized attachment to %s in namespace %s only via the legacy pods/portforward "+
 			"grant; its Role should migrate to create attachments.telepresence.io before the enforcing-mode "+
 			"default flips", workloadName, namespace),
 	}
+}
+
+// EnsureAgentReview is the Review authorizing agent provisioning for
+// workloadName: the caller must hold create (an intercepting client) or get
+// (an ingest client) on the attachment.
+func EnsureAgentReview(namespace, workloadName string) *Review {
+	r := AttachmentReview(namespace, workloadName, "create")
+	r.Subject = fmt.Sprintf("create or get attachment %s", workloadName)
+	get := *r.Attributes[0]
+	get.Verb = "get"
+	r.Attributes = append(r.Attributes, &get)
+	return r
 }
 
 // NamespaceReview is the Review authorizing attachment to anything in
@@ -122,12 +156,12 @@ func NamespaceReview(namespace string) *Review {
 	return &Review{
 		Subject:   "create attachments",
 		Namespace: namespace,
-		Attributes: &authorizationv1.ResourceAttributes{
+		Attributes: []*authorizationv1.ResourceAttributes{{
 			Namespace: namespace,
 			Verb:      "create",
 			Group:     "telepresence.io",
 			Resource:  "attachments",
-		},
+		}},
 		Migration: fmt.Sprintf("authorized for namespace %s only via the legacy pods/portforward grant; its Role "+
 			"should migrate to create attachments.telepresence.io before the enforcing-mode default flips", namespace),
 	}
@@ -157,18 +191,21 @@ func (a *Authorizer) Authorize(ctx context.Context, required Grant, p *Principal
 	}
 }
 
-// telepresenceVerdict converts the r.Attributes review into a verdict error.
+// telepresenceVerdict converts the r.Attributes reviews into a verdict
+// error; any allowed attribute set authorizes the operation.
 func (a *Authorizer) telepresenceVerdict(ctx context.Context, p *Principal, r *Review) error {
-	allowed, err := a.review(ctx, p, r.Attributes)
-	if err != nil {
-		return errors.Errorf(codes.Unavailable,
-			"unable to determine whether %s may %s in namespace %s: %v", p.Username, r.Subject, r.Namespace, err)
+	for _, ra := range r.Attributes {
+		allowed, err := a.review(ctx, p, ra)
+		if err != nil {
+			return errors.Errorf(codes.Unavailable,
+				"unable to determine whether %s may %s in namespace %s: %v", p.Username, r.Subject, r.Namespace, err)
+		}
+		if allowed {
+			return nil
+		}
 	}
-	if !allowed {
-		return errors.Errorf(codes.PermissionDenied,
-			"%s is not permitted to %s in namespace %s", p.Username, r.Subject, r.Namespace)
-	}
-	return nil
+	return errors.Errorf(codes.PermissionDenied,
+		"%s is not permitted to %s in namespace %s", p.Username, r.Subject, r.Namespace)
 }
 
 // portForwardVerdict converts the legacy pods/portforward review into a
@@ -208,7 +245,13 @@ func (a *Authorizer) CanGetLogs(ctx context.Context, p *Principal, namespace, su
 	})
 }
 
+// review returns the cached verdict for the principal and attribute set, or
+// performs a SubjectAccessReview and caches its outcome.
 func (a *Authorizer) review(ctx context.Context, p *Principal, ra *authorizationv1.ResourceAttributes) (bool, error) {
+	key := sarKey(p, ra)
+	if allowed, ok := a.cache.get(key); ok {
+		return allowed, nil
+	}
 	review := &authorizationv1.SubjectAccessReview{
 		Spec: authorizationv1.SubjectAccessReviewSpec{
 			User:               p.Username,
@@ -222,6 +265,7 @@ func (a *Authorizer) review(ctx context.Context, p *Principal, ra *authorization
 	if err != nil {
 		return false, fmt.Errorf("subject access review: %w", err)
 	}
+	a.cache.put(key, result.Status.Allowed)
 	return result.Status.Allowed, nil
 }
 

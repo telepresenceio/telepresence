@@ -1398,11 +1398,9 @@ func (s *service) authorizeConnect(ctx context.Context) error {
 	})
 }
 
-// attachmentReview builds the attachment Review with the workload's pods
-// grounding the legacy grant; a failed pod lookup degrades to a
-// namespace-wide review.
-func (s *service) attachmentReview(namespace, workloadName, verb string) *auth.Review {
-	r := auth.AttachmentReview(namespace, workloadName, verb)
+// groundOnWorkloadPods sets r's legacy-grant grounding to the workload's
+// pods; a failed pod lookup degrades to a namespace-wide review.
+func groundOnWorkloadPods(r *auth.Review, namespace, workloadName string) *auth.Review {
 	r.PodNames = func(ctx context.Context) ([]string, error) {
 		podNames, err := workloadPodNames(ctx, workloadName, namespace)
 		if err != nil {
@@ -1416,7 +1414,7 @@ func (s *service) attachmentReview(namespace, workloadName, verb string) *auth.R
 
 func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
 	return s.authorized(ctx, fmt.Sprintf("intercept %q in namespace %s", spec.Name, namespace), func(p *auth.Principal) error {
-		return s.authorizer.Authorize(ctx, s.authGrant, p, s.attachmentReview(namespace, spec.Agent, "create"))
+		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(auth.AttachmentReview(namespace, spec.Agent, "create"), namespace, spec.Agent))
 	})
 }
 
@@ -1424,15 +1422,7 @@ func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec
 // intercepting client) or "get" (an ingest client) on the attachment.
 func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadName string) error {
 	return s.authorized(ctx, fmt.Sprintf("ensure agent for %s in namespace %s", workloadName, namespace), func(p *auth.Principal) error {
-		createErr := s.authorizer.Authorize(ctx, s.authGrant, p, s.attachmentReview(namespace, workloadName, "create"))
-		if createErr == nil || status.Code(createErr) == codes.Unavailable {
-			return createErr
-		}
-		getErr := s.authorizer.Authorize(ctx, s.authGrant, p, s.attachmentReview(namespace, workloadName, "get"))
-		if getErr == nil || status.Code(getErr) == codes.Unavailable {
-			return getErr
-		}
-		return createErr
+		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(auth.EnsureAgentReview(namespace, workloadName), namespace, workloadName))
 	})
 }
 
