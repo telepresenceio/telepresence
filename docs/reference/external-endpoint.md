@@ -89,11 +89,13 @@ remain recommended defense in depth.
 
 ## Disabling the port-forward path entirely
 
-Publishing an endpoint stops the chart from granting the port-forward
-bootstrap — except when `security.authorization.requiredGrant: portforward`,
-where possession of `pods/portforward` is itself the connect policy, so the
-named grant, and with it the path, remains. With any other required grant,
-what remains is RBAC granted elsewhere: set
+Publishing an endpoint stops the chart from granting `pods/portforward` in
+any client Role — the connect Role's bootstrap grant and the per-namespace
+intercept Roles' direct-agent-dial grant alike — since an external client
+never port-forwards. The exception is `security.authorization.requiredGrant:
+portforward`, where possession of `pods/portforward` is itself the
+authorization policy, so the named grants remain. With any other required
+grant, what remains is RBAC granted elsewhere: set
 `security.authorization.requiredGrant: telepresence` so an identity holding
 `pods/portforward` for unrelated reasons still cannot turn the tunnel into
 a session. Wildcard identities such as `cluster-admin` pass every review

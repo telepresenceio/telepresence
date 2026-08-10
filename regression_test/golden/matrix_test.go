@@ -239,17 +239,20 @@ func assertClientRoleRules(t *testing.T, out map[string]string, grant string) {
 	if !rendered(out, clientClusterScopeTpl) {
 		t.Fatalf("%s did not render", clientClusterScopeTpl)
 	}
-	assertInterceptRules(t, clientClusterScopeTpl, out[clientClusterScopeTpl], grant)
+	assertInterceptRules(t, clientClusterScopeTpl, out[clientClusterScopeTpl], grant, false)
 }
 
 // assertInterceptRules checks the grant-dependent and grant-independent rules
 // that telepresence.clientRbacInterceptRules renders into a client Role
-// (ClusterRole or namespaced Role) doc.
-func assertInterceptRules(t *testing.T, tpl, doc, grant string) {
+// (ClusterRole or namespaced Role) doc. With an external endpoint published,
+// the mechanical pods/portforward rule is withheld unless the required grant
+// is "portforward".
+func assertInterceptRules(t *testing.T, tpl, doc, grant string, external bool) {
 	t.Helper()
 	wantAttach := grant != "portforward"
-	if got := strings.Contains(doc, `resources: ["pods/portforward"]`); got != (grant != "telepresence") {
-		t.Errorf("%s pods/portforward rule present=%v, want requiredGrant=%q -> %v", tpl, got, grant, grant != "telepresence")
+	wantPortForward := grant != "telepresence" && (!external || grant == "portforward")
+	if got := strings.Contains(doc, `resources: ["pods/portforward"]`); got != wantPortForward {
+		t.Errorf("%s pods/portforward rule present=%v, want requiredGrant=%q external=%v -> %v", tpl, got, grant, external, wantPortForward)
 	}
 	if got := strings.Contains(doc, `resources: ["attachments"]`); got != wantAttach {
 		t.Errorf("%s attachments rule present=%v, want requiredGrant=%q -> %v", tpl, got, grant, wantAttach)
@@ -287,7 +290,7 @@ func TestNamespaceScopeRoleGrant(t *testing.T) {
 			if rendered(out, clientClusterScopeTpl) {
 				t.Fatalf("%s rendered while clientRbac.namespaces was set; expected namespace-scope only", clientClusterScopeTpl)
 			}
-			assertInterceptRules(t, clientNamespaceTpl, out[clientNamespaceTpl], grant)
+			assertInterceptRules(t, clientNamespaceTpl, out[clientNamespaceTpl], grant, false)
 		})
 	}
 }

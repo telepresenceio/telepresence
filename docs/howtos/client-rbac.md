@@ -122,7 +122,11 @@ This mode requires enforcing authentication — without the API server
 vouching for whoever reaches the port, an unauthenticated caller must not
 be admitted — and pairs naturally with `telepresence` as the required
 grant and `clientRbac.create: false`, so that no Kubernetes grant, held
-for whatever reason, can establish a session. See
+for whatever reason, can establish a session. Publishing the endpoint also
+withholds the mechanical `pods/portforward` grants from any client Roles
+the chart still renders — those clients never port-forward — leaving only
+the `telepresence.io` policy grants, unless the required grant is
+`portforward`. See
 [External control endpoint](../reference/external-endpoint.md).
 
 ## The ladder

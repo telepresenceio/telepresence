@@ -396,10 +396,11 @@ quicTunnel:
 # it requires security.authentication.mode: enforcing -- in permissive or
 # disabled mode the listener would have no access control -- and exactly one
 # of tls.secretName / tls.certManager.enabled, both enforced at chart render.
-# Publishing it also drops the pods/portforward rule from the rendered
-# clientRbac connect Role -- external clients never port-forward -- unless
-# the required grant is "portforward", where possession of that grant
-# is itself the connect policy.
+# Publishing it also drops the mechanical pods/portforward rules from the
+# rendered clientRbac Roles -- both the connect Role and the per-namespace
+# intercept Roles -- since external clients never port-forward, unless the
+# required grant is "portforward", where possession of that grant is itself
+# the authorization policy.
 externalEndpoint:
   enabled: false
 

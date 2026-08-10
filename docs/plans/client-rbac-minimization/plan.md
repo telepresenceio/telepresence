@@ -176,12 +176,16 @@ configured required grant. The discovery and port-forward rules are
 transport, not policy, and render whenever the port-forward path is in
 use — removing them when the required grant is `telepresence` would leave
 a client with no path to the manager at all. With an external endpoint
-published (phase 4) clients never port-forward, so the mechanical rule is
-dropped — except when the required grant is `portforward`, where
-possession of the grant is itself the connect policy and the named rule
-renders even though nothing exercises it. The golden chart tests assert
-the required-grant × legacy-toggle cross-product, including the phase-3
-minimal rule and the external-endpoint renderings.
+published (phase 4) clients never port-forward, so the mechanical
+`pods/portforward` rule is dropped from every client Role that carries it
+— the connect Role's bootstrap grant and the per-namespace intercept
+Roles' direct-agent-dial grant alike (decided: the invariant holds for
+all three client Roles through one `telepresence.requiredGrant` helper, not
+just the connect Role) — except when the required grant is `portforward`,
+where possession of the grant is itself the authorization policy and the
+named rules render even though nothing exercises them. The golden chart
+tests assert the required-grant × legacy-toggle cross-product, including
+the phase-3 minimal rule and the external-endpoint renderings.
 
 Verification for this phase needs negative cases per required-grant value:
 an authenticated caller whose Role has been withheld must be refused a

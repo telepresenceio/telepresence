@@ -52,6 +52,14 @@ into.
 {{- end -}}
 
 {{- /*
+The grant a client must hold to be authorized: the value of
+security.authorization.requiredGrant, defaulting to "any".
+*/}}
+{{- define "telepresence.requiredGrant" -}}
+{{- .Values.security.authorization.requiredGrant | default "any" }}
+{{- end -}}
+
+{{- /*
 Traffic Manager Namespace
 */}}
 {{- define "traffic-manager.namespace" -}}
@@ -285,7 +293,8 @@ The legacy pods get/list and pods/log get grants are gated by clientRbac.legacyA
 logs via the StreamLogs RPC, so neither grant is mechanically required.
 */}}
 {{- define "telepresence.clientRbacInterceptRules" -}}
-{{- $requiredGrant := .Values.security.authorization.requiredGrant | default "any" }}
+{{- $requiredGrant := include "telepresence.requiredGrant" . }}
+{{- $external := .Values.externalEndpoint.enabled }}
 {{- if .Values.clientRbac.legacyAccess }}
 {{- /* Legacy. Namespace access command completion experience and client-side gather-logs discovery. */}}
 - apiGroups: [""]
@@ -299,8 +308,13 @@ logs via the StreamLogs RPC, so neither grant is mechanically required.
 - apiGroups: ["telepresence.io"]
   resources: ["logs", "logs/yaml"]
   verbs: ["get"]
-{{- if ne $requiredGrant "telepresence" }}
-{{- /* All traffic will be routed via the traffic-manager unless a portforward can be created directly to a pod */}}
+{{- if and (ne $requiredGrant "telepresence") (or (not $external) (eq $requiredGrant "portforward")) }}
+{{- /*
+Direct-agent-dial transport, and the legacy policy the manager's attachment
+review falls back to. Withheld when the endpoint is external -- those clients
+never port-forward -- except under the "portforward" required grant, where
+possession of it is itself the attachment policy.
+*/}}
 - apiGroups: [""]
   resources: ["pods/portforward"]
   verbs: ["create"]

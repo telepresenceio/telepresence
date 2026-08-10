@@ -170,6 +170,38 @@ func TestExternalEndpointOmitsConnectPortForward(t *testing.T) {
 	})
 }
 
+// TestExternalEndpointOmitsInterceptPortForward asserts that with an external
+// endpoint published, the per-namespace intercept Roles withhold the
+// mechanical pods/portforward grant -- clients never port-forward in external
+// mode -- except under required grant "portforward", where possession of it
+// is the attachment policy. The attachments grant is unaffected.
+func TestExternalEndpointOmitsInterceptPortForward(t *testing.T) {
+	subjects := []map[string]any{{
+		"kind":      "ServiceAccount",
+		"name":      "rtest-golden",
+		"namespace": releaseNamespace,
+	}}
+	for _, grant := range []string{"any", "telepresence", "portforward"} {
+		t.Run("requiredGrant="+grant, func(t *testing.T) {
+			out := renderChart(t, map[string]any{
+				"security": map[string]any{
+					"authentication": map[string]any{"mode": "enforcing"},
+					"authorization":  map[string]any{"requiredGrant": grant},
+				},
+				"externalEndpoint": map[string]any{
+					"enabled": true,
+					"tls":     map[string]any{"secretName": "rtest-external-tls"},
+				},
+				"clientRbac": map[string]any{"create": true, "subjects": subjects},
+			})
+			if !rendered(out, clientClusterScopeTpl) {
+				t.Fatalf("%s did not render", clientClusterScopeTpl)
+			}
+			assertInterceptRules(t, clientClusterScopeTpl, out[clientClusterScopeTpl], grant, true)
+		})
+	}
+}
+
 // TestExternalEndpointRequiresEnforcing asserts that externalEndpoint.enabled
 // fails the render under any auth mode other than enforcing.
 func TestExternalEndpointRequiresEnforcing(t *testing.T) {

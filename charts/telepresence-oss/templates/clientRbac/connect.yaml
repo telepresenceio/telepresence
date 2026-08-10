@@ -23,7 +23,7 @@ clientRbac.legacyAccess (default true) picks the port-forward path's form:
          nothing else. Only pre-2.33 clients, or an apiPort override that
          breaks the known-name contract, need the discovery rules.
 */}}
-{{- $requiredGrant := $.Values.security.authorization.requiredGrant | default "any" }}
+{{- $requiredGrant := include "telepresence.requiredGrant" $ }}
 {{- $external := $.Values.externalEndpoint.enabled }}
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
