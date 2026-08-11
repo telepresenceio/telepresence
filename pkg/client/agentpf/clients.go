@@ -524,10 +524,19 @@ func (s *clients) watchesNamespace(namespace string) bool {
 // The traffic-agent is chosen using the following rules in the order mentioned:
 //
 //  1. agent has a pod_ip that matches the given ip
-//  2. agent is currently intercepted by this client
-//  3. any agent
+//  2. agent is currently intercepted by this client and is connected
+//  3. any connected agent
 //
-// The function returns nil when there are no agents in the connected namespace.
+// Rules 2 and 3 pick an agent as an interchangeable relay for traffic that is
+// not addressed to its own pod, and the caller's alternative for that traffic
+// is the traffic-manager tunnel, which is an equally correct route. Requiring
+// an established connection keeps an agent that cannot be reached -- one whose
+// only transport is a Kubernetes port-forward over a connection that has no
+// cluster API access, say -- from being preferred over that tunnel and
+// stalling the dial. Rule 1 is the agent's own pod address, so it stands
+// whether or not a connection exists yet.
+//
+// The function returns nil when no agent in the connected namespace qualifies.
 func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 	if s.disabled.Load() {
 		return nil
@@ -538,6 +547,7 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 		switch {
 		case ok && ip == podIP:
 			primary = c
+		case !c.connected():
 		case c.intercepted():
 			secondary = c
 		default:
