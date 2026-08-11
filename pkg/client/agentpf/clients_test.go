@@ -129,3 +129,39 @@ func TestGetRandomAgentSkipsNodeAgent(t *testing.T) {
 
 	require.Nil(t, cs.GetRandomAgent(context.Background()))
 }
+
+// TestGetRandomAgentDoesNotDial asserts that an agent nothing has connected yet is
+// skipped rather than dialled. The caller is a name lookup whose deadline is shorter
+// than a dial's own timeout, so dialling here would spend the lookup's entire budget
+// before it could fall back to the traffic-manager.
+func TestGetRandomAgentDoesNotDial(t *testing.T) {
+	cl := &k8s.Cluster{
+		Kubeconfig: &k8s.Kubeconfig{
+			Context:   context.Background(),
+			Namespace: "alpha",
+		},
+	}
+	session := &manager.SessionInfo{SessionId: "session"}
+	cs := NewClients(cl, session, []string{"alpha"}, nil)
+	css, ok := cs.(*clients)
+	require.True(t, ok)
+
+	ac := &client{
+		Cluster: cl,
+		session: session,
+		owner:   css,
+		info: &manager.AgentPodInfo{
+			PodName:   "agent-alpha",
+			Namespace: "alpha",
+		},
+	}
+	css.clients.Store("agent-alpha.alpha", ac)
+
+	require.Nil(t, cs.GetRandomAgent(context.Background()))
+
+	// A dial would have left its outcome on the client, either a client or an error.
+	ac.RLock()
+	defer ac.RUnlock()
+	require.Nil(t, ac.cli)
+	require.NoError(t, ac.connectErr)
+}

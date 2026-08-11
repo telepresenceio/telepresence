@@ -556,8 +556,11 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 	return pvd
 }
 
-// GetRandomAgent returns an active agent.AgentClient and ensures that it is kept alive
-// for at least 5 seconds.
+// GetRandomAgent returns an already connected agent.AgentClient and ensures that it is
+// kept alive for at least 5 seconds. It never establishes a connection: the caller is a
+// name lookup, and dialling an agent takes up to five seconds, which is more than a
+// lookup's whole deadline. An agent that no traffic has needed yet is therefore left to
+// the dial watcher and the ip-waiter loop, which connect on the session's own context.
 //
 // Node-agent sessions are never returned. A node-agent's pod runs in the
 // traffic-manager's namespace rather than the workload's, so its resolv.conf
@@ -568,9 +571,9 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 // qualifies single-label names against the client's connected namespace
 // itself.
 //
-// The function returns nil when there are no active agents.
-func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
-	var connected, waiting, other *client
+// The function returns nil when no agent is connected.
+func (s *clients) GetRandomAgent(context.Context) (aa agent.AgentClient) {
+	var connected *client
 	s.clients.Range(func(_ string, ac *client) bool {
 		if ac.info.NodeAgent {
 			return true
@@ -579,29 +582,15 @@ func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
 			connected = ac
 			return false
 		}
-		if s.isProxyVIA(ac.info) || s.hasWaiterFor(ac.info) {
-			waiting = ac
-		} else {
-			other = ac
-		}
 		return true
 	})
-
-	var err error
-	switch {
-	case connected != nil:
-		connected.Lock()
-		connected.lastActive = time.Now().UnixNano()
-		aa = connected.cli
-		connected.Unlock()
-	case waiting != nil:
-		aa, err = waiting.ensureConnect(ctx)
-	case other != nil:
-		aa, err = other.ensureConnect(ctx)
+	if connected == nil {
+		return nil
 	}
-	if err != nil {
-		clog.Warn(s, err)
-	}
+	connected.Lock()
+	connected.lastActive = time.Now().UnixNano()
+	aa = connected.cli
+	connected.Unlock()
 	return aa
 }
 
