@@ -187,6 +187,20 @@ func lookupIP(ctx context.Context, network, qName, noSearchDomain string, r *net
 			IsNotFound: true,
 		}
 	}
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
+		otherNetwork := "ip4"
+		if network == "ip4" {
+			otherNetwork = "ip6"
+		}
+		otherIPs, otherErr := r.LookupIP(ctx, otherNetwork, name)
+		if otherErr != nil && !final {
+			otherIPs, otherErr = r.LookupIP(ctx, otherNetwork, qName)
+		}
+		if otherErr == nil && len(otherIPs) > 0 {
+			return nil, nil
+		}
+	}
 	return ips, err
 }
 
