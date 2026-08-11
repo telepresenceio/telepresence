@@ -175,10 +175,20 @@ func useLookupName(qName, noSearchDomain string) (string, bool) {
 
 func lookupIP(ctx context.Context, network, qName, noSearchDomain string, r *net.Resolver) ([]net.IP, error) {
 	name, final := useLookupName(qName, noSearchDomain)
-	ips, err := r.LookupIP(ctx, "ip", name)
+	lookup := func(name string) ([]net.IP, error) {
+		ips, err := r.LookupIP(ctx, "ip", name)
+		var dnsErr *net.DNSError
+		if errors.As(err, &dnsErr) && dnsErr.IsTemporary {
+			if requested, requestedErr := r.LookupIP(ctx, network, name); requestedErr == nil {
+				return requested, nil
+			}
+		}
+		return ips, err
+	}
+	ips, err := lookup(name)
 	if err != nil && !final {
 		clog.Errorf(ctx, "LookupIP failed %q failed, trying LookupIP %q", name, qName)
-		ips, err = r.LookupIP(ctx, "ip", qName)
+		ips, err = lookup(qName)
 	}
 	if err == nil && len(ips) == 0 {
 		err = &net.DNSError{

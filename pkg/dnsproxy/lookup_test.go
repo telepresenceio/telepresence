@@ -73,11 +73,12 @@ func TestLookupIPAddressFamilies(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 
 	tests := []struct {
-		name       string
-		network    string
-		hostname   string
-		wantIPs    []string
-		wantAbsent bool
+		name          string
+		network       string
+		hostname      string
+		wantIPs       []string
+		wantAbsent    bool
+		wantTemporary bool
 	}{
 		{
 			name:     "AAAA lookup for IPv4-only hostname returns no data",
@@ -114,6 +115,30 @@ func TestLookupIPAddressFamilies(t *testing.T) {
 			wantIPs:  []string{"2001:db8::20"},
 		},
 		{
+			name:     "A lookup recovers when the AAAA query fails temporarily",
+			network:  "ip4",
+			hostname: "ipv4-partial.example.",
+			wantIPs:  []string{"192.0.2.10"},
+		},
+		{
+			name:     "AAAA lookup recovers when the A query fails temporarily",
+			network:  "ip6",
+			hostname: "ipv6-partial.example.",
+			wantIPs:  []string{"2001:db8::10"},
+		},
+		{
+			name:          "A query failure is preserved when the AAAA query succeeds",
+			network:       "ip4",
+			hostname:      "ipv6-partial.example.",
+			wantTemporary: true,
+		},
+		{
+			name:          "AAAA query failure is preserved when the A query succeeds",
+			network:       "ip6",
+			hostname:      "ipv4-partial.example.",
+			wantTemporary: true,
+		},
+		{
 			name:       "missing hostname preserves A NXDOMAIN",
 			network:    "ip4",
 			hostname:   "missing.example.",
@@ -130,6 +155,17 @@ func TestLookupIPAddressFamilies(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ips, err := lookupIP(ctx, tt.network, tt.hostname, ".example.", resolver)
+			if tt.wantTemporary {
+				require.Empty(t, ips)
+				require.Error(t, err)
+				var dnsErr *net.DNSError
+				require.ErrorAs(t, err, &dnsErr)
+				require.True(t, dnsErr.IsTemporary)
+				rCode, rpcErr := MakeDNSError(err)
+				require.Equal(t, dns.RcodeNameError, rCode)
+				require.Equal(t, codes.Unavailable, status.Code(rpcErr))
+				return
+			}
 			if tt.wantAbsent {
 				require.Error(t, err)
 				var dnsErr *net.DNSError
@@ -204,19 +240,23 @@ func startLookupIPTestResolver(t *testing.T) *net.Resolver {
 
 			question := request.Question[0]
 			switch question.Name {
-			case "ipv4.example.":
+			case "ipv4.example.", "ipv4-partial.example.":
 				if question.Qtype == dns.TypeA {
 					response.Answer = []dns.RR{&dns.A{
 						Hdr: dns.RR_Header{Name: question.Name, Rrtype: dns.TypeA, Class: dns.ClassINET},
 						A:   net.ParseIP("192.0.2.10").To4(),
 					}}
+				} else if question.Name == "ipv4-partial.example." {
+					response.SetRcode(request, dns.RcodeServerFailure)
 				}
-			case "ipv6.example.":
+			case "ipv6.example.", "ipv6-partial.example.":
 				if question.Qtype == dns.TypeAAAA {
 					response.Answer = []dns.RR{&dns.AAAA{
 						Hdr:  dns.RR_Header{Name: question.Name, Rrtype: dns.TypeAAAA, Class: dns.ClassINET},
 						AAAA: net.ParseIP("2001:db8::10"),
 					}}
+				} else if question.Name == "ipv6-partial.example." {
+					response.SetRcode(request, dns.RcodeServerFailure)
 				}
 			case "dual.example.":
 				switch question.Qtype {
