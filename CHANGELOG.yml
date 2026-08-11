@@ -28,6 +28,22 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Completion for use flag
+        body: >-
+          Automcompletion for <code>use</code> flag now dynamically generates
+          completions based on existing daemons.
+      - type: bugfix
+        title: Preserve agent images during concurrent pod injection
+        body: >-
+          The agent injector reused a cached sidecar config across concurrent
+          pod admissions while serializing that config temporarily cleared
+          creation-only fields such as the traffic-agent image. A concurrent
+          admission could observe the cleared image and produce invalid
+          traffic-agent and init-container patches with empty image fields.
+          Serialization now strips those fields from a local copy, so parallel
+          pod creation cannot corrupt the cached config or block a workload
+          rollout.
+      - type: feature
         title: Guided traffic-manager setup with telepresence setup
         body: >-
           The new <code>telepresence setup</code> command analyzes the

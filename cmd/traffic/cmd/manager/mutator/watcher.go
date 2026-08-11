@@ -53,7 +53,7 @@ type Map interface {
 
 type configWatcher struct {
 	cancel       context.CancelFunc
-	agentConfigs *xsync.Map[string, map[string]*agentconfig.Sidecar]
+	agentConfigs *xsync.Map[string, *xsync.Map[string, *agentconfig.Sidecar]]
 	informers    *xsync.Map[string, *informersWithCancel]
 	inactivePods *xsync.Map[types.UID, inactivation]
 	startedAt    time.Time
@@ -188,58 +188,45 @@ type inactivation struct {
 	deleted bool
 }
 
-func (c *configWatcher) Delete(name, namespace string) {
-	c.agentConfigs.Compute(namespace, func(sceMap map[string]*agentconfig.Sidecar, loaded bool) (map[string]*agentconfig.Sidecar, xsync.ComputeOp) {
-		if loaded {
-			delete(sceMap, name)
-			if len(sceMap) > 0 {
-				return sceMap, xsync.UpdateOp
-			}
-		}
-		return nil, xsync.DeleteOp
+func (c *configWatcher) namespaceAgentConfigs(namespace string) *xsync.Map[string, *agentconfig.Sidecar] {
+	scMap, _ := c.agentConfigs.LoadOrCompute(namespace, func() (*xsync.Map[string, *agentconfig.Sidecar], bool) {
+		return xsync.NewMap[string, *agentconfig.Sidecar](), false
 	})
+	return scMap
+}
+
+func (c *configWatcher) Delete(name, namespace string) {
+	if scMap, ok := c.agentConfigs.Load(namespace); ok {
+		scMap.Delete(name)
+	}
+}
+
+func (c *configWatcher) deleteNamespaceAgentConfigs(namespace string) {
+	c.agentConfigs.Delete(namespace)
 }
 
 func (c *configWatcher) Update(name, namespace string, updater func(*agentconfig.Sidecar) (*agentconfig.Sidecar, error)) (*agentconfig.Sidecar, error) {
 	var err error
 	var sc *agentconfig.Sidecar
-	c.agentConfigs.Compute(namespace, func(scMap map[string]*agentconfig.Sidecar, loaded bool) (map[string]*agentconfig.Sidecar, xsync.ComputeOp) {
+	c.namespaceAgentConfigs(namespace).Compute(name, func(existing *agentconfig.Sidecar, loaded bool) (*agentconfig.Sidecar, xsync.ComputeOp) {
 		if loaded {
-			var ok bool
-			sc, ok = scMap[name]
-			if ok {
-				sc = sc.Clone()
-			}
-			sc, err = updater(sc)
-			if err == nil {
-				if sc == nil {
-					delete(scMap, name)
-				} else {
-					scMap[name] = sc
-				}
-			}
-			return scMap, xsync.UpdateOp
-		} else {
-			sc, err = updater(nil)
-			if err == nil && sc != nil {
-				scMap = map[string]*agentconfig.Sidecar{name: sc}
-				return scMap, xsync.UpdateOp
-			}
-			return nil, xsync.CancelOp
+			sc = existing.Clone()
+		}
+		sc, err = updater(sc)
+		switch {
+		case err != nil:
+			return existing, xsync.CancelOp
+		case sc == nil:
+			return nil, xsync.DeleteOp
+		default:
+			return sc, xsync.UpdateOp
 		}
 	})
 	return sc, err
 }
 
 func (c *configWatcher) Store(sc *agentconfig.Sidecar) {
-	c.agentConfigs.Compute(sc.Namespace, func(scMap map[string]*agentconfig.Sidecar, loaded bool) (map[string]*agentconfig.Sidecar, xsync.ComputeOp) {
-		if loaded {
-			scMap[sc.AgentName] = sc
-		} else {
-			scMap = map[string]*agentconfig.Sidecar{sc.AgentName: sc}
-		}
-		return scMap, xsync.UpdateOp
-	})
+	c.namespaceAgentConfigs(sc.Namespace).Store(sc.AgentName, sc)
 }
 
 func NewWatcher() Map {
@@ -247,7 +234,7 @@ func NewWatcher() Map {
 		cancel:       func() {},
 		informers:    xsync.NewMap[string, *informersWithCancel](),
 		inactivePods: xsync.NewMap[types.UID, inactivation](),
-		agentConfigs: xsync.NewMap[string, map[string]*agentconfig.Sidecar](),
+		agentConfigs: xsync.NewMap[string, *xsync.Map[string, *agentconfig.Sidecar]](),
 	}
 	return w
 }
@@ -336,12 +323,9 @@ func (c *configWatcher) Wait(ctx context.Context) error {
 // An error is only returned when the configmap holding the configuration could not be loaded for
 // other reasons than it did not exist.
 func (c *configWatcher) Get(key, ns string) (ac *agentconfig.Sidecar) {
-	c.agentConfigs.Compute(ns, func(scMap map[string]*agentconfig.Sidecar, loaded bool) (map[string]*agentconfig.Sidecar, xsync.ComputeOp) {
-		if loaded {
-			ac = scMap[key]
-		}
-		return nil, xsync.CancelOp
-	})
+	if scMap, ok := c.agentConfigs.Load(ns); ok {
+		ac, _ = scMap.Load(key)
+	}
 	return ac
 }
 
@@ -384,16 +368,12 @@ func (c *configWatcher) GetOrGenerate(ctx context.Context, wl k8sapi.Workload) (
 	}
 
 	// Store the generated config, unless another goroutine generated it concurrently.
-	c.agentConfigs.Compute(wl.GetNamespace(), func(scMap map[string]*agentconfig.Sidecar, loaded bool) (map[string]*agentconfig.Sidecar, xsync.ComputeOp) {
-		if !loaded {
-			return map[string]*agentconfig.Sidecar{wl.GetName(): ac}, xsync.UpdateOp
-		}
-		if existing := scMap[wl.GetName()]; existing != nil {
+	c.namespaceAgentConfigs(wl.GetNamespace()).Compute(wl.GetName(), func(existing *agentconfig.Sidecar, loaded bool) (*agentconfig.Sidecar, xsync.ComputeOp) {
+		if loaded && existing != nil {
 			ac = existing
-			return scMap, xsync.CancelOp
+			return existing, xsync.CancelOp
 		}
-		scMap[wl.GetName()] = ac
-		return scMap, xsync.UpdateOp
+		return ac, xsync.UpdateOp
 	})
 	return ac, nil
 }

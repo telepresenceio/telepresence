@@ -105,27 +105,7 @@ func (s *Server) tryResolveD(c context.Context, dev vif.Device, configureDNS fun
 
 func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
 	s.Lock()
-	paths := make([]string, len(s.search)+len(s.routes)+len(s.IncludeSuffixes)+1)
-
-	// Namespaces are copied verbatim. Entries that aren't prefixed with "~" are considered search path entries.
-	copy(paths, s.search)
-	i := len(s.search)
-	for ns := range s.routes {
-		paths[i] = "~" + ns
-		i++
-	}
-
-	// Include-suffixes are routes, i.e. in contrast to search paths, they are never appended to the name, but
-	// used as a filter that will direct queries for names ending with them to this resolver. Routes must be
-	// prefixed with "~".
-	for _, sfx := range s.IncludeSuffixes {
-		if !strings.HasSuffix(sfx, ".") {
-			sfx += "."
-		}
-		paths[i] = "~" + strings.TrimPrefix(sfx, ".")
-		i++
-	}
-	paths[i] = "~" + s.clusterDomain
+	paths := linkDomains(s.search, s.routes, s.IncludeSuffixes, s.clusterDomain)
 	s.Unlock()
 
 	if err := dbus.SetLinkDomains(c, int(dev.Index()), paths...); err != nil {
@@ -134,4 +114,34 @@ func (s *Server) updateLinkDomains(c context.Context, dev vif.Device) error {
 	s.flushDNS()
 	clog.Debugf(c, "Link domains on device %q set to [%s]", dev.Name(), strings.Join(paths, ","))
 	return nil
+}
+
+func linkDomains(search []string, routes map[string]struct{}, includeSuffixes []string, clusterDomain string) []string {
+	paths := make([]string, 0, len(search)+len(routes)*2+len(includeSuffixes)+1)
+
+	// Namespaces are copied verbatim. Entries that aren't prefixed with "~" are considered search path entries.
+	paths = append(paths, search...)
+	serviceClusterDomain := strings.TrimSuffix(clusterDomain, ".")
+	for ns := range routes {
+		paths = append(paths, "~"+ns)
+		if ns != "svc" && serviceClusterDomain != "" {
+			// DHCP can advertise a route-only svc.<cluster-domain> on the VM's
+			// primary link. Namespace-qualified service routes are more specific,
+			// so systemd-resolved sends Kubernetes service lookups through the
+			// Telepresence link instead of a different cluster's DNS server.
+			paths = append(paths, "~"+ns+".svc."+serviceClusterDomain)
+		}
+	}
+
+	// Include-suffixes are routes, i.e. in contrast to search paths, they are never appended to the name, but
+	// used as a filter that will direct queries for names ending with them to this resolver. Routes must be
+	// prefixed with "~".
+	for _, sfx := range includeSuffixes {
+		if !strings.HasSuffix(sfx, ".") {
+			sfx += "."
+		}
+		paths = append(paths, "~"+strings.TrimPrefix(sfx, "."))
+	}
+	paths = append(paths, "~"+clusterDomain)
+	return paths
 }
