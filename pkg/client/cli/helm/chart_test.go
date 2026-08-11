@@ -61,3 +61,52 @@ func TestQuicTunnelRequiresSingleManagerReplica(t *testing.T) {
 	require.Error(t, err, "quicTunnel.enabled with two replicas must refuse to render even without the schema")
 	require.ErrorContains(t, err, "quicTunnel.enabled requires replicaCount 1")
 }
+
+func TestQuicForwarderPodLabelsSchema(t *testing.T) {
+	t.Run("accepts string-valued pod labels", func(t *testing.T) {
+		err := renderCoreChart(t, map[string]any{
+			"quicTunnel": map[string]any{
+				"enabled": true,
+				"forwarder": map[string]any{
+					"podLabels": map[string]any{"example.com/mesh-injection": "enabled"},
+				},
+			},
+		}, true)
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects non-object pod labels", func(t *testing.T) {
+		err := renderCoreChart(t, map[string]any{
+			"quicTunnel": map[string]any{
+				"enabled":   true,
+				"forwarder": map[string]any{"podLabels": "enabled"},
+			},
+		}, true)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "podLabels")
+	})
+
+	t.Run("rejects non-string pod label values", func(t *testing.T) {
+		err := renderCoreChart(t, map[string]any{
+			"quicTunnel": map[string]any{
+				"enabled": true,
+				"forwarder": map[string]any{
+					"podLabels": map[string]any{"example.com/mesh-injection": true},
+				},
+			},
+		}, true)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "podLabels")
+	})
+
+	t.Run("rejects unknown forwarder properties", func(t *testing.T) {
+		err := renderCoreChart(t, map[string]any{
+			"quicTunnel": map[string]any{
+				"enabled":   true,
+				"forwarder": map[string]any{"unknownProperty": "value"},
+			},
+		}, true)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "unknownProperty")
+	})
+}
