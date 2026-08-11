@@ -175,10 +175,10 @@ func useLookupName(qName, noSearchDomain string) (string, bool) {
 
 func lookupIP(ctx context.Context, network, qName, noSearchDomain string, r *net.Resolver) ([]net.IP, error) {
 	name, final := useLookupName(qName, noSearchDomain)
-	ips, err := r.LookupIP(ctx, network, name)
+	ips, err := r.LookupIP(ctx, "ip", name)
 	if err != nil && !final {
 		clog.Errorf(ctx, "LookupIP failed %q failed, trying LookupIP %q", name, qName)
-		ips, err = r.LookupIP(ctx, network, qName)
+		ips, err = r.LookupIP(ctx, "ip", qName)
 	}
 	if err == nil && len(ips) == 0 {
 		err = &net.DNSError{
@@ -187,19 +187,10 @@ func lookupIP(ctx context.Context, network, qName, noSearchDomain string, r *net
 			IsNotFound: true,
 		}
 	}
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
-		otherNetwork := "ip4"
-		if network == "ip4" {
-			otherNetwork = "ip6"
-		}
-		otherIPs, otherErr := r.LookupIP(ctx, otherNetwork, name)
-		if otherErr != nil && !final {
-			otherIPs, otherErr = r.LookupIP(ctx, otherNetwork, qName)
-		}
-		if otherErr == nil && len(otherIPs) > 0 {
-			return nil, nil
-		}
+	if err == nil {
+		ips = slices.DeleteFunc(ips, func(ip net.IP) bool {
+			return (ip.To4() != nil) != (network == "ip4")
+		})
 	}
 	return ips, err
 }
