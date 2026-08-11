@@ -171,6 +171,7 @@ func WithSubCommands(ctx context.Context) context.Context {
 		leaveCmd(),
 		list(),
 		listContexts(),
+		localClientRedirectCmd(),
 		revokeCmd(),
 		listNamespaces(),
 		loglevel(),

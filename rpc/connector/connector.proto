@@ -140,6 +140,15 @@ service Connector {
 
   // RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
   rpc RerouteRemotePort(daemon.ReroutePortRequest) returns (google.protobuf.Empty);
+
+  // AddLocalClientRedirect redirects traffic for a netip.AddrPort to localhost on a different port.
+  rpc AddLocalClientRedirect(daemon.ReroutePortRequest) returns (google.protobuf.Empty);
+
+  // RemoveLocalClientRedirect stops redirecting traffic for a netip.AddrPort to localhost.
+  rpc RemoveLocalClientRedirect(daemon.ReroutePortRequest) returns (google.protobuf.Empty);
+
+  // ListLocalClientRedirects lists active local client redirects.
+  rpc ListLocalClientRedirects(google.protobuf.Empty) returns (daemon.LocalClientRedirects);
 }
 
 message Interceptor {

@@ -290,6 +290,38 @@ func (s *service) WatchAgentPods(stream rpc.Daemon_WatchAgentPodsServer) error {
 	}
 }
 
+func (s *service) AddLocalClientRedirect(ctx context.Context, request *rpc.ReroutePortRequest) (rsp *emptypb.Empty, err error) {
+	err = s.withSession(ctx, func(_ context.Context, session *session) error {
+		var ap types.AddrPortProto
+		err = ap.UnmarshalBinary(request.DstHostPort)
+		if err == nil {
+			session.addLocalClientRedirect(ap, uint16(request.SrcPort))
+		}
+		return err
+	})
+	return &emptypb.Empty{}, err
+}
+
+func (s *service) RemoveLocalClientRedirect(ctx context.Context, request *rpc.ReroutePortRequest) (rsp *emptypb.Empty, err error) {
+	err = s.withSession(ctx, func(_ context.Context, session *session) error {
+		var ap types.AddrPortProto
+		err = ap.UnmarshalBinary(request.DstHostPort)
+		if err == nil {
+			session.removeLocalClientRedirect(ap)
+		}
+		return err
+	})
+	return &emptypb.Empty{}, err
+}
+
+func (s *service) ListLocalClientRedirects(ctx context.Context, _ *emptypb.Empty) (rsp *rpc.LocalClientRedirects, err error) {
+	err = s.withSession(ctx, func(_ context.Context, session *session) error {
+		rsp = &rpc.LocalClientRedirects{Redirects: session.listLocalClientRedirects()}
+		return nil
+	})
+	return rsp, err
+}
+
 func (s *service) withSession(ctx context.Context, f func(context.Context, *session) error) (err error) {
 	s.sessionLock.RLock()
 	defer s.sessionLock.RUnlock()

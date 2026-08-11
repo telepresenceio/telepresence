@@ -652,6 +652,36 @@ func (s *service) RerouteRemotePort(ctx context.Context, request *daemon.Reroute
 	return rsp, err
 }
 
+func (s *service) AddLocalClientRedirect(ctx context.Context, request *daemon.ReroutePortRequest) (rsp *empty.Empty, err error) {
+	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
+		return session.WithRootClient(ctx, func(ctx context.Context, rd daemon.DaemonClient) (err error) {
+			rsp, err = rd.AddLocalClientRedirect(ctx, request)
+			return err
+		})
+	})
+	return rsp, err
+}
+
+func (s *service) RemoveLocalClientRedirect(ctx context.Context, request *daemon.ReroutePortRequest) (rsp *empty.Empty, err error) {
+	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
+		return session.WithRootClient(ctx, func(ctx context.Context, rd daemon.DaemonClient) (err error) {
+			rsp, err = rd.RemoveLocalClientRedirect(ctx, request)
+			return err
+		})
+	})
+	return rsp, err
+}
+
+func (s *service) ListLocalClientRedirects(ctx context.Context, request *empty.Empty) (rsp *daemon.LocalClientRedirects, err error) {
+	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
+		return session.WithRootClient(ctx, func(ctx context.Context, rd daemon.DaemonClient) (err error) {
+			rsp, err = rd.ListLocalClientRedirects(ctx, request)
+			return err
+		})
+	})
+	return rsp, err
+}
+
 func (s *service) withRootDaemon(ctx context.Context, f func(ctx context.Context, daemonClient daemon.DaemonClient) error) error {
 	s.sessionLock.RLock()
 	defer s.sessionLock.RUnlock()
