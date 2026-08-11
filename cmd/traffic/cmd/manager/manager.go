@@ -84,6 +84,12 @@ func MainWithEnv(ctx context.Context) (err error) {
 	if err != nil {
 		return fmt.Errorf("unable to get the Kubernetes InClusterConfig: %w", err)
 	}
+	// The manager shares one client with its informer set, admission injector, and
+	// pod-reconciliation paths. client-go's default 5 QPS / 10 burst budget is too
+	// small for clusters with many watched namespaces and can make unrelated
+	// workload reconciliation queue for longer than the webhook timeout.
+	cfg.QPS = 50
+	cfg.Burst = 100
 	ki, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		return fmt.Errorf("unable to create the Kubernetes Interface from InClusterConfig: %w", err)

@@ -98,7 +98,11 @@ func WatchWarnings(ctx context.Context, ki kubernetes.Interface, namespace, name
 					!strings.HasPrefix(e.Note, combinedNotePrefix) &&
 					regardingMatches(e, name, nd) {
 					clog.Infof(ctx, "%s %s %s", e.Type, e.Reason, e.Note)
-					ec <- e
+					select {
+					case <-ctx.Done():
+						return
+					case ec <- e:
+					}
 				}
 			}
 		}

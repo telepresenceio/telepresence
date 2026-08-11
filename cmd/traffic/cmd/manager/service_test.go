@@ -427,6 +427,27 @@ func agentPrincipal(agent *rpc.AgentInfo) *auth.Principal {
 	}
 }
 
+// TestArriveAsAgentIsIdempotent covers a retry after the manager has already
+// committed the first arrival but its response did not reach the agent.
+func TestArriveAsAgentIsIdempotent(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	testAgents := testdata.GetTestAgents(t)
+	req := require.New(t)
+
+	_, mgr, sctx := getTestClientConnAndService(ctx, t, nil)
+	agent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+
+	first, err := mgr.ArriveAsAgent(sctx, agent)
+	req.NoError(err)
+	second, err := mgr.ArriveAsAgent(sctx, agent)
+	req.NoError(err)
+
+	req.NotEmpty(first.SessionId)
+	req.Equal(first.SessionId, second.SessionId)
+	req.Equal(1, mgr.State().CountAgents())
+}
+
 // TestAgentSessionBinding covers the pod-identity binding established at agent
 // arrival and enforced by ensureAgentSession on later agent-session RPCs: matching
 // claims bind the session and lock out every other identity (including no identity

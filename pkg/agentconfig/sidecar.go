@@ -517,29 +517,18 @@ func UnmarshalYAML(data []byte) (*Sidecar, error) {
 // MarshalTight marshals the given instance into JSON data, with data relating to the creation of the
 // container manifest stripped off.
 func MarshalTight(ac *Sidecar) (string, error) {
-	// Strip things that are not needed once the container has been created.
-	ai := ac.AgentImage
-	pp := ac.PullPolicy
-	ps := ac.PullSecrets
-	ir := ac.InitResources
-	sc := ac.SecurityContext
-	is := ac.InitSecurityContext
+	// Sidecars are cached and reused by concurrent admission requests. Strip
+	// creation-only fields from a value copy so marshaling never mutates that
+	// shared config while another request is building an injected container.
+	tight := *ac
+	tight.AgentImage = ""
+	tight.PullPolicy = ""
+	tight.PullSecrets = nil
+	tight.InitResources = nil
+	tight.SecurityContext = nil
+	tight.InitSecurityContext = nil
 
-	ac.AgentImage = ""
-	ac.PullPolicy = ""
-	ac.PullSecrets = nil
-	ac.InitResources = nil
-	ac.SecurityContext = nil
-	ac.InitSecurityContext = nil
-
-	data, err := json.Marshal(ac)
-	ac.AgentImage = ai
-	ac.PullPolicy = pp
-	ac.PullSecrets = ps
-	ac.InitResources = ir
-	ac.SecurityContext = sc
-	ac.InitSecurityContext = is
-
+	data, err := json.Marshal(&tight)
 	if err != nil {
 		return "", err
 	}
