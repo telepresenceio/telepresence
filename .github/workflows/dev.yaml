@@ -29,28 +29,36 @@ concurrency:
 # gate for PRs from forks. The jobs below repeat that condition because
 # workflow files cannot share expressions.
 #
-# Required-status-check semantics shape this workflow: a job skipped through
-# its if-condition reports conclusion "skipped", which SATISFIES a required
-# check. That is intended when preflight reports a docs-only change or a
-# prerequisite has failed (the failed prerequisite is itself required, so the
-# merge stays blocked), but it must never happen for an unlabeled fork PR --
-# which is why regression renders a different job name in that case, leaving
-# the required "regression" context unreported and the merge blocked as
-# "expected".
+# Required-status-check semantics shape this workflow. GitHub counts a
+# "skipped" job as a satisfied required check, and evaluates a job's name
+# expression only when the job actually runs -- a job skipped by its if is
+# reported under the raw, unevaluated expression text. The regression
+# aggregate therefore always runs and decides in its steps, and its name
+# decides whether this run claims the required "regression" context at all:
+# a run that skips the shards by design (a label this workflow acts on for
+# some other purpose) or that no maintainer has vouched for (an unlabeled
+# fork PR) reports under a different name, leaving the context unreported
+# and the merge blocked as "expected".
 jobs:
   # Gatekeeper for the expensive jobs: removes the triggering label so a
   # maintainer can re-add it, decides whether the change is docs-only, and
   # waits for the other required checks so a DCO or unit-test failure is
   # never followed by a pointless integration run.
   preflight:
+    # A labeled run enters only for the two labels this workflow acts on.
+    # Without that test every label added to an in-repository pull request
+    # would start this workflow and have the label stripped again by the
+    # step below.
     if: >-
-      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) ||
+      (github.event.action != 'labeled' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       !github.event.pull_request.draft) ||
       github.event.label.name == 'ok to test' ||
       github.event.label.name == 'compatibility test'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     outputs:
-      docs_only: ${{ steps.skip.outputs.should_skip }}
+      docs_only: ${{ steps.skip.outputs.docs_only }}
     steps:
       # For PRs from a fork the GITHUB_TOKEN is read-only and this call
       # fails; continue-on-error keeps that from aborting the job (the
@@ -65,17 +73,47 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           LABEL: ${{ github.event.label.name }}
         run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
-      # docs_only=true when every change since the last successful run of
-      # this workflow matches paths_ignore; build_and_test is then skipped
-      # and its required check is satisfied without a run. When no prior
-      # successful run can be found the answer is false, so the fail-safe
-      # direction is a full run.
+      # docs_only=true when every file this pull request changes is one the
+      # regression suite cannot exercise. It is a property of the whole pull
+      # request, deliberately not of the commits since some earlier
+      # successful run of this workflow: an incremental answer has to trust
+      # that run to have covered the code, and a run here can conclude
+      # successfully having tested nothing at all -- an unlabeled fork pull
+      # request skips every job. A docs-only commit pushed on top of
+      # untested code would then inherit that verdict and take the required
+      # regression context green for code no shard ever ran. Asking about
+      # the pull request as a whole cannot borrow a verdict from anything.
+      #
+      # Anything unreadable or unexpected leaves docs_only unset, so the
+      # fail-safe direction stays a full run.
       - name: Check for a docs-only change
         id: skip
-        uses: fkirc/skip-duplicate-actions@v5
-        with:
-          cancel_others: false
-          paths_ignore: '["docs/**", "**.md", "CHANGELOG.yml"]'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          if [ -z "$files" ]; then
+            echo "no files reported for this pull request; running everything"
+            echo "docs_only=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          docs_only=true
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            case "$f" in
+              docs/* | *.md | CHANGELOG.yml) ;;
+              *)
+                echo "not a docs-only change: $f"
+                docs_only=false
+                break
+                ;;
+            esac
+          done <<<"$files"
+          echo "docs_only=$docs_only"
+          echo "docs_only=$docs_only" >>"$GITHUB_OUTPUT"
       # The list is the branch protection's required contexts minus this
       # workflow's own build_and_test; reading it from the API would need
       # admin scope the GITHUB_TOKEN does not have, so it is spelled out
@@ -235,40 +273,71 @@ jobs:
           path: build-output/rtest/logs/
 
   # The single required "regression" context: green exactly when every
-  # shard is. A skipped shard matrix (docs-only, failed prerequisite)
-  # skips this job too, with the same required-check semantics the header
-  # comment describes; for an unlabeled fork PR the rendered name differs,
-  # leaving the required context unreported and the merge blocked.
+  # shard is, or when the shards were legitimately not run because the
+  # change is docs-only.
+  #
+  # This job decides in its steps rather than its if. A skipped job never
+  # evaluates its name expression -- GitHub reports the raw expression text
+  # as the check name -- so gating with if would publish the verdict under a
+  # name that is not "regression", leaving the required context unreported
+  # for a docs-only change instead of satisfying it.
+  #
+  # Only a run that is actually responsible for the regression gate takes
+  # the required name. A run this workflow starts for some other purpose
+  # skips the shards by design, and must not then report the gate green on
+  # the strength of that skip: a maintainer labelling for the compatibility
+  # tests while a push run's shards are still going would otherwise publish
+  # a passing "regression" before the shards that decide it have finished,
+  # and the shards carry no required context of their own. An unlabeled fork
+  # PR is excluded for the original reason: the gate stays unreported until
+  # a maintainer vouches for the code with "ok to test".
   regression:
     needs: [preflight, regression_shard]
-    if: >-
-      always() &&
-      needs.preflight.result == 'success' &&
-      needs.preflight.outputs.docs_only != 'true' &&
-      (github.event.action != 'labeled' || github.event.label.name == 'ok to test')
+    if: ${{ !cancelled() }}
     name: >-
-      ${{ ((github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) ||
-           github.event.label.name == 'ok to test')
+      ${{ (((github.event.action != 'labeled') &&
+             github.event.pull_request.head.repo.full_name == github.repository &&
+             !github.event.pull_request.draft) ||
+            github.event.label.name == 'ok to test')
           && 'regression'
-          || 'regression (awaiting ok-to-test)' }}
+          || 'regression (not requested)' }}
     runs-on: ubuntu-latest
     steps:
       - name: All shards green
         env:
+          PREFLIGHT: ${{ needs.preflight.result }}
           SHARDS: ${{ needs.regression_shard.result }}
         run: |
-          echo "regression_shard: $SHARDS"
-          test "$SHARDS" = "success"
+          set -eu
+          echo "preflight: $PREFLIGHT, regression_shard: $SHARDS"
+          # A prerequisite that failed is reported here too. It carries its
+          # own required context, so the merge was already blocked; saying so
+          # here as well beats a green "regression" that ran nothing.
+          case "$PREFLIGHT" in
+            success | skipped) ;;
+            *) echo "preflight did not succeed"; exit 1 ;;
+          esac
+          case "$SHARDS" in
+            success | skipped) ;;
+            *) echo "one or more regression shards did not succeed"; exit 1 ;;
+          esac
 
   # Bidirectional compatibility of the compat-core subset: the labeled tests
   # collectively cover most of the manager.Manager RPC surface (guarded by
   # regression_test/framework/compat's manifest test). The counterpart
   # version is the latest release tag, not a hand-pinned literal.
+  #
+  # The label is an explicit request, so it does not consult docs_only.
+  # That output answers "is everything since the last successful run of this
+  # workflow ignorable", which the action decides by backtracking over
+  # paths_ignore: a docs-only commit on top of a revision whose regression
+  # run passed makes it true, even though no compatibility run has ever
+  # covered that revision. The two runs are not interchangeable, and asking
+  # for one by hand should not be answered with the other's result.
   regression_compat:
     needs: preflight
     if: >-
       needs.preflight.result == 'success' &&
-      needs.preflight.outputs.docs_only != 'true' &&
       github.event.label.name == 'compatibility test'
     runs-on: ubuntu-latest
     steps:
