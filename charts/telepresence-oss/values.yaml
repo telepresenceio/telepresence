@@ -301,6 +301,8 @@ quicTunnel:
   # backend allowlist it consumes over gRPC. Only deployed when
   # quicTunnel.enabled is true.
   forwarder:
+    # Additional labels to add to the quic-forwarder pod.
+    podLabels: {}
     # Number of quic-forwarder replicas. The forwarder keeps no state that
     # matters across a restart, so this can be scaled freely without any
     # coordination between replicas.
