@@ -54,6 +54,8 @@ jobs:
       docs_only: ${{ steps.decide.outputs.docs_only }}
       vouched: ${{ steps.decide.outputs.vouched }}
       draft: ${{ steps.decide.outputs.draft }}
+      inherited: ${{ steps.decide.outputs.inherited }}
+      inherited_from: ${{ steps.decide.outputs.inherited_from }}
     steps:
       - name: Decide whether the shards run
         id: decide
@@ -63,6 +65,9 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           ATTEMPT: ${{ github.run_attempt }}
+          ACTION: ${{ github.event.action }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
         run: |
           set -euo pipefail
           # A pull request whose head branch lives in this repository is
@@ -77,14 +82,26 @@ jobs:
           # Live pull-request state, not the frozen event payload, so a
           # re-run of an existing attempt sees the current draft flag.
           draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .draft)
+          # Succeeds when every filename on stdin is one the test suites
+          # cannot exercise.
+          docs_only_paths() {
+            local f
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              case "$f" in
+                docs/* | *.md | CHANGELOG.yml) ;;
+                *)
+                  echo "not a docs-only change: $f"
+                  return 1
+                  ;;
+              esac
+            done
+            return 0
+          }
           # docs_only=true when every file this pull request changes is one
           # the regression suite cannot exercise. It is a property of the
-          # whole pull request, deliberately not of the commits since some
-          # earlier successful run of this workflow: an incremental answer
-          # has to trust that run to have covered the code, and a run here
-          # can conclude successfully having tested nothing at all. Asking
-          # about the pull request as a whole cannot borrow a verdict from
-          # anything.
+          # whole pull request: there is then no code the shards could
+          # verify, so no verdict needs borrowing from anywhere.
           #
           # Anything unreadable or unexpected fails this job, so the
           # fail-safe direction stays a blocked merge.
@@ -93,24 +110,46 @@ jobs:
           if [ -z "$files" ]; then
             echo "no files reported for this pull request; running everything"
             docs_only=false
+          elif ! docs_only_paths <<<"$files"; then
+            docs_only=false
           fi
-          while IFS= read -r f; do
-            [ -n "$f" ] || continue
-            case "$f" in
-              docs/* | *.md | CHANGELOG.yml) ;;
-              *)
-                echo "not a docs-only change: $f"
-                docs_only=false
-                break
-                ;;
-            esac
-          done <<<"$files"
+          # A push whose commits change only docs cannot alter what the
+          # shards verify, so the previous head's verdict carries over --
+          # provided it was earned. Every run of this workflow reports the
+          # "regression" context truthfully (a run that tested nothing
+          # fails rather than passing vacuously), so a completed success on
+          # the previous head is proof that this exact code content was
+          # verified. The compare status must be "ahead": a force-push
+          # diverges, and the new head is then not the verified content
+          # plus docs. An API hiccup or a truncated file list (the compare
+          # endpoint caps at 300 files) falls back to a full run.
+          inherited=false
+          inherited_from=''
+          if [ "$ACTION" = synchronize ] && [ "$docs_only" != true ] &&
+             [ -n "$BEFORE" ] && [ -n "$AFTER" ]; then
+            cmp=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$AFTER" 2>/dev/null) || cmp=''
+            if [ -n "$cmp" ] &&
+               [ "$(jq -r .status <<<"$cmp")" = ahead ] &&
+               [ "$(jq -r '.files | length' <<<"$cmp")" -lt 300 ] &&
+               docs_only_paths < <(jq -r '.files[].filename' <<<"$cmp"); then
+              reg=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BEFORE/check-runs?check_name=regression" \
+                --jq '[.check_runs[] | select(.name == "regression")] | sort_by(.started_at) | map("\(.status)/\(.conclusion)") | last // ""' 2>/dev/null) || reg=''
+              if [ "$reg" = completed/success ]; then
+                echo "docs-only push onto $BEFORE, whose regression verdict is green"
+                inherited=true
+                inherited_from=$BEFORE
+              else
+                echo "docs-only push, but no green regression on $BEFORE (found '$reg')"
+              fi
+            fi
+          fi
           run_shards=false
-          if [ "$vouched" = true ] && [ "$draft" != true ] && [ "$docs_only" != true ]; then
+          if [ "$vouched" = true ] && [ "$draft" != true ] &&
+             [ "$docs_only" != true ] && [ "$inherited" != true ]; then
             run_shards=true
           fi
-          printf 'vouched=%s\ndraft=%s\ndocs_only=%s\nrun_shards=%s\n' \
-            "$vouched" "$draft" "$docs_only" "$run_shards" | tee -a "$GITHUB_OUTPUT"
+          printf 'vouched=%s\ndraft=%s\ndocs_only=%s\ninherited=%s\ninherited_from=%s\nrun_shards=%s\n' \
+            "$vouched" "$draft" "$docs_only" "$inherited" "$inherited_from" "$run_shards" | tee -a "$GITHUB_OUTPUT"
       # The list is the branch protection's required contexts minus this
       # workflow's own regression; reading it from the API would need
       # admin scope the GITHUB_TOKEN does not have, so it is spelled out
@@ -136,16 +175,6 @@ jobs:
             pending=()
             for name in "${required[@]}"; do
               row=$(jq -r --arg n "$name" '.[] | select(.name == $n) | "\(.status)/\(.conclusion)"' <<<"$runs")
-              # A matrix job skipped before expansion (docs-only change)
-              # reports one bare context named for the job, not the
-              # per-matrix names; accept the bare context in that case.
-              if [ -z "$row" ] && [[ "$name" == *' ('* ]]; then
-                bare=${name%% (*}
-                barerow=$(jq -r --arg n "$bare" '.[] | select(.name == $n) | "\(.status)/\(.conclusion)"' <<<"$runs")
-                if [ "$barerow" = completed/skipped ]; then
-                  continue
-                fi
-              fi
               case "$row" in
                 completed/success|completed/neutral|completed/skipped) ;;
                 completed/*)
@@ -269,10 +298,11 @@ jobs:
           path: build-output/rtest/logs/
 
   # The single required "regression" context: green exactly when every
-  # shard is, or when the shards were legitimately not run because the
-  # change is docs-only. Any other skip is reported as a failure naming
-  # the reason, so the merge box always shows a verdict rather than an
-  # unreported context.
+  # shard is, when the shards were legitimately not run because the change
+  # is docs-only, or when a docs-only push carries over the verdict the
+  # previous head already earned. Any other skip is reported as a failure
+  # naming the reason, so the merge box always shows a verdict rather than
+  # an unreported context.
   regression:
     needs: [preflight, regression_shard]
     if: ${{ !cancelled() }}
@@ -285,6 +315,8 @@ jobs:
           DOCS_ONLY: ${{ needs.preflight.outputs.docs_only }}
           DRAFT: ${{ needs.preflight.outputs.draft }}
           VOUCHED: ${{ needs.preflight.outputs.vouched }}
+          INHERITED: ${{ needs.preflight.outputs.inherited }}
+          INHERITED_FROM: ${{ needs.preflight.outputs.inherited_from }}
         run: |
           set -eu
           echo "preflight: $PREFLIGHT, regression_shard: $SHARDS"
@@ -302,6 +334,10 @@ jobs:
           esac
           if [ "$DOCS_ONLY" = true ]; then
             echo "docs-only change; the shards have nothing to exercise"
+            exit 0
+          fi
+          if [ "$INHERITED" = true ]; then
+            echo "docs-only push; regression verdict inherited from $INHERITED_FROM"
             exit 0
           fi
           if [ "$DRAFT" = true ]; then
