@@ -1,0 +1,100 @@
+name: "Compatibility Tests"
+on:
+  pull_request:
+    types:
+      - labeled
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  TELEPRESENCE_REGISTRY: local
+
+concurrency:
+  group: "regression-compat-${{ github.event.pull_request.number }}"
+  cancel-in-progress: true
+
+# Bidirectional compatibility of the compat-core subset: the labeled tests
+# collectively cover most of the manager.Manager RPC surface (guarded by
+# regression_test/framework/compat's manifest test). The counterpart
+# version is the latest release tag, not a hand-pinned literal.
+#
+# This lives in its own workflow so that the "compatibility test" label
+# never starts the Regression Tests workflow: the merge box resolves the
+# required "regression" context against that workflow's newest check
+# suite, and a suite this label created could never report it. Nothing
+# here is a required check, so a label-created suite of this workflow is
+# harmless -- including the skipped runs every other label produces,
+# since a trigger cannot filter labels by name.
+jobs:
+  regression_compat:
+    if: github.event.label.name == 'compatibility test'
+    runs-on: ubuntu-latest
+    steps:
+      # The label is a one-shot request: remove it so a maintainer can
+      # re-add it for another run. For PRs from a fork the GITHUB_TOKEN is
+      # read-only and this call fails; continue-on-error keeps that from
+      # aborting the job (the maintainer removes the label by hand
+      # instead). The label name and PR number are passed via env (not
+      # interpolated into the script) to avoid command injection.
+      - name: Remove triggering label
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          LABEL: ${{ github.event.label.name }}
+        run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+      - name: install dependencies
+        uses: ./.github/actions/install-dependencies
+      - name: Get Telepresence Version
+        run: |
+          v=$(go run build-aux/genversion/main.go ${{github.run_id}})
+          echo "TELEPRESENCE_VERSION=$v" >> "$GITHUB_ENV"
+          echo "TELEPRESENCE_SEMVER=${v#v}" >> "$GITHUB_ENV"
+      - name: Determine counterpart version
+        run: |
+          git fetch --tags --quiet
+          c=$(git tag --sort=-v:refname | grep -E '^v2\.[0-9]+\.[0-9]+$' | head -1)
+          echo "COMPAT_VERSION=${c#v}" >> "$GITHUB_ENV"
+          echo "counterpart version: $c"
+      - name: Start minikube
+        uses: medyagh/setup-minikube@latest
+        with:
+          kubernetes-version: v1.33.5
+          container-runtime: containerd
+      - name: Build client
+        run: make build
+      - name: Build images
+        run: make tel2-image client-image
+      - name: Load images into minikube
+        run: minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
+      - name: Compat-core against the released manager
+        timeout-minutes: 30
+        shell: bash
+        env:
+          RTEST_REGISTRY: local
+          RTEST_MANAGER_VERSION: ${{ env.COMPAT_VERSION }}
+          RTEST_LABELS: compat-core
+        run: |
+          set -ex
+          make check-regression
+      - name: Compat-core with the released client
+        timeout-minutes: 30
+        shell: bash
+        env:
+          RTEST_REGISTRY: local
+          RTEST_CLIENT_VERSION: ${{ env.COMPAT_VERSION }}
+          RTEST_LABELS: compat-core
+        run: |
+          set -ex
+          make check-regression
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: regression-compat-logs-${{ runner.os }}-${{ runner.arch }}
+          path: build-output/rtest/logs/
