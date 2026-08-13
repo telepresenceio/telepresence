@@ -1351,7 +1351,7 @@ func TestRestoredServiceInterceptRequeuesWhenRecordedPodLeaves(t *testing.T) {
 	require.Empty(t, updated.participants[agentParticipantKey(stable.AgentInfo)].podName)
 }
 
-func TestServiceInterceptRemovalClearsOnlyRemovedParticipantReview(t *testing.T) {
+func TestServiceInterceptRemovalTransfersSecondaryParticipantReview(t *testing.T) {
 	ctx, st := newServiceInterceptState(t)
 	stable := serviceAgent("example-service", "stable-pod", "10.0.0.1")
 	canary := serviceAgent("example-service-canary", "canary-pod", "10.0.0.2")
@@ -1372,6 +1372,7 @@ func TestServiceInterceptRemovalClearsOnlyRemovedParticipantReview(t *testing.T)
 	intercept = st.ApplyAgentReview(ctx, intercept.Id, stable, &rpc.ReviewInterceptRequest{
 		Disposition: rpc.InterceptDispositionType_ACTIVE,
 		PodIp:       stable.PodIp,
+		Environment: map[string]string{"PRIMARY": "unchanged"},
 	})
 	intercept = st.ApplyAgentReview(ctx, intercept.Id, canary, &rpc.ReviewInterceptRequest{
 		Disposition: rpc.InterceptDispositionType_ACTIVE,
@@ -1384,11 +1385,181 @@ func TestServiceInterceptRemovalClearsOnlyRemovedParticipantReview(t *testing.T)
 
 	intercept, ok := st.intercepts.Load(intercept.Id)
 	require.True(t, ok)
-	require.Equal(t, rpc.InterceptDispositionType_WAITING, intercept.Disposition)
+	require.Equal(t, rpc.InterceptDispositionType_ACTIVE, intercept.Disposition)
 	require.Equal(t, stable.PodIp, intercept.PodIp)
 	require.Equal(t, stable.PodName, intercept.PodName)
+	require.Equal(t, map[string]string{"PRIMARY": "unchanged"}, intercept.Environment)
 	participant := intercept.participants[agentParticipantKey(canary.AgentInfo)]
 	require.NotNil(t, participant)
+	require.NotNil(t, participant.review)
+	require.Equal(t, canaryReplacement.PodName, participant.podName)
+	require.Equal(t, canaryReplacement.PodIp, participant.review.PodIp)
+}
+
+func TestServiceInterceptRemovalTransfersPublishedParticipantReview(t *testing.T) {
+	ctx, st := newServiceInterceptState(t)
+	stable := serviceAgent("example-service", "stable-pod", "10.0.0.1")
+	stableSibling := serviceAgent("example-service", "stable-pod-2", "10.0.0.3")
+	stableSibling.ApiPort = 9901
+	stableSibling.FtpPort = 9902
+	stableSibling.SftpPort = 9903
+	stableSibling.InterceptTargets[0].ContainerName = "replacement-app"
+	stableSibling.Containers = map[string]*rpc.AgentInfo_ContainerInfo{
+		"replacement-app": {
+			Environment: map[string]string{"POD": "replacement", "SECRET_NEW": "must-not-be-published"},
+			MountPoint:  "/replacement/mount",
+			Mounts:      map[string]int32{"/replacement/data": 1},
+		},
+	}
+	canary := serviceAgent("example-service-canary", "canary-pod", "10.0.0.2")
+	st.agents.Store("stable", stable)
+	st.agents.Store("stable-sibling", stableSibling)
+	st.agents.Store("canary", canary)
+
+	spec := sharedServiceSpec()
+	spec.ContainerName = "original-app"
+	intercept := &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:               "client:example-service",
+		Spec:             spec,
+		Disposition:      rpc.InterceptDispositionType_WAITING,
+		ClientSession:    &rpc.SessionInfo{SessionId: "client"},
+		ServiceWorkloads: sharedServiceWorkloads(stable.Name, canary.Name),
+	}}
+	st.initializeParticipants(intercept)
+	st.intercepts.Store(intercept.Id, intercept)
+	intercept = st.ApplyAgentReview(ctx, intercept.Id, stable, &rpc.ReviewInterceptRequest{
+		Disposition:       rpc.InterceptDispositionType_ACTIVE,
+		PodIp:             stable.PodIp,
+		FtpPort:           8001,
+		SftpPort:          8002,
+		MountPoint:        "/old/mount",
+		Mounts:            map[string]int32{"/old/data": 2},
+		Environment:       map[string]string{"POD": "old"},
+		MechanismArgsDesc: "header-filter",
+	})
+	intercept = st.ApplyAgentReview(ctx, intercept.Id, canary, &rpc.ReviewInterceptRequest{
+		Disposition: rpc.InterceptDispositionType_ACTIVE,
+		PodIp:       canary.PodIp,
+	})
+	require.Equal(t, rpc.InterceptDispositionType_ACTIVE, intercept.Disposition)
+
+	st.agents.Delete("stable")
+	st.consolidateAgentSessionIntercepts(stable)
+
+	intercept, ok := st.intercepts.Load(intercept.Id)
+	require.True(t, ok)
+	require.Equal(t, rpc.InterceptDispositionType_ACTIVE, intercept.Disposition)
+	require.Equal(t, stableSibling.PodName, intercept.PodName)
+	require.Equal(t, stableSibling.PodIp, intercept.PodIp)
+	require.Equal(t, stableSibling.ApiPort, intercept.ApiPort)
+	require.Equal(t, stableSibling.FtpPort, intercept.FtpPort)
+	require.Equal(t, stableSibling.SftpPort, intercept.SftpPort)
+	require.Equal(t, "/replacement/mount", intercept.MountPoint)
+	require.Equal(t, map[string]int32{"/replacement/data": 1}, intercept.Mounts)
+	require.Equal(t, map[string]string{"POD": "replacement"}, intercept.Environment)
+	require.Equal(t, "header-filter", intercept.MechanismArgsDesc)
+	participant := intercept.participants[agentParticipantKey(stable.AgentInfo)]
+	require.Equal(t, stableSibling.PodName, participant.podName)
+	require.Equal(t, stableSibling.PodIp, participant.review.PodIp)
+	require.NotNil(t, intercept.participants[agentParticipantKey(canary.AgentInfo)].review)
+}
+
+func TestServiceInterceptRemovalSelectsEligibleReplacementDeterministically(t *testing.T) {
+	tests := []struct {
+		name       string
+		ineligible func(context.Context, *AgentSession)
+	}{
+		{
+			name: "omitted environment",
+			ineligible: func(_ context.Context, agent *AgentSession) {
+				agent.ContainerEnvironmentOmitted = true
+			},
+		},
+		{
+			name: "inactive pod",
+			ineligible: func(ctx context.Context, agent *AgentSession) {
+				mutator.GetMap(ctx).Inactivate(k8sTypes.UID(agent.PodUid))
+			},
+		},
+		{
+			name: "missing pod address",
+			ineligible: func(_ context.Context, agent *AgentSession) {
+				agent.PodIp = ""
+			},
+		},
+		{
+			name: "unknown target container",
+			ineligible: func(_ context.Context, agent *AgentSession) {
+				agent.InterceptTargets[0].ContainerName = "missing-app"
+				agent.Containers = map[string]*rpc.AgentInfo_ContainerInfo{
+					"other-app": {},
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, st := newServiceInterceptState(t)
+			stable := serviceAgent("example-service", "stable-pod", "10.0.0.1")
+			canary := serviceAgent("example-service-canary", "canary-pod", "10.0.0.2")
+			intercept := activeServiceIntercept(t, ctx, st, stable, canary)
+			ineligible := serviceAgent("example-service", "a-ineligible-pod", "10.0.0.3")
+			tt.ineligible(ctx, ineligible)
+			last := serviceAgent("example-service", "z-eligible-pod", "10.0.0.4")
+			first := serviceAgent("example-service", "m-eligible-pod", "10.0.0.5")
+			st.agents.Store("ineligible", ineligible)
+			st.agents.Store("last", last)
+			st.agents.Store("first", first)
+
+			st.agents.Delete("stable")
+			st.consolidateAgentSessionIntercepts(stable)
+
+			updated, ok := st.intercepts.Load(intercept.Id)
+			require.True(t, ok)
+			require.Equal(t, rpc.InterceptDispositionType_ACTIVE, updated.Disposition)
+			require.Equal(t, first.PodName, updated.PodName)
+			require.Equal(t, first.PodIp, updated.PodIp)
+		})
+	}
+}
+
+func TestServiceInterceptRemovalRequeuesWhenReplacementContainerUnknown(t *testing.T) {
+	ctx, st := newServiceInterceptState(t)
+	stable := serviceAgent("example-service", "stable-pod", "10.0.0.1")
+	stableSibling := serviceAgent("example-service", "stable-pod-2", "10.0.0.3")
+	stableSibling.Containers = map[string]*rpc.AgentInfo_ContainerInfo{
+		"other-app": {Environment: map[string]string{"POD": "replacement"}},
+	}
+	canary := serviceAgent("example-service-canary", "canary-pod", "10.0.0.2")
+	intercept := activeServiceIntercept(t, ctx, st, stable, canary)
+	intercept.Spec.ContainerName = "original-app"
+	st.agents.Store("stable-sibling", stableSibling)
+
+	st.agents.Delete("stable")
+	st.consolidateAgentSessionIntercepts(stable)
+
+	updated, ok := st.intercepts.Load(intercept.Id)
+	require.True(t, ok)
+	require.Equal(t, rpc.InterceptDispositionType_WAITING, updated.Disposition)
+	participant := updated.participants[agentParticipantKey(stable.AgentInfo)]
+	require.Nil(t, participant.review)
+	require.Empty(t, participant.podName)
+}
+
+func TestServiceInterceptRemovalKeepsNoAgentWhenNoReplacementExists(t *testing.T) {
+	ctx, st := newServiceInterceptState(t)
+	stable := serviceAgent("example-service", "stable-pod", "10.0.0.1")
+	canary := serviceAgent("example-service-canary", "canary-pod", "10.0.0.2")
+	intercept := activeServiceIntercept(t, ctx, st, stable, canary)
+
+	st.agents.Delete("stable")
+	st.consolidateAgentSessionIntercepts(stable)
+
+	updated, ok := st.intercepts.Load(intercept.Id)
+	require.True(t, ok)
+	require.Equal(t, rpc.InterceptDispositionType_NO_AGENT, updated.Disposition)
+	participant := updated.participants[agentParticipantKey(stable.AgentInfo)]
 	require.Nil(t, participant.review)
 	require.Empty(t, participant.podName)
 }

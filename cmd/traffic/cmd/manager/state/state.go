@@ -412,16 +412,22 @@ func (s *State) consolidateAgentSessionIntercepts(agent *AgentSession) {
 				intercept.Message = errMsg
 			})
 		case serviceScoped && removedParticipantReview:
-			// A different pod in the same workload can keep serving traffic,
-			// but it must review the intercept before that workload is an
-			// active participant again. Preserve the primary pod recorded on
-			// the logical intercept while clearing only this workload's review.
+			// Replicas in one workload already receive the active intercept.
+			// Hand its existing approval to a compatible survivor without
+			// withdrawing forwarding or closing every client's dial watcher.
+			if s.transferServiceParticipantReview(interceptID, participantKey, agent) {
+				break
+			}
+			// Restored intercepts may have only a published pod identity, not
+			// an approval that can safely be transferred.
 			clog.Debugf(s.backgroundCtx, "Intercept %q lost reviewing pod %s(%s). Setting its disposition to WAITING", interceptID, agent.PodName, agent.PodIp)
 			s.UpdateIntercept(interceptID, func(intercept *Intercept) {
-				if participant := intercept.participants[participantKey]; participant != nil && participant.podName == agent.PodName {
-					participant.review = nil
-					participant.podName = ""
+				participant := intercept.participants[participantKey]
+				if participant == nil || participant.podName != agent.PodName {
+					return
 				}
+				participant.review = nil
+				participant.podName = ""
 				intercept.Disposition = rpc.InterceptDispositionType_WAITING
 				intercept.Message = fmt.Sprintf("Waiting for Agent approval from workloads: %s", strings.Join(intercept.pendingParticipants(), ", "))
 			})
@@ -445,6 +451,103 @@ func (s *State) consolidateAgentSessionIntercepts(agent *AgentSession) {
 		}
 		return true
 	})
+}
+
+// transferServiceParticipantReview preserves a workload's existing approval
+// when its reviewing pod leaves and another eligible replica is already
+// serving the same active intercept.
+func (s *State) transferServiceParticipantReview(interceptID, key string, removed *AgentSession) bool {
+	transferred := false
+	updated := s.UpdateIntercept(interceptID, func(intercept *Intercept) {
+		transferred = false
+		participant := intercept.participants[key]
+		if intercept.Disposition != rpc.InterceptDispositionType_ACTIVE || participant == nil ||
+			participant.podName != removed.PodName || participant.review == nil {
+			return
+		}
+
+		var replacement *AgentSession
+		s.EachAgent(func(_ tunnel.SessionID, agent *AgentSession) bool {
+			if agent.PodName == removed.PodName || agent.PodIp == "" || agent.ContainerEnvironmentOmitted ||
+				agentParticipantKey(agent.AgentInfo) != key ||
+				!AgentMatchesInterceptInfo(agent.AgentInfo, intercept) {
+				return true
+			}
+			containerName := intercept.Spec.ContainerName
+			for _, target := range agent.InterceptTargets {
+				if servicePortMatches(target, intercept.Spec) && target.ContainerName != "" {
+					containerName = target.ContainerName
+					break
+				}
+			}
+			if len(agent.Containers) > 0 && agent.Containers[containerName] == nil &&
+				(containerName != "" || len(agent.Containers) != 1) {
+				return true
+			}
+			if replacement == nil || agent.PodName < replacement.PodName {
+				replacement = agent
+			}
+			return true
+		})
+		if replacement == nil {
+			return
+		}
+
+		review := proto.Clone(participant.review).(*rpc.ReviewInterceptRequest)
+		review.PodIp = replacement.PodIp
+		review.FtpPort = replacement.FtpPort
+		review.SftpPort = replacement.SftpPort
+		if review.Session != nil && replacement.sessionID() != "" {
+			review.Session = &rpc.SessionInfo{SessionId: string(replacement.sessionID())}
+		}
+
+		containerName := intercept.Spec.ContainerName
+		for _, target := range replacement.InterceptTargets {
+			if servicePortMatches(target, intercept.Spec) && target.ContainerName != "" {
+				containerName = target.ContainerName
+				break
+			}
+		}
+		container := replacement.Containers[containerName]
+		if container == nil && containerName == "" && len(replacement.Containers) == 1 {
+			for _, candidate := range replacement.Containers {
+				container = candidate
+			}
+		}
+		if container != nil {
+			container = proto.Clone(container).(*rpc.AgentInfo_ContainerInfo)
+			// Preserve the keys authorized by the original agent review. This
+			// also keeps excluded environment variables excluded if a restored
+			// agent snapshot or exclusion settings changed in the meantime.
+			for name := range review.Environment {
+				if value, ok := container.Environment[name]; ok {
+					review.Environment[name] = value
+				} else {
+					delete(review.Environment, name)
+				}
+			}
+			review.MountPoint = container.MountPoint
+			review.Mounts = container.Mounts
+		} else if len(replacement.Containers) > 0 || len(review.Environment) > 0 ||
+			review.MountPoint != "" || len(review.Mounts) > 0 {
+			return
+		}
+
+		published := intercept.publishedServiceParticipant() == participant
+		participant.review = review
+		participant.podName = replacement.PodName
+		if published {
+			applyReview(intercept, review)
+			intercept.PodName = replacement.PodName
+			intercept.ApiPort = replacement.ApiPort
+		}
+		transferred = true
+	})
+	if updated != nil && transferred {
+		clog.Debugf(s.backgroundCtx, "Intercept %q transferred workload approval from pod %s(%s) without leaving ACTIVE", interceptID, removed.PodName, removed.PodIp)
+		return true
+	}
+	return false
 }
 
 func (s *State) gcClientSessionIntercepts(client *ClientSession) {
