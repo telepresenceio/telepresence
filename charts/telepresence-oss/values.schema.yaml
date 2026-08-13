@@ -683,6 +683,11 @@ properties:
         type: object
         additionalProperties: false
         properties:
+          podLabels:
+            description: Labels to add to the quic-forwarder Pod.
+            type: object
+            additionalProperties:
+              type: string
           replicas:
             description: >-
               Number of quic-forwarder replicas. The forwarder keeps no state that matters across a restart,

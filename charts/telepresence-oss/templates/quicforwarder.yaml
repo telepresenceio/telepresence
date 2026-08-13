@@ -31,7 +31,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "telepresence.quicForwarderSelectorLabels" $ | nindent 8 }}
+        {{- merge (fromYaml (include "telepresence.quicForwarderSelectorLabels" $)) (.quicTunnel.forwarder.podLabels | default dict) | toYaml | nindent 8 }}
     spec:
       {{- with .image.imagePullSecrets }}
       imagePullSecrets:

@@ -333,6 +333,10 @@ push-client-image: client-image ## (Build) Push the client container image to $(
 load-client-image: client-image ## (Build) Load the client container image into the local cluster (kind/minikube)
 	$(call load-image,$(CLIENT_IMAGE_FQN))
 
+.PHONY: save-client-image
+save-client-image: client-image
+	docker save $(CLIENT_IMAGE_FQN) > $(BUILDDIR)/client-image.tar
+
 ROUTECONTROLLER_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/route-controller:$(TELEPRESENCE_SEMVER)
 
 .PHONY: routecontroller-image
@@ -348,6 +352,10 @@ push-routecontroller-image: routecontroller-image ## (Build) Push the route-cont
 .PHONY: load-routecontroller-image
 load-routecontroller-image: routecontroller-image ## (Build) Load the route-controller DaemonSet image into the local cluster (kind/minikube)
 	$(call load-image,$(ROUTECONTROLLER_IMAGE_FQN))
+
+.PHONY: save-routecontroller-image
+save-routecontroller-image: routecontroller-image
+	docker save $(ROUTECONTROLLER_IMAGE_FQN) > $(BUILDDIR)/routecontroller-image.tar
 
 .PHONY: push-images
 push-images: push-tel2-image push-client-image push-routecontroller-image
@@ -460,6 +468,10 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./packaging/windows-package.sh
+shellscripts += ./build-aux/vagrant-rtest/preflight.sh
+shellscripts += ./build-aux/vagrant-rtest/provision.sh
+shellscripts += ./build-aux/vagrant-rtest/run-shard.sh
+shellscripts += ./build-aux/vagrant-rtest/run-shards.sh
 .PHONY: lint lint-rpc lint-go lint-docs
 
 lint: lint-rpc lint-go lint-docs
@@ -535,6 +547,10 @@ ifdef SHARD
 else
 	go test -count=1 -timeout=90m ./regression_test/...
 endif
+
+.PHONY: check-regression-vagrant
+check-regression-vagrant: ## (QA) Run all 3 regression shards in parallel VirtualBox VMs via Vagrant
+	build-aux/vagrant-rtest/run-shards.sh
 
 .PHONY: rtest-clean
 rtest-clean: ## (QA) Remove regression-test resources left in the cluster

@@ -13,5 +13,6 @@ A few sentences describing the overall goals of the pull request's commits.
  - [ ] I made sure to add any documentation changes required for my change.
  - [ ] My change is adequately tested.
  - [ ] I updated `CONTRIBUTING.md` with any special dev tricks I had to use to work on this code efficiently.
- - [ ] Once my PR is ready to have integration tests ran, I posted the PR in #telepresence-oss channel on the
-       [CNCF Slack](https://slack.cncf.io/) so that the "ok to test" label can be applied.
+ - [ ] If my PR comes from a fork: once it is ready to have integration tests ran, I posted the PR in the
+       #telepresence-oss channel on the [CNCF Slack](https://slack.cncf.io/) so that a maintainer can start
+       them by re-running the "Regression Tests" workflow run.

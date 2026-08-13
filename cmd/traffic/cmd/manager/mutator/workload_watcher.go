@@ -17,27 +17,54 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
+// shouldWatchWorkload keeps ReplicaSets owned by custom controllers visible to
+// the mutator. Other controller-owned workload kinds keep the existing
+// top-level-only behavior. ReplicaSets controlled by an enabled Deployment or
+// Rollout are reconciled through that parent workload instead.
+func shouldWatchWorkload(wl k8sapi.Workload, enabledKinds k8sapi.Kinds) bool {
+	if len(wl.GetOwnerReferences()) == 0 {
+		return true
+	}
+	if wl.GetKind() != k8sapi.ReplicaSetKind {
+		return false
+	}
+	for _, ref := range wl.GetOwnerReferences() {
+		if ref.Controller == nil || !*ref.Controller {
+			continue
+		}
+		kind := k8sapi.Kind(ref.Kind)
+		switch kind {
+		case k8sapi.DeploymentKind, k8sapi.RolloutKind:
+			return !enabledKinds.Contains(kind)
+		default:
+			return true
+		}
+	}
+	return false
+}
+
 func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndexInformer) (cache.ResourceEventHandlerRegistration, error) {
+	enabledKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
 	return ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
-				if wl, ok := workload.FromAny(obj); ok && len(wl.GetOwnerReferences()) == 0 {
+				if wl, ok := workload.FromAny(obj); ok && shouldWatchWorkload(wl, enabledKinds) {
 					c.updateWorkload(ctx, wl, nil, workload.GetWorkloadState(wl))
 				}
 			},
 			DeleteFunc: func(obj any) {
 				if wl, ok := workload.FromAny(obj); ok {
-					if len(wl.GetOwnerReferences()) == 0 {
+					if shouldWatchWorkload(wl, enabledKinds) {
 						c.Delete(wl.GetName(), wl.GetNamespace())
 					}
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
-					if wl, ok = workload.FromAny(dfsu.Obj); ok && len(wl.GetOwnerReferences()) == 0 {
+					if wl, ok = workload.FromAny(dfsu.Obj); ok && shouldWatchWorkload(wl, enabledKinds) {
 						c.Delete(wl.GetName(), wl.GetNamespace())
 					}
 				}
 			},
 			UpdateFunc: func(oldObj, newObj any) {
-				if wl, ok := workload.FromAny(newObj); ok && len(wl.GetOwnerReferences()) == 0 {
+				if wl, ok := workload.FromAny(newObj); ok && shouldWatchWorkload(wl, enabledKinds) {
 					if oldWl, ok := workload.FromAny(oldObj); ok {
 						c.updateWorkload(ctx, wl, oldWl, workload.GetWorkloadState(wl))
 					}

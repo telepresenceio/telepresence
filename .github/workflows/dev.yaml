@@ -6,81 +6,156 @@ on:
       - synchronize
       - reopened
       - ready_for_review
-      - labeled
 
 permissions:
   contents: read
-  pull-requests: write
+  pull-requests: read
   actions: read
   checks: read
 
 env:
   TELEPRESENCE_REGISTRY: local
 
-# A new push cancels the still-running jobs of the previous push. The label
-# name is part of the group so that a push does not cancel an in-flight
-# labeled run of a different kind (e.g. "compatibility test").
+# A new push cancels the still-running jobs of the previous push.
 concurrency:
-  group: "regression-${{ github.event.pull_request.number }}-${{ github.event.label.name || 'push' }}"
+  group: "regression-${{ github.event.pull_request.number }}"
   cancel-in-progress: true
 
-# regression runs without a label for non-draft PRs whose head branch is
-# in this repository; the "ok to test"/"compatibility test" labels remain the
-# gate for PRs from forks. The jobs below repeat that condition because
-# workflow files cannot share expressions.
+# The merge box resolves the required "regression" context against the most
+# recently created check suite of this workflow; once a newer suite exists,
+# nothing an older suite reports counts. Two invariants keep that sound:
 #
-# Required-status-check semantics shape this workflow: a job skipped through
-# its if-condition reports conclusion "skipped", which SATISFIES a required
-# check. That is intended when preflight reports a docs-only change or a
-# prerequisite has failed (the failed prerequisite is itself required, so the
-# merge stays blocked), but it must never happen for an unlabeled fork PR --
-# which is why regression renders a different job name in that case, leaving
-# the required "regression" context unreported and the merge blocked as
-# "expected".
+#  - Only pushes (and ready_for_review) trigger this workflow. In
+#    particular no label events: a trigger cannot filter labels by name,
+#    so any label would create a suite that either misstates the gate or
+#    leaves it unreported, blocking the merge as "expected" with no
+#    recovery short of a new push.
+#  - Every run reports the context under the literal name "regression",
+#    with a truthful verdict for its commit. The aggregate job therefore
+#    decides in its steps: a job skipped by its if reports under the raw,
+#    unevaluated name expression instead of its name.
+#
+# Job conditions consult github.event only for identities fixed for the
+# lifetime of the pull request: the event payload is frozen across
+# re-runs, and a re-run must be able to reach a different verdict. Gating
+# lives in preflight steps that read live state, plus github.run_attempt:
+# GitHub restricts re-running to users with write access, so a full
+# re-run ("Re-run all jobs") is how a maintainer vouches for a pull
+# request from a fork.
 jobs:
-  # Gatekeeper for the expensive jobs: removes the triggering label so a
-  # maintainer can re-add it, decides whether the change is docs-only, and
+  # Gatekeeper for the expensive jobs: decides whether the shards run, and
   # waits for the other required checks so a DCO or unit-test failure is
   # never followed by a pointless integration run.
   preflight:
-    if: >-
-      (github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) ||
-      github.event.label.name == 'ok to test' ||
-      github.event.label.name == 'compatibility test'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     outputs:
-      docs_only: ${{ steps.skip.outputs.should_skip }}
+      run_shards: ${{ steps.decide.outputs.run_shards }}
+      docs_only: ${{ steps.decide.outputs.docs_only }}
+      vouched: ${{ steps.decide.outputs.vouched }}
+      draft: ${{ steps.decide.outputs.draft }}
+      inherited: ${{ steps.decide.outputs.inherited }}
+      inherited_from: ${{ steps.decide.outputs.inherited_from }}
     steps:
-      # For PRs from a fork the GITHUB_TOKEN is read-only and this call
-      # fails; continue-on-error keeps that from aborting the job (the
-      # maintainer removes the label by hand instead). The label name and PR
-      # number are passed via env (not interpolated into the script) to
-      # avoid command injection.
-      - name: Remove triggering label
-        if: github.event.action == 'labeled'
-        continue-on-error: true
+      - name: Decide whether the shards run
+        id: decide
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
-          LABEL: ${{ github.event.label.name }}
-        run: gh pr edit "$PR" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
-      # docs_only=true when every change since the last successful run of
-      # this workflow matches paths_ignore; build_and_test is then skipped
-      # and its required check is satisfied without a run. When no prior
-      # successful run can be found the answer is false, so the fail-safe
-      # direction is a full run.
-      - name: Check for a docs-only change
-        id: skip
-        uses: fkirc/skip-duplicate-actions@v5
-        with:
-          cancel_others: false
-          paths_ignore: '["docs/**", "**.md", "CHANGELOG.yml"]'
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          ATTEMPT: ${{ github.run_attempt }}
+          ACTION: ${{ github.event.action }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          # A pull request whose head branch lives in this repository is
+          # vouched for by its author's write access. One from a fork runs
+          # the shards only on attempt two or later: re-running all jobs
+          # is how a maintainer vouches for it, and a new push starts over
+          # at attempt one.
+          vouched=false
+          if [ "$SAME_REPO" = true ] || [ "$ATTEMPT" -gt 1 ]; then
+            vouched=true
+          fi
+          # Live pull-request state, not the frozen event payload, so a
+          # re-run of an existing attempt sees the current draft flag.
+          draft=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .draft)
+          # Succeeds when every filename on stdin is one the test suites
+          # cannot exercise.
+          docs_only_paths() {
+            local f
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              case "$f" in
+                docs/* | *.md | CHANGELOG.yml) ;;
+                *)
+                  echo "not a docs-only change: $f"
+                  return 1
+                  ;;
+              esac
+            done
+            return 0
+          }
+          # docs_only=true when every file this pull request changes is one
+          # the regression suite cannot exercise. It is a property of the
+          # whole pull request: there is then no code the shards could
+          # verify, so no verdict needs borrowing from anywhere.
+          #
+          # Anything unreadable or unexpected fails this job, so the
+          # fail-safe direction stays a blocked merge.
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          docs_only=true
+          if [ -z "$files" ]; then
+            echo "no files reported for this pull request; running everything"
+            docs_only=false
+          elif ! docs_only_paths <<<"$files"; then
+            docs_only=false
+          fi
+          # A push whose commits change only docs cannot alter what the
+          # shards verify, so the previous head's verdict carries over --
+          # provided it was earned. Every run of this workflow reports the
+          # "regression" context truthfully (a run that tested nothing
+          # fails rather than passing vacuously), so a completed success on
+          # the previous head is proof that this exact code content was
+          # verified. The compare status must be "ahead": a force-push
+          # diverges, and the new head is then not the verified content
+          # plus docs. An API hiccup or a truncated file list (the compare
+          # endpoint caps at 300 files) falls back to a full run.
+          inherited=false
+          inherited_from=''
+          if [ "$ACTION" = synchronize ] && [ "$docs_only" != true ] &&
+             [ -n "$BEFORE" ] && [ -n "$AFTER" ]; then
+            cmp=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$AFTER" 2>/dev/null) || cmp=''
+            if [ -n "$cmp" ] &&
+               [ "$(jq -r .status <<<"$cmp")" = ahead ] &&
+               [ "$(jq -r '.files | length' <<<"$cmp")" -lt 300 ] &&
+               docs_only_paths < <(jq -r '.files[].filename' <<<"$cmp"); then
+              reg=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BEFORE/check-runs?check_name=regression" \
+                --jq '[.check_runs[] | select(.name == "regression")] | sort_by(.started_at) | map("\(.status)/\(.conclusion)") | last // ""' 2>/dev/null) || reg=''
+              if [ "$reg" = completed/success ]; then
+                echo "docs-only push onto $BEFORE, whose regression verdict is green"
+                inherited=true
+                inherited_from=$BEFORE
+              else
+                echo "docs-only push, but no green regression on $BEFORE (found '$reg')"
+              fi
+            fi
+          fi
+          run_shards=false
+          if [ "$vouched" = true ] && [ "$draft" != true ] &&
+             [ "$docs_only" != true ] && [ "$inherited" != true ]; then
+            run_shards=true
+          fi
+          printf 'vouched=%s\ndraft=%s\ndocs_only=%s\ninherited=%s\ninherited_from=%s\nrun_shards=%s\n' \
+            "$vouched" "$draft" "$docs_only" "$inherited" "$inherited_from" "$run_shards" | tee -a "$GITHUB_OUTPUT"
       # The list is the branch protection's required contexts minus this
-      # workflow's own build_and_test; reading it from the API would need
+      # workflow's own regression; reading it from the API would need
       # admin scope the GITHUB_TOKEN does not have, so it is spelled out
       # here. Keep it in sync with the branch protection settings.
       - name: Wait for the other required checks
+        if: steps.decide.outputs.run_shards == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -100,16 +175,6 @@ jobs:
             pending=()
             for name in "${required[@]}"; do
               row=$(jq -r --arg n "$name" '.[] | select(.name == $n) | "\(.status)/\(.conclusion)"' <<<"$runs")
-              # A matrix job skipped before expansion (docs-only change)
-              # reports one bare context named for the job, not the
-              # per-matrix names; accept the bare context in that case.
-              if [ -z "$row" ] && [[ "$name" == *' ('* ]]; then
-                bare=${name%% (*}
-                barerow=$(jq -r --arg n "$bare" '.[] | select(.name == $n) | "\(.status)/\(.conclusion)"' <<<"$runs")
-                if [ "$barerow" = completed/skipped ]; then
-                  continue
-                fi
-              fi
               case "$row" in
                 completed/success|completed/neutral|completed/skipped) ;;
                 completed/*)
@@ -144,8 +209,7 @@ jobs:
     needs: preflight
     if: >-
       needs.preflight.result == 'success' &&
-      needs.preflight.outputs.docs_only != 'true' &&
-      (github.event.action != 'labeled' || github.event.label.name == 'ok to test')
+      needs.preflight.outputs.run_shards == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -192,8 +256,7 @@ jobs:
     needs: preflight
     if: >-
       needs.preflight.result == 'success' &&
-      needs.preflight.outputs.docs_only != 'true' &&
-      (github.event.action != 'labeled' || github.event.label.name == 'ok to test')
+      needs.preflight.outputs.run_shards == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -235,93 +298,53 @@ jobs:
           path: build-output/rtest/logs/
 
   # The single required "regression" context: green exactly when every
-  # shard is. A skipped shard matrix (docs-only, failed prerequisite)
-  # skips this job too, with the same required-check semantics the header
-  # comment describes; for an unlabeled fork PR the rendered name differs,
-  # leaving the required context unreported and the merge blocked.
+  # shard is, when the shards were legitimately not run because the change
+  # is docs-only, or when a docs-only push carries over the verdict the
+  # previous head already earned. Any other skip is reported as a failure
+  # naming the reason, so the merge box always shows a verdict rather than
+  # an unreported context.
   regression:
     needs: [preflight, regression_shard]
-    if: >-
-      always() &&
-      needs.preflight.result == 'success' &&
-      needs.preflight.outputs.docs_only != 'true' &&
-      (github.event.action != 'labeled' || github.event.label.name == 'ok to test')
-    name: >-
-      ${{ ((github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft) ||
-           github.event.label.name == 'ok to test')
-          && 'regression'
-          || 'regression (awaiting ok-to-test)' }}
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: All shards green
         env:
+          PREFLIGHT: ${{ needs.preflight.result }}
           SHARDS: ${{ needs.regression_shard.result }}
+          DOCS_ONLY: ${{ needs.preflight.outputs.docs_only }}
+          DRAFT: ${{ needs.preflight.outputs.draft }}
+          VOUCHED: ${{ needs.preflight.outputs.vouched }}
+          INHERITED: ${{ needs.preflight.outputs.inherited }}
+          INHERITED_FROM: ${{ needs.preflight.outputs.inherited_from }}
         run: |
-          echo "regression_shard: $SHARDS"
-          test "$SHARDS" = "success"
-
-  # Bidirectional compatibility of the compat-core subset: the labeled tests
-  # collectively cover most of the manager.Manager RPC surface (guarded by
-  # regression_test/framework/compat's manifest test). The counterpart
-  # version is the latest release tag, not a hand-pinned literal.
-  regression_compat:
-    needs: preflight
-    if: >-
-      needs.preflight.result == 'success' &&
-      needs.preflight.outputs.docs_only != 'true' &&
-      github.event.label.name == 'compatibility test'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: "${{ github.event.pull_request.head.sha }}"
-      - name: install dependencies
-        uses: ./.github/actions/install-dependencies
-      - name: Get Telepresence Version
-        run: |
-          v=$(go run build-aux/genversion/main.go ${{github.run_id}})
-          echo "TELEPRESENCE_VERSION=$v" >> "$GITHUB_ENV"
-          echo "TELEPRESENCE_SEMVER=${v#v}" >> "$GITHUB_ENV"
-      - name: Determine counterpart version
-        run: |
-          git fetch --tags --quiet
-          c=$(git tag --sort=-v:refname | grep -E '^v2\.[0-9]+\.[0-9]+$' | head -1)
-          echo "COMPAT_VERSION=${c#v}" >> "$GITHUB_ENV"
-          echo "counterpart version: $c"
-      - name: Start minikube
-        uses: medyagh/setup-minikube@latest
-        with:
-          kubernetes-version: v1.33.5
-          container-runtime: containerd
-      - name: Build client
-        run: make build
-      - name: Build images
-        run: make tel2-image client-image
-      - name: Load images into minikube
-        run: minikube image load ${{env.TELEPRESENCE_REGISTRY}}/tel2:${{env.TELEPRESENCE_SEMVER}}
-      - name: Compat-core against the released manager
-        timeout-minutes: 30
-        shell: bash
-        env:
-          RTEST_REGISTRY: local
-          RTEST_MANAGER_VERSION: ${{ env.COMPAT_VERSION }}
-          RTEST_LABELS: compat-core
-        run: |
-          set -ex
-          make check-regression
-      - name: Compat-core with the released client
-        timeout-minutes: 30
-        shell: bash
-        env:
-          RTEST_REGISTRY: local
-          RTEST_CLIENT_VERSION: ${{ env.COMPAT_VERSION }}
-          RTEST_LABELS: compat-core
-        run: |
-          set -ex
-          make check-regression
-      - uses: actions/upload-artifact@v7
-        if: ${{ always() }}
-        with:
-          name: regression-compat-logs-${{ runner.os }}-${{ runner.arch }}
-          path: build-output/rtest/logs/
+          set -eu
+          echo "preflight: $PREFLIGHT, regression_shard: $SHARDS"
+          # A prerequisite that failed is reported here too. It carries its
+          # own required context, so the merge was already blocked; saying so
+          # here as well beats a green "regression" that ran nothing.
+          case "$PREFLIGHT" in
+            success) ;;
+            *) echo "preflight did not succeed"; exit 1 ;;
+          esac
+          case "$SHARDS" in
+            success) exit 0 ;;
+            skipped) ;;
+            *) echo "one or more regression shards did not succeed"; exit 1 ;;
+          esac
+          if [ "$DOCS_ONLY" = true ]; then
+            echo "docs-only change; the shards have nothing to exercise"
+            exit 0
+          fi
+          if [ "$INHERITED" = true ]; then
+            echo "docs-only push; regression verdict inherited from $INHERITED_FROM"
+            exit 0
+          fi
+          if [ "$DRAFT" = true ]; then
+            echo "draft pull request; the shards run when it is marked ready for review"
+          elif [ "$VOUCHED" != true ]; then
+            echo "pull request from a fork; a maintainer vouches for it by re-running all jobs of this run"
+          else
+            echo "the shards were skipped for no known reason"
+          fi
+          exit 1
