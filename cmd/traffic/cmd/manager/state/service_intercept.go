@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 
@@ -217,6 +218,24 @@ func (s *State) initializeParticipants(intercept *Intercept) {
 	if !prunedPublished && !publishedUnknown && intercept.PodName != "" {
 		if participant, ok := intercept.participants[publishedKey]; ok {
 			participant.podName = intercept.PodName
+			if intercept.Disposition == rpc.InterceptDispositionType_ACTIVE {
+				// Reconnect snapshots persist only the published intercept,
+				// not manager-private participant approvals. Recover the one
+				// unambiguous published approval so its workload can hand it to
+				// another replica after a traffic-manager restart.
+				participant.review = &rpc.ReviewInterceptRequest{
+					Id:                intercept.Id,
+					Disposition:       rpc.InterceptDispositionType_ACTIVE,
+					Message:           intercept.Message,
+					PodIp:             intercept.PodIp,
+					FtpPort:           intercept.FtpPort,
+					SftpPort:          intercept.SftpPort,
+					MountPoint:        intercept.MountPoint,
+					MechanismArgsDesc: intercept.MechanismArgsDesc,
+					Environment:       maps.Clone(intercept.Environment),
+					Mounts:            maps.Clone(intercept.Mounts),
+				}
+			}
 		}
 	}
 	intercept.syncServiceWorkloads()

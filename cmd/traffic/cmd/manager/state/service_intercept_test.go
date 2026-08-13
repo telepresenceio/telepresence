@@ -1310,24 +1310,67 @@ func TestInitializeParticipantsRestoresUnambiguousWaitingPublishedPod(t *testing
 	require.Equal(t, stable.PodName, participant.podName)
 	require.Equal(t, stable.PodIp, intercept.PodIp)
 	require.Equal(t, rpc.InterceptDispositionType_WAITING, intercept.Disposition)
+	require.Nil(t, participant.review)
 }
 
-func TestRestoredServiceInterceptRequeuesWhenRecordedPodLeaves(t *testing.T) {
+func TestInitializeParticipantsClonesRestoredPublishedReview(t *testing.T) {
+	_, st := newServiceInterceptState(t)
+	stable := serviceAgent("example-service", "stable-pod", "10.0.0.1")
+	st.agents.Store("stable", stable)
+	intercept := &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:               "client:example-service",
+		Spec:             sharedServiceSpec(),
+		Disposition:      rpc.InterceptDispositionType_ACTIVE,
+		PodIp:            stable.PodIp,
+		PodName:          stable.PodName,
+		Environment:      map[string]string{"POD": "old"},
+		Mounts:           map[string]int32{"/data": 1},
+		ServiceWorkloads: sharedServiceWorkloads(stable.Name),
+	}}
+
+	st.initializeParticipants(intercept)
+
+	participant := intercept.participants[agentParticipantKey(stable.AgentInfo)]
+	require.NotNil(t, participant.review)
+	participant.review.Environment["POD"] = "replacement"
+	participant.review.Mounts["/data"] = 2
+	require.Equal(t, "old", intercept.Environment["POD"])
+	require.EqualValues(t, 1, intercept.Mounts["/data"])
+}
+
+func TestRestoredServiceInterceptTransfersWhenRecordedPodLeaves(t *testing.T) {
 	ctx, st := newServiceInterceptState(t)
 	ctx = k8sapi.WithK8sInterface(ctx, fake.NewSimpleClientset())
 	stable := serviceAgent("example-service", "stable-pod", "10.0.0.1")
 	stableSibling := serviceAgent("example-service", "stable-pod-2", "10.0.0.3")
+	stableSibling.ApiPort = 9901
+	stableSibling.FtpPort = 9902
+	stableSibling.SftpPort = 9903
+	stableSibling.InterceptTargets[0].ContainerName = "app"
+	stableSibling.Containers = map[string]*rpc.AgentInfo_ContainerInfo{
+		"app": {
+			Environment: map[string]string{"POD": "replacement", "EXCLUDED": "must-not-be-published"},
+			MountPoint:  "/replacement/mount",
+			Mounts:      map[string]int32{"/replacement/data": 1},
+		},
+	}
 	canary := serviceAgent("example-service-canary", "canary-pod", "10.0.0.2")
 	st.agents.Store("stable", stable)
 	st.agents.Store("stable-sibling", stableSibling)
 	st.agents.Store("canary", canary)
 
 	restored := &rpc.InterceptInfo{
-		Id:          "client:example-service",
-		Spec:        sharedServiceSpec(),
-		Disposition: rpc.InterceptDispositionType_ACTIVE,
-		PodIp:       stable.PodIp,
-		PodName:     stable.PodName,
+		Id:                "client:example-service",
+		Spec:              sharedServiceSpec(),
+		Disposition:       rpc.InterceptDispositionType_ACTIVE,
+		PodIp:             stable.PodIp,
+		PodName:           stable.PodName,
+		FtpPort:           8001,
+		SftpPort:          8002,
+		MountPoint:        "/old/mount",
+		Mounts:            map[string]int32{"/old/data": 2},
+		Environment:       map[string]string{"POD": "old"},
+		MechanismArgsDesc: "header-filter",
 		ClientSession: &rpc.SessionInfo{
 			SessionId: "client",
 		},
@@ -1339,16 +1382,35 @@ func TestRestoredServiceInterceptRequeuesWhenRecordedPodLeaves(t *testing.T) {
 	st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now())
 	intercept, ok := st.intercepts.Load(restored.Id)
 	require.True(t, ok)
-	require.Equal(t, stable.PodName, intercept.participants[agentParticipantKey(stable.AgentInfo)].podName)
+	participant := intercept.participants[agentParticipantKey(stable.AgentInfo)]
+	require.Equal(t, stable.PodName, participant.podName)
+	require.NotNil(t, participant.review)
+	require.Equal(t, stable.PodIp, participant.review.PodIp)
+	require.Equal(t, restored.Environment, participant.review.Environment)
+	require.Equal(t, restored.Mounts, participant.review.Mounts)
+	require.Nil(t, intercept.participants[agentParticipantKey(canary.AgentInfo)].review)
 
 	st.agents.Delete("stable")
 	st.consolidateAgentSessionIntercepts(stable)
 
 	updated, ok := st.intercepts.Load(restored.Id)
 	require.True(t, ok)
-	require.Equal(t, rpc.InterceptDispositionType_WAITING, updated.Disposition)
-	require.Nil(t, updated.participants[agentParticipantKey(stable.AgentInfo)].review)
-	require.Empty(t, updated.participants[agentParticipantKey(stable.AgentInfo)].podName)
+	require.Equal(t, rpc.InterceptDispositionType_ACTIVE, updated.Disposition)
+	require.Equal(t, stableSibling.PodName, updated.PodName)
+	require.Equal(t, stableSibling.PodIp, updated.PodIp)
+	require.Equal(t, stableSibling.ApiPort, updated.ApiPort)
+	require.Equal(t, stableSibling.FtpPort, updated.FtpPort)
+	require.Equal(t, stableSibling.SftpPort, updated.SftpPort)
+	require.Equal(t, "/replacement/mount", updated.MountPoint)
+	require.Equal(t, map[string]int32{"/replacement/data": 1}, updated.Mounts)
+	require.Equal(t, map[string]string{"POD": "replacement"}, updated.Environment)
+	require.Equal(t, "header-filter", updated.MechanismArgsDesc)
+	require.Equal(t, map[string]string{"POD": "old"}, restored.Environment)
+	participant = updated.participants[agentParticipantKey(stable.AgentInfo)]
+	require.NotNil(t, participant.review)
+	require.Equal(t, stableSibling.PodName, participant.podName)
+	require.Equal(t, stableSibling.PodIp, participant.review.PodIp)
+	require.Nil(t, updated.participants[agentParticipantKey(canary.AgentInfo)].review)
 }
 
 func TestServiceInterceptRemovalTransfersSecondaryParticipantReview(t *testing.T) {
