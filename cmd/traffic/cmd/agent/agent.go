@@ -260,6 +260,50 @@ func TalkToManagerLoop(ctx context.Context, s State, info *rpc.AgentInfo) {
 	}
 }
 
+func advertisedInterceptTargets(ac *agentconfig.Sidecar) []*rpc.AgentInfo_InterceptTarget {
+	interceptTargets := make([]*rpc.AgentInfo_InterceptTarget, 0)
+	seenTargets := make(map[string]struct{})
+	for _, cn := range ac.Containers {
+		for _, ic := range cn.Intercepts {
+			if ic.ServiceUID == "" {
+				continue
+			}
+			key := fmt.Sprintf("%s/%d/%s/%s/%d",
+				ic.ServiceUID, ic.ServicePort, ic.Protocol, cn.Name, ic.ContainerPort)
+			if _, ok := seenTargets[key]; ok {
+				continue
+			}
+			seenTargets[key] = struct{}{}
+			interceptTargets = append(interceptTargets, &rpc.AgentInfo_InterceptTarget{
+				ServiceUid:      string(ic.ServiceUID),
+				ServiceName:     ic.ServiceName,
+				ServicePortName: ic.ServicePortName,
+				ServicePort:     int32(ic.ServicePort),
+				Protocol:        ic.Protocol.String(),
+				ContainerName:   cn.Name,
+				ContainerPort:   int32(ic.ContainerPort),
+			})
+		}
+	}
+	sort.Slice(interceptTargets, func(i, j int) bool {
+		a, b := interceptTargets[i], interceptTargets[j]
+		if a.ServiceUid != b.ServiceUid {
+			return a.ServiceUid < b.ServiceUid
+		}
+		if a.ServicePort != b.ServicePort {
+			return a.ServicePort < b.ServicePort
+		}
+		if a.Protocol != b.Protocol {
+			return a.Protocol < b.Protocol
+		}
+		if a.ContainerName != b.ContainerName {
+			return a.ContainerName < b.ContainerName
+		}
+		return a.ContainerPort < b.ContainerPort
+	})
+	return interceptTargets
+}
+
 func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error) {
 	ac := config.AgentConfig()
 
@@ -340,6 +384,7 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 			Mounts:      appMounts.ToRPC(),
 		}
 	}
+	interceptTargets := advertisedInterceptTargets(ac)
 
 	return &rpc.AgentInfo{
 		Name:      ac.AgentName,
@@ -367,7 +412,8 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 				Version: version.Version,
 			},
 		},
-		Containers: containers,
+		Containers:       containers,
+		InterceptTargets: interceptTargets,
 	}, nil
 }
 

@@ -44,6 +44,20 @@ items:
           pod creation cannot corrupt the cached config or block a workload
           rollout.
       - type: feature
+        title: HTTP intercepts can follow every workload selected by one Service
+        body: >-
+          A Kubernetes Service can route requests to more than one workload,
+          such as stable and canary Deployments, while an intercept previously
+          followed only the workload named by the user. HTTP intercepts
+          without <code>--replace</code> now let each selected workload
+          participate in one logical intercept, so filtered traffic reaches
+          the same local handler regardless of which selected workload
+          receives it. If the selected workloads or their traffic-agents
+          cannot support shared interception, Telepresence warns and keeps
+          the historical single-workload behavior instead of failing the
+          intercept.
+        docs: reference/attachments/cli
+      - type: feature
         title: Guided traffic-manager setup with telepresence setup
         body: >-
           The new <code>telepresence setup</code> command analyzes the

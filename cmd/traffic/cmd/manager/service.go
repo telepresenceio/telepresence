@@ -696,7 +696,7 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 				Namespace:    a.Namespace,
 				PodIp:        aip.AsSlice(),
 				ApiPort:      a.ApiPort,
-				Intercepted:  s.state.IsInterceptedBy(a.Name, a.Namespace, clientSessionID),
+				Intercepted:  s.state.IsInterceptedBy(a, clientSessionID),
 				NodeAgent:    a.NodeAgent,
 				QuicSni:      quicSNIForAgent(a.QuicPort, a.PodUid),
 			}
@@ -797,7 +797,7 @@ func (p *agentPodProjection) run(ctx context.Context, sessionDone <-chan struct{
 						Namespace:    a.Namespace,
 						PodIp:        aip.AsSlice(),
 						ApiPort:      a.ApiPort,
-						Intercepted:  p.s.state.IsInterceptedBy(a.Name, a.Namespace, p.clientSessionID),
+						Intercepted:  p.s.state.IsInterceptedBy(a, p.clientSessionID),
 						NodeAgent:    a.NodeAgent,
 						QuicSni:      quicSNIForAgent(a.QuicPort, a.PodUid),
 						Version:      a.Version,
@@ -820,7 +820,8 @@ func (p *agentPodProjection) refreshIntercepted() {
 		if p.m.IsInactive(types.UID(a.PodId)) {
 			return true
 		}
-		intercepted := p.s.state.IsInterceptedBy(a.WorkloadName, a.Namespace, p.clientSessionID)
+		agent := p.s.state.GetAgent(tunnel.SessionID(state.AgentSessionIDPrefix + a.PodId))
+		intercepted := p.s.state.IsInterceptedBy(agent, p.clientSessionID)
 		p.agentPodInfos.Compute(k, func(a *rpc.AgentPodInfo, loaded bool) (*rpc.AgentPodInfo, xsync.ComputeOp) {
 			if loaded && a.Intercepted != intercepted {
 				a := proto.Clone(a).(*rpc.AgentPodInfo)
@@ -974,10 +975,75 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 	}
 }
 
+// filterInterceptDeltas keeps a per-subscriber view of matching intercepts.
+// Unlike cache.Map's stateless filter, it emits a removal when an updated
+// intercept stops matching, which is required when a Service selector prunes
+// a participant that previously received the intercept.
+func filterInterceptDeltas(
+	ctx context.Context,
+	source <-chan cache.Delta[string, *state.Intercept],
+	include func(string, *state.Intercept) bool,
+) <-chan cache.Delta[string, *state.Intercept] {
+	filtered := make(chan cache.Delta[string, *state.Intercept], 1)
+	go func() {
+		defer close(filtered)
+		included := make(map[string]*state.Intercept)
+		initialized := false
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case delta, ok := <-source:
+				if !ok {
+					return
+				}
+				next := cache.Delta[string, *state.Intercept]{}
+				for id := range delta.Removals {
+					if previous, exists := included[id]; exists {
+						if next.Removals == nil {
+							next.Removals = make(map[string]*state.Intercept)
+						}
+						next.Removals[id] = previous
+						delete(included, id)
+					}
+				}
+				for id, intercept := range delta.Upserts {
+					if include == nil || include(id, intercept) {
+						if next.Upserts == nil {
+							next.Upserts = make(map[string]*state.Intercept)
+						}
+						next.Upserts[id] = intercept
+						included[id] = intercept
+						continue
+					}
+					if previous, exists := included[id]; exists {
+						if next.Removals == nil {
+							next.Removals = make(map[string]*state.Intercept)
+						}
+						next.Removals[id] = previous
+						delete(included, id)
+					}
+				}
+				if initialized && len(next.Upserts) == 0 && len(next.Removals) == 0 {
+					continue
+				}
+				initialized = true
+				select {
+				case <-ctx.Done():
+					return
+				case filtered <- next:
+				}
+			}
+		}
+	}()
+	return filtered
+}
+
 func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo) (<-chan cache.Delta[string, *state.Intercept], <-chan struct{}, error) {
 	sessionID := tunnel.SessionID(session.GetSessionId())
 	var sessionDone <-chan struct{}
 	var filter func(id string, info *state.Intercept) bool
+	participantAwareFilter := false
 	if sessionID == "" {
 		filter = func(id string, info *state.Intercept) bool {
 			return info.Disposition != rpc.InterceptDispositionType_REMOVED && !state.IsChildIntercept(info.Spec)
@@ -993,7 +1059,7 @@ func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo)
 				return nil, nil, err
 			}
 			filter = func(id string, info *state.Intercept) bool {
-				if info.Spec.Namespace != agent.Namespace || info.Spec.Agent != agent.Name {
+				if !state.AgentMatchesInterceptInfo(agent.AgentInfo, info) {
 					// Don't return intercepts for different agents.
 					return false
 				}
@@ -1015,6 +1081,7 @@ func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo)
 					return false
 				}
 			}
+			participantAwareFilter = true
 		} else {
 			// sessionID refers to a client session.
 			client := s.state.GetClient(sessionID)
@@ -1032,6 +1099,9 @@ func (s *service) watchIntercepts(ctx context.Context, session *rpc.SessionInfo)
 		}
 	}
 
+	if participantAwareFilter {
+		return filterInterceptDeltas(ctx, s.state.WatchIntercepts(ctx, nil), filter), sessionDone, nil
+	}
 	return s.state.WatchIntercepts(ctx, filter), sessionDone, nil
 }
 
@@ -1394,31 +1464,7 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 
 	s.removeExcludedEnvVars(rIReq.Environment)
 
-	intercept := s.state.UpdateIntercept(ceptID, func(intercept *state.Intercept) {
-		// Sanity check: The reviewing agent must be an agent for the intercept.
-		if intercept.Spec.Namespace != agent.Namespace || intercept.Spec.Agent != agent.Name {
-			return
-		}
-		if mutator.GetMap(ctx).IsInactive(types.UID(agent.PodUid)) {
-			clog.Debugf(ctx, "Pod %s(%s) is blacklisted", agent.PodName, agent.PodIp)
-			return
-		}
-
-		// Only update intercepts in the waiting or no agent states.  Agents race to review an intercept, but we
-		// expect they will always produce compatible answers.
-		if intercept.Disposition == rpc.InterceptDispositionType_NO_AGENT || intercept.Disposition == rpc.InterceptDispositionType_WAITING {
-			intercept.Disposition = rIReq.Disposition
-			intercept.Message = rIReq.Message
-			intercept.PodIp = rIReq.PodIp
-			intercept.PodName = agent.PodName
-			intercept.FtpPort = rIReq.FtpPort
-			intercept.SftpPort = rIReq.SftpPort
-			intercept.MountPoint = rIReq.MountPoint
-			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
-			intercept.Environment = rIReq.Environment
-			intercept.Mounts = rIReq.Mounts
-		}
-	})
+	intercept := s.state.ApplyAgentReview(ctx, ceptID, agent, rIReq)
 
 	if intercept == nil {
 		return nil, status.Errorf(codes.NotFound, "Intercept with ID %q not found for this session", ceptID)

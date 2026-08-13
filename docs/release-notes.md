@@ -14,6 +14,12 @@ Automcompletion for <code>use</code> flag now dynamically generates completions 
 The agent injector reused a cached sidecar config across concurrent pod admissions while serializing that config temporarily cleared creation-only fields such as the traffic-agent image. A concurrent admission could observe the cleared image and produce invalid traffic-agent and init-container patches with empty image fields. Serialization now strips those fields from a local copy, so parallel pod creation cannot corrupt the cached config or block a workload rollout.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[HTTP intercepts can follow every workload selected by one Service](reference/attachments/cli)</div></div>
+<div style="margin-left: 15px">
+
+A Kubernetes Service can route requests to more than one workload, such as stable and canary Deployments, while an intercept previously followed only the workload named by the user. HTTP intercepts without <code>--replace</code> now let each selected workload participate in one logical intercept, so filtered traffic reaches the same local handler regardless of which selected workload receives it. If the selected workloads or their traffic-agents cannot support shared interception, Telepresence warns and keeps the historical single-workload behavior instead of failing the intercept.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Guided traffic-manager setup with telepresence setup](reference/setup)</div></div>
 <div style="margin-left: 15px">
 

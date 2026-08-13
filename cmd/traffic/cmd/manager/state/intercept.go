@@ -249,6 +249,364 @@ func serviceIPs(ctx context.Context, serviceName, namespace string) (ips [][]byt
 	return ips
 }
 
+func servicePodIsRelevant(pod *core.Pod) bool {
+	// The shared pod informer deliberately strips Status.Conditions. Service
+	// discovery still needs every selector-matching pod that has not started
+	// deleting so it can detect pod-only labels and resolve current owners.
+	return pod.DeletionTimestamp == nil
+}
+
+func sidecarClaimsService(sc *agentconfig.Sidecar, spec *rpc.InterceptSpec) bool {
+	for _, container := range sc.Containers {
+		for _, target := range container.Intercepts {
+			if string(target.ServiceUID) != spec.ServiceUid || target.Protocol.String() != spec.Protocol {
+				continue
+			}
+			if spec.ServicePort > 0 && int32(target.ServicePort) == spec.ServicePort {
+				return true
+			}
+			if spec.ServicePort == 0 && spec.ServicePortName != "" && target.ServicePortName == spec.ServicePortName {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func sortedServiceWorkloads(workloads map[string]k8sapi.Workload) []k8sapi.Workload {
+	keys := make([]string, 0, len(workloads))
+	for key := range workloads {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]k8sapi.Workload, len(keys))
+	for i, key := range keys {
+		result[i] = workloads[key]
+	}
+	return result
+}
+
+func addServiceWorkload(workloads map[string]k8sapi.Workload, workload k8sapi.Workload) {
+	workloads[participantKey(workload.GetNamespace(), string(workload.GetKind()), workload.GetName())] = workload
+}
+
+var (
+	errServicePodOnlySelection        = errors.New("service selects only individual pods from a workload")
+	errServicePodOwnerUnrepresentable = errors.New("service selects a pod without a supported workload owner")
+	errServiceIdentityChanged         = errors.New("service is missing or changed identity")
+	errServiceSelectorless            = errors.New("service has no selector")
+)
+
+// discoverServiceWorkloads finds both selector-matching workload templates
+// and current selected pod owners. The former keeps scaled-to-zero and
+// starting workloads from escaping when they later become ready. A workload
+// selected only by labels on one of its pods cannot be expanded safely,
+// because agent configuration is shared by every pod in that workload.
+func discoverServiceWorkloads(ctx context.Context, spec *rpc.InterceptSpec) ([]k8sapi.Workload, bool, error) {
+	if !serviceScopedIntercept(spec) || spec.ServiceName == "" {
+		return nil, false, nil
+	}
+
+	f := informer.GetFactory(ctx, spec.Namespace)
+	if f == nil {
+		return nil, false, nil
+	}
+	kf := f.GetK8sInformerFactory()
+	svc, err := kf.Core().V1().Services().Lister().Services(spec.Namespace).Get(spec.ServiceName)
+	if err != nil {
+		if k8sErrors.IsNotFound(err) {
+			return nil, true, fmt.Errorf("%w: service %s.%s no longer exists",
+				errServiceIdentityChanged, spec.ServiceName, spec.Namespace)
+		}
+		return nil, true, err
+	}
+	if string(svc.UID) != spec.ServiceUid {
+		return nil, true, fmt.Errorf("%w: service %s.%s changed identity while preparing intercept",
+			errServiceIdentityChanged, spec.ServiceName, spec.Namespace)
+	}
+	if len(svc.Spec.Selector) == 0 {
+		return nil, true, fmt.Errorf("%w: service %s.%s has no selector",
+			errServiceSelectorless, spec.ServiceName, spec.Namespace)
+	}
+
+	selector := labels.SelectorFromSet(svc.Spec.Selector)
+	enabledKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
+	workloads := make(map[string]k8sapi.Workload)
+	addTemplate := func(workload k8sapi.Workload) {
+		if hasValidReplicasetOwner(workload, enabledKinds) {
+			return
+		}
+		if workload.GetKind() == k8sapi.DeploymentKind &&
+			agentmap.TrafficManagerSelector.Matches(labels.Set(workload.GetLabels())) {
+			return
+		}
+		if selector.Matches(labels.Set(workload.GetPodTemplate().Labels)) {
+			addServiceWorkload(workloads, workload)
+		}
+	}
+
+	ai := kf.Apps().V1()
+	for _, kind := range enabledKinds {
+		switch kind {
+		case k8sapi.DeploymentKind:
+			deployments, err := ai.Deployments().Lister().Deployments(spec.Namespace).List(labels.Everything())
+			if err != nil {
+				return nil, true, err
+			}
+			for _, deployment := range deployments {
+				addTemplate(k8sapi.Deployment(deployment))
+			}
+		case k8sapi.ReplicaSetKind:
+			replicaSets, err := ai.ReplicaSets().Lister().ReplicaSets(spec.Namespace).List(labels.Everything())
+			if err != nil {
+				return nil, true, err
+			}
+			for _, replicaSet := range replicaSets {
+				addTemplate(k8sapi.ReplicaSet(replicaSet))
+			}
+		case k8sapi.StatefulSetKind:
+			statefulSets, err := ai.StatefulSets().Lister().StatefulSets(spec.Namespace).List(labels.Everything())
+			if err != nil {
+				return nil, true, err
+			}
+			for _, statefulSet := range statefulSets {
+				addTemplate(k8sapi.StatefulSet(statefulSet))
+			}
+		case k8sapi.RolloutKind:
+			ri := f.GetArgoRolloutsInformerFactory().Argoproj().V1alpha1().Rollouts()
+			rollouts, err := ri.Lister().Rollouts(spec.Namespace).List(labels.Everything())
+			if err != nil {
+				return nil, true, err
+			}
+			for _, rollout := range rollouts {
+				addTemplate(k8sapi.Rollout(rollout))
+			}
+		}
+	}
+
+	pods, err := kf.Core().V1().Pods().Lister().Pods(spec.Namespace).List(selector)
+	if err != nil {
+		return nil, true, err
+	}
+	for _, pod := range pods {
+		if !servicePodIsRelevant(pod) {
+			continue
+		}
+		workload, err := agentmap.FindOwnerWorkload(ctx, k8sapi.Pod(pod), enabledKinds)
+		if err != nil {
+			var ownerNotFound *agentmap.WorkloadOwnerNotFoundError
+			if errors.As(err, &ownerNotFound) {
+				return nil, true, fmt.Errorf("%w: service endpoint pod %s.%s has no supported workload owner: %v",
+					errServicePodOwnerUnrepresentable, pod.Name, pod.Namespace, err)
+			}
+			return nil, true, fmt.Errorf("unable to resolve workload owner for service endpoint pod %s.%s: %w", pod.Name, pod.Namespace, err)
+		}
+		if !selector.Matches(labels.Set(workload.GetPodTemplate().Labels)) {
+			return nil, true, fmt.Errorf("%w: service endpoint pod %s.%s belongs to %s whose pod template does not match the Service selector",
+				errServicePodOnlySelection, pod.Name, pod.Namespace, workload)
+		}
+		addServiceWorkload(workloads, workload)
+	}
+	return sortedServiceWorkloads(workloads), true, nil
+}
+
+// serviceWorkloads keeps the explicitly requested workload when informer
+// state is unavailable, preserving single-workload interception.
+func serviceWorkloads(ctx context.Context, spec *rpc.InterceptSpec, primary k8sapi.Workload) ([]k8sapi.Workload, error) {
+	workloads := map[string]k8sapi.Workload{
+		participantKey(primary.GetNamespace(), string(primary.GetKind()), primary.GetName()): primary,
+	}
+	discovered, known, err := discoverServiceWorkloads(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
+	if !known {
+		return sortedServiceWorkloads(workloads), nil
+	}
+	for _, workload := range discovered {
+		addServiceWorkload(workloads, workload)
+	}
+	return sortedServiceWorkloads(workloads), nil
+}
+
+// checkServiceWorkloadConflicts resolves the target container for a
+// secondary workload without changing its stored agent config. This must run
+// before shared-Service expansion changes ReplacePolicyContainer to
+// ReplacePolicyIntercept and restarts pods.
+func (s *State) checkServiceWorkloadConflicts(
+	ctx context.Context,
+	spec *rpc.InterceptSpec,
+	workload k8sapi.Workload,
+	client *ClientSession,
+) error {
+	return s.checkServiceWorkloadConflictsIgnoring(ctx, spec, workload, client, "")
+}
+
+func (s *State) checkServiceWorkloadConflictsIgnoring(
+	ctx context.Context,
+	spec *rpc.InterceptSpec,
+	workload k8sapi.Workload,
+	client *ClientSession,
+	ignoredInterceptID string,
+) error {
+	if client == nil {
+		return fmt.Errorf("client session is unavailable")
+	}
+	agentImage := managerutil.GetAgentImage(ctx)
+	if err := s.ValidateAgentImage(agentImage, s.isExtended(spec)); err != nil {
+		return err
+	}
+	var config *agentconfig.Sidecar
+	if mm := mutator.GetMap(ctx); mm != nil {
+		config = mm.Get(workload.GetName(), workload.GetNamespace())
+	}
+	if config == nil || !sidecarClaimsService(config, spec) {
+		var err error
+		config, err = s.createAgentConfig(ctx, workload, agentImage)
+		if err != nil {
+			return err
+		}
+	}
+	secondarySpec := proto.Clone(spec).(*rpc.InterceptSpec)
+	// Different selected workloads can use different container names for the
+	// same Service target. Resolve the secondary workload's own container.
+	secondarySpec.ContainerName = ""
+	_, ic, err := config.FindIntercept(
+		secondarySpec.ServiceName,
+		secondarySpec.ContainerName,
+		types.PortIdentifier(secondarySpec.PortIdentifier),
+	)
+	if err != nil {
+		return err
+	}
+	_, containerPorts, err := checkPortConsistency(config, nil, ic, secondarySpec)
+	if err != nil {
+		return err
+	}
+	conflictSpec := proto.Clone(secondarySpec).(*rpc.InterceptSpec)
+	conflictSpec.ServiceUid = string(ic.ServiceUID)
+	conflictSpec.ServicePortName = ic.ServicePortName
+	conflictSpec.ServicePort = int32(ic.ServicePort)
+	conflictSpec.Protocol = ic.Protocol.String()
+	conflictSpec.ContainerPort = int32(ic.ContainerPort)
+	return s.checkInterceptConflictsIgnoring(config, client, containerPorts, conflictSpec, ignoredInterceptID)
+}
+
+func serviceWorkloadInfos(workloads []k8sapi.Workload) []*rpc.InterceptWorkload {
+	infos := make([]*rpc.InterceptWorkload, len(workloads))
+	for i, workload := range workloads {
+		infos[i] = &rpc.InterceptWorkload{
+			Namespace:    workload.GetNamespace(),
+			WorkloadKind: string(workload.GetKind()),
+			WorkloadName: workload.GetName(),
+		}
+	}
+	return infos
+}
+
+func fallbackToSingleWorkload(ctx context.Context, spec *rpc.InterceptSpec, reason string) {
+	clog.Warnf(ctx, "Shared-Service expansion for %q is unavailable: %s; using only requested workload %q",
+		spec.ServiceName, reason, spec.Agent)
+	spec.ServiceUid = ""
+	spec.ServicePortName = ""
+	spec.ServicePort = 0
+}
+
+func (s *State) ensureServiceWorkloads(
+	ctx context.Context,
+	spec *rpc.InterceptSpec,
+	primary k8sapi.Workload,
+	primaryConfig *agentconfig.Sidecar,
+	primaryAgents []*AgentSession,
+	rp agentconfig.ReplacePolicy,
+	client *ClientSession,
+) []*rpc.InterceptWorkload {
+	if !serviceScopedIntercept(spec) {
+		return nil
+	}
+	if spec.Replace || spec.Mechanism != "http" {
+		fallbackToSingleWorkload(ctx, spec, "shared interception requires the http mechanism without --replace")
+		return nil
+	}
+
+	workloads, err := serviceWorkloads(ctx, spec, primary)
+	if err != nil {
+		fallbackToSingleWorkload(ctx, spec, err.Error())
+		return nil
+	}
+	if len(workloads) <= 1 {
+		return serviceWorkloadInfos(workloads)
+	}
+
+	configWorkloads := make(map[string]k8sapi.Workload, len(workloads))
+	for _, workload := range workloads {
+		if workload.GetName() == primary.GetName() && workload.GetKind() == primary.GetKind() {
+			continue
+		}
+		if err = s.checkServiceWorkloadConflicts(ctx, spec, workload, client); err != nil {
+			fallbackToSingleWorkload(ctx, spec,
+				fmt.Sprintf("workload %s conflicts with an existing intercept: %v", workload, err))
+			return nil
+		}
+		configWorkloads[participantKey(workload.GetNamespace(), string(workload.GetKind()), workload.GetName())] = workload
+	}
+
+	for _, workload := range workloads {
+		config := primaryConfig
+		agents := primaryAgents
+		if workload.GetName() != primary.GetName() || workload.GetKind() != primary.GetKind() {
+			configWorkload := configWorkloads[participantKey(workload.GetNamespace(), string(workload.GetKind()), workload.GetName())]
+			if k8sapi.ReadyReplicas(workload) == 0 {
+				config, err = s.getOrCreateAgentConfig(ctx, configWorkload, s.isExtended(spec), false, spec, rp)
+				if err == nil {
+					err = mutator.GetMap(ctx).EvictPodsWithAgentConfigMismatch(ctx, workload, config)
+				}
+				agents = nil
+			} else {
+				config, agents, err = s.ensureAgent(ctx, configWorkload, s.isExtended(spec), false, spec, rp)
+			}
+			if err != nil {
+				fallbackToSingleWorkload(ctx, spec,
+					fmt.Sprintf("unable to ensure agent for workload %s: %v", workload, err))
+				return nil
+			}
+		}
+		if !sidecarClaimsService(config, spec) {
+			fallbackToSingleWorkload(ctx, spec,
+				fmt.Sprintf("agent config for workload %s does not claim the selected Service target", workload))
+			return nil
+		}
+		currentAgents := s.LoadMatchingAgents(func(_ tunnel.SessionID, agent *AgentSession) bool {
+			return agent.Namespace == workload.GetNamespace() &&
+				agent.Kind == string(workload.GetKind()) &&
+				agent.Name == workload.GetName()
+		})
+		if len(currentAgents) > 0 {
+			agents = agents[:0]
+			for _, agent := range currentAgents {
+				agents = append(agents, agent)
+			}
+			sortAgents(agents)
+		}
+		if len(agents) == 0 && k8sapi.ReadyReplicas(workload) == 0 {
+			continue
+		}
+		allClaim := len(agents) > 0
+		for _, agent := range agents {
+			if !agentClaimsService(agent.AgentInfo, spec) {
+				allClaim = false
+				break
+			}
+		}
+		if !allClaim {
+			fallbackToSingleWorkload(ctx, spec,
+				fmt.Sprintf("not every agent for workload %s advertises the selected Service target", workload))
+			return nil
+		}
+	}
+	return serviceWorkloadInfos(workloads)
+}
+
 func prepareAllContainerPorts(cn *agentconfig.Container, pi *rpc.PreparedIntercept) {
 	pics := agentconfig.PortUniqueIntercepts(cn)
 	if ni := len(pics); ni > 0 {
@@ -303,7 +661,13 @@ func (s *State) checkInterceptConsistency(
 	if err != nil {
 		return err
 	}
-	err = s.checkInterceptConflicts(ac, client, containerPorts, spec)
+	conflictSpec := proto.Clone(spec).(*rpc.InterceptSpec)
+	conflictSpec.ServiceUid = string(ic.ServiceUID)
+	conflictSpec.ServicePortName = ic.ServicePortName
+	conflictSpec.ServicePort = int32(ic.ServicePort)
+	conflictSpec.Protocol = ic.Protocol.String()
+	conflictSpec.ContainerPort = int32(ic.ContainerPort)
+	err = s.checkInterceptConflicts(ac, client, containerPorts, conflictSpec)
 	if err != nil {
 		return err
 	}
@@ -366,13 +730,115 @@ func checkPortConsistency(
 }
 
 func (s *State) checkInterceptConflicts(ac *agentconfig.Sidecar, client *ClientSession, containerPorts []types.PortAndProto, spec *rpc.InterceptSpec) error {
+	return s.checkInterceptConflictsIgnoring(ac, client, containerPorts, spec, "")
+}
+
+// serviceParticipantPotentialConflict reports whether an existing shared
+// Service intercept occupies one of the requested ports in this sidecar's
+// workload. The logical intercept stores the primary workload's resolved
+// container port, but a secondary workload can route the same Service port to
+// a different container port.
+func serviceParticipantPotentialConflict(
+	ac *agentconfig.Sidecar,
+	containerPorts []types.PortAndProto,
+	intercept *Intercept,
+) bool {
+	if !serviceScopedIntercept(intercept.Spec) || intercept.Spec.Wiretap {
+		return false
+	}
+	switch intercept.Disposition {
+	case rpc.InterceptDispositionType_ACTIVE, rpc.InterceptDispositionType_WAITING, rpc.InterceptDispositionType_NO_AGENT:
+	default:
+		return false
+	}
+
+	workloadName := ac.WorkloadName
+	if workloadName == "" {
+		workloadName = ac.AgentName
+	}
+	workloadKind := string(ac.WorkloadKind)
+	matchesWorkload := func(namespace, kind, name string) bool {
+		return namespace == ac.Namespace && name == workloadName &&
+			(workloadKind == "" || kind == "" || kind == workloadKind)
+	}
+	participant := false
+	if len(intercept.participants) > 0 {
+		for _, candidate := range intercept.participants {
+			if matchesWorkload(candidate.namespace, candidate.kind, candidate.name) {
+				participant = true
+				break
+			}
+		}
+	} else {
+		for _, candidate := range intercept.ServiceWorkloads {
+			if candidate != nil && matchesWorkload(candidate.Namespace, candidate.WorkloadKind, candidate.WorkloadName) {
+				participant = true
+				break
+			}
+		}
+	}
+	if !participant {
+		return false
+	}
+
+	portName := intercept.Spec.ServicePortName
+	if portName == "" && intercept.Spec.ServicePort > 0 {
+		portName = fmt.Sprintf("%d", intercept.Spec.ServicePort)
+	}
+	portID, err := types.NewPortIdentifier(
+		types.FromK8sProtocol(core.Protocol(intercept.Spec.Protocol)),
+		portName,
+	)
+	if err != nil {
+		return false
+	}
+	_, target, err := ac.FindIntercept(intercept.Spec.ServiceName, "", portID)
+	if err != nil {
+		return false
+	}
+	if !servicePortMatches(&rpc.AgentInfo_InterceptTarget{
+		ServiceUid:      string(target.ServiceUID),
+		ServicePortName: target.ServicePortName,
+		ServicePort:     int32(target.ServicePort),
+		Protocol:        target.Protocol.String(),
+	}, intercept.Spec) {
+		return false
+	}
+	targetPort := types.PortAndProto{Proto: target.Protocol, Port: target.ContainerPort}
+	for _, containerPort := range containerPorts {
+		if containerPort == targetPort {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *State) checkInterceptConflictsIgnoring(
+	ac *agentconfig.Sidecar,
+	client *ClientSession,
+	containerPorts []types.PortAndProto,
+	spec *rpc.InterceptSpec,
+	ignoredInterceptID string,
+) error {
 	if spec.Wiretap {
 		// A wiretap intercept is never in conflict with any other intercept.
 		return nil
 	}
 
 	// Validate that there's no port conflict with other intercepts using the same agent.
-	potentialConflicts := s.intercepts.LoadMatching(func(s string, info *Intercept) bool {
+	potentialConflicts := s.intercepts.LoadMatching(func(id string, info *Intercept) bool {
+		if id == ignoredInterceptID {
+			return false
+		}
+		if serviceScopesOverlap(spec, info.Spec) {
+			switch info.Disposition {
+			case rpc.InterceptDispositionType_ACTIVE, rpc.InterceptDispositionType_WAITING, rpc.InterceptDispositionType_NO_AGENT:
+				return !info.Spec.Wiretap
+			}
+		}
+		if serviceParticipantPotentialConflict(ac, containerPorts, info) {
+			return true
+		}
 		return icept.PotentialConflict(ac.AgentName, ac.Namespace, containerPorts, info.InterceptInfo)
 	})
 	if len(potentialConflicts) == 0 {
@@ -414,6 +880,16 @@ func (s *State) checkInterceptConflicts(ac *agentconfig.Sidecar, client *ClientS
 	return nil
 }
 
+func serviceScopesOverlap(a, b *rpc.InterceptSpec) bool {
+	if !serviceScopedIntercept(a) || !serviceScopedIntercept(b) || a.ServiceUid != b.ServiceUid || a.Protocol != b.Protocol {
+		return false
+	}
+	if a.ServicePort > 0 && b.ServicePort > 0 {
+		return a.ServicePort == b.ServicePort
+	}
+	return a.ServicePortName != "" && a.ServicePortName == b.ServicePortName
+}
+
 func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptRequest) (*ClientSession, *rpc.InterceptInfo, error) {
 	clientSession := cir.Session
 	sessionID := tunnel.SessionID(clientSession.SessionId)
@@ -438,6 +914,9 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 	if spec.Replace {
 		rp = agentconfig.ReplacePolicyContainer
 	}
+	var primaryConfig *agentconfig.Sidecar
+	var primaryAgents []*AgentSession
+	var serviceWorkloads []*rpc.InterceptWorkload
 	if spec.NodeAgent {
 		// PrepareIntercept already provisioned the node-agent Job. Running
 		// the injecting ensureAgent here would inject a sidecar and restart
@@ -448,14 +927,22 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		if _, err = s.waitForNodeAgent(ctx, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, nil, err
 		}
+		if serviceScopedIntercept(spec) {
+			// Node-agent intercepts target the pod selected during
+			// PrepareIntercept. They cannot provision the other workloads
+			// behind a shared Service, so don't let existing sidecars make
+			// this intercept appear partially service-scoped.
+			fallbackToSingleWorkload(ctx, spec, "node-agent intercepts target only the requested workload")
+		}
 	} else {
-		_, _, err = s.ensureAgent(ctx, wl, s.isExtended(spec), false, spec, rp)
+		primaryConfig, primaryAgents, err = s.ensureAgent(ctx, wl, s.isExtended(spec), false, spec, rp)
 		if err != nil {
 			return nil, nil, err
 		}
+		serviceWorkloads = s.ensureServiceWorkloads(ctx, spec, wl, primaryConfig, primaryAgents, rp, client)
 	}
 
-	is, err := s.addIntercept(interceptID, cir)
+	is, err := s.addIntercept(interceptID, cir, serviceWorkloads)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -488,7 +975,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		pmSpec.Client = fmt.Sprintf("child %s %s %s", pm, spec.Name, spec.Client)
 
 		pmInterceptID := fmt.Sprintf("%s:%s", sessionID, pmSpec.Name)
-		_, err = s.addIntercept(pmInterceptID, pmCir)
+		_, err = s.addIntercept(pmInterceptID, pmCir, nil)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -520,6 +1007,9 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		// has stored it.
 		s.startNodeAgentPodWatch(spec.Agent, spec.Namespace)
 	}
+	if serviceScopedIntercept(spec) {
+		s.startServiceInterceptWatch(interceptID)
+	}
 
 	agentType := "sidecar"
 	if spec.NodeAgent {
@@ -541,8 +1031,10 @@ func (s *State) GetParentIntercept(sessionID tunnel.SessionID, spec *rpc.Interce
 	return s.intercepts.Load(fmt.Sprintf("%s:%s", sessionID, childCols[2]))
 }
 
-func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest) (*Intercept, error) {
+func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest, serviceWorkloads []*rpc.InterceptWorkload) (*Intercept, error) {
 	is := s.NewInterceptInfo(id, cir)
+	is.ServiceWorkloads = serviceWorkloads
+	s.initializeParticipants(is)
 
 	// Wrap each potential-state-change in an
 	//
@@ -870,13 +1362,18 @@ func (s *State) GetOrGenerateAgentConfig(ctx context.Context, name, namespace st
 	return s.getOrCreateAgentConfig(ctx, wl, false, true, nil, agentconfig.ReplacePolicyInactive)
 }
 
-func (s *State) createAgentConfig(ctx context.Context, wl k8sapi.Workload, agentImage string) (*agentconfig.Sidecar, error) {
+func (s *State) generateAgentConfig(
+	ctx context.Context,
+	wl k8sapi.Workload,
+	agentImage string,
+	existing *agentconfig.Sidecar,
+) (*agentconfig.Sidecar, error) {
 	gc, err := managerutil.GetEnv(ctx).GeneratorConfig(agentImage)
 	if err != nil {
 		return nil, err
 	}
 	clog.Debugf(ctx, "generating new agent config for %s", wl)
-	sc, err := gc.Generate(ctx, wl, nil)
+	sc, err := gc.Generate(ctx, wl, existing)
 	if err != nil {
 		return nil, err
 	}
@@ -884,6 +1381,10 @@ func (s *State) createAgentConfig(ctx context.Context, wl k8sapi.Workload, agent
 		return nil, err
 	}
 	return sc, nil
+}
+
+func (s *State) createAgentConfig(ctx context.Context, wl k8sapi.Workload, agentImage string) (*agentconfig.Sidecar, error) {
+	return s.generateAgentConfig(ctx, wl, agentImage, nil)
 }
 
 func (s *State) getOrCreateAgentConfig(
@@ -920,6 +1421,12 @@ func (s *State) getOrCreateAgentConfig(
 			// If the agentImage has changed, and the extended image is requested, then update
 			if sc.AgentImage != agentImage {
 				sc.AgentImage = agentImage
+			}
+			if serviceScopedIntercept(spec) && !sidecarClaimsService(sc, spec) {
+				sc, err = s.generateAgentConfig(ctx, wl, agentImage, sc)
+				if err != nil {
+					return nil, err
+				}
 			}
 			clog.Debugf(ctx, "found existing agent config for %s", wl)
 		} else {
