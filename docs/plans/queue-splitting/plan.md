@@ -2,10 +2,12 @@
 
 ## Status
 
-Proposed. Implementation must not begin until the Kafka and RabbitMQ cutover
-prototypes in **Delivery plan** pass. Those prototypes are explicit go/no-go
-gates because safe ownership transfer, not the provider interface or CLI, is the
-principal technical risk.
+Proposed; the phase-0 feasibility gates have **passed** (2026-08-15, real
+brokers: Kafka 4.3.1, RabbitMQ 4.3.4 — see
+[phase0-findings.md](phase0-findings.md)). Safe ownership transfer was the
+principal technical risk and both cutover prototypes proved the contract. One
+result changed the design and is folded in below: quorum-queue source
+ownership is monitored, not broker-enforced.
 
 ## Problem
 
@@ -309,7 +311,11 @@ publishing. Kafka group membership cannot prove Kubernetes workload identity or
 prevent another principal from joining later. Exclusive ownership of the
 original Kafka app group is therefore a documented operator precondition; the
 agent monitors and reports unexpected members but cannot make that topology
-safe. RabbitMQ enforces source ownership with an exclusive consumer.
+safe. RabbitMQ enforces source ownership with an exclusive consumer on
+classic queues only; a quorum queue admits competing consumers despite the
+exclusive flag (phase 0, R1), so quorum sources carry the same documented
+precondition as Kafka groups, verified at preflight and monitored through the
+management API's consumer count, degrading on violation.
 
 ### Activation state machine
 
@@ -449,9 +455,12 @@ The Kafka engine uses `github.com/twmb/franz-go`.
   before its replacement accepts work. The producer also uses a deterministic
   transactional ID solely for producer-epoch fencing, even though v1 does not
   promise transactional delivery. The replacement initializes its producer and
-  obtains the new epoch before consuming; the prototype must prove that a stale
-  producer cannot publish after that point. A fenced process closes all broker
-  clients and reports unhealthy.
+  obtains the new epoch before consuming; phase 0 proved that a stale producer
+  cannot publish after that point (produce fails `INVALID_PRODUCER_EPOCH`,
+  commit fails `PRODUCER_FENCED`). Fencing surfaces only on broker round
+  trips — a fenced producer's transaction begin still succeeds client-side —
+  so produce/commit errors, never a successful begin, are the fence signal. A
+  fenced process closes all broker clients and reports unhealthy.
 - Each shadow topic starts with the source partition count. Records retain their
   partition index, and produces for one destination partition remain ordered.
 - A source offset commits only after the destination produce is acknowledged. A
@@ -470,10 +479,15 @@ The Kafka engine uses `github.com/twmb/franz-go`.
 - Cleanup removes only resources recorded for the activation. A delete failure
   is an observable leak, not a reason to undo a completed handoff.
 
-The prototype must prove with a real broker that offsets can be read and altered
-in the intended states, produce-before-commit crashes recover, and app-shadow
-end positions compare reliably with committed positions. `kfake` unit tests are
-not evidence for these admin and recovery semantics.
+Phase 0 proved against a real broker that offsets can be read and altered in
+the intended states, produce-before-commit crashes recover as exactly one
+duplicate, and app-shadow end positions compare reliably with committed
+positions. Two observed details the implementation must encode: the broker
+refuses an external offset commit while the group has any live member — the
+guard the handback relies on — and the refusal is the blunt
+`UNKNOWN_MEMBER_ID`, which deserves mapping to an actionable error message.
+`kfake` unit tests remain non-evidence for these admin and recovery
+semantics.
 
 ### RabbitMQ
 
@@ -485,8 +499,11 @@ The RabbitMQ engine uses `github.com/rabbitmq/amqp091-go`.
 - Before consuming, it holds a deterministic exclusive lock queue on the same
   broker connection. A replacement cannot start until RabbitMQ has closed the
   predecessor's connection and released that lock.
-- The source consumer is itself exclusive. After the initial zero-consumer
-  preflight, RabbitMQ rejects any later competing consumer for the source queue.
+- The source consumer sets the exclusive flag. On a classic queue the broker
+  then rejects any later competing consumer; on a quorum queue the flag is not
+  enforced (phase 0), so after the initial zero-consumer preflight the engine
+  watches the management API's consumer count and reports `DEGRADED` when a
+  foreign consumer appears.
 - Every publish sets `mandatory=true`. The engine correlates returns and
   publisher confirms by sequence number and acknowledges the source only after
   a positive confirm with no return. Returned, negatively confirmed, and
@@ -498,6 +515,14 @@ The RabbitMQ engine uses `github.com/rabbitmq/amqp091-go`.
   deliveries cannot race the mover.
 - Final app drain uses a quiesce-and-recheck cycle because passive queue depth
   does not include unacked deliveries.
+- Drain mechanics proved necessary in phase 0: cap prefetch or the broker
+  eagerly pushes the entire ready backlog into the unacked set; cancel a
+  consumer before acking its final deliveries or the freed slots are refilled
+  immediately; cancel every consumer before a rollback republish or an active
+  consumer instantly re-consumes the republished messages.
+- Quorum-queue management-API statistics lag AMQP-visible state by up to the
+  stats emission interval (about 5 s observed in phase 0); every count read
+  polls with a deadline instead of sampling once.
 - Preflight verifies a supported durable classic or quorum source and, after
   workload quiescence, no other consumers. The required management API supplies
   source properties and ready/unacknowledged counts; AMQP passive-declare
@@ -506,10 +531,14 @@ The RabbitMQ engine uses `github.com/rabbitmq/amqp091-go`.
   source must not drain into a single-node classic shadow, or a broker-node
   failure would violate the no-silent-loss principle that the source itself
   upholds. The lock queue stays a classic exclusive queue in either case.
-- Source-consumer exclusivity must hold on both queue types. The phase-0
-  prototype proves that a competing consumer is rejected on a quorum source —
-  via the exclusive-consume flag if quorum queues honor it, otherwise by an
-  equivalent guard — before the design relies on it.
+- Source-consumer exclusivity differs by queue type, per phase 0: a classic
+  queue rejects a competing consumer with `ACCESS_REFUSED`, while a quorum
+  queue admits it silently despite the exclusive flag. The lock queue still
+  fences stale queue-agent processes for both types; protection against
+  *foreign* consumers on a quorum source is preflight, monitoring, and a
+  documented precondition — not broker enforcement.
+  `x-single-active-consumer` is no substitute, being a declaration argument
+  the existing source does not carry.
 
 A future exchange/binding engine may implement the lifecycle contract, but it
 is not a hidden fallback in v1.
@@ -676,13 +705,14 @@ forbidden-license check remains authoritative.
 Each phase is reviewable. The feature stays disabled until the final chart and
 documentation phase.
 
-0. **Provider feasibility gates.** Build throwaway real-broker prototypes for
-   Kafka offset transfer and RabbitMQ quiesce/drain, the latter against both a
-   classic and a quorum source queue: consumer exclusivity, management-API
-   ready/unacked reporting, republish-to-source, and shadow queue type behavior
-   must hold on both. Record observed behavior in tests. Stop and revise this
-   plan if either handoff cannot prove the contract, or scope quorum queues out
-   explicitly if only they fail.
+0. **Provider feasibility gates.** Completed 2026-08-15; results in
+   [phase0-findings.md](phase0-findings.md). Throwaway real-broker prototypes
+   proved Kafka offset transfer, fencing, and crash recovery, and RabbitMQ
+   quiesce/drain and rollback against both classic and quorum sources. Quorum
+   queues stay in scope with one design change, folded into this plan: their
+   source ownership is monitored through the management API rather than
+   broker-enforced, because the exclusive-consume flag is not honored on
+   quorum queues.
 1. **Config and state model.** Add annotation schema, validation, naming,
    durable ConfigMap schema, state machine, overlap detection, and recovery unit
    tests.
