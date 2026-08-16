@@ -107,7 +107,10 @@ The common provider contract is exercised by the shared conformance suite:
    the message twice. The system never promises exactly-once processing.
 3. A route stops accepting new messages before its shadow is drained or moved.
 4. A shadow is deleted only after its consumer is gone and the provider has
-   proved that no acknowledged backlog remains.
+   proved that no acknowledged backlog remains. A provider without a
+   loss-proof delete never deletes automatically: it retains the
+   verified-empty shadow as cleanup-pending inventory for deliberate
+   operator reaping.
 5. The application returns to the source only after session residue has moved to
    the app shadow, that shadow has drained, and the provider-specific handoff has
    completed.
@@ -410,8 +413,11 @@ queue in its active split set together:
    frontier while the group has no members; RabbitMQ needs no offset operation;
 5. persist an inactive override generation, restore replicas, and verify that
    ready Pods no longer carry a queue override; and
-6. delete empty shadows and provider groups, release the Lease, and reap the
-   idle queue-agent after its TTL.
+6. verify cleanup readiness with live broker reads (`VerifyCleanupReady`),
+   delete empty shadows and provider groups where a loss-proof delete
+   exists — RabbitMQ quorum shadows are instead retained cleanup-pending
+   (see the engine contract below) — release the Lease, and reap the idle
+   queue-agent after its TTL.
 
 New source messages wait at the broker between steps 1 and 5. No source and
 shadow consumer run concurrently during handback.
@@ -423,16 +429,19 @@ and opaque checkpoints:
 
 ```go
 type Engine interface {
-    Prepare(context.Context, QueueConfig, ActivationID) (EnvOverrides, error)
+    Prepare(context.Context) (EnvOverrides, error)
     Start(context.Context) error
     ReconcileRoutes(context.Context, []Route) error
-    DrainRoute(context.Context, RouteID) error
+    DrainRoute(context.Context, id string) ([]RetainedResource, error)
     Stop(context.Context) (Handoff, error)
+    Abort(context.Context) error
     DrainApplication(context.Context, Handoff) error
     CommitHandoff(context.Context, Handoff) error
-    Cleanup(context.Context) error
-    Recover(context.Context, DesiredState) error
+    VerifyCleanupReady(context.Context) error
+    Cleanup(context.Context) ([]RetainedResource, error)
+    Recover(context.Context, RecoveredState) error
     Status(context.Context) Status
+    Close() error
 }
 ```
 
@@ -441,8 +450,34 @@ and desired generation. `Recover` reconciles deterministic resources and
 broker-native checkpoints after restart. The manager owns workload scaling and
 state transitions; engines prove broker state is safe for the next transition.
 
-The interface is provisional until both real-broker prototypes pass. The shared
-conformance suite is the contract; the method spelling is not.
+`VerifyCleanupReady` gates the transition into cleanup. The manager calls it
+only after it has causally quiesced every shadow consumer — workload restarted
+onto the source or scaled to zero, session consumers detached, connections
+confirmed closed so unacknowledged deliveries have requeued — because that
+Kubernetes-side knowledge is part of the proof; the engine alone cannot infer
+from broker statistics that the application's connections have terminated.
+Only live broker reads (passive declares, group-coordinator metadata) decide
+the outcome; management statistics pace drain waits but never authorize
+deletion. Message residue comes back as `NeedsDrainError` and loops the state
+machine back to draining; an attached consumer is a hard error because
+quiescence has not actually completed.
+
+`Cleanup` re-runs the live checks immediately before each deletion and returns
+the resources it deliberately retained. A provider with no loss-proof delete
+never deletes automatically: RabbitMQ quorum queues reject every conditional
+`queue.delete` flag (540, connection-closing — phase 0, R7), and a
+check-then-delete sequence is an unbounded correctness race under concurrent
+access, not a guarantee. Verified-empty quorum shadows are therefore returned
+as retained; the manager keeps them in the activation's broker inventory
+marked cleanup-pending, re-verifies them on cleanup retries, exposes the leak
+operationally, and offers a deliberate operator reaping path that requires
+explicit acknowledgement of the data-loss risk. Automatic quorum cleanup
+waits for a broker-supported atomic "delete only if unused and empty".
+Retention round-trips through the contract: `DrainRoute` and `Cleanup` return
+what they retained for immediate persistence, and `RecoveredState.Retained`
+hands it back after a restart so a recovered engine keeps reporting it.
+Carrying the cleanup-pending marking in the persisted state model is phase-3
+work, landing with the manager that owns that state.
 
 ### Kafka
 

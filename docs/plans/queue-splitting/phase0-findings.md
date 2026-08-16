@@ -44,6 +44,7 @@ Findings folded into the plan:
 | R4 management-API observability | Pass | Pass | Type, arguments, ready/unacked/consumer counts all reported; unacked deliveries invisible to passive declare |
 | R5 quiesce/drain + rollback | Pass | Pass | Unacked requeued with redelivered flag on connection close; drain to shadow and republish-to-source both verified with confirms |
 | R6 quorum shadow parity | n/a | Pass | Quorum shadow behaves identically end-to-end |
+| R7 conditional queue.delete | Partial | **Rejected** | Classic honors `if-unused` (406 for an active `basic.consume`) and `if-empty`, but neither sees a parked unacked `basic.get` delivery — the delete destroys it; quorum rejects both flags outright (540 `NOT_IMPLEMENTED`, closing the whole connection), while its live consumer count does surface a parked `basic.get` hold (classic's reads 0) |
 
 Findings folded into the plan:
 
@@ -70,3 +71,16 @@ Findings folded into the plan:
   consumer before acking its final deliveries or freed slots are instantly
   refilled; cancel all consumers before a rollback republish or an active
   consumer re-consumes the republished messages immediately.
+- **No loss-proof delete exists for a quorum queue** (R7, verified on both
+  3.13.7 and 4.3.4): both conditional `queue.delete` flags are rejected
+  outright, and
+  an unconditional delete destroys whatever arrives concurrently — a
+  check-then-delete sequence is an unbounded race, not a guarantee. Classic
+  `if-unused` guards only active `basic.consume` clients; a parked unacked
+  `basic.get` delivery is invisible to it and to classic's consumer count,
+  and is destroyed by the delete. Consequence: cleanup readiness is causal —
+  the manager verifies consumer quiescence (connections closed, unacked
+  requeued) and the engine reads live broker state; classic shadows then
+  delete under `if-unused`+`if-empty` belts, while quorum shadows are never
+  deleted automatically: verified empty, retained as cleanup-pending
+  inventory, reaped only by deliberate operator action.

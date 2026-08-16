@@ -78,6 +78,7 @@ following Free and Open Source software:
     github.com/jlaffaye/ftp                                                   v0.2.1                                  ISC license
     github.com/jmoiron/sqlx                                                   v1.4.0                                  MIT license
     github.com/json-iterator/go                                               v1.1.12                                 MIT license
+    github.com/klauspost/compress                                             v1.19.0                                 3-clause BSD license, Apache License 2.0, MIT license
     github.com/kr/fs                                                          v0.1.0                                  3-clause BSD license
     github.com/kylelemons/godebug                                             v1.1.0                                  Apache License 2.0
     github.com/lann/builder                                                   v0.0.0-20180802200727-47ae307949d0      MIT license
@@ -109,6 +110,7 @@ following Free and Open Source software:
     github.com/opencontainers/go-digest                                       v1.0.0                                  Apache License 2.0
     github.com/opencontainers/image-spec                                      v1.1.1                                  Apache License 2.0
     github.com/peterbourgon/diskv                                             v2.0.1+incompatible                     MIT license
+    github.com/pierrec/lz4/v4                                                 v4.1.26                                 3-clause BSD license
     github.com/pkg/browser                                                    v0.0.0-20240102092130-5ac0b6a4141c      2-clause BSD license
     github.com/pkg/errors                                                     v0.9.1                                  2-clause BSD license
     github.com/pkg/sftp                                                       v1.13.11                                2-clause BSD license
@@ -120,6 +122,7 @@ following Free and Open Source software:
     github.com/puzpuzpuz/xsync/v4                                             v4.5.0                                  Apache License 2.0
     github.com/quic-go/qpack                                                  v0.6.0                                  MIT license
     github.com/quic-go/quic-go                                                v0.60.0                                 MIT license
+    github.com/rabbitmq/amqp091-go                                            v1.13.0                                 2-clause BSD license
     github.com/rogpeppe/go-internal                                           v1.15.0                                 3-clause BSD license
     github.com/rubenv/sql-migrate                                             v1.8.1                                  MIT license
     github.com/russross/blackfriday/v2                                        v2.1.0                                  2-clause BSD license
@@ -140,6 +143,9 @@ following Free and Open Source software:
     github.com/telepresenceio/go-fuseftp/rpc                                  v1.0.1                                  Apache License 2.0
     github.com/telepresenceio/telepresence/cmd/cobraparser/v2                 (modified)                              Apache License 2.0
     github.com/telepresenceio/telepresence/rpc/v2                             (modified)                              Apache License 2.0
+    github.com/twmb/franz-go                                                  v1.21.6                                 3-clause BSD license
+    github.com/twmb/franz-go/pkg/kadm                                         v1.18.0                                 3-clause BSD license
+    github.com/twmb/franz-go/pkg/kmsg                                         v1.13.1                                 3-clause BSD license
     github.com/vishvananda/netlink                                            v1.3.1                                  Apache License 2.0
     github.com/vishvananda/netns                                              v0.0.5                                  Apache License 2.0
     github.com/winfsp/cgofuse                                                 v1.6.0                                  MIT license
