@@ -310,15 +310,28 @@ func (e *Engine) verifyStoppedCleanupReady(ctx context.Context) error {
 		return err
 	}
 
-	appFinal, err := e.appShadowFinalOffsets(ctx)
+	appExists, err := e.topicExists(ctx, e.appShadow)
 	if err != nil {
 		return err
 	}
-	if err := e.checkTopicDrained(ctx, e.appShadow, e.appGroup, appFinal); err != nil {
-		return err
+	if appExists {
+		appFinal, err := e.appShadowFinalOffsets(ctx)
+		if err != nil {
+			return err
+		}
+		if err := e.checkTopicDrained(ctx, e.appShadow, e.appGroup, appFinal); err != nil {
+			return err
+		}
 	}
 
 	for _, r := range e.knownRoutes() {
+		exists, err := e.topicExists(ctx, r.Shadow)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
 		final, err := e.finalOffsets(ctx, r.Shadow)
 		if err != nil {
 			return err
