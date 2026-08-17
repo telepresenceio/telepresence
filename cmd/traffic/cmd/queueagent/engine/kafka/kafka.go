@@ -64,6 +64,8 @@ type routeEntry struct {
 
 // Engine owns one logical Kafka queue for one activation.
 type Engine struct {
+	engine.Lifecycle
+
 	cfg Config
 
 	appShadow     string
@@ -90,13 +92,6 @@ type Engine struct {
 	// from a real failure. It is engine-wide, not per-run, since only one
 	// pump run is ever active at a time.
 	stopRequested atomic.Bool
-
-	// started, stopped, and aborted record the activation's persisted
-	// lifecycle phase, for VerifyCleanupReady and Cleanup to key their
-	// enforcement on.
-	started atomic.Bool
-	stopped atomic.Bool
-	aborted atomic.Bool
 
 	// producerMu serializes every begin/produce/end-transaction cycle
 	// across the pump and DrainRoute, and doubles as DrainRoute's publish
@@ -209,17 +204,6 @@ func (e *Engine) closeClientsLocked() {
 		e.admin.Close()
 		e.admin = nil
 	}
-}
-
-// matches reports whether headers satisfies filter's equality conjunction.
-// An empty filter matches every message.
-func matches(filter, headers map[string]string) bool {
-	for k, v := range filter {
-		if headers[k] != v {
-			return false
-		}
-	}
-	return true
 }
 
 // headerMap converts Kafka record headers to a map, last-wins on a

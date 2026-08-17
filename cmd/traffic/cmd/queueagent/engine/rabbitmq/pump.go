@@ -8,6 +8,8 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/telepresenceio/clog"
+
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/queueagent/engine"
 )
 
 // Start acquires the provider fence for this activation, verifies via the
@@ -20,12 +22,22 @@ func (e *Engine) Start(ctx context.Context) error {
 	if err := e.healthErr(); err != nil {
 		return err
 	}
+	if err := e.acquireLock(ctx); err != nil {
+		return err
+	}
+	if err := e.resumePump(ctx); err != nil {
+		return err
+	}
+	e.MarkStarted()
+	return nil
+}
+
+// resumePump starts the pump goroutine, unwinding markRunning on any setup
+// failure so a later retry is not permanently treated as a no-op. It is a
+// no-op if a pump is already running on this instance.
+func (e *Engine) resumePump(ctx context.Context) error {
 	if !e.markRunning() {
 		return nil // already running: idempotent no-op
-	}
-	if err := e.acquireLock(ctx); err != nil {
-		e.clearRunning()
-		return err
 	}
 	if err := e.checkSourceNoConsumers(ctx); err != nil {
 		e.clearRunning()
@@ -35,7 +47,6 @@ func (e *Engine) Start(ctx context.Context) error {
 		e.clearRunning()
 		return err
 	}
-	e.started.Store(true)
 	return nil
 }
 
@@ -181,12 +192,15 @@ func forwardedPublishing(d amqp.Delivery) amqp.Publishing {
 // a valid route table; it is still deterministic for one that (transiently,
 // or in a test) is not.
 func (e *Engine) classify(headers amqp.Table) string {
-	msgHeaders := stringHeaders(headers)
-
 	e.routesMu.Lock()
 	defer e.routesMu.Unlock()
+
+	var msgHeaders map[string]string
 	for _, r := range e.routes {
-		if matchFilter(msgHeaders, r.Filter) {
+		if len(r.Filter) != 0 && msgHeaders == nil {
+			msgHeaders = stringHeaders(headers)
+		}
+		if engine.FilterMatches(r.Filter, msgHeaders) {
 			return e.sessionShadowName(r.ID)
 		}
 	}
@@ -203,17 +217,6 @@ func stringHeaders(headers amqp.Table) map[string]string {
 		}
 	}
 	return out
-}
-
-// matchFilter reports whether every key in filter maps to the same value in
-// headers. An empty filter matches every message.
-func matchFilter(headers, filter map[string]string) bool {
-	for k, v := range filter {
-		if headers[k] != v {
-			return false
-		}
-	}
-	return true
 }
 
 // maxQuorumMonitorFailures bounds consecutive management-API failures

@@ -20,7 +20,9 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync/atomic"
 )
 
 // Route is one developer's filter attachment to the logical queue.
@@ -35,14 +37,58 @@ type Route struct {
 	Filter map[string]string
 }
 
+// FilterMatches reports whether headers satisfy filter: every filter key
+// must map to the same value in headers. An empty filter matches all.
+func FilterMatches(filter, headers map[string]string) bool {
+	for k, v := range filter {
+		if headers[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
 // EnvOverrides are the application environment variable overrides an
 // engine's Prepare contributes, keyed by variable name.
 type EnvOverrides map[string]string
 
 // Handoff is an engine-opaque checkpoint produced by Stop and consumed by
-// DrainApplication and CommitHandoff. Its encoding is provider-specific; the
-// manager never interprets it.
+// CommitHandoff. Its encoding is provider-specific; the manager never
+// interprets it.
 type Handoff []byte
+
+// Lifecycle tracks an activation's phase. Providers embed it, mark
+// transitions on success, and Restore it from persisted state.
+type Lifecycle struct {
+	started, stopped, aborted atomic.Bool
+}
+
+func (l *Lifecycle) MarkStarted()  { l.started.Store(true) }
+func (l *Lifecycle) MarkStopped()  { l.stopped.Store(true) }
+func (l *Lifecycle) MarkAborted()  { l.aborted.Store(true) }
+func (l *Lifecycle) Started() bool { return l.started.Load() }
+func (l *Lifecycle) Stopped() bool { return l.stopped.Load() }
+func (l *Lifecycle) Aborted() bool { return l.aborted.Load() }
+
+// Restore rebuilds the phase from st. Aborting recovery leaves the aborted
+// mark unset; the retried Abort sets it.
+func (l *Lifecycle) Restore(st RecoveredState) {
+	if st.Started {
+		l.started.Store(true)
+	}
+	if st.Stopped {
+		l.stopped.Store(true)
+	}
+}
+
+// CleanupGate returns an error in the one state Cleanup must refuse:
+// started but neither stopped nor aborted.
+func (l *Lifecycle) CleanupGate() error {
+	if l.started.Load() && !l.stopped.Load() && !l.aborted.Load() {
+		return errors.New("activation is active; Stop or Abort first")
+	}
+	return nil
+}
 
 // RecoveredState is the persisted desired state a restarted process hands to
 // Recover. The engine derives nothing from broker-resource existence; the
@@ -155,7 +201,7 @@ type Engine interface {
 
 	// DrainApplication returns nil only once the app shadow is proven
 	// drained. It blocks, bounded by ctx, until that proof is available.
-	DrainApplication(ctx context.Context, h Handoff) error
+	DrainApplication(ctx context.Context) error
 
 	// CommitHandoff performs the provider-specific handback of source
 	// ownership to the application, using the checkpoint Stop returned.

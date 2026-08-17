@@ -435,7 +435,7 @@ type Engine interface {
     DrainRoute(context.Context, id string) ([]RetainedResource, error)
     Stop(context.Context) (Handoff, error)
     Abort(context.Context) error
-    DrainApplication(context.Context, Handoff) error
+    DrainApplication(context.Context) error
     CommitHandoff(context.Context, Handoff) error
     VerifyCleanupReady(context.Context) error
     Cleanup(context.Context) ([]RetainedResource, error)

@@ -50,7 +50,7 @@ func (e *Engine) Stop(ctx context.Context) (engine.Handoff, error) {
 	if err != nil {
 		return nil, err
 	}
-	e.stopped.Store(true)
+	e.MarkStopped()
 	return h, nil
 }
 
@@ -61,13 +61,13 @@ func (e *Engine) Stop(ctx context.Context) (engine.Handoff, error) {
 // that is the rollback. Idempotent.
 func (e *Engine) Abort(ctx context.Context) error {
 	e.stopPump(ctx)
-	e.aborted.Store(true)
+	e.MarkAborted()
 	return nil
 }
 
 // DrainApplication returns nil once the app group's committed offsets on
 // the app shadow equal the app shadow's end offsets, bounded by ctx.
-func (e *Engine) DrainApplication(ctx context.Context, _ engine.Handoff) error {
+func (e *Engine) DrainApplication(ctx context.Context) error {
 	e.mu.Lock()
 	err := e.ensureClients()
 	e.mu.Unlock()
@@ -216,16 +216,9 @@ func (e *Engine) observeLastRealOffsets(ctx context.Context, topic string, rawEn
 		remaining[p] = at
 	}
 	for len(remaining) > 0 {
-		if err := ctx.Err(); err != nil {
+		fetches, err := pollFetchesRetrying(ctx, consumer)
+		if err != nil {
 			return nil, err
-		}
-		fetches := consumer.PollFetches(ctx)
-		if err := fetches.Err(); err != nil {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			time.Sleep(drainPollInterval)
-			continue
 		}
 		fetches.EachPartition(func(p kgo.FetchTopicPartition) {
 			if n := len(p.Records); n > 0 {
@@ -291,9 +284,9 @@ func (e *Engine) VerifyCleanupReady(ctx context.Context) error {
 	}
 
 	switch {
-	case e.stopped.Load():
+	case e.Stopped():
 		return e.verifyStoppedCleanupReady(ctx)
-	case e.aborted.Load():
+	case e.Aborted():
 		return e.verifyMemberless(ctx)
 	default:
 		return fmt.Errorf("kafka: activation is still active, VerifyCleanupReady runs only after Stop or Abort")
@@ -357,11 +350,15 @@ func (e *Engine) checkTopicDrained(ctx context.Context, topic, group string, fin
 }
 
 // verifyMemberless requires the app group and every known route's session
-// group to report zero members.
+// group to report zero members, checked with one DescribeGroups call.
 func (e *Engine) verifyMemberless(ctx context.Context) error {
 	groups := append([]string{e.appGroup}, e.sessionGroupNames()...)
+	described, err := e.admin.DescribeGroups(ctx, groups...)
+	if err != nil {
+		return fmt.Errorf("kafka: describing consumer groups: %w", err)
+	}
 	for _, g := range groups {
-		n, err := describeGroupMembers(ctx, e.admin, g)
+		n, err := groupMemberCount(described, g)
 		if err != nil {
 			return err
 		}
@@ -396,14 +393,15 @@ func (e *Engine) Cleanup(ctx context.Context) ([]engine.RetainedResource, error)
 		return nil, err
 	}
 
+	if err := e.CleanupGate(); err != nil {
+		return nil, fmt.Errorf("kafka: %w", err)
+	}
 	switch {
-	case e.started.Load() && !e.stopped.Load() && !e.aborted.Load():
-		return nil, fmt.Errorf("kafka: activation is active; Stop or Abort first")
-	case e.stopped.Load():
+	case e.Stopped():
 		if err := e.verifyStoppedCleanupReady(ctx); err != nil {
 			return nil, err
 		}
-	case e.aborted.Load():
+	case e.Aborted():
 		if err := e.verifyMemberless(ctx); err != nil {
 			return nil, err
 		}
@@ -412,31 +410,68 @@ func (e *Engine) Cleanup(ctx context.Context) ([]engine.RetainedResource, error)
 		// holds anything the app owns.
 	}
 
-	if _, err := e.admin.DeleteTopic(ctx, e.appShadow); err != nil && !isUnknownTopicErr(err) {
-		return nil, fmt.Errorf("kafka: deleting app shadow %q: %w", e.appShadow, err)
-	}
-
 	routes := e.knownRoutes()
+	topics := make([]string, 0, 1+len(routes))
+	topics = append(topics, e.appShadow)
 	for _, r := range routes {
-		if _, err := e.admin.DeleteTopic(ctx, r.Shadow); err != nil && !isUnknownTopicErr(err) {
-			return nil, fmt.Errorf("kafka: deleting session shadow %q: %w", r.Shadow, err)
-		}
-		for _, g := range []string{e.sessionGroupName(r.ID), e.drainGroupName(r.ID)} {
-			if _, err := e.admin.DeleteGroup(ctx, g); err != nil && !isUnknownGroupErr(err) {
-				return nil, fmt.Errorf("kafka: deleting group %q: %w", g, err)
-			}
-		}
+		topics = append(topics, r.Shadow)
+	}
+	if err := deleteTopics(ctx, e.admin, topics); err != nil {
+		return nil, err
 	}
 
-	for _, g := range []string{e.splitterGroup, e.appGroup} {
-		if _, err := e.admin.DeleteGroup(ctx, g); err != nil && !isUnknownGroupErr(err) {
-			return nil, fmt.Errorf("kafka: deleting group %q: %w", g, err)
-		}
+	groups := make([]string, 0, 2+2*len(routes))
+	for _, r := range routes {
+		groups = append(groups, e.sessionGroupName(r.ID), e.drainGroupName(r.ID))
+	}
+	groups = append(groups, e.splitterGroup, e.appGroup)
+	if err := deleteGroups(ctx, e.admin, groups); err != nil {
+		return nil, err
 	}
 
 	empty := []routeEntry{}
 	e.routes.Store(&empty)
 	return nil, nil
+}
+
+// deleteTopics batch-deletes names in one call. Only an explicit
+// unknown-topic result counts as already-deleted; a missing response is an
+// unconfirmed deletion and fails.
+func deleteTopics(ctx context.Context, admin *kadm.Client, names []string) error {
+	resp, err := admin.DeleteTopics(ctx, names...)
+	if err != nil {
+		return fmt.Errorf("kafka: deleting topics: %w", err)
+	}
+	for _, name := range names {
+		r, ok := resp[name]
+		if !ok {
+			return fmt.Errorf("kafka: deleting shadow topic %q: no response from broker", name)
+		}
+		if r.Err != nil && !isUnknownTopicErr(r.Err) {
+			return fmt.Errorf("kafka: deleting shadow topic %q: %w", name, r.Err)
+		}
+	}
+	return nil
+}
+
+// deleteGroups batch-deletes names in one call. Only an explicit
+// unknown-group result counts as already-deleted; a missing response is an
+// unconfirmed deletion and fails.
+func deleteGroups(ctx context.Context, admin *kadm.Client, names []string) error {
+	resp, err := admin.DeleteGroups(ctx, names...)
+	if err != nil {
+		return fmt.Errorf("kafka: deleting groups: %w", err)
+	}
+	for _, name := range names {
+		r, ok := resp[name]
+		if !ok {
+			return fmt.Errorf("kafka: deleting group %q: no response from broker", name)
+		}
+		if r.Err != nil && !isUnknownGroupErr(r.Err) {
+			return fmt.Errorf("kafka: deleting group %q: %w", name, r.Err)
+		}
+	}
+	return nil
 }
 
 // Recover rebuilds clients and ensures Prepare-level resources exist, then
@@ -462,7 +497,7 @@ func (e *Engine) Recover(ctx context.Context, st engine.RecoveredState) error {
 	if !st.Started {
 		return nil
 	}
-	e.started.Store(true)
+	e.Restore(st)
 
 	if st.Aborting {
 		e.mu.Lock()
@@ -478,7 +513,6 @@ func (e *Engine) Recover(ctx context.Context, st engine.RecoveredState) error {
 		return err
 	}
 	if st.Stopped {
-		e.stopped.Store(true)
 		return nil
 	}
 	return e.startPump(ctx)

@@ -44,7 +44,11 @@ func (e *Engine) prepareResourcesLocked(ctx context.Context) error {
 	if err := e.ensureClients(); err != nil {
 		return err
 	}
-	return e.ensureShadowTopic(ctx, e.appShadow)
+	partitions, err := e.sourcePartitionCount(ctx)
+	if err != nil {
+		return err
+	}
+	return e.ensureShadowTopic(ctx, e.appShadow, partitions)
 }
 
 // sourcePartitionCount returns the source topic's partition count.
@@ -63,17 +67,13 @@ func (e *Engine) sourcePartitionCount(ctx context.Context) (int32, error) {
 	return int32(len(td.Partitions)), nil
 }
 
-// ensureShadowTopic creates name with the source topic's partition count and
-// unbounded retention, tolerating a topic that already exists, and verifies
-// -- fresh create or pre-existing -- that its effective retention is
-// actually unbounded: a shadow a broker default or an external override
-// could expire would silently lose messages this engine promises to keep.
-func (e *Engine) ensureShadowTopic(ctx context.Context, name string) error {
-	partitions, err := e.sourcePartitionCount(ctx)
-	if err != nil {
-		return err
-	}
-	_, err = e.admin.CreateTopic(ctx, partitions, -1, unboundedRetention(), name)
+// ensureShadowTopic creates name with partitions partitions and unbounded
+// retention, tolerating a topic that already exists, and verifies -- fresh
+// create or pre-existing -- that its effective retention is actually
+// unbounded: a shadow a broker default or an external override could expire
+// would silently lose messages this engine promises to keep.
+func (e *Engine) ensureShadowTopic(ctx context.Context, name string, partitions int32) error {
+	_, err := e.admin.CreateTopic(ctx, partitions, -1, unboundedRetention(), name)
 	if err != nil && !isTopicAlreadyExistsErr(err) {
 		return fmt.Errorf("kafka: creating shadow topic %q: %w", name, err)
 	}

@@ -8,6 +8,8 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
+
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/queueagent/engine"
 )
 
 // sessionTimeout bounds how long the splitter group's static membership
@@ -60,7 +62,7 @@ func (e *Engine) Start(ctx context.Context) error {
 	if err := e.startPump(ctx); err != nil {
 		return err
 	}
-	e.started.Store(true)
+	e.MarkStarted()
 	return nil
 }
 
@@ -159,6 +161,12 @@ func describeGroupMembers(ctx context.Context, admin *kadm.Client, group string)
 	if err != nil {
 		return 0, fmt.Errorf("kafka: describing consumer group %q: %w", group, err)
 	}
+	return groupMemberCount(groups, group)
+}
+
+// groupMemberCount extracts group's member count from a DescribeGroups
+// result, treating an absent or dead group as zero members.
+func groupMemberCount(groups kadm.DescribedGroups, group string) (int, error) {
 	g, ok := groups[group]
 	if !ok {
 		return 0, nil
@@ -340,11 +348,15 @@ func (e *Engine) processRecord(ctx context.Context, consumer *kgo.Client, rec *k
 }
 
 // classify returns rec's destination shadow topic: the first installed
-// route whose filter matches rec's headers, or the app shadow.
+// route whose filter matches rec's headers, or the app shadow. The header
+// map is built lazily, only once some route has a non-empty filter to test.
 func (e *Engine) classify(rec *kgo.Record) string {
-	headers := headerMap(rec.Headers)
+	var headers map[string]string
 	for _, r := range *e.routes.Load() {
-		if matches(r.Filter, headers) {
+		if len(r.Filter) != 0 && headers == nil {
+			headers = headerMap(rec.Headers)
+		}
+		if engine.FilterMatches(r.Filter, headers) {
 			return r.Shadow
 		}
 	}

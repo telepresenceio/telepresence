@@ -139,4 +139,8 @@ type Harness struct {
 	// Skip reports whether the suite must be skipped -- typically because no
 	// broker is reachable from the test environment -- and, if so, why.
 	Skip func() (reason string, skip bool)
+
+	// BeginScenario, if non-nil, runs at the start of every scenario: the
+	// point where a Probe resets any per-scenario state it privately tracks.
+	BeginScenario func()
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -34,15 +35,22 @@ func (e *Engine) ReconcileRoutes(ctx context.Context, routes []engine.Route) err
 }
 
 // installRoutes creates a session shadow topic for each route and installs
-// routes as the pump's route table in one atomic swap.
+// routes as the pump's route table in one atomic swap. The source partition
+// count is fetched once for the whole call, not once per route.
 func (e *Engine) installRoutes(ctx context.Context, routes []engine.Route) error {
 	entries := make([]routeEntry, 0, len(routes))
-	for _, r := range routes {
-		shadow := e.sessionShadowName(r.ID)
-		if err := e.ensureShadowTopic(ctx, shadow); err != nil {
+	if len(routes) > 0 {
+		partitions, err := e.sourcePartitionCount(ctx)
+		if err != nil {
 			return err
 		}
-		entries = append(entries, routeEntry{ID: r.ID, Filter: r.Filter, Shadow: shadow})
+		for _, r := range routes {
+			shadow := e.sessionShadowName(r.ID)
+			if err := e.ensureShadowTopic(ctx, shadow, partitions); err != nil {
+				return err
+			}
+			entries = append(entries, routeEntry{ID: r.ID, Filter: r.Filter, Shadow: shadow})
+		}
 	}
 	e.routes.Store(&entries)
 	return nil
@@ -243,16 +251,9 @@ func (e *Engine) drainToAppShadow(
 	defer consumer.Close()
 
 	for len(remaining) > 0 {
-		if err := ctx.Err(); err != nil {
+		fetches, err := pollFetchesRetrying(ctx, consumer)
+		if err != nil {
 			return err
-		}
-		fetches := consumer.PollFetches(ctx)
-		if err := fetches.Err(); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			time.Sleep(drainPollInterval)
-			continue
 		}
 
 		var drainErr error
@@ -311,13 +312,26 @@ func (e *Engine) drainOneRecord(ctx context.Context, consumer *kgo.Client, rec *
 func (e *Engine) knownRoutes() []routeEntry {
 	entries := slices.Clone(*e.routes.Load())
 	slices.SortFunc(entries, func(a, b routeEntry) int {
-		if a.ID < b.ID {
-			return -1
-		}
-		if a.ID > b.ID {
-			return 1
-		}
-		return 0
+		return strings.Compare(a.ID, b.ID)
 	})
 	return entries
+}
+
+// pollFetchesRetrying polls consumer once, retrying a transient fetch error
+// after drainPollInterval, and returns ctx's error once ctx is done.
+func pollFetchesRetrying(ctx context.Context, consumer *kgo.Client) (kgo.Fetches, error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		fetches := consumer.PollFetches(ctx)
+		if err := fetches.Err(); err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			time.Sleep(drainPollInterval)
+			continue
+		}
+		return fetches, nil
+	}
 }

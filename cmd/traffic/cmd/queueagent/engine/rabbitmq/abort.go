@@ -18,18 +18,8 @@ func (e *Engine) Abort(ctx context.Context) error {
 		return err
 	}
 
-	e.stopMonitor()
-	if consumeCh, tag := e.consumer(); consumeCh != nil && !consumeCh.IsClosed() {
-		if err := consumeCh.Cancel(tag, false); err != nil {
-			return fmt.Errorf("rabbitmq: cancel source consumer: %w", err)
-		}
-	}
-	if done := e.pumpDoneChan(); done != nil {
-		select {
-		case <-done:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
+	if err := e.stopSourceConsumer(ctx); err != nil {
+		return err
 	}
 
 	if err := e.rollbackShadowToSource(ctx, e.appShadowName); err != nil {
@@ -46,7 +36,7 @@ func (e *Engine) Abort(ctx context.Context) error {
 			return fmt.Errorf("rabbitmq: roll back session shadow for route %q: %w", r.ID, err)
 		}
 	}
-	e.aborted.Store(true)
+	e.MarkAborted()
 	return nil
 }
 

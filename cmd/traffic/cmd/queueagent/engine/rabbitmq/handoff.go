@@ -30,18 +30,8 @@ func (e *Engine) Stop(ctx context.Context) (engine.Handoff, error) {
 		return nil, err
 	}
 
-	e.stopMonitor()
-	if consumeCh, tag := e.consumer(); consumeCh != nil && !consumeCh.IsClosed() {
-		if err := consumeCh.Cancel(tag, false); err != nil {
-			return nil, fmt.Errorf("rabbitmq: cancel source consumer: %w", err)
-		}
-	}
-	if done := e.pumpDoneChan(); done != nil {
-		select {
-		case <-done:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+	if err := e.stopSourceConsumer(ctx); err != nil {
+		return nil, err
 	}
 	if err := e.healthErr(); err != nil {
 		return nil, err // the pump may have stopped because it lost the fence, not because of Cancel
@@ -56,13 +46,13 @@ func (e *Engine) Stop(ctx context.Context) (engine.Handoff, error) {
 	if err != nil {
 		return nil, fmt.Errorf("rabbitmq: encode handoff marker: %w", err)
 	}
-	e.stopped.Store(true)
+	e.MarkStopped()
 	return data, nil
 }
 
 // DrainApplication blocks until the app shadow is proven drained by
 // proveEmpty. It is bounded by ctx.
-func (e *Engine) DrainApplication(ctx context.Context, _ engine.Handoff) error {
+func (e *Engine) DrainApplication(ctx context.Context) error {
 	return e.proveEmpty(ctx, e.appShadowName)
 }
 
@@ -110,8 +100,8 @@ func (e *Engine) VerifyCleanupReady(context.Context) error {
 // (prepare-only is permitted, live checks included). The lock releases
 // last: a partial cleanup is a retryable leak, not a held fence.
 func (e *Engine) Cleanup(context.Context) ([]engine.RetainedResource, error) {
-	if e.started.Load() && !e.stopped.Load() && !e.aborted.Load() {
-		return nil, fmt.Errorf("rabbitmq: activation is active; Stop or Abort first")
+	if err := e.CleanupGate(); err != nil {
+		return nil, fmt.Errorf("rabbitmq: %w", err)
 	}
 
 	var errs []error

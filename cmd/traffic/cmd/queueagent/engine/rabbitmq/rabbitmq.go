@@ -14,7 +14,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -60,6 +59,8 @@ type Config struct {
 
 // Engine implements engine.Engine for one RabbitMQ logical queue.
 type Engine struct {
+	engine.Lifecycle
+
 	cfg Config
 
 	appShadowName string
@@ -112,12 +113,6 @@ type Engine struct {
 	lockMu      sync.Mutex
 	lockHeld    bool
 	lockWatchWG sync.WaitGroup
-
-	// started, stopped, and aborted record the activation's persisted
-	// lifecycle phase, for Cleanup to key its enforcement on.
-	started atomic.Bool
-	stopped atomic.Bool
-	aborted atomic.Bool
 
 	routesMu sync.Mutex
 	routes   []engine.Route // ordered: classification uses first match
@@ -276,6 +271,25 @@ func (e *Engine) stopMonitor() {
 	if monitorDone != nil {
 		<-monitorDone
 	}
+}
+
+// stopSourceConsumer stops the quorum monitor, cancels the source consumer,
+// and waits for the pump goroutine to exit, bounded by ctx.
+func (e *Engine) stopSourceConsumer(ctx context.Context) error {
+	e.stopMonitor()
+	if consumeCh, tag := e.consumer(); consumeCh != nil && !consumeCh.IsClosed() {
+		if err := consumeCh.Cancel(tag, false); err != nil {
+			return fmt.Errorf("rabbitmq: cancel source consumer: %w", err)
+		}
+	}
+	if done := e.pumpDoneChan(); done != nil {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
 }
 
 // stopRunning cancels and joins the pump and quorum-monitor goroutines, if

@@ -29,7 +29,7 @@ func (e *Engine) Recover(ctx context.Context, st engine.RecoveredState) error {
 	if !st.Started {
 		return nil
 	}
-	e.started.Store(true)
+	e.Restore(st)
 
 	if err := e.acquireLock(ctx); err != nil {
 		return err
@@ -37,23 +37,8 @@ func (e *Engine) Recover(ctx context.Context, st engine.RecoveredState) error {
 	if err := e.ReconcileRoutes(ctx, st.Routes); err != nil {
 		return err
 	}
-	if st.Stopped {
-		e.stopped.Store(true)
-	}
 	if st.Aborting || st.Stopped {
 		return nil
 	}
-
-	if !e.markRunning() {
-		return nil // already running: idempotent no-op
-	}
-	if err := e.checkSourceNoConsumers(ctx); err != nil {
-		e.clearRunning()
-		return err
-	}
-	if err := e.startPump(ctx); err != nil {
-		e.clearRunning()
-		return err
-	}
-	return nil
+	return e.resumePump(ctx)
 }

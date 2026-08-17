@@ -141,6 +141,7 @@ func waitForBroker(brokers []string) error {
 }
 
 func TestConformance(t *testing.T) {
+	p := &probe{}
 	h := &enginetest.Harness{
 		Identity: identity,
 		Skip: func() (string, bool) {
@@ -149,7 +150,8 @@ func TestConformance(t *testing.T) {
 			}
 			return "", false
 		},
-		Probe: &probe{},
+		Probe:         p,
+		BeginScenario: p.beginScenario,
 		NewEngine: func(t *testing.T) engine.Engine {
 			t.Helper()
 			return New(Config{
@@ -171,27 +173,30 @@ func TestConformance(t *testing.T) {
 
 // probe implements enginetest.Probe against the package-level admin and
 // producer clients set up in TestMain.
-type probe struct{}
-
-// caughtUpScenarios records, per scenario ctx, whether SeedSource has
-// already caught the app group up to the source's pre-scenario position.
-// Every scenario function derives one ctx from t.Context() and reuses it
-// for every probe call it makes, and each scenario's ctx is distinct from
-// every other's, so ctx identity stands in for the scenario identity the
-// Probe interface does not carry: a scenario's first SeedSource call catches
-// up (hiding an earlier scenario's tail), and a later SeedSource call within
+//
+// caughtUp records whether the current scenario's SeedSource has already
+// caught the app group up to the source's pre-scenario position:
+// beginScenario resets it, a scenario's first SeedSource call catches up
+// (hiding an earlier scenario's tail), and a later SeedSource call within
 // the same scenario does not (keeping that scenario's own earlier batch
 // visible to its own later app-group-relative reads).
-var (
-	caughtUpMu   sync.Mutex
-	caughtUpCtxs = map[context.Context]bool{}
-)
+type probe struct {
+	mu       sync.Mutex
+	caughtUp bool
+}
+
+// beginScenario resets caughtUp for a new scenario.
+func (p *probe) beginScenario() {
+	p.mu.Lock()
+	p.caughtUp = false
+	p.mu.Unlock()
+}
 
 func (p *probe) SeedSource(ctx context.Context, msgs []enginetest.Message) error {
-	caughtUpMu.Lock()
-	already := caughtUpCtxs[ctx]
-	caughtUpCtxs[ctx] = true
-	caughtUpMu.Unlock()
+	p.mu.Lock()
+	already := p.caughtUp
+	p.caughtUp = true
+	p.mu.Unlock()
 	if !already {
 		if err := catchUpAppGroup(ctx); err != nil {
 			return err

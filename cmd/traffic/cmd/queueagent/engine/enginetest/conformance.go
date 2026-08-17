@@ -38,14 +38,26 @@ func RunConformance(t *testing.T, h *Harness) {
 		}
 	}
 
-	t.Run("PrepareOnlyRecovery", func(t *testing.T) { runPrepareOnlyRecovery(t, h) })
-	t.Run("Activation", func(t *testing.T) { runActivation(t, h) })
-	t.Run("Routing", func(t *testing.T) { runRouting(t, h) })
-	t.Run("CrashRecovery", func(t *testing.T) { runCrashRecovery(t, h) })
-	t.Run("RouteDrain", func(t *testing.T) { runRouteDrain(t, h) })
-	t.Run("AbortRollback", func(t *testing.T) { runAbortRollback(t, h) })
-	t.Run("StopDrainHandback", func(t *testing.T) { runStopDrainHandback(t, h) })
-	t.Run("Fencing", func(t *testing.T) { runFencing(t, h) })
+	runScenario(t, h, "PrepareOnlyRecovery", runPrepareOnlyRecovery)
+	runScenario(t, h, "Activation", runActivation)
+	runScenario(t, h, "Routing", runRouting)
+	runScenario(t, h, "CrashRecovery", runCrashRecovery)
+	runScenario(t, h, "RouteDrain", runRouteDrain)
+	runScenario(t, h, "AbortRollback", runAbortRollback)
+	runScenario(t, h, "StopDrainHandback", runStopDrainHandback)
+	runScenario(t, h, "Fencing", runFencing)
+}
+
+// runScenario runs one named conformance scenario as a subtest, calling
+// h.BeginScenario first so a Probe can reset its own per-scenario state.
+func runScenario(t *testing.T, h *Harness, name string, fn func(t *testing.T, h *Harness)) {
+	t.Helper()
+	t.Run(name, func(t *testing.T) {
+		if h.BeginScenario != nil {
+			h.BeginScenario()
+		}
+		fn(t, h)
+	})
 }
 
 // runPrepareOnlyRecovery seeds 3 source messages, prepares an activation
@@ -392,7 +404,7 @@ func runStopDrainHandback(t *testing.T, h *Harness) {
 	_, err = h.Probe.AppDrainShadow(ctx, appShadow)
 	require.NoError(t, err)
 
-	require.NoError(t, eng2.DrainApplication(ctx, handoff))
+	require.NoError(t, eng2.DrainApplication(ctx))
 	require.NoError(t, eng2.CommitHandoff(ctx, handoff))
 	require.NoError(t, eng2.VerifyCleanupReady(ctx))
 
@@ -488,13 +500,11 @@ func keysOf(seen map[string]Message) []string {
 	return keys
 }
 
-// collectShadow polls shadow, merging newly read messages into seed keyed
-// by Message.ID, until every ID in want is present or suiteDeadline
-// elapses. A nil seed starts from empty. The returned map may hold IDs
-// outside want: callers that assert set equality against it catch a
-// message that reached the wrong destination.
-func collectShadow(
-	t *testing.T, ctx context.Context, probe Probe, shadow string, want []string, seed map[string]Message,
+// collect polls read, merging newly read messages into seed keyed by
+// Message.ID, until every ID in want is present or suiteDeadline elapses. A
+// nil seed starts from empty.
+func collect(
+	t *testing.T, want []string, seed map[string]Message, read func(timeout time.Duration) ([]Message, error),
 ) map[string]Message {
 	t.Helper()
 
@@ -515,7 +525,7 @@ func collectShadow(
 	for missing() && time.Now().Before(end) {
 		left := min(time.Until(end), readTimeout)
 
-		msgs, err := probe.ReadShadow(ctx, shadow, len(want)*2+4, left)
+		msgs, err := read(left)
 		require.NoError(t, err)
 		for _, m := range msgs {
 			seen[m.ID] = m
@@ -527,41 +537,28 @@ func collectShadow(
 	return seen
 }
 
-// collectSource polls the source through ConsumeSourceAsApp, merging newly
-// read messages into seed keyed by Message.ID, until every ID in want is
-// present or suiteDeadline elapses. A nil seed starts from empty.
+// collectShadow polls shadow via probe.ReadShadow until every ID in want is
+// present or suiteDeadline elapses. The returned map may hold IDs outside
+// want: callers that assert set equality against it catch a message that
+// reached the wrong destination.
+func collectShadow(
+	t *testing.T, ctx context.Context, probe Probe, shadow string, want []string, seed map[string]Message,
+) map[string]Message {
+	t.Helper()
+	return collect(t, want, seed, func(timeout time.Duration) ([]Message, error) {
+		return probe.ReadShadow(ctx, shadow, len(want)*2+4, timeout)
+	})
+}
+
+// collectSource polls the source through probe.ConsumeSourceAsApp until
+// every ID in want is present or suiteDeadline elapses.
 func collectSource(
 	t *testing.T, ctx context.Context, probe Probe, want []string, seed map[string]Message,
 ) map[string]Message {
 	t.Helper()
-
-	seen := seed
-	if seen == nil {
-		seen = make(map[string]Message, len(want))
-	}
-	missing := func() bool {
-		for _, id := range want {
-			if _, ok := seen[id]; !ok {
-				return true
-			}
-		}
-		return false
-	}
-
-	end := time.Now().Add(suiteDeadline)
-	for missing() && time.Now().Before(end) {
-		left := min(time.Until(end), readTimeout)
-
-		msgs, err := probe.ConsumeSourceAsApp(ctx, len(want)*2, left)
-		require.NoError(t, err)
-		for _, m := range msgs {
-			seen[m.ID] = m
-		}
-		if len(msgs) == 0 {
-			time.Sleep(pollInterval)
-		}
-	}
-	return seen
+	return collect(t, want, seed, func(timeout time.Duration) ([]Message, error) {
+		return probe.ConsumeSourceAsApp(ctx, len(want)*2, timeout)
+	})
 }
 
 // assertDisjoint fails the test if any message ID appears in more than one
