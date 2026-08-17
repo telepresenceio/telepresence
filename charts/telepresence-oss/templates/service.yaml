@@ -17,6 +17,31 @@ spec:
   selector:
     {{- include "telepresence.selectorLabels" $ | nindent 4 }}
 {{- /*
+Governing Service for the traffic-manager StatefulSet (spec.serviceName):
+gives pod ordinal 0 its stable traffic-manager-0 DNS identity. Distinct
+from the traffic-manager Service above so that Service stays exactly as it
+is today for in-cluster clients and agents; publishNotReadyAddresses lets
+the pod's DNS record resolve during startup, before the readiness probe
+that a rollout otherwise waits on.
+*/}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "traffic-manager.headlessServiceName" $ }}
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+  - name: api
+    port: {{ .apiPort }}
+    targetPort: api
+  selector:
+    {{- include "telepresence.selectorLabels" $ | nindent 4 }}
+{{- /*
 The agent-injector Service is also needed for a node-agent-only install
 (agentInjector.enabled=false, nodeAgent.enabled=true): the pre-delete hook
 dials it to reach /uninstall, which a plain-HTTP server serves on the same

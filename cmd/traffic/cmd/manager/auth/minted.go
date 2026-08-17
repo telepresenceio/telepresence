@@ -17,12 +17,10 @@ const mintedTokenTTL = time.Hour
 // base64 encoding.
 const mintedTokenBytes = 32
 
-// mintedTokenReuseMargin is the minimum remaining validity an existing token must have
-// for Mint to return it instead of minting a fresh one. It must exceed the client's own
-// refresh margin (one minute): a client that refreshes near expiry would otherwise be
-// handed the same near-expired token back, and would repeat a full TLS handshake on
-// every call until the token actually expires. A replaced token stays valid until its
-// own expiry, so calls already carrying it keep working.
+// mintedTokenReuseMargin is the minimum remaining validity for Mint to return an
+// existing token instead of a fresh one. It must exceed the client's one-minute
+// refresh margin, or a refreshing client would be handed back the near-expired token
+// it is replacing.
 const mintedTokenReuseMargin = 2 * time.Minute
 
 // mintedTokenMaxEntries bounds the store so a client that repeatedly presents distinct

@@ -176,13 +176,8 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 // grpc's own reconnect machinery makes transparently after a transport failure -- and falls
 // back to the Kubernetes port-forward otherwise.
 func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.AgentPodInfo) (*grpc.ClientConn, agent.AgentClient, error) {
-	podID := types.UID(ai.PodId)
-	var grpcAddr string
-	if podID == "" {
-		grpcAddr = fmt.Sprintf("pod/%s.%s:%d", ai.PodName, ns, ai.ApiPort)
-	} else {
-		grpcAddr = fmt.Sprintf("pod/%s.%s:%d#%s", ai.PodName, ns, ai.ApiPort, podID)
-	}
+	pap := portforward.PodAddress{Name: ai.PodName, Namespace: ns, PodID: types.UID(ai.PodId)}
+	grpcAddr := pap.AddrFor(uint16(ai.ApiPort))
 
 	pfDialer := portforward.Dialer(ac.Cluster)
 	dialer := agentDialer(ai.QuicSni, &ac.quicDead, &ac.transport,
@@ -529,10 +524,19 @@ func (s *clients) watchesNamespace(namespace string) bool {
 // The traffic-agent is chosen using the following rules in the order mentioned:
 //
 //  1. agent has a pod_ip that matches the given ip
-//  2. agent is currently intercepted by this client
-//  3. any agent
+//  2. agent is currently intercepted by this client and is connected
+//  3. any connected agent
 //
-// The function returns nil when there are no agents in the connected namespace.
+// Rules 2 and 3 pick an agent as an interchangeable relay for traffic that is
+// not addressed to its own pod, and the caller's alternative for that traffic
+// is the traffic-manager tunnel, which is an equally correct route. Requiring
+// an established connection keeps an agent that cannot be reached -- one whose
+// only transport is a Kubernetes port-forward over a connection that has no
+// cluster API access, say -- from being preferred over that tunnel and
+// stalling the dial. Rule 1 is the agent's own pod address, so it stands
+// whether or not a connection exists yet.
+//
+// The function returns nil when no agent in the connected namespace qualifies.
 func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 	if s.disabled.Load() {
 		return nil
@@ -543,6 +547,7 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 		switch {
 		case ok && ip == podIP:
 			primary = c
+		case !c.connected():
 		case c.intercepted():
 			secondary = c
 		default:
@@ -561,8 +566,11 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 	return pvd
 }
 
-// GetRandomAgent returns an active agent.AgentClient and ensures that it is kept alive
-// for at least 5 seconds.
+// GetRandomAgent returns an already connected agent.AgentClient and ensures that it is
+// kept alive for at least 5 seconds. It never establishes a connection: the caller is a
+// name lookup, and dialling an agent takes up to five seconds, which is more than a
+// lookup's whole deadline. An agent that no traffic has needed yet is therefore left to
+// the dial watcher and the ip-waiter loop, which connect on the session's own context.
 //
 // Node-agent sessions are never returned. A node-agent's pod runs in the
 // traffic-manager's namespace rather than the workload's, so its resolv.conf
@@ -573,9 +581,9 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 // qualifies single-label names against the client's connected namespace
 // itself.
 //
-// The function returns nil when there are no active agents.
-func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
-	var connected, waiting, other *client
+// The function returns nil when no agent is connected.
+func (s *clients) GetRandomAgent(context.Context) (aa agent.AgentClient) {
+	var connected *client
 	s.clients.Range(func(_ string, ac *client) bool {
 		if ac.info.NodeAgent {
 			return true
@@ -584,29 +592,15 @@ func (s *clients) GetRandomAgent(ctx context.Context) (aa agent.AgentClient) {
 			connected = ac
 			return false
 		}
-		if s.isProxyVIA(ac.info) || s.hasWaiterFor(ac.info) {
-			waiting = ac
-		} else {
-			other = ac
-		}
 		return true
 	})
-
-	var err error
-	switch {
-	case connected != nil:
-		connected.Lock()
-		connected.lastActive = time.Now().UnixNano()
-		aa = connected.cli
-		connected.Unlock()
-	case waiting != nil:
-		aa, err = waiting.ensureConnect(ctx)
-	case other != nil:
-		aa, err = other.ensureConnect(ctx)
+	if connected == nil {
+		return nil
 	}
-	if err != nil {
-		clog.Warn(s, err)
-	}
+	connected.Lock()
+	connected.lastActive = time.Now().UnixNano()
+	aa = connected.cli
+	connected.Unlock()
 	return aa
 }
 

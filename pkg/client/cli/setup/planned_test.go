@@ -20,7 +20,7 @@ func TestPlannedObjects(t *testing.T) {
 	require.NotEmpty(t, objects)
 
 	assert.True(t, sort.StringsAreSorted(objects), "objects must be sorted (and thereby kind-grouped)")
-	assert.Contains(t, objects, "Deployment traffic-manager.ambassador")
+	assert.Contains(t, objects, "StatefulSet traffic-manager.ambassador")
 	assert.Contains(t, objects, "Deployment quic-forwarder.ambassador")
 	assert.Contains(t, objects, "ServiceAccount traffic-manager.ambassador")
 	assert.Contains(t, objects, "ClusterRole traffic-manager-ambassador")

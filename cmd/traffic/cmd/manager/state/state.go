@@ -482,31 +482,34 @@ func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
 	}
 }
 
+// RestoreIntercepts stores each entry in intercepts as manager state, keyed
+// by its own Id, and wires the finalizers a running intercept needs. A
+// pod-port intercept's children are never taken from intercepts -- a spec
+// for which IsChildIntercept is true is skipped -- since WatchIntercepts
+// never sends a child to a client; every non-child entry has its children
+// re-derived instead from its own Spec.PodPorts.
 func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) {
-	var addedChildren []*Intercept
 	nodeAgentWatches := make(map[nodeAgentWatchKey]struct{})
 	for _, intercept := range intercepts {
-		s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
-			spec := intercept.Spec
+		spec := intercept.Spec
+		if IsChildIntercept(spec) {
+			continue
+		}
+		is, _ := s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
 			is := &Intercept{InterceptInfo: intercept}
-			if IsChildIntercept(spec) {
-				// Finalizer must be added to the parent intercept, but the parent might be added after
-				// the child intercept is added, so it'll have to wait.
-				addedChildren = append(addedChildren, is)
-			} else {
-				wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
-				if err == nil {
-					is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-						return s.restoreAppContainer(ctx, interceptInfo, wl)
-					})
-				}
-				if spec.NodeAgent {
-					is.addFinalizer(s.nodeAgentReapFinalizer())
-					nodeAgentWatches[nodeAgentWatchKey{name: spec.Agent, namespace: spec.Namespace}] = struct{}{}
-				}
+			wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
+			if err == nil {
+				is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+					return s.restoreAppContainer(ctx, interceptInfo, wl)
+				})
+			}
+			if spec.NodeAgent {
+				is.addFinalizer(s.nodeAgentReapFinalizer())
+				nodeAgentWatches[nodeAgentWatchKey{name: spec.Agent, namespace: spec.Namespace}] = struct{}{}
 			}
 			return is
 		})
+		s.restoreChildIntercepts(is, now)
 	}
 	// The watches are started only after the intercepts are stored: a watcher
 	// checks nodeAgentWanted as soon as it starts, and exits unless it can
@@ -514,14 +517,32 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 	for key := range nodeAgentWatches {
 		s.startNodeAgentPodWatch(key.name, key.namespace)
 	}
-	for _, intercept := range addedChildren {
-		parent, ok := s.GetParentIntercept(tunnel.SessionID(intercept.ClientSession.SessionId), intercept.Spec)
-		if ok {
-			parent.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-				s.intercepts.Delete(intercept.Id)
-				return nil
-			})
-		}
+}
+
+// restoreChildIntercepts regenerates parent's pod-port children and wires a
+// finalizer that removes each child once parent's own finalizers run.
+func (s *State) restoreChildIntercepts(parent *Intercept, now time.Time) {
+	childSpecs, err := childInterceptSpecs(parent.Spec)
+	if err != nil {
+		clog.Errorf(s.backgroundCtx, "unable to restore pod-port children of intercept %s: %v", parent.Id, err)
+		return
+	}
+	sessionID := tunnel.SessionID(parent.ClientSession.GetSessionId())
+	for _, pmSpec := range childSpecs {
+		pmID := fmt.Sprintf("%s:%s", sessionID, pmSpec.Name)
+		s.intercepts.LoadOrCompute(pmID, func() *Intercept {
+			return &Intercept{InterceptInfo: &rpc.InterceptInfo{
+				Id:            pmID,
+				Spec:          pmSpec,
+				Disposition:   rpc.InterceptDispositionType_WAITING,
+				ClientSession: parent.ClientSession,
+				ModifiedAt:    timestamppb.New(now),
+			}}
+		})
+		parent.addFinalizer(func(_ context.Context, _ *rpc.InterceptInfo) error {
+			s.intercepts.Delete(pmID)
+			return nil
+		})
 	}
 }
 

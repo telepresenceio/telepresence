@@ -412,6 +412,65 @@ func TestActiveNodeAgentIntercept(t *testing.T) {
 	assert.Equal(t, "c4:ic4", found.Id)
 }
 
+// TestRestoreIntercepts_RegeneratesChildrenFromPodPorts: a child spec in the
+// input is never stored directly; the restored parent's own PodPorts
+// regenerates its child instead.
+func TestRestoreIntercepts_RegeneratesChildrenFromPodPorts(t *testing.T) {
+	t.Parallel()
+	ctx := k8sapi.WithK8sInterface(context.Background(), fake.NewClientset())
+
+	s := &State{
+		intercepts: cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+	}
+
+	parentSpec := &rpc.InterceptSpec{
+		Name:      "ic1",
+		Client:    "user@host1",
+		Agent:     "test-agent",
+		Namespace: "test-namespace",
+		Mechanism: "tcp",
+		PodPorts:  []string{"8080:9090"},
+	}
+	parent := &rpc.InterceptInfo{
+		Id:            "c1:ic1",
+		Spec:          parentSpec,
+		Disposition:   rpc.InterceptDispositionType_WAITING,
+		ClientSession: &rpc.SessionInfo{SessionId: "c1"},
+	}
+
+	// A child spec arriving alongside the parent must never be stored as-is:
+	// it carries a forged disposition and would bypass the derivation below.
+	forgedChild := &rpc.InterceptInfo{
+		Id: "c1:forged-child",
+		Spec: &rpc.InterceptSpec{
+			Name: "forged-child", Client: "child 1:1 ic1 user@host1",
+			Agent: "test-agent", Namespace: "test-namespace", Mechanism: "tcp",
+		},
+		Disposition:   rpc.InterceptDispositionType_ACTIVE,
+		ClientSession: &rpc.SessionInfo{SessionId: "c1"},
+	}
+
+	s.RestoreIntercepts(ctx, []*rpc.InterceptInfo{parent, forgedChild}, time.Now())
+
+	_, ok := s.intercepts.Load("c1:forged-child")
+	assert.False(t, ok, "a child spec present in the input must never be stored directly")
+
+	// The regenerated child's id is derived (mirroring AddIntercept), not the
+	// forged one, so look it up by scanning for the intercept that isn't the
+	// parent.
+	var child *Intercept
+	s.intercepts.Range(func(id string, ic *Intercept) bool {
+		if id != parent.Id {
+			child = ic
+		}
+		return true
+	})
+	require.NotNil(t, child, "the parent's PodPorts must regenerate its child")
+	assert.True(t, IsChildIntercept(child.Spec))
+	assert.Equal(t, rpc.InterceptDispositionType_WAITING, child.Disposition)
+	assert.Equal(t, "c1", child.ClientSession.SessionId)
+}
+
 // TestEnsureAgent_InjectorDisabled verifies that ensureAgent's injector gate
 // (the "agent-injector is disabled" rejection) is bypassed for a node-agent
 // request -- letting it through to generate an agent config -- while a

@@ -261,12 +261,13 @@ func getOrProvision[T any](t testing.TB, f *Fixture[T]) T {
 const workloadFixturePrefix = "workload/"
 
 // maxLiveWorkloads bounds how many workload fixtures stay provisioned once a
-// suite ends. Every workload is a running pod, and a memo entry lives until
-// the run ends, so without a bound a long run holds every workload any suite
-// ever touched: past a single node's pod capacity, later managers cannot be
-// scheduled at all. The bound is well above any one suite's usage, so
-// fixtures a neighbouring suite reuses are still served from the memo.
-const maxLiveWorkloads = 25
+// suite ends. Every workload is a running, usually agent-injected pod, and
+// each agent reconnects to the manager on every helm swap: a large standing
+// pool turns each swap into a reconnect stampede that can starve the manager
+// on a single-node cluster. Workload names are per-suite, so cross-suite
+// memo reuse is nil and idle workloads are pure load; the bound only needs
+// to cover what one suite touches.
+const maxLiveWorkloads = 4
 
 // evictIdleWorkloads destroys workload fixtures untouched since mark, past
 // maxLiveWorkloads. Called at suite boundaries, where mark is the reading

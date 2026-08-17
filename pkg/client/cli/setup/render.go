@@ -155,7 +155,7 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 	}
 
 	if h := facts.Health; h != nil {
-		healthArea(w, "traffic-manager deployment", &h.ManagerReady)
+		healthArea(w, "traffic-manager", &h.ManagerReady)
 		healthArea(w, "agent-injector webhook", h.Webhook)
 		healthArea(w, "webhook certificate", h.Certificate)
 		healthArea(w, "agent-injector endpoints", h.InjectorEndpoints)

@@ -89,9 +89,15 @@ func rendered(out map[string]string, name string) bool {
 // Template file paths within the rendered map, relative to the chart name
 // (engine.Render keys every entry "<chart.Name>/<template.Name>").
 const (
-	deploymentTpl = "telepresence-oss/templates/deployment.yaml"
-	webhookTpl    = "telepresence-oss/templates/agentInjectorWebhook.yaml"
-	quicFwdTpl    = "telepresence-oss/templates/quicforwarder.yaml"
-	nodeAgentTpl  = "telepresence-oss/templates/trafficManagerRbac/node-agent.yaml"
-	x509Tpl       = "telepresence-oss/templates/trafficManagerRbac/x509-auth.yaml"
+	statefulsetTpl        = "telepresence-oss/templates/statefulset.yaml"
+	headlessServiceTpl    = "telepresence-oss/templates/service.yaml"
+	webhookTpl            = "telepresence-oss/templates/agentInjectorWebhook.yaml"
+	quicFwdTpl            = "telepresence-oss/templates/quicforwarder.yaml"
+	nodeAgentTpl          = "telepresence-oss/templates/trafficManagerRbac/node-agent.yaml"
+	x509Tpl               = "telepresence-oss/templates/trafficManagerRbac/x509-auth.yaml"
+	clientConnectTpl      = "telepresence-oss/templates/clientRbac/connect.yaml"
+	clientClusterScopeTpl = "telepresence-oss/templates/clientRbac/cluster-scope.yaml"
+	clientNamespaceTpl    = "telepresence-oss/templates/clientRbac/namespace-scope.yaml"
+	preUpgradeHookTpl     = "telepresence-oss/templates/pre-upgrade-hook.yaml"
+	externalEndpointTpl   = "telepresence-oss/templates/external-endpoint.yaml"
 )

@@ -191,7 +191,7 @@ func TestPrintReport_HealthLines(t *testing.T) {
 	cmd.SetOut(out)
 	require.NoError(t, PrintReport(cmd, s))
 	text := out.String()
-	assert.Contains(t, text, "  health: traffic-manager deployment no")
+	assert.Contains(t, text, "  health: traffic-manager no")
 	assert.Contains(t, text, "    - BackOff: image pull failure")
 	assert.Contains(t, text, "  health: quic endpoint yes")
 	assert.Contains(t, text, "  health: version skew yes")

@@ -17,8 +17,8 @@ was chosen for universal reachability, not throughput:
 ```
 app socket
   -> TUN device (pkg/vif, gVisor netstack terminates TCP/UDP)
-  -> one bidirectional gRPC Tunnel stream per flow (rpc/manager Tunnel RPC,
-     muxed and managed by pkg/tunnel)
+  -> one bidirectional gRPC tunnel stream per flow (muxed and managed by
+     pkg/tunnel)
   -> a single HTTP/2 connection, carried as plaintext gRPC
   -> SPDY/WebSocket port-forward through the Kubernetes apiserver
      (pkg/client/portforward)
@@ -235,13 +235,13 @@ always sends SNI in a known version.
 UDP redirector to any pod IP an attacker encodes into a forged CID. The forwarder
 validates every routing decision -- SNI resolution and decoded CIDs -- against the
 set of live manager and agent backends, which the traffic-manager streams to it as
-full-replacement snapshots over its in-cluster gRPC port (the `WatchQuicBackends`
-RPC), derived from the agent sessions the manager already tracks; the forwarder needs
+full-replacement snapshots over its in-cluster gRPC port, derived from the
+agent sessions the manager already tracks; the forwarder needs
 no Kubernetes API access of its own. Packets that resolve outside the allowlist are
 dropped. The allowlist is soft state with a deliberate asymmetry: losing the manager
 keeps the last known-good snapshot, so established routing keeps working, but a
 forwarder that has never received a snapshot drops everything until the first one
-arrives. `WatchQuicBackends` itself carries no credential -- any in-cluster caller can
+arrives. The snapshot stream itself carries no credential -- any in-cluster caller can
 read the manager/agent pod IPs, UIDs, and QUIC ports it serves -- which matches the
 plaintext in-cluster posture of the manager's other gRPC endpoints and exposes no
 keys: reaching a backend still requires completing its mTLS handshake.
@@ -271,8 +271,8 @@ allowlist snapshot and drops everything until the manager returns.
 
 The client's connection to a traffic-agent -- sidecar or node-agent alike -- is a
 gRPC connection to the agent's API port, carried by default over its own Kubernetes
-port-forward per agent pod. Everything an attachment needs (the `WatchDial` reverse
-dials, the agent `Tunnel` streams, environment and mount negotiation) flows over
+port-forward per agent pod. Everything an attachment needs (the reverse dials,
+the agent tunnel streams, environment and mount negotiation) flows over
 that one connection, so moving *it* moves the entire attachment.
 
 * The agent runs a QUIC listener on its pod IP (no exposure; reachable only via the

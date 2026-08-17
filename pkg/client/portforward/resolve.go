@@ -31,19 +31,7 @@ func ResolveServiceAndPort(ctx context.Context, name, namespace string, portName
 			}, nil
 		}
 	}
-	svcObj, err := k8sapi.GetService(ctx, name, namespace)
-	if err != nil {
-		return pap, err
-	}
-	svc, _ := k8sapi.ServiceImpl(svcObj)
-	if svc.Spec.ClusterIP == core.ClusterIPNone {
-		return pap, fmt.Errorf("service '%s' is not accessible from outside the cluster", name)
-	}
-	ip, err := netip.ParseAddr(svc.Spec.ClusterIP)
-	if err != nil {
-		return pap, fmt.Errorf("unable to parse ClusterIP %q of service '%s': %v", svc.Spec.ClusterIP, name, err)
-	}
-	svcPort, err := servicePortByName(svc, portName, core.Protocol(proto.String()))
+	ip, svcPort, err := k8sapi.ResolveServicePort(ctx, name, namespace, portName, core.Protocol(proto.String()))
 	if err != nil {
 		return pap, err
 	}
@@ -63,7 +51,7 @@ func ResolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa 
 		return pa, err
 	}
 	svc, _ := k8sapi.ServiceImpl(svcObj)
-	svcPort, err := servicePortByName(svc, portName, "")
+	svcPort, err := k8sapi.ServicePortByName(svc, portName, "")
 	if err != nil {
 		return pa, err
 	}
@@ -103,29 +91,6 @@ func ResolveSvcToPod(ctx context.Context, name, namespace, portName string) (pa 
 	return pa, fmt.Errorf("no running pods with accessible ports found for service %s.%s", name, namespace)
 }
 
-func servicePortByName(svc *core.Service, name string, proto core.Protocol) (*core.ServicePort, error) {
-	sps := svc.Spec.Ports
-	if proto == "" {
-		proto = core.ProtocolTCP
-	}
-	if pn, err := strconv.Atoi(name); err == nil {
-		for si := range sps {
-			sp := &sps[si]
-			if sp.Port == int32(pn) && (proto == sp.Protocol || proto == core.ProtocolTCP && sp.Protocol == "") {
-				return sp, nil
-			}
-		}
-		return nil, fmt.Errorf("service '%s' does not have %s port number '%d'", svc.Name, proto, pn)
-	}
-	for si := range sps {
-		sp := &sps[si]
-		if sp.Name == name && (proto == sp.Protocol || proto == core.ProtocolTCP && sp.Protocol == "") {
-			return sp, nil
-		}
-	}
-	return nil, fmt.Errorf("service '%s' does not have a %s port named '%s'", svc.Name, proto, name)
-}
-
 func containerPortNumber(pod *core.Pod, port intstr.IntOrString) (uint16, error) {
 	if port.Type == intstr.Int {
 		// It's not required for the container to declare the port.
@@ -161,8 +126,15 @@ func resolve(ctx context.Context, addr string) (pa *PodAddress, err error) {
 	if p, err := strconv.ParseUint(port, 10, 16); err == nil {
 		pn = uint16(p)
 	}
-	if pn != 0 && podID != "" {
-		return &PodAddress{Name: name, Namespace: namespace, Port: pn, PodID: podID}, nil
+	if pn != 0 {
+		switch podID {
+		case NoLookupMarker:
+			// Known-name dial: no Kubernetes read at all.
+			return &PodAddress{Name: name, Namespace: namespace, Port: pn, NoLookup: true}, nil
+		case "":
+		default:
+			return &PodAddress{Name: name, Namespace: namespace, Port: pn, PodID: podID}, nil
+		}
 	}
 
 	// Get the pod.

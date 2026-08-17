@@ -1,25 +1,21 @@
 {{- with .Values }}
 {{- if not (and .rbac .rbac.only) }}
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "traffic-manager.name" $ }}
   namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
     {{ include "telepresence.labels" $ | nindent 4 }}
 spec:
-{{- if and .quicTunnel .quicTunnel.enabled (gt (int .replicaCount) 1) }}
-{{- fail "quicTunnel.enabled requires replicaCount 1: the traffic-manager's QUIC certificate authority and session state are process-local, so a second replica breaks the QUIC handshake (see the QUIC Tunnel Transport reference)" }}
+{{- if gt (int .replicaCount) 1 }}
+{{- fail "replicaCount must be 1: the traffic-manager's CA and session state are process-local, and the client's known-name pods/portforward connect path dials pod traffic-manager-0 specifically" }}
 {{- end }}
-  replicas: {{ .replicaCount }}
+  replicas: 1
+  serviceName: {{ include "traffic-manager.headlessServiceName" $ }}
   selector:
     matchLabels:
       {{ include "telepresence.selectorLabels" $ | nindent 6 }}
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1        # Allows creating one extra pod during the update
-      maxUnavailable: 0  # Ensures no pods are terminated until new ones are ready
   template:
     metadata:
     {{- with .podAnnotations }}
@@ -100,7 +96,26 @@ spec:
           {{- end }}
           {{- end }}
           {{- end }}
+          {{- with .authorization }}
+          {{- if .requiredGrant }}
+          - name: AUTHORIZATION_REQUIRED_GRANT
+            value: {{ .requiredGrant }}
           {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- /*
+          Bounds for the StreamLogs RPC (`telepresence gather-logs`). Each
+          var falls back to the default documented in values.yaml's
+          logStreaming block when the corresponding key is omitted.
+          */}}
+          - name: LOG_STREAM_CHUNK_SIZE
+            value: {{ default "64Ki" .logStreaming.chunkSize }}
+          - name: LOG_STREAM_POD_CONCURRENCY
+            value: {{ default 4 .logStreaming.podConcurrency | quote }}
+          - name: LOG_STREAM_POD_BYTE_LIMIT
+            value: {{ default "10Mi" .logStreaming.podByteLimit }}
+          - name: LOG_STREAM_DEADLINE
+            value: {{ quote (default "5m" .logStreaming.deadline) }}
           {{- if .workloads }}
           {{- with .workloads }}
           - name: ENABLED_WORKLOAD_KINDS
@@ -174,6 +189,14 @@ spec:
           - name: TUNNEL_QUIC_SERVICE_NAME
             value: {{ include "traffic-manager.quicServiceName" $ | quote }}
           {{- end }}
+          {{- end }}
+          {{- end }}
+          {{- with .externalEndpoint }}
+          {{- if .enabled }}
+          - name: EXTERNAL_PORT
+            value: {{ .port | quote }}
+          - name: EXTERNAL_TLS_CERT_DIR
+            value: /var/run/secrets/telepresence.io/external-tls
           {{- end }}
           {{- end }}
       {{- if or .agentInjector.enabled .nodeAgent.enabled }}
@@ -392,6 +415,10 @@ spec:
           - name: prometheus
             containerPort: {{ .prometheus.port }}
           {{- end }}
+          {{- if .externalEndpoint.enabled }}
+          - name: external
+            containerPort: {{ .externalEndpoint.port }}
+          {{- end }}
           {{- /*
           No "quic" containerPort here: the manager's QUIC listener (governed by
           TUNNEL_QUIC_PORT below) is reachable only via the forwarder's SNI/connection-ID
@@ -419,11 +446,16 @@ spec:
           resources:
             {{ toYaml . | nindent 12 }}
           {{- end }}
-      {{- if or (eq .agentInjector.certificate.accessMethod "mount") .extraVolumeMounts }}
+      {{- if or (eq .agentInjector.certificate.accessMethod "mount") .externalEndpoint.enabled .extraVolumeMounts }}
           volumeMounts:
           {{- if and (eq .agentInjector.certificate.accessMethod "mount") .agentInjector.enabled }}
             - name: tls
               mountPath: /var/run/secrets/tls
+              readOnly: true
+          {{- end }}
+          {{- if .externalEndpoint.enabled }}
+            - name: external-tls
+              mountPath: /var/run/secrets/telepresence.io/external-tls
               readOnly: true
           {{- end }}
           {{- with .extraVolumeMounts }}
@@ -448,13 +480,18 @@ spec:
       {{- with .priorityClassName }}
       priorityClassName: {{ . | quote }}
       {{- end }}
-  {{- if or (eq .agentInjector.certificate.accessMethod "mount") .extraVolumes }}
+  {{- if or (eq .agentInjector.certificate.accessMethod "mount") .externalEndpoint.enabled .extraVolumes }}
       volumes:
         {{- if and (eq .agentInjector.certificate.accessMethod "mount") .agentInjector.enabled }}
         - name: tls
           secret:
             defaultMode: 420
             secretName: {{ .agentInjector.secret.name }}
+        {{- end }}
+        {{- if .externalEndpoint.enabled }}
+        - name: external-tls
+          secret:
+            secretName: {{ include "traffic-manager.externalTLSSecretName" $ }}
         {{- end }}
         {{- with .extraVolumes }}
         {{ toYaml . | nindent 8 }}

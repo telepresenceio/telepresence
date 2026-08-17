@@ -181,7 +181,7 @@ func provisionManager(e Env, spec managers.Spec) (*ManagerHandle, error) {
 	if _, stderr, err := r.helmCLI().Run(e.Ctx, args...); err != nil {
 		return nil, fmt.Errorf("%s: %w: %s", strings.Join(args[:2], " "), err, stderr)
 	}
-	if _, err := r.Kubectl(e.Ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=180s"); err != nil {
+	if _, err := r.Kubectl(e.Ctx, ns, "rollout", "status", managerWorkloadRef(e, ns), "--timeout=180s"); err != nil {
 		return nil, err
 	}
 	if err := waitOldManagerGone(e, ns); err != nil {
@@ -229,7 +229,7 @@ func adoptManager(e Env, spec managers.Spec) (*ManagerHandle, bool) {
 	if err != nil || sha256Hex(valuesYAML) != st.ValuesHash {
 		return nil, false
 	}
-	if _, err := r.Kubectl(e.Ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=180s"); err != nil {
+	if _, err := r.Kubectl(e.Ctx, ns, "rollout", "status", managerWorkloadRef(e, ns), "--timeout=180s"); err != nil {
 		return nil, false
 	}
 	return &ManagerHandle{Namespace: ns, Spec: spec}, true
@@ -266,7 +266,7 @@ func ensureManagerRBAC(e Env, ns string) error {
 	return e.R.applyManifest(e.Ctx, "", "client-rbac", rbac)
 }
 
-// RestartManager restarts the shared manager's Deployment and waits for the
+// RestartManager restarts the shared manager's workload and waits for the
 // rollout to finish. A newly created or newly labeled namespace only enters
 // the manager's namespaceSelector-managed set once its pod restarts and
 // re-lists namespaces; there is no live pickup. Callers that create or
@@ -274,13 +274,24 @@ func ensureManagerRBAC(e Env, ns string) error {
 // before anything that depends on the manager seeing it.
 func RestartManager(e Env) error {
 	ns := managers.ManagerNamespace
-	if _, err := e.R.Kubectl(e.Ctx, ns, "rollout", "restart", "deploy/"+helmReleaseName); err != nil {
+	ref := managerWorkloadRef(e, ns)
+	if _, err := e.R.Kubectl(e.Ctx, ns, "rollout", "restart", ref); err != nil {
 		return err
 	}
-	if _, err := e.R.Kubectl(e.Ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=120s"); err != nil {
+	if _, err := e.R.Kubectl(e.Ctx, ns, "rollout", "status", ref, "--timeout=120s"); err != nil {
 		return err
 	}
 	return waitOldManagerGone(e, ns)
+}
+
+// managerWorkloadRef returns the kubectl workload reference for the shared
+// manager release: a StatefulSet if the chart rendered one, else a
+// Deployment.
+func managerWorkloadRef(e Env, ns string) string {
+	if _, err := e.R.Kubectl(e.Ctx, ns, "get", "statefulset", helmReleaseName, "-o", "name"); err == nil {
+		return "statefulset/" + helmReleaseName
+	}
+	return "deploy/" + helmReleaseName
 }
 
 // waitOldManagerGone waits until only one traffic-manager pod remains.

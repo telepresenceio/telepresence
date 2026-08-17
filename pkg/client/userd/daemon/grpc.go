@@ -622,10 +622,13 @@ func (s *service) LookupIP(ctx context.Context, request *daemon.LookupIPRequest)
 
 func (s *service) ResolvePort(ctx context.Context, request *daemon.ResolvePortRequest) (rsp *daemon.ResolvePortResponse, err error) {
 	err = s.withSession(ctx, func(ctx context.Context, session userd.Session) error {
-		return session.WithRootClient(ctx, func(ctx context.Context, rd daemon.DaemonClient) (err error) {
-			rsp, err = rd.ResolvePort(ctx, request)
+		ap, err := session.ResolvePort(ctx, request.Host, request.Port)
+		if err != nil {
 			return err
-		})
+		}
+		apb, _ := ap.MarshalBinary()
+		rsp = &daemon.ResolvePortResponse{HostPort: apb}
+		return nil
 	})
 	return rsp, err
 }

@@ -62,6 +62,7 @@ type Session interface {
 	RemoveIntercept(string) error
 	RemoveInterceptor(string) error
 	RerouteLocalPort(ap types.AddrPortProto, srcPort uint16)
+	ResolvePort(ctx context.Context, host, port string) (types.AddrPortProto, error)
 
 	// WithRootClient calls the given function with a gRPC-cancel sensitive context and the root daemon client.
 	// This function is intended to facilitate gRPC calls to the root daemon that are sensitive to both the session

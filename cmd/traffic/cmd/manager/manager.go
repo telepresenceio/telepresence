@@ -192,9 +192,19 @@ func MainWithEnv(ctx context.Context) (err error) {
 		watcher.SetConfigured()
 
 		g.Go("config", namespaces.Listen)
-		g.Go("prometheus", mgr.servePrometheus)
-		g.Go("quictunnel", mgr.serveQuicTunnel)
+		if env.PrometheusPort != 0 {
+			g.Go("prometheus", mgr.servePrometheus)
+		}
+		if env.TunnelQuicPort != 0 {
+			g.Go("quictunnel", mgr.serveQuicTunnel)
+		}
+		// The x509 auth listener's gate is not env: NewService binds it
+		// only when x509 authentication is active, and serveX509Auth exits
+		// when it didn't.
 		g.Go("x509auth", mgr.serveX509Auth)
+		if env.ExternalPort != 0 {
+			g.Go("external", func(ctx context.Context) error { return serveExternal(ctx, mgr) })
+		}
 
 		// reapNodeAgentJobs is the callback the uninstall endpoint runs, in
 		// addition to the agent injector's sidecar rollback, to delete every
@@ -321,13 +331,9 @@ func SetGauge(ctx context.Context, metric *prometheus.GaugeVec, client, installI
 	}
 }
 
-// ServePrometheus serves Prometheus metrics if env.PrometheusPort != 0.
+// servePrometheus serves Prometheus metrics on env.PrometheusPort.
 func (s *service) servePrometheus(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
-	if env.PrometheusPort == 0 {
-		clog.Info(ctx, "Prometheus metrics server not started")
-		return nil
-	}
 	newGaugeFunc("telepresence_agent_count", "Number of connected traffic agents", s.state.CountAgents)
 	newGaugeFunc("telepresence_client_count", "Number of connected clients", s.state.CountClients)
 	newGaugeFunc("telepresence_active_intercept_count", "Number of active intercepts", s.state.CountIntercepts)
@@ -385,13 +391,10 @@ func (s *service) servePrometheus(ctx context.Context) error {
 	return svc.Shutdown(context.Background())
 }
 
-// serveQuicTunnel starts the QUIC tunnel listener if env.TunnelQuicPort != 0. It
+// serveQuicTunnel starts the QUIC tunnel listener on env.TunnelQuicPort. It
 // blocks, serving accepted tunnel streams through s.state.Tunnel, until ctx is done.
 func (s *service) serveQuicTunnel(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
-	if env.TunnelQuicPort == 0 {
-		return nil
-	}
 	if !env.PodIp.IsValid() {
 		return errors.New("QUIC tunnel listener is enabled but POD_IP is not set")
 	}
@@ -421,6 +424,16 @@ func (s *service) serveX509Auth(ctx context.Context) error {
 	return s.x509Listener.Serve(ctx)
 }
 
+// serverOptions appends extra to env's derived gRPC server options, currently
+// just MaxRecvMsgSize when env.GrpcMaxReceiveSize is set.
+func serverOptions(env *managerutil.Env, extra ...grpc.ServerOption) []grpc.ServerOption {
+	opts := append([]grpc.ServerOption{}, extra...)
+	if mz, ok := env.GrpcMaxReceiveSize.AsInt64(); ok {
+		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
+	}
+	return opts
+}
+
 func (s *service) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
@@ -430,15 +443,10 @@ func (s *service) serveHTTP(ctx context.Context) error {
 		return err
 	}
 
-	opts := []grpc.ServerOption{
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    env.ClientConnectionTTL,
-			Timeout: 20 * time.Second,
-		}),
-	}
-	if mz, ok := env.GrpcMaxReceiveSize.AsInt64(); ok {
-		opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
-	}
+	opts := serverOptions(env, grpc.KeepaliveParams(keepalive.ServerParameters{
+		Time:    env.ClientConnectionTTL,
+		Timeout: 20 * time.Second,
+	}))
 	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithMintedTokens(s.mintedTokens)), env.AuthenticationMode)
 	svc := server.NewWithAuth(ctx, &server.Interceptors{Unary: ai.Unary(), Stream: ai.Stream()}, opts...)
 	s.RegisterServers(svc)

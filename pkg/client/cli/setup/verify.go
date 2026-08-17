@@ -26,22 +26,29 @@ const (
 )
 
 // VerifyInstall performs the best-effort post-apply checks that Atomic/Wait
-// does not cover: the QUIC endpoint and the agent-injector Service. Findings
-// are notes, never errors, and the whole verification is capped in time.
+// does not cover: the QUIC endpoint, the external TLS control endpoint, and
+// the agent-injector Service. Findings are notes, never errors, and the
+// whole verification is capped in time.
 func VerifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts) []Note {
-	return verifyInstall(ctx, ki, managerNamespace, values, auth, quicGoDial)
+	return verifyInstall(ctx, ki, managerNamespace, values, auth, quicGoDial, externalGRPCProbe)
 }
 
-// verifyInstall is VerifyInstall with the QUIC reachability dialer factored
-// out as a parameter so tests can exercise the classification logic without
-// opening real sockets.
-func verifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts, dial quicDialer) []Note {
+// verifyInstall is VerifyInstall with the QUIC reachability dialer and the
+// external-endpoint prober factored out as parameters so tests can exercise
+// the classification logic without opening real sockets.
+func verifyInstall(
+	ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts,
+	dial quicDialer, extProbe externalProber,
+) []Note {
 	ctx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
 
 	var notes []Note
 	if enabled, present := boolAt(values, "quicTunnel", "enabled"); present && enabled {
 		notes = append(notes, noteFromFinding(verifyQuic(ctx, ki, managerNamespace, dial)))
+	}
+	if enabled, present := boolAt(values, "externalEndpoint", "enabled"); present && enabled {
+		notes = append(notes, verifyExternalEndpoint(ctx, ki, managerNamespace, values, auth, extProbe)...)
 	}
 	// The chart enables the agent-injector by default, so the check runs
 	// unless the values disable it explicitly.
@@ -125,23 +132,15 @@ func quicServiceFinding(ctx context.Context, ki kubernetes.Interface, namespace 
 	}
 	switch svc.Spec.Type {
 	case corev1.ServiceTypeLoadBalancer:
-		for _, ing := range svc.Status.LoadBalancer.Ingress {
-			addr := ing.IP
-			if addr == "" {
-				addr = ing.Hostname
-			}
-			if addr != "" {
-				return Finding{Verdict: VerdictYes, Evidence: []string{"QUIC endpoint available at " + addr}}, false, svc
-			}
+		if addr := firstLoadBalancerIngressAddr(svc); addr != "" {
+			return Finding{Verdict: VerdictYes, Evidence: []string{"QUIC endpoint available at " + addr}}, false, svc
 		}
 		return Finding{Verdict: VerdictNo, Evidence: []string{
 			"no QUIC endpoint yet — clients will fall back to gRPC (the LoadBalancer may still be provisioning)",
 		}}, true, nil
 	case corev1.ServiceTypeNodePort:
-		for _, p := range svc.Spec.Ports {
-			if p.NodePort != 0 {
-				return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("QUIC endpoint allocated node port %d", p.NodePort)}}, false, svc
-			}
+		if np, ok := firstAllocatedNodePort(svc); ok {
+			return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("QUIC endpoint allocated node port %d", np)}}, false, svc
 		}
 		return Finding{Verdict: VerdictNo, Evidence: []string{
 			"the QUIC service has no allocated node port yet — clients will fall back to gRPC",
