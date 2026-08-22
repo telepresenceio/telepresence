@@ -42,6 +42,8 @@ require (
 	github.com/telepresenceio/go-fuseftp/rpc v1.0.1
 	github.com/telepresenceio/telepresence/cmd/cobraparser/v2 v2.0.0-20260920112347-08e1216b3734
 	github.com/telepresenceio/telepresence/rpc/v2 v2.32.1
+	github.com/twmb/franz-go v1.21.6
+	github.com/twmb/franz-go/pkg/kadm v1.18.0
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
 	golang.org/x/crypto v0.57.0
@@ -66,6 +68,7 @@ require (
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/kubectl v0.37.0
 	k8s.io/streaming v0.37.0
+	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -132,6 +135,7 @@ require (
 	github.com/jlaffaye/ftp v0.2.4 // indirect
 	github.com/jmoiron/sqlx v1.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/klauspost/compress v1.19.1 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
@@ -156,6 +160,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
+	github.com/pierrec/lz4/v4 v4.1.26 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
@@ -169,6 +174,7 @@ require (
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	github.com/winfsp/cgofuse v1.6.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xhit/go-str2duration/v2 v2.2.0 // indirect
