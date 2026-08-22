@@ -56,3 +56,28 @@ func EnvFile(path string) InterceptOpt {
 func ToPod(spec string) InterceptOpt {
 	return func() []string { return []string{"--to-pod", spec} }
 }
+
+// KafkaOnly requests Kafka routes without a network intercept.
+func KafkaOnly() InterceptOpt {
+	return func() []string { return []string{"--kafka-only"} }
+}
+
+// KafkaHeader adds one exact Kafka header predicate.
+func KafkaHeader(name, value string) InterceptOpt {
+	return func() []string { return []string{"--kafka-header", name + "=" + value} }
+}
+
+// KafkaKey adds one exact Kafka key predicate.
+func KafkaKey(value string) InterceptOpt {
+	return func() []string { return []string{"--kafka-key", value} }
+}
+
+// KafkaKeyPrefix adds one Kafka key-prefix predicate.
+func KafkaKeyPrefix(value string) InterceptOpt {
+	return func() []string { return []string{"--kafka-key-prefix", value} }
+}
+
+// NoKafka requests a network intercept without matching Kafka routes.
+func NoKafka() InterceptOpt {
+	return func() []string { return []string{"--no-kafka"} }
+}

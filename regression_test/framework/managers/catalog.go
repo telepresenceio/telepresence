@@ -8,6 +8,11 @@ import "strings"
 //nolint:gochecknoglobals // catalog entry
 var Default = Spec{Key: "default"}
 
+// Kafka returns a manager spec with Kafka personal intercepts installed.
+func Kafka() Spec {
+	return Spec{Key: "kafka", Values: Values{Kafka: KafkaValues{Enabled: true}}}
+}
+
 // InjectorDisabled returns a manager spec with the agent-injector webhook
 // (agentInjector.enabled) turned off entirely: no workload in any managed
 // namespace can be intercepted, since no agent can be injected.

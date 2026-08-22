@@ -64,9 +64,11 @@ type InterceptInfo struct {
 	ContainerPort int32 `json:"container_port,omitempty"`
 	// PodIP is the IP of the pod serving the attachment, dialable from the
 	// test host through the connected session.
-	PodIP   string `json:"pod_ip,omitempty"`
-	Replace bool   `json:"replace,omitempty"`
-	Wiretap bool   `json:"wiretap,omitempty"`
+	PodIP       string   `json:"pod_ip,omitempty"`
+	Replace     bool     `json:"replace,omitempty"`
+	Wiretap     bool     `json:"wiretap,omitempty"`
+	KafkaOnly   bool     `json:"kafka_only,omitempty"`
+	KafkaSplits []string `json:"kafka_splits,omitempty"`
 	// Environment carries the intercepted container's environment plus the
 	// TELEPRESENCE_ROOT/TELEPRESENCE_INTERCEPT_ID/TELEPRESENCE_API_HOST
 	// entries the CLI adds locally before printing (pkg/client/cli/
