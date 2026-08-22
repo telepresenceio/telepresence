@@ -69,7 +69,7 @@ func resolveTLS(
 			pool = x509.NewCertPool()
 		}
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, errors.New("Kafka TLS CA contains no PEM certificates")
+			return nil, errors.New("kafka TLS CA contains no PEM certificates")
 		}
 		config.RootCAs = pool
 	}
@@ -205,7 +205,7 @@ func resolveKerberos(
 		}
 		kerberosClient = krbclient.NewWithKeytab(username, spec.Realm, kt, config)
 	default:
-		return nil, errors.New("Kafka Kerberos requires a password or keytab")
+		return nil, errors.New("kafka Kerberos requires a password or keytab")
 	}
 	return kerberos.Auth{Client: kerberosClient, Service: spec.ServiceName}.AsMechanismWithClose(), nil
 }
@@ -245,7 +245,7 @@ func secretKey(
 	selector *corev1.SecretKeySelector,
 ) ([]byte, error) {
 	if selector == nil {
-		return nil, errors.New("Secret key selector is missing")
+		return nil, errors.New("secret key selector is missing")
 	}
 	secret := new(corev1.Secret)
 	if err := reader.Get(ctx, ctrlclient.ObjectKey{Namespace: namespace, Name: selector.Name}, secret); err != nil {
@@ -253,7 +253,7 @@ func secretKey(
 	}
 	data, ok := secret.Data[selector.Key]
 	if !ok {
-		return nil, fmt.Errorf("Secret %s/%s has no key %q", namespace, selector.Name, selector.Key)
+		return nil, fmt.Errorf("secret %s/%s has no key %q", namespace, selector.Name, selector.Key)
 	}
 	return data, nil
 }

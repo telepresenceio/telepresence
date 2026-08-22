@@ -1,6 +1,7 @@
 package v1alpha1
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +36,16 @@ func TestKafkaSplitValidation(t *testing.T) {
 	split = validSplit()
 	split.Spec.Shadows = KafkaShadowSpec{Mode: ShadowModePreprovisioned, Preprovisioned: &KafkaPreprovisionedShadows{}}
 	require.ErrorContains(t, split.Validate(), "applicationGroup")
+
+	split = validSplit()
+	factor := int32(32768)
+	split.Spec.Shadows.Managed.ReplicationFactor = &factor
+	require.ErrorContains(t, split.Validate(), "between 1 and 32767")
+
+	split = validSplit()
+	split.Namespace = strings.Repeat("n", 40)
+	split.Name = strings.Repeat("s", 30)
+	require.ErrorContains(t, split.Validate(), "shorten the namespace or KafkaSplit name")
 }
 
 func TestPreprovisionedResourceValidation(t *testing.T) {

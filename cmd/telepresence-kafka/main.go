@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -9,13 +10,17 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -26,6 +31,7 @@ import (
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/controller"
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/kafkaconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/runtimeconfig"
 )
 
 func main() {
@@ -73,10 +79,16 @@ func runController(args []string) error {
 	certDir := flags.String("webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs", "admission certificate directory")
 	leaderElection := flags.Bool("leader-elect", true, "enable leader election")
 	leaderNamespace := flags.String("leader-election-namespace", os.Getenv("POD_NAMESPACE"), "leader election namespace")
+	providerNamespace := flags.String("provider-namespace", os.Getenv("POD_NAMESPACE"), "namespace for splitter resources")
+	providerImage := flags.String("provider-image", os.Getenv("TELEPRESENCE_KAFKA_IMAGE"), "image used by splitter StatefulSets")
+	serviceAccount := flags.String("service-account", runtimeconfig.ProviderName, "service account used by splitter StatefulSets")
 	zapOptions := zap.Options{Development: false}
 	zapOptions.BindFlags(flags)
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	if *providerNamespace == "" {
+		return errors.New("provider namespace is required")
 	}
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOptions)))
 	scheme, err := newScheme()
@@ -84,11 +96,19 @@ func runController(args []string) error {
 		return err
 	}
 	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme:                        scheme,
+		Scheme: scheme,
+		Cache: ctrlcache.Options{ByObject: map[client.Object]ctrlcache.ByObject{
+			&corev1.ConfigMap{}:     {Namespaces: map[string]ctrlcache.Config{*providerNamespace: {}}},
+			&corev1.Service{}:       {Namespaces: map[string]ctrlcache.Config{*providerNamespace: {}}},
+			&coordinationv1.Lease{}: {Namespaces: map[string]ctrlcache.Config{*providerNamespace: {}}},
+		}},
+		Client: client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{
+			&corev1.Secret{},
+		}}},
 		Metrics:                       metricsserver.Options{BindAddress: *metricsAddress},
 		HealthProbeBindAddress:        *probeAddress,
 		LeaderElection:                *leaderElection,
-		LeaderElectionID:              "telepresence-kafka-controller.kafka.telepresence.io",
+		LeaderElectionID:              runtimeconfig.ProviderName,
 		LeaderElectionNamespace:       *leaderNamespace,
 		LeaderElectionReleaseOnCancel: true,
 		WebhookServer:                 webhook.NewServer(webhook.Options{Port: *webhookPort, CertDir: *certDir}),
@@ -96,10 +116,15 @@ func runController(args []string) error {
 	if err != nil {
 		return fmt.Errorf("create Kafka controller manager: %w", err)
 	}
-	if err := (&controller.SplitReconciler{Client: manager.GetClient()}).SetupWithManager(manager); err != nil {
+	if err := (&controller.SplitReconciler{
+		Client: manager.GetClient(), ProviderNamespace: *providerNamespace,
+		ProviderImage: *providerImage, ServiceAccount: *serviceAccount,
+	}).SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register KafkaSplit controller: %w", err)
 	}
-	if err := (&controller.RouteReconciler{Client: manager.GetClient()}).SetupWithManager(manager); err != nil {
+	if err := (&controller.RouteReconciler{
+		Client: manager.GetClient(), ProviderNamespace: *providerNamespace,
+	}).SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register KafkaRoute controller: %w", err)
 	}
 	controller.RegisterWebhooks(manager.GetWebhookServer(), manager.GetClient())
@@ -112,18 +137,6 @@ func runController(args []string) error {
 	return manager.Start(ctrl.SetupSignalHandler())
 }
 
-type splitterFile struct {
-	Namespace             string                      `json:"namespace"`
-	Connection            api.KafkaConnectionSpec     `json:"connection"`
-	Group                 string                      `json:"group"`
-	InstanceIDPrefix      string                      `json:"instanceIDPrefix"`
-	TransactionalIDPrefix string                      `json:"transactionalIDPrefix"`
-	AppTopics             map[string]string           `json:"appTopics"`
-	OffsetReset           string                      `json:"offsetReset"`
-	BatchSize             int                         `json:"batchSize"`
-	Routes                kafkaintercept.RoutingTable `json:"routes"`
-}
-
 func runSplitter(args []string) error {
 	flags := flag.NewFlagSet("splitter", flag.ContinueOnError)
 	configFile := flags.String("config", "/var/run/telepresence-kafka/config.json", "splitter configuration file")
@@ -134,7 +147,7 @@ func runSplitter(args []string) error {
 	if err != nil {
 		return fmt.Errorf("read Kafka splitter config: %w", err)
 	}
-	var config splitterFile
+	var config runtimeconfig.Config
 	if err := json.Unmarshal(bytes, &config); err != nil {
 		return fmt.Errorf("decode Kafka splitter config: %w", err)
 	}
@@ -156,6 +169,17 @@ func runSplitter(args []string) error {
 	if err != nil {
 		return err
 	}
+	var acknowledged atomic.Uint64
+	control := splitterControl{
+		client: kubeClient, podName: os.Getenv("POD_NAME"), acknowledged: &acknowledged,
+	}
+	if config.Control != nil {
+		control.config = *config.Control
+		config.Routes, err = control.readRoutingTable(ctx)
+		if err != nil {
+			return fmt.Errorf("read initial Kafka routing table: %w", err)
+		}
+	}
 	splitter, err := kafkaintercept.NewSplitter(kafkaintercept.SplitterConfig{
 		Brokers:         config.Connection.BootstrapServers,
 		Group:           config.Group,
@@ -166,11 +190,23 @@ func runSplitter(args []string) error {
 		BatchSize:       config.BatchSize,
 		ClientOptions:   clientOptions,
 		InitialRoutes:   config.Routes,
+		OnGeneration:    acknowledged.Store,
 	})
 	if err != nil {
 		return err
 	}
-	return splitter.Run(ctx)
+	if config.Control == nil {
+		return splitter.Run(ctx)
+	}
+	controlCtx, cancelControl := context.WithCancel(ctx)
+	defer cancelControl()
+	go control.run(controlCtx, splitter)
+	err = splitter.Run(ctx)
+	cancelControl()
+	publishCtx, cancelPublish := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+	defer cancelPublish()
+	control.publish(publishCtx, false)
+	return err
 }
 
 func podOrdinal(name string) (int, error) {
