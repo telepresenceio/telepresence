@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/validation"
 	validation2 "k8s.io/apimachinery/pkg/util/validation"
 
@@ -51,19 +52,68 @@ func validateConnection(connection KafkaConnectionSpec) []error {
 	if tls := connection.TLS; tls != nil && (tls.Certificate == nil) != (tls.PrivateKey == nil) {
 		errs = append(errs, errors.New("TLS certificate and privateKey must be specified together"))
 	}
+	if tls := connection.TLS; tls != nil {
+		for name, selector := range map[string]*corev1.SecretKeySelector{
+			"ca": tls.CA, "certificate": tls.Certificate, "privateKey": tls.PrivateKey,
+		} {
+			if selector != nil && (selector.Name == "" || selector.Key == "") {
+				errs = append(errs, fmt.Errorf("TLS %s Secret name and key must not be empty", name))
+			}
+		}
+	}
 	if sasl := connection.SASL; sasl != nil {
 		switch sasl.Mechanism {
 		case "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512":
 			if sasl.Username == nil || sasl.Password == nil {
 				errs = append(errs, fmt.Errorf("%s requires username and password", sasl.Mechanism))
+			} else {
+				if err := validateValueSource(*sasl.Username); err != nil {
+					errs = append(errs, fmt.Errorf("%s username: %w", sasl.Mechanism, err))
+				}
+				if err := validateValueSource(*sasl.Password); err != nil {
+					errs = append(errs, fmt.Errorf("%s password: %w", sasl.Mechanism, err))
+				}
 			}
 		case "OAUTHBEARER":
 			if sasl.OAuth == nil {
 				errs = append(errs, errors.New("OAUTHBEARER requires oauth configuration"))
+			} else {
+				oauth := sasl.OAuth
+				if oauth.TokenURL == "" {
+					errs = append(errs, errors.New("OAUTHBEARER tokenURL must not be empty"))
+				}
+				if err := validateValueSource(oauth.ClientID); err != nil {
+					errs = append(errs, fmt.Errorf("OAUTHBEARER clientID: %w", err))
+				}
+				if err := validateValueSource(oauth.ClientSecret); err != nil {
+					errs = append(errs, fmt.Errorf("OAUTHBEARER clientSecret: %w", err))
+				}
 			}
 		case "GSSAPI":
 			if sasl.Kerberos == nil {
 				errs = append(errs, errors.New("GSSAPI requires kerberos configuration"))
+			} else {
+				kerberos := sasl.Kerberos
+				if kerberos.ServiceName == "" || kerberos.Realm == "" || kerberos.Config == nil {
+					errs = append(errs, errors.New("GSSAPI requires serviceName, realm, and config"))
+				}
+				if err := validateValueSource(kerberos.Username); err != nil {
+					errs = append(errs, fmt.Errorf("GSSAPI username: %w", err))
+				}
+				if (kerberos.Password == nil) == (kerberos.Keytab == nil) {
+					errs = append(errs, errors.New("GSSAPI requires exactly one of password or keytab"))
+				}
+				if kerberos.Password != nil {
+					if err := validateValueSource(*kerberos.Password); err != nil {
+						errs = append(errs, fmt.Errorf("GSSAPI password: %w", err))
+					}
+				}
+				if kerberos.Config != nil && (kerberos.Config.Name == "" || kerberos.Config.Key == "") {
+					errs = append(errs, errors.New("GSSAPI config Secret name and key must not be empty"))
+				}
+				if kerberos.Keytab != nil && (kerberos.Keytab.Name == "" || kerberos.Keytab.Key == "") {
+					errs = append(errs, errors.New("GSSAPI keytab Secret name and key must not be empty"))
+				}
 			}
 		case "AWS_MSK_IAM":
 			if sasl.AWS == nil || sasl.AWS.Region == "" {

@@ -38,7 +38,7 @@ minikube status >/dev/null 2>&1 || minikube start \
 # "telepresence connect --docker" runs the client as a container on the
 # local docker daemon, so the images must be present there as well as in
 # the cluster.
-for image in tel2-image client-image routecontroller-image; do
+for image in tel2-image client-image routecontroller-image kafka-image; do
     docker load -i "build-output/${image}.tar"
     minikube image load "build-output/${image}.tar"
 done
