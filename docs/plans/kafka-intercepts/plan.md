@@ -175,13 +175,19 @@ already-absent result.
 
 ## Delivery phases
 
-### Phase 0: transactional feasibility
+### Phase 0: transactional feasibility (complete)
 
 Prove consume-transform-produce transactions against the original application
 group using `franz-go`. Test commit and abort visibility, crashes on both sides
 of commit, static membership, transactional fencing, rebalances, and multiple
 splitter replicas against Kafka 3.8 and current Kafka 4.x. Record the results
 before implementing the Kubernetes lifecycle.
+
+The central transaction and open-transaction recovery proofs passed on both
+broker lines and are recorded in [phase0-findings.md](phase0-findings.md).
+Static-membership fencing was already proven by the earlier Kafka feasibility
+work; rebalance and multi-replica coverage remain part of the maintained
+phase-2 conformance suite.
 
 ### Phase 1: provider foundation
 
