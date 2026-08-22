@@ -33,6 +33,16 @@ const (
 	RouteStateClosing RouteState = "Closing"
 )
 
+// KafkaAdmissionMode controls how replacement Pods are admitted.
+// +kubebuilder:validation:Enum=Normal;Shadow;Blocked
+type KafkaAdmissionMode string
+
+const (
+	KafkaAdmissionNormal  KafkaAdmissionMode = "Normal"
+	KafkaAdmissionShadow  KafkaAdmissionMode = "Shadow"
+	KafkaAdmissionBlocked KafkaAdmissionMode = "Blocked"
+)
+
 // ValueSource is a literal or one key in a Secret.
 type ValueSource struct {
 	Value        string                    `json:"value,omitempty"`
@@ -204,6 +214,8 @@ type KafkaSplitStatus struct {
 	ObservedGeneration int64                       `json:"observedGeneration,omitempty"`
 	ActiveGeneration   int64                       `json:"activeGeneration,omitempty"`
 	Phase              string                      `json:"phase,omitempty"`
+	AdmissionMode      KafkaAdmissionMode          `json:"admissionMode,omitempty"`
+	ApplicationEnv     map[string]string           `json:"applicationEnv,omitempty"`
 	Workloads          []WorkloadReference         `json:"workloads,omitempty"`
 	SourceTopics       []KafkaTopicStatus          `json:"sourceTopics,omitempty"`
 	Resources          []KafkaResourceStatus       `json:"resources,omitempty"`

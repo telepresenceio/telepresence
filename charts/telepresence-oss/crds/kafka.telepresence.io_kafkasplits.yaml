@@ -663,6 +663,18 @@ spec:
               activeGeneration:
                 format: int64
                 type: integer
+              admissionMode:
+                description: KafkaAdmissionMode controls how replacement Pods are
+                  admitted.
+                enum:
+                - Normal
+                - Shadow
+                - Blocked
+                type: string
+              applicationEnv:
+                additionalProperties:
+                  type: string
+                type: object
               conditions:
                 items:
                   description: Condition contains details for one aspect of the current
