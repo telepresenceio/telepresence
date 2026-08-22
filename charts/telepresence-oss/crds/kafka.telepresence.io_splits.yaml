@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-  name: kafkasplits.kafka.telepresence.io
+  name: splits.kafka.telepresence.io
 spec:
   group: kafka.telepresence.io
   names:
     kind: KafkaSplit
     listKind: KafkaSplitList
-    plural: kafkasplits
+    plural: splits
     shortNames:
     - ksplit
-    singular: kafkasplit
+    singular: split
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -513,10 +513,10 @@ spec:
                         additionalProperties:
                           type: string
                         type: object
-                      prefix:
-                        type: string
                       replicationFactor:
                         format: int32
+                        maximum: 32767
+                        minimum: 1
                         type: integer
                     type: object
                   mode:
@@ -663,6 +663,567 @@ spec:
               activeGeneration:
                 format: int64
                 type: integer
+              activeSpec:
+                description: |-
+                  KafkaActiveSpec is the safety-relevant configuration snapshot currently
+                  enforced by admission and broker reconciliation.
+                properties:
+                  application:
+                    description: |-
+                      KafkaApplicationSpec describes the selected container's configuration
+                      adapter.
+                    properties:
+                      groupEnv:
+                        type: string
+                      isolationLevelEnv:
+                        type: string
+                      shadowCredentials:
+                        additionalProperties:
+                          description: ValueSource is a literal or one key in a Secret.
+                          properties:
+                            secretKeyRef:
+                              description: SecretKeySelector selects a key of a Secret.
+                              properties:
+                                key:
+                                  description: The key of the secret to select from.  Must
+                                    be a valid secret key.
+                                  type: string
+                                name:
+                                  default: ""
+                                  description: |-
+                                    Name of the referent.
+                                    This field is effectively required, but due to backwards compatibility is
+                                    allowed to be empty. Instances of this type with an empty value here are
+                                    almost certainly wrong.
+                                    More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                  type: string
+                                optional:
+                                  description: Specify whether the Secret or its key
+                                    must be defined
+                                  type: boolean
+                              required:
+                              - key
+                              type: object
+                              x-kubernetes-map-type: atomic
+                            value:
+                              type: string
+                          type: object
+                        type: object
+                      topicBindings:
+                        items:
+                          description: KafkaTopicEnvBinding maps one source topic
+                            to an application variable.
+                          properties:
+                            env:
+                              type: string
+                            source:
+                              type: string
+                          required:
+                          - env
+                          - source
+                          type: object
+                        type: array
+                      topicEnv:
+                        type: string
+                      topicSeparator:
+                        type: string
+                      transactionalIDEnv:
+                        type: string
+                    required:
+                    - groupEnv
+                    - isolationLevelEnv
+                    type: object
+                  connection:
+                    description: KafkaConnectionSpec contains provider-only broker
+                      connection settings.
+                    properties:
+                      bootstrapServers:
+                        items:
+                          type: string
+                        minItems: 1
+                        type: array
+                      sasl:
+                        description: KafkaSASLSpec configures one Kafka SASL mechanism.
+                        properties:
+                          aws:
+                            description: KafkaAWSSpec configures AWS MSK IAM authentication.
+                            properties:
+                              region:
+                                type: string
+                            required:
+                            - region
+                            type: object
+                          kerberos:
+                            description: KafkaKerberosSpec configures SASL/GSSAPI.
+                            properties:
+                              config:
+                                description: SecretKeySelector selects a key of a
+                                  Secret.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              keytab:
+                                description: SecretKeySelector selects a key of a
+                                  Secret.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              password:
+                                description: ValueSource is a literal or one key in
+                                  a Secret.
+                                properties:
+                                  secretKeyRef:
+                                    description: SecretKeySelector selects a key of
+                                      a Secret.
+                                    properties:
+                                      key:
+                                        description: The key of the secret to select
+                                          from.  Must be a valid secret key.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the Secret or
+                                          its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  value:
+                                    type: string
+                                type: object
+                              realm:
+                                type: string
+                              serviceName:
+                                type: string
+                              username:
+                                description: ValueSource is a literal or one key in
+                                  a Secret.
+                                properties:
+                                  secretKeyRef:
+                                    description: SecretKeySelector selects a key of
+                                      a Secret.
+                                    properties:
+                                      key:
+                                        description: The key of the secret to select
+                                          from.  Must be a valid secret key.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the Secret or
+                                          its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  value:
+                                    type: string
+                                type: object
+                            required:
+                            - config
+                            - realm
+                            - serviceName
+                            - username
+                            type: object
+                          mechanism:
+                            enum:
+                            - PLAIN
+                            - SCRAM-SHA-256
+                            - SCRAM-SHA-512
+                            - OAUTHBEARER
+                            - GSSAPI
+                            - AWS_MSK_IAM
+                            type: string
+                          oauth:
+                            description: KafkaOAuthSpec configures an OAUTHBEARER
+                              client-credentials flow.
+                            properties:
+                              clientID:
+                                description: ValueSource is a literal or one key in
+                                  a Secret.
+                                properties:
+                                  secretKeyRef:
+                                    description: SecretKeySelector selects a key of
+                                      a Secret.
+                                    properties:
+                                      key:
+                                        description: The key of the secret to select
+                                          from.  Must be a valid secret key.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the Secret or
+                                          its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  value:
+                                    type: string
+                                type: object
+                              clientSecret:
+                                description: ValueSource is a literal or one key in
+                                  a Secret.
+                                properties:
+                                  secretKeyRef:
+                                    description: SecretKeySelector selects a key of
+                                      a Secret.
+                                    properties:
+                                      key:
+                                        description: The key of the secret to select
+                                          from.  Must be a valid secret key.
+                                        type: string
+                                      name:
+                                        default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                        type: string
+                                      optional:
+                                        description: Specify whether the Secret or
+                                          its key must be defined
+                                        type: boolean
+                                    required:
+                                    - key
+                                    type: object
+                                    x-kubernetes-map-type: atomic
+                                  value:
+                                    type: string
+                                type: object
+                              scopes:
+                                items:
+                                  type: string
+                                type: array
+                              tokenURL:
+                                type: string
+                            required:
+                            - clientID
+                            - clientSecret
+                            - tokenURL
+                            type: object
+                          password:
+                            description: ValueSource is a literal or one key in a
+                              Secret.
+                            properties:
+                              secretKeyRef:
+                                description: SecretKeySelector selects a key of a
+                                  Secret.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              value:
+                                type: string
+                            type: object
+                          username:
+                            description: ValueSource is a literal or one key in a
+                              Secret.
+                            properties:
+                              secretKeyRef:
+                                description: SecretKeySelector selects a key of a
+                                  Secret.
+                                properties:
+                                  key:
+                                    description: The key of the secret to select from.  Must
+                                      be a valid secret key.
+                                    type: string
+                                  name:
+                                    default: ""
+                                    description: |-
+                                      Name of the referent.
+                                      This field is effectively required, but due to backwards compatibility is
+                                      allowed to be empty. Instances of this type with an empty value here are
+                                      almost certainly wrong.
+                                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                    type: string
+                                  optional:
+                                    description: Specify whether the Secret or its
+                                      key must be defined
+                                    type: boolean
+                                required:
+                                - key
+                                type: object
+                                x-kubernetes-map-type: atomic
+                              value:
+                                type: string
+                            type: object
+                        required:
+                        - mechanism
+                        type: object
+                      tls:
+                        description: KafkaTLSSpec configures broker TLS and optional
+                          client authentication.
+                        properties:
+                          ca:
+                            description: SecretKeySelector selects a key of a Secret.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          certificate:
+                            description: SecretKeySelector selects a key of a Secret.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          privateKey:
+                            description: SecretKeySelector selects a key of a Secret.
+                            properties:
+                              key:
+                                description: The key of the secret to select from.  Must
+                                  be a valid secret key.
+                                type: string
+                              name:
+                                default: ""
+                                description: |-
+                                  Name of the referent.
+                                  This field is effectively required, but due to backwards compatibility is
+                                  allowed to be empty. Instances of this type with an empty value here are
+                                  almost certainly wrong.
+                                  More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                                type: string
+                              optional:
+                                description: Specify whether the Secret or its key
+                                  must be defined
+                                type: boolean
+                            required:
+                            - key
+                            type: object
+                            x-kubernetes-map-type: atomic
+                          serverName:
+                            type: string
+                        type: object
+                    required:
+                    - bootstrapServers
+                    type: object
+                  container:
+                    type: string
+                  shadows:
+                    description: KafkaShadowSpec configures shadow resource ownership.
+                    properties:
+                      managed:
+                        description: KafkaManagedShadows configures controller-created
+                          topics.
+                        properties:
+                          configs:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          replicationFactor:
+                            format: int32
+                            maximum: 32767
+                            minimum: 1
+                            type: integer
+                        type: object
+                      mode:
+                        description: ShadowMode controls who provisions Kafka shadow
+                          topics.
+                        enum:
+                        - Managed
+                        - Preprovisioned
+                        type: string
+                      preprovisioned:
+                        description: |-
+                          KafkaPreprovisionedShadows lists operator-owned application and session
+                          resources.
+                        properties:
+                          applicationGroup:
+                            type: string
+                          applicationTopics:
+                            additionalProperties:
+                              type: string
+                            type: object
+                          sessions:
+                            items:
+                              description: KafkaSessionSlot is one reusable preprovisioned
+                                set of session topics.
+                              properties:
+                                group:
+                                  type: string
+                                name:
+                                  type: string
+                                topics:
+                                  additionalProperties:
+                                    type: string
+                                  type: object
+                              required:
+                              - group
+                              - name
+                              - topics
+                              type: object
+                            type: array
+                        required:
+                        - applicationGroup
+                        - applicationTopics
+                        - sessions
+                        type: object
+                    required:
+                    - mode
+                    type: object
+                  source:
+                    description: KafkaSourceSpec identifies the application subscription
+                      being split.
+                    properties:
+                      group:
+                        type: string
+                      offsetReset:
+                        enum:
+                        - earliest
+                        - latest
+                        type: string
+                      topics:
+                        items:
+                          type: string
+                        minItems: 1
+                        type: array
+                    required:
+                    - group
+                    - offsetReset
+                    - topics
+                    type: object
+                  splitter:
+                    description: KafkaSplitterSpec controls data-plane capacity.
+                    properties:
+                      batchSize:
+                        default: 100
+                        format: int32
+                        minimum: 1
+                        type: integer
+                      replicas:
+                        default: 1
+                        format: int32
+                        minimum: 1
+                        type: integer
+                    type: object
+                required:
+                - application
+                - connection
+                - container
+                - shadows
+                - source
+                - splitter
+                type: object
               admissionMode:
                 description: KafkaAdmissionMode controls how replacement Pods are
                   admitted.
@@ -672,6 +1233,15 @@ spec:
                 - Blocked
                 type: string
               applicationEnv:
+                additionalProperties:
+                  type: string
+                type: object
+              applicationGroup:
+                type: string
+              applicationLag:
+                format: int64
+                type: integer
+              applicationTopics:
                 additionalProperties:
                   type: string
                 type: object
@@ -773,6 +1343,8 @@ spec:
                       type: string
                     source:
                       type: string
+                    topicID:
+                      type: string
                   required:
                   - kind
                   - managed
@@ -799,6 +1371,10 @@ spec:
                   - topicID
                   type: object
                 type: array
+              splitterName:
+                type: string
+              transactionalIDPrefix:
+                type: string
               workloads:
                 items:
                   description: WorkloadReference is an immutable member of the active

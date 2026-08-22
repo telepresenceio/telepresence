@@ -1,12 +1,28 @@
 {{- if .Values.kafka.enabled }}
+{{- if not (semverCompare ">=1.27-0" .Capabilities.KubeVersion.Version) }}
+{{- fail "kafka.enabled requires Kubernetes 1.27 or newer for Pod scheduling gates" }}
+{{- end }}
 {{- $namespace := include "traffic-manager.namespace" $ }}
-{{- $name := "telepresence-kafka" }}
+{{- $name := "tp-kafka" }}
 {{- $roleName := printf "%s-%s" $name $namespace }}
-{{- $secretName := printf "%s-webhook-tls" $name }}
+{{- $resourceRoleName := $name }}
+{{- $secretName := printf "%s-tls" $name }}
 {{- $serviceDNS := printf "%s.%s.svc" $name $namespace }}
-{{- $genCA := genCA "telepresence-kafka-ca" 365 }}
+{{- $genCA := genCA "tp-kafka-ca" 365 }}
 {{- $genCert := genSignedCert $name nil (list (printf "%s.%s" $name $namespace) $serviceDNS) 365 $genCA }}
 {{- $secretData := (lookup "v1" "Secret" $namespace $secretName).data }}
+{{- $podNamespaceSelector := include "traffic-manager.namespaceSelector" $ | fromJson }}
+{{- $podNamespaceExpressions := default (list) $podNamespaceSelector.matchExpressions }}
+{{- $_ := set $podNamespaceSelector "matchExpressions" (append $podNamespaceExpressions (dict
+      "key" "kubernetes.io/metadata.name" "operator" "NotIn" "values" (list $namespace))) }}
+{{- $kafkaLabels := merge (deepCopy (.Values.labels | default dict)) (dict
+      "app.kubernetes.io/name" $name
+      "app.kubernetes.io/instance" .Release.Name
+      "app.kubernetes.io/managed-by" .Release.Service
+      "helm.sh/chart" (include "telepresence.chart" $)) }}
+{{- if .Chart.AppVersion }}
+{{- $kafkaLabels = merge $kafkaLabels (dict "app.kubernetes.io/version" .Chart.AppVersion) }}
+{{- end }}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -14,39 +30,39 @@ metadata:
   name: {{ $name }}
   namespace: {{ $namespace }}
   labels:
-    {{- include "telepresence.labels" $ | nindent 4 }}
+    {{- toYaml $kafkaLabels | nindent 4 }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: {{ $roleName }}
   labels:
-    {{- include "telepresence.labels" $ | nindent 4 }}
+    {{- toYaml $kafkaLabels | nindent 4 }}
 rules:
   - apiGroups: ["kafka.telepresence.io"]
-    resources: ["kafkasplits", "kafkaroutes"]
+    resources: ["splits", "routes"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["kafka.telepresence.io"]
-    resources: ["kafkasplits/status", "kafkaroutes/status"]
+    resources: ["splits/status", "routes/status"]
     verbs: ["get", "update", "patch"]
   - apiGroups: ["kafka.telepresence.io"]
-    resources: ["kafkasplits/finalizers", "kafkaroutes/finalizers"]
+    resources: ["splits/finalizers", "routes/finalizers"]
     verbs: ["update"]
   - apiGroups: [""]
-    resources: ["pods", "secrets", "configmaps"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
   - apiGroups: [""]
     resources: ["pods/eviction"]
     verbs: ["create"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    verbs: ["get", "list", "watch"]
   - apiGroups: ["argoproj.io"]
     resources: ["rollouts"]
     verbs: ["get", "list", "watch"]
-  - apiGroups: ["coordination.k8s.io"]
-    resources: ["leases"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: ["policy"]
     resources: ["poddisruptionbudgets"]
     verbs: ["get", "list", "watch"]
@@ -56,7 +72,7 @@ kind: ClusterRoleBinding
 metadata:
   name: {{ $roleName }}
   labels:
-    {{- include "telepresence.labels" $ | nindent 4 }}
+    {{- toYaml $kafkaLabels | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -65,13 +81,54 @@ subjects:
   - kind: ServiceAccount
     name: {{ $name }}
     namespace: {{ $namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $resourceRoleName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- toYaml $kafkaLabels | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch", "update"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["create", "update", "patch", "delete"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $resourceRoleName }}
+  namespace: {{ $namespace }}
+  labels:
+    {{- toYaml $kafkaLabels | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $resourceRoleName }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $namespace }}
+---
 apiVersion: v1
 kind: Secret
 metadata:
   name: {{ $secretName }}
   namespace: {{ $namespace }}
   labels:
-    {{- include "telepresence.labels" $ | nindent 4 }}
+    {{- toYaml $kafkaLabels | nindent 4 }}
 type: kubernetes.io/tls
 data:
 {{- if $secretData }}
@@ -90,12 +147,15 @@ metadata:
   name: {{ $name }}
   namespace: {{ $namespace }}
   labels:
-    {{- include "telepresence.labels" $ | nindent 4 }}
+    {{- toYaml $kafkaLabels | nindent 4 }}
 spec:
   ports:
     - name: webhook
       port: 443
       targetPort: webhook
+    - name: metrics
+      port: 8080
+      targetPort: metrics
   selector:
     app.kubernetes.io/name: {{ $name }}
 ---
@@ -105,7 +165,7 @@ metadata:
   name: {{ $name }}
   namespace: {{ $namespace }}
   labels:
-    {{- include "telepresence.labels" $ | nindent 4 }}
+    {{- toYaml $kafkaLabels | nindent 4 }}
 spec:
   replicas: {{ .Values.kafka.replicas }}
   selector:
@@ -114,8 +174,7 @@ spec:
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: {{ $name }}
-        {{- include "telepresence.labels" $ | nindent 8 }}
+        {{- toYaml $kafkaLabels | nindent 8 }}
     spec:
       serviceAccountName: {{ $name }}
       securityContext:
@@ -128,6 +187,9 @@ spec:
             - controller
             - --webhook-port={{ .Values.kafka.webhook.port }}
             - --leader-election-namespace={{ $namespace }}
+            - --provider-namespace={{ $namespace }}
+            - --provider-image={{ coalesce .Values.kafka.image.registry .Values.image.registry }}/{{ .Values.kafka.image.name }}:{{ .Chart.AppVersion }}
+            - --service-account={{ $name }}
           env:
             - name: POD_NAMESPACE
               valueFrom:
@@ -167,11 +229,11 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  name: {{ $name }}-{{ $namespace }}
+  name: {{ $roleName }}
   labels:
-    {{- include "telepresence.labels" $ | nindent 4 }}
+    {{- toYaml $kafkaLabels | nindent 4 }}
 webhooks:
-  - name: validate-kafkasplit.kafka.telepresence.io
+  - name: split.kafka.telepresence.io
     admissionReviewVersions: ["v1"]
     clientConfig:
       caBundle: {{ if $secretData }}{{ get $secretData "ca.crt" }}{{ else }}{{ $genCA.Cert | b64enc }}{{ end }}
@@ -185,11 +247,11 @@ webhooks:
       - apiGroups: ["kafka.telepresence.io"]
         apiVersions: ["v1alpha1"]
         operations: ["CREATE", "UPDATE"]
-        resources: ["kafkasplits"]
+        resources: ["splits"]
         scope: Namespaced
     sideEffects: None
     timeoutSeconds: {{ .Values.kafka.webhook.timeoutSeconds }}
-  - name: validate-kafkaroute.kafka.telepresence.io
+  - name: route.kafka.telepresence.io
     admissionReviewVersions: ["v1"]
     clientConfig:
       caBundle: {{ if $secretData }}{{ get $secretData "ca.crt" }}{{ else }}{{ $genCA.Cert | b64enc }}{{ end }}
@@ -203,7 +265,7 @@ webhooks:
       - apiGroups: ["kafka.telepresence.io"]
         apiVersions: ["v1alpha1"]
         operations: ["CREATE", "UPDATE"]
-        resources: ["kafkaroutes"]
+        resources: ["routes"]
         scope: Namespaced
     sideEffects: None
     timeoutSeconds: {{ .Values.kafka.webhook.timeoutSeconds }}
@@ -211,9 +273,9 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  name: {{ $name }}-pods-{{ $namespace }}
+  name: {{ $roleName }}
   labels:
-    {{- include "telepresence.labels" $ | nindent 4 }}
+    {{- toYaml $kafkaLabels | nindent 4 }}
 webhooks:
   - name: pods.kafka.telepresence.io
     admissionReviewVersions: ["v1"]
@@ -226,7 +288,7 @@ webhooks:
         port: 443
     failurePolicy: {{ .Values.kafka.webhook.failurePolicy }}
     namespaceSelector:
-      {{- include "traffic-manager.namespaceSelector" $ | fromJson | toYaml | nindent 6 }}
+      {{- toYaml $podNamespaceSelector | nindent 6 }}
     reinvocationPolicy: IfNeeded
     rules:
       - apiGroups: [""]

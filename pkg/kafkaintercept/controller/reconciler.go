@@ -1,31 +1,56 @@
-// Package controller contains the KafkaSplit and KafkaRoute Kubernetes
-// reconcilers.
+// Package controller reconciles Kafka personal intercept resources.
 package controller
 
 import (
 	"context"
-	"fmt"
 	"reflect"
-	"sort"
 	"time"
 
-	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
-	appsv1 "k8s.io/api/apps/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apiMeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
+	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/broker"
+	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/runtimeconfig"
 )
 
-const validationRequeue = 30 * time.Second
+const (
+	reconcileInterval = 2 * time.Second
+	splitFinalizer    = runtimeconfig.SplitFinalizer
+	routeFinalizer    = runtimeconfig.RouteFinalizer
+)
 
-// SplitReconciler validates desired state and publishes an immutable workload
-// snapshot before any broker lifecycle begins.
+type kafkaBroker interface {
+	Prepare(context.Context, *api.KafkaSplit) (broker.Prepared, error)
+	EnsureSession(context.Context, *api.KafkaSplit, *api.KafkaRoute) (broker.Session, error)
+	GroupMemberless(context.Context, string) (bool, error)
+	GroupMembers(context.Context, string) ([]string, error)
+	Remaining(context.Context, string, map[string]string) (int64, error)
+	DrainSession(context.Context, *api.KafkaSplit, string, string, map[string]string, map[string]string) error
+	DeleteManaged(context.Context, []api.KafkaResourceStatus) error
+	Close()
+}
+
+type brokerOpener func(context.Context, client.Reader, string, api.KafkaConnectionSpec) (kafkaBroker, error)
+
+func defaultBrokerOpener(
+	ctx context.Context,
+	reader client.Reader,
+	namespace string,
+	connection api.KafkaConnectionSpec,
+) (kafkaBroker, error) {
+	return broker.Open(ctx, reader, namespace, connection)
+}
+
+// SplitReconciler owns the workload cutover and splitter lifecycle.
 type SplitReconciler struct {
 	client.Client
+	ProviderNamespace string
+	ProviderImage     string
+	ServiceAccount    string
+	OpenBroker        brokerOpener
 }
 
 // SetupWithManager registers the KafkaSplit controller.
@@ -33,7 +58,7 @@ func (r *SplitReconciler) SetupWithManager(manager ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(manager).For(&api.KafkaSplit{}).Complete(r)
 }
 
-// Reconcile validates one split and resolves its selected workloads.
+// Reconcile advances one split through its requested lifecycle.
 func (r *SplitReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	split := new(api.KafkaSplit)
 	if err := r.Get(ctx, request.NamespacedName, split); err != nil {
@@ -41,117 +66,72 @@ func (r *SplitReconciler) Reconcile(ctx context.Context, request ctrl.Request) (
 	}
 	before := split.Status.DeepCopy()
 	split.Status.ObservedGeneration = split.Generation
+	if split.DeletionTimestamp != nil {
+		return r.reconcileSplitDeletion(ctx, split, before)
+	}
+	if split.Status.ActiveSpec != nil &&
+		(split.Spec.DesiredState == api.DesiredStateDisabled || split.Status.ActiveGeneration != split.Generation) {
+		return r.reconcileDeactivation(ctx, split, before, false)
+	}
 	if err := split.Validate(); err != nil {
 		split.Status.Phase = "Invalid"
-		setCondition(&split.Status.Conditions, "Ready", metav1.ConditionFalse, "InvalidSpec", err.Error(), split.Generation)
-		return r.updateSplitStatus(ctx, split, before)
+		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "InvalidSpec", err.Error(), split.Generation)
+		return r.updateSplitStatus(ctx, split, before, false)
+	}
+	if !containsString(split.Finalizers, splitFinalizer) {
+		split.Finalizers = append(split.Finalizers, splitFinalizer)
+		if err := r.Update(ctx, split); err != nil {
+			return ctrl.Result{}, err
+		}
+		return requeue(), nil
 	}
 	if split.Spec.DesiredState == api.DesiredStateDisabled {
-		split.Status.Phase = "Disabled"
-		split.Status.Workloads = nil
-		setCondition(&split.Status.Conditions, "Ready", metav1.ConditionFalse, "Disabled", "Kafka split is disabled", split.Generation)
-		return r.updateSplitStatus(ctx, split, before)
+		return r.reconcileDisabled(ctx, split, before)
 	}
+	return r.reconcileEnabled(ctx, split, before)
+}
 
-	workloads, err := r.resolveWorkloads(ctx, split)
-	if err != nil {
-		split.Status.Phase = "Pending"
-		setCondition(&split.Status.Conditions, "Ready", metav1.ConditionFalse, "WorkloadResolutionFailed", err.Error(), split.Generation)
-		result, updateErr := r.updateSplitStatus(ctx, split, before)
-		if updateErr != nil {
-			return result, updateErr
-		}
-		return ctrl.Result{RequeueAfter: validationRequeue}, nil
+func (r *SplitReconciler) openBroker(ctx context.Context, split *api.KafkaSplit) (kafkaBroker, error) {
+	opener := r.OpenBroker
+	if opener == nil {
+		opener = defaultBrokerOpener
 	}
-	if len(workloads) == 0 {
-		split.Status.Phase = "Pending"
-		setCondition(&split.Status.Conditions, "Ready", metav1.ConditionFalse, "NoWorkloads", "workloadSelector matched no supported workload", split.Generation)
-		result, updateErr := r.updateSplitStatus(ctx, split, before)
-		if updateErr != nil {
-			return result, updateErr
-		}
-		return ctrl.Result{RequeueAfter: validationRequeue}, nil
+	return opener(ctx, r.Client, split.Namespace, split.Spec.Connection)
+}
+
+func (r *SplitReconciler) providerNamespace() string {
+	if r.ProviderNamespace != "" {
+		return r.ProviderNamespace
 	}
-	split.Status.Workloads = workloads
-	split.Status.Phase = "Preparing"
-	setCondition(
-		&split.Status.Conditions, "Ready", metav1.ConditionFalse, "Preparing",
-		"workload snapshot is valid; broker preflight and cutover are pending", split.Generation,
-	)
-	return r.updateSplitStatus(ctx, split, before)
+	return "ambassador"
 }
 
 func (r *SplitReconciler) updateSplitStatus(
 	ctx context.Context,
 	split *api.KafkaSplit,
 	before *api.KafkaSplitStatus,
+	requeueAfter bool,
 ) (ctrl.Result, error) {
 	if reflect.DeepEqual(*before, split.Status) {
+		if requeueAfter {
+			return requeue(), nil
+		}
 		return ctrl.Result{}, nil
 	}
-	return ctrl.Result{}, r.Status().Update(ctx, split)
+	if err := r.Status().Update(ctx, split); err != nil {
+		return ctrl.Result{}, err
+	}
+	if requeueAfter {
+		return requeue(), nil
+	}
+	return ctrl.Result{}, nil
 }
 
-func (r *SplitReconciler) resolveWorkloads(ctx context.Context, split *api.KafkaSplit) ([]api.WorkloadReference, error) {
-	selector, err := metav1.LabelSelectorAsSelector(&split.Spec.WorkloadSelector)
-	if err != nil {
-		return nil, err
-	}
-	options := []client.ListOption{client.InNamespace(split.Namespace), client.MatchingLabelsSelector{Selector: selector}}
-	var refs []api.WorkloadReference
-
-	deployments := new(appsv1.DeploymentList)
-	if err := r.List(ctx, deployments, options...); err != nil {
-		return nil, fmt.Errorf("list Deployments: %w", err)
-	}
-	for i := range deployments.Items {
-		refs = append(refs, workloadReference("apps/v1", "Deployment", &deployments.Items[i]))
-	}
-
-	statefulSets := new(appsv1.StatefulSetList)
-	if err := r.List(ctx, statefulSets, options...); err != nil {
-		return nil, fmt.Errorf("list StatefulSets: %w", err)
-	}
-	for i := range statefulSets.Items {
-		refs = append(refs, workloadReference("apps/v1", "StatefulSet", &statefulSets.Items[i]))
-	}
-
-	replicaSets := new(appsv1.ReplicaSetList)
-	if err := r.List(ctx, replicaSets, options...); err != nil {
-		return nil, fmt.Errorf("list ReplicaSets: %w", err)
-	}
-	for i := range replicaSets.Items {
-		if metav1.GetControllerOf(&replicaSets.Items[i]) == nil {
-			refs = append(refs, workloadReference("apps/v1", "ReplicaSet", &replicaSets.Items[i]))
-		}
-	}
-
-	rollouts := new(argorollouts.RolloutList)
-	if err := r.List(ctx, rollouts, options...); err != nil && !apiMeta.IsNoMatchError(err) && !apierrors.IsNotFound(err) {
-		return nil, fmt.Errorf("list Argo Rollouts: %w", err)
-	}
-	for i := range rollouts.Items {
-		refs = append(refs, workloadReference("argoproj.io/v1alpha1", "Rollout", &rollouts.Items[i]))
-	}
-
-	sort.Slice(refs, func(i, j int) bool {
-		if refs[i].Kind != refs[j].Kind {
-			return refs[i].Kind < refs[j].Kind
-		}
-		return refs[i].Name < refs[j].Name
-	})
-	return refs, nil
-}
-
-func workloadReference(apiVersion, kind string, object client.Object) api.WorkloadReference {
-	return api.WorkloadReference{
-		APIVersion: apiVersion, Kind: kind, Name: object.GetName(), UID: object.GetUID(),
-	}
-}
-
-// RouteReconciler validates durable route ownership and expiry.
+// RouteReconciler owns one personal shadow and its transactional drain.
 type RouteReconciler struct {
 	client.Client
+	ProviderNamespace string
+	OpenBroker        brokerOpener
 }
 
 // SetupWithManager registers the KafkaRoute controller.
@@ -159,7 +139,7 @@ func (r *RouteReconciler) SetupWithManager(manager ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(manager).For(&api.KafkaRoute{}).Complete(r)
 }
 
-// Reconcile validates one route against its split.
+// Reconcile advances one personal route.
 func (r *RouteReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	route := new(api.KafkaRoute)
 	if err := r.Get(ctx, request.NamespacedName, route); err != nil {
@@ -169,51 +149,84 @@ func (r *RouteReconciler) Reconcile(ctx context.Context, request ctrl.Request) (
 	route.Status.ObservedGeneration = route.Generation
 	if err := route.Validate(); err != nil {
 		route.Status.Phase = "Invalid"
-		setCondition(&route.Status.Conditions, "Ready", metav1.ConditionFalse, "InvalidSpec", err.Error(), route.Generation)
-		return r.updateRouteStatus(ctx, route, before)
+		setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "InvalidSpec", err.Error(), route.Generation)
+		return r.updateRouteStatus(ctx, route, before, false)
 	}
-	split := new(api.KafkaSplit)
-	if err := r.Get(ctx, client.ObjectKey{Namespace: route.Namespace, Name: route.Spec.SplitRef.Name}, split); err != nil {
-		route.Status.Phase = "Pending"
-		setCondition(&route.Status.Conditions, "Ready", metav1.ConditionFalse, "SplitUnavailable", err.Error(), route.Generation)
-		result, updateErr := r.updateRouteStatus(ctx, route, before)
-		if updateErr != nil {
-			return result, updateErr
+	if route.Status.Phase != "Closed" && route.DeletionTimestamp == nil && !containsString(route.Finalizers, routeFinalizer) {
+		route.Finalizers = append(route.Finalizers, routeFinalizer)
+		if err := r.Update(ctx, route); err != nil {
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{RequeueAfter: validationRequeue}, nil
+		return requeue(), nil
 	}
-	if !route.Spec.ExpiresAt.After(time.Now()) || route.Spec.DesiredState == api.RouteStateClosing {
-		route.Status.Phase = "Closing"
-		setCondition(&route.Status.Conditions, "Ready", metav1.ConditionFalse, "Closing", "route is closing", route.Generation)
-	} else if split.Status.Phase != "Enabled" {
-		route.Status.Phase = "Pending"
-		setCondition(&route.Status.Conditions, "Ready", metav1.ConditionFalse, "SplitNotReady", "referenced KafkaSplit is not enabled", route.Generation)
-	} else {
-		route.Status.Phase = "Preparing"
-		setCondition(&route.Status.Conditions, "Ready", metav1.ConditionFalse, "Preparing", "session resources are pending", route.Generation)
+	return r.reconcileRoute(ctx, route, before)
+}
+
+func (r *RouteReconciler) openBroker(ctx context.Context, split *api.KafkaSplit) (kafkaBroker, error) {
+	opener := r.OpenBroker
+	if opener == nil {
+		opener = defaultBrokerOpener
 	}
-	return r.updateRouteStatus(ctx, route, before)
+	return opener(ctx, r.Client, split.Namespace, split.Spec.Connection)
+}
+
+func (r *RouteReconciler) providerNamespace() string {
+	if r.ProviderNamespace != "" {
+		return r.ProviderNamespace
+	}
+	return "ambassador"
 }
 
 func (r *RouteReconciler) updateRouteStatus(
 	ctx context.Context,
 	route *api.KafkaRoute,
 	before *api.KafkaRouteStatus,
+	requeueAfter bool,
 ) (ctrl.Result, error) {
 	if reflect.DeepEqual(*before, route.Status) {
+		if requeueAfter {
+			return requeue(), nil
+		}
 		return ctrl.Result{}, nil
 	}
-	return ctrl.Result{}, r.Status().Update(ctx, route)
+	if err := r.Status().Update(ctx, route); err != nil {
+		return ctrl.Result{}, err
+	}
+	if requeueAfter {
+		return requeue(), nil
+	}
+	return ctrl.Result{}, nil
 }
 
-func setCondition(
+func setReadyCondition(
 	conditions *[]metav1.Condition,
-	typeName string,
 	status metav1.ConditionStatus,
 	reason, message string,
 	generation int64,
 ) {
 	apiMeta.SetStatusCondition(conditions, metav1.Condition{
-		Type: typeName, Status: status, Reason: reason, Message: message, ObservedGeneration: generation,
+		Type: "Ready", Status: status, Reason: reason, Message: message, ObservedGeneration: generation,
 	})
+}
+
+func requeue() ctrl.Result {
+	return ctrl.Result{RequeueAfter: reconcileInterval}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func removeString(values []string, target string) []string {
+	for i := range values {
+		if values[i] == target {
+			return append(values[:i], values[i+1:]...)
+		}
+	}
+	return values
 }

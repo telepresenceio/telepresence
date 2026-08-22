@@ -153,3 +153,20 @@ jobs:
           max_attempts: 3
           timeout_minutes: 12
           command: make check-unit
+
+  kafka-conformance:
+    needs: changes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        if: needs.changes.outputs.run_units == 'true'
+        with:
+          fetch-depth: 0
+          ref: "${{ github.event.pull_request.head.sha }}"
+      - name: install dependencies
+        if: needs.changes.outputs.run_units == 'true'
+        uses: ./.github/actions/install-dependencies
+      - name: Run Kafka conformance
+        if: needs.changes.outputs.run_units == 'true'
+        timeout-minutes: 30
+        run: make check-kafka-conformance

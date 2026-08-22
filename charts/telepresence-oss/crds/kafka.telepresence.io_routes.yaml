@@ -4,16 +4,16 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-  name: kafkaroutes.kafka.telepresence.io
+  name: routes.kafka.telepresence.io
 spec:
   group: kafka.telepresence.io
   names:
     kind: KafkaRoute
     listKind: KafkaRouteList
-    plural: kafkaroutes
+    plural: routes
     shortNames:
     - kroute
-    singular: kafkaroute
+    singular: route
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
@@ -176,11 +176,40 @@ spec:
                 type: object
               group:
                 type: string
+              lag:
+                format: int64
+                type: integer
               observedGeneration:
                 format: int64
                 type: integer
               phase:
                 type: string
+              resources:
+                items:
+                  description: KafkaResourceStatus is one broker resource owned or
+                    leased by a split.
+                  properties:
+                    kind:
+                      type: string
+                    managed:
+                      type: boolean
+                    name:
+                      type: string
+                    routeName:
+                      type: string
+                    source:
+                      type: string
+                    topicID:
+                      type: string
+                  required:
+                  - kind
+                  - managed
+                  - name
+                  type: object
+                type: array
+              routeGeneration:
+                format: int64
+                type: integer
               topics:
                 additionalProperties:
                   type: string
