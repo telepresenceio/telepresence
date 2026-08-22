@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
@@ -48,6 +49,63 @@ func TestStateCreateRequestNamespace(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "beta", req.Spec.Namespace)
 	})
+}
+
+func TestStateCreateRequestKafkaPredicate(t *testing.T) {
+	ctx := daemon.WithUserClient(context.Background(), createRequestUserClient{})
+	st := NewState(&Command{
+		Name: "local", AgentName: "checkout", Mechanism: "tcp", kafkaFlags: true,
+		KafkaOnly: true, KafkaHeaders: []string{"tenant=blue", "binary=base64:AP8="}, KafkaKeyPrefix: "order-",
+	}, nil)
+	req, err := st.CreateRequest(ctx)
+	require.NoError(t, err)
+	require.True(t, req.Spec.Kafka.Only)
+	require.Equal(t, []byte("order-"), req.Spec.Kafka.KeyPrefix)
+	require.Equal(t, []byte("blue"), req.Spec.Kafka.Headers[0].Value)
+	require.Equal(t, []byte{0, 255}, req.Spec.Kafka.Headers[1].Value)
+}
+
+func TestKafkaFlagValidation(t *testing.T) {
+	command := &cobra.Command{}
+	args := &Command{NoKafka: true, KafkaKey: "orders"}
+	require.ErrorContains(t, args.validateKafkaFlags(command), "--no-kafka")
+
+	args = &Command{KafkaKey: "one", KafkaKeyPrefix: "two"}
+	require.ErrorContains(t, args.validateKafkaFlags(command), "mutually exclusive")
+
+	args = &Command{KafkaHeaders: []string{"tenant=base64:not-base64"}}
+	require.ErrorContains(t, args.validateKafkaFlags(command), "invalid --kafka-header")
+
+	args = &Command{Wiretap: true, NoKafka: true}
+	require.ErrorContains(t, args.validateKafkaFlags(command), "cannot be used with wiretap")
+}
+
+func TestKafkaBytesEscapedLiteral(t *testing.T) {
+	value, err := kafkaBytes("text:base64:not-encoded")
+	require.NoError(t, err)
+	require.Equal(t, []byte("base64:not-encoded"), value)
+}
+
+func TestKafkaOnlySuppressesMountAfterValidation(t *testing.T) {
+	command := &cobra.Command{Use: "intercept"}
+	command.SetContext(client.WithConfig(t.Context(), client.GetDefaultConfig()))
+	args := &Command{}
+	args.AddInterceptFlags(command)
+	args.KafkaOnly = true
+
+	require.NoError(t, args.Validate(command, []string{"orders"}))
+	require.False(t, args.MountFlags.Enabled)
+	require.Zero(t, args.MountFlags.LocalMountPort)
+}
+
+func TestWiretapDoesNotRegisterKafkaFlags(t *testing.T) {
+	command := &cobra.Command{Use: "wiretap"}
+	args := &Command{Wiretap: true}
+	args.AddInterceptFlags(command)
+
+	for _, name := range []string{"no-kafka", "kafka-only", "kafka-header", "kafka-key", "kafka-key-prefix"} {
+		require.Nil(t, command.Flags().Lookup(name), name)
+	}
 }
 
 func TestCommand_Validate_HTTPIntercepts(t *testing.T) {

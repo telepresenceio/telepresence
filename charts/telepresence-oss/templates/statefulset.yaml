@@ -360,6 +360,10 @@ spec:
           - name: NODE_AGENT_CRI_SOCKET
             value: {{ .nodeAgent.criSocket | quote }}
           {{- end }}
+          {{- if .kafka.enabled }}
+          - name: KAFKA_INTERCEPTS_ENABLED
+            value: "true"
+          {{- end }}
          {{- /*
         Client configuration
         */}}

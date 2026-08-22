@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -156,6 +157,22 @@ func TestInfo_HTTPFilterDisplay(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewInfoKafkaOnly(t *testing.T) {
+	info := NewInfo(context.Background(), &manager.InterceptInfo{
+		Disposition: manager.InterceptDispositionType_ACTIVE,
+		Spec: &manager.InterceptSpec{
+			Name: "orders", WorkloadKind: "Deployment", Kafka: &manager.KafkaIntercept{Only: true},
+		},
+		KafkaRoutes: []*manager.KafkaRoute{{Split: "payments"}, {Split: "orders"}},
+	}, false, nil)
+
+	require.True(t, info.KafkaOnly)
+	require.Equal(t, []string{"orders", "payments"}, info.KafkaSplits)
+	output := info.String()
+	require.Contains(t, output, "Kafka splits")
+	require.NotContains(t, output, " -> ")
 }
 
 func TestNewInfo_HTTPFilterPopulation(t *testing.T) {

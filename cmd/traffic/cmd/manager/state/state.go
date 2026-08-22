@@ -488,7 +488,12 @@ func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
 // for which IsChildIntercept is true is skipped -- since WatchIntercepts
 // never sends a child to a client; every non-child entry has its children
 // re-derived instead from its own Spec.PodPorts.
-func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) {
+func (s *State) RestoreIntercepts(
+	ctx context.Context,
+	intercepts []*rpc.InterceptInfo,
+	now time.Time,
+	initializers ...func(*Intercept),
+) {
 	nodeAgentWatches := make(map[nodeAgentWatchKey]struct{})
 	for _, intercept := range intercepts {
 		spec := intercept.Spec
@@ -497,11 +502,16 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 		}
 		is, _ := s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
 			is := &Intercept{InterceptInfo: intercept}
-			wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
-			if err == nil {
-				is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-					return s.restoreAppContainer(ctx, interceptInfo, wl)
-				})
+			for _, initialize := range initializers {
+				initialize(is)
+			}
+			if !spec.GetKafka().GetOnly() {
+				wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
+				if err == nil {
+					is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+						return s.restoreAppContainer(ctx, interceptInfo, wl)
+					})
+				}
 			}
 			if spec.NodeAgent {
 				is.addFinalizer(s.nodeAgentReapFinalizer())
@@ -810,6 +820,18 @@ func (s *State) UninstallAgents(ctx context.Context, ur *rpc.UninstallAgentsRequ
 
 func (s *State) GetIntercept(interceptID string) (*Intercept, bool) {
 	return s.intercepts.Load(interceptID)
+}
+
+// ClientIntercepts returns a stable snapshot of one client's intercepts.
+func (s *State) ClientIntercepts(sessionID string) []*rpc.InterceptInfo {
+	var result []*rpc.InterceptInfo
+	s.intercepts.Range(func(_ string, intercept *Intercept) bool {
+		if intercept.GetClientSession().GetSessionId() == sessionID && !IsChildIntercept(intercept.Spec) {
+			result = append(result, proto.Clone(intercept.InterceptInfo).(*rpc.InterceptInfo))
+		}
+		return true
+	})
+	return result
 }
 
 func (s *State) WatchIntercepts(
