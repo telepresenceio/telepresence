@@ -559,6 +559,10 @@ else
 	CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./pkg/... | $(tools/test-report)
 endif
 
+.PHONY: check-kafka-conformance
+check-kafka-conformance: ## (QA) Run Kafka provider conformance against pinned 3.8 and current brokers
+	build-aux/kafka-conformance.sh
+
 # Shards for check-regression: three area groups balanced by measured
 # duration (~17 min each), grouping the areas that share node-agent/quic
 # manager specs so the shared release switches as little as possible.

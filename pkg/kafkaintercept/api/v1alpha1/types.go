@@ -138,7 +138,8 @@ type KafkaSplitterSpec struct {
 
 // KafkaManagedShadows configures controller-created topics.
 type KafkaManagedShadows struct {
-	Prefix            string            `json:"prefix,omitempty"`
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=32767
 	ReplicationFactor *int32            `json:"replicationFactor,omitempty"`
 	Configs           map[string]string `json:"configs,omitempty"`
 }
@@ -177,6 +178,17 @@ type KafkaSplitSpec struct {
 	Shadows          KafkaShadowSpec      `json:"shadows"`
 }
 
+// KafkaActiveSpec is the safety-relevant configuration snapshot currently
+// enforced by admission and broker reconciliation.
+type KafkaActiveSpec struct {
+	Container   string               `json:"container"`
+	Connection  KafkaConnectionSpec  `json:"connection"`
+	Source      KafkaSourceSpec      `json:"source"`
+	Application KafkaApplicationSpec `json:"application"`
+	Splitter    KafkaSplitterSpec    `json:"splitter"`
+	Shadows     KafkaShadowSpec      `json:"shadows"`
+}
+
 // WorkloadReference is an immutable member of the active workload snapshot.
 type WorkloadReference struct {
 	APIVersion string    `json:"apiVersion"`
@@ -196,6 +208,7 @@ type KafkaTopicStatus struct {
 type KafkaResourceStatus struct {
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
+	TopicID   string `json:"topicID,omitempty"`
 	Source    string `json:"source,omitempty"`
 	Managed   bool   `json:"managed"`
 	RouteName string `json:"routeName,omitempty"`
@@ -213,20 +226,26 @@ type KafkaSplitterMemberStatus struct {
 type KafkaSplitStatus struct {
 	ObservedGeneration int64                       `json:"observedGeneration,omitempty"`
 	ActiveGeneration   int64                       `json:"activeGeneration,omitempty"`
+	ActiveSpec         *KafkaActiveSpec            `json:"activeSpec,omitempty"`
 	Phase              string                      `json:"phase,omitempty"`
 	AdmissionMode      KafkaAdmissionMode          `json:"admissionMode,omitempty"`
 	ApplicationEnv     map[string]string           `json:"applicationEnv,omitempty"`
+	ApplicationTopics  map[string]string           `json:"applicationTopics,omitempty"`
+	ApplicationGroup   string                      `json:"applicationGroup,omitempty"`
+	TransactionalID    string                      `json:"transactionalIDPrefix,omitempty"`
+	SplitterName       string                      `json:"splitterName,omitempty"`
 	Workloads          []WorkloadReference         `json:"workloads,omitempty"`
 	SourceTopics       []KafkaTopicStatus          `json:"sourceTopics,omitempty"`
 	Resources          []KafkaResourceStatus       `json:"resources,omitempty"`
 	RouteGeneration    int64                       `json:"routeGeneration,omitempty"`
 	Members            []KafkaSplitterMemberStatus `json:"members,omitempty"`
+	ApplicationLag     *int64                      `json:"applicationLag,omitempty"`
 	Conditions         []metav1.Condition          `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=ksplit
+// +kubebuilder:resource:path=splits,scope=Namespaced,shortName=ksplit,singular=split
 // +kubebuilder:printcolumn:name="State",type=string,JSONPath=`.spec.desiredState`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
@@ -273,17 +292,20 @@ type KafkaRouteSpec struct {
 
 // KafkaRouteStatus records route resources and readiness.
 type KafkaRouteStatus struct {
-	ObservedGeneration int64              `json:"observedGeneration,omitempty"`
-	Phase              string             `json:"phase,omitempty"`
-	Group              string             `json:"group,omitempty"`
-	Topics             map[string]string  `json:"topics,omitempty"`
-	Environment        map[string]string  `json:"environment,omitempty"`
-	Conditions         []metav1.Condition `json:"conditions,omitempty"`
+	ObservedGeneration int64                 `json:"observedGeneration,omitempty"`
+	Phase              string                `json:"phase,omitempty"`
+	Group              string                `json:"group,omitempty"`
+	Topics             map[string]string     `json:"topics,omitempty"`
+	Environment        map[string]string     `json:"environment,omitempty"`
+	Resources          []KafkaResourceStatus `json:"resources,omitempty"`
+	RouteGeneration    int64                 `json:"routeGeneration,omitempty"`
+	Lag                *int64                `json:"lag,omitempty"`
+	Conditions         []metav1.Condition    `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=kroute
+// +kubebuilder:resource:path=routes,scope=Namespaced,shortName=kroute,singular=route
 // +kubebuilder:printcolumn:name="Split",type=string,JSONPath=`.spec.splitRef.name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`

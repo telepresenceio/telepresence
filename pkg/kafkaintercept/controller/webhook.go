@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -16,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
+	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/runtimeconfig"
 )
 
 // RegisterWebhooks installs validation handlers on server.
@@ -63,7 +65,11 @@ func (m podMutator) Handle(ctx context.Context, request admission.Request) admis
 	if err := json.Unmarshal(request.Object.Raw, pod); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
-	if pod.Labels["app.kubernetes.io/name"] == "telepresence-kafka" {
+	originalNamespace := pod.Namespace
+	if originalNamespace == "" {
+		pod.Namespace = request.Namespace
+	}
+	if pod.Labels["app.kubernetes.io/name"] == runtimeconfig.ProviderName {
 		return admission.Allowed("Kafka provider Pod is excluded")
 	}
 
@@ -89,18 +95,39 @@ func (m podMutator) Handle(ctx context.Context, request admission.Request) admis
 			continue
 		}
 		if split.Status.AdmissionMode == api.KafkaAdmissionBlocked {
-			return admission.Denied(fmt.Sprintf("KafkaSplit %s is changing source ownership", split.Name))
+			ensureSchedulingGate(pod, runtimeconfig.HandoffGate)
+			generations[split.Name] = strconv.FormatInt(split.Status.ActiveGeneration, 10)
+			continue
 		}
-		container := findContainer(pod.Spec.Containers, split.Spec.Container)
+		containerName := split.Spec.Container
+		application := split.Spec.Application
+		if split.Status.ActiveSpec != nil {
+			containerName = split.Status.ActiveSpec.Container
+			application = split.Status.ActiveSpec.Application
+		}
+		container := findContainer(pod.Spec.Containers, containerName)
 		if container == nil {
-			return admission.Denied(fmt.Sprintf("KafkaSplit %s selected Pod without container %s", split.Name, split.Spec.Container))
+			return admission.Denied(fmt.Sprintf("KafkaSplit %s selected Pod without container %s", split.Name, containerName))
 		}
 		for name, value := range split.Status.ApplicationEnv {
-			if prior, ok := envOwners[name]; ok {
-				return admission.Denied(fmt.Sprintf("KafkaSplits %s and %s both override %s", prior, split.Name, name))
+			if response := claimEnv(envOwners, split.Name, name); response != nil {
+				return *response
 			}
-			envOwners[name] = split.Name
 			setLiteralEnv(container, name, value)
+		}
+		for name, source := range application.ShadowCredentials {
+			if response := claimEnv(envOwners, split.Name, name); response != nil {
+				return *response
+			}
+			setValueSourceEnv(container, name, source)
+		}
+		if split.Status.TransactionalID != "" && application.TransactionalIDEnv != "" {
+			name := application.TransactionalIDEnv
+			if response := claimEnv(envOwners, split.Name, name); response != nil {
+				return *response
+			}
+			setPodUIDEnv(container)
+			setLiteralEnvLast(container, name, split.Status.TransactionalID+".$(TELEPRESENCE_KAFKA_POD_UID)")
 		}
 		generations[split.Name] = strconv.FormatInt(split.Status.ActiveGeneration, 10)
 	}
@@ -114,12 +141,33 @@ func (m podMutator) Handle(ctx context.Context, request admission.Request) admis
 	if pod.Annotations == nil {
 		pod.Annotations = make(map[string]string)
 	}
-	pod.Annotations["kafka.telepresence.io/active-generations"] = string(encoded)
+	pod.Annotations[runtimeconfig.ActiveAnnotation] = string(encoded)
+	if originalNamespace == "" {
+		pod.Namespace = ""
+	}
 	mutated, err := json.Marshal(pod)
 	if err != nil {
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	return admission.PatchResponseFromRaw(request.Object.Raw, mutated)
+}
+
+func ensureSchedulingGate(pod *corev1.Pod, name string) {
+	if slices.ContainsFunc(pod.Spec.SchedulingGates, func(gate corev1.PodSchedulingGate) bool {
+		return gate.Name == name
+	}) {
+		return
+	}
+	pod.Spec.SchedulingGates = append(pod.Spec.SchedulingGates, corev1.PodSchedulingGate{Name: name})
+}
+
+func claimEnv(owners map[string]string, split, name string) *admission.Response {
+	if prior, ok := owners[name]; ok {
+		response := admission.Denied(fmt.Sprintf("KafkaSplits %s and %s both override %s", prior, split, name))
+		return &response
+	}
+	owners[name] = split
+	return nil
 }
 
 func findContainer(containers []corev1.Container, name string) *corev1.Container {
@@ -139,6 +187,48 @@ func setLiteralEnv(container *corev1.Container, name, value string) {
 		}
 	}
 	container.Env = append(container.Env, corev1.EnvVar{Name: name, Value: value})
+}
+
+func setLiteralEnvLast(container *corev1.Container, name, value string) {
+	for i := range container.Env {
+		if container.Env[i].Name == name {
+			container.Env = append(container.Env[:i], container.Env[i+1:]...)
+			break
+		}
+	}
+	container.Env = append(container.Env, corev1.EnvVar{Name: name, Value: value})
+}
+
+func setValueSourceEnv(container *corev1.Container, name string, source api.ValueSource) {
+	env := corev1.EnvVar{Name: name, Value: source.Value}
+	if source.SecretKeyRef != nil {
+		env.Value = ""
+		env.ValueFrom = &corev1.EnvVarSource{SecretKeyRef: source.SecretKeyRef.DeepCopy()}
+	}
+	for i := range container.Env {
+		if container.Env[i].Name == name {
+			container.Env[i] = env
+			return
+		}
+	}
+	container.Env = append(container.Env, env)
+}
+
+func setPodUIDEnv(container *corev1.Container) {
+	const name = "TELEPRESENCE_KAFKA_POD_UID"
+	env := corev1.EnvVar{
+		Name: name,
+		ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{
+			APIVersion: "v1", FieldPath: "metadata.uid",
+		}},
+	}
+	for i := range container.Env {
+		if container.Env[i].Name == name {
+			container.Env[i] = env
+			return
+		}
+	}
+	container.Env = append(container.Env, env)
 }
 
 func podMatchesSnapshot(

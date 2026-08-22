@@ -17,6 +17,12 @@ import (
 // Validate checks the complete KafkaSplit contract independently of admission.
 func (s *KafkaSplit) Validate() error {
 	var errs []error
+	if s.Namespace != "" && s.Name != "" {
+		name := s.Namespace + "-" + s.Name
+		if messages := validation2.IsDNS1123Label(name); len(messages) > 0 {
+			errs = append(errs, fmt.Errorf("splitter resource name %q is invalid: %s; shorten the namespace or KafkaSplit name", name, strings.Join(messages, ", ")))
+		}
+	}
 	if s.Spec.DesiredState != DesiredStateEnabled && s.Spec.DesiredState != DesiredStateDisabled {
 		errs = append(errs, fmt.Errorf("invalid desiredState %q", s.Spec.DesiredState))
 	}
@@ -49,79 +55,111 @@ func validateConnection(connection KafkaConnectionSpec) []error {
 			errs = append(errs, fmt.Errorf("invalid bootstrap server %q: %w", server, err))
 		}
 	}
-	if tls := connection.TLS; tls != nil && (tls.Certificate == nil) != (tls.PrivateKey == nil) {
+	errs = append(errs, validateTLS(connection.TLS)...)
+	errs = append(errs, validateSASL(connection.SASL)...)
+	return errs
+}
+
+func validateTLS(tls *KafkaTLSSpec) []error {
+	if tls == nil {
+		return nil
+	}
+	var errs []error
+	if (tls.Certificate == nil) != (tls.PrivateKey == nil) {
 		errs = append(errs, errors.New("TLS certificate and privateKey must be specified together"))
 	}
-	if tls := connection.TLS; tls != nil {
-		for name, selector := range map[string]*corev1.SecretKeySelector{
-			"ca": tls.CA, "certificate": tls.Certificate, "privateKey": tls.PrivateKey,
-		} {
-			if selector != nil && (selector.Name == "" || selector.Key == "") {
-				errs = append(errs, fmt.Errorf("TLS %s Secret name and key must not be empty", name))
-			}
+	for name, selector := range map[string]*corev1.SecretKeySelector{
+		"ca": tls.CA, "certificate": tls.Certificate, "privateKey": tls.PrivateKey,
+	} {
+		if selector != nil && (selector.Name == "" || selector.Key == "") {
+			errs = append(errs, fmt.Errorf("TLS %s Secret name and key must not be empty", name))
 		}
 	}
-	if sasl := connection.SASL; sasl != nil {
-		switch sasl.Mechanism {
-		case "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512":
-			if sasl.Username == nil || sasl.Password == nil {
-				errs = append(errs, fmt.Errorf("%s requires username and password", sasl.Mechanism))
-			} else {
-				if err := validateValueSource(*sasl.Username); err != nil {
-					errs = append(errs, fmt.Errorf("%s username: %w", sasl.Mechanism, err))
-				}
-				if err := validateValueSource(*sasl.Password); err != nil {
-					errs = append(errs, fmt.Errorf("%s password: %w", sasl.Mechanism, err))
-				}
-			}
-		case "OAUTHBEARER":
-			if sasl.OAuth == nil {
-				errs = append(errs, errors.New("OAUTHBEARER requires oauth configuration"))
-			} else {
-				oauth := sasl.OAuth
-				if oauth.TokenURL == "" {
-					errs = append(errs, errors.New("OAUTHBEARER tokenURL must not be empty"))
-				}
-				if err := validateValueSource(oauth.ClientID); err != nil {
-					errs = append(errs, fmt.Errorf("OAUTHBEARER clientID: %w", err))
-				}
-				if err := validateValueSource(oauth.ClientSecret); err != nil {
-					errs = append(errs, fmt.Errorf("OAUTHBEARER clientSecret: %w", err))
-				}
-			}
-		case "GSSAPI":
-			if sasl.Kerberos == nil {
-				errs = append(errs, errors.New("GSSAPI requires kerberos configuration"))
-			} else {
-				kerberos := sasl.Kerberos
-				if kerberos.ServiceName == "" || kerberos.Realm == "" || kerberos.Config == nil {
-					errs = append(errs, errors.New("GSSAPI requires serviceName, realm, and config"))
-				}
-				if err := validateValueSource(kerberos.Username); err != nil {
-					errs = append(errs, fmt.Errorf("GSSAPI username: %w", err))
-				}
-				if (kerberos.Password == nil) == (kerberos.Keytab == nil) {
-					errs = append(errs, errors.New("GSSAPI requires exactly one of password or keytab"))
-				}
-				if kerberos.Password != nil {
-					if err := validateValueSource(*kerberos.Password); err != nil {
-						errs = append(errs, fmt.Errorf("GSSAPI password: %w", err))
-					}
-				}
-				if kerberos.Config != nil && (kerberos.Config.Name == "" || kerberos.Config.Key == "") {
-					errs = append(errs, errors.New("GSSAPI config Secret name and key must not be empty"))
-				}
-				if kerberos.Keytab != nil && (kerberos.Keytab.Name == "" || kerberos.Keytab.Key == "") {
-					errs = append(errs, errors.New("GSSAPI keytab Secret name and key must not be empty"))
-				}
-			}
-		case "AWS_MSK_IAM":
-			if sasl.AWS == nil || sasl.AWS.Region == "" {
-				errs = append(errs, errors.New("AWS_MSK_IAM requires an AWS region"))
-			}
-		default:
-			errs = append(errs, fmt.Errorf("unsupported SASL mechanism %q", sasl.Mechanism))
+	return errs
+}
+
+func validateSASL(sasl *KafkaSASLSpec) []error {
+	if sasl == nil {
+		return nil
+	}
+	switch sasl.Mechanism {
+	case "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512":
+		return validateUserPasswordSASL(sasl)
+	case "OAUTHBEARER":
+		return validateOAuthSASL(sasl.OAuth)
+	case "GSSAPI":
+		return validateKerberosSASL(sasl.Kerberos)
+	case "AWS_MSK_IAM":
+		if sasl.AWS == nil || sasl.AWS.Region == "" {
+			return []error{errors.New("AWS_MSK_IAM requires an AWS region")}
 		}
+		return nil
+	default:
+		return []error{fmt.Errorf("unsupported SASL mechanism %q", sasl.Mechanism)}
+	}
+}
+
+func validateUserPasswordSASL(sasl *KafkaSASLSpec) []error {
+	if sasl.Username == nil || sasl.Password == nil {
+		return []error{fmt.Errorf("%s requires username and password", sasl.Mechanism)}
+	}
+	var errs []error
+	if err := validateValueSource(*sasl.Username); err != nil {
+		errs = append(errs, fmt.Errorf("%s username: %w", sasl.Mechanism, err))
+	}
+	if err := validateValueSource(*sasl.Password); err != nil {
+		errs = append(errs, fmt.Errorf("%s password: %w", sasl.Mechanism, err))
+	} else if sasl.Password.SecretKeyRef == nil {
+		errs = append(errs, fmt.Errorf("%s password must use secretKeyRef", sasl.Mechanism))
+	}
+	return errs
+}
+
+func validateOAuthSASL(oauth *KafkaOAuthSpec) []error {
+	if oauth == nil {
+		return []error{errors.New("OAUTHBEARER requires oauth configuration")}
+	}
+	var errs []error
+	if oauth.TokenURL == "" {
+		errs = append(errs, errors.New("OAUTHBEARER tokenURL must not be empty"))
+	}
+	if err := validateValueSource(oauth.ClientID); err != nil {
+		errs = append(errs, fmt.Errorf("OAUTHBEARER clientID: %w", err))
+	}
+	if err := validateValueSource(oauth.ClientSecret); err != nil {
+		errs = append(errs, fmt.Errorf("OAUTHBEARER clientSecret: %w", err))
+	} else if oauth.ClientSecret.SecretKeyRef == nil {
+		errs = append(errs, errors.New("OAUTHBEARER clientSecret must use secretKeyRef"))
+	}
+	return errs
+}
+
+func validateKerberosSASL(kerberos *KafkaKerberosSpec) []error {
+	if kerberos == nil {
+		return []error{errors.New("GSSAPI requires kerberos configuration")}
+	}
+	var errs []error
+	if kerberos.ServiceName == "" || kerberos.Realm == "" || kerberos.Config == nil {
+		errs = append(errs, errors.New("GSSAPI requires serviceName, realm, and config"))
+	}
+	if err := validateValueSource(kerberos.Username); err != nil {
+		errs = append(errs, fmt.Errorf("GSSAPI username: %w", err))
+	}
+	if (kerberos.Password == nil) == (kerberos.Keytab == nil) {
+		errs = append(errs, errors.New("GSSAPI requires exactly one of password or keytab"))
+	}
+	if kerberos.Password != nil {
+		if err := validateValueSource(*kerberos.Password); err != nil {
+			errs = append(errs, fmt.Errorf("GSSAPI password: %w", err))
+		} else if kerberos.Password.SecretKeyRef == nil {
+			errs = append(errs, errors.New("GSSAPI password must use secretKeyRef"))
+		}
+	}
+	if kerberos.Config != nil && (kerberos.Config.Name == "" || kerberos.Config.Key == "") {
+		errs = append(errs, errors.New("GSSAPI config Secret name and key must not be empty"))
+	}
+	if kerberos.Keytab != nil && (kerberos.Keytab.Name == "" || kerberos.Keytab.Key == "") {
+		errs = append(errs, errors.New("GSSAPI keytab Secret name and key must not be empty"))
 	}
 	return errs
 }
@@ -197,6 +235,8 @@ func validateApplication(source KafkaSourceSpec, application KafkaApplicationSpe
 		addEnv("shadowCredentials", name)
 		if err := validateValueSource(value); err != nil {
 			errs = append(errs, fmt.Errorf("shadow credential %q: %w", name, err))
+		} else if value.SecretKeyRef == nil {
+			errs = append(errs, fmt.Errorf("shadow credential %q must use secretKeyRef", name))
 		}
 	}
 	return errs
@@ -214,11 +254,13 @@ func validateShadows(source KafkaSourceSpec, shadows KafkaShadowSpec) []error {
 	switch shadows.Mode {
 	case ShadowModeManaged:
 		if shadows.Managed == nil || shadows.Preprovisioned != nil {
-			errs = append(errs, errors.New("Managed shadows require only the managed configuration"))
+			errs = append(errs, errors.New("managed shadows require only the managed configuration"))
+		} else if factor := shadows.Managed.ReplicationFactor; factor != nil && (*factor < 1 || *factor > 32767) {
+			errs = append(errs, errors.New("managed replicationFactor must be between 1 and 32767"))
 		}
 	case ShadowModePreprovisioned:
 		if shadows.Preprovisioned == nil || shadows.Managed != nil {
-			errs = append(errs, errors.New("Preprovisioned shadows require only the preprovisioned configuration"))
+			errs = append(errs, errors.New("preprovisioned shadows require only the preprovisioned configuration"))
 			break
 		}
 		pre := shadows.Preprovisioned
