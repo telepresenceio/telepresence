@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -100,6 +101,26 @@ func TestPreprovisionedResourceValidation(t *testing.T) {
 			require.ErrorContains(t, split.Validate(), tt.message)
 		})
 	}
+}
+
+func TestKafkaAuthenticationValidation(t *testing.T) {
+	split := validSplit()
+	split.Spec.Connection.SASL = &KafkaSASLSpec{
+		Mechanism: "GSSAPI",
+		Kerberos: &KafkaKerberosSpec{
+			ServiceName: "kafka", Realm: "EXAMPLE.COM", Username: ValueSource{Value: "alice"},
+			Password: &ValueSource{Value: "password"},
+			Keytab:   &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "kafka"}, Key: "client.keytab"},
+			Config:   &corev1.SecretKeySelector{LocalObjectReference: corev1.LocalObjectReference{Name: "kafka"}, Key: "krb5.conf"},
+		},
+	}
+	require.ErrorContains(t, split.Validate(), "exactly one")
+
+	split.Spec.Connection.SASL = &KafkaSASLSpec{
+		Mechanism: "OAUTHBEARER",
+		OAuth:     &KafkaOAuthSpec{ClientID: ValueSource{Value: "id"}, ClientSecret: ValueSource{Value: "secret"}},
+	}
+	require.ErrorContains(t, split.Validate(), "tokenURL")
 }
 
 func TestKafkaRouteValidation(t *testing.T) {

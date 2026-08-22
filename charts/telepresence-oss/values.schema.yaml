@@ -577,6 +577,53 @@ properties:
     description: isCI can be set to force the traffic-manager namespace to be "ambassador"
     type: boolean
 
+  kafka:
+    description: Optional Kafka personal-intercept provider configuration.
+    type: object
+    additionalProperties: false
+    properties:
+      enabled:
+        description: Install the Kafka CRDs, controller, splitter support, and admission webhook.
+        type: boolean
+      replicas:
+        description: Number of controller replicas serving admission. One replica leads reconciliation.
+        type: integer
+        minimum: 2
+      image:
+        type: object
+        additionalProperties: false
+        properties:
+          name:
+            description: Kafka provider image name.
+            type: string
+          pullPolicy:
+            description: Pull policy for the Kafka provider image. Empty inherits image.pullPolicy.
+            anyOf:
+              - type: string
+                const: ""
+              - $ref: "#/$defs/pullPolicy"
+          registry:
+            description: Kafka provider image registry. Empty inherits image.registry.
+            type: string
+      resources:
+        description: Resource requests and limits for each Kafka controller.
+        $ref: "#/$defs/resourceRequirements"
+      webhook:
+        type: object
+        additionalProperties: false
+        properties:
+          failurePolicy:
+            type: string
+            enum: [Fail, Ignore]
+          port:
+            type: integer
+            minimum: 1
+            maximum: 65535
+          timeoutSeconds:
+            type: integer
+            minimum: 1
+            maximum: 30
+
   labels:
     description: Common labels applied to all resources created by this chart
     type: object
