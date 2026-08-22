@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.34.0
 <Note>
+	<Title type="feature" docs="reference/kafka-intercepts">Personal Kafka consumer intercepts</Title>
+	<Body>
+The optional Kafka provider lets multiple developers consume disjoint personal message routes while the in-cluster application continues to receive unmatched records. A namespaced <code>KafkaSplit</code> controls workload cutover, and mandatory Kafka transactions atomically publish each record to one shadow topic while advancing the original consumer-group offset.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="howtos/monitoring">Prometheus metrics for the traffic-manager's gRPC requests</Title>
 	<Body>
 The traffic-manager publishes two new Prometheus metrics: <code>telepresence_grpc_request_count</code> counts the completed gRPC requests by listener, method and status code, and <code>telepresence_grpc_request_duration_seconds</code> records the duration of unary requests. They show which calls fail, how often, and how long they take.
