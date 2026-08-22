@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.33.0
 <Note>
+	<Title type="feature" docs="reference/kafka-intercepts">Personal Kafka consumer intercepts</Title>
+	<Body>
+The optional Kafka provider lets multiple developers consume disjoint personal message routes while the in-cluster application continues to receive unmatched records. A namespaced <code>KafkaSplit</code> controls workload cutover, and mandatory Kafka transactions atomically publish each record to one shadow topic while advancing the original consumer-group offset.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Improve selected-intercept tunnel stability</Title>
 	<Body>
 Selected-intercept tunnels now reconnect agent dial watchers with backoff, clean up abandoned forwards more carefully, use separate timeouts for agent connections and intercepted endpoints, and reject dial requests when responder capacity is full instead of letting work accumulate. The default for the <code>endpointDial</code> timeout is raised from 3 to 15 seconds, so a connection to a cluster address that is not yet accepting connections is retried for longer before it fails.

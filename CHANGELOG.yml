@@ -27,6 +27,16 @@ items:
   - version: 2.33.0
     date: (TBD)
     notes:
+      - type: feature
+        title: Personal Kafka consumer intercepts
+        body: >-
+          The optional Kafka provider lets multiple developers consume
+          disjoint personal message routes while the in-cluster application
+          continues to receive unmatched records. A namespaced
+          <code>KafkaSplit</code> controls workload cutover, and mandatory
+          Kafka transactions atomically publish each record to one shadow
+          topic while advancing the original consumer-group offset.
+        docs: reference/kafka-intercepts
       - type: bugfix
         title: Improve selected-intercept tunnel stability
         body: >-

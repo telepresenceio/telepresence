@@ -29,11 +29,16 @@ Intercept a service
       --http-path-equal strings        HTTP path filters. Only requests with matching paths will be intercepted. Exact path matching.
       --http-path-prefix strings       HTTP path prefix filters. Only requests with matching path prefixes will be intercepted.
       --http-path-regex strings        HTTP path regex filters. Only requests with paths matching the regex will be intercepted.
+      --kafka-header strings           Exact Kafka last-header match as name=value; use base64: for binary data or text: for an escaped literal
+      --kafka-key string               Exact Kafka record key; use base64: for binary data or text: for an escaped literal
+      --kafka-key-prefix string        Kafka record-key prefix; use base64: for binary data or text: for an escaped literal
+      --kafka-only                     Attach Kafka splits without intercepting network traffic
       --local-mount-port uint16        Do not mount remote directories. Instead, expose this port on localhost to an external mounter
       --mechanism mechanism            Which extension mechanism to use (default &quot;tcp&quot;)
       --metadata strings               Metadata to attach to the intercept. Use --metadata key=value to set a single key/value pair, or --metadata key1=value1 --metadata key2=value2 to set multiple key/value pairs. The metadata can be retrieved using the Telepresence API server.
       --mount string                   The absolute path for the root directory where volumes will be mounted, $TELEPRESENCE_ROOT. Use &quot;true&quot; to have Telepresence pick a random mount point (default). Use &quot;false&quot; to disable filesystem mounting entirely. Append &quot;:ro&quot; to mount everything read-only. (default &quot;true&quot;)
   -n, --namespace string               Namespace containing the workload to intercept. Defaults to the connected namespace
+      --no-kafka                       Do not attach matching Kafka splits
       --node-agent                     Serve this intercept with a node-hosted traffic-agent (a manager-created Job that enters the target pod's namespaces) instead of injecting a sidecar. Requires the traffic-manager to have node-agent mode enabled.
       --plaintext                      Use plaintext instead of TLS when communicating with the intercept handler
   -p, --port strings                   Local ports to forward to. Use &lt;local port&gt;:&lt;identifier&gt; to uniquely identify service ports, where the &lt;identifier&gt; is the port name or number. With --docker-run and a daemon that doesn't run in docker', use &lt;local port&gt;:&lt;container port&gt; or &lt;local port&gt;:&lt;container port&gt;:&lt;identifier&gt;.
