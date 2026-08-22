@@ -687,7 +687,12 @@ func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
 // restore their agent configuration before agents can review them. Permanent
 // replacement failures are logged and skipped. On a retryable error,
 // the caller must remove the client session to clean up partial restoration.
-func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) error {
+func (s *State) RestoreIntercepts(
+	ctx context.Context,
+	intercepts []*rpc.InterceptInfo,
+	now time.Time,
+	initializers ...func(*Intercept),
+) error {
 	nodeAgentWatches := make(map[nodeAgentWatchKey]struct{})
 	serviceInterceptWatches := make(map[string]struct{})
 	for _, intercept := range intercepts {
@@ -730,7 +735,10 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 		is, _ := s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
 			is := &Intercept{InterceptInfo: intercept}
 			s.initializeParticipants(is)
-			if err == nil && !spec.NodeAgent {
+			for _, initialize := range initializers {
+				initialize(is)
+			}
+			if err == nil && !spec.NodeAgent && !spec.GetKafka().GetOnly() {
 				is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
 					return s.restoreAppContainer(ctx, interceptInfo, wl)
 				})
@@ -1118,6 +1126,18 @@ func (s *State) UninstallAgents(ctx context.Context, ur *rpc.UninstallAgentsRequ
 
 func (s *State) GetIntercept(interceptID string) (*Intercept, bool) {
 	return s.intercepts.Load(interceptID)
+}
+
+// ClientIntercepts returns a stable snapshot of one client's intercepts.
+func (s *State) ClientIntercepts(sessionID string) []*rpc.InterceptInfo {
+	var result []*rpc.InterceptInfo
+	s.intercepts.Range(func(_ string, intercept *Intercept) bool {
+		if intercept.GetClientSession().GetSessionId() == sessionID && !IsChildIntercept(intercept.Spec) {
+			result = append(result, proto.Clone(intercept.InterceptInfo).(*rpc.InterceptInfo))
+		}
+		return true
+	})
+	return result
 }
 
 func (s *State) WatchIntercepts(

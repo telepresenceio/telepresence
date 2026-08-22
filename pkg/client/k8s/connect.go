@@ -53,11 +53,16 @@ type connectResult struct {
 	conn *grpc.ClientConn
 	name string
 	ver  semver.Version
+	info *manager.VersionInfo2
 	err  error
 }
 
 func (r connectResult) get() (*grpc.ClientConn, string, semver.Version, error) {
 	return r.conn, r.name, r.ver, r.err
+}
+
+func (r connectResult) getWithInfo() (*grpc.ClientConn, string, semver.Version, *manager.VersionInfo2, error) {
+	return r.conn, r.name, r.ver, r.info, r.err
 }
 
 // managerDialer is the set of cluster operations connectSequence needs,
@@ -104,6 +109,19 @@ func (d clusterDialer) canReachKnownName() (bool, error) {
 // known-name dial is retried with backoff instead of failing outright, since
 // a minimal-RBAC client has no other path to the manager.
 func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
+	return kc.connectToManager(dialCtx, namespace).get()
+}
+
+// ConnectToManagerWithInfo returns the version handshake used to establish
+// the connection so callers do not repeat the Version RPC.
+func (kc *Cluster) ConnectToManagerWithInfo(
+	dialCtx context.Context,
+	namespace string,
+) (*grpc.ClientConn, string, semver.Version, *manager.VersionInfo2, error) {
+	return kc.connectToManager(dialCtx, namespace).getWithInfo()
+}
+
+func (kc *Cluster) connectToManager(dialCtx context.Context, namespace string) connectResult {
 	dialCtx, cancel := client.GetConfig(kc).Timeouts().TimeoutContext(dialCtx, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
@@ -114,7 +132,7 @@ func (kc *Cluster) ConnectToManager(dialCtx context.Context, namespace string) (
 	}
 
 	knownPap := &portforward.PodAddress{Name: trafficManagerPodName, Namespace: namespace, Port: trafficManagerAPIPort, NoLookup: true}
-	return connectSequence(dialCtx, knownNameProbeTimeout, clusterDialer{kc: kc, namespace: namespace}, knownPap).get()
+	return connectSequence(dialCtx, knownNameProbeTimeout, clusterDialer{kc: kc, namespace: namespace}, knownPap)
 }
 
 // connectSequence implements the known-name / discovery / forbidden-retry
@@ -238,7 +256,7 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 	if err != nil {
 		return connectResult{err: err}
 	}
-	name, ver, err := kc.finishConnect(dialCtx, conn, func(vi *manager.VersionInfo2) error {
+	name, ver, info, err := kc.finishConnect(dialCtx, conn, func(vi *manager.VersionInfo2) error {
 		hasX509Path := false
 		if hasX509Source {
 			if authPort := vi.GetAuthX509Port(); authPort != 0 {
@@ -258,7 +276,7 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 		}
 		return nil
 	})
-	return connectResult{conn: conn, name: name, ver: ver, err: err}
+	return connectResult{conn: conn, name: name, ver: ver, info: info, err: err}
 }
 
 // finishConnect runs the post-dial handshake shared by both manager
@@ -269,35 +287,35 @@ func (kc *Cluster) finishConnect(
 	dialCtx context.Context,
 	conn *grpc.ClientConn,
 	authCheck func(vi *manager.VersionInfo2) error,
-) (name string, ver semver.Version, err error) {
+) (name string, ver semver.Version, info *manager.VersionInfo2, err error) {
 	defer func() {
 		if err != nil {
 			conn.Close()
 		}
 	}()
-	vi, err := getVersion(dialCtx, manager.NewManagerClient(conn))
+	info, err = getVersion(dialCtx, manager.NewManagerClient(conn))
 	if err != nil {
-		return "", ver, client.CheckTimeout(dialCtx, fmt.Errorf("dial manager: %w", err))
+		return "", ver, nil, client.CheckTimeout(dialCtx, fmt.Errorf("dial manager: %w", err))
 	}
-	if err = authCheck(vi); err != nil {
-		return "", ver, err
+	if err = authCheck(info); err != nil {
+		return "", ver, info, err
 	}
-	verStr := strings.TrimPrefix(vi.Version, "v")
+	verStr := strings.TrimPrefix(info.Version, "v")
 	ver, err = semver.Parse(verStr)
 	if err != nil {
 		err = fmt.Errorf("failed to parse manager version %q: %w", verStr, err)
 	}
-	return vi.Name, ver, err
+	return info.Name, ver, info, err
 }
 
 // connectExternal dials cluster.managerAddress directly, with no Kubernetes
 // API calls. It presents exactly one credential in the TLS handshake --
 // bearer token if available, otherwise a client certificate -- since the
 // external listener rejects a call carrying both.
-func (kc *Cluster) connectExternal(dialCtx context.Context, addr string) (conn *grpc.ClientConn, name string, ver semver.Version, err error) {
+func (kc *Cluster) connectExternal(dialCtx context.Context, addr string) (result connectResult) {
 	hostPort, serverName, err := parseManagerAddress(addr)
 	if err != nil {
-		return nil, "", ver, err
+		return connectResult{err: err}
 	}
 
 	bearerSrc := newManagerTokenSource(kc.Kubeconfig)
@@ -311,7 +329,7 @@ func (kc *Cluster) connectExternal(dialCtx context.Context, addr string) (conn *
 	}
 	creds, err := managerServerCredentials(serverName, client.GetConfig(kc).Cluster().ManagerServerCA, getClientCert)
 	if err != nil {
-		return nil, "", ver, err
+		return connectResult{err: err}
 	}
 
 	opts := []grpc.DialOption{
@@ -329,14 +347,14 @@ func (kc *Cluster) connectExternal(dialCtx context.Context, addr string) (conn *
 		clog.Debugf(kc, "the kubeconfig yields no bearer token or client certificate for the external traffic-manager connection")
 	}
 
-	conn, err = grpcClient.DialGRPC(dialCtx, "dns:///"+hostPort, opts...)
+	conn, err := grpcClient.DialGRPC(dialCtx, "dns:///"+hostPort, opts...)
 	if err != nil {
-		return nil, "", ver, err
+		return connectResult{err: err}
 	}
-	name, ver, err = kc.finishConnect(dialCtx, conn, func(vi *manager.VersionInfo2) error {
+	name, ver, info, err := kc.finishConnect(dialCtx, conn, func(vi *manager.VersionInfo2) error {
 		return managerAuthError(vi, hasBearerSource, hasClientCert)
 	})
-	return conn, name, ver, err
+	return connectResult{conn: conn, name: name, ver: ver, info: info, err: err}
 }
 
 // managerAuthError returns a user-facing error when vi reports that the
