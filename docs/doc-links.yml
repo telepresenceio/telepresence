@@ -22,6 +22,8 @@
   items:
     - title: Code and debug an application locally
       link: howtos/attach
+    - title: Intercept Kafka consumers
+      link: howtos/kafka-intercepts
     - title: Choose between the sidecar and the node-agent
       link: howtos/agent-modes
     - title: Use Telepresence with Docker
@@ -291,6 +293,8 @@
       link: reference/route-controller
     - title: Node-hosted Traffic Agent
       link: reference/node-agent
+    - title: Kafka personal intercepts
+      link: reference/kafka-intercepts
 - title: Comparisons
   items:
     - title: mirrord vs Telepresence

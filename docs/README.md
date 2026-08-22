@@ -16,6 +16,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Glossary](concepts/glossary.md)
 - How do I...
   - [Code and debug an application locally](howtos/attach.md)
+  - [Intercept Kafka consumers](howtos/kafka-intercepts.md)
   - [Choose between the sidecar and the node-agent](howtos/agent-modes.md)
   - [Use Telepresence with Docker](howtos/docker.md)
   - [Extend Docker Compose with Telepresence](howtos/docker-compose.md)
@@ -146,6 +147,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
   - [Traffic Agent Packet Routing](reference/agent-packet-routing.md)
   - [Routing Loop Prevention on Local Clusters](reference/route-controller.md)
   - [Node-hosted Traffic Agent](reference/node-agent.md)
+  - [Kafka personal intercepts](reference/kafka-intercepts.md)
 - Comparisons
   - [mirrord vs Telepresence](compare/mirrord.md)
   - [Telepresence vs Gefyra](compare/gefyra.md)
