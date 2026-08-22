@@ -69,6 +69,14 @@ type Command struct {
 	HTTPPathPrefixFilters []string // --http-path-prefix paths for HTTP path filtering (prefix match)
 	HTTPPathRegexFilters  []string // --http-path-regex paths for HTTP path filtering (regex match)
 	Plaintext             bool     // --plaintext use plaintext instead of TLS when communicating with the intercept handler
+
+	// Kafka personal-intercept fields.
+	NoKafka        bool
+	KafkaOnly      bool
+	KafkaHeaders   []string
+	KafkaKey       string
+	KafkaKeyPrefix string
+	kafkaFlags     bool
 }
 
 // UsesHTTPMechanism returns true if any HTTP-specific flags were provided,
@@ -130,6 +138,7 @@ func tryParseHeaderWithSeparator(header, separator string) (string, string, bool
 }
 
 func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
+	c.kafkaFlags = !c.Wiretap
 	what := "intercept"
 	how := "intercepted"
 	if c.Wiretap {
@@ -192,6 +201,14 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 		fmt.Sprintf(`HTTP path regex filters. Only requests with paths matching the regex will be %s.`, how))
 
 	flagSet.BoolVar(&c.Plaintext, "plaintext", false, "Use plaintext instead of TLS when communicating with the intercept handler")
+	if !c.Wiretap {
+		flagSet.BoolVar(&c.NoKafka, "no-kafka", false, "Do not attach matching Kafka splits")
+		flagSet.BoolVar(&c.KafkaOnly, "kafka-only", false, "Attach Kafka splits without intercepting network traffic")
+		flagSet.StringSliceVar(&c.KafkaHeaders, "kafka-header", nil,
+			"Exact Kafka last-header match as name=value; use base64: for binary data or text: for an escaped literal")
+		flagSet.StringVar(&c.KafkaKey, "kafka-key", "", "Exact Kafka record key; use base64: for binary data or text: for an escaped literal")
+		flagSet.StringVar(&c.KafkaKeyPrefix, "kafka-key-prefix", "", "Kafka record-key prefix; use base64: for binary data or text: for an escaped literal")
+	}
 
 	flagSet.BoolVar(&c.NodeAgent, "node-agent", false,
 		"Serve this intercept with a node-hosted traffic-agent (a manager-created Job that enters the target pod's namespaces) instead of injecting a sidecar. "+
@@ -253,6 +270,9 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 		}
 	}
 	c.FormattedOutput = output.WantsFormatted(cmd)
+	if err := c.validateKafkaFlags(cmd); err != nil {
+		return err
+	}
 
 	for _, meta := range c.Metadata {
 		if _, _, err := parseKeyValue(meta); err != nil {
@@ -293,8 +313,16 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 			c.Ports = []string{strconv.Itoa(dp)}
 		}
 	}
+	if c.KafkaOnly {
+		c.Ports = nil
+	}
 	if err := c.MountFlags.Validate(cmd); err != nil {
 		return err
+	}
+	if c.KafkaOnly {
+		c.MountFlags.Enabled = false
+		c.MountFlags.Mount = ""
+		c.MountFlags.LocalMountPort = 0
 	}
 	if c.DockerFlags.Mount != "" && !c.MountFlags.Enabled {
 		return errors.New("--docker-mount cannot be used with --mount=false")
@@ -313,6 +341,63 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 
 	clog.Debugf(cmd.Context(), "Docker flags = %v", c.DockerFlags)
 	return nil
+}
+
+func (c *Command) validateKafkaFlags(cmd *cobra.Command) error {
+	filtered := c.KafkaOnly || len(c.KafkaHeaders) > 0 || c.KafkaKey != "" || c.KafkaKeyPrefix != ""
+	if c.Wiretap && (c.NoKafka || filtered) {
+		return errcat.User.New("Kafka routing flags cannot be used with wiretap")
+	}
+	if c.NoKafka && filtered {
+		return errcat.User.New("--no-kafka cannot be combined with Kafka routing flags")
+	}
+	if c.KafkaKey != "" && c.KafkaKeyPrefix != "" {
+		return errcat.User.New("--kafka-key and --kafka-key-prefix are mutually exclusive")
+	}
+	for _, header := range c.KafkaHeaders {
+		_, value, err := parseKafkaHeader(header)
+		if err != nil {
+			return errcat.User.Newf("invalid --kafka-header: %v", err)
+		}
+		if _, err := kafkaBytes(value); err != nil {
+			return errcat.User.Newf("invalid --kafka-header: %v", err)
+		}
+	}
+	for _, flag := range []struct {
+		name  string
+		value string
+	}{
+		{name: "--kafka-key", value: c.KafkaKey},
+		{name: "--kafka-key-prefix", value: c.KafkaKeyPrefix},
+	} {
+		if _, err := kafkaBytes(flag.value); err != nil {
+			return errcat.User.Newf("invalid %s: %v", flag.name, err)
+		}
+	}
+	if !c.KafkaOnly {
+		return nil
+	}
+	for _, name := range []string{
+		"port", "service", "address", "mount", "docker-mount", "from-pod", "http-header",
+		"http-path-equal", "http-path-prefix", "http-path-regex", "to-pod", "node-agent",
+	} {
+		if flag := cmd.Flags().Lookup(name); flag != nil && flag.Changed {
+			return errcat.User.Newf("--kafka-only cannot be combined with --%s", name)
+		}
+	}
+	if c.Replace || c.Wiretap {
+		return errcat.User.New("--kafka-only cannot be combined with replace or wiretap")
+	}
+	return nil
+}
+
+func parseKafkaHeader(value string) (string, string, error) {
+	name, match, ok := strings.Cut(value, "=")
+	name = strings.TrimSpace(name)
+	if !ok || name == "" {
+		return "", "", fmt.Errorf("must be name=value")
+	}
+	return name, match, nil
 }
 
 func (c *Command) ValidateReplace(cmd *cobra.Command, positional []string) error {

@@ -209,14 +209,17 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 
 		pa := ic.podAccess()
 		var err error
+		kafkaOnly := ii.Spec.GetKafka().GetOnly()
 		agentGone := false
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
-			err = s.WithRootClient(ic.ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
-				return pa.ensureAccess(ctx, rd)
-			})
-			if _, ok := s.agentless[ii.Id]; ok && err == nil {
-				delete(s.agentless, ii.Id)
-				clog.Infof(s, "intercept %s re-attached to pod %s", ii.Spec.Name, pa.podIP)
+			if !kafkaOnly {
+				err = s.WithRootClient(ic.ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
+					return pa.ensureAccess(ctx, rd)
+				})
+				if _, ok := s.agentless[ii.Id]; ok && err == nil {
+					delete(s.agentless, ii.Id)
+					clog.Infof(s, "intercept %s re-attached to pod %s", ii.Spec.Name, pa.podIP)
+				}
 			}
 		} else {
 			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
@@ -239,7 +242,7 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 				intercept: ic,
 				err:       err,
 			}
-			if err == nil {
+			if err == nil && !kafkaOnly {
 				ir.mountsDone = pat.getOrCreateMountsDone(pa)
 			} else {
 				md := make(chan struct{})
@@ -261,6 +264,9 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 			if !agentGone {
 				clog.Error(s, err)
 			}
+			continue
+		}
+		if kafkaOnly {
 			continue
 		}
 
@@ -564,17 +570,38 @@ func requireQuicTunnelAvailable(ctx context.Context, mc quicTunnelEndpointGetter
 	return nil
 }
 
+func prepareKafkaIntercept(spec *manager.InterceptSpec, supported bool) (bool, error) {
+	kafka := spec.GetKafka()
+	if kafka == nil {
+		return false, nil
+	}
+	if supported {
+		return kafka.GetOnly(), nil
+	}
+	if kafka.GetOnly() || len(kafka.GetHeaders()) > 0 || len(kafka.GetKey()) > 0 || len(kafka.GetKeyPrefix()) > 0 {
+		return false, errcat.User.New("the traffic-manager does not support Kafka personal intercepts")
+	}
+	spec.Kafka = nil
+	return false, nil
+}
+
 func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, error) {
 	spec := ir.Spec
 	kind := "intercept"
 	if spec.Replace {
 		kind = "replace"
 	}
-	if err := requireAgentPortForward(ctx, kind); err != nil {
+	kafkaOnly, err := prepareKafkaIntercept(spec, s.managerKafkaIntercepts)
+	if err != nil {
 		return nil, err
 	}
-	if err := requireQuicTunnelAvailable(ctx, s.ManagerClient(), s.SessionInfo(), kind); err != nil {
-		return nil, err
+	if !kafkaOnly {
+		if err := requireAgentPortForward(ctx, kind); err != nil {
+			return nil, err
+		}
+		if err := requireQuicTunnelAvailable(ctx, s.ManagerClient(), s.SessionInfo(), kind); err != nil {
+			return nil, err
+		}
 	}
 	if spec.Namespace == "" {
 		spec.Namespace = s.Namespace
@@ -604,8 +631,8 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		return nil, errcat.User.Newf("traffic-manager version %s has no support for node-agents", s.ManagerVersion())
 	}
 
-	_, err := netip.ParseAddr(spec.TargetHost)
-	if err != nil {
+	_, err = netip.ParseAddr(spec.TargetHost)
+	if err != nil && !kafkaOnly {
 		// The targetHost is not a valid IP. Treat it as a name and create a synthetic IP for it.
 		rndIP, err := uuid.NewRandom()
 		if err != nil {
@@ -651,8 +678,10 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	if pi.Error != "" {
 		return nil, errcat.Category(pi.ErrorCategory).New(pi.Error)
 	}
-	if er := s.ensureNoPortConflict(spec, pi); er != nil {
-		return nil, er
+	if !kafkaOnly {
+		if er := s.ensureNoPortConflict(spec, pi); er != nil {
+			return nil, er
+		}
 	}
 
 	iInfo := &interceptInfo{preparedIntercept: pi}
