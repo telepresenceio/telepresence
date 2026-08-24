@@ -21,10 +21,7 @@ import (
 )
 
 func TestManagedShadowsAndTransactionalDrain(t *testing.T) {
-	brokers := strings.FieldsFunc(os.Getenv("TP_TEST_KAFKA_BROKERS"), func(r rune) bool { return r == ',' })
-	if len(brokers) == 0 {
-		t.Skip("TP_TEST_KAFKA_BROKERS is not set")
-	}
+	brokers := testKafkaBrokers(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
 	defer cancel()
 	client, err := kgo.NewClient(kgo.SeedBrokers(brokers...))
@@ -118,4 +115,13 @@ func TestManagedShadowsAndTransactionalDrain(t *testing.T) {
 	// group deletion rather than treating the missing topic as an error.
 	require.NoError(t, manager.DeleteManaged(ctx, session.Resources))
 	require.NoError(t, manager.DeleteManaged(ctx, session.Resources))
+}
+
+func testKafkaBrokers(t *testing.T) []string {
+	t.Helper()
+	raw := os.Getenv("TP_TEST_KAFKA_BROKERS")
+	if raw == "" {
+		t.Skip("TP_TEST_KAFKA_BROKERS is not set")
+	}
+	return strings.Split(raw, ",")
 }

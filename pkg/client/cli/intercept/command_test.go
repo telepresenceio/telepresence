@@ -54,7 +54,7 @@ func TestStateCreateRequestNamespace(t *testing.T) {
 func TestStateCreateRequestKafkaPredicate(t *testing.T) {
 	ctx := daemon.WithUserClient(context.Background(), createRequestUserClient{})
 	st := NewState(&Command{
-		Name: "local", AgentName: "checkout", Mechanism: "tcp", kafkaFlags: true,
+		Name: "local", AgentName: "checkout", Mechanism: "tcp", kafkaEnabled: true,
 		KafkaOnly: true, KafkaHeaders: []string{"tenant=blue", "binary=base64:AP8="}, KafkaKeyPrefix: "order-",
 	}, nil)
 	req, err := st.CreateRequest(ctx)
@@ -63,6 +63,38 @@ func TestStateCreateRequestKafkaPredicate(t *testing.T) {
 	require.Equal(t, []byte("order-"), req.Spec.Kafka.KeyPrefix)
 	require.Equal(t, []byte("blue"), req.Spec.Kafka.Headers[0].Value)
 	require.Equal(t, []byte{0, 255}, req.Spec.Kafka.Headers[1].Value)
+}
+
+// Only the intercept flag set enables Kafka attachment: replace commands and
+// programmatically built Commands must never request a Kafka spec.
+func TestKafkaRequestedOnlyByInterceptCommands(t *testing.T) {
+	ctx := daemon.WithUserClient(context.Background(), createRequestUserClient{})
+
+	replace := &Command{Name: "local", AgentName: "checkout", Mechanism: "tcp", Replace: true}
+	replace.AddReplaceFlags(&cobra.Command{Use: "replace"})
+	replace.Ports = []string{"8080"}
+	req, err := NewState(replace, nil).CreateRequest(ctx)
+	require.NoError(t, err)
+	require.Nil(t, req.Spec.Kafka)
+
+	manifest := &Command{
+		Name: "local", AgentName: "checkout", Mechanism: "tcp", Replace: true, NoDefaultPort: true,
+	}
+	req, err = NewState(manifest, nil).CreateRequest(ctx)
+	require.NoError(t, err)
+	require.Nil(t, req.Spec.Kafka)
+
+	intercept := &Command{Name: "local", AgentName: "checkout", Mechanism: "tcp"}
+	intercept.AddInterceptFlags(&cobra.Command{Use: "intercept"})
+	req, err = NewState(intercept, nil).CreateRequest(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, req.Spec.Kafka)
+
+	wiretap := &Command{Name: "local", AgentName: "checkout", Mechanism: "tcp", Wiretap: true}
+	wiretap.AddInterceptFlags(&cobra.Command{Use: "wiretap"})
+	req, err = NewState(wiretap, nil).CreateRequest(ctx)
+	require.NoError(t, err)
+	require.Nil(t, req.Spec.Kafka)
 }
 
 func TestKafkaFlagValidation(t *testing.T) {

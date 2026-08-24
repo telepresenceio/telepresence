@@ -257,11 +257,12 @@ func (r *SplitReconciler) replacePods(
 	if err := r.List(ctx, pods, client.InNamespace(split.Namespace)); err != nil {
 		return false, "", err
 	}
+	resolver := &replicaSetResolver{reader: r.Client}
 	ready := int32(0)
 	stale := 0
 	for i := range pods.Items {
 		pod := &pods.Items[i]
-		matches, err := podMatchesSnapshot(ctx, r.Client, pod, split.Status.Workloads)
+		matches, err := podMatchesSnapshot(ctx, resolver, pod, split.Status.Workloads)
 		if err != nil {
 			return false, "", err
 		}
@@ -296,10 +297,11 @@ func (r *SplitReconciler) removePods(ctx context.Context, split *api.KafkaSplit)
 	if err := r.List(ctx, pods, client.InNamespace(split.Namespace)); err != nil {
 		return false, "", err
 	}
+	resolver := &replicaSetResolver{reader: r.Client}
 	remaining := 0
 	for i := range pods.Items {
 		pod := &pods.Items[i]
-		matches, err := podMatchesSnapshot(ctx, r.Client, pod, split.Status.Workloads)
+		matches, err := podMatchesSnapshot(ctx, resolver, pod, split.Status.Workloads)
 		if err != nil {
 			return false, "", err
 		}

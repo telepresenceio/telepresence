@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -56,11 +55,7 @@ func (c *splitterControl) readRoutingTable(ctx context.Context) (kafkaintercept.
 	if err := c.client.Get(ctx, key, configMap); err != nil {
 		return kafkaintercept.RoutingTable{}, err
 	}
-	var table kafkaintercept.RoutingTable
-	if err := json.Unmarshal([]byte(configMap.Data[runtimeconfig.RoutingDataKey]), &table); err != nil {
-		return table, err
-	}
-	return table, nil
+	return runtimeconfig.RoutingFromConfigMap(configMap)
 }
 
 func (c *splitterControl) publish(ctx context.Context, healthy bool) {

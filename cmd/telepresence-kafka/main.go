@@ -14,7 +14,6 @@ import (
 	"time"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
-	appsv1 "k8s.io/api/apps/v1"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -59,8 +58,6 @@ func newScheme() (*runtime.Scheme, error) {
 	scheme := runtime.NewScheme()
 	for _, add := range []func(*runtime.Scheme) error{
 		clientgoscheme.AddToScheme,
-		appsv1.AddToScheme,
-		corev1.AddToScheme,
 		argorollouts.AddToScheme,
 		api.AddToScheme,
 	} {
@@ -116,15 +113,16 @@ func runController(args []string) error {
 	if err != nil {
 		return fmt.Errorf("create Kafka controller manager: %w", err)
 	}
-	if err := (&controller.SplitReconciler{
-		Client: manager.GetClient(), ProviderNamespace: *providerNamespace,
-		ProviderImage: *providerImage, ServiceAccount: *serviceAccount,
-	}).SetupWithManager(manager); err != nil {
+	splitReconciler := &controller.SplitReconciler{ProviderImage: *providerImage, ServiceAccount: *serviceAccount}
+	splitReconciler.Client = manager.GetClient()
+	splitReconciler.ProviderNamespace = *providerNamespace
+	if err := splitReconciler.SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register KafkaSplit controller: %w", err)
 	}
-	if err := (&controller.RouteReconciler{
-		Client: manager.GetClient(), ProviderNamespace: *providerNamespace,
-	}).SetupWithManager(manager); err != nil {
+	routeReconciler := &controller.RouteReconciler{}
+	routeReconciler.Client = manager.GetClient()
+	routeReconciler.ProviderNamespace = *providerNamespace
+	if err := routeReconciler.SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register KafkaRoute controller: %w", err)
 	}
 	controller.RegisterWebhooks(manager.GetWebhookServer(), manager.GetClient())

@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/broker"
@@ -44,13 +45,33 @@ func defaultBrokerOpener(
 	return broker.Open(ctx, reader, namespace, connection)
 }
 
-// SplitReconciler owns the workload cutover and splitter lifecycle.
-type SplitReconciler struct {
+// base holds the broker-opening behavior shared by both reconcilers.
+type base struct {
 	client.Client
 	ProviderNamespace string
-	ProviderImage     string
-	ServiceAccount    string
 	OpenBroker        brokerOpener
+}
+
+func (b *base) openBroker(ctx context.Context, split *api.KafkaSplit) (kafkaBroker, error) {
+	opener := b.OpenBroker
+	if opener == nil {
+		opener = defaultBrokerOpener
+	}
+	return opener(ctx, b.Client, split.Namespace, split.Spec.Connection)
+}
+
+func (b *base) providerNamespace() string {
+	if b.ProviderNamespace != "" {
+		return b.ProviderNamespace
+	}
+	return "ambassador"
+}
+
+// SplitReconciler owns the workload cutover and splitter lifecycle.
+type SplitReconciler struct {
+	base
+	ProviderImage  string
+	ServiceAccount string
 }
 
 // SetupWithManager registers the KafkaSplit controller.
@@ -74,36 +95,19 @@ func (r *SplitReconciler) Reconcile(ctx context.Context, request ctrl.Request) (
 		return r.reconcileDeactivation(ctx, split, before, false)
 	}
 	if err := split.Validate(); err != nil {
-		split.Status.Phase = "Invalid"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "InvalidSpec", err.Error(), split.Generation)
-		return r.updateSplitStatus(ctx, split, before, false)
+		return r.transitionSplit(ctx, split, before, api.SplitPhaseInvalid, "InvalidSpec", err.Error(), false)
 	}
-	if !containsString(split.Finalizers, splitFinalizer) {
-		split.Finalizers = append(split.Finalizers, splitFinalizer)
+	if !controllerutil.ContainsFinalizer(split, splitFinalizer) {
+		controllerutil.AddFinalizer(split, splitFinalizer)
 		if err := r.Update(ctx, split); err != nil {
 			return ctrl.Result{}, err
 		}
 		return requeue(), nil
 	}
 	if split.Spec.DesiredState == api.DesiredStateDisabled {
-		return r.reconcileDisabled(ctx, split, before)
+		return r.reconcileDeactivation(ctx, split, before, false)
 	}
 	return r.reconcileEnabled(ctx, split, before)
-}
-
-func (r *SplitReconciler) openBroker(ctx context.Context, split *api.KafkaSplit) (kafkaBroker, error) {
-	opener := r.OpenBroker
-	if opener == nil {
-		opener = defaultBrokerOpener
-	}
-	return opener(ctx, r.Client, split.Namespace, split.Spec.Connection)
-}
-
-func (r *SplitReconciler) providerNamespace() string {
-	if r.ProviderNamespace != "" {
-		return r.ProviderNamespace
-	}
-	return "ambassador"
 }
 
 func (r *SplitReconciler) updateSplitStatus(
@@ -112,14 +116,10 @@ func (r *SplitReconciler) updateSplitStatus(
 	before *api.KafkaSplitStatus,
 	requeueAfter bool,
 ) (ctrl.Result, error) {
-	if reflect.DeepEqual(*before, split.Status) {
-		if requeueAfter {
-			return requeue(), nil
+	if !reflect.DeepEqual(*before, split.Status) {
+		if err := r.Status().Update(ctx, split); err != nil {
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
-	}
-	if err := r.Status().Update(ctx, split); err != nil {
-		return ctrl.Result{}, err
 	}
 	if requeueAfter {
 		return requeue(), nil
@@ -127,15 +127,47 @@ func (r *SplitReconciler) updateSplitStatus(
 	return ctrl.Result{}, nil
 }
 
+// transitionSplit sets the split's phase and Ready condition, then persists the status.
+func (r *SplitReconciler) transitionSplit(
+	ctx context.Context,
+	split *api.KafkaSplit,
+	before *api.KafkaSplitStatus,
+	phase api.SplitPhase,
+	reason, message string,
+	requeueAfter bool,
+) (ctrl.Result, error) {
+	split.Status.Phase = phase
+	status := metav1.ConditionFalse
+	if phase == api.SplitPhaseEnabled {
+		status = metav1.ConditionTrue
+	}
+	setReadyCondition(&split.Status.Conditions, status, reason, message, split.Generation)
+	return r.updateSplitStatus(ctx, split, before, requeueAfter)
+}
+
 // RouteReconciler owns one personal shadow and its transactional drain.
 type RouteReconciler struct {
-	client.Client
-	ProviderNamespace string
-	OpenBroker        brokerOpener
+	base
+}
+
+// routeSplitRefIndexField indexes KafkaRoutes by their spec.splitRef.name.
+const routeSplitRefIndexField = "spec.splitRef.name"
+
+func routeSplitRefIndexer(obj client.Object) []string {
+	route, ok := obj.(*api.KafkaRoute)
+	if !ok {
+		return nil
+	}
+	return []string{route.Spec.SplitRef.Name}
 }
 
 // SetupWithManager registers the KafkaRoute controller.
 func (r *RouteReconciler) SetupWithManager(manager ctrl.Manager) error {
+	if err := manager.GetFieldIndexer().IndexField(
+		context.Background(), &api.KafkaRoute{}, routeSplitRefIndexField, routeSplitRefIndexer,
+	); err != nil {
+		return err
+	}
 	return ctrl.NewControllerManagedBy(manager).For(&api.KafkaRoute{}).Complete(r)
 }
 
@@ -148,12 +180,11 @@ func (r *RouteReconciler) Reconcile(ctx context.Context, request ctrl.Request) (
 	before := route.Status.DeepCopy()
 	route.Status.ObservedGeneration = route.Generation
 	if err := route.Validate(); err != nil {
-		route.Status.Phase = "Invalid"
-		setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "InvalidSpec", err.Error(), route.Generation)
-		return r.updateRouteStatus(ctx, route, before, false)
+		return r.transitionRoute(ctx, route, before, api.RoutePhaseInvalid, "InvalidSpec", err.Error(), false)
 	}
-	if route.Status.Phase != "Closed" && route.DeletionTimestamp == nil && !containsString(route.Finalizers, routeFinalizer) {
-		route.Finalizers = append(route.Finalizers, routeFinalizer)
+	if route.Status.Phase != api.RoutePhaseClosed && route.DeletionTimestamp == nil &&
+		!controllerutil.ContainsFinalizer(route, routeFinalizer) {
+		controllerutil.AddFinalizer(route, routeFinalizer)
 		if err := r.Update(ctx, route); err != nil {
 			return ctrl.Result{}, err
 		}
@@ -162,40 +193,39 @@ func (r *RouteReconciler) Reconcile(ctx context.Context, request ctrl.Request) (
 	return r.reconcileRoute(ctx, route, before)
 }
 
-func (r *RouteReconciler) openBroker(ctx context.Context, split *api.KafkaSplit) (kafkaBroker, error) {
-	opener := r.OpenBroker
-	if opener == nil {
-		opener = defaultBrokerOpener
-	}
-	return opener(ctx, r.Client, split.Namespace, split.Spec.Connection)
-}
-
-func (r *RouteReconciler) providerNamespace() string {
-	if r.ProviderNamespace != "" {
-		return r.ProviderNamespace
-	}
-	return "ambassador"
-}
-
 func (r *RouteReconciler) updateRouteStatus(
 	ctx context.Context,
 	route *api.KafkaRoute,
 	before *api.KafkaRouteStatus,
 	requeueAfter bool,
 ) (ctrl.Result, error) {
-	if reflect.DeepEqual(*before, route.Status) {
-		if requeueAfter {
-			return requeue(), nil
+	if !reflect.DeepEqual(*before, route.Status) {
+		if err := r.Status().Update(ctx, route); err != nil {
+			return ctrl.Result{}, err
 		}
-		return ctrl.Result{}, nil
-	}
-	if err := r.Status().Update(ctx, route); err != nil {
-		return ctrl.Result{}, err
 	}
 	if requeueAfter {
 		return requeue(), nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// transitionRoute sets the route's phase and Ready condition, then persists the status.
+func (r *RouteReconciler) transitionRoute(
+	ctx context.Context,
+	route *api.KafkaRoute,
+	before *api.KafkaRouteStatus,
+	phase api.RoutePhase,
+	reason, message string,
+	requeueAfter bool,
+) (ctrl.Result, error) {
+	route.Status.Phase = phase
+	status := metav1.ConditionFalse
+	if phase == api.RoutePhaseReady {
+		status = metav1.ConditionTrue
+	}
+	setReadyCondition(&route.Status.Conditions, status, reason, message, route.Generation)
+	return r.updateRouteStatus(ctx, route, before, requeueAfter)
 }
 
 func setReadyCondition(
@@ -211,22 +241,4 @@ func setReadyCondition(
 
 func requeue() ctrl.Result {
 	return ctrl.Result{RequeueAfter: reconcileInterval}
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
-}
-
-func removeString(values []string, target string) []string {
-	for i := range values {
-		if values[i] == target {
-			return append(values[:i], values[i+1:]...)
-		}
-	}
-	return values
 }

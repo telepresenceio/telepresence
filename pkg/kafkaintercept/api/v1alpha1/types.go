@@ -136,6 +136,22 @@ type KafkaSplitterSpec struct {
 	BatchSize int32 `json:"batchSize,omitempty"`
 }
 
+// EffectiveReplicas returns the configured replica count, defaulting to 1.
+func (s KafkaSplitterSpec) EffectiveReplicas() int32 {
+	if s.Replicas <= 0 {
+		return 1
+	}
+	return s.Replicas
+}
+
+// EffectiveBatchSize returns the configured batch size, defaulting to 100.
+func (s KafkaSplitterSpec) EffectiveBatchSize() int32 {
+	if s.BatchSize <= 0 {
+		return 100
+	}
+	return s.BatchSize
+}
+
 // KafkaManagedShadows configures controller-created topics.
 type KafkaManagedShadows struct {
 	// +kubebuilder:validation:Minimum=1
@@ -222,12 +238,38 @@ type KafkaSplitterMemberStatus struct {
 	LastSeen   metav1.Time `json:"lastSeen"`
 }
 
+// SplitPhase is the reconciliation phase of a KafkaSplit.
+type SplitPhase string
+
+const (
+	SplitPhasePreparing            SplitPhase = "Preparing"
+	SplitPhaseRedirecting          SplitPhase = "Redirecting"
+	SplitPhaseStarting             SplitPhase = "Starting"
+	SplitPhaseEnabled              SplitPhase = "Enabled"
+	SplitPhasePausing              SplitPhase = "Pausing"
+	SplitPhaseClosingRoutes        SplitPhase = "ClosingRoutes"
+	SplitPhaseDrainingApplication  SplitPhase = "DrainingApplication"
+	SplitPhaseQuiescingApplication SplitPhase = "QuiescingApplication"
+	SplitPhaseStoppingSplitter     SplitPhase = "StoppingSplitter"
+	SplitPhaseRestoringApplication SplitPhase = "RestoringApplication"
+	SplitPhaseCleaningApplication  SplitPhase = "CleaningApplication"
+	SplitPhaseDisabled             SplitPhase = "Disabled"
+	SplitPhaseDegraded             SplitPhase = "Degraded"
+	SplitPhasePending              SplitPhase = "Pending"
+	SplitPhaseInvalid              SplitPhase = "Invalid"
+)
+
+// AcceptsRoutes reports whether routes may be provisioned while a split is in this phase.
+func (p SplitPhase) AcceptsRoutes() bool {
+	return p == SplitPhaseEnabled || p == SplitPhaseStarting
+}
+
 // KafkaSplitStatus records durable reconciliation and broker state.
 type KafkaSplitStatus struct {
 	ObservedGeneration int64                       `json:"observedGeneration,omitempty"`
 	ActiveGeneration   int64                       `json:"activeGeneration,omitempty"`
 	ActiveSpec         *KafkaActiveSpec            `json:"activeSpec,omitempty"`
-	Phase              string                      `json:"phase,omitempty"`
+	Phase              SplitPhase                  `json:"phase,omitempty"`
 	AdmissionMode      KafkaAdmissionMode          `json:"admissionMode,omitempty"`
 	ApplicationEnv     map[string]string           `json:"applicationEnv,omitempty"`
 	ApplicationTopics  map[string]string           `json:"applicationTopics,omitempty"`
@@ -290,10 +332,23 @@ type KafkaRouteSpec struct {
 	Predicate    KafkaRoutePredicate         `json:"predicate,omitempty"`
 }
 
+// RoutePhase is the reconciliation phase of a KafkaRoute.
+type RoutePhase string
+
+const (
+	RoutePhasePending  RoutePhase = "Pending"
+	RoutePhaseStaged   RoutePhase = "Staged"
+	RoutePhaseReady    RoutePhase = "Ready"
+	RoutePhaseClosing  RoutePhase = "Closing"
+	RoutePhaseCleaning RoutePhase = "Cleaning"
+	RoutePhaseClosed   RoutePhase = "Closed"
+	RoutePhaseInvalid  RoutePhase = "Invalid"
+)
+
 // KafkaRouteStatus records route resources and readiness.
 type KafkaRouteStatus struct {
 	ObservedGeneration int64                 `json:"observedGeneration,omitempty"`
-	Phase              string                `json:"phase,omitempty"`
+	Phase              RoutePhase            `json:"phase,omitempty"`
 	Group              string                `json:"group,omitempty"`
 	Topics             map[string]string     `json:"topics,omitempty"`
 	Environment        map[string]string     `json:"environment,omitempty"`

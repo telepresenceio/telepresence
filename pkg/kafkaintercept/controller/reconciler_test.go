@@ -17,6 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -49,7 +50,7 @@ func TestSplitReconcilerSnapshotsWorkload(t *testing.T) {
 		}}},
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(split).WithObjects(split, deployment).Build()
-	reconciler := &SplitReconciler{Client: client}
+	reconciler := &SplitReconciler{base: base{Client: client}}
 	_, err := reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "checkout", Namespace: "shop"}})
 	require.NoError(t, err)
 	_, err = reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "checkout", Namespace: "shop"}})
@@ -57,7 +58,7 @@ func TestSplitReconcilerSnapshotsWorkload(t *testing.T) {
 
 	got := new(api.KafkaSplit)
 	require.NoError(t, client.Get(t.Context(), types.NamespacedName{Name: "checkout", Namespace: "shop"}, got))
-	require.Equal(t, "Preparing", got.Status.Phase)
+	require.Equal(t, api.SplitPhasePreparing, got.Status.Phase)
 	require.Equal(t, []api.WorkloadReference{{
 		APIVersion: "apps/v1", Kind: "Deployment", Name: "checkout", UID: types.UID("deployment-uid"),
 	}}, got.Status.Workloads)
@@ -71,7 +72,7 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "deployment", Namespace: "shop"},
 			Spec: appsv1.DeploymentSpec{
-				Replicas: ptrTo(int32(2)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Replicas: ptr.To(int32(2)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "deployment"}},
 				}},
 			},
@@ -79,7 +80,7 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 		&appsv1.StatefulSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "statefulset", Namespace: "shop"},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptrTo(int32(3)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Replicas: ptr.To(int32(3)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "statefulset"}},
 				}},
 			},
@@ -87,7 +88,7 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 		&appsv1.ReplicaSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "replicaset", Namespace: "shop"},
 			Spec: appsv1.ReplicaSetSpec{
-				Replicas: ptrTo(int32(4)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Replicas: ptr.To(int32(4)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "replicaset"}},
 				}},
 			},
@@ -95,14 +96,14 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 		&argorollouts.Rollout{
 			ObjectMeta: metav1.ObjectMeta{Name: "rollout", Namespace: "shop"},
 			Spec: argorollouts.RolloutSpec{
-				Replicas: ptrTo(int32(5)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Replicas: ptr.To(int32(5)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "rollout"}},
 				}},
 			},
 		},
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-	reconciler := &SplitReconciler{Client: client}
+	reconciler := &SplitReconciler{base: base{Client: client}}
 	for i, kind := range []string{"Deployment", "StatefulSet", "ReplicaSet", "Rollout"} {
 		t.Run(kind, func(t *testing.T) {
 			name := strings.ToLower(kind)
@@ -128,7 +129,7 @@ func TestPodMutatorComposesActiveSplits(t *testing.T) {
 		Name: "checkout-123", Namespace: "shop", UID: types.UID("replicaset-uid"),
 		OwnerReferences: []metav1.OwnerReference{{
 			APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID,
-			Controller: ptrTo(true),
+			Controller: ptr.To(true),
 		}},
 	}}
 	split := validControllerSplit()
@@ -146,7 +147,7 @@ func TestPodMutatorComposesActiveSplits(t *testing.T) {
 			Name: "checkout-123-abc", Namespace: "shop",
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: "apps/v1", Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSet.UID,
-				Controller: ptrTo(true),
+				Controller: ptr.To(true),
 			}},
 		},
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{
@@ -174,7 +175,7 @@ func TestPodMutatorGatesBlockedSplit(t *testing.T) {
 		Name: "checkout-123", Namespace: "shop", UID: types.UID("replicaset-uid"),
 		OwnerReferences: []metav1.OwnerReference{{
 			APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID,
-			Controller: ptrTo(true),
+			Controller: ptr.To(true),
 		}},
 	}}
 	split := validControllerSplit()
@@ -191,7 +192,7 @@ func TestPodMutatorGatesBlockedSplit(t *testing.T) {
 			Name: "checkout-123-abc", Namespace: "shop",
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: "apps/v1", Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSet.UID,
-				Controller: ptrTo(true),
+				Controller: ptr.To(true),
 			}},
 		},
 		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
@@ -228,21 +229,24 @@ func TestInvalidReplacementSpecStillDeactivatesSnapshot(t *testing.T) {
 	split.Finalizers = []string{splitFinalizer}
 	split.Status.ActiveGeneration = split.Generation
 	split.Status.ActiveSpec = activeSpec(split)
-	split.Status.Phase = "CleaningApplication"
+	split.Status.Phase = api.SplitPhaseCleaningApplication
 	split.Spec.DesiredState = api.DesiredStateDisabled
 	split.Spec.Container = ""
-	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(split).WithObjects(split).Build()
+	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(split).
+		WithIndex(&api.KafkaRoute{}, routeSplitRefIndexField, routeSplitRefIndexer).WithObjects(split).Build()
 	reconciler := &SplitReconciler{
-		Client: client,
-		OpenBroker: func(context.Context, ctrlclient.Reader, string, api.KafkaConnectionSpec) (kafkaBroker, error) {
-			return fakeKafkaBroker{}, nil
+		base: base{
+			Client: client,
+			OpenBroker: func(context.Context, ctrlclient.Reader, string, api.KafkaConnectionSpec) (kafkaBroker, error) {
+				return fakeKafkaBroker{}, nil
+			},
 		},
 	}
 	_, err := reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: split.Name, Namespace: split.Namespace}})
 	require.NoError(t, err)
 	got := new(api.KafkaSplit)
 	require.NoError(t, client.Get(t.Context(), types.NamespacedName{Name: split.Name, Namespace: split.Namespace}, got))
-	require.Equal(t, "Disabled", got.Status.Phase)
+	require.Equal(t, api.SplitPhaseDisabled, got.Status.Phase)
 	require.Nil(t, got.Status.ActiveSpec)
 }
 
@@ -252,8 +256,9 @@ func TestRouteOverlapHasDeterministicWinner(t *testing.T) {
 	created := metav1.NewTime(time.Now())
 	older := validControllerRoute("a", created)
 	newer := validControllerRoute("b", metav1.NewTime(created.Add(time.Second)))
-	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(older, newer).Build()
-	reconciler := &RouteReconciler{Client: client}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithIndex(&api.KafkaRoute{}, routeSplitRefIndexField, routeSplitRefIndexer).
+		WithObjects(older, newer).Build()
+	reconciler := &RouteReconciler{base: base{Client: client}}
 	require.NoError(t, reconciler.rejectOverlap(t.Context(), older))
 	require.ErrorContains(t, reconciler.rejectOverlap(t.Context(), newer), "KafkaRoute a")
 }
@@ -272,7 +277,7 @@ func TestSplitBindingCollisionHasDeterministicWinner(t *testing.T) {
 	second.UID = types.UID("b")
 	second.CreationTimestamp = metav1.NewTime(created.Add(time.Second))
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(first, second).Build()
-	reconciler := &SplitReconciler{Client: client}
+	reconciler := &SplitReconciler{base: base{Client: client}}
 
 	require.NoError(t, reconciler.validateSplitComposition(t.Context(), first, first.Status.Workloads))
 	require.ErrorContains(t, reconciler.validateSplitComposition(t.Context(), second, second.Status.Workloads), "KafkaSplit a")
@@ -290,7 +295,7 @@ func TestRoutingUpdatesDoNotRollSplitter(t *testing.T) {
 		ApplicationGroup:  "tp.orders.group",
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).Build()
-	reconciler := &SplitReconciler{Client: client, ProviderNamespace: "ambassador"}
+	reconciler := &SplitReconciler{base: base{Client: client, ProviderNamespace: "ambassador"}}
 	generation, err := reconciler.ensureProviderResources(t.Context(), split, prepared, kafkaintercept.RoutingTable{})
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), generation)
@@ -326,7 +331,7 @@ func TestMembersAcknowledgedPublishesPersistedStatus(t *testing.T) {
 		},
 		Spec: coordinationv1.LeaseSpec{RenewTime: &now},
 	}
-	reconciler := &SplitReconciler{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(lease).Build()}
+	reconciler := &SplitReconciler{base: base{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(lease).Build()}}
 	split := validControllerSplit()
 
 	acknowledged, err := reconciler.membersAcknowledged(t.Context(), split, "provider", 3, 1)
@@ -340,10 +345,10 @@ func TestMembersAcknowledgedPublishesPersistedStatus(t *testing.T) {
 }
 
 func TestRouteProvisioningContinuesDuringAcknowledgement(t *testing.T) {
-	require.True(t, routeProvisioningAllowed("Enabled"))
-	require.True(t, routeProvisioningAllowed("Starting"))
-	require.False(t, routeProvisioningAllowed("Preparing"))
-	require.False(t, routeProvisioningAllowed("ClosingRoutes"))
+	require.True(t, api.SplitPhaseEnabled.AcceptsRoutes())
+	require.True(t, api.SplitPhaseStarting.AcceptsRoutes())
+	require.False(t, api.SplitPhasePreparing.AcceptsRoutes())
+	require.False(t, api.SplitPhaseClosingRoutes.AcceptsRoutes())
 }
 
 func TestFinishClosingRouteRequiresFreshMemberAcknowledgement(t *testing.T) {
@@ -358,7 +363,7 @@ func TestFinishClosingRouteRequiresFreshMemberAcknowledgement(t *testing.T) {
 	split.Status.SplitterName = "provider"
 	route := validControllerRoute("alice", metav1.Now())
 	route.Generation = 1
-	route.Status.Phase = "Cleaning"
+	route.Status.Phase = api.RoutePhaseCleaning
 	route.Status.Resources = []api.KafkaResourceStatus{{Kind: "SessionTopic", Name: "alice", Managed: true}}
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{Name: "provider", Namespace: "ambassador"},
@@ -376,9 +381,11 @@ func TestFinishClosingRouteRequiresFreshMemberAcknowledgement(t *testing.T) {
 		WithObjects(route, configMap, lease).Build()
 	tracker := new(deleteTrackingBroker)
 	reconciler := &RouteReconciler{
-		Client: client, ProviderNamespace: "ambassador",
-		OpenBroker: func(context.Context, ctrlclient.Reader, string, api.KafkaConnectionSpec) (kafkaBroker, error) {
-			return tracker, nil
+		base: base{
+			Client: client, ProviderNamespace: "ambassador",
+			OpenBroker: func(context.Context, ctrlclient.Reader, string, api.KafkaConnectionSpec) (kafkaBroker, error) {
+				return tracker, nil
+			},
 		},
 	}
 
@@ -401,7 +408,7 @@ func TestFinishClosingRouteDrainsResidueAfterAcknowledgement(t *testing.T) {
 	split.Status.SplitterName = "provider"
 	route := validControllerRoute("alice", metav1.Now())
 	route.Generation = 1
-	route.Status.Phase = "Cleaning"
+	route.Status.Phase = api.RoutePhaseCleaning
 	route.Status.Group = "alice-group"
 	route.Status.Topics = map[string]string{"orders": "alice-topic"}
 	route.Status.Resources = []api.KafkaResourceStatus{{Kind: "SessionTopic", Name: "alice-topic", Managed: true}}
@@ -421,9 +428,11 @@ func TestFinishClosingRouteDrainsResidueAfterAcknowledgement(t *testing.T) {
 		WithObjects(route, configMap, lease).Build()
 	tracker := new(deleteTrackingBroker)
 	reconciler := &RouteReconciler{
-		Client: client, ProviderNamespace: "ambassador",
-		OpenBroker: func(context.Context, ctrlclient.Reader, string, api.KafkaConnectionSpec) (kafkaBroker, error) {
-			return tracker, nil
+		base: base{
+			Client: client, ProviderNamespace: "ambassador",
+			OpenBroker: func(context.Context, ctrlclient.Reader, string, api.KafkaConnectionSpec) (kafkaBroker, error) {
+				return tracker, nil
+			},
 		},
 	}
 
@@ -440,9 +449,9 @@ func TestExpiredClosedRouteIsDeleted(t *testing.T) {
 	route := validControllerRoute("expired", metav1.Now())
 	route.Finalizers = []string{routeFinalizer}
 	route.Spec.ExpiresAt = metav1.NewTime(time.Now().Add(-time.Minute))
-	route.Status.Phase = "Closed"
+	route.Status.Phase = api.RoutePhaseClosed
 	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(route).WithObjects(route).Build()
-	reconciler := &RouteReconciler{Client: client}
+	reconciler := &RouteReconciler{base: base{Client: client}}
 	request := ctrl.Request{NamespacedName: types.NamespacedName{Namespace: route.Namespace, Name: route.Name}}
 
 	result, err := reconciler.Reconcile(t.Context(), request)
@@ -504,10 +513,6 @@ func (b *deleteTrackingBroker) DrainSession(context.Context, *api.KafkaSplit, st
 func (b *deleteTrackingBroker) DeleteManaged(context.Context, []api.KafkaResourceStatus) error {
 	b.deleted = true
 	return nil
-}
-
-func ptrTo[T any](value T) *T {
-	return &value
 }
 
 func validControllerSplit() *api.KafkaSplit {

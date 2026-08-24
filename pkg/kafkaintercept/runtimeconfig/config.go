@@ -2,6 +2,11 @@
 package runtimeconfig
 
 import (
+	"encoding/json"
+	"fmt"
+
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept"
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
 )
@@ -53,4 +58,13 @@ type Config struct {
 	BatchSize             int                         `json:"batchSize"`
 	Routes                kafkaintercept.RoutingTable `json:"routes"`
 	Control               *Control                    `json:"control,omitempty"`
+}
+
+// RoutingFromConfigMap decodes the routing table stored in a splitter ConfigMap.
+func RoutingFromConfigMap(configMap *corev1.ConfigMap) (kafkaintercept.RoutingTable, error) {
+	var table kafkaintercept.RoutingTable
+	if err := json.Unmarshal([]byte(configMap.Data[RoutingDataKey]), &table); err != nil {
+		return table, fmt.Errorf("decode routing table from ConfigMap %s/%s: %w", configMap.Namespace, configMap.Name, err)
+	}
+	return table, nil
 }

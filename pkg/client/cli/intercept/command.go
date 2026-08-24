@@ -76,7 +76,11 @@ type Command struct {
 	KafkaHeaders   []string
 	KafkaKey       string
 	KafkaKeyPrefix string
-	kafkaFlags     bool
+
+	// kafkaEnabled marks command paths whose flag set supports Kafka
+	// attachment. Replace and other Command uses leave it false so their
+	// requests never carry a Kafka spec.
+	kafkaEnabled bool
 }
 
 // UsesHTTPMechanism returns true if any HTTP-specific flags were provided,
@@ -138,7 +142,6 @@ func tryParseHeaderWithSeparator(header, separator string) (string, string, bool
 }
 
 func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
-	c.kafkaFlags = !c.Wiretap
 	what := "intercept"
 	how := "intercepted"
 	if c.Wiretap {
@@ -202,6 +205,7 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 
 	flagSet.BoolVar(&c.Plaintext, "plaintext", false, "Use plaintext instead of TLS when communicating with the intercept handler")
 	if !c.Wiretap {
+		c.kafkaEnabled = true
 		flagSet.BoolVar(&c.NoKafka, "no-kafka", false, "Do not attach matching Kafka splits")
 		flagSet.BoolVar(&c.KafkaOnly, "kafka-only", false, "Attach Kafka splits without intercepting network traffic")
 		flagSet.StringSliceVar(&c.KafkaHeaders, "kafka-header", nil,
@@ -384,9 +388,6 @@ func (c *Command) validateKafkaFlags(cmd *cobra.Command) error {
 		if flag := cmd.Flags().Lookup(name); flag != nil && flag.Changed {
 			return errcat.User.Newf("--kafka-only cannot be combined with --%s", name)
 		}
-	}
-	if c.Replace || c.Wiretap {
-		return errcat.User.New("--kafka-only cannot be combined with replace or wiretap")
 	}
 	return nil
 }

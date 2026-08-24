@@ -412,31 +412,23 @@ func (s *service) reviewRestoredIntercepts(
 				}
 			} else {
 				var attachErr error
-				kafkaRoutes, kafkaEnvironment, attachErr = s.kafka.attach(
-					ctx, spec.Namespace, spec.Agent, spec.WorkloadKind, spec.Client, spec.Name, interceptID,
-					info.GetSession().GetSessionId(), kafkaRequest,
-				)
+				kafkaRoutes, kafkaEnvironment, attachErr = s.attachKafkaRoutes(ctx, spec, interceptID, info.GetSession().GetSessionId())
 				if attachErr != nil {
 					return nil, status.Errorf(codes.Unavailable, "restore Kafka routes for %s: %v", spec.Name, attachErr)
 				}
 			}
 		}
-		disposition := rpc.InterceptDispositionType_WAITING
-		message := ""
-		if spec.GetKafka().GetOnly() {
-			disposition = rpc.InterceptDispositionType_ACTIVE
-			message = "Kafka routes are ready"
-		}
-		accepted = append(accepted, &rpc.InterceptInfo{
+		ii := &rpc.InterceptInfo{
 			Id:            interceptID,
 			Spec:          spec,
-			Disposition:   disposition,
-			Message:       message,
+			Disposition:   rpc.InterceptDispositionType_WAITING,
 			ClientSession: info.Session,
 			ModifiedAt:    timestamppb.New(now),
 			KafkaRoutes:   kafkaRoutes,
 			Environment:   kafkaEnvironment,
-		})
+		}
+		(&state.Intercept{InterceptInfo: ii}).ActivateKafkaOnly()
+		accepted = append(accepted, ii)
 	}
 	return accepted, nil
 }
@@ -582,9 +574,9 @@ func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 		clog.Tracef(ctx, "Last activity: %s", lastActivity)
 	}
 	if s.kafka != nil {
-		for _, intercept := range s.state.ClientIntercepts(string(sessionID)) {
-			if err := s.kafka.refresh(ctx, intercept.Spec.Namespace, intercept.KafkaRoutes); err != nil {
-				clog.Errorf(ctx, "refresh Kafka routes for intercept %s: %v", intercept.Spec.Name, err)
+		for _, ck := range s.state.ClientKafkaRoutes(string(sessionID)) {
+			if err := s.kafka.refresh(ctx, ck.Namespace, ck.Routes); err != nil {
+				clog.Errorf(ctx, "refresh Kafka routes for session %s: %v", sessionID, err)
 			}
 		}
 	}
@@ -1444,10 +1436,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 				return nil, status.Error(codes.FailedPrecondition, "Kafka personal intercepts are not installed")
 			}
 		} else {
-			kafkaRoutes, kafkaEnvironment, err = s.kafka.attach(
-				ctx, namespace, spec.Agent, spec.WorkloadKind, spec.Client, spec.Name, interceptID,
-				ciReq.GetSession().GetSessionId(), kafkaRequest,
-			)
+			kafkaRoutes, kafkaEnvironment, err = s.attachKafkaRoutes(ctx, spec, interceptID, ciReq.GetSession().GetSessionId())
 			if err != nil {
 				return nil, status.Errorf(codes.FailedPrecondition, "attach Kafka routes: %v", err)
 			}
@@ -1456,9 +1445,8 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 
 	var initialize func(*state.Intercept)
 	if len(kafkaRoutes) > 0 {
-		routes := slices.Clone(kafkaRoutes)
 		initialize = func(intercept *state.Intercept) {
-			s.initializeKafkaAttachment(intercept, namespace, routes, kafkaEnvironment)
+			s.initializeKafkaAttachment(intercept, namespace, kafkaRoutes, kafkaEnvironment)
 		}
 	}
 	client, interceptInfo, err := s.state.AddIntercept(ctx, ciReq, initialize)
@@ -1476,6 +1464,18 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	return interceptInfo, nil
+}
+
+// attachKafkaRoutes marshals spec's Kafka-relevant fields and attaches
+// routes for it via s.kafka. Callers must check that s.kafka is non-nil and
+// apply their own not-installed policy before calling.
+func (s *service) attachKafkaRoutes(
+	ctx context.Context, spec *rpc.InterceptSpec, interceptID, sessionID string,
+) ([]*rpc.KafkaRoute, map[string]string, error) {
+	return s.kafka.attach(
+		ctx, spec.Namespace, spec.Agent, spec.WorkloadKind, spec.Client, spec.Name, interceptID,
+		sessionID, spec.GetKafka(),
+	)
 }
 
 func (s *service) initializeKafkaAttachment(

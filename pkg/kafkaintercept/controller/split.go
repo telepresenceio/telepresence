@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/broker"
@@ -38,9 +38,7 @@ func (r *SplitReconciler) reconcileEnabled(
 		split.Status.ActiveSpec = activeSpec(split)
 		split.Status.Workloads = workloads
 		split.Status.AdmissionMode = api.KafkaAdmissionNormal
-		split.Status.Phase = "Preparing"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "Preparing", "active workload snapshot recorded", split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(ctx, split, before, api.SplitPhasePreparing, "Preparing", "active workload snapshot recorded", true)
 	}
 	active := activeSplit(split)
 	desiredPods, err := r.validateWorkloadEnvironment(ctx, active, split.Status.Workloads)
@@ -60,14 +58,10 @@ func (r *SplitReconciler) reconcileEnabled(
 		return r.pendingSplit(ctx, split, before, "BrokerPreflightFailed", err.Error())
 	}
 	if err := verifySourceIncarnations(split.Status.SourceTopics, prepared.SourceTopics); err != nil {
-		split.Status.Phase = "Degraded"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "SourceRecreated", err.Error(), split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(ctx, split, before, api.SplitPhaseDegraded, "SourceRecreated", err.Error(), true)
 	}
 	if err := verifyResourceIncarnations(split.Status.Resources, prepared.Resources); err != nil {
-		split.Status.Phase = "Degraded"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "ShadowRecreated", err.Error(), split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(ctx, split, before, api.SplitPhaseDegraded, "ShadowRecreated", err.Error(), true)
 	}
 	split.Status.SourceTopics = prepared.SourceTopics
 	split.Status.ApplicationTopics = maps.Clone(prepared.ApplicationTopics)
@@ -79,9 +73,9 @@ func (r *SplitReconciler) reconcileEnabled(
 	split.Status.TransactionalID = prepared.Names.ApplicationTransactional()
 	if split.Status.AdmissionMode != api.KafkaAdmissionShadow {
 		split.Status.AdmissionMode = api.KafkaAdmissionShadow
-		split.Status.Phase = "Redirecting"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "Redirecting", "replacement Pods will consume application shadows", split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(
+			ctx, split, before, api.SplitPhaseRedirecting, "Redirecting", "replacement Pods will consume application shadows", true,
+		)
 	}
 
 	redirected, message, err := r.replacePods(ctx, active, desiredPods, split.Status.ActiveGeneration)
@@ -89,17 +83,19 @@ func (r *SplitReconciler) reconcileEnabled(
 		return ctrl.Result{}, err
 	}
 	if !redirected {
-		if routeProvisioningAllowed(split.Status.Phase) {
+		if split.Status.Phase.AcceptsRoutes() {
 			return requeue(), nil
 		}
 		return r.pendingSplit(ctx, split, before, "ReplacingPods", message)
 	}
-	memberless, err := kafka.GroupMemberless(ctx, active.Spec.Source.Group)
-	if err != nil {
-		return r.pendingSplit(ctx, split, before, "SourceOwnershipUnknown", err.Error())
-	}
-	if !memberless && split.Status.SplitterName == "" {
-		return r.pendingSplit(ctx, split, before, "SourceGroupNotEmpty", "original application group still has consumers")
+	if split.Status.SplitterName == "" {
+		memberless, err := kafka.GroupMemberless(ctx, active.Spec.Source.Group)
+		if err != nil {
+			return r.pendingSplit(ctx, split, before, "SourceOwnershipUnknown", err.Error())
+		}
+		if !memberless {
+			return r.pendingSplit(ctx, split, before, "SourceGroupNotEmpty", "original application group still has consumers")
+		}
 	}
 	table, err := r.desiredRoutingTable(ctx, active, false)
 	if err != nil {
@@ -112,36 +108,26 @@ func (r *SplitReconciler) reconcileEnabled(
 	split.Status.SplitterName = prepared.Names.KubernetesName
 	split.Status.RouteGeneration = int64(generation)
 	acknowledged, err := r.membersAcknowledged(
-		ctx, split, prepared.Names.KubernetesName, generation, splitterReplicas(active.Spec.Splitter),
+		ctx, split, prepared.Names.KubernetesName, generation, active.Spec.Splitter.EffectiveReplicas(),
 	)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 	if !acknowledged {
-		split.Status.Phase = "Starting"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "Starting", "waiting for splitter generation acknowledgements", split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(
+			ctx, split, before, api.SplitPhaseStarting, "Starting", "waiting for splitter generation acknowledgements", true,
+		)
 	}
 	members, err := kafka.GroupMembers(ctx, active.Spec.Source.Group)
 	if err != nil {
 		return r.pendingSplit(ctx, split, before, "SourceOwnershipUnknown", err.Error())
 	}
-	if err := verifySplitterMembers(members, prepared.Names.SplitterInstance, splitterReplicas(active.Spec.Splitter)); err != nil {
-		split.Status.Phase = "Degraded"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "UnexpectedSourceMember", err.Error(), split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+	if err := verifySplitterMembers(members, prepared.Names.SplitterInstance, active.Spec.Splitter.EffectiveReplicas()); err != nil {
+		return r.transitionSplit(ctx, split, before, api.SplitPhaseDegraded, "UnexpectedSourceMember", err.Error(), true)
 	}
-	split.Status.Phase = "Enabled"
-	setReadyCondition(&split.Status.Conditions, metav1.ConditionTrue, "Enabled", "all source partitions have transactional splitter owners", split.Generation)
-	return r.updateSplitStatus(ctx, split, before, true)
-}
-
-func (r *SplitReconciler) reconcileDisabled(
-	ctx context.Context,
-	split *api.KafkaSplit,
-	before *api.KafkaSplitStatus,
-) (ctrl.Result, error) {
-	return r.reconcileDeactivation(ctx, split, before, false)
+	return r.transitionSplit(
+		ctx, split, before, api.SplitPhaseEnabled, "Enabled", "all source partitions have transactional splitter owners", true,
+	)
 }
 
 func (r *SplitReconciler) reconcileSplitDeletion(
@@ -149,7 +135,7 @@ func (r *SplitReconciler) reconcileSplitDeletion(
 	split *api.KafkaSplit,
 	before *api.KafkaSplitStatus,
 ) (ctrl.Result, error) {
-	if !containsString(split.Finalizers, splitFinalizer) {
+	if !controllerutil.ContainsFinalizer(split, splitFinalizer) {
 		return ctrl.Result{}, nil
 	}
 	return r.reconcileDeactivation(ctx, split, before, true)
@@ -163,19 +149,17 @@ func (r *SplitReconciler) reconcileDeactivation(
 ) (ctrl.Result, error) {
 	if split.Status.ActiveSpec == nil {
 		if deleting {
-			split.Finalizers = removeString(split.Finalizers, splitFinalizer)
+			controllerutil.RemoveFinalizer(split, splitFinalizer)
 			return ctrl.Result{}, r.Update(ctx, split)
 		}
-		split.Status.Phase = "Disabled"
 		split.Status.AdmissionMode = api.KafkaAdmissionNormal
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "Disabled", "Kafka split is disabled", split.Generation)
-		return r.updateSplitStatus(ctx, split, before, false)
+		return r.transitionSplit(ctx, split, before, api.SplitPhaseDisabled, "Disabled", "Kafka split is disabled", false)
 	}
 	active := activeSplit(split)
-	if split.Status.Phase == "CleaningApplication" {
+	if split.Status.Phase == api.SplitPhaseCleaningApplication {
 		return r.finishDeactivation(ctx, split, before, active, deleting)
 	}
-	if split.Status.Phase == "RestoringApplication" {
+	if split.Status.Phase == api.SplitPhaseRestoringApplication {
 		return r.reconcileRestoringApplication(ctx, split, before, active)
 	}
 	routes, err := r.closeRoutes(ctx, active)
@@ -183,7 +167,7 @@ func (r *SplitReconciler) reconcileDeactivation(
 		return ctrl.Result{}, err
 	}
 	prepared := preparedFromStatus(active)
-	if split.Status.SplitterName != "" && split.Status.Phase != "StoppingSplitter" {
+	if split.Status.SplitterName != "" && split.Status.Phase != api.SplitPhaseStoppingSplitter {
 		table, err := r.desiredRoutingTable(ctx, active, true)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -194,21 +178,22 @@ func (r *SplitReconciler) reconcileDeactivation(
 		}
 		split.Status.RouteGeneration = int64(generation)
 		acknowledged, err := r.membersAcknowledged(
-			ctx, split, split.Status.SplitterName, generation, splitterReplicas(active.Spec.Splitter),
+			ctx, split, split.Status.SplitterName, generation, active.Spec.Splitter.EffectiveReplicas(),
 		)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if !acknowledged {
-			split.Status.Phase = "Pausing"
-			setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "Pausing", "waiting for splitters to pause between transactions", split.Generation)
-			return r.updateSplitStatus(ctx, split, before, true)
+			return r.transitionSplit(
+				ctx, split, before, api.SplitPhasePausing, "Pausing", "waiting for splitters to pause between transactions", true,
+			)
 		}
 	}
 	if routes > 0 {
-		split.Status.Phase = "ClosingRoutes"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "ClosingRoutes", fmt.Sprintf("waiting for %d Kafka routes to drain", routes), split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(
+			ctx, split, before, api.SplitPhaseClosingRoutes, "ClosingRoutes",
+			fmt.Sprintf("waiting for %d Kafka routes to drain", routes), true,
+		)
 	}
 	kafka, err := r.openBroker(ctx, active)
 	if err != nil {
@@ -221,18 +206,17 @@ func (r *SplitReconciler) reconcileDeactivation(
 	}
 	split.Status.ApplicationLag = &remaining
 	if remaining > 0 {
-		split.Status.Phase = "DrainingApplication"
-		setReadyCondition(
-			&split.Status.Conditions, metav1.ConditionFalse, "DrainingApplication",
-			fmt.Sprintf("waiting for application to consume %d shadow records", remaining), split.Generation,
+		return r.transitionSplit(
+			ctx, split, before, api.SplitPhaseDrainingApplication, "DrainingApplication",
+			fmt.Sprintf("waiting for application to consume %d shadow records", remaining), true,
 		)
-		return r.updateSplitStatus(ctx, split, before, true)
 	}
 	if split.Status.AdmissionMode != api.KafkaAdmissionBlocked {
 		split.Status.AdmissionMode = api.KafkaAdmissionBlocked
-		split.Status.Phase = "QuiescingApplication"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "QuiescingApplication", "blocking replacements before source handback", split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(
+			ctx, split, before, api.SplitPhaseQuiescingApplication, "QuiescingApplication",
+			"blocking replacements before source handback", true,
+		)
 	}
 	removed, message, err := r.removePods(ctx, active)
 	if err != nil {
@@ -253,15 +237,10 @@ func (r *SplitReconciler) reconcileDeactivation(
 		return ctrl.Result{}, err
 	}
 	if !deleted {
-		split.Status.Phase = "StoppingSplitter"
-		setReadyCondition(
-			&split.Status.Conditions,
-			metav1.ConditionFalse,
-			"StoppingSplitter",
-			"waiting for splitters to leave the original group",
-			split.Generation,
+		return r.transitionSplit(
+			ctx, split, before, api.SplitPhaseStoppingSplitter, "StoppingSplitter",
+			"waiting for splitters to leave the original group", true,
 		)
-		return r.updateSplitStatus(ctx, split, before, true)
 	}
 	split.Status.SplitterName = ""
 	split.Status.Members = nil
@@ -275,13 +254,13 @@ func (r *SplitReconciler) reconcileDeactivation(
 	}
 	if split.Status.AdmissionMode != api.KafkaAdmissionNormal {
 		split.Status.AdmissionMode = api.KafkaAdmissionNormal
-		split.Status.Phase = "RestoringApplication"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "RestoringApplication", "normally configured Pods may resume", split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(
+			ctx, split, before, api.SplitPhaseRestoringApplication, "RestoringApplication", "normally configured Pods may resume", true,
+		)
 	}
-	split.Status.Phase = "CleaningApplication"
-	setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "CleaningApplication", "deleting managed application shadows", split.Generation)
-	return r.updateSplitStatus(ctx, split, before, true)
+	return r.transitionSplit(
+		ctx, split, before, api.SplitPhaseCleaningApplication, "CleaningApplication", "deleting managed application shadows", true,
+	)
 }
 
 func (r *SplitReconciler) reconcileRestoringApplication(
@@ -299,18 +278,11 @@ func (r *SplitReconciler) reconcileRestoringApplication(
 		return ctrl.Result{}, err
 	}
 	if !restored {
-		setReadyCondition(
-			&split.Status.Conditions,
-			metav1.ConditionFalse,
-			"RestoringApplication",
-			message,
-			split.Generation,
-		)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(ctx, split, before, split.Status.Phase, "RestoringApplication", message, true)
 	}
-	split.Status.Phase = "CleaningApplication"
-	setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "CleaningApplication", "deleting managed application shadows", split.Generation)
-	return r.updateSplitStatus(ctx, split, before, true)
+	return r.transitionSplit(
+		ctx, split, before, api.SplitPhaseCleaningApplication, "CleaningApplication", "deleting managed application shadows", true,
+	)
 }
 
 func (r *SplitReconciler) finishDeactivation(
@@ -326,36 +298,36 @@ func (r *SplitReconciler) finishDeactivation(
 	}
 	defer kafka.Close()
 	if err := kafka.DeleteManaged(ctx, applicationResources(split.Status.Resources)); err != nil {
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "CleanupPending", err.Error(), split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(ctx, split, before, split.Status.Phase, "CleanupPending", err.Error(), true)
 	}
 	if err := r.releaseOwnership(ctx, active); err != nil {
 		return ctrl.Result{}, err
 	}
 	clearActiveStatus(&split.Status)
 	if deleting {
-		split.Finalizers = removeString(split.Finalizers, splitFinalizer)
+		controllerutil.RemoveFinalizer(split, splitFinalizer)
 		return ctrl.Result{}, r.Update(ctx, split)
 	}
 	if split.Spec.DesiredState == api.DesiredStateEnabled {
-		split.Status.Phase = "Preparing"
-		setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "SpecChanged", "previous active snapshot is disabled; preparing the new generation", split.Generation)
-		return r.updateSplitStatus(ctx, split, before, true)
+		return r.transitionSplit(
+			ctx, split, before, api.SplitPhasePreparing, "SpecChanged",
+			"previous active snapshot is disabled; preparing the new generation", true,
+		)
 	}
-	split.Status.Phase = "Disabled"
-	setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, "Disabled", "Kafka split is disabled", split.Generation)
-	return r.updateSplitStatus(ctx, split, before, false)
+	return r.transitionSplit(ctx, split, before, api.SplitPhaseDisabled, "Disabled", "Kafka split is disabled", false)
 }
 
 func (r *SplitReconciler) closeRoutes(ctx context.Context, split *api.KafkaSplit) (int, error) {
 	routes := new(api.KafkaRouteList)
-	if err := r.List(ctx, routes, client.InNamespace(split.Namespace)); err != nil {
+	if err := r.List(
+		ctx, routes, client.InNamespace(split.Namespace), client.MatchingFields{routeSplitRefIndexField: split.Name},
+	); err != nil {
 		return 0, err
 	}
 	remaining := 0
 	for i := range routes.Items {
 		route := &routes.Items[i]
-		if route.Spec.SplitRef.Name != split.Name || route.Status.Phase == "Closed" {
+		if route.Status.Phase == api.RoutePhaseClosed {
 			continue
 		}
 		remaining++
@@ -385,20 +357,12 @@ func applicationResources(resources []api.KafkaResourceStatus) []api.KafkaResour
 }
 
 func clearActiveStatus(status *api.KafkaSplitStatus) {
-	status.ActiveGeneration = 0
-	status.ActiveSpec = nil
-	status.AdmissionMode = api.KafkaAdmissionNormal
-	status.ApplicationEnv = nil
-	status.ApplicationTopics = nil
-	status.ApplicationGroup = ""
-	status.TransactionalID = ""
-	status.SplitterName = ""
-	status.Workloads = nil
-	status.SourceTopics = nil
-	status.Resources = nil
-	status.RouteGeneration = 0
-	status.Members = nil
-	status.ApplicationLag = nil
+	*status = api.KafkaSplitStatus{
+		ObservedGeneration: status.ObservedGeneration,
+		Phase:              status.Phase,
+		Conditions:         status.Conditions,
+		AdmissionMode:      api.KafkaAdmissionNormal,
+	}
 }
 
 func verifySourceIncarnations(previous, current []api.KafkaTopicStatus) error {
@@ -453,9 +417,9 @@ func (r *SplitReconciler) pendingSplit(
 	before *api.KafkaSplitStatus,
 	reason, message string,
 ) (ctrl.Result, error) {
-	if split.Status.Phase != "Degraded" {
-		split.Status.Phase = "Pending"
+	phase := split.Status.Phase
+	if phase != api.SplitPhaseDegraded {
+		phase = api.SplitPhasePending
 	}
-	setReadyCondition(&split.Status.Conditions, metav1.ConditionFalse, reason, message, split.Generation)
-	return r.updateSplitStatus(ctx, split, before, true)
+	return r.transitionSplit(ctx, split, before, phase, reason, message, true)
 }
