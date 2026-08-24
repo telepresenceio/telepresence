@@ -2127,7 +2127,7 @@ matchExpressions:
 				if expectedPatch != "null\n" {
 					expectedPatch = fmt.Sprintf(expectedPatch, cfgJSON)
 				}
-				patchBytes, err := json.Marshal(actualPatch, json.Deterministic(true), jsonv1.OmitEmptyWithLegacySemantics(true), json.FormatNilSliceAsNull(true)) //nolint:govet // provided by GOEXPERIMENT=jsonv2 on go1.26
+				patchBytes, err := json.Marshal(actualPatch, json.Deterministic(true), jsonv1.OmitEmptyWithLegacySemantics(true), json.FormatNilSliceAsNull(true))
 				require.NoError(t, err)
 				patchBytes, err = yaml.JSONToYAML(patchBytes)
 				require.NoError(t, err)

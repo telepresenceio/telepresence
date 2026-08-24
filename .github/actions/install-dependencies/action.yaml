@@ -6,9 +6,6 @@ runs:
     - uses: actions/setup-go@v6
       with:
         go-version: stable
-    - name: enable JSON v2
-      shell: bash
-      run: echo "GOEXPERIMENT=jsonv2" >> "$GITHUB_ENV"
     - if: runner.os == 'Linux'
       name: install Linux dependencies
       shell: bash

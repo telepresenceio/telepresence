@@ -1,6 +1,6 @@
 module github.com/telepresenceio/telepresence/v2
 
-go 1.26.3
+go 1.27.0
 
 require (
 	github.com/blang/semver/v4 v4.0.0

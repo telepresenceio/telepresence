@@ -8,7 +8,8 @@ import (
 	"github.com/telepresenceio/clog"
 )
 
-// Marshal serializes the given value to JSON deterministically and enforces unit serialization of durations.
+// Marshal serializes the given value to JSON deterministically and represents
+// durations using time.Duration.String.
 func Marshal(value any) ([]byte, error) {
 	opts := json.WithMarshalers(json.MarshalFunc(func(d time.Duration) ([]byte, error) {
 		return json.Marshal(d.String())
@@ -16,8 +17,8 @@ func Marshal(value any) ([]byte, error) {
 	return json.Marshal(value, opts, json.Deterministic(true))
 }
 
-// Unmarshal deserializes the given JSON data into the given value. Durations are deserialized using the
-// time.ParseDuration function (unit-aware).
+// Unmarshal deserializes the given JSON data into the given value. Durations are
+// parsed from strings using time.ParseDuration.
 func Unmarshal(data []byte, into any, rejectUnknown bool) error {
 	opts := []json.Options{json.WithUnmarshalers(
 		json.JoinUnmarshalers(
