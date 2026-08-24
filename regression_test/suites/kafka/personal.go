@@ -11,8 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -90,10 +88,15 @@ func (s *Personal) Test_TransactionalPersonalRoutes() {
 	app := s.Workload(kafkaApplication())
 	conn := s.Connect()
 	client := openKafka(t, ctx, brokerAddress)
-	createTopic(t, ctx, client, sourceTopic)
-	createTopic(t, ctx, client, secondSourceTopic)
+	createTopic(t, ctx, client, sourceTopic, nil)
+	createTopic(t, ctx, client, secondSourceTopic, nil)
+	minusOne := "-1"
+	deletePolicy := "delete"
+	shadowConfigs := map[string]*string{
+		"cleanup.policy": &deletePolicy, "retention.ms": &minusOne, "retention.bytes": &minusOne,
+	}
 	for _, topic := range []string{paymentsAppTopic, "rtest-payments-session-0", "rtest-payments-session-1"} {
-		createShadowTopic(t, ctx, client, topic)
+		createTopic(t, ctx, client, topic, shadowConfigs)
 	}
 	apply(t, ctx, s.R(), ns, "kafka-provider-credentials", kafkaProviderSecret(ns, tlsMaterial.ca))
 	ordersSplit := splitFixture{
@@ -279,7 +282,7 @@ func (s *Personal) Test_WorkloadAdapters() {
 			"KAFKA_TRANSACTIONAL_ID": name,
 		}
 		s.Workload(adapter.template)
-		createTopic(t, ctx, client, fixture.topic)
+		createTopic(t, ctx, client, fixture.topic, nil)
 		apply(t, ctx, s.R(), ns, "kafka-split-"+name, kafkaSplit(ns, brokerAddress, name, fixture))
 		t.Cleanup(func() { cleanupSplit(s.R(), ns, name, name) })
 		waitSplitPhase(t, ctx, s.R(), ns, name, "Enabled")
@@ -578,11 +581,7 @@ spec:
 
 func apply(t testing.TB, ctx context.Context, r *rt.Runtime, namespace, name, manifest string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), name+".yaml")
-	if err := os.WriteFile(path, []byte(manifest), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := r.Kubectl(ctx, namespace, "apply", "-f", path); err != nil {
+	if err := r.ApplyManifest(ctx, namespace, name, manifest); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -605,31 +604,15 @@ func openKafka(t testing.TB, ctx context.Context, address string) *kgo.Client {
 	}
 }
 
-func createTopic(t testing.TB, ctx context.Context, client *kgo.Client, topic string) {
+func createTopic(t testing.TB, ctx context.Context, client *kgo.Client, topic string, configs map[string]*string) {
 	t.Helper()
-	responses, err := kadm.NewClient(client).CreateTopics(ctx, 1, 1, nil, topic)
+	responses, err := kadm.NewClient(client).CreateTopics(ctx, 1, 1, configs, topic)
 	if err != nil {
 		t.Fatal(err)
 	}
 	response, ok := responses[topic]
 	if !ok || (response.Err != nil && !errors.Is(response.Err, kerr.TopicAlreadyExists)) {
 		t.Fatalf("create topic %s: %+v", topic, response)
-	}
-}
-
-func createShadowTopic(t testing.TB, ctx context.Context, client *kgo.Client, topic string) {
-	t.Helper()
-	minusOne := "-1"
-	deletePolicy := "delete"
-	responses, err := kadm.NewClient(client).CreateTopics(ctx, 1, 1, map[string]*string{
-		"cleanup.policy": &deletePolicy, "retention.ms": &minusOne, "retention.bytes": &minusOne,
-	}, topic)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, ok := responses[topic]
-	if !ok || (response.Err != nil && !errors.Is(response.Err, kerr.TopicAlreadyExists)) {
-		t.Fatalf("create shadow topic %s: %+v", topic, response)
 	}
 }
 
@@ -752,10 +735,27 @@ func applicationEnvironment(t testing.TB, ctx context.Context, r *rt.Runtime, na
 	return nil
 }
 
-func waitRedirectedPods(t testing.TB, ctx context.Context, r *rt.Runtime, namespace string, count int) {
+// waitFor polls poll once a second until it reports done, or fails the test
+// with its last state after timeout elapses. poll may call t.Fatal itself
+// for errors that should abort immediately rather than be retried.
+func waitFor(t testing.TB, poll func() (done bool, state string)) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Minute)
 	for {
+		done, state := poll()
+		if done {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s", state)
+		}
+		time.Sleep(time.Second)
+	}
+}
+
+func waitRedirectedPods(t testing.TB, ctx context.Context, r *rt.Runtime, namespace string, count int) {
+	t.Helper()
+	waitFor(t, func() (bool, string) {
 		pods := new(corev1.PodList)
 		if err := r.KubectlJSON(ctx, namespace, pods, "get", "pods", "-l", "app="+appName); err != nil {
 			t.Fatal(err)
@@ -773,14 +773,8 @@ func waitRedirectedPods(t testing.TB, ctx context.Context, r *rt.Runtime, namesp
 				}
 			}
 		}
-		if ready == count {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("redirected ready pods = %d, want %d", ready, count)
-		}
-		time.Sleep(time.Second)
-	}
+		return ready == count, fmt.Sprintf("redirected ready pods = %d, want %d", ready, count)
+	})
 }
 
 func waitWorkloadRedirected(
@@ -791,8 +785,7 @@ func waitWorkloadRedirected(
 	fixture splitFixture,
 ) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Minute)
-	for {
+	waitFor(t, func() (bool, string) {
 		pods := new(corev1.PodList)
 		if err := r.KubectlJSON(ctx, namespace, pods, "get", "pods", "-l", "app="+workload); err != nil {
 			t.Fatal(err)
@@ -803,15 +796,12 @@ func waitWorkloadRedirected(
 			}
 			for _, container := range pods.Items[i].Spec.Containers {
 				if container.Name == workload && envValue(container.Env, fixture.topicEnv) != fixture.topic {
-					return
+					return true, ""
 				}
 			}
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s did not produce a redirected ready Pod", workload)
-		}
-		time.Sleep(time.Second)
-	}
+		return false, fmt.Sprintf("%s did not produce a redirected ready Pod", workload)
+	})
 }
 
 func podReady(pod *corev1.Pod) bool {
@@ -829,9 +819,9 @@ func envValue(environment []corev1.EnvVar, name string) string {
 	return ""
 }
 
-func waitSplitPhase(t testing.TB, ctx context.Context, r *rt.Runtime, namespace, name, phase string) {
+func waitSplitPhase(t testing.TB, ctx context.Context, r *rt.Runtime, namespace, name string, phase api.SplitPhase) {
 	t.Helper()
-	waitForSplit(t, ctx, r, namespace, name, func(split *api.KafkaSplit) bool { return split.Status.Phase == phase }, "phase "+phase)
+	waitForSplit(t, ctx, r, namespace, name, func(split *api.KafkaSplit) bool { return split.Status.Phase == phase }, "phase "+string(phase))
 }
 
 func getSplit(t testing.TB, ctx context.Context, r *rt.Runtime, namespace, name string) *api.KafkaSplit {
@@ -852,58 +842,49 @@ func waitSplitReason(t testing.TB, ctx context.Context, r *rt.Runtime, namespace
 
 func waitRouteReady(t testing.TB, ctx context.Context, r *rt.Runtime, namespace, name string) map[string]string {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Minute)
-	for {
+	var environment map[string]string
+	waitFor(t, func() (bool, string) {
 		route := new(api.KafkaRoute)
 		err := r.KubectlJSON(ctx, namespace, route, "get", "kroute/"+name)
 		if err == nil && route.Status.Phase == "Ready" {
-			return route.Status.Environment
+			environment = route.Status.Environment
+			return true, ""
 		}
-		if time.Now().After(deadline) {
-			if err != nil {
-				t.Fatalf("KafkaRoute %s did not become ready: %v", name, err)
-			}
-			t.Fatalf("KafkaRoute %s did not become ready: phase=%s conditions=%v", name, route.Status.Phase, route.Status.Conditions)
+		if err != nil {
+			return false, fmt.Sprintf("KafkaRoute %s did not become ready: %v", name, err)
 		}
-		time.Sleep(time.Second)
-	}
+		return false, fmt.Sprintf("KafkaRoute %s did not become ready: phase=%s conditions=%v", name, route.Status.Phase, route.Status.Conditions)
+	})
+	return environment
 }
 
 func waitRouteGone(t testing.TB, ctx context.Context, r *rt.Runtime, namespace, name string) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Minute)
-	for {
+	waitFor(t, func() (bool, string) {
 		_, err := r.Kubectl(ctx, namespace, "get", "kroute/"+name)
 		if err != nil && strings.Contains(strings.ToLower(err.Error()), "not found") {
-			return
+			return true, ""
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("KafkaRoute %s was not removed after expiry: %v", name, err)
-		}
-		time.Sleep(time.Second)
-	}
+		return false, fmt.Sprintf("KafkaRoute %s was not removed after expiry: %v", name, err)
+	})
 }
 
 func waitAllRoutesGone(t testing.TB, ctx context.Context, r *rt.Runtime, namespace string) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Minute)
-	for {
+	waitFor(t, func() (bool, string) {
 		routes := new(api.KafkaRouteList)
 		if err := r.KubectlJSON(ctx, namespace, routes, "get", "routes.kafka.telepresence.io"); err != nil {
 			t.Fatal(err)
 		}
 		if len(routes.Items) == 0 {
-			return
+			return true, ""
 		}
-		if time.Now().After(deadline) {
-			names := make([]string, len(routes.Items))
-			for i := range routes.Items {
-				names[i] = routes.Items[i].Name
-			}
-			t.Fatalf("KafkaRoutes were not removed: %v", names)
+		names := make([]string, len(routes.Items))
+		for i := range routes.Items {
+			names[i] = routes.Items[i].Name
 		}
-		time.Sleep(time.Second)
-	}
+		return false, fmt.Sprintf("KafkaRoutes were not removed: %v", names)
+	})
 }
 
 func waitForSplit(
@@ -916,21 +897,17 @@ func waitForSplit(
 	description string,
 ) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Minute)
-	for {
+	waitFor(t, func() (bool, string) {
 		split := new(api.KafkaSplit)
 		err := r.KubectlJSON(ctx, namespace, split, "get", "ksplit/"+name)
 		if err == nil && ready(split) {
-			return
+			return true, ""
 		}
-		if time.Now().After(deadline) {
-			if err != nil {
-				t.Fatalf("KafkaSplit did not reach %s: %v", description, err)
-			}
-			t.Fatalf("KafkaSplit did not reach %s: phase=%s conditions=%v", description, split.Status.Phase, split.Status.Conditions)
+		if err != nil {
+			return false, fmt.Sprintf("KafkaSplit did not reach %s: %v", description, err)
 		}
-		time.Sleep(time.Second)
-	}
+		return false, fmt.Sprintf("KafkaSplit did not reach %s: phase=%s conditions=%v", description, split.Status.Phase, split.Status.Conditions)
+	})
 }
 
 func cleanupSplit(r *rt.Runtime, namespace, workload, name string) {

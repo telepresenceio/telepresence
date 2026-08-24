@@ -24,4 +24,12 @@ func TestValidateKafkaIntercept(t *testing.T) {
 	invalid.Kafka = &rpc.KafkaIntercept{Only: true}
 	invalid.PortIdentifier = "http"
 	require.Contains(t, validateIntercept(invalid), "cannot request network")
+
+	invalid = proto.Clone(valid).(*rpc.InterceptSpec)
+	invalid.Replace = true
+	require.Contains(t, validateIntercept(invalid), "replace cannot request Kafka routes")
+
+	invalid = proto.Clone(valid).(*rpc.InterceptSpec)
+	invalid.Wiretap = true
+	require.Contains(t, validateIntercept(invalid), "wiretap cannot request Kafka routes")
 }

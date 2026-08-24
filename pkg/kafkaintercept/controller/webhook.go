@@ -20,6 +20,9 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/runtimeconfig"
 )
 
+// podUIDEnvName names the environment variable that carries a Pod's UID.
+const podUIDEnvName = "TELEPRESENCE_KAFKA_POD_UID"
+
 // RegisterWebhooks installs validation handlers on server.
 func RegisterWebhooks(server interface{ Register(string, http.Handler) }, reader client.Reader) {
 	server.Register("/split", &admission.Webhook{Handler: splitValidator{}})
@@ -82,12 +85,13 @@ func (m podMutator) Handle(ctx context.Context, request admission.Request) admis
 	original := pod.DeepCopy()
 	generations := make(map[string]string)
 	envOwners := make(map[string]string)
+	resolver := &replicaSetResolver{reader: m.reader}
 	for i := range splits.Items {
 		split := &splits.Items[i]
 		if split.Status.ActiveGeneration == 0 || split.Status.AdmissionMode == api.KafkaAdmissionNormal {
 			continue
 		}
-		matches, err := podMatchesSnapshot(ctx, m.reader, pod, split.Status.Workloads)
+		matches, err := podMatchesSnapshot(ctx, resolver, pod, split.Status.Workloads)
 		if err != nil {
 			return admission.Errored(http.StatusInternalServerError, err)
 		}
@@ -113,21 +117,21 @@ func (m podMutator) Handle(ctx context.Context, request admission.Request) admis
 			if response := claimEnv(envOwners, split.Name, name); response != nil {
 				return *response
 			}
-			setLiteralEnv(container, name, value)
+			setEnv(container, corev1.EnvVar{Name: name, Value: value})
 		}
 		for name, source := range application.ShadowCredentials {
 			if response := claimEnv(envOwners, split.Name, name); response != nil {
 				return *response
 			}
-			setValueSourceEnv(container, name, source)
+			setEnv(container, valueSourceEnvVar(name, source))
 		}
 		if split.Status.TransactionalID != "" && application.TransactionalIDEnv != "" {
 			name := application.TransactionalIDEnv
 			if response := claimEnv(envOwners, split.Name, name); response != nil {
 				return *response
 			}
-			setPodUIDEnv(container)
-			setLiteralEnvLast(container, name, split.Status.TransactionalID+".$(TELEPRESENCE_KAFKA_POD_UID)")
+			setEnv(container, podUIDEnvVar())
+			setLiteralEnvLast(container, name, split.Status.TransactionalID+".$("+podUIDEnvName+")")
 		}
 		generations[split.Name] = strconv.FormatInt(split.Status.ActiveGeneration, 10)
 	}
@@ -179,14 +183,15 @@ func findContainer(containers []corev1.Container, name string) *corev1.Container
 	return nil
 }
 
-func setLiteralEnv(container *corev1.Container, name, value string) {
+// setEnv replaces the container's existing env var of the same name, or appends it.
+func setEnv(container *corev1.Container, env corev1.EnvVar) {
 	for i := range container.Env {
-		if container.Env[i].Name == name {
-			container.Env[i] = corev1.EnvVar{Name: name, Value: value}
+		if container.Env[i].Name == env.Name {
+			container.Env[i] = env
 			return
 		}
 	}
-	container.Env = append(container.Env, corev1.EnvVar{Name: name, Value: value})
+	container.Env = append(container.Env, env)
 }
 
 func setLiteralEnvLast(container *corev1.Container, name, value string) {
@@ -199,41 +204,49 @@ func setLiteralEnvLast(container *corev1.Container, name, value string) {
 	container.Env = append(container.Env, corev1.EnvVar{Name: name, Value: value})
 }
 
-func setValueSourceEnv(container *corev1.Container, name string, source api.ValueSource) {
+func valueSourceEnvVar(name string, source api.ValueSource) corev1.EnvVar {
 	env := corev1.EnvVar{Name: name, Value: source.Value}
 	if source.SecretKeyRef != nil {
 		env.Value = ""
 		env.ValueFrom = &corev1.EnvVarSource{SecretKeyRef: source.SecretKeyRef.DeepCopy()}
 	}
-	for i := range container.Env {
-		if container.Env[i].Name == name {
-			container.Env[i] = env
-			return
-		}
-	}
-	container.Env = append(container.Env, env)
+	return env
 }
 
-func setPodUIDEnv(container *corev1.Container) {
-	const name = "TELEPRESENCE_KAFKA_POD_UID"
-	env := corev1.EnvVar{
-		Name: name,
+func podUIDEnvVar() corev1.EnvVar {
+	return corev1.EnvVar{
+		Name: podUIDEnvName,
 		ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{
 			APIVersion: "v1", FieldPath: "metadata.uid",
 		}},
 	}
-	for i := range container.Env {
-		if container.Env[i].Name == name {
-			container.Env[i] = env
-			return
-		}
+}
+
+// replicaSetResolver memoizes ReplicaSet-controller lookups by ReplicaSet name.
+type replicaSetResolver struct {
+	reader client.Reader
+	cache  map[string]*metav1.OwnerReference
+}
+
+func (resolver *replicaSetResolver) parentOf(ctx context.Context, namespace, name string) (*metav1.OwnerReference, error) {
+	if resolver.cache == nil {
+		resolver.cache = make(map[string]*metav1.OwnerReference)
 	}
-	container.Env = append(container.Env, env)
+	if parent, ok := resolver.cache[name]; ok {
+		return parent, nil
+	}
+	rs := new(appsv1.ReplicaSet)
+	if err := resolver.reader.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, rs); err != nil {
+		return nil, fmt.Errorf("resolve ReplicaSet owner %s/%s: %w", namespace, name, err)
+	}
+	parent := metav1.GetControllerOf(rs)
+	resolver.cache[name] = parent
+	return parent, nil
 }
 
 func podMatchesSnapshot(
 	ctx context.Context,
-	reader client.Reader,
+	resolver *replicaSetResolver,
 	pod *corev1.Pod,
 	workloads []api.WorkloadReference,
 ) (bool, error) {
@@ -249,11 +262,10 @@ func podMatchesSnapshot(
 	if owner.Kind != "ReplicaSet" {
 		return false, nil
 	}
-	rs := new(appsv1.ReplicaSet)
-	if err := reader.Get(ctx, client.ObjectKey{Namespace: pod.Namespace, Name: owner.Name}, rs); err != nil {
-		return false, fmt.Errorf("resolve ReplicaSet owner %s/%s: %w", pod.Namespace, owner.Name, err)
+	parent, err := resolver.parentOf(ctx, pod.Namespace, owner.Name)
+	if err != nil {
+		return false, err
 	}
-	parent := metav1.GetControllerOf(rs)
 	if parent == nil {
 		return false, nil
 	}
