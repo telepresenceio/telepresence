@@ -685,7 +685,7 @@ func (s *session) getInfosForWorkloads(
 			for _, ii := range iis {
 				include := false
 				switch {
-				case ii.Spec.NoDefaultPort:
+				case ii.Spec.Replace:
 					filterMatch |= rpc.ListRequest_REPLACEMENTS
 					include = filter&rpc.ListRequest_REPLACEMENTS != 0
 				case ii.Spec.Wiretap:

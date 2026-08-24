@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +21,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
 
 type StatusInfo struct {
@@ -303,7 +303,7 @@ func setUserDaemonStatus(ctx context.Context, userD daemon.UserClient, di *daemo
 			Client: icept.Spec.Client,
 		}
 		switch {
-		case icept.Spec.NoDefaultPort:
+		case icept.Spec.Replace:
 			us.Replacements = append(us.Replacements, cis)
 		case icept.Spec.Wiretap:
 			us.Wiretaps = append(us.Wiretaps, cis)
@@ -448,7 +448,7 @@ func (s *SingleConnectStatusInfo) toMap() (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err = json.Unmarshal(sx, &m); err != nil {
+		if err = json.Unmarshal(sx, &m, false); err != nil {
 			return nil, err
 		}
 	}
@@ -456,7 +456,7 @@ func (s *SingleConnectStatusInfo) toMap() (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = json.Unmarshal(sx, &m); err != nil {
+	if err = json.Unmarshal(sx, &m, false); err != nil {
 		return nil, err
 	}
 	return m, nil
@@ -477,7 +477,7 @@ func (s *MultiConnectStatusInfo) toMap() (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err = json.Unmarshal(sx, &m); err != nil {
+		if err = json.Unmarshal(sx, &m, false); err != nil {
 			return nil, err
 		}
 	}
@@ -697,7 +697,7 @@ func (ts *TrafficManagerStatus) toMap() (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err = json.Unmarshal(sx, &m); err != nil {
+		if err = json.Unmarshal(sx, &m, false); err != nil {
 			return nil, err
 		}
 	}

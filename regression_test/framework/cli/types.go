@@ -61,8 +61,11 @@ type InterceptInfo struct {
 	// container port it replaces, respectively.
 	TargetPort    int32 `json:"target_port,omitempty"`
 	ContainerPort int32 `json:"container_port,omitempty"`
-	Replace       bool  `json:"replace,omitempty"`
-	Wiretap       bool  `json:"wiretap,omitempty"`
+	// PodIP is the IP of the pod serving the attachment, dialable from the
+	// test host through the connected session.
+	PodIP   string `json:"pod_ip,omitempty"`
+	Replace bool   `json:"replace,omitempty"`
+	Wiretap bool   `json:"wiretap,omitempty"`
 	// Environment carries the intercepted container's environment plus the
 	// TELEPRESENCE_ROOT/TELEPRESENCE_INTERCEPT_ID/TELEPRESENCE_API_HOST
 	// entries the CLI adds locally before printing (pkg/client/cli/

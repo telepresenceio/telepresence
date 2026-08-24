@@ -88,7 +88,7 @@ func AttachmentTypeFromSpec(spec *manager.InterceptSpec) AttachmentType {
 	switch {
 	case spec.Wiretap:
 		return AttachmentTypeWiretap
-	case spec.NoDefaultPort:
+	case spec.Replace:
 		return AttachmentTypeReplace
 	default:
 		return AttachmentTypeIntercept

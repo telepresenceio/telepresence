@@ -675,7 +675,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	spec.Protocol = pi.Protocol
 	spec.ContainerPort = pi.ContainerPort
 	spec.ContainerName = pi.ContainerName
-	if spec.NoDefaultPort {
+	if spec.Replace {
 		spec.Name = spec.Agent + "/" + pi.ContainerName
 	}
 	spec.PodPorts = pi.PodPorts

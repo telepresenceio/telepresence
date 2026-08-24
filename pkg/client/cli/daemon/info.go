@@ -207,7 +207,7 @@ func (il *InfoLoader[T]) DialDaemon(ctx context.Context, waitForConnect bool) (c
 		daemonPort = ii.DaemonPort
 	} else {
 		daemonName = "root"
-		daemonPort = (any(info).(*RootInfo)).DaemonPort
+		daemonPort = any(info).(*RootInfo).DaemonPort
 	}
 	conn, err = dialDaemon(ctx, daemonName, daemonPort)
 	if errors.Is(err, context.DeadlineExceeded) && !waitForConnect {

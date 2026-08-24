@@ -22,7 +22,7 @@ func DescribeIntercepts(
 		var nis, ris, wts []*manager.InterceptInfo
 		for _, ii := range iis {
 			switch {
-			case ii.Spec.NoDefaultPort:
+			case ii.Spec.Replace:
 				ris = append(ris, ii)
 			case ii.Spec.Wiretap:
 				wts = append(wts, ii)

@@ -171,6 +171,13 @@ items:
           persisted server certificate, from an existing TLS Secret or
           cert-manager.
         docs: reference/external-endpoint
+      - type: change
+        title: The deprecated --replace flag has been removed
+        body: >-
+          The <code>--replace</code> flag of <code>telepresence intercept</code>, deprecated
+          since 2.22.0, has been removed. Use the <code>telepresence replace</code> command
+          instead. The traffic-manager now ignores HTTP filters that older clients send
+          along with a replace request.
   - version: 2.31.2
     date: 2026-08-02
     notes:
