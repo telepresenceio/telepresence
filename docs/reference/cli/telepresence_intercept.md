@@ -37,7 +37,6 @@ Intercept a service
       --node-agent                     Serve this intercept with a node-hosted traffic-agent (a manager-created Job that enters the target pod's namespaces) instead of injecting a sidecar. Requires the traffic-manager to have node-agent mode enabled.
       --plaintext                      Use plaintext instead of TLS when communicating with the intercept handler
   -p, --port strings                   Local ports to forward to. Use &lt;local port&gt;:&lt;identifier&gt; to uniquely identify service ports, where the &lt;identifier&gt; is the port name or number. With --docker-run and a daemon that doesn't run in docker', use &lt;local port&gt;:&lt;container port&gt; or &lt;local port&gt;:&lt;container port&gt;:&lt;identifier&gt;.
-      --replace                        Indicates if the traffic-agent should replace application containers in workload pods. The default behavior is for the agent sidecar to be installed alongside existing containers. (DEPRECATED: Use the replace command.)
       --service string                 Optional name of service to intercept. Sometimes needed to uniquely identify the intercepted port.
       --to-pod strings                 Additional ports to forward to the intercepted pod, will available for connections to localhost:PORT. Use this to, for example, access proxy/helper sidecars in the intercepted pod. The default protocol is TCP. Use &lt;port&gt;/UDP for UDP ports
       --wait-message string            Message to print when intercept handler has started

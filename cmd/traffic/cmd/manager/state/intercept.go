@@ -41,6 +41,16 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/usg"
 )
 
+// A replace routes all of the container's traffic, so mechanism
+// filters cannot apply.
+func normalizeReplaceSpec(spec *rpc.InterceptSpec) {
+	if spec.Replace {
+		spec.Mechanism = "tcp"
+		spec.HeaderFilters = nil
+		spec.PathFilters = nil
+	}
+}
+
 // PrepareIntercept ensures that the given request can be matched against the intercept configuration of
 // the workload that it references. It returns a PreparedIntercept where all intercepted ports have been
 // qualified with a container port and if applicable, with service name and a service port name.
@@ -67,6 +77,7 @@ func (s *State) PrepareIntercept(
 	}
 
 	spec := cr.InterceptSpec
+	normalizeReplaceSpec(spec)
 	kind := k8sapi.Kind(spec.WorkloadKind)
 	enabledWorkloadKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
 	var wl k8sapi.Workload
@@ -108,7 +119,7 @@ func (s *State) PrepareIntercept(
 			// Replace is implemented by the sidecar machinery, which
 			// node-agent mode never runs, so the app container would keep
 			// running and the replace would be silently ignored.
-			return interceptError(errcat.User.New("node-agent mode does not support --replace"))
+			return interceptError(errcat.User.New("node-agent mode does not support replacing containers"))
 		}
 	} else {
 		// Provisioning a sidecar intercept injects a traffic-agent into the
@@ -277,9 +288,10 @@ func (s *State) checkInterceptConsistency(
 	spec := cr.InterceptSpec
 	env := managerutil.GetEnv(s.backgroundCtx)
 
-	// Check if global intercepts are allowed before proceeding
-	// Block replaces and global TCP/UDP intercepts, but allow HTTP intercepts and wiretaps
-	if !env.InterceptAllowGlobal && (spec.Replace || !(spec.Wiretap || spec.Mechanism == "http")) {
+	// Check if global intercepts are allowed before proceeding. Block global
+	// TCP/UDP intercepts, but allow HTTP intercepts and wiretaps. A replace
+	// spec is always tcp (see normalizeReplaceSpec), so it's blocked here too.
+	if !env.InterceptAllowGlobal && !(spec.Wiretap || spec.Mechanism == "http") {
 		return fmt.Errorf("global TCP/UDP intercepts and replaces are disabled. Use --http-header or --http-path-* flags for HTTP intercepts")
 	}
 
@@ -423,6 +435,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 	}
 
 	spec := cir.InterceptSpec
+	normalizeReplaceSpec(spec)
 	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
 
 	wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))

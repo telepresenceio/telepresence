@@ -303,7 +303,7 @@ func setUserDaemonStatus(ctx context.Context, userD daemon.UserClient, di *daemo
 			Client: icept.Spec.Client,
 		}
 		switch {
-		case icept.Spec.NoDefaultPort:
+		case icept.Spec.Replace:
 			us.Replacements = append(us.Replacements, cis)
 		case icept.Spec.Wiretap:
 			us.Wiretaps = append(us.Wiretaps, cis)
