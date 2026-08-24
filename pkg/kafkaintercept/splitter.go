@@ -125,10 +125,6 @@ func validateSplitterConfig(cfg SplitterConfig) error {
 // ApplyRoutingTable publishes a desired generation for adoption at the next
 // transaction boundary.
 func (s *Splitter) ApplyRoutingTable(table RoutingTable) error {
-	table = cloneRoutingTable(table)
-	if err := validateRoutingTable(table, s.cfg.AppTopics); err != nil {
-		return err
-	}
 	s.routingMu.Lock()
 	current := s.desired.Load()
 	if table.Generation < current.Generation {
@@ -136,12 +132,17 @@ func (s *Splitter) ApplyRoutingTable(table RoutingTable) error {
 		return fmt.Errorf("kafka routing generation %d is older than %d", table.Generation, current.Generation)
 	}
 	if table.Generation == current.Generation {
-		if !reflect.DeepEqual(table, *current) {
-			s.routingMu.Unlock()
+		conflict := !reflect.DeepEqual(table, *current)
+		s.routingMu.Unlock()
+		if conflict {
 			return fmt.Errorf("kafka routing generation %d has conflicting content", table.Generation)
 		}
-		s.routingMu.Unlock()
 		return nil
+	}
+	table = cloneRoutingTable(table)
+	if err := validateRoutingTable(table, s.cfg.AppTopics); err != nil {
+		s.routingMu.Unlock()
+		return err
 	}
 	s.desired.Store(&table)
 	s.routingMu.Unlock()
@@ -268,12 +269,8 @@ func (s *Splitter) transact(ctx context.Context, table RoutingTable, records []*
 		_, _ = s.session.End(context.WithoutCancel(ctx), kgo.TryAbort)
 		return fmt.Errorf("produce Kafka shadow records: %w", err)
 	}
-	committed, err := s.session.End(ctx, kgo.TryCommit)
-	if err != nil {
+	if _, err := s.session.End(ctx, kgo.TryCommit); err != nil {
 		return fmt.Errorf("commit Kafka split transaction: %w", err)
-	}
-	if !committed {
-		return nil
 	}
 	return nil
 }

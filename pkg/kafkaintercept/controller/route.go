@@ -10,13 +10,14 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept"
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/broker"
+	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/runtimeconfig"
 )
 
 func (r *RouteReconciler) reconcileRoute(
@@ -24,9 +25,9 @@ func (r *RouteReconciler) reconcileRoute(
 	route *api.KafkaRoute,
 	before *api.KafkaRouteStatus,
 ) (ctrl.Result, error) {
-	if route.Status.Phase == "Closed" {
-		if containsString(route.Finalizers, routeFinalizer) {
-			route.Finalizers = removeString(route.Finalizers, routeFinalizer)
+	if route.Status.Phase == api.RoutePhaseClosed {
+		if controllerutil.ContainsFinalizer(route, routeFinalizer) {
+			controllerutil.RemoveFinalizer(route, routeFinalizer)
 			return requeue(), r.Update(ctx, route)
 		}
 		if route.DeletionTimestamp == nil && !route.Spec.ExpiresAt.After(time.Now()) {
@@ -47,13 +48,11 @@ func (r *RouteReconciler) reconcileRoute(
 	if closing {
 		return r.reconcileClosingRoute(ctx, route, before, split)
 	}
-	if !routeProvisioningAllowed(split.Status.Phase) {
+	if !split.Status.Phase.AcceptsRoutes() {
 		return r.pendingRoute(ctx, route, before, "SplitNotReady", "referenced KafkaSplit is not enabled")
 	}
 	if err := r.rejectOverlap(ctx, route); err != nil {
-		route.Status.Phase = "Invalid"
-		setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "OverlappingPredicate", err.Error(), route.Generation)
-		return r.updateRouteStatus(ctx, route, before, false)
+		return r.transitionRoute(ctx, route, before, api.RoutePhaseInvalid, "OverlappingPredicate", err.Error(), false)
 	}
 	active := activeSplit(split)
 	kafka, err := r.openBroker(ctx, active)
@@ -89,23 +88,15 @@ func (r *RouteReconciler) reconcileRoute(
 		return ctrl.Result{}, err
 	}
 	if !included {
-		route.Status.Phase = "Staged"
-		setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "Staged", "waiting for the split routing table", route.Generation)
-		return r.updateRouteStatus(ctx, route, before, true)
+		return r.transitionRoute(ctx, route, before, api.RoutePhaseStaged, "Staged", "waiting for the split routing table", true)
 	}
 	route.Status.RouteGeneration = int64(generation)
 	if !membersHaveGeneration(split.Status.Members, generation) {
-		route.Status.Phase = "Staged"
-		setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "AwaitingAcknowledgement", "waiting for every splitter to adopt the route", route.Generation)
-		return r.updateRouteStatus(ctx, route, before, true)
+		return r.transitionRoute(
+			ctx, route, before, api.RoutePhaseStaged, "AwaitingAcknowledgement", "waiting for every splitter to adopt the route", true,
+		)
 	}
-	route.Status.Phase = "Ready"
-	setReadyCondition(&route.Status.Conditions, metav1.ConditionTrue, "Ready", "all splitters acknowledged the personal route", route.Generation)
-	return r.updateRouteStatus(ctx, route, before, true)
-}
-
-func routeProvisioningAllowed(splitPhase string) bool {
-	return splitPhase == "Enabled" || splitPhase == "Starting"
+	return r.transitionRoute(ctx, route, before, api.RoutePhaseReady, "Ready", "all splitters acknowledged the personal route", true)
 }
 
 func (r *RouteReconciler) reconcileClosingRoute(
@@ -115,14 +106,12 @@ func (r *RouteReconciler) reconcileClosingRoute(
 	split *api.KafkaSplit,
 ) (ctrl.Result, error) {
 	if len(route.Status.Resources) == 0 {
-		route.Status.Phase = "Closed"
 		route.Status.Environment = nil
 		route.Status.Topics = nil
 		route.Status.Group = ""
-		setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "Closed", "Kafka route is closed", route.Generation)
-		return r.updateRouteStatus(ctx, route, before, true)
+		return r.transitionRoute(ctx, route, before, api.RoutePhaseClosed, "Closed", "Kafka route is closed", true)
 	}
-	if route.Status.Phase == "Cleaning" {
+	if route.Status.Phase == api.RoutePhaseCleaning {
 		return r.finishClosingRoute(ctx, route, before, split)
 	}
 	generation, included, err := r.routeGeneration(ctx, split, route.Name)
@@ -130,9 +119,7 @@ func (r *RouteReconciler) reconcileClosingRoute(
 		return ctrl.Result{}, err
 	}
 	if included || !membersHaveGeneration(split.Status.Members, generation) {
-		route.Status.Phase = "Closing"
-		setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "Closing", "waiting for splitters to stop routing new records", route.Generation)
-		return r.updateRouteStatus(ctx, route, before, true)
+		return r.transitionRoute(ctx, route, before, api.RoutePhaseClosing, "Closing", "waiting for splitters to stop routing new records", true)
 	}
 	active := activeSplit(split)
 	kafka, err := r.openBroker(ctx, active)
@@ -143,9 +130,7 @@ func (r *RouteReconciler) reconcileClosingRoute(
 	if reason, err := drainClosingRoute(ctx, kafka, active, route, split.Status.ApplicationTopics); err != nil {
 		return r.pendingRoute(ctx, route, before, reason, err.Error())
 	}
-	route.Status.Phase = "Cleaning"
-	setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "Cleaning", "deleting managed session resources", route.Generation)
-	return r.updateRouteStatus(ctx, route, before, true)
+	return r.transitionRoute(ctx, route, before, api.RoutePhaseCleaning, "Cleaning", "deleting managed session resources", true)
 }
 
 func (r *RouteReconciler) finishClosingRoute(
@@ -154,6 +139,7 @@ func (r *RouteReconciler) finishClosingRoute(
 	before *api.KafkaRouteStatus,
 	split *api.KafkaSplit,
 ) (ctrl.Result, error) {
+	active := activeSplit(split)
 	generation, included, err := r.routeGeneration(ctx, split, route.Name)
 	if err != nil {
 		return r.pendingRoute(ctx, route, before, "RoutingUnknown", err.Error())
@@ -162,33 +148,27 @@ func (r *RouteReconciler) finishClosingRoute(
 	if err != nil {
 		return r.pendingRoute(ctx, route, before, "AcknowledgementUnknown", err.Error())
 	}
-	if included || len(members) != int(splitterReplicas(activeSplit(split).Spec.Splitter)) ||
-		!membersHaveGeneration(members, generation) {
+	if included || !membersReady(members, active.Spec.Splitter.EffectiveReplicas(), generation) {
 		return r.pendingRoute(ctx, route, before, "AwaitingAcknowledgement", "waiting for every splitter to confirm the closing route generation")
 	}
-	active := activeSplit(split)
 	kafka, err := r.openBroker(ctx, active)
 	if err != nil {
-		setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "BrokerUnavailable", err.Error(), route.Generation)
-		return r.updateRouteStatus(ctx, route, before, true)
+		return r.transitionRoute(ctx, route, before, route.Status.Phase, "BrokerUnavailable", err.Error(), true)
 	}
 	defer kafka.Close()
 	if reason, err := drainClosingRoute(ctx, kafka, active, route, split.Status.ApplicationTopics); err != nil {
 		return r.pendingRoute(ctx, route, before, reason, err.Error())
 	}
 	if err := kafka.DeleteManaged(ctx, route.Status.Resources); err != nil {
-		setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "CleanupPending", err.Error(), route.Generation)
-		return r.updateRouteStatus(ctx, route, before, true)
+		return r.transitionRoute(ctx, route, before, route.Status.Phase, "CleanupPending", err.Error(), true)
 	}
-	route.Status.Phase = "Closed"
 	route.Status.Group = ""
 	route.Status.Topics = nil
 	route.Status.Environment = nil
 	route.Status.Resources = nil
 	route.Status.RouteGeneration = 0
 	route.Status.Lag = nil
-	setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, "Closed", "session residue returned to the application shadow", route.Generation)
-	return r.updateRouteStatus(ctx, route, before, true)
+	return r.transitionRoute(ctx, route, before, api.RoutePhaseClosed, "Closed", "session residue returned to the application shadow", true)
 }
 
 func drainClosingRoute(
@@ -208,14 +188,9 @@ func drainClosingRoute(
 	if err := kafka.DrainSession(ctx, split, route.Name, route.Status.Group, route.Status.Topics, applicationTopics); err != nil {
 		return "DrainFailed", err
 	}
-	remaining, err := kafka.Remaining(ctx, route.Status.Group, route.Status.Topics)
-	if err != nil {
-		return "DrainUnknown", err
-	}
-	route.Status.Lag = &remaining
-	if remaining != 0 {
-		return "DrainPending", fmt.Errorf("%d session records remain", remaining)
-	}
+	// DrainSession only returns nil after its own residue check found zero records remaining.
+	var zero int64
+	route.Status.Lag = &zero
 	return "", nil
 }
 
@@ -228,12 +203,14 @@ func (r *RouteReconciler) routeForSessionSlot(
 		return route, nil
 	}
 	routes := new(api.KafkaRouteList)
-	if err := r.List(ctx, routes, client.InNamespace(route.Namespace)); err != nil {
+	if err := r.List(
+		ctx, routes, client.InNamespace(route.Namespace), client.MatchingFields{routeSplitRefIndexField: split.Name},
+	); err != nil {
 		return nil, err
 	}
 	used := make(map[string]struct{})
 	for i := range routes.Items {
-		if routes.Items[i].Name != route.Name && routes.Items[i].Spec.SplitRef.Name == split.Name {
+		if routes.Items[i].Name != route.Name {
 			used[routes.Items[i].Status.Group] = struct{}{}
 		}
 	}
@@ -250,15 +227,17 @@ func (r *RouteReconciler) routeForSessionSlot(
 
 func (r *RouteReconciler) rejectOverlap(ctx context.Context, route *api.KafkaRoute) error {
 	routes := new(api.KafkaRouteList)
-	if err := r.List(ctx, routes, client.InNamespace(route.Namespace)); err != nil {
+	if err := r.List(
+		ctx, routes, client.InNamespace(route.Namespace), client.MatchingFields{routeSplitRefIndexField: route.Spec.SplitRef.Name},
+	); err != nil {
 		return err
 	}
 	predicate := predicateFromAPI(route.Spec.Predicate)
 	for i := range routes.Items {
 		other := &routes.Items[i]
-		if other.Name == route.Name || other.Spec.SplitRef.Name != route.Spec.SplitRef.Name ||
+		if other.Name == route.Name ||
 			other.Spec.DesiredState != api.RouteStateActive || !other.Spec.ExpiresAt.After(time.Now()) ||
-			other.Status.Phase == "Closed" || other.Status.Phase == "Invalid" {
+			other.Status.Phase == api.RoutePhaseClosed || other.Status.Phase == api.RoutePhaseInvalid {
 			continue
 		}
 		if predicate.Overlaps(predicateFromAPI(other.Spec.Predicate)) {
@@ -287,7 +266,7 @@ func (r *RouteReconciler) routeGeneration(
 		}
 		return 0, false, err
 	}
-	table, err := routingFromConfigMap(configMap)
+	table, err := runtimeconfig.RoutingFromConfigMap(configMap)
 	if err != nil {
 		return 0, false, err
 	}
@@ -302,15 +281,19 @@ func membersHaveGeneration(members []api.KafkaSplitterMemberStatus, generation u
 	})
 }
 
+func membersReady(members []api.KafkaSplitterMemberStatus, replicas int32, generation uint64) bool {
+	return len(members) == int(replicas) && membersHaveGeneration(members, generation)
+}
+
 func (r *RouteReconciler) pendingRoute(
 	ctx context.Context,
 	route *api.KafkaRoute,
 	before *api.KafkaRouteStatus,
 	reason, message string,
 ) (ctrl.Result, error) {
-	if route.Status.Phase != "Invalid" {
-		route.Status.Phase = "Pending"
+	phase := route.Status.Phase
+	if phase != api.RoutePhaseInvalid {
+		phase = api.RoutePhasePending
 	}
-	setReadyCondition(&route.Status.Conditions, metav1.ConditionFalse, reason, message, route.Generation)
-	return r.updateRouteStatus(ctx, route, before, true)
+	return r.transitionRoute(ctx, route, before, phase, reason, message, true)
 }

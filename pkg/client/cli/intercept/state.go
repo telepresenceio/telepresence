@@ -92,7 +92,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		NodeAgent:     s.NodeAgent,
 		PathFilters:   BuildPathFilters(s.HTTPPathEqualFilters, s.HTTPPathPrefixFilters, s.HTTPPathRegexFilters),
 	}
-	if s.kafkaFlags && !s.NoKafka {
+	if s.kafkaEnabled && !s.NoKafka {
 		spec.Kafka = &manager.KafkaIntercept{Only: s.KafkaOnly}
 		for _, value := range s.KafkaHeaders {
 			name, encoded, _ := parseKafkaHeader(value)

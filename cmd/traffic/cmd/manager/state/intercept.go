@@ -580,10 +580,7 @@ func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest, initial
 	if initialize != nil {
 		initialize(is)
 	}
-	if cir.InterceptSpec.GetKafka().GetOnly() {
-		is.Disposition = rpc.InterceptDispositionType_ACTIVE
-		is.Message = "Kafka routes are ready"
-	}
+	is.ActivateKafkaOnly()
 
 	// Wrap each potential-state-change in an
 	//
@@ -610,6 +607,15 @@ func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest, initial
 // visible to state subscribers.
 func (is *Intercept) AddFinalizer(finalizer InterceptFinalizer) {
 	is.addFinalizer(finalizer)
+}
+
+// ActivateKafkaOnly marks a Kafka-only intercept ACTIVE, since there is no
+// agent to wait for. Intercepts of any other kind are left untouched.
+func (is *Intercept) ActivateKafkaOnly() {
+	if is.Spec.GetKafka().GetOnly() {
+		is.Disposition = rpc.InterceptDispositionType_ACTIVE
+		is.Message = "Kafka routes are ready"
+	}
 }
 
 func (s *State) NewInterceptInfo(interceptID string, ciReq *rpc.CreateInterceptRequest) *Intercept {

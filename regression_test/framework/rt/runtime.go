@@ -430,16 +430,22 @@ func (r *Runtime) clusterKey(ctx context.Context) string {
 	return r.clusterKeyVal
 }
 
-// applyManifest writes manifest to a file under ArtifactDir("manifests") and
+// ApplyManifest writes manifest to a file under ArtifactDir("manifests") and
 // applies it with `kubectl apply -f <path>`. Using a file (rather than
 // piping through stdin) keeps Kubectl's simple args-based signature.
-func (r *Runtime) applyManifest(ctx context.Context, ns, tag, manifest string) error {
+func (r *Runtime) ApplyManifest(ctx context.Context, ns, tag, manifest string) error {
 	path := filepath.Join(r.ArtifactDir("manifests"), tag+".yaml")
 	if err := os.WriteFile(path, []byte(manifest), 0o644); err != nil {
 		return fmt.Errorf("rtest: writing %s: %w", path, err)
 	}
 	_, err := r.Kubectl(ctx, ns, "apply", "-f", path)
 	return err
+}
+
+// applyManifest is a private alias for ApplyManifest used by internal
+// fixtures.
+func (r *Runtime) applyManifest(ctx context.Context, ns, tag, manifest string) error {
+	return r.ApplyManifest(ctx, ns, tag, manifest)
 }
 
 // Kubectl runs kubectl with the run's context and (when ns is non-empty)

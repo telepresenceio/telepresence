@@ -19,6 +19,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept"
@@ -66,10 +67,10 @@ func (r *SplitReconciler) releaseOwnership(ctx context.Context, split *api.Kafka
 }
 
 func activeSpec(split *api.KafkaSplit) *api.KafkaActiveSpec {
-	clone := split.DeepCopy()
+	spec := split.Spec.DeepCopy()
 	return &api.KafkaActiveSpec{
-		Container: clone.Spec.Container, Connection: clone.Spec.Connection, Source: clone.Spec.Source,
-		Application: clone.Spec.Application, Splitter: clone.Spec.Splitter, Shadows: clone.Spec.Shadows,
+		Container: spec.Container, Connection: spec.Connection, Source: spec.Source,
+		Application: spec.Application, Splitter: spec.Splitter, Shadows: spec.Shadows,
 	}
 }
 
@@ -116,16 +117,18 @@ func (r *SplitReconciler) desiredRoutingTable(
 	paused bool,
 ) (kafkaintercept.RoutingTable, error) {
 	routes := new(api.KafkaRouteList)
-	if err := r.List(ctx, routes, client.InNamespace(split.Namespace)); err != nil {
+	if err := r.List(
+		ctx, routes, client.InNamespace(split.Namespace), client.MatchingFields{routeSplitRefIndexField: split.Name},
+	); err != nil {
 		return kafkaintercept.RoutingTable{}, err
 	}
 	sort.Slice(routes.Items, func(i, j int) bool { return routes.Items[i].Name < routes.Items[j].Name })
 	table := kafkaintercept.RoutingTable{Paused: paused}
 	for i := range routes.Items {
 		route := &routes.Items[i]
-		if route.Spec.SplitRef.Name != split.Name || route.Spec.DesiredState != api.RouteStateActive ||
+		if route.Spec.DesiredState != api.RouteStateActive ||
 			!route.Spec.ExpiresAt.After(time.Now()) || len(route.Status.Topics) == 0 ||
-			(route.Status.Phase != "Staged" && route.Status.Phase != "Ready") {
+			(route.Status.Phase != api.RoutePhaseStaged && route.Status.Phase != api.RoutePhaseReady) {
 			continue
 		}
 		table.Routes = append(table.Routes, kafkaintercept.Route{
@@ -165,7 +168,7 @@ func (r *SplitReconciler) ensureProviderResources(
 			Labels: map[string]string{runtimeconfig.SplitLabel: name},
 		}}
 	} else {
-		current, parseErr := routingFromConfigMap(configMap)
+		current, parseErr := runtimeconfig.RoutingFromConfigMap(configMap)
 		if parseErr != nil {
 			return 0, parseErr
 		}
@@ -177,17 +180,17 @@ func (r *SplitReconciler) ensureProviderResources(
 			table.Generation++
 		}
 	}
-	runtime := runtimeconfig.Config{
-		Namespace: split.Namespace, Connection: split.Spec.Connection, Group: split.Spec.Source.Group,
-		InstanceIDPrefix: prepared.Names.SplitterInstance, TransactionalIDPrefix: prepared.Names.SplitterTransactional,
-		AppTopics: maps.Clone(prepared.ApplicationTopics), OffsetReset: split.Spec.Source.OffsetReset,
-		BatchSize: int(splitterBatchSize(split.Spec.Splitter)), Routes: table,
-		Control: &runtimeconfig.Control{
-			Namespace: key.Namespace, ConfigMap: key.Name, MemberLeasePrefix: name + "-", Split: name,
-		},
-	}
 	configBytes := []byte(configMap.Data[runtimeconfig.ConfigDataKey])
 	if configMap.ResourceVersion == "" {
+		runtime := runtimeconfig.Config{
+			Namespace: split.Namespace, Connection: split.Spec.Connection, Group: split.Spec.Source.Group,
+			InstanceIDPrefix: prepared.Names.SplitterInstance, TransactionalIDPrefix: prepared.Names.SplitterTransactional,
+			AppTopics: maps.Clone(prepared.ApplicationTopics), OffsetReset: split.Spec.Source.OffsetReset,
+			BatchSize: int(split.Spec.Splitter.EffectiveBatchSize()), Routes: table,
+			Control: &runtimeconfig.Control{
+				Namespace: key.Namespace, ConfigMap: key.Name, MemberLeasePrefix: name + "-", Split: name,
+			},
+		}
 		configBytes, err = json.Marshal(runtime)
 		if err != nil {
 			return 0, err
@@ -218,28 +221,6 @@ func (r *SplitReconciler) ensureProviderResources(
 		return 0, err
 	}
 	return table.Generation, nil
-}
-
-func routingFromConfigMap(configMap *corev1.ConfigMap) (kafkaintercept.RoutingTable, error) {
-	var table kafkaintercept.RoutingTable
-	if err := json.Unmarshal([]byte(configMap.Data[runtimeconfig.RoutingDataKey]), &table); err != nil {
-		return table, fmt.Errorf("decode routing table from ConfigMap %s/%s: %w", configMap.Namespace, configMap.Name, err)
-	}
-	return table, nil
-}
-
-func splitterBatchSize(spec api.KafkaSplitterSpec) int32 {
-	if spec.BatchSize <= 0 {
-		return 100
-	}
-	return spec.BatchSize
-}
-
-func splitterReplicas(spec api.KafkaSplitterSpec) int32 {
-	if spec.Replicas <= 0 {
-		return 1
-	}
-	return spec.Replicas
 }
 
 func (r *SplitReconciler) ensureSplitterService(ctx context.Context, key client.ObjectKey) error {
@@ -285,7 +266,7 @@ func (r *SplitReconciler) ensureSplitterStatefulSet(
 	labels := map[string]string{
 		"app.kubernetes.io/name": runtimeconfig.SplitterName, runtimeconfig.SplitLabel: key.Name,
 	}
-	replicas := splitterReplicas(split.Spec.Splitter)
+	replicas := split.Spec.Splitter.EffectiveReplicas()
 	checksum := sha256.Sum256(config)
 	expected := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name, Labels: maps.Clone(labels)},
@@ -298,14 +279,14 @@ func (r *SplitReconciler) ensureSplitterStatefulSet(
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: serviceAccount,
-					SecurityContext:    &corev1.PodSecurityContext{RunAsNonRoot: pointer(true)},
+					SecurityContext:    &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true)},
 					Containers: []corev1.Container{{
 						Name: "splitter", Image: image, Args: []string{"splitter"},
 						Env: []corev1.EnvVar{{
 							Name: "POD_NAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "metadata.name"}},
 						}},
 						SecurityContext: &corev1.SecurityContext{
-							AllowPrivilegeEscalation: pointer(false), ReadOnlyRootFilesystem: pointer(true),
+							AllowPrivilegeEscalation: ptr.To(false), ReadOnlyRootFilesystem: ptr.To(true),
 							Capabilities: &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 						},
 						VolumeMounts: []corev1.VolumeMount{{Name: "config", MountPath: "/var/run/telepresence-kafka", ReadOnly: true}},
@@ -347,7 +328,7 @@ func (r *SplitReconciler) membersAcknowledged(
 		return false, err
 	}
 	split.Status.Members = members
-	return len(members) == int(replicas) && membersHaveGeneration(members, generation), nil
+	return membersReady(members, replicas, generation), nil
 }
 
 func splitterMemberStatus(
@@ -417,8 +398,4 @@ func (r *SplitReconciler) deleteProviderResources(ctx context.Context, split *ap
 		}
 	}
 	return true, nil
-}
-
-func pointer[T any](value T) *T {
-	return &value
 }

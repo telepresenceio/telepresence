@@ -161,14 +161,24 @@ func (m *Manager) Close() {
 	m.client.Close()
 }
 
+// topicDetail returns a topic's detail, failing closed if it is missing,
+// errored, or has no partitions.
+func topicDetail(details kadm.TopicDetails, topic string) (kadm.TopicDetail, error) {
+	detail, ok := details[topic]
+	if !ok || detail.Err != nil || len(detail.Partitions) == 0 {
+		if ok && detail.Err != nil {
+			return kadm.TopicDetail{}, fmt.Errorf("describe Kafka topic %s: %w", topic, detail.Err)
+		}
+		return kadm.TopicDetail{}, fmt.Errorf("kafka topic %s does not exist", topic)
+	}
+	return detail, nil
+}
+
 // Prepare verifies source incarnations and creates or verifies application
 // shadows.
 func (m *Manager) Prepare(ctx context.Context, split *api.KafkaSplit) (Prepared, error) {
 	names := ResourceNames(split, split.Spec.Source.Group)
-	replicas := split.Spec.Splitter.Replicas
-	if replicas <= 0 {
-		replicas = 1
-	}
+	replicas := split.Spec.Splitter.EffectiveReplicas()
 	if err := names.ValidateApplication(
 		split.Spec.Source.Topics, replicas, split.Spec.Shadows.Mode == api.ShadowModeManaged,
 		split.Spec.Application.TransactionalIDEnv != "",
@@ -181,12 +191,9 @@ func (m *Manager) Prepare(ctx context.Context, split *api.KafkaSplit) (Prepared,
 	}
 	result := Prepared{Names: names, ApplicationTopics: make(map[string]string, len(split.Spec.Source.Topics))}
 	for _, source := range split.Spec.Source.Topics {
-		detail, ok := details[source]
-		if !ok || detail.Err != nil || len(detail.Partitions) == 0 {
-			if ok && detail.Err != nil {
-				return Prepared{}, fmt.Errorf("describe Kafka source topic %s: %w", source, detail.Err)
-			}
-			return Prepared{}, fmt.Errorf("kafka source topic %s does not exist", source)
+		detail, err := topicDetail(details, source)
+		if err != nil {
+			return Prepared{}, err
 		}
 		result.SourceTopics = append(result.SourceTopics, api.KafkaTopicStatus{
 			Name: source, TopicID: detail.ID.String(), Partitions: int32(len(detail.Partitions)),
@@ -206,10 +213,14 @@ func (m *Manager) Prepare(ctx context.Context, split *api.KafkaSplit) (Prepared,
 		return Prepared{}, fmt.Errorf("unsupported Kafka shadow mode %q", split.Spec.Shadows.Mode)
 	}
 
+	shadowDetails, err := m.listShadowDetails(ctx, split.Spec.Source.Topics, result.ApplicationTopics)
+	if err != nil {
+		return Prepared{}, err
+	}
 	for _, source := range split.Spec.Source.Topics {
 		sourceDetail := details[source]
 		destination := result.ApplicationTopics[source]
-		shadow, err := m.ensureShadow(ctx, split, source, destination, sourceDetail)
+		shadow, err := m.ensureShadow(ctx, split, source, destination, sourceDetail, shadowDetails)
 		if err != nil {
 			return Prepared{}, err
 		}
@@ -264,15 +275,16 @@ func (m *Manager) EnsureSession(
 	if err != nil {
 		return Session{}, fmt.Errorf("describe Kafka source topics: %w", err)
 	}
+	shadowDetails, err := m.listShadowDetails(ctx, split.Spec.Source.Topics, result.Topics)
+	if err != nil {
+		return Session{}, err
+	}
 	for _, source := range split.Spec.Source.Topics {
-		detail, ok := details[source]
-		if !ok || detail.Err != nil || len(detail.Partitions) == 0 {
-			if ok && detail.Err != nil {
-				return Session{}, fmt.Errorf("describe Kafka source topic %s: %w", source, detail.Err)
-			}
-			return Session{}, fmt.Errorf("kafka source topic %s does not exist", source)
+		detail, err := topicDetail(details, source)
+		if err != nil {
+			return Session{}, err
 		}
-		shadow, err := m.ensureShadow(ctx, split, source, result.Topics[source], detail)
+		shadow, err := m.ensureShadow(ctx, split, source, result.Topics[source], detail, shadowDetails)
 		if err != nil {
 			return Session{}, err
 		}
@@ -287,26 +299,48 @@ func (m *Manager) EnsureSession(
 	return result, nil
 }
 
+// listShadowDetails describes every non-empty shadow destination for sources
+// in one call.
+func (m *Manager) listShadowDetails(ctx context.Context, sources []string, destinations map[string]string) (kadm.TopicDetails, error) {
+	topics := make([]string, 0, len(sources))
+	for _, source := range sources {
+		if destination := destinations[source]; destination != "" {
+			topics = append(topics, destination)
+		}
+	}
+	if len(topics) == 0 {
+		return nil, nil
+	}
+	details, err := m.admin.ListTopics(ctx, topics...)
+	if err != nil {
+		return nil, fmt.Errorf("describe Kafka shadow topics: %w", err)
+	}
+	return details, nil
+}
+
 func (m *Manager) ensureShadow(
 	ctx context.Context,
 	split *api.KafkaSplit,
 	source, destination string,
 	sourceDetail kadm.TopicDetail,
+	shadowDetails kadm.TopicDetails,
 ) (kadm.TopicDetail, error) {
 	if destination == "" {
 		return kadm.TopicDetail{}, fmt.Errorf("kafka shadow topic for %s is empty", source)
 	}
 	managed := split.Spec.Shadows.Mode == api.ShadowModeManaged
-	details, err := m.admin.ListTopics(ctx, destination)
-	if err != nil {
-		return kadm.TopicDetail{}, fmt.Errorf("describe Kafka shadow topic %s: %w", destination, err)
-	}
-	detail, exists := details[destination]
+	detail, exists := shadowDetails[destination]
+	var sourceConfigs map[string]string
 	if !exists || errors.Is(detail.Err, kerr.UnknownTopicOrPartition) {
 		if !managed {
 			return kadm.TopicDetail{}, fmt.Errorf("preprovisioned Kafka shadow topic %s does not exist", destination)
 		}
-		if err := m.createShadow(ctx, split, destination, sourceDetail); err != nil {
+		configs, err := m.topicConfigs(ctx, sourceDetail.Topic)
+		if err != nil {
+			return kadm.TopicDetail{}, err
+		}
+		sourceConfigs = configs[sourceDetail.Topic]
+		if err := m.createShadow(ctx, split, destination, sourceDetail, sourceConfigs); err != nil {
 			return kadm.TopicDetail{}, err
 		}
 		detail, err = m.waitForPartitions(ctx, destination, len(sourceDetail.Partitions))
@@ -341,7 +375,7 @@ func (m *Manager) ensureShadow(
 	} else if havePartitions > wantPartitions {
 		return kadm.TopicDetail{}, fmt.Errorf("kafka shadow topic %s has %d partitions, source %s has %d", destination, havePartitions, source, wantPartitions)
 	}
-	if err := m.verifyShadow(ctx, split, detail, sourceDetail); err != nil {
+	if err := m.verifyShadow(ctx, split, detail, sourceDetail, sourceConfigs); err != nil {
 		return kadm.TopicDetail{}, err
 	}
 	return detail, nil
@@ -374,8 +408,9 @@ func (m *Manager) createShadow(
 	split *api.KafkaSplit,
 	destination string,
 	source kadm.TopicDetail,
+	sourceConfigs map[string]string,
 ) error {
-	configs, replicationFactor, err := m.shadowConfigs(ctx, split, source)
+	configs, replicationFactor, err := m.shadowConfigs(split, source, sourceConfigs)
 	if err != nil {
 		return err
 	}
@@ -394,14 +429,10 @@ func (m *Manager) createShadow(
 }
 
 func (m *Manager) shadowConfigs(
-	ctx context.Context,
 	split *api.KafkaSplit,
 	source kadm.TopicDetail,
+	sourceConfigs map[string]string,
 ) (map[string]*string, int16, error) {
-	sourceConfigs, err := m.topicConfig(ctx, source.Topic)
-	if err != nil {
-		return nil, 0, err
-	}
 	configured := split.Spec.Shadows.Managed
 	configs := make(map[string]*string)
 	if configured != nil {
@@ -444,21 +475,29 @@ func (m *Manager) verifyShadow(
 	ctx context.Context,
 	split *api.KafkaSplit,
 	shadow, source kadm.TopicDetail,
+	sourceConfigs map[string]string,
 ) error {
 	topic := shadow.Topic
-	configs, err := m.topicConfig(ctx, topic)
-	if err != nil {
-		return err
+	var configs map[string]string
+	if sourceConfigs != nil {
+		fetched, err := m.topicConfigs(ctx, topic)
+		if err != nil {
+			return err
+		}
+		configs = fetched[topic]
+	} else {
+		fetched, err := m.topicConfigs(ctx, topic, source.Topic)
+		if err != nil {
+			return err
+		}
+		configs = fetched[topic]
+		sourceConfigs = fetched[source.Topic]
 	}
 	if configs["retention.ms"] != "-1" || configs["retention.bytes"] != "-1" {
 		return fmt.Errorf("kafka shadow topic %s must have effective unbounded retention", topic)
 	}
 	if configs["cleanup.policy"] != "delete" {
 		return fmt.Errorf("kafka shadow topic %s must use cleanup.policy=delete", topic)
-	}
-	sourceConfigs, err := m.topicConfig(ctx, source.Topic)
-	if err != nil {
-		return err
 	}
 	shadowMax, _ := strconv.ParseInt(configs["max.message.bytes"], 10, 64)
 	sourceMax, _ := strconv.ParseInt(sourceConfigs["max.message.bytes"], 10, 64)
@@ -490,20 +529,25 @@ func (m *Manager) verifyShadow(
 	return nil
 }
 
-func (m *Manager) topicConfig(ctx context.Context, topic string) (map[string]string, error) {
-	resources, err := m.admin.DescribeTopicConfigs(ctx, topic)
+// topicConfigs describes all topics in one call, keyed by topic name.
+func (m *Manager) topicConfigs(ctx context.Context, topics ...string) (map[string]map[string]string, error) {
+	resources, err := m.admin.DescribeTopicConfigs(ctx, topics...)
 	if err != nil {
-		return nil, fmt.Errorf("describe Kafka topic config %s: %w", topic, err)
+		return nil, fmt.Errorf("describe Kafka topic configs: %w", err)
 	}
-	resource, err := resources.On(topic, func(resource *kadm.ResourceConfig) error { return resource.Err })
-	if err != nil {
-		return nil, fmt.Errorf("describe Kafka topic config %s: %w", topic, err)
+	result := make(map[string]map[string]string, len(topics))
+	for _, topic := range topics {
+		resource, err := resources.On(topic, func(resource *kadm.ResourceConfig) error { return resource.Err })
+		if err != nil {
+			return nil, fmt.Errorf("describe Kafka topic config %s: %w", topic, err)
+		}
+		configs := make(map[string]string, len(resource.Configs))
+		for i := range resource.Configs {
+			configs[resource.Configs[i].Key] = resource.Configs[i].MaybeValue()
+		}
+		result[topic] = configs
 	}
-	configs := make(map[string]string, len(resource.Configs))
-	for i := range resource.Configs {
-		configs[resource.Configs[i].Key] = resource.Configs[i].MaybeValue()
-	}
-	return configs, nil
+	return result, nil
 }
 
 // GroupMemberless reports whether a classic consumer group has no live member.
@@ -560,12 +604,9 @@ func (m *Manager) Remaining(ctx context.Context, group string, topics map[string
 	}
 	var remaining int64
 	for _, topic := range destinations {
-		detail, ok := details[topic]
-		if !ok || detail.Err != nil {
-			if ok {
-				return 0, fmt.Errorf("describe Kafka shadow %s: %w", topic, detail.Err)
-			}
-			return 0, fmt.Errorf("describe Kafka shadow %s: missing broker response", topic)
+		detail, err := topicDetail(details, topic)
+		if err != nil {
+			return 0, err
 		}
 		for partition, end := range ends[topic] {
 			if end.Err != nil {
@@ -679,6 +720,7 @@ func (m *Manager) readableRecords(
 // resources are successful retries; ambiguous responses fail closed.
 func (m *Manager) DeleteManaged(ctx context.Context, resources []api.KafkaResourceStatus) error {
 	var topics, groups []string
+	var topicResources []api.KafkaResourceStatus
 	for _, resource := range resources {
 		if !resource.Managed {
 			continue
@@ -686,6 +728,7 @@ func (m *Manager) DeleteManaged(ctx context.Context, resources []api.KafkaResour
 		switch {
 		case strings.HasSuffix(resource.Kind, "Topic"):
 			topics = append(topics, resource.Name)
+			topicResources = append(topicResources, resource)
 		case strings.HasSuffix(resource.Kind, "Group"):
 			groups = append(groups, resource.Name)
 		}
@@ -695,10 +738,7 @@ func (m *Manager) DeleteManaged(ctx context.Context, resources []api.KafkaResour
 		if err != nil {
 			return fmt.Errorf("describe Kafka topics before cleanup: %w", err)
 		}
-		for _, resource := range resources {
-			if !resource.Managed || !strings.HasSuffix(resource.Kind, "Topic") {
-				continue
-			}
+		for _, resource := range topicResources {
 			detail, ok := details[resource.Name]
 			if !ok || errors.Is(detail.Err, kerr.UnknownTopicOrPartition) {
 				continue
@@ -724,13 +764,19 @@ func (m *Manager) DeleteManaged(ctx context.Context, resources []api.KafkaResour
 			}
 		}
 	}
-	for _, group := range groups {
-		response, err := m.admin.DeleteGroup(ctx, group)
-		if err != nil && !errors.Is(err, kerr.GroupIDNotFound) {
-			return fmt.Errorf("delete Kafka group %s: %w", group, err)
+	if len(groups) > 0 {
+		responses, err := m.admin.DeleteGroups(ctx, groups...)
+		if err != nil {
+			return fmt.Errorf("delete Kafka groups: %w", err)
 		}
-		if response.Err != nil && !errors.Is(response.Err, kerr.GroupIDNotFound) {
-			return fmt.Errorf("delete Kafka group %s: %w", group, response.Err)
+		for _, group := range groups {
+			response, ok := responses[group]
+			if !ok {
+				return fmt.Errorf("delete Kafka group %s: missing broker response", group)
+			}
+			if response.Err != nil && !errors.Is(response.Err, kerr.GroupIDNotFound) {
+				return fmt.Errorf("delete Kafka group %s: %w", group, response.Err)
+			}
 		}
 	}
 	return nil

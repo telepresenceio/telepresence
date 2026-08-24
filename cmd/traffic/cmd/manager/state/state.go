@@ -492,7 +492,7 @@ func (s *State) RestoreIntercepts(
 	ctx context.Context,
 	intercepts []*rpc.InterceptInfo,
 	now time.Time,
-	initializers ...func(*Intercept),
+	initialize func(*Intercept),
 ) {
 	nodeAgentWatches := make(map[nodeAgentWatchKey]struct{})
 	for _, intercept := range intercepts {
@@ -502,7 +502,7 @@ func (s *State) RestoreIntercepts(
 		}
 		is, _ := s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
 			is := &Intercept{InterceptInfo: intercept}
-			for _, initialize := range initializers {
+			if initialize != nil {
 				initialize(is)
 			}
 			if !spec.GetKafka().GetOnly() {
@@ -822,12 +822,23 @@ func (s *State) GetIntercept(interceptID string) (*Intercept, bool) {
 	return s.intercepts.Load(interceptID)
 }
 
-// ClientIntercepts returns a stable snapshot of one client's intercepts.
-func (s *State) ClientIntercepts(sessionID string) []*rpc.InterceptInfo {
-	var result []*rpc.InterceptInfo
+// ClientKafkaRoute pairs an intercept's namespace with its attached Kafka
+// routes, as returned by ClientKafkaRoutes.
+type ClientKafkaRoute struct {
+	Namespace string
+	Routes    []*rpc.KafkaRoute
+}
+
+// ClientKafkaRoutes returns the namespace and Kafka routes of each of
+// sessionID's intercepts that has Kafka routes attached. It reads the
+// stored Intercept fields directly instead of cloning: an update always
+// replaces the whole stored Intercept rather than mutating one in place.
+func (s *State) ClientKafkaRoutes(sessionID string) []ClientKafkaRoute {
+	var result []ClientKafkaRoute
 	s.intercepts.Range(func(_ string, intercept *Intercept) bool {
-		if intercept.GetClientSession().GetSessionId() == sessionID && !IsChildIntercept(intercept.Spec) {
-			result = append(result, proto.Clone(intercept.InterceptInfo).(*rpc.InterceptInfo))
+		if intercept.GetClientSession().GetSessionId() == sessionID &&
+			!IsChildIntercept(intercept.Spec) && len(intercept.KafkaRoutes) > 0 {
+			result = append(result, ClientKafkaRoute{Namespace: intercept.Spec.Namespace, Routes: intercept.KafkaRoutes})
 		}
 		return true
 	})

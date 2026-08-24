@@ -162,7 +162,7 @@ func (k *kafkaAPI) attach(
 			Environment: maps.Clone(route.Status.Environment),
 		})
 	}
-	slices.SortFunc(summaries, func(a, b *rpc.KafkaRoute) int { return compare(a.GetSplit(), b.GetSplit()) })
+	slices.SortFunc(summaries, func(a, b *rpc.KafkaRoute) int { return strings.Compare(a.GetSplit(), b.GetSplit()) })
 	return summaries, environment, nil
 }
 
@@ -188,7 +188,7 @@ func (k *kafkaAPI) matchingSplits(
 			return candidate.Name == workload && (workloadKind == "" || candidate.Kind == workloadKind)
 		})
 	})
-	slices.SortFunc(list.Items, func(a, b kafkaSplitResource) int { return compare(a.Metadata.Name, b.Metadata.Name) })
+	slices.SortFunc(list.Items, func(a, b kafkaSplitResource) int { return strings.Compare(a.Metadata.Name, b.Metadata.Name) })
 	return list.Items, nil
 }
 
@@ -401,15 +401,4 @@ func kafkaRouteSegment(name string) string {
 		}
 	}
 	return result.String()
-}
-
-func compare(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	default:
-		return 0
-	}
 }
