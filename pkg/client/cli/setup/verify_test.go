@@ -56,7 +56,7 @@ func TestVerifyInstall_QuicLoadBalancer(t *testing.T) {
 			svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "1.2.3.4"}}
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "quic", Port: 7778}}
 		}))
-		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess)
+		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess, nil)
 		require.Len(t, notes, 1)
 		assert.Equal(t, NoteInfo, notes[0].Level)
 		assert.Contains(t, notes[0].Text, "QUIC endpoint reachable from this workstation at 1.2.3.4:7778")
@@ -66,7 +66,7 @@ func TestVerifyInstall_QuicLoadBalancer(t *testing.T) {
 			svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{Hostname: "lb.example.com"}}
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "quic", Port: 7778}}
 		}))
-		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess)
+		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess, nil)
 		require.Len(t, notes, 1)
 		assert.Contains(t, notes[0].Text, "lb.example.com:7778")
 	})
@@ -81,7 +81,7 @@ func TestVerifyInstall_QuicLoadBalancer(t *testing.T) {
 		client := fake.NewClientset(quicService(corev1.ServiceTypeLoadBalancer, func(svc *corev1.Service) {
 			svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "1.2.3.4"}}
 		}))
-		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess)
+		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess, nil)
 		require.Len(t, notes, 1)
 		assert.Equal(t, NoteWarning, notes[0].Level)
 		assert.Contains(t, notes[0].Text, "dial address could not be determined")
@@ -92,7 +92,7 @@ func TestVerifyInstall_QuicLoadBalancer(t *testing.T) {
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "quic", Port: 7778}}
 		}))
 		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{},
-			func(ctx context.Context, addr string, tlsConf *tls.Config) error { return context.DeadlineExceeded })
+			func(ctx context.Context, addr string, tlsConf *tls.Config) error { return context.DeadlineExceeded }, nil)
 		require.Len(t, notes, 1)
 		assert.Equal(t, NoteWarning, notes[0].Level)
 		assert.Contains(t, notes[0].Text, "not reachable over UDP")
@@ -112,7 +112,7 @@ func TestVerifyInstall_QuicNodePort(t *testing.T) {
 				},
 			},
 		)
-		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess)
+		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess, nil)
 		require.Len(t, notes, 1)
 		assert.Equal(t, NoteInfo, notes[0].Level)
 		assert.Contains(t, notes[0].Text, "reachable from this workstation at 172.18.0.2:31234")
@@ -121,7 +121,7 @@ func TestVerifyInstall_QuicNodePort(t *testing.T) {
 		client := fake.NewClientset(quicService(corev1.ServiceTypeNodePort, func(svc *corev1.Service) {
 			svc.Spec.Ports = []corev1.ServicePort{{Name: "quic", Port: 7778, NodePort: 31234}}
 		}))
-		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess)
+		notes := verifyInstall(context.Background(), client, "ambassador", quicValuesEnabled(), ClientAuthFacts{}, fakeDialSuccess, nil)
 		require.Len(t, notes, 1)
 		assert.Equal(t, NoteWarning, notes[0].Level)
 		assert.Contains(t, notes[0].Text, "dial address could not be determined")

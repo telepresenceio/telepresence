@@ -91,8 +91,20 @@ duplicate serves everything else.
   connected directly on your workstation instead of doing a round trip to
   the cluster (the [local shortcut](../reference/config.md#intercept)).
 - **Made for organization-wide rollout.** One audited, privileged install;
-  clients with minimal RBAC; centralized client configuration through the
-  Helm chart.
+  centralized client configuration through the Helm chart; and a client RBAC
+  footprint that [shrinks in steps](../howtos/client-rbac.md) to a single
+  named grant — or to no Kubernetes API access at all, when the manager
+  publishes an
+  [external control endpoint](../reference/external-endpoint.md). Gefyra's
+  team flow looks similar on the surface — an admin hands each developer a
+  generated client file instead of a kubeconfig — but that file embeds a
+  long-lived service-account token the CLI uses to talk to the Kubernetes
+  API directly, and every client shares one cluster-wide role that can
+  bridge workloads, and run `pods/exec`, in every namespace. Telepresence
+  authenticates each caller's own Kubernetes identity — short-lived tokens
+  and exec plugins included — and authorizes every connection and
+  attachment against it, scoped per namespace or per workload with ordinary
+  RBAC.
 
 ## Choosing between them
 
@@ -113,6 +125,8 @@ This comparison applies to the Open Source editions of both products.
 | Runs the local service natively, without Docker                  | ✅            | ❌      |
 | Can run unmodified Docker containers locally                     | ✅            | ✅      |
 | Does not need administrative permission on workstation           | ✅ [^1]       | ✅      |
+| Client can connect without any Kubernetes API access             | ✅ [^6]       | ❌      |
+| Can restrict which developer may attach to which workload        | ✅            | ❌      |
 | Cluster network available to all local tools (including browser) | ✅ [^2]       | ❌      |
 | Can act as a cluster VPN only                                    | ✅            | ❌ [^3] |
 | Tunnels over the Kubernetes API connection (no extra open ports) | ✅            | ❌      |
@@ -152,3 +166,10 @@ restarts the workload.
 [^5]: Opt-in: the cluster operator enables the QUIC endpoint in the
 traffic-manager's Helm chart. Clients use it automatically when reachable and
 otherwise stay on the API-server path.
+
+[^6]: Opt-in: the cluster operator publishes the traffic-manager's
+[external control endpoint](../reference/external-endpoint.md) over TLS.
+Clients still authenticate with their kubeconfig credentials — resolved
+locally, without contacting the Kubernetes API server. A Gefyra client file
+avoids a personal kubeconfig but composes one from its embedded token; the
+connection itself is negotiated through the Kubernetes API server.

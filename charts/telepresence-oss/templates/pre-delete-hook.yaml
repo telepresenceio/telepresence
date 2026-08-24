@@ -27,23 +27,10 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name | quote }}
         helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
     spec:
-      securityContext:
-        {{- toYaml .Values.hooks.podSecurityContext | nindent 8 }}
-      restartPolicy: Never
-      {{- with .Values.hooks.curl.imagePullSecrets }}
-      imagePullSecrets:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "telepresence.hookPodSpecHead" (dict "root" $ "restartPolicy" "Never") | nindent 6 }}
       containers:
         - name: uninstall-agents
-          securityContext:
-            {{- if .Values.hooks.securityContext }}
-            {{- toYaml .Values.hooks.securityContext | nindent 12 }}
-            {{- else }}
-            {{- toYaml .Values.securityContext | nindent 12 }}
-            {{- end }}
-          image: "{{ .Values.hooks.curl.registry }}/{{ .Values.hooks.curl.image }}:{{ .Values.hooks.curl.tag }}"
-          imagePullPolicy: {{ .Values.hooks.curl.pullPolicy }}
+          {{- include "telepresence.hookContainerHead" $ | nindent 10 }}
           {{- if .Values.agentInjector.enabled }}
           volumeMounts:
             - name: secret-volume
@@ -52,8 +39,7 @@ spec:
             - name: CURL_CA_BUNDLE
               value: /secret/ca.crt
           {{- end }}
-          resources:
-            {{- toYaml .Values.hooks.resources | nindent 12 }}
+          {{- include "telepresence.hookResources" $ | nindent 10 }}
           command:
             - sh
             - -c
@@ -70,19 +56,5 @@ spec:
           secret:
             secretName: {{ .Values.agentInjector.secret.name }}
       {{- end }}
-      {{- with .Values.schedulerName }}
-      schedulerName: {{ . }}
-      {{- end }}
-      {{- with .Values.nodeSelector }}
-      nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+      {{- include "telepresence.hookSchedulingTail" $ | nindent 6 }}
 {{- end }}

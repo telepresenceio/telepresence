@@ -22,6 +22,12 @@ image:
   name: tel2
   pullPolicy: IfNotPresent
 
+# apiPort is part of the known-name connect contract: a client dials pod
+# traffic-manager-0 on this port directly to establish its session (see
+# docs/reference/rbac.md). Overriding it takes clients off that path onto
+# the discovery fallback, which requires clientRbac.legacyAccess.
+#
+# Default: 8081
 apiPort: 8081
 
 securityContext:
@@ -105,6 +111,21 @@ security:
       # Default: 8083
       port: 8083
 
+  authorization:
+    # requiredGrant controls which grant a client must hold to satisfy the
+    # traffic-manager's authorization review at connect and attach time:
+    #
+    #  portforward   the caller must hold the pods/portforward grant against
+    #                the target (today's proxy).
+    #  telepresence  the caller must hold the corresponding telepresence.io
+    #                grant (connections to connect, attachments to attach).
+    #  any           either grant satisfies the review.
+    #
+    # The chart renders client Roles to match this setting.
+    #
+    # Default: any
+    requiredGrant: any
+
 # podCIDRStrategy controls what strategy the traffic-manager will use for finding out what
 # CIDRs the cluster is using for its pods. Valid values are:
 #
@@ -125,10 +146,57 @@ managerRbac:
   # Default: true
   create: true
 
+clientRbac:
+  # legacyAccess controls the mechanical (non-policy) rules the chart
+  # renders into client Roles:
+  #
+  #  true   the connect Role's discovery rules (services get, pods
+  #         get/list) and unscoped pods/portforward create, plus the
+  #         per-namespace/cluster-scope Roles' legacy diagnostic grants
+  #         (pods get/list, pods/log get, namespaces get/list/watch) --
+  #         everything a pre-2.33 client needs to resolve the
+  #         traffic-manager Service to a pod and gather logs directly.
+  #  false  the connect Role's single pods/portforward rule, scoped to
+  #         the StatefulSet's known pod name, and no legacy diagnostic
+  #         grants.
+  #
+  # Only pre-2.33 clients, or an install that overrides apiPort's
+  # default (see apiPort below), need the legacy grants. Default flips
+  # to false two minor releases after 2.32, and the toggle -- along with
+  # the rules it guards and the Deployment-to-StatefulSet migration hook
+  # -- is removed four minors after 2.32. Both changes get release-note
+  # entries.
+  #
+  # Default: true
+  legacyAccess: true
+
 timeouts:
   # The duration the traffic manager should wait for an agent to arrive (i.e., to be registered in the traffic manager's state)
   # Default: 30s
   agentArrival: 30s
+
+# logStreaming bounds the traffic-manager's StreamLogs RPC, which
+# `telepresence gather-logs` uses to fetch manager and agent logs without
+# direct pods/log access. Raise these for installations that need larger or
+# longer-running log collection.
+logStreaming:
+  # chunkSize is a quantity bounding the size of each streamed log chunk.
+  # Default: 64Ki
+  chunkSize: 64Ki
+
+  # podConcurrency is the maximum number of pods a single StreamLogs request
+  # reads from concurrently.
+  # Default: 4
+  podConcurrency: 4
+
+  # podByteLimit is a quantity capping the total bytes streamed per pod
+  # within a single StreamLogs request.
+  # Default: 10Mi
+  podByteLimit: 10Mi
+
+  # deadline bounds the total duration of a single StreamLogs request.
+  # Default: 5m
+  deadline: 5m
 
 ################################################################################
 ## Agent Injector Configuration
@@ -319,6 +387,65 @@ quicTunnel:
         memory: 128Mi
       limits:
         memory: 512Mi
+
+################################################################################
+## External Endpoint Configuration
+################################################################################
+# externalEndpoint controls the opt-in external TLS gRPC listener that lets a
+# client connect without ever contacting the Kubernetes API server. Publishing
+# it requires security.authentication.mode: enforcing -- in permissive or
+# disabled mode the listener would have no access control -- and exactly one
+# of tls.secretName / tls.certManager.enabled, both enforced at chart render.
+# Publishing it also drops the mechanical pods/portforward rules from the
+# rendered clientRbac Roles -- both the connect Role and the per-namespace
+# intercept Roles -- since external clients never port-forward, unless the
+# required grant is "portforward", where possession of that grant is itself
+# the authorization policy.
+externalEndpoint:
+  enabled: false
+
+  # port is the container port the external TLS listener binds to. 8444
+  # avoids colliding with the agent-injector webhook's 8443 container port.
+  # Default: 8444
+  port: 8444
+
+  # service configures the Service that fronts the external listener.
+  service:
+    # type of the Service. LoadBalancer and NodePort are the typical choices
+    # for a listener meant to be reached from outside the cluster; ClusterIP
+    # is useful behind a separately managed ingress/gateway.
+    type: LoadBalancer
+    # port the Service listens on.
+    port: 443
+    # annotations to add to the Service, e.g. cloud-provider load-balancer
+    # settings.
+    annotations: {}
+
+  # tls configures the certificate the external listener terminates with.
+  # Exactly one of secretName or certManager.enabled must be set: the
+  # in-memory QUIC CA is ephemeral by design and cannot anchor an
+  # admin-distributed pin, so the external listener requires a certificate
+  # backed by persistent Secret material.
+  tls:
+    # secretName is an existing kubernetes.io/tls Secret, in the
+    # traffic-manager's namespace, to terminate the listener with.
+    secretName: ""
+
+    # certManager has the chart provision the certificate via cert-manager
+    # instead of a pre-existing Secret.
+    certManager:
+      # enabled turns on a cert-manager Certificate for the external
+      # listener, issued into the traffic-manager-external-tls Secret.
+      enabled: false
+
+      # dnsNames are the Subject Alternative Names for the issued
+      # certificate, e.g. the DNS name clients use to reach the external
+      # Service.
+      dnsNames: []
+
+      # issuerRef is the cert-manager issuer to request the certificate
+      # from, e.g. {name: my-issuer, kind: ClusterIssuer}.
+      issuerRef: {}
 
 # Values specific to the helm chart hooks for managing upgrade/deleting
 hooks:

@@ -234,22 +234,6 @@ func (s *service) LookupIP(ctx context.Context, request *rpc.LookupIPRequest) (r
 	return rsp, err
 }
 
-func (s *service) ResolvePort(ctx context.Context, request *rpc.ResolvePortRequest) (rsp *rpc.ResolvePortResponse, err error) {
-	err = s.withSession(ctx, func(ctx context.Context, session *session) error {
-		ap, err := session.resolvePort(ctx, request.Host, request.Port)
-		if err != nil {
-			return err
-		}
-		apb, err := ap.MarshalBinary()
-		if err != nil {
-			return err
-		}
-		rsp = &rpc.ResolvePortResponse{HostPort: apb}
-		return nil
-	})
-	return rsp, err
-}
-
 func (s *service) SetInterceptShortcuts(ctx context.Context, request *rpc.SetInterceptShortcutsRequest) (*emptypb.Empty, error) {
 	err := s.withSession(ctx, func(ctx context.Context, session *session) error {
 		session.SetInterceptShortcuts(ctx, request.Shortcuts)

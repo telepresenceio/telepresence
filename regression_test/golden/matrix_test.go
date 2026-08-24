@@ -3,6 +3,7 @@ package golden
 import (
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
@@ -17,6 +18,7 @@ const (
 	axisNodeAgent       = "nodeAgent.enabled"
 	axisQuicTunnel      = "quicTunnel.enabled"
 	axisAuthMode        = "security.authentication.mode"
+	axisAuthGrant       = "security.authorization.requiredGrant"
 	axisAPIPort         = "telepresenceAPI.port"
 	axisUsageEnabled    = "usage.enabled"
 )
@@ -31,6 +33,7 @@ func matrixAxes() []rt.Axis {
 		{Name: axisNodeAgent, Values: []string{"true", "false"}},
 		{Name: axisQuicTunnel, Values: []string{"true", "false"}},
 		{Name: axisAuthMode, Values: []string{"permissive", "enforcing"}},
+		{Name: axisAuthGrant, Values: []string{"portforward", "telepresence", "any"}},
 		{Name: axisAPIPort, Values: []string{"0", "9980"}},
 		{Name: axisUsageEnabled, Values: []string{"false", "true"}},
 	}
@@ -54,24 +57,36 @@ func valuesFromCombo(c map[string]string) map[string]any {
 		"quicTunnel": map[string]any{"enabled": c[axisQuicTunnel] == "true"},
 		"security": map[string]any{
 			"authentication": map[string]any{"mode": c[axisAuthMode]},
+			"authorization":  map[string]any{"requiredGrant": c[axisAuthGrant]},
 		},
 		"telepresenceAPI": map[string]any{"port": port},
 		"usage":           map[string]any{"enabled": c[axisUsageEnabled] == "true"},
+		// clientRbac isn't itself an axis (its shape doesn't vary with the
+		// combo), but it must be enabled for the assertions below to see the
+		// client Role content the required-grant axis controls.
+		"clientRbac": map[string]any{
+			"create": true,
+			"subjects": []map[string]any{{
+				"kind":      "ServiceAccount",
+				"name":      "rtest-golden",
+				"namespace": releaseNamespace,
+			}},
+		},
 	}
 }
 
 // envLineRE matches one `- name: KEY` / `value: VAL` pair from a rendered
-// Deployment's env list (deployment.yaml's own indentation and quoting).
+// StatefulSet's env list (statefulset.yaml's own indentation and quoting).
 // Entries using `valueFrom:` (MANAGER_NAMESPACE, POD_IP, POD_HOST_IP) don't
 // match: the line after `- name:` isn't `value:`, so they're silently
 // skipped rather than mismatched.
 var envLineRE = regexp.MustCompile(`(?m)^\s*- name:\s*(\S+)\n\s*value:\s*"?([^"\n]*?)"?\s*$`)
 
 // parseEnv extracts the container env vars set via plain `value:` (not
-// `valueFrom:`) from a rendered deployment.yaml, keyed by name.
-func parseEnv(deploymentYAML string) map[string]string {
+// `valueFrom:`) from a rendered statefulset.yaml, keyed by name.
+func parseEnv(statefulsetYAML string) map[string]string {
 	out := map[string]string{}
-	for _, m := range envLineRE.FindAllStringSubmatch(deploymentYAML, -1) {
+	for _, m := range envLineRE.FindAllStringSubmatch(statefulsetYAML, -1) {
 		out[m[1]] = m[2]
 	}
 	return out
@@ -79,7 +94,7 @@ func parseEnv(deploymentYAML string) map[string]string {
 
 // TestChartMatrix renders the local chart source over a pairwise matrix of
 // matrixAxes and asserts structural invariants: no combination in the
-// matrix hits a template guard (fail/required), and the axes that gate a
+// matrix hits a template guard (fail/required), and the axes that control a
 // resource's existence or an env var's value do so consistently.
 func TestChartMatrix(t *testing.T) {
 	axes := matrixAxes()
@@ -100,9 +115,17 @@ func TestChartMatrix(t *testing.T) {
 
 			out := renderChart(t, valuesFromCombo(c))
 
-			// The deployment renders unconditionally.
-			if !rendered(out, deploymentTpl) {
-				t.Fatalf("%s did not render", deploymentTpl)
+			// The workload renders unconditionally, as a singleton
+			// StatefulSet governed by the headless Service, for every
+			// combo in this matrix.
+			if !rendered(out, statefulsetTpl) {
+				t.Fatalf("%s did not render", statefulsetTpl)
+			}
+			workloadDoc := out[statefulsetTpl]
+			for _, want := range []string{"kind: StatefulSet", "serviceName: traffic-manager-headless", "replicas: 1"} {
+				if !strings.Contains(workloadDoc, want) {
+					t.Errorf("%s: %q not rendered", statefulsetTpl, want)
+				}
 			}
 
 			// The webhook config renders iff the injector is enabled.
@@ -128,7 +151,7 @@ func TestChartMatrix(t *testing.T) {
 				t.Errorf("%s rendered=%v, want security.authentication.mode=enforcing", x509Tpl, got)
 			}
 
-			env := parseEnv(out[deploymentTpl])
+			env := parseEnv(out[statefulsetTpl])
 
 			// AUTHENTICATION_MODE always carries the configured mode.
 			if v := env["AUTHENTICATION_MODE"]; v != authMode {
@@ -170,6 +193,104 @@ func TestChartMatrix(t *testing.T) {
 			if v := env["USAGE_REPORTING_ENABLED"]; v != strconv.FormatBool(usageEnabled) {
 				t.Errorf("USAGE_REPORTING_ENABLED = %q, want %q", v, strconv.FormatBool(usageEnabled))
 			}
+
+			// AUTHORIZATION_REQUIRED_GRANT always carries the configured grant.
+			grant := c[axisAuthGrant]
+			if v := env["AUTHORIZATION_REQUIRED_GRANT"]; v != grant {
+				t.Errorf("AUTHORIZATION_REQUIRED_GRANT = %q, want %q", v, grant)
+			}
+
+			// LOG_STREAM_* always carry the chart's built-in defaults here:
+			// no combo in this matrix overrides logStreaming, so every
+			// render exercises the "block absent" defaulting path.
+			wantLogStreamEnv := map[string]string{
+				"LOG_STREAM_CHUNK_SIZE":      "64Ki",
+				"LOG_STREAM_POD_CONCURRENCY": "4",
+				"LOG_STREAM_POD_BYTE_LIMIT":  "10Mi",
+				"LOG_STREAM_DEADLINE":        "5m",
+			}
+			for name, want := range wantLogStreamEnv {
+				if v := env[name]; v != want {
+					t.Errorf("%s = %q, want %q", name, v, want)
+				}
+			}
+
+			assertClientRoleRules(t, out, grant)
+		})
+	}
+}
+
+// assertClientRoleRules checks the grant-dependent client Role rules on both
+// connect.yaml and the cluster-scope ClusterRole for the given required grant.
+func assertClientRoleRules(t *testing.T, out map[string]string, grant string) {
+	t.Helper()
+	if !rendered(out, clientConnectTpl) {
+		t.Fatalf("%s did not render", clientConnectTpl)
+	}
+	connectDoc := out[clientConnectTpl]
+	wantConnect := grant != "portforward"
+	if !strings.Contains(connectDoc, `resources: ["pods/portforward"]`) {
+		t.Errorf("%s pods/portforward rule missing with requiredGrant=%q; the transport rules render for every grant", clientConnectTpl, grant)
+	}
+	if got := strings.Contains(connectDoc, `resources: ["connections"]`); got != wantConnect {
+		t.Errorf("%s connections rule present=%v, want requiredGrant=%q -> %v", clientConnectTpl, got, grant, wantConnect)
+	}
+
+	if !rendered(out, clientClusterScopeTpl) {
+		t.Fatalf("%s did not render", clientClusterScopeTpl)
+	}
+	assertInterceptRules(t, clientClusterScopeTpl, out[clientClusterScopeTpl], grant, false)
+}
+
+// assertInterceptRules checks the grant-dependent and grant-independent rules
+// that telepresence.clientRbacInterceptRules renders into a client Role
+// (ClusterRole or namespaced Role) doc. With an external endpoint published,
+// the mechanical pods/portforward rule is withheld unless the required grant
+// is "portforward".
+func assertInterceptRules(t *testing.T, tpl, doc, grant string, external bool) {
+	t.Helper()
+	wantAttach := grant != "portforward"
+	wantPortForward := grant != "telepresence" && (!external || grant == "portforward")
+	if got := strings.Contains(doc, `resources: ["pods/portforward"]`); got != wantPortForward {
+		t.Errorf("%s pods/portforward rule present=%v, want requiredGrant=%q external=%v -> %v", tpl, got, grant, external, wantPortForward)
+	}
+	if got := strings.Contains(doc, `resources: ["attachments"]`); got != wantAttach {
+		t.Errorf("%s attachments rule present=%v, want requiredGrant=%q -> %v", tpl, got, grant, wantAttach)
+	}
+	for _, want := range []string{`resources: ["pods"]`, `resources: ["pods/log"]`, `resources: ["logs", "logs/yaml"]`} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("%s: %q not rendered regardless of requiredGrant=%q", tpl, want, grant)
+		}
+	}
+}
+
+// TestNamespaceScopeRoleGrant asserts that clientRbac.namespaces renders the
+// namespace-scoped Role with the same grant-dependent rules as the
+// cluster-scope ClusterRole, for every requiredGrant value.
+func TestNamespaceScopeRoleGrant(t *testing.T) {
+	for _, grant := range []string{"portforward", "telepresence", "any"} {
+		t.Run(grant, func(t *testing.T) {
+			out := renderChart(t, map[string]any{
+				"security": map[string]any{
+					"authorization": map[string]any{"requiredGrant": grant},
+				},
+				"clientRbac": map[string]any{
+					"create":     true,
+					"namespaces": []string{"rtest-app"},
+					"subjects": []map[string]any{{
+						"kind":      "ServiceAccount",
+						"name":      "rtest-golden",
+						"namespace": releaseNamespace,
+					}},
+				},
+			})
+			if !rendered(out, clientNamespaceTpl) {
+				t.Fatalf("%s did not render", clientNamespaceTpl)
+			}
+			if rendered(out, clientClusterScopeTpl) {
+				t.Fatalf("%s rendered while clientRbac.namespaces was set; expected namespace-scope only", clientClusterScopeTpl)
+			}
+			assertInterceptRules(t, clientNamespaceTpl, out[clientNamespaceTpl], grant, false)
 		})
 	}
 }

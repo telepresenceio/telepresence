@@ -16,7 +16,7 @@ import (
 const coverHostPath = "/rtest-coverage"
 
 // coverVolumeName is the volume/volumeMount name for coverHostPath on the
-// traffic-manager deployment.
+// traffic-manager StatefulSet.
 const coverVolumeName = "rtest-coverage"
 
 // coverScraperPod is the name of the throwaway pod used to retrieve covdata
@@ -149,7 +149,7 @@ func (r *Runtime) collectClusterCoverage() {
 			r.Infof("[rtest] cover: deleting traffic-manager pod: %v", err)
 			return
 		}
-		if _, err := r.Kubectl(ctx, ns, "rollout", "status", "deploy/"+helmReleaseName, "--timeout=120s"); err != nil {
+		if _, err := r.Kubectl(ctx, ns, "rollout", "status", managerWorkloadRef(Env{Ctx: ctx, R: r}, ns), "--timeout=120s"); err != nil {
 			r.Infof("[rtest] cover: waiting for traffic-manager rollout: %v", err)
 			return
 		}

@@ -109,7 +109,7 @@ func (s *AuthEnforcing) Test_SessionRequiresAndBindsVerifiedIdentity() {
 		s.Equal(codes.Unauthenticated, st.Code())
 	}
 
-	grantedTok := kubectlCreateToken(t, ctx, r, managers.ManagerNamespace, managers.TestServiceAccount)
+	grantedTok := kubectlCreateToken(t, ctx, r, managers.TestServiceAccount)
 	grantedCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+grantedTok)
 
 	si, err := mc.ArriveAsClient(grantedCtx, &manager.ClientInfo{
@@ -123,7 +123,7 @@ func (s *AuthEnforcing) Test_SessionRequiresAndBindsVerifiedIdentity() {
 	defer func() { _, _ = mc.Depart(grantedCtx, si) }()
 
 	otherName := createNoGrantsServiceAccount(t, ctx, r, "rtest-auth-noperms-session")
-	otherTok := kubectlCreateToken(t, ctx, r, managers.ManagerNamespace, otherName)
+	otherTok := kubectlCreateToken(t, ctx, r, otherName)
 	otherCtx := metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+otherTok)
 
 	_, err = mc.Remain(otherCtx, &manager.RemainRequest{Session: si})

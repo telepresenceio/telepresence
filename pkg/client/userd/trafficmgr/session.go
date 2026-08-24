@@ -192,6 +192,11 @@ type session struct {
 	// session is constructed.
 	agentPodWatchNamespacesOnce  sync.Once
 	agentPodWatchNamespacesValue []string
+
+	// namespaceWatchOnce guards the choice between the manager's WatchNamespaces RPC and
+	// the client-side Kubernetes namespace watcher: whichever is selected the first time
+	// the client watches all namespaces is the one used for the rest of the session.
+	namespaceWatchOnce sync.Once
 }
 
 // agentPodWatchNamespaces returns the namespaces in which this client watches
@@ -205,7 +210,15 @@ type session struct {
 // independently.
 func (s *session) agentPodWatchNamespaces() []string {
 	s.agentPodWatchNamespacesOnce.Do(func() {
-		if !client.GetConfig(s).Cluster().AgentPortForward {
+		cc := client.GetConfig(s).Cluster()
+		if !cc.AgentPortForward {
+			return
+		}
+		if cc.UsesExternalManager() {
+			// External manager transport: no Kubernetes API access, so
+			// CanPortForward can't run. Keep every mapped namespace; the
+			// manager reviews attach permissions itself.
+			s.agentPodWatchNamespacesValue = s.GetCurrentNamespaces(true)
 			return
 		}
 		s.agentPodWatchNamespacesValue = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
@@ -216,6 +229,10 @@ func (s *session) agentPodWatchNamespaces() []string {
 }
 
 func (s *session) RevokeIntercept(ctx context.Context, interceptID string) error {
+	if client.GetConfig(s).Cluster().UsesExternalManager() {
+		return errcat.User.New("revoking an intercept requires cluster access to the traffic-manager's ConfigMap, " +
+			"which this external connection does not have")
+	}
 	return tmconfig.AddCommand(s, k8s.GetManagerNamespace(ctx), tmconfig.AdminCommand{
 		Name:      tmconfig.RemoveIntercept,
 		Args:      []string{interceptID},
@@ -1070,6 +1087,20 @@ func (s *session) Status(ctx context.Context) (*rpc.ConnectInfo, error) {
 	return s.status(ctx, false)
 }
 
+// managerSupportsWatchNamespaces reports whether the connected traffic-manager implements
+// the WatchNamespaces RPC, so the client can consume it instead of watching namespaces
+// itself.
+func (s *session) managerSupportsWatchNamespaces() bool {
+	return s.compareFinalizedManagerVersion(2, 32, 0) >= 0
+}
+
+// managerSupportsStreamLogs reports whether the connected traffic-manager implements the
+// StreamLogs RPC, so gather-logs can consume it instead of reading pod logs directly through
+// the Kubernetes API.
+func (s *session) managerSupportsStreamLogs() bool {
+	return s.compareFinalizedManagerVersion(2, 32, 0) >= 0
+}
+
 func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 	var tmCfg client.Config
 	cliCfg, err := s.ManagerClient().GetClientConfig(ctx, &empty.Empty{})
@@ -1094,17 +1125,30 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 		// We do not want to override the local config with the traffic-manager's config even if the local config is empty.
 		cfg.Cluster().MappedNamespaces = clientMappedNamespaces
 		namespaces = effectiveMappedNamespaces(namespaces, clientMappedNamespaces, tmMappedNamespaces)
-		if s.SetMappedNamespaces(namespaces) {
-			if len(namespaces) == 0 {
-				if k8sapi.CanWatchNamespaces(s) {
+		changed := s.SetMappedNamespaces(namespaces)
+		switch {
+		case len(namespaces) == 0:
+			// A fresh session's mapped set is already empty, so watching
+			// everything is not a "change" -- selection can't depend on that.
+			s.namespaceWatchOnce.Do(func() {
+				external := client.GetConfig(s).Cluster().UsesExternalManager()
+				switch {
+				case s.managerSupportsWatchNamespaces():
+					clog.Infof(s, "Will watch all namespaces using the traffic-manager's WatchNamespaces RPC")
+					s.StartNamespacesFromManager(s.ManagerClient(), s.sessionInfo)
+				case external:
+					// No Kubernetes API access, and this manager predates
+					// WatchNamespaces: no watcher option remains.
+					clog.Warnf(s, "Unable to watch all namespaces: the traffic-manager does not support the WatchNamespaces RPC")
+				case k8sapi.CanWatchNamespaces(s):
 					clog.Infof(s, "Will watch all namespaces")
 					s.StartNamespaceWatcher()
-				} else {
+				default:
 					clog.Warnf(s, "Unable to watch all namespaces")
 				}
-			} else {
-				clog.Infof(s, "Will use mapped namespaces %s", namespaces)
-			}
+			})
+		case changed:
+			clog.Infof(s, "Will use mapped namespaces %s", namespaces)
 		}
 		rt := cfg.Routing()
 		rt.NeverProxy = subnet.Unique(append(rt.NeverProxy, tmCfg.Routing().NeverProxy...))

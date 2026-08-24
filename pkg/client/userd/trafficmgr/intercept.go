@@ -499,6 +499,31 @@ func requireAgentPortForward(ctx context.Context, kind string) error {
 	return nil
 }
 
+// quicTunnelEndpointGetter is the subset of manager.ManagerClient that
+// requireQuicTunnelAvailable needs, narrowed for testability. Its signature matches
+// manager.ManagerClient.GetQuicTunnelEndpoint so s.ManagerClient() satisfies it directly.
+type quicTunnelEndpointGetter interface {
+	GetQuicTunnelEndpoint(ctx context.Context, in *manager.SessionInfo, opts ...grpc.CallOption) (*manager.QuicTunnelEndpoint, error)
+}
+
+// requireQuicTunnelAvailable fails early when the external manager transport lacks a
+// QUIC tunnel, the only channel to an agent in that mode. An RPC error is treated the
+// same as disabled: the safe default is refusing rather than creating a dead attachment.
+func requireQuicTunnelAvailable(ctx context.Context, mc quicTunnelEndpointGetter, si *manager.SessionInfo, kind string) error {
+	if !client.GetConfig(ctx).Cluster().UsesExternalManager() {
+		return nil
+	}
+	ep, err := mc.GetQuicTunnelEndpoint(ctx, si)
+	if err != nil || !ep.GetEnabled() {
+		return errcat.User.Newf(
+			"creating an %s requires a channel to the traffic-agent, but this connection uses the external "+
+				"manager endpoint and the QUIC tunnel is not available; publish the traffic-manager's QUIC "+
+				"endpoint (Helm value quicTunnel.enabled) or use a connection with Kubernetes port-forward access",
+			kind)
+	}
+	return nil
+}
+
 func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (userd.InterceptInfo, error) {
 	spec := ir.Spec
 	kind := "intercept"
@@ -506,6 +531,9 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		kind = "replace"
 	}
 	if err := requireAgentPortForward(ctx, kind); err != nil {
+		return nil, err
+	}
+	if err := requireQuicTunnelAvailable(ctx, s.ManagerClient(), s.SessionInfo(), kind); err != nil {
 		return nil, err
 	}
 	if spec.Namespace == "" {

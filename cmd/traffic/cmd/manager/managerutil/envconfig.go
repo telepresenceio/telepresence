@@ -106,6 +106,21 @@ type Env struct {
 	// listener.
 	AuthX509Port uint16
 
+	// ExternalPort is the TCP port the traffic-manager's external client-only
+	// TLS gRPC listener binds to on all interfaces. Zero (the default)
+	// disables the listener. Enabling it (chart value
+	// externalEndpoint.enabled) requires AuthenticationMode to be enforcing
+	// and ExternalTLSCertDir to be set; the manager refuses to start
+	// otherwise.
+	ExternalPort uint16
+
+	// ExternalTLSCertDir is the directory containing tls.crt and tls.key for
+	// the external listener's server certificate, mounted from the Secret
+	// named by externalEndpoint.tls (chart values). The listener re-reads
+	// the files on change, so certificate rotation never requires a manager
+	// restart.
+	ExternalTLSCertDir string
+
 	// TunnelQuicExternalHost is the externally reachable host or IP advertised to
 	// clients for the QUIC tunnel endpoint, overriding candidate discovery
 	// entirely (see "Zero-configuration endpoint discovery" in
@@ -154,9 +169,31 @@ type Env struct {
 	InterceptAllowGlobal          bool `default:"true"`
 	InterceptInactiveBlockTimeout time.Duration
 
+	// LogStreamChunkSize is the maximum size of a single LogChunk data frame
+	// StreamLogs sends for one pod.
+	LogStreamChunkSize resource.Quantity `default:"64Ki"`
+
+	// LogStreamPodConcurrency is the maximum number of pods a single
+	// StreamLogs request reads from concurrently.
+	LogStreamPodConcurrency int `default:"4"`
+
+	// LogStreamPodByteLimit is the maximum number of log bytes StreamLogs
+	// reads from a single pod before truncating it and reporting the
+	// truncation as an error frame.
+	LogStreamPodByteLimit resource.Quantity `default:"10Mi"`
+
+	// LogStreamDeadline bounds the total duration of one StreamLogs request.
+	LogStreamDeadline time.Duration `default:"5m"`
+
 	// AuthenticationMode controls how strictly the traffic-manager enforces
 	// caller authentication (disabled, permissive, or enforcing).
 	AuthenticationMode auth.Mode `default:"permissive"`
+
+	// AuthorizationRequiredGrant is the grant a client must hold to be
+	// authorized to connect and to attach to a workload: pods/portforward
+	// ("portforward"), the telepresence.io group's own attributes
+	// ("telepresence"), or either ("any").
+	AuthorizationRequiredGrant auth.Grant `default:"any"`
 
 	// Anonymous usage reporting. The manager produces reports whose only
 	// identifier is the UUID stored in the traffic-manager-install-id

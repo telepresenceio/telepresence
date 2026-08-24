@@ -5,6 +5,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/puzpuzpuz/xsync/v4"
+
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
@@ -68,6 +70,15 @@ type ClientSession struct {
 	*rpc.ClientInfo
 	sessionState
 	consumptionMetrics *SessionConsumptionMetrics
+
+	// authorizedNamespaces caches this session's authorized-namespace probe
+	// outcomes, keyed by namespace name. See AuthorizedNamespace.
+	authorizedNamespaces *xsync.Map[string, bool]
+
+	// logStreamActive is set while this session has a StreamLogs call open.
+	// It lives exactly as long as this ClientSession, so a lost session
+	// (crash, Depart, reconnect) resets it for free.
+	logStreamActive atomic.Bool
 }
 
 func (cs *ClientSession) ConsumptionMetrics() *SessionConsumptionMetrics {
@@ -76,9 +87,10 @@ func (cs *ClientSession) ConsumptionMetrics() *SessionConsumptionMetrics {
 
 func newClientSessionState(ctx context.Context, id tunnel.SessionID, ci *rpc.ClientInfo, ts time.Time) *ClientSession {
 	return &ClientSession{
-		ClientInfo:         ci,
-		sessionState:       newSessionState(ctx, id, ts),
-		consumptionMetrics: NewSessionConsumptionMetrics(),
+		ClientInfo:           ci,
+		sessionState:         newSessionState(ctx, id, ts),
+		consumptionMetrics:   NewSessionConsumptionMetrics(),
+		authorizedNamespaces: xsync.NewMap[string, bool](),
 	}
 }
 

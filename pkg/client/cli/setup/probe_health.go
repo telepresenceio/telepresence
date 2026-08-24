@@ -14,8 +14,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-// managerDeploymentName is the chart's fixed traffic-manager Deployment name.
-const managerDeploymentName = "traffic-manager"
+// managerStatefulSetName is the chart's fixed traffic-manager StatefulSet name.
+const managerStatefulSetName = "traffic-manager"
 
 // webhookConfigurationPrefix combined with the manager namespace names the
 // chart's MutatingWebhookConfiguration (agentInjector.webhook.name).
@@ -84,32 +84,32 @@ func (p *Prober) probeHealth(ctx context.Context, rel *ReleaseFacts, auth Client
 	return h
 }
 
-// healthManager checks the traffic-manager Deployment's readiness and, when
+// healthManager checks the traffic-manager StatefulSet's readiness and, when
 // it is unready, attaches the Warning events the API server still retains for
 // the release.
 func (p *Prober) healthManager(ctx context.Context) Finding {
-	dep, err := p.KubeClient.AppsV1().Deployments(p.ManagerNamespace).Get(ctx, managerDeploymentName, metav1.GetOptions{})
+	sts, err := p.KubeClient.AppsV1().StatefulSets(p.ManagerNamespace).Get(ctx, managerStatefulSetName, metav1.GetOptions{})
 	switch {
 	case apierrors.IsNotFound(err):
 		return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf(
-			"the %s deployment was not found in namespace %s", managerDeploymentName, p.ManagerNamespace)}}
+			"the %s statefulset was not found in namespace %s", managerStatefulSetName, p.ManagerNamespace)}}
 	case err != nil:
 		return Finding{Verdict: VerdictUnknown, Evidence: []string{fmt.Sprintf(
-			"the %s deployment could not be read: %v", managerDeploymentName, err)}}
+			"the %s statefulset could not be read: %v", managerStatefulSetName, err)}}
 	}
 	desired := int32(1)
-	if dep.Spec.Replicas != nil {
-		desired = *dep.Spec.Replicas
+	if sts.Spec.Replicas != nil {
+		desired = *sts.Spec.Replicas
 	}
 	if desired == 0 {
-		return Finding{Verdict: VerdictNo, Evidence: []string{"the deployment is scaled to zero replicas"}}
+		return Finding{Verdict: VerdictNo, Evidence: []string{"the statefulset is scaled to zero replicas"}}
 	}
-	ready := dep.Status.ReadyReplicas
+	ready := sts.Status.ReadyReplicas
 	if ready >= desired {
 		return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("%d of %d replicas ready", ready, desired)}}
 	}
 	evidence := []string{fmt.Sprintf("%d of %d replicas ready", ready, desired)}
-	if es, err := eventwatch.ListWarnings(ctx, p.KubeClient, p.ManagerNamespace, managerDeploymentName); err == nil {
+	if es, err := eventwatch.ListWarnings(ctx, p.KubeClient, p.ManagerNamespace, managerStatefulSetName); err == nil {
 		for _, e := range es {
 			evidence = append(evidence, fmt.Sprintf("%s: %s", e.Reason, e.Note))
 			if len(evidence) > healthEventMax {

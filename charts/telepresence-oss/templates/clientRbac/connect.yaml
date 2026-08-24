@@ -1,9 +1,30 @@
 {{- with .Values.clientRbac }}
 {{- if .create }}
 {{- /*
-Client must have the following RBAC in the traffic-manager.namespace to establish
-a port-forward to the traffic-manager pod.
+Client must have the following RBAC in the traffic-manager.namespace to
+establish a session. The manager's connect review accepts one of two grants,
+depending on security.authorization.requiredGrant, and the Role always
+carries at least one of them: pods/portforward create (also the mechanical
+means of reaching the manager pod over the port-forward path) and/or the
+telepresence.io connections grant that exists purely as policy.
+
+With externalEndpoint.enabled, clients dial the published endpoint and never
+port-forward, so pods/portforward renders only when the required grant is
+"portforward" -- possession of the grant is then itself the connect policy --
+and always in its named form, since the discovery rules below serve only the
+port-forward path.
+
+clientRbac.legacyAccess (default true) picks the port-forward path's form:
+  true   the discovery rules (services get, pods get/list) plus an
+         unscoped pods/portforward create, for clients that resolve the
+         manager Service to a pod before connecting.
+  false  a single pods/portforward create scoped to pod
+         traffic-manager-0 -- the StatefulSet's known pod name -- and
+         nothing else. Only pre-2.33 clients, or an apiPort override that
+         breaks the known-name contract, need the discovery rules.
 */}}
+{{- $requiredGrant := include "telepresence.requiredGrant" $ }}
+{{- $external := $.Values.externalEndpoint.enabled }}
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -12,6 +33,7 @@ metadata:
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 rules:
+{{- if and (not $external) .legacyAccess }}
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
@@ -23,6 +45,18 @@ rules:
   - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]
+{{- else if or (not $external) (eq $requiredGrant "portforward") }}
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    resourceNames:
+      - {{ include "traffic-manager.podName" $ }}
+    verbs: ["create"]
+{{- end }}
+{{- if ne $requiredGrant "portforward" }}
+  - apiGroups: ["telepresence.io"]
+    resources: ["connections"]
+    verbs: ["create"]
+{{- end }}
 ---
 
 apiVersion: rbac.authorization.k8s.io/v1

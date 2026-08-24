@@ -482,33 +482,62 @@ message LogLevelRequest {
   SessionInfo session = 3;
 }
 
-// Deprecated.
-message GetLogsRequest {
+message StreamLogsRequest {
+  // The session of the requesting client. The handler calls
+  // ensureClientSession.
+  SessionInfo session = 1;
+
   // Whether or not logs from the traffic-manager are desired.
-  bool traffic_manager = 1;
+  bool traffic_manager = 2;
 
-  // The traffic-agent(s) logs are desired from. Can be `all`, `False`,
-  // or substring to filter based on pod names.
-  string agents = 2;
+  // The traffic-agent(s) logs are desired from. Can be `all`, `false` or
+  // the empty string (both meaning no agent logs), or a substring to filter
+  // based on pod names.
+  string agents = 3;
 
-  // Whether or not to get the pod yaml deployed to the cluster.
-  bool get_pod_yaml = 3;
+  // Whether or not to also stream the pod's yaml as deployed to the cluster.
+  bool get_pod_yaml = 4;
 }
 
-// Deprecated.
-message LogsResponse {
+// LogChunk is one frame of a StreamLogs response. The manager reads from
+// several pods concurrently and multiplexes their output onto a single
+// response stream; frame together with the (pod_name, pod_namespace) pair
+// let a client demultiplex per-pod data even though frames from different
+// pods interleave.
+message LogChunk {
+  enum Frame {
+    // A payload frame: data, error, or pod_yaml is set.
+    DATA_UNSPECIFIED = 0;
 
-  // The map contains assocations between <podName.namespace> and the logs
-  // from that pod.
-  map<string, string> pod_logs = 1;
+    // Sent once, first, when the manager starts reading from this pod.
+    // Carries no payload.
+    BEGIN = 1;
 
-  // Errors encountered when getting logs from the traffic-manager
-  // and/or traffic-agents.
-  string err_msg = 2;
+    // Sent once, last, for this pod, whether or not it ended in an error.
+    // Carries no payload.
+    END = 2;
+  }
 
-  // The map contains assocations between <podName.namespace> and the pod's
-  // yaml.
-  map<string, string> pod_yaml = 3;
+  // The pod this chunk originates from.
+  string pod_name = 1;
+  string pod_namespace = 2;
+
+  Frame frame = 3;
+
+  oneof payload {
+    // A chunk of log data, in the order it was read from the pod.
+    bytes data = 4;
+
+    // Reported in place of further data when this pod's collection failed,
+    // e.g. it was denied by the logs.telepresence.io SubjectAccessReview or
+    // the pod disappeared mid-stream. One pod's error does not abort the
+    // stream for the others.
+    string error = 5;
+
+    // The pod's manifest as deployed to the cluster. Sent once, when the
+    // request's get_pod_yaml is set.
+    bytes pod_yaml = 6;
+  }
 }
 
 message TelepresenceAPIInfo {
@@ -703,6 +732,27 @@ message DNSResponse {
 
   // rrs is an array of packed RR records
   bytes rrs = 2;
+}
+
+// ResolveServicePort request sent from a client.
+message ResolveServicePortRequest {
+  // Client session
+  SessionInfo session = 1;
+  // Namespace of the service.
+  string namespace = 2;
+  // Name of the service.
+  string service = 3;
+  // Service port name or port number.
+  string port = 4;
+  // Port protocol, TCP when empty.
+  string protocol = 5;
+}
+
+message ResolveServicePortResponse {
+  // The service's ClusterIP in netip.Addr binary form.
+  bytes cluster_ip = 1;
+  // Resolved port number.
+  int32 port = 2;
 }
 
 message DNSAgentResponse {
@@ -981,6 +1031,13 @@ message UninstallAgentsRequest {
   repeated string agents = 2;
 }
 
+// NamespaceList is the manager's managed-namespace set, pushed on every
+// change. Served unfiltered: it is the same set for every caller, not
+// scoped to the requesting session.
+message NamespaceList {
+  repeated string namespaces = 1;
+}
+
 service Manager {
   // Version returns the version information of the Manager.
   rpc Version(google.protobuf.Empty) returns (VersionInfo2);
@@ -1020,10 +1077,12 @@ service Manager {
   // traffic-agents for a duration that is determined b the request.
   rpc SetLogLevel(LogLevelRequest) returns (google.protobuf.Empty);
 
-  // GetLogs will acquire logs for the various Telepresence components in kubernetes
-  // (pending the request) and return them to the caller
-  // Deprecated: Will return an empty response
-  rpc GetLogs(GetLogsRequest) returns (LogsResponse);
+  // StreamLogs streams logs for the traffic-manager and/or traffic-agents
+  // selected by the request. The handler calls ensureClientSession. The
+  // stream is bounded server-side -- chunk size, per-pod byte cap,
+  // concurrent pod readers, and request deadline -- with every limit
+  // configured as a manager Helm value.
+  rpc StreamLogs(StreamLogsRequest) returns (stream LogChunk);
 
   // WatchAgentPods notifies a client of the set of known Agents from the client
   // connections namespace that the client can connect to when port-forwards are
@@ -1076,6 +1135,11 @@ service Manager {
   // connectivity to the cluster.
   rpc WatchClusterInfo(SessionInfo) returns (stream ClusterInfo);
 
+  // WatchNamespaces streams the manager's managed-namespace set, pushed on
+  // every change. The handler validates and binds the supplied client
+  // session before subscribing.
+  rpc WatchNamespaces(SessionInfo) returns (stream NamespaceList);
+
   // EnsureAgent ensures that an agent is injected to the pods of a workload and
   // returns the agents, sorted by pod name.
   rpc EnsureAgent(EnsureAgentRequest) returns (AgentInfoSnapshot);
@@ -1119,6 +1183,10 @@ service Manager {
   // LookupDNS performs a DNS lookup in the cluster. If the caller has intercepts
   // active, the lookup will be performed from the intercepted pods.
   rpc LookupDNS(DNSRequest) returns (DNSResponse);
+
+  // ResolveServicePort resolves a service port given by name or number to
+  // the service's ClusterIP and numeric port.
+  rpc ResolveServicePort(ResolveServicePortRequest) returns (ResolveServicePortResponse);
 
   // WatchLogLevel lets an agent receive log-level updates
   rpc WatchLogLevel(google.protobuf.Empty) returns (stream LogLevelRequest);

@@ -75,8 +75,15 @@ architecture pays off:
   just the one injected process. Telepresence can also be used as a plain
   cluster VPN, with no attachment at all.
 - **Made for organization-wide rollout.** One audited, privileged install;
-  clients with minimal RBAC; centralized client configuration through the Helm
-  chart.
+  centralized client configuration through the Helm chart; and a client RBAC
+  footprint that [shrinks in steps](../howtos/client-rbac.md) — to a single
+  named port-forward grant, to pure-policy grants the client never exercises,
+  or to nothing at all: the traffic-manager can publish an
+  [external control endpoint](../reference/external-endpoint.md) so clients
+  make no Kubernetes API request whatsoever. mirrord's counterpart — narrower
+  user RBAC behind its operator — is part of the paid product, and even there
+  every client needs Kubernetes API access and a kubeconfig with RBAC on the
+  operator's API.
 - **More attachment modes.** Besides intercepting and mirroring traffic,
   Telepresence can replace a container entirely (useful for queue consumers
   that must not run twice) and ingest a container's environment and volumes
@@ -116,6 +123,7 @@ This comparison applies to the Open Source editions of both products.
 |----------------------------------------------------------------------|--------------|---------|
 | Requires nothing preinstalled in the cluster                         | ❌            | ✅       |
 | Client needs no elevated cluster permissions (RBAC)                  | ✅            | ❌       |
+| Client can connect without any Kubernetes API access                 | ✅ [^4]       | ❌       |
 | Does not need administrative permission on workstation               | ✅ [^1]       | ✅       |
 | Effect is limited to the targeted process                            | ❌ [^2]       | ✅       |
 | Remote volumes without extra mount software (FUSE)                   | ❌            | ✅       |
@@ -148,3 +156,8 @@ injected (pre-installing the agent avoids this). Attaching with the optional
 [node-agent](../reference/node-agent.md) mode never modifies or restarts the
 workload; like mirrord's agent, it runs privileged, whereas the default sidecar
 needs no special capabilities.
+
+[^4]: Opt-in: the cluster operator publishes the traffic-manager's
+[external control endpoint](../reference/external-endpoint.md) over TLS.
+Clients still authenticate with their kubeconfig credentials — resolved
+locally, without contacting the Kubernetes API server.

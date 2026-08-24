@@ -211,7 +211,7 @@ func valueAtPath(values map[string]any, path ...string) (any, bool) {
 
 // Test_ApplyIdempotence installs with `setup --apply --non-interactive`,
 // repeats the identical apply and expects a no-op, reads the same state back
-// as --format json, then scales the Deployment to zero and confirms the
+// as --format json, then scales the StatefulSet to zero and confirms the
 // doctor checks (pkg/client/cli/setup/probe_health.go's probeHealth,
 // rendered by render.go's printFindings) notice.
 func (s *Setup) Test_ApplyIdempotence() {
@@ -247,7 +247,7 @@ func (s *Setup) Test_ApplyIdempotence() {
 	s.Contains(stdout, "up to date")
 	s.NotContains(stdout, "Applying...")
 	for _, want := range []string{
-		"health: traffic-manager deployment yes",
+		"health: traffic-manager yes",
 		"health: quic endpoint yes",
 		"health: version skew yes",
 	} {
@@ -267,12 +267,12 @@ func (s *Setup) Test_ApplyIdempotence() {
 	s.Contains(facts, "health")
 
 	// Scale to zero: probeHealth's healthManager (probe_health.go) reports
-	// the Deployment unready with "scaled to zero replicas" evidence.
-	_, err = r.Kubectl(ctx, ns, "scale", trafficManagerDeployment, "--replicas=0")
+	// the StatefulSet unready with "scaled to zero replicas" evidence.
+	_, err = r.Kubectl(ctx, ns, "scale", trafficManagerStatefulSet, "--replicas=0")
 	s.Require().NoError(err)
 	stdout, stderr, err = s.CLI().Run(ctx, "setup", "--manager-namespace", ns, "--non-interactive")
 	s.Require().NoError(err, "setup after scale-to-zero: %s", stderr)
-	s.Contains(stdout, "health: traffic-manager deployment no")
+	s.Contains(stdout, "health: traffic-manager no")
 	s.Contains(stdout, "scaled to zero")
 }
 

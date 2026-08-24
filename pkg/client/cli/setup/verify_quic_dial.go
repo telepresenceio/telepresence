@@ -5,8 +5,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"net"
-	"strconv"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -94,54 +92,14 @@ func isQuicPeerResponse(err error) bool {
 	return errors.As(err, &te) || errors.As(err, &ae) || errors.As(err, &ve) || errors.As(err, &se)
 }
 
+// quicPortName is the chart's fixed name for the QUIC Service's port.
+const quicPortName = "quic"
+
 // quicDialAddr resolves the address to dial for the reachability probe from the QUIC
 // Service's already-confirmed endpoint: a LoadBalancer's ingress address, or a NodePort
 // together with a node address (ExternalIP preferred, InternalIP as fallback).
 func quicDialAddr(ctx context.Context, ki kubernetes.Interface, svc *corev1.Service) (string, error) {
-	switch svc.Spec.Type {
-	case corev1.ServiceTypeLoadBalancer:
-		port, ok := quicServicePort(svc)
-		if !ok {
-			return "", errors.New("the QUIC service has no identifiable quic port")
-		}
-		for _, ing := range svc.Status.LoadBalancer.Ingress {
-			addr := ing.IP
-			if addr == "" {
-				addr = ing.Hostname
-			}
-			if addr != "" {
-				return net.JoinHostPort(addr, strconv.Itoa(int(port.Port))), nil
-			}
-		}
-		return "", errors.New("the QUIC service has no assigned LoadBalancer ingress")
-	case corev1.ServiceTypeNodePort:
-		port, ok := quicServicePort(svc)
-		if !ok || port.NodePort == 0 {
-			return "", errors.New("the QUIC service has no allocated node port")
-		}
-		addr, err := firstNodeAddress(ctx, ki)
-		if err != nil {
-			return "", err
-		}
-		return net.JoinHostPort(addr, strconv.Itoa(int(port.NodePort))), nil
-	default:
-		return "", fmt.Errorf("service type %s has no externally reachable address", svc.Spec.Type)
-	}
-}
-
-// quicServicePort finds the chart's "quic" port on svc, falling back to the sole port
-// when the Service carries exactly one (a customized chart install might not preserve
-// the name).
-func quicServicePort(svc *corev1.Service) (corev1.ServicePort, bool) {
-	for _, p := range svc.Spec.Ports {
-		if p.Name == "quic" {
-			return p, true
-		}
-	}
-	if len(svc.Spec.Ports) == 1 {
-		return svc.Spec.Ports[0], true
-	}
-	return corev1.ServicePort{}, false
+	return resolveServiceDialAddr(ctx, ki, svc, quicPortName, "the QUIC service")
 }
 
 // firstNodeAddress lists the cluster's nodes and returns the first ExternalIP found,
