@@ -417,11 +417,12 @@ func connectMgr(
 	if si == nil {
 		clog.Debugf(cluster, "traffic-manager port-forward established, making client known to the traffic-manager as %q", clientID)
 		si, err = mClient.ArriveAsClient(timeoutCtx, &manager.ClientInfo{
-			Name:      clientID,
-			Namespace: cluster.Namespace,
-			InstallId: installID,
-			Product:   "telepresence",
-			Version:   client.Version(),
+			Name:                     clientID,
+			Namespace:                cluster.Namespace,
+			InstallId:                installID,
+			Product:                  "telepresence",
+			Version:                  client.Version(),
+			SupportsCompactAgentInfo: true,
 		})
 		if err != nil {
 			if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
@@ -478,11 +479,12 @@ func (s *session) reconnectManager() (returnedErr error) {
 	_, err = manager.NewManagerClient(conn).ReconnectClient(tc, &manager.ReconnectClientRequest{
 		Session: s.sessionInfo,
 		Client: &manager.ClientInfo{
-			Name:      s.clientID,
-			Namespace: s.Namespace,
-			InstallId: s.installID,
-			Product:   "telepresence",
-			Version:   client.Version(),
+			Name:                     s.clientID,
+			Namespace:                s.Namespace,
+			InstallId:                s.installID,
+			Product:                  "telepresence",
+			Version:                  client.Version(),
+			SupportsCompactAgentInfo: true,
 		},
 		Intercepts: s.getCurrentInterceptInfos(),
 	})
