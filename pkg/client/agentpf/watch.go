@@ -32,11 +32,27 @@ func WatchPods(
 	onReset func() error,
 	onNarrowed func([]string),
 ) error {
+	return WatchPodsWithClient(ctx, func() manager.ManagerClient { return rmc }, session, namespaces, connectedNamespace, onDelta, onReset, onNarrowed)
+}
+
+// WatchPodsWithClient is like WatchPods, but calls managerClient for each new
+// stream so a caller that repaired its manager transport can bind retries to
+// the replacement connection.
+func WatchPodsWithClient(
+	ctx context.Context,
+	managerClient func() manager.ManagerClient,
+	session *manager.SessionInfo,
+	namespaces []string,
+	connectedNamespace string,
+	onDelta func(upserts map[string]*manager.AgentPodInfo, removals []string) error,
+	onReset func() error,
+	onNarrowed func([]string),
+) error {
 	retryInterval := tpClient.GetConfig(ctx).Grpc().WatchRetryInterval
 	err := watcher.WatchWithRetry(ctx, "WatchAgentPodsInNamespacesDelta", retryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoDelta], error) {
 			clog.Debugf(ctx, "WatchAgentPodsInNamespacesDelta starting")
-			return rmc.WatchAgentPodsInNamespacesDelta(ctx, &manager.AgentsRequest{Session: session, Namespaces: namespaces})
+			return managerClient().WatchAgentPodsInNamespacesDelta(ctx, &manager.AgentsRequest{Session: session, Namespaces: namespaces})
 		},
 		func(delta *manager.AgentPodInfoDelta) error {
 			clog.Debugf(ctx, "WatchAgentPodsInNamespacesDelta received %d upserts, %d removals", len(delta.Upserts), len(delta.Removals))
@@ -59,7 +75,7 @@ func WatchPods(
 	err = watcher.WatchWithRetry(ctx, "WatchAgentPodsDelta", retryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoDelta], error) {
 			clog.Debugf(ctx, "WatchAgentPodsDelta starting")
-			return rmc.WatchAgentPodsDelta(ctx, session)
+			return managerClient().WatchAgentPodsDelta(ctx, session)
 		},
 		func(delta *manager.AgentPodInfoDelta) error {
 			clog.Debugf(ctx, "WatchAgentPodsDelta received %d upserts, %d removals", len(delta.Upserts), len(delta.Removals))
@@ -78,7 +94,7 @@ func WatchPods(
 	return watcher.WatchWithRetry(ctx, "WatchAgentPods", retryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.AgentPodInfoSnapshot], error) {
 			clog.Debugf(ctx, "No delta support in traffic-manager, starting WatchAgentPods instead")
-			return rmc.WatchAgentPods(ctx, session)
+			return managerClient().WatchAgentPods(ctx, session)
 		},
 		func(snapshot *manager.AgentPodInfoSnapshot) error {
 			if onReset != nil {

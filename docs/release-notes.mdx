@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.32.0
 <Note>
+	<Title type="bugfix">Recover promptly from stalled manager sessions</Title>
+	<Body>
+Manager keepalive failures now use the existing session repair path instead of ending the client session. Expired sessions recover immediately, while repeated transient failures trigger repair without dropping active intercepts.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature">Completion for use flag</Title>
 	<Body>
 Automcompletion for <code>use</code> flag now dynamically generates completions based on existing daemons.
