@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json/v2"
 	"io"
 	"log/slog"
 	"os"
@@ -26,6 +25,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/flags"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
@@ -107,7 +107,7 @@ func (i *genYAMLCommand) loadConfigMapEntry() (*agentconfig.Sidecar, error) {
 	var cfg agentconfig.Sidecar
 	b, err = yaml.YAMLToJSON(b)
 	if err == nil {
-		err = json.Unmarshal(b, &cfg)
+		err = json.Unmarshal(b, &cfg, false)
 	}
 	if err != nil {
 		return nil, errcat.User.Newf("unable to parse config %s: %w", i.configFile, err)

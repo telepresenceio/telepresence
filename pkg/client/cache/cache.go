@@ -35,7 +35,7 @@ func SaveToUserCache(ctx context.Context, object any, file string, perm Permissi
 	if err := dos.MkdirAll(ctx, dir, 0o755); err != nil {
 		return err
 	}
-	return dos.WriteFile(ctx, fullFilePath, jsonContent, (fs.FileMode(perm)))
+	return dos.WriteFile(ctx, fullFilePath, jsonContent, fs.FileMode(perm))
 }
 
 func LoadFromUserCache(ctx context.Context, dest any, file string) error {

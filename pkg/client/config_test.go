@@ -268,6 +268,7 @@ func Test_ConfigMarshalYAML(t *testing.T) {
 	cfg := GetDefaultConfig()
 	cfg.Images().PrivateAgentImage = "something:else"
 	cfg.Timeouts().PrivateTrafficManagerAPI = defaultTimeoutsTrafficManagerAPI + 20*time.Second
+	cfg.DNS().LookupTimeout++
 	cfg.LogLevels().UserDaemon = clog.LevelTrace
 	cfg.Grpc().MaxReceiveSizeV, _ = resource.ParseQuantity("20Mi")
 	cfg.Intercept().DefaultPort = 9080

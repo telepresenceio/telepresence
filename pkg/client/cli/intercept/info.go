@@ -79,7 +79,7 @@ func NewInfo(ctx context.Context, ii *manager.InterceptInfo, ro bool, mountError
 		HeaderFilters: spec.HeaderFilters,
 		PathFilters:   spec.PathFilters,
 		Global:        spec.Mechanism == "tcp",
-		Replace:       spec.NoDefaultPort, // spec.Replace can't be used because it's set by deprecated --replace flag
+		Replace:       spec.Replace,
 		Wiretap:       spec.Wiretap,
 	}
 

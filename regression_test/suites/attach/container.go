@@ -1,6 +1,8 @@
 package attach
 
 import (
+	"net"
+	"strconv"
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/cli"
@@ -35,6 +37,12 @@ func containerWorkload(name string) workloads.Template {
 		Port: secondaryContainerPort,
 		Env:  map[string]string{"TP_TEST_TAG": "secondary"},
 	}}
+	// No Service covers the secondary's port; the annotation makes it
+	// interceptable (pkg/annotation/annotation.go), so "replace" can
+	// target the secondary container.
+	tpl.Annotations = map[string]string{
+		"telepresence.io/inject-container-ports": strconv.Itoa(secondaryContainerPort),
+	}
 	return tpl
 }
 
@@ -60,17 +68,10 @@ func containerWorkload(name string) workloads.Template {
 // (cmd/traffic/cmd/agent/containerstate.go) in the ReviewInterceptRequest,
 // regardless of which container's port is actually being forwarded.
 //
-// Test_ContainerReplace additionally combines --container with the
-// deprecated "intercept --replace" flag (not the dedicated "replace"
-// command, whose own --container instead names the container to replace
-// directly). cmd/traffic/cmd/manager/state/intercept.go's
-// getOrCreateAgentConfig resolves the container to mark
-// agentconfig.ReplacePolicyContainer through that same
-// Sidecar.FindIntercept call, so --replace combined with --container removes
-// the *named* container from the pod
-// (cmd/traffic/cmd/manager/mutator/agent_injector.go's
-// maybeRemoveAppContainer) even though forwarded traffic keeps flowing
-// through whichever container's port the Service actually exposes.
+// Test_ContainerReplace additionally proves --container selects the
+// container the "replace" command removes from the pod: pkg/icept/find.go's
+// FindContainer resolves the container by name directly, and refuses a
+// multi-container pod when no name is given.
 type Container struct {
 	rt.Suite
 }
@@ -106,26 +107,42 @@ func (s *Container) Test_ContainerTargetsNamedContainer() {
 	a.Detach(t)
 }
 
-// Test_ContainerReplace proves --container also selects which container
-// --replace acts on: with --container secondary, the secondary container is
-// the one removed from the pod spec, not the primary one whose port is
-// actually forwarded to the local echo. Detaching restores it, and a plain
-// intercept on the same workload afterwards proves the pod is back to its
-// original two-container shape with the primary as the default env source.
+// Test_ContainerReplace proves --container selects which container the
+// "replace" command acts on: with --container secondary, the secondary
+// container -- not the service-backed primary -- is removed from the pod
+// and its port forwarded to the local echo, while the primary keeps
+// serving the Service. Without --container, a two-container workload is
+// refused. Detaching restores the pod, and a plain intercept afterwards
+// proves the primary is the default env source again.
 func (s *Container) Test_ContainerReplace() {
 	t := s.T()
 	conn := s.Connect()
 	wl := s.Workload(containerWorkload("container-replace"))
 	ls := s.LocalEcho()
 
-	a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse(), cli.Container("secondary"), cli.Replace())
+	// A replace must name its container when the pod has more than one.
+	stdout, stderr, err := s.CLI().Run(s.Ctx(), "replace", wl.Name, "-n", wl.Namespace, "--mount", "false")
+	s.Error(err, "replace without --container should be refused on a two-container workload")
+	s.Contains(stdout+stderr, "more than one container")
+
+	// The secondary's port is service-less and unnamed, so it is targeted
+	// by number.
+	a := conn.Replace(t, wl, rt.ToLocal(ls, strconv.Itoa(secondaryContainerPort)), cli.MountFalse(), cli.Container("secondary"))
 	waitRollout(&s.Suite, wl)
-	rt.RoutedToLocal(t, wl.ServiceURL(), ls)
-	s.Require().NotNil(a.Intercept, "intercept response should include InterceptInfo")
-	s.Equal("secondary", a.Intercept.Environment["TP_TEST_TAG"])
+	s.Require().NotNil(a.Replace, "replace response should include InterceptInfo")
+	s.Equal("secondary", a.Replace.Environment["TP_TEST_TAG"])
 	assertPodContainers(&s.Suite, wl, true, false)
 
-	a.Detach(t)
+	// The Service still routes to the live primary, while the replaced
+	// secondary's port routes to the local echo.
+	rt.RoutedToCluster(t, wl.ServiceURL())
+	rt.RoutedToLocal(t, "http://"+net.JoinHostPort(a.Replace.PodIP, strconv.Itoa(secondaryContainerPort)), ls)
+
+	// replace names a --container attachment "<workload>/<container>"
+	// (pkg/client/cli/intercept/command.go's ValidateReplace), so detach
+	// must name the container explicitly too.
+	_, stderr, err = s.CLI().Run(s.Ctx(), "detach", wl.Name, "--container", "secondary", "-n", wl.Namespace)
+	s.Require().NoError(err, "detach: %s", stderr)
 	waitRollout(&s.Suite, wl)
 	assertPodContainers(&s.Suite, wl, true, true)
 

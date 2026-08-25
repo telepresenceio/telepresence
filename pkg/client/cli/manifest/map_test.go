@@ -115,6 +115,26 @@ func TestBuildReplaceCommand(t *testing.T) {
 		assert.True(t, c.Replace)
 		assert.True(t, c.NoDefaultPort)
 	})
+
+	t.Run("node-agent is never used, regardless of the config default", func(t *testing.T) {
+		a := &Attachment{Type: TypeReplace, Name: "echo-server"}
+		c, err := buildReplaceCommand(testCmd(t), a)
+		require.NoError(t, err)
+		assert.False(t, c.NodeAgent)
+	})
+
+	t.Run("explicit nodeAgent true is rejected", func(t *testing.T) {
+		a := &Attachment{Type: TypeReplace, Name: "echo-server", NodeAgent: new(true)}
+		_, err := buildReplaceCommand(testCmd(t), a)
+		require.ErrorContains(t, err, "node-agent")
+	})
+
+	t.Run("explicit nodeAgent false is accepted", func(t *testing.T) {
+		a := &Attachment{Type: TypeReplace, Name: "echo-server", NodeAgent: new(false)}
+		c, err := buildReplaceCommand(testCmd(t), a)
+		require.NoError(t, err)
+		assert.False(t, c.NodeAgent)
+	})
 }
 
 func TestBuildIngestCommand(t *testing.T) {

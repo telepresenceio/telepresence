@@ -190,8 +190,8 @@ combinations that would break one of them:
 
 - **Privileged posture required.** The manager's namespace must admit
   privileged pods; clusters that ban `hostPID` cannot run node-agents.
-- **`--replace` is not supported.** Replacing a container is implemented by
-  the injection machinery, which node-agent mode never runs.
+- **Replacing containers is not supported.** `telepresence replace` is
+  implemented by the injection machinery, which node-agent mode never runs.
 - **User-namespaced pods are not supported yet.** A `hostUsers: false` pod
   needs the packet-mark discriminator (`SO_MARK`) instead of the GID owner
   match; until that lands, such targets are rejected with a clear error.

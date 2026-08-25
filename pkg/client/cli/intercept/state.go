@@ -207,7 +207,7 @@ func (s *state) what() string {
 	what := "intercept"
 	if s.Wiretap {
 		what = "wiretap"
-	} else if s.NoDefaultPort {
+	} else if s.Replace {
 		what = "replace"
 	}
 	return what

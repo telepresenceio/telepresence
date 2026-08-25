@@ -36,6 +36,8 @@ import (
 
 // TestAllowGlobalIntercepts_ValidationLogic tests the validation logic
 // for the AllowGlobalIntercepts setting without requiring a full agent setup.
+// Specs are normalized first, so a replace case is blocked as tcp, not by
+// a dedicated replace check.
 func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 	t.Parallel()
 
@@ -69,6 +71,18 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 			name:             "replace_blocked_when_disabled",
 			allowGlobal:      false,
 			mechanism:        "tcp",
+			wiretap:          false,
+			replace:          true,
+			expectError:      true,
+			expectedErrorMsg: "global TCP/UDP intercepts and replaces are disabled",
+		},
+		{
+			// A replace spec is normalized to tcp before this check runs
+			// (see normalizeReplaceSpec), so an http mechanism here still
+			// hits the tcp gate, not the http bypass.
+			name:             "replace_with_http_mechanism_normalizes_and_is_blocked",
+			allowGlobal:      false,
+			mechanism:        "http",
 			wiretap:          false,
 			replace:          true,
 			expectError:      true,
@@ -136,12 +150,13 @@ func TestAllowGlobalIntercepts_ValidationLogic(t *testing.T) {
 				Namespace: "test-namespace",
 			}
 
-			// Create intercept spec
+			// Create intercept spec, normalized like a real client-supplied spec.
 			spec := &rpc.InterceptSpec{
 				Mechanism: tt.mechanism,
 				Wiretap:   tt.wiretap,
 				Replace:   tt.replace,
 			}
+			normalizeReplaceSpec(spec)
 
 			// Create minimal CreateInterceptRequest
 			cr := &rpc.CreateInterceptRequest{
@@ -294,6 +309,35 @@ func TestAllowGlobalIntercepts_DefaultBehavior(t *testing.T) {
 		assert.NotContains(t, prepErr.Error(), "global TCP/UDP intercepts and replaces are disabled",
 			"Default behavior should allow global intercepts and replaces")
 	}
+}
+
+// TestNormalizeReplaceSpec verifies that a replace spec has its mechanism
+// forced to tcp and its HTTP filters cleared, while a non-replace spec is
+// left untouched.
+func TestNormalizeReplaceSpec(t *testing.T) {
+	t.Parallel()
+
+	replaceSpec := &rpc.InterceptSpec{
+		Replace:       true,
+		Mechanism:     "http",
+		HeaderFilters: map[string]string{"x-test": "1"},
+		PathFilters:   []string{"/foo"},
+	}
+	normalizeReplaceSpec(replaceSpec)
+	assert.Equal(t, "tcp", replaceSpec.Mechanism)
+	assert.Nil(t, replaceSpec.HeaderFilters)
+	assert.Nil(t, replaceSpec.PathFilters)
+
+	nonReplaceSpec := &rpc.InterceptSpec{
+		Replace:       false,
+		Mechanism:     "http",
+		HeaderFilters: map[string]string{"x-test": "1"},
+		PathFilters:   []string{"/foo"},
+	}
+	normalizeReplaceSpec(nonReplaceSpec)
+	assert.Equal(t, "http", nonReplaceSpec.Mechanism)
+	assert.Equal(t, map[string]string{"x-test": "1"}, nonReplaceSpec.HeaderFilters)
+	assert.Equal(t, []string{"/foo"}, nonReplaceSpec.PathFilters)
 }
 
 // TestAgentSessionMatches verifies that waitForAgents' predicate distinguishes
@@ -660,6 +704,61 @@ func TestPrepareIntercept_SecondNodeAgentInterceptShared(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, piC.Error, "a sidecar intercept request against a workload with a live node-agent intercept must still be rejected")
 	assert.Contains(t, piC.Error, "node-agent")
+}
+
+// TestPrepareIntercept_NodeAgentReplaceRefused verifies that PrepareIntercept
+// refuses a node-agent request that also sets Replace: node-agent mode never
+// runs the sidecar machinery a replace depends on, so the app container would
+// keep running and the replace would be silently ignored.
+func TestPrepareIntercept_NodeAgentReplaceRefused(t *testing.T) {
+	t.Parallel()
+
+	const ns = "default"
+
+	dep := &apps.Deployment{
+		ObjectMeta: meta.ObjectMeta{Name: "test-agent", Namespace: ns},
+		Spec: apps.DeploymentSpec{
+			Selector: &meta.LabelSelector{MatchLabels: map[string]string{"app": "test-agent"}},
+			Template: core.PodTemplateSpec{
+				ObjectMeta: meta.ObjectMeta{Labels: map[string]string{"app": "test-agent"}},
+				Spec: core.PodSpec{
+					Containers: []core.Container{{
+						Name:  "app",
+						Ports: []core.ContainerPort{{ContainerPort: 8080}},
+					}},
+				},
+			},
+		},
+	}
+
+	ci := fake.NewSimpleClientset(dep)
+	ctx := k8sapi.WithJoinedClientSetInterface(t.Context(), ci, argorolloutsfake.NewSimpleClientset())
+
+	env := &managerutil.Env{
+		NodeAgentEnabled:     true,
+		EnabledWorkloadKinds: k8sapi.Kinds{k8sapi.DeploymentKind},
+	}
+	ctx = managerutil.WithEnv(ctx, env)
+
+	s := &State{
+		backgroundCtx:    ctx,
+		intercepts:       cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+		agents:           cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
+		clients:          xsync.NewMap[tunnel.SessionID, *ClientSession](),
+		workloadWatchers: xsync.NewMap[string, Watcher](),
+		timedLogLevel:    log.NewTimedLevel(slog.LevelDebug, clog.SetTreeLevel),
+		llSubs:           newLoglevelSubscribers(),
+	}
+
+	client := &ClientSession{ClientInfo: &rpc.ClientInfo{Name: "user@host"}, sessionState: sessionState{id: tunnel.SessionID("sessionA")}}
+	cr := &rpc.CreateInterceptRequest{InterceptSpec: &rpc.InterceptSpec{
+		Name: "ic1", Client: "user@host", Agent: "test-agent", Namespace: ns,
+		WorkloadKind: string(k8sapi.DeploymentKind), NodeAgent: true, Replace: true,
+	}}
+	pi, err := s.PrepareIntercept(ctx, cr, client)
+	require.NoError(t, err)
+	require.NotEmpty(t, pi.Error)
+	assert.Contains(t, pi.Error, "node-agent mode does not support replacing containers")
 }
 
 // waitForAgentsTestSession returns an AgentSession that matches waitForAgents'

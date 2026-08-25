@@ -4,12 +4,24 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	daemonRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
+
+func TestStatusInfoDurationJSON(t *testing.T) {
+	s := &StatusInfo{RootDaemon: RootDaemonStatus{
+		Running: true,
+		DNS:     &client.DNSSnake{LookupTimeout: 4 * time.Second},
+	}}
+	data, err := s.MarshalJSON()
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"lookup_timeout":"4s"`)
+}
 
 func TestFormatTunnelTransport(t *testing.T) {
 	tests := []struct {

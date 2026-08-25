@@ -80,6 +80,12 @@ The client now port-forwards directly to the <code>traffic-manager-0</code> pod,
 The new Helm setting <code>externalEndpoint</code> publishes a TLS gRPC listener that serves only the traffic-manager's client-facing RPC surface, with per-method session-ownership enforcement and admission controls in front of token validation. A client configured with <code>cluster.managerAddress</code> (and optionally <code>cluster.managerServerCA</code>) dials it directly and makes no Kubernetes API requests at all; it authenticates with its kubeconfig's bearer token, or with its client certificate directly in the TLS handshake when no bearer source exists. Publishing the endpoint requires <code>security.authentication.mode: enforcing</code> and a persisted server certificate, from an existing TLS Secret or cert-manager.
   </Body>
 </Note>
+<Note>
+	<Title type="change">The deprecated --replace flag has been removed</Title>
+	<Body>
+The <code>--replace</code> flag of <code>telepresence intercept</code>, deprecated since 2.22.0, has been removed. Use the <code>telepresence replace</code> command instead. The traffic-manager now ignores HTTP filters that older clients send along with a replace request.
+  </Body>
+</Note>
 ## Version 2.31.2 <span style={{fontSize:'16px'}}>(August  2)</span>
 <Note>
 	<Title type="change">Namespaced installs no longer read ingresses cluster-wide</Title>
