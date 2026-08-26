@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apps "k8s.io/api/apps/v1"
@@ -217,4 +218,41 @@ func TestState_WatchWorkloads_KeyFollowsScope(t *testing.T) {
 		assert.True(t, hasKey(s, "ns-a"), "selector scope must key by namespace")
 		assert.False(t, hasKey(s, ""), "selector scope must not create the cluster-wide watcher")
 	})
+}
+
+func TestWatcherDispatchSkipsCanceledSubscription(t *testing.T) {
+	subCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := make(chan []Event, 1)
+	ch <- nil
+
+	w := &watcher{
+		subscriptions: map[uuid.UUID]subscription{
+			uuid.New(): {
+				ch:        ch,
+				namespace: "default",
+				done:      subCtx.Done(),
+			},
+		},
+		events: []Event{{Workload: k8sapi.Deployment(newTestDeployment("app", "default"))}},
+	}
+
+	dispatched := make(chan struct{})
+	go func() {
+		w.dispatch(context.Background())
+		close(dispatched)
+	}()
+
+	require.Eventually(t, func() bool {
+		w.Lock()
+		defer w.Unlock()
+		return w.events == nil
+	}, time.Second, time.Millisecond)
+
+	cancel()
+	select {
+	case <-dispatched:
+	case <-time.After(time.Second):
+		t.Fatal("dispatch blocked on canceled subscription")
+	}
 }
