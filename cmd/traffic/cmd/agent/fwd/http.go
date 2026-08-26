@@ -12,6 +12,7 @@ import (
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"sync"
 
 	"golang.org/x/net/http2"
 
@@ -21,6 +22,36 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
+
+const (
+	httpInterceptMaxIdleConns        = 512
+	httpInterceptMaxIdleConnsPerHost = 128
+	httpInterceptMaxConnsPerHost     = 128
+)
+
+type httpInterceptDialContextKey struct{}
+
+type httpInterceptDialContext struct {
+	src netip.AddrPort
+	ii  *manager.InterceptInfo
+}
+
+type httpInterceptTransport struct {
+	targetURL *url.URL
+	transport *http.Transport
+}
+
+type metricsReportingConn struct {
+	net.Conn
+	once   sync.Once
+	report func()
+}
+
+func (c *metricsReportingConn) Close() error {
+	err := c.Conn.Close()
+	c.once.Do(c.report)
+	return err
+}
 
 func (f *tcp) protocols(ctx context.Context, plainText bool) *http.Protocols {
 	pr := new(http.Protocols)
@@ -207,6 +238,9 @@ func (f *tcp) configureUpstreamTransport(ctx context.Context, plaintext bool) *h
 	tm := f.tlsManager
 	tp := f.Target().Port()
 	trn := f.configureTransport(ctx, plaintext)
+	trn.MaxIdleConns = max(trn.MaxIdleConns, httpInterceptMaxIdleConns)
+	trn.MaxIdleConnsPerHost = max(trn.MaxIdleConnsPerHost, httpInterceptMaxIdleConnsPerHost)
+	trn.MaxConnsPerHost = max(trn.MaxConnsPerHost, httpInterceptMaxConnsPerHost)
 	if plaintext {
 		return trn
 	}
@@ -225,6 +259,134 @@ func (f *tcp) configureUpstreamTransport(ctx context.Context, plaintext bool) *h
 	return trn
 }
 
+func httpInterceptTransportKey(ii *manager.InterceptInfo, requestProtoMajor int) string {
+	if ii == nil || ii.Spec == nil || ii.ClientSession == nil {
+		return ""
+	}
+	protocol := "h2"
+	if requestProtoMajor < 2 {
+		protocol = "h1"
+	}
+	spec := ii.Spec
+	return fmt.Sprintf(
+		"%s|%s|%s|%d|%t|%s",
+		ii.Id,
+		ii.ClientSession.SessionId,
+		spec.TargetHost,
+		spec.TargetPort,
+		spec.Plaintext,
+		protocol,
+	)
+}
+
+func (f *tcp) getHTTPInterceptTransport(
+	ctx context.Context,
+	ii *manager.InterceptInfo,
+	requestProtoMajor int,
+) *httpInterceptTransport {
+	key := httpInterceptTransportKey(ii, requestProtoMajor)
+	if cached, ok := f.httpTransportCache.Load(key); ok {
+		return cached.(*httpInterceptTransport)
+	}
+
+	spec := ii.Spec
+	trn := f.configureUpstreamTransport(ctx, spec.Plaintext)
+
+	// Keep the protocol choice tied to the request being forwarded. In
+	// particular, an HTTP/1 request must not reuse a transport configured for
+	// h2c prior knowledge.
+	if requestProtoMajor < 2 && trn.Protocols.UnencryptedHTTP2() {
+		pr := new(http.Protocols)
+		pr.SetHTTP1(true)
+		trn.Protocols = pr
+	}
+
+	trn.DialContext = func(dialCtx context.Context, _, _ string) (net.Conn, error) {
+		di, ok := dialCtx.Value(httpInterceptDialContextKey{}).(*httpInterceptDialContext)
+		if !ok {
+			return nil, fmt.Errorf("missing HTTP selected intercept dial context for intercept %s", ii.Id)
+		}
+
+		f.mu.Lock()
+		sp := f.streamProvider
+		f.mu.Unlock()
+
+		metricsEnabled := sp != nil && sp.MetricsEnabled()
+		var ingressBytes, egressBytes *tunnel.CounterProbe
+		if metricsEnabled {
+			ingressBytes = tunnel.NewCounterProbe("FromClientBytes")
+			egressBytes = tunnel.NewCounterProbe("ToClientBytes")
+		}
+
+		s, err := f.createStream(dialCtx, di.src, di.ii)
+		if err != nil {
+			return nil, err
+		}
+		// Ingress and egress swap places here because this is a connection where the stream is attached to a connection *to* the client, not *from* the client.
+		conn := tunnel.NewStreamConn(dialCtx, s, egressBytes, ingressBytes)
+		if !metricsEnabled {
+			return conn, nil
+		}
+		return &metricsReportingConn{
+			Conn: conn,
+			report: func() {
+				sp.ReportMetrics(f.lCtx, &manager.TunnelMetrics{
+					ClientSessionId: di.ii.ClientSession.SessionId,
+					IngressBytes:    ingressBytes.GetValue(),
+					EgressBytes:     egressBytes.GetValue(),
+				})
+			},
+		}, nil
+	}
+
+	scheme := "http"
+	if trn.Protocols.HTTP2() {
+		scheme = "https"
+	}
+	hit := &httpInterceptTransport{
+		targetURL: &url.URL{Scheme: scheme, Host: iputil.JoinHostPort(spec.TargetHost, uint16(spec.TargetPort))},
+		transport: trn,
+	}
+	actual, loaded := f.httpTransportCache.LoadOrStore(key, hit)
+	if loaded {
+		trn.CloseIdleConnections()
+		return actual.(*httpInterceptTransport)
+	}
+	return hit
+}
+
+func (f *tcp) pruneHTTPInterceptTransports(intercepts []*manager.InterceptInfo) {
+	if len(intercepts) == 0 {
+		f.httpTransportCache.Range(func(key, value any) bool {
+			if hit, ok := value.(*httpInterceptTransport); ok {
+				hit.transport.CloseIdleConnections()
+			}
+			f.httpTransportCache.Delete(key)
+			return true
+		})
+		return
+	}
+
+	active := make(map[string]struct{}, len(intercepts)*2)
+	for _, ii := range intercepts {
+		for _, protoMajor := range []int{1, 2} {
+			if key := httpInterceptTransportKey(ii, protoMajor); key != "" {
+				active[key] = struct{}{}
+			}
+		}
+	}
+	f.httpTransportCache.Range(func(key, value any) bool {
+		if _, ok := active[key.(string)]; ok {
+			return true
+		}
+		if hit, ok := value.(*httpInterceptTransport); ok {
+			hit.transport.CloseIdleConnections()
+		}
+		f.httpTransportCache.Delete(key)
+		return true
+	})
+}
+
 func (f *tcp) serveHTTPIntercept(
 	ctx context.Context,
 	src netip.AddrPort,
@@ -233,58 +395,21 @@ func (f *tcp) serveHTTPIntercept(
 	ii *manager.InterceptInfo,
 	defaultHandler http.Handler,
 ) {
-	spec := ii.Spec
-	f.mu.Lock()
-	sp := f.streamProvider
-	f.mu.Unlock()
+	hit := f.getHTTPInterceptTransport(ctx, ii, request.ProtoMajor)
 
-	metricsEnabled := sp != nil && sp.MetricsEnabled()
-	var ingressBytes, egressBytes *tunnel.CounterProbe
-	if metricsEnabled {
-		ingressBytes = tunnel.NewCounterProbe("FromClientBytes")
-		egressBytes = tunnel.NewCounterProbe("ToClientBytes")
-	}
-	trn := f.configureUpstreamTransport(ctx, spec.Plaintext)
-
-	// The transport's protocols mirror what the app supports, but this
-	// connection goes to the intercept handler on the workstation, and the
-	// exchange must use the protocol of the request being forwarded: h2c
-	// prior knowledge on an HTTP/1 exchange breaks handlers that only speak
-	// HTTP/1.
-	if request.ProtoMajor < 2 && trn.Protocols.UnencryptedHTTP2() {
-		pr := new(http.Protocols)
-		pr.SetHTTP1(true)
-		trn.Protocols = pr
-	}
-
-	trn.DialContext = func(context.Context, string, string) (net.Conn, error) {
-		s, err := f.createStream(ctx, src, ii)
-		if err != nil {
-			return nil, err
-		}
-		// Ingress and egress swap places here because this is a connection where the stream is attached to a connection *to* the client, not *from* the client.
-		return tunnel.NewStreamConn(ctx, s, egressBytes, ingressBytes), nil
-	}
-
-	scheme := "http"
-	if trn.Protocols.HTTP2() {
-		scheme = "https"
-	}
-	trg := &url.URL{Scheme: scheme, Host: iputil.JoinHostPort(spec.TargetHost, uint16(spec.TargetPort))}
-
-	if tlsConfig := trn.TLSClientConfig; tlsConfig != nil {
+	if tlsConfig := hit.transport.TLSClientConfig; tlsConfig != nil {
 		if len(tlsConfig.Certificates) > 0 {
-			clog.Debugf(ctx, "Using a client certificate when connecting to %s", trg)
+			clog.Debugf(ctx, "Using a client certificate when connecting to %s", hit.targetURL)
 		} else {
-			clog.Debugf(ctx, "Not using a client certificate when connecting to %s", trg)
+			clog.Debugf(ctx, "Not using a client certificate when connecting to %s", hit.targetURL)
 		}
 		if tlsConfig.InsecureSkipVerify {
-			clog.Warnf(ctx, "Skipping verification of server's certificate chain and host name when connecting to %s", trg)
+			clog.Warnf(ctx, "Skipping verification of server's certificate chain and host name when connecting to %s", hit.targetURL)
 		}
 	} else {
-		clog.Debugf(ctx, "No TLS config used when connecting to %s", trg)
+		clog.Debugf(ctx, "No TLS config used when connecting to %s", hit.targetURL)
 	}
-	targetProxy := httputil.NewSingleHostReverseProxy(trg)
+	targetProxy := httputil.NewSingleHostReverseProxy(hit.targetURL)
 	targetProxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
 		if errors.Is(err, errClientStream) {
 			clog.Warnf(ctx, "Intercept tunnel unavailable for %s %s; failing open to app container: %v", req.Method, req.URL.Path, err)
@@ -293,19 +418,14 @@ func (f *tcp) serveHTTPIntercept(
 		}
 		proxyErrorHandler(rw, req, err)
 	}
-	targetProxy.Transport = trn
+	targetProxy.Transport = hit.transport
+	request = request.WithContext(context.WithValue(request.Context(), httpInterceptDialContextKey{}, &httpInterceptDialContext{
+		src: src,
+		ii:  ii,
+	}))
 	targetProxy.ServeHTTP(writer, request)
 
-	if metricsEnabled {
-		clog.Debugf(ctx, "Connection to %s ended. IngressBytes: %d, egressBytes: %d", trg, ingressBytes.GetValue(), egressBytes.GetValue())
-		sp.ReportMetrics(f.lCtx, &manager.TunnelMetrics{
-			ClientSessionId: ii.ClientSession.SessionId,
-			IngressBytes:    ingressBytes.GetValue(),
-			EgressBytes:     egressBytes.GetValue(),
-		})
-	} else {
-		clog.Debugf(ctx, "Connection to %s ended", trg)
-	}
+	clog.Debugf(ctx, "Request to %s ended", hit.targetURL)
 }
 
 func proxyErrorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
