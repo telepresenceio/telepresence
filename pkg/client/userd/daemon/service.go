@@ -60,7 +60,7 @@ type service struct {
 
 	sessionLock    sync.RWMutex
 	session        userd.Session
-	sessionCancel  context.CancelFunc
+	sessionCancel  func(error)
 	sessionRunning chan struct{}
 
 	fuseFtpMgr remotefs.FuseFTPManager
@@ -215,7 +215,7 @@ func runAliveAndCancellation(g log.Group, cancel context.CancelFunc, daemonInfoF
 		return il.WatchInfos(func(ctx context.Context) error {
 			ok, err := il.InfoExists(daemonInfoFile)
 			if err == nil && !ok {
-				clog.Debugf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemonInfoFile)
+				clog.Warnf(ctx, "info-watcher cancels everything because daemon info %s does not exist", daemonInfoFile)
 				cancel()
 			}
 			return err

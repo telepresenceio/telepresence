@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/telepresenceio/clog"
@@ -24,6 +25,7 @@ type tcp struct {
 	*interceptor
 	tlsManager     tls.Manager
 	listenerSwitch ListenerSwitch
+	httpRequestID  atomic.Uint64
 }
 
 func NewTCPInterceptor(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, tlsManager tls.Manager, target netip.AddrPort, opts ...forwarder.Option) Interceptor {
@@ -191,9 +193,37 @@ func (f *tcp) createStream(ctx context.Context, src netip.AddrPort, ii *manager.
 	f.mu.Lock()
 	sp := f.streamProvider
 	f.mu.Unlock()
+	start := time.Now()
 	s, err := sp.CreateClientStream(ctx, tunnel.AgentToClient, clientSession, id, latency, timeout)
 	if err != nil {
+		clog.Warnf(
+			ctx,
+			"failed to create agent-to-client intercept stream after %s: intercept=%s clientSession=%s conn=%s src=%s dst=%s target=%s:%d error=%v",
+			time.Since(start).Round(time.Millisecond),
+			ii.Id,
+			clientSession,
+			id,
+			src,
+			dst,
+			spec.TargetHost,
+			spec.TargetPort,
+			err,
+		)
 		return nil, fmt.Errorf("%w: %w", errClientStream, err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		clog.Warnf(
+			ctx,
+			"created agent-to-client intercept stream slowly after %s: intercept=%s clientSession=%s conn=%s src=%s dst=%s target=%s:%d",
+			elapsed.Round(time.Millisecond),
+			ii.Id,
+			clientSession,
+			id,
+			src,
+			dst,
+			spec.TargetHost,
+			spec.TargetPort,
+		)
 	}
 	return s, nil
 }

@@ -2,6 +2,8 @@ package rootd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -96,11 +98,11 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		return nil, err
 	}
 
-	sessionCtx, sessionCancel := context.WithCancel(s)
+	sessionCtx, sessionCancel := context.WithCancelCause(s)
 	var sn *session
 	sn, err = createSession(client.WithConfig(sessionCtx, cfg), ctx, info, s.activity, dns.CleanupRouting)
 	if err != nil {
-		sessionCancel()
+		sessionCancel(fmt.Errorf("failed to create root daemon session: %w", err))
 		return nil, err
 	}
 	if !s.managed {
@@ -120,7 +122,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 	sessionRunning := make(chan struct{})
 	go func() {
 		defer func() {
-			sessionCancel()
+			sessionCancel(context.Canceled)
 			if !s.managed {
 				// Restore log level from service config after session ends.
 				client.ReloadLogLevel(s)
@@ -136,18 +138,24 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		return nil, status.Error(codes.Canceled, "session canceled")
 	case <-ctx.Done():
 		// gRPC context was canceled, probably by the caller.
-		sessionCancel()
+		sessionCancel(errors.New("root daemon Connect call canceled"))
 		return nil, status.Error(codes.Canceled, "connect call canceled")
 	case err = <-initErrCh:
 		if err != nil {
 			// Session failed to initialize.
-			sessionCancel()
+			sessionCancel(fmt.Errorf("root daemon session initialization failed: %w", err))
 			return nil, err
 		}
 		// Session initialized successfully.
 	}
 	s.session = sn
-	s.sessionCancel = sessionCancel
+	s.sessionCancel = func(cause error) {
+		if cause == nil {
+			cause = context.Canceled
+		}
+		clog.Infof(sn, "canceling root daemon session: %v", cause)
+		sessionCancel(cause)
+	}
 	s.sessionRunning = sessionRunning
 	return reply, nil
 }
@@ -170,7 +178,7 @@ func (s *service) cancelSession(ctx context.Context) {
 	// We must use a shared read lock when cancelling to avoid a deadlock.
 	var oldSession *session
 	err := s.withSession(ctx, func(_ context.Context, session *session) error {
-		s.sessionCancel()
+		s.sessionCancel(errors.New("root daemon Disconnect request"))
 		oldSession = session
 		return nil
 	})
