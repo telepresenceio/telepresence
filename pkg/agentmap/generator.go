@@ -179,6 +179,9 @@ func (cfg *GeneratorConfig) Generate(
 			ccs = append(ccs, cfg.newContainerConfig(cn, len(ccs), nil, containerReplacePolicy(existingConfig, cn)))
 		}
 	}
+	if err = applyInactivePortAnnotation(wl, ccs); err != nil {
+		return nil, err
+	}
 
 	return &agentconfig.Sidecar{
 		AgentImage:          cfg.QualifiedAgentImage,
@@ -205,6 +208,43 @@ func (cfg *GeneratorConfig) Generate(
 		EnableMetrics:       cfg.EnableMetrics,
 		WatchRetryInterval:  cfg.WatchRetryInterval,
 	}, nil
+}
+
+func applyInactivePortAnnotation(wl k8sapi.Workload, containers []*agentconfig.Container) error {
+	value := strings.TrimSpace(wl.GetPodTemplate().Annotations[annotation.InjectInactivePort])
+	if value == "" {
+		return nil
+	}
+	port, err := strconv.ParseUint(value, 10, 16)
+	if err != nil || port == 0 {
+		return errcat.User.Newf("annotation %s of %s must be a port between 1 and 65535", annotation.InjectInactivePort, wl)
+	}
+
+	type target struct {
+		container string
+		port      uint16
+		protocol  types.Proto
+	}
+	targets := make(map[target]struct{})
+	for _, container := range containers {
+		for _, intercept := range container.Intercepts {
+			targets[target{
+				container: container.Name,
+				port:      intercept.ContainerPort,
+				protocol:  intercept.Protocol,
+			}] = struct{}{}
+		}
+	}
+	if len(targets) != 1 {
+		return errcat.User.Newf("annotation %s of %s requires exactly one intercepted container port, found %d", annotation.InjectInactivePort, wl, len(targets))
+	}
+
+	for _, container := range containers {
+		for _, intercept := range container.Intercepts {
+			intercept.InactivePort = uint16(port)
+		}
+	}
+	return nil
 }
 
 func ManagerHost(managerNamespace, clusterDomain string) string {
