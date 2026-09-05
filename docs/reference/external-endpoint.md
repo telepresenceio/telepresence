@@ -4,7 +4,8 @@ description: The traffic-manager's optional TLS gRPC listener for clients that m
 ---
 
 The traffic-manager can publish an optional TLS gRPC listener for clients,
-configured with the Helm value `externalEndpoint`. A client configured with
+configured with the Helm value `externalEndpoint`. This approach is called
+Direct Connect throughout the documentation. A client configured with
 `cluster.managerAddress` dials it directly instead of establishing a
 port-forward through the Kubernetes API server, which removes the last
 mechanical Kubernetes permission a connection needs: such a client makes no
@@ -24,7 +25,7 @@ cluster:
   and any other mode. In permissive mode an unauthenticated caller would be
   admitted; that is tolerable over a port-forward only because reaching the
   manager then requires `pods/portforward` and the API server has vouched for
-  the caller. An external endpoint has no such precondition.
+  the caller. Direct Connect has no such precondition.
 - **Server trust must survive manager restarts.** The listener terminates TLS
   with a persisted certificate: either an existing `kubernetes.io/tls` Secret
   (`externalEndpoint.tls.secretName`) or a cert-manager Certificate
@@ -39,17 +40,17 @@ cluster:
 The external listener carries the control plane. Outbound cluster traffic
 can fall back to tunnel streams on the TLS gRPC connection itself, but
 agent-bound streams — the delivery path for intercepted traffic and volume
-mounts — need a client-to-agent channel, which in external mode is the QUIC
-tunnel (`quicTunnel.enabled`): there is no Kubernetes port-forward to fall
-back to. Publish the QUIC endpoint alongside the external endpoint.
-Without it, an external-only client can connect, browse, and gather logs,
+mounts — need a client-to-agent channel, which under Direct Connect is the
+QUIC tunnel (`quicTunnel.enabled`): there is no Kubernetes port-forward to
+fall back to. Publish the QUIC endpoint alongside Direct Connect.
+Without it, a Direct Connect client can connect, browse, and gather logs,
 but creating an intercept or ingest fails early with an error naming the
 missing channel — the client never creates an attachment whose traffic
 has no way to reach the local workstation.
 
 ## What the client loses without cluster access
 
-In external-only mode, features that inherently require client-side
+Under Direct Connect, features that inherently require client-side
 Kubernetes access are disabled with explicit errors rather than degraded
 silently: the ConfigMap-backed admin commands for revoking intercepts, and
 the legacy direct log-gathering path (the manager serves the logs instead).
@@ -92,8 +93,8 @@ remain recommended defense in depth.
 
 Publishing an endpoint stops the chart from granting `pods/portforward` in
 any client Role — the connect Role's bootstrap grant and the per-namespace
-intercept Roles' direct-agent-dial grant alike — since an external client
-never port-forwards. The exception is `security.authorization.requiredGrant:
+intercept Roles' direct-agent-dial grant alike — since a Direct Connect
+client never port-forwards. The exception is `security.authorization.requiredGrant:
 portforward`, where possession of `pods/portforward` is itself the
 authorization policy, so the named grants remain. With any other required
 grant, what remains is RBAC granted elsewhere: set

@@ -10,8 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	rbac "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/yaml"
 
+	"github.com/telepresenceio/telepresence/v2/regression_test/framework/cli"
+	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 )
 
@@ -478,9 +481,11 @@ func (s *Setup) Test_NonAdminHandoff() {
 }
 
 // Test_ClientRbacInputRoundTrip proves that an input's clientRbac block
-// round-trips unchanged: recommend.go's engine has no opinion about
-// clientRbac.* at all, so ReconcileWithInput's deep clone (input.go) carries
-// it through verbatim.
+// round-trips unchanged aside from the engine's own legacyAccess opinion:
+// recommend.go has no opinion about clientRbac.create/subjects, so
+// ReconcileWithInput's deep clone (input.go) carries them through verbatim,
+// while clientRbac.legacyAccess is always merged in from the answer (default
+// false, since the input here doesn't pin it).
 func (s *Setup) Test_ClientRbacInputRoundTrip() {
 	t := s.T()
 	ctx := s.Ctx()
@@ -505,8 +510,15 @@ func (s *Setup) Test_ClientRbacInputRoundTrip() {
 		"setup", "--manager-namespace", ns, "--non-interactive", "--input", input, "--output", output)
 	s.Require().NoError(err, "setup --input --output: %s", stderr)
 
+	want := map[string]any{
+		"create":       true,
+		"legacyAccess": false,
+		"subjects": []any{
+			map[string]any{"kind": "User", "name": "alice", "apiGroup": "rbac.authorization.k8s.io"},
+		},
+	}
 	values := loadValuesFile(t, output)
-	s.Equal(clientRbac, values["clientRbac"])
+	s.Equal(want, values["clientRbac"])
 
 	exists, err := releaseExists(ctx, r, ns)
 	s.Require().NoError(err)
@@ -547,4 +559,160 @@ func (s *Setup) Test_Validation() {
 	exists, err := releaseExists(ctx, r, ns)
 	s.Require().NoError(err)
 	s.False(exists, "validation-only run must not create a release")
+}
+
+// connectIdentity is the --as value for the ServiceAccount clientRbac grants
+// below: the same identity name the auth suites use (managers.
+// TestServiceAccount), though the connecting client here talks to its own
+// private release rather than the shared one.
+const connectIdentity = "system:serviceaccount:" + managers.ManagerNamespace + ":" + managers.TestServiceAccount
+
+// Test_SecurityInput installs with security.authentication.mode enforcing,
+// security.authorization.requiredGrant telepresence, and clientRbac.legacyAccess
+// false, with the agent-injector and node-agent both disabled so no attach
+// machinery is provisioned, then connects under the granted identity to prove
+// the resulting installation actually admits a client. The rendered connect
+// Role (charts/telepresence-oss/templates/clientRbac/connect.yaml) is checked
+// against what legacyAccess false and requiredGrant telepresence actually
+// render: pods/portforward scoped to the known pod name rather than the
+// legacy unscoped/discovery form, and the telepresence.io connections grant.
+func (s *Setup) Test_SecurityInput() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	env := rt.Env{Ctx: ctx, T: t, R: r}
+	ns := rt.PrivateUnmanagedNamespace(env, "security")
+	t.Cleanup(func() { uninstallIfPresent(t, ctx, r, ns) })
+
+	dir := r.ArtifactDir("setup")
+	input := filepath.Join(dir, "security-"+ns+"-input.yaml")
+	output := filepath.Join(dir, "security-"+ns+"-output.yaml")
+	writeValuesFile(t, input, map[string]any{
+		"security": map[string]any{
+			"authentication": map[string]any{"mode": "enforcing"},
+			"authorization":  map[string]any{"requiredGrant": "telepresence"},
+		},
+		"clientRbac": map[string]any{
+			"legacyAccess": false,
+			"create":       true,
+			"subjects": []any{
+				map[string]any{"kind": "ServiceAccount", "name": managers.TestServiceAccount, "namespace": managers.ManagerNamespace},
+			},
+		},
+		"agentInjector": map[string]any{"enabled": false},
+		"nodeAgent":     map[string]any{"enabled": false},
+	})
+
+	stdout, stderr, err := s.CLI().Run(ctx,
+		"setup", "--manager-namespace", ns, "--non-interactive", "--input", input, "--output", output, "--apply")
+	s.Require().NoError(err, "setup --apply: %s", stderr)
+	s.Contains(stdout, "Action: install")
+
+	values := loadValuesFile(t, output)
+	mode, _ := valueAtPath(values, "security", "authentication", "mode")
+	s.Equal("enforcing", mode)
+	grant, _ := valueAtPath(values, "security", "authorization", "requiredGrant")
+	s.Equal("telepresence", grant)
+	legacy, _ := valueAtPath(values, "clientRbac", "legacyAccess")
+	s.Equal(false, legacy)
+
+	helmValues, err := helmGetValues(ctx, r, ns)
+	s.Require().NoError(err)
+	mode, _ = valueAtPath(helmValues, "security", "authentication", "mode")
+	s.Equal("enforcing", mode)
+	grant, _ = valueAtPath(helmValues, "security", "authorization", "requiredGrant")
+	s.Equal("telepresence", grant)
+	legacy, _ = valueAtPath(helmValues, "clientRbac", "legacyAccess")
+	s.Equal(false, legacy)
+
+	roleYAML, err := r.Kubectl(ctx, ns, "get", "role", "traffic-manager-connect", "-o", "yaml")
+	s.Require().NoError(err, "reading the connect Role")
+	var role rbac.Role
+	s.Require().NoError(yaml.Unmarshal([]byte(roleYAML), &role))
+	var scopedPortForward, legacyDiscovery, connectionsGrant bool
+	for _, rule := range role.Rules {
+		for _, res := range rule.Resources {
+			switch res {
+			case "pods/portforward":
+				if len(rule.ResourceNames) > 0 {
+					scopedPortForward = true
+				}
+			case "pods", "services":
+				legacyDiscovery = true
+			case "connections":
+				for _, g := range rule.APIGroups {
+					if g == "telepresence.io" {
+						connectionsGrant = true
+					}
+				}
+			}
+		}
+	}
+	s.True(scopedPortForward, "legacyAccess false should scope pods/portforward to the known pod name:\n%s", roleYAML)
+	s.False(legacyDiscovery, "legacyAccess false should not render the legacy pods/services discovery rules:\n%s", roleYAML)
+	s.True(connectionsGrant, "requiredGrant telepresence should grant telepresence.io connections:\n%s", roleYAML)
+
+	if _, _, err := s.CLI().Run(ctx, "quit", "-s"); err != nil {
+		t.Logf("[rtest] setup: quit -s before connect: %v", err)
+	}
+	r.ForgetConnections()
+	t.Cleanup(func() {
+		if _, _, err := s.CLI().Run(ctx, "quit", "-s"); err != nil {
+			r.Infof("[rtest] setup: quit -s after Test_SecurityInput: %v", err)
+		}
+		r.ForgetConnections()
+	})
+
+	_, stderr, err = s.CLI().Run(ctx, "connect", "--namespace", ns, "--manager-namespace", ns, "--as", connectIdentity)
+	s.Require().NoError(err, "connect: %s", stderr)
+
+	var st cli.Status
+	s.Require().NoError(s.CLI().JSON(ctx, &st, "status", "--format", "json"))
+	s.True(st.UserDaemon.Running, "the user daemon should report connected")
+	s.Equal(ns, st.UserDaemon.ManagerNamespace)
+}
+
+// Test_ExternalEndpointValidation checks ValidateValues's two chart guards
+// (input.go): externalEndpoint.enabled requires security.authentication.mode
+// enforcing, and its tls block must set exactly one of secretName or
+// certManager.enabled. Both are hard errors before any release is touched.
+func (s *Setup) Test_ExternalEndpointValidation() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	env := rt.Env{Ctx: ctx, T: t, R: r}
+	ns := rt.PrivateUnmanagedNamespace(env, "extvalidate")
+	t.Cleanup(func() { uninstallIfPresent(t, ctx, r, ns) })
+
+	dir := r.ArtifactDir("setup")
+
+	t.Run("externalEndpoint without enforcing mode", func(t *testing.T) {
+		input := filepath.Join(dir, "extvalidate-"+ns+"-permissive-input.yaml")
+		output := filepath.Join(dir, "extvalidate-"+ns+"-permissive-output.yaml")
+		writeValuesFile(t, input, map[string]any{
+			"security":         map[string]any{"authentication": map[string]any{"mode": "permissive"}},
+			"externalEndpoint": map[string]any{"enabled": true},
+		})
+		_, stderr, err := s.CLI().Run(ctx,
+			"setup", "--manager-namespace", ns, "--non-interactive", "--input", input, "--output", output)
+		s.Require().Error(err)
+		s.Contains(stderr, "externalEndpoint.enabled requires security.authentication.mode: enforcing")
+	})
+
+	t.Run("externalEndpoint with no certificate source", func(t *testing.T) {
+		input := filepath.Join(dir, "extvalidate-"+ns+"-notls-input.yaml")
+		output := filepath.Join(dir, "extvalidate-"+ns+"-notls-output.yaml")
+		writeValuesFile(t, input, map[string]any{
+			"security":         map[string]any{"authentication": map[string]any{"mode": "enforcing"}},
+			"externalEndpoint": map[string]any{"enabled": true},
+		})
+		_, stderr, err := s.CLI().Run(ctx,
+			"setup", "--manager-namespace", ns, "--non-interactive", "--input", input, "--output", output)
+		s.Require().Error(err)
+		s.Contains(stderr, "set exactly one of tls.secretName or tls.certManager.enabled")
+	})
+
+	exists, err := releaseExists(ctx, r, ns)
+	s.Require().NoError(err)
+	s.False(exists, "neither validation failure may create a release")
 }

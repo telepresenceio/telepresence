@@ -11,11 +11,12 @@ import (
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/release"
 
-	authv1 "k8s.io/api/authorization/v1"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	auth "k8s.io/api/authorization/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -23,31 +24,33 @@ import (
 
 func TestGatherFacts_Smoke(t *testing.T) {
 	client := fake.NewClientset(
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ambassador"}},
-		&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}},
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
+		&core.Namespace{ObjectMeta: meta.ObjectMeta{Name: "ambassador"}},
+		&core.Namespace{ObjectMeta: meta.ObjectMeta{Name: "default"}},
+		&core.Node{
+			ObjectMeta: meta.ObjectMeta{
 				Name:   "node-1",
 				Labels: map[string]string{"kubernetes.io/os": "linux"},
 			},
-			Spec: corev1.NodeSpec{ProviderID: "kind://docker/kind/kind-control-plane", PodCIDR: "10.244.0.0/16"},
-			Status: corev1.NodeStatus{
-				Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "172.18.0.2"}},
-				NodeInfo:  corev1.NodeSystemInfo{ContainerRuntimeVersion: "containerd://1.6.6"},
+			Spec: core.NodeSpec{ProviderID: "kind://docker/kind/kind-control-plane", PodCIDR: "10.244.0.0/16"},
+			Status: core.NodeStatus{
+				Addresses: []core.NodeAddress{{Type: core.NodeInternalIP, Address: "172.18.0.2"}},
+				NodeInfo:  core.NodeSystemInfo{ContainerRuntimeVersion: "containerd://1.6.6"},
 			},
 		},
-		&corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: "traffic-manager-quic", Namespace: "ambassador"},
-			Spec:       corev1.ServiceSpec{Type: corev1.ServiceTypeClusterIP},
+		&core.Service{
+			ObjectMeta: meta.ObjectMeta{Name: "traffic-manager-quic", Namespace: "ambassador"},
+			Spec:       core.ServiceSpec{Type: core.ServiceTypeClusterIP},
 		},
 	)
-	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*authv1.ResourceAttributes) bool { return true })
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*auth.ResourceAttributes) bool { return true })
 
+	releaseConfig, err := (&helm.Values{ReplicaCount: new(int32(1))}).ToMap()
+	require.NoError(t, err)
 	stubRelease := &release.Release{
 		Name:      "traffic-manager",
 		Namespace: "ambassador",
 		Chart:     &chart.Chart{Metadata: &chart.Metadata{Version: "2.31.0"}},
-		Config:    map[string]any{"replicaCount": float64(1)},
+		Config:    releaseConfig,
 	}
 
 	srv := newUpdateServer(t, version.Structured.String()+"\n", http.StatusOK)

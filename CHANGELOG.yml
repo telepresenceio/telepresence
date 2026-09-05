@@ -60,7 +60,12 @@ items:
           install privileges are missing, the report itemizes exactly what
           to hand to a cluster admin instead of a dead end, and
           <code>telepresence setup --format json</code> is a convenient
-          attachment for bug reports.
+          attachment for bug reports. The interview also asks whether to
+          enforce authentication, which RBAC grant to require, whether to
+          enable Direct Connect, an external control endpoint using an
+          existing TLS Secret or cert-manager, and whether older clients
+          need access, so the client's cluster permissions can be minimized
+          without hand-editing a values file.
         docs: reference/setup
       - type: bugfix
         title: Intercepts work in namespaces created after a no-injector manager started
@@ -169,7 +174,8 @@ items:
           Publishing the endpoint requires
           <code>security.authentication.mode: enforcing</code> and a
           persisted server certificate, from an existing TLS Secret or
-          cert-manager.
+          cert-manager. The documentation calls this approach Direct
+          Connect.
         docs: reference/external-endpoint
       - type: change
         title: The deprecated --replace flag has been removed

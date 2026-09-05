@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/url"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // providerSchemes maps a node's spec.providerID scheme to the cloud it names.
@@ -20,7 +20,7 @@ var providerSchemes = map[string]string{ //nolint:gochecknoglobals // constant l
 
 // classifyProvider derives the cluster's provider from the first node whose
 // providerID carries a recognized scheme.
-func classifyProvider(nodes []corev1.Node) string {
+func classifyProvider(nodes []core.Node) string {
 	for _, n := range nodes {
 		if n.Spec.ProviderID == "" {
 			continue
@@ -46,14 +46,14 @@ func isCloudProvider(provider string) bool {
 }
 
 // probeQuic is P2: it classifies the cluster's provider and decides which
-// quicTunnel.service.type is likely to work.
-func (p *Prober) probeQuic(ctx context.Context, nodes []corev1.Node, nodesErr error, provider string) QuicFacts {
+// quicTunnel.service.type is likely to work. services and listEvidence are the single
+// cluster-wide (or manager-namespace fallback) Service list GatherFacts fetches once.
+func (p *Prober) probeQuic(nodes []core.Node, nodesErr error, provider string, services []core.Service, listEvidence []string) QuicFacts {
 	facts := QuicFacts{Provider: provider}
 
-	services, listEvidence := p.listServices(ctx)
 	lbService := ""
 	for _, svc := range services {
-		if svc.Spec.Type == corev1.ServiceTypeLoadBalancer && len(svc.Status.LoadBalancer.Ingress) > 0 {
+		if svc.Spec.Type == core.ServiceTypeLoadBalancer && len(svc.Status.LoadBalancer.Ingress) > 0 {
 			lbService = svc.Namespace + "/" + svc.Name
 			break
 		}
@@ -95,24 +95,24 @@ func (p *Prober) probeQuic(ctx context.Context, nodes []corev1.Node, nodesErr er
 
 // listServices lists Services cluster-wide, falling back to the manager
 // namespace alone when the cluster-wide list fails.
-func (p *Prober) listServices(ctx context.Context) ([]corev1.Service, []string) {
-	list, err := p.KubeClient.CoreV1().Services("").List(ctx, metav1.ListOptions{Limit: 500})
+func (p *Prober) listServices(ctx context.Context) ([]core.Service, []string) {
+	list, err := p.KubeClient.CoreV1().Services("").List(ctx, meta.ListOptions{Limit: 500})
 	if err == nil {
 		return list.Items, nil
 	}
 	evidence := []string{fmt.Sprintf("cannot list services cluster-wide: %v", err)}
-	list, err = p.KubeClient.CoreV1().Services(p.ManagerNamespace).List(ctx, metav1.ListOptions{Limit: 500})
+	list, err = p.KubeClient.CoreV1().Services(p.ManagerNamespace).List(ctx, meta.ListOptions{Limit: 500})
 	if err != nil {
 		return nil, append(evidence, err.Error())
 	}
 	return list.Items, evidence
 }
 
-func nodeAddressCount(nodes []corev1.Node) int {
+func nodeAddressCount(nodes []core.Node) int {
 	count := 0
 	for _, node := range nodes {
 		for _, addr := range node.Status.Addresses {
-			if addr.Type == corev1.NodeInternalIP || addr.Type == corev1.NodeExternalIP {
+			if addr.Type == core.NodeInternalIP || addr.Type == core.NodeExternalIP {
 				count++
 				break
 			}

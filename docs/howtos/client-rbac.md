@@ -100,7 +100,7 @@ transport](../reference/quic-transport.md) provides the direct path
 instead. The intermediate `any` setting (the default) accepts either grant
 during a migration.
 
-## Step 4: no Kubernetes API access at all
+## Step 4: Direct Connect, no Kubernetes API access at all
 
 ```yaml
 externalEndpoint:
@@ -136,7 +136,9 @@ the `telepresence.io` policy grants, unless the required grant is
 | Discovery, diagnostics, and port-forward grants | defaults | — |
 | One named `pods/portforward` in the manager namespace, `pods/portforward` per attached namespace | `clientRbac.legacyAccess: false` | current clients, default `apiPort` |
 | Policy-only `telepresence.io` grants | + `security.authorization.requiredGrant: telepresence` | `security.authentication.mode: enforcing`; QUIC for direct agent traffic |
-| None | + `externalEndpoint`, `clientRbac.create: false` | enforcing mode, a persisted TLS certificate, QUIC for attachments |
+| None | + `externalEndpoint`, `clientRbac.create: false` | enforcing mode, a persisted TLS certificate, QUIC for Direct Connect attachments |
 
-`telepresence setup` probes a cluster and generates a values file
-interactively; see [Guided cluster setup](../reference/setup.md).
+`telepresence setup` asks about each step above — whether to enforce
+authentication, which grant to require, whether to enable Direct Connect,
+and whether legacy clients need access — and writes the resulting values;
+see [Guided cluster setup](../reference/setup.md).

@@ -3,7 +3,6 @@ package setup
 import (
 	"bytes"
 	"encoding/json/v2"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -11,8 +10,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"sigs.k8s.io/yaml"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 )
 
@@ -22,9 +21,9 @@ func renderSummary() *Summary {
 		Answers: recAnswers(),
 		Proposal: &Proposal{
 			Action: ActionInstall,
-			Values: map[string]any{
-				"agentInjector": map[string]any{"enabled": false},
-				"nodeAgent":     map[string]any{"enabled": true},
+			Values: &helm.Values{
+				AgentInjector: helm.AgentInjector{Enabled: new(false)},
+				NodeAgent:     helm.NodeAgent{Enabled: new(true)},
 			},
 			Notes: []Note{
 				{Level: NoteInfo, Text: "an informational note"},
@@ -50,6 +49,25 @@ func TestPrintReport_Text(t *testing.T) {
 	assert.Contains(t, text, "  note: an informational note")
 	assert.Contains(t, text, "  warning: a cautionary note")
 	assert.Contains(t, text, "Action: would-install")
+}
+
+func TestPrintReport_ReleaseValuesError(t *testing.T) {
+	out := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(out)
+
+	s := renderSummary()
+	s.Facts.Release = ReleaseFacts{
+		Installed:   true,
+		Namespace:   "ambassador",
+		Version:     "2.31.0",
+		ValuesError: "unable to convert map to Values: bogus",
+		Values:      &helm.Values{},
+	}
+	require.NoError(t, PrintReport(cmd, s))
+	text := out.String()
+	assert.Contains(t, text, "release: traffic-manager 2.31.0 installed in namespace ambassador")
+	assert.Contains(t, text, "values: unable to convert map to Values: bogus")
 }
 
 func TestActionWord(t *testing.T) {
@@ -81,12 +99,11 @@ func TestSummary_MarshalsCleanJSON(t *testing.T) {
 	data, err := json.Marshal(renderSummary())
 	require.NoError(t, err)
 
-	var m map[string]any
-	require.NoError(t, json.Unmarshal(data, &m))
-	assert.Contains(t, m, "facts")
-	assert.Contains(t, m, "answers")
-	assert.Contains(t, m, "proposal")
-	assert.Equal(t, "would-install", m["action"])
+	text := string(data)
+	assert.Contains(t, text, `"facts":`)
+	assert.Contains(t, text, `"answers":`)
+	assert.Contains(t, text, `"proposal":`)
+	assert.Contains(t, text, `"action":"would-install"`)
 }
 
 func TestPrintReport_PlannedObjectsSection(t *testing.T) {
@@ -158,24 +175,130 @@ func TestPrintReport_RoutingLine(t *testing.T) {
 	})
 }
 
+func TestPrintReport_AuthenticationLine(t *testing.T) {
+	cases := []struct {
+		name   string
+		auth   ClientAuthFacts
+		verd   Verdict
+		expect string
+	}{
+		{"bearer only", ClientAuthFacts{Bearer: true}, VerdictYes, "this client has bearer token; kube-system x509 RoleBinding yes"},
+		{"x509 only", ClientAuthFacts{X509: true}, VerdictNo, "this client has client certificate; kube-system x509 RoleBinding no"},
+		{"both", ClientAuthFacts{Bearer: true, X509: true}, VerdictYes, "this client has bearer token and client certificate; kube-system x509 RoleBinding yes"},
+		{"neither", ClientAuthFacts{}, VerdictUnknown, "this client has no usable credential; kube-system x509 RoleBinding unknown"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := renderSummary()
+			s.Facts.ClientAuth = c.auth
+			s.Facts.Privileges.X509KubeSystem = Finding{Verdict: c.verd}
+			out := &bytes.Buffer{}
+			cmd := &cobra.Command{}
+			cmd.SetOut(out)
+			require.NoError(t, PrintReport(cmd, s))
+			assert.Contains(t, out.String(), "  authentication: "+c.expect)
+		})
+	}
+}
+
+func TestPrintReport_ExternalEndpointArea(t *testing.T) {
+	t.Run("no secrets, cert-manager absent", func(t *testing.T) {
+		s := renderSummary()
+		s.Facts.External = ExternalFacts{CertManager: Finding{Verdict: VerdictNo}}
+		out := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(out)
+		require.NoError(t, PrintReport(cmd, s))
+		assert.Contains(t, out.String(), "  external endpoint: cert-manager no, 0 TLS secrets")
+	})
+	t.Run("secrets with expiry annotations", func(t *testing.T) {
+		s := renderSummary()
+		s.Facts.External = ExternalFacts{
+			CertManager: Finding{Verdict: VerdictYes},
+			TLSSecrets: []TLSSecretFacts{
+				{Name: "tm-external-tls", DNSNames: []string{"tm.example.com"}, NotAfter: "2027-03-01T00:00:00Z"},
+				{Name: "expiring-soon", NotAfter: "2026-09-20T00:00:00Z", ExpiringSoon: true},
+				{Name: "expired-one", NotAfter: "2020-01-01T00:00:00Z", Expired: true},
+				{Name: "unreadable", ReadError: "could not read tls.crt: denied"},
+			},
+		}
+		out := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(out)
+		require.NoError(t, PrintReport(cmd, s))
+		text := out.String()
+		assert.Contains(t, text, "  external endpoint: cert-manager yes, 4 TLS secrets")
+		assert.Contains(t, text, "    - tm-external-tls  tm.example.com  expires 2027-03-01")
+		assert.Contains(t, text, "    - expiring-soon  expires 2026-09-20 (expires within 30 days)")
+		assert.Contains(t, text, "    - expired-one  expires 2020-01-01 (expired)")
+		assert.Contains(t, text, "    - unreadable  could not read tls.crt: denied")
+	})
+	t.Run("listing denied", func(t *testing.T) {
+		s := renderSummary()
+		s.Facts.External = ExternalFacts{CertManager: Finding{Verdict: VerdictNo}, SecretsListDenied: true}
+		out := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(out)
+		require.NoError(t, PrintReport(cmd, s))
+		assert.Contains(t, out.String(), "  external endpoint: cert-manager no, TLS secrets: listing denied")
+	})
+	t.Run("unknown on error", func(t *testing.T) {
+		s := renderSummary()
+		s.Facts.External = ExternalFacts{CertManager: Finding{Verdict: VerdictUnknown}, SecretsListError: "boom"}
+		out := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(out)
+		require.NoError(t, PrintReport(cmd, s))
+		assert.Contains(t, out.String(), "  external endpoint: cert-manager unknown, TLS secrets: unknown")
+	})
+}
+
+func TestPrintReport_ReleaseWorkloadLine(t *testing.T) {
+	t.Run("deployment appends the migration note", func(t *testing.T) {
+		s := renderSummary()
+		s.Facts.Release = ReleaseFacts{Installed: true, Version: "2.31.0", Namespace: "ambassador", Workload: "Deployment", Values: &helm.Values{}}
+		out := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(out)
+		require.NoError(t, PrintReport(cmd, s))
+		assert.Contains(t, out.String(), "  release: traffic-manager 2.31.0 installed in namespace ambassador, running as a Deployment")
+	})
+	t.Run("statefulset renders no extra note", func(t *testing.T) {
+		s := renderSummary()
+		s.Facts.Release = ReleaseFacts{Installed: true, Version: "2.32.0", Namespace: "ambassador", Workload: "StatefulSet", Values: &helm.Values{}}
+		out := &bytes.Buffer{}
+		cmd := &cobra.Command{}
+		cmd.SetOut(out)
+		require.NoError(t, PrintReport(cmd, s))
+		text := out.String()
+		assert.Contains(t, text, "  release: traffic-manager 2.32.0 installed in namespace ambassador")
+		assert.NotContains(t, text, "running as a Deployment")
+	})
+}
+
+func TestPrintReport_ExternalEndpointHealthLine(t *testing.T) {
+	s := renderSummary()
+	ext := Finding{Verdict: VerdictYes, Evidence: []string{"the traffic-manager-external service is LoadBalancer, address 1.2.3.4"}}
+	s.Facts.Health = &HealthFacts{
+		ManagerReady:     Finding{Verdict: VerdictYes},
+		ExternalEndpoint: &ext,
+		VersionSkew:      Finding{Verdict: VerdictYes},
+	}
+	out := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(out)
+	require.NoError(t, PrintReport(cmd, s))
+	text := out.String()
+	assert.Contains(t, text, "  health: external endpoint yes")
+	assert.Contains(t, text, "    - the traffic-manager-external service is LoadBalancer, address 1.2.3.4")
+}
+
 func TestBanner(t *testing.T) {
 	facts := recFacts(func(f *ClusterFacts) {
 		f.Context = "kind-dev"
 		f.Server = "https://127.0.0.1:6443"
 	})
-	assert.Equal(t, `Configuring cluster "kind-dev" (server https://127.0.0.1:6443, manager namespace ambassador)`, Banner(facts))
-}
-
-func TestHealthFactsClean(t *testing.T) {
-	var h *HealthFacts
-	assert.True(t, h.Clean(), "no health checks is clean")
-	h = &HealthFacts{
-		ManagerReady: Finding{Verdict: VerdictYes},
-		VersionSkew:  Finding{Verdict: VerdictUnknown},
-	}
-	assert.True(t, h.Clean(), "unknown findings do not make an install unhealthy")
-	h.Quic = &Finding{Verdict: VerdictNo}
-	assert.False(t, h.Clean())
+	assert.Equal(t, `Configuring cluster "kind-dev" (server https://127.0.0.1:6443, manager namespace ambassador)`, facts.Banner())
 }
 
 func TestPrintReport_HealthLines(t *testing.T) {
@@ -203,8 +326,8 @@ func TestWriteValues_ProvenanceHeader(t *testing.T) {
 		f.Context = "kind-dev"
 		f.Server = "https://127.0.0.1:6443"
 	})
-	header := ProvenanceHeader(facts, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	values := map[string]any{"nodeAgent": map[string]any{"enabled": true}}
+	header := facts.ProvenanceHeader(time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	values := &helm.Values{NodeAgent: helm.NodeAgent{Enabled: new(true)}}
 
 	buf := &bytes.Buffer{}
 	require.NoError(t, WriteValues(buf, values, header...))
@@ -223,29 +346,27 @@ func TestWriteValues_ProvenanceHeader(t *testing.T) {
 }
 
 func TestWriteValues_RoundTrip(t *testing.T) {
-	values := map[string]any{
-		"nodeAgent": map[string]any{"enabled": true},
-		"client":    map[string]any{"cluster": map[string]any{"mappedNamespaces": []any{"foo"}}},
+	values := &helm.Values{
+		NodeAgent: helm.NodeAgent{Enabled: new(true)},
+		Client:    helm.Client{Cluster: helm.ClientCluster{MappedNamespaces: []string{"foo"}}},
 	}
 	buf := &bytes.Buffer{}
 	require.NoError(t, WriteValues(buf, values))
 
-	var got map[string]any
-	require.NoError(t, yaml.Unmarshal(buf.Bytes(), &got))
+	got, err := helm.ParseValues(buf.Bytes())
+	require.NoError(t, err)
 	assert.Equal(t, values, got)
 }
 
 func TestWriteValuesFile_RoundTrip(t *testing.T) {
-	values := map[string]any{
-		"nodeAgent":  map[string]any{"enabled": true},
-		"namespaces": []any{"foo", "ambassador"},
+	values := &helm.Values{
+		NodeAgent:  helm.NodeAgent{Enabled: new(true)},
+		Namespaces: []string{"foo", "ambassador"},
 	}
 	path := filepath.Join(t.TempDir(), "values.yaml")
 	require.NoError(t, WriteValuesFile(path, values))
 
-	data, err := os.ReadFile(path)
+	got, err := LoadInputValues(path)
 	require.NoError(t, err)
-	var got map[string]any
-	require.NoError(t, yaml.Unmarshal(data, &got))
 	assert.Equal(t, values, got)
 }

@@ -10,12 +10,12 @@ Analyze the cluster and propose or apply a traffic-manager configuration
 
 Analyze the cluster and propose or apply a traffic-manager configuration.
 
-The command probes the cluster (privileges, QUIC viability, node-agent
-viability, webhook creation, namespace scale, and any existing installation),
-asks a small number of questions that the findings make relevant, and prints a
-report with a generated Helm values document. Without --output or --apply the
-command only validates the setup; --output writes the values file, and --apply
-installs or upgrades the traffic-manager with it.
+The command probes the cluster (privileges, QUIC and node-agent viability,
+webhook creation, namespace scale, and any existing installation), then asks
+only the questions the findings leave open, including whether to enforce
+caller authentication, the required grant, an external control endpoint, and
+legacy client access, and prints a report with the values. --output writes
+the values file, and --apply installs or upgrades the traffic-manager.
 
 ### Usage:
 ```
