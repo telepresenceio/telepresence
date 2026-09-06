@@ -515,11 +515,11 @@ func (iv *Interviewer) askCertManagerAnswer() (*CertManagerAnswer, error) {
 // or 0 when the value is not one of the three known grants.
 func requiredGrantIndex(s string) int {
 	switch s {
-	case RequiredGrantAny:
-		return 1
 	case RequiredGrantTelepresence:
-		return 2
+		return 1
 	case RequiredGrantPortForward:
+		return 2
+	case RequiredGrantAny:
 		return 3
 	default:
 		return 0
@@ -529,7 +529,7 @@ func requiredGrantIndex(s string) int {
 // requiredGrantChoice returns the requiredGrant value at the given 1-based
 // choice index.
 func requiredGrantChoice(idx int) string {
-	return [...]string{RequiredGrantAny, RequiredGrantTelepresence, RequiredGrantPortForward}[idx-1]
+	return [...]string{RequiredGrantTelepresence, RequiredGrantPortForward, RequiredGrantAny}[idx-1]
 }
 
 // askRequiredGrant presents the required-grant choice, defaulting to the
@@ -537,14 +537,14 @@ func requiredGrantChoice(idx int) string {
 // else to "telepresence" when the external endpoint was chosen on a fresh
 // install, else the chart's own default.
 func (iv *Interviewer) askRequiredGrant(a *Answers) (string, error) {
-	def := 1
+	def := requiredGrantIndex(RequiredGrantAny)
 	if grant := deref(iv.effective.Security.Authorization.RequiredGrant); grant != "" {
 		if idx := requiredGrantIndex(grant); idx != 0 {
 			def = idx
 		}
 	}
 	if !iv.Facts.Release.Installed && a.ExternalEndpoint {
-		def = 2
+		def = requiredGrantIndex(RequiredGrantTelepresence)
 	}
 
 	if iv.NonInteractive {
@@ -552,10 +552,10 @@ func (iv *Interviewer) askRequiredGrant(a *Answers) (string, error) {
 	}
 
 	ioutil.Println(iv.Out, "Which grant should the traffic-manager require for authorization?")
-	ioutil.Println(iv.Out, "  1) any (either grant satisfies the check)")
 	ioutil.Println(iv.Out,
-		"  2) telepresence (Telepresence's own policy grants; clients lose direct traffic-agent port-forwards unless QUIC is enabled)")
-	ioutil.Println(iv.Out, "  3) portforward (the pods/portforward permission)")
+		"  1) telepresence (Telepresence's own policy grants; clients lose direct traffic-agent port-forwards unless QUIC is enabled)")
+	ioutil.Println(iv.Out, "  2) portforward (the pods/portforward permission)")
+	ioutil.Println(iv.Out, "  3) any (either grant satisfies the check)")
 	choice, err := iv.askChoice(fmt.Sprintf("Choose 1-3 [%d]: ", def), 3, def)
 	if err != nil {
 		return "", err

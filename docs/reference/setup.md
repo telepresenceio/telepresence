@@ -285,10 +285,10 @@ previous decisions"); "always" means "unless pinned by the input".
 8. **Required grant** (only when enforcing): "Which grant should the
    traffic-manager require for authorization?"
 
-   1. `any` — either grant satisfies the check.
-   2. `telepresence` — Telepresence's own policy grants; clients lose
+   1. `telepresence` — Telepresence's own policy grants; clients lose
       direct traffic-agent port-forwards unless QUIC is enabled.
-   3. `portforward` — the `pods/portforward` permission.
+   2. `portforward` — the `pods/portforward` permission.
+   3. `any` — either grant satisfies the check.
 
    The default is `telepresence` when Direct Connect was chosen,
    otherwise `any`. On an upgrade the default is the release's current
