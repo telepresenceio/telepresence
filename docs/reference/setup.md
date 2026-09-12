@@ -354,11 +354,16 @@ the result instead of assuming success:
   endpoint (LoadBalancer ingress address or the allocated NodePort) with a
   short timeout. Any completed handshake, or even a certificate rejection,
   proves a peer answered over UDP, since the manager's CA is generated per
-  session and unknown to the probe; a timeout means the endpoint is not
-  reachable from this workstation. The verification note names the likely
-  causes: a firewall, the LoadBalancer still provisioning, or an
-  unreachable node network (the case a local kind cluster's Docker network
-  produces honestly);
+  session and unknown to the probe. When nothing answers, setup narrows the
+  cause before reporting: a host that rejects the UDP port outright is a
+  LoadBalancer or node that does not forward UDP; a host that answers a TCP
+  connect to the same address but stays silent on UDP has the port dropped
+  on the way, by a firewall or by a LoadBalancer or node that does not
+  forward UDP, and the note names which one to check; a host
+  that answers neither is unreachable from this workstation, and the note
+  says which interface or gateway the workstation routes it through, and
+  points out a Docker bridge, since a kind cluster's node network is only
+  reachable from the host that runs Docker;
 - when the webhook is enabled, setup checks that the agent-injector Service
   has ready endpoints — the point being that the webhook's
   `failurePolicy: Ignore` lets a broken injector degrade silently: pods

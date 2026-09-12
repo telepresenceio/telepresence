@@ -33,22 +33,22 @@ const (
 // the agent-injector Service. Findings are notes, never errors, and the
 // whole verification is capped in time.
 func VerifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespace string, values *helm.Values, auth ClientAuthFacts) []Note {
-	return verifyInstall(ctx, ki, managerNamespace, values, auth, quicGoDial, externalGRPCProbe)
+	return verifyInstall(ctx, ki, managerNamespace, values, auth, quicGoDial, diagnoseQuicSilence, externalGRPCProbe)
 }
 
-// verifyInstall is VerifyInstall with the QUIC reachability dialer and the
-// external-endpoint prober factored out as parameters so tests can exercise
-// the classification logic without opening real sockets.
+// verifyInstall is VerifyInstall with the QUIC reachability dialer, its silence diagnoser,
+// and the external-endpoint prober factored out as parameters so tests can exercise the
+// classification logic without opening real sockets.
 func verifyInstall(
 	ctx context.Context, ki kubernetes.Interface, managerNamespace string, values *helm.Values, auth ClientAuthFacts,
-	dial quicDialer, extProbe externalProber,
+	dial quicDialer, diagnose quicDiagnoser, extProbe externalProber,
 ) []Note {
 	ctx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
 
 	var notes []Note
 	if deref(values.QuicTunnel.Enabled) {
-		notes = append(notes, noteFromFinding(verifyQuic(ctx, ki, managerNamespace, dial)))
+		notes = append(notes, noteFromFinding(verifyQuic(ctx, ki, managerNamespace, dial, diagnose)))
 	}
 	if deref(values.ExternalEndpoint.Enabled) {
 		notes = append(notes, verifyExternalEndpoint(ctx, ki, managerNamespace, values, auth, extProbe)...)
@@ -97,7 +97,7 @@ func noteFromFinding(f Finding) Note {
 // one QUIC handshake to it, replacing the existence finding with the
 // reachability verdict: existence alone does not mean this workstation can
 // actually reach it over UDP.
-func verifyQuic(ctx context.Context, ki kubernetes.Interface, namespace string, dial quicDialer) Finding {
+func verifyQuic(ctx context.Context, ki kubernetes.Interface, namespace string, dial quicDialer, diagnose quicDiagnoser) Finding {
 	f, retryLB, svc := quicServiceFinding(ctx, ki, namespace)
 	if retryLB {
 		ticker := time.NewTicker(quicLBInterval)
@@ -114,7 +114,7 @@ func verifyQuic(ctx context.Context, ki kubernetes.Interface, namespace string, 
 	if f.Verdict != VerdictYes {
 		return f
 	}
-	return verifyQuicReachability(ctx, ki, svc, dial)
+	return verifyQuicReachability(ctx, ki, svc, dial, diagnose)
 }
 
 // quicServiceFinding is a single look at the QUIC Service: does it offer
