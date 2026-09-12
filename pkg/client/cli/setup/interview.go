@@ -55,6 +55,27 @@ func ParseManagedScope(s string) (ManagedScope, error) {
 	}
 }
 
+// ConflictStrategy is how clients handle local routes that overlap the
+// cluster's subnets.
+type ConflictStrategy string
+
+const (
+	ConflictsVirtual    ConflictStrategy = "virtual"
+	ConflictsAllow      ConflictStrategy = "allow"
+	ConflictsNeverProxy ConflictStrategy = "never-proxy"
+)
+
+// ParseConflictStrategy validates a ConflictStrategy value ("virtual",
+// "allow", or "never-proxy").
+func ParseConflictStrategy(s string) (ConflictStrategy, error) {
+	switch c := ConflictStrategy(s); c {
+	case ConflictsVirtual, ConflictsAllow, ConflictsNeverProxy:
+		return c, nil
+	default:
+		return "", errcat.User.Newf("invalid conflict strategy %q: must be virtual, allow, or never-proxy", s)
+	}
+}
+
 // Answers holds the interview's conclusions, whether they came from an
 // --input pin, a prompt, or a default.
 type Answers struct {
@@ -67,7 +88,7 @@ type Answers struct {
 	MappedNamespaces    []string           `json:"mappedNamespaces,omitempty"`  // becomes the clients' mapped-namespaces default
 	Quic                Tri                `json:"quic"`
 	NodeAgent           Tri                `json:"nodeAgent"`
-	AllowConflicts      bool               `json:"allowConflicts,omitempty"` // accept routing conflicts cluster-wide
+	Conflicts           ConflictStrategy   `json:"conflicts,omitempty"` // how clients handle routing conflicts
 	EnforceAuth         bool               `json:"enforceAuth"`
 	RequiredGrant       string             `json:"requiredGrant,omitempty"` // any|telepresence|portforward
 	ExternalEndpoint    bool               `json:"externalEndpoint,omitempty"`
@@ -92,7 +113,7 @@ type Preset struct {
 	ManagedScope      bool
 	ManagedNamespaces bool
 	MappedNamespaces  bool
-	AllowConflicts    bool
+	Conflicts         bool
 	EnforceAuth       bool
 	RequiredGrant     bool
 	ExternalEndpoint  bool
@@ -222,14 +243,12 @@ func (iv *Interviewer) Interview(ctx context.Context) (*Answers, error) {
 		return nil, err
 	}
 
-	if conflicts := iv.Facts.Routing.ConflictingSubnets(); len(conflicts) > 0 && !iv.Preset.AllowConflicts {
-		v, err := iv.askYesNo(fmt.Sprintf(
-			"Local routes overlap the cluster's subnets (%s). Allow the conflicts cluster-wide (traffic to those ranges goes to the cluster for every client)? ",
-			strings.Join(conflicts, ", ")), false)
+	if conflicts := iv.Facts.Routing.ConflictingSubnets(); len(conflicts) > 0 && !iv.Preset.Conflicts {
+		strategy, err := iv.askConflictStrategy(conflicts)
 		if err != nil {
 			return nil, err
 		}
-		a.AllowConflicts = v
+		a.Conflicts = strategy
 	}
 
 	return &a, ctx.Err()
@@ -561,6 +580,63 @@ func (iv *Interviewer) askRequiredGrant(a *Answers) (string, error) {
 		return "", err
 	}
 	return requiredGrantChoice(choice), nil
+}
+
+// conflictStrategyIndex maps a ConflictStrategy to its 1-based choice index.
+func conflictStrategyIndex(s ConflictStrategy) int {
+	switch s {
+	case ConflictsAllow:
+		return 2
+	case ConflictsNeverProxy:
+		return 3
+	default:
+		return 1
+	}
+}
+
+// conflictStrategyChoice returns the ConflictStrategy at the given 1-based
+// choice index.
+func conflictStrategyChoice(idx int) ConflictStrategy {
+	return [...]ConflictStrategy{ConflictsVirtual, ConflictsAllow, ConflictsNeverProxy}[idx-1]
+}
+
+// conflictStrategyDefault picks the routing-conflict default from the
+// installed release's effective values: allow when allowConflictingSubnets
+// covers a conflicting subnet, never-proxy when neverProxySubnets does, else
+// virtual (the chart's own default).
+func (iv *Interviewer) conflictStrategyDefault(conflicts []string) ConflictStrategy {
+	r := iv.effective.Client.Routing
+	switch {
+	case slice.ContainsAny(r.AllowConflictingSubnets, conflicts):
+		return ConflictsAllow
+	case slice.ContainsAny(r.NeverProxySubnets, conflicts):
+		return ConflictsNeverProxy
+	default:
+		return ConflictsVirtual
+	}
+}
+
+// askConflictStrategy presents the routing-conflict three-way choice,
+// defaulting per conflictStrategyDefault.
+func (iv *Interviewer) askConflictStrategy(conflicts []string) (ConflictStrategy, error) {
+	def := conflictStrategyIndex(iv.conflictStrategyDefault(conflicts))
+	if iv.NonInteractive {
+		return conflictStrategyChoice(def), nil
+	}
+
+	ioutil.Printf(iv.Out, "Local routes overlap the cluster's subnets (%s). How should clients handle those ranges?\n",
+		strings.Join(conflicts, ", "))
+	ioutil.Println(iv.Out,
+		"  1) map them to a virtual subnet, so both the local network and the cluster stay reachable (VNAT, the default)")
+	ioutil.Println(iv.Out,
+		"  2) send them to the cluster, hiding the local network behind them (client.routing.allowConflictingSubnets)")
+	ioutil.Println(iv.Out,
+		"  3) leave them to the local network and never proxy them (client.routing.neverProxySubnets)")
+	choice, err := iv.askChoice(fmt.Sprintf("Choose 1-3 [%d]: ", def), 3, def)
+	if err != nil {
+		return "", err
+	}
+	return conflictStrategyChoice(choice), nil
 }
 
 // askManagedScope presents the numbered managed-scope choice, defaulting to a

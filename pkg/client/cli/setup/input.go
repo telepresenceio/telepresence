@@ -32,7 +32,7 @@ func PinAnswers(in *helm.Values, a *Answers, pre *Preset) {
 	pinQuic(in, a)
 	pinManagedScope(in, a, pre)
 	pinMappedNamespaces(in, a, pre)
-	pinAllowConflicts(in, a, pre)
+	pinConflicts(in, a, pre)
 	pinSecurity(in, a, pre)
 	pinExternalEndpoint(in, a, pre)
 	pinLegacyAccess(in, a, pre)
@@ -117,15 +117,26 @@ func pinMappedNamespaces(in *helm.Values, a *Answers, pre *Preset) {
 	}
 }
 
-// pinAllowConflicts pins the conflicts question from
-// client.routing.allowConflictingSubnets: the input's list is authoritative,
-// so answering yes lets the engine emit its own list and the reconcile pass
-// guard the pinned value.
-func pinAllowConflicts(in *helm.Values, a *Answers, pre *Preset) {
-	if subnets := in.Client.Routing.AllowConflictingSubnets; len(subnets) > 0 && !pre.AllowConflicts {
-		a.AllowConflicts = true
-		pre.AllowConflicts = true
+// pinConflicts pins the routing-conflict strategy: a non-empty
+// allowConflictingSubnets pins allow, a non-empty neverProxySubnets pins
+// never-proxy, and an explicit autoResolveConflicts: true pins virtual, in
+// that order.
+func pinConflicts(in *helm.Values, a *Answers, pre *Preset) {
+	if pre.Conflicts {
+		return
 	}
+	r := in.Client.Routing
+	switch {
+	case len(r.AllowConflictingSubnets) > 0:
+		a.Conflicts = ConflictsAllow
+	case len(r.NeverProxySubnets) > 0:
+		a.Conflicts = ConflictsNeverProxy
+	case r.AutoResolveConflicts != nil && *r.AutoResolveConflicts:
+		a.Conflicts = ConflictsVirtual
+	default:
+		return
+	}
+	pre.Conflicts = true
 }
 
 // pinSecurity pins enforce-auth and the required grant from

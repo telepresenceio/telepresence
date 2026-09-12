@@ -201,16 +201,8 @@ func RecommendWithInput(facts *ClusterFacts, answers *Answers, input *helm.Value
 	}
 
 	if conflicts := facts.Routing.ConflictingSubnets(); len(conflicts) > 0 {
-		if a.AllowConflicts {
-			allowed, err := decideSlice(e, "client.routing.allowConflictingSubnets", input.Client.Routing.AllowConflictingSubnets, conflicts)
-			if err != nil {
-				return nil, err
-			}
-			rec.Client.Routing = helm.ClientRouting{AllowConflictingSubnets: allowed}
-			e.notes.info(fmt.Sprintf("clients accept local route conflicts with %s; traffic to those ranges goes to the cluster", strings.Join(conflicts, ", ")))
-		} else {
-			e.notes.warn(fmt.Sprintf("local routes overlap the cluster's subnets (%s); either set client.routing.allowConflictingSubnets cluster-wide, "+
-				"or accept them per client with 'telepresence connect --vnat <subnet>'", strings.Join(conflicts, ", ")))
+		if err := e.conflictValues(rec, conflicts); err != nil {
+			return nil, err
 		}
 	}
 
@@ -310,6 +302,40 @@ func decideMap(e *engine, path string, input, recommended map[string]string) (ma
 		return input, nil
 	}
 	return recommended, nil
+}
+
+// conflictValues emits the chosen routing-conflict strategy for conflicts,
+// the cluster subnets that overlap a local route: virtual maps them through
+// a VNAT (the chart default), allow sends them to the cluster, and
+// never-proxy leaves them on the local network.
+func (e *engine) conflictValues(rec *helm.Values, conflicts []string) error {
+	switch e.answers.Conflicts {
+	case ConflictsAllow:
+		allowed, err := decideSlice(e, "client.routing.allowConflictingSubnets", e.input.Client.Routing.AllowConflictingSubnets, conflicts)
+		if err != nil {
+			return err
+		}
+		rec.Client.Routing = helm.ClientRouting{AllowConflictingSubnets: allowed}
+		e.notes.info(fmt.Sprintf("clients accept local route conflicts with %s; traffic to those ranges goes to the cluster",
+			strings.Join(conflicts, ", ")))
+	case ConflictsNeverProxy:
+		never, err := decideSlice(e, "client.routing.neverProxySubnets", e.input.Client.Routing.NeverProxySubnets, conflicts)
+		if err != nil {
+			return err
+		}
+		rec.Client.Routing = helm.ClientRouting{NeverProxySubnets: never}
+		e.notes.info(fmt.Sprintf("clients never proxy %s; those ranges stay on the local network and cluster addresses in them are unreachable",
+			strings.Join(conflicts, ", ")))
+	default:
+		resolve, err := decide(e, "client.routing.autoResolveConflicts", e.input.Client.Routing.AutoResolveConflicts, true)
+		if err != nil {
+			return err
+		}
+		rec.Client.Routing = helm.ClientRouting{AutoResolveConflicts: new(resolve)}
+		e.notes.info(fmt.Sprintf("clients map the conflicting subnets (%s) to a virtual subnet; no --vnat flag is needed",
+			strings.Join(conflicts, ", ")))
+	}
+	return nil
 }
 
 // securityValues emits security.authentication.mode, externalEndpoint.enabled,

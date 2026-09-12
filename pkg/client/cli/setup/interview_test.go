@@ -186,42 +186,85 @@ func TestInterview_InputPinsSkipQuestions(t *testing.T) {
 	})
 }
 
-func TestInterview_AllowConflicts(t *testing.T) {
-	conflictFacts := recFacts(func(f *ClusterFacts) {
+func TestInterview_ConflictStrategy(t *testing.T) {
+	withConflicts := func(f *ClusterFacts) {
 		f.Routing = RoutingFacts{
 			Summary: Finding{Verdict: VerdictNo},
 			Conflicts: []RoutingConflict{
 				{ClusterSubnet: "10.244.0.0/16", Source: sourcePodCIDR, LocalRoute: "10.0.0.0/8", Interface: "tun0"},
 			},
 		}
-	})
-	t.Run("asked only when conflicts exist, default no", func(t *testing.T) {
+	}
+	conflictFacts := recFacts(withConflicts)
+
+	t.Run("asked only when conflicts exist, default virtual", func(t *testing.T) {
 		a, out, err := runInterview(t, conflictFacts, "\n\n\n\n\n\n", Answers{}, Preset{}, false)
 		require.NoError(t, err)
-		assert.Contains(t, out, "Local routes overlap the cluster's subnets (10.244.0.0/16).")
-		assert.False(t, a.AllowConflicts)
+		assert.Contains(t, out, "Local routes overlap the cluster's subnets (10.244.0.0/16). How should clients handle those ranges?")
+		assert.Contains(t, out, "Choose 1-3 [1]")
+		assert.Equal(t, ConflictsVirtual, a.Conflicts)
 	})
-	t.Run("yes accepts the conflicts", func(t *testing.T) {
-		a, _, err := runInterview(t, conflictFacts, "\n\n\n\n\ny\n", Answers{}, Preset{}, false)
+	t.Run("choice 2 sends the conflicts to the cluster", func(t *testing.T) {
+		a, _, err := runInterview(t, conflictFacts, "\n\n\n\n\n2\n", Answers{}, Preset{}, false)
 		require.NoError(t, err)
-		assert.True(t, a.AllowConflicts)
+		assert.Equal(t, ConflictsAllow, a.Conflicts)
+	})
+	t.Run("choice 3 never proxies the conflicts", func(t *testing.T) {
+		a, _, err := runInterview(t, conflictFacts, "\n\n\n\n\n3\n", Answers{}, Preset{}, false)
+		require.NoError(t, err)
+		assert.Equal(t, ConflictsNeverProxy, a.Conflicts)
 	})
 	t.Run("not asked without conflicts", func(t *testing.T) {
 		_, out, err := runInterview(t, recFacts(), "\n\n\n", Answers{}, Preset{}, false)
 		require.NoError(t, err)
 		assert.NotContains(t, out, "Local routes overlap")
 	})
-	t.Run("non-interactive defaults to no", func(t *testing.T) {
+	t.Run("non-interactive defaults to virtual", func(t *testing.T) {
 		a, out, err := runInterview(t, conflictFacts, "", Answers{}, Preset{}, true)
 		require.NoError(t, err)
-		assert.False(t, a.AllowConflicts)
+		assert.Equal(t, ConflictsVirtual, a.Conflicts)
 		assert.Empty(t, out)
 	})
+	t.Run("default follows the installed release's allowConflictingSubnets", func(t *testing.T) {
+		facts := recFacts(withConflicts, func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{
+				Installed: true, Version: version.Structured.String(), Namespace: "ambassador",
+				Values: &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{AllowConflictingSubnets: []string{"10.244.0.0/16"}}}},
+			}
+		})
+		a, out, err := runInterview(t, facts, "", Answers{}, Preset{}, true)
+		require.NoError(t, err)
+		assert.Equal(t, ConflictsAllow, a.Conflicts)
+		assert.Empty(t, out)
+	})
+	t.Run("default follows the installed release's neverProxySubnets", func(t *testing.T) {
+		facts := recFacts(withConflicts, func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{
+				Installed: true, Version: version.Structured.String(), Namespace: "ambassador",
+				Values: &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{NeverProxySubnets: []string{"10.244.0.0/16"}}}},
+			}
+		})
+		a, out, err := runInterview(t, facts, "", Answers{}, Preset{}, true)
+		require.NoError(t, err)
+		assert.Equal(t, ConflictsNeverProxy, a.Conflicts)
+		assert.Empty(t, out)
+	})
+	t.Run("release settings for other subnets do not change the virtual default", func(t *testing.T) {
+		facts := recFacts(withConflicts, func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{
+				Installed: true, Version: version.Structured.String(), Namespace: "ambassador",
+				Values: &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{AllowConflictingSubnets: []string{"192.168.0.0/16"}}}},
+			}
+		})
+		a, _, err := runInterview(t, facts, "", Answers{}, Preset{}, true)
+		require.NoError(t, err)
+		assert.Equal(t, ConflictsVirtual, a.Conflicts)
+	})
 	t.Run("preset skips the question", func(t *testing.T) {
-		a, out, err := runInterview(t, conflictFacts, "\n\n\n", Answers{AllowConflicts: true}, Preset{AllowConflicts: true}, false)
+		a, out, err := runInterview(t, conflictFacts, "\n\n\n", Answers{Conflicts: ConflictsAllow}, Preset{Conflicts: true}, false)
 		require.NoError(t, err)
 		assert.NotContains(t, out, "Local routes overlap")
-		assert.True(t, a.AllowConflicts)
+		assert.Equal(t, ConflictsAllow, a.Conflicts)
 	})
 }
 

@@ -303,30 +303,37 @@ func TestRecommend_RoutingConflicts(t *testing.T) {
 		})
 	}
 
-	t.Run("accepted conflicts become a cluster-wide value", func(t *testing.T) {
-		p, err := Recommend(conflictFacts(), recAnswers(func(a *Answers) { a.AllowConflicts = true }))
+	t.Run("virtual strategy resolves the conflicts through a VNAT", func(t *testing.T) {
+		p, err := Recommend(conflictFacts(), recAnswers(func(a *Answers) { a.Conflicts = ConflictsVirtual }))
+		require.NoError(t, err)
+		assert.True(t, *p.Values.Client.Routing.AutoResolveConflicts)
+		text := p.notesText()
+		assert.Contains(t, text, "10.244.0.0/16")
+		assert.Contains(t, text, "no --vnat flag is needed")
+	})
+	t.Run("allow strategy sends the conflicts to the cluster", func(t *testing.T) {
+		p, err := Recommend(conflictFacts(), recAnswers(func(a *Answers) { a.Conflicts = ConflictsAllow }))
 		require.NoError(t, err)
 		assert.Equal(t, []string{"10.244.0.0/16", "10.96.0.0/16"}, p.Values.Client.Routing.AllowConflictingSubnets)
 		assert.NotContains(t, p.notesText(), "--vnat")
 	})
-	t.Run("declined conflicts leave no value and warn with both remedies", func(t *testing.T) {
-		p, err := Recommend(conflictFacts(), recAnswers())
+	t.Run("never-proxy strategy leaves the conflicts on the local network", func(t *testing.T) {
+		p, err := Recommend(conflictFacts(), recAnswers(func(a *Answers) { a.Conflicts = ConflictsNeverProxy }))
 		require.NoError(t, err)
-		assert.Zero(t, p.Values.Client)
+		assert.Equal(t, []string{"10.244.0.0/16", "10.96.0.0/16"}, p.Values.Client.Routing.NeverProxySubnets)
 		text := p.notesText()
-		assert.Contains(t, text, "10.244.0.0/16")
-		assert.Contains(t, text, "client.routing.allowConflictingSubnets")
-		assert.Contains(t, text, "--vnat")
+		assert.Contains(t, text, "never proxy")
+		assert.NotContains(t, text, "--vnat")
 	})
 	t.Run("no conflicts set nothing", func(t *testing.T) {
-		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) { a.AllowConflicts = true }))
+		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) { a.Conflicts = ConflictsAllow }))
 		require.NoError(t, err)
 		assert.Zero(t, p.Values.Client)
 	})
-	t.Run("mapped namespaces and accepted conflicts share the client value", func(t *testing.T) {
+	t.Run("mapped namespaces and the allow strategy share the client value", func(t *testing.T) {
 		answers := recAnswers(func(a *Answers) {
 			a.MappedNamespaces = []string{"foo"}
-			a.AllowConflicts = true
+			a.Conflicts = ConflictsAllow
 		})
 		p, err := Recommend(conflictFacts(), answers)
 		require.NoError(t, err)

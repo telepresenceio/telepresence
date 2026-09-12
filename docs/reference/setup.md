@@ -219,7 +219,7 @@ input-pinned value, then the default below.
 | Required grant | `any`, or `telepresence` when Direct Connect ends up enabled; on an upgrade, the release's current value |
 | Direct Connect | never enabled unless an input file pins `externalEndpoint.enabled: true` or the installed release already enables it; a pinned enable with several TLS Secrets, or only an expired one, and no pinned `tls.secretName`, or a cert-manager choice with no pinned issuer and DNS names, is an error |
 | Legacy client access | no (`clientRbac.legacyAccess: false`); on an upgrade, the release's current value, which is yes when the release never set it; forced to yes when `apiPort` is overridden in the input or release values |
-| Routing conflicts | not accepted; the report carries a warning naming both remedies (see "Routing conflicts" below) |
+| Routing conflicts | virtual subnet (`client.routing.autoResolveConflicts: true`); on an upgrade, the release's current strategy |
 
 ## The interview
 
@@ -301,11 +301,21 @@ previous decisions"); "always" means "unless pinned by the input".
    when `apiPort` is overridden in the input or the release values.
    Answer -> `clientRbac.legacyAccess`.
 10. **Routing conflicts** (only when the probe finds an overlap): "Local
-    routes overlap the cluster's subnets. Allow the conflicts cluster-wide
-    (traffic to those ranges goes to the cluster for every client)?" A yes
-    sets `client.routing.allowConflictingSubnets`; a no leaves it to
-    individual clients, with a note recommending
-    `telepresence connect --vnat <subnet>` for whoever hits the conflict.
+    routes overlap the cluster's subnets (`<list>`). How should clients
+    handle those ranges?"
+
+    1. map them to a virtual subnet, so both the local network and the
+       cluster stay reachable (VNAT, the default) ->
+       `client.routing.autoResolveConflicts: true`.
+    2. send them to the cluster, hiding the local network behind them ->
+       `client.routing.allowConflictingSubnets`.
+    3. leave them to the local network and never proxy them ->
+       `client.routing.neverProxySubnets`.
+
+    The default is virtual, unless the installed release's effective values
+    already resolve the same subnets another way: allow when
+    `allowConflictingSubnets` covers one of them, never-proxy when
+    `neverProxySubnets` does.
 
 ## The validation report
 
@@ -322,11 +332,11 @@ report. In text mode it has up to three sections:
 - **Proposed configuration**: the generated values document verbatim, plus,
   when upgrading an existing release, the list of keys that would change.
 - **Notes**: warnings and informational notes explaining any decision that
-  needed one (a routing conflict left unresolved, an `--input` value kept
-  over the probe's recommendation, missing install privileges and how to
-  hand off to an admin, a Deployment-to-StatefulSet migration on upgrade, a
-  reminder that attachments need QUIC enabled alongside the external
-  endpoint, ...).
+  needed one (the routing-conflict strategy applied to the overlapping
+  subnets, an `--input` value kept over the probe's recommendation, missing
+  install privileges and how to hand off to an admin, a
+  Deployment-to-StatefulSet migration on upgrade, a reminder that
+  attachments need QUIC enabled alongside the external endpoint, ...).
 
 The final line is always `Action: <action>` — `install`, `upgrade`, or
 `none` when applying, prefixed with `would-` when not (`would-install`,

@@ -171,11 +171,56 @@ func TestPinAnswers(t *testing.T) {
 			},
 		},
 		{
-			name: "allowConflictingSubnets pins the conflicts question",
+			name: "allowConflictingSubnets pins the conflicts question to allow",
 			in:   &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{AllowConflictingSubnets: []string{"10.244.0.0/16"}}}},
 			check: func(t *testing.T, a *Answers, pre *Preset) {
-				assert.True(t, a.AllowConflicts)
-				assert.True(t, pre.AllowConflicts)
+				assert.Equal(t, ConflictsAllow, a.Conflicts)
+				assert.True(t, pre.Conflicts)
+			},
+		},
+		{
+			name: "neverProxySubnets pins the conflicts question to never-proxy",
+			in:   &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{NeverProxySubnets: []string{"10.244.0.0/16"}}}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.Equal(t, ConflictsNeverProxy, a.Conflicts)
+				assert.True(t, pre.Conflicts)
+			},
+		},
+		{
+			name: "autoResolveConflicts true pins the conflicts question to virtual",
+			in:   &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{AutoResolveConflicts: new(true)}}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.Equal(t, ConflictsVirtual, a.Conflicts)
+				assert.True(t, pre.Conflicts)
+			},
+		},
+		{
+			name: "autoResolveConflicts false pins nothing",
+			in:   &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{AutoResolveConflicts: new(false)}}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.Empty(t, a.Conflicts)
+				assert.False(t, pre.Conflicts)
+			},
+		},
+		{
+			name: "allowConflictingSubnets wins over neverProxySubnets and autoResolveConflicts",
+			in: &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{
+				AllowConflictingSubnets: []string{"10.244.0.0/16"},
+				NeverProxySubnets:       []string{"10.96.0.0/16"},
+				AutoResolveConflicts:    new(true),
+			}}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.Equal(t, ConflictsAllow, a.Conflicts)
+			},
+		},
+		{
+			name: "neverProxySubnets wins over autoResolveConflicts",
+			in: &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{
+				NeverProxySubnets:    []string{"10.96.0.0/16"},
+				AutoResolveConflicts: new(true),
+			}}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.Equal(t, ConflictsNeverProxy, a.Conflicts)
 			},
 		},
 		{
