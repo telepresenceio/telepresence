@@ -309,13 +309,10 @@ previous decisions"); "always" means "unless pinned by the input".
        `client.routing.autoResolveConflicts: true`.
     2. send them to the cluster, hiding the local network behind them ->
        `client.routing.allowConflictingSubnets`.
-    3. leave them to the local network and never proxy them ->
-       `client.routing.neverProxySubnets`.
 
     The default is virtual, unless the installed release's effective values
     already resolve the same subnets another way: allow when
-    `allowConflictingSubnets` covers one of them, never-proxy when
-    `neverProxySubnets` does.
+    `allowConflictingSubnets` covers one of them.
 
 ## The validation report
 

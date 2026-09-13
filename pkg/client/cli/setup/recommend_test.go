@@ -317,14 +317,6 @@ func TestRecommend_RoutingConflicts(t *testing.T) {
 		assert.Equal(t, []string{"10.244.0.0/16", "10.96.0.0/16"}, p.Values.Client.Routing.AllowConflictingSubnets)
 		assert.NotContains(t, p.notesText(), "--vnat")
 	})
-	t.Run("never-proxy strategy leaves the conflicts on the local network", func(t *testing.T) {
-		p, err := Recommend(conflictFacts(), recAnswers(func(a *Answers) { a.Conflicts = ConflictsNeverProxy }))
-		require.NoError(t, err)
-		assert.Equal(t, []string{"10.244.0.0/16", "10.96.0.0/16"}, p.Values.Client.Routing.NeverProxySubnets)
-		text := p.notesText()
-		assert.Contains(t, text, "never proxy")
-		assert.NotContains(t, text, "--vnat")
-	})
 	t.Run("no conflicts set nothing", func(t *testing.T) {
 		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) { a.Conflicts = ConflictsAllow }))
 		require.NoError(t, err)

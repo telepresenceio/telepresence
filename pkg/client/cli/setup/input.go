@@ -118,9 +118,8 @@ func pinMappedNamespaces(in *helm.Values, a *Answers, pre *Preset) {
 }
 
 // pinConflicts pins the routing-conflict strategy: a non-empty
-// allowConflictingSubnets pins allow, a non-empty neverProxySubnets pins
-// never-proxy, and an explicit autoResolveConflicts: true pins virtual, in
-// that order.
+// allowConflictingSubnets pins allow, and an explicit autoResolveConflicts:
+// true pins virtual, in that order.
 func pinConflicts(in *helm.Values, a *Answers, pre *Preset) {
 	if pre.Conflicts {
 		return
@@ -129,8 +128,6 @@ func pinConflicts(in *helm.Values, a *Answers, pre *Preset) {
 	switch {
 	case len(r.AllowConflictingSubnets) > 0:
 		a.Conflicts = ConflictsAllow
-	case len(r.NeverProxySubnets) > 0:
-		a.Conflicts = ConflictsNeverProxy
 	case r.AutoResolveConflicts != nil && *r.AutoResolveConflicts:
 		a.Conflicts = ConflictsVirtual
 	default:

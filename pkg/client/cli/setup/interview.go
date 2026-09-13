@@ -60,19 +60,18 @@ func ParseManagedScope(s string) (ManagedScope, error) {
 type ConflictStrategy string
 
 const (
-	ConflictsVirtual    ConflictStrategy = "virtual"
-	ConflictsAllow      ConflictStrategy = "allow"
-	ConflictsNeverProxy ConflictStrategy = "never-proxy"
+	ConflictsVirtual ConflictStrategy = "virtual"
+	ConflictsAllow   ConflictStrategy = "allow"
 )
 
-// ParseConflictStrategy validates a ConflictStrategy value ("virtual",
-// "allow", or "never-proxy").
+// ParseConflictStrategy validates a ConflictStrategy value ("virtual" or
+// "allow").
 func ParseConflictStrategy(s string) (ConflictStrategy, error) {
 	switch c := ConflictStrategy(s); c {
-	case ConflictsVirtual, ConflictsAllow, ConflictsNeverProxy:
+	case ConflictsVirtual, ConflictsAllow:
 		return c, nil
 	default:
-		return "", errcat.User.Newf("invalid conflict strategy %q: must be virtual, allow, or never-proxy", s)
+		return "", errcat.User.Newf("invalid conflict strategy %q: must be virtual or allow", s)
 	}
 }
 
@@ -587,8 +586,6 @@ func conflictStrategyIndex(s ConflictStrategy) int {
 	switch s {
 	case ConflictsAllow:
 		return 2
-	case ConflictsNeverProxy:
-		return 3
 	default:
 		return 1
 	}
@@ -597,26 +594,21 @@ func conflictStrategyIndex(s ConflictStrategy) int {
 // conflictStrategyChoice returns the ConflictStrategy at the given 1-based
 // choice index.
 func conflictStrategyChoice(idx int) ConflictStrategy {
-	return [...]ConflictStrategy{ConflictsVirtual, ConflictsAllow, ConflictsNeverProxy}[idx-1]
+	return [...]ConflictStrategy{ConflictsVirtual, ConflictsAllow}[idx-1]
 }
 
 // conflictStrategyDefault picks the routing-conflict default from the
 // installed release's effective values: allow when allowConflictingSubnets
-// covers a conflicting subnet, never-proxy when neverProxySubnets does, else
-// virtual (the chart's own default).
+// covers a conflicting subnet, else virtual (the chart's own default).
 func (iv *Interviewer) conflictStrategyDefault(conflicts []string) ConflictStrategy {
 	r := iv.effective.Client.Routing
-	switch {
-	case slice.ContainsAny(r.AllowConflictingSubnets, conflicts):
+	if slice.ContainsAny(r.AllowConflictingSubnets, conflicts) {
 		return ConflictsAllow
-	case slice.ContainsAny(r.NeverProxySubnets, conflicts):
-		return ConflictsNeverProxy
-	default:
-		return ConflictsVirtual
 	}
+	return ConflictsVirtual
 }
 
-// askConflictStrategy presents the routing-conflict three-way choice,
+// askConflictStrategy presents the routing-conflict two-way choice,
 // defaulting per conflictStrategyDefault.
 func (iv *Interviewer) askConflictStrategy(conflicts []string) (ConflictStrategy, error) {
 	def := conflictStrategyIndex(iv.conflictStrategyDefault(conflicts))
@@ -630,9 +622,7 @@ func (iv *Interviewer) askConflictStrategy(conflicts []string) (ConflictStrategy
 		"  1) map them to a virtual subnet, so both the local network and the cluster stay reachable (VNAT, the default)")
 	ioutil.Println(iv.Out,
 		"  2) send them to the cluster, hiding the local network behind them (client.routing.allowConflictingSubnets)")
-	ioutil.Println(iv.Out,
-		"  3) leave them to the local network and never proxy them (client.routing.neverProxySubnets)")
-	choice, err := iv.askChoice(fmt.Sprintf("Choose 1-3 [%d]: ", def), 3, def)
+	choice, err := iv.askChoice(fmt.Sprintf("Choose 1-2 [%d]: ", def), 2, def)
 	if err != nil {
 		return "", err
 	}

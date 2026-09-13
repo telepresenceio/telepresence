@@ -201,18 +201,13 @@ func TestInterview_ConflictStrategy(t *testing.T) {
 		a, out, err := runInterview(t, conflictFacts, "\n\n\n\n\n\n", Answers{}, Preset{}, false)
 		require.NoError(t, err)
 		assert.Contains(t, out, "Local routes overlap the cluster's subnets (10.244.0.0/16). How should clients handle those ranges?")
-		assert.Contains(t, out, "Choose 1-3 [1]")
+		assert.Contains(t, out, "Choose 1-2 [1]")
 		assert.Equal(t, ConflictsVirtual, a.Conflicts)
 	})
 	t.Run("choice 2 sends the conflicts to the cluster", func(t *testing.T) {
 		a, _, err := runInterview(t, conflictFacts, "\n\n\n\n\n2\n", Answers{}, Preset{}, false)
 		require.NoError(t, err)
 		assert.Equal(t, ConflictsAllow, a.Conflicts)
-	})
-	t.Run("choice 3 never proxies the conflicts", func(t *testing.T) {
-		a, _, err := runInterview(t, conflictFacts, "\n\n\n\n\n3\n", Answers{}, Preset{}, false)
-		require.NoError(t, err)
-		assert.Equal(t, ConflictsNeverProxy, a.Conflicts)
 	})
 	t.Run("not asked without conflicts", func(t *testing.T) {
 		_, out, err := runInterview(t, recFacts(), "\n\n\n", Answers{}, Preset{}, false)
@@ -235,18 +230,6 @@ func TestInterview_ConflictStrategy(t *testing.T) {
 		a, out, err := runInterview(t, facts, "", Answers{}, Preset{}, true)
 		require.NoError(t, err)
 		assert.Equal(t, ConflictsAllow, a.Conflicts)
-		assert.Empty(t, out)
-	})
-	t.Run("default follows the installed release's neverProxySubnets", func(t *testing.T) {
-		facts := recFacts(withConflicts, func(f *ClusterFacts) {
-			f.Release = ReleaseFacts{
-				Installed: true, Version: version.Structured.String(), Namespace: "ambassador",
-				Values: &helm.Values{Client: helm.Client{Routing: helm.ClientRouting{NeverProxySubnets: []string{"10.244.0.0/16"}}}},
-			}
-		})
-		a, out, err := runInterview(t, facts, "", Answers{}, Preset{}, true)
-		require.NoError(t, err)
-		assert.Equal(t, ConflictsNeverProxy, a.Conflicts)
 		assert.Empty(t, out)
 	})
 	t.Run("release settings for other subnets do not change the virtual default", func(t *testing.T) {
