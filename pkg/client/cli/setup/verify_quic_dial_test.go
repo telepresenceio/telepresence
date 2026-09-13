@@ -28,7 +28,9 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
 // -- classification against a fake dialer, no sockets involved --
@@ -373,4 +375,10 @@ func TestRouteClauseForDest(t *testing.T) {
 		clause := routeClauseForDest(table, dst)
 		assert.Equal(t, ", which routes it via interface wlan0", clause)
 	})
+}
+
+func TestQuicDialTLSConfig_RoutesToTheManager(t *testing.T) {
+	c := quicDialTLSConfig()
+	assert.Equal(t, quicfwd.ManagerSNI, c.ServerName)
+	assert.Equal(t, []string{tunnel.QuicALPN}, c.NextProtos)
 }

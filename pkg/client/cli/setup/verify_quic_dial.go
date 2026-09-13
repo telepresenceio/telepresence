@@ -17,6 +17,7 @@ import (
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
@@ -52,11 +53,16 @@ func quicGoDial(ctx context.Context, addr string, tlsConf *tls.Config) error {
 	return nil
 }
 
-// quicDialTLSConfig is the client TLS configuration for the reachability probe: the same
-// ALPN the manager negotiates for the real tunnel, with verification disabled for the
-// reason given on quicGoDial.
+// quicDialTLSConfig is the client TLS configuration for the reachability probe: the
+// forwarder routes a connection's first packet by its SNI, so the traffic-manager's name
+// must be present, and the same ALPN the manager negotiates for the real tunnel. Verification
+// is disabled for the reason given on quicGoDial.
 func quicDialTLSConfig() *tls.Config {
-	return &tls.Config{InsecureSkipVerify: true, NextProtos: []string{tunnel.QuicALPN}} //nolint:gosec // reachability only, see quicGoDial
+	return &tls.Config{ //nolint:gosec // reachability only, see quicGoDial
+		InsecureSkipVerify: true,
+		ServerName:         quicfwd.ManagerSNI,
+		NextProtos:         []string{tunnel.QuicALPN},
+	}
 }
 
 // verifyQuicReachability attempts a single QUIC handshake to the address the existence
