@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/netip"
 	"strings"
-	"syscall" //nolint:depguard // "unix" don't work on windows
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -126,7 +125,7 @@ func isQuicPeerResponse(err error) bool {
 // the connecting socket -- a live host explicitly rejecting the port -- as opposed to
 // silence.
 func isConnRefused(err error) bool {
-	return errors.Is(err, syscall.ECONNREFUSED)
+	return errors.Is(err, errConnRefused)
 }
 
 // diagnoseQuicSilence is the production quicDiagnoser. A TCP connect to the same host:port
