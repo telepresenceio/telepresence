@@ -67,6 +67,9 @@ type Service struct {
 	Ports       []string
 	Environment map[string]string
 	Volumes     []string
+	// Profiles is compose's own "profiles" list, gating the service behind
+	// a `docker compose --profile` selection.
+	Profiles []string
 }
 
 // Volume is a top-level named volume declaration.

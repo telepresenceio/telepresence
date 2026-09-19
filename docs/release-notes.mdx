@@ -75,6 +75,12 @@ The new Helm setting <code>externalEndpoint</code> publishes a TLS gRPC listener
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/4278">telepresence compose forwards --profile to docker compose</Title>
+	<Body>
+The profiles given with <code>--profile</code> were applied when Telepresence loaded the project but never passed on to the <code>docker compose</code> command that starts the stack, so <code>telepresence compose --profile &lt;name&gt; up</code> reported "no service selected" and stopped. The stop that runs when an attached <code>up</code> is interrupted now carries the profiles too, so profiled services are stopped as well.
+  </Body>
+</Note>
+<Note>
 	<Title type="change">The deprecated --replace flag has been removed</Title>
 	<Body>
 The <code>--replace</code> flag of <code>telepresence intercept</code>, deprecated since 2.22.0, has been removed. Use the <code>telepresence replace</code> command instead. The traffic-manager now ignores HTTP filters that older clients send along with a replace request.

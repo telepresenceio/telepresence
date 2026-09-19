@@ -48,6 +48,7 @@ type serviceDoc struct {
 	Ports       []string          `json:"ports,omitempty"`
 	Environment map[string]string `json:"environment,omitempty"`
 	Volumes     []string          `json:"volumes,omitempty"`
+	Profiles    []string          `json:"profiles,omitempty"`
 }
 
 type volumeDoc struct {
@@ -76,6 +77,7 @@ func (p *Project) Render() ([]byte, error) {
 				Ports:       s.Ports,
 				Environment: s.Environment,
 				Volumes:     s.Volumes,
+				Profiles:    s.Profiles,
 			}
 			if s.XTele != nil {
 				sd.XTele = s.XTele.xTele()
