@@ -12,7 +12,6 @@ import (
 	"math/big"
 	"net"
 	"net/netip"
-	"syscall" //nolint:depguard // "unix" don't work on windows
 	"testing"
 	"time"
 
@@ -22,7 +21,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
@@ -61,7 +60,7 @@ func TestQuicReachabilityFinding_PeerResponded(t *testing.T) {
 
 func TestQuicReachabilityFinding_ConnRefused(t *testing.T) {
 	f := quicReachabilityFinding(context.Background(), func(context.Context, string, *tls.Config) error {
-		return &net.OpError{Op: "read", Net: "udp", Err: syscall.ECONNREFUSED}
+		return &net.OpError{Op: "read", Net: "udp", Err: errConnRefused}
 	}, fakeDiagnoseNone, "1.2.3.4:7778", core.ServiceTypeLoadBalancer)
 	assert.Equal(t, VerdictNo, f.Verdict)
 	assert.Contains(t, f.Evidence[0], "not reachable over UDP")
@@ -175,7 +174,7 @@ func TestQuicDialAddr_NodePort(t *testing.T) {
 	}}
 	t.Run("prefers external over internal", func(t *testing.T) {
 		client := fake.NewClientset(&core.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "n1"},
+			ObjectMeta: meta.ObjectMeta{Name: "n1"},
 			Status: core.NodeStatus{Addresses: []core.NodeAddress{
 				{Type: core.NodeInternalIP, Address: "10.0.0.1"},
 				{Type: core.NodeExternalIP, Address: "203.0.113.1"},
@@ -187,7 +186,7 @@ func TestQuicDialAddr_NodePort(t *testing.T) {
 	})
 	t.Run("falls back to internal", func(t *testing.T) {
 		client := fake.NewClientset(&core.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "n1"},
+			ObjectMeta: meta.ObjectMeta{Name: "n1"},
 			Status: core.NodeStatus{Addresses: []core.NodeAddress{
 				{Type: core.NodeInternalIP, Address: "172.18.0.2"},
 			}},
@@ -197,7 +196,7 @@ func TestQuicDialAddr_NodePort(t *testing.T) {
 		assert.Equal(t, "172.18.0.2:31234", addr)
 	})
 	t.Run("no node has a usable address", func(t *testing.T) {
-		client := fake.NewClientset(&core.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1"}})
+		client := fake.NewClientset(&core.Node{ObjectMeta: meta.ObjectMeta{Name: "n1"}})
 		_, err := quicDialAddr(context.Background(), client, svc)
 		assert.Error(t, err)
 	})
