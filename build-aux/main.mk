@@ -534,17 +534,19 @@ RTEST_SHARD_AREAS_2 = TestSmoke|TestIntercept|TestInstall|TestDns|TestRouting|Te
 RTEST_SHARD_AREAS_3 = TestConnect|TestAttach|TestInjector|TestNamespaces
 
 .PHONY: check-regression
-check-regression: build-deps ## (QA) Run the regression-test framework suite; SHARD=1|2|3 runs one shard
+check-regression: build-deps $(tools/test-report) ## (QA) Run the regression-test framework suite; SHARD=1|2|3 runs one shard
 ifdef SHARD
-	go test -count=1 -timeout=45m \
+	set -o pipefail; go test -json -count=1 -timeout=45m \
 		-run '^($(or $(RTEST_SHARD_AREAS_$(SHARD)),$(error unknown SHARD "$(SHARD)": use 1, 2 or 3)))$$' \
-		./regression_test
+		./regression_test | $(tools/test-report)
 	# The clusterless packages (golden chart rendering, framework unit
 	# tests) run only under check-regression, so a sharded CI still needs
 	# them once; they cost seconds, so every shard runs them.
-	go test -count=1 -timeout=10m ./regression_test/framework/... ./regression_test/golden
+	set -o pipefail; go test -json -count=1 -timeout=10m \
+		./regression_test/framework/... ./regression_test/golden | $(tools/test-report)
 else
-	go test -count=1 -timeout=90m ./regression_test/...
+	set -o pipefail; go test -json -count=1 -timeout=90m \
+		./regression_test/... | $(tools/test-report)
 endif
 
 .PHONY: check-regression-vagrant

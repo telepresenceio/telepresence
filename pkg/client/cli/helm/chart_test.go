@@ -1,9 +1,12 @@
 package helm
 
 import (
+	"context"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/blang/semver/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/engine"
@@ -17,7 +20,7 @@ import (
 // which is the path that reaches the templates' own guards.
 func renderCoreChart(t *testing.T, vals map[string]any, withSchema bool) error {
 	t.Helper()
-	chrt, err := loadCoreChart(semver.MustParse("2.31.0"))
+	chrt, err := LoadCoreChart(semver.MustParse("2.31.0"))
 	require.NoError(t, err)
 	if !withSchema {
 		chrt.Schema = nil
@@ -95,5 +98,65 @@ func TestQuicForwarderPodLabelsSchema(t *testing.T) {
 		}, true)
 		require.Error(t, err)
 		require.ErrorContains(t, err, "unknownProperty")
+	})
+}
+
+// withGetValuesFunc replaces GetValuesFunc with f for the duration of the test.
+func withGetValuesFunc(t *testing.T, f func(context.Context, *Request) *Values) {
+	t.Helper()
+	old := GetValuesFunc
+	GetValuesFunc = f
+	t.Cleanup(func() { GetValuesFunc = old })
+}
+
+func TestCoalesceValues(t *testing.T) {
+	logLevel := "debug"
+	base := &Values{LogLevel: new(logLevel)}
+	withGetValuesFunc(t, func(context.Context, *Request) *Values { return base })
+
+	t.Run("no ValuesJson uses the base values as-is", func(t *testing.T) {
+		req := &Request{}
+		got, err := coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, base, got)
+	})
+
+	t.Run("empty document behaves as if nothing were provided", func(t *testing.T) {
+		req := &Request{ValuesJson: []byte(`{}`)}
+		got, err := coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, base, got)
+	})
+
+	t.Run("an upgrade with no values requests reuse-values unless reset-values is set", func(t *testing.T) {
+		req := &Request{Type: Upgrade}
+		_, err := coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.True(t, req.ReuseValues)
+
+		req = &Request{Type: Upgrade, ResetValues: true}
+		_, err = coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.False(t, req.ReuseValues)
+	})
+
+	t.Run("provided values win over the base and reuse-values is not requested", func(t *testing.T) {
+		providedTag := "override"
+		provided := &Values{Image: Image{Tag: new(providedTag)}}
+		providedJSON, err := json.Marshal(provided)
+		require.NoError(t, err)
+
+		req := &Request{Type: Upgrade, ValuesJson: providedJSON}
+		got, err := coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "override", *got.Image.Tag)
+		assert.Equal(t, "debug", *got.LogLevel)
+		assert.False(t, req.ReuseValues)
+	})
+
+	t.Run("invalid JSON is an error", func(t *testing.T) {
+		req := &Request{ValuesJson: []byte(`not json`)}
+		_, err := coalesceValues(t.Context(), req)
+		require.Error(t, err)
 	})
 }

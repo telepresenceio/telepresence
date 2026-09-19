@@ -4,29 +4,37 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	core "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
+	k8stesting "k8s.io/client-go/testing"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 )
 
-func externalValuesEnabled(mod ...func(map[string]any)) map[string]any {
-	v := map[string]any{"externalEndpoint": map[string]any{"enabled": true}}
+func externalValuesEnabled(mod ...func(*helm.Values)) *helm.Values {
+	v := &helm.Values{ExternalEndpoint: helm.ExternalEndpoint{Enabled: new(true)}}
 	for _, m := range mod {
 		m(v)
 	}
 	return v
 }
 
-func externalService(svcType corev1.ServiceType, mod ...func(*corev1.Service)) *corev1.Service {
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Name: externalServiceName, Namespace: "ambassador"},
-		Spec:       corev1.ServiceSpec{Type: svcType},
+func externalService(svcType core.ServiceType, mod ...func(*core.Service)) *core.Service {
+	svc := &core.Service{
+		ObjectMeta: meta.ObjectMeta{Name: externalServiceName, Namespace: "ambassador"},
+		Spec:       core.ServiceSpec{Type: svcType},
 	}
 	for _, m := range mod {
 		m(svc)
@@ -53,35 +61,35 @@ func unusedExternalProbe(t *testing.T) externalProber {
 
 func TestExternalDialAddr_LoadBalancer(t *testing.T) {
 	t.Run("IP ingress", func(t *testing.T) {
-		svc := externalService(corev1.ServiceTypeLoadBalancer, func(svc *corev1.Service) {
-			svc.Spec.Ports = []corev1.ServicePort{{Name: externalPortName, Port: 443}}
-			svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "1.2.3.4"}}
+		svc := externalService(core.ServiceTypeLoadBalancer, func(svc *core.Service) {
+			svc.Spec.Ports = []core.ServicePort{{Name: externalPortName, Port: 443}}
+			svc.Status.LoadBalancer.Ingress = []core.LoadBalancerIngress{{IP: "1.2.3.4"}}
 		})
 		addr, err := externalDialAddr(context.Background(), fake.NewClientset(), svc)
 		require.NoError(t, err)
 		assert.Equal(t, "1.2.3.4:443", addr)
 	})
 	t.Run("hostname ingress", func(t *testing.T) {
-		svc := externalService(corev1.ServiceTypeLoadBalancer, func(svc *corev1.Service) {
-			svc.Spec.Ports = []corev1.ServicePort{{Name: externalPortName, Port: 443}}
-			svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{Hostname: "tm.example.com"}}
+		svc := externalService(core.ServiceTypeLoadBalancer, func(svc *core.Service) {
+			svc.Spec.Ports = []core.ServicePort{{Name: externalPortName, Port: 443}}
+			svc.Status.LoadBalancer.Ingress = []core.LoadBalancerIngress{{Hostname: "tm.example.com"}}
 		})
 		addr, err := externalDialAddr(context.Background(), fake.NewClientset(), svc)
 		require.NoError(t, err)
 		assert.Equal(t, "tm.example.com:443", addr)
 	})
 	t.Run("sole unnamed port", func(t *testing.T) {
-		svc := externalService(corev1.ServiceTypeLoadBalancer, func(svc *corev1.Service) {
-			svc.Spec.Ports = []corev1.ServicePort{{Port: 443}}
-			svc.Status.LoadBalancer.Ingress = []corev1.LoadBalancerIngress{{IP: "1.2.3.4"}}
+		svc := externalService(core.ServiceTypeLoadBalancer, func(svc *core.Service) {
+			svc.Spec.Ports = []core.ServicePort{{Port: 443}}
+			svc.Status.LoadBalancer.Ingress = []core.LoadBalancerIngress{{IP: "1.2.3.4"}}
 		})
 		addr, err := externalDialAddr(context.Background(), fake.NewClientset(), svc)
 		require.NoError(t, err)
 		assert.Equal(t, "1.2.3.4:443", addr)
 	})
 	t.Run("no ingress assigned", func(t *testing.T) {
-		svc := externalService(corev1.ServiceTypeLoadBalancer, func(svc *corev1.Service) {
-			svc.Spec.Ports = []corev1.ServicePort{{Name: externalPortName, Port: 443}}
+		svc := externalService(core.ServiceTypeLoadBalancer, func(svc *core.Service) {
+			svc.Spec.Ports = []core.ServicePort{{Name: externalPortName, Port: 443}}
 		})
 		_, err := externalDialAddr(context.Background(), fake.NewClientset(), svc)
 		assert.Error(t, err)
@@ -89,14 +97,14 @@ func TestExternalDialAddr_LoadBalancer(t *testing.T) {
 }
 
 func TestExternalDialAddr_NodePort(t *testing.T) {
-	svc := externalService(corev1.ServiceTypeNodePort, func(svc *corev1.Service) {
-		svc.Spec.Ports = []corev1.ServicePort{{Name: externalPortName, Port: 443, NodePort: 31443}}
+	svc := externalService(core.ServiceTypeNodePort, func(svc *core.Service) {
+		svc.Spec.Ports = []core.ServicePort{{Name: externalPortName, Port: 443, NodePort: 31443}}
 	})
 	t.Run("node address available", func(t *testing.T) {
-		client := fake.NewClientset(&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{Name: "n1"},
-			Status: corev1.NodeStatus{Addresses: []corev1.NodeAddress{
-				{Type: corev1.NodeInternalIP, Address: "172.18.0.2"},
+		client := fake.NewClientset(&core.Node{
+			ObjectMeta: meta.ObjectMeta{Name: "n1"},
+			Status: core.NodeStatus{Addresses: []core.NodeAddress{
+				{Type: core.NodeInternalIP, Address: "172.18.0.2"},
 			}},
 		})
 		addr, err := externalDialAddr(context.Background(), client, svc)
@@ -104,13 +112,13 @@ func TestExternalDialAddr_NodePort(t *testing.T) {
 		assert.Equal(t, "172.18.0.2:31443", addr)
 	})
 	t.Run("no node has a usable address", func(t *testing.T) {
-		client := fake.NewClientset(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1"}})
+		client := fake.NewClientset(&core.Node{ObjectMeta: meta.ObjectMeta{Name: "n1"}})
 		_, err := externalDialAddr(context.Background(), client, svc)
 		assert.Error(t, err)
 	})
 	t.Run("no allocated node port", func(t *testing.T) {
-		unallocated := externalService(corev1.ServiceTypeNodePort, func(svc *corev1.Service) {
-			svc.Spec.Ports = []corev1.ServicePort{{Name: externalPortName, Port: 443}}
+		unallocated := externalService(core.ServiceTypeNodePort, func(svc *core.Service) {
+			svc.Spec.Ports = []core.ServicePort{{Name: externalPortName, Port: 443}}
 		})
 		_, err := externalDialAddr(context.Background(), fake.NewClientset(), unallocated)
 		assert.Error(t, err)
@@ -118,7 +126,7 @@ func TestExternalDialAddr_NodePort(t *testing.T) {
 }
 
 func TestExternalDialAddr_ClusterIPUnsupported(t *testing.T) {
-	svc := externalService(corev1.ServiceTypeClusterIP)
+	svc := externalService(core.ServiceTypeClusterIP)
 	_, err := externalDialAddr(context.Background(), fake.NewClientset(), svc)
 	assert.Error(t, err)
 }
@@ -126,7 +134,7 @@ func TestExternalDialAddr_ClusterIPUnsupported(t *testing.T) {
 // -- verifyExternalEndpoint: address resolution gating the probe --
 
 func TestVerifyExternalEndpoint_ClusterIPSkipsProbe(t *testing.T) {
-	client := fake.NewClientset(externalService(corev1.ServiceTypeClusterIP))
+	client := fake.NewClientset(externalService(core.ServiceTypeClusterIP))
 	notes := verifyExternalEndpoint(context.Background(), client, "ambassador", externalValuesEnabled(), ClientAuthFacts{}, unusedExternalProbe(t))
 	require.Len(t, notes, 1)
 	assert.Equal(t, NoteInfo, notes[0].Level)
@@ -143,7 +151,7 @@ func TestVerifyExternalEndpoint_ServiceMissing(t *testing.T) {
 }
 
 func TestVerifyExternalEndpoint_LoadBalancerNoIngressWithinDeadline(t *testing.T) {
-	client := fake.NewClientset(externalService(corev1.ServiceTypeLoadBalancer))
+	client := fake.NewClientset(externalService(core.ServiceTypeLoadBalancer))
 	notes := verifyExternalEndpoint(shortCtx(t), client, "ambassador", externalValuesEnabled(), ClientAuthFacts{}, unusedExternalProbe(t))
 	require.Len(t, notes, 1)
 	assert.Equal(t, NoteWarning, notes[0].Level)
@@ -151,8 +159,8 @@ func TestVerifyExternalEndpoint_LoadBalancerNoIngressWithinDeadline(t *testing.T
 }
 
 func TestVerifyExternalEndpoint_NodePortNoNodeAddress(t *testing.T) {
-	client := fake.NewClientset(externalService(corev1.ServiceTypeNodePort, func(svc *corev1.Service) {
-		svc.Spec.Ports = []corev1.ServicePort{{Name: externalPortName, Port: 443, NodePort: 31443}}
+	client := fake.NewClientset(externalService(core.ServiceTypeNodePort, func(svc *core.Service) {
+		svc.Spec.Ports = []core.ServicePort{{Name: externalPortName, Port: 443, NodePort: 31443}}
 	}))
 	notes := verifyExternalEndpoint(context.Background(), client, "ambassador", externalValuesEnabled(), ClientAuthFacts{}, unusedExternalProbe(t))
 	require.Len(t, notes, 1)
@@ -162,31 +170,31 @@ func TestVerifyExternalEndpoint_NodePortNoNodeAddress(t *testing.T) {
 
 // -- verifyExternalEndpoint: report rendering of a successful and failed probe --
 
-func nodePortReadyService() *corev1.Service {
-	return externalService(corev1.ServiceTypeNodePort, func(svc *corev1.Service) {
-		svc.Spec.Ports = []corev1.ServicePort{{Name: externalPortName, Port: 443, NodePort: 31443}}
+func nodePortReadyService() *core.Service {
+	return externalService(core.ServiceTypeNodePort, func(svc *core.Service) {
+		svc.Spec.Ports = []core.ServicePort{{Name: externalPortName, Port: 443, NodePort: 31443}}
 	})
 }
 
-func nodePortReadyNode() *corev1.Node {
-	return &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "n1"},
-		Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "172.18.0.2"}}},
+func nodePortReadyNode() *core.Node {
+	return &core.Node{
+		ObjectMeta: meta.ObjectMeta{Name: "n1"},
+		Status:     core.NodeStatus{Addresses: []core.NodeAddress{{Type: core.NodeInternalIP, Address: "172.18.0.2"}}},
 	}
 }
 
 // externalTLSSecret is the Secret externalValuesWithTLS names, so CA
 // resolution succeeds without adding its own warning note.
-func externalTLSSecret() *corev1.Secret {
-	return &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "tm-tls", Namespace: "ambassador"},
+func externalTLSSecret() *core.Secret {
+	return &core.Secret{
+		ObjectMeta: meta.ObjectMeta{Name: "tm-tls", Namespace: "ambassador"},
 		Data:       map[string][]byte{"ca.crt": []byte("CA-PEM")},
 	}
 }
 
-func externalValuesWithTLS() map[string]any {
-	return externalValuesEnabled(func(v map[string]any) {
-		v["externalEndpoint"].(map[string]any)["tls"] = map[string]any{"secretName": "tm-tls"}
+func externalValuesWithTLS() *helm.Values {
+	return externalValuesEnabled(func(v *helm.Values) {
+		v.ExternalEndpoint.TLS = helm.ExternalTLS{SecretName: new("tm-tls")}
 	})
 }
 
@@ -274,14 +282,14 @@ func TestVerifyExternalEndpoint_MissingCAAddsWarningButStillProbes(t *testing.T)
 
 func TestExternalTLSSecretName(t *testing.T) {
 	t.Run("explicit secretName", func(t *testing.T) {
-		v := externalValuesEnabled(func(v map[string]any) {
-			v["externalEndpoint"].(map[string]any)["tls"] = map[string]any{"secretName": "my-tls-secret"}
+		v := externalValuesEnabled(func(v *helm.Values) {
+			v.ExternalEndpoint.TLS = helm.ExternalTLS{SecretName: new("my-tls-secret")}
 		})
 		assert.Equal(t, "my-tls-secret", externalTLSSecretName(v))
 	})
 	t.Run("certManager enabled", func(t *testing.T) {
-		v := externalValuesEnabled(func(v map[string]any) {
-			v["externalEndpoint"].(map[string]any)["tls"] = map[string]any{"certManager": map[string]any{"enabled": true}}
+		v := externalValuesEnabled(func(v *helm.Values) {
+			v.ExternalEndpoint.TLS = helm.ExternalTLS{CertManager: helm.CertManager{Enabled: new(true)}}
 		})
 		assert.Equal(t, certManagerSecretName, externalTLSSecretName(v))
 	})
@@ -291,12 +299,12 @@ func TestExternalTLSSecretName(t *testing.T) {
 }
 
 func TestExternalCA(t *testing.T) {
-	values := externalValuesEnabled(func(v map[string]any) {
-		v["externalEndpoint"].(map[string]any)["tls"] = map[string]any{"secretName": "tm-tls"}
+	values := externalValuesEnabled(func(v *helm.Values) {
+		v.ExternalEndpoint.TLS = helm.ExternalTLS{SecretName: new("tm-tls")}
 	})
 	t.Run("prefers ca.crt", func(t *testing.T) {
-		client := fake.NewClientset(&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "tm-tls", Namespace: "ambassador"},
+		client := fake.NewClientset(&core.Secret{
+			ObjectMeta: meta.ObjectMeta{Name: "tm-tls", Namespace: "ambassador"},
 			Data:       map[string][]byte{"ca.crt": []byte("CA-PEM"), "tls.crt": []byte("LEAF-PEM")},
 		})
 		ca, err := externalCA(context.Background(), client, "ambassador", values)
@@ -304,8 +312,8 @@ func TestExternalCA(t *testing.T) {
 		assert.Equal(t, []byte("CA-PEM"), ca)
 	})
 	t.Run("falls back to tls.crt", func(t *testing.T) {
-		client := fake.NewClientset(&corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "tm-tls", Namespace: "ambassador"},
+		client := fake.NewClientset(&core.Secret{
+			ObjectMeta: meta.ObjectMeta{Name: "tm-tls", Namespace: "ambassador"},
 			Data:       map[string][]byte{"tls.crt": []byte("LEAF-PEM")},
 		})
 		ca, err := externalCA(context.Background(), client, "ambassador", values)
@@ -317,13 +325,56 @@ func TestExternalCA(t *testing.T) {
 		assert.Error(t, err)
 	})
 	t.Run("secret has neither key", func(t *testing.T) {
-		client := fake.NewClientset(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tm-tls", Namespace: "ambassador"}})
+		client := fake.NewClientset(&core.Secret{ObjectMeta: meta.ObjectMeta{Name: "tm-tls", Namespace: "ambassador"}})
 		_, err := externalCA(context.Background(), client, "ambassador", values)
 		assert.Error(t, err)
 	})
 	t.Run("no secret named in values", func(t *testing.T) {
 		_, err := externalCA(context.Background(), fake.NewClientset(), "ambassador", externalValuesEnabled())
 		assert.Error(t, err)
+	})
+}
+
+// certManagerValues selects the cert-manager path, the one for which
+// externalCA waits for the Secret to appear.
+func certManagerValues() *helm.Values {
+	return externalValuesEnabled(func(v *helm.Values) {
+		v.ExternalEndpoint.TLS = helm.ExternalTLS{CertManager: helm.CertManager{Enabled: new(true)}}
+	})
+}
+
+func TestExternalCA_CertManagerWait(t *testing.T) {
+	t.Run("secret appears after a short wait", func(t *testing.T) {
+		client := fake.NewClientset()
+		secret := &core.Secret{
+			ObjectMeta: meta.ObjectMeta{Name: certManagerSecretName, Namespace: "ambassador"},
+			Data:       map[string][]byte{"tls.crt": []byte("LEAF-PEM")},
+		}
+		var calls int32
+		client.PrependReactor("get", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
+			// The first lookup finds nothing, proving the wait loop must
+			// poll at least once; the tracker gains the Secret shortly
+			// after, before the loop's next tick.
+			if atomic.AddInt32(&calls, 1) == 1 {
+				return true, nil, apierrors.NewNotFound(schema.GroupResource{Resource: "secrets"}, certManagerSecretName)
+			}
+			return false, nil, nil
+		})
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			_ = client.Tracker().Add(secret)
+		}()
+
+		ca, err := externalCA(context.Background(), client, "ambassador", certManagerValues())
+		require.NoError(t, err)
+		assert.Equal(t, []byte("LEAF-PEM"), ca)
+		assert.GreaterOrEqual(t, atomic.LoadInt32(&calls), int32(2))
+	})
+
+	t.Run("never issued times out with a clear error", func(t *testing.T) {
+		_, err := externalCA(shortCtx(t), fake.NewClientset(), "ambassador", certManagerValues())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "cert-manager certificate was not issued within the verification window")
 	})
 }
 

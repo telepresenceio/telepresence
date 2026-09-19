@@ -17,14 +17,15 @@ import (
 	"google.golang.org/grpc/metadata"
 	empty "google.golang.org/protobuf/types/known/emptypb"
 
-	corev1 "k8s.io/api/core/v1"
+	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
@@ -78,17 +79,17 @@ type externalProber func(ctx context.Context, addr string, caPEM []byte, bearerT
 // a LoadBalancer ingress, then runs the TLS/Version/authenticated-session
 // probe. ClusterIP is reported and skipped: it is not externally reachable.
 func verifyExternalEndpoint(
-	ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts, prober externalProber,
+	ctx context.Context, ki kubernetes.Interface, managerNamespace string, values *helm.Values, auth ClientAuthFacts, prober externalProber,
 ) []Note {
 	ticker := time.NewTicker(quicLBInterval)
 	defer ticker.Stop()
 
 	var note *Note
-	var svc *corev1.Service
+	var svc *core.Service
 	for {
-		var retryLB bool
-		note, retryLB, svc = externalServiceLook(ctx, ki, managerNamespace)
-		if !retryLB {
+		var kind externalServiceLookKind
+		kind, note, svc = externalServiceLook(ctx, ki, managerNamespace)
+		if kind != externalServiceProvisioning {
 			break
 		}
 		select {
@@ -134,81 +135,115 @@ func verifyExternalEndpoint(
 	return notes
 }
 
-// externalServiceLook is a single look at the external Service. A non-nil
-// note is terminal: retryLB says whether it's worth looking again (not yet
-// provisioned) or never (missing, unreadable, unsupported type, or ClusterIP).
-func externalServiceLook(ctx context.Context, ki kubernetes.Interface, namespace string) (note *Note, retryLB bool, svc *corev1.Service) {
-	s, err := ki.CoreV1().Services(namespace).Get(ctx, externalServiceName, metav1.GetOptions{})
+// externalServiceLookKind classifies why externalServiceLook's note is
+// terminal, so callers can map it to their own verdict scale without
+// matching on the note's text.
+type externalServiceLookKind int
+
+const (
+	externalServiceReachable externalServiceLookKind = iota
+	externalServiceNotFound
+	externalServiceReadFailed
+	externalServiceProvisioning
+	externalServiceNoNodePort
+	externalServiceClusterIP
+	externalServiceUnsupportedType
+)
+
+// externalServiceLook is a single look at the external Service. A non-nil note is
+// terminal; a caller with time to spare may look again when kind is
+// externalServiceProvisioning (a LoadBalancer whose ingress has not been assigned yet),
+// never for any other kind (missing, unreadable, unsupported type, or ClusterIP).
+func externalServiceLook(
+	ctx context.Context, ki kubernetes.Interface, namespace string,
+) (kind externalServiceLookKind, note *Note, svc *core.Service) {
+	s, err := ki.CoreV1().Services(namespace).Get(ctx, externalServiceName, meta.GetOptions{})
 	switch {
 	case apierrors.IsNotFound(err):
-		return &Note{Level: NoteWarning, Text: fmt.Sprintf(
-			"the external endpoint service %s was not found in namespace %s: %v", externalServiceName, namespace, err)}, false, nil
+		return externalServiceNotFound, &Note{Level: NoteWarning, Text: fmt.Sprintf(
+			"the external endpoint service %s was not found in namespace %s: %v", externalServiceName, namespace, err)}, nil
 	case err != nil:
-		return &Note{Level: NoteWarning, Text: fmt.Sprintf(
-			"the external endpoint service %s could not be read: %v", externalServiceName, err)}, false, nil
+		return externalServiceReadFailed, &Note{Level: NoteWarning, Text: fmt.Sprintf(
+			"the external endpoint service %s could not be read: %v", externalServiceName, err)}, nil
 	}
 	switch s.Spec.Type {
-	case corev1.ServiceTypeLoadBalancer:
+	case core.ServiceTypeLoadBalancer:
 		if firstLoadBalancerIngressAddr(s) != "" {
-			return nil, false, s
+			return externalServiceReachable, nil, s
 		}
-		return &Note{Level: NoteWarning, Text: "no external endpoint ingress yet (the LoadBalancer may still be " +
-			"provisioning) -- skipping the TLS/gRPC probe"}, true, nil
-	case corev1.ServiceTypeNodePort:
+		return externalServiceProvisioning, &Note{Level: NoteWarning, Text: "no external endpoint ingress yet (the LoadBalancer may still be " +
+			"provisioning) -- skipping the TLS/gRPC probe"}, nil
+	case core.ServiceTypeNodePort:
 		if _, ok := firstAllocatedNodePort(s); ok {
-			return nil, false, s
+			return externalServiceReachable, nil, s
 		}
-		return &Note{Level: NoteWarning, Text: "the external endpoint service has no allocated node port yet -- skipping the TLS/gRPC probe"}, false, nil
-	case corev1.ServiceTypeClusterIP:
-		return &Note{Level: NoteInfo, Text: fmt.Sprintf(
+		return externalServiceNoNodePort, &Note{
+			Level: NoteWarning,
+			Text:  "the external endpoint service has no allocated node port yet -- skipping the TLS/gRPC probe",
+		}, nil
+	case core.ServiceTypeClusterIP:
+		return externalServiceClusterIP, &Note{Level: NoteInfo, Text: fmt.Sprintf(
 			"the external endpoint service %s is ClusterIP: it is not reachable from outside the cluster, so setup "+
 				"cannot validate it from this workstation; validate it from within the cluster or behind whatever "+
-				"ingress/gateway fronts it", externalServiceName)}, false, nil
+				"ingress/gateway fronts it", externalServiceName)}, nil
 	default:
-		return &Note{Level: NoteWarning, Text: fmt.Sprintf(
-			"the external endpoint service has type %s; endpoint discovery has nothing externally reachable to probe", s.Spec.Type)}, false, nil
+		return externalServiceUnsupportedType, &Note{Level: NoteWarning, Text: fmt.Sprintf(
+			"the external endpoint service has type %s; endpoint discovery has nothing externally reachable to probe", s.Spec.Type)}, nil
 	}
 }
 
 // externalDialAddr picks a LoadBalancer ingress address, or a NodePort plus a
 // node address (ExternalIP preferred, InternalIP as fallback).
-func externalDialAddr(ctx context.Context, ki kubernetes.Interface, svc *corev1.Service) (string, error) {
+func externalDialAddr(ctx context.Context, ki kubernetes.Interface, svc *core.Service) (string, error) {
 	return resolveServiceDialAddr(ctx, ki, svc, externalPortName, "the external endpoint service")
 }
 
 // externalTLSSecretName returns the admin-named Secret, or the chart's fixed
 // cert-manager Secret name. Empty when neither is configured (chart render
 // would have failed in that case).
-func externalTLSSecretName(values map[string]any) string {
-	if v, ok := valueAt(values, "externalEndpoint", "tls", "secretName"); ok {
-		if s, ok := v.(string); ok && s != "" {
-			return s
-		}
+func externalTLSSecretName(values *helm.Values) string {
+	if name := deref(values.ExternalEndpoint.TLS.SecretName); name != "" {
+		return name
 	}
-	if enabled, _ := boolAt(values, "externalEndpoint", "tls", "certManager", "enabled"); enabled {
+	if deref(values.ExternalEndpoint.TLS.CertManager.Enabled) {
 		return certManagerSecretName
 	}
 	return ""
 }
 
 // externalCA reads ca.crt from the Secret, falling back to the leaf tls.crt
-// (a self-signed or unchained certificate is its own trust anchor).
-func externalCA(ctx context.Context, ki kubernetes.Interface, namespace string, values map[string]any) ([]byte, error) {
+// (a self-signed or unchained certificate is its own trust anchor). On the
+// cert-manager path the Secret may not exist yet, so this waits for it to
+// appear, polling every quicLBInterval until ctx is done.
+func externalCA(ctx context.Context, ki kubernetes.Interface, namespace string, values *helm.Values) ([]byte, error) {
 	name := externalTLSSecretName(values)
 	if name == "" {
 		return nil, errors.New("externalEndpoint.tls names no Secret (secretName unset and certManager disabled)")
 	}
-	sec, err := ki.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
+	waitForIssuance := name == certManagerSecretName
+
+	ticker := time.NewTicker(quicLBInterval)
+	defer ticker.Stop()
+	for {
+		sec, err := ki.CoreV1().Secrets(namespace).Get(ctx, name, meta.GetOptions{})
+		switch {
+		case err == nil:
+			if ca := sec.Data["ca.crt"]; len(ca) > 0 {
+				return ca, nil
+			}
+			if leaf := sec.Data["tls.crt"]; len(leaf) > 0 {
+				return leaf, nil
+			}
+			return nil, fmt.Errorf("secret %s has neither ca.crt nor tls.crt", name)
+		case !waitForIssuance || !apierrors.IsNotFound(err):
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("the cert-manager certificate was not issued within the verification window: %w", ctx.Err())
+		case <-ticker.C:
+		}
 	}
-	if ca := sec.Data["ca.crt"]; len(ca) > 0 {
-		return ca, nil
-	}
-	if leaf := sec.Data["tls.crt"]; len(leaf) > 0 {
-		return leaf, nil
-	}
-	return nil, fmt.Errorf("secret %s has neither ca.crt nor tls.crt", name)
 }
 
 // externalBearerToken resolves rc's bearer-token credential (static token,
