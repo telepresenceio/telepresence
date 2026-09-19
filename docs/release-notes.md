@@ -68,6 +68,12 @@ The client now port-forwards directly to the <code>traffic-manager-0</code> pod,
 The new Helm setting <code>externalEndpoint</code> publishes a TLS gRPC listener that serves only the traffic-manager's client-facing RPC surface, with per-method session-ownership enforcement and admission controls in front of token validation. A client configured with <code>cluster.managerAddress</code> (and optionally <code>cluster.managerServerCA</code>) dials it directly and makes no Kubernetes API requests at all; it authenticates with its kubeconfig's bearer token, or with its client certificate directly in the TLS handshake when no bearer source exists. Publishing the endpoint requires <code>security.authentication.mode: enforcing</code> and a persisted server certificate, from an existing TLS Secret or cert-manager. The documentation calls this approach Direct Connect.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[telepresence compose forwards --profile to docker compose](https://github.com/telepresenceio/telepresence/issues/4278)</div></div>
+<div style="margin-left: 15px">
+
+The profiles given with <code>--profile</code> were applied when Telepresence loaded the project but never passed on to the <code>docker compose</code> command that starts the stack, so <code>telepresence compose --profile &lt;name&gt; up</code> reported "no service selected" and stopped. The stop that runs when an attached <code>up</code> is interrupted now carries the profiles too, so profiled services are stopped as well.
+</div>
+
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The deprecated --replace flag has been removed</div></div>
 <div style="margin-left: 15px">
 

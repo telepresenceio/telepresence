@@ -174,6 +174,17 @@ func (c *config) detached() bool {
 	return false
 }
 
+// profileFlags returns the configured profiles as repeated "--profile"
+// pairs, suitable for inclusion among the global flags of a compose
+// command line.
+func (c *config) profileFlags() []string {
+	pf := make([]string, 0, len(c.profiles)*2)
+	for _, p := range c.profiles {
+		pf = append(pf, "--profile", p)
+	}
+	return pf
+}
+
 func (c *config) appendFlags(flags *pflag.FlagSet, opts []string) []string {
 	// Need VisitAll here because Visit doesn't use the Changed status of the actual flag, instead
 	// it keeps track of flags set in the command's FlagSet.

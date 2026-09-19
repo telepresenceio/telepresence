@@ -177,6 +177,17 @@ items:
           cert-manager. The documentation calls this approach Direct
           Connect.
         docs: reference/external-endpoint
+      - type: bugfix
+        title: telepresence compose forwards --profile to docker compose
+        body: >-
+          The profiles given with <code>--profile</code> were applied when
+          Telepresence loaded the project but never passed on to the
+          <code>docker compose</code> command that starts the stack, so
+          <code>telepresence compose --profile &lt;name&gt; up</code> reported
+          "no service selected" and stopped. The stop that runs when an attached
+          <code>up</code> is interrupted now carries the profiles too, so profiled
+          services are stopped as well.
+        docs: https://github.com/telepresenceio/telepresence/issues/4278
       - type: change
         title: The deprecated --replace flag has been removed
         body: >-
