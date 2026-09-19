@@ -257,10 +257,10 @@ func NewSession(
 	}
 	cfg := client.GetConfig(cluster)
 	tos := cfg.Timeouts()
-	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
-	defer cancel()
+	managerCtx, managerCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 
-	tmgr, err := connectMgr(ctx, service, cluster, installID, cr)
+	tmgr, err := connectMgr(managerCtx, service, cluster, installID, cr)
+	managerCancel()
 	if err != nil {
 		clog.Errorf(config, "Unable to connect to session: %s", err)
 		return nil, nil, err
@@ -269,7 +269,9 @@ func NewSession(
 		return nil, nil,
 			fmt.Errorf("traffic manager version %s is too old. Minimum supported version is 2.21.0, please upgrade", tmgr.managerVersion)
 	}
-	tmgr.updateClientConfig(ctx, cr.MappedNamespaces)
+	configCtx, configCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	tmgr.updateClientConfig(configCtx, cr.MappedNamespaces)
+	configCancel()
 
 	oi := tmgr.getNetworkInfo(cr)
 	if !service.RootSessionInProcess() {
@@ -293,7 +295,11 @@ func NewSession(
 
 	tmgr.Context = tunnel.WithSyntheticIPResolver(tmgr.Context, tmgr)
 
-	if err = tmgr.connectRootDaemon(ctx, oi, wg, cr.IsPodDaemon); err != nil {
+	// The root daemon establishes its own manager connection, so give that phase
+	// a fresh timeout instead of reusing the budget spent by the user daemon.
+	rootCtx, rootCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	defer rootCancel()
+	if err = tmgr.connectRootDaemon(rootCtx, oi, wg, cr.IsPodDaemon); err != nil {
 		tmgr.managerConn.Close()
 		return nil, nil, err
 	}
@@ -302,7 +308,7 @@ func NewSession(
 	clog.Debug(tmgr, "Finished connecting to traffic manager")
 
 	tmgr.AddNamespaceEventHandler(tmgr.updateDaemonNamespaces)
-	ci, err := tmgr.status(ctx, true)
+	ci, err := tmgr.status(rootCtx, true)
 	return tmgr, ci, err
 }
 
