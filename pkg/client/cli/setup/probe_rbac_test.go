@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	authv1 "k8s.io/api/authorization/v1"
+	auth "k8s.io/api/authorization/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -15,7 +15,7 @@ import (
 
 func TestProbeRBAC_AllowAll(t *testing.T) {
 	client := fake.NewClientset()
-	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*authv1.ResourceAttributes) bool { return true })
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*auth.ResourceAttributes) bool { return true })
 
 	p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
 	facts := p.probeRBAC(context.Background(), true)
@@ -36,7 +36,7 @@ func TestProbeRBAC_AllowAll(t *testing.T) {
 func TestProbeRBAC_ClusterScopedDenied(t *testing.T) {
 	const deniedName = "traffic-manager-ambassador"
 	client := fake.NewClientset()
-	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(ra *authv1.ResourceAttributes) bool {
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(ra *auth.ResourceAttributes) bool {
 		if ra.Name == deniedName && (ra.Resource == "clusterroles" || ra.Resource == "clusterrolebindings") {
 			return false
 		}
@@ -57,7 +57,7 @@ func TestProbeRBAC_ClusterScopedDenied(t *testing.T) {
 	// (sorted) order.
 	require.Len(t, facts.MissingAttributes, len(facts.Missing))
 	for i, a := range facts.MissingAttributes {
-		assert.Equal(t, facts.Missing[i], formatAttributes(&authv1.ResourceAttributes{
+		assert.Equal(t, facts.Missing[i], formatAttributes(&auth.ResourceAttributes{
 			Verb: a.Verb, Group: a.Group, Resource: a.Resource, Namespace: a.Namespace, Name: a.Name,
 		}))
 	}
@@ -77,7 +77,7 @@ func TestProbeRBAC_NamespacedAttributes(t *testing.T) {
 	client := fake.NewClientset()
 	// Deny everything, so both the cluster-wide and namespaced renders come
 	// back denied, and both record structured denials.
-	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*authv1.ResourceAttributes) bool { return false })
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*auth.ResourceAttributes) bool { return false })
 
 	p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
 	facts := p.probeRBAC(context.Background(), true)
@@ -95,7 +95,7 @@ func TestProbeRBAC_NamespacedAttributes(t *testing.T) {
 
 func TestProbeRBAC_X509KubeSystemAllowed(t *testing.T) {
 	client := fake.NewClientset()
-	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*authv1.ResourceAttributes) bool { return true })
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*auth.ResourceAttributes) bool { return true })
 
 	p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
 	facts := p.probeRBAC(context.Background(), true)
@@ -106,7 +106,7 @@ func TestProbeRBAC_X509KubeSystemAllowed(t *testing.T) {
 func TestProbeRBAC_X509KubeSystemDenied(t *testing.T) {
 	const deniedName = "traffic-manager-x509-auth-ambassador"
 	client := fake.NewClientset()
-	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(ra *authv1.ResourceAttributes) bool {
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(ra *auth.ResourceAttributes) bool {
 		if ra.Resource == "rolebindings" && ra.Namespace == "kube-system" && ra.Name == deniedName {
 			return false
 		}
@@ -118,6 +118,56 @@ func TestProbeRBAC_X509KubeSystemDenied(t *testing.T) {
 
 	require.Equal(t, VerdictNo, facts.X509KubeSystem.Verdict)
 	assert.NotEmpty(t, facts.X509KubeSystem.Evidence)
+}
+
+func TestProbeRBAC_CertManagerCertificateAllowed(t *testing.T) {
+	client := fake.NewClientset()
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*auth.ResourceAttributes) bool { return true })
+
+	p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+	facts := p.probeRBAC(context.Background(), true)
+
+	assert.Equal(t, VerdictYes, facts.CertManagerCertificate.Verdict)
+}
+
+func TestProbeRBAC_CertManagerCertificateDenied(t *testing.T) {
+	client := fake.NewClientset()
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(ra *auth.ResourceAttributes) bool {
+		if ra.Resource == certManagerResource && ra.Group == "cert-manager.io" {
+			return false
+		}
+		return true
+	})
+
+	p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+	facts := p.probeRBAC(context.Background(), true)
+
+	require.Equal(t, VerdictNo, facts.CertManagerCertificate.Verdict)
+	assert.NotEmpty(t, facts.CertManagerCertificate.Evidence)
+}
+
+// TestDefaultCandidateValues_ExternalEndpointSweep proves the P1 render also
+// enables the external endpoint (its Service enters the privilege sweep)
+// without pulling in x509 auth's kube-system RoleBinding.
+func TestDefaultCandidateValues_ExternalEndpointSweep(t *testing.T) {
+	chrt, err := loadEmbeddedChart()
+	require.NoError(t, err)
+	manifest, err := renderChart(context.Background(), chrt, "ambassador", DefaultCandidateValues())
+	require.NoError(t, err)
+	objs, err := decodeManifests(manifest)
+	require.NoError(t, err)
+
+	var foundExternalService bool
+	for _, o := range objs {
+		gvk := o.GroupVersionKind()
+		if gvk.Kind == "Service" && o.GetName() == "traffic-manager-external" {
+			foundExternalService = true
+		}
+		if gvk.Kind == "RoleBinding" && o.GetNamespace() == "kube-system" {
+			t.Fatalf("unexpected kube-system RoleBinding in the P1 render: %s", o.GetName())
+		}
+	}
+	assert.True(t, foundExternalService, "expected a traffic-manager-external Service in the P1 render")
 }
 
 func TestProbeRBAC_ReviewCallError(t *testing.T) {
@@ -132,19 +182,19 @@ func TestProbeRBAC_ReviewCallError(t *testing.T) {
 }
 
 func TestFormatAttributes(t *testing.T) {
-	assert.Equal(t, "create deployments.apps in namespace ambassador", formatAttributes(&authv1.ResourceAttributes{
+	assert.Equal(t, "create deployments.apps in namespace ambassador", formatAttributes(&auth.ResourceAttributes{
 		Verb: "create", Group: "apps", Resource: "deployments", Namespace: "ambassador",
 	}))
-	assert.Equal(t, "create clusterroles.rbac.authorization.k8s.io", formatAttributes(&authv1.ResourceAttributes{
+	assert.Equal(t, "create clusterroles.rbac.authorization.k8s.io", formatAttributes(&auth.ResourceAttributes{
 		Verb: "create", Group: "rbac.authorization.k8s.io", Resource: "clusterroles",
 	}))
-	assert.Equal(t, "create namespaces", formatAttributes(&authv1.ResourceAttributes{
+	assert.Equal(t, "create namespaces", formatAttributes(&auth.ResourceAttributes{
 		Verb: "create", Resource: "namespaces",
 	}))
 }
 
 func TestDedupeAttributes(t *testing.T) {
-	ras := []*authv1.ResourceAttributes{
+	ras := []*auth.ResourceAttributes{
 		{Verb: "create", Resource: "secrets", Namespace: "ambassador"},
 		{Verb: "create", Resource: "secrets", Namespace: "ambassador"},
 		{Verb: "create", Resource: "secrets", Namespace: "other"},

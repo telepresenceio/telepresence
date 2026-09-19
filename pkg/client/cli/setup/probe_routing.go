@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/netip"
 
-	corev1 "k8s.io/api/core/v1"
+	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
@@ -41,10 +41,10 @@ type clusterSubnet struct {
 
 // probeRouting is P8: it derives the cluster's subnets from the node pod
 // CIDRs and the observed Service ClusterIPs, and intersects them with the
-// workstation's routing table.
-func (p *Prober) probeRouting(ctx context.Context, nodes []corev1.Node) RoutingFacts {
+// workstation's routing table. services is the single cluster-wide (or
+// manager-namespace fallback) Service list GatherFacts fetches once.
+func (p *Prober) probeRouting(ctx context.Context, nodes []core.Node, services []core.Service) RoutingFacts {
 	subnets := podCIDRSubnets(nodes)
-	services, _ := p.listServices(ctx)
 	subnets = append(subnets, estimatedServiceSubnets(services)...)
 	if len(subnets) == 0 {
 		return RoutingFacts{Summary: Finding{
@@ -112,7 +112,7 @@ func prefixesOverlap(a, b netip.Prefix) bool {
 }
 
 // podCIDRSubnets collects the distinct pod CIDRs the nodes declare.
-func podCIDRSubnets(nodes []corev1.Node) []clusterSubnet {
+func podCIDRSubnets(nodes []core.Node) []clusterSubnet {
 	var subnets []clusterSubnet
 	seen := map[netip.Prefix]bool{}
 	for i := range nodes {
@@ -136,7 +136,7 @@ func podCIDRSubnets(nodes []corev1.Node) []clusterSubnet {
 // estimatedServiceSubnets derives a best-effort service CIDR from the
 // observed ClusterIPs: the distinct /16 (IPv4) or /112 (IPv6) containers of
 // the addresses. Headless services carry no ClusterIP and are skipped.
-func estimatedServiceSubnets(services []corev1.Service) []clusterSubnet {
+func estimatedServiceSubnets(services []core.Service) []clusterSubnet {
 	var subnets []clusterSubnet
 	seen := map[netip.Prefix]bool{}
 	for i := range services {

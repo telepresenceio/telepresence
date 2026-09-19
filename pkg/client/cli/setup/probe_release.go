@@ -21,23 +21,33 @@ func NewReleaseLookup(clientGetter genericclioptions.RESTClientGetter) func(ctx 
 
 // probeRelease is P6: it locates an existing traffic-manager release through
 // p.ReleaseLookup. A nil ReleaseLookup disables the probe; a lookup error
-// leaves ReleaseFacts zero rather than failing GatherFacts.
+// leaves ReleaseFacts zero rather than failing GatherFacts. Workload is left
+// unset here; GatherFacts fills it in from the single managerWorkload fetch it
+// shares with the health probe.
 func (p *Prober) probeRelease(ctx context.Context) ReleaseFacts {
+	empty := func() ReleaseFacts { return ReleaseFacts{Values: &helm.Values{}} }
 	if p.ReleaseLookup == nil {
-		return ReleaseFacts{}
+		return empty()
 	}
 	rel, err := p.ReleaseLookup(ctx, p.ManagerNamespace)
 	if err != nil {
 		clog.Debugf(ctx, "unable to look up existing traffic-manager release: %v", err)
-		return ReleaseFacts{}
+		return empty()
 	}
 	if rel == nil {
-		return ReleaseFacts{}
+		return empty()
 	}
 	facts := ReleaseFacts{
 		Installed: true,
 		Namespace: rel.Namespace,
-		Values:    rel.Config,
+		Values:    &helm.Values{},
+	}
+	if rel.Config != nil {
+		if vals, err := helm.ValuesFromMap(rel.Config); err != nil {
+			facts.ValuesError = err.Error()
+		} else {
+			facts.Values = vals
+		}
 	}
 	if rel.Chart != nil && rel.Chart.Metadata != nil {
 		facts.Version = strings.TrimPrefix(rel.Chart.Metadata.Version, "v")

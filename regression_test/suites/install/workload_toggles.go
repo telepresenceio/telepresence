@@ -123,7 +123,7 @@ type WorkloadToggles struct {
 }
 
 func init() {
-	rt.Register(&WorkloadToggles{}, rt.InArea("install"))
+	rt.Register(&WorkloadToggles{}, rt.InArea("install"), rt.NeedsManager(managers.Default))
 }
 
 // Test_DisabledReplicaSetInvisible proves that a bare ReplicaSet workload

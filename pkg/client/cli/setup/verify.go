@@ -6,19 +6,22 @@ import (
 	"strings"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
+	core "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 )
 
 // quicServiceName is the chart's fixed name for the Service fronting the QUIC
 // forwarder (the traffic-manager.quicServiceName template helper).
 const quicServiceName = "traffic-manager-quic"
 
-// injectorServiceName is the chart's default agentInjector.name.
-const injectorServiceName = "agent-injector"
+// injectorServiceName is the chart's default agentInjector.name, used to look
+// up the Service when the values leave it unset.
+const injectorServiceName = helm.DefaultInjectorName
 
 const (
 	verifyTimeout  = 30 * time.Second
@@ -29,33 +32,33 @@ const (
 // does not cover: the QUIC endpoint, the external TLS control endpoint, and
 // the agent-injector Service. Findings are notes, never errors, and the
 // whole verification is capped in time.
-func VerifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts) []Note {
-	return verifyInstall(ctx, ki, managerNamespace, values, auth, quicGoDial, externalGRPCProbe)
+func VerifyInstall(ctx context.Context, ki kubernetes.Interface, managerNamespace string, values *helm.Values, auth ClientAuthFacts) []Note {
+	return verifyInstall(ctx, ki, managerNamespace, values, auth, quicGoDial, diagnoseQuicSilence, externalGRPCProbe)
 }
 
-// verifyInstall is VerifyInstall with the QUIC reachability dialer and the
-// external-endpoint prober factored out as parameters so tests can exercise
-// the classification logic without opening real sockets.
+// verifyInstall is VerifyInstall with the QUIC reachability dialer, its silence diagnoser,
+// and the external-endpoint prober factored out as parameters so tests can exercise the
+// classification logic without opening real sockets.
 func verifyInstall(
-	ctx context.Context, ki kubernetes.Interface, managerNamespace string, values map[string]any, auth ClientAuthFacts,
-	dial quicDialer, extProbe externalProber,
+	ctx context.Context, ki kubernetes.Interface, managerNamespace string, values *helm.Values, auth ClientAuthFacts,
+	dial quicDialer, diagnose quicDiagnoser, extProbe externalProber,
 ) []Note {
 	ctx, cancel := context.WithTimeout(ctx, verifyTimeout)
 	defer cancel()
 
 	var notes []Note
-	if enabled, present := boolAt(values, "quicTunnel", "enabled"); present && enabled {
-		notes = append(notes, noteFromFinding(verifyQuic(ctx, ki, managerNamespace, dial)))
+	if deref(values.QuicTunnel.Enabled) {
+		notes = append(notes, noteFromFinding(verifyQuic(ctx, ki, managerNamespace, dial, diagnose)))
 	}
-	if enabled, present := boolAt(values, "externalEndpoint", "enabled"); present && enabled {
+	if deref(values.ExternalEndpoint.Enabled) {
 		notes = append(notes, verifyExternalEndpoint(ctx, ki, managerNamespace, values, auth, extProbe)...)
 	}
 	// The chart enables the agent-injector by default, so the check runs
 	// unless the values disable it explicitly.
-	if enabled, present := boolAt(values, "agentInjector", "enabled"); !present || enabled {
-		notes = append(notes, noteFromFinding(injectorEndpointsFinding(ctx, ki, managerNamespace, injectorName(values))))
+	if p := values.AgentInjector.Enabled; p == nil || *p {
+		notes = append(notes, noteFromFinding(injectorEndpointsFinding(ctx, ki, managerNamespace, values.InjectorName())))
 	}
-	if mode, _ := valueAt(values, "security", "authentication", "mode"); mode == "enforcing" {
+	if values.AuthEnforced() {
 		notes = append(notes, authEnforcedNote(values, auth))
 	}
 	return notes
@@ -65,7 +68,7 @@ func verifyInstall(
 // manager that enforces authentication: its bearer token when it has one,
 // the manager's x509 listener when the values leave it enabled, or a
 // warning when the client has no credential the manager will accept.
-func authEnforcedNote(values map[string]any, auth ClientAuthFacts) Note {
+func authEnforcedNote(values *helm.Values, auth ClientAuthFacts) Note {
 	switch {
 	case auth.Bearer:
 		return Note{Level: NoteInfo, Text: "authentication is enforced; this client authenticates with its kubeconfig's bearer token"}
@@ -94,7 +97,7 @@ func noteFromFinding(f Finding) Note {
 // one QUIC handshake to it, replacing the existence finding with the
 // reachability verdict: existence alone does not mean this workstation can
 // actually reach it over UDP.
-func verifyQuic(ctx context.Context, ki kubernetes.Interface, namespace string, dial quicDialer) Finding {
+func verifyQuic(ctx context.Context, ki kubernetes.Interface, namespace string, dial quicDialer, diagnose quicDiagnoser) Finding {
 	f, retryLB, svc := quicServiceFinding(ctx, ki, namespace)
 	if retryLB {
 		ticker := time.NewTicker(quicLBInterval)
@@ -111,7 +114,7 @@ func verifyQuic(ctx context.Context, ki kubernetes.Interface, namespace string, 
 	if f.Verdict != VerdictYes {
 		return f
 	}
-	return verifyQuicReachability(ctx, ki, svc, dial)
+	return verifyQuicReachability(ctx, ki, svc, dial, diagnose)
 }
 
 // quicServiceFinding is a single look at the QUIC Service: does it offer
@@ -120,8 +123,8 @@ func verifyQuic(ctx context.Context, ki kubernetes.Interface, namespace string, 
 // look again. The Service itself is returned alongside a VerdictYes finding
 // so a caller can resolve a reachability dial address from it without
 // re-fetching.
-func quicServiceFinding(ctx context.Context, ki kubernetes.Interface, namespace string) (Finding, bool, *corev1.Service) {
-	svc, err := ki.CoreV1().Services(namespace).Get(ctx, quicServiceName, metav1.GetOptions{})
+func quicServiceFinding(ctx context.Context, ki kubernetes.Interface, namespace string) (Finding, bool, *core.Service) {
+	svc, err := ki.CoreV1().Services(namespace).Get(ctx, quicServiceName, meta.GetOptions{})
 	switch {
 	case apierrors.IsNotFound(err):
 		return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf(
@@ -131,14 +134,14 @@ func quicServiceFinding(ctx context.Context, ki kubernetes.Interface, namespace 
 			"the QUIC service %s could not be read: %v", quicServiceName, err)}}, false, nil
 	}
 	switch svc.Spec.Type {
-	case corev1.ServiceTypeLoadBalancer:
+	case core.ServiceTypeLoadBalancer:
 		if addr := firstLoadBalancerIngressAddr(svc); addr != "" {
 			return Finding{Verdict: VerdictYes, Evidence: []string{"QUIC endpoint available at " + addr}}, false, svc
 		}
 		return Finding{Verdict: VerdictNo, Evidence: []string{
 			"no QUIC endpoint yet — clients will fall back to gRPC (the LoadBalancer may still be provisioning)",
 		}}, true, nil
-	case corev1.ServiceTypeNodePort:
+	case core.ServiceTypeNodePort:
 		if np, ok := firstAllocatedNodePort(svc); ok {
 			return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("QUIC endpoint allocated node port %d", np)}}, false, svc
 		}
@@ -151,24 +154,13 @@ func quicServiceFinding(ctx context.Context, ki kubernetes.Interface, namespace 
 	}
 }
 
-// injectorName returns the agent-injector Service name the values select,
-// the chart's default when unset.
-func injectorName(values map[string]any) string {
-	if v, ok := valueAt(values, "agentInjector", "name"); ok {
-		if s, ok := v.(string); ok && s != "" {
-			return s
-		}
-	}
-	return injectorServiceName
-}
-
 // injectorEndpointsFinding checks that the agent-injector Service has ready
 // endpoints. An injector canary (an annotated dry-run pod) is deliberately
 // not attempted: the injector skips any pod without a supported workload
 // owner, so a standalone canary always comes back unmutated regardless of
 // webhook health.
 func injectorEndpointsFinding(ctx context.Context, ki kubernetes.Interface, namespace, name string) Finding {
-	slices, err := ki.DiscoveryV1().EndpointSlices(namespace).List(ctx, metav1.ListOptions{
+	slices, err := ki.DiscoveryV1().EndpointSlices(namespace).List(ctx, meta.ListOptions{
 		LabelSelector: discoveryv1.LabelServiceName + "=" + name,
 	})
 	if err != nil {

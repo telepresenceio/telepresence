@@ -9,17 +9,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	core "k8s.io/api/core/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/routing"
 )
 
-func podCIDRNode(cidrs ...string) corev1.Node {
-	return corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "node-" + cidrs[0]},
-		Spec:       corev1.NodeSpec{PodCIDR: cidrs[0], PodCIDRs: cidrs},
+func podCIDRNode(cidrs ...string) core.Node {
+	return core.Node{
+		ObjectMeta: meta.ObjectMeta{Name: "node-" + cidrs[0]},
+		Spec:       core.NodeSpec{PodCIDR: cidrs[0], PodCIDRs: cidrs},
 	}
 }
 
@@ -44,11 +44,11 @@ func routeProber(routes []*routing.Route, err error) *Prober {
 }
 
 func TestProbeRouting(t *testing.T) {
-	nodes := []corev1.Node{podCIDRNode("10.244.0.0/24"), podCIDRNode("10.244.1.0/24")}
+	nodes := []core.Node{podCIDRNode("10.244.0.0/24"), podCIDRNode("10.244.1.0/24")}
 
 	tests := []struct {
 		name          string
-		nodes         []corev1.Node
+		nodes         []core.Node
 		routes        []*routing.Route
 		routeErr      error
 		wantVerdict   Verdict
@@ -73,7 +73,7 @@ func TestProbeRouting(t *testing.T) {
 		},
 		{
 			name:          "v6 pod CIDR overlap",
-			nodes:         []corev1.Node{podCIDRNode("fd00:10:244::/64")},
+			nodes:         []core.Node{podCIDRNode("fd00:10:244::/64")},
 			routes:        []*routing.Route{localRoute("fd00:10::/32", "wg0")},
 			wantVerdict:   VerdictNo,
 			wantConflicts: 1,
@@ -99,7 +99,7 @@ func TestProbeRouting(t *testing.T) {
 		},
 		{
 			name:        "loopback and link-local destinations are excluded",
-			nodes:       []corev1.Node{podCIDRNode("127.0.0.0/16"), podCIDRNode("fe80::/64")},
+			nodes:       []core.Node{podCIDRNode("127.0.0.0/16"), podCIDRNode("fe80::/64")},
 			routes:      []*routing.Route{localRoute("127.0.0.0/8", "lo"), localRoute("fe80::/64", "eth0")},
 			wantVerdict: VerdictYes,
 		},
@@ -119,7 +119,7 @@ func TestProbeRouting(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := routeProber(tt.routes, tt.routeErr)
-			facts := p.probeRouting(context.Background(), tt.nodes)
+			facts := p.probeRouting(context.Background(), tt.nodes, nil)
 			assert.Equal(t, tt.wantVerdict, facts.Summary.Verdict)
 			assert.Len(t, facts.Conflicts, tt.wantConflicts)
 			if tt.wantEvidence != "" {
@@ -131,13 +131,13 @@ func TestProbeRouting(t *testing.T) {
 
 func TestProbeRouting_EstimatedServiceCIDR(t *testing.T) {
 	client := fake.NewClientset(
-		&corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: "svc", Namespace: "default"},
-			Spec:       corev1.ServiceSpec{ClusterIP: "10.96.0.10"},
+		&core.Service{
+			ObjectMeta: meta.ObjectMeta{Name: "svc", Namespace: "default"},
+			Spec:       core.ServiceSpec{ClusterIP: "10.96.0.10"},
 		},
-		&corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: "headless", Namespace: "default"},
-			Spec:       corev1.ServiceSpec{ClusterIP: "None"},
+		&core.Service{
+			ObjectMeta: meta.ObjectMeta{Name: "headless", Namespace: "default"},
+			Spec:       core.ServiceSpec{ClusterIP: "None"},
 		},
 	)
 	p := &Prober{
@@ -147,7 +147,8 @@ func TestProbeRouting_EstimatedServiceCIDR(t *testing.T) {
 			return []*routing.Route{localRoute("10.96.0.0/12", "tun0")}, nil
 		},
 	}
-	facts := p.probeRouting(context.Background(), nil)
+	services, _ := p.listServices(context.Background())
+	facts := p.probeRouting(context.Background(), nil, services)
 	require.Equal(t, VerdictNo, facts.Summary.Verdict)
 	require.Len(t, facts.Conflicts, 1)
 	assert.Equal(t, "10.96.0.0/16", facts.Conflicts[0].ClusterSubnet)
