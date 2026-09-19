@@ -1135,7 +1135,7 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 				switch {
 				case s.managerSupportsWatchNamespaces():
 					clog.Infof(s, "Will watch all namespaces using the traffic-manager's WatchNamespaces RPC")
-					s.StartNamespacesFromManager(s.ManagerClient(), s.sessionInfo)
+					s.StartNamespacesFromManager(s.ManagerClient, s.sessionInfo)
 				case external:
 					// No Kubernetes API access, and this manager predates
 					// WatchNamespaces: no watcher option remains.
