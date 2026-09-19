@@ -1,0 +1,130 @@
+{{- /*
+A Deployment cannot be patched into a StatefulSet in place -- the two kinds
+don't share an update path, and applying the StatefulSet manifest over a
+release that still owns a Deployment leaves both controllers reconciling
+pods against the same selector. This hook deletes the old
+traffic-manager Deployment, if one exists, and waits for its pods to be
+gone before Helm applies the StatefulSet.
+
+"helm.sh/hook": pre-upgrade already means Helm only ever runs this Job
+during `helm upgrade`, never `helm install` -- a fresh install has no
+Deployment to migrate, so no additional IsInstall guard is needed. The
+ServiceAccount/Role/RoleBinding below aren't hook resources themselves;
+they render on every install/upgrade like any other RBAC object,
+harmlessly unused outside a Deployment-to-StatefulSet upgrade.
+
+Uses the same curl image as pre-delete-hook.yaml rather than adding an
+external kubectl image: the Kubernetes API server is a plain HTTPS REST
+API, reachable in-cluster at https://kubernetes.default.svc with the pod's
+own projected ServiceAccount token and CA bundle.
+*/}}
+{{- if not (and .Values.rbac .Values.rbac.only) }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: traffic-manager-migrate-hook
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: traffic-manager-migrate-hook
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["traffic-manager"]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: traffic-manager-migrate-hook
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: traffic-manager-migrate-hook
+subjects:
+  - kind: ServiceAccount
+    name: traffic-manager-migrate-hook
+    namespace: {{ include "traffic-manager.namespace" $ }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: traffic-manager-migrate-statefulset
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+  annotations:
+    {{- /* This is what defines this resource as a hook. Without this line, the job is considered part of the release. */}}
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      name: traffic-manager-migrate-statefulset
+      labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
+        app.kubernetes.io/instance: {{ .Release.Name | quote }}
+        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+    spec:
+      {{- include "telepresence.hookPodSpecHead" (dict "root" $ "serviceAccountName" "traffic-manager-migrate-hook" "restartPolicy" "Never") | nindent 6 }}
+      containers:
+        - name: migrate-statefulset
+          {{- include "telepresence.hookContainerHead" $ | nindent 10 }}
+          {{- include "telepresence.hookResources" $ | nindent 10 }}
+          command:
+            - sh
+            - -c
+          args:
+            {{- /*
+            $() are shell command substitutions, not template actions -- quoted so Helm
+            leaves them alone. The DELETE uses foreground propagation, so the Deployment
+            object itself lingers until its ReplicaSets and pods are gone; polling the
+            Deployment to 404 is therefore the pod-termination wait, with no pod-list
+            permission needed. A 404 on the DELETE means there is nothing to migrate --
+            every upgrade after the StatefulSet conversion takes that path and must not
+            wait on anything (the running StatefulSet pod matches the same labels the
+            old Deployment's pods carried).
+            */}}
+            - |
+              set -eu
+              API=https://kubernetes.default.svc
+              NS={{ include "traffic-manager.namespace" $ | quote }}
+              TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+              CACERT=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              DEPLOY="$API/apis/apps/v1/namespaces/$NS/deployments/traffic-manager"
+
+              code=$(curl -sS -o /dev/null -w '%{http_code}' --cacert "$CACERT" \
+                --header "Authorization: Bearer $TOKEN" \
+                --request DELETE "$DEPLOY?propagationPolicy=Foreground")
+              case "$code" in
+                404) exit 0 ;;
+                200|202) ;;
+                *) echo "delete traffic-manager Deployment: unexpected HTTP $code"; exit 1 ;;
+              esac
+
+              i=0
+              while [ "$i" -lt 60 ]; do
+                code=$(curl -sS -o /dev/null -w '%{http_code}' --cacert "$CACERT" \
+                  --header "Authorization: Bearer $TOKEN" "$DEPLOY")
+                if [ "$code" = 404 ]; then
+                  exit 0
+                fi
+                i=$((i + 1))
+                sleep 2
+              done
+              echo "timed out waiting for the old traffic-manager Deployment and its pods to be deleted"
+              exit 1
+      {{- include "telepresence.hookSchedulingTail" $ | nindent 6 }}
+{{- end }}

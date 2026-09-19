@@ -24,6 +24,42 @@ traffic-manager-quic
 {{- end -}}
 
 {{- /*
+Name of the headless Service that governs the traffic-manager StatefulSet
+(its spec.serviceName), giving pod ordinal 0 the stable identity a client
+dials directly for pods/portforward.
+*/}}
+{{- define "traffic-manager.headlessServiceName" -}}
+traffic-manager-headless
+{{- end -}}
+
+{{- /*
+Name of the traffic-manager StatefulSet's sole pod. Hard-coded off
+traffic-manager.name the same way, so it never varies with nameOverride or
+the release name -- see the connect-role rule in clientRbac/connect.yaml
+and docs/reference/rbac.md.
+*/}}
+{{- define "traffic-manager.podName" -}}
+{{- printf "%s-0" (include "traffic-manager.name" $) }}
+{{- end -}}
+
+{{- /*
+The Secret holding the external endpoint's TLS server certificate: the
+user-supplied name, or the name the chart's cert-manager Certificate issues
+into.
+*/}}
+{{- define "traffic-manager.externalTLSSecretName" -}}
+{{- .Values.externalEndpoint.tls.secretName | default "traffic-manager-external-tls" }}
+{{- end -}}
+
+{{- /*
+The grant a client must hold to be authorized: the value of
+security.authorization.requiredGrant, defaulting to "any".
+*/}}
+{{- define "telepresence.requiredGrant" -}}
+{{- .Values.security.authorization.requiredGrant | default "any" }}
+{{- end -}}
+
+{{- /*
 Traffic Manager Namespace
 */}}
 {{- define "traffic-manager.namespace" -}}
@@ -248,19 +284,47 @@ RBAC rules for workload kinds enabled via values.workloads.*.enabled
 
 {{- /*
 RBAC rules required to create an intercept in a namespace; excludes any rules that are always cluster wide.
+The pods/portforward rule and the telepresence.io attachments rule are controlled by
+security.authorization.requiredGrant: "portforward" keeps pods/portforward only, "telepresence"
+replaces it with the attachments rule, and "any" (the default) renders both. The
+telepresence.io logs/logs-yaml diagnostic grant is independent of the required grant and always renders.
+The legacy pods get/list and pods/log get grants are gated by clientRbac.legacyAccess
+(default true): a modern client resolves the manager by its known pod name and streams
+logs via the StreamLogs RPC, so neither grant is mechanically required.
 */}}
 {{- define "telepresence.clientRbacInterceptRules" -}}
-{{- /* Mandatory. Controls namespace access command completion experience */}}
+{{- $requiredGrant := include "telepresence.requiredGrant" . }}
+{{- $external := .Values.externalEndpoint.enabled }}
+{{- if .Values.clientRbac.legacyAccess }}
+{{- /* Legacy. Namespace access command completion experience and client-side gather-logs discovery. */}}
 - apiGroups: [""]
   resources: ["pods"]
   verbs: ["get","list"] {{- /* "list" is only necessary if the client should be able to gather the pod logs */}}
 - apiGroups: [""]
   resources: ["pods/log"]
   verbs: ["get"]
-{{- /* All traffic will be routed via the traffic-manager unless a portforward can be created directly to a pod */}}
+{{- end }}
+{{- /* Diagnostic grants for the traffic-manager's StreamLogs RPC: "logs" authorizes streaming a pod's log, "logs/yaml" authorizes pod-manifest inclusion. Always rendered, independent of the required grant. */}}
+- apiGroups: ["telepresence.io"]
+  resources: ["logs", "logs/yaml"]
+  verbs: ["get"]
+{{- if and (ne $requiredGrant "telepresence") (or (not $external) (eq $requiredGrant "portforward")) }}
+{{- /*
+Direct-agent-dial transport, and the legacy policy the manager's attachment
+review falls back to. Withheld when the endpoint is external -- those clients
+never port-forward -- except under the "portforward" required grant, where
+possession of it is itself the attachment policy.
+*/}}
 - apiGroups: [""]
   resources: ["pods/portforward"]
   verbs: ["create"]
+{{- end }}
+{{- if ne $requiredGrant "portforward" }}
+{{- /* Authorizes attaching to a workload: "create" for an intercept, "get" for an ingest */}}
+- apiGroups: ["telepresence.io"]
+  resources: ["attachments"]
+  verbs: ["create", "get"]
+{{- end }}
 {{- if and .Values.clientRbac .Values.clientRbac.ruleExtras }}
 {{ template "clientRbac-ruleExtras" . }}
 {{- end }}
@@ -278,6 +342,85 @@ security.authentication.x509.enabled (default true) is not set to false.
     {{- true }}
   {{- end }}
 {{- end }}
+
+{{- /*
+telepresence.hookPodSpecHead renders the pod-spec fields shared by the
+pre-upgrade and pre-delete hook Jobs: the optional serviceAccountName, the
+pod securityContext (hooks.podSecurityContext), restartPolicy and the
+optional imagePullSecrets (hooks.curl.imagePullSecrets). serviceAccountName
+and restartPolicy are per-hook, so they're passed in rather than read from
+Values.
+Call with (dict "root" $ "serviceAccountName" "..." "restartPolicy" "...").
+*/}}
+{{- define "telepresence.hookPodSpecHead" -}}
+{{- include "private.hookPodSpecHead" . | trimPrefix "\n" -}}
+{{- end -}}
+
+{{- define "private.hookPodSpecHead" -}}
+{{- with .serviceAccountName }}
+serviceAccountName: {{ . }}
+{{- end }}
+securityContext:
+  {{- toYaml .root.Values.hooks.podSecurityContext | nindent 2 }}
+restartPolicy: {{ .restartPolicy }}
+{{- with .root.Values.hooks.curl.imagePullSecrets }}
+imagePullSecrets:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
+
+{{- /*
+telepresence.hookContainerHead renders the container fields shared by the
+pre-upgrade and pre-delete hook Jobs: the securityContext (falling back from
+hooks.securityContext to the top-level securityContext) and the hooks.curl
+image/imagePullPolicy. Call with the root context.
+*/}}
+{{- define "telepresence.hookContainerHead" -}}
+securityContext:
+  {{- if .Values.hooks.securityContext }}
+  {{- toYaml .Values.hooks.securityContext | nindent 2 }}
+  {{- else }}
+  {{- toYaml .Values.securityContext | nindent 2 }}
+  {{- end }}
+image: "{{ .Values.hooks.curl.registry }}/{{ .Values.hooks.curl.image }}:{{ .Values.hooks.curl.tag }}"
+imagePullPolicy: {{ .Values.hooks.curl.pullPolicy }}
+{{- end -}}
+
+{{- /*
+telepresence.hookResources renders the hooks.resources block shared by the
+pre-upgrade and pre-delete hook Jobs. Call with the root context.
+*/}}
+{{- define "telepresence.hookResources" -}}
+resources:
+  {{- toYaml .Values.hooks.resources | nindent 2 }}
+{{- end -}}
+
+{{- /*
+telepresence.hookSchedulingTail renders the schedulerName/nodeSelector/
+affinity/tolerations tail shared by the pre-upgrade and pre-delete hook Job
+pod specs. Call with the root context.
+*/}}
+{{- define "telepresence.hookSchedulingTail" -}}
+{{- include "private.hookSchedulingTail" . | trimPrefix "\n" -}}
+{{- end -}}
+
+{{- define "private.hookSchedulingTail" -}}
+{{- with .Values.schedulerName }}
+schedulerName: {{ . }}
+{{- end }}
+{{- with .Values.nodeSelector }}
+nodeSelector:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.affinity }}
+affinity:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- with .Values.tolerations }}
+tolerations:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end -}}
 
 {{/*
 Kubernetes version

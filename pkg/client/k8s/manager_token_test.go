@@ -21,7 +21,7 @@ func TestNewManagerTokenSource_StaticBearerToken(t *testing.T) {
 	src := newManagerTokenSource(kc)
 	require.NotNil(t, src)
 
-	md, err := newManagerTokenCredentials(src).GetRequestMetadata(ctx)
+	md, err := newManagerTokenCredentials(src, false).GetRequestMetadata(ctx)
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"authorization": "Bearer static-tok"}, md)
 }
@@ -36,7 +36,7 @@ func TestNewManagerTokenSource_BearerTokenFile(t *testing.T) {
 	src := newManagerTokenSource(kc)
 	require.NotNil(t, src)
 
-	md, err := newManagerTokenCredentials(src).GetRequestMetadata(ctx)
+	md, err := newManagerTokenCredentials(src, false).GetRequestMetadata(ctx)
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"authorization": "Bearer file-tok"}, md)
 }
@@ -152,12 +152,17 @@ func TestExecTokenSource_NoBearerToken(t *testing.T) {
 
 	// The credentials wrapper must treat this as "no token available", not a
 	// hard failure: empty metadata, nil error.
-	md, err := newManagerTokenCredentials(src).GetRequestMetadata(ctx)
+	md, err := newManagerTokenCredentials(src, false).GetRequestMetadata(ctx)
 	require.NoError(t, err)
 	require.Empty(t, md)
 }
 
 func TestManagerTokenCredentials_RequireTransportSecurity(t *testing.T) {
-	creds := newManagerTokenCredentials(staticTokenSource("x"))
+	// false: the port-forwarded h2c socket used by the classic transport.
+	creds := newManagerTokenCredentials(staticTokenSource("x"), false)
 	require.False(t, creds.RequireTransportSecurity())
+
+	// true: the external cluster.managerAddress TLS dial.
+	creds = newManagerTokenCredentials(staticTokenSource("x"), true)
+	require.True(t, creds.RequireTransportSecurity())
 }

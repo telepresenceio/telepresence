@@ -7,20 +7,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 )
 
 func TestPlannedObjects(t *testing.T) {
-	values := map[string]any{
-		"agentInjector": map[string]any{"enabled": false},
-		"nodeAgent":     map[string]any{"enabled": true},
-		"quicTunnel":    map[string]any{"enabled": true},
+	values := &helm.Values{
+		AgentInjector: helm.AgentInjector{Enabled: new(false)},
+		NodeAgent:     helm.NodeAgent{Enabled: new(true)},
+		QuicTunnel:    helm.QuicTunnel{Enabled: new(true)},
 	}
 	objects, err := PlannedObjects(context.Background(), "ambassador", values)
 	require.NoError(t, err)
 	require.NotEmpty(t, objects)
 
 	assert.True(t, sort.StringsAreSorted(objects), "objects must be sorted (and thereby kind-grouped)")
-	assert.Contains(t, objects, "Deployment traffic-manager.ambassador")
+	assert.Contains(t, objects, "StatefulSet traffic-manager.ambassador")
 	assert.Contains(t, objects, "Deployment quic-forwarder.ambassador")
 	assert.Contains(t, objects, "ServiceAccount traffic-manager.ambassador")
 	assert.Contains(t, objects, "ClusterRole traffic-manager-ambassador")
@@ -29,10 +31,10 @@ func TestPlannedObjects(t *testing.T) {
 }
 
 func TestPlannedObjects_InjectorEnabled(t *testing.T) {
-	values := map[string]any{
-		"agentInjector": map[string]any{"enabled": true},
-		"nodeAgent":     map[string]any{"enabled": false},
-		"quicTunnel":    map[string]any{"enabled": false},
+	values := &helm.Values{
+		AgentInjector: helm.AgentInjector{Enabled: new(true)},
+		NodeAgent:     helm.NodeAgent{Enabled: new(false)},
+		QuicTunnel:    helm.QuicTunnel{Enabled: new(false)},
 	}
 	objects, err := PlannedObjects(context.Background(), "ambassador", values)
 	require.NoError(t, err)

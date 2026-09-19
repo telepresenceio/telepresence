@@ -36,12 +36,6 @@ func HTTPPathPrefix(p string) InterceptOpt {
 	return func() []string { return []string{"--http-path-prefix", p} }
 }
 
-// Replace sets --replace, so the traffic-agent replaces the application
-// container instead of running alongside it.
-func Replace() InterceptOpt {
-	return func() []string { return []string{"--replace"} }
-}
-
 // Container sets --container name.
 func Container(name string) InterceptOpt {
 	return func() []string { return []string{"--container", name} }

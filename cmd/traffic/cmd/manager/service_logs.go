@@ -1,0 +1,339 @@
+package manager
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"sigs.k8s.io/yaml"
+
+	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
+	"github.com/telepresenceio/telepresence/v2/pkg/informer"
+	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+)
+
+// logTarget identifies one pod StreamLogs reads from and the container whose
+// log to read.
+type logTarget struct {
+	podName      string
+	podNamespace string
+	container    string
+}
+
+// logChunkSender serializes LogChunk sends onto the response stream: several
+// pods are read concurrently, and grpc.ServerStreamingServer.Send is not
+// safe for concurrent use.
+type logChunkSender struct {
+	mu     sync.Mutex
+	stream grpc.ServerStreamingServer[rpc.LogChunk]
+}
+
+func (s *logChunkSender) send(chunk *rpc.LogChunk) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stream.Send(chunk)
+}
+
+func (s *logChunkSender) sendError(target logTarget, msg string) error {
+	return s.send(&rpc.LogChunk{
+		PodName:      target.podName,
+		PodNamespace: target.podNamespace,
+		Payload:      &rpc.LogChunk_Error{Error: msg},
+	})
+}
+
+// sendFrame sends a BEGIN or END frame for target, with no payload.
+func (s *logChunkSender) sendFrame(target logTarget, frame rpc.LogChunk_Frame) error {
+	return s.send(&rpc.LogChunk{PodName: target.podName, PodNamespace: target.podNamespace, Frame: frame})
+}
+
+// sendData sends one data chunk for target.
+func (s *logChunkSender) sendData(target logTarget, data []byte) error {
+	return s.send(&rpc.LogChunk{
+		PodName:      target.podName,
+		PodNamespace: target.podNamespace,
+		Payload:      &rpc.LogChunk_Data{Data: data},
+	})
+}
+
+// sendYAML sends target's pod manifest as a pod_yaml frame.
+func (s *logChunkSender) sendYAML(target logTarget, data []byte) error {
+	return s.send(&rpc.LogChunk{
+		PodName:      target.podName,
+		PodNamespace: target.podNamespace,
+		Payload:      &rpc.LogChunk_PodYaml{PodYaml: data},
+	})
+}
+
+// logNamespaceAuth memoizes the per-namespace log SubjectAccessReview
+// outcome for one StreamLogs request. An Unavailable outcome is never
+// cached, so a later pod in the same namespace retries instead of being
+// stuck on a transient failure.
+type logNamespaceAuth struct {
+	authorizer *auth.Authorizer
+	principal  *auth.Principal
+
+	mu       sync.Mutex
+	verdicts map[string]error
+}
+
+func newLogNamespaceAuth(authorizer *auth.Authorizer, principal *auth.Principal) *logNamespaceAuth {
+	return &logNamespaceAuth{
+		authorizer: authorizer,
+		principal:  principal,
+		verdicts:   make(map[string]error),
+	}
+}
+
+// can returns nil when the principal may get logs.telepresence.io, qualified
+// by subresource, in namespace; a PermissionDenied error when it may not; and
+// an Unavailable error when the review could not be performed.
+func (c *logNamespaceAuth) can(ctx context.Context, namespace, subresource string) error {
+	res := "logs"
+	if subresource != "" {
+		res += "/" + subresource
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	key := namespace + "/" + subresource
+	if err, ok := c.verdicts[key]; ok {
+		return err
+	}
+	allowed, sarErr := c.authorizer.CanGetLogs(ctx, c.principal, namespace, subresource)
+	if sarErr != nil {
+		return errors.Errorf(codes.Unavailable,
+			"unable to determine whether %s may get %s.telepresence.io in namespace %s: %v", c.principal.Username, res, namespace, sarErr)
+	}
+	var result error
+	if !allowed {
+		result = errors.Errorf(codes.PermissionDenied,
+			"%s is not permitted to get %s.telepresence.io in namespace %s", c.principal.Username, res, namespace)
+	}
+	c.verdicts[key] = result
+	return result
+}
+
+// StreamLogs streams the traffic-manager's own log and/or its traffic-agents'
+// logs to the caller, framed per pod: BEGIN, data chunks, an optional
+// trailing error frame, and END, with the pod's manifest sent before END
+// when requested and authorized separately. Unlike every other call site in
+// this file, a nil principal is refused with Unauthenticated in every
+// authentication mode -- this endpoint's entire payload is pod contents and
+// diagnostic data, so an unproven caller must not trigger it. A denied or
+// unreviewable namespace does not abort the request: its pods still get
+// BEGIN/END, with an error frame naming the denial in between.
+func (s *service) StreamLogs(request *rpc.StreamLogsRequest, stream grpc.ServerStreamingServer[rpc.LogChunk]) error {
+	ctx, session, err := s.ensureClientSession(stream.Context(), request.GetSession())
+	if err != nil {
+		return err
+	}
+
+	principal := auth.PrincipalFrom(ctx)
+	if principal == nil {
+		return errors.Errorf(codes.Unauthenticated, "streaming logs requires an authenticated caller")
+	}
+
+	env := managerutil.GetEnv(ctx)
+	release, err := session.BeginLogStream()
+	if err != nil {
+		return err
+	}
+	defer release()
+
+	ctx, cancel := context.WithTimeout(ctx, env.LogStreamDeadline)
+	defer cancel()
+
+	targets, err := logStreamTargets(ctx, request)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+
+	sender := &logChunkSender{stream: stream}
+	nsAuth := newLogNamespaceAuth(s.authorizer, principal)
+
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(env.LogStreamPodConcurrency)
+	for _, target := range targets {
+		g.Go(func() error {
+			return streamPodLog(gCtx, sender, nsAuth, target, request.GetGetPodYaml(), env)
+		})
+	}
+	return g.Wait()
+}
+
+// logStreamTargets resolves a StreamLogsRequest's traffic_manager and agents
+// selection into the concrete pods to stream from.
+func logStreamTargets(ctx context.Context, request *rpc.StreamLogsRequest) ([]logTarget, error) {
+	var targets []logTarget
+	if request.GetTrafficManager() {
+		podName, err := managerPodName(ctx)
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, logTarget{
+			podName:      podName,
+			podNamespace: managerutil.GetEnv(ctx).ManagerNamespace,
+			container:    agentconfig.ManagerAppName,
+		})
+	}
+
+	agentsSel := request.GetAgents()
+	if agentsSel != "" && !strings.EqualFold(agentsSel, "false") {
+		agentTargets, err := agentPodTargets(ctx, agentsSel)
+		if err != nil {
+			return nil, err
+		}
+		targets = append(targets, agentTargets...)
+	}
+	return targets, nil
+}
+
+// agentPodTargets enumerates traffic-agent pods via the shared pod informer,
+// filtered by agentsSel ("all" or a pod-name substring). The informer (not
+// AgentSession state) also surfaces an agent that crashed or never
+// completed ArriveAsAgent.
+func agentPodTargets(ctx context.Context, agentsSel string) ([]logTarget, error) {
+	all := strings.EqualFold(agentsSel, "all")
+
+	var targets []logTarget
+	for _, ns := range namespaces.GetOrGlobal(ctx) {
+		lister := informer.GetK8sFactory(ctx, ns).Core().V1().Pods().Lister()
+		var pods []*corev1.Pod
+		var err error
+		if ns != "" {
+			pods, err = lister.Pods(ns).List(labels.Everything())
+		} else {
+			pods, err = lister.List(labels.Everything())
+		}
+		if err != nil {
+			return nil, errors.Errorf(codes.Unavailable, "unable to list pods in namespace %q: %v", ns, err)
+		}
+		for _, pod := range pods {
+			if agentmap.AgentContainer(pod) == nil {
+				continue
+			}
+			if !all && !strings.Contains(pod.Name, agentsSel) {
+				continue
+			}
+			targets = append(targets, logTarget{
+				podName:      pod.Name,
+				podNamespace: pod.Namespace,
+				container:    agentconfig.ContainerName,
+			})
+		}
+	}
+	return targets, nil
+}
+
+// streamPodLog sends the full per-pod frame sequence for target. It returns
+// a non-nil error only when the stream itself fails -- every other failure
+// becomes an error frame so one pod's trouble does not abort the others.
+func streamPodLog(ctx context.Context, sender *logChunkSender, nsAuth *logNamespaceAuth, target logTarget, wantYAML bool, env *managerutil.Env) error {
+	if err := sender.sendFrame(target, rpc.LogChunk_BEGIN); err != nil {
+		return err
+	}
+
+	if authErr := nsAuth.can(ctx, target.podNamespace, ""); authErr != nil {
+		if err := sender.sendError(target, authErr.Error()); err != nil {
+			return err
+		}
+		return sender.sendFrame(target, rpc.LogChunk_END)
+	}
+
+	if err := readPodLog(ctx, sender, target, env); err != nil {
+		return err
+	}
+
+	if wantYAML {
+		// A denied logs/yaml review omits the manifest without an error frame:
+		// the caller's grant simply doesn't include manifests. An Unavailable
+		// review outcome is still reported.
+		switch authErr := nsAuth.can(ctx, target.podNamespace, "yaml"); {
+		case authErr == nil:
+			if err := sendPodYAML(ctx, sender, target); err != nil {
+				return err
+			}
+		case status.Code(authErr) != codes.PermissionDenied:
+			if err := sender.sendError(target, authErr.Error()); err != nil {
+				return err
+			}
+		}
+	}
+
+	return sender.sendFrame(target, rpc.LogChunk_END)
+}
+
+// readPodLog reads target's log in chunks up to the configured per-pod byte
+// cap. A read failure or truncation is reported as a trailing error frame,
+// not a return error -- only a broken response stream is.
+func readPodLog(ctx context.Context, sender *logChunkSender, target logTarget, env *managerutil.Env) error {
+	req := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(target.podNamespace).GetLogs(target.podName, &corev1.PodLogOptions{
+		Container: target.container,
+	})
+	rc, err := req.Stream(ctx)
+	if err != nil {
+		return sender.sendError(target, fmt.Sprintf("failed to read log: %v", err))
+	}
+	defer rc.Close()
+
+	chunkSize := env.LogStreamChunkSize.Value()
+	byteLimit := env.LogStreamPodByteLimit.Value()
+
+	buf := make([]byte, chunkSize)
+	var total int64
+	for {
+		n, readErr := rc.Read(buf)
+		if n > 0 {
+			data := buf[:n]
+			if remaining := byteLimit - total; int64(n) > remaining {
+				if remaining > 0 {
+					if err := sender.sendData(target, append([]byte(nil), data[:remaining]...)); err != nil {
+						return err
+					}
+				}
+				return sender.sendError(target, fmt.Sprintf("log truncated at the %d-byte per-pod cap", byteLimit))
+			}
+			if err := sender.sendData(target, append([]byte(nil), data...)); err != nil {
+				return err
+			}
+			total += int64(n)
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return nil
+			}
+			return sender.sendError(target, fmt.Sprintf("log read failed: %v", readErr))
+		}
+	}
+}
+
+// sendPodYAML sends target's current pod manifest as a pod_yaml frame.
+func sendPodYAML(ctx context.Context, sender *logChunkSender, target logTarget) error {
+	pod, err := k8sapi.GetK8sInterface(ctx).CoreV1().Pods(target.podNamespace).Get(ctx, target.podName, metav1.GetOptions{})
+	if err != nil {
+		return sender.sendError(target, fmt.Sprintf("failed to get pod manifest: %v", err))
+	}
+	b, err := yaml.Marshal(pod)
+	if err != nil {
+		return sender.sendError(target, fmt.Sprintf("failed to marshal pod manifest: %v", err))
+	}
+	return sender.sendYAML(target, b)
+}

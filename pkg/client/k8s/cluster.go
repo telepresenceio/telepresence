@@ -17,6 +17,7 @@ import (
 
 	"github.com/blang/semver/v4"
 	"github.com/cenkalti/backoff/v4"
+	"google.golang.org/grpc"
 	auth "k8s.io/api/authorization/v1"
 	core "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,9 +27,11 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
+	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/watcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 )
@@ -45,11 +48,17 @@ type Cluster struct {
 	*Kubeconfig
 	MappedNamespaces []string
 
-	// nsLock protects namespaceWatcherSnapshot, currentMappedNamespaces and namespaceEventHandlers
+	// nsLock protects namespaceWatcherSnapshot, namespacesFromManager, currentMappedNamespaces
+	// and namespaceEventHandlers
 	nsLock sync.Mutex
 
-	// snapshot maintained by the namespaces watcher.
+	// snapshot maintained by the namespaces watcher or the WatchNamespaces RPC.
 	namespaceWatcherSnapshot map[string]struct{}
+
+	// namespacesFromManager is true once the snapshot is fed by the manager's
+	// WatchNamespaces RPC instead of the client-side watch; refreshNamespaces then
+	// skips the canAccessNS probe since the manager already scoped the stream.
+	namespacesFromManager bool
 
 	// Current Namespace snapshot, filtered by MappedNamespaces
 	currentMappedNamespaces map[string]bool
@@ -193,14 +202,20 @@ func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
 	ret := &Cluster{Kubeconfig: kubeFlags}
 
 	cfg := client.GetConfig(ret)
-	timedC, cancel := cfg.Timeouts().TimeoutContext(kubeFlags, client.TimeoutClusterConnect)
-	defer cancel()
-	if err := ret.check(timedC); err != nil {
-		return nil, err
+	external := cfg.Cluster().UsesExternalManager()
+	if external {
+		// An external manager address means the client never talks to the
+		// Kubernetes API server: skip the discovery ServerVersion probe.
+		clog.Infof(ret, "Manager address: %s (external, no cluster API access)", cfg.Cluster().ManagerAddress)
+	} else {
+		timedC, cancel := cfg.Timeouts().TimeoutContext(kubeFlags, client.TimeoutClusterConnect)
+		defer cancel()
+		if err := ret.check(timedC); err != nil {
+			return nil, err
+		}
+		clog.Infof(ret, "Context: %s", ret.KubeContext)
+		clog.Infof(ret, "Server: %s", ret.Server)
 	}
-
-	clog.Infof(ret, "Context: %s", ret.KubeContext)
-	clog.Infof(ret, "Server: %s", ret.Server)
 
 	if len(namespaces) == 1 && namespaces[0] == "all" {
 		namespaces = nil
@@ -209,22 +224,26 @@ func NewCluster(kubeFlags *Kubeconfig, namespaces []string) (*Cluster, error) {
 		namespaces = cfg.Cluster().MappedNamespaces
 	}
 	if len(namespaces) == 0 {
-		if k8sapi.CanWatchNamespaces(ret) {
-			clog.Infof(ret, "Will watch all namespaces")
-			ret.StartNamespaceWatcher()
-		} else {
-			clog.Warnf(ret, "Unable to watch all namespaces")
-		}
+		// Namespace watching starts once the manager connection is established and its
+		// version is known, so that the caller can choose between the WatchNamespaces RPC
+		// and this Kubernetes watch as a fallback.
+		clog.Infof(ret, "Will watch all namespaces")
 	} else {
 		clog.Infof(ret, "Will use mapped namespaces %s", namespaces)
 		ret.SetMappedNamespaces(namespaces)
 	}
 	if GetManagerNamespace(ret) == "" {
-		tns, err := ret.determineTrafficManagerNamespace()
-		if err != nil {
-			return nil, err
+		if external {
+			// The manager namespace is irrelevant to an external dial; keep
+			// a value for display purposes only.
+			cfg.Cluster().DefaultManagerNamespace = defaultManagerNamespace
+		} else {
+			tns, err := ret.determineTrafficManagerNamespace()
+			if err != nil {
+				return nil, err
+			}
+			cfg.Cluster().DefaultManagerNamespace = tns
 		}
-		cfg.Cluster().DefaultManagerNamespace = tns
 	}
 	clog.Infof(ret, "Will look for traffic manager in namespace %s", GetManagerNamespace(ret))
 	return ret, nil
@@ -293,9 +312,19 @@ func ConnectCluster(cr *rpc.ConnectRequest, config *Kubeconfig) (*Cluster, error
 func (kc *Cluster) determineTrafficManagerNamespace() (string, error) {
 	// Search for the traffic-manager in mapped namespaces
 	nss := kc.GetCurrentNamespaces(true)
-	for _, ns := range nss {
-		if _, err := k8sapi.GetService(kc, agentconfig.ManagerAppName, ns); err == nil {
+	if len(nss) == 0 {
+		// The watcher hasn't started yet, so currentMappedNamespaces is empty.
+		// Find the manager with one cross-namespace Service lookup instead of
+		// listing every namespace and probing each; clients whose RBAC forbids
+		// it fall through to the static defaults below.
+		if ns, ok := kc.findManagerServiceNamespace(); ok {
 			return ns, nil
+		}
+	} else {
+		for _, ns := range nss {
+			if _, err := k8sapi.GetService(kc, agentconfig.ManagerAppName, ns); err == nil {
+				return ns, nil
+			}
 		}
 	}
 
@@ -310,6 +339,34 @@ func (kc *Cluster) determineTrafficManagerNamespace() (string, error) {
 		return kc.Namespace, nil
 	}
 	return "", errcat.User.New("unable to determine the traffic-manager namespace")
+}
+
+// findManagerServiceNamespace locates the namespace of an installed
+// traffic-manager with a single name-scoped Service list across namespaces,
+// preferring the default manager namespace. The FieldSelector narrows what
+// the server returns; the name is re-checked so correctness does not depend
+// on the server honoring it.
+func (kc *Cluster) findManagerServiceNamespace() (string, bool) {
+	svcs, err := k8sapi.GetK8sInterface(kc).CoreV1().Services("").List(kc, meta.ListOptions{
+		FieldSelector: "metadata.name=" + agentconfig.ManagerAppName,
+	})
+	if err != nil {
+		clog.Debugf(kc, "unable to search for the traffic-manager service: %v", err)
+		return "", false
+	}
+	fallback := ""
+	for i := range svcs.Items {
+		if svcs.Items[i].Name != agentconfig.ManagerAppName {
+			continue
+		}
+		if svcs.Items[i].Namespace == defaultManagerNamespace {
+			return defaultManagerNamespace, true
+		}
+		if fallback == "" {
+			fallback = svcs.Items[i].Namespace
+		}
+	}
+	return fallback, fallback != ""
 }
 
 // GetCurrentNamespaces returns the names of the namespaces that this client
@@ -431,6 +488,47 @@ func (kc *Cluster) namespacesEventHandler(evCh <-chan watch.Event, nsSynced chan
 	}
 }
 
+// StartNamespacesFromManager applies each WatchNamespaces list the way the Kubernetes
+// namespace watcher applies a snapshot, keeping namespace access agnostic to its
+// source. Entries are marked accessible without the canAccessNS probe, since the
+// manager already scoped the stream and a reduced-RBAC client may not be able to run
+// that probe itself.
+func (kc *Cluster) StartNamespacesFromManager(mc manager.ManagerClient, session *manager.SessionInfo) {
+	nsSynced := make(chan struct{})
+	closeSynced := sync.Once{}
+	go func() {
+		_ = watcher.WatchWithRetry(kc, "WatchNamespaces", client.GetConfig(kc).Grpc().WatchRetryInterval,
+			func(ctx context.Context) (grpc.ServerStreamingClient[manager.NamespaceList], error) {
+				return mc.WatchNamespaces(ctx, session)
+			},
+			func(nsl *manager.NamespaceList) error {
+				kc.applyNamespaceList(nsl)
+				closeSynced.Do(func() { close(nsSynced) })
+				return nil
+			},
+			nil,
+		)
+	}()
+	select {
+	case <-kc.Done():
+	case <-nsSynced:
+	}
+}
+
+// applyNamespaceList replaces the snapshot with the manager-reported set and marks
+// the source as the manager, so refreshNamespaces skips the canAccessNS probe.
+func (kc *Cluster) applyNamespaceList(nsl *manager.NamespaceList) {
+	snapshot := make(map[string]struct{}, len(nsl.Namespaces))
+	for _, ns := range nsl.Namespaces {
+		snapshot[ns] = struct{}{}
+	}
+	kc.nsLock.Lock()
+	kc.namespaceWatcherSnapshot = snapshot
+	kc.namespacesFromManager = true
+	kc.nsLock.Unlock()
+	kc.refreshNamespaces()
+}
+
 func (kc *Cluster) SetMappedNamespaces(namespaces []string) bool {
 	sort.Strings(namespaces)
 	if !slices.Equal(namespaces, kc.MappedNamespaces) {
@@ -466,12 +564,25 @@ func (kc *Cluster) refreshNamespaces() {
 			i++
 		}
 	}
+	// Over an external manager transport there is no Kubernetes API to probe
+	// with canAccessNS; the manager reviews namespace access itself, so every
+	// entry is taken as accessible, exactly as for a manager-fed snapshot.
+	// GetConfigNoDefault: a Cluster context always carries a config in
+	// production; tests exercising the snapshot machinery may not set one.
+	external := false
+	if cfg := client.GetConfigNoDefault(kc); cfg != nil {
+		external = cfg.Cluster().UsesExternalManager()
+	}
 	namespaces := make(map[string]bool, len(nss))
 	for _, ns := range nss {
 		if kc.shouldBeWatched(ns) {
-			accessOk, ok := kc.currentMappedNamespaces[ns]
-			if !ok {
-				accessOk = canAccessNS(kc, ns)
+			accessOk := true
+			if !(kc.namespacesFromManager || external) {
+				var ok bool
+				accessOk, ok = kc.currentMappedNamespaces[ns]
+				if !ok {
+					accessOk = canAccessNS(kc, ns)
+				}
 			}
 			namespaces[ns] = accessOk
 		}

@@ -47,10 +47,12 @@ roleRef:
 {{- end }}
 
 {{- $managerNamespace := include "traffic-manager.namespace" $ }}
-{{- if and $namespaces (not (has $managerNamespace $namespaces)) }}
+{{- if and .legacyAccess $namespaces (not (has $managerNamespace $namespaces)) }}
 {{- /*
-This is required only if the client should be permitted to gather the traffic-manager logs, and it
-is only required when the traffic-manager isn't managing its own namespace.
+This is required only if the client should be permitted to gather the traffic-manager logs via
+the legacy direct pods/log path, and it is only required when the traffic-manager isn't managing
+its own namespace. Gated by clientRbac.legacyAccess: a modern client streams logs via the
+StreamLogs RPC instead.
 */}}
 ---
 kind: Role

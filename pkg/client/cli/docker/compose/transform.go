@@ -85,6 +85,7 @@ func (t *transformer) createProject(cmdName, composeFile string) ([]string, erro
 	for _, envFile := range c.envFiles {
 		opts = append(opts, "--env-file", envFile)
 	}
+	opts = append(opts, c.profileFlags()...)
 	opts = append(opts, cmdName)
 	opts = c.appendFlags(c.subCommandFlags, opts)
 	return opts, nil
@@ -223,7 +224,8 @@ func (t *transformer) runAttachedUp(parentCtx context.Context, composeFile strin
 	stopDone := make(chan struct{})
 	go func() {
 		<-parentCtx.Done()
-		args := append([]string{"compose", "--file", composeFile, "stop"}, t.config.services...)
+		args := append([]string{"compose", "--file", composeFile}, t.config.profileFlags()...)
+		args = append(append(args, "stop"), t.config.services...)
 		stopCmd := exec.CommandContext(ctx, docker.Exe, args...)
 		// Don't assign stdout/stderr. Avoid duplicated output from "compose up" and "compose stop".
 		stopCmd.Env = os.Environ()

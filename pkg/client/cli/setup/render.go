@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"sigs.k8s.io/yaml"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
@@ -47,7 +48,7 @@ func PrintReport(cmd *cobra.Command, s *Summary) error {
 	w := cmd.OutOrStdout()
 	printFindings(w, s.Facts)
 
-	if len(s.Proposal.Values) > 0 {
+	if s.Proposal.Values != nil {
 		data, err := yaml.Marshal(s.Proposal.Values)
 		if err != nil {
 			return err
@@ -75,9 +76,9 @@ func PrintReport(cmd *cobra.Command, s *Summary) error {
 }
 
 // Banner identifies the cluster a setup session is about to configure.
-func Banner(facts *ClusterFacts) string {
+func (f *ClusterFacts) Banner() string {
 	return fmt.Sprintf("Configuring cluster %q (server %s, manager namespace %s)",
-		facts.Context, facts.Server, facts.ManagerNamespace)
+		f.Context, f.Server, f.ManagerNamespace)
 }
 
 // PrintNotes renders a section of note/warning lines; an empty list renders
@@ -106,6 +107,9 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 	pf := &facts.Privileges
 	area(w, "privileges", fmt.Sprintf("cluster-wide install %s, namespaced install %s", pf.ClusterWide.Verdict, pf.Namespaced.Verdict),
 		concat(pf.ClusterWide.Evidence, prefixed("missing: ", pf.Missing)))
+
+	area(w, "authentication", fmt.Sprintf("this client has %s; kube-system x509 RoleBinding %s",
+		credentialDescription(facts.ClientAuth), pf.X509KubeSystem.Verdict), pf.X509KubeSystem.Evidence)
 
 	q := &facts.Quic
 	area(w, "quic", fmt.Sprintf("provider %s, loadBalancer %s, nodePort %s", orUnknown(q.Provider), q.LoadBalancer.Verdict, q.NodePort.Verdict),
@@ -149,18 +153,29 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 	}
 
 	if facts.Release.Installed {
-		area(w, "release", fmt.Sprintf("traffic-manager %s installed in namespace %s", facts.Release.Version, facts.Release.Namespace), nil)
+		line := fmt.Sprintf("traffic-manager %s installed in namespace %s", facts.Release.Version, facts.Release.Namespace)
+		if facts.Release.Workload == "Deployment" {
+			line += ", running as a Deployment"
+		}
+		var evidence []string
+		if facts.Release.ValuesError != "" {
+			evidence = []string{"values: " + facts.Release.ValuesError}
+		}
+		area(w, "release", line, evidence)
 	} else {
 		area(w, "release", "not installed", nil)
 	}
 
+	externalArea(w, &facts.External)
+
 	if h := facts.Health; h != nil {
-		healthArea(w, "traffic-manager deployment", &h.ManagerReady)
+		healthArea(w, "traffic-manager", &h.ManagerReady)
 		healthArea(w, "agent-injector webhook", h.Webhook)
 		healthArea(w, "webhook certificate", h.Certificate)
 		healthArea(w, "agent-injector endpoints", h.InjectorEndpoints)
 		healthArea(w, "quic endpoint", h.Quic)
 		healthArea(w, "x509 client auth", h.X509ClientAuth)
+		healthArea(w, "external endpoint", h.ExternalEndpoint)
 		healthArea(w, "version skew", &h.VersionSkew)
 	}
 
@@ -173,6 +188,67 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 	default:
 		area(w, "client update", "up to date", nil)
 	}
+}
+
+// credentialDescription names the credential kinds this client's kubeconfig
+// can produce, the way the authentication finding line reports them.
+func credentialDescription(auth ClientAuthFacts) string {
+	switch {
+	case auth.Bearer && auth.X509:
+		return "bearer token and client certificate"
+	case auth.Bearer:
+		return "bearer token"
+	case auth.X509:
+		return "client certificate"
+	default:
+		return "no usable credential"
+	}
+}
+
+// externalArea prints the external endpoint's prerequisites: whether
+// cert-manager is installed, and the TLS Secrets already in the manager
+// namespace.
+func externalArea(w io.Writer, ext *ExternalFacts) {
+	secretsPart := fmt.Sprintf("%d TLS secrets", len(ext.TLSSecrets))
+	switch {
+	case ext.SecretsListDenied:
+		secretsPart = "TLS secrets: listing denied"
+	case ext.SecretsListError != "":
+		secretsPart = "TLS secrets: unknown"
+	}
+	evidence := make([]string, 0, len(ext.TLSSecrets))
+	for _, s := range ext.TLSSecrets {
+		evidence = append(evidence, s.evidenceLine())
+	}
+	area(w, "external endpoint", fmt.Sprintf("cert-manager %s, %s", ext.CertManager.Verdict, secretsPart), evidence)
+}
+
+// evidenceLine renders one TLS Secret evidence line: its name followed by
+// detail.
+func (s *TLSSecretFacts) evidenceLine() string {
+	return s.Name + s.detail()
+}
+
+// detail renders a TLS Secret's DNS names and expiry, each preceded by two
+// spaces, or its ReadError when the leaf certificate could not be read.
+func (s *TLSSecretFacts) detail() string {
+	if s.ReadError != "" {
+		return "  " + s.ReadError
+	}
+	var detail string
+	if len(s.DNSNames) > 0 {
+		detail += "  " + strings.Join(s.DNSNames, ",")
+	}
+	if t, err := time.Parse(time.RFC3339, s.NotAfter); err == nil {
+		detail += "  expires " + t.Format("2006-01-02")
+	}
+	switch {
+	case s.Expired:
+		detail += " (expired)"
+	case s.ExpiringSoon:
+		detail += " (expires within 30 days)"
+	}
+	return detail
 }
 
 func healthArea(w io.Writer, label string, f *Finding) {
@@ -221,7 +297,7 @@ func writeIndented(w io.Writer, text string) {
 
 // WriteValues writes the proposal's Helm values as YAML, preceded by the
 // given provenance comment lines.
-func WriteValues(w io.Writer, values map[string]any, header ...string) error {
+func WriteValues(w io.Writer, values *helm.Values, header ...string) error {
 	data, err := yaml.Marshal(values)
 	if err != nil {
 		return err
@@ -236,7 +312,7 @@ func WriteValues(w io.Writer, values map[string]any, header ...string) error {
 }
 
 // WriteValuesFile writes the proposal's Helm values as YAML to a file.
-func WriteValuesFile(path string, values map[string]any, header ...string) error {
+func WriteValuesFile(path string, values *helm.Values, header ...string) error {
 	var buf bytes.Buffer
 	if err := WriteValues(&buf, values, header...); err != nil {
 		return err
@@ -246,11 +322,11 @@ func WriteValuesFile(path string, values map[string]any, header ...string) error
 
 // ProvenanceHeader builds the comment lines that make a written values file
 // explain itself: generating client, cluster, manager namespace, and date.
-func ProvenanceHeader(facts *ClusterFacts, date time.Time) []string {
+func (f *ClusterFacts) ProvenanceHeader(date time.Time) []string {
 	return []string{
 		"# Generated by telepresence setup " + version.Version,
-		fmt.Sprintf("# Cluster: %s (%s)", facts.Context, facts.Server),
-		"# Manager namespace: " + facts.ManagerNamespace,
+		fmt.Sprintf("# Cluster: %s (%s)", f.Context, f.Server),
+		"# Manager namespace: " + f.ManagerNamespace,
 		"# Date: " + date.Format(time.RFC3339),
 	}
 }

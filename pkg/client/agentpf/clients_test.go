@@ -129,3 +129,74 @@ func TestGetRandomAgentSkipsNodeAgent(t *testing.T) {
 
 	require.Nil(t, cs.GetRandomAgent(context.Background()))
 }
+
+// TestGetClientRelayRequiresConnection asserts that an unconnected agent is offered for
+// its own pod address but not as a relay for anything else. Relaying is interchangeable
+// with the traffic-manager tunnel the caller falls back to, so an agent that has not been
+// reached must not be preferred over it.
+func TestGetClientRelayRequiresConnection(t *testing.T) {
+	cl := &k8s.Cluster{
+		Kubeconfig: &k8s.Kubeconfig{
+			Context:   context.Background(),
+			Namespace: "alpha",
+		},
+	}
+	session := &manager.SessionInfo{SessionId: "session"}
+	cs := NewClients(cl, session, []string{"alpha"}, nil)
+	css, ok := cs.(*clients)
+	require.True(t, ok)
+
+	podIP := netip.MustParseAddr("10.244.0.7")
+	css.clients.Store("agent-alpha.alpha", &client{
+		Cluster: cl,
+		session: session,
+		owner:   css,
+		info: &manager.AgentPodInfo{
+			PodName:   "agent-alpha",
+			Namespace: "alpha",
+			PodIp:     podIP.AsSlice(),
+		},
+	})
+
+	// The agent's own pod address still selects it, connected or not.
+	require.NotNil(t, cs.GetClient(podIP))
+
+	// A service ClusterIP matches no pod, so the agent would only be a relay.
+	require.Nil(t, cs.GetClient(netip.MustParseAddr("10.96.230.123")))
+}
+
+// TestGetRandomAgentDoesNotDial asserts that an agent nothing has connected yet is
+// skipped rather than dialled. The caller is a name lookup whose deadline is shorter
+// than a dial's own timeout, so dialling here would spend the lookup's entire budget
+// before it could fall back to the traffic-manager.
+func TestGetRandomAgentDoesNotDial(t *testing.T) {
+	cl := &k8s.Cluster{
+		Kubeconfig: &k8s.Kubeconfig{
+			Context:   context.Background(),
+			Namespace: "alpha",
+		},
+	}
+	session := &manager.SessionInfo{SessionId: "session"}
+	cs := NewClients(cl, session, []string{"alpha"}, nil)
+	css, ok := cs.(*clients)
+	require.True(t, ok)
+
+	ac := &client{
+		Cluster: cl,
+		session: session,
+		owner:   css,
+		info: &manager.AgentPodInfo{
+			PodName:   "agent-alpha",
+			Namespace: "alpha",
+		},
+	}
+	css.clients.Store("agent-alpha.alpha", ac)
+
+	require.Nil(t, cs.GetRandomAgent(context.Background()))
+
+	// A dial would have left its outcome on the client, either a client or an error.
+	ac.RLock()
+	defer ac.RUnlock()
+	require.Nil(t, ac.cli)
+	require.NoError(t, ac.connectErr)
+}

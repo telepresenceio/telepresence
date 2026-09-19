@@ -470,7 +470,7 @@ func awaitNonzeroDatagramsReceived(t testing.TB, ctx context.Context, r *rt.Runt
 	mgrNS := managers.ManagerNamespace
 	deadline := time.Now().Add(quicDatagramCountersTimeout)
 	for {
-		out, err := r.Kubectl(ctx, mgrNS, "logs", "deploy/"+trafficManagerDeployment)
+		out, err := r.Kubectl(ctx, mgrNS, "logs", "statefulset/"+trafficManagerDeployment)
 		if err == nil {
 			for _, m := range datagramCountersLogRE.FindAllStringSubmatch(out, -1) {
 				if m[1] != "0" {
