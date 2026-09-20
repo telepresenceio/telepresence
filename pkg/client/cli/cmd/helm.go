@@ -23,8 +23,7 @@ func helmCmd() *cobra.Command {
 
 type HelmCommand struct {
 	helm.Request
-	AllValues map[string]any
-	rq        *daemon.CobraRequest
+	rq *daemon.CobraRequest
 }
 
 var (

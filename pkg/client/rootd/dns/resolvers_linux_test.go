@@ -26,3 +26,23 @@ Link 4 (eth1): [2001:db8::1]:53
 		netip.MustParseAddrPort("[2001:db8::53]:53"),
 	}, got)
 }
+
+func TestLinkDomainsIncludesNamespaceQualifiedServiceRoutes(t *testing.T) {
+	paths := linkDomains(
+		[]string{"tel2-search"},
+		map[string]struct{}{"app": {}, "other": {}, "svc": {}},
+		[]string{".internal"},
+		"cluster.local.",
+	)
+
+	require.ElementsMatch(t, []string{
+		"tel2-search",
+		"~app",
+		"~app.svc.cluster.local",
+		"~other",
+		"~other.svc.cluster.local",
+		"~svc",
+		"~internal.",
+		"~cluster.local.",
+	}, paths)
+}

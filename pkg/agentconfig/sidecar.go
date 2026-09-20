@@ -182,6 +182,9 @@ type Intercept struct {
 	// The number of the intercepted container port
 	ContainerPort uint16 `json:"containerPort,omitzero"`
 
+	// Port used to reach the application when no intercept matches, when non-zero.
+	InactivePort uint16 `json:"inactivePort,omitzero"`
+
 	// Number of intercepted service port
 	ServicePort uint16 `json:"servicePort,omitzero"`
 
@@ -290,7 +293,7 @@ type Sidecar struct {
 	InitSecurityContext *core.SecurityContext `json:"initSecurityContext,omitempty"`
 
 	// ClientConnectionTTL is the maximum duration that the traffic-agent will keep an idle client connection alive.
-	ClientConnectionTTL time.Duration `json:"clientConnectionTTL,omitempty,format:units"`
+	ClientConnectionTTL time.Duration `json:"clientConnectionTTL,omitempty"`
 
 	// EnableMetrics is true if the traffic-agent should send consumption reports to the traffic-manager.
 	EnableMetrics bool `json:"enableMetrics,omitempty"`
@@ -299,7 +302,7 @@ type Sidecar struct {
 	EnableH2cProbing bool `json:"enableH2cProbing,omitempty"`
 
 	// WatchRetryInterval is the interval between retries that a watcher uses when the gRPC connection to the traffic-manager is lost.
-	WatchRetryInterval time.Duration `json:"watchRetryInterval,format:units"`
+	WatchRetryInterval time.Duration `json:"watchRetryInterval"`
 }
 
 // InterceptTarget returns the container and intercepts that are parents of the given container port and protocol.
@@ -324,8 +327,8 @@ func (s *Sidecar) InterceptTarget(containerPort uint16, proto types.Proto) (*Con
 }
 
 // InterceptorInactivePort returns the port that the interceptor should write to when it isn't serving
-// an intercept. The port will be the container port unless some service uses a numeric target port
-// that targets the container port.
+// an intercept. An explicit inactive port takes precedence. Otherwise, the port will be the container
+// port unless some service uses a numeric target port that targets the container port.
 //
 // When a numeric target port is specified, the init-container sets up an iptables NAT PREROUTING rule
 // to redirect all traffic destined for the container port to the corresponding port where the agent's
@@ -335,8 +338,13 @@ func (s *Sidecar) InterceptTarget(containerPort uint16, proto types.Proto) (*Con
 // which is redirected to the container port via an iptables NAT OUTPUT rule.
 func (s *Sidecar) InterceptorInactivePort(containerPort uint16, proto types.Proto) uint16 {
 	_, it := s.InterceptTarget(containerPort, proto)
-	if it != nil && it.TargetPortNumeric() {
-		return s.ProxyPort(it.AgentPort())
+	if it != nil {
+		if inactivePort := it.InactivePort(); inactivePort != 0 {
+			return inactivePort
+		}
+		if it.TargetPortNumeric() {
+			return s.ProxyPort(it.AgentPort())
+		}
 	}
 	return containerPort
 }
@@ -517,29 +525,18 @@ func UnmarshalYAML(data []byte) (*Sidecar, error) {
 // MarshalTight marshals the given instance into JSON data, with data relating to the creation of the
 // container manifest stripped off.
 func MarshalTight(ac *Sidecar) (string, error) {
-	// Strip things that are not needed once the container has been created.
-	ai := ac.AgentImage
-	pp := ac.PullPolicy
-	ps := ac.PullSecrets
-	ir := ac.InitResources
-	sc := ac.SecurityContext
-	is := ac.InitSecurityContext
+	// Sidecars are cached and reused by concurrent admission requests. Strip
+	// creation-only fields from a value copy so marshaling never mutates that
+	// shared config while another request is building an injected container.
+	tight := *ac
+	tight.AgentImage = ""
+	tight.PullPolicy = ""
+	tight.PullSecrets = nil
+	tight.InitResources = nil
+	tight.SecurityContext = nil
+	tight.InitSecurityContext = nil
 
-	ac.AgentImage = ""
-	ac.PullPolicy = ""
-	ac.PullSecrets = nil
-	ac.InitResources = nil
-	ac.SecurityContext = nil
-	ac.InitSecurityContext = nil
-
-	data, err := json.Marshal(ac)
-	ac.AgentImage = ai
-	ac.PullPolicy = pp
-	ac.PullSecrets = ps
-	ac.InitResources = ir
-	ac.SecurityContext = sc
-	ac.InitSecurityContext = is
-
+	data, err := json.Marshal(&tight)
 	if err != nil {
 		return "", err
 	}

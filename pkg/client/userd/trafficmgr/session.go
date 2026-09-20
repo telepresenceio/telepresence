@@ -12,6 +12,7 @@ import (
 	"os/user"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -99,8 +100,16 @@ type session struct {
 	installID string // telepresence's install ID
 	clientID  string // "laptop-username@laptop-hostname"
 
-	// manager client connection
-	managerConn *grpc.ClientConn
+	// manager client connection and metadata. A failed watcher and Remain can
+	// both notice the same broken transport, so keep replacements serialized
+	// and let later repairs observe that an earlier one already won.
+	managerLock          sync.RWMutex
+	managerReconnectLock sync.Mutex
+	managerConn          *grpc.ClientConn
+	managerGeneration    uint64
+
+	consecutiveRemainFailures int
+	remainFailureGeneration   uint64
 
 	// name reported by the manager
 	managerName string
@@ -184,6 +193,11 @@ type session struct {
 	// session is constructed.
 	agentPodWatchNamespacesOnce  sync.Once
 	agentPodWatchNamespacesValue []string
+
+	// namespaceWatchOnce guards the choice between the manager's WatchNamespaces RPC and
+	// the client-side Kubernetes namespace watcher: whichever is selected the first time
+	// the client watches all namespaces is the one used for the rest of the session.
+	namespaceWatchOnce sync.Once
 }
 
 // agentPodWatchNamespaces returns the namespaces in which this client watches
@@ -197,7 +211,15 @@ type session struct {
 // independently.
 func (s *session) agentPodWatchNamespaces() []string {
 	s.agentPodWatchNamespacesOnce.Do(func() {
-		if !client.GetConfig(s).Cluster().AgentPortForward {
+		cc := client.GetConfig(s).Cluster()
+		if !cc.AgentPortForward {
+			return
+		}
+		if cc.UsesExternalManager() {
+			// External manager transport: no Kubernetes API access, so
+			// CanPortForward can't run. Keep every mapped namespace; the
+			// manager reviews attach permissions itself.
+			s.agentPodWatchNamespacesValue = s.GetCurrentNamespaces(true)
 			return
 		}
 		s.agentPodWatchNamespacesValue = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
@@ -208,6 +230,10 @@ func (s *session) agentPodWatchNamespaces() []string {
 }
 
 func (s *session) RevokeIntercept(ctx context.Context, interceptID string) error {
+	if client.GetConfig(s).Cluster().UsesExternalManager() {
+		return errcat.User.New("revoking an intercept requires cluster access to the traffic-manager's ConfigMap, " +
+			"which this external connection does not have")
+	}
 	return tmconfig.AddCommand(s, k8s.GetManagerNamespace(ctx), tmconfig.AdminCommand{
 		Name:      tmconfig.RemoveIntercept,
 		Args:      []string{interceptID},
@@ -250,7 +276,7 @@ func NewSession(
 	}
 	if tmgr.compareFinalizedManagerVersion(2, 21, 0) < 0 {
 		return nil, nil,
-			fmt.Errorf("traffic manager version %s is too old. Minimum supported version is 2.21.0, please upgrade", tmgr.managerVersion)
+			fmt.Errorf("traffic manager version %s is too old. Minimum supported version is 2.21.0, please upgrade", tmgr.ManagerVersion())
 	}
 	tmgr.updateClientConfig(ctx, cr.MappedNamespaces)
 
@@ -277,7 +303,7 @@ func NewSession(
 	tmgr.Context = tunnel.WithSyntheticIPResolver(tmgr.Context, tmgr)
 
 	if err = tmgr.connectRootDaemon(ctx, oi, wg, cr.IsPodDaemon); err != nil {
-		tmgr.managerConn.Close()
+		_ = tmgr.managerConnection().Close()
 		return nil, nil, err
 	}
 
@@ -325,15 +351,51 @@ func (s *session) WithRootClient(ctx context.Context, f func(context.Context, ro
 	return f(ctx, rd)
 }
 
+func (s *session) managerSnapshot() (*grpc.ClientConn, string, semver.Version, uint64) {
+	s.managerLock.RLock()
+	defer s.managerLock.RUnlock()
+	return s.managerConn, s.managerName, s.managerVersion, s.managerGeneration
+}
+
+func (s *session) managerConnection() *grpc.ClientConn {
+	s.managerLock.RLock()
+	defer s.managerLock.RUnlock()
+	return s.managerConn
+}
+
+func (s *session) currentManagerGeneration() uint64 {
+	s.managerLock.RLock()
+	defer s.managerLock.RUnlock()
+	return s.managerGeneration
+}
+
+func (s *session) invalidateManagerConnection() *grpc.ClientConn {
+	s.managerLock.Lock()
+	defer s.managerLock.Unlock()
+	s.managerGeneration++
+	return s.managerConn
+}
+
+func (s *session) managerClient() (manager.ManagerClient, uint64) {
+	s.managerLock.RLock()
+	defer s.managerLock.RUnlock()
+	return manager.NewManagerClient(s.managerConn), s.managerGeneration
+}
+
 func (s *session) ManagerClient() manager.ManagerClient {
-	return manager.NewManagerClient(s.managerConn)
+	mClient, _ := s.managerClient()
+	return mClient
 }
 
 func (s *session) ManagerName() string {
+	s.managerLock.RLock()
+	defer s.managerLock.RUnlock()
 	return s.managerName
 }
 
 func (s *session) ManagerVersion() semver.Version {
+	s.managerLock.RLock()
+	defer s.managerLock.RUnlock()
 	return s.managerVersion
 }
 
@@ -440,13 +502,30 @@ func connectMgr(
 	return sess, nil
 }
 
-func (s *session) reconnectManager() (returnedErr error) {
+func (s *session) reconnectManager(failedGeneration uint64) error {
+	return s.reconnectManagerWith(failedGeneration, func(ctx context.Context) (*grpc.ClientConn, string, semver.Version, error) {
+		return s.ConnectToManager(ctx, k8s.GetManagerNamespace(s))
+	})
+}
+
+func (s *session) reconnectManagerWith(
+	failedGeneration uint64,
+	connect func(context.Context) (*grpc.ClientConn, string, semver.Version, error),
+) (returnedErr error) {
+	s.managerReconnectLock.Lock()
+	defer s.managerReconnectLock.Unlock()
+
+	generation := s.currentManagerGeneration()
+	if generation != failedGeneration {
+		return nil
+	}
+
 	cfg := client.GetConfig(s)
 	tos := cfg.Timeouts()
 	tc, cancel := tos.TimeoutContext(s, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	conn, managerName, managerVersion, err := s.ConnectToManager(tc, k8s.GetManagerNamespace(s))
+	conn, managerName, managerVersion, err := connect(tc)
 	if err != nil {
 		return err
 	}
@@ -475,18 +554,33 @@ func (s *session) reconnectManager() (returnedErr error) {
 		return fmt.Errorf("unable to reconnect client: %w", err)
 	}
 
+	s.managerLock.Lock()
+	if s.managerGeneration != failedGeneration {
+		s.managerLock.Unlock()
+		_ = conn.Close()
+		return nil
+	}
 	// The replaced connection is pinned to a manager pod that is gone or no
 	// longer accepts this client; close it so its transport stops redialing.
-	if old := s.managerConn; old != nil {
-		_ = old.Close()
-	}
+	old := s.managerConn
 	s.managerConn = conn
 	s.managerName = managerName
 	s.managerVersion = managerVersion
+	s.managerGeneration++
+	s.managerLock.Unlock()
+	if old != nil {
+		_ = old.Close()
+	}
 	return nil
 }
 
+const remainReconnectFailureThreshold = 3
+
 func (s *session) remain() error {
+	return s.remainWith(s.reconnectManager)
+}
+
+func (s *session) remainWith(reconnect func(uint64) error) error {
 	ctx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerAPI)
 	defer cancel()
 	var lastActivity *timestamppb.Timestamp
@@ -494,13 +588,49 @@ func (s *session) remain() error {
 	if ln != 0 {
 		lastActivity = timestamppb.New(time.Unix(0, ln))
 	}
-	_, err := s.ManagerClient().Remain(ctx, &manager.RemainRequest{
+	mClient, managerGeneration := s.managerClient()
+	if s.remainFailureGeneration != managerGeneration {
+		s.consecutiveRemainFailures = 0
+		s.remainFailureGeneration = managerGeneration
+	}
+	_, err := mClient.Remain(ctx, &manager.RemainRequest{
 		Session:      s.SessionInfo(),
 		LastActivity: lastActivity,
 	})
-	if err != nil {
-		clog.Errorf(ctx, "error calling Remain: %v", client.CheckTimeout(ctx, err))
+	if err == nil {
+		s.consecutiveRemainFailures = 0
+		return nil
 	}
+
+	checkedErr := client.CheckTimeout(ctx, err)
+	clog.Errorf(ctx, "error calling Remain: %v", checkedErr)
+
+	code := status.Code(err)
+	if code == codes.Unknown && errors.Is(err, context.DeadlineExceeded) {
+		code = codes.DeadlineExceeded
+	}
+	switch code {
+	case codes.NotFound:
+		s.consecutiveRemainFailures = 0
+	case codes.DeadlineExceeded, codes.Unavailable:
+		s.consecutiveRemainFailures++
+		if s.consecutiveRemainFailures < remainReconnectFailureThreshold {
+			return nil
+		}
+	default:
+		s.consecutiveRemainFailures = 0
+		return nil
+	}
+
+	clog.Warnf(ctx, "reconnecting after Remain failed: %v", checkedErr)
+	if err = reconnect(managerGeneration); err != nil {
+		// A reconnect can fail while the laptop is waking, the network is
+		// returning, or the manager is still restarting. Keep the session and
+		// its intercepts alive so the next Remain tick gets another chance.
+		clog.Errorf(ctx, "unable to reconnect after Remain failed: %v", err)
+		return nil
+	}
+	s.consecutiveRemainFailures = 0
 	return nil
 }
 
@@ -670,7 +800,7 @@ func (s *session) getInfosForWorkloads(
 			for _, ii := range iis {
 				include := false
 				switch {
-				case ii.Spec.NoDefaultPort:
+				case ii.Spec.Replace:
 					filterMatch |= rpc.ListRequest_REPLACEMENTS
 					include = filter&rpc.ListRequest_REPLACEMENTS != 0
 				case ii.Spec.Wiretap:
@@ -822,8 +952,6 @@ func (s *session) WorkloadInfoSnapshot(
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
 ) (*rpc.WorkloadInfoSnapshot, error) {
-	is := s.getCurrentIntercepts()
-
 	var nss []string
 	var sMap map[string]string
 	nss = make([]string, 0, len(namespaces))
@@ -838,6 +966,11 @@ func (s *session) WorkloadInfoSnapshot(
 		clog.Debug(s, "No namespaces are mapped")
 		return &rpc.WorkloadInfoSnapshot{}, nil
 	}
+	if filter == rpc.ListRequest_INTERCEPTS {
+		return s.interceptInfoSnapshot(nss), nil
+	}
+
+	is := s.getCurrentIntercepts()
 	if len(nss) == 1 && nss[0] == s.Namespace {
 		cas := s.getCurrentAgentPods()
 		sMap = make(map[string]string, len(cas))
@@ -868,6 +1001,104 @@ nextIs:
 	return &rpc.WorkloadInfoSnapshot{Workloads: workloadInfos}, nil
 }
 
+// interceptInfoSnapshot returns the current normal intercepts without waiting
+// for the workload watchers. The watcher snapshot is useful when listing all
+// workloads, but an intercept-only list can get the workload identity from the
+// intercept spec itself.
+func (s *session) interceptInfoSnapshot(namespaces []string) *rpc.WorkloadInfoSnapshot {
+	namespaceSet := make(map[string]struct{}, len(namespaces))
+	for _, namespace := range namespaces {
+		namespaceSet[namespace] = struct{}{}
+	}
+
+	type key struct {
+		kind      string
+		name      string
+		namespace string
+	}
+	type agentKey struct {
+		name      string
+		namespace string
+	}
+
+	cachedWorkloads := make(map[key]workloadInfo)
+	s.eachWorkload(namespaces, func(kind manager.WorkloadInfo_Kind, name, namespace string, info workloadInfo) {
+		cachedWorkloads[key{kind: kind.String(), name: name, namespace: namespace}] = info
+	})
+	agentVersions := make(map[agentKey]string)
+	for _, agent := range s.getCurrentAgentPods() {
+		if _, ok := namespaceSet[agent.namespace]; ok {
+			agentVersions[agentKey{name: agent.workload, namespace: agent.namespace}] = agent.version
+		}
+	}
+
+	workloadInfos := make(map[key]*rpc.WorkloadInfo)
+	for _, intercept := range s.getCurrentIntercepts() {
+		if intercept == nil || intercept.InterceptInfo == nil {
+			continue
+		}
+		spec := intercept.Spec
+		if spec == nil || spec.NoDefaultPort || spec.Wiretap {
+			continue
+		}
+		if _, ok := namespaceSet[spec.Namespace]; !ok {
+			continue
+		}
+
+		kind := normalizedWorkloadResourceType(spec.WorkloadKind)
+		k := key{
+			kind:      kind,
+			name:      spec.Agent,
+			namespace: spec.Namespace,
+		}
+		workloadInfo, ok := workloadInfos[k]
+		if !ok {
+			workloadInfo = &rpc.WorkloadInfo{
+				Name:                 spec.Agent,
+				Namespace:            spec.Namespace,
+				WorkloadResourceType: kind,
+				AgentVersion:         agentVersions[agentKey{name: spec.Agent, namespace: spec.Namespace}],
+			}
+			if cached, ok := cachedWorkloads[k]; ok {
+				workloadInfo.Uid = string(cached.uid)
+				workloadInfo.DesiredReplicas = cached.desiredReplicas
+				workloadInfo.ReadyReplicas = cached.readyReplicas
+				workloadInfo.Services = cloneServiceAssociations(cached.services)
+				if cached.state != workload.StateAvailable {
+					workloadInfo.NotInterceptableReason = cached.state.String()
+				}
+			}
+			workloadInfos[k] = workloadInfo
+		}
+		workloadInfo.InterceptInfo = append(workloadInfo.InterceptInfo, intercept.InterceptInfo)
+	}
+
+	snapshot := &rpc.WorkloadInfoSnapshot{
+		Workloads: make([]*rpc.WorkloadInfo, 0, len(workloadInfos)),
+	}
+	for _, workloadInfo := range workloadInfos {
+		snapshot.Workloads = append(snapshot.Workloads, workloadInfo)
+	}
+	sort.Slice(snapshot.Workloads, func(i, j int) bool {
+		left, right := snapshot.Workloads[i], snapshot.Workloads[j]
+		if left.Name != right.Name {
+			return left.Name < right.Name
+		}
+		if left.Namespace != right.Namespace {
+			return left.Namespace < right.Namespace
+		}
+		return left.WorkloadResourceType < right.WorkloadResourceType
+	})
+	return snapshot
+}
+
+func normalizedWorkloadResourceType(kind string) string {
+	if value, ok := manager.WorkloadInfo_Kind_value[strings.ToUpper(kind)]; ok {
+		return manager.WorkloadInfo_Kind(value).String()
+	}
+	return kind
+}
+
 func (s *session) remainLoop(_ context.Context) error {
 	ticker := time.NewTicker(client.GetConfig(s).Grpc().PingInterval)
 	defer func() {
@@ -883,7 +1114,9 @@ func (s *session) remainLoop(_ context.Context) error {
 			}
 		}
 		// Call Close() in separate go-routine because it might block.
-		go s.managerConn.Close()
+		if managerConn := s.invalidateManagerConnection(); managerConn != nil {
+			go managerConn.Close()
+		}
 	}()
 
 	for {
@@ -958,6 +1191,20 @@ func (s *session) Status(ctx context.Context) (*rpc.ConnectInfo, error) {
 	return s.status(ctx, false)
 }
 
+// managerSupportsWatchNamespaces reports whether the connected traffic-manager implements
+// the WatchNamespaces RPC, so the client can consume it instead of watching namespaces
+// itself.
+func (s *session) managerSupportsWatchNamespaces() bool {
+	return s.compareFinalizedManagerVersion(2, 32, 0) >= 0
+}
+
+// managerSupportsStreamLogs reports whether the connected traffic-manager implements the
+// StreamLogs RPC, so gather-logs can consume it instead of reading pod logs directly through
+// the Kubernetes API.
+func (s *session) managerSupportsStreamLogs() bool {
+	return s.compareFinalizedManagerVersion(2, 32, 0) >= 0
+}
+
 func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 	var tmCfg client.Config
 	cliCfg, err := s.ManagerClient().GetClientConfig(ctx, &empty.Empty{})
@@ -982,17 +1229,30 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 		// We do not want to override the local config with the traffic-manager's config even if the local config is empty.
 		cfg.Cluster().MappedNamespaces = clientMappedNamespaces
 		namespaces = effectiveMappedNamespaces(namespaces, clientMappedNamespaces, tmMappedNamespaces)
-		if s.SetMappedNamespaces(namespaces) {
-			if len(namespaces) == 0 {
-				if k8sapi.CanWatchNamespaces(s) {
+		changed := s.SetMappedNamespaces(namespaces)
+		switch {
+		case len(namespaces) == 0:
+			// A fresh session's mapped set is already empty, so watching
+			// everything is not a "change" -- selection can't depend on that.
+			s.namespaceWatchOnce.Do(func() {
+				external := client.GetConfig(s).Cluster().UsesExternalManager()
+				switch {
+				case s.managerSupportsWatchNamespaces():
+					clog.Infof(s, "Will watch all namespaces using the traffic-manager's WatchNamespaces RPC")
+					s.StartNamespacesFromManager(s.ManagerClient, s.sessionInfo)
+				case external:
+					// No Kubernetes API access, and this manager predates
+					// WatchNamespaces: no watcher option remains.
+					clog.Warnf(s, "Unable to watch all namespaces: the traffic-manager does not support the WatchNamespaces RPC")
+				case k8sapi.CanWatchNamespaces(s):
 					clog.Infof(s, "Will watch all namespaces")
 					s.StartNamespaceWatcher()
-				} else {
+				default:
 					clog.Warnf(s, "Unable to watch all namespaces")
 				}
-			} else {
-				clog.Infof(s, "Will use mapped namespaces %s", namespaces)
-			}
+			})
+		case changed:
+			clog.Infof(s, "Will use mapped namespaces %s", namespaces)
 		}
 		rt := cfg.Routing()
 		rt.NeverProxy = subnet.Unique(append(rt.NeverProxy, tmCfg.Routing().NeverProxy...))
@@ -1011,6 +1271,7 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 
 func (s *session) status(ctx context.Context, initial bool) (*rpc.ConnectInfo, error) {
 	cfg := s.Kubeconfig
+	_, managerName, managerVersion, _ := s.managerSnapshot()
 	ret := &rpc.ConnectInfo{
 		Initial:          initial,
 		ClusterContext:   cfg.KubeContext,
@@ -1023,8 +1284,8 @@ func (s *session) status(ctx context.Context, initial bool) (*rpc.ConnectInfo, e
 		Ingests:          s.getCurrentIngests(),
 		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
 		ManagerVersion: &manager.VersionInfo2{
-			Name:    s.managerName,
-			Version: "v" + s.managerVersion.String(),
+			Name:    managerName,
+			Version: "v" + managerVersion.String(),
 		},
 		ManagerNamespace:   k8s.GetManagerNamespace(s),
 		SubnetViaWorkloads: s.subnetViaWorkloads,
@@ -1080,7 +1341,8 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 	if svc.RootSessionInProcess() {
 		// Just run the root session in-process.
 		activity := make(chan time.Time)
-		rootSession, err := rootd.NewInProcSession(s.Cluster, nc, s.managerConn, s.managerVersion, activity, isPodDaemon)
+		managerConn, _, managerVersion, _ := s.managerSnapshot()
+		rootSession, err := rootd.NewInProcSession(s.Cluster, nc, managerConn, managerVersion, activity, isPodDaemon)
 		if err != nil {
 			close(activity)
 			return err

@@ -62,11 +62,11 @@ var manifest = map[string][]string{
 	"intercept.HeaderFilter/Test_Header": {
 		"Tunnel",
 	},
-	// `gather-logs` drives GetLogs (pkg/client/userd/trafficmgr/
+	// `gather-logs` drives StreamLogs (pkg/client/userd/trafficmgr/
 	// gather_logs.go) for both the manager and the intercepted workload's
 	// agent.
 	"session.GatherLogs/Test_Matrix": {
-		"GetLogs",
+		"StreamLogs",
 	},
 	// Test_ManagerWatchSeesLifecycle opens its own WatchWorkloads stream
 	// directly (rt.ManagerClient), and the intercept it drives through the

@@ -4,13 +4,15 @@ import (
 	"context"
 	"fmt"
 	"sort"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 )
 
 // PlannedObjects renders the embedded chart with the final values and returns
 // one "Kind name" line per object the install would create, grouped by kind
 // and sorted. Namespaced objects carry their namespace, defaulted to the
 // manager namespace exactly like the P1 privilege sweep.
-func PlannedObjects(ctx context.Context, managerNamespace string, values map[string]any) ([]string, error) {
+func PlannedObjects(ctx context.Context, managerNamespace string, values *helm.Values) ([]string, error) {
 	chrt, err := loadEmbeddedChart()
 	if err != nil {
 		return nil, err

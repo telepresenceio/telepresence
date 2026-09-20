@@ -8,14 +8,14 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 )
 
-// managerReleaseName is the traffic-manager helm release/Deployment name
+// managerReleaseName is the traffic-manager helm release/StatefulSet name
 // every telepresence-oss chart install uses (rt's own helmReleaseName,
 // unexported there).
 const managerReleaseName = "traffic-manager"
 
-// trafficManagerDeployment is the kubectl resource path for the
-// traffic-manager Deployment.
-const trafficManagerDeployment = "deploy/" + managerReleaseName
+// trafficManagerStatefulSet is the kubectl resource path for the
+// traffic-manager StatefulSet.
+const trafficManagerStatefulSet = "statefulset/" + managerReleaseName
 
 // pullPolicyFor mirrors rt's own unexported helper (framework/rt/env.go): the
 // image.pullPolicy a raw `telepresence helm install|upgrade` needs so a
@@ -58,27 +58,27 @@ func helmInstallArgs(r *rt.Runtime, ns string) []string {
 	return append([]string{"helm", "install", "--manager-namespace", ns}, helmSetArgs(r, ns, "")...)
 }
 
-// requireManagerReady waits for the traffic-manager Deployment in ns to
+// requireManagerReady waits for the traffic-manager StatefulSet in ns to
 // finish rolling out, failing t if it doesn't.
 func requireManagerReady(t testing.TB, ctx context.Context, r *rt.Runtime, ns string) {
 	t.Helper()
-	if _, err := r.Kubectl(ctx, ns, "rollout", "status", trafficManagerDeployment, "--timeout=120s"); err != nil {
+	if _, err := r.Kubectl(ctx, ns, "rollout", "status", trafficManagerStatefulSet, "--timeout=120s"); err != nil {
 		t.Fatalf("waiting for traffic-manager in %s: %v", ns, err)
 	}
 }
 
-// requireManagerAbsent fails t if the traffic-manager Deployment still
+// requireManagerAbsent fails t if the traffic-manager StatefulSet still
 // exists in ns.
 func requireManagerAbsent(t testing.TB, ctx context.Context, r *rt.Runtime, ns string) {
 	t.Helper()
-	if _, err := r.Kubectl(ctx, ns, "get", trafficManagerDeployment); err == nil {
+	if _, err := r.Kubectl(ctx, ns, "get", trafficManagerStatefulSet); err == nil {
 		t.Fatalf("traffic-manager still present in %s after uninstall", ns)
 	}
 }
 
-// managerLogLevel returns the traffic-manager Deployment's LOG_LEVEL env var
-// in ns: the chart's rendering of the logLevel value
-// (charts/telepresence-oss/templates/deployment.yaml).
+// managerLogLevel returns the traffic-manager StatefulSet's LOG_LEVEL env
+// var in ns: the chart's rendering of the logLevel value
+// (charts/telepresence-oss/templates/statefulset.yaml).
 func managerLogLevel(t testing.TB, ctx context.Context, r *rt.Runtime, ns string) string {
 	t.Helper()
 	var dep struct {
@@ -95,8 +95,8 @@ func managerLogLevel(t testing.TB, ctx context.Context, r *rt.Runtime, ns string
 			} `json:"template"`
 		} `json:"spec"`
 	}
-	if err := r.KubectlJSON(ctx, ns, &dep, "get", trafficManagerDeployment); err != nil {
-		t.Fatalf("reading traffic-manager deployment in %s: %v", ns, err)
+	if err := r.KubectlJSON(ctx, ns, &dep, "get", trafficManagerStatefulSet); err != nil {
+		t.Fatalf("reading traffic-manager statefulset in %s: %v", ns, err)
 	}
 	for _, c := range dep.Spec.Template.Spec.Containers {
 		for _, e := range c.Env {

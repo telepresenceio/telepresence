@@ -11,6 +11,7 @@ const (
 
 	Config                     = DomainPrefix + "agent-config"
 	InjectContainerPorts       = DomainPrefix + "inject-container-ports"
+	InjectInactivePort         = DomainPrefix + "inject-inactive-port"
 	InjectIgnoreVolumeMounts   = DomainPrefix + "inject-ignore-volume-mounts"
 	InjectServiceName          = DomainPrefix + "inject-service-name"
 	InjectServicePorts         = DomainPrefix + "inject-service-ports"

@@ -1,9 +1,12 @@
 package helm
 
 import (
+	"context"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/blang/semver/v4"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/engine"
@@ -17,7 +20,7 @@ import (
 // which is the path that reaches the templates' own guards.
 func renderCoreChart(t *testing.T, vals map[string]any, withSchema bool) error {
 	t.Helper()
-	chrt, err := loadCoreChart(semver.MustParse("2.31.0"))
+	chrt, err := LoadCoreChart(semver.MustParse("2.31.0"))
 	require.NoError(t, err)
 	if !withSchema {
 		chrt.Schema = nil
@@ -32,16 +35,9 @@ func renderCoreChart(t *testing.T, vals map[string]any, withSchema bool) error {
 	return err
 }
 
-// TestQuicTunnelRequiresSingleManagerReplica pins both lines of defense against
-// running the QUIC path with more than one traffic-manager replica (unsupported: the
-// QUIC CA and session state are process-local):
-//
-//   - The values schema pins replicaCount to exactly 1 (const), so a packaged
-//     install rejects any scaling attempt before a template renders.
-//   - The Deployment template refuses quicTunnel.enabled together with
-//     replicaCount > 1, which is what protects the schema-less render paths (the
-//     bare chart directory) and stays load-bearing if the schema's replicaCount
-//     pin is ever relaxed.
+// TestQuicTunnelRequiresSingleManagerReplica pins two defenses against a
+// multi-replica traffic-manager: the values schema pins replicaCount to 1,
+// and the StatefulSet template also refuses replicaCount > 1 without the schema.
 func TestQuicTunnelRequiresSingleManagerReplica(t *testing.T) {
 	require.NoError(t, renderCoreChart(t, map[string]any{
 		"quicTunnel": map[string]any{"enabled": true},
@@ -51,13 +47,116 @@ func TestQuicTunnelRequiresSingleManagerReplica(t *testing.T) {
 	require.Error(t, err, "the values schema must reject scaling the traffic-manager")
 	require.ErrorContains(t, err, "replicaCount")
 
-	require.NoError(t, renderCoreChart(t, map[string]any{"replicaCount": 2}, false),
-		"without the schema, scaling alone must render (the template guard is scoped to quicTunnel)")
+	err = renderCoreChart(t, map[string]any{"replicaCount": 2}, false)
+	require.Error(t, err, "scaling must refuse to render even without the schema")
+	require.ErrorContains(t, err, "replicaCount must be 1")
+}
 
-	err = renderCoreChart(t, map[string]any{
-		"quicTunnel":   map[string]any{"enabled": true},
-		"replicaCount": 2,
-	}, false)
-	require.Error(t, err, "quicTunnel.enabled with two replicas must refuse to render even without the schema")
-	require.ErrorContains(t, err, "quicTunnel.enabled requires replicaCount 1")
+func TestQuicForwarderPodLabelsSchema(t *testing.T) {
+	t.Run("accepts string-valued pod labels", func(t *testing.T) {
+		err := renderCoreChart(t, map[string]any{
+			"quicTunnel": map[string]any{
+				"enabled": true,
+				"forwarder": map[string]any{
+					"podLabels": map[string]any{"example.com/mesh-injection": "enabled"},
+				},
+			},
+		}, true)
+		require.NoError(t, err)
+	})
+
+	t.Run("rejects non-object pod labels", func(t *testing.T) {
+		err := renderCoreChart(t, map[string]any{
+			"quicTunnel": map[string]any{
+				"enabled":   true,
+				"forwarder": map[string]any{"podLabels": "enabled"},
+			},
+		}, true)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "podLabels")
+	})
+
+	t.Run("rejects non-string pod label values", func(t *testing.T) {
+		err := renderCoreChart(t, map[string]any{
+			"quicTunnel": map[string]any{
+				"enabled": true,
+				"forwarder": map[string]any{
+					"podLabels": map[string]any{"example.com/mesh-injection": true},
+				},
+			},
+		}, true)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "podLabels")
+	})
+
+	t.Run("rejects unknown forwarder properties", func(t *testing.T) {
+		err := renderCoreChart(t, map[string]any{
+			"quicTunnel": map[string]any{
+				"enabled":   true,
+				"forwarder": map[string]any{"unknownProperty": "value"},
+			},
+		}, true)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "unknownProperty")
+	})
+}
+
+// withGetValuesFunc replaces GetValuesFunc with f for the duration of the test.
+func withGetValuesFunc(t *testing.T, f func(context.Context, *Request) *Values) {
+	t.Helper()
+	old := GetValuesFunc
+	GetValuesFunc = f
+	t.Cleanup(func() { GetValuesFunc = old })
+}
+
+func TestCoalesceValues(t *testing.T) {
+	logLevel := "debug"
+	base := &Values{LogLevel: new(logLevel)}
+	withGetValuesFunc(t, func(context.Context, *Request) *Values { return base })
+
+	t.Run("no ValuesJson uses the base values as-is", func(t *testing.T) {
+		req := &Request{}
+		got, err := coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, base, got)
+	})
+
+	t.Run("empty document behaves as if nothing were provided", func(t *testing.T) {
+		req := &Request{ValuesJson: []byte(`{}`)}
+		got, err := coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, base, got)
+	})
+
+	t.Run("an upgrade with no values requests reuse-values unless reset-values is set", func(t *testing.T) {
+		req := &Request{Type: Upgrade}
+		_, err := coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.True(t, req.ReuseValues)
+
+		req = &Request{Type: Upgrade, ResetValues: true}
+		_, err = coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.False(t, req.ReuseValues)
+	})
+
+	t.Run("provided values win over the base and reuse-values is not requested", func(t *testing.T) {
+		providedTag := "override"
+		provided := &Values{Image: Image{Tag: new(providedTag)}}
+		providedJSON, err := json.Marshal(provided)
+		require.NoError(t, err)
+
+		req := &Request{Type: Upgrade, ValuesJson: providedJSON}
+		got, err := coalesceValues(t.Context(), req)
+		require.NoError(t, err)
+		assert.Equal(t, "override", *got.Image.Tag)
+		assert.Equal(t, "debug", *got.LogLevel)
+		assert.False(t, req.ReuseValues)
+	})
+
+	t.Run("invalid JSON is an error", func(t *testing.T) {
+		req := &Request{ValuesJson: []byte(`not json`)}
+		_, err := coalesceValues(t.Context(), req)
+		require.Error(t, err)
+	})
 }

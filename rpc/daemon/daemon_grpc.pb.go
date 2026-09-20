@@ -36,7 +36,6 @@ const (
 	Daemon_WaitForNetwork_FullMethodName        = "/telepresence.daemon.Daemon/WaitForNetwork"
 	Daemon_WaitForAgentIP_FullMethodName        = "/telepresence.daemon.Daemon/WaitForAgentIP"
 	Daemon_LookupIP_FullMethodName              = "/telepresence.daemon.Daemon/LookupIP"
-	Daemon_ResolvePort_FullMethodName           = "/telepresence.daemon.Daemon/ResolvePort"
 	Daemon_RerouteRemotePort_FullMethodName     = "/telepresence.daemon.Daemon/RerouteRemotePort"
 	Daemon_SetInterceptShortcuts_FullMethodName = "/telepresence.daemon.Daemon/SetInterceptShortcuts"
 	Daemon_ActivityWatcher_FullMethodName       = "/telepresence.daemon.Daemon/ActivityWatcher"
@@ -78,8 +77,6 @@ type DaemonClient interface {
 	WaitForAgentIP(ctx context.Context, in *WaitForAgentIPRequest, opts ...grpc.CallOption) (*WaitForAgentIPResponse, error)
 	// LookupIP resolves the given name using the Telepresence DNS server
 	LookupIP(ctx context.Context, in *LookupIPRequest, opts ...grpc.CallOption) (*LookupIPResponse, error)
-	// ResolvePort resolves an hostName:portID string from into a netip.AddrPort
-	ResolvePort(ctx context.Context, in *ResolvePortRequest, opts ...grpc.CallOption) (*ResolvePortResponse, error)
 	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
 	RerouteRemotePort(ctx context.Context, in *ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// SetInterceptShortcuts declares cluster-side destinations that the root daemon
@@ -243,16 +240,6 @@ func (c *daemonClient) LookupIP(ctx context.Context, in *LookupIPRequest, opts .
 	return out, nil
 }
 
-func (c *daemonClient) ResolvePort(ctx context.Context, in *ResolvePortRequest, opts ...grpc.CallOption) (*ResolvePortResponse, error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ResolvePortResponse)
-	err := c.cc.Invoke(ctx, Daemon_ResolvePort_FullMethodName, in, out, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *daemonClient) RerouteRemotePort(ctx context.Context, in *ReroutePortRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
@@ -340,8 +327,6 @@ type DaemonServer interface {
 	WaitForAgentIP(context.Context, *WaitForAgentIPRequest) (*WaitForAgentIPResponse, error)
 	// LookupIP resolves the given name using the Telepresence DNS server
 	LookupIP(context.Context, *LookupIPRequest) (*LookupIPResponse, error)
-	// ResolvePort resolves an hostName:portID string from into a netip.AddrPort
-	ResolvePort(context.Context, *ResolvePortRequest) (*ResolvePortResponse, error)
 	// RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
 	RerouteRemotePort(context.Context, *ReroutePortRequest) (*emptypb.Empty, error)
 	// SetInterceptShortcuts declares cluster-side destinations that the root daemon
@@ -406,9 +391,6 @@ func (UnimplementedDaemonServer) WaitForAgentIP(context.Context, *WaitForAgentIP
 }
 func (UnimplementedDaemonServer) LookupIP(context.Context, *LookupIPRequest) (*LookupIPResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method LookupIP not implemented")
-}
-func (UnimplementedDaemonServer) ResolvePort(context.Context, *ResolvePortRequest) (*ResolvePortResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ResolvePort not implemented")
 }
 func (UnimplementedDaemonServer) RerouteRemotePort(context.Context, *ReroutePortRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method RerouteRemotePort not implemented")
@@ -695,24 +677,6 @@ func _Daemon_LookupIP_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Daemon_ResolvePort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ResolvePortRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(DaemonServer).ResolvePort(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Daemon_ResolvePort_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaemonServer).ResolvePort(ctx, req.(*ResolvePortRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Daemon_RerouteRemotePort_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReroutePortRequest)
 	if err := dec(in); err != nil {
@@ -829,10 +793,6 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LookupIP",
 			Handler:    _Daemon_LookupIP_Handler,
-		},
-		{
-			MethodName: "ResolvePort",
-			Handler:    _Daemon_ResolvePort_Handler,
 		},
 		{
 			MethodName: "RerouteRemotePort",

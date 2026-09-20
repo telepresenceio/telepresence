@@ -515,12 +515,40 @@ func (c *Conn) Disconnect(t testing.TB) {
 // Detach removes the intercept, ingest, replace, or wiretap.
 func (a *Attach) Detach(t testing.TB) {
 	t.Helper()
+	a.detachWithin(t, 0, 0)
+}
+
+// DetachWithin is Detach, retried until it succeeds or timeout elapses. A
+// detach is one of the few CLI operations that must reach the traffic-manager
+// and name the client's session, so it fails while the manager has no record
+// of that session -- the window after a manager restart, before the client's
+// ReconnectClient has restored it. A test that restarts the manager uses this
+// so the detach waits for the restore rather than racing it.
+func (a *Attach) DetachWithin(t testing.TB, timeout, interval time.Duration) {
+	t.Helper()
+	a.detachWithin(t, timeout, interval)
+}
+
+// detachWithin runs the detach command, retrying until timeout elapses. A
+// zero timeout means a single attempt.
+func (a *Attach) detachWithin(t testing.TB, timeout, interval time.Duration) {
+	t.Helper()
 	use := a.conn.useArgs()
 	args := make([]string, 0, 4+len(use))
 	args = append(args, "detach", a.name, "-n", a.namespace)
 	args = append(args, use...)
-	if stdout, stderr, err := a.conn.r.CLI().Run(a.conn.ctx, args...); err != nil {
-		t.Fatalf("detach %s: %v\nstdout:\n%s\nstderr:\n%s", a.name, err, stdout, stderr)
+
+	deadline := time.Now().Add(timeout)
+	for {
+		stdout, stderr, err := a.conn.r.CLI().Run(a.conn.ctx, args...)
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("detach %s: %v\nstdout:\n%s\nstderr:\n%s", a.name, err, stdout, stderr)
+			return
+		}
+		time.Sleep(interval)
 	}
 }
 

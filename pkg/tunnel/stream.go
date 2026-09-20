@@ -144,6 +144,8 @@ func ReadLoop(ctx context.Context, s Stream, p *CounterProbe) (<-chan Message, <
 				endReason = "EOF on input"
 			case errors.Is(err, net.ErrClosed):
 				endReason = "stream closed"
+			case IsPeerClosed(err):
+				endReason = "stream closed by peer"
 			case errors.Is(err, context.Canceled):
 				endReason = err.Error()
 			default:
@@ -210,9 +212,10 @@ func WriteLoop(
 					continue
 				case errors.Is(err, net.ErrClosed):
 					endReason = "output stream is closed"
+				case IsPeerClosed(err):
+					endReason = "output stream closed by peer"
 				default:
 					endReason = err.Error()
-					clog.Errorf(ctx, "!! %s %s, Send failed: %v", s.Tag(), s.ID(), err)
 				}
 			}
 			break
@@ -383,7 +386,7 @@ func (s *stream) Send(ctx context.Context, m Message) error {
 		err = s.grpcStream.Send(m.TunnelMessage())
 	}
 	if err != nil {
-		if ctx.Err() == nil && !errors.Is(err, net.ErrClosed) {
+		if ctx.Err() == nil && !errors.Is(err, net.ErrClosed) && !IsPeerClosed(err) {
 			clog.Errorf(ctx, "!! %s %s, Send failed: %v", s.tag, s.id, err)
 		}
 		return err
@@ -394,7 +397,7 @@ func (s *stream) Send(ctx context.Context, m Message) error {
 
 func (s *stream) CloseSend(ctx context.Context) error {
 	if err := s.Send(ctx, NewMessage(closeSend, nil)); err != nil {
-		if ctx.Err() == nil && !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)) {
+		if ctx.Err() == nil && !(errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed) || IsPeerClosed(err)) {
 			return fmt.Errorf("send of closeSend message failed: %w", err)
 		}
 	}

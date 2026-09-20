@@ -2,6 +2,7 @@ package docker
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -85,15 +86,20 @@ func (s *Compose) connection(ns string) compose.Connection {
 
 // composeUp writes proj under ArtifactDir("compose"), brings it up, and
 // registers a `compose down` cleanup, returning the compose file's path for
-// the caller's own `compose exec`/`compose logs` polling.
-func (s *Compose) composeUp(proj *compose.Project) string {
+// the caller's own `compose exec`/`compose logs` polling. extraArgs, if
+// given, are inserted between the compose file and the "up"/"down"
+// subcommand, e.g. for "--profile".
+func (s *Compose) composeUp(proj *compose.Project, extraArgs ...string) string {
 	t := s.T()
 	ctx := s.Ctx()
 	path, err := proj.Write(rt.Env{Ctx: ctx, T: t, R: s.R()})
 	s.Require().NoError(err, "writing compose project")
 
-	t.Cleanup(func() { _, _, _ = s.CLI().Run(ctx, "compose", "-f", path, "down") })
-	_, stderr, err := s.CLI().Run(ctx, "compose", "-f", path, "up", "-d")
+	base := append([]string{"compose", "-f", path}, extraArgs...)
+	t.Cleanup(func() {
+		_, _, _ = s.CLI().Run(ctx, append(slices.Clone(base), "down")...)
+	})
+	_, stderr, err := s.CLI().Run(ctx, append(slices.Clone(base), "up", "-d")...)
 	s.Require().NoError(err, "compose up: %s", stderr)
 	return path
 }
@@ -148,6 +154,39 @@ func (s *Compose) Test_Connect() {
 		t.Logf("wget %s: %v\nstderr:\n%s", url, err, stderr)
 		return false
 	}, composeConnectTimeout, composeConnectInterval, "wget of %s from connect container should succeed", url)
+}
+
+// Test_Profile proves that `telepresence compose --profile X up` forwards
+// the profile to the underlying `docker compose` invocations, bringing up
+// and exec-ing a service that is only enabled under that profile.
+func (s *Compose) Test_Profile() {
+	t := s.T()
+	ns := s.AppNamespace()
+	wl := s.Workload(workloads.Echo("compose-profile"))
+	url := wl.ServiceURL()
+
+	proj := &compose.Project{
+		Connections: []compose.Connection{s.connection(ns)},
+		Services: map[string]*compose.Service{
+			"tester": {
+				XTele:    compose.Connect{},
+				Image:    composeToolImage,
+				Command:  composeSleepInfinityCmd(),
+				Profiles: []string{"extra"},
+			},
+		},
+	}
+	path := s.composeUp(proj, "--profile", "extra")
+
+	s.Eventually(func() bool {
+		execArgs := []string{"compose", "-f", path, "--profile", "extra", "exec", "tester", "wget", "-qO-", url}
+		stdout, stderr, err := s.CLI().Run(s.Ctx(), execArgs...)
+		if err == nil && len(stdout) > 0 {
+			return true
+		}
+		t.Logf("wget %s: %v\nstderr:\n%s", url, err, stderr)
+		return false
+	}, composeConnectTimeout, composeConnectInterval, "wget of %s from profiled tester container should succeed", url)
 }
 
 // Test_Proxy proves a `type: proxy` compose service is replaced by a proxy

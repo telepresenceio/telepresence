@@ -8,11 +8,6 @@ on:
 permissions:
   contents: write
 
-# The build target imports encoding/json/v2, which is gated behind this
-# experiment; without it `go list -deps` excludes those files and fails.
-env:
-  GOEXPERIMENT: jsonv2
-
 jobs:
   go-action-detection:
     runs-on: ubuntu-latest

@@ -44,7 +44,7 @@ type Command struct {
 	ContainerName string   // --container
 	Address       string   // --address
 
-	Replace   bool // whether --replace was passed
+	Replace   bool // replace the targeted application container
 	Wiretap   bool // wiretap subcommand used
 	NodeAgent bool // --node-agent
 
@@ -174,13 +174,6 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 
 	flagSet.BoolVar(&c.DetailedOutput, "detailed-output", false,
 		fmt.Sprintf(`Provide very detailed info about the %s when used together with --output=json or --output=yaml'`, what))
-
-	if !c.Wiretap {
-		flagSet.BoolVarP(&c.Replace, "replace", "", false,
-			`Indicates if the traffic-agent should replace application containers in workload pods. `+
-				`The default behavior is for the agent sidecar to be installed alongside existing containers.`)
-		flagSet.Lookup("replace").Deprecated = "Use the replace command."
-	}
 
 	// HTTP Intercepts flags
 	flagSet.StringSliceVar(&c.HTTPHeaderFilters, "http-header", nil,

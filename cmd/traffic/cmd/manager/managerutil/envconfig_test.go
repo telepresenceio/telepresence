@@ -70,6 +70,11 @@ func TestEnvconfig(t *testing.T) {
 		MutatorWebhookPort:           8443,
 		TunnelQuicAgentPort:          7787,
 		AuthenticationMode:           auth.ModePermissive,
+		AuthorizationRequiredGrant:   auth.GrantAny,
+		LogStreamChunkSize:           resource.MustParse("64Ki"),
+		LogStreamPodConcurrency:      4,
+		LogStreamPodByteLimit:        resource.MustParse("10Mi"),
+		LogStreamDeadline:            5 * time.Minute,
 	}
 
 	testcases := map[string]struct {
@@ -199,6 +204,32 @@ func TestEnvconfig(t *testing.T) {
 			},
 			Output: func(e *managerutil.Env) {
 				e.AuthenticationMode = auth.ModeDisabled
+			},
+		},
+		"authorization-required-grant-portforward": {
+			Input: map[string]string{
+				"AUTHORIZATION_REQUIRED_GRANT": "portforward",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AuthorizationRequiredGrant = auth.GrantPortForward
+			},
+		},
+		"authorization-required-grant-telepresence": {
+			Input: map[string]string{
+				"AUTHORIZATION_REQUIRED_GRANT": "telepresence",
+			},
+			Output: func(e *managerutil.Env) {
+				e.AuthorizationRequiredGrant = auth.GrantTelepresence
+			},
+		},
+		"external-listener": {
+			Input: map[string]string{
+				"EXTERNAL_PORT":         "8443",
+				"EXTERNAL_TLS_CERT_DIR": "/var/run/secrets/telepresence.io/external-tls",
+			},
+			Output: func(e *managerutil.Env) {
+				e.ExternalPort = 8443
+				e.ExternalTLSCertDir = "/var/run/secrets/telepresence.io/external-tls"
 			},
 		},
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/ann"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/output"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/progress"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/setup"
@@ -37,12 +38,12 @@ func setupCmd() *cobra.Command {
 		Short: "Analyze the cluster and propose or apply a traffic-manager configuration",
 		Long: `Analyze the cluster and propose or apply a traffic-manager configuration.
 
-The command probes the cluster (privileges, QUIC viability, node-agent
-viability, webhook creation, namespace scale, and any existing installation),
-asks a small number of questions that the findings make relevant, and prints a
-report with a generated Helm values document. Without --output or --apply the
-command only validates the setup; --output writes the values file, and --apply
-installs or upgrades the traffic-manager with it.`,
+The command probes the cluster (privileges, QUIC and node-agent viability,
+webhook creation, namespace scale, and any existing installation), then asks
+only the questions the findings leave open, including whether to enforce
+caller authentication, the required grant, an external control endpoint, and
+legacy client access, and prints a report with the values. --output writes
+the values file, and --apply installs or upgrades the traffic-manager.`,
 		Annotations: map[string]string{
 			ann.UpdateCheckFormat: ann.Tel2,
 		},
@@ -70,7 +71,7 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 	if toStdout && formatted {
 		return errcat.User.New("--output - cannot be combined with --format; both claim stdout")
 	}
-	var inputVals map[string]any
+	inputVals := &helm.Values{}
 	var err error
 	if sc.inputFile != "" {
 		if inputVals, err = setup.LoadInputValues(sc.inputFile); err != nil {
@@ -88,6 +89,9 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	facts := cl.facts
+	if err := facts.Release.ReadableValues(); err != nil {
+		return err
+	}
 	ctx := cmd.Context()
 
 	_, isTTY := term.GetFdInfo(cmd.InOrStdin())
@@ -101,12 +105,11 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 		promptOut = io.Discard
 	}
 	if interactive {
-		ioutil.Println(promptOut, setup.Banner(facts))
+		ioutil.Println(promptOut, facts.Banner())
 	}
 	var answers setup.Answers
 	var preset setup.Preset
-	pins := setup.DerivePins(inputVals)
-	pins.ApplyTo(&answers, &preset)
+	setup.PinAnswers(inputVals, &answers, &preset)
 
 	iv := &setup.Interviewer{
 		Facts:          facts,
@@ -129,8 +132,10 @@ func (sc *setupCommand) run(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	if err = setup.ValidateValues(facts, proposal.Values, sc.apply); err != nil {
-		return err
+	if proposal.Values != nil {
+		if err = facts.ValidateValues(proposal.Values, sc.apply); err != nil {
+			return err
+		}
 	}
 
 	return sc.emit(cmd, cl, ivAnswers, proposal, toStdout, formatted)
@@ -179,8 +184,8 @@ func (sc *setupCommand) emit(
 		}
 	}
 
-	if len(proposal.Values) > 0 {
-		header := setup.ProvenanceHeader(facts, time.Now())
+	if proposal.Values != nil {
+		header := facts.ProvenanceHeader(time.Now())
 		switch {
 		case toStdout:
 			err = setup.WriteValues(cmd.OutOrStdout(), proposal.Values, header...)

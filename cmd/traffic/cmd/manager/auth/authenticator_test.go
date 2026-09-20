@@ -3,9 +3,12 @@ package auth_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	authnv1 "k8s.io/api/authentication/v1"
@@ -17,6 +20,21 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
+
+// unregisteredMetrics builds a *auth.Metrics whose counters are plain, unregistered
+// prometheus.Counters -- safe to construct repeatedly across tests, unlike
+// auth.NewMetrics which registers with the global default registry.
+func unregisteredMetrics() *auth.Metrics {
+	c := func() prometheus.Counter { return prometheus.NewCounter(prometheus.CounterOpts{Name: "c"}) }
+	return &auth.Metrics{
+		CacheHits:       c(),
+		FirstReviews:    c(),
+		FallbackReviews: c(),
+		RateLimited:     c(),
+		InvalidTokens:   c(),
+		APIFailures:     c(),
+	}
+}
 
 func authenticatedStatus(name, uid string, groups ...string) *authnv1.TokenReviewStatus {
 	return &authnv1.TokenReviewStatus{
@@ -111,6 +129,68 @@ func TestAuthenticate_InfrastructureError(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestAuthenticate_Metrics verifies the external listener's authentication metrics: a
+// first (manager-audience) TokenReview for a manager-audience token, a fallback
+// (no-audience) TokenReview for a token that only verifies without an audience
+// constraint, a cache hit for a repeated lookup, and an invalid-token count for a token
+// that fails both reviews.
+func TestAuthenticate_Metrics(t *testing.T) {
+	ci := fake.NewClientset()
+	k8sapi.InstallFakeTokenReviews(ci, func(token string, audiences []string) *authnv1.TokenReviewStatus {
+		switch {
+		case token == "manager-token" && len(audiences) == 1 && audiences[0] == agentconfig.ManagerTokenAudience:
+			return authenticatedStatus("manager-sa", "u1")
+		case token == "user-token" && len(audiences) == 0:
+			return authenticatedStatus("some-user", "u2")
+		default:
+			return &authnv1.TokenReviewStatus{Authenticated: false}
+		}
+	})
+
+	m := unregisteredMetrics()
+	a := auth.NewAuthenticator(ci, auth.WithMetrics(m))
+
+	_, err := a.Authenticate(context.Background(), "manager-token")
+	require.NoError(t, err)
+	assert.Equal(t, float64(1), testutil.ToFloat64(m.FirstReviews))
+	assert.Equal(t, float64(0), testutil.ToFloat64(m.FallbackReviews))
+	assert.Equal(t, float64(0), testutil.ToFloat64(m.CacheHits))
+
+	// A repeat lookup of the same token is served from cache.
+	_, err = a.Authenticate(context.Background(), "manager-token")
+	require.NoError(t, err)
+	assert.Equal(t, float64(1), testutil.ToFloat64(m.FirstReviews))
+	assert.Equal(t, float64(1), testutil.ToFloat64(m.CacheHits))
+
+	// A user token fails the manager-audience review and succeeds on fallback.
+	_, err = a.Authenticate(context.Background(), "user-token")
+	require.NoError(t, err)
+	assert.Equal(t, float64(2), testutil.ToFloat64(m.FirstReviews))
+	assert.Equal(t, float64(1), testutil.ToFloat64(m.FallbackReviews))
+
+	// A token that fails both reviews counts as invalid.
+	_, err = a.Authenticate(context.Background(), "bad-token")
+	assert.ErrorIs(t, err, auth.ErrInvalidToken)
+	assert.Equal(t, float64(1), testutil.ToFloat64(m.InvalidTokens))
+}
+
+// TestAuthenticate_Metrics_APIFailure verifies that a TokenReview call failing for
+// infrastructure reasons is counted as an API failure.
+func TestAuthenticate_Metrics_APIFailure(t *testing.T) {
+	ci := fake.NewClientset()
+	k8sapi.InstallFakeTokenReviews(ci, nil)
+	ci.PrependReactor("create", "tokenreviews", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("connection refused")
+	})
+
+	m := unregisteredMetrics()
+	a := auth.NewAuthenticator(ci, auth.WithMetrics(m))
+
+	_, err := a.Authenticate(context.Background(), "any-token")
+	require.Error(t, err)
+	assert.Equal(t, float64(1), testutil.ToFloat64(m.APIFailures))
+}
+
 func TestAuthenticate_Caching(t *testing.T) {
 	var calls atomic.Int32
 
@@ -142,4 +222,35 @@ func TestAuthenticate_Caching(t *testing.T) {
 	_, err = a.Authenticate(context.Background(), "bad")
 	assert.ErrorIs(t, err, auth.ErrInvalidToken)
 	assert.Equal(t, afterBad, calls.Load())
+}
+
+// TestAuthenticate_AudiencePathMemoized: after a user token authenticates via
+// the no-audience fallback, a repeat Authenticate never re-tries the doomed
+// manager-audience review, since a token's audiences are a property of the
+// token string.
+func TestAuthenticate_AudiencePathMemoized(t *testing.T) {
+	var mu sync.Mutex
+	var audienceScoped, total int
+	ci := fake.NewClientset()
+	k8sapi.InstallFakeTokenReviews(ci, func(token string, audiences []string) *authnv1.TokenReviewStatus {
+		mu.Lock()
+		total++
+		if len(audiences) > 0 {
+			audienceScoped++
+		}
+		mu.Unlock()
+		if len(audiences) == 0 && token == "user-token" {
+			return authenticatedStatus("some-user", "u2")
+		}
+		return &authnv1.TokenReviewStatus{Authenticated: false}
+	})
+
+	a := auth.NewAuthenticator(ci)
+	for range 3 {
+		p, err := a.Authenticate(context.Background(), "user-token")
+		require.NoError(t, err)
+		assert.Equal(t, "some-user", p.Username)
+	}
+	assert.Equal(t, 1, audienceScoped, "the manager-audience review must run only once per token")
+	assert.Equal(t, 2, total, "later calls are served by the token cache")
 }
