@@ -290,6 +290,24 @@ func TestUpdateInterceptSkipsSemanticNoOp(t *testing.T) {
 	require.NotNil(t, updated.ModifiedAt)
 }
 
+func TestUpdateInterceptMissingReturnsNil(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.NewContext(t, false)
+	st := &State{
+		backgroundCtx: ctx,
+		intercepts:    cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
+	}
+
+	applyCalls := 0
+	updated := st.UpdateIntercept("missing", func(intercept *Intercept) {
+		applyCalls++
+	})
+
+	require.Nil(t, updated)
+	require.Equal(t, 0, applyCalls)
+}
+
 func TestSuiteState(testing *testing.T) {
 	suite.Run(testing, new(suiteState))
 }

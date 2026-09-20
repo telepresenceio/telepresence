@@ -741,35 +741,24 @@ func (s *State) WatchWorkloads(ctx context.Context, ns string) (ch <-chan []Even
 	return ww.Subscribe(ctx, ns), nil
 }
 
-// UpdateIntercept applies a given mutator function to the stored intercept with interceptID;
-// storing and returning the result. If the mutator leaves the intercept semantically unchanged,
-// the current value is returned without updating ModifiedAt. If the given intercept does not
-// exist, then the mutator function is not run, and nil is returned.
-//
-// This does not lock; but instead uses CAS and may therefore call the mutator function multiple
-// times.  So: it is safe to perform blocking operations in your mutator function, but you must take
-// care that it is safe to call your mutator function multiple times.
+// UpdateIntercept applies a given mutator function to a clone of the stored intercept with
+// interceptID, storing the clone and giving it a fresh ModifiedAt unless it is semantically equal
+// to the current value, in which case the current value is kept. If the given intercept does not
+// exist, the mutator function is not run and nil is returned.
 func (s *State) UpdateIntercept(interceptID string, apply func(*Intercept)) *Intercept {
-	for {
-		cur, ok := s.intercepts.Load(interceptID)
-		if !ok {
-			// Doesn't exist (possibly was deleted while this loop was running).
-			return nil
+	v, _ := s.intercepts.Compute(interceptID, func(cur *Intercept, loaded bool) (*Intercept, xsync.ComputeOp) {
+		if !loaded {
+			return nil, xsync.CancelOp
 		}
-
-		newInfo := cur.Clone()
-		apply(newInfo)
-		if interceptEqual(cur, newInfo) {
-			return cur
+		n := cur.Clone()
+		apply(n)
+		if interceptEqual(cur, n) {
+			return cur, xsync.CancelOp
 		}
-		newInfo.ModifiedAt = timestamppb.Now()
-
-		swapped := s.intercepts.CompareAndSwap(newInfo.Id, cur, newInfo)
-		if swapped {
-			// Success!
-			return newInfo
-		}
-	}
+		n.ModifiedAt = timestamppb.Now()
+		return n, xsync.UpdateOp
+	})
+	return v
 }
 
 func (s *State) RemoveIntercept(interceptID string) {
