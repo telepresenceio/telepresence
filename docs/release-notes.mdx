@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.32.0
 <Note>
+	<Title type="feature" docs="reference/cluster-config">Choose the port that receives non-intercepted traffic</Title>
+	<Body>
+The <code>telepresence.io/inject-inactive-port</code> annotation names the container port the traffic-agent forwards traffic to while no intercept is active, instead of the intercepted container port. It applies to workloads with exactly one intercepted container port.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Recover promptly from stalled manager sessions</Title>
 	<Body>
 Manager keepalive failures now use the existing session repair path instead of ending the client session. Expired sessions recover immediately, while repeated transient failures trigger repair without dropping active intercepts.

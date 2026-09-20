@@ -27,6 +27,14 @@ items:
   - version: 2.32.0
     date: (TBD)
     notes:
+      - type: feature
+        title: Choose the port that receives non-intercepted traffic
+        body: >-
+          The <code>telepresence.io/inject-inactive-port</code>
+          annotation names the container port the traffic-agent forwards traffic
+          to while no intercept is active, instead of the intercepted container
+          port. It applies to workloads with exactly one intercepted container port.
+        docs: reference/cluster-config
       - type: bugfix
         title: Recover promptly from stalled manager sessions
         body: >-
