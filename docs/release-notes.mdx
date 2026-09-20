@@ -21,6 +21,12 @@ The traffic-manager sent every container's environment variables with each agent
   </Body>
 </Note>
 <Note>
+	<Title type="change">The traffic-agent reuses connections to HTTP intercept handlers</Title>
+	<Body>
+Each request matched by an HTTP intercept opened a new tunnel to the workstation and closed it when the response ended. The traffic-agent now keeps a transport per intercept and protocol version, reuses its connections across requests, and reports tunnel traffic when a connection closes rather than after every request.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="reference/cluster-config">Choose the port that receives non-intercepted traffic</Title>
 	<Body>
 The <code>telepresence.io/inject-inactive-port</code> annotation names the container port the traffic-agent forwards traffic to while no intercept is active, instead of the intercepted container port. It applies to workloads with exactly one intercepted container port.

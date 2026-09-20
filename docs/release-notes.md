@@ -14,6 +14,12 @@ The traffic-manager batches workload events and delivers them to every watching 
 The traffic-manager sent every container's environment variables with each agent update, which made reconnect snapshots large in namespaces with many pods. Clients now receive agent updates without the environment maps and fetch a full description only when an ingest or intercept needs one. Older clients keep receiving the full payloads.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The traffic-agent reuses connections to HTTP intercept handlers</div></div>
+<div style="margin-left: 15px">
+
+Each request matched by an HTTP intercept opened a new tunnel to the workstation and closed it when the response ended. The traffic-agent now keeps a transport per intercept and protocol version, reuses its connections across requests, and reports tunnel traffic when a connection closes rather than after every request.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Choose the port that receives non-intercepted traffic](reference/cluster-config)</div></div>
 <div style="margin-left: 15px">
 

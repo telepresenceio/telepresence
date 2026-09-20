@@ -3,11 +3,14 @@ package fwd
 import (
 	"context"
 	"net"
+	"net/netip"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
+	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 func TestTCPDispatch_HTTPMechanism_Handled(t *testing.T) {
@@ -56,4 +59,39 @@ func TestTCPDispatch_NoMechanism_NotHandled(t *testing.T) {
 	f.SetIntercepting([]*manager.InterceptInfo{intercept})
 	handled = f.IsHTTP()
 	require.False(t, handled)
+}
+
+func TestHTTPInterceptTransportReusedAndPruned(t *testing.T) {
+	f := NewTCPInterceptor(
+		context.Background(),
+		types.PortAndProto{Port: 3000, Proto: types.ProtoTCP},
+		tunnel.AgentToClient,
+		nil,
+		netip.MustParseAddrPort("127.0.0.1:3000"),
+	).(*tcp)
+	ii := &manager.InterceptInfo{
+		Id:            "intercept-id",
+		ClientSession: &manager.SessionInfo{SessionId: "client-session"},
+		Spec: &manager.InterceptSpec{
+			TargetHost:    "127.0.0.1",
+			TargetPort:    3000,
+			HeaderFilters: map[string]string{"X-Test": "value"},
+		},
+	}
+
+	first := f.getHTTPInterceptTransport(context.Background(), ii, 1)
+	second := f.getHTTPInterceptTransport(context.Background(), ii, 1)
+	require.Same(t, first, second)
+
+	// HTTP/1 and HTTP/2 requests may need different transport protocol
+	// settings, so they must not share the same cached entry.
+	require.NotSame(t, first, f.getHTTPInterceptTransport(context.Background(), ii, 2))
+
+	key := httpInterceptTransportKey(ii, 1)
+	_, ok := f.httpTransportCache.Load(key)
+	require.True(t, ok)
+
+	f.SetIntercepting(nil)
+	_, ok = f.httpTransportCache.Load(key)
+	require.False(t, ok)
 }

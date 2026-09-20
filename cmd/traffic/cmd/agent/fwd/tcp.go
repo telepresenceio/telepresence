@@ -22,8 +22,9 @@ var errClientStream = errors.New("failed to create client stream")
 
 type tcp struct {
 	*interceptor
-	tlsManager     tls.Manager
-	listenerSwitch ListenerSwitch
+	tlsManager         tls.Manager
+	listenerSwitch     ListenerSwitch
+	httpTransportCache sync.Map
 }
 
 func NewTCPInterceptor(ctx context.Context, listenPort types.PortAndProto, tag tunnel.Tag, tlsManager tls.Manager, target netip.AddrPort, opts ...forwarder.Option) Interceptor {
@@ -40,6 +41,7 @@ func (f *tcp) IsHTTP() bool {
 // SetIntercepting overrides the base implementation to handle HTTP intercepts.
 func (f *tcp) SetIntercepting(intercepts []*manager.InterceptInfo) {
 	f.interceptor.SetIntercepting(intercepts)
+	f.pruneHTTPInterceptTransports(intercepts)
 	f.setListenerSwitch()
 }
 
