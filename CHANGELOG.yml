@@ -27,6 +27,14 @@ items:
   - version: 2.32.0
     date: (TBD)
     notes:
+      - type: change
+        title: The traffic-agent reuses connections to HTTP intercept handlers
+        body: >-
+          Each request matched by an HTTP intercept opened a new tunnel to the
+          workstation and closed it when the response ended. The traffic-agent now
+          keeps a transport per intercept and protocol version, reuses its
+          connections across requests, and reports tunnel traffic when a connection
+          closes rather than after every request.
       - type: feature
         title: Choose the port that receives non-intercepted traffic
         body: >-
