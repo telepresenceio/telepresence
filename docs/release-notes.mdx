@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.32.0
 <Note>
+	<Title type="bugfix">Workload watch delivery survives cancelled and stalled subscribers</Title>
+	<Body>
+The traffic-manager batches workload events and delivers them to every watching client. A client whose watch had ended, or one that stopped reading, could hold up delivery to all other clients. Cancelled watches are now skipped, a subscriber that does not read within ten seconds is dropped, and events are partitioned by namespace once per batch instead of once per subscriber.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="reference/cluster-config">Choose the port that receives non-intercepted traffic</Title>
 	<Body>
 The <code>telepresence.io/inject-inactive-port</code> annotation names the container port the traffic-agent forwards traffic to while no intercept is active, instead of the intercepted container port. It applies to workloads with exactly one intercepted container port.
