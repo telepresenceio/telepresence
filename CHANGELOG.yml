@@ -27,6 +27,15 @@ items:
   - version: 2.32.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Workload watch delivery survives cancelled and stalled subscribers
+        body: >-
+          The traffic-manager batches workload events and delivers them to every
+          watching client. A client whose watch had ended, or one that stopped
+          reading, could hold up delivery to all other clients. Cancelled watches
+          are now skipped, a subscriber that does not read within ten seconds is
+          dropped, and events are partitioned by namespace once per batch instead
+          of once per subscriber.
       - type: change
         title: Agent watch streams omit container environments the client does not need
         body: >-

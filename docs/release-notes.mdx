@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.32.0
 <Note>
+	<Title type="bugfix">Workload watch delivery survives cancelled and stalled subscribers</Title>
+	<Body>
+The traffic-manager batches workload events and delivers them to every watching client. A client whose watch had ended, or one that stopped reading, could hold up delivery to all other clients. Cancelled watches are now skipped, a subscriber that does not read within ten seconds is dropped, and events are partitioned by namespace once per batch instead of once per subscriber.
+  </Body>
+</Note>
+<Note>
 	<Title type="change">Agent watch streams omit container environments the client does not need</Title>
 	<Body>
 The traffic-manager sent every container's environment variables with each agent update, which made reconnect snapshots large in namespaces with many pods. Clients now receive agent updates without the environment maps and fetch a full description only when an ingest or intercept needs one. Older clients keep receiving the full payloads.
