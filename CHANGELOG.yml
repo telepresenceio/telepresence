@@ -27,6 +27,14 @@ items:
   - version: 2.32.0
     date: (TBD)
     notes:
+      - type: change
+        title: Daemon logs name the reason a session ended
+        body: >-
+          When a user or root daemon session stops, the logs said only that it
+          ended. Both daemons now cancel their session with a cause, such as a
+          disconnect request or a failed initialization, and the session summary
+          reports how long it ran, the cause, and any error, so a session that
+          disappears can be traced to what stopped it.
       - type: bugfix
         title: Workload watch delivery survives cancelled and stalled subscribers
         body: >-

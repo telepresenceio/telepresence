@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.32.0
 <Note>
+	<Title type="change">Daemon logs name the reason a session ended</Title>
+	<Body>
+When a user or root daemon session stops, the logs said only that it ended. Both daemons now cancel their session with a cause, such as a disconnect request or a failed initialization, and the session summary reports how long it ran, the cause, and any error, so a session that disappears can be traced to what stopped it.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Workload watch delivery survives cancelled and stalled subscribers</Title>
 	<Body>
 The traffic-manager batches workload events and delivers them to every watching client. A client whose watch had ended, or one that stopped reading, could hold up delivery to all other clients. Cancelled watches are now skipped, a subscriber that does not read within ten seconds is dropped, and events are partitioned by namespace once per batch instead of once per subscriber.
