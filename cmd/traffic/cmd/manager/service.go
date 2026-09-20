@@ -326,6 +326,14 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	now := time.Now()
 	st.RestoreClient(sessionID, client, auth.PrincipalFrom(ctx), now)
 	agents := slices.DeleteFunc(slices.Clone(info.Agents), func(agent *rpc.AgentInfo) bool {
+		if agent.GetContainerEnvironmentOmitted() {
+			// Compact watch snapshots are intentionally incomplete. Restoring
+			// one after a manager restart would make the omitted container
+			// environment authoritative until the real traffic-agent
+			// reconnects, breaking consumers that need it.
+			clog.Debugf(ctx, "Not restoring compact agent %s.%s; waiting for the traffic-agent to reconnect", agent.Name, agent.Namespace)
+			return true
+		}
 		if st.ManagesNamespace(ctx, agent.Namespace) {
 			return false
 		}
@@ -936,7 +944,8 @@ func (s *service) WatchAgents(session *rpc.SessionInfo, stream grpc.ServerStream
 		return err
 	}
 	ns := clientInfo.Namespace
-	return s.watchAgents(ctx, func(_ tunnel.SessionID, a *state.AgentSession) bool { return a.Namespace == ns }, stream)
+	return s.watchAgents(ctx, clientInfo.SupportsCompactAgentInfo,
+		func(_ tunnel.SessionID, a *state.AgentSession) bool { return a.Namespace == ns }, stream)
 }
 
 func infosEqual(a, b *rpc.AgentInfo) bool {
@@ -946,7 +955,47 @@ func infosEqual(a, b *rpc.AgentInfo) bool {
 	return proto.Equal(a, b)
 }
 
-func (s *service) watchAgents(ctx context.Context, includeAgent func(tunnel.SessionID, *state.AgentSession) bool, stream grpc.ServerStreamingServer[rpc.AgentInfoSnapshot]) error {
+// agentInfoForWatch omits the potentially huge container environment maps for
+// clients that advertise support for fetching full agent details on demand.
+// The remaining AgentInfo is immutable state, so sharing its small repeated
+// fields is safe while avoiding a full proto.Clone of the omitted maps.
+func agentInfoForWatch(ai *rpc.AgentInfo, compact bool) *rpc.AgentInfo {
+	if !compact {
+		return ai
+	}
+	containers := make(map[string]*rpc.AgentInfo_ContainerInfo, len(ai.Containers))
+	for name, container := range ai.Containers {
+		containers[name] = &rpc.AgentInfo_ContainerInfo{
+			MountPoint: container.MountPoint,
+			Mounts:     container.Mounts,
+		}
+	}
+	return &rpc.AgentInfo{
+		Name:                        ai.Name,
+		Kind:                        ai.Kind,
+		Namespace:                   ai.Namespace,
+		PodName:                     ai.PodName,
+		PodIp:                       ai.PodIp,
+		PodUid:                      ai.PodUid,
+		ApiPort:                     ai.ApiPort,
+		SftpPort:                    ai.SftpPort,
+		FtpPort:                     ai.FtpPort,
+		Product:                     ai.Product,
+		Version:                     ai.Version,
+		Mechanisms:                  ai.Mechanisms,
+		Containers:                  containers,
+		NodeAgent:                   ai.NodeAgent,
+		QuicPort:                    ai.QuicPort,
+		ContainerEnvironmentOmitted: true,
+	}
+}
+
+func (s *service) watchAgents(
+	ctx context.Context,
+	compact bool,
+	includeAgent func(tunnel.SessionID, *state.AgentSession) bool,
+	stream grpc.ServerStreamingServer[rpc.AgentInfoSnapshot],
+) error {
 	deltaCh := s.state.WatchAgents(ctx, includeAgent)
 	sessionDone, err := s.state.SessionDone(managerutil.GetSessionID(ctx))
 	if err != nil {
@@ -972,7 +1021,7 @@ func (s *service) watchAgents(ctx context.Context, includeAgent func(tunnel.Sess
 		for _, agentSessionID := range agentSessionIDs {
 			ag, ok := snapshot.Load(agentSessionID)
 			if ok && !m.IsInactive(types.UID(ag.PodUid)) {
-				agents = append(agents, ag.AgentInfo)
+				agents = append(agents, agentInfoForWatch(ag.AgentInfo, compact))
 			}
 		}
 		if firstSnap {
@@ -1007,6 +1056,7 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 		return err
 	}
 	ns := clientInfo.Namespace
+	compact := clientInfo.SupportsCompactAgentInfo
 	deltaCh := s.state.WatchAgents(ctx, func(_ tunnel.SessionID, a *state.AgentSession) bool { return a.Namespace == ns })
 	sessionDone, err := s.state.SessionDone(managerutil.GetSessionID(ctx))
 	if err != nil {
@@ -1023,7 +1073,7 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 			if rl := len(delta.Upserts); rl > 0 {
 				aid.Upserts = make(map[string]*rpc.AgentInfo, rl)
 				for k, v := range delta.Upserts {
-					aid.Upserts[string(k)] = v.AgentInfo
+					aid.Upserts[string(k)] = agentInfoForWatch(v.AgentInfo, compact)
 				}
 			}
 			if rl := len(delta.Removals); rl > 0 {

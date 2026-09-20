@@ -8,6 +8,12 @@
 The traffic-manager batches workload events and delivers them to every watching client. A client whose watch had ended, or one that stopped reading, could hold up delivery to all other clients. Cancelled watches are now skipped, a subscriber that does not read within ten seconds is dropped, and events are partitioned by namespace once per batch instead of once per subscriber.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Agent watch streams omit container environments the client does not need</div></div>
+<div style="margin-left: 15px">
+
+The traffic-manager sent every container's environment variables with each agent update, which made reconnect snapshots large in namespaces with many pods. Clients now receive agent updates without the environment maps and fetch a full description only when an ingest or intercept needs one. Older clients keep receiving the full payloads.
+</div>
+
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Choose the port that receives non-intercepted traffic](reference/cluster-config)</div></div>
 <div style="margin-left: 15px">
 
