@@ -27,78 +27,6 @@ items:
   - version: 2.32.0
     date: (TBD)
     notes:
-      - type: change
-        title: Daemon logs name the reason a session ended
-        body: >-
-          When a user or root daemon session stops, the logs said only that it
-          ended. Both daemons now cancel their session with a cause, such as a
-          disconnect request or a failed initialization, and the session summary
-          reports how long it ran, the cause, and any error, so a session that
-          disappears can be traced to what stopped it.
-      - type: bugfix
-        title: Workload watch delivery survives cancelled and stalled subscribers
-        body: >-
-          The traffic-manager batches workload events and delivers them to every
-          watching client. A client whose watch had ended, or one that stopped
-          reading, could hold up delivery to all other clients. Cancelled watches
-          are now skipped, a subscriber that does not read within ten seconds is
-          dropped, and events are partitioned by namespace once per batch instead
-          of once per subscriber.
-      - type: change
-        title: Agent watch streams omit container environments the client does not need
-        body: >-
-          The traffic-manager sent every container's environment variables with
-          each agent update, which made reconnect snapshots large in namespaces
-          with many pods. Clients now receive agent updates without the
-          environment maps and fetch a full description only when an ingest or
-          intercept needs one. Older clients keep receiving the full payloads.
-      - type: change
-        title: The traffic-agent reuses connections to HTTP intercept handlers
-        body: >-
-          Each request matched by an HTTP intercept opened a new tunnel to the
-          workstation and closed it when the response ended. The traffic-agent now
-          keeps a transport per intercept and protocol version, reuses its
-          connections across requests, and reports tunnel traffic when a connection
-          closes rather than after every request.
-      - type: feature
-        title: Choose the port that receives non-intercepted traffic
-        body: >-
-          The <code>telepresence.io/inject-inactive-port</code>
-          annotation names the container port the traffic-agent forwards traffic
-          to while no intercept is active, instead of the intercepted container
-          port. It applies to workloads with exactly one intercepted container port.
-        docs: reference/cluster-config
-      - type: bugfix
-        title: Intercept-only lists no longer wait for the workload watcher
-        body: >-
-          <code>telepresence list --intercepts</code> built its rows from the
-          workload watcher snapshot, so an active intercept was missing from the
-          list while that snapshot was empty or slow to arrive. The list is now
-          built from the current intercepts themselves, and workload details such
-          as services and replica counts are added when the watcher has them.
-      - type: bugfix
-        title: Recover promptly from stalled manager sessions
-        body: >-
-          Manager keepalive failures now use the existing session repair path
-          instead of ending the client session. Expired sessions recover
-          immediately, while repeated transient failures trigger repair
-          without dropping active intercepts.
-      - type: feature
-        title: Completion for use flag
-        body: >-
-          Automcompletion for <code>use</code> flag now dynamically generates
-          completions based on existing daemons.
-      - type: bugfix
-        title: Preserve agent images during concurrent pod injection
-        body: >-
-          The agent injector reused a cached sidecar config across concurrent
-          pod admissions while serializing that config temporarily cleared
-          creation-only fields such as the traffic-agent image. A concurrent
-          admission could observe the cleared image and produce invalid
-          traffic-agent and init-container patches with empty image fields.
-          Serialization now strips those fields from a local copy, so parallel
-          pod creation cannot corrupt the cached config or block a workload
-          rollout.
       - type: feature
         title: Guided traffic-manager setup with telepresence setup
         body: >-
@@ -123,98 +51,6 @@ items:
           need access, so the client's cluster permissions can be minimized
           without hand-editing a values file.
         docs: reference/setup
-      - type: bugfix
-        title: Intercepts work in namespaces created after a no-injector manager started
-        body: >-
-          With <code>agentInjector.enabled=false</code>, the traffic-manager
-          only watched the namespaces that existed when its pod started.
-          A managed namespace created later never got watchers, so every
-          intercept of a workload there failed with <code>has no
-          interceptable port</code> until the manager was restarted, and
-          Service changes never refreshed already-generated agent
-          configurations. The manager now follows namespace changes and
-          keeps agent configurations up to date even when the
-          agent-injector is disabled.
-      - type: bugfix
-        title: Crossing between namespace-selector and cluster-wide scope restarts the traffic-manager
-        body: >-
-          A <code>helm upgrade</code> that added or removed the
-          <code>namespaceSelector</code> of a live installation kept the
-          running pod, which continued with the informer topology of its
-          old scope and left workload watching -- and with it
-          <code>telepresence list</code> and agent-config generation --
-          broken until a manual restart. The scope is now stamped into the
-          pod template, so an upgrade crossing that boundary rolls the
-          deployment, exactly as a change to the static
-          <code>namespaces</code> list always has. Changes within a
-          selector are still picked up live, without a restart.
-      - type: feature
-        title: Required grant for Telepresence-specific RBAC authorization
-        body: >-
-          The new Helm setting <code>security.authorization.requiredGrant</code>
-          (<code>portforward</code>, <code>telepresence</code>, or
-          <code>any</code>; default <code>any</code>) selects which RBAC
-          grant the traffic-manager requires when it authorizes a caller:
-          the legacy <code>pods/portforward</code> permission, Telepresence's
-          own policy attributes -- <code>create</code> on
-          <code>connections.telepresence.io</code> to connect, and
-          <code>create</code> or <code>get</code> on
-          <code>attachments.telepresence.io</code> to intercept or ingest a
-          named workload -- or either. The chart renders client Roles to
-          match, the manager logs a migration warning whenever a caller
-          authorizes only via the legacy grant, and sessions and intercepts
-          restored after a manager restart are re-authorized and rebuilt
-          from their specifications.
-        docs: reference/rbac
-      - type: change
-        title: Ambiguous workload names must state their kind
-        body: >-
-          When several enabled workload kinds have a workload with the same
-          name in a namespace, the traffic-manager now rejects an agent
-          request that does not state the intended kind instead of silently
-          picking one in priority order. <code>telepresence ingest</code>
-          gained a <code>--workload-kind</code> flag to qualify such names.
-      - type: feature
-        title: Log gathering and namespace discovery through the traffic-manager
-        body: >-
-          <code>telepresence gather-logs</code> now streams traffic-manager
-          and traffic-agent logs (and, with <code>--get-pod-yaml</code>, pod
-          manifests) through the traffic-manager, which reads them on the
-          client's behalf, and a client watching all namespaces receives the
-          manager's managed-namespace list the same way. A client therefore
-          no longer needs Kubernetes permissions to list pods, read
-          <code>pods/log</code>, or list namespaces; log access is instead
-          authorized by <code>get</code> on the <code>logs</code> and
-          <code>logs/yaml</code> resources in <code>telepresence.io</code>,
-          which the chart's client Roles grant. The streaming bounds are
-          tunable through the new Helm setting <code>logStreaming</code>,
-          and both features fall back to the old direct Kubernetes API
-          access when the traffic-manager predates them.
-        docs: reference/rbac
-      - type: change
-        title: The traffic-manager runs as a StatefulSet with a fixed pod name
-        body: >-
-          The traffic-manager Deployment is now a single-replica StatefulSet
-          whose pod is always named <code>traffic-manager-0</code>. A
-          pre-upgrade hook migrates an existing Deployment install
-          automatically; rolling back to an older chart requires uninstall
-          and reinstall. Because a one-replica StatefulSet cannot surge a
-          replacement pod, an image update includes a brief window with no
-          ready manager -- client sessions survive it and re-establish with
-          their intercepts intact.
-      - type: feature
-        title: Clients connect to the traffic-manager by its fixed pod name
-        body: >-
-          The client now port-forwards directly to the
-          <code>traffic-manager-0</code> pod, so the only Kubernetes
-          permission a connection needs is <code>create</code> on
-          <code>pods/portforward</code> for that one pod name. The previous
-          discovery grants (get services, list pods) remain available as a
-          fallback and are rendered while the new Helm setting
-          <code>clientRbac.legacyAccess</code> is true (the default);
-          pre-2.33 clients and installs that override <code>apiPort</code>
-          still need them.
-        docs: reference/rbac
       - type: feature
         title: External control endpoint for clients without Kubernetes API access
         body: >-
@@ -233,6 +69,177 @@ items:
           cert-manager. The documentation calls this approach Direct
           Connect.
         docs: reference/external-endpoint
+      - type: feature
+        title: Required grant for Telepresence-specific RBAC authorization
+        body: >-
+          The new Helm setting <code>security.authorization.requiredGrant</code>
+          (<code>portforward</code>, <code>telepresence</code>, or
+          <code>any</code>; default <code>any</code>) selects which RBAC
+          grant the traffic-manager requires when it authorizes a caller:
+          the legacy <code>pods/portforward</code> permission, Telepresence's
+          own policy attributes -- <code>create</code> on
+          <code>connections.telepresence.io</code> to connect, and
+          <code>create</code> or <code>get</code> on
+          <code>attachments.telepresence.io</code> to intercept or ingest a
+          named workload -- or either. The chart renders client Roles to
+          match, the manager logs a migration warning whenever a caller
+          authorizes only via the legacy grant, and sessions and intercepts
+          restored after a manager restart are re-authorized and rebuilt
+          from their specifications.
+        docs: reference/rbac
+      - type: feature
+        title: Clients connect to the traffic-manager by its fixed pod name
+        body: >-
+          The client now port-forwards directly to the
+          <code>traffic-manager-0</code> pod, so the only Kubernetes
+          permission a connection needs is <code>create</code> on
+          <code>pods/portforward</code> for that one pod name. The previous
+          discovery grants (get services, list pods) remain available as a
+          fallback and are rendered while the new Helm setting
+          <code>clientRbac.legacyAccess</code> is true (the default);
+          pre-2.33 clients and installs that override <code>apiPort</code>
+          still need them.
+        docs: reference/rbac
+      - type: feature
+        title: Log gathering and namespace discovery through the traffic-manager
+        body: >-
+          <code>telepresence gather-logs</code> now streams traffic-manager
+          and traffic-agent logs (and, with <code>--get-pod-yaml</code>, pod
+          manifests) through the traffic-manager, which reads them on the
+          client's behalf, and a client watching all namespaces receives the
+          manager's managed-namespace list the same way. A client therefore
+          no longer needs Kubernetes permissions to list pods, read
+          <code>pods/log</code>, or list namespaces; log access is instead
+          authorized by <code>get</code> on the <code>logs</code> and
+          <code>logs/yaml</code> resources in <code>telepresence.io</code>,
+          which the chart's client Roles grant. The streaming bounds are
+          tunable through the new Helm setting <code>logStreaming</code>,
+          and both features fall back to the old direct Kubernetes API
+          access when the traffic-manager predates them.
+        docs: reference/rbac
+      - type: feature
+        title: Choose the port that receives non-intercepted traffic
+        body: >-
+          The <code>telepresence.io/inject-inactive-port</code>
+          annotation names the container port the traffic-agent forwards traffic
+          to while no intercept is active, instead of the intercepted container
+          port. It applies to workloads with exactly one intercepted container port.
+        docs: reference/cluster-config
+      - type: feature
+        title: Completion for use flag
+        body: >-
+          Automcompletion for <code>use</code> flag now dynamically generates
+          completions based on existing daemons.
+      - type: change
+        title: The traffic-manager runs as a StatefulSet with a fixed pod name
+        body: >-
+          The traffic-manager Deployment is now a single-replica StatefulSet
+          whose pod is always named <code>traffic-manager-0</code>. A
+          pre-upgrade hook migrates an existing Deployment install
+          automatically; rolling back to an older chart requires uninstall
+          and reinstall. Because a one-replica StatefulSet cannot surge a
+          replacement pod, an image update includes a brief window with no
+          ready manager -- client sessions survive it and re-establish with
+          their intercepts intact.
+      - type: change
+        title: The deprecated --replace flag has been removed
+        body: >-
+          The <code>--replace</code> flag of <code>telepresence intercept</code>, deprecated
+          since 2.22.0, has been removed. Use the <code>telepresence replace</code> command
+          instead. The traffic-manager now ignores HTTP filters that older clients send
+          along with a replace request.
+      - type: change
+        title: Ambiguous workload names must state their kind
+        body: >-
+          When several enabled workload kinds have a workload with the same
+          name in a namespace, the traffic-manager now rejects an agent
+          request that does not state the intended kind instead of silently
+          picking one in priority order. <code>telepresence ingest</code>
+          gained a <code>--workload-kind</code> flag to qualify such names.
+      - type: change
+        title: Agent watch streams omit container environments the client does not need
+        body: >-
+          The traffic-manager sent every container's environment variables with
+          each agent update, which made reconnect snapshots large in namespaces
+          with many pods. Clients now receive agent updates without the
+          environment maps and fetch a full description only when an ingest or
+          intercept needs one. Older clients keep receiving the full payloads.
+      - type: change
+        title: The traffic-agent reuses connections to HTTP intercept handlers
+        body: >-
+          Each request matched by an HTTP intercept opened a new tunnel to the
+          workstation and closed it when the response ended. The traffic-agent now
+          keeps a transport per intercept and protocol version, reuses its
+          connections across requests, and reports tunnel traffic when a connection
+          closes rather than after every request.
+      - type: change
+        title: Daemon logs name the reason a session ended
+        body: >-
+          When a user or root daemon session stops, the logs said only that it
+          ended. Both daemons now cancel their session with a cause, such as a
+          disconnect request or a failed initialization, and the session summary
+          reports how long it ran, the cause, and any error, so a session that
+          disappears can be traced to what stopped it.
+      - type: bugfix
+        title: Recover promptly from stalled manager sessions
+        body: >-
+          Manager keepalive failures now use the existing session repair path
+          instead of ending the client session. Expired sessions recover
+          immediately, while repeated transient failures trigger repair
+          without dropping active intercepts.
+      - type: bugfix
+        title: Workload watch delivery survives cancelled and stalled subscribers
+        body: >-
+          The traffic-manager batches workload events and delivers them to every
+          watching client. A client whose watch had ended, or one that stopped
+          reading, could hold up delivery to all other clients. Cancelled watches
+          are now skipped, a subscriber that does not read within ten seconds is
+          dropped, and events are partitioned by namespace once per batch instead
+          of once per subscriber.
+      - type: bugfix
+        title: Intercept-only lists no longer wait for the workload watcher
+        body: >-
+          <code>telepresence list --intercepts</code> built its rows from the
+          workload watcher snapshot, so an active intercept was missing from the
+          list while that snapshot was empty or slow to arrive. The list is now
+          built from the current intercepts themselves, and workload details such
+          as services and replica counts are added when the watcher has them.
+      - type: bugfix
+        title: Preserve agent images during concurrent pod injection
+        body: >-
+          The agent injector reused a cached sidecar config across concurrent
+          pod admissions while serializing that config temporarily cleared
+          creation-only fields such as the traffic-agent image. A concurrent
+          admission could observe the cleared image and produce invalid
+          traffic-agent and init-container patches with empty image fields.
+          Serialization now strips those fields from a local copy, so parallel
+          pod creation cannot corrupt the cached config or block a workload
+          rollout.
+      - type: bugfix
+        title: Crossing between namespace-selector and cluster-wide scope restarts the traffic-manager
+        body: >-
+          A <code>helm upgrade</code> that added or removed the
+          <code>namespaceSelector</code> of a live installation kept the
+          running pod, which continued with the informer topology of its
+          old scope and left workload watching -- and with it
+          <code>telepresence list</code> and agent-config generation --
+          broken until a manual restart. The scope is now stamped into the
+          pod template, so an upgrade crossing that boundary rolls the
+          deployment, exactly as a change to the static
+          <code>namespaces</code> list always has. Changes within a
+          selector are still picked up live, without a restart.
+      - type: bugfix
+        title: Intercepts work in namespaces created after a no-injector manager started
+        body: >-
+          With <code>agentInjector.enabled=false</code>, the traffic-manager
+          only watched the namespaces that existed when its pod started.
+          A managed namespace created later never got watchers, so every
+          intercept of a workload there failed with <code>has no
+          interceptable port</code> until the manager was restarted, and
+          Service changes never refreshed already-generated agent
+          configurations. The manager now follows namespace changes and
+          keeps agent configurations up to date even when the
+          agent-injector is disabled.
       - type: bugfix
         title: telepresence compose forwards --profile to docker compose
         body: >-
@@ -244,13 +251,6 @@ items:
           <code>up</code> is interrupted now carries the profiles too, so profiled
           services are stopped as well.
         docs: https://github.com/telepresenceio/telepresence/issues/4278
-      - type: change
-        title: The deprecated --replace flag has been removed
-        body: >-
-          The <code>--replace</code> flag of <code>telepresence intercept</code>, deprecated
-          since 2.22.0, has been removed. Use the <code>telepresence replace</code> command
-          instead. The traffic-manager now ignores HTTP filters that older clients send
-          along with a replace request.
   - version: 2.31.2
     date: 2026-08-02
     notes:
