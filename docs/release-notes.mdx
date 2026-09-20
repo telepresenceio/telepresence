@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.32.0
 <Note>
+	<Title type="feature" docs="reference/cluster-config">Choose the port that receives non-intercepted traffic</Title>
+	<Body>
+The <code>telepresence.io/inject-inactive-port</code> annotation names the container port the traffic-agent forwards traffic to while no intercept is active, instead of the intercepted container port. It applies to workloads with exactly one intercepted container port.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Intercept-only lists no longer wait for the workload watcher</Title>
 	<Body>
 <code>telepresence list --intercepts</code> built its rows from the workload watcher snapshot, so an active intercept was missing from the list while that snapshot was empty or slow to arrive. The list is now built from the current intercepts themselves, and workload details such as services and replica counts are added when the watcher has them.
