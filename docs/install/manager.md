@@ -9,9 +9,15 @@ Telepresence uses a traffic manager to send/receive cloud traffic to the user. T
 hood to install the traffic manager in your cluster. The `telepresence` binary embeds both `helm` and a helm-chart for a
 traffic-manager that is of the same version as the binary.
 
-The Telepresence Helm chart documentation is published at [ArtifactHUB](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss).
+There are three ways to install it, all using the same chart:
 
-You can also use `helm` command directly, see [Install With Helm](#install-with-helm) for more details.
+- [`telepresence setup --apply`](#install-the-traffic-manager) probes the cluster, asks the questions the probes leave
+  open, and installs a traffic-manager configured to fit. This is the recommended way.
+- [`telepresence helm install`](#install-with-telepresence-helm-install) installs the embedded chart with the values you
+  give it, when you already know what you want.
+- [`helm install`](#install-with-helm) with the published chart, for clusters managed with your own Helm tooling.
+
+The Telepresence Helm chart documentation is published at [ArtifactHUB](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss).
 
 ## Prerequisites
 
@@ -24,13 +30,35 @@ See the [cloud provider installation notes](../install/cloud.md) for more.
 
 ## Install the Traffic Manager
 
-The telepresence cli can install the traffic manager for you. The basic install will install the same version as the client used.
+The recommended way to install the traffic manager is the guided setup:
 
-1. Install the Telepresence Traffic Manager with the following command:
+```shell
+telepresence setup --apply
+```
 
-   ```shell
-   telepresence helm install
-   ```
+`telepresence setup` first inspects the cluster without changing anything: whether you have the privileges to install,
+whether the QUIC endpoint and the node-agent are viable, whether the agent-injector webhook can reach the API server,
+how many namespaces there are, and what is already installed. It then asks only the questions the probes cannot answer,
+such as which namespaces the traffic-manager should manage, whether to enforce caller authentication, whether to enable
+[Direct Connect](../reference/external-endpoint.md), which RBAC grant clients must hold, and how clients should handle
+subnets that collide with your VPN. With `--apply` it installs (or upgrades) the traffic-manager from the answers and
+then verifies the result: the traffic-manager is ready, the QUIC endpoint answers, and the agent-injector has endpoints.
+
+The same command fits a GitOps workflow. `--output values.yaml` writes the answers as a plain Helm values file instead of
+installing, so the file can be reviewed and committed and later installed with `telepresence helm install --values
+values.yaml` or with `helm`. `--input values.yaml` pins earlier decisions so a later run only asks about what is new, and
+`--non-interactive` accepts the defaults. If you lack the privileges to install, the report lists exactly which
+permissions to ask a cluster administrator for. The [setup reference](../reference/setup.md) describes every probe,
+question, and verification.
+
+## Install with telepresence helm install
+
+When you already know the values you want, `telepresence helm install` installs the embedded chart directly. The basic
+install uses the chart defaults and installs the same version as the client:
+
+```shell
+telepresence helm install
+```
 
 ### How the traffic-agent reaches your workloads
 
@@ -108,7 +136,9 @@ See [the kubeconfig documentation](../reference/config.md#manager) for more info
 
 1. Download the cli of the version of Telepresence you wish to use.
 
-2. Run the `upgrade` command. Optionally with `--values` and/or `--set` flags 
+2. Run `telepresence setup --apply`. It detects the existing installation, keeps its current values as the defaults,
+   asks about anything the new version adds, and upgrades the traffic-manager. Alternatively, run the `upgrade` command
+   directly, optionally with `--values` and/or `--set` flags:
 
    ```shell
    telepresence helm upgrade
