@@ -355,9 +355,13 @@ func (e *engine) securityValues(vals *helm.Values) error {
 		vals.Security.Authorization = helm.Authorization{RequiredGrant: new(grant)}
 
 		if !e.answers.ExternalEndpoint {
-			if !e.facts.External.CertManager.Verdict.Likely() && len(e.facts.External.TLSSecrets) == 0 {
-				e.notes.info("Direct Connect (an external control endpoint) needs a kubernetes.io/tls Secret in the manager namespace or " +
-					"cert-manager; neither was found, so none is proposed")
+			switch ext := e.facts.External; {
+			case ext.SecretsListDenied:
+				e.notes.info("Direct Connect not proposed: setup may not list Secrets in the manager namespace, so it cannot tell " +
+					"whether a TLS certificate exists")
+			case !ext.CertManager.Verdict.Likely() && len(ext.TLSSecrets) == 0:
+				e.notes.info("Direct Connect not proposed: it needs a kubernetes.io/tls Secret in the manager namespace or " +
+					"cert-manager; add one and run setup again")
 			}
 		}
 	}
@@ -673,13 +677,19 @@ func (e *engine) quicValues(clusterScope bool) (helm.QuicTunnel, error) {
 		}
 	default:
 		switch {
+		case lb == VerdictYes:
+			enabled = true
+			e.notes.info("QUIC enabled with a LoadBalancer service")
 		case lb.Likely():
 			enabled = true
-			e.notes.info("QUIC enabled with the default LoadBalancer service: " + strings.Join(e.facts.Quic.LoadBalancer.Evidence, "; "))
+			e.notes.info("QUIC enabled with a LoadBalancer service; " + strings.Join(e.facts.Quic.LoadBalancer.Evidence, "; "))
 		case nodePortViable && clusterScope:
 			enabled = true
 			serviceType = "NodePort"
-			e.notes.info("QUIC enabled with a NodePort service; the traffic-manager needs cluster-wide node access for NodePort discovery")
+			e.notes.info("QUIC enabled with a NodePort service, since no LoadBalancer is available")
+		case nodePortViable:
+			e.notes.info("QUIC disabled: no LoadBalancer is available, and a NodePort service needs a traffic-manager that manages " +
+				"all namespaces; widen the managed scope, set quicTunnel.externalHost, or provide a LoadBalancer")
 		default:
 			e.notes.info(fmt.Sprintf("QUIC disabled: no viable service type (loadBalancer %s, nodePort %s)", lb, np))
 		}
