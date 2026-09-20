@@ -48,7 +48,7 @@ func GetFactory(ctx context.Context, ns string) GlobalFactory {
 		k8sOpts, argoOpts := getOpts(ns)
 		i := k8sapi.GetJoinedClientSetInterface(ctx)
 		k8sFactory := informers.NewSharedInformerFactoryWithOptions(i, 0, k8sOpts...)
-		argoRolloutFactory := argorolloutsinformer.NewSharedInformerFactoryWithOptions(i, 0, argoOpts...)
+		argoRolloutFactory := argorolloutsinformer.NewSharedInformerFactoryWithOptions(i.ArgoRollouts(), 0, argoOpts...)
 		return NewDefaultGlobalFactory(k8sFactory, argoRolloutFactory), false
 	})
 	return gf

@@ -14,8 +14,6 @@ import (
 	"net/url"
 	"sync"
 
-	"golang.org/x/net/http2"
-
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
@@ -91,23 +89,29 @@ func (f *tcp) targetUsesTLS(ctx context.Context) bool {
 	return false
 }
 
-func (f *tcp) configureDownstreamTLS(ctx context.Context, server *http.Server, listener net.Listener) (net.Listener, error) {
+func (f *tcp) configureDownstreamTLS(ctx context.Context, server *http.Server, listener net.Listener) net.Listener {
 	tm := f.tlsManager
 	tp := f.Target().Port()
 	if tm == nil || !tm.UseTLS(ctx, tp) {
-		return listener, nil
+		return listener
 	}
 	cert := tm.GetDownstreamCertificate(tp)
 	if cert == nil {
-		return listener, nil
+		return listener
 	}
-	server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{*cert}}
-	listener = tls.NewListener(listener, server.TLSConfig)
-	err := http2.ConfigureServer(server, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to configure HTTP2 server: %v", err)
+	// The listener is wrapped here rather than served with ServeTLS, so the
+	// ALPN protocols and the HTTP/2 server protocol are enabled explicitly.
+	server.TLSConfig = &tls.Config{
+		Certificates: []tls.Certificate{*cert},
+		NextProtos:   []string{"h2", "http/1.1"},
 	}
-	return listener, nil
+	pr := new(http.Protocols)
+	if server.Protocols != nil {
+		*pr = *server.Protocols
+	}
+	pr.SetHTTP2(true)
+	server.Protocols = pr
+	return tls.NewListener(listener, server.TLSConfig)
 }
 
 func (f *tcp) acceptHTTPLoop(ctx context.Context, listener net.Listener) {
@@ -130,11 +134,7 @@ func (f *tcp) acceptHTTPLoop(ctx context.Context, listener net.Listener) {
 		Protocols: f.protocols(ctx, false),
 	}
 
-	var err error
-	listener, err = f.configureDownstreamTLS(ctx, server, listener)
-	if err != nil {
-		return
-	}
+	listener = f.configureDownstreamTLS(ctx, server, listener)
 
 	go func() {
 		clog.Debugf(ctx, "Starting HTTP intercept forwarder on %s", la)

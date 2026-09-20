@@ -1,6 +1,6 @@
 module github.com/telepresenceio/telepresence/cmd/teleroute
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -8,7 +8,7 @@ require (
 	github.com/puzpuzpuz/xsync/v4 v4.5.0
 	github.com/telepresenceio/clog v0.0.0-20260114221933-287514cf9831
 	github.com/telepresenceio/telepresence/rpc/v2 v2.31.2
-	google.golang.org/grpc v1.83.1
+	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -16,10 +16,10 @@ require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/coreos/go-systemd v0.0.0-20191104093116-d3cd4ed1dbcf // indirect
 	github.com/docker/go-connections v0.8.1 // indirect
-	golang.org/x/net v0.58.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
+	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260918162117-cecb64721679 // indirect
 )
 
 replace github.com/telepresenceio/telepresence/rpc/v2 => ./rpc
