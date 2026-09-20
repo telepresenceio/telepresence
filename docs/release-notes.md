@@ -20,6 +20,12 @@ The kubeauth daemon served exec-plugin cluster credentials to any caller on the 
 A client whose attachment grant covers a single workload can create its intercept, but the traffic-manager denies the namespace-wide workload watch that the user daemon starts for it. The user daemon retried that denial forever, so the CLI hung after the intercept was already active. A denied or unmanaged namespace now ends the watch at once and the error reaches the caller, so the intercept command finishes and <code>telepresence list</code> reports the denial instead of an empty result.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Unchanged intercept updates no longer rewrite the stored intercept</div></div>
+<div style="margin-left: 15px">
+
+The traffic-manager compares the result of an intercept update with the stored intercept and keeps the stored one when nothing changed, so no-op updates no longer bump the modification time or notify watchers.
+</div>
+
 ## Version 2.32.2 <span style="font-size: 16px;">(October  8)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Root daemon no longer shuts down after a brief stall](https://github.com/telepresenceio/telepresence/issues/4332)</div></div>
 <div style="margin-left: 15px">

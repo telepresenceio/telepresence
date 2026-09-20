@@ -54,6 +54,12 @@ items:
           command finishes and <code>telepresence list</code> reports the
           denial instead of an empty result.
         docs: https://github.com/telepresenceio/telepresence/pull/4341
+      - type: change
+        title: Unchanged intercept updates no longer rewrite the stored intercept
+        body: >-
+          The traffic-manager compares the result of an intercept update with the
+          stored intercept and keeps the stored one when nothing changed, so
+          no-op updates no longer bump the modification time or notify watchers.
   - version: 2.32.2
     date: 2026-10-08
     notes:
