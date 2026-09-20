@@ -521,19 +521,26 @@ func TestRecommend_SecurityValues(t *testing.T) {
 	t.Run("enforcing without an external endpoint and no prerequisites notes it", func(t *testing.T) {
 		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) { a.EnforceAuth = true }))
 		require.NoError(t, err)
-		assert.Contains(t, p.notesText(), "neither was found, so none is proposed")
+		assert.Contains(t, p.notesText(), "Direct Connect not proposed: it needs")
+	})
+	t.Run("denied Secret listing is reported instead of a missing certificate", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) { f.External.SecretsListDenied = true })
+		p, err := Recommend(facts, recAnswers(func(a *Answers) { a.EnforceAuth = true }))
+		require.NoError(t, err)
+		assert.Contains(t, p.notesText(), "Direct Connect not proposed: setup may not list Secrets")
+		assert.NotContains(t, p.notesText(), "add one and run setup again")
 	})
 	t.Run("cert-manager available suppresses the no-prerequisites note", func(t *testing.T) {
 		facts := recFacts(func(f *ClusterFacts) { f.External.CertManager = Finding{Verdict: VerdictYes} })
 		p, err := Recommend(facts, recAnswers(func(a *Answers) { a.EnforceAuth = true }))
 		require.NoError(t, err)
-		assert.NotContains(t, p.notesText(), "neither was found")
+		assert.NotContains(t, p.notesText(), "Direct Connect not proposed")
 	})
 	t.Run("an existing TLS Secret suppresses the no-prerequisites note", func(t *testing.T) {
 		facts := recFacts(func(f *ClusterFacts) { f.External.TLSSecrets = []TLSSecretFacts{{Name: "my-secret"}} })
 		p, err := Recommend(facts, recAnswers(func(a *Answers) { a.EnforceAuth = true }))
 		require.NoError(t, err)
-		assert.NotContains(t, p.notesText(), "neither was found")
+		assert.NotContains(t, p.notesText(), "Direct Connect not proposed")
 	})
 }
 

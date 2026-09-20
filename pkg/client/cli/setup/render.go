@@ -112,7 +112,7 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 		credentialDescription(facts.ClientAuth), pf.X509KubeSystem.Verdict), pf.X509KubeSystem.Evidence)
 
 	q := &facts.Quic
-	area(w, "quic", fmt.Sprintf("provider %s, loadBalancer %s, nodePort %s", orUnknown(q.Provider), q.LoadBalancer.Verdict, q.NodePort.Verdict),
+	area(w, "quic", fmt.Sprintf("provider %s, loadBalancer %s, nodePort %s", providerDisplay(orUnknown(q.Provider)), q.LoadBalancer.Verdict, q.NodePort.Verdict),
 		concat(q.LoadBalancer.Evidence, q.NodePort.Evidence))
 
 	na := &facts.NodeAgent
