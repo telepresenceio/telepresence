@@ -23,7 +23,7 @@ The new Helm setting <code>security.authorization.requiredGrant</code> (<code>po
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Clients connect to the traffic-manager by its fixed pod name](reference/rbac)</div></div>
 <div style="margin-left: 15px">
 
-The client now port-forwards directly to the <code>traffic-manager-0</code> pod, so the only Kubernetes permission a connection needs is <code>create</code> on <code>pods/portforward</code> for that one pod name. The previous discovery grants (get services, list pods) remain available as a fallback and are rendered while the new Helm setting <code>clientRbac.legacyAccess</code> is true (the default); pre-2.33 clients and installs that override <code>apiPort</code> still need them.
+The client now port-forwards directly to the <code>traffic-manager-0</code> pod, so the only Kubernetes permission a connection needs is <code>create</code> on <code>pods/portforward</code> for that one pod name. The previous discovery grants (get services, list pods) remain available as a fallback and are rendered while the new Helm setting <code>clientRbac.legacyAccess</code> is true (the default); pre-2.32 clients and installs that override <code>apiPort</code> still need them.
 </div>
 
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Log gathering and namespace discovery through the traffic-manager](reference/rbac)</div></div>
@@ -54,12 +54,6 @@ The traffic-manager Deployment is now a single-replica StatefulSet whose pod is 
 <div style="margin-left: 15px">
 
 The <code>--replace</code> flag of <code>telepresence intercept</code>, deprecated since 2.22.0, has been removed. Use the <code>telepresence replace</code> command instead. The traffic-manager now ignores HTTP filters that older clients send along with a replace request.
-</div>
-
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ambiguous workload names must state their kind</div></div>
-<div style="margin-left: 15px">
-
-When several enabled workload kinds have a workload with the same name in a namespace, the traffic-manager now rejects an agent request that does not state the intended kind instead of silently picking one in priority order. <code>telepresence ingest</code> gained a <code>--workload-kind</code> flag to qualify such names.
 </div>
 
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Agent watch streams omit container environments the client does not need</div></div>

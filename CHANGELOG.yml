@@ -97,7 +97,7 @@ items:
           discovery grants (get services, list pods) remain available as a
           fallback and are rendered while the new Helm setting
           <code>clientRbac.legacyAccess</code> is true (the default);
-          pre-2.33 clients and installs that override <code>apiPort</code>
+          pre-2.32 clients and installs that override <code>apiPort</code>
           still need them.
         docs: reference/rbac
       - type: feature
@@ -148,14 +148,6 @@ items:
           since 2.22.0, has been removed. Use the <code>telepresence replace</code> command
           instead. The traffic-manager now ignores HTTP filters that older clients send
           along with a replace request.
-      - type: change
-        title: Ambiguous workload names must state their kind
-        body: >-
-          When several enabled workload kinds have a workload with the same
-          name in a namespace, the traffic-manager now rejects an agent
-          request that does not state the intended kind instead of silently
-          picking one in priority order. <code>telepresence ingest</code>
-          gained a <code>--workload-kind</code> flag to qualify such names.
       - type: change
         title: Agent watch streams omit container environments the client does not need
         body: >-

@@ -35,8 +35,11 @@ $ telepresence helm install
 Traffic Manager installed successfully
 ```
 
-See [Install Traffic Manager](install/manager.md) for custom namespaces, Helm
-values, and installation as part of your own charts.
+This installs the chart defaults, which is all the quick start needs. For a
+cluster you will keep, run `telepresence setup --apply` instead: it inspects the
+cluster, asks a few questions, and installs a traffic-manager configured to fit.
+See [Install Traffic Manager](install/manager.md) for the guided setup, custom
+namespaces, Helm values, and installation as part of your own charts.
 
 ## 2. Deploy the sample service
 
