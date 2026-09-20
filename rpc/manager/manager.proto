@@ -21,6 +21,10 @@ message ClientInfo {
   string product = 3;  // "telepresence"
   string version = 4;
 
+  // Clients that set this can receive lightweight AgentInfo updates from the
+  // watch streams and fetch full container environments only when needed.
+  bool supports_compact_agent_info = 7;
+
   reserved 5; // was api_key
 }
 
@@ -81,6 +85,11 @@ message AgentInfo {
   // forwarder (see docs/reference/quic-transport-architecture.md, "Agent connections
   // over QUIC"). 0 means this agent has no QUIC listener.
   int32 quic_port = 16;
+
+  // True when this AgentInfo came from a lightweight watch snapshot and its
+  // container environment maps were intentionally omitted. Callers that need
+  // those maps must fetch a full AgentInfo through EnsureAgent.
+  bool container_environment_omitted = 17;
 
   reserved 6;
 }
