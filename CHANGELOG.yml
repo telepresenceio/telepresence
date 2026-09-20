@@ -36,6 +36,14 @@ items:
           port. It applies to workloads with exactly one intercepted container port.
         docs: reference/cluster-config
       - type: bugfix
+        title: Intercept-only lists no longer wait for the workload watcher
+        body: >-
+          <code>telepresence list --intercepts</code> built its rows from the
+          workload watcher snapshot, so an active intercept was missing from the
+          list while that snapshot was empty or slow to arrive. The list is now
+          built from the current intercepts themselves, and workload details such
+          as services and replica counts are added when the watcher has them.
+      - type: bugfix
         title: Recover promptly from stalled manager sessions
         body: >-
           Manager keepalive failures now use the existing session repair path

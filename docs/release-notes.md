@@ -8,6 +8,12 @@
 The <code>telepresence.io/inject-inactive-port</code> annotation names the container port the traffic-agent forwards traffic to while no intercept is active, instead of the intercepted container port. It applies to workloads with exactly one intercepted container port.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Intercept-only lists no longer wait for the workload watcher</div></div>
+<div style="margin-left: 15px">
+
+<code>telepresence list --intercepts</code> built its rows from the workload watcher snapshot, so an active intercept was missing from the list while that snapshot was empty or slow to arrive. The list is now built from the current intercepts themselves, and workload details such as services and replica counts are added when the watcher has them.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Recover promptly from stalled manager sessions</div></div>
 <div style="margin-left: 15px">
 
