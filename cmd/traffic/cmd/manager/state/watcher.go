@@ -72,12 +72,18 @@ type handlerReg struct {
 // always fits.
 const subscriptionBacklog = 8
 
+// subscriptionSendTimeout bounds how long dispatch waits for one subscriber
+// to accept a batch before dropping it, so a subscriber that has stopped
+// reading cannot stall delivery to everyone else.
+const subscriptionSendTimeout = 10 * time.Second
+
 // subscription is a single Subscribe call: the channel events are delivered
-// on, and the namespace they're filtered to.
+// on, the namespace they're filtered to, and the means to cancel it.
 type subscription struct {
 	ch        chan<- []Event
 	namespace string
 	done      <-chan struct{}
+	cancel    context.CancelFunc
 }
 
 type watcher struct {
@@ -87,6 +93,8 @@ type watcher struct {
 	timer                *time.Timer
 	events               []Event
 	enabledWorkloadKinds k8sapi.Kinds
+	// sendTimeout bounds delivery to one subscriber; see subscriptionSendTimeout.
+	sendTimeout time.Duration
 	// regs is populated by NewWatcher only, before the watcher is shared.
 	regs []handlerReg
 }
@@ -100,6 +108,7 @@ func NewWatcher(ctx context.Context, ns string, enabledWorkloadKinds k8sapi.Kind
 	w.namespace = ns
 	w.enabledWorkloadKinds = enabledWorkloadKinds
 	w.subscriptions = make(map[uuid.UUID]subscription)
+	w.sendTimeout = subscriptionSendTimeout
 	w.timer = time.AfterFunc(time.Duration(math.MaxInt64), func() {
 		w.dispatch(ctx)
 	})
@@ -113,29 +122,40 @@ func NewWatcher(ctx context.Context, ns string, enabledWorkloadKinds k8sapi.Kind
 
 func (w *watcher) dispatch(ctx context.Context) {
 	w.Lock()
-	ss := make([]subscription, 0, len(w.subscriptions))
+	ss := make([]subscription, len(w.subscriptions))
+	i := 0
 	for _, sub := range w.subscriptions {
-		ss = append(ss, sub)
+		ss[i] = sub
+		i++
 	}
 	events := w.events
 	w.events = nil
 	w.Unlock()
+
+	byNamespace := make(map[string][]Event)
+	for _, event := range events {
+		ns := event.Workload.GetNamespace()
+		byNamespace[ns] = append(byNamespace[ns], event)
+	}
+
+	timer := time.NewTimer(time.Duration(math.MaxInt64))
+	defer timer.Stop()
 	for _, s := range ss {
-		filtered := make([]Event, 0, len(events))
-		for _, event := range events {
-			if event.Workload.GetNamespace() == s.namespace {
-				filtered = append(filtered, event)
-			}
-		}
+		filtered := byNamespace[s.namespace]
 		if len(filtered) == 0 {
 			continue
 		}
+		timer.Reset(w.sendTimeout)
 		select {
 		case <-ctx.Done():
 			return
 		case <-s.done:
 		case s.ch <- filtered:
+		case <-timer.C:
+			clog.Warnf(ctx, "workload watch subscriber for %s stopped reading; dropping subscription", s.namespace)
+			s.cancel()
 		}
+		timer.Stop()
 	}
 }
 
@@ -217,11 +237,12 @@ func (w *watcher) Subscribe(ctx context.Context, namespace string) <-chan []Even
 	}
 	ch <- initialEvents
 
+	sctx, cancel := context.WithCancel(ctx)
 	w.Lock()
-	w.subscriptions[id] = subscription{ch: ch, namespace: namespace, done: ctx.Done()}
+	w.subscriptions[id] = subscription{ch: ch, namespace: namespace, done: sctx.Done(), cancel: cancel}
 	w.Unlock()
 	go func() {
-		<-ctx.Done()
+		<-sctx.Done()
 		w.Lock()
 		delete(w.subscriptions, id)
 		w.Unlock()

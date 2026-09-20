@@ -232,9 +232,11 @@ func TestWatcherDispatchSkipsCanceledSubscription(t *testing.T) {
 				ch:        ch,
 				namespace: "default",
 				done:      subCtx.Done(),
+				cancel:    cancel,
 			},
 		},
-		events: []Event{{Workload: k8sapi.Deployment(newTestDeployment("app", "default"))}},
+		events:      []Event{{Workload: k8sapi.Deployment(newTestDeployment("app", "default"))}},
+		sendTimeout: time.Minute,
 	}
 
 	dispatched := make(chan struct{})
@@ -255,4 +257,86 @@ func TestWatcherDispatchSkipsCanceledSubscription(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("dispatch blocked on canceled subscription")
 	}
+}
+
+// TestWatcherDispatchDropsStalledSubscriber verifies that a subscriber whose
+// channel is full and whose context is still live does not stall dispatch:
+// the send times out, the subscriber's context is canceled, and dispatch
+// returns promptly.
+func TestWatcherDispatchDropsStalledSubscriber(t *testing.T) {
+	subCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ch := make(chan []Event, 1)
+	ch <- nil // fill the buffer so a subsequent send blocks
+
+	w := &watcher{
+		subscriptions: map[uuid.UUID]subscription{
+			uuid.New(): {
+				ch:        ch,
+				namespace: "default",
+				done:      subCtx.Done(),
+				cancel:    cancel,
+			},
+		},
+		events:      []Event{{Workload: k8sapi.Deployment(newTestDeployment("app", "default"))}},
+		sendTimeout: 20 * time.Millisecond,
+	}
+
+	dispatched := make(chan struct{})
+	go func() {
+		w.dispatch(context.Background())
+		close(dispatched)
+	}()
+
+	select {
+	case <-dispatched:
+	case <-time.After(time.Second):
+		t.Fatal("dispatch did not return after a stalled subscriber timed out")
+	}
+
+	assert.Error(t, subCtx.Err(), "stalled subscriber's context must be canceled")
+}
+
+// TestWatcherDispatchPartitionsByNamespace verifies that events are
+// partitioned by namespace once per batch: each subscriber receives exactly
+// its own namespace's events, and a namespace with no subscriber gets nothing.
+func TestWatcherDispatchPartitionsByNamespace(t *testing.T) {
+	chA := make(chan []Event, 1)
+	chB := make(chan []Event, 1)
+	doneA := make(chan struct{})
+	doneB := make(chan struct{})
+
+	w := &watcher{
+		subscriptions: map[uuid.UUID]subscription{
+			uuid.New(): {ch: chA, namespace: "a", done: doneA, cancel: func() {}},
+			uuid.New(): {ch: chB, namespace: "b", done: doneB, cancel: func() {}},
+		},
+		events: []Event{
+			{Workload: k8sapi.Deployment(newTestDeployment("app-a1", "a"))},
+			{Workload: k8sapi.Deployment(newTestDeployment("app-a2", "a"))},
+			{Workload: k8sapi.Deployment(newTestDeployment("app-b1", "b"))},
+			{Workload: k8sapi.Deployment(newTestDeployment("app-c1", "c"))},
+		},
+		sendTimeout: time.Minute,
+	}
+
+	dispatched := make(chan struct{})
+	go func() {
+		w.dispatch(context.Background())
+		close(dispatched)
+	}()
+
+	select {
+	case <-dispatched:
+	case <-time.After(time.Second):
+		t.Fatal("dispatch did not return")
+	}
+
+	evsA, ok := receiveWithTimeout(t, chA, time.Second)
+	require.True(t, ok, "namespace a subscriber must receive its events")
+	assert.ElementsMatch(t, []string{"app-a1", "app-a2"}, eventNames(evsA))
+
+	evsB, ok := receiveWithTimeout(t, chB, time.Second)
+	require.True(t, ok, "namespace b subscriber must receive its event")
+	assert.ElementsMatch(t, []string{"app-b1"}, eventNames(evsB))
 }
