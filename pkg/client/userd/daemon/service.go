@@ -97,6 +97,7 @@ func newService(ctx context.Context, cancel context.CancelFunc, cfg client.Confi
 		fuseFtpMgr:     remotefs.NewFuseFTPManager(),
 		sessionRunning: make(chan struct{}),
 	}
+	s.initFTPServer(ctx, cfg)
 	close(s.sessionRunning)
 	s.quit = func(sessionIsLocked bool) {
 		cancel()
@@ -326,16 +327,6 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 		return err
 	}
 
-	if cfg.Intercept().UseFtp && !s.fuseFtpMgr.LinkedFTP() {
-		g.Go("fuseftp-server", func(c context.Context) error {
-			if err := s.InitFTPServer(c); err != nil {
-				return err
-			}
-			<-c.Done()
-			return nil
-		})
-	}
-
 	g.Go("config-reload", s.configReload)
 	if !rootSessionInProc {
 		// User daemon process survives multiple sessions.
@@ -355,6 +346,19 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 
 func (s *service) LinkedFTP() bool {
 	return s.fuseFtpMgr.LinkedFTP()
+}
+
+// initFTPServer records an unavailable FTP implementation as a mount capability
+// error. Some builds intentionally omit fuseftp, while ordinary clients can
+// still have intercept.useFtp configured.
+func (s *service) initFTPServer(ctx context.Context, cfg client.Config) {
+	if !cfg.Intercept().UseFtp || s.fuseFtpMgr.LinkedFTP() {
+		return
+	}
+	if err := s.InitFTPServer(ctx); err != nil {
+		s.fuseFTPError = err
+		clog.Warnf(ctx, "FTP remote mounts are unavailable: %v", err)
+	}
 }
 
 func (s *service) InitFTPServer(ctx context.Context) error {

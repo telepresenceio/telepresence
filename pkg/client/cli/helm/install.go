@@ -145,7 +145,7 @@ func getHelmConfig(ctx context.Context, clientGetter genericclioptions.RESTClien
 	return helmConfig, nil
 }
 
-func GetValues(ctx context.Context, req *Request) map[string]any {
+func GetValues(ctx context.Context, req *Request) *Values {
 	clientConfig := client.GetConfig(ctx)
 	imgConfig := clientConfig.Images()
 	imageRegistry := imgConfig.Registry(ctx)
@@ -153,19 +153,17 @@ func GetValues(ctx context.Context, req *Request) map[string]any {
 	if imageTag == "" {
 		imageTag = strings.TrimPrefix(client.Version(), "v")
 	}
-	vs := map[string]any{
-		"image": map[string]any{
-			"registry": imageRegistry,
-			"tag":      imageTag,
+	vs := &Values{
+		Image: Image{
+			Registry: new(imageRegistry),
+			Tag:      new(imageTag),
 		},
 	}
-	if !clientConfig.Grpc().MaxReceiveSizeV.IsZero() {
-		vs["grpc"] = map[string]any{
-			"maxReceiveSize": clientConfig.Grpc().MaxReceiveSizeV.String(),
-		}
+	if maxReceiveSize := clientConfig.Grpc().MaxReceiveSizeV; !maxReceiveSize.IsZero() {
+		vs.Grpc = Grpc{MaxReceiveSize: new(maxReceiveSize)}
 	}
 	if wai, wr := imgConfig.AgentImage(ctx), imgConfig.WebhookRegistry(ctx); wai != "" || wr != "" {
-		image := make(map[string]any)
+		image := AgentImage{}
 		if wai != "" {
 			i := strings.LastIndexByte(wai, '/')
 			if i >= 0 {
@@ -181,13 +179,13 @@ func GetValues(ctx context.Context, req *Request) map[string]any {
 				name = parts[0]
 				tag = parts[1]
 			}
-			image["name"] = name
-			image["tag"] = tag
+			image.Name = new(name)
+			image.Tag = new(tag)
 		}
 		if wr != "" {
-			image["registry"] = wr
+			image.Registry = new(wr)
 		}
-		vs["agent"] = map[string]any{"image": image}
+		vs.Agent = Agent{Image: image}
 	}
 	return vs
 }
@@ -220,9 +218,13 @@ func installNew(
 	helmConfig *action.Configuration,
 	releaseName, namespace string,
 	req *Request,
-	values map[string]any,
+	vals *Values,
 ) error {
 	clog.Infof(ctx, "No existing %s found in namespace %s, installing %s...", releaseName, namespace, chrt.Metadata.Version)
+	m, err := vals.ToMap()
+	if err != nil {
+		return err
+	}
 	install := action.NewInstall(helmConfig)
 	install.ReleaseName = releaseName
 	install.Namespace = namespace
@@ -234,7 +236,7 @@ func installNew(
 	install.Version = chrt.Metadata.Version
 	return runManagerHelm(ctx, ki, namespace, releaseName, func(c context.Context, timeout time.Duration) error {
 		install.Timeout = timeout
-		_, err := install.RunWithContext(c, chrt, values)
+		_, err := install.RunWithContext(c, chrt, m)
 		return err
 	})
 }
@@ -247,9 +249,13 @@ func upgradeExisting(
 	helmConfig *action.Configuration,
 	releaseName, ns string,
 	req *Request,
-	values map[string]any,
+	vals *Values,
 ) error {
 	clog.Infof(ctx, "Existing Traffic Manager %s found in namespace %s, upgrading to %s...", existingVer, ns, chrt.Metadata.Version)
+	m, err := vals.ToMap()
+	if err != nil {
+		return err
+	}
 	upgrade := action.NewUpgrade(helmConfig)
 	upgrade.Atomic = true
 	upgrade.Wait = true
@@ -260,7 +266,7 @@ func upgradeExisting(
 	upgrade.Version = chrt.Metadata.Version
 	return runManagerHelm(ctx, ki, ns, releaseName, func(c context.Context, timeout time.Duration) error {
 		upgrade.Timeout = timeout
-		_, err := upgrade.RunWithContext(c, releaseName, chrt, values)
+		_, err := upgrade.RunWithContext(c, releaseName, chrt, m)
 		return err
 	})
 }
@@ -526,13 +532,13 @@ func ensureIsDeleted(
 	return uninstallExisting(ctx, helmConfig, releaseName, namespace, req)
 }
 
-func getTrafficManagerVersion(values map[string]any) (semver.Version, error) {
-	if img, ok := values["image"].(map[string]any); ok {
-		if tag, ok := img["tag"].(string); ok {
-			v, err := semver.ParseTolerant(tag)
-			if err != nil {
-				return v, fmt.Errorf("unable to parse chart value image.tag %q to a version: %w", tag, err)
-			}
+// TrafficManagerVersion resolves the chart/manager version the values imply:
+// the client's own version, after validating that an image.tag, when set,
+// parses as a version.
+func (v *Values) TrafficManagerVersion() (semver.Version, error) {
+	if v.Image.Tag != nil {
+		if _, err := semver.ParseTolerant(*v.Image.Tag); err != nil {
+			return semver.Version{}, fmt.Errorf("unable to parse chart value image.tag %q to a version: %w", *v.Image.Tag, err)
 		}
 	}
 	return version.Structured, nil

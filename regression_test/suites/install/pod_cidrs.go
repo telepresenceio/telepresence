@@ -40,7 +40,7 @@ type PodCIDRs struct {
 }
 
 func init() {
-	rt.Register(&PodCIDRs{}, rt.InArea("install"))
+	rt.Register(&PodCIDRs{}, rt.InArea("install"), rt.NeedsManager(managers.Default))
 }
 
 // Test_ExplicitCIDRsReachStatus switches the shared release to

@@ -74,9 +74,10 @@ ServiceAccount token would otherwise pass authentication.
 
 Creating an intercept requires the physical ability to receive the workload's
 traffic, which already implies `create` access on `pods/portforward` in the
-target namespace. The traffic-manager makes that requirement explicit:
-`CreateIntercept` runs a Kubernetes `SubjectAccessReview` asking whether the
-caller may `create` `pods/portforward` in the intercepted namespace.
+target namespace. The traffic-manager makes that requirement explicit: when
+an intercept is created, it runs a Kubernetes `SubjectAccessReview` asking
+whether the caller may `create` `pods/portforward` in the intercepted
+namespace.
 
 The check runs in two steps:
 
@@ -160,7 +161,7 @@ caller presents a session credential, and the agent verifies it.
 The credential is rooted in the traffic-manager's in-memory QUIC CA (the same
 CA that signs the QUIC tunnel's certificates), regenerated on every manager
 restart, which revokes every outstanding credential at once. It takes two
-forms, both minted by a single `GetSessionCredential` call and sharing the
+forms, both minted by the manager in a single request and sharing the
 same 24-hour expiry:
 
 - A **client certificate**, CommonName set to the session ID, used wherever
@@ -171,8 +172,8 @@ same 24-hour expiry:
   dial-watcher calls (the QUIC and port-forwarded paths to one agent share a
   single gRPC connection, so the same metadata covers both).
 
-`GetSessionCredential` mints both forms only for the calling session's own
-owner, the same ownership check the manager's other session-scoped RPCs use.
+The manager mints both forms only for the calling session's own owner, the
+same ownership check its other session-scoped calls use.
 
 ### Enforcement mirrors the authentication mode
 
@@ -243,7 +244,7 @@ disabled/permissive agents; only enforcing mode requires it to be upgraded
 first. A new client talking to an old agent gets no benefit from its
 credential — the old agent has no verification code path, so its ports stay
 exactly as open as before — but nothing breaks. Talking through a manager
-that predates `GetSessionCredential`, a new agent never receives credential
+that predates session credentials, a new agent never receives credential
 material to verify against, so it falls back to accepting every connection
 and call unauthenticated, the same as before this feature existed. Every
 combination keeps working outside enforcing mode.

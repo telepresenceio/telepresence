@@ -5,17 +5,20 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"strings"
 	"time"
 
+	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/eventwatch"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-// managerDeploymentName is the chart's fixed traffic-manager Deployment name.
-const managerDeploymentName = "traffic-manager"
+// managerStatefulSetName is the chart's fixed traffic-manager StatefulSet name; older
+// chart versions run the traffic-manager as a Deployment of the same name instead.
+const managerStatefulSetName = "traffic-manager"
 
 // webhookConfigurationPrefix combined with the manager namespace names the
 // chart's MutatingWebhookConfiguration (agentInjector.webhook.name).
@@ -38,78 +41,117 @@ type HealthFacts struct {
 	InjectorEndpoints *Finding `json:"injectorEndpoints,omitempty"`
 	Quic              *Finding `json:"quic,omitempty"`
 	X509ClientAuth    *Finding `json:"x509ClientAuth,omitempty"`
+	ExternalEndpoint  *Finding `json:"externalEndpoint,omitempty"`
 	VersionSkew       Finding  `json:"versionSkew"`
 }
 
-// Clean reports whether no health check concluded "no"; a nil receiver (no
-// installed release, hence no checks) is clean.
-func (h *HealthFacts) Clean() bool {
-	if h == nil {
-		return true
-	}
-	for _, f := range []*Finding{&h.ManagerReady, h.Webhook, h.Certificate, h.InjectorEndpoints, h.Quic, h.X509ClientAuth, &h.VersionSkew} {
-		if f != nil && f.Verdict == VerdictNo {
-			return false
-		}
-	}
-	return true
-}
-
-// probeHealth runs the read-only doctor checks over the installed release.
-// Every check is one-shot and tolerates denials as VerdictUnknown.
-func (p *Prober) probeHealth(ctx context.Context, rel *ReleaseFacts, auth ClientAuthFacts) *HealthFacts {
+// probeHealth runs the read-only doctor checks over the installed release. mw is the
+// single manager-workload fetch GatherFacts made when it saw the release installed;
+// every other check is one-shot and tolerates denials as VerdictUnknown.
+func (p *Prober) probeHealth(ctx context.Context, rel *ReleaseFacts, auth ClientAuthFacts, mw managerWorkloadResult) *HealthFacts {
 	h := &HealthFacts{
-		ManagerReady: p.healthManager(ctx),
-		VersionSkew:  healthVersionSkew(rel),
+		ManagerReady: p.managerReadyFinding(ctx, mw),
+		VersionSkew:  rel.versionSkew(),
 	}
 	// The chart enables the agent-injector by default, so the checks run
 	// unless the release's values disable it explicitly.
-	if enabled, present := boolAt(rel.Values, "agentInjector", "enabled"); !present || enabled {
+	if injEnabled := rel.Values.AgentInjector.Enabled; injEnabled == nil || *injEnabled {
 		webhook, certificate := p.healthWebhook(ctx)
 		h.Webhook = &webhook
 		if certificate != nil {
 			h.Certificate = certificate
 		}
-		endpoints := injectorEndpointsFinding(ctx, p.KubeClient, p.ManagerNamespace, injectorName(rel.Values))
+		endpoints := injectorEndpointsFinding(ctx, p.KubeClient, p.ManagerNamespace, rel.Values.InjectorName())
 		h.InjectorEndpoints = &endpoints
 	}
-	if enabled, present := boolAt(rel.Values, "quicTunnel", "enabled"); present && enabled {
+	if deref(rel.Values.QuicTunnel.Enabled) {
 		quic, _, _ := quicServiceFinding(ctx, p.KubeClient, p.ManagerNamespace)
 		h.Quic = &quic
 	}
-	if mode, _ := valueAt(rel.Values, "security", "authentication", "mode"); mode == "enforcing" {
-		x509 := healthX509ClientAuth(rel, auth)
+	if rel.Values.AuthEnforced() {
+		x509 := rel.x509ClientAuth(auth)
 		h.X509ClientAuth = &x509
+	}
+	if deref(rel.Values.ExternalEndpoint.Enabled) {
+		ext := p.healthExternalEndpoint(ctx)
+		h.ExternalEndpoint = &ext
 	}
 	return h
 }
 
-// healthManager checks the traffic-manager Deployment's readiness and, when
-// it is unready, attaches the Warning events the API server still retains for
-// the release.
-func (p *Prober) healthManager(ctx context.Context) Finding {
-	dep, err := p.KubeClient.AppsV1().Deployments(p.ManagerNamespace).Get(ctx, managerDeploymentName, metav1.GetOptions{})
+// managerWorkloadResult is a single read of whichever object hosts the
+// traffic-manager: the StatefulSet the chart installs today, or the
+// Deployment an older chart version left behind. GatherFacts fetches it once
+// and derives both ReleaseFacts.Workload and the ManagerReady health finding
+// from it.
+type managerWorkloadResult struct {
+	Kind      string // "StatefulSet" or "Deployment"; empty when neither was readable
+	Desired   int32
+	Ready     int32
+	NotFound  bool
+	ReadError error
+}
+
+// managerWorkload fetches the traffic-manager StatefulSet, falling back to the
+// Deployment older chart versions used.
+func (p *Prober) managerWorkload(ctx context.Context) managerWorkloadResult {
+	sts, err := p.KubeClient.AppsV1().StatefulSets(p.ManagerNamespace).Get(ctx, managerStatefulSetName, meta.GetOptions{})
 	switch {
+	case err == nil:
+		return managerWorkloadResult{Kind: "StatefulSet", Desired: replicaCount(sts.Spec.Replicas), Ready: sts.Status.ReadyReplicas}
+	case !apierrors.IsNotFound(err):
+		return managerWorkloadResult{ReadError: fmt.Errorf("the %s statefulset could not be read: %w", managerStatefulSetName, err)}
+	}
+	dep, err := p.KubeClient.AppsV1().Deployments(p.ManagerNamespace).Get(ctx, managerStatefulSetName, meta.GetOptions{})
+	switch {
+	case err == nil:
+		return managerWorkloadResult{Kind: "Deployment", Desired: replicaCount(dep.Spec.Replicas), Ready: dep.Status.ReadyReplicas}
 	case apierrors.IsNotFound(err):
+		return managerWorkloadResult{NotFound: true}
+	default:
+		return managerWorkloadResult{ReadError: fmt.Errorf("the %s deployment could not be read: %w", managerStatefulSetName, err)}
+	}
+}
+
+// replicaCount resolves a workload's desired replica count, defaulting to 1 when the
+// spec leaves it unset.
+func replicaCount(replicas *int32) int32 {
+	if replicas == nil {
+		return 1
+	}
+	return *replicas
+}
+
+// managerReadyFinding classifies mw's replica readiness and, when it is
+// unready, attaches the Warning events the API server still retains for the
+// release; a Deployment result also carries the migration note.
+func (p *Prober) managerReadyFinding(ctx context.Context, mw managerWorkloadResult) Finding {
+	switch {
+	case mw.ReadError != nil:
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{mw.ReadError.Error()}}
+	case mw.NotFound:
 		return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf(
-			"the %s deployment was not found in namespace %s", managerDeploymentName, p.ManagerNamespace)}}
-	case err != nil:
-		return Finding{Verdict: VerdictUnknown, Evidence: []string{fmt.Sprintf(
-			"the %s deployment could not be read: %v", managerDeploymentName, err)}}
+			"the %s statefulset was not found in namespace %s", managerStatefulSetName, p.ManagerNamespace)}}
 	}
-	desired := int32(1)
-	if dep.Spec.Replicas != nil {
-		desired = *dep.Spec.Replicas
+	f := p.workloadReadiness(ctx, strings.ToLower(mw.Kind), mw.Desired, mw.Ready)
+	if mw.Kind == "Deployment" {
+		f.Evidence = append([]string{"the traffic-manager still runs as a Deployment; the upgrade migrates it to a StatefulSet"}, f.Evidence...)
 	}
+	return f
+}
+
+// workloadReadiness classifies a workload's replica readiness and, when it
+// is unready, attaches the Warning events the API server still retains for
+// the release.
+func (p *Prober) workloadReadiness(ctx context.Context, kind string, desired, ready int32) Finding {
 	if desired == 0 {
-		return Finding{Verdict: VerdictNo, Evidence: []string{"the deployment is scaled to zero replicas"}}
+		return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf("the %s is scaled to zero replicas", kind)}}
 	}
-	ready := dep.Status.ReadyReplicas
 	if ready >= desired {
 		return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("%d of %d replicas ready", ready, desired)}}
 	}
 	evidence := []string{fmt.Sprintf("%d of %d replicas ready", ready, desired)}
-	if es, err := eventwatch.ListWarnings(ctx, p.KubeClient, p.ManagerNamespace, managerDeploymentName); err == nil {
+	if es, err := eventwatch.ListWarnings(ctx, p.KubeClient, p.ManagerNamespace, managerStatefulSetName); err == nil {
 		for _, e := range es {
 			evidence = append(evidence, fmt.Sprintf("%s: %s", e.Reason, e.Note))
 			if len(evidence) > healthEventMax {
@@ -120,12 +162,45 @@ func (p *Prober) healthManager(ctx context.Context) Finding {
 	return Finding{Verdict: VerdictNo, Evidence: evidence}
 }
 
+// healthExternalEndpoint reports whether the external control endpoint's
+// Service is available, reusing the same single-look check the post-apply
+// verification runs. Only a missing Service or an unallocated NodePort are
+// "no"; anything else inconclusive (still provisioning, ClusterIP, a denied
+// or failed read, an unsupported type) is "unknown", not "no".
+func (p *Prober) healthExternalEndpoint(ctx context.Context) Finding {
+	kind, note, svc := externalServiceLook(ctx, p.KubeClient, p.ManagerNamespace)
+	switch {
+	case note == nil:
+		return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf(
+			"the %s service is %s, address %s", externalServiceName, svc.Spec.Type, externalServiceAddr(svc))}}
+	case kind == externalServiceNotFound || kind == externalServiceNoNodePort:
+		return Finding{Verdict: VerdictNo, Evidence: []string{note.Text}}
+	default:
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{note.Text}}
+	}
+}
+
+// externalServiceAddr describes svc's externally reachable address for
+// evidence text: a LoadBalancer's ingress address, or the allocated node
+// port for a NodePort Service.
+func externalServiceAddr(svc *core.Service) string {
+	switch svc.Spec.Type {
+	case core.ServiceTypeLoadBalancer:
+		return firstLoadBalancerIngressAddr(svc)
+	case core.ServiceTypeNodePort:
+		if np, ok := firstAllocatedNodePort(svc); ok {
+			return fmt.Sprintf("node port %d", np)
+		}
+	}
+	return "unknown"
+}
+
 // healthWebhook checks that the agent-injector's MutatingWebhookConfiguration
 // exists, and when it does, that its CA bundle certificate is not expired or
 // about to expire.
 func (p *Prober) healthWebhook(ctx context.Context) (Finding, *Finding) {
 	name := webhookConfigurationPrefix + p.ManagerNamespace
-	mwc, err := p.KubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(ctx, name, metav1.GetOptions{})
+	mwc, err := p.KubeClient.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(ctx, name, meta.GetOptions{})
 	switch {
 	case apierrors.IsNotFound(err):
 		return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf(
@@ -164,12 +239,14 @@ func certificateFinding(caBundle []byte, now time.Time) Finding {
 	}
 }
 
-// healthX509ClientAuth checks, under enforcing mode, whether this client's
-// own credentials remain usable: a bearer token always is, a client
-// certificate needs the manager's x509 listener enabled, and a kubeconfig
-// producing neither is rejected outright.
-func healthX509ClientAuth(rel *ReleaseFacts, auth ClientAuthFacts) Finding {
-	x509Enabled, present := boolAt(rel.Values, "security", "authentication", "x509", "enabled")
+// x509ClientAuth checks, under enforcing mode, whether this client's own
+// credentials remain usable: a bearer token always is, a client certificate
+// needs the manager's x509 listener enabled, and a kubeconfig producing
+// neither is rejected outright.
+func (r *ReleaseFacts) x509ClientAuth(auth ClientAuthFacts) Finding {
+	p := r.Values.Security.Authentication.X509.Enabled
+	present := p != nil
+	x509Enabled := present && *p
 	switch {
 	case auth.Bearer:
 		return Finding{Verdict: VerdictYes}
@@ -187,24 +264,24 @@ func healthX509ClientAuth(rel *ReleaseFacts, auth ClientAuthFacts) Finding {
 	}
 }
 
-// healthVersionSkew relates the installed release's version to the client's:
-// the two are meant to be kept in lockstep, and an upgrade always moves the
+// versionSkew relates the installed release's version to the client's: the
+// two are meant to be kept in lockstep, and an upgrade always moves the
 // older side forward.
-func healthVersionSkew(rel *ReleaseFacts) Finding {
-	facts := &ClusterFacts{Release: *rel}
-	switch compareRelease(facts, version.Structured) {
+func (r *ReleaseFacts) versionSkew() Finding {
+	facts := &ClusterFacts{Release: *r}
+	switch facts.releaseAge(version.Structured) {
 	case releaseSame:
-		return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("client and traffic-manager are both %s", rel.Version)}}
+		return Finding{Verdict: VerdictYes, Evidence: []string{fmt.Sprintf("client and traffic-manager are both %s", r.Version)}}
 	case releaseOlder:
 		return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf(
 			"traffic-manager %s is older than this client (%s); run 'telepresence setup --apply' or 'telepresence helm upgrade' to upgrade it",
-			rel.Version, version.Version)}}
+			r.Version, version.Version)}}
 	case releaseNewer:
 		return Finding{Verdict: VerdictNo, Evidence: []string{fmt.Sprintf(
 			"the installed traffic-manager %s is newer than this client (%s); upgrade the client instead of downgrading the traffic-manager",
-			rel.Version, version.Version)}}
+			r.Version, version.Version)}}
 	default:
 		return Finding{Verdict: VerdictUnknown, Evidence: []string{fmt.Sprintf(
-			"the installed traffic-manager version %q could not be parsed", rel.Version)}}
+			"the installed traffic-manager version %q could not be parsed", r.Version)}}
 	}
 }

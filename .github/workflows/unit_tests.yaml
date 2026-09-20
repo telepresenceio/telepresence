@@ -6,25 +6,108 @@ env:
 permissions:
   contents: read
   actions: read
+  checks: read
+  pull-requests: read
 jobs:
-  # Reports docs_only=true when every change since the last successful run of
-  # this workflow matches paths_ignore. The unit matrix is skipped in that
-  # case; a job skipped through its if-condition still satisfies its required
-  # status check. When no prior successful run can be found the answer is
-  # docs_only=false, so the fail-safe direction is to run the tests.
+  # Decides whether the unit matrix actually executes. Two cases let it
+  # not to: the pull request as a whole changes nothing the tests can
+  # exercise, or a docs-only push arrives on a head whose per-OS unit
+  # checks are already green -- the code content is then identical to what
+  # those checks verified. The decision is computed from the pull
+  # request's own state, never by trusting an earlier run of this
+  # workflow to have tested anything.
   changes:
     runs-on: ubuntu-latest
     outputs:
-      docs_only: ${{ steps.skip.outputs.should_skip }}
+      run_units: ${{ steps.decide.outputs.run_units }}
+      inherited_from: ${{ steps.decide.outputs.inherited_from }}
     steps:
-      - id: skip
-        uses: fkirc/skip-duplicate-actions@v5
-        with:
-          cancel_others: false
-          paths_ignore: '["docs/**", "**.md", "CHANGELOG.yml"]'
+      - name: Decide whether the tests run
+        id: decide
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          ACTION: ${{ github.event.action }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          # Succeeds when every filename on stdin is one the tests cannot
+          # exercise.
+          docs_only_paths() {
+            local f
+            while IFS= read -r f; do
+              [ -n "$f" ] || continue
+              case "$f" in
+                docs/* | *.md | CHANGELOG.yml) ;;
+                *)
+                  echo "not a docs-only change: $f"
+                  return 1
+                  ;;
+              esac
+            done
+            return 0
+          }
+          # Anything unreadable or unexpected fails this job, so the
+          # fail-safe direction stays a blocked merge.
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
+          docs_only=true
+          if [ -z "$files" ]; then
+            echo "no files reported for this pull request; running everything"
+            docs_only=false
+          elif ! docs_only_paths <<<"$files"; then
+            docs_only=false
+          fi
+          # Verdict inheritance for a docs-only push: the compare status
+          # must be "ahead" (a force-push diverges, and the new head is
+          # then not the verified content plus docs), and every per-OS
+          # unit check on the previous head must have concluded success --
+          # a bare skipped "unit" context is not a verdict. An API hiccup
+          # or a truncated file list (the compare endpoint caps at 300
+          # files) falls back to a full run.
+          inherited=false
+          inherited_from=''
+          if [ "$ACTION" = synchronize ] && [ "$docs_only" != true ] &&
+             [ -n "$BEFORE" ] && [ -n "$AFTER" ]; then
+            cmp=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$AFTER" 2>/dev/null) || cmp=''
+            if [ -n "$cmp" ] &&
+               [ "$(jq -r .status <<<"$cmp")" = ahead ] &&
+               [ "$(jq -r '.files | length' <<<"$cmp")" -lt 300 ] &&
+               docs_only_paths < <(jq -r '.files[].filename' <<<"$cmp"); then
+              runs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$BEFORE/check-runs?per_page=100" \
+                --jq '[.check_runs[] | {name, status, conclusion, started_at}]' 2>/dev/null) || runs='[]'
+              inherited=true
+              # Keep this list in sync with the unit job's matrix.
+              for u in 'unit (ubuntu-latest)' 'unit (macos-latest)' 'unit (windows-latest)'; do
+                row=$(jq -r --arg n "$u" \
+                  '[.[] | select(.name == $n)] | sort_by(.started_at) | map("\(.status)/\(.conclusion)") | last // ""' <<<"$runs")
+                if [ "$row" != completed/success ]; then
+                  echo "docs-only push, but no green '$u' on $BEFORE (found '$row')"
+                  inherited=false
+                  break
+                fi
+              done
+              if [ "$inherited" = true ]; then
+                echo "docs-only push onto $BEFORE, whose unit verdicts are green"
+                inherited_from=$BEFORE
+              fi
+            fi
+          fi
+          run_units=true
+          if [ "$docs_only" = true ] || [ "$inherited" = true ]; then
+            run_units=false
+          fi
+          printf 'docs_only=%s\ninherited=%s\ninherited_from=%s\nrun_units=%s\n' \
+            "$docs_only" "$inherited" "$inherited_from" "$run_units" | tee -a "$GITHUB_OUTPUT"
+  # The matrix never skips at the job level: a matrix job skipped before
+  # expansion reports one bare "unit" context instead of the per-OS names
+  # branch protection requires, leaving those contexts unreported and the
+  # merge blocked as "expected". When there is nothing to test, the jobs
+  # run with every step skipped and report their required contexts as
+  # successful in seconds.
   unit:
     needs: changes
-    if: needs.changes.outputs.docs_only != 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -35,31 +118,36 @@ jobs:
     runs-on: ${{ matrix.runners }}
     steps:
       - uses: actions/checkout@v6
+        if: needs.changes.outputs.run_units == 'true'
         with:
           fetch-depth: 0
           ref: "${{ github.event.pull_request.head.sha }}"
       - name: install dependencies
+        if: needs.changes.outputs.run_units == 'true'
         uses: ./.github/actions/install-dependencies
       - name: install build dependencies
+        if: needs.changes.outputs.run_units == 'true'
         run: make build-deps
       - name: Lint
-        if: ${{ runner.os != 'Windows' }}
+        if: needs.changes.outputs.run_units == 'true' && runner.os != 'Windows'
         uses: golangci/golangci-lint-action@v9
         with:
           args: --timeout 8m ./...
       - name: Lint (limited on windows)
-        if: ${{ runner.os == 'Windows' }}
         # Windows builds cgofuse without CGO (it drives winfsp through its DLL),
         # so lint with CGO disabled too; otherwise the type-checker pulls in
         # cgofuse's host_cgo.go, which needs winfsp's fuse_common.h header.
+        if: needs.changes.outputs.run_units == 'true' && runner.os == 'Windows'
         env:
           CGO_ENABLED: "0"
         uses: golangci/golangci-lint-action@v9
         with:
           args: --timeout 8m ./cmd/telepresence/... ./pkg/...
       - name: Build
+        if: needs.changes.outputs.run_units == 'true'
         run: make build
       - name: Run tests
+        if: needs.changes.outputs.run_units == 'true'
         uses: nick-fields/retry/@v4
         with:
           max_attempts: 3

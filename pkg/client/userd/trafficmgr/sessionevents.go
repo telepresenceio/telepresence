@@ -90,6 +90,7 @@ func (s *session) watchSessionEvents(ctx context.Context) error {
 
 	icSnapshots := make(chan []*manager.InterceptInfo, 1)
 	icDone := make(chan struct{})
+	var managerGeneration uint64
 	go func() {
 		defer close(icDone)
 		for snap := range icSnapshots {
@@ -99,7 +100,9 @@ func (s *session) watchSessionEvents(ctx context.Context) error {
 
 	err := watcher.WatchWithRetry(ctx, "WatchSessionEvents", client.GetConfig(ctx).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.SessionEventsDelta], error) {
-			return s.ManagerClient().WatchSessionEvents(ctx, &manager.SessionEventsRequest{
+			mClient, generation := s.managerClient()
+			managerGeneration = generation
+			return mClient.WatchSessionEvents(ctx, &manager.SessionEventsRequest{
 				Session:    s.SessionInfo(),
 				Namespaces: s.agentPodWatchNamespaces(),
 			})
@@ -128,7 +131,7 @@ func (s *session) watchSessionEvents(ctx context.Context) error {
 			if relayEnabled {
 				s.podRelay.beginSync()
 			}
-			return s.reconnectManager()
+			return s.reconnectManager(managerGeneration)
 		})
 
 	// Stop the intercept consumer and wait it out, so the final cleanup below
@@ -160,7 +163,7 @@ func (s *session) watchSessionEventsLegacy(ctx context.Context) error {
 	g.Go("intercept-port-forward", s.watchInterceptsHandler)
 	if relayEnabled {
 		g.Go("agent-pods-legacy", func(ctx context.Context) error {
-			return agentpf.WatchPods(ctx, s.ManagerClient(), s.SessionInfo(), s.agentPodWatchNamespaces(), s.Namespace,
+			return agentpf.WatchPodsWithClient(ctx, s.ManagerClient, s.SessionInfo(), s.agentPodWatchNamespaces(), s.Namespace,
 				func(upserts map[string]*manager.AgentPodInfo, removals []string) error {
 					s.podRelay.apply(upserts, removals)
 					return nil

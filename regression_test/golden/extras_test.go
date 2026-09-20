@@ -22,7 +22,7 @@ func TestExtraValuesReachManagerAndForwarder(t *testing.T) {
 			"mountPath": "/rtest-extra",
 		}},
 	})
-	for _, tpl := range []string{deploymentTpl, quicFwdTpl} {
+	for _, tpl := range []string{statefulsetTpl, quicFwdTpl} {
 		doc := out[tpl]
 		for _, want := range []string{"EXTRA_ENV_RTEST", "extra-vol-rtest", "/rtest-extra"} {
 			if !strings.Contains(doc, want) {
@@ -30,4 +30,47 @@ func TestExtraValuesReachManagerAndForwarder(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestLogStreamingEnv asserts that a custom logStreaming block overrides
+// every LOG_STREAM_* env var, and an absent block falls back to defaults.
+func TestLogStreamingEnv(t *testing.T) {
+	t.Run("custom", func(t *testing.T) {
+		out := renderChart(t, map[string]any{
+			"logStreaming": map[string]any{
+				"chunkSize":      "128Ki",
+				"podConcurrency": 8,
+				"podByteLimit":   "20Mi",
+				"deadline":       "2m",
+			},
+		})
+		env := parseEnv(out[statefulsetTpl])
+		want := map[string]string{
+			"LOG_STREAM_CHUNK_SIZE":      "128Ki",
+			"LOG_STREAM_POD_CONCURRENCY": "8",
+			"LOG_STREAM_POD_BYTE_LIMIT":  "20Mi",
+			"LOG_STREAM_DEADLINE":        "2m",
+		}
+		for name, wantVal := range want {
+			if v := env[name]; v != wantVal {
+				t.Errorf("%s = %q, want %q", name, v, wantVal)
+			}
+		}
+	})
+
+	t.Run("absent", func(t *testing.T) {
+		out := renderChart(t, map[string]any{})
+		env := parseEnv(out[statefulsetTpl])
+		want := map[string]string{
+			"LOG_STREAM_CHUNK_SIZE":      "64Ki",
+			"LOG_STREAM_POD_CONCURRENCY": "4",
+			"LOG_STREAM_POD_BYTE_LIMIT":  "10Mi",
+			"LOG_STREAM_DEADLINE":        "5m",
+		}
+		for name, wantVal := range want {
+			if v := env[name]; v != wantVal {
+				t.Errorf("%s = %q, want %q", name, v, wantVal)
+			}
+		}
+	})
 }

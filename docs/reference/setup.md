@@ -37,7 +37,8 @@ runs a set of read-only probes before asking anything:
 | Namespace scale | How many namespaces exist, presented as evidence when the managed-scope question is asked. |
 | Existing installation | Whether a `traffic-manager` Helm release already exists, its version, and its current values. |
 | Client update | A best-effort check of the latest released client, advisory only. |
-| Existing-install health | When a release is found: Deployment readiness and recent warning events, webhook presence and certificate expiry, agent-injector endpoint readiness, QUIC endpoint state, client/manager version skew, and — under enforcing authentication — whether this client's kubeconfig credentials will be accepted. |
+| Existing-install health | When a release is found: StatefulSet readiness and recent warning events (a pre-2.32 release still has a Deployment, which is reported as still to be migrated), webhook presence and certificate expiry, agent-injector endpoint readiness, QUIC endpoint state, client/manager version skew, and — under enforcing authentication — whether this client's credentials (a bearer token, or a client certificate) will be accepted. |
+| External endpoint prerequisites | Whether the `certificates.cert-manager.io` CRD is served, and which `kubernetes.io/tls` Secrets exist in the manager namespace, with their DNS names and expiry. |
 | Routing conflicts | Whether the workstation's local routes overlap the cluster's pod/service subnets (read from the local route table; the remedy is always cluster-side). |
 
 Every probe tolerates denied permissions — a probe that cannot get an
@@ -82,6 +83,43 @@ clean values stream, whether the session is interactive or not (combine
 `--output -` with `--non-interactive` for a fully scripted pipeline).
 `--output -` cannot be combined with `--format`; both would claim stdout.
 
+### Minimal client permissions
+
+```console
+$ telepresence setup --apply
+```
+
+Answering yes to "Enforce caller authentication?", yes to "Enable Direct
+Connect, so clients reach the traffic-manager at a published address instead
+of through the Kubernetes API?", picking an existing TLS Secret (or
+cert-manager) for the certificate, and accepting the default `telepresence`
+required grant walks the [client permission ladder](../howtos/client-rbac.md)
+in one run. The resulting values:
+
+```yaml
+security:
+  authentication:
+    mode: enforcing
+  authorization:
+    requiredGrant: telepresence
+externalEndpoint:
+  enabled: true
+  tls:
+    secretName: traffic-manager-external-tls
+clientRbac:
+  legacyAccess: false
+```
+
+A client configured with the `cluster.managerAddress` that the post-apply
+verification prints then connects without any Kubernetes API request: its
+kubeconfig credentials carry authentication, and the `telepresence.io`
+policy grants bound to `clientRbac.subjects` carry authorization. The
+ladder's last rung, `clientRbac.create: false`, is not something setup
+decides; add it to the values file by hand when no client should hold a
+Kubernetes grant at all. See [Minimize the client's cluster
+permissions](../howtos/client-rbac.md) for what each setting removes and
+what it requires.
+
 ### Re-run with the previous decisions
 
 ```console
@@ -92,14 +130,21 @@ $ telepresence setup --input values.yaml --output values.yaml
 treats its settings as pinned: anything it already decided —
 `agentInjector.enabled`/`nodeAgent.enabled` (attach/replace),
 `quicTunnel.enabled`/`quicTunnel.service.type` (QUIC), `namespaces` /
-`namespaceSelector` (managed scope), and `client.cluster.mappedNamespaces`
-(mapped namespaces, pinned independently of the managed scope) — is never
-asked about again and never silently changed. If a fresh probe recommends
-something different, the interactive session asks whether to keep the
-pinned value (default: keep); a non-interactive run keeps it and the report
-carries a warning note instead. Keys the tool has no opinion about (image,
-resources, `clientRbac.*`, ...) pass through untouched, so an
-`--input FILE --output FILE` round trip is lossless. This is also how every
+`namespaceSelector` (managed scope), `client.cluster.mappedNamespaces`
+(mapped namespaces, pinned independently of the managed scope),
+`security.authentication.mode` (enforce authentication),
+`security.authorization.requiredGrant` (required grant),
+`externalEndpoint.enabled` (with its `tls` settings, Direct Connect),
+and `clientRbac.legacyAccess` (legacy client access) — is never asked about
+again and never silently changed. If a fresh probe recommends something
+different, the interactive session asks whether to keep the pinned value
+(default: keep); a non-interactive run keeps it and the report carries a
+warning note instead. Keys the tool has no opinion about (image, resources,
+`logStreaming`, ...) pass through untouched, so an
+`--input FILE --output FILE` round trip is lossless. The file is checked
+against the chart before anything runs: a key the chart does not define is
+an error naming the key, and `client.*` accepts every client setting, since
+the chart hands that block to clients as their configuration. This is also how every
 setting that used to be its own flag is expressed now: there is no
 `--attach`, `--quic`, `--managed-namespaces`, `--client-rbac-subjects`, or
 similar — write (or hand-edit) a values file and pass it with `--input`.
@@ -170,7 +215,11 @@ input-pinned value, then the default below.
 | Managed scope | no limit; when the probes show cluster-wide install privileges are missing, a managed list containing just the manager namespace |
 | Managed namespaces | with a managed scope of namespaces and no input-pinned list: the manager namespace. A managed scope of selector without an input-pinned label selector is an error — the label selector needs a prompt and none is possible non-interactively. |
 | Mapped namespaces | none unless an input file's `client.cluster.mappedNamespaces` sets them; not asked interactively. |
-| Routing conflicts | not accepted; the report carries a warning naming both remedies (see "Routing conflicts" below) |
+| Enforce authentication | yes when this client's own credentials would be accepted under enforcing mode, otherwise no; on an upgrade, the installed release's current mode |
+| Required grant | `any`, or `telepresence` when Direct Connect ends up enabled; on an upgrade, the release's current value |
+| Direct Connect | never enabled unless an input file pins `externalEndpoint.enabled: true` or the installed release already enables it; a pinned enable with several TLS Secrets, or only an expired one, and no pinned `tls.secretName`, or a cert-manager choice with no pinned issuer and DNS names, is an error |
+| Legacy client access | no (`clientRbac.legacyAccess: false`); on an upgrade, the release's current value, which is yes when the release never set it; forced to yes when `apiPort` is overridden in the input or release values |
+| Routing conflicts | virtual subnet (`client.routing.autoResolveConflicts: true`); on an upgrade, the release's current strategy |
 
 ## The interview
 
@@ -205,12 +254,65 @@ previous decisions"); "always" means "unless pinned by the input".
    still override it) that is independent of the managed scope — a
    namespace-limited managed scope and a mapped-namespaces default can both
    be set at once.
-6. **Routing conflicts** (only when the probe finds an overlap): "Local
-   routes overlap the cluster's subnets. Allow the conflicts cluster-wide
-   (traffic to those ranges goes to the cluster for every client)?" A yes
-   sets `client.routing.allowConflictingSubnets`; a no leaves it to
-   individual clients, with a note recommending
-   `telepresence connect --vnat <subnet>` for whoever hits the conflict.
+6. **Enforce authentication** (always): "Enforce caller authentication?"
+   Setup first explains what the setting does: enforcing refuses telepresence
+   clients older than 2.31, and it is also required for Direct Connect. One
+   more line says whether this caller's own kubeconfig would pass. The
+   fresh-install default is yes when this kubeconfig would pass (a bearer
+   token or a client certificate), otherwise no. On an upgrade the default is
+   the installed release's current mode. Answer -> `security.authentication.mode`.
+7. **Direct Connect** (only when enforcing, and a TLS Secret or cert-manager
+   was found; asked before the required-grant question because it changes
+   that question's default): "Enable Direct Connect, so clients reach the
+   traffic-manager at a published address instead of through the Kubernetes
+   API?" default no. A yes asks which certificate to use: "The endpoint needs
+   a TLS certificate that clients can trust. Which one should it use?", with one
+   numbered line per `kubernetes.io/tls` Secret in the manager namespace
+   (showing its DNS names and expiry) plus, when cert-manager is present,
+   "a new one issued by cert-manager". A single Secret is the default; a
+   Secret named `traffic-manager-external-tls` is listed first and is the
+   default; otherwise there is no default. An expired or soon-to-expire
+   certificate is marked and is never the default. Choosing cert-manager
+   asks three more prompts: "cert-manager issuer name:", "cert-manager
+   issuer kind (Issuer or ClusterIssuer) [ClusterIssuer]:", and "DNS names
+   clients will use to reach the endpoint (comma-separated):". The Service
+   type itself is not asked: `LoadBalancer` when the QUIC probe found it
+   viable, `NodePort` otherwise, with a note that the DNS names must then
+   resolve to a node address. When enforcing but neither a Secret nor
+   cert-manager exists, the question is skipped and an info note names
+   both prerequisites. Answer -> `externalEndpoint.enabled` and its `tls`
+   settings.
+8. **Required grant** (only when enforcing): "Which grant should the
+   traffic-manager require for authorization?"
+
+   1. `telepresence` — Telepresence's own policy grants; clients lose
+      direct traffic-agent port-forwards unless QUIC is enabled.
+   2. `portforward` — the `pods/portforward` permission.
+   3. `any` — either grant satisfies the check.
+
+   The default is `telepresence` when Direct Connect was chosen,
+   otherwise `any`. On an upgrade the default is the release's current
+   value. Answer -> `security.authorization.requiredGrant`.
+9. **Legacy client access** (always): "Do clients older than 2.32 need to
+   connect to this traffic-manager?" The fresh-install default is no,
+   which renders `clientRbac.legacyAccess: false`. On an upgrade the
+   default is the release's current value, and yes when the release never
+   set it, since that is the chart default. Forced to yes, with a note,
+   when `apiPort` is overridden in the input or the release values.
+   Answer -> `clientRbac.legacyAccess`.
+10. **Routing conflicts** (only when the probe finds an overlap): "Local
+    routes overlap the cluster's subnets (`<list>`). How should clients
+    handle those ranges?"
+
+    1. map them to a virtual subnet, so both the local network and the
+       cluster stay reachable (VNAT, the default) ->
+       `client.routing.autoResolveConflicts: true`.
+    2. send them to the cluster, hiding the local network behind them ->
+       `client.routing.allowConflictingSubnets`.
+
+    The default is virtual, unless the installed release's effective values
+    already resolve the same subnets another way: allow when
+    `allowConflictingSubnets` covers one of them.
 
 ## The validation report
 
@@ -218,17 +320,20 @@ Every run — whether or not `--output` or `--apply` is given — ends with a
 report. In text mode it has up to three sections:
 
 - **Findings**: one line per probed area (cluster, privileges, quic,
-  node-agent, webhook, namespaces, routing, release, and — when an existing
-  release was found — a health subsection covering the traffic-manager
-  Deployment, the webhook and its certificate, agent-injector endpoints, the
-  QUIC endpoint, version skew and, under enforcing authentication, whether
+  node-agent, webhook, namespaces, routing, release, authentication, external
+  endpoint, and — when an existing release was found — a health subsection
+  covering the traffic-manager StatefulSet, the webhook and its certificate,
+  agent-injector endpoints, the QUIC endpoint, the external endpoint's health
+  when enabled, version skew and, under enforcing authentication, whether
   this client's credentials will be accepted) plus supporting evidence.
 - **Proposed configuration**: the generated values document verbatim, plus,
   when upgrading an existing release, the list of keys that would change.
 - **Notes**: warnings and informational notes explaining any decision that
-  needed one (a routing conflict left unresolved, an `--input` value kept
-  over the probe's recommendation, missing install privileges and how to
-  hand off to an admin, ...).
+  needed one (the routing-conflict strategy applied to the overlapping
+  subnets, an `--input` value kept over the probe's recommendation, missing
+  install privileges and how to hand off to an admin, a
+  Deployment-to-StatefulSet migration on upgrade, a reminder that
+  attachments need QUIC enabled alongside the external endpoint, ...).
 
 The final line is always `Action: <action>` — `install`, `upgrade`, or
 `none` when applying, prefixed with `would-` when not (`would-install`,
@@ -249,21 +354,36 @@ install health checks make useful even when nothing needs to change.
 After `--apply` installs or upgrades the traffic-manager, setup verifies
 the result instead of assuming success:
 
-- the traffic-manager Deployment becomes ready (this is already covered by
-  the underlying Helm install's atomic wait);
+- the traffic-manager StatefulSet becomes ready (this is already covered by
+  the underlying Helm install's atomic wait; migrating a pre-2.32 Deployment
+  to it is part of the same upgrade);
 - when QUIC is enabled, setup attempts a real QUIC handshake against the
   endpoint (LoadBalancer ingress address or the allocated NodePort) with a
   short timeout. Any completed handshake, or even a certificate rejection,
   proves a peer answered over UDP, since the manager's CA is generated per
-  session and unknown to the probe; a timeout means the endpoint is not
-  reachable from this workstation. The verification note names the likely
-  causes: a firewall, the LoadBalancer still provisioning, or an
-  unreachable node network (the case a local kind cluster's Docker network
-  produces honestly);
+  session and unknown to the probe. When nothing answers, setup narrows the
+  cause before reporting: a host that rejects the UDP port outright is a
+  LoadBalancer or node that does not forward UDP; a host that answers a TCP
+  connect to the same address but stays silent on UDP has the port dropped
+  on the way, by a firewall or by a LoadBalancer or node that does not
+  forward UDP, and the note names which one to check; a host
+  that answers neither is unreachable from this workstation, and the note
+  says which interface or gateway the workstation routes it through, and
+  points out a Docker bridge, since a kind cluster's node network is only
+  reachable from the host that runs Docker;
 - when the webhook is enabled, setup checks that the agent-injector Service
   has ready endpoints — the point being that the webhook's
   `failurePolicy: Ignore` lets a broken injector degrade silently: pods
-  simply stop getting agents, with no error anywhere.
+  simply stop getting agents, with no error anywhere;
+- when the external endpoint is enabled, setup resolves the published
+  Service (waiting briefly for a LoadBalancer ingress, as with QUIC above),
+  then confirms the TLS handshake, the version handshake, and — when this
+  kubeconfig yields a bearer token — that an authenticated session can be
+  opened and closed, printing a ready-to-paste client config block
+  (`cluster.managerAddress` and `cluster.managerServerCA`) once the version
+  handshake succeeds. When the certificate comes from cert-manager, setup
+  first waits for the issued Secret to appear, within the same verification
+  window, before probing.
 
 ## See also
 

@@ -15,9 +15,11 @@ metadata:
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
 rules:
+{{- if .legacyAccess }}
 - apiGroups: [""]
   resources: ["namespaces"]
   verbs: ["get", "list", "watch"]
+{{- end }}
 {{- include "telepresence.clientRbacInterceptRules" $ }}
 
 ---
