@@ -39,6 +39,24 @@ The client binary must be rebuilt (`make build`) after changing client code
 **or the chart** — the chart is embedded in the binary. The manager image
 must be rebuilt and re-loaded after changing `cmd/traffic` code.
 
+## Parallel shards in Vagrant VMs
+
+The three area shards can run concurrently on a single dev box, each in
+its own VirtualBox VM with its own minikube cluster, instead of serially
+against one cluster:
+
+```bash
+make check-regression-vagrant
+```
+
+This needs `vagrant` and VirtualBox, plus roughly 50G of free RAM and,
+on the first run, 60G of free disk (subsequent runs reuse the VMs and
+need only 25G). Per-shard output lands in `build-output/vagrant-rtest/`
+(`shard-N.log` and `shard-N-rtest-logs.tgz`). To free RAM between
+sessions without losing the VMs: `VAGRANT_CWD=build-aux/vagrant-rtest
+vagrant halt`. To reclaim the disk entirely:
+`VAGRANT_CWD=build-aux/vagrant-rtest vagrant destroy -f`.
+
 ## Environment
 
 The shell environment always wins; there is no config file.

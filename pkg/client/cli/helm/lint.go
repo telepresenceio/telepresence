@@ -22,7 +22,7 @@ func lint(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, 
 		return err
 	}
 
-	tmVer, err := getTrafficManagerVersion(vals)
+	tmVer, err := vals.TrafficManagerVersion()
 	if err != nil {
 		return err
 	}
@@ -56,12 +56,16 @@ func lint(ctx context.Context, clientGetter genericclioptions.RESTClientGetter, 
 	return runLint(fh.Name(), namespace, vals, req)
 }
 
-func runLint(path, namespace string, vals map[string]any, req *Request) error {
+func runLint(path, namespace string, vals *Values, req *Request) error {
+	m, err := vals.ToMap()
+	if err != nil {
+		return err
+	}
 	lint := action.NewLint()
 	lint.Namespace = namespace
 	lint.Strict = true
 	lint.KubeVersion = req.KubeVersion
-	lr := lint.Run([]string{path}, vals)
+	lr := lint.Run([]string{path}, m)
 	if err := errors.Join(lr.Errors...); err != nil {
 		return err
 	}

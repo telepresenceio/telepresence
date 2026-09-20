@@ -108,6 +108,26 @@ for an intercept, but you can explicitly define that only one service and/or por
        containers:
 ```
 
+### Inactive Port
+
+By default, traffic that doesn't match an active intercept is forwarded to the workload's own
+container port. The `telepresence.io/inject-inactive-port` annotation overrides this and names a
+different port to receive that traffic instead. The value must be a port number between 1 and
+65535, and the workload must have exactly one intercepted container port; injection fails with an
+error otherwise. This is useful when an application should keep serving non-intercepted traffic on
+a port other than the one targeted by the Service, for example a health check or admin port that
+must stay reachable while an intercept is active.
+
+```diff
+ spec:
+   template:
+     metadata:
+       annotations:
++        telepresence.io/inject-inactive-port: "8081"
+     spec:
+       containers:
+```
+
 ### Control Volume Sharing
 
 Telepresence enables control over what volumes that will be shared with connecting clients using mount policies. A

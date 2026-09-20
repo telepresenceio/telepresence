@@ -121,7 +121,10 @@ func (s *ArgoRollouts) ensureArgoRollouts(t *testing.T) {
 		t.Fatalf("create namespace %s: %v", argoNamespace, err)
 	}
 
-	if _, err := r.Kubectl(ctx, argoNamespace, "apply", "-f", argoInstallURL); err != nil {
+	// Server-side apply: the manifest's CRDs exceed the 256 KiB limit of the
+	// last-applied-configuration annotation that client-side apply writes.
+	if _, err := r.Kubectl(ctx, argoNamespace, "apply", "--server-side", "--force-conflicts",
+		"-f", argoInstallURL); err != nil {
 		t.Fatalf("apply argo-rollouts install manifest: %v", err)
 	}
 

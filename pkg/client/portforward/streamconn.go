@@ -65,9 +65,10 @@ func dialContext(grpcCtx, logCtx context.Context, addr string, cfg *config) (net
 	}
 	key := pa.PodID
 	if key == "" {
-		err = errors.New("pod ID is empty")
-		clog.Error(logCtx, err)
-		return nil, err
+		// Known-name (no-lookup) dial: no pod UID to key the cache by. Key
+		// on name+namespace instead; a stale connection to a replaced pod
+		// is detected by connection death, not UID pinning.
+		key = types.UID(pa.Name + "." + pa.Namespace)
 	}
 	pc, _ := cfg.podDialers.LoadOrCompute(key, func() (pc *podDialer, cancel bool) {
 		pc, err = newPodDialer(logCtx, key, cfg, pa.Name, pa.Namespace)

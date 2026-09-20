@@ -44,6 +44,23 @@ func (is interceptsStringer) String() string {
 
 var NewExtendedManagerClient func(conn *grpc.ClientConn, ossManager rpc.ManagerClient) rpc.ManagerClient //nolint:gochecknoglobals // extension point
 
+// managerHandshakeTimeout bounds the initial unary RPCs made before the agent
+// can enter its reconnecting watch loops. Without a timeout, a manager that
+// accepts the transport but stops servicing unary RPCs can leave the agent
+// stuck forever before /tmp/agent/ready is created.
+var managerHandshakeTimeout = 10 * time.Second //nolint:gochecknoglobals // overridden by tests
+
+const agentSessionIDPrefix = "agent:"
+
+// Agent session IDs are deterministic from the pod UID. Older managers can
+// return an empty ID when a retried arrival finds the first call already
+// committed, so recover the same ID before opening session streams.
+func recoverAgentSessionID(info *rpc.AgentInfo, session *rpc.SessionInfo) {
+	if session.GetSessionId() == "" && info.GetPodUid() != "" {
+		session.SessionId = agentSessionIDPrefix + info.GetPodUid()
+	}
+}
+
 func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, state State) error {
 	// processCtx outlives this single manager session: it bounds the QUIC listener
 	// RefreshQuicAgentListener may start below, which must survive the reconnects
@@ -73,9 +90,11 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		manager = NewExtendedManagerClient(conn, manager)
 	}
 
-	ver, err := manager.Version(ctx, &empty.Empty{})
+	handshakeCtx, handshakeCancel := context.WithTimeout(ctx, managerHandshakeTimeout)
+	ver, err := manager.Version(handshakeCtx, &empty.Empty{})
+	handshakeCancel()
 	if err != nil {
-		return err
+		return fmt.Errorf("get manager version: %w", err)
 	}
 
 	verStr := strings.TrimPrefix(ver.Version, "v")
@@ -85,10 +104,13 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 		return fmt.Errorf("failed to parse manager version %q: %s", verStr, err)
 	}
 
-	session, err := manager.ArriveAsAgent(ctx, info)
+	handshakeCtx, handshakeCancel = context.WithTimeout(ctx, managerHandshakeTimeout)
+	session, err := manager.ArriveAsAgent(handshakeCtx, info)
+	handshakeCancel()
 	if err != nil {
-		return err
+		return fmt.Errorf("arrive as agent: %w", err)
 	}
+	recoverAgentSessionID(info, session)
 
 	state.SetManager(session, manager, mgrVer)
 

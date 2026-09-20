@@ -30,7 +30,6 @@ bindir ?= $(or $(shell go env GOBIN),$(shell go env GOPATH|cut -d: -f1)/bin)
 # Dockerfile extensions for the Go build cache.  See
 # https://github.com/moby/buildkit/blob/master/frontend/dockerfile/docs/syntax.md.
 export DOCKER_BUILDKIT := 1
-export GOEXPERIMENT := jsonv2
 
 .PHONY: FORCE
 FORCE:
@@ -333,6 +332,10 @@ push-client-image: client-image ## (Build) Push the client container image to $(
 load-client-image: client-image ## (Build) Load the client container image into the local cluster (kind/minikube)
 	$(call load-image,$(CLIENT_IMAGE_FQN))
 
+.PHONY: save-client-image
+save-client-image: client-image
+	docker save $(CLIENT_IMAGE_FQN) > $(BUILDDIR)/client-image.tar
+
 ROUTECONTROLLER_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/route-controller:$(TELEPRESENCE_SEMVER)
 
 .PHONY: routecontroller-image
@@ -348,6 +351,10 @@ push-routecontroller-image: routecontroller-image ## (Build) Push the route-cont
 .PHONY: load-routecontroller-image
 load-routecontroller-image: routecontroller-image ## (Build) Load the route-controller DaemonSet image into the local cluster (kind/minikube)
 	$(call load-image,$(ROUTECONTROLLER_IMAGE_FQN))
+
+.PHONY: save-routecontroller-image
+save-routecontroller-image: routecontroller-image
+	docker save $(ROUTECONTROLLER_IMAGE_FQN) > $(BUILDDIR)/routecontroller-image.tar
 
 .PHONY: push-images
 push-images: push-tel2-image push-client-image push-routecontroller-image
@@ -460,6 +467,10 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./packaging/windows-package.sh
+shellscripts += ./build-aux/vagrant-rtest/preflight.sh
+shellscripts += ./build-aux/vagrant-rtest/provision.sh
+shellscripts += ./build-aux/vagrant-rtest/run-shard.sh
+shellscripts += ./build-aux/vagrant-rtest/run-shards.sh
 .PHONY: lint lint-rpc lint-go lint-docs
 
 lint: lint-rpc lint-go lint-docs
@@ -471,13 +482,13 @@ lint-docs: $(tools/docslint) ## (QA) Lint the documentation
 lint-go: lint-deps ## (QA) Run the golangci-lint
 ifeq ($(GOOS),windows)
 	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
-	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
+	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
 	run --timeout 8m ./cmd/cobraparser/... ./cmd/telepresence/... ./pkg/...
 else
 	# libfuse-dev provides fuse.h, which cgofuse needs to typecheck the linked
 	# fuseftp file system on Linux.
 	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
-	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app --entrypoint bash golangci/golangci-lint:$$ver \
+	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app --entrypoint bash golangci/golangci-lint:$$ver \
 	-c "apt-get update -qq && apt-get install -y -qq libfuse-dev && golangci-lint run --timeout 8m ./..."
 endif
 
@@ -491,11 +502,11 @@ endif
 format: lint-deps ## (QA) Automatically fix linter complaints
 ifeq ($(GOHOSTOS),windows)
 	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
-	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
+	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
 	run --timeout 8m --fix ./cmd/telepresence/... ./pkg/...
 else
 	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
-	docker run -e GOOS=$(GOOS) -e GOEXPERIMENT=$(GOEXPERIMENT) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
+	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
 	run --timeout 8m --fix ./...
 endif
 	$(tools/protolint) lint --fix rpc || true
@@ -523,18 +534,24 @@ RTEST_SHARD_AREAS_2 = TestSmoke|TestIntercept|TestInstall|TestDns|TestRouting|Te
 RTEST_SHARD_AREAS_3 = TestConnect|TestAttach|TestInjector|TestNamespaces
 
 .PHONY: check-regression
-check-regression: build-deps ## (QA) Run the regression-test framework suite; SHARD=1|2|3 runs one shard
+check-regression: build-deps $(tools/test-report) ## (QA) Run the regression-test framework suite; SHARD=1|2|3 runs one shard
 ifdef SHARD
-	go test -count=1 -timeout=45m \
+	set -o pipefail; go test -json -count=1 -timeout=45m \
 		-run '^($(or $(RTEST_SHARD_AREAS_$(SHARD)),$(error unknown SHARD "$(SHARD)": use 1, 2 or 3)))$$' \
-		./regression_test
+		./regression_test | $(tools/test-report)
 	# The clusterless packages (golden chart rendering, framework unit
 	# tests) run only under check-regression, so a sharded CI still needs
 	# them once; they cost seconds, so every shard runs them.
-	go test -count=1 -timeout=10m ./regression_test/framework/... ./regression_test/golden
+	set -o pipefail; go test -json -count=1 -timeout=10m \
+		./regression_test/framework/... ./regression_test/golden | $(tools/test-report)
 else
-	go test -count=1 -timeout=90m ./regression_test/...
+	set -o pipefail; go test -json -count=1 -timeout=90m \
+		./regression_test/... | $(tools/test-report)
 endif
+
+.PHONY: check-regression-vagrant
+check-regression-vagrant: ## (QA) Run all 3 regression shards in parallel VirtualBox VMs via Vagrant
+	build-aux/vagrant-rtest/run-shards.sh
 
 .PHONY: rtest-clean
 rtest-clean: ## (QA) Remove regression-test resources left in the cluster

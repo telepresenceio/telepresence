@@ -13,7 +13,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
 )
 
-// trafficManagerDeployment is the chart-created Deployment name for the
+// trafficManagerDeployment is the chart-created StatefulSet name for the
 // shared traffic-manager release (rt/fixture_manager.go's unexported
 // helmReleaseName), mirroring helpers.go's quicForwarderDeployment.
 const trafficManagerDeployment = "traffic-manager"
@@ -160,15 +160,15 @@ func (s *ManagerOutage) Test_AttachmentSurvivesManagerOutage() {
 	mustDetach = false
 }
 
-// scaleManagerDown scales the shared traffic-manager Deployment to zero
+// scaleManagerDown scales the shared traffic-manager StatefulSet to zero
 // replicas and waits for its pod to actually terminate: `rollout status`
 // alone would report success as soon as the scale is accepted, before the
 // pod is actually gone. Mirrors helpers.go's scaleQuicForwarderDown, for
-// deploy/traffic-manager rather than deploy/quic-forwarder.
+// statefulset/traffic-manager rather than deploy/quic-forwarder.
 func scaleManagerDown(t testing.TB, ctx context.Context, r *rt.Runtime) {
 	t.Helper()
 	mgrNS := managers.ManagerNamespace
-	if _, err := r.Kubectl(ctx, mgrNS, "scale", "deploy/"+trafficManagerDeployment, "--replicas", "0"); err != nil {
+	if _, err := r.Kubectl(ctx, mgrNS, "scale", "statefulset/"+trafficManagerDeployment, "--replicas", "0"); err != nil {
 		t.Fatalf("scale %s to 0: %v", trafficManagerDeployment, err)
 	}
 	deadline := time.Now().Add(quicManagerOutageTermTimeout)
@@ -184,15 +184,15 @@ func scaleManagerDown(t testing.TB, ctx context.Context, r *rt.Runtime) {
 	}
 }
 
-// scaleManagerUp scales the shared traffic-manager Deployment back to one
+// scaleManagerUp scales the shared traffic-manager StatefulSet back to one
 // replica and waits for the rollout to report ready.
 func scaleManagerUp(t testing.TB, ctx context.Context, r *rt.Runtime) {
 	t.Helper()
 	mgrNS := managers.ManagerNamespace
-	if _, err := r.Kubectl(ctx, mgrNS, "scale", "deploy/"+trafficManagerDeployment, "--replicas", "1"); err != nil {
+	if _, err := r.Kubectl(ctx, mgrNS, "scale", "statefulset/"+trafficManagerDeployment, "--replicas", "1"); err != nil {
 		t.Fatalf("scale %s to 1: %v", trafficManagerDeployment, err)
 	}
-	if _, err := r.Kubectl(ctx, mgrNS, "rollout", "status", "deploy/"+trafficManagerDeployment, "--timeout=120s"); err != nil {
+	if _, err := r.Kubectl(ctx, mgrNS, "rollout", "status", "statefulset/"+trafficManagerDeployment, "--timeout=120s"); err != nil {
 		t.Fatalf("rollout status %s: %v", trafficManagerDeployment, err)
 	}
 }

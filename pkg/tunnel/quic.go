@@ -3,6 +3,7 @@ package tunnel
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -115,6 +116,14 @@ func (s *quicStream) Recv() (*rpc.TunnelMessage, error) {
 		return nil, fmt.Errorf("failed to unmarshal QUIC tunnel frame: %w", err)
 	}
 	return m, nil
+}
+
+// IsPeerClosed reports whether err is a QUIC stream cancellation with error
+// code 0 issued by the remote side, which is how a peer ends a finished tunnel
+// stream.
+func IsPeerClosed(err error) bool {
+	var se *quic.StreamError
+	return errors.As(err, &se) && se.Remote && se.ErrorCode == 0
 }
 
 // CloseRecv releases the receive direction of the underlying QUIC stream. The tunnel

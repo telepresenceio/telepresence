@@ -1,0 +1,28 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Three self-contained VMs, one per regression-test shard. Each machine
+# gets its own copy of the repo and its own minikube cluster so the three
+# shards run concurrently without sharing a TUN device, DNS override, or
+# cluster.
+Vagrant.configure("2") do |config|
+  config.vm.box = "bento/ubuntu-24.04"
+
+  (1..3).each do |n|
+    config.vm.define "shard#{n}" do |shard|
+      shard.vm.hostname = "shard#{n}"
+
+      shard.vm.provider "virtualbox" do |vb|
+        vb.cpus = 8
+        vb.memory = 14336
+        vb.linked_clone = true
+      end
+
+      shard.vm.synced_folder "../..", "/home/vagrant/tp",
+        type: "rsync",
+        rsync__exclude: [".git/", ".claude/", ".vagrant/"]
+
+      shard.vm.provision "shell", path: "provision.sh"
+    end
+  end
+end

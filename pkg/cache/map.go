@@ -39,11 +39,22 @@ func (delta *Delta[K, V]) Merge(other Delta[K, V]) {
 }
 
 type subscription[K comparable, V any] struct {
+	sync.Mutex
 	channel     chan Delta[K, V]
 	include     func(K, V) bool
-	initialized atomic.Bool
+	initialized bool
 	mark        atomic.Bool
 	doneCh      <-chan struct{}
+	closed      bool
+}
+
+func (sb *subscription[K, V]) close() {
+	sb.Lock()
+	if !sb.closed {
+		close(sb.channel)
+		sb.closed = true
+	}
+	sb.Unlock()
 }
 
 type Map[K comparable, V any] struct {
@@ -98,7 +109,7 @@ func (m *Map[K, V]) Subscribe(done <-chan struct{}, includeFilter func(K, V) boo
 		go func() {
 			<-done
 			m.subscribers.Delete(id)
-			close(ch)
+			sb.close()
 		}()
 	}
 	return ch
@@ -308,7 +319,13 @@ func (ad *allDelta[K, V]) filteredDelta(initialized bool, include func(K, V) boo
 }
 
 func (ad *allDelta[K, V]) send(sb *subscription[K, V]) {
-	initialized := sb.initialized.Swap(true)
+	sb.Lock()
+	defer sb.Unlock()
+	if sb.closed {
+		return
+	}
+	initialized := sb.initialized
+	sb.initialized = true
 	fd := ad.filteredDelta(initialized, sb.include)
 	if initialized && len(fd.Upserts) == 0 && len(fd.Removals) == 0 {
 		return

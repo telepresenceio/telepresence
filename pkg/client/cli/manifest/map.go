@@ -202,6 +202,9 @@ func buildReplaceCommand(cmd *cobra.Command, a *Attachment) (*intercept.Command,
 	if err := validateMountFlags(cmd.Context(), &mf); err != nil {
 		return nil, err
 	}
+	if a.NodeAgent != nil && *a.NodeAgent {
+		return nil, errcat.User.New("a replace attachment cannot use a node-agent")
+	}
 	c := &intercept.Command{
 		EnvFlags:      ef,
 		MountFlags:    mf,
@@ -212,7 +215,7 @@ func buildReplaceCommand(cmd *cobra.Command, a *Attachment) (*intercept.Command,
 		Address:       a.Address,
 		ContainerName: a.Container,
 		Replace:       true,
-		NodeAgent:     desiredNodeAgent(cmd, a),
+		NodeAgent:     false,
 		ToPod:         append([]string(nil), a.ToPod...),
 		Mechanism:     "tcp",
 		NoDefaultPort: true,

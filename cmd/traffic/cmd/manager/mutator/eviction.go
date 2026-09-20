@@ -62,7 +62,7 @@ func (c *configWatcher) EvictPodsWithAgentConfig(ctx context.Context, wl k8sapi.
 }
 
 func (c *configWatcher) EvictAllPodsWithAgentConfig(ctx context.Context, namespace string) error {
-	c.agentConfigs.Delete(namespace)
+	c.deleteNamespaceAgentConfigs(namespace)
 	evictMap, err := podList(ctx, namespace)
 	if err != nil {
 		return err
