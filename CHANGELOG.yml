@@ -27,6 +27,13 @@ items:
   - version: 2.32.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Recover promptly from stalled manager sessions
+        body: >-
+          Manager keepalive failures now use the existing session repair path
+          instead of ending the client session. Expired sessions recover
+          immediately, while repeated transient failures trigger repair
+          without dropping active intercepts.
       - type: feature
         title: Completion for use flag
         body: >-
