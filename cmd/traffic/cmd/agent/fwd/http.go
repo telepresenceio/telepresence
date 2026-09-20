@@ -23,11 +23,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 )
 
-const (
-	httpInterceptMaxIdleConns        = 512
-	httpInterceptMaxIdleConnsPerHost = 128
-	httpInterceptMaxConnsPerHost     = 128
-)
+// httpInterceptMaxIdleConnsPerHost replaces the transport's default of two idle
+// connections per host, which would otherwise close most reusable connections
+// to the intercept handler as soon as a burst of requests ends.
+const httpInterceptMaxIdleConnsPerHost = 128
 
 type httpInterceptDialContextKey struct{}
 
@@ -238,9 +237,7 @@ func (f *tcp) configureUpstreamTransport(ctx context.Context, plaintext bool) *h
 	tm := f.tlsManager
 	tp := f.Target().Port()
 	trn := f.configureTransport(ctx, plaintext)
-	trn.MaxIdleConns = max(trn.MaxIdleConns, httpInterceptMaxIdleConns)
 	trn.MaxIdleConnsPerHost = max(trn.MaxIdleConnsPerHost, httpInterceptMaxIdleConnsPerHost)
-	trn.MaxConnsPerHost = max(trn.MaxConnsPerHost, httpInterceptMaxConnsPerHost)
 	if plaintext {
 		return trn
 	}
