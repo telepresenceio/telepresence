@@ -5,11 +5,42 @@ import (
 	"net/netip"
 	"sync"
 	"testing"
+	"time"
 
 	core "k8s.io/api/core/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
+
+func TestInterceptorInactivePort(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		numericTarget bool
+		inactivePort  uint16
+		want          uint16
+	}{
+		{name: "named target", want: 8000},
+		{name: "numeric target", numericTarget: true, want: 9912},
+		{name: "explicit inactive port", numericTarget: true, inactivePort: 8399, want: 8399},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sc := &Sidecar{Containers: []*Container{{
+				Name: "app",
+				Intercepts: []*Intercept{{
+					ContainerPort:     8000,
+					InactivePort:      tc.inactivePort,
+					AgentPort:         9900,
+					Protocol:          types.ProtoTCP,
+					TargetPortNumeric: tc.numericTarget,
+				}},
+			}}}
+
+			if got := sc.InterceptorInactivePort(8000, types.ProtoTCP); got != tc.want {
+				t.Fatalf("InterceptorInactivePort() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestAgentGIDFromEnv(t *testing.T) {
 	t.Run("unset", func(t *testing.T) {
@@ -181,6 +212,8 @@ func TestMarshalTightDoesNotMutateSidecar(t *testing.T) {
 		InitResources:       &core.ResourceRequirements{},
 		SecurityContext:     &core.SecurityContext{},
 		InitSecurityContext: &core.SecurityContext{},
+		ClientConnectionTTL: 24 * time.Hour,
+		WatchRetryInterval:  3 * time.Second,
 	}
 
 	tight, err := MarshalTight(sc)
@@ -198,6 +231,10 @@ func TestMarshalTightDoesNotMutateSidecar(t *testing.T) {
 		decoded.SecurityContext != nil ||
 		decoded.InitSecurityContext != nil {
 		t.Fatalf("tight config retained container creation fields: %#v", decoded)
+	}
+	if decoded.ClientConnectionTTL != sc.ClientConnectionTTL || decoded.WatchRetryInterval != sc.WatchRetryInterval {
+		t.Fatalf("tight config durations = %s, %s; want %s, %s",
+			decoded.ClientConnectionTTL, decoded.WatchRetryInterval, sc.ClientConnectionTTL, sc.WatchRetryInterval)
 	}
 
 	if sc.AgentImage == "" ||

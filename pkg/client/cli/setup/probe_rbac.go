@@ -7,25 +7,29 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"maps"
 	"sort"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
 
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
-	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/chartutil"
 
-	authv1 "k8s.io/api/authorization/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	auth "k8s.io/api/authorization/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 	"sigs.k8s.io/yaml"
 
-	"github.com/telepresenceio/telepresence/v2/charts"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
+
+// accessReviewConcurrency bounds how many SelfSubjectAccessReviews sweepAccess issues at
+// once, so a large chart render doesn't open hundreds of simultaneous requests.
+const accessReviewConcurrency = 8
 
 // clusterScopedKinds are the chart's kinds that never carry a namespace.
 var clusterScopedKinds = map[string]bool{ //nolint:gochecknoglobals // constant lookup table
@@ -38,7 +42,7 @@ var clusterScopedKinds = map[string]bool{ //nolint:gochecknoglobals // constant 
 	"PriorityClass":                  true,
 }
 
-// DeniedAttribute is a JSON-clean mirror of the authv1.ResourceAttributes a
+// DeniedAttribute is a JSON-clean mirror of the auth.ResourceAttributes a
 // SelfSubjectAccessReview denied; it is exposed in --format json/yaml output
 // so an admin can see exactly which privileges to grant.
 type DeniedAttribute struct {
@@ -56,12 +60,19 @@ type DeniedAttribute struct {
 func (p *Prober) probeRBAC(ctx context.Context, nsExists bool) PrivilegeFacts {
 	facts := PrivilegeFacts{}
 
-	facts.X509KubeSystem = p.singleAccessCheck(ctx, &authv1.ResourceAttributes{
+	facts.X509KubeSystem = p.singleAccessCheck(ctx, &auth.ResourceAttributes{
 		Verb:      "create",
 		Group:     "rbac.authorization.k8s.io",
 		Resource:  "rolebindings",
 		Namespace: "kube-system",
 		Name:      fmt.Sprintf("traffic-manager-x509-auth-%s", p.ManagerNamespace),
+	})
+
+	facts.CertManagerCertificate = p.singleAccessCheck(ctx, &auth.ResourceAttributes{
+		Verb:      "create",
+		Group:     "cert-manager.io",
+		Resource:  certManagerResource,
+		Namespace: p.ManagerNamespace,
 	})
 
 	clusterWide, missing, attrs := p.evaluateChartAccess(ctx, nsExists, p.candidateValues())
@@ -74,9 +85,8 @@ func (p *Prober) probeRBAC(ctx context.Context, nsExists bool) PrivilegeFacts {
 		return facts
 	}
 
-	nsValues := chartutil.CoalesceTables(cloneTopLevel(p.candidateValues()), map[string]any{
-		"namespaces": []any{p.ManagerNamespace},
-	})
+	nsValues := p.candidateValues().DeepCopy()
+	nsValues.Namespaces = []string{p.ManagerNamespace}
 	namespaced, missingNs, nsAttrs := p.evaluateChartAccess(ctx, nsExists, nsValues)
 	facts.Namespaced = namespaced
 	facts.MissingNamespaced = missingNs
@@ -89,7 +99,7 @@ func (p *Prober) probeRBAC(ctx context.Context, nsExists bool) PrivilegeFacts {
 // SelfSubjectAccessReview for each. The formatted denial strings and the
 // structured DeniedAttribute list both derive from the same sorted sweep
 // result, so they never drift apart.
-func (p *Prober) evaluateChartAccess(ctx context.Context, nsExists bool, values map[string]any) (Finding, []string, []DeniedAttribute) {
+func (p *Prober) evaluateChartAccess(ctx context.Context, nsExists bool, values *helm.Values) (Finding, []string, []DeniedAttribute) {
 	chrt, err := loadEmbeddedChart()
 	if err != nil {
 		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
@@ -125,7 +135,7 @@ func (p *Prober) evaluateChartAccess(ctx context.Context, nsExists bool, values 
 
 // toDeniedAttribute mirrors a denied ResourceAttributes into its JSON-clean
 // fact form.
-func toDeniedAttribute(ra *authv1.ResourceAttributes) DeniedAttribute {
+func toDeniedAttribute(ra *auth.ResourceAttributes) DeniedAttribute {
 	return DeniedAttribute{
 		Verb:      ra.Verb,
 		Group:     ra.Group,
@@ -135,26 +145,37 @@ func toDeniedAttribute(ra *authv1.ResourceAttributes) DeniedAttribute {
 	}
 }
 
-// loadEmbeddedChart mirrors loadCoreChart in pkg/client/cli/helm/chart.go, which
-// is unexported.
+// embeddedChartOnce loads and caches the CLI's own embedded chart once, so every P1
+// render and PlannedObjects call reuses the same *chart.Chart.
+var (
+	embeddedChartOnce sync.Once    //nolint:gochecknoglobals // memoization cache
+	embeddedChart     *chart.Chart //nolint:gochecknoglobals // memoization cache
+	errEmbeddedChart  error        //nolint:gochecknoglobals // memoization cache
+)
+
+// loadEmbeddedChart returns the CLI's own embedded telepresence-oss chart at
+// version.Structured.
 func loadEmbeddedChart() (*chart.Chart, error) {
-	var buf bytes.Buffer
-	if err := charts.WriteChart(charts.DirTypeTelepresence, &buf, charts.TelepresenceChartName, version.Structured); err != nil {
-		return nil, err
-	}
-	return loader.LoadArchive(&buf)
+	embeddedChartOnce.Do(func() {
+		embeddedChart, errEmbeddedChart = helm.LoadCoreChart(version.Structured)
+	})
+	return embeddedChart, errEmbeddedChart
 }
 
 // renderChart renders chrt client-side, with no cluster contact, and returns
 // the release manifest concatenated with every hook's manifest.
-func renderChart(ctx context.Context, chrt *chart.Chart, namespace string, values map[string]any) (string, error) {
+func renderChart(ctx context.Context, chrt *chart.Chart, namespace string, values *helm.Values) (string, error) {
 	install := action.NewInstall(&action.Configuration{})
 	install.DryRun = true
 	install.ClientOnly = true
 	install.ReleaseName = "traffic-manager"
 	install.Namespace = namespace
 
-	rel, err := install.RunWithContext(ctx, chrt, values)
+	valuesMap, err := values.ToMap()
+	if err != nil {
+		return "", err
+	}
+	rel, err := install.RunWithContext(ctx, chrt, valuesMap)
 	if err != nil {
 		return "", err
 	}
@@ -201,11 +222,11 @@ func decodeManifests(manifest string) ([]*unstructured.Unstructured, error) {
 // object doesn't carry one of its own. Name is included even though plain RBAC
 // ignores resourceNames on create, because it lets a name-scoped admission
 // policy distinguish same-typed objects.
-func attributesForObjects(objs []*unstructured.Unstructured, managerNamespace string) []*authv1.ResourceAttributes {
-	ras := make([]*authv1.ResourceAttributes, 0, len(objs))
+func attributesForObjects(objs []*unstructured.Unstructured, managerNamespace string) []*auth.ResourceAttributes {
+	ras := make([]*auth.ResourceAttributes, 0, len(objs))
 	for _, obj := range objs {
 		gvk := obj.GroupVersionKind()
-		gvr, _ := meta.UnsafeGuessKindToResource(gvk)
+		gvr, _ := apimeta.UnsafeGuessKindToResource(gvk)
 
 		ns := ""
 		if !clusterScopedKinds[gvk.Kind] {
@@ -214,7 +235,7 @@ func attributesForObjects(objs []*unstructured.Unstructured, managerNamespace st
 				ns = managerNamespace
 			}
 		}
-		ras = append(ras, &authv1.ResourceAttributes{
+		ras = append(ras, &auth.ResourceAttributes{
 			Verb:      "create",
 			Group:     gvr.Group,
 			Version:   gvr.Version,
@@ -229,38 +250,29 @@ func attributesForObjects(objs []*unstructured.Unstructured, managerNamespace st
 // extraChecks are the install-time RBAC needs that no rendered object implies:
 // namespace creation, the helm storage driver's secrets, and the privileged
 // PSS label patch that node-agent mode requires.
-func extraChecks(nsExists bool, values map[string]any, managerNamespace string) []*authv1.ResourceAttributes {
-	var extra []*authv1.ResourceAttributes
+func extraChecks(nsExists bool, values *helm.Values, managerNamespace string) []*auth.ResourceAttributes {
+	var extra []*auth.ResourceAttributes
 	if !nsExists {
-		extra = append(extra, &authv1.ResourceAttributes{Verb: "create", Resource: "namespaces"})
+		extra = append(extra, &auth.ResourceAttributes{Verb: "create", Resource: "namespaces"})
 	}
-	extra = append(extra, &authv1.ResourceAttributes{Verb: "create", Resource: "secrets", Namespace: managerNamespace})
-	if nodeAgentEnabled(values) {
-		extra = append(extra, &authv1.ResourceAttributes{Verb: "patch", Resource: "namespaces", Name: managerNamespace})
+	extra = append(extra, &auth.ResourceAttributes{Verb: "create", Resource: "secrets", Namespace: managerNamespace})
+	if deref(values.NodeAgent.Enabled) {
+		extra = append(extra, &auth.ResourceAttributes{Verb: "patch", Resource: "namespaces", Name: managerNamespace})
 	}
 	return extra
 }
 
-func nodeAgentEnabled(values map[string]any) bool {
-	na, ok := values["nodeAgent"].(map[string]any)
-	if !ok {
-		return false
-	}
-	enabled, _ := na["enabled"].(bool)
-	return enabled
-}
-
 // attributeKey renders every field a SelfSubjectAccessReview compares into a
 // single string, used for both deduplication and deterministic ordering.
-func attributeKey(ra *authv1.ResourceAttributes) string {
+func attributeKey(ra *auth.ResourceAttributes) string {
 	return strings.Join([]string{ra.Verb, ra.Group, ra.Version, ra.Resource, ra.Subresource, ra.Namespace, ra.Name}, "|")
 }
 
 // dedupeAttributes removes ResourceAttributes that are identical in every
 // field that a SelfSubjectAccessReview compares.
-func dedupeAttributes(ras []*authv1.ResourceAttributes) []*authv1.ResourceAttributes {
+func dedupeAttributes(ras []*auth.ResourceAttributes) []*auth.ResourceAttributes {
 	seen := make(map[string]bool, len(ras))
-	out := make([]*authv1.ResourceAttributes, 0, len(ras))
+	out := make([]*auth.ResourceAttributes, 0, len(ras))
 	for _, ra := range ras {
 		key := attributeKey(ra)
 		if seen[key] {
@@ -272,24 +284,34 @@ func dedupeAttributes(ras []*authv1.ResourceAttributes) []*authv1.ResourceAttrib
 	return out
 }
 
-// sweepAccess issues one SelfSubjectAccessReview per attribute set and returns
-// the denied attributes, sorted deterministically. It errors only when a
-// review call itself fails (transport or API error), never on a denial.
-func (p *Prober) sweepAccess(ctx context.Context, ras []*authv1.ResourceAttributes) ([]*authv1.ResourceAttributes, error) {
+// sweepAccess issues one SelfSubjectAccessReview per attribute set, up to
+// accessReviewConcurrency at a time, and returns the denied attributes, sorted
+// deterministically. It errors only when a review call itself fails (transport or API
+// error), never on a denial.
+func (p *Prober) sweepAccess(ctx context.Context, ras []*auth.ResourceAttributes) ([]*auth.ResourceAttributes, error) {
 	sar := p.KubeClient.AuthorizationV1().SelfSubjectAccessReviews()
-	var denied []*authv1.ResourceAttributes
+	var mu sync.Mutex
+	var denied []*auth.ResourceAttributes
 	var callErrs []string
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(accessReviewConcurrency)
 	for _, ra := range ras {
-		review := &authv1.SelfSubjectAccessReview{Spec: authv1.SelfSubjectAccessReviewSpec{ResourceAttributes: ra}}
-		result, err := sar.Create(ctx, review, metav1.CreateOptions{})
-		if err != nil {
-			callErrs = append(callErrs, err.Error())
-			continue
-		}
-		if !result.Status.Allowed {
-			denied = append(denied, ra)
-		}
+		g.Go(func() error {
+			review := &auth.SelfSubjectAccessReview{Spec: auth.SelfSubjectAccessReviewSpec{ResourceAttributes: ra}}
+			result, err := sar.Create(gctx, review, meta.CreateOptions{})
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				callErrs = append(callErrs, err.Error())
+			} else if !result.Status.Allowed {
+				denied = append(denied, ra)
+			}
+			return nil
+		})
 	}
+	_ = g.Wait()
+
 	if len(callErrs) > 0 {
 		return denied, errors.New(strings.Join(callErrs, "; "))
 	}
@@ -299,10 +321,10 @@ func (p *Prober) sweepAccess(ctx context.Context, ras []*authv1.ResourceAttribut
 
 // singleAccessCheck issues one SelfSubjectAccessReview and reports the result
 // as a Finding.
-func (p *Prober) singleAccessCheck(ctx context.Context, ra *authv1.ResourceAttributes) Finding {
+func (p *Prober) singleAccessCheck(ctx context.Context, ra *auth.ResourceAttributes) Finding {
 	sar := p.KubeClient.AuthorizationV1().SelfSubjectAccessReviews()
-	review := &authv1.SelfSubjectAccessReview{Spec: authv1.SelfSubjectAccessReviewSpec{ResourceAttributes: ra}}
-	result, err := sar.Create(ctx, review, metav1.CreateOptions{})
+	review := &auth.SelfSubjectAccessReview{Spec: auth.SelfSubjectAccessReviewSpec{ResourceAttributes: ra}}
+	result, err := sar.Create(ctx, review, meta.CreateOptions{})
 	if err != nil {
 		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}
 	}
@@ -314,7 +336,7 @@ func (p *Prober) singleAccessCheck(ctx context.Context, ra *authv1.ResourceAttri
 
 // formatAttributes renders a denial like "create deployments.apps in namespace
 // ambassador" or "create clusterroles.rbac.authorization.k8s.io".
-func formatAttributes(ra *authv1.ResourceAttributes) string {
+func formatAttributes(ra *auth.ResourceAttributes) string {
 	res := ra.Resource
 	if ra.Group != "" {
 		res += "." + ra.Group
@@ -324,10 +346,4 @@ func formatAttributes(ra *authv1.ResourceAttributes) string {
 		s += " in namespace " + ra.Namespace
 	}
 	return s
-}
-
-func cloneTopLevel(v map[string]any) map[string]any {
-	out := make(map[string]any, len(v))
-	maps.Copy(out, v)
-	return out
 }

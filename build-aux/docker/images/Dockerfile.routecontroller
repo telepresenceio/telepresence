@@ -16,8 +16,6 @@
 
 FROM --platform=$BUILDPLATFORM golang:alpine AS routecontroller-build
 
-ENV GOEXPERIMENT=jsonv2
-
 WORKDIR telepresence
 COPY go.mod go.sum .
 COPY cmd/routecontroller/ cmd/routecontroller/

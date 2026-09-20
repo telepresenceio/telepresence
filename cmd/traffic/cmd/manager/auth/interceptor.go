@@ -102,6 +102,9 @@ func (i *Interceptor) authenticate(ctx context.Context, method string) (context.
 		if enforcing {
 			return ctx, status.Error(codes.Unauthenticated, unauthenticatedMessage)
 		}
+	case errors.Is(err, errTooManyReviews):
+		clog.Warnf(ctx, "call to %s was rejected by review admission", method)
+		return ctx, status.Error(codes.ResourceExhausted, "too many authentication attempts")
 	default:
 		clog.Errorf(ctx, "token authentication unavailable for %s: %v", method, err)
 		if enforcing {

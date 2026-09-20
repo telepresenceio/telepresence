@@ -8,7 +8,7 @@ disable-model-invocation: true
 
 End-to-end driver for releasing Telepresence. Picks up where `prepare-release` left off and carries the change through:
 
-1. Telepresence release PR (CI green + `ok to test` + `regression` green)
+1. Telepresence release PR (CI green + `regression` green)
 2. Docs PR in `../telepresence.io`
 3. Tag push, Releases workflow, merge of both PRs.
 
@@ -59,17 +59,11 @@ Filter out the rows whose name is exactly `regression` or `node_agent_docker_run
 
 **Polling cadence:** these checks (lint, unit tests, license, image-scan) typically finish in 5-15 min. Use `ScheduleWakeup` with `delaySeconds=180` while any check is still running. Do not tight-loop with sleeps.
 
-### 1.3 Trigger `regression`
+### 1.3 Wait for `regression` to be green
 
-Once every non-`regression` check is green:
-
-```
-gh pr edit "$tp_branch" --add-label "ok to test"
-```
-
-Confirm the label is set: `gh pr view "$tp_branch" --json labels`.
-
-### 1.4 Wait for `regression` to be green
+`regression` starts automatically with the push (the release branch lives in
+this repository); there is nothing to trigger. If it needs another attempt,
+use "Re-run all jobs" on its workflow run (`gh run rerun <run-id>`).
 
 The regression suite runs as three parallel shards (~30 min including cluster setup), summed into the single `regression` context; the node-agent job runs beside them. Use `ScheduleWakeup` with `delaySeconds` around **900**. Poll with the same `gh pr checks` query, looking at the `regression` and `node_agent_docker_runtime` rows.
 
@@ -235,7 +229,7 @@ Verify each merged: `gh pr view "$tp_branch" --json state` should report `MERGED
 
 - Anything under 5 min → don't sleep; just poll once.
 - 5-30 min waits (Phase 1.2 non-regression checks) → `ScheduleWakeup` with `delaySeconds=180`.
-- 30-60 min waits (Phase 1.4 `regression`) → `ScheduleWakeup` with `delaySeconds=1200`.
+- 30-60 min waits (Phase 1.3 `regression`) → `ScheduleWakeup` with `delaySeconds=1200`.
 - Hours-to-overnight (Phase 3.2 macOS signing approval) → `ScheduleWakeup` with `delaySeconds=1800` or longer.
 
 Each wake-up: re-fetch state, decide green/red/still-waiting, schedule the next wake or advance.
@@ -253,6 +247,6 @@ Each wake-up: re-fetch state, decide green/red/still-waiting, schedule the next 
 - Push tags before all required PR checks are green (Phase 1 must complete first).
 - Merge the release PR or the docs PR for a pre-release (`-test.*`/`-rc.*`) version — both stay open until GA (see 3.3).
 - Merge PRs as squash or rebase — both repos require merge commits.
-- Skip `ok to test` and try to trigger `regression` some other way.
+- Trigger `regression` by any means other than the push itself or a re-run of its workflow run.
 - Approve the `macos-signing` environment programmatically — that requires a human reviewer.
 - Force-push or delete the release branch.

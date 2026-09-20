@@ -12,7 +12,6 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,7 +37,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client/bwcompat"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/teleroute"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/portforward"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/vip"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/sessioncred"
@@ -514,36 +512,6 @@ func (s *session) lookupSequencerGC() {
 	maps.GC(s.lookupSequencer, lookupSequencerTTL, s.Done(), func(key string, value clusterLookupResult) bool {
 		return time.Since(value.created) > lookupSequencerTTL
 	})
-}
-
-func (s *session) resolvePort(ctx context.Context, host, portStr string) (ap types.AddrPortProto, err error) {
-	ix := strings.LastIndexByte(portStr, types.ProtoSeparator)
-	proto := types.ProtoTCP
-	if ix > 0 {
-		proto, err = types.ParseProto(portStr[ix+1:])
-		if err != nil {
-			return ap, err
-		}
-		portStr = portStr[:ix]
-	}
-
-	if port, err := types.ParsePort(portStr); err == nil {
-		ip, err := netip.ParseAddr(host)
-		if err != nil {
-			ip, err = dns.LookupIP(ctx, s.localDNS, dns2.Fqdn(host))
-			if err != nil {
-				return ap, err
-			}
-		}
-		return types.AddrPortProto{AddrPort: netip.AddrPortFrom(ip, port), Proto: proto}, nil
-	}
-
-	// The toPort is symbolic, so it must be resolved using the Kubernetes API.
-	_, err = netip.ParseAddr(host)
-	if err == nil {
-		return ap, errors.New("a symbolic port must be used with a service name, not an IP address")
-	}
-	return portforward.ResolveServiceAndPort(ctx, host, s.Namespace, portStr, proto)
 }
 
 func (s *session) rerouteRemotePort(ap types.AddrPortProto, newPort uint16) {
@@ -1461,9 +1429,14 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 		// WatchAgentPods instead of this daemon watching the traffic-manager itself.
 		relayMode := len(s.agentPodNamespaces) > 0
 		var agentNamespaces []string
-		if relayMode {
+		switch {
+		case relayMode:
 			agentNamespaces = s.agentPodNamespaces
-		} else {
+		case clusterCfg.UsesExternalManager():
+			// No relay list and no cluster API access: direct agent
+			// port-forwards are unavailable over an external manager
+			// transport, and CanPortForward would be a Kubernetes API call.
+		default:
 			agentNamespaces = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
 				return !k8s.CanPortForward(s, ns)
 			})
@@ -1665,6 +1638,8 @@ func (s *session) activateProxyViaWorkloads() error {
 			return errcat.User.Newf("Agent port-forwards are disabled. Client is not permitted to do proxy-via %s", wlName)
 		}
 		clog.Debugf(s, "Ensuring proxy-via agent in %s", wlName)
+		// wlName has no associated kind here; an ambiguous name is rejected
+		// by the manager rather than resolved on this path.
 		_, err := s.managerClient().EnsureAgent(s, &manager.EnsureAgentRequest{
 			Session: s.session,
 			Name:    wlName,

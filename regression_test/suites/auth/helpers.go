@@ -101,11 +101,11 @@ func createNoGrantsServiceAccount(t *testing.T, ctx context.Context, r *rt.Runti
 	return name
 }
 
-// kubectlCreateToken runs `kubectl create token <name>` in ns and returns the
-// trimmed bearer token.
-func kubectlCreateToken(t *testing.T, ctx context.Context, r *rt.Runtime, ns, name string) string {
+// kubectlCreateToken runs `kubectl create token <name>` in the manager
+// namespace and returns the trimmed bearer token.
+func kubectlCreateToken(t *testing.T, ctx context.Context, r *rt.Runtime, name string) string {
 	t.Helper()
-	out, err := r.Kubectl(ctx, ns, "create", "token", name)
+	out, err := r.Kubectl(ctx, managers.ManagerNamespace, "create", "token", name)
 	if err != nil {
 		t.Fatalf("creating token for %s: %v", name, err)
 	}

@@ -3,6 +3,7 @@ package managers
 import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/labels"
 )
@@ -32,6 +33,9 @@ type Values struct {
 	ClientRbac    Rbac          `json:"clientRbac,omitzero"`
 	ManagerRbac   ManagerRbac   `json:"managerRbac,omitzero"`
 	Timeouts      Timeouts      `json:"timeouts,omitzero"`
+	// Resources is the chart's top-level resources shape: the
+	// traffic-manager container's requests/limits.
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 	// NodeAgent is the chart's top-level nodeAgent.* shape (node-hosted
 	// traffic-agent mode, cluster-wide). Not to be confused with Client's
 	// nested client.nodeAgent.enabled, the client-side default served to
@@ -46,6 +50,10 @@ type Values struct {
 	// Security is the chart's security.* shape: traffic-manager caller
 	// authentication/authorization.
 	Security Security `json:"security,omitzero"`
+	// ExternalEndpoint is the chart's externalEndpoint.* shape: the opt-in
+	// external TLS gRPC listener that lets a client connect without ever
+	// contacting the Kubernetes API server.
+	ExternalEndpoint ExternalEndpoint `json:"externalEndpoint,omitzero"`
 	// Compatibility is the chart's compatibility.* shape: for testing only,
 	// makes the manager emulate an older version (see checkCompat in
 	// cmd/traffic/cmd/manager/service.go).
@@ -204,6 +212,16 @@ type QuicTunnelService struct {
 // authentication/authorization.
 type Security struct {
 	Authentication Authentication `json:"authentication,omitzero"`
+	Authorization  Authorization  `json:"authorization,omitzero"`
+}
+
+// Authorization is the chart's security.authorization.* shape.
+type Authorization struct {
+	// RequiredGrant is one of "portforward", "telepresence", or "any" --
+	// which grant a client must hold to pass the traffic-manager's
+	// authorization review at connect and attach time (values.yaml's
+	// security.authorization.requiredGrant).
+	RequiredGrant string `json:"requiredGrant,omitempty"`
 }
 
 // Authentication is the chart's security.authentication.* shape.
@@ -219,6 +237,31 @@ type X509 struct {
 	// false: the chart default is true, which a plain bool couldn't
 	// override to false through Merge.
 	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// ExternalEndpoint is the chart's externalEndpoint.* shape, restricted to
+// the keys the catalog configures: whether the listener is enabled, the
+// container port it binds to, the Service fronting it, and the Secret its
+// certificate is terminated from.
+type ExternalEndpoint struct {
+	Enabled bool                    `json:"enabled,omitempty"`
+	Port    int                     `json:"port,omitempty"`
+	Service ExternalEndpointService `json:"service,omitzero"`
+	TLS     ExternalEndpointTLS     `json:"tls,omitzero"`
+}
+
+// ExternalEndpointService is the chart's externalEndpoint.service.* shape,
+// restricted to the keys the catalog configures.
+type ExternalEndpointService struct {
+	Type string `json:"type,omitempty"`
+	Port int    `json:"port,omitempty"`
+}
+
+// ExternalEndpointTLS is the chart's externalEndpoint.tls.* shape,
+// restricted to secretName: the catalog only exercises the
+// existing-Secret form, never certManager.
+type ExternalEndpointTLS struct {
+	SecretName string `json:"secretName,omitempty"`
 }
 
 // Compatibility is the chart's compatibility.* shape (for testing only).
@@ -323,6 +366,15 @@ func Baseline(reg, tag, pullPolicy, selectorLabel string) Values {
 		},
 		ManagerRbac: ManagerRbac{Create: true},
 		Timeouts:    Timeouts{AgentArrival: "60s"},
+		// Requests only, no limits: their purpose is cgroup CPU weight, so
+		// the (otherwise BestEffort) manager cannot be starved when many
+		// test workload pods contend for a single node's CPU at once.
+		Resources: &corev1.ResourceRequirements{
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("128Mi"),
+			},
+		},
 		// Expressed as a matchExpressions requirement rather than the
 		// equivalent matchLabels form: released charts up to 2.31.x crash on
 		// a matchLabels-only selector during any LATER manager install's
@@ -349,6 +401,9 @@ func Merge(base, over Values) Values {
 		m.LogLevel = over.LogLevel
 	}
 	m.Image = mergeImage(m.Image, over.Image)
+	if over.Resources != nil {
+		m.Resources = over.Resources
+	}
 	m.Agent.Image = mergeImage(m.Agent.Image, over.Agent.Image)
 	if over.Agent.EnableH2cProbing != nil {
 		m.Agent.EnableH2cProbing = over.Agent.EnableH2cProbing
@@ -367,6 +422,7 @@ func Merge(base, over Values) Values {
 	m.Client = mergeClient(m.Client, over.Client)
 	m.QuicTunnel = mergeQuicTunnel(m.QuicTunnel, over.QuicTunnel)
 	m.Security = mergeSecurity(m.Security, over.Security)
+	m.ExternalEndpoint = mergeExternalEndpoint(m.ExternalEndpoint, over.ExternalEndpoint)
 	if over.Compatibility.Version != "" {
 		m.Compatibility.Version = over.Compatibility.Version
 	}
@@ -540,12 +596,34 @@ func mergeIntercept(base, over Intercept) Intercept {
 	return base
 }
 
+func mergeExternalEndpoint(base, over ExternalEndpoint) ExternalEndpoint {
+	if over.Enabled {
+		base.Enabled = true
+	}
+	if over.Port != 0 {
+		base.Port = over.Port
+	}
+	if over.Service.Type != "" {
+		base.Service.Type = over.Service.Type
+	}
+	if over.Service.Port != 0 {
+		base.Service.Port = over.Service.Port
+	}
+	if over.TLS.SecretName != "" {
+		base.TLS.SecretName = over.TLS.SecretName
+	}
+	return base
+}
+
 func mergeSecurity(base, over Security) Security {
 	if over.Authentication.Mode != "" {
 		base.Authentication.Mode = over.Authentication.Mode
 	}
 	if over.Authentication.X509.Enabled != nil {
 		base.Authentication.X509.Enabled = over.Authentication.X509.Enabled
+	}
+	if over.Authorization.RequiredGrant != "" {
+		base.Authorization.RequiredGrant = over.Authorization.RequiredGrant
 	}
 	return base
 }

@@ -270,4 +270,4 @@ container within the pod, and the original container is automatically restored o
 > Sidecars will not be stopped. Only the targeted container will be removed from the pod.
 
 > [!NOTE]
-> The `--replace` flag of `telepresence intercept` is deprecated; use the `telepresence replace` command.
+> The former `--replace` flag of `telepresence intercept` was removed in 2.32.0; use the `telepresence replace` command.

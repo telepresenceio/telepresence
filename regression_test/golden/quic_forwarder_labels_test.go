@@ -101,7 +101,7 @@ func TestQuicForwarderPodLabels(t *testing.T) {
 			t.Errorf("custom pod label unexpectedly appears on forwarder deployment metadata")
 		}
 
-		manager := quicForwarderResource(t, output, deploymentTpl, "Deployment", "traffic-manager")
+		manager := quicForwarderResource(t, output, statefulsetTpl, "StatefulSet", "traffic-manager")
 		if _, exists := quicForwarderStringMap(t, manager, "spec", "template", "metadata", "labels")[labelKey]; exists {
 			t.Errorf("custom forwarder pod label unexpectedly appears on manager pods")
 		}
@@ -145,6 +145,7 @@ func TestQuicForwarderPodLabels(t *testing.T) {
 		for _, tc := range []struct {
 			name       string
 			template   string
+			kind       string
 			selector   map[string]string
 			label      string
 			otherLabel string
@@ -152,19 +153,21 @@ func TestQuicForwarderPodLabels(t *testing.T) {
 			{
 				name:       "quic-forwarder",
 				template:   quicFwdTpl,
+				kind:       "Deployment",
 				selector:   expectedSelector,
 				label:      labelKey,
 				otherLabel: managerLabelKey,
 			},
 			{
 				name:       "traffic-manager",
-				template:   deploymentTpl,
+				template:   statefulsetTpl,
+				kind:       "StatefulSet",
 				selector:   map[string]string{"app": "traffic-manager", "telepresence": "manager"},
 				label:      managerLabelKey,
 				otherLabel: labelKey,
 			},
 		} {
-			deployment := quicForwarderResource(t, output, tc.template, "Deployment", tc.name)
+			deployment := quicForwarderResource(t, output, tc.template, tc.kind, tc.name)
 			selector := quicForwarderStringMap(t, deployment, "spec", "selector", "matchLabels")
 			if !maps.Equal(selector, tc.selector) {
 				t.Errorf("%s deployment selector = %v, want %v", tc.name, selector, tc.selector)
@@ -217,8 +220,8 @@ func TestQuicForwarderPodLabels(t *testing.T) {
 			if rendered(output, quicFwdTpl) {
 				t.Errorf("forwarder unexpectedly renders when the QUIC tunnel is disabled")
 			}
-			if !rendered(output, deploymentTpl) {
-				t.Errorf("manager deployment does not render when the QUIC tunnel is disabled")
+			if !rendered(output, statefulsetTpl) {
+				t.Errorf("manager statefulset does not render when the QUIC tunnel is disabled")
 			}
 			if strings.Contains(output[serviceTpl], "name: traffic-manager-quic") {
 				t.Errorf("forwarder service unexpectedly renders when the QUIC tunnel is disabled")

@@ -27,7 +27,11 @@ func Apply(ctx context.Context, clientGetter genericclioptions.RESTClientGetter,
 	default:
 		return nil
 	}
-	valuesJSON, err := json.Marshal(p.Values)
+	valuesMap, err := p.Values.ToMap()
+	if err != nil {
+		return err
+	}
+	valuesJSON, err := json.Marshal(valuesMap)
 	if err != nil {
 		return err
 	}

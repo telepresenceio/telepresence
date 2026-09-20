@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"net/netip"
@@ -282,4 +283,13 @@ func TestQuicE2E_Datagrams(t *testing.T) {
 	}, time.Second, 10*time.Millisecond, "server did not record the dead-ConnID datagram as unknown-conn")
 
 	require.NoError(t, client.CloseSend(ctx))
+}
+
+func TestIsPeerClosed(t *testing.T) {
+	peer := &quic.StreamError{StreamID: 4, ErrorCode: 0, Remote: true}
+	assert.True(t, IsPeerClosed(peer))
+	assert.True(t, IsPeerClosed(fmt.Errorf("write: %w", peer)))
+	assert.False(t, IsPeerClosed(&quic.StreamError{StreamID: 4, ErrorCode: 0, Remote: false}))
+	assert.False(t, IsPeerClosed(&quic.StreamError{StreamID: 4, ErrorCode: 1, Remote: true}))
+	assert.False(t, IsPeerClosed(errors.New("other")))
 }

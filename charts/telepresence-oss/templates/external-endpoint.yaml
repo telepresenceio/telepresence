@@ -1,0 +1,52 @@
+{{- with .Values.externalEndpoint }}
+{{- if .enabled }}
+{{- if ne $.Values.security.authentication.mode "enforcing" }}
+{{- fail "externalEndpoint.enabled requires security.authentication.mode: enforcing -- the external listener has no other access control in permissive or disabled mode" }}
+{{- end }}
+{{- $hasSecret := ne .tls.secretName "" }}
+{{- $hasCertManager := .tls.certManager.enabled }}
+{{- if eq $hasSecret $hasCertManager }}
+{{- fail "externalEndpoint.tls: set exactly one of tls.secretName or tls.certManager.enabled" }}
+{{- end }}
+{{- if not (and $.Values.rbac $.Values.rbac.only) }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: traffic-manager-external
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+  {{- with .service.annotations }}
+  annotations:
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .service.type }}
+  ports:
+  - name: external
+    port: {{ .service.port }}
+    targetPort: external
+  selector:
+    {{- include "telepresence.selectorLabels" $ | nindent 4 }}
+{{- if $hasCertManager }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "traffic-manager.externalTLSSecretName" $ }}
+  namespace: {{ include "traffic-manager.namespace" $ }}
+  labels:
+    {{- include "telepresence.labels" $ | nindent 4 }}
+spec:
+  secretName: {{ include "traffic-manager.externalTLSSecretName" $ }}
+  dnsNames:
+  {{- range .tls.certManager.dnsNames }}
+  - {{ . }}
+  {{- end }}
+  issuerRef:
+    {{- toYaml .tls.certManager.issuerRef | nindent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

@@ -10,19 +10,21 @@ import (
 func NewPipe(id ConnID, sessionID SessionID, tagA, tagB Tag) (Stream, Stream) {
 	out := make(chan Message, 1)
 	in := make(chan Message, 1)
-	return &channelStream{
-			id:     id,
-			sid:    sessionID,
-			tag:    tagA,
-			recvCh: in,
-			sendCh: out,
-		}, &channelStream{
-			id:     id,
-			sid:    sessionID,
-			tag:    tagB,
-			recvCh: out,
-			sendCh: in,
-		}
+	a := &channelStream{
+		id:     id,
+		sid:    sessionID,
+		tag:    tagA,
+		recvCh: in,
+		sendCh: out,
+	}
+	b := &channelStream{
+		id:     id,
+		sid:    sessionID,
+		tag:    tagB,
+		recvCh: out,
+		sendCh: in,
+	}
+	return a, b
 }
 
 type channelStream struct {

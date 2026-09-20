@@ -15,29 +15,47 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	admissionv1 "k8s.io/api/admissionregistration/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
+	admission "k8s.io/api/admissionregistration/v1"
+	apps "k8s.io/api/apps/v1"
+	core "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
 	"github.com/telepresenceio/telepresence/v2/pkg/version"
 )
 
-func managerDeployment(desired, ready int32) *appsv1.Deployment {
-	return &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{Name: managerDeploymentName, Namespace: "ambassador"},
-		Spec:       appsv1.DeploymentSpec{Replicas: &desired},
-		Status:     appsv1.DeploymentStatus{ReadyReplicas: ready},
+func managerStatefulSet(desired, ready int32) *apps.StatefulSet {
+	return &apps.StatefulSet{
+		ObjectMeta: meta.ObjectMeta{Name: managerStatefulSetName, Namespace: "ambassador"},
+		Spec:       apps.StatefulSetSpec{Replicas: &desired},
+		Status:     apps.StatefulSetStatus{ReadyReplicas: ready},
 	}
 }
 
-func installedRelease(values map[string]any) *ReleaseFacts {
+func managerDeployment(desired, ready int32) *apps.Deployment {
+	return &apps.Deployment{
+		ObjectMeta: meta.ObjectMeta{Name: managerStatefulSetName, Namespace: "ambassador"},
+		Spec:       apps.DeploymentSpec{Replicas: &desired},
+		Status:     apps.DeploymentStatus{ReadyReplicas: ready},
+	}
+}
+
+// probeHealthAt fetches mw the way GatherFacts does, then runs probeHealth with it.
+func probeHealthAt(p *Prober, rel *ReleaseFacts, auth ClientAuthFacts) *HealthFacts {
+	ctx := context.Background()
+	return p.probeHealth(ctx, rel, auth, p.managerWorkload(ctx))
+}
+
+func installedRelease(values *helm.Values) *ReleaseFacts {
+	if values == nil {
+		values = &helm.Values{}
+	}
 	return &ReleaseFacts{
 		Installed: true,
 		Version:   version.Structured.String(),
@@ -65,13 +83,13 @@ func pemCert(t *testing.T, notAfter time.Time) []byte {
 	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
-func webhookConfiguration(caBundle []byte) *admissionv1.MutatingWebhookConfiguration {
-	return &admissionv1.MutatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{Name: webhookConfigurationPrefix + "ambassador"},
-		Webhooks: []admissionv1.MutatingWebhook{
+func webhookConfiguration(caBundle []byte) *admission.MutatingWebhookConfiguration {
+	return &admission.MutatingWebhookConfiguration{
+		ObjectMeta: meta.ObjectMeta{Name: webhookConfigurationPrefix + "ambassador"},
+		Webhooks: []admission.MutatingWebhook{
 			{
 				Name:         "agent-injector-ambassador.telepresence.io",
-				ClientConfig: admissionv1.WebhookClientConfig{CABundle: caBundle},
+				ClientConfig: admission.WebhookClientConfig{CABundle: caBundle},
 			},
 		},
 	}
@@ -79,70 +97,169 @@ func webhookConfiguration(caBundle []byte) *admissionv1.MutatingWebhookConfigura
 
 func TestProbeHealth_ManagerReadiness(t *testing.T) {
 	t.Run("ready", func(t *testing.T) {
-		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
 		assert.Equal(t, VerdictYes, h.ManagerReady.Verdict)
 		assert.Contains(t, h.ManagerReady.Evidence[0], "1 of 1 replicas ready")
 	})
 	t.Run("unready with warning events as evidence", func(t *testing.T) {
 		client := fake.NewClientset(
-			managerDeployment(1, 0),
+			managerStatefulSet(1, 0),
 			&eventsv1.Event{
-				ObjectMeta: metav1.ObjectMeta{Name: "ev1", Namespace: "ambassador"},
+				ObjectMeta: meta.ObjectMeta{Name: "ev1", Namespace: "ambassador"},
 				Type:       "Warning",
 				Reason:     "BackOff",
 				Note:       "Back-off pulling image",
-				Regarding:  corev1.ObjectReference{Kind: "Pod", Name: "traffic-manager-abc123-xyz", Namespace: "ambassador"},
+				Regarding:  core.ObjectReference{Kind: "Pod", Name: "traffic-manager-abc123-xyz", Namespace: "ambassador"},
 			},
 			&eventsv1.Event{
-				ObjectMeta: metav1.ObjectMeta{Name: "ev2", Namespace: "ambassador"},
+				ObjectMeta: meta.ObjectMeta{Name: "ev2", Namespace: "ambassador"},
 				Type:       "Normal",
 				Reason:     "Pulled",
-				Regarding:  corev1.ObjectReference{Kind: "Pod", Name: "traffic-manager-abc123-xyz", Namespace: "ambassador"},
+				Regarding:  core.ObjectReference{Kind: "Pod", Name: "traffic-manager-abc123-xyz", Namespace: "ambassador"},
 			},
 			&eventsv1.Event{
-				ObjectMeta: metav1.ObjectMeta{Name: "ev3", Namespace: "ambassador"},
+				ObjectMeta: meta.ObjectMeta{Name: "ev3", Namespace: "ambassador"},
 				Type:       "Warning",
 				Reason:     "Unrelated",
-				Regarding:  corev1.ObjectReference{Name: "other-pod", Namespace: "ambassador"},
+				Regarding:  core.ObjectReference{Name: "other-pod", Namespace: "ambassador"},
 			},
 		)
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
 		require.Equal(t, VerdictNo, h.ManagerReady.Verdict)
 		assert.Contains(t, h.ManagerReady.Evidence[0], "0 of 1 replicas ready")
 		require.Len(t, h.ManagerReady.Evidence, 2)
 		assert.Equal(t, "BackOff: Back-off pulling image", h.ManagerReady.Evidence[1])
 	})
 	t.Run("scaled to zero", func(t *testing.T) {
-		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(0, 0)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(0, 0)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
 		require.Equal(t, VerdictNo, h.ManagerReady.Verdict)
 		assert.Contains(t, h.ManagerReady.Evidence[0], "scaled to zero")
 	})
-	t.Run("deployment missing", func(t *testing.T) {
+	t.Run("statefulset missing", func(t *testing.T) {
 		p := &Prober{KubeClient: fake.NewClientset(), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
 		assert.Equal(t, VerdictNo, h.ManagerReady.Verdict)
 	})
 	t.Run("denial is unknown", func(t *testing.T) {
 		client := fake.NewClientset()
-		client.PrependReactor("get", "deployments", func(k8stesting.Action) (bool, runtime.Object, error) {
-			return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, managerDeploymentName, nil)
+		client.PrependReactor("get", "statefulsets", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "statefulsets"}, managerStatefulSetName, nil)
 		})
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
 		assert.Equal(t, VerdictUnknown, h.ManagerReady.Verdict)
 	})
 }
 
+func TestProbeHealth_ManagerDeploymentFallback(t *testing.T) {
+	t.Run("ready deployment reports yes with the migration note", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
+		require.Equal(t, VerdictYes, h.ManagerReady.Verdict)
+		require.NotEmpty(t, h.ManagerReady.Evidence)
+		assert.Contains(t, h.ManagerReady.Evidence[0], "still runs as a Deployment")
+		assert.Contains(t, h.ManagerReady.Evidence[0], "migrates it to a StatefulSet")
+	})
+	t.Run("unready deployment reports no with the migration note", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 0)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
+		require.Equal(t, VerdictNo, h.ManagerReady.Verdict)
+		require.Len(t, h.ManagerReady.Evidence, 2)
+		assert.Contains(t, h.ManagerReady.Evidence[0], "still runs as a Deployment")
+		assert.Contains(t, h.ManagerReady.Evidence[1], "0 of 1 replicas ready")
+	})
+	t.Run("neither statefulset nor deployment exists", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
+		require.Equal(t, VerdictNo, h.ManagerReady.Verdict)
+		require.NotEmpty(t, h.ManagerReady.Evidence)
+		assert.Contains(t, h.ManagerReady.Evidence[0], "statefulset was not found")
+	})
+}
+
+func TestProbeHealth_ExternalEndpoint(t *testing.T) {
+	externalValues := &helm.Values{ExternalEndpoint: helm.ExternalEndpoint{Enabled: new(true)}}
+
+	t.Run("loadbalancer with an assigned address is yes", func(t *testing.T) {
+		client := fake.NewClientset(managerStatefulSet(1, 1), externalService(core.ServiceTypeLoadBalancer, func(svc *core.Service) {
+			svc.Status.LoadBalancer.Ingress = []core.LoadBalancerIngress{{IP: "1.2.3.4"}}
+		}))
+		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(externalValues), ClientAuthFacts{})
+		require.NotNil(t, h.ExternalEndpoint)
+		assert.Equal(t, VerdictYes, h.ExternalEndpoint.Verdict)
+		assert.Contains(t, h.ExternalEndpoint.Evidence[0], "1.2.3.4")
+	})
+	t.Run("loadbalancer still provisioning is unknown", func(t *testing.T) {
+		client := fake.NewClientset(managerStatefulSet(1, 1), externalService(core.ServiceTypeLoadBalancer))
+		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(externalValues), ClientAuthFacts{})
+		require.NotNil(t, h.ExternalEndpoint)
+		assert.Equal(t, VerdictUnknown, h.ExternalEndpoint.Verdict)
+		assert.Contains(t, h.ExternalEndpoint.Evidence[0], "provisioning")
+	})
+	t.Run("missing service is no", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(externalValues), ClientAuthFacts{})
+		require.NotNil(t, h.ExternalEndpoint)
+		assert.Equal(t, VerdictNo, h.ExternalEndpoint.Verdict)
+	})
+	t.Run("nodeport with no allocated port is no", func(t *testing.T) {
+		client := fake.NewClientset(managerStatefulSet(1, 1), externalService(core.ServiceTypeNodePort))
+		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(externalValues), ClientAuthFacts{})
+		require.NotNil(t, h.ExternalEndpoint)
+		assert.Equal(t, VerdictNo, h.ExternalEndpoint.Verdict)
+		assert.Contains(t, h.ExternalEndpoint.Evidence[0], "no allocated node port")
+	})
+	t.Run("nodeport with an allocated port is yes", func(t *testing.T) {
+		client := fake.NewClientset(managerStatefulSet(1, 1), externalService(core.ServiceTypeNodePort, func(svc *core.Service) {
+			svc.Spec.Ports = []core.ServicePort{{Name: externalPortName, Port: 443, NodePort: 31443}}
+		}))
+		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(externalValues), ClientAuthFacts{})
+		require.NotNil(t, h.ExternalEndpoint)
+		assert.Equal(t, VerdictYes, h.ExternalEndpoint.Verdict)
+	})
+	t.Run("clusterip is unknown, not no", func(t *testing.T) {
+		client := fake.NewClientset(managerStatefulSet(1, 1), externalService(core.ServiceTypeClusterIP))
+		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(externalValues), ClientAuthFacts{})
+		require.NotNil(t, h.ExternalEndpoint)
+		assert.Equal(t, VerdictUnknown, h.ExternalEndpoint.Verdict)
+		assert.Contains(t, h.ExternalEndpoint.Evidence[0], "ClusterIP")
+	})
+	t.Run("a denied read is unknown, not no", func(t *testing.T) {
+		client := fake.NewClientset(managerStatefulSet(1, 1))
+		client.PrependReactor("get", "services", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			if action.(k8stesting.GetAction).GetName() == externalServiceName {
+				return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "services"}, externalServiceName, nil)
+			}
+			return false, nil, nil
+		})
+		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(externalValues), ClientAuthFacts{})
+		require.NotNil(t, h.ExternalEndpoint)
+		assert.Equal(t, VerdictUnknown, h.ExternalEndpoint.Verdict)
+		assert.Contains(t, h.ExternalEndpoint.Evidence[0], "could not be read")
+	})
+	t.Run("not enabled skips the check", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
+		assert.Nil(t, h.ExternalEndpoint)
+	})
+}
+
 func TestProbeHealth_Webhook(t *testing.T) {
-	injectorValues := map[string]any{"agentInjector": map[string]any{"enabled": true}}
+	injectorValues := &helm.Values{AgentInjector: helm.AgentInjector{Enabled: new(true)}}
 
 	t.Run("present with a healthy certificate", func(t *testing.T) {
-		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(300*24*time.Hour))))
+		client := fake.NewClientset(managerStatefulSet(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(300*24*time.Hour))))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Webhook)
 		assert.Equal(t, VerdictYes, h.Webhook.Verdict)
 		require.NotNil(t, h.Certificate)
@@ -152,47 +269,47 @@ func TestProbeHealth_Webhook(t *testing.T) {
 		assert.Equal(t, VerdictNo, h.InjectorEndpoints.Verdict)
 	})
 	t.Run("expired certificate", func(t *testing.T) {
-		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(-time.Hour))))
+		client := fake.NewClientset(managerStatefulSet(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(-time.Hour))))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Certificate)
 		assert.Equal(t, VerdictNo, h.Certificate.Verdict)
 		assert.Contains(t, h.Certificate.Evidence[0], "expired")
 	})
 	t.Run("certificate expiring within 30 days", func(t *testing.T) {
-		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(10*24*time.Hour))))
+		client := fake.NewClientset(managerStatefulSet(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(10*24*time.Hour))))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Certificate)
 		assert.Equal(t, VerdictNo, h.Certificate.Verdict)
 		assert.Contains(t, h.Certificate.Evidence[0], "expires within 30 days")
 	})
 	t.Run("unparseable bundle", func(t *testing.T) {
-		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration([]byte("not a pem")))
+		client := fake.NewClientset(managerStatefulSet(1, 1), webhookConfiguration([]byte("not a pem")))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Certificate)
 		assert.Equal(t, VerdictUnknown, h.Certificate.Verdict)
 	})
 	t.Run("missing configuration", func(t *testing.T) {
-		client := fake.NewClientset(managerDeployment(1, 1))
+		client := fake.NewClientset(managerStatefulSet(1, 1))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(injectorValues), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(injectorValues), ClientAuthFacts{})
 		require.NotNil(t, h.Webhook)
 		assert.Equal(t, VerdictNo, h.Webhook.Verdict)
 		assert.Nil(t, h.Certificate)
 	})
 	t.Run("injector disabled by the release skips the checks", func(t *testing.T) {
-		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"agentInjector": map[string]any{"enabled": false}}), ClientAuthFacts{})
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(&helm.Values{AgentInjector: helm.AgentInjector{Enabled: new(false)}}), ClientAuthFacts{})
 		assert.Nil(t, h.Webhook)
 		assert.Nil(t, h.Certificate)
 		assert.Nil(t, h.InjectorEndpoints)
 	})
 	t.Run("injector absent from the values runs the checks", func(t *testing.T) {
-		client := fake.NewClientset(managerDeployment(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(300*24*time.Hour))))
+		client := fake.NewClientset(managerStatefulSet(1, 1), webhookConfiguration(pemCert(t, time.Now().Add(300*24*time.Hour))))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
 		require.NotNil(t, h.Webhook)
 		assert.Equal(t, VerdictYes, h.Webhook.Verdict)
 		require.NotNil(t, h.InjectorEndpoints)
@@ -201,95 +318,95 @@ func TestProbeHealth_Webhook(t *testing.T) {
 
 func TestProbeHealth_QuicAndEndpoints(t *testing.T) {
 	t.Run("quic node port allocated", func(t *testing.T) {
-		client := fake.NewClientset(managerDeployment(1, 1), quicService(corev1.ServiceTypeNodePort, func(svc *corev1.Service) {
-			svc.Spec.Ports = []corev1.ServicePort{{Name: "quic", Port: 7778, NodePort: 31234}}
+		client := fake.NewClientset(managerStatefulSet(1, 1), quicService(core.ServiceTypeNodePort, func(svc *core.Service) {
+			svc.Spec.Ports = []core.ServicePort{{Name: "quic", Port: 7778, NodePort: 31234}}
 		}))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"quicTunnel": map[string]any{"enabled": true}}), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(&helm.Values{QuicTunnel: helm.QuicTunnel{Enabled: new(true)}}), ClientAuthFacts{})
 		require.NotNil(t, h.Quic)
 		assert.Equal(t, VerdictYes, h.Quic.Verdict)
 	})
 	t.Run("quic service missing", func(t *testing.T) {
-		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"quicTunnel": map[string]any{"enabled": true}}), ClientAuthFacts{})
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(&helm.Values{QuicTunnel: helm.QuicTunnel{Enabled: new(true)}}), ClientAuthFacts{})
 		require.NotNil(t, h.Quic)
 		assert.Equal(t, VerdictNo, h.Quic.Verdict)
 	})
 	t.Run("ready injector endpoints", func(t *testing.T) {
-		client := fake.NewClientset(managerDeployment(1, 1),
+		client := fake.NewClientset(managerStatefulSet(1, 1),
 			webhookConfiguration(pemCert(t, time.Now().Add(300*24*time.Hour))), injectorSlice(true))
 		p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(map[string]any{"agentInjector": map[string]any{"enabled": true}}), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(&helm.Values{AgentInjector: helm.AgentInjector{Enabled: new(true)}}), ClientAuthFacts{})
 		require.NotNil(t, h.InjectorEndpoints)
 		assert.Equal(t, VerdictYes, h.InjectorEndpoints.Verdict)
 	})
 }
 
 func TestProbeHealth_X509ClientAuth(t *testing.T) {
-	enforcingX509Disabled := map[string]any{"security": map[string]any{"authentication": map[string]any{
-		"mode": "enforcing", "x509": map[string]any{"enabled": false},
+	enforcingX509Disabled := &helm.Values{Security: helm.Security{Authentication: helm.Authentication{
+		Mode: new(helm.AuthModeEnforcing), X509: helm.X509{Enabled: new(false)},
 	}}}
 
 	t.Run("cert-only client rejected", func(t *testing.T) {
-		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(enforcingX509Disabled), ClientAuthFacts{X509: true})
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(enforcingX509Disabled), ClientAuthFacts{X509: true})
 		require.NotNil(t, h.X509ClientAuth)
 		assert.Equal(t, VerdictNo, h.X509ClientAuth.Verdict)
 		assert.Contains(t, h.X509ClientAuth.Evidence[0], "this client will be rejected")
 	})
 	t.Run("bearer-capable client is unaffected", func(t *testing.T) {
-		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(enforcingX509Disabled), ClientAuthFacts{Bearer: true, X509: true})
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(enforcingX509Disabled), ClientAuthFacts{Bearer: true, X509: true})
 		require.NotNil(t, h.X509ClientAuth)
 		assert.Equal(t, VerdictYes, h.X509ClientAuth.Verdict)
 	})
 	t.Run("x509 not explicitly disabled", func(t *testing.T) {
-		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		enforcing := map[string]any{"security": map[string]any{"authentication": map[string]any{"mode": "enforcing"}}}
-		h := p.probeHealth(context.Background(), installedRelease(enforcing), ClientAuthFacts{X509: true})
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		enforcing := &helm.Values{Security: helm.Security{Authentication: helm.Authentication{Mode: new(helm.AuthModeEnforcing)}}}
+		h := probeHealthAt(p, installedRelease(enforcing), ClientAuthFacts{X509: true})
 		require.NotNil(t, h.X509ClientAuth)
 		assert.Equal(t, VerdictYes, h.X509ClientAuth.Verdict)
 	})
 	t.Run("client with no usable credentials rejected", func(t *testing.T) {
-		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		enforcing := map[string]any{"security": map[string]any{"authentication": map[string]any{"mode": "enforcing"}}}
-		h := p.probeHealth(context.Background(), installedRelease(enforcing), ClientAuthFacts{})
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		enforcing := &helm.Values{Security: helm.Security{Authentication: helm.Authentication{Mode: new(helm.AuthModeEnforcing)}}}
+		h := probeHealthAt(p, installedRelease(enforcing), ClientAuthFacts{})
 		require.NotNil(t, h.X509ClientAuth)
 		assert.Equal(t, VerdictNo, h.X509ClientAuth.Verdict)
 		assert.Contains(t, h.X509ClientAuth.Evidence[0], "neither a bearer token nor a client certificate")
 	})
 	t.Run("not in enforcing mode skips the check", func(t *testing.T) {
-		p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
-		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{X509: true})
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{X509: true})
 		assert.Nil(t, h.X509ClientAuth)
 	})
 }
 
 func TestProbeHealth_VersionSkew(t *testing.T) {
-	p := &Prober{KubeClient: fake.NewClientset(managerDeployment(1, 1)), ManagerNamespace: "ambassador"}
+	p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
 
 	t.Run("equal", func(t *testing.T) {
-		h := p.probeHealth(context.Background(), installedRelease(nil), ClientAuthFacts{})
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
 		assert.Equal(t, VerdictYes, h.VersionSkew.Verdict)
 	})
 	t.Run("older release", func(t *testing.T) {
 		rel := installedRelease(nil)
 		rel.Version = olderVersion()
-		h := p.probeHealth(context.Background(), rel, ClientAuthFacts{})
+		h := probeHealthAt(p, rel, ClientAuthFacts{})
 		require.Equal(t, VerdictNo, h.VersionSkew.Verdict)
 		assert.Contains(t, h.VersionSkew.Evidence[0], "older than this client")
 	})
 	t.Run("newer release", func(t *testing.T) {
 		rel := installedRelease(nil)
 		rel.Version = newerVersion()
-		h := p.probeHealth(context.Background(), rel, ClientAuthFacts{})
+		h := probeHealthAt(p, rel, ClientAuthFacts{})
 		require.Equal(t, VerdictNo, h.VersionSkew.Verdict)
 		assert.Contains(t, h.VersionSkew.Evidence[0], "upgrade the client instead")
 	})
 	t.Run("unparseable release version", func(t *testing.T) {
 		rel := installedRelease(nil)
 		rel.Version = "not-a-version"
-		h := p.probeHealth(context.Background(), rel, ClientAuthFacts{})
+		h := probeHealthAt(p, rel, ClientAuthFacts{})
 		assert.Equal(t, VerdictUnknown, h.VersionSkew.Verdict)
 	})
 }

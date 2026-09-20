@@ -54,9 +54,6 @@ service Daemon {
   // LookupIP resolves the given name using the Telepresence DNS server
   rpc LookupIP(LookupIPRequest) returns (LookupIPResponse);
 
-  // ResolvePort resolves an hostName:portID string from into a netip.AddrPort
-  rpc ResolvePort(ResolvePortRequest) returns (ResolvePortResponse);
-
   // RerouteRemotePort makes a netip.AddrPort available on a new port on the same address.
   rpc RerouteRemotePort(ReroutePortRequest) returns (google.protobuf.Empty);
 

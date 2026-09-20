@@ -3,7 +3,6 @@ package helm
 import (
 	"bytes"
 	"context"
-	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
-	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/registry"
 
@@ -22,7 +20,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
-func loadCoreChart(version semver.Version) (*chart.Chart, error) {
+// LoadCoreChart loads the CLI's embedded telepresence-oss chart at the given version.
+func LoadCoreChart(version semver.Version) (*chart.Chart, error) {
 	var buf bytes.Buffer
 	if err := charts.WriteChart(charts.DirTypeTelepresence, &buf, charts.TelepresenceChartName, version); err != nil {
 		return nil, err
@@ -79,35 +78,34 @@ func pullCoreChart(ctx context.Context, helmConfig *action.Configuration, ref st
 	return c, err
 }
 
-func coalesceValues(ctx context.Context, req *Request) (map[string]any, error) {
-	// OK, now install things.
-	var providedVals map[string]any
+func coalesceValues(ctx context.Context, req *Request) (*Values, error) {
+	var provided *Values
 	if len(req.ValuesJson) > 0 {
-		if err := json.Unmarshal(req.ValuesJson, &providedVals); err != nil {
+		v, err := ParseValues(req.ValuesJson)
+		if err != nil {
 			return nil, fmt.Errorf("unable to parse values JSON: %w", err)
 		}
-	}
-
-	var vals map[string]any
-	if len(providedVals) > 0 {
-		vals = chartutil.CoalesceTables(providedVals, GetValuesFunc(ctx, req))
-	} else {
-		// No values were provided. This means that an upgrade should retain existing values unless
-		// reset-values is true.
-		if req.Type == Upgrade && !req.ResetValues {
-			req.ReuseValues = true
+		if !v.IsZero() {
+			provided = v
 		}
-		vals = GetValuesFunc(ctx, req)
 	}
-	return vals, nil
+	if provided != nil {
+		return MergeValues(provided, GetValuesFunc(ctx, req)), nil
+	}
+	// No values were provided. This means that an upgrade should retain existing values unless
+	// reset-values is true.
+	if req.Type == Upgrade && !req.ResetValues {
+		req.ReuseValues = true
+	}
+	return GetValuesFunc(ctx, req), nil
 }
 
-func loadOrPullChart(ctx context.Context, helmConfig *action.Configuration, req *Request) (chrt *chart.Chart, vals map[string]any, err error) {
+func loadOrPullChart(ctx context.Context, helmConfig *action.Configuration, req *Request) (chrt *chart.Chart, vals *Values, err error) {
 	vals, err = coalesceValues(ctx, req)
 	if err != nil {
 		return nil, nil, err
 	}
-	tmVer, err := getTrafficManagerVersion(vals)
+	tmVer, err := vals.TrafficManagerVersion()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -121,7 +119,7 @@ func loadOrPullChart(ctx context.Context, helmConfig *action.Configuration, req 
 			return chrt, vals, err
 		}
 	}
-	chrt, err = loadCoreChart(tmVer)
+	chrt, err = LoadCoreChart(tmVer)
 	if err != nil {
 		err = fmt.Errorf("unable to load built-in helm chart: %w", err)
 	}
