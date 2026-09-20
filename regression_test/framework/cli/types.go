@@ -14,6 +14,7 @@ type Status struct {
 // UserDaemonStatus the framework asserts on.
 type UserDaemonStatus struct {
 	Running          bool   `json:"running,omitempty"`
+	Status           string `json:"status,omitempty"`
 	Version          string `json:"version,omitempty"`
 	Namespace        string `json:"namespace,omitempty"`
 	ManagerNamespace string `json:"manager_namespace,omitempty"`
