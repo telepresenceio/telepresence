@@ -27,6 +27,14 @@ items:
   - version: 2.32.0
     date: (TBD)
     notes:
+      - type: change
+        title: Agent watch streams omit container environments the client does not need
+        body: >-
+          The traffic-manager sent every container's environment variables with
+          each agent update, which made reconnect snapshots large in namespaces
+          with many pods. Clients now receive agent updates without the
+          environment maps and fetch a full description only when an ingest or
+          intercept needs one. Older clients keep receiving the full payloads.
       - type: feature
         title: Choose the port that receives non-intercepted traffic
         body: >-

@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.32.0
 <Note>
+	<Title type="change">Agent watch streams omit container environments the client does not need</Title>
+	<Body>
+The traffic-manager sent every container's environment variables with each agent update, which made reconnect snapshots large in namespaces with many pods. Clients now receive agent updates without the environment maps and fetch a full description only when an ingest or intercept needs one. Older clients keep receiving the full payloads.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="reference/cluster-config">Choose the port that receives non-intercepted traffic</Title>
 	<Body>
 The <code>telepresence.io/inject-inactive-port</code> annotation names the container port the traffic-agent forwards traffic to while no intercept is active, instead of the intercepted container port. It applies to workloads with exactly one intercepted container port.
