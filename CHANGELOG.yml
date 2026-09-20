@@ -35,6 +35,12 @@ items:
           list while that snapshot was empty or slow to arrive. The list is now
           built from the current intercepts themselves, and workload details such
           as services and replica counts are added when the watcher has them.
+        title: Recover promptly from stalled manager sessions
+        body: >-
+          Manager keepalive failures now use the existing session repair path
+          instead of ending the client session. Expired sessions recover
+          immediately, while repeated transient failures trigger repair
+          without dropping active intercepts.
       - type: feature
         title: Completion for use flag
         body: >-

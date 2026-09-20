@@ -493,13 +493,13 @@ func (kc *Cluster) namespacesEventHandler(evCh <-chan watch.Event, nsSynced chan
 // source. Entries are marked accessible without the canAccessNS probe, since the
 // manager already scoped the stream and a reduced-RBAC client may not be able to run
 // that probe itself.
-func (kc *Cluster) StartNamespacesFromManager(mc manager.ManagerClient, session *manager.SessionInfo) {
+func (kc *Cluster) StartNamespacesFromManager(mc func() manager.ManagerClient, session *manager.SessionInfo) {
 	nsSynced := make(chan struct{})
 	closeSynced := sync.Once{}
 	go func() {
 		_ = watcher.WatchWithRetry(kc, "WatchNamespaces", client.GetConfig(kc).Grpc().WatchRetryInterval,
 			func(ctx context.Context) (grpc.ServerStreamingClient[manager.NamespaceList], error) {
-				return mc.WatchNamespaces(ctx, session)
+				return mc().WatchNamespaces(ctx, session)
 			},
 			func(nsl *manager.NamespaceList) error {
 				kc.applyNamespaceList(nsl)

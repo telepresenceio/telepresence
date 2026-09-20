@@ -9,9 +9,9 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.32.0
 <Note>
-	<Title type="bugfix">Intercept-only lists no longer wait for the workload watcher</Title>
+	<Title type="bugfix">Recover promptly from stalled manager sessions</Title>
 	<Body>
-<code>telepresence list --intercepts</code> built its rows from the workload watcher snapshot, so an active intercept was missing from the list while that snapshot was empty or slow to arrive. The list is now built from the current intercepts themselves, and workload details such as services and replica counts are added when the watcher has them.
+Manager keepalive failures now use the existing session repair path instead of ending the client session. Expired sessions recover immediately, while repeated transient failures trigger repair without dropping active intercepts.
   </Body>
 </Note>
 <Note>
