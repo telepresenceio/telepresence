@@ -35,6 +35,7 @@ items:
           list while that snapshot was empty or slow to arrive. The list is now
           built from the current intercepts themselves, and workload details such
           as services and replica counts are added when the watcher has them.
+      - type: bugfix
         title: Recover promptly from stalled manager sessions
         body: >-
           Manager keepalive failures now use the existing session repair path
