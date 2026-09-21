@@ -145,7 +145,7 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 
 	switch rs := &facts.Routing.Summary; rs.Verdict {
 	case VerdictYes:
-		area(w, "routing", "no conflicts", nil)
+		area(w, "routing", "no conflicts", rs.Evidence)
 	case VerdictNo:
 		area(w, "routing", fmt.Sprintf("%d conflicts", len(facts.Routing.Conflicts)), rs.Evidence)
 	default:
