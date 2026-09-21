@@ -164,6 +164,17 @@ func QuicRelay() Spec {
 	return QuicNodePort()
 }
 
+// QuicNodePortAuthEnforcing returns a manager spec combining QuicNodePort's
+// QUIC tunnel with AuthEnforcing's security.authentication.mode=enforcing,
+// so a suite can prove a QUIC tunnel is still accepted once every RPC call
+// requires a verified identity.
+func QuicNodePortAuthEnforcing() Spec {
+	return Spec{
+		Key:    "quic-nodeport-auth-enforcing",
+		Values: Merge(QuicNodePort().Values, AuthEnforcing().Values),
+	}
+}
+
 // AuthPermissive returns a manager spec that explicitly sets
 // security.authentication.mode to "permissive" -- the chart's own default,
 // set here so the auth area's permissive scenario has a spec named for what
