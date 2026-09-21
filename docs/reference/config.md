@@ -356,6 +356,10 @@ CLI/user-daemon and the traffic-manager.
      (outbound tunnels / outbound tunnel errors / incoming dials / incoming
      dial errors).
 
+The `manager.boot` report includes `nodeagent.enabled`, `injector.enabled`,
+and `authentication.mode` (`disabled`, `permissive`, or `enforcing`). The mode
+is the configured policy; no credentials or authenticated identities are sent.
+
 Reports **never** contain cluster, namespace, workload, hostname, IP address,
 intercept header, or any user-provided string. The full set of keys the
 collector can ever receive is enumerated in the source under
