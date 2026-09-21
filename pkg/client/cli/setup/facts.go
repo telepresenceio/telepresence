@@ -6,6 +6,7 @@ package setup
 import (
 	"context"
 	"net/http"
+	"net/netip"
 	"time"
 
 	core "k8s.io/api/core/v1"
@@ -232,6 +233,12 @@ type Prober struct {
 	// RouteSource reads the workstation's routing table; nil means
 	// routing.GetRoutingTable.
 	RouteSource func(ctx context.Context) ([]*routing.Route, error)
+
+	// ActiveRoutes reports the subnets an already-connected Telepresence
+	// session routes, so the routing probe can exclude its own routes from
+	// conflict detection. nil means defaultActiveRoutes, which asks the root
+	// daemon; ok is false whenever there is no session to ask.
+	ActiveRoutes func(ctx context.Context) (subnets []netip.Prefix, ok bool)
 }
 
 func (p *Prober) candidateValues() *helm.Values {

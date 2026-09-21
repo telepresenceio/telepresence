@@ -257,9 +257,13 @@ func (s *Setup) Test_ApplyIdempotence() {
 		s.Contains(stdout, want)
 	}
 
+	dir := r.ArtifactDir("setup")
+	f5 := filepath.Join(dir, "idempotence-"+ns+"-f5.yaml")
+	f6 := filepath.Join(dir, "idempotence-"+ns+"-f6.yaml")
+
 	// --format json produces the same Summary (render.go's PrintReport)
 	// as a clean structured object instead of sectioned text.
-	jargs := []string{"setup", "--manager-namespace", ns, "--non-interactive", "--format", "json"}
+	jargs := []string{"setup", "--manager-namespace", ns, "--non-interactive", "--format", "json", "--output", f5}
 	stdout, stderr, err = s.CLI().Run(ctx, jargs...)
 	s.Require().NoError(err, "setup --format json: %s", stderr)
 	var summary map[string]any
@@ -273,7 +277,7 @@ func (s *Setup) Test_ApplyIdempotence() {
 	// the StatefulSet unready with "scaled to zero replicas" evidence.
 	_, err = r.Kubectl(ctx, ns, "scale", trafficManagerStatefulSet, "--replicas=0")
 	s.Require().NoError(err)
-	stdout, stderr, err = s.CLI().Run(ctx, "setup", "--manager-namespace", ns, "--non-interactive")
+	stdout, stderr, err = s.CLI().Run(ctx, "setup", "--manager-namespace", ns, "--non-interactive", "--output", f6)
 	s.Require().NoError(err, "setup after scale-to-zero: %s", stderr)
 	s.Contains(stdout, "health: traffic-manager no")
 	s.Contains(stdout, "scaled to zero")
@@ -538,7 +542,9 @@ func (s *Setup) Test_Validation() {
 	ns := rt.PrivateUnmanagedNamespace(env, "validate")
 	t.Cleanup(func() { uninstallIfPresent(t, ctx, r, ns) })
 
-	stdout, stderr, err := s.CLI().Run(ctx, "setup", "--manager-namespace", ns, "--non-interactive")
+	dir := r.ArtifactDir("setup")
+	values := filepath.Join(dir, "validate-"+ns+"-values.yaml")
+	stdout, stderr, err := s.CLI().Run(ctx, "setup", "--manager-namespace", ns, "--non-interactive", "--output", values)
 	s.Require().NoError(err, "setup: %s", stderr)
 
 	for _, want := range []string{

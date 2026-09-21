@@ -20,7 +20,9 @@ $ telepresence setup --apply
 
 The command never mutates anything on the workstation. Every remedy it
 produces is either a cluster-side Helm value or an informative message —
-running it is safe to repeat, and safe to run read-only.
+running it is safe to repeat, and safe to run read-only with `--output`
+alone. At least one of `--output` and `--apply` is required; passing both
+writes the values file and applies it.
 
 ## What it probes
 
@@ -342,8 +344,8 @@ apply will create, grouped by kind and name, and notes that
 `telepresence helm uninstall` removes the release's resources, but leaves
 the manager namespace behind if setup created it.
 
-`telepresence setup --format json` (or `--format yaml`) prints the same
-information as one structured object (`facts`, `answers`, `proposal`,
+`telepresence setup --output values.yaml --format json` (or `--format yaml`)
+prints the same information as one structured object (`facts`, `answers`, `proposal`,
 `action`, and, after an apply, `plannedObjects`/`applyOutcome`/
 `verification`) instead of the sectioned text — this is the standard way
 to attach cluster state to a bug report, and is exactly what the existing-

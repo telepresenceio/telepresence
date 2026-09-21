@@ -14,8 +14,10 @@ The command probes the cluster (privileges, QUIC and node-agent viability,
 webhook creation, namespace scale, and any existing installation), then asks
 only the questions the findings leave open, including whether to enforce
 caller authentication, the required grant, an external control endpoint, and
-legacy client access, and prints a report with the values. --output writes
-the values file, and --apply installs or upgrades the traffic-manager.
+legacy client access, and prints a report with the values. At least one of
+--output and --apply is required: --output writes the values file (--output -
+for a read-only run that only prints them), and --apply installs or upgrades
+the traffic-manager; passing both writes the file and applies it.
 
 ### Usage:
 ```
