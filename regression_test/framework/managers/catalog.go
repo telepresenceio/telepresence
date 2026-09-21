@@ -190,6 +190,22 @@ func AuthEnforcing() Spec {
 	}
 }
 
+// NodeAgentAuthEnforcing returns a manager spec combining NodeAgent's
+// node-hosted traffic-agent mode with security.authentication.mode=
+// enforcing: a node-agent attach must authenticate to the manager the same
+// way a sidecar traffic-agent does.
+func NodeAgentAuthEnforcing() Spec {
+	disableH2c := false
+	return Spec{
+		Key: "node-agent-auth-enforcing",
+		Values: Values{
+			NodeAgent: NodeAgentValues{Enabled: true},
+			Agent:     AgentValues{EnableH2cProbing: &disableH2c},
+			Security:  Security{Authentication: Authentication{Mode: "enforcing"}},
+		},
+	}
+}
+
 // UsageTo returns a manager spec with usage reporting enabled and pointed
 // at addr (a host:port), dialed without TLS: the local usage collector
 // (rt.NewUsageCollector) or any other plain-text gRPC usg-service listener

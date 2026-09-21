@@ -434,6 +434,12 @@ func serverOptions(env *managerutil.Env, extra ...grpc.ServerOption) []grpc.Serv
 	return opts
 }
 
+// mainKeepaliveMinTime is the minimum interval a client may send keepalive
+// pings at before the connection is closed as abusive. The quic-forwarder
+// pings every 10s (keepalive.ClientParameters{Time: 10 * time.Second}), so
+// this must stay below that.
+const mainKeepaliveMinTime = 5 * time.Second
+
 func (s *service) serveHTTP(ctx context.Context) error {
 	env := managerutil.GetEnv(ctx)
 	host := env.ServerHost
@@ -443,10 +449,12 @@ func (s *service) serveHTTP(ctx context.Context) error {
 		return err
 	}
 
-	opts := serverOptions(env, grpc.KeepaliveParams(keepalive.ServerParameters{
-		Time:    env.ClientConnectionTTL,
-		Timeout: 20 * time.Second,
-	}))
+	opts := serverOptions(env,
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{MinTime: mainKeepaliveMinTime, PermitWithoutStream: true}),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    env.ClientConnectionTTL,
+			Timeout: 20 * time.Second,
+		}))
 	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithMintedTokens(s.mintedTokens)), env.AuthenticationMode)
 	svc := server.NewWithAuth(ctx, &server.Interceptors{Unary: ai.Unary(), Stream: ai.Stream()}, opts...)
 	s.RegisterServers(svc)
