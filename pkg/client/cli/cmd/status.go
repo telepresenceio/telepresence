@@ -587,7 +587,7 @@ func printDNS(kvf *ioutil.KeyValueFormatter, d *client.DNSSnake) {
 		dnsKvf.Add("Local addresses", fmt.Sprintf("%s", d.LocalAddresses))
 	}
 	if d.VIFAddress.IsValid() {
-		dnsKvf.Add("VIF Address", d.VIFAddress.String())
+		dnsKvf.Add("DNS server address", d.VIFAddress.String())
 	}
 	dnsKvf.Add("Exclude suffixes", fmt.Sprintf("%v", d.ExcludeSuffixes))
 	dnsKvf.Add("Include suffixes", fmt.Sprintf("%v", d.IncludeSuffixes))
