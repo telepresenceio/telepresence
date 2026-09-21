@@ -831,6 +831,7 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 			},
 		},
 		criVolume,
+		agentconfig.ManagerTokenVolume(),
 	}
 	mounts := []core.VolumeMount{
 		{
@@ -838,6 +839,7 @@ func buildNodeAgentJob(cfg *agentconfig.Sidecar, opts nodeAgentJobOpts) (*batchv
 			MountPath: agentconfig.ExportsMountPoint,
 		},
 		criMount,
+		agentconfig.ManagerTokenVolumeMount(),
 	}
 	if opts.coverDir != "" {
 		hostPathDirOrCreate := core.HostPathDirectoryOrCreate

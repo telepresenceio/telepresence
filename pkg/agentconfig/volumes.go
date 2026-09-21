@@ -12,6 +12,35 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
+// ManagerTokenVolume returns the projected volume that supplies a
+// ServiceAccount token for ManagerTokenAudience, written to ManagerTokenFile
+// so a container can present it to the traffic-manager for authentication.
+func ManagerTokenVolume() core.Volume {
+	return core.Volume{
+		Name: ManagerTokenVolumeName,
+		VolumeSource: core.VolumeSource{
+			Projected: &core.ProjectedVolumeSource{
+				Sources: []core.VolumeProjection{{
+					ServiceAccountToken: &core.ServiceAccountTokenProjection{
+						Audience: ManagerTokenAudience,
+						Path:     ManagerTokenFile,
+					},
+				}},
+			},
+		},
+	}
+}
+
+// ManagerTokenVolumeMount returns the read-only mount for ManagerTokenVolume,
+// placing the token file at ManagerTokenMountPath.
+func ManagerTokenVolumeMount() core.VolumeMount {
+	return core.VolumeMount{
+		Name:      ManagerTokenVolumeName,
+		ReadOnly:  true,
+		MountPath: ManagerTokenMountPath,
+	}
+}
+
 func AgentVolumes(agentName string, pod *core.Pod, coverDir string) (volumes []core.Volume, err error) {
 	volumes = []core.Volume{
 		{
@@ -42,19 +71,7 @@ func AgentVolumes(agentName string, pod *core.Pod, coverDir string) (volumes []c
 				EmptyDir: &core.EmptyDirVolumeSource{},
 			},
 		},
-		{
-			Name: ManagerTokenVolumeName,
-			VolumeSource: core.VolumeSource{
-				Projected: &core.ProjectedVolumeSource{
-					Sources: []core.VolumeProjection{{
-						ServiceAccountToken: &core.ServiceAccountTokenProjection{
-							Audience: ManagerTokenAudience,
-							Path:     ManagerTokenFile,
-						},
-					}},
-				},
-			},
-		},
+		ManagerTokenVolume(),
 	}
 	if coverDir != "" {
 		hostPathDirOrCreate := core.HostPathDirectoryOrCreate

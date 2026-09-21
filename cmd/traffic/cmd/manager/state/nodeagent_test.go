@@ -602,6 +602,43 @@ func TestBuildNodeAgentJob_ExportsVolume(t *testing.T) {
 	assert.Equal(t, agentconfig.ExportsMountPoint, mount.MountPath)
 }
 
+// TestBuildNodeAgentJob_ManagerTokenVolume verifies that the node-agent Job
+// mounts the projected ServiceAccount token used to authenticate to the
+// traffic-manager, the same way the sidecar traffic-agent does.
+func TestBuildNodeAgentJob_ManagerTokenVolume(t *testing.T) {
+	t.Parallel()
+
+	job, err := buildNodeAgentJob(testSidecar(), testOpts())
+	require.NoError(t, err)
+
+	podSpec := job.Spec.Template.Spec
+	var vol *core.Volume
+	for i := range podSpec.Volumes {
+		if podSpec.Volumes[i].Name == agentconfig.ManagerTokenVolumeName {
+			vol = &podSpec.Volumes[i]
+			break
+		}
+	}
+	require.NotNil(t, vol, "manager token volume not found")
+	require.NotNil(t, vol.Projected)
+	require.Len(t, vol.Projected.Sources, 1)
+	sat := vol.Projected.Sources[0].ServiceAccountToken
+	require.NotNil(t, sat)
+	assert.Equal(t, agentconfig.ManagerTokenAudience, sat.Audience)
+	assert.Equal(t, agentconfig.ManagerTokenFile, sat.Path)
+
+	var mount *core.VolumeMount
+	for i := range podSpec.Containers[0].VolumeMounts {
+		if podSpec.Containers[0].VolumeMounts[i].Name == agentconfig.ManagerTokenVolumeName {
+			mount = &podSpec.Containers[0].VolumeMounts[i]
+			break
+		}
+	}
+	require.NotNil(t, mount, "manager token mount not found")
+	assert.Equal(t, agentconfig.ManagerTokenMountPath, mount.MountPath)
+	assert.True(t, mount.ReadOnly)
+}
+
 // TestBuildNodeAgentJob_CRIVolume verifies that, when a CRI socket path is
 // configured, it is mounted read-only into the node-agent container via a
 // hostPath volume of type Socket.
