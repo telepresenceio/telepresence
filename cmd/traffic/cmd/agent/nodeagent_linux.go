@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 
 	"github.com/google/nftables"
 
@@ -129,6 +130,23 @@ func (c *nodeConfig) NodeAgent() bool {
 	return true
 }
 
+// SymlinkRoots returns agentconfig.MountPrefixApp plus the procfs root of every resolved
+// container PID, since exportProcMounts symlinks into the intercepted containers'
+// filesystems by way of /proc/<pid>/root.
+func (c *nodeConfig) SymlinkRoots() []string {
+	names := make([]string, 0, len(c.pids))
+	for name := range c.pids {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	roots := []string{agentconfig.MountPrefixApp}
+	for _, name := range names {
+		roots = append(roots, procfs.RootPath(c.pids[name]))
+	}
+	return roots
+}
+
 // parseContainerIDs decodes the JSON object mapping container name to CRI container ID.
 func parseContainerIDs(raw string) (map[string]string, error) {
 	var ids map[string]string
@@ -219,12 +237,9 @@ func loadNodeConfig(ctx context.Context) (*nodeConfig, error) {
 }
 
 // exportProcMounts populates exportsRoot/<base of cn.MountPoint> with symlinks into pid's
-// mount namespace: one per remote mount path declared in cn.Mounts, plus any pod-injected
-// /var/run/secrets subdirectory of the target that isn't already covered by cn.Mounts. The
-// FTP client strips the ExportsMountPoint prefix from the reported MountPoint (a client-side
-// contract that is out of scope here), so serving must stay rooted under exportsRoot rather
-// than exposing /proc/<pid>/root directly; the symlinks resolve in the target's mount
-// namespace when the node-agent's ftp/sftp server follows them.
+// filesystem via /proc/<pid>/root: one per remote mount path in cn.Mounts, plus any pod-injected
+// /var/run/secrets subdirectory not already covered. Each target is canonicalized with
+// resolveInRoot first, so no symlink of the target's own filesystem lies on the linked path.
 func exportProcMounts(ctx context.Context, exportsRoot string, pid int, cn *agentconfig.Container, mps types.MountPolicies) error {
 	clog.Infof(ctx, "Exporting procfs mounts for container %s", cn.Name)
 	cnMountPoint := filepath.Join(exportsRoot, filepath.Base(cn.MountPoint))
@@ -242,7 +257,13 @@ func exportProcMounts(ctx context.Context, exportsRoot string, pid int, cn *agen
 		if err := dos.MkdirAll(ctx, filepath.Dir(target), 0o700); err != nil {
 			return err
 		}
-		if err := dos.Symlink(ctx, procfs.RootPath(pid, path), target); err != nil {
+		linkPath := path
+		if canonical, cerr := resolveInRoot(procfs.RootPath(pid), path); cerr != nil {
+			clog.Infof(ctx, "Unable to canonicalize mount path %q for container %s: %v", path, cn.Name, cerr)
+		} else {
+			linkPath = canonical
+		}
+		if err := dos.Symlink(ctx, procfs.RootPath(pid, linkPath), target); err != nil {
 			return err
 		}
 	}

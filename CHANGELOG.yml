@@ -243,6 +243,15 @@ items:
           <code>up</code> is interrupted now carries the profiles too, so profiled
           services are stopped as well.
         docs: https://github.com/telepresenceio/telepresence/issues/4278
+      - type: bugfix
+        title: Node-agent intercepts serve their volume mounts again
+        body: >-
+          Mounts made through a node-hosted traffic-agent failed with
+          "Operation not permitted" over sshfs or "Permission denied" over
+          fuseftp, because the agent's confined SFTP and FTP servers knew
+          only the sidecar's fixed mounts tree and not the intercepted
+          container's filesystem. Both servers now follow the node-agent's
+          links into it, and mounted content is reachable again.
   - version: 2.31.2
     date: 2026-08-02
     notes:

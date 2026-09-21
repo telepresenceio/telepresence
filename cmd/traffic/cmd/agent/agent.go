@@ -107,9 +107,8 @@ func appEnvironment(osEnv []string, ag *agentconfig.Container) map[string]string
 // sftpServer creates a listener on the next available port, writes that port on the
 // given channel, and then starts accepting connections on that port. Each connection is
 // screened by serveSftpConn's tunnel-source gate and, once past that, served by a
-// sftpserver.Server confined to agentconfig.ExportsMountPoint and
-// agentconfig.MountPrefixApp.
-func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAuth, podIP netip.Addr) error {
+// sftpserver.Server confined to agentconfig.ExportsMountPoint and roots.
+func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAuth, podIP netip.Addr, roots []string) error {
 	defer close(sftpPortCh)
 
 	// start an sftp-server for remote sshfs mounts
@@ -132,7 +131,7 @@ func sftpServer(ctx context.Context, sftpPortCh chan<- uint16, auth *fileShareAu
 	}
 	sftpPortCh <- ap.Port()
 
-	srv, err := sftpserver.New(agentconfig.ExportsMountPoint, agentconfig.MountPrefixApp)
+	srv, err := sftpserver.New(agentconfig.ExportsMountPoint, roots...)
 	if err != nil {
 		return err
 	}
@@ -290,17 +289,17 @@ func StartServices(g log.Group, config Config, srv State) (*rpc.AgentInfo, error
 	ftpPortCh := make(chan uint16)
 	if config.HasRemoteMounts() {
 		g.Go("sftp-server", func(ctx context.Context) error {
-			return sftpServer(ctx, sftpPortCh, srv.FileShareAuth(), config.PodIP())
+			return sftpServer(ctx, sftpPortCh, srv.FileShareAuth(), config.PodIP(), config.SymlinkRoots())
 		})
 		g.Go("ftp-server", func(ctx context.Context) error {
 			publicHost := ""
 			if !config.PodIP().Is6() {
 				publicHost = config.PodIP().String()
 			}
-			// MountPrefixApp is the only tree the exports symlinks may lead into;
-			// see addAppMounts, which creates them.
+			// config.SymlinkRoots lists the trees the exports symlinks may lead
+			// into; see addAppMounts and exportProcMounts, which create them.
 			return ftp.StartWithValidator(ctx, publicHost, agentconfig.ExportsMountPoint, ftpPortCh,
-				srv.FileShareAuth().validatePassword, agentconfig.MountPrefixApp)
+				srv.FileShareAuth().validatePassword, config.SymlinkRoots()...)
 		})
 	} else {
 		close(sftpPortCh)

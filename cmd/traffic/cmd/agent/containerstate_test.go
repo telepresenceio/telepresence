@@ -36,6 +36,7 @@ func (f *fakeConfig) NodeAgent() bool                            { return false 
 func (f *fakeConfig) AppPodIP() netip.Addr                       { return f.podIP }
 func (f *fakeConfig) ListenerFactory() forwarder.ListenerFactory { return nil }
 func (f *fakeConfig) DialerFactory() forwarder.Dialer            { return nil }
+func (f *fakeConfig) SymlinkRoots() []string                     { return nil }
 
 // newTestContainerState builds a containerState for a single-container,
 // single-intercept Sidecar config, with the intercept's TargetPortNumeric
