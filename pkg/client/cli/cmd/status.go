@@ -287,6 +287,12 @@ func setUserDaemonStatus(ctx context.Context, userD daemon.UserClient, di *daemo
 		us.Error = err.Error()
 		return nil, err
 	}
+	// A reply without a session carries only the root daemon's status: the
+	// user daemon is running but nothing is connected.
+	if status.SessionInfo == nil {
+		us.Status = "Not connected"
+		return status, nil
+	}
 	us.Status = "Connected"
 	us.KubernetesServer = status.ClusterServer
 	us.KubernetesContext = status.ClusterContext

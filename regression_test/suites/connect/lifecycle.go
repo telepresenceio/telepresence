@@ -94,6 +94,11 @@ func (s *ConnectLifecycle) Test_Lifecycle() {
 	_, stderr, err := s.CLI().Run(s.Ctx(), "quit")
 	s.Require().NoError(err, "quit: %s", stderr)
 
+	st = conn.Status(t)
+	s.True(st.UserDaemon.Running, "user daemon should still be running after quit")
+	s.Equal("Not connected", st.UserDaemon.Status, "user daemon must not report a connection after quit")
+	s.Empty(st.UserDaemon.Namespace)
+
 	// Connect again: a fresh session on the same daemons.
 	_, stderr, err = s.CLI().Run(s.Ctx(), "connect",
 		"--namespace", ns,
