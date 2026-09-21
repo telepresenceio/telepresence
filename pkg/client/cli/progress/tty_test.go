@@ -137,6 +137,27 @@ func TestErrorEventWrap(t *testing.T) {
 	assert.Equal(t, 2, n)
 }
 
+// TestErrorEventNoStartTime verifies that an error event created without a
+// StartTime (as NewEvent leaves it for anything but a working event) prints
+// no timer text, instead of the bogus duration EndTime.Sub(a zero time)
+// would produce.
+func TestErrorEventNoStartTime(t *testing.T) {
+	ev := &Event{
+		ID:         "id",
+		Text:       "Text",
+		Status:     EventStatusError,
+		StatusText: "Failed",
+		EndTime:    time.Now(),
+		spinner: &spinner{
+			chars: []string{"."},
+		},
+	}
+
+	lineWidth := len(fmt.Sprintf("%s %s ", ev.ID, ev.Text))
+	out, _ := tty().lineText(ev, true, 40, lineWidth)
+	assert.NotContains(t, out, "s ")
+}
+
 func TestLineTextSingleEvent(t *testing.T) {
 	now := time.Now()
 	ev := &Event{

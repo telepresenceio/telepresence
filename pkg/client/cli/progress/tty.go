@@ -285,6 +285,8 @@ func (w *ttyWriter) lineText(event *Event, withID bool, terminalWidth, statusPad
 	var timerLen int
 	var timer, coloredTimer string
 	switch {
+	case event.StartTime.IsZero():
+		timer = ""
 	case event.Status == EventStatusWorking:
 		timer = fmt.Sprintf("%.1fs ", time.Since(event.StartTime).Seconds())
 	case !event.EndTime.IsZero():
