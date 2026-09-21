@@ -445,18 +445,24 @@ func (s *service) ReconnectAgent(ctx context.Context, rq *rpc.ReconnectAgentRequ
 // verifiedAgentPrincipal returns the caller's principal when its bound-token pod
 // claims match the presented AgentInfo, and whether a presented principal failed
 // to match (mismatch). mismatch is always false when the caller had no principal
-// at all -- an old, tokenless agent -- which is a distinct, permitted case.
+// at all -- an old, tokenless agent -- which is a distinct, permitted case. A
+// sidecar's ServiceAccount lives in the workload's namespace; a node-agent runs
+// as a Job in the manager's namespace, so its token is expected from there.
 func verifiedAgentPrincipal(ctx context.Context, agent *rpc.AgentInfo) (principal *auth.Principal, mismatch bool) {
 	p := auth.PrincipalFrom(ctx)
 	if p == nil {
 		clog.Debugf(ctx, "agent %s.%s arrived without a bound token", agent.PodName, agent.Namespace)
 		return nil, false
 	}
-	if p.PodName == agent.PodName && p.PodUID == agent.PodUid && strings.HasPrefix(p.Username, "system:serviceaccount:"+agent.Namespace+":") {
+	tokenNamespace := agent.Namespace
+	if agent.NodeAgent {
+		tokenNamespace = managerutil.GetEnv(ctx).ManagerNamespace
+	}
+	if p.PodName == agent.PodName && p.PodUID == agent.PodUid && strings.HasPrefix(p.Username, "system:serviceaccount:"+tokenNamespace+":") {
 		return p, false
 	}
-	clog.Warnf(ctx, "bound token for pod %s (uid %s) does not match presented agent identity %s.%s (uid %s); not binding the session",
-		p.PodName, p.PodUID, agent.PodName, agent.Namespace, agent.PodUid)
+	clog.Warnf(ctx, "bound token %s for pod %s (uid %s) does not match presented agent identity %s.%s (uid %s); not binding the session",
+		p.Username, p.PodName, p.PodUID, agent.PodName, agent.Namespace, agent.PodUid)
 	return nil, true
 }
 
