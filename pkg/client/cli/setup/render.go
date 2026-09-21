@@ -105,89 +105,40 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 	}
 
 	pf := &facts.Privileges
-	area(w, "privileges", fmt.Sprintf("cluster-wide install %s, namespaced install %s", pf.ClusterWide.Verdict, pf.Namespaced.Verdict),
-		concat(pf.ClusterWide.Evidence, prefixed("missing: ", pf.Missing)))
+	_, privilegesLine, privilegesEvidence := privilegesSummary(pf)
+	area(w, "privileges", privilegesLine, privilegesEvidence)
 
 	area(w, "authentication", fmt.Sprintf("this client has %s; kube-system x509 RoleBinding %s",
 		credentialDescription(facts.ClientAuth), pf.X509KubeSystem.Verdict), pf.X509KubeSystem.Evidence)
 
-	q := &facts.Quic
-	area(w, "quic", fmt.Sprintf("provider %s, loadBalancer %s, nodePort %s", providerDisplay(orUnknown(q.Provider)), q.LoadBalancer.Verdict, q.NodePort.Verdict),
-		concat(q.LoadBalancer.Evidence, q.NodePort.Evidence))
+	_, quicLine, quicEvidence := quicSummary(&facts.Quic)
+	area(w, "quic", quicLine, quicEvidence)
 
-	na := &facts.NodeAgent
-	naLine := fmt.Sprintf("%s (%d of %d nodes linux", na.Viable.Verdict, na.LinuxNodes, na.TotalNodes)
-	if len(na.Runtimes) > 0 {
-		naLine += ", runtimes: " + strings.Join(na.Runtimes, ", ")
-	}
-	naLine += ")"
-	naEvidence := na.Viable.Evidence
-	if na.CanaryDenial != "" {
-		naEvidence = concat(naEvidence, []string{"admission canary rejected: " + na.CanaryDenial})
-	}
+	_, naLine, naEvidence := nodeAgentSummary(&facts.NodeAgent)
 	area(w, "node-agent", naLine, naEvidence)
 
-	wh := &facts.Webhook
-	whEvidence := wh.CanCreate.Evidence
-	if wh.ReachabilityConcern != "" {
-		whEvidence = concat(whEvidence, []string{wh.ReachabilityConcern})
-	}
-	area(w, "webhook", fmt.Sprintf("create %s", wh.CanCreate.Verdict), whEvidence)
+	_, whLine, whEvidence := webhookSummary(&facts.Webhook)
+	area(w, "webhook", whLine, whEvidence)
 
-	switch {
-	case facts.Namespaces.ListDenied:
-		area(w, "namespaces", "listing denied", nil)
-	case facts.Namespaces.ListError != "":
-		area(w, "namespaces", "unknown", []string{facts.Namespaces.ListError})
-	default:
-		area(w, "namespaces", fmt.Sprintf("%d", facts.Namespaces.Count), nil)
-	}
+	_, nsLine, nsEvidence := namespacesSummary(&facts.Namespaces)
+	area(w, "namespaces", nsLine, nsEvidence)
 
-	switch rs := &facts.Routing.Summary; rs.Verdict {
-	case VerdictYes:
-		area(w, "routing", "no conflicts", rs.Evidence)
-	case VerdictNo:
-		area(w, "routing", fmt.Sprintf("%d conflicts", len(facts.Routing.Conflicts)), rs.Evidence)
-	default:
-		area(w, "routing", "unknown", rs.Evidence)
-	}
+	_, routingLine, routingEvidence := routingSummary(&facts.Routing)
+	area(w, "routing", routingLine, routingEvidence)
 
-	if facts.Release.Installed {
-		line := fmt.Sprintf("traffic-manager %s installed in namespace %s", facts.Release.Version, facts.Release.Namespace)
-		if facts.Release.Workload == "Deployment" {
-			line += ", running as a Deployment"
-		}
-		var evidence []string
-		if facts.Release.ValuesError != "" {
-			evidence = []string{"values: " + facts.Release.ValuesError}
-		}
-		area(w, "release", line, evidence)
-	} else {
-		area(w, "release", "not installed", nil)
-	}
+	_, releaseLine, releaseEvidence := releaseSummary(&facts.Release)
+	area(w, "release", releaseLine, releaseEvidence)
 
 	externalArea(w, &facts.External)
 
 	if h := facts.Health; h != nil {
-		healthArea(w, "traffic-manager", &h.ManagerReady)
-		healthArea(w, "agent-injector webhook", h.Webhook)
-		healthArea(w, "webhook certificate", h.Certificate)
-		healthArea(w, "agent-injector endpoints", h.InjectorEndpoints)
-		healthArea(w, "quic endpoint", h.Quic)
-		healthArea(w, "x509 client auth", h.X509ClientAuth)
-		healthArea(w, "external endpoint", h.ExternalEndpoint)
-		healthArea(w, "version skew", &h.VersionSkew)
+		for _, lf := range healthLabeledFindings(h) {
+			healthArea(w, lf.label, lf.finding)
+		}
 	}
 
-	cu := &facts.ClientUpdate
-	switch {
-	case cu.UpdateAvailable:
-		area(w, "client update", fmt.Sprintf("%s available (this client is %s)", cu.Latest, version.Version), nil)
-	case cu.CheckError != "":
-		area(w, "client update", "check failed", []string{cu.CheckError})
-	default:
-		area(w, "client update", "up to date", nil)
-	}
+	_, cuLine, cuEvidence := clientUpdateSummary(&facts.ClientUpdate)
+	area(w, "client update", cuLine, cuEvidence)
 }
 
 // credentialDescription names the credential kinds this client's kubeconfig
@@ -209,6 +160,15 @@ func credentialDescription(auth ClientAuthFacts) string {
 // cert-manager is installed, and the TLS Secrets already in the manager
 // namespace.
 func externalArea(w io.Writer, ext *ExternalFacts) {
+	_, line, evidence := externalSummary(ext)
+	area(w, "external endpoint", line, evidence)
+}
+
+// externalSummary reports cert-manager's availability and the TLS Secrets
+// already in the manager namespace; its verdict is cert-manager's, the
+// prerequisite that decides whether the external endpoint can get a
+// certificate without one being supplied.
+func externalSummary(ext *ExternalFacts) (Verdict, string, []string) {
 	secretsPart := fmt.Sprintf("%d TLS secrets", len(ext.TLSSecrets))
 	switch {
 	case ext.SecretsListDenied:
@@ -220,7 +180,184 @@ func externalArea(w io.Writer, ext *ExternalFacts) {
 	for _, s := range ext.TLSSecrets {
 		evidence = append(evidence, s.evidenceLine())
 	}
-	area(w, "external endpoint", fmt.Sprintf("cert-manager %s, %s", ext.CertManager.Verdict, secretsPart), evidence)
+	return ext.CertManager.Verdict, fmt.Sprintf("cert-manager %s, %s", ext.CertManager.Verdict, secretsPart), evidence
+}
+
+// privilegesSummary reports whether either a cluster-wide or a namespaced
+// install is viable; its verdict is yes if either is, no if neither is, and
+// otherwise the stronger of the two intermediate verdicts.
+func privilegesSummary(pf *PrivilegeFacts) (Verdict, string, []string) {
+	summary := fmt.Sprintf("cluster-wide install %s, namespaced install %s", pf.ClusterWide.Verdict, pf.Namespaced.Verdict)
+	evidence := concat(pf.ClusterWide.Evidence, prefixed("missing: ", pf.Missing))
+	return combineVerdicts(pf.ClusterWide.Verdict, pf.Namespaced.Verdict), summary, evidence
+}
+
+// quicSummary reports whether either QUIC discovery path is viable; its
+// verdict follows the same either-path rule as privilegesSummary.
+func quicSummary(q *QuicFacts) (Verdict, string, []string) {
+	summary := fmt.Sprintf("provider %s, loadBalancer %s, nodePort %s",
+		providerDisplay(orUnknown(q.Provider)), q.LoadBalancer.Verdict, q.NodePort.Verdict)
+	evidence := concat(q.LoadBalancer.Evidence, q.NodePort.Evidence)
+	return combineVerdicts(q.LoadBalancer.Verdict, q.NodePort.Verdict), summary, evidence
+}
+
+// combineVerdicts reports the strongest of two independent viability
+// verdicts: yes if either is yes, otherwise the better of the two.
+func combineVerdicts(a, b Verdict) Verdict {
+	switch {
+	case a == VerdictYes || b == VerdictYes:
+		return VerdictYes
+	case a == VerdictProbable || b == VerdictProbable:
+		return VerdictProbable
+	case a == VerdictUnknown || b == VerdictUnknown:
+		return VerdictUnknown
+	default:
+		return VerdictNo
+	}
+}
+
+// nodeAgentSummary reports the node-agent viability finding verbatim; it is
+// the phase's own Finding.
+func nodeAgentSummary(na *NodeAgentFacts) (Verdict, string, []string) {
+	line := fmt.Sprintf("%s (%d of %d nodes linux", na.Viable.Verdict, na.LinuxNodes, na.TotalNodes)
+	if len(na.Runtimes) > 0 {
+		line += ", runtimes: " + strings.Join(na.Runtimes, ", ")
+	}
+	line += ")"
+	evidence := na.Viable.Evidence
+	if na.CanaryDenial != "" {
+		evidence = concat(evidence, []string{"admission canary rejected: " + na.CanaryDenial})
+	}
+	return na.Viable.Verdict, line, evidence
+}
+
+// webhookSummary reports the webhook-creation finding verbatim; it is the
+// phase's own Finding.
+func webhookSummary(wh *WebhookFacts) (Verdict, string, []string) {
+	evidence := wh.CanCreate.Evidence
+	if wh.ReachabilityConcern != "" {
+		evidence = concat(evidence, []string{wh.ReachabilityConcern})
+	}
+	return wh.CanCreate.Verdict, fmt.Sprintf("create %s", wh.CanCreate.Verdict), evidence
+}
+
+// namespacesSummary reports the namespace count as a neutral fact; it is
+// unknown when the count itself could not be established.
+func namespacesSummary(nf *NamespaceFacts) (Verdict, string, []string) {
+	switch {
+	case nf.ListDenied:
+		return VerdictUnknown, "listing denied", nil
+	case nf.ListError != "":
+		return VerdictUnknown, "unknown", []string{nf.ListError}
+	default:
+		return VerdictYes, fmt.Sprintf("%d", nf.Count), nil
+	}
+}
+
+// routingSummary reports the subnet-conflict finding verbatim; it is the
+// phase's own Finding.
+func routingSummary(rf *RoutingFacts) (Verdict, string, []string) {
+	rs := &rf.Summary
+	switch rs.Verdict {
+	case VerdictYes:
+		return VerdictYes, "no conflicts", rs.Evidence
+	case VerdictNo:
+		return VerdictNo, fmt.Sprintf("%d conflicts", len(rf.Conflicts)), rs.Evidence
+	default:
+		return rs.Verdict, "unknown", rs.Evidence
+	}
+}
+
+// releaseSummary reports whether a traffic-manager release was found, a
+// neutral fact regardless of which way it comes out.
+func releaseSummary(rf *ReleaseFacts) (Verdict, string, []string) { //nolint:unparam // always yes: a neutral fact, kept for a uniform summary-function signature
+	if !rf.Installed {
+		return VerdictYes, "not installed", nil
+	}
+	line := fmt.Sprintf("traffic-manager %s installed in namespace %s", rf.Version, rf.Namespace)
+	if rf.Workload == "Deployment" {
+		line += ", running as a Deployment"
+	}
+	var evidence []string
+	if rf.ValuesError != "" {
+		evidence = []string{"values: " + rf.ValuesError}
+	}
+	return VerdictYes, line, evidence
+}
+
+// clientUpdateSummary reports whether this client is current; yes when it
+// is, probable when a newer release is available, unknown when the check
+// itself failed.
+func clientUpdateSummary(cu *UpdateFacts) (Verdict, string, []string) {
+	switch {
+	case cu.UpdateAvailable:
+		return VerdictProbable, fmt.Sprintf("%s available (this client is %s)", cu.Latest, version.Version), nil
+	case cu.CheckError != "":
+		return VerdictUnknown, "check failed", []string{cu.CheckError}
+	default:
+		return VerdictYes, "up to date", nil
+	}
+}
+
+// healthLabeledFindings lists the health findings in the order printFindings
+// prints them, paired with the label their area line uses.
+func healthLabeledFindings(h *HealthFacts) []struct {
+	label   string
+	finding *Finding
+} {
+	return []struct {
+		label   string
+		finding *Finding
+	}{
+		{"traffic-manager", &h.ManagerReady},
+		{"agent-injector webhook", h.Webhook},
+		{"webhook certificate", h.Certificate},
+		{"agent-injector endpoints", h.InjectorEndpoints},
+		{"quic endpoint", h.Quic},
+		{"x509 client auth", h.X509ClientAuth},
+		{"external endpoint", h.ExternalEndpoint},
+		{"version skew", &h.VersionSkew},
+	}
+}
+
+// healthSeverity orders verdicts from best (yes) to worst (no), so the
+// worst health finding can be picked out as the phase's overall verdict.
+func healthSeverity(v Verdict) int {
+	switch v {
+	case VerdictNo:
+		return 3
+	case VerdictUnknown:
+		return 2
+	case VerdictProbable:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// healthSummary reports the worst of the installation's health findings, or
+// a neutral "not installed" when there is no release to check.
+func healthSummary(rf *ReleaseFacts, h *HealthFacts) (Verdict, string, []string) {
+	if !rf.Installed || h == nil {
+		return VerdictYes, "not installed", nil
+	}
+	worst := VerdictYes
+	var worstLabel string
+	var worstEvidence []string
+	for _, lf := range healthLabeledFindings(h) {
+		if lf.finding == nil {
+			continue
+		}
+		if healthSeverity(lf.finding.Verdict) > healthSeverity(worst) {
+			worst = lf.finding.Verdict
+			worstLabel = lf.label
+			worstEvidence = lf.finding.Evidence
+		}
+	}
+	if worstLabel == "" {
+		return VerdictYes, "ready", nil
+	}
+	return worst, fmt.Sprintf("%s %s", worstLabel, worst), worstEvidence
 }
 
 // evidenceLine renders one TLS Secret evidence line: its name followed by

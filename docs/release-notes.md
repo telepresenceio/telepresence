@@ -116,6 +116,12 @@ With <code>agentInjector.enabled=false</code>, the traffic-manager only watched 
 The profiles given with <code>--profile</code> were applied when Telepresence loaded the project but never passed on to the <code>docker compose</code> command that starts the stack, so <code>telepresence compose --profile &lt;name&gt; up</code> reported "no service selected" and stopped. The stop that runs when an attached <code>up</code> is interrupted now carries the profiles too, so profiled services are stopped as well.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Kubernetes client log lines no longer interrupt the terminal output</div></div>
+<div style="margin-left: 15px">
+
+Warnings returned by the API server and log lines from the Kubernetes client, such as client-side throttling notices, are written to <code>cli.log</code> instead of the terminal, where they broke the progress display of commands like <code>telepresence setup</code>. Setup also raises its request budget so the privilege probe no longer waits on throttling, and each probe's progress line now ends with its result.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Node-agent intercepts serve their volume mounts again</div></div>
 <div style="margin-left: 15px">
 

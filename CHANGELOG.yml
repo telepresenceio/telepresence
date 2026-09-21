@@ -243,6 +243,15 @@ items:
           <code>up</code> is interrupted now carries the profiles too, so profiled
           services are stopped as well.
         docs: https://github.com/telepresenceio/telepresence/issues/4278
+      - type: change
+        title: Kubernetes client log lines no longer interrupt the terminal output
+        body: >-
+          Warnings returned by the API server and log lines from the Kubernetes client, such
+          as client-side throttling notices, are written to <code>cli.log</code> instead of
+          the terminal, where they broke the progress display of commands like
+          <code>telepresence setup</code>. Setup also raises its request budget so the
+          privilege probe no longer waits on throttling, and each probe's progress line
+          now ends with its result.
       - type: bugfix
         title: Node-agent intercepts serve their volume mounts again
         body: >-

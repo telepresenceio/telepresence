@@ -533,7 +533,12 @@ func (s *Setup) Test_ClientRbacInputRoundTrip() {
 // a fresh namespace: the findings section (render.go's printFindings), the
 // proposed configuration, the planned-objects list (always computed for an
 // ActionInstall proposal regardless of --apply; see cmd/setup.go's emit),
-// and the would-install action a validation-only run reports.
+// the would-install action a validation-only run reports, and that a
+// non-`yes` probe outcome (facts.go's Prober.Outcome) reaches the plain
+// progress writer: the harness runs with TELEPRESENCE_PROGRESS=plain (see
+// runtime.go), whose Warning events go to stderr (progress/plain.go).
+// Nothing installs cert-manager on the test cluster, so the external
+// endpoint phase's cert-manager finding is always "no".
 func (s *Setup) Test_Validation() {
 	t := s.T()
 	ctx := s.Ctx()
@@ -561,6 +566,8 @@ func (s *Setup) Test_Validation() {
 	} {
 		s.Contains(stdout, want)
 	}
+	s.Contains(stdout, "cert-manager no, 0 TLS secrets",
+		"the external-endpoint phase's outcome must reach the plain progress writer")
 
 	exists, err := releaseExists(ctx, r, ns)
 	s.Require().NoError(err)

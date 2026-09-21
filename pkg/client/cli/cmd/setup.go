@@ -279,6 +279,10 @@ func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, erro
 	if err != nil {
 		return nil, err
 	}
+	// The privileges sweep issues dozens of parallel SubjectAccessReviews;
+	// the default client-side rate limit (5 QPS, burst 10) would throttle it.
+	restCfg.QPS = 50
+	restCfg.Burst = 100
 	ki, err := kubernetes.NewForConfig(restCfg)
 	if err != nil {
 		return nil, err
@@ -290,7 +294,6 @@ func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, erro
 		managerNamespace: k8s.GetManagerNamespace(cluster),
 	}
 	pctx := ctx
-	var lastPhase string
 	bearer, x509 := k8s.ClientAuthMethods(cluster.Kubeconfig)
 	prober := &setup.Prober{
 		KubeClient:       ki,
@@ -299,19 +302,17 @@ func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, erro
 		Server:           cluster.Server,
 		ClientAuth:       setup.ClientAuthFacts{Bearer: bearer, X509: x509},
 		Progress: func(phase string) {
-			if lastPhase != "" {
-				progress.Done(progress.WithEventId(pctx, lastPhase))
-			}
-			lastPhase = phase
 			progress.Working(progress.WithEventId(pctx, phase))
+		},
+		// Only a Done event closes a phase's row and replaces its status text; the
+		// verdict is already spelled out in the summary.
+		Outcome: func(phase string, _ setup.Verdict, summary string) {
+			progress.PrintDone(progress.WithEventId(pctx, phase), summary)
 		},
 		ReleaseLookup: setup.NewReleaseLookup(cluster.Kubeconfig),
 	}
 	if cl.facts, err = prober.GatherFacts(ctx); err != nil {
 		return nil, err
-	}
-	if lastPhase != "" {
-		progress.Done(progress.WithEventId(pctx, lastPhase))
 	}
 	return cl, nil
 }

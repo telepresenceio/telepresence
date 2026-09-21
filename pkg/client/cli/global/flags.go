@@ -2,11 +2,15 @@ package global
 
 import (
 	"context"
+	"log/slog"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/client-go/rest"
+	"k8s.io/klog/v2"
 
+	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
@@ -80,8 +84,19 @@ func InitConfig(cmd *cobra.Command) error {
 			if err != nil {
 				return err
 			}
+			redirectThirdPartyLogs(ctx)
 		}
 	}
 	cmd.SetContext(ctx)
 	return nil
+}
+
+// redirectThirdPartyLogs points klog and client-go's API-server warning
+// handler at the CLI's own log, so client-side throttling notices and
+// deprecation warnings land in cli.log instead of the terminal.
+func redirectThirdPartyLogs(ctx context.Context) {
+	w := clog.StdLogger(ctx, slog.LevelInfo).Writer()
+	klog.LogToStderr(false)
+	klog.SetOutput(w)
+	rest.SetDefaultWarningHandler(rest.NewWarningWriter(w, rest.WarningWriterOptions{Deduplicate: true}))
 }

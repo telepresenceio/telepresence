@@ -123,6 +123,12 @@ The profiles given with <code>--profile</code> were applied when Telepresence lo
   </Body>
 </Note>
 <Note>
+	<Title type="change">Kubernetes client log lines no longer interrupt the terminal output</Title>
+	<Body>
+Warnings returned by the API server and log lines from the Kubernetes client, such as client-side throttling notices, are written to <code>cli.log</code> instead of the terminal, where they broke the progress display of commands like <code>telepresence setup</code>. Setup also raises its request budget so the privilege probe no longer waits on throttling, and each probe's progress line now ends with its result.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Node-agent intercepts serve their volume mounts again</Title>
 	<Body>
 Mounts made through a node-hosted traffic-agent failed with "Operation not permitted" over sshfs or "Permission denied" over fuseftp, because the agent's confined SFTP and FTP servers knew only the sidecar's fixed mounts tree and not the intercepted container's filesystem. Both servers now follow the node-agent's links into it, and mounted content is reachable again.
