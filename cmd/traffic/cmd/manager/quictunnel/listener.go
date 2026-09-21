@@ -14,6 +14,7 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/telepresenceio/clog"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/pkg/quicfwd"
 	"github.com/telepresenceio/telepresence/v2/pkg/tunnel"
 	"github.com/telepresenceio/telepresence/v2/pkg/types"
@@ -218,6 +219,7 @@ func (l *Listener) handleStream(ctx context.Context, conn *quic.Conn, qs *quic.S
 		detach := tunnel.AttachDatagramRoute(stream)
 		defer detach()
 	}
+	ctx = auth.WithSessionCredential(ctx, certCN)
 	if err := l.handler(ctx, stream); err != nil && ctx.Err() == nil {
 		clog.Errorf(ctx, "quictunnel: tunnel for session %s ended with error: %v", certCN, err)
 	}

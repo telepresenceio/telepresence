@@ -40,3 +40,16 @@ func TestWithPrincipal_RoundTrip(t *testing.T) {
 	ctx := auth.WithPrincipal(context.Background(), p)
 	assert.Same(t, p, auth.PrincipalFrom(ctx))
 }
+
+func TestSessionCredentialFrom_Absent(t *testing.T) {
+	sessionID, ok := auth.SessionCredentialFrom(context.Background())
+	assert.False(t, ok)
+	assert.Empty(t, sessionID)
+}
+
+func TestWithSessionCredential_RoundTrip(t *testing.T) {
+	ctx := auth.WithSessionCredential(context.Background(), "session-1")
+	sessionID, ok := auth.SessionCredentialFrom(ctx)
+	assert.True(t, ok)
+	assert.Equal(t, "session-1", sessionID)
+}
