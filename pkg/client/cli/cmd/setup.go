@@ -279,6 +279,10 @@ func (sc *setupCommand) connectAndProbe(cmd *cobra.Command) (*setupCluster, erro
 	if err != nil {
 		return nil, err
 	}
+	// The privileges sweep issues dozens of parallel SubjectAccessReviews;
+	// the default client-side rate limit (5 QPS, burst 10) would throttle it.
+	restCfg.QPS = 50
+	restCfg.Burst = 100
 	ki, err := kubernetes.NewForConfig(restCfg)
 	if err != nil {
 		return nil, err
