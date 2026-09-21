@@ -32,6 +32,9 @@ type Config interface {
 	PodUID() k8sTypes.UID
 	NodeAgent() bool
 
+	// SymlinkRoots lists the directories an exported symlink may lead into.
+	SymlinkRoots() []string
+
 	// AppPodIP returns the IP of the pod that hosts the application containers.
 	// For the sidecar that is the agent's own pod (PodIP); the node-agent's
 	// application runs in a separate pod, so it returns that pod's IP. It is the
@@ -178,6 +181,12 @@ func (c *config) NodeAgent() bool {
 	return false
 }
 
+// SymlinkRoots returns agentconfig.MountPrefixApp, the only tree addAppMounts' exported
+// symlinks lead into.
+func (c *config) SymlinkRoots() []string {
+	return []string{agentconfig.MountPrefixApp}
+}
+
 // ListenerFactory returns nil: the sidecar agent's forwarders listen in its own
 // network namespace, which is already the target pod's namespace.
 func (c *config) ListenerFactory() forwarder.ListenerFactory {
@@ -303,7 +312,13 @@ func mountVRS(ctx context.Context, mps types.MountPolicies, ag *agentconfig.Cont
 				}
 				hasVrsExportDir = true
 			}
-			src := filepath.Join(root, subDir)
+			canonical := subDir
+			if c, cerr := resolveInRoot(root, subDir); cerr != nil {
+				clog.Infof(ctx, "Unable to canonicalize %q under %q: %v", subDir, root, cerr)
+			} else {
+				canonical = c
+			}
+			src := filepath.Join(root, canonical)
 			newName := filepath.Join(vrsExportDir, vr.Name())
 			if err = dos.Symlink(ctx, src, newName); err != nil {
 				return fmt.Errorf("can't symlink %s to %s: %v", src, newName, err)

@@ -354,6 +354,164 @@ func TestUnexportedTopIsInvisible(t *testing.T) {
 	}
 }
 
+// nodeAgentTree is the fixture a newNodeAgentTestServer builds: an exports root with a
+// nested absolute symlink app/var/run/secrets/kubernetes.io -> <procRoot's same path>,
+// mirroring exportProcMounts' layout (a link at arbitrary depth reached through several
+// plain directory components, not just the top-level <container>/<top> the sidecar uses).
+// Inside procRoot, the serviceaccount directory mirrors a projected volume: a versioned
+// data directory, a "..data" symlink to it, and a "token" symlink reached through "..data".
+type nodeAgentTree struct {
+	exportsRoot  string
+	procRoot     string
+	container    string
+	tokenContent string
+}
+
+// newNodeAgentTestServer builds a nodeAgentTree under two t.TempDir() trees and starts a
+// Server over exportsRoot; procRoot is passed as an allowed root only when allowProcRoot is
+// true, so a caller can also exercise the case where the node-agent's own procfs root isn't
+// one of the roots the server was configured with.
+func newNodeAgentTestServer(t *testing.T, allowProcRoot bool) (*sftp.Client, nodeAgentTree) {
+	t.Helper()
+
+	const c = "node-agent-content"
+	const content = "sa-token"
+	procRoot := t.TempDir()
+	exportsRoot := t.TempDir()
+
+	saDir := filepath.Join(procRoot, "var", "run", "secrets", "kubernetes.io", "serviceaccount")
+	dataDir := filepath.Join(saDir, "..2026_data")
+	require.NoError(t, os.MkdirAll(dataDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "token"), []byte(content), 0o644))
+	require.NoError(t, os.Symlink("..2026_data", filepath.Join(saDir, "..data")))
+	require.NoError(t, os.Symlink("..data/token", filepath.Join(saDir, "token")))
+
+	linkParent := filepath.Join(exportsRoot, c, "var", "run", "secrets")
+	require.NoError(t, os.MkdirAll(linkParent, 0o755))
+	require.NoError(t, os.Symlink(
+		filepath.Join(procRoot, "var", "run", "secrets", "kubernetes.io"),
+		filepath.Join(linkParent, "kubernetes.io")))
+
+	var opts []string
+	if allowProcRoot {
+		opts = append(opts, procRoot)
+	}
+	srv, err := sftpserver.New(exportsRoot, opts...)
+	require.NoError(t, err)
+
+	client := startServer(t, srv)
+
+	return client, nodeAgentTree{exportsRoot: exportsRoot, procRoot: procRoot, container: c, tokenContent: content}
+}
+
+func TestNodeAgentLinkWorks(t *testing.T) {
+	client, tree := newNodeAgentTestServer(t, true)
+	secretsDir := "/tel_app_exports/" + tree.container + "/var/run/secrets"
+	linkPath := secretsDir + "/kubernetes.io"
+
+	entries, err := client.ReadDir(secretsDir)
+	require.NoError(t, err)
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
+	}
+	require.Contains(t, names, "kubernetes.io")
+
+	lf, err := client.Lstat(linkPath)
+	require.NoError(t, err)
+	require.NotEqual(t, os.FileMode(0), lf.Mode()&os.ModeSymlink)
+
+	sf, err := client.Stat(linkPath)
+	require.NoError(t, err)
+	require.True(t, sf.IsDir())
+
+	// The token is reached through both the node-agent's absolute redirect into procRoot
+	// and a relative "..data/token" symlink inside it, mirroring a projected volume.
+	require.Equal(t, tree.tokenContent, readAll(t, client, linkPath+"/serviceaccount/token"))
+}
+
+func TestNodeAgentLinkRefusedWithoutProcRoot(t *testing.T) {
+	client, tree := newNodeAgentTestServer(t, false)
+	linkPath := "/tel_app_exports/" + tree.container + "/var/run/secrets/kubernetes.io"
+
+	_, err := client.Stat(linkPath)
+	require.Error(t, err)
+
+	_, err = client.Open(linkPath + "/serviceaccount/token")
+	require.Error(t, err)
+}
+
+// newProcRootLinkTestServer builds an exports root with a single uncanonicalized redirect,
+// app/var/run/secrets/kubernetes.io -> <procRoot>/var/run/secrets/kubernetes.io -- the exact
+// link an unpatched node-agent would have written -- and a procRoot where "var/run" is
+// itself a symlink to "run", either relative ("../run") or absolute ("/run") depending on
+// absoluteLink. The real content, run/secrets/kubernetes.io/serviceaccount/token, sits
+// beside the "var" directory, one level below procRoot.
+func newProcRootLinkTestServer(t *testing.T, absoluteLink bool) (*sftp.Client, string) {
+	t.Helper()
+
+	const content = "sa-token"
+	procRoot := t.TempDir()
+	exportsRoot := t.TempDir()
+
+	saDir := filepath.Join(procRoot, "run", "secrets", "kubernetes.io", "serviceaccount")
+	require.NoError(t, os.MkdirAll(saDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(saDir, "token"), []byte(content), 0o644))
+
+	require.NoError(t, os.Mkdir(filepath.Join(procRoot, "var"), 0o755))
+	target := "../run"
+	if absoluteLink {
+		target = "/run"
+	}
+	require.NoError(t, os.Symlink(target, filepath.Join(procRoot, "var", "run")))
+
+	linkParent := filepath.Join(exportsRoot, "app", "var", "run", "secrets")
+	require.NoError(t, os.MkdirAll(linkParent, 0o755))
+	require.NoError(t, os.Symlink(
+		filepath.Join(procRoot, "var", "run", "secrets", "kubernetes.io"),
+		filepath.Join(linkParent, "kubernetes.io")))
+
+	srv, err := sftpserver.New(exportsRoot, procRoot)
+	require.NoError(t, err)
+
+	client := startServer(t, srv)
+
+	return client, content
+}
+
+func TestNodeAgentRelativeVarRunLinkWorks(t *testing.T) {
+	client, content := newProcRootLinkTestServer(t, false)
+	linkPath := "/tel_app_exports/app/var/run/secrets/kubernetes.io"
+
+	sf, err := client.Stat(linkPath)
+	require.NoError(t, err)
+	require.True(t, sf.IsDir())
+
+	entries, err := client.ReadDir(linkPath)
+	require.NoError(t, err)
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
+	}
+	require.Contains(t, names, "serviceaccount")
+
+	require.Equal(t, content, readAll(t, client, linkPath+"/serviceaccount/token"))
+}
+
+// TestNodeAgentAbsoluteVarRunLinkRefused documents that os.Root never follows an absolute
+// symlink even inside an allowed root: a Debian-style "var/run" -> "/run" is refused rather
+// than rebased, unlike the relative case TestNodeAgentRelativeVarRunLinkWorks covers.
+func TestNodeAgentAbsoluteVarRunLinkRefused(t *testing.T) {
+	client, _ := newProcRootLinkTestServer(t, true)
+	linkPath := "/tel_app_exports/app/var/run/secrets/kubernetes.io"
+
+	_, err := client.Stat(linkPath)
+	require.Error(t, err)
+
+	_, err = client.Open(linkPath + "/serviceaccount/token")
+	require.Error(t, err)
+}
+
 func TestHostileSymlinksAreBlocked(t *testing.T) {
 	client, tree := newMountsTestServer(t)
 
@@ -368,4 +526,28 @@ func TestHostileSymlinksAreBlocked(t *testing.T) {
 	require.Error(t, err)
 	_, err = client.Open("/tel_app_exports/" + tree.container + "/etc/escape")
 	require.Error(t, err)
+}
+
+func TestMountsLinkRenameAcrossDirectories(t *testing.T) {
+	client, tree := newMountsTestServer(t)
+	base := "/tel_app_exports/" + tree.container + "/etc"
+	require.NoError(t, client.Mkdir(base+"/d1"))
+	require.NoError(t, client.Mkdir(base+"/d2"))
+	f, err := client.Create(base + "/d1/x")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("moved"))
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	require.NoError(t, client.Rename(base+"/d1/x", base+"/d2/y"))
+	data, err := os.ReadFile(filepath.Join(tree.mountsRoot, tree.container, "etc", "d2", "y"))
+	require.NoError(t, err)
+	require.Equal(t, "moved", string(data))
+
+	require.NoError(t, client.PosixRename(base+"/d2/y", base+"/d1/z"))
+	_, err = os.Stat(filepath.Join(tree.mountsRoot, tree.container, "etc", "d1", "z"))
+	require.NoError(t, err)
+	require.NoError(t, client.Link(base+"/d1/z", base+"/d2/w"))
+	_, err = os.Stat(filepath.Join(tree.mountsRoot, tree.container, "etc", "d2", "w"))
+	require.NoError(t, err)
 }

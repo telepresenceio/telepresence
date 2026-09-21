@@ -12,11 +12,12 @@ import (
 // applies to a syscall.Statfs_t, but statfs's the file opened at r.Filepath under whichever
 // root resolve picks instead of the raw path a plain sftp.Server would use.
 func (s *Server) StatVFS(r *sftp.Request) (*sftp.StatVFS, error) {
-	root, rel, err := s.resolve(r.Filepath)
+	res, err := s.resolve(r.Filepath, true)
 	if err != nil {
 		return nil, err
 	}
-	f, err := root.Open(rel)
+	defer res.close()
+	f, err := res.root.Open(res.rel)
 	if err != nil {
 		return nil, err
 	}
