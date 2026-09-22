@@ -45,11 +45,6 @@ metadata:
   name: %[1]s
   namespace: %[2]s
 rules:
-  # The client's namespace-accessibility probe needs pods get/list; it
-  # says nothing about reaching an agent pod.
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list"]
   - apiGroups: ["telepresence.io"]
     resources: ["attachments"]
     verbs: ["create", "get"]
