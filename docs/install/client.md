@@ -222,6 +222,32 @@ Remove-Item telepresenceInstaller -Recurse -Confirm:$false -Force
 > Telepresence will request elevated privileges when connecting, and volume mounts will not work without
 > WinFSP and SSHFS-Win installed separately.
 
+## Verifying the download
+
+`telepresence.exe`, the setup installer, and the MSI are all Authenticode-signed. Check a file's signature
+with PowerShell:
+
+```powershell
+Get-AuthenticodeSignature .\telepresence.exe | Format-List Status, SignerCertificate, TimeStamperCertificate
+Get-AuthenticodeSignature .\telepresence-windows-amd64-setup.exe | Format-List Status, SignerCertificate, TimeStamperCertificate
+Get-AuthenticodeSignature .\telepresence-windows-amd64.msi | Format-List Status, SignerCertificate, TimeStamperCertificate
+```
+
+`Status` must read `Valid`. The signer certificate is issued through the SignPath Foundation; admins can
+write an allow rule (for example in AppLocker or WDAC) against the signer certificate's subject shown by
+`SignerCertificate`. The same information is available without PowerShell: right-click the file, choose
+**Properties**, and open the **Digital Signatures** tab.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
+[SignPath Foundation](https://signpath.org/). The Windows release binaries and installers are
+Authenticode-signed with it.
+
+- Committers and reviewers: [telepresence-maintainers](https://github.com/orgs/telepresenceio/teams/telepresence-maintainers)
+- Approvers: [administrators](https://github.com/orgs/telepresenceio/teams/administrators)
+- Privacy policy: [PRIVACY.md](https://github.com/telepresenceio/telepresence/blob/release/v2/PRIVACY.md)
+
 </Platform.WindowsTab>
 </Platform.TabGroup>
 
