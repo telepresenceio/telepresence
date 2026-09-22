@@ -1220,6 +1220,7 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 		// We do not want to override the local config with the traffic-manager's config even if the local config is empty.
 		cfg.Cluster().MappedNamespaces = clientMappedNamespaces
 		namespaces = effectiveMappedNamespaces(namespaces, clientMappedNamespaces, tmMappedNamespaces)
+		s.SetManagerReviewsAccess(s.managerSupportsWatchNamespaces())
 		changed := s.SetMappedNamespaces(namespaces)
 		switch {
 		case len(namespaces) == 0:
