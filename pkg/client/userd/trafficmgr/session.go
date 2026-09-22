@@ -163,6 +163,10 @@ type session struct {
 	// are deleted as soon as the intercept arrives and gets stored in currentIntercepts
 	interceptWaiters map[string]*awaitIntercept
 
+	// agentless holds the ids of established intercepts whose traffic-agent is gone, so the
+	// loss and the later re-attach are each logged once. Only the session-events loop touches it.
+	agentless map[string]struct{}
+
 	isPodDaemon bool
 
 	// Synthetic IPs are generated when the targetIP is a hostname, so that we can defer the
@@ -1425,7 +1429,7 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 	if !svc.RootSessionInProcess() {
 		s.startRootDaemonActivityWatcher(rd, generation)
 	}
-	clog.Debug(s, "Connected to root daemon")
+	clog.Info(s, "Connected to root daemon")
 	return nil
 }
 

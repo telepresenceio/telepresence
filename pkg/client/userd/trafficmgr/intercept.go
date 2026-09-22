@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -178,6 +179,11 @@ func (s *session) watchInterceptsLoop(ctx context.Context) error {
 func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*manager.InterceptInfo) {
 	s.setCurrentIntercepts(intercepts)
 	pat.initSnapshot()
+	for id := range s.agentless {
+		if !slices.ContainsFunc(intercepts, func(ii *manager.InterceptInfo) bool { return ii.Id == id }) {
+			delete(s.agentless, id)
+		}
+	}
 
 	for _, ii := range intercepts {
 		if ii.Disposition == manager.InterceptDispositionType_WAITING {
@@ -194,12 +200,27 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 
 		pa := ic.podAccess()
 		var err error
+		agentGone := false
 		if ii.Disposition == manager.InterceptDispositionType_ACTIVE {
 			err = s.WithRootClient(ic.ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
 				return pa.ensureAccess(ctx, rd)
 			})
+			if _, ok := s.agentless[ii.Id]; ok && err == nil {
+				delete(s.agentless, ii.Id)
+				clog.Infof(s, "intercept %s re-attached to pod %s", ii.Spec.Name, pa.podIP)
+			}
 		} else {
 			err = fmt.Errorf("intercept in error state %v: %v", ii.Disposition, ii.Message)
+			if ii.Disposition == manager.InterceptDispositionType_NO_AGENT && aw == nil {
+				if _, ok := s.agentless[ii.Id]; !ok {
+					if s.agentless == nil {
+						s.agentless = make(map[string]struct{})
+					}
+					s.agentless[ii.Id] = struct{}{}
+					clog.Infof(s, "intercept %s: its traffic-agent is gone; waiting for a new pod", ii.Spec.Name)
+				}
+				agentGone = true
+			}
 		}
 
 		// Notify waiters for active intercepts
@@ -228,7 +249,9 @@ func (s *session) handleInterceptSnapshot(pat *podAccessTracker, intercepts []*m
 			}
 		}
 		if err != nil {
-			clog.Error(s, err)
+			if !agentGone {
+				clog.Error(s, err)
+			}
 			continue
 		}
 
