@@ -281,6 +281,18 @@ items:
           instead of hanging. Against a traffic-manager at v2.32 or later,
           an explicit <code>--mapped-namespaces</code> list is likewise no
           longer probed with a <code>get pods</code> review per namespace.
+      - type: feature
+        title: Signed Windows binaries and installers
+        body: >-
+          Windows releases ship <code>telepresence.exe</code>, the MSI, and
+          the setup bundle with timestamped Authenticode signatures from a
+          SignPath Foundation certificate, so enterprises can allow the
+          binary by publisher instead of per-run admin approval. The exes
+          now also carry version metadata visible in Explorer's Properties
+          dialog. A standalone <code>telepresence-windows-amd64.msi</code>
+          is published for Intune/GPO deployment.
+          <a href="https://github.com/telepresenceio/telepresence/issues/4284">#4284</a>
+        docs: install/client
   - version: 2.31.2
     date: 2026-08-02
     notes:
