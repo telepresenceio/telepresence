@@ -185,6 +185,10 @@ TELEPRESENCE_INSTALLER=$(BINDIR)/telepresence$(BZIP)
 	$(tools/go-winres) make --in $< --out $(dir $@)rsrc --arch $(GOARCH) --product-version $(TELEPRESENCE_SEMVER) --file-version $(TELEPRESENCE_SEMVER)
 
 build-deps: cmd/telepresence/rsrc_windows_$(GOARCH).syso
+
+.PHONY: verify-signatures
+verify-signatures: ## (Release) Verify Authenticode signatures on every artifact in build-output/release
+	pwsh -File build-aux/signpath/verify-signatures.ps1 -Dir $(RELEASEDIR)
 endif
 
 .PHONY: build
