@@ -53,6 +53,7 @@ jobs:
           cd build-aux/wix-installer
           make bundle ARCH=${{ matrix.arch }}
           cp ../../build-output/bin/TelepresenceInstall.exe ../../build-output/release/telepresence-windows-${{ matrix.arch }}-setup.exe
+          cp ../../build-output/msi/MainPackage.msi ../../build-output/release/telepresence-windows-amd64.msi
       - name: Install nfpm
         if: runner.os == 'Linux'
         shell: bash
@@ -186,6 +187,7 @@ jobs:
             | macOS | amd64 | [telepresence-darwin-amd64.pkg](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64.pkg) |
             | macOS | arm64 | [telepresence-darwin-arm64.pkg](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64.pkg) |
             | Windows | amd64 | [telepresence-windows-amd64-setup.exe](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64-setup.exe) |
+            | Windows (MSI, for Intune/GPO) | amd64 | [telepresence-windows-amd64.msi](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.msi) |
             | Windows | arm64 | *Not available — WinFSP and SSHFS-Win installers lack arm64 versions. Use the zip file below.* |
 
             ### Standalone Binaries
@@ -309,11 +311,25 @@ jobs:
           cp build-output/Telepresence.pkg telepresence-darwin-${{ matrix.arch }}.pkg
           gh release upload ${{ github.ref_name }} telepresence-darwin-${{ matrix.arch }}.pkg --clobber
 
+  # Signs the Windows exes, MSI and installer bundle. Like
+  # build-macos-pkg, this runs behind a protected environment: if nobody
+  # approves it, the release stands with the unsigned Windows artifacts.
+  sign-windows:
+    needs:
+      - publish-release
+    if: needs.publish-release.outputs.draft == 'false'
+    uses: ./.github/workflows/sign-windows.yaml
+    with:
+      tag: ${{ github.ref_name }}
+      signing-policy: release-signing
+    secrets: inherit
+
   test-release:
     needs:
       - push-images
       - publish-release
-    if: ${{ needs.publish-release.outputs.draft == 'false' }}
+      - sign-windows
+    if: ${{ always() && needs.push-images.result == 'success' && needs.publish-release.result == 'success' && needs.publish-release.outputs.draft == 'false' }}
     strategy:
       fail-fast: false
       matrix:
@@ -362,3 +378,13 @@ jobs:
               echo "Version does not match!"
               exit 1
           fi
+      - name: test signature
+        shell: pwsh
+        if: ${{ runner.os == 'Windows' && needs.sign-windows.result == 'success' && !(runner.arch == 'X64' && matrix.arch == 'arm64') }}
+        run: |
+          $sig = Get-AuthenticodeSignature .\telepresence.exe
+          if ($sig.Status -ne 'Valid') {
+            Write-Error "telepresence.exe signature status is $($sig.Status), expected Valid"
+            exit 1
+          }
+          Write-Host "Signature valid, signed by $($sig.SignerCertificate.Subject)"

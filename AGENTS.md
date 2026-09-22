@@ -443,3 +443,62 @@ VERSION=2.26.0 ./build-pkg.sh
 pkgutil --check-signature ../../build-output/Telepresence.pkg
 spctl --assess --type install ../../build-output/Telepresence.pkg
 ```
+
+### Windows Installer Signing
+
+Windows `telepresence.exe`, `MainPackage.msi` and the `TelepresenceInstall.exe`
+Burn bundle are Authenticode-signed through the
+[SignPath Foundation](https://signpath.org/) free code-signing program for
+open-source projects. Signing runs in `.github/workflows/sign-windows.yaml`,
+called from `release.yaml` after `publish-release`, behind a protected
+GitHub Environment.
+
+#### Environment Setup
+
+1. Go to https://github.com/telepresenceio/telepresence/settings/environments
+2. Create an environment named `windows-signing`
+3. Enable "Required reviewers" and add authorized personnel
+4. Add the environment secret `SIGNPATH_API_TOKEN` (the CI submitter
+   user's API token, from the SignPath portal)
+5. Add the repository variables `SIGNPATH_ORGANIZATION_ID` and
+   `SIGNPATH_PROJECT_SLUG` (Settings → Secrets and variables → Actions →
+   Variables). The signing job is skipped entirely while
+   `SIGNPATH_ORGANIZATION_ID` is unset, so the workflow is a no-op before
+   the portal is configured.
+
+In the SignPath portal: create the project, link the predefined
+"GitHub.com" trusted build system to the organization and the project,
+add a `release-signing` policy with manual approval and a `test-signing`
+policy without, create a CI user with submitter rights, and add the
+artifact configurations `core`, `engine` and `bundle` from
+`build-aux/signpath/` (mirror any portal edit back into those files).
+
+#### Release Workflow
+
+When a release tag is pushed:
+1. All platform binaries, and the unsigned MSI and installer bundle, are
+   built and published immediately.
+2. `sign-windows` waits for approval from a required reviewer, then signs
+   in three sequential rounds, each a separate SignPath approval: `core`
+   (the two standalone exes and the MSI, which deep-signs the two exes it
+   embeds), `engine` (the bundle's detached Burn engine — it can only be
+   extracted from a built bundle), and `bundle` (the installer rebuilt
+   with the signed engine — it can only be built from the signed MSI).
+3. The signed `.zip`s, `.msi` and `-setup.exe` replace the unsigned ones
+   on the release (`gh release upload --clobber`), and
+   `make verify-signatures` gates the upload.
+
+If the environment is not configured or never approved, the release
+stands with the unsigned Windows artifacts, as macOS does when its
+signing job is skipped.
+
+To exercise the pipeline against a pre-release tag without waiting for an
+approver, dispatch it against the `test-signing` policy:
+
+```bash
+gh workflow run sign-windows.yaml -f tag=v2.32.0-rc.2 -f signing-policy=test-signing
+```
+
+Verify a signed artifact with `make verify-signatures` (Windows only), or
+with `Get-AuthenticodeSignature` on an individual file — see
+`docs/install/client.md`.

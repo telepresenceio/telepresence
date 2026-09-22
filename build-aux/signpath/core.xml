@@ -1,0 +1,26 @@
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <directory path="telepresence-windows-amd64">
+      <pe-file path="telepresence.exe" product-name="Telepresence" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+    </directory>
+    <directory path="telepresence-windows-arm64">
+      <pe-file path="telepresence.exe" product-name="Telepresence" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+    </directory>
+    <msi-file path="telepresence-windows-amd64.msi">
+      <pe-file path="telepresence.exe" product-name="Telepresence" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+      <pe-file path="TelepresenceDaemon.exe" product-name="Telepresence" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+      <authenticode-sign />
+    </msi-file>
+  </zip-file>
+</artifact-configuration>
