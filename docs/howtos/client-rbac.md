@@ -39,6 +39,11 @@ one pod. Namespace discovery and `telepresence gather-logs` keep working —
 the manager serves both, and controls log access per namespace with the
 `logs.telepresence.io` grant described below.
 
+Against a traffic-manager at v2.32 or later, an explicit
+`--mapped-namespaces` list needs no `pods` grant either: the client trusts
+the manager's own attachment review instead of probing `get pods` in each
+listed namespace.
+
 This requires clients at the release that introduced known-name connection
 or later, and the default `apiPort`; older clients must resolve the
 `traffic-manager` Service to a pod themselves, which is exactly what the

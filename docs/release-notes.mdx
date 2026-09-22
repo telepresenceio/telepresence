@@ -137,7 +137,7 @@ Mounts made through a node-hosted traffic-agent failed with "Operation not permi
 <Note>
 	<Title type="change">Direct agent connections no longer depend on a connect-time permission check</Title>
 	<Body>
-Connecting no longer issues a <code>SelfSubjectAccessReview</code> for <code>pods/portforward</code> in every mapped namespace before reaching the traffic-manager. A QUIC direct path to an agent now works whether or not the client may create <code>pods/portforward</code>. An attachment in a namespace where the client may not create <code>pods/portforward</code> and the QUIC tunnel is unavailable now fails at once with a clear message instead of hanging.
+Connecting no longer issues a <code>SelfSubjectAccessReview</code> for <code>pods/portforward</code> in every mapped namespace before reaching the traffic-manager. A QUIC direct path to an agent now works whether or not the client may create <code>pods/portforward</code>. An attachment in a namespace where the client may not create <code>pods/portforward</code> and the QUIC tunnel is unavailable now fails at once with a clear message instead of hanging. Against a traffic-manager at v2.32 or later, an explicit <code>--mapped-namespaces</code> list is likewise no longer probed with a <code>get pods</code> review per namespace.
   </Body>
 </Note>
 ## Version 2.31.2 <span style={{fontSize:'16px'}}>(August  2)</span>

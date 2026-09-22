@@ -271,7 +271,9 @@ items:
           <code>pods/portforward</code>. An attachment in a namespace where
           the client may not create <code>pods/portforward</code> and the
           QUIC tunnel is unavailable now fails at once with a clear message
-          instead of hanging.
+          instead of hanging. Against a traffic-manager at v2.32 or later,
+          an explicit <code>--mapped-namespaces</code> list is likewise no
+          longer probed with a <code>get pods</code> review per namespace.
   - version: 2.31.2
     date: 2026-08-02
     notes:
