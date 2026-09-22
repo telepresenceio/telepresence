@@ -353,6 +353,10 @@ func (e *engine) securityValues(vals *helm.Values) error {
 			return err
 		}
 		vals.Security.Authorization = helm.Authorization{RequiredGrant: new(grant)}
+		if grant == RequiredGrantTelepresence && !deref(vals.QuicTunnel.Enabled) {
+			e.notes.warn("requiredGrant telepresence without the QUIC tunnel: clients cannot receive attachment traffic; " +
+				"enable the QUIC tunnel or require the any or portforward grant")
+		}
 
 		if !e.answers.ExternalEndpoint {
 			switch ext := e.facts.External; {
