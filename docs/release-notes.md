@@ -128,6 +128,12 @@ Warnings returned by the API server and log lines from the Kubernetes client, su
 Mounts made through a node-hosted traffic-agent failed with "Operation not permitted" over sshfs or "Permission denied" over fuseftp, because the agent's confined SFTP and FTP servers knew only the sidecar's fixed mounts tree and not the intercepted container's filesystem. Both servers now follow the node-agent's links into it, and mounted content is reachable again.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Direct agent connections no longer depend on a connect-time permission check</div></div>
+<div style="margin-left: 15px">
+
+Connecting no longer issues a <code>SelfSubjectAccessReview</code> for <code>pods/portforward</code> in every mapped namespace before reaching the traffic-manager. A QUIC direct path to an agent now works whether or not the client may create <code>pods/portforward</code>, and a refused port-forward routes that namespace's agent traffic through the traffic-manager instead of waiting out an intercept timeout.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">

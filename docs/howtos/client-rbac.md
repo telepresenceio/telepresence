@@ -93,11 +93,13 @@ renders matching client Roles for whichever grant is required
 
 With `telepresence` as the required grant, the per-namespace
 `pods/portforward` grant disappears from the client Roles. Its mechanical
-use goes with it: the client can no longer open direct port-forwards to
-traffic-agents, so attachment traffic routes through the manager — with a
-modest throughput cost — unless the [QUIC
+use goes with it: the client's first direct port-forward dial to a
+traffic-agent in that namespace is refused, and from then on that
+namespace's attachment traffic routes through the manager — with a modest
+throughput cost — unless the [QUIC
 transport](../reference/quic-transport.md) provides the direct path
-instead. The intermediate `any` setting (the default) accepts either grant
+instead, decided independently of this grant when an agent is first
+dialed. The intermediate `any` setting (the default) accepts either grant
 during a migration.
 
 This is what the client's permissions look like at this step, for a

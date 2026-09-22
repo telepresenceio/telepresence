@@ -261,6 +261,16 @@ items:
           only the sidecar's fixed mounts tree and not the intercepted
           container's filesystem. Both servers now follow the node-agent's
           links into it, and mounted content is reachable again.
+      - type: change
+        title: Direct agent connections no longer depend on a connect-time permission check
+        body: >-
+          Connecting no longer issues a <code>SelfSubjectAccessReview</code>
+          for <code>pods/portforward</code> in every mapped namespace before
+          reaching the traffic-manager. A QUIC direct path to an agent now
+          works whether or not the client may create
+          <code>pods/portforward</code>, and a refused port-forward routes
+          that namespace's agent traffic through the traffic-manager
+          instead of waiting out an intercept timeout.
   - version: 2.31.2
     date: 2026-08-02
     notes:
