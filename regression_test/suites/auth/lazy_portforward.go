@@ -3,8 +3,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,55 +15,10 @@ import (
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
 )
 
-// lazyPortForwardRouteTimeout bounds routedThroughManager. A name in a
-// portforward-denied namespace resolves through the traffic-manager's Lookup
-// RPC (no direct agent connection exists to answer it): the first attempt
-// commonly misses its own deadline and is cached as a miss for up to 60s
-// (pkg/client/rootd/dns/server.go's cacheTTL) before DNS retries, and each
-// probe then re-opens a fresh manager tunnel (routedThroughManager disables
-// keep-alives, like check.EventuallyHTTP), which costs more than a direct
-// connection would.
-const lazyPortForwardRouteTimeout = 150 * time.Second
-
-// routedThroughManagerProbeTimeout is the per-request budget routedThroughManager
-// gives each probe: generous enough for a DNS lookup relayed through the
-// traffic-manager plus a manager-tunneled HTTP round trip, both slower than
-// check.EventuallyHTTP's 1s budget (tuned for a direct connection) allows.
-const routedThroughManagerProbeTimeout = 10 * time.Second
-
-// routedThroughManagerPollInterval is the delay between probes.
-const routedThroughManagerPollInterval = 2 * time.Second
-
-// routedThroughManager polls url until its body contains marker, or fails t
-// once timeout elapses. It is check.EventuallyHTTP's shape, but with a
-// per-request timeout long enough for a request relayed through the
-// traffic-manager rather than dialed directly to the agent.
-func routedThroughManager(t testing.TB, url, marker string, timeout time.Duration) {
-	t.Helper()
-	client := &http.Client{
-		Timeout:   routedThroughManagerProbeTimeout,
-		Transport: &http.Transport{DisableKeepAlives: true},
-	}
-	deadline := time.Now().Add(timeout)
-	var lastErr error
-	for {
-		resp, err := client.Get(url)
-		if err == nil {
-			body, readErr := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			if readErr == nil && strings.Contains(string(body), marker) {
-				return
-			}
-			lastErr = fmt.Errorf("unexpected body %q (read err %v)", body, readErr)
-		} else {
-			lastErr = err
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("routedThroughManager %s: timed out after %s: %v", url, timeout, lastErr)
-		}
-		time.Sleep(routedThroughManagerPollInterval)
-	}
-}
+// interceptFailTimeout bounds how long a doomed intercept attempt (no
+// direct agent path and no QUIC tunnel) may take to fail: well under the
+// intercept timeout it would otherwise wait out.
+const interceptFailTimeout = 60 * time.Second
 
 // connectOnlyRules grants exactly what the chart's traffic-manager-connect
 // Role grants without clientRbac.legacyAccess: pods/portforward create
@@ -83,17 +36,17 @@ const connectOnlyRules = `  - apiGroups: [""]
 // appAttachOnlyManifest is grantIdentityManifest's app-namespace
 // counterpart: a Role granting attachments.telepresence.io create/get in
 // the app namespace (%[2]s), bound to the ServiceAccount named %[1]s that
-// lives in the manager namespace (%[3]s). The pods get/list grant is the
-// same legacy discovery rule clientRbacInterceptRules always renders
-// (namespace-accessibility completion); it says nothing about reaching an
-// agent pod. No pods/portforward grant at all, so a port-forward dial to
-// an agent pod in this namespace is refused.
+// lives in the manager namespace (%[3]s). No pods/portforward grant at
+// all, so a port-forward dial to an agent pod in this namespace is
+// refused.
 const appAttachOnlyManifest = `apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: %[1]s
   namespace: %[2]s
 rules:
+  # The client's namespace-accessibility probe needs pods get/list; it
+  # says nothing about reaching an agent pod.
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
@@ -166,12 +119,13 @@ func portForwardRefusalLogged(t *testing.T, r *rt.Runtime, ns string) bool {
 	return false
 }
 
-// AttachWithoutPortForward proves the lazy port-forward fallback
-// (pkg/client/agentpf/portforward_deny.go): an identity that can connect
-// and attach (connections/attachments.telepresence.io) but holds no
-// pods/portforward in the target namespace still intercepts successfully,
-// with agent traffic routed through the traffic-manager and the refusal
-// logged once per namespace.
+// AttachWithoutPortForward proves the fail-fast path
+// (pkg/client/agentpf/clients.go's WaitForIP, pkg/client/userd/trafficmgr/
+// podaccess.go's ensureAccess): an identity that can connect and attach
+// (connections/attachments.telepresence.io) but holds no pods/portforward
+// in the target namespace, and has no QUIC tunnel available either, fails
+// its intercept quickly with a clear error instead of hanging, and the
+// refusal is logged once for that namespace.
 type AttachWithoutPortForward struct {
 	rt.Suite
 }
@@ -181,10 +135,11 @@ func init() {
 }
 
 // Test_InterceptWithoutPodsPortForward creates an identity that can connect
-// and attach but has no pods/portforward in the app namespace, connects and
-// intercepts as that identity, and asserts both that the intercept works
-// (traffic reaches the local handler through the manager) and that the root
-// daemon logged the namespace as refused for direct agent access.
+// and attach but has no pods/portforward in the app namespace, connects as
+// that identity, and asserts that an intercept attempt fails quickly with
+// an error naming both the missing pods/portforward grant and the QUIC
+// tunnel, and that the root daemon logged the namespace as refused for
+// direct agent access.
 func (s *AttachWithoutPortForward) Test_InterceptWithoutPodsPortForward() {
 	t := s.T()
 	ctx := s.Ctx()
@@ -201,15 +156,24 @@ func (s *AttachWithoutPortForward) Test_InterceptWithoutPodsPortForward() {
 	// --mapped-namespaces ns keeps the client from watching every namespace
 	// in the (shared, long-lived) cluster: with the default "all namespaces"
 	// mode, the client-side accessibility scan (one SelfSubjectAccessReview
-	// per cluster namespace) can take far longer than this test's routing
-	// timeout on a cluster that has accumulated many namespaces.
-	conn := rt.Mutate(t, rt.ConnectionFixture(ns, rt.ConnExtraArgs("--as", identity(name), "--mapped-namespaces", ns)))
+	// per cluster namespace) can take far longer than this test's fail-fast
+	// budget on a cluster that has accumulated many namespaces.
+	rt.Mutate(t, rt.ConnectionFixture(ns, rt.ConnExtraArgs("--as", identity(name), "--mapped-namespaces", ns)))
 
 	wl := s.Workload(workloads.Echo("lazy-pf"))
 	ls := s.LocalEcho()
-	a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
-	defer a.Detach(t)
-	routedThroughManager(t, wl.ServiceURL(), ls.Marker(), lazyPortForwardRouteTimeout)
+
+	interceptOpts := append(rt.ToLocal(ls, "http")(), cli.MountFalse()()...)
+	iArgs := append([]string{"intercept", wl.Name, "--namespace", ns}, interceptOpts...)
+
+	start := time.Now()
+	_, stderr, err := r.CLI().Run(ctx, iArgs...)
+	elapsed := time.Since(start)
+
+	s.Require().Error(err, "intercept should fail without a direct agent path or a QUIC tunnel")
+	s.Contains(stderr, "pods/portforward")
+	s.Contains(stderr, "QUIC tunnel")
+	s.Less(elapsed, interceptFailTimeout, "intercept should fail quickly instead of waiting out a timeout")
 
 	s.Eventually(func() bool {
 		return portForwardRefusalLogged(t, r, ns)
