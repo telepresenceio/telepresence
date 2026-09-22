@@ -1436,17 +1436,10 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 		// WatchAgentPods instead of this daemon watching the traffic-manager itself.
 		relayMode := len(s.agentPodNamespaces) > 0
 		var agentNamespaces []string
-		switch {
-		case relayMode:
+		if relayMode {
 			agentNamespaces = s.agentPodNamespaces
-		case clusterCfg.UsesExternalManager():
-			// No relay list and no cluster API access: direct agent
-			// port-forwards are unavailable over an external manager
-			// transport, and CanPortForward would be a Kubernetes API call.
-		default:
-			agentNamespaces = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
-				return !k8s.CanPortForward(s, ns)
-			})
+		} else {
+			agentNamespaces = s.GetCurrentNamespaces(true)
 		}
 		if len(agentNamespaces) > 0 {
 			s.agentClients = agentpf.NewClients(s.Cluster, s.session, agentNamespaces, s.sessionCredentialToken)
@@ -1478,7 +1471,7 @@ func (s *session) Start(g log.Group, teleroutePort uint16) error {
 				})
 			}
 		} else {
-			clog.Infof(s, "Agent port-forwards are disabled. Client is not permitted to do port-forward to any mapped namespace")
+			clog.Infof(s, "Agent port-forwards are disabled. No mapped namespace to watch for agent pods")
 		}
 	}
 	if err := s.activateProxyViaWorkloads(); err != nil {

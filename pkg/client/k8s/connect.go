@@ -263,8 +263,8 @@ func (kc *Cluster) connectToPod(dialCtx context.Context, pap *portforward.PodAdd
 
 // finishConnect runs the post-dial handshake shared by both manager
 // transports: fetch the manager's version, apply authCheck to it, and parse
-// the version number. It closes conn on error and logs the connection
-// otherwise.
+// the version number. It closes conn on error; getVersion logs the
+// connection.
 func (kc *Cluster) finishConnect(
 	dialCtx context.Context,
 	conn *grpc.ClientConn,
@@ -273,8 +273,6 @@ func (kc *Cluster) finishConnect(
 	defer func() {
 		if err != nil {
 			conn.Close()
-		} else {
-			clog.Infof(kc, "Connected to Manager %s", ver)
 		}
 	}()
 	vi, err := getVersion(dialCtx, manager.NewManagerClient(conn))

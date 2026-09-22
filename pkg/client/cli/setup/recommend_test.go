@@ -518,6 +518,28 @@ func TestRecommend_SecurityValues(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, RequiredGrantPortForward, *p.Values.Security.Authorization.RequiredGrant)
 	})
+	t.Run("requiredGrant telepresence without QUIC warns", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) { f.Quic.LoadBalancer = Finding{Verdict: VerdictNo} })
+		answers := recAnswers(func(a *Answers) {
+			a.EnforceAuth = true
+			a.RequiredGrant = RequiredGrantTelepresence
+			a.ManagedScope = ManagedScopeNamespaces
+			a.ManagedNamespaces = []string{"ambassador"}
+		})
+		p, err := Recommend(facts, answers)
+		require.NoError(t, err)
+		assert.False(t, *p.Values.QuicTunnel.Enabled)
+		assert.Contains(t, p.notesText(), "requiredGrant telepresence without the QUIC tunnel")
+	})
+	t.Run("requiredGrant telepresence with QUIC enabled does not warn", func(t *testing.T) {
+		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) {
+			a.EnforceAuth = true
+			a.RequiredGrant = RequiredGrantTelepresence
+		}))
+		require.NoError(t, err)
+		assert.True(t, *p.Values.QuicTunnel.Enabled)
+		assert.NotContains(t, p.notesText(), "requiredGrant telepresence without the QUIC tunnel")
+	})
 	t.Run("enforcing without an external endpoint and no prerequisites notes it", func(t *testing.T) {
 		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) { a.EnforceAuth = true }))
 		require.NoError(t, err)

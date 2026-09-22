@@ -223,12 +223,12 @@ rules:
     verbs: ["get"]
 
   # Rendered whenever the required grant isn't "telepresence": lets the
-  # client open port-forwards directly to traffic-agents (better
-  # throughput than routing via the manager), and doubles as the
-  # authorization for attaching when the required grant is pods/portforward.
-  # Withheld with an external endpoint published (those clients never
-  # port-forward) unless the required grant is "portforward", where
-  # possession of it is itself the attachment policy.
+  # client open port-forwards directly to traffic-agents, the only way to
+  # reach one without the QUIC tunnel, and doubles as the authorization for
+  # attaching when the required grant is pods/portforward. Withheld with an
+  # external endpoint published (those clients never port-forward) unless
+  # the required grant is "portforward", where possession of it is itself
+  # the attachment policy.
   - apiGroups: [""]
     resources: ["pods/portforward"]
     verbs: ["create"]
@@ -248,9 +248,10 @@ against the caller's verified identity — so granting them confers nothing
 outside Telepresence. `clientRbac.ruleExtras` appends additional rules to
 these Roles.
 
-Without direct `pods/portforward` in the namespace, all attachment traffic
-is routed via the traffic-manager, at a modest throughput cost, unless the
-[QUIC transport](quic-transport.md) provides the direct path instead.
+There is no manager relay for agent traffic. Without direct
+`pods/portforward` in the namespace, an attachment there needs the
+[QUIC transport](quic-transport.md); without either, the intercept, replace,
+or ingest fails immediately with a clear error.
 
 ### Legacy access
 

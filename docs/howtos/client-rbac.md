@@ -39,6 +39,11 @@ one pod. Namespace discovery and `telepresence gather-logs` keep working —
 the manager serves both, and controls log access per namespace with the
 `logs.telepresence.io` grant described below.
 
+Against a traffic-manager at v2.32 or later, an explicit
+`--mapped-namespaces` list needs no `pods` grant either: the client trusts
+the manager's own attachment review instead of probing `get pods` in each
+listed namespace.
+
 This requires clients at the release that introduced known-name connection
 or later, and the default `apiPort`; older clients must resolve the
 `traffic-manager` Service to a pod themselves, which is exactly what the
@@ -93,12 +98,13 @@ renders matching client Roles for whichever grant is required
 
 With `telepresence` as the required grant, the per-namespace
 `pods/portforward` grant disappears from the client Roles. Its mechanical
-use goes with it: the client can no longer open direct port-forwards to
-traffic-agents, so attachment traffic routes through the manager — with a
-modest throughput cost — unless the [QUIC
-transport](../reference/quic-transport.md) provides the direct path
-instead. The intermediate `any` setting (the default) accepts either grant
-during a migration.
+use goes with it: the client's first direct port-forward dial to a
+traffic-agent in that namespace is refused, and there is no manager relay
+to fall back on. An attachment in that namespace then needs the [QUIC
+transport](../reference/quic-transport.md), decided independently of this
+grant when an agent is first dialed; without it, the intercept, replace, or
+ingest fails immediately with a clear error. The intermediate `any` setting
+(the default) accepts either grant during a migration.
 
 This is what the client's permissions look like at this step, for a
 developer who connects and attaches to two named workloads in the `shop`
@@ -218,7 +224,7 @@ you wrote, and nothing else.
 |---------------------------------|-------------|----------|
 | Discovery, diagnostics, and port-forward grants | defaults | — |
 | One named `pods/portforward` in the manager namespace, `pods/portforward` per attached namespace | `clientRbac.legacyAccess: false` | current clients, default `apiPort` |
-| Policy-only `telepresence.io` grants | + `security.authorization.requiredGrant: telepresence` | `security.authentication.mode: enforcing`; QUIC for direct agent traffic |
+| Policy-only `telepresence.io` grants | + `security.authorization.requiredGrant: telepresence` | `security.authentication.mode: enforcing`; QUIC tunnel for attachments |
 | None | + `externalEndpoint`, `clientRbac.create: false` | enforcing mode, a persisted TLS certificate, QUIC for Direct Connect attachments |
 
 `telepresence setup` asks about each step above — whether to enforce

@@ -34,6 +34,13 @@ func (f *fakeIngestRootDaemon) TranslateEnvIPs(_ context.Context, e *rootdRpc.En
 	return e, nil
 }
 
+// WaitForAgentIP echoes the requested IP back as the local IP, standing in for a root
+// daemon that has direct agent access, so ensureAccess succeeds without any real port
+// forwarding.
+func (f *fakeIngestRootDaemon) WaitForAgentIP(_ context.Context, rq *rootdRpc.WaitForAgentIPRequest) (*rootdRpc.WaitForAgentIPResponse, error) {
+	return &rootdRpc.WaitForAgentIPResponse{LocalIp: rq.Ip}, nil
+}
+
 // withFakeRootDaemon wires s up with a bufconn-backed root daemon that only
 // supports TranslateEnvIPs, so Ingest's post-EnsureAgent env-translation step
 // succeeds.
@@ -165,6 +172,7 @@ func TestSession_Ingest_CachedNodeAgentReusedSilentlyForPlainRequest(t *testing.
 					Name:      "wl",
 					Namespace: "default",
 					NodeAgent: true,
+					PodIp:     "10.244.0.7",
 					Containers: map[string]*manager.AgentInfo_ContainerInfo{
 						"cn": {},
 					},

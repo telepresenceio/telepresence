@@ -128,6 +128,18 @@ Warnings returned by the API server and log lines from the Kubernetes client, su
 Mounts made through a node-hosted traffic-agent failed with "Operation not permitted" over sshfs or "Permission denied" over fuseftp, because the agent's confined SFTP and FTP servers knew only the sidecar's fixed mounts tree and not the intercepted container's filesystem. Both servers now follow the node-agent's links into it, and mounted content is reachable again.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Ingest no longer waits out the intercept timeout before it starts</div></div>
+<div style="margin-left: 15px">
+
+The user daemon handled a new agent pod before telling the root daemon about it, so an ingest waited the full intercept timeout for a pod the root daemon did not know yet. The pod is now relayed first, and the ingest starts as soon as the agent is reachable.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Direct agent connections no longer depend on a connect-time permission check</div></div>
+<div style="margin-left: 15px">
+
+Connecting no longer issues a <code>SelfSubjectAccessReview</code> for <code>pods/portforward</code> in every mapped namespace before reaching the traffic-manager. A QUIC direct path to an agent now works whether or not the client may create <code>pods/portforward</code>. An attachment in a namespace where the client may not create <code>pods/portforward</code> and the QUIC tunnel is unavailable now fails at once with a clear message instead of hanging. Against a traffic-manager at v2.32 or later, an explicit <code>--mapped-namespaces</code> list is likewise no longer probed with a <code>get pods</code> review per namespace.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">

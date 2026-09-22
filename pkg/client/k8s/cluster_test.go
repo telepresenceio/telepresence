@@ -13,13 +13,26 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	auth "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
+
+// denyingClientset returns a fake clientset whose SelfSubjectAccessReviews
+// are always denied, without the fake tracker's schema-conversion noise.
+func denyingClientset() *fake.Clientset {
+	fc := fake.NewClientset()
+	fc.PrependReactor("create", "selfsubjectaccessreviews", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, &auth.SelfSubjectAccessReview{Status: auth.SubjectAccessReviewStatus{Allowed: false}}, nil
+	})
+	return fc
+}
 
 func TestClassifyUnreachable(t *testing.T) {
 	tests := []struct {
@@ -116,6 +129,37 @@ func TestApplyNamespaceList_UpdatesOnSubsequentLists(t *testing.T) {
 	kc.applyNamespaceList(&manager.NamespaceList{Namespaces: []string{"ns-b"}})
 
 	require.Equal(t, []string{"ns-b"}, kc.GetCurrentNamespaces(true))
+}
+
+// TestSetMappedNamespaces_ManagerReviewsAccessSkipsProbe confirms that with
+// managerReviewsAccess set, an explicit --mapped-namespaces list is trusted
+// as-is: every namespace stays accessible and no SelfSubjectAccessReview is
+// issued, even though the fake clientset denies by default.
+func TestSetMappedNamespaces_ManagerReviewsAccessSkipsProbe(t *testing.T) {
+	kc := newTestCluster("default")
+	fc := denyingClientset()
+	kc.Context = k8sapi.WithK8sInterface(kc.Context, fc)
+	kc.SetManagerReviewsAccess(true)
+
+	kc.SetMappedNamespaces([]string{"ns-a", "ns-b"})
+
+	require.Equal(t, []string{"ns-a", "ns-b"}, kc.GetCurrentNamespaces(true))
+	for _, action := range fc.Actions() {
+		require.NotEqual(t, "selfsubjectaccessreviews", action.GetResource().Resource)
+	}
+}
+
+// TestSetMappedNamespaces_ProbesWithoutManagerReviewsAccess confirms the
+// existing behaviour holds when managerReviewsAccess is not set: a denied
+// SelfSubjectAccessReview marks the namespace inaccessible.
+func TestSetMappedNamespaces_ProbesWithoutManagerReviewsAccess(t *testing.T) {
+	kc := newTestCluster("default")
+	kc.Context = k8sapi.WithK8sInterface(kc.Context, denyingClientset())
+
+	kc.SetMappedNamespaces([]string{"ns-a", "ns-b"})
+
+	require.Empty(t, kc.GetCurrentNamespaces(true))
+	require.Equal(t, []string{"ns-a", "ns-b"}, kc.GetCurrentNamespaces(false))
 }
 
 // TestFindManagerServiceNamespace_PrefersDefault: with the manager present in

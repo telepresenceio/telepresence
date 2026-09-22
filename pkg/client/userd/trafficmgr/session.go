@@ -200,31 +200,15 @@ type session struct {
 	namespaceWatchOnce sync.Once
 }
 
-// agentPodWatchNamespaces returns the namespaces in which this client watches
-// agent pods: nil when cluster.agentPortForward is disabled (there's no
-// channel to traffic-agents at all), otherwise the mapped namespaces this
-// client can port-forward to. This is the same computation the root daemon's
-// Start used to perform on its own (rootd/session.go); the user daemon now
-// performs it once and passes the result to the traffic-manager
-// (SessionEventsRequest.Namespaces) and to the root daemon
-// (NetworkConfig.AgentPodNamespaces) so both sides agree without computing it
-// independently.
+// agentPodWatchNamespaces returns the namespaces in which this client watches agent pods:
+// nil when cluster.agentPortForward is off, otherwise every mapped namespace. Whether a
+// namespace yields a direct connection is decided per agent when it is dialed. The result
+// goes to both the traffic-manager (SessionEventsRequest) and the root daemon (NetworkConfig).
 func (s *session) agentPodWatchNamespaces() []string {
 	s.agentPodWatchNamespacesOnce.Do(func() {
-		cc := client.GetConfig(s).Cluster()
-		if !cc.AgentPortForward {
-			return
-		}
-		if cc.UsesExternalManager() {
-			// External manager transport: no Kubernetes API access, so
-			// CanPortForward can't run. Keep every mapped namespace; the
-			// manager reviews attach permissions itself.
+		if client.GetConfig(s).Cluster().AgentPortForward {
 			s.agentPodWatchNamespacesValue = s.GetCurrentNamespaces(true)
-			return
 		}
-		s.agentPodWatchNamespacesValue = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
-			return !k8s.CanPortForward(s, ns)
-		})
 	})
 	return s.agentPodWatchNamespacesValue
 }
@@ -1236,6 +1220,7 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 		// We do not want to override the local config with the traffic-manager's config even if the local config is empty.
 		cfg.Cluster().MappedNamespaces = clientMappedNamespaces
 		namespaces = effectiveMappedNamespaces(namespaces, clientMappedNamespaces, tmMappedNamespaces)
+		s.SetManagerReviewsAccess(s.managerSupportsWatchNamespaces())
 		changed := s.SetMappedNamespaces(namespaces)
 		switch {
 		case len(namespaces) == 0:
