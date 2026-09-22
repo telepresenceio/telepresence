@@ -177,10 +177,7 @@ func MainWithEnv(ctx context.Context) (err error) {
 					Address:  env.UsageCollectorAddress,
 					Insecure: env.UsageCollectorInsecure,
 				})
-				usg.Quick(ctx, "manager.boot",
-					"nodeagent.enabled", strconv.FormatBool(env.NodeAgentEnabled),
-					"injector.enabled", strconv.FormatBool(managerutil.AgentInjectorEnabled(ctx)),
-				)
+				reportManagerBoot(ctx)
 			}
 		}
 
@@ -486,4 +483,13 @@ func (s *service) runUpdateTrafficManagerConfigMapLoop(ctx context.Context) erro
 			return nil
 		}
 	}
+}
+
+func reportManagerBoot(ctx context.Context) {
+	env := managerutil.GetEnv(ctx)
+	usg.Quick(ctx, "manager.boot",
+		"nodeagent.enabled", strconv.FormatBool(env.NodeAgentEnabled),
+		"injector.enabled", strconv.FormatBool(managerutil.AgentInjectorEnabled(ctx)),
+		"authentication.mode", env.AuthenticationMode.String(),
+	)
 }
