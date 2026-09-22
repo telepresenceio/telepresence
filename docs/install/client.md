@@ -244,8 +244,8 @@ Free code signing provided by [SignPath.io](https://about.signpath.io/), certifi
 [SignPath Foundation](https://signpath.org/). The Windows release binaries and installers are
 Authenticode-signed with it.
 
-- Committers and reviewers: [telepresence-maintainers](https://github.com/orgs/telepresenceio/teams/telepresence-maintainers)
-- Approvers: [administrators](https://github.com/orgs/telepresenceio/teams/administrators)
+- Committers and reviewers: [telepresence-maintainers](https://github.com/orgs/telepresenceio/teams/telepresence-maintainers) ([@thallgren](https://github.com/thallgren), [@bgruszka](https://github.com/bgruszka), [@njayp](https://github.com/njayp), [@breland-openai](https://github.com/breland-openai))
+- Approvers: [administrators](https://github.com/orgs/telepresenceio/teams/administrators) ([@khussey](https://github.com/khussey), [@thallgren](https://github.com/thallgren))
 - Privacy policy: [PRIVACY.md](https://github.com/telepresenceio/telepresence/blob/release/v2/PRIVACY.md)
 
 </Platform.WindowsTab>
