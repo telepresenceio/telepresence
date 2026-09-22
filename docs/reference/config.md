@@ -63,10 +63,11 @@ Values for `client.cluster` controls aspects on how client's connection to the t
 
 With `agentPortForward` left at its default `true`, whether a given namespace actually gets a
 direct channel to its agents is decided per namespace, the first time an agent there is dialed,
-not up front when connecting. A client without `pods/portforward` in that namespace has its first
-direct dial refused, and from then on that namespace's attachment traffic routes through the
-traffic-manager instead, unless the [QUIC transport](quic-transport.md) provides a direct path
-that doesn't depend on that permission.
+not up front when connecting. There is no manager relay for agent traffic: a client without
+`pods/portforward` in that namespace has its first direct dial refused, and needs the
+[QUIC transport](quic-transport.md) instead, which doesn't depend on that permission. Without
+either, an attachment (intercept, replace, or ingest) in that namespace fails immediately with a
+clear error.
 
 ### Docker
 Values for the `client.docker` provides docker specific options.
