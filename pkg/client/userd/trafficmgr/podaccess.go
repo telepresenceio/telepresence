@@ -14,6 +14,7 @@ import (
 	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/forwarder"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -121,7 +122,9 @@ func (pa *podAccess) ensureAccess(ctx context.Context, rd daemon.DaemonClient) e
 			Timeout:   durationpb.New(cc.Timeouts().Get(client.TimeoutIntercept)),
 		})
 		switch status.Code(err) {
-		case codes.Unavailable: // Unavailable means that the feature disabled. This is OK, the traffic-manager will do the forwarding
+		case codes.Unavailable:
+			return errcat.User.Newf(
+				"%s; grant pods/portforward in that namespace or enable the QUIC tunnel (quicTunnel.enabled)", status.Convert(err).Message())
 		case codes.OK:
 			if lip, ok := netip.AddrFromSlice(rsp.LocalIp); ok {
 				pa.podIP = lip.String()

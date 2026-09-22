@@ -32,6 +32,7 @@ func TestWaitForIPUnavailableForUnwatchedNamespace(t *testing.T) {
 
 	err := cs.WaitForIP(context.Background(), time.Millisecond, "beta", netip.MustParseAddr("10.0.0.1"))
 	require.Equal(t, codes.Unavailable, status.Code(err))
+	assert.Contains(t, err.Error(), "namespace beta is not watched for traffic-agents")
 }
 
 // TestClients_PreferredQuicAddr proves the default (no callback installed, or a callback
@@ -341,6 +342,7 @@ func TestWaitForIP_PortForwardDenied_ShortCircuitsAfterFirstDial(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.Equal(t, codes.Unavailable, status.Code(err))
+	assert.Contains(t, err.Error(), "direct agent access in namespace alpha refused (pods/portforward) and the QUIC tunnel is not available")
 	assert.Less(t, elapsed, time.Second, "must return well inside the 2s timeout, not exhaust it")
 	assert.True(t, cs.isPortForwardDenied("alpha"))
 

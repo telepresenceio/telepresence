@@ -151,3 +151,23 @@ func TestWatchDial_Displacement(t *testing.T) {
 		t.Fatal("third WatchDial call never returned after its context was cancelled")
 	}
 }
+
+// TestCreateClientStream_NoDialWatcher_TimesOut proves that CreateClientStream doesn't
+// wait forever for a dial watcher that never registers: it returns the "no dial watcher"
+// error once its bounded wait expires, instead of retrying until the caller's context ends.
+func TestCreateClientStream_NoDialWatcher_TimesOut(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	cfg := &fakeConfig{sidecar: &agentconfig.Sidecar{}, podIP: netip.MustParseAddr("127.0.0.1")}
+	st, err := NewState(ctx, cfg)
+	require.NoError(t, err)
+	s := st.(*state)
+
+	start := time.Now()
+	_, err = s.CreateClientStream(ctx, tunnel.ClientToAgent, tunnel.SessionID("no-such-session"), tunnel.ConnID("conn-1"), 0, 0)
+	elapsed := time.Since(start)
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no dial watcher")
+	require.Less(t, elapsed, 10*time.Second, "must not wait longer than the bounded (>=5s) wait")
+	require.GreaterOrEqual(t, elapsed, 4*time.Second, "must wait roughly the bounded minimum, not return immediately")
+}

@@ -59,8 +59,9 @@ func (ig *ingest) podAccess(rd daemon.DaemonClient) *podAccess {
 		readOnly:         true,
 		wg:               &ig.wg,
 	}
+	// An ingest needs no direct agent path: its mounts reach the pod over the tunnel.
 	if err := pa.ensureAccess(ig.ctx, rd); err != nil {
-		clog.Error(ig.ctx, err)
+		clog.Infof(ig.ctx, "ingest %s continues without direct agent access: %v", ig.container, err)
 	}
 	return pa
 }

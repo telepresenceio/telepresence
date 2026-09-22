@@ -903,13 +903,13 @@ func (s *clients) loadOrAddClient(ai *manager.AgentPodInfo) *client {
 
 func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, namespace string, ip netip.Addr) error {
 	if s.disabled.Load() {
-		return status.Error(codes.Unavailable, "")
+		return status.Error(codes.Unavailable, "direct agent access is disabled")
 	}
 	if namespace == "" {
 		namespace = s.Namespace
 	}
 	if !s.watchesNamespace(namespace) {
-		return status.Error(codes.Unavailable, "")
+		return status.Errorf(codes.Unavailable, "namespace %s is not watched for traffic-agents", namespace)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -935,7 +935,8 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, namespac
 				return nil
 			}
 			if errors.Is(err, errNoDirectAccess) {
-				return status.Error(codes.Unavailable, "")
+				return status.Errorf(codes.Unavailable,
+					"direct agent access in namespace %s refused (pods/portforward) and the QUIC tunnel is not available", namespace)
 			}
 			select {
 			case <-ctx.Done():
