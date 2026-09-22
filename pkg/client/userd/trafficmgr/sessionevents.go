@@ -111,10 +111,12 @@ func (s *session) watchSessionEvents(ctx context.Context) error {
 			everReceived = true
 			if ad := delta.AgentPods; ad != nil {
 				pods := applyAgentPodsDelta(podMap, ad)
-				s.handleAgentPodSnapshot(ctx, pods, s.coveredCombined)
+				// The root daemon must learn the pods first: handling the snapshot waits
+				// on it for the agent IPs of ingests and intercepts.
 				if relayEnabled {
 					s.podRelay.apply(ad.Upserts, ad.Removals)
 				}
+				s.handleAgentPodSnapshot(ctx, pods, s.coveredCombined)
 			}
 			if id := delta.Intercepts; id != nil {
 				snap := applyInterceptsDelta(icMap, id)

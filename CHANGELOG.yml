@@ -261,6 +261,13 @@ items:
           only the sidecar's fixed mounts tree and not the intercepted
           container's filesystem. Both servers now follow the node-agent's
           links into it, and mounted content is reachable again.
+      - type: bugfix
+        title: Ingest no longer waits out the intercept timeout before it starts
+        body: >-
+          The user daemon handled a new agent pod before telling the root daemon about
+          it, so an ingest waited the full intercept timeout for a pod the root daemon
+          did not know yet. The pod is now relayed first, and the ingest starts as soon
+          as the agent is reachable.
       - type: change
         title: Direct agent connections no longer depend on a connect-time permission check
         body: >-
