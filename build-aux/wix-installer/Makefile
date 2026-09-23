@@ -27,7 +27,8 @@ EXE              := telepresence.exe
 MAIN_MSI         := MainPackage.msi
 LICENSE          := License.rtf
 DAEMON_EXE       := TelepresenceDaemon.exe
-PRODUCT_VERSION  := $(shell ../winversion.sh $(TELEPRESENCE_VERSION))
+include ../winversion.mk
+PRODUCT_VERSION  := $(TELEPRESENCE_WINVERSION)
 WIXDEFS          := -d ProductVersion=$(PRODUCT_VERSION)
 
 .PHONY: all msi deps clean
