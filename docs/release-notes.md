@@ -170,6 +170,12 @@ The user daemon now creates the <code>telfs-</code> mount directory under <code>
 Upgrading the <code>.rpm</code> package stopped and disabled <code>telepresence-rootd.service</code>, because the removed package's scriptlets ran after the new package had enabled it. The remove scriptlets now act only on a real removal, and an upgrade restarts the service so the new daemon runs.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Status names the embedded root daemon correctly</div></div>
+<div style="margin-left: 15px">
+
+When the user daemon runs with elevated privileges and embeds the root daemon, <code>telepresence status</code> and <code>telepresence version</code> printed that section under the user daemon's name. It is now labelled as the embedded root daemon.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">
