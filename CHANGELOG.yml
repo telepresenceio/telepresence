@@ -293,6 +293,13 @@ items:
           is published for Intune/GPO deployment.
           <a href="https://github.com/telepresenceio/telepresence/issues/4284">#4284</a>
         docs: install/client
+      - type: bugfix
+        title: Temporary volume mount directories are removed
+        body: >-
+          The user daemon now creates the <code>telfs-</code> mount
+          directory under <code>intercept.mountsRoot</code> and removes it
+          when the intercept or ingest ends, however the session ends, and
+          sweeps abandoned empty ones at startup.
   - version: 2.31.2
     date: 2026-08-02
     notes:
