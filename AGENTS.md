@@ -446,8 +446,9 @@ spctl --assess --type install ../../build-output/Telepresence.pkg
 
 ### Windows Installer Signing
 
-Windows `telepresence.exe`, `MainPackage.msi` and the `TelepresenceInstall.exe`
-Burn bundle are Authenticode-signed through the
+Windows `telepresence.exe` and both `MainPackage.msi` builds (amd64, arm64,
+published as `telepresence-windows-amd64.msi` and
+`telepresence-windows-arm64.msi`) are Authenticode-signed through the
 [SignPath Foundation](https://signpath.org/) free code-signing program for
 open-source projects. Signing runs in `.github/workflows/sign-windows.yaml`,
 called from `release.yaml` after `publish-release`, behind a protected
@@ -470,23 +471,20 @@ In the SignPath portal: create the project, link the predefined
 "GitHub.com" trusted build system to the organization and the project,
 add a `release-signing` policy with manual approval and a `test-signing`
 policy without, create a CI user with submitter rights, and add the
-artifact configurations `core`, `engine` and `bundle` from
-`build-aux/signpath/` (mirror any portal edit back into those files).
+`core` artifact configuration from `build-aux/signpath/` (mirror any
+portal edit back into that file).
 
 #### Release Workflow
 
 When a release tag is pushed:
-1. All platform binaries, and the unsigned MSI and installer bundle, are
-   built and published immediately.
+1. All platform binaries and both unsigned MSIs are built and published
+   immediately.
 2. `sign-windows` waits for approval from a required reviewer, then signs
-   in three sequential rounds, each a separate SignPath approval: `core`
-   (the two standalone exes and the MSI, which deep-signs the two exes it
-   embeds), `engine` (the bundle's detached Burn engine — it can only be
-   extracted from a built bundle), and `bundle` (the installer rebuilt
-   with the signed engine — it can only be built from the signed MSI).
-3. The signed `.zip`s, `.msi` and `-setup.exe` replace the unsigned ones
-   on the release (`gh release upload --clobber`), and
-   `make verify-signatures` gates the upload.
+   the `core` artifact: the two standalone exes and both MSIs, which
+   deep-signs the two exes each MSI embeds.
+3. The signed `.zip`s and `.msi`s replace the unsigned ones on the
+   release (`gh release upload --clobber`), and `make verify-signatures`
+   gates the upload.
 
 If the environment is not configured or never approved, the release
 stands with the unsigned Windows artifacts, as macOS does when its

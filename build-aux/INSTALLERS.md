@@ -14,30 +14,31 @@ All installers are built and published via `.github/workflows/release.yaml`.
 
 **Location:** `build-aux/wix-installer/`
 
-**Output:** `telepresence-windows-amd64-setup.exe` (WiX bundle/bootstrapper)
+**Output:** `MainPackage.msi`, published as `telepresence-windows-amd64.msi` and
+`telepresence-windows-arm64.msi`
 
-**Architecture:** amd64 only (WinFSP and SSHFS-Win installers lack arm64 versions)
+**Architecture:** amd64 and arm64
 
 ### Key Files
 - `Makefile` - Build orchestration, downloads binary if not present locally
-- `TeleProduct.wxs` - MSI product definition
-- `TeleBundle.wxs` - Bundle/bootstrapper definition
-- `variables.wxi` - Version and path variables
+- `MainPackage.wxs` - MSI product definition, including the install UI dialogs
+- `Dialogs_en-us.wxl` - Localized dialog strings
 
 ### CI Build Steps
 ```yaml
 - name: Install WiX Toolset
   run: |
     dotnet tool install --global wix
-    wix extension add -g WixToolset.BootstrapperApplications.wixext
     wix extension add -g WixToolset.UI.wixext
     wix extension add -g WixToolset.Util.wixext
 - name: Build WiX Installer
-  run: make bundle ARCH=amd64
+  run: make msi ARCH=amd64   # or ARCH=arm64
 ```
 
 ### Service Details
-The Windows installer registers Telepresence and configures PATH. The root daemon service management is handled differently on Windows (not a persistent service like Unix platforms).
+The MSI registers Telepresence and configures PATH. The root daemon service management is handled
+differently on Windows (not a persistent service like Unix platforms). The MSI does not install WinFsp or
+SSHFS-Win; volume mounts need both installed separately.
 
 ---
 
@@ -249,7 +250,7 @@ The GitHub release body separates installer types:
 **Installers (with root daemon as a system service):**
 - Linux .deb/.rpm
 - macOS .pkg
-- Windows setup.exe
+- Windows .msi
 
 **Standalone Binaries:**
 - Linux/macOS executables

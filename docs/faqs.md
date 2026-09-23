@@ -60,7 +60,7 @@ The cluster must also have access to an external registry to be able to download
 
 The local daemon needs to create a VIF (Virtual Network Interface) for outbound routing and DNS, which is a privileged operation. However, sudo is **not** required when:
 
-- Telepresence was installed using a [package installer](install/client.md) (`.pkg` on macOS, `.deb`/`.rpm` on Linux, or the Windows setup installer), which configures the root daemon as a system service.
+- Telepresence was installed using a [package installer](install/client.md) (`.pkg` on macOS, `.deb`/`.rpm` on Linux, or the Windows MSI), which configures the root daemon as a system service.
 - Telepresence runs in [Docker mode](howtos/docker.md) (`telepresence connect --docker`).
 
 Sudo is only needed when using a standalone binary installation without a system service.

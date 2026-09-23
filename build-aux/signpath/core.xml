@@ -22,5 +22,14 @@
       </pe-file>
       <authenticode-sign />
     </msi-file>
+    <msi-file path="telepresence-windows-arm64.msi">
+      <pe-file path="telepresence.exe" product-name="Telepresence" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+      <pe-file path="TelepresenceDaemon.exe" product-name="Telepresence" product-version="${version}">
+        <authenticode-sign />
+      </pe-file>
+      <authenticode-sign />
+    </msi-file>
   </zip-file>
 </artifact-configuration>
