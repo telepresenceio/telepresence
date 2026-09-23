@@ -15,9 +15,10 @@ import (
 
 func main() {
 	fs := pflag.NewFlagSet("cobraparse", pflag.ExitOnError)
-	var helpArg string
+	var helpArg, name string
 	fs.BoolP("help", "h", false, "Help for this command")
 	fs.StringVar(&helpArg, "help-arg", "--help", "Help for this argument")
+	fs.StringVar(&name, "name", "", "Name for the root command, overriding the executable's own name")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), "Usage:\n  cobraparse <command to parse help output from> [...args]")
 		fs.PrintDefaults()
@@ -35,6 +36,9 @@ func main() {
 	root, err := f.BuildCommandTree(args[1:], 8)
 	if err != nil {
 		log.Fatalf("error: %v\n", err)
+	}
+	if name != "" {
+		root.Name = name
 	}
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
