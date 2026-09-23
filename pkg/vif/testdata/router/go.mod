@@ -22,7 +22,7 @@ require (
 	github.com/puzpuzpuz/xsync/v4 v4.5.0 // indirect
 	github.com/quic-go/quic-go v0.62.0 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
-	github.com/telepresenceio/telepresence/rpc/v2 v2.32.0-rc.4 // indirect
+	github.com/telepresenceio/telepresence/rpc/v2 v2.32.0-rc.5 // indirect
 	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
