@@ -1,28 +1,21 @@
-# Makefile — complete Telepresence Windows installer
-# Run: make bundle            → produces TelepresenceInstall.exe
-#      make msi                → produces MainPackage.msi only
-#      make bundle-from-msi    → produces TelepresenceInstall.exe from an
-#                                 already built (possibly signed) MainPackage.msi,
-#                                 without rebuilding it
-#      make detach-engine      → extracts the bundle's burn engine for signing
-#      make reattach-engine    → rebuilds the bundle with a signed burn engine
-#      make clean              → remove everything
+# Makefile — Telepresence Windows MSI installer
+# Run: make msi     → produces MainPackage.msi for ARCH (amd64 or arm64)
+#      make clean   → remove everything
 
 SHELL:=$(shell which bash)
 
 .PHONY: FORCE
 
-# VERSION is the telepresence version to bundle. Use TELEPRESENCE_VERSION if set (for CI).
+# VERSION is the telepresence version to package. Use TELEPRESENCE_VERSION if set (for CI).
 VERSION          ?= $(if $(TELEPRESENCE_VERSION),$(patsubst v%,%,$(TELEPRESENCE_VERSION)),2.26.0)
 ARCH             ?= amd64
+WIXARCH          := $(if $(filter arm64,$(ARCH)),arm64,x64)
 WIX              := wix
 GO               := go
 CURL             := curl
 UNZIP            := unzip
 SEVENZ           := 7z      # install: sudo apt install p7zip-full
 
-WINFSP_VERSION   := 2.1.25156
-SSHFS_VERSION    := 3.7.21011
 WINTUN_VERSION   := 0.14.1
 WINTUN_SUM       := 07c256185d6ee3652e09fa55c0b673e2624b565e02c4b9091c79ca7d2f24ef51  # update if version changes
 
@@ -30,77 +23,25 @@ BUILD            := ../../build-output
 BINDIR           := $(BUILD)/bin
 MSIDIR           := $(BUILD)/msi
 ZIPDIR           := $(BUILD)/zip
-SIGNDIR          := $(BUILD)/signing
 EXE              := telepresence.exe
-BUNDLE           := TelepresenceInstall.exe
 MAIN_MSI         := MainPackage.msi
 LICENSE          := License.rtf
 DAEMON_EXE       := TelepresenceDaemon.exe
-BUNDLE_VERSION   := $(word 1, $(subst -, ,$(TELEPRESENCE_VERSION:v%=%))).0
-WIXDEFS          := -d BundleVersion=$(BUNDLE_VERSION)
+PRODUCT_VERSION  := $(word 1, $(subst -, ,$(TELEPRESENCE_VERSION:v%=%))).0
+WIXDEFS          := -d ProductVersion=$(PRODUCT_VERSION)
 
-.PHONY: all bundle msi bundle-from-msi detach-engine reattach-engine deps clean
+.PHONY: all msi deps clean
 
-all: bundle
-
-# Final single-click installer, built from scratch (including the MSI)
-bundle: $(BINDIR)/$(BUNDLE)
-	@echo "SUCCESS! Installer ready: $<"
-	@du -h $<
-
-# wix build command for the bundle, shared by the from-scratch and
-# from-an-existing-MSI paths.
-define BUILD_BUNDLE
-	$(WIX) build $(WIXDEFS) \
-		-ext WixToolset.BootstrapperApplications.wixext \
-		-ext WixToolset.UI.wixext \
-		-arch x64 \
-		-src Telepresence.wxs \
-		-bindpath . \
-		-bindpath "$(MSIDIR)" \
-		-o $(BINDIR)/$(BUNDLE)
-endef
-
-$(BINDIR)/$(BUNDLE): Telepresence.wxs $(MSIDIR)/$(MAIN_MSI) $(MSIDIR)/winfsp.msi $(MSIDIR)/sshfs-win.msi | $(BINDIR)
-	$(BUILD_BUNDLE)
-
-# Builds the bundle from a MainPackage.msi that already exists in $(MSIDIR)
-# (for example a signed copy put there by the signing job), without
-# triggering the MSI rule below, whose FORCE'd inputs would always rebuild it.
-bundle-from-msi: Telepresence.wxs $(MSIDIR)/winfsp.msi $(MSIDIR)/sshfs-win.msi | $(BINDIR)
-	@test -f "$(MSIDIR)/$(MAIN_MSI)" || { \
-		echo "error: $(MSIDIR)/$(MAIN_MSI) not found; run 'make msi' first, or put a signed copy there" >&2; \
-		exit 1; \
-	}
-	$(BUILD_BUNDLE)
-
-# Extracts the bundle's burn engine so it can be signed on its own.
-detach-engine: | $(SIGNDIR)
-	@test -f "$(BINDIR)/$(BUNDLE)" || { \
-		echo "error: $(BINDIR)/$(BUNDLE) not found; run 'make bundle-from-msi' first" >&2; \
-		exit 1; \
-	}
-	$(WIX) burn detach $(BINDIR)/$(BUNDLE) -engine $(SIGNDIR)/burnengine.exe
-
-# Rebuilds the bundle with the signed burn engine, which the signing job
-# copies over $(SIGNDIR)/burnengine.exe before this runs. The result,
-# $(SIGNDIR)/$(BUNDLE), is the bundle ready for its own signature.
-reattach-engine: | $(SIGNDIR)
-	@test -f "$(SIGNDIR)/burnengine.exe" || { \
-		echo "error: $(SIGNDIR)/burnengine.exe not found; run 'make detach-engine' and replace it with the signed engine first" >&2; \
-		exit 1; \
-	}
-	$(WIX) burn reattach $(BINDIR)/$(BUNDLE) -engine $(SIGNDIR)/burnengine.exe -o $(SIGNDIR)/$(BUNDLE)
-
-# Main MSI only
-msi: $(MSIDIR)/$(MAIN_MSI)
+all: msi
 
 # Main MSI (binary, service daemon, and wintun.dll)
+msi: $(MSIDIR)/$(MAIN_MSI)
+
 $(MSIDIR)/$(MAIN_MSI): MainPackage.wxs Dialogs_en-us.wxl $(BINDIR)/$(EXE) $(BINDIR)/$(DAEMON_EXE) $(BINDIR)/wintun.dll $(BUILD)/$(LICENSE) | $(MSIDIR)
 	$(WIX) build $(WIXDEFS) \
 		-ext WixToolset.UI.wixext \
 		-ext WixToolset.Util.wixext \
-		-arch x64 \
+		-arch $(WIXARCH) \
 		-loc Dialogs_en-us.wxl \
 		-bindpath . \
 		-bindpath "$(BUILD)" \
@@ -116,32 +57,11 @@ $(BINDIR):
 $(MSIDIR):
 	mkdir -p $@
 
-$(SIGNDIR):
-	mkdir -p $@
-
 $(BUILD):
 	mkdir -p $@
 
 # Dependencies
-deps: $(MSIDIR)/winfsp.msi $(MSIDIR)/sshfs-win.msi $(BINDIR)/wintun.dll $(BINDIR)/$(EXE) $(BINDIR)/$(DAEMON_EXE) $(BUILD)/$(LICENSE)
-
-WF_URL := https://github.com/winfsp/winfsp/releases/download/v2.1/winfsp-$(WINFSP_VERSION).msi
-
-$(MSIDIR)/winfsp.msi: | $(MSIDIR)
-	@if [ -f "$@" ]; then \
-		$(CURL) -L --fail -z "$@" -R -o "$@" "$(WF_URL)"; \
-	else \
-		$(CURL) -L --fail -R -o "$@" "$(WF_URL)"; \
-	fi
-
-SSHFS_URL := https://github.com/winfsp/sshfs-win/releases/download/v$(SSHFS_VERSION)/sshfs-win-$(SSHFS_VERSION)-x64.msi
-
-$(MSIDIR)/sshfs-win.msi: | $(MSIDIR)
-	@if [ -f "$@" ]; then \
-		$(CURL) -L --fail -z "$@" -R -o "$@" "$(SSHFS_URL)"; \
-	else \
-		$(CURL) -L --fail -R -o "$@" "$(SSHFS_URL)"; \
-	fi
+deps: $(BINDIR)/wintun.dll $(BINDIR)/$(EXE) $(BINDIR)/$(DAEMON_EXE) $(BUILD)/$(LICENSE)
 
 # wintun.dll
 # Paths
@@ -227,4 +147,4 @@ init:
 	$(GO) mod tidy
 
 clean:
-	rm -rf $(BUILD) $(BINDIR) $(BUNDLE) *.wixobj *.wixpdb rsrc_windows_*.syso
+	rm -rf $(BUILD) $(BINDIR) *.wixobj *.wixpdb rsrc_windows_*.syso

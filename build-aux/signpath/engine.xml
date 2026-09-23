@@ -1,9 +1,0 @@
-<!--
-The Burn engine is a WiX binary, not a Telepresence build output, so it
-carries no product-name/product-version restriction.
--->
-<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
-  <pe-file>
-    <authenticode-sign />
-  </pe-file>
-</artifact-configuration>

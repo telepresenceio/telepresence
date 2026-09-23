@@ -3,13 +3,11 @@
 Assembles the signed Windows release artifacts into build-output/release.
 
 Repacks the standalone zips with the signed telepresence.exe (files stay
-at the zip root) and copies the signed installer bundle and MSI in
-alongside them.
+at the zip root) and copies the signed MSIs in alongside them.
 #>
 param(
     [string]$UnsignedDir = "build-output/unsigned",
     [string]$CoreSignedDir = "build-output/signing/core-signed",
-    [string]$BundleSignedDir = "build-output/signing/bundle-signed",
     [string]$ReleaseDir = "build-output/release"
 )
 
@@ -29,5 +27,5 @@ foreach ($arch in "amd64", "arm64") {
     Compress-Archive -Path (Join-Path $expandDir "*") -DestinationPath $outZip
 }
 
-Copy-Item (Join-Path $BundleSignedDir "TelepresenceInstall.exe") (Join-Path $ReleaseDir "telepresence-windows-amd64-setup.exe") -Force
 Copy-Item (Join-Path $CoreSignedDir "telepresence-windows-amd64.msi") (Join-Path $ReleaseDir "telepresence-windows-amd64.msi") -Force
+Copy-Item (Join-Path $CoreSignedDir "telepresence-windows-arm64.msi") (Join-Path $ReleaseDir "telepresence-windows-arm64.msi") -Force

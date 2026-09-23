@@ -425,8 +425,11 @@ func (s *service) RemoteMountAvailability(ctx context.Context, ex *empty.Empty) 
 	if err != nil {
 		clog.Errorf(ctx, "sshfs not installed: %v", err)
 		msg := "sshfs is not installed on your local machine"
-		if runtime.GOOS == "darwin" {
+		switch runtime.GOOS {
+		case "darwin":
 			msg += `. Install it with "brew install fuse-t fuse-t-sshfs"`
+		case "windows":
+			msg += ". Install WinFsp (https://winfsp.dev/rel/) and SSHFS-Win (https://github.com/winfsp/sshfs-win/releases)"
 		}
 		return ex, errcat.User.New(msg)
 	}
