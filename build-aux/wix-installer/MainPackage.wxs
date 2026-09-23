@@ -41,7 +41,7 @@
          lets a locked telepresence.exe be removed instead of deferred to a
          reboot. -->
     <InstallExecuteSequence>
-      <Custom Action="Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="RemoveFiles" Condition="VersionNT &gt; 400"/>
+      <Custom Action="override Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="RemoveFiles" Condition="VersionNT &gt; 400"/>
     </InstallExecuteSequence>
     <Property Id="PORT" Secure="yes" Value="4037"/>
     <Property Id="PPROFPORT" Secure="yes" Value="0"/>
