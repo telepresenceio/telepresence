@@ -24,13 +24,21 @@ type InProcSession struct {
 	*session
 }
 
+// versionInfo names the session after the process that embeds it, so
+// status and version output tell it apart from a separate root daemon.
+func versionInfo(ctx context.Context) *common.VersionInfo {
+	vi := client.VersionInfo(ctx)
+	vi.Name += " (embedded root daemon)"
+	return vi
+}
+
 func (rd *InProcSession) Version(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*common.VersionInfo, error) {
-	return client.VersionInfo(ctx), nil
+	return versionInfo(ctx), nil
 }
 
 func (rd *InProcSession) Status(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*rpc.DaemonStatus, error) {
 	return &rpc.DaemonStatus{
-		Version:         client.VersionInfo(ctx),
+		Version:         versionInfo(ctx),
 		OutboundConfig:  rd.getNetworkConfig(),
 		TunnelTransport: rd.tunnelTransportRPC(),
 	}, nil

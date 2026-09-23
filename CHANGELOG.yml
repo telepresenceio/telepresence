@@ -328,6 +328,14 @@ items:
           The remove scriptlets now act only on a real removal, and an
           upgrade restarts the service so the new daemon runs.
         docs: install/client
+      - type: bugfix
+        title: Status names the embedded root daemon correctly
+        body: >-
+          When the user daemon runs with elevated privileges and embeds the
+          root daemon, <code>telepresence status</code> and
+          <code>telepresence version</code> printed that section under the
+          user daemon's name. It is now labelled as the embedded root
+          daemon.
   - version: 2.31.2
     date: 2026-08-02
     notes:
