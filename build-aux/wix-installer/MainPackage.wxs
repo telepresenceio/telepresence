@@ -36,6 +36,13 @@
         EndSessionMessage="no"
         TerminateProcess="10"
         RebootPrompt="no"/>
+    <!-- The extension sequences CloseApplications before InstallFiles, which
+         on an uninstall is after RemoveFiles; moving it ahead of RemoveFiles
+         lets a locked telepresence.exe be removed instead of deferred to a
+         reboot. -->
+    <InstallExecuteSequence>
+      <Custom Action="Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="RemoveFiles" Condition="VersionNT &gt; 400"/>
+    </InstallExecuteSequence>
     <Property Id="PORT" Secure="yes" Value="4037"/>
     <Property Id="PPROFPORT" Secure="yes" Value="0"/>
     <Property Id="LOGLEVEL" Secure="yes" Value="info"/>

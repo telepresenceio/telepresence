@@ -1,4 +1,5 @@
 //go:build windows
+
 package main
 
 import (
@@ -59,14 +60,18 @@ func (w *wrapper) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<-
 	log.Println("telepresence.exe started (PID", cmd.Process.Pid, ")")
 	changes <- svc.Status{State: svc.Running, Accepts: cmdsAccepted}
 
-	// Wait for stop request or child exit
+	exited := make(chan struct{})
 	go func() {
-		_ = cmd.Wait() // ignore error, we just want to know when it dies
-		changes <- svc.Status{State: svc.Stopped}
+		_ = cmd.Wait()
+		close(exited)
 	}()
 
 	for {
 		select {
+		case <-exited:
+			log.Println("telepresence.exe exited")
+			changes <- svc.Status{State: svc.Stopped}
+			return false, 0
 		case c := <-r:
 			switch c.Cmd {
 			case svc.Interrogate:
@@ -74,10 +79,12 @@ func (w *wrapper) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<-
 			case svc.Stop, svc.Shutdown:
 				log.Println("Stopping telepresence.exe...")
 				changes <- svc.Status{State: svc.StopPending}
-				// Graceful SIGTERM first
 				if err := cmd.Process.Kill(); err != nil {
 					log.Printf("Kill failed: %v", err)
 				}
+				// The service only reports stopped once the child is gone, so an
+				// uninstall that follows finds telepresence.exe unlocked.
+				<-exited
 				return false, 0
 			}
 		}
