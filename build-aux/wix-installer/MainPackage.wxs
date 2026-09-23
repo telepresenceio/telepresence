@@ -9,6 +9,10 @@
 
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed."/>
 
+    <!-- Files travel inside the MSI, so it works on its own and can be
+         deep-signed as one artifact. -->
+    <MediaTemplate EmbedCab="yes"/>
+
     <!-- Issue #4079: on Windows, an upgrade can find the previous
          telepresence.exe still locked (held by a user-launched CLI, by the
          user daemon, or by the TelepresenceDaemon service's spawned rootd
