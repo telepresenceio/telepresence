@@ -7,7 +7,11 @@
       Manufacturer="TelepresenceIO"
       Version="$(var.ProductVersion)">
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed."/>
+    <!-- Every 2.x.y pre-release and the GA share the three-field product
+         version, so same-version installs must count as upgrades or they
+         install side by side and keep the old files. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version is already installed."/>
 
     <!-- Files travel inside the MSI, so it works on its own and can be
          deep-signed as one artifact. -->
@@ -32,6 +36,13 @@
         EndSessionMessage="no"
         TerminateProcess="10"
         RebootPrompt="no"/>
+    <!-- The extension sequences CloseApplications before InstallFiles, which
+         on an uninstall is after RemoveFiles; moving it ahead of RemoveFiles
+         lets a locked telepresence.exe be removed instead of deferred to a
+         reboot. -->
+    <InstallExecuteSequence>
+      <Custom Action="Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="RemoveFiles" Condition="VersionNT &gt; 400"/>
+    </InstallExecuteSequence>
     <Property Id="PORT" Secure="yes" Value="4037"/>
     <Property Id="PPROFPORT" Secure="yes" Value="0"/>
     <Property Id="LOGLEVEL" Secure="yes" Value="info"/>

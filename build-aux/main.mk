@@ -181,8 +181,9 @@ TELEPRESENCE_INSTALLER=$(BINDIR)/telepresence$(BZIP)
 
 # TELEPRESENCE_SEMVER is defined further down in this file; it is a
 # recursively expanded variable, so referencing it here is fine.
+TELEPRESENCE_WINVERSION = $(shell build-aux/winversion.sh $(TELEPRESENCE_VERSION))
 %/rsrc_windows_$(GOARCH).syso: %/winres.json $(tools/go-winres)
-	$(tools/go-winres) make --in $< --out $(dir $@)rsrc --arch $(GOARCH) --product-version $(TELEPRESENCE_SEMVER) --file-version $(TELEPRESENCE_SEMVER)
+	$(tools/go-winres) make --in $< --out $(dir $@)rsrc --arch $(GOARCH) --product-version $(TELEPRESENCE_SEMVER) --file-version $(TELEPRESENCE_WINVERSION)
 
 build-deps: cmd/telepresence/rsrc_windows_$(GOARCH).syso
 
@@ -478,6 +479,7 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./packaging/windows-package.sh
+shellscripts += ./build-aux/winversion.sh
 shellscripts += ./build-aux/vagrant-rtest/preflight.sh
 shellscripts += ./build-aux/vagrant-rtest/provision.sh
 shellscripts += ./build-aux/vagrant-rtest/run-shard.sh
