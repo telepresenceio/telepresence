@@ -54,6 +54,20 @@
       </DirectorySearch>
     </Property>
 
+    <!-- Probes for the two packages a volume mount needs at runtime; this
+         package does not install either. WinFsp's installer is 32-bit, so
+         its registry key lives under WOW6432Node on 64-bit Windows;
+         Bitness="always32" reaches it directly. -->
+    <Property Id="WINFSP_INSTALLED" Secure="yes">
+      <RegistrySearch Id="WinFspInstallDirSearch" Root="HKLM" Key="SOFTWARE\WinFsp"
+          Name="InstallDir" Type="raw" Bitness="always32"/>
+    </Property>
+    <Property Id="SSHFSWIN_INSTALLED" Secure="yes">
+      <DirectorySearch Id="SshfsWinBinDirSearch" Path="[ProgramFiles64Folder]SSHFS-Win\bin">
+        <FileSearch Id="SshfsWinExeSearch" Name="sshfs-win.exe"/>
+      </DirectorySearch>
+    </Property>
+
     <!-- Seed USAGE_REPORTING from the probe when it wasn't passed on the
          command line. Runs in both sequences so silent installs reach the
          same conclusion as interactive ones. The Action attribute
@@ -151,7 +165,7 @@
         AllowAbsent="no"
         AllowAdvertise="no"
         Title="Telepresence CLI"
-        Description="Installs everything needed to interact with services in your cluster."
+        Description="Installs everything needed to interact with services in your cluster. Volume mounts additionally need WinFsp and SSHFS-Win, installed separately."
         Display="expand"
         ConfigurableDirectory="INSTALLDIR">
       <ComponentGroupRef Id="TelepresenceFiles"/>
@@ -222,6 +236,36 @@
 
       </Dialog>
 
+      <!-- Warns that volume mounts need WinFsp and SSHFS-Win, which this
+           package does not install. Skipped when AppSearch already found
+           both. -->
+      <Dialog Id="PrereqDlg" Width="370" Height="270" Title="Telepresence Core Setup">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no"
+            Text="WixUI_Bmp_Banner"/>
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0"/>
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0"/>
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="280" Height="15" Transparent="yes" NoPrefix="yes"
+            Text="{\WixUI_Font_Title}Volume Mount Prerequisites"/>
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes"
+            Text="WinFsp and SSHFS-Win are required for volume mounts."/>
+
+        <Control Id="PrereqHelp" Type="Text" X="15" Y="70" Width="340" Height="140" Transparent="yes" NoPrefix="yes"
+            Text="Volume mounts need WinFsp and SSHFS-Win, which this package does not install.&#10;&#10;Telepresence works without them, but intercepts will not mount the container's volumes until both are installed.&#10;&#10;Download:&#10;https://winfsp.dev/rel/&#10;https://github.com/winfsp/sshfs-win/releases"/>
+
+        <!-- Navigation. Back returns to whichever dialog led here;
+             Next continues to UsageReportingDlg, which always follows. -->
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="Back">
+          <Publish Event="NewDialog" Value="CustomizeDlg" Condition="WixUI_InstallMode = &quot;InstallCustom&quot;"/>
+          <Publish Event="NewDialog" Value="SetupTypeDlg" Condition="WixUI_InstallMode = &quot;InstallComplete&quot;"/>
+        </Control>
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next">
+          <Publish Event="NewDialog" Value="UsageReportingDlg"/>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg"/>
+        </Control>
+      </Dialog>
+
       <!-- Anonymous usage reporting opt-in, on a dedicated dialog so the
            choice is always presented regardless of whether the user keeps
            the Network Service feature (PortDlg, which used to host this
@@ -244,10 +288,17 @@
         <Control Id="UsageReportingHelp" Type="Text" X="15" Y="90" Width="340" Height="120" Transparent="yes" NoPrefix="yes"
             Text="Telepresence is an open-source project without conventional customers, so usage data is the only signal we have for what to prioritize — without it the community is flying blind.&#10;&#10;Reports contain only an installation UUID, OS/architecture, version, and command topics such as &quot;cmd.connect&quot;; never cluster, namespace, workload, or address data.&#10;&#10;You can opt out later by creating the file C:\ProgramData\Telepresence\usage-opt-out."/>
 
-        <!-- Navigation -->
+        <!-- Navigation. Back returns to PrereqDlg when it was shown (same
+             condition that made SetupTypeDlg/CustomizeDlg publish to it
+             instead of here), otherwise straight to the dialog that led
+             here, as before. -->
         <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Text="Back">
-          <Publish Event="NewDialog" Value="CustomizeDlg" Condition="WixUI_InstallMode = &quot;InstallCustom&quot;"/>
-          <Publish Event="NewDialog" Value="SetupTypeDlg" Condition="WixUI_InstallMode = &quot;InstallComplete&quot;"/>
+          <Publish Event="NewDialog" Value="PrereqDlg" Order="10"
+              Condition="NOT Installed AND (NOT WINFSP_INSTALLED OR NOT SSHFSWIN_INSTALLED)"/>
+          <Publish Event="NewDialog" Value="CustomizeDlg" Order="20"
+              Condition="WixUI_InstallMode = &quot;InstallCustom&quot; AND (Installed OR (WINFSP_INSTALLED AND SSHFSWIN_INSTALLED))"/>
+          <Publish Event="NewDialog" Value="SetupTypeDlg" Order="20"
+              Condition="WixUI_InstallMode = &quot;InstallComplete&quot; AND (Installed OR (WINFSP_INSTALLED AND SSHFSWIN_INSTALLED))"/>
         </Control>
         <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="Next">
           <!-- MSI's CheckBox writes CheckBoxValue when checked and null
@@ -282,9 +333,16 @@
            reachable even when the user has unticked the Network Service
            feature on CustomizeDlg. UsageReportingDlg's Next button then
            jumps to PortDlg when &Service = 3 or to VerifyReadyDlg when
-           the daemon-as-a-service isn't being installed. -->
-      <Publish Dialog="SetupTypeDlg" Control="CompleteButton" Event="NewDialog" Value="UsageReportingDlg" Order="10"/>
-      <Publish Dialog="CustomizeDlg" Control="Next" Event="NewDialog" Value="UsageReportingDlg" Order="10"/>
+           the daemon-as-a-service isn't being installed. PrereqDlg is
+           interposed first when WinFsp or SSHFS-Win is missing. -->
+      <Publish Dialog="SetupTypeDlg" Control="CompleteButton" Event="NewDialog" Value="PrereqDlg" Order="10"
+          Condition="NOT Installed AND (NOT WINFSP_INSTALLED OR NOT SSHFSWIN_INSTALLED)"/>
+      <Publish Dialog="SetupTypeDlg" Control="CompleteButton" Event="NewDialog" Value="UsageReportingDlg" Order="20"
+          Condition="Installed OR (WINFSP_INSTALLED AND SSHFSWIN_INSTALLED)"/>
+      <Publish Dialog="CustomizeDlg" Control="Next" Event="NewDialog" Value="PrereqDlg" Order="10"
+          Condition="NOT Installed AND (NOT WINFSP_INSTALLED OR NOT SSHFSWIN_INSTALLED)"/>
+      <Publish Dialog="CustomizeDlg" Control="Next" Event="NewDialog" Value="UsageReportingDlg" Order="20"
+          Condition="Installed OR (WINFSP_INSTALLED AND SSHFSWIN_INSTALLED)"/>
       <Publish Dialog="PortDlg" Control="Next" Event="NewDialog" Value="VerifyReadyDlg" Order="10"
           Condition="PORT &gt;= 0 AND PORT &lt;= 65535 AND PPROFPORT &gt;= 0 AND PPROFPORT &lt;= 65535"/>
       <Publish Dialog="PortDlg" Control="Next" Event="SpawnDialog" Value="ErrorInvalidPort" Order="10"

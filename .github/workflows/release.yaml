@@ -187,7 +187,7 @@ jobs:
             | macOS | amd64 | [telepresence-darwin-amd64.pkg](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-amd64.pkg) |
             | macOS | arm64 | [telepresence-darwin-arm64.pkg](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-darwin-arm64.pkg) |
             | Windows | amd64 | [telepresence-windows-amd64-setup.exe](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64-setup.exe) |
-            | Windows (MSI, for Intune/GPO) | amd64 | [telepresence-windows-amd64.msi](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.msi) |
+            | Windows (MSI, for Intune/GPO; needs WinFsp and SSHFS-Win installed separately) | amd64 | [telepresence-windows-amd64.msi](https://github.com/telepresenceio/telepresence/releases/download/${{ github.ref_name }}/telepresence-windows-amd64.msi) |
             | Windows | arm64 | *Not available — WinFSP and SSHFS-Win installers lack arm64 versions. Use the zip file below.* |
 
             ### Standalone Binaries

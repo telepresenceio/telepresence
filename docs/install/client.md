@@ -163,6 +163,14 @@ You can also deselect the "Telepresence Network Service" feature if you prefer t
 > [!NOTE]
 > The Windows installer is currently only available for AMD64. For ARM64, use the manual installation method below.
 
+## OR install the MSI for managed deployments
+
+[telepresence-windows-amd64.msi](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-windows-amd64.msi)
+installs Telepresence and the TelepresenceDaemon service only. It does not install
+[WinFsp](https://winfsp.dev/rel/) or [SSHFS-Win](https://github.com/winfsp/sshfs-win/releases), so an
+Intune or Group Policy deployment that needs volume mounts must push all three packages. A silent install
+runs with `msiexec /i telepresence-windows-amd64.msi /qn`.
+
 ## OR install manually using PowerShell
 
 ### Windows AMD64
