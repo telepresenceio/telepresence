@@ -218,9 +218,9 @@ ifneq ($(TELEPRESENCE_COVER),)
 COVER_FLAG=-cover
 endif
 
-pkg/client/cli/docker/compose/dc-cli.json: go.mod go.mod cmd/cobraparser/main.go
+pkg/client/cli/docker/compose/dc-cli.json: $(tools/docker-compose) build-aux/docker-compose.version go.mod cmd/cobraparser/main.go
 	go mod tidy
-	(cd cmd/cobraparser && go mod tidy) && GOOS= GOARCH= go run cmd/cobraparser/main.go docker compose > $@
+	(cd cmd/cobraparser && go mod tidy) && GOOS= GOARCH= go run cmd/cobraparser/main.go --name compose $(tools/docker-compose) > $@
 
 build-deps: pkg/client/cli/docker/compose/dc-cli.json
 
