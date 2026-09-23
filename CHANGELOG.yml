@@ -319,6 +319,15 @@ items:
           directory under <code>intercept.mountsRoot</code> and removes it
           when the intercept or ingest ends, however the session ends, and
           sweeps abandoned empty ones at startup.
+      - type: bugfix
+        title: Linux package upgrades keep the root daemon service running
+        body: >-
+          Upgrading the <code>.rpm</code> package stopped and disabled
+          <code>telepresence-rootd.service</code>, because the removed
+          package's scriptlets ran after the new package had enabled it.
+          The remove scriptlets now act only on a real removal, and an
+          upgrade restarts the service so the new daemon runs.
+        docs: install/client
   - version: 2.31.2
     date: 2026-08-02
     notes:

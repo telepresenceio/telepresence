@@ -479,6 +479,11 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./packaging/windows-package.sh
+shellscripts += ./build-aux/systemd-installer/build-packages.sh
+shellscripts += ./build-aux/systemd-installer/postinstall.sh
+shellscripts += ./build-aux/systemd-installer/posttrans.sh
+shellscripts += ./build-aux/systemd-installer/preremove.sh
+shellscripts += ./build-aux/systemd-installer/postremove.sh
 shellscripts += ./build-aux/vagrant-rtest/preflight.sh
 shellscripts += ./build-aux/vagrant-rtest/provision.sh
 shellscripts += ./build-aux/vagrant-rtest/run-shard.sh
