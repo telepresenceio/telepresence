@@ -43,6 +43,11 @@
     <InstallExecuteSequence>
       <Custom Action="override Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="RemoveFiles" Condition="VersionNT &gt; 400"/>
     </InstallExecuteSequence>
+    <!-- Restart Manager would find the daemon service, its rootd child and the
+         loaded wintun.dll during InstallValidate and offer a reboot; the
+         package stops the service and closes telepresence.exe itself before
+         any file is touched. -->
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="Disable"/>
     <Property Id="PORT" Secure="yes" Value="4037"/>
     <Property Id="PPROFPORT" Secure="yes" Value="0"/>
     <Property Id="LOGLEVEL" Secure="yes" Value="info"/>
