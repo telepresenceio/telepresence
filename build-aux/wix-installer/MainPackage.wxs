@@ -7,7 +7,11 @@
       Manufacturer="TelepresenceIO"
       Version="$(var.ProductVersion)">
 
-    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed."/>
+    <!-- Every 2.x.y pre-release and the GA share the three-field product
+         version, so same-version installs must count as upgrades or they
+         install side by side and keep the old files. -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes"
+        DowngradeErrorMessage="A newer version is already installed."/>
 
     <!-- Files travel inside the MSI, so it works on its own and can be
          deep-signed as one artifact. -->
