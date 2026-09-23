@@ -30,7 +30,11 @@ func init() {
 
 // Test_ConfigMapContent intercepts EchoWithConfigVolume with mounts enabled
 // (the default; no --mount false) and asserts the mounted ConfigMap file's
-// content matches, and the serviceaccount token file is readable.
+// content matches, and the serviceaccount token file is readable. It also
+// asserts that the generated mount point directory (the user daemon's
+// telfs-* temporary directory, since no --mount path was given) is gone once
+// the intercept ends: the user daemon, not the CLI, owns that directory and
+// removes it when the intercept is torn down.
 func (s *Content) Test_ConfigMapContent() {
 	t := s.T()
 	conn := s.Connect()
@@ -43,6 +47,11 @@ func (s *Content) Test_ConfigMapContent() {
 	if !ok {
 		t.Fatalf("intercept for %s carries no TELEPRESENCE_ROOT", wl.Name)
 	}
+	t.Cleanup(func() {
+		// Runs after the deferred Detach above, so the intercept has
+		// already ended by the time this checks for the directory.
+		check.EventuallyRemoved(t, root, mountTimeout)
+	})
 
 	check.EventuallyFile(t, configFilePath(root), isConfigContent, mountTimeout)
 	check.EventuallyFile(t, tokenFilePath(root), isNonEmpty, mountTimeout)

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -74,6 +75,10 @@ type intercept struct {
 	// Mount read-only
 	readOnly bool
 
+	// ownsMountPoint is true when this daemon created ClientMountPoint (the CLI asked
+	// for a generated mount point) and is therefore responsible for removing it.
+	ownsMountPoint atomic.Bool
+
 	// finalRemovalDone is closed when the traffic-manager sends a snapshot that no longer contains
 	// this intercept.
 	finalRemovalDone chan struct{}
@@ -97,6 +102,10 @@ type awaitIntercept struct {
 	// mountPort is optional and indicates that a TCP bridge should be established, allowing
 	// the mount to take place in a host
 	mountPort int32
+
+	// ownsMountPoint is true when this daemon created mountPoint and must remove it once
+	// the intercept ends.
+	ownsMountPoint bool
 
 	readOnly bool
 	waitCh   chan<- interceptResult
@@ -306,6 +315,7 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 				ic.ClientMountPoint = aw.mountPoint
 				ic.localMountPort = aw.mountPort
 				ic.readOnly = aw.readOnly
+				ic.ownsMountPoint.Store(aw.ownsMountPoint)
 			}
 		}
 		intercepts[ii.Id] = ic
@@ -334,6 +344,13 @@ func (s *session) setCurrentIntercepts(iis []*manager.InterceptInfo) {
 		clog.Debugf(s, "Cancelling context for intercept %s", ic.Spec.Name)
 		ic.cancel()
 		close(ic.finalRemovalDone)
+		// The manager dropped this intercept without going through removeIntercept, e.g. it
+		// was removed by another client or the agent's pod is gone for good. Wait for the
+		// mount to actually unwind before reclaiming a directory this daemon created for it.
+		go func(ic *intercept) {
+			ic.wg.Wait()
+			removeOwnedMountPoint(s, &ic.ownsMountPoint, ic.ClientMountPoint)
+		}(ic)
 	}
 }
 
@@ -669,6 +686,22 @@ func (s *session) newCreateInterceptRequest(spec *manager.InterceptSpec) *manage
 
 // AddIntercept adds one intercept.
 func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptRequest) (*manager.InterceptInfo, error) {
+	mp, ownsMountPoint, err := resolveMountPoint(ctx, ir.MountPoint)
+	if err != nil {
+		return nil, err
+	}
+	ir.MountPoint = mp
+	// Cleared once the manager has accepted the intercept, handing ownership of the
+	// directory to the intercept struct that removeIntercept will eventually tear down.
+	mountPointHandedOff := false
+	if ownsMountPoint {
+		defer func() {
+			if !mountPointHandedOff {
+				removeMountPointDir(ctx, ir.MountPoint)
+			}
+		}()
+	}
+
 	iInfo, err := s.CanIntercept(ctx, ir)
 	if err != nil {
 		return nil, err
@@ -732,10 +765,11 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 	waitCh := make(chan interceptResult, 2) // Need a buffer because reply can come before we're reading the channel,
 	s.currentInterceptsLock.Lock()
 	s.interceptWaiters[spec.Name] = &awaitIntercept{
-		mountPoint: ir.MountPoint,
-		mountPort:  ir.LocalMountPort,
-		readOnly:   ir.MountReadOnly,
-		waitCh:     waitCh,
+		mountPoint:     ir.MountPoint,
+		mountPort:      ir.LocalMountPort,
+		ownsMountPoint: ownsMountPoint,
+		readOnly:       ir.MountReadOnly,
+		waitCh:         waitCh,
 	}
 	s.currentInterceptsLock.Unlock()
 	defer func() {
@@ -752,6 +786,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		clog.Debugf(c, "manager responded to CreateIntercept with error %v", err)
 		return nil, err
 	}
+	mountPointHandedOff = true
 
 	clog.Debugf(c, "created intercept %s", ii.Spec.Name)
 
@@ -835,6 +870,7 @@ func (s *session) removeIntercept(ic *intercept) error {
 	// Unmount filesystems before telling the manager to remove the intercept
 	ic.cancel()
 	ic.wg.Wait()
+	removeOwnedMountPoint(s, &ic.ownsMountPoint, ic.ClientMountPoint)
 
 	c := s.Context
 	clog.Debugf(c, "telling manager to remove intercept %s", name)
@@ -1028,6 +1064,7 @@ func (s *session) ClearIngestsAndIntercepts() error {
 	s.currentIngests.Range(func(key ingestKey, ig *ingest) bool {
 		clog.Debugf(s, "Clearing ingest %s", key)
 		s.stopHandler(key.workload+"/"+key.container, ig.handlerContainer, ig.pid)
+		s.removeIngestMount(ig)
 		return true
 	})
 	return nil
