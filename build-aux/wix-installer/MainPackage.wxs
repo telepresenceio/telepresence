@@ -260,8 +260,14 @@
         <Control Id="Description" Type="Text" X="25" Y="23" Width="280" Height="15" Transparent="yes" NoPrefix="yes"
             Text="WinFsp and SSHFS-Win are required for volume mounts."/>
 
-        <Control Id="PrereqHelp" Type="Text" X="15" Y="70" Width="340" Height="140" Transparent="yes" NoPrefix="yes"
-            Text="Volume mounts need WinFsp and SSHFS-Win, which this package does not install.&#10;&#10;Telepresence works without them, but intercepts will not mount the container's volumes until both are installed.&#10;&#10;Download:&#10;https://winfsp.dev/rel/&#10;https://github.com/winfsp/sshfs-win/releases"/>
+        <Control Id="PrereqHelp" Type="Text" X="15" Y="70" Width="340" Height="70" Transparent="yes" NoPrefix="yes"
+            Text="Volume mounts need WinFsp and SSHFS-Win, which this package does not install.&#10;&#10;Telepresence works without them, but intercepts will not mount the container's volumes until both are installed.&#10;&#10;Download:"/>
+        <Control Id="WinFspLink" Type="Hyperlink" X="15" Y="145" Width="340" Height="15">
+          <Text><![CDATA[<a href="https://winfsp.dev/rel/">https://winfsp.dev/rel/</a>]]></Text>
+        </Control>
+        <Control Id="SshfsWinLink" Type="Hyperlink" X="15" Y="163" Width="340" Height="15">
+          <Text><![CDATA[<a href="https://github.com/winfsp/sshfs-win/releases">https://github.com/winfsp/sshfs-win/releases</a>]]></Text>
+        </Control>
 
         <!-- Navigation. Back returns to whichever dialog led here;
              Next continues to UsageReportingDlg, which always follows. -->
