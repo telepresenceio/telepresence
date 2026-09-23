@@ -155,6 +155,12 @@
               "shorthand": "t",
               "type": "stringArray",
               "description": "Transformation to apply to compose model (default: docker/compose-bridge-kubernetes)"
+            },
+            {
+              "name": "yes",
+              "shorthand": "y",
+              "type": "bool",
+              "description": "Assume \"yes\" to the output directory overwrite prompt. For scripts/CI, where no interactive confirmation is possible"
             }
           ]
         }
@@ -845,7 +851,7 @@
         {
           "name": "format",
           "type": "string",
-          "description": "Format output using a custom template: 'table':            Print output in table format with column headers (default) 'table TEMPLATE':   Print output in table format using the given Go template 'json':             Print in JSON format 'TEMPLATE':         Print output using the given Go template. Refer to https://docs.docker.com/go/formatting/ for more information about formatting output with templates (default \"table\")"
+          "description": "Format output using a custom template: 'table':            Print output in table format with column headers (default) 'table TEMPLATE':   Print output in table format using the given Go template 'json':             Print in JSON format 'TEMPLATE':         Print output using the given Go template. Refer to https://docs.docker.com/go/formatting/ for more information about formatting output with templates"
         },
         {
           "name": "no-trunc",
