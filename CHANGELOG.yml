@@ -293,6 +293,16 @@ items:
           is published for Intune/GPO deployment.
           <a href="https://github.com/telepresenceio/telepresence/issues/4284">#4284</a>
         docs: install/client
+      - type: change
+        title: Windows MSI states its volume-mount prerequisites
+        body: >-
+          The standalone MSI installs Telepresence and the daemon service
+          only, so it now warns during interactive installation when WinFsp
+          or SSHFS-Win is missing instead of installing silently without
+          them. The install page documents the MSI for managed deployments,
+          and the daemon's "sshfs is not installed" message on Windows names
+          the two packages to install.
+        docs: install/client
   - version: 2.31.2
     date: 2026-08-02
     notes:

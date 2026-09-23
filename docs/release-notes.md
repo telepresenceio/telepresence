@@ -146,6 +146,12 @@ Connecting no longer issues a <code>SelfSubjectAccessReview</code> for <code>pod
 Windows releases ship <code>telepresence.exe</code>, the MSI, and the setup bundle with timestamped Authenticode signatures from a SignPath Foundation certificate, so enterprises can allow the binary by publisher instead of per-run admin approval. The exes now also carry version metadata visible in Explorer's Properties dialog. A standalone <code>telepresence-windows-amd64.msi</code> is published for Intune/GPO deployment. <a href="https://github.com/telepresenceio/telepresence/issues/4284">#4284</a>
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Windows MSI states its volume-mount prerequisites](install/client)</div></div>
+<div style="margin-left: 15px">
+
+The standalone MSI installs Telepresence and the daemon service only, so it now warns during interactive installation when WinFsp or SSHFS-Win is missing instead of installing silently without them. The install page documents the MSI for managed deployments, and the daemon's "sshfs is not installed" message on Windows names the two packages to install.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">
