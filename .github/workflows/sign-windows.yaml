@@ -1,12 +1,9 @@
 # Signs the Windows release artifacts with a SignPath Foundation
 # certificate and republishes them to an existing GitHub release.
 #
-# The Burn bundle forces three sequential signing rounds: the bundle's
-# engine can only be extracted from a built bundle, and the bundle can
-# only be built from the already-signed MSI. Round 1 signs the two
-# standalone telepresence.exe binaries and the MSI (which deep-signs the
-# exes it embeds); round 2 signs the detached Burn engine; round 3 signs
-# the bundle rebuilt with that signed engine.
+# One signing round covers everything: the two standalone telepresence.exe
+# binaries and both MSIs (amd64, arm64), which deep-signs the exes each
+# MSI embeds.
 #
 # The job is skipped until vars.SIGNPATH_ORGANIZATION_ID is set, so it is
 # a no-op before the SignPath portal is configured. workflow_dispatch lets
@@ -62,16 +59,6 @@ jobs:
         run: echo "VERSION_NO_V=${TAG#v}" >> "$GITHUB_ENV"
         env:
           TAG: ${{ inputs.tag }}
-      - name: Install WiX Toolset
-        shell: pwsh
-        run: |
-          dotnet tool install --global wix --version 6.0.2
-          wix extension add -g WixToolset.BootstrapperApplications.wixext/6.0.2
-          wix extension add -g WixToolset.UI.wixext/6.0.2
-          wix extension add -g WixToolset.Util.wixext/6.0.2
-      - name: Add dotnet tools to PATH
-        shell: pwsh
-        run: echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Append
 
       - name: Download release artifacts
         shell: bash
@@ -80,10 +67,11 @@ jobs:
             -p telepresence-windows-amd64.zip \
             -p telepresence-windows-arm64.zip \
             -p telepresence-windows-amd64.msi \
+            -p telepresence-windows-arm64.msi \
             -D build-output/unsigned
 
-      # Round 1: standalone exes and the MSI (which deep-signs the exes
-      # it embeds).
+      # The two standalone exes and both MSIs (which deep-sign the exes
+      # each one embeds).
       - name: Stage core artifact
         shell: pwsh
         run: |
@@ -94,6 +82,7 @@ jobs:
           Copy-Item build-output/unsigned/amd64/telepresence.exe build-output/signing/core/telepresence-windows-amd64/telepresence.exe
           Copy-Item build-output/unsigned/arm64/telepresence.exe build-output/signing/core/telepresence-windows-arm64/telepresence.exe
           Copy-Item build-output/unsigned/telepresence-windows-amd64.msi build-output/signing/core/telepresence-windows-amd64.msi
+          Copy-Item build-output/unsigned/telepresence-windows-arm64.msi build-output/signing/core/telepresence-windows-arm64.msi
       - name: Upload core artifact
         id: core
         uses: actions/upload-artifact@v7
@@ -113,61 +102,6 @@ jobs:
           output-artifact-directory: build-output/signing/core-signed
           parameters: |
             version: ${{ env.VERSION_NO_V }}
-      - name: Stage signed MSI for the bundle build
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path build-output/msi | Out-Null
-          Copy-Item build-output/signing/core-signed/telepresence-windows-amd64.msi build-output/msi/MainPackage.msi
-
-      - name: Build bundle from signed MSI and detach the Burn engine
-        shell: bash
-        run: |
-          make -C build-aux/wix-installer bundle-from-msi
-          make -C build-aux/wix-installer detach-engine
-
-      # Round 2: the detached Burn engine.
-      - name: Upload engine artifact
-        id: engine
-        uses: actions/upload-artifact@v7
-        with:
-          path: build-output/signing/burnengine.exe
-          retention-days: 1
-          archive: false
-      - name: Sign engine artifact
-        uses: signpath/github-action-submit-signing-request@v3
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ inputs.signing-policy }}
-          artifact-configuration-slug: engine
-          github-artifact-id: ${{ steps.engine.outputs.artifact-id }}
-          output-artifact-directory: build-output/signing/engine-signed
-      - name: Replace the Burn engine with the signed copy
-        shell: pwsh
-        run: Copy-Item build-output/signing/engine-signed/burnengine.exe build-output/signing/burnengine.exe -Force
-      - name: Reattach the signed Burn engine
-        shell: bash
-        run: make -C build-aux/wix-installer reattach-engine
-
-      # Round 3: the bundle rebuilt with the signed engine.
-      - name: Upload bundle artifact
-        id: bundle
-        uses: actions/upload-artifact@v7
-        with:
-          path: build-output/signing/TelepresenceInstall.exe
-          retention-days: 1
-          archive: false
-      - name: Sign bundle artifact
-        uses: signpath/github-action-submit-signing-request@v3
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ inputs.signing-policy }}
-          artifact-configuration-slug: bundle
-          github-artifact-id: ${{ steps.bundle.outputs.artifact-id }}
-          output-artifact-directory: build-output/signing/bundle-signed
 
       - name: Assemble signed release artifacts
         shell: pwsh

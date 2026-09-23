@@ -5,7 +5,7 @@
   <Package Id="MainPackage"
       Name="Telepresence Components"
       Manufacturer="TelepresenceIO"
-      Version="$(var.BundleVersion)">
+      Version="$(var.ProductVersion)">
 
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed."/>
 
