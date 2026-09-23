@@ -65,3 +65,7 @@ scripts:
 rpm:
   group: Applications/Internet
   summary: Fast, local development for Kubernetes
+  # rpm runs the new package's postinstall before the old package's
+  # preremove; posttrans runs after both.
+  scripts:
+    posttrans: ./posttrans.sh
