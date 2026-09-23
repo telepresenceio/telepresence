@@ -444,6 +444,15 @@ pkgutil --check-signature ../../build-output/Telepresence.pkg
 spctl --assess --type install ../../build-output/Telepresence.pkg
 ```
 
+### Windows Version Numbers
+
+Windows needs a four-field numeric version. `build-aux/winversion.sh` derives
+it from `TELEPRESENCE_VERSION`: `X.Y.Z.100` for a GA release and `X.Y.Z.N` for
+pre-release number N (`v2.32.0-rc.4` is `2.32.0.4`). It is the file version of
+the Windows executables and the MSI product version, so every pre-release
+replaces the previous one; the product version string in the executables
+stays the full semver.
+
 ### Windows Installer Signing
 
 Windows `telepresence.exe` and both `MainPackage.msi` builds (amd64, arm64,
