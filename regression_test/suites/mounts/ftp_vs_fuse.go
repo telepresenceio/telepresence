@@ -53,6 +53,7 @@ func (s *FTPvsFUSE) Test_ContentUnderFTPAndFUSE() {
 	}
 	check.EventuallyFile(t, configFilePath(rootFtp), isConfigContent, mountTimeout)
 	a.Detach(t)
+	check.EventuallyRemoved(t, rootFtp, mountTimeout)
 
 	fuse := rt.Mutate(t, rt.ConnectionFixture(ns, rt.ConnWithConfig(disableFtp)))
 	b := fuse.Intercept(t, wl)
@@ -61,5 +62,6 @@ func (s *FTPvsFUSE) Test_ContentUnderFTPAndFUSE() {
 	if !ok {
 		t.Fatalf("intercept for %s carries no TELEPRESENCE_ROOT", wl.Name)
 	}
+	t.Cleanup(func() { check.EventuallyRemoved(t, rootFuse, mountTimeout) })
 	check.EventuallyFile(t, configFilePath(rootFuse), isConfigContent, mountTimeout)
 }

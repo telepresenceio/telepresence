@@ -2,7 +2,9 @@
 package check
 
 import (
+	"errors"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"strings"
@@ -114,4 +116,21 @@ func EventuallyFile(t testing.TB, path string, want func([]byte) bool, timeout t
 		t.Fatalf("EventuallyFile %s: timed out after %s: %v", path, timeout, lastErr)
 	}
 	t.Fatalf("EventuallyFile %s: timed out after %s: content %q did not match", path, timeout, lastContent)
+}
+
+// EventuallyRemoved polls path until it no longer exists, or fails t once
+// timeout elapses.
+func EventuallyRemoved(t testing.TB, path string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			return
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(pollInterval)
+	}
+	t.Fatalf("EventuallyRemoved %s: still exists after %s", path, timeout)
 }

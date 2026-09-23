@@ -48,6 +48,7 @@ func (s *NodeAgentContent) Test_ConfigMapContentOverNodeAgent() {
 	check.EventuallyFile(t, configFilePath(rootFtp), isConfigContent, mountTimeout)
 	check.EventuallyFile(t, tokenFilePath(rootFtp), isNonEmpty, mountTimeout)
 	a.Detach(t)
+	check.EventuallyRemoved(t, rootFtp, mountTimeout)
 
 	fuse := rt.Mutate(t, rt.ConnectionFixture(ns, rt.ConnWithConfig(disableFtp)))
 	b := fuse.Intercept(t, wl, nodeAgentFlag())
@@ -56,6 +57,7 @@ func (s *NodeAgentContent) Test_ConfigMapContentOverNodeAgent() {
 	if !ok {
 		t.Fatalf("intercept for %s carries no TELEPRESENCE_ROOT", wl.Name)
 	}
+	t.Cleanup(func() { check.EventuallyRemoved(t, rootFuse, mountTimeout) })
 	check.EventuallyFile(t, configFilePath(rootFuse), isConfigContent, mountTimeout)
 	check.EventuallyFile(t, tokenFilePath(rootFuse), isNonEmpty, mountTimeout)
 }

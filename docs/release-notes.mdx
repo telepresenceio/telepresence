@@ -164,6 +164,12 @@ The MSI installs Telepresence and the daemon service only, so it now warns durin
 The setup bundle <code>telepresence-windows-amd64-setup.exe</code> is no longer published. <code>telepresence-windows-amd64.msi</code> and <code>telepresence-windows-arm64.msi</code> install Telepresence, the daemon service, and wintun; WinFsp and SSHFS-Win are installed separately for volume mounts.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix">Temporary volume mount directories are removed</Title>
+	<Body>
+The user daemon now creates the <code>telfs-</code> mount directory under <code>intercept.mountsRoot</code> and removes it when the intercept or ingest ends, however the session ends, and sweeps abandoned empty ones at startup.
+  </Body>
+</Note>
 ## Version 2.31.2 <span style={{fontSize:'16px'}}>(August  2)</span>
 <Note>
 	<Title type="change">Namespaced installs no longer read ingresses cluster-wide</Title>
