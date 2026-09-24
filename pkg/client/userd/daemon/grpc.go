@@ -415,7 +415,7 @@ func (s *service) RemoteMountAvailability(ctx context.Context, ex *empty.Empty) 
 
 	// Use CombinedOutput to include stderr which has information about whether they
 	// need to upgrade to a newer version of macFUSE or not
-	cmd := proc.CommandContext(ctx, remotefs.SshfsExecutable(), remotefs.SshfsVersionArgs()...)
+	cmd := proc.CommandContext(ctx, remotefs.SshfsExecutable(ctx), remotefs.SshfsVersionArgs()...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		clog.Errorf(ctx, "sshfs not installed: %v", err)

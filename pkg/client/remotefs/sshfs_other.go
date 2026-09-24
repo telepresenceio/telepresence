@@ -2,8 +2,17 @@
 
 package remotefs
 
-// SshfsExecutable returns the sshfs executable name.
-func SshfsExecutable() string {
+import (
+	"context"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+)
+
+// SshfsExecutable returns the configured intercept.sshfsPath, else "sshfs".
+func SshfsExecutable(ctx context.Context) string {
+	if p := client.GetConfig(ctx).Intercept().SshfsPath; p != "" {
+		return p
+	}
 	return "sshfs"
 }
 

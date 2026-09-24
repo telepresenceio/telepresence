@@ -179,7 +179,7 @@ When the user daemon runs with elevated privileges and embeds the root daemon, <
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Volume mounts on Windows find SSHFS-Win without PATH changes](install/client)</div></div>
 <div style="margin-left: 15px">
 
-The SSHFS-Win installer does not add its <code>bin</code> directory to <code>PATH</code>, so intercepts installed from the MSI reported that sshfs was not installed. The daemon now also looks for <code>sshfs-win.exe</code> in SSHFS-Win's installation directory under Program Files.
+The SSHFS-Win installer does not add its <code>bin</code> directory to <code>PATH</code>, so intercepts installed from the MSI reported that sshfs was not installed. The daemon now also looks for <code>sshfs-win.exe</code> in SSHFS-Win's installation directory under Program Files, and the new <code>intercept.sshfsPath</code> setting names the executable explicitly for installations elsewhere.
 </div>
 
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>

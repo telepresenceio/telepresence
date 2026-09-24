@@ -1,15 +1,21 @@
 package remotefs
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
-// SshfsExecutable returns the sshfs-win launcher: the one on PATH when
-// present, otherwise the one in SSHFS-Win's installation directory. The
-// SSHFS-Win installer does not put its bin directory on PATH.
-func SshfsExecutable() string {
+// SshfsExecutable returns the sshfs-win launcher: the configured
+// intercept.sshfsPath, else the one on PATH, else the one in SSHFS-Win's
+// installation directory, since its installer does not touch PATH.
+func SshfsExecutable(ctx context.Context) string {
+	if p := client.GetConfig(ctx).Intercept().SshfsPath; p != "" {
+		return p
+	}
 	const exe = "sshfs-win"
 	if _, err := exec.LookPath(exe); err == nil {
 		return exe

@@ -99,7 +99,7 @@ func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMoun
 				)
 			}
 
-			exe := SshfsExecutable()
+			exe := SshfsExecutable(ctx)
 			sshfsArgs = sshfsCommandArgs(sshfsArgs...)
 			var err error
 			switch {
