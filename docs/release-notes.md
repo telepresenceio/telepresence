@@ -182,6 +182,12 @@ When the user daemon runs with elevated privileges and embeds the root daemon, <
 The SSHFS-Win installer does not add its <code>bin</code> directory to <code>PATH</code>, so intercepts installed from the MSI reported that sshfs was not installed. The daemon now also looks for <code>sshfs-win.exe</code> in SSHFS-Win's installation directory under Program Files, and the new <code>intercept.sshfsPath</code> setting names the executable explicitly for installations elsewhere.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Leaving an intercept on Windows unmounts its drive</div></div>
+<div style="margin-left: 15px">
+
+Ending an intercept with a volume mount on Windows only terminated the <code>sshfs-win</code> launcher and left its <code>sshfs</code> child, and with it the mounted drive, behind. The whole process tree is now terminated, so the drive disappears when the intercept ends.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">

@@ -347,6 +347,13 @@ items:
           setting names the executable explicitly for installations
           elsewhere.
         docs: install/client
+      - type: bugfix
+        title: Leaving an intercept on Windows unmounts its drive
+        body: >-
+          Ending an intercept with a volume mount on Windows only terminated the
+          <code>sshfs-win</code> launcher and left its <code>sshfs</code> child,
+          and with it the mounted drive, behind. The whole process tree is now
+          terminated, so the drive disappears when the intercept ends.
   - version: 2.31.2
     date: 2026-08-02
     notes:
