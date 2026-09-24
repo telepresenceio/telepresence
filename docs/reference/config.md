@@ -200,6 +200,7 @@ The `intercept` controls applies to how Telepresence will intercept the communic
 | `localShortcut` | Connect local traffic to destinations covered by the client's own intercepts directly to the local intercept handler instead of tunneling to the cluster | [boolean][yaml-bool] | true       |
 | `localShortcutIsGlobal` | Apply the local shortcut to all intercepts, including those with header or path filters                      | [boolean][yaml-bool] | true       |
 | `mountsRoot`  | Directory that will be used as the root for all automatically generated mount directories (not applicable on windows) | [string][yaml-str]   | env:TMPDIR |
+| `sshfsPath`   | Path of the sshfs executable (the `sshfs-win` launcher on Windows). When unset, `sshfs` is found on `PATH`; on Windows, `sshfs-win` is found on `PATH` or in SSHFS-Win's installation directory under Program Files | [string][yaml-str]   |            |
 
 #### Local shortcut
 

@@ -271,6 +271,7 @@ type ClientIntercept struct {
 	LocalShortcutIsGlobal *bool   `json:"localShortcutIsGlobal,omitzero"`
 	MountsRoot            *string `json:"mountsRoot,omitzero"`
 	MountCompletionDelay  *string `json:"mountCompletionDelay,omitzero"`
+	SshfsPath             *string `json:"sshfsPath,omitzero"`
 }
 
 // ClientLogLevels configures the log level of each client-side process.

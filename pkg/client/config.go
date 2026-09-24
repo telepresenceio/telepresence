@@ -838,6 +838,7 @@ type Intercept struct {
 	LocalShortcutIsGlobal bool          `json:"localShortcutIsGlobal"`
 	MountsRoot            string        `json:"mountsRoot"`
 	MountCompletionDelay  time.Duration `json:"mountCompletionDelay"`
+	SshfsPath             string        `json:"sshfsPath"`
 }
 
 func (ic *Intercept) defaults() DefaultsAware {
