@@ -3,6 +3,7 @@ package sftpserver_test
 import (
 	"context"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -192,6 +193,32 @@ func TestWritePath(t *testing.T) {
 	require.NoError(t, client.Remove(otherPath))
 	_, err = client.Stat(otherPath)
 	require.Error(t, err)
+}
+
+func TestRenameAcrossDirectoriesWorks(t *testing.T) {
+	client, _ := newTestServer(t)
+	base := "/tel_app_exports/app"
+	require.NoError(t, client.Mkdir(base+"/a"))
+	require.NoError(t, client.Mkdir(base+"/b"))
+	f, err := client.Create(base + "/a/x")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("moved"))
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	require.NoError(t, client.Rename(base+"/a/x", base+"/b/y"))
+	require.Equal(t, "moved", readAll(t, client, base+"/b/y"))
+	_, err = client.Stat(base + "/a/x")
+	require.Error(t, err)
+
+	require.NoError(t, client.PosixRename(base+"/b/y", base+"/a/z"))
+	require.Equal(t, "moved", readAll(t, client, base+"/a/z"))
+	_, err = client.Stat(base + "/b/y")
+	require.Error(t, err)
+
+	require.NoError(t, client.Link(base+"/a/z", base+"/b/w"))
+	require.Equal(t, "moved", readAll(t, client, base+"/b/w"))
+	require.Equal(t, "moved", readAll(t, client, base+"/a/z"))
 }
 
 func TestStatOutsideTreeFails(t *testing.T) {
@@ -550,4 +577,136 @@ func TestMountsLinkRenameAcrossDirectories(t *testing.T) {
 	require.NoError(t, client.Link(base+"/d1/z", base+"/d2/w"))
 	_, err = os.Stat(filepath.Join(tree.mountsRoot, tree.container, "etc", "d2", "w"))
 	require.NoError(t, err)
+}
+
+// twoRootsTree is the fixture a newTwoRootsTestServer builds: an exports root holding one
+// symlinked "container" per allowed root, mirroring nodeConfig.SymlinkRoots' layout of one
+// procfs root per resolved container pid. containerA and containerC both export into rootA
+// -- containerA directly, containerC through rootAAlias, a symlink registered as a separate
+// allowed root that resolves to the same directory -- so a rename between them must be
+// recognized as staying within one root even though the two resolutions open it through
+// distinct *os.Root values. containerB exports into rootB, an unrelated directory.
+type twoRootsTree struct {
+	exportsRoot string
+	rootA       string
+	rootB       string
+}
+
+// newTwoRootsTestServer builds a twoRootsTree under several t.TempDir() trees and starts a
+// sftpserver.Server over it, registering rootA, rootB, and rootAAlias (a symlink to rootA)
+// all as allowed roots.
+func newTwoRootsTestServer(t *testing.T) (*sftp.Client, twoRootsTree) {
+	t.Helper()
+
+	rootA := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(rootA, "x.txt"), []byte("in-a"), 0o644))
+
+	rootB := t.TempDir()
+
+	aliasParent := t.TempDir()
+	rootAAlias := filepath.Join(aliasParent, "alias")
+	require.NoError(t, os.Symlink(rootA, rootAAlias))
+
+	exportsRoot := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(exportsRoot, "containerA"), 0o755))
+	require.NoError(t, os.Symlink(rootA, filepath.Join(exportsRoot, "containerA", "mount")))
+	require.NoError(t, os.Mkdir(filepath.Join(exportsRoot, "containerB"), 0o755))
+	require.NoError(t, os.Symlink(rootB, filepath.Join(exportsRoot, "containerB", "mount")))
+	require.NoError(t, os.Mkdir(filepath.Join(exportsRoot, "containerC"), 0o755))
+	require.NoError(t, os.Symlink(rootAAlias, filepath.Join(exportsRoot, "containerC", "mount")))
+
+	srv, err := sftpserver.New(exportsRoot, rootA, rootB, rootAAlias)
+	require.NoError(t, err)
+
+	client := startServer(t, srv)
+
+	return client, twoRootsTree{exportsRoot: exportsRoot, rootA: rootA, rootB: rootB}
+}
+
+func TestRenameWithinOneExportWorks(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	require.NoError(t, client.Rename(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerA/mount/y.txt"))
+	data, err := os.ReadFile(filepath.Join(tree.rootA, "y.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "in-a", string(data))
+}
+
+func TestRenameAcrossDifferentRootsReturnsEXDEV(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	err := client.Rename(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerB/mount/x.txt")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "escape")
+	require.Contains(t, err.Error(), "cross-device")
+
+	// The failed rename must not have moved or removed anything.
+	_, err = os.Stat(filepath.Join(tree.rootA, "x.txt"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(tree.rootB, "x.txt"))
+	require.ErrorIs(t, err, fs.ErrNotExist)
+}
+
+func TestPosixRenameAcrossDifferentRootsReturnsEXDEV(t *testing.T) {
+	client, _ := newTwoRootsTestServer(t)
+
+	err := client.PosixRename(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerB/mount/x.txt")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "escape")
+	require.Contains(t, err.Error(), "cross-device")
+}
+
+func TestLinkAcrossDifferentRootsReturnsEXDEV(t *testing.T) {
+	client, _ := newTwoRootsTestServer(t)
+
+	err := client.Link(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerB/mount/x.txt")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "escape")
+	require.Contains(t, err.Error(), "cross-device")
+}
+
+func TestRenameAcrossExportsOfSameRootWorks(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	// containerA and containerC export the same directory (rootA, reached directly and
+	// through rootAAlias); a rename between them must succeed rather than return EXDEV.
+	require.NoError(t, client.Rename(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerC/mount/y.txt"))
+	data, err := os.ReadFile(filepath.Join(tree.rootA, "y.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "in-a", string(data))
+}
+
+func TestLinkAcrossExportsOfSameRootWorks(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	require.NoError(t, client.Link(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerC/mount/link.txt"))
+	data, err := os.ReadFile(filepath.Join(tree.rootA, "link.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "in-a", string(data))
+}
+
+func TestPosixRenameAcrossExportsOfSameRootWorks(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	existing := "/tel_app_exports/containerC/mount/y.txt"
+	w, err := client.Create(existing)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	require.NoError(t, client.PosixRename("/tel_app_exports/containerA/mount/x.txt", existing))
+	data, err := os.ReadFile(filepath.Join(tree.rootA, "y.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "in-a", string(data))
 }
