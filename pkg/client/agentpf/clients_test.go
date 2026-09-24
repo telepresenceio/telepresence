@@ -247,33 +247,37 @@ func TestWrapPortForwardDialer_MarksDeniedOnForbidden(t *testing.T) {
 	cl := &k8s.Cluster{Kubeconfig: &k8s.Kubeconfig{Context: context.Background(), Namespace: "alpha"}}
 	cs := NewClients(cl, &manager.SessionInfo{SessionId: "s"}, []string{"alpha", "beta"}, nil).(*clients)
 
+	podA := podKey{namespace: "alpha", name: "echo-1"}
 	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "echo-1", errors.New("denied"))
-	dial := wrapPortForwardDialer(cs, "alpha", func(context.Context, string) (net.Conn, error) {
+	dial := wrapPortForwardDialer(cs, podA, func(context.Context, string) (net.Conn, error) {
 		return nil, forbidden
 	})
 	_, err := dial(context.Background(), "addr")
 	require.Same(t, forbidden, err, "the original error must be returned unchanged")
-	assert.True(t, cs.isPortForwardDenied("alpha"))
-	assert.False(t, cs.isPortForwardDenied("beta"), "only the dialed namespace is marked")
+	assert.True(t, cs.isPortForwardDenied(podA))
+	assert.False(t, cs.isPortForwardDenied(podKey{namespace: "beta", name: "echo-1"}), "only the dialed pod is marked")
+	assert.False(t, cs.isPortForwardDenied(podKey{namespace: "alpha", name: "echo-2"}),
+		"a different pod in the same namespace is not marked")
 }
 
 func TestWrapPortForwardDialer_PlainErrorDoesNotMarkDenied(t *testing.T) {
 	cl := &k8s.Cluster{Kubeconfig: &k8s.Kubeconfig{Context: context.Background(), Namespace: "alpha"}}
 	cs := NewClients(cl, &manager.SessionInfo{SessionId: "s"}, []string{"alpha"}, nil).(*clients)
 
+	podA := podKey{namespace: "alpha", name: "echo-1"}
 	plain := errors.New("dial tcp: connection refused")
-	dial := wrapPortForwardDialer(cs, "alpha", func(context.Context, string) (net.Conn, error) {
+	dial := wrapPortForwardDialer(cs, podA, func(context.Context, string) (net.Conn, error) {
 		return nil, plain
 	})
 	_, err := dial(context.Background(), "addr")
 	require.Same(t, plain, err)
-	assert.False(t, cs.isPortForwardDenied("alpha"))
+	assert.False(t, cs.isPortForwardDenied(podA))
 }
 
-// TestGetClient_SkipsClientInDeniedNamespace proves that a denied namespace overrides even
-// GetClient's rule 1 (the agent's own pod address, which otherwise stands whether or not a
-// connection exists yet -- see the GetClient doc comment).
-func TestGetClient_SkipsClientInDeniedNamespace(t *testing.T) {
+// TestGetClient_SkipsDeniedPod proves that a denied pod overrides even GetClient's rule 1
+// (the agent's own pod address, which otherwise stands whether or not a connection exists
+// yet -- see the GetClient doc comment).
+func TestGetClient_SkipsDeniedPod(t *testing.T) {
 	cl := &k8s.Cluster{Kubeconfig: &k8s.Kubeconfig{Context: context.Background(), Namespace: "alpha"}}
 	session := &manager.SessionInfo{SessionId: "session"}
 	cs := NewClients(cl, session, []string{"alpha"}, nil).(*clients)
@@ -292,12 +296,36 @@ func TestGetClient_SkipsClientInDeniedNamespace(t *testing.T) {
 
 	require.NotNil(t, cs.GetClient(podIP), "sanity: the client is offered before any denial")
 
-	cs.markPortForwardDenied("alpha")
-	assert.Nil(t, cs.GetClient(podIP), "a client in a denied namespace must not be offered, even for its own pod IP")
+	cs.markPortForwardDenied(podKey{namespace: "alpha", name: "agent-alpha"})
+	assert.Nil(t, cs.GetClient(podIP), "a denied pod must not be offered, even for its own pod IP")
+}
+
+// TestGetClient_DeniedPodDoesNotBlockOtherPodInSameNamespace proves that a denial recorded
+// for one pod does not shadow a different pod in the same namespace -- the bug this cache
+// exists to avoid, since RBAC can grant pods/portforward per pod via resourceNames.
+func TestGetClient_DeniedPodDoesNotBlockOtherPodInSameNamespace(t *testing.T) {
+	cl := &k8s.Cluster{Kubeconfig: &k8s.Kubeconfig{Context: context.Background(), Namespace: "alpha"}}
+	session := &manager.SessionInfo{SessionId: "session"}
+	cs := NewClients(cl, session, []string{"alpha"}, nil).(*clients)
+
+	podIP := netip.MustParseAddr("10.244.0.10")
+	cs.clients.Store("agent-b.alpha", &client{
+		Cluster: cl,
+		session: session,
+		owner:   cs,
+		info: &manager.AgentPodInfo{
+			PodName:   "agent-b",
+			Namespace: "alpha",
+			PodIp:     podIP.AsSlice(),
+		},
+	})
+
+	cs.markPortForwardDenied(podKey{namespace: "alpha", name: "agent-a"})
+	assert.NotNil(t, cs.GetClient(podIP), "a denial for a different pod in the same namespace must not deny this one")
 }
 
 // fakePFDialerFactory returns a pfDialerFactory whose dialer always calls dial and counts
-// its invocations in calls, so tests can assert whether a namespace was redialed.
+// its invocations in calls, so tests can assert whether a pod was redialed.
 func fakePFDialerFactory(
 	dial func(ctx context.Context, address string) (net.Conn, error), calls *atomic.Int32,
 ) func(context.Context) func(context.Context, string) (net.Conn, error) {
@@ -313,7 +341,7 @@ func fakePFDialerFactory(
 // has no quic_sni to try, so it goes straight to the wrapped port-forward dialer) through a
 // fake port-forward dialer that always refuses with Forbidden. WaitForIP must learn the
 // refusal from that one dial, return well inside its timeout instead of retrying until the
-// deadline, and never dial again for a later call in the same namespace.
+// deadline, and never dial again for a later call to the same pod.
 func TestWaitForIP_PortForwardDenied_ShortCircuitsAfterFirstDial(t *testing.T) {
 	old := dialTimeout
 	dialTimeout = 50 * time.Millisecond
@@ -342,16 +370,75 @@ func TestWaitForIP_PortForwardDenied_ShortCircuitsAfterFirstDial(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.Equal(t, codes.Unavailable, status.Code(err))
-	assert.Contains(t, err.Error(), "direct agent access in namespace alpha refused (pods/portforward) and the QUIC tunnel is not available")
+	assert.Contains(t, err.Error(), "direct agent access to pod echo-1.alpha refused (pods/portforward) and the QUIC tunnel is not available")
 	assert.Less(t, elapsed, time.Second, "must return well inside the 2s timeout, not exhaust it")
-	assert.True(t, cs.isPortForwardDenied("alpha"))
+	assert.True(t, cs.isPortForwardDenied(podKey{namespace: "alpha", name: "echo-1", uid: ai.PodId}))
 
 	callsAfterFirst := calls.Load()
 	assert.Positive(t, callsAfterFirst, "the fake dialer must have been invoked at least once")
 
 	err = cs.WaitForIP(context.Background(), 2*time.Second, "alpha", ip)
 	require.Equal(t, codes.Unavailable, status.Code(err))
-	assert.Equal(t, callsAfterFirst, calls.Load(), "a namespace already known to be denied must not be redialed")
+	assert.Equal(t, callsAfterFirst, calls.Load(), "a pod already known to be denied must not be redialed")
+}
+
+// TestWaitForIP_PortForwardDenied_DoesNotBlockOtherPodInSameNamespace proves the fix for the
+// bug this cache exists to guard against: RBAC can grant pods/portforward per pod via
+// resourceNames, so a refusal dialing pod A must not deny a dial to pod B in the same
+// namespace. Pod A's dial is refused with Forbidden; pod B's dial is left to succeed (no
+// error), and WaitForIP for pod B must still reach (and use) the fake dialer instead of
+// short-circuiting with errNoDirectAccess.
+func TestWaitForIP_PortForwardDenied_DoesNotBlockOtherPodInSameNamespace(t *testing.T) {
+	old := dialTimeout
+	dialTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { dialTimeout = old })
+
+	cs := newTestClients(context.Background(), "alpha")
+	var calls atomic.Int32
+	forbidden := apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "echo-a", errors.New("denied"))
+	cs.pfDialerFactory = fakePFDialerFactory(func(context.Context, string) (net.Conn, error) {
+		// The first dial is pod A's (refused); every dial after that is pod B's
+		// (a plain, unrelated failure -- WaitForIP for B must still reach it).
+		if calls.Load() == 1 {
+			return nil, forbidden
+		}
+		return nil, errors.New("dial tcp: connection refused")
+	}, &calls)
+
+	ipA := netip.MustParseAddr("10.244.0.11")
+	ipB := netip.MustParseAddr("10.244.0.12")
+	aiA := &manager.AgentPodInfo{
+		PodName:      "echo-a",
+		PodId:        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+		Namespace:    "alpha",
+		WorkloadName: "echo-a",
+		PodIp:        ipA.AsSlice(),
+		ApiPort:      10000,
+	}
+	aiB := &manager.AgentPodInfo{
+		PodName:      "echo-b",
+		PodId:        "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+		Namespace:    "alpha",
+		WorkloadName: "echo-b",
+		PodIp:        ipB.AsSlice(),
+		ApiPort:      10000,
+	}
+	require.NoError(t, cs.ApplyPodsDelta(true, map[string]*manager.AgentPodInfo{
+		"echo-a.alpha": aiA,
+		"echo-b.alpha": aiB,
+	}, nil))
+
+	err := cs.WaitForIP(context.Background(), 2*time.Second, "alpha", ipA)
+	require.Equal(t, codes.Unavailable, status.Code(err))
+	assert.True(t, cs.isPortForwardDenied(podKey{namespace: "alpha", name: "echo-a", uid: aiA.PodId}))
+	assert.False(t, cs.isPortForwardDenied(podKey{namespace: "alpha", name: "echo-b", uid: aiB.PodId}),
+		"pod B must not be marked denied by pod A's refusal")
+
+	callsAfterA := calls.Load()
+	err = cs.WaitForIP(context.Background(), 400*time.Millisecond, "alpha", ipB)
+	assert.NotEqual(t, codes.Unavailable, status.Code(err),
+		"pod B's dial must not short-circuit with errNoDirectAccess just because pod A was denied")
+	assert.Greater(t, calls.Load(), callsAfterA, "pod B's dial must actually reach the fake dialer")
 }
 
 // TestWaitForIP_PlainDialError_RetriesUntilDeadline is the contrast case: a dial error that
@@ -381,7 +468,8 @@ func TestWaitForIP_PlainDialError_RetriesUntilDeadline(t *testing.T) {
 
 	err := cs.WaitForIP(context.Background(), 400*time.Millisecond, "alpha", ip)
 
-	assert.False(t, cs.isPortForwardDenied("alpha"), "a plain dial error must not be treated as a permission refusal")
+	assert.False(t, cs.isPortForwardDenied(podKey{namespace: "alpha", name: "echo-2", uid: ai.PodId}),
+		"a plain dial error must not be treated as a permission refusal")
 	assert.Greater(t, calls.Load(), int32(1), "a plain error must keep retrying (and redialing), not stop after one attempt")
 	assert.NotEqual(t, codes.Unavailable, status.Code(err))
 }

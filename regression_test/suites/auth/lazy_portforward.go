@@ -92,12 +92,13 @@ func deleteAppAttachRole(t *testing.T, ctx context.Context, r *rt.Runtime, name,
 	}
 }
 
-// portForwardRefusalLogged reports whether the root daemon's log recorded
-// the pods/portforward refusal for ns: daemon.log, or any daemon-*.log this
-// run rotated.
+// portForwardRefusalLogged reports whether the root daemon's log recorded a
+// pods/portforward refusal for a pod in ns: daemon.log, or any
+// daemon-*.log this run rotated. The needle matches the "<pod>.<ns>
+// refused" part of the message, so the pod's generated name doesn't matter.
 func portForwardRefusalLogged(t *testing.T, r *rt.Runtime, ns string) bool {
 	t.Helper()
-	needle := fmt.Sprintf("direct agent access in namespace %s refused (pods/portforward)", ns)
+	needle := fmt.Sprintf(".%s refused (pods/portforward)", ns)
 	paths, err := filepath.Glob(filepath.Join(r.LogDir(), "daemon*.log"))
 	if err != nil {
 		t.Fatalf("globbing daemon logs: %v", err)
@@ -120,7 +121,7 @@ func portForwardRefusalLogged(t *testing.T, r *rt.Runtime, ns string) bool {
 // (connections/attachments.telepresence.io) but holds no pods/portforward
 // in the target namespace, and has no QUIC tunnel available either, fails
 // its intercept quickly with a clear error instead of hanging, and the
-// refusal is logged once for that namespace.
+// refusal is logged once for the refused pod.
 type AttachWithoutPortForward struct {
 	rt.Suite
 }
@@ -133,8 +134,8 @@ func init() {
 // and attach but has no pods/portforward in the app namespace, connects as
 // that identity, and asserts that an intercept attempt fails quickly with
 // an error naming both the missing pods/portforward grant and the QUIC
-// tunnel, and that the root daemon logged the namespace as refused for
-// direct agent access.
+// tunnel, and that the root daemon logged the pod as refused for direct
+// agent access.
 func (s *AttachWithoutPortForward) Test_InterceptWithoutPodsPortForward() {
 	t := s.T()
 	ctx := s.Ctx()
