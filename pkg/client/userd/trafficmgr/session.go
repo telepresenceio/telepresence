@@ -87,6 +87,11 @@ type session struct {
 	service            userd.Service
 	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
 
+	// closing is set when the session is being cancelled, before the root daemon
+	// is told to disconnect, so the activity watcher does not treat the resulting
+	// EOF as a lost connection and reconnect.
+	closing atomic.Bool
+
 	rootDaemonLock          sync.RWMutex
 	rootDaemon              rootdRpc.DaemonClient
 	rootDaemonConn          *grpc.ClientConn
@@ -1437,8 +1442,7 @@ func (s *session) startRootDaemonActivityWatcher(rd rootdRpc.DaemonClient, gener
 	go func() {
 		aw, err := rd.ActivityWatcher(s, &empty.Empty{})
 		if err != nil {
-			if !errors.Is(err, context.Canceled) && s.Err() == nil {
-				clog.Errorf(s, "activity watcher failed: %v", err)
+			if s.rootDaemonLost(err) {
 				s.reconnectRootDaemon(generation, err)
 			}
 			return
@@ -1446,8 +1450,7 @@ func (s *session) startRootDaemonActivityWatcher(rd rootdRpc.DaemonClient, gener
 		for {
 			at, err := aw.Recv()
 			if err != nil {
-				if !errors.Is(err, context.Canceled) && s.Err() == nil {
-					clog.Errorf(s, "activity watcher failed: %v", err)
+				if s.rootDaemonLost(err) {
 					s.reconnectRootDaemon(generation, err)
 				}
 				return
@@ -1481,6 +1484,22 @@ func (s *session) RootSessionEndMetrics() *rootdRpc.Activity {
 	return a
 }
 
+// rootDaemonLost reports whether an activity watcher error means the root daemon
+// connection was lost while the session is still live, which is when a reconnect
+// is wanted. An error caused by the session ending is not.
+func (s *session) rootDaemonLost(err error) bool {
+	if errors.Is(err, context.Canceled) || s.Err() != nil || s.closing.Load() {
+		return false
+	}
+	clog.Errorf(s, "activity watcher failed: %v", err)
+	return true
+}
+
+// MarkClosing records that the session is being cancelled.
+func (s *session) MarkClosing() {
+	s.closing.Store(true)
+}
+
 func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 	s.rootDaemonReconnectLock.Lock()
 	defer s.rootDaemonReconnectLock.Unlock()
@@ -1495,7 +1514,7 @@ func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 	clog.Warnf(s, "root daemon connection lost: %v; reconnecting", cause)
 
 	backoff := 200 * time.Millisecond
-	for attempt := 1; s.Err() == nil; attempt++ {
+	for attempt := 1; s.Err() == nil && !s.closing.Load(); attempt++ {
 		nc, isPodDaemon := s.rootDaemonReconnectConfig()
 		if nc == nil {
 			clog.Error(s, "unable to reconnect root daemon: missing network configuration")

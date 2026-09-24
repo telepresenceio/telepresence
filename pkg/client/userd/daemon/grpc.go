@@ -137,6 +137,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 			cause = context.Canceled
 		}
 		clog.Infof(session, "canceling user daemon session: %v", cause)
+		session.MarkClosing()
 		if err := session.ClearIngestsAndIntercepts(); err != nil {
 			clog.Errorf(ctx, "failed to clear intercepts: %v", err)
 		}
