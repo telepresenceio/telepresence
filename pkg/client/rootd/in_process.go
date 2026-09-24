@@ -38,9 +38,10 @@ func (rd *InProcSession) Version(ctx context.Context, _ *empty.Empty, _ ...grpc.
 
 func (rd *InProcSession) Status(ctx context.Context, _ *empty.Empty, _ ...grpc.CallOption) (*rpc.DaemonStatus, error) {
 	return &rpc.DaemonStatus{
-		Version:         versionInfo(ctx),
-		OutboundConfig:  rd.getNetworkConfig(),
-		TunnelTransport: rd.tunnelTransportRPC(),
+		Version:          versionInfo(ctx),
+		OutboundConfig:   rd.getNetworkConfig(),
+		TunnelTransport:  rd.tunnelTransportRPC(),
+		VifInterfaceName: rd.vifInterfaceNameRPC(),
 	}, nil
 }
 

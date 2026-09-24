@@ -40,8 +40,12 @@ type DaemonStatus struct {
 	// agent connection is up; an old root daemon that predates this field is
 	// indistinguishable from that case, so callers must treat both as "omit".
 	AgentTransports []*AgentTransport `protobuf:"bytes,7,rep,name=agent_transports,json=agentTransports,proto3" json:"agent_transports,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// vif_interface_name is the name of the local network interface that
+	// carries the session's virtual network (e.g. "tel0" or, on macOS, a
+	// "utunN" name). Empty when there is no active session.
+	VifInterfaceName string `protobuf:"bytes,8,opt,name=vif_interface_name,json=vifInterfaceName,proto3" json:"vif_interface_name,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DaemonStatus) Reset() {
@@ -107,6 +111,13 @@ func (x *DaemonStatus) GetAgentTransports() []*AgentTransport {
 		return x.AgentTransports
 	}
 	return nil
+}
+
+func (x *DaemonStatus) GetVifInterfaceName() string {
+	if x != nil {
+		return x.VifInterfaceName
+	}
+	return ""
 }
 
 // TunnelTransport reports which transport currently serves manager-bound
@@ -1480,13 +1491,14 @@ var File_daemon_daemon_proto protoreflect.FileDescriptor
 
 const file_daemon_daemon_proto_rawDesc = "" +
 	"\n" +
-	"\x13daemon/daemon.proto\x12\x13telepresence.daemon\x1a\x14common/version.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15manager/manager.proto\"\xd8\x02\n" +
+	"\x13daemon/daemon.proto\x12\x13telepresence.daemon\x1a\x14common/version.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x15manager/manager.proto\"\x86\x03\n" +
 	"\fDaemonStatus\x12\x18\n" +
 	"\amanaged\x18\x02 \x01(\bR\amanaged\x12K\n" +
 	"\x0foutbound_config\x18\x04 \x01(\v2\".telepresence.daemon.NetworkConfigR\x0eoutboundConfig\x12:\n" +
 	"\aversion\x18\x05 \x01(\v2 .telepresence.common.VersionInfoR\aversion\x12O\n" +
 	"\x10tunnel_transport\x18\x06 \x01(\v2$.telepresence.daemon.TunnelTransportR\x0ftunnelTransport\x12N\n" +
-	"\x10agent_transports\x18\a \x03(\v2#.telepresence.daemon.AgentTransportR\x0fagentTransportsJ\x04\b\x03\x10\x04\"K\n" +
+	"\x10agent_transports\x18\a \x03(\v2#.telepresence.daemon.AgentTransportR\x0fagentTransports\x12,\n" +
+	"\x12vif_interface_name\x18\b \x01(\tR\x10vifInterfaceNameJ\x04\b\x03\x10\x04\"K\n" +
 	"\x0fTunnelTransport\x12\x1c\n" +
 	"\ttransport\x18\x01 \x01(\tR\ttransport\x12\x1a\n" +
 	"\bendpoint\x18\x02 \x01(\tR\bendpoint\"\\\n" +

@@ -65,7 +65,7 @@ func (p *Prober) probeRouting(ctx context.Context, nodes []core.Node, services [
 			Evidence: []string{fmt.Sprintf("the workstation's routing table could not be read: %v", err)},
 		}}
 	}
-	activeSubnets, activeOK := p.activeRoutes(ctx)
+	activeSubnets, activeInterface, activeOK := p.activeRoutes(ctx)
 
 	var conflicts []RoutingConflict
 	var evidence []string
@@ -76,7 +76,7 @@ func (p *Prober) probeRouting(ctx context.Context, nodes []core.Node, services [
 			if !relevantRoute(rt) || !prefixesOverlap(sn.prefix, rt.RoutedNet) {
 				continue
 			}
-			if isActiveSessionRoute(rt, activeSubnets, activeOK) {
+			if isActiveSessionRoute(rt, activeSubnets, activeInterface, activeOK) {
 				key := rt.RoutedNet.String()
 				if !excludedSeen[key] {
 					excludedSeen[key] = true
@@ -115,9 +115,9 @@ func (p *Prober) localRoutes(ctx context.Context) ([]*routing.Route, error) {
 }
 
 // activeRoutes reports the subnets an already-connected Telepresence session
-// routes, using Prober.ActiveRoutes when set and defaultActiveRoutes
-// otherwise.
-func (p *Prober) activeRoutes(ctx context.Context) (subnets []netip.Prefix, ok bool) {
+// routes and the local interface that carries them, using Prober.ActiveRoutes
+// when set and defaultActiveRoutes otherwise.
+func (p *Prober) activeRoutes(ctx context.Context) (subnets []netip.Prefix, interfaceName string, ok bool) {
 	if p.ActiveRoutes != nil {
 		return p.ActiveRoutes(ctx)
 	}
@@ -126,13 +126,17 @@ func (p *Prober) activeRoutes(ctx context.Context) (subnets []netip.Prefix, ok b
 
 // isActiveSessionRoute reports whether rt is a route the local Telepresence
 // tunnel device owns: either it runs on a "tel"-prefixed device (checked
-// regardless of activeOK, since the device name alone identifies it), or its
-// routed net is one an active session reports as its own.
-func isActiveSessionRoute(rt *routing.Route, activeSubnets []netip.Prefix, activeOK bool) bool {
+// regardless of activeOK, since the device name alone identifies it on
+// platforms that use it), or it runs on the active session's own interface
+// (its name reported by an active session, needed on platforms such as
+// macOS where the device is a utunN) and its routed net is one the session
+// reports as its own. A subnet match on any other interface is a real
+// conflict, not the session's route.
+func isActiveSessionRoute(rt *routing.Route, activeSubnets []netip.Prefix, activeInterface string, activeOK bool) bool {
 	if isTelepresenceDevice(rt.InterfaceName) {
 		return true
 	}
-	if !activeOK {
+	if !activeOK || activeInterface == "" || rt.InterfaceName != activeInterface {
 		return false
 	}
 	for _, sn := range activeSubnets {

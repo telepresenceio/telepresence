@@ -238,10 +238,11 @@ type Prober struct {
 	RouteSource func(ctx context.Context) ([]*routing.Route, error)
 
 	// ActiveRoutes reports the subnets an already-connected Telepresence
-	// session routes, so the routing probe can exclude its own routes from
+	// session routes and the name of the local interface that carries them,
+	// so the routing probe can exclude only that session's own routes from
 	// conflict detection. nil means defaultActiveRoutes, which asks the root
 	// daemon; ok is false whenever there is no session to ask.
-	ActiveRoutes func(ctx context.Context) (subnets []netip.Prefix, ok bool)
+	ActiveRoutes func(ctx context.Context) (subnets []netip.Prefix, interfaceName string, ok bool)
 }
 
 func (p *Prober) candidateValues() *helm.Values {
