@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"os/exec"
 	"runtime"
 	"sync"
@@ -110,7 +111,17 @@ func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMoun
 					err = dpipe.DPipe(ctx, conn, exe, sshfsArgs...)
 				}
 			case runtime.GOOS == "windows":
-				err = proc.Run(ctx, nil, exe, sshfsArgs...)
+				// The sshfs-win launcher runs sshfs.exe as a child; killing only the
+				// launcher leaves that child, and the mounted drive, behind.
+				cmd := proc.CommandStd(ctx, nil, exe, sshfsArgs...)
+				cmd.Cancel = func() error {
+					proc.KillProcessGroup(ctx, cmd, os.Kill)
+					return nil
+				}
+				cmd.WaitDelay = 5 * time.Second
+				if err = proc.StartCmd(ctx, cmd); err == nil {
+					err = cmd.Wait()
+				}
 			default:
 				// sshfs must be given a chance to unmount before it exits. With a kext-less
 				// FUSE implementation (FUSE-T), the kernel NFS mount outlives a killed sshfs
