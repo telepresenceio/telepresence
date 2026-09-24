@@ -176,6 +176,12 @@ Upgrading the <code>.rpm</code> package stopped and disabled <code>telepresence-
 When the user daemon runs with elevated privileges and embeds the root daemon, <code>telepresence status</code> and <code>telepresence version</code> printed that section under the user daemon's name. It is now labelled as the embedded root daemon.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Volume mounts on Windows find SSHFS-Win without PATH changes](install/client)</div></div>
+<div style="margin-left: 15px">
+
+The SSHFS-Win installer does not add its <code>bin</code> directory to <code>PATH</code>, so intercepts installed from the MSI reported that sshfs was not installed. The daemon now also looks for <code>sshfs-win.exe</code> in SSHFS-Win's installation directory under Program Files.
+</div>
+
 ## Version 2.31.2 <span style="font-size: 16px;">(August  2)</span>
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Namespaced installs no longer read ingresses cluster-wide</div></div>
 <div style="margin-left: 15px">

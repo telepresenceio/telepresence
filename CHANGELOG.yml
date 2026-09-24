@@ -336,6 +336,15 @@ items:
           <code>telepresence version</code> printed that section under the
           user daemon's name. It is now labelled as the embedded root
           daemon.
+      - type: bugfix
+        title: Volume mounts on Windows find SSHFS-Win without PATH changes
+        body: >-
+          The SSHFS-Win installer does not add its <code>bin</code> directory
+          to <code>PATH</code>, so intercepts installed from the MSI reported
+          that sshfs was not installed. The daemon now also looks for
+          <code>sshfs-win.exe</code> in SSHFS-Win's installation directory
+          under Program Files.
+        docs: install/client
   - version: 2.31.2
     date: 2026-08-02
     notes:

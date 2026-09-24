@@ -99,12 +99,8 @@ func (m *sftpMounter) Start(ctx context.Context, workload, container, clientMoun
 				)
 			}
 
-			exe := "sshfs"
-			if runtime.GOOS == "windows" {
-				// Use sshfs-win to launch the sshfs
-				sshfsArgs = append([]string{"cmd", "-ouid=-1", "-ogid=-1"}, sshfsArgs...)
-				exe = "sshfs-win"
-			}
+			exe := SshfsExecutable()
+			sshfsArgs = sshfsCommandArgs(sshfsArgs...)
 			var err error
 			switch {
 			case useIPv6:
