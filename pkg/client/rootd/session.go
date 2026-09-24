@@ -346,6 +346,15 @@ func (s *session) agentTransportsRPC() []*rpc.AgentTransport {
 	return out
 }
 
+// vifInterfaceNameRPC returns the name of the local network interface that carries
+// this session's virtual network, or "" when no VIF is attached.
+func (s *session) vifInterfaceNameRPC() string {
+	if s.tunVif == nil {
+		return ""
+	}
+	return s.tunVif.Device.Name()
+}
+
 // createSession will establish a connection to the traffic-manager and return a new properly initialized session object.
 func createSession(
 	sessionCtx, dialCtx context.Context,

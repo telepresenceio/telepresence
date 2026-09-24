@@ -37,6 +37,7 @@ func (s *service) Status(ctx context.Context, _ *emptypb.Empty) (*rpc.DaemonStat
 		r.OutboundConfig = s.session.getNetworkConfig()
 		r.TunnelTransport = s.session.tunnelTransportRPC()
 		r.AgentTransports = s.session.agentTransportsRPC()
+		r.VifInterfaceName = s.session.vifInterfaceNameRPC()
 	}
 	return r, nil
 }
@@ -77,6 +78,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		reply.OutboundConfig = s.session.getNetworkConfig()
 		reply.TunnelTransport = s.session.tunnelTransportRPC()
 		reply.AgentTransports = s.session.agentTransportsRPC()
+		reply.VifInterfaceName = s.session.vifInterfaceNameRPC()
 		return nil
 	})
 	if err == nil {
@@ -90,6 +92,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		reply.OutboundConfig = s.session.getNetworkConfig()
 		reply.TunnelTransport = s.session.tunnelTransportRPC()
 		reply.AgentTransports = s.session.agentTransportsRPC()
+		reply.VifInterfaceName = s.session.vifInterfaceNameRPC()
 		return reply, nil
 	}
 
@@ -117,6 +120,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 	reply.TunnelTransport = sn.tunnelTransportRPC()
 	// No agent has had a chance to connect yet either.
 	reply.AgentTransports = sn.agentTransportsRPC()
+	reply.VifInterfaceName = sn.vifInterfaceNameRPC()
 	initErrCh := make(chan error, 1)
 
 	sessionRunning := make(chan struct{})

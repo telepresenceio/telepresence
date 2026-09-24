@@ -16,7 +16,6 @@ func (s *Server) StatVFS(r *sftp.Request) (*sftp.StatVFS, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer res.close()
 	f, err := res.root.Open(res.rel)
 	if err != nil {
 		return nil, err

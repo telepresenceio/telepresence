@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"syscall" //nolint:depguard // "unix" don't work on windows
 	"time"
 
 	"github.com/pkg/sftp"
@@ -120,19 +121,6 @@ func splitRel(rel string) (dirs []string, leaf string, ok bool) {
 	return parts[:len(parts)-1], parts[len(parts)-1], true
 }
 
-// commonPrefixLen returns the number of leading elements a and b share.
-func commonPrefixLen(a, b []string) int {
-	n := len(a)
-	if len(b) < n {
-		n = len(b)
-	}
-	i := 0
-	for i < n && a[i] == b[i] {
-		i++
-	}
-	return i
-}
-
 // readAbsoluteSymlink Lstats rel within root and, if it names a symlink whose literal
 // target text is an absolute path, returns that text and true. Anything else -- rel doesn't
 // exist, rel isn't a symlink, or rel is a symlink with a relative target -- reports
@@ -169,63 +157,35 @@ func (s *Server) matchAllowedRoot(target string) (*os.Root, string, bool) {
 	return nil, "", false
 }
 
-// walkDirs descends dirs from start one os.Root.OpenRoot at a time until it meets an absolute
-// symlink: that one is redirected through matchAllowedRoot (os.ErrPermission if unclaimed) and the
-// walk stops, returning the matched root and prefix, the redirect's path joined with the unwalked
-// dirs, for one os.Root call. A missing component ends the walk early with n < len(dirs).
-func (s *Server) walkDirs(start *os.Root, dirs []string) (root *os.Root, prefix string, owned bool, n int, err error) {
-	cur, curOwned := start, false
+// walkDirs checks each component of dirs, relative to start, for an absolute symlink.
+// The first one found is redirected through matchAllowedRoot (os.ErrPermission if
+// unclaimed) and the walk stops, returning that root and the redirect's target joined
+// with the unwalked dirs. Relative symlinks and missing components stay in the prefix.
+func (s *Server) walkDirs(start *os.Root, dirs []string) (root *os.Root, prefix string, err error) {
 	for i, comp := range dirs {
-		target, ok, rerr := s.readAbsoluteSymlink(cur, comp)
+		p := path.Join(prefix, comp)
+		target, ok, rerr := s.readAbsoluteSymlink(start, p)
 		if rerr != nil {
-			if curOwned {
-				_ = cur.Close()
-			}
-			return nil, "", false, 0, rerr
+			return nil, "", rerr
 		}
 		if ok {
 			newRoot, newRel, allowed := s.matchAllowedRoot(target)
-			if curOwned {
-				_ = cur.Close()
-			}
 			if !allowed {
-				return nil, "", false, 0, os.ErrPermission
+				return nil, "", os.ErrPermission
 			}
 			rest := append([]string{newRel}, dirs[i+1:]...)
-			return newRoot, path.Join(rest...), false, len(dirs), nil
+			return newRoot, path.Join(rest...), nil
 		}
-		nr, oerr := cur.OpenRoot(comp)
-		if oerr != nil {
-			if errors.Is(oerr, os.ErrNotExist) {
-				return cur, "", curOwned, i, nil
-			}
-			if curOwned {
-				_ = cur.Close()
-			}
-			return nil, "", false, 0, oerr
-		}
-		if curOwned {
-			_ = cur.Close()
-		}
-		cur, curOwned = nr, true
+		prefix = p
 	}
-	return cur, "", curOwned, len(dirs), nil
+	return start, prefix, nil
 }
 
 // resolved is the result of resolving a client-facing path: rel names the resolved entry
-// within root. If owned is true, root was opened by this resolution (via os.Root.OpenRoot)
-// and must be closed via close once the caller is done with it; if false, root is one of
-// the Server's long-lived, shared roots and must never be closed.
+// within root, one of the Server's long-lived, shared roots.
 type resolved struct {
-	root  *os.Root
-	rel   string
-	owned bool
-}
-
-func (r *resolved) close() {
-	if r.owned {
-		_ = r.root.Close()
-	}
+	root *os.Root
+	rel  string
 }
 
 // resolve maps a client path to the root and root-relative name that serve it. Every
@@ -238,84 +198,73 @@ func (s *Server) resolve(p string, followLeaf bool) (*resolved, error) {
 	if !ok {
 		return &resolved{root: s.exports, rel: "."}, nil
 	}
-	root, prefix, owned, n, err := s.walkDirs(s.exports, dirs)
+	root, prefix, err := s.walkDirs(s.exports, dirs)
 	if err != nil {
 		return nil, err
 	}
-	if n != len(dirs) {
-		if owned {
-			_ = root.Close()
-		}
-		return nil, os.ErrNotExist
-	}
 	rel := path.Join(prefix, leaf)
 	if !followLeaf {
-		return &resolved{root: root, rel: rel, owned: owned}, nil
+		return &resolved{root: root, rel: rel}, nil
 	}
 	for hops := 0; hops < maxRedirectHops; hops++ {
 		target, ok, rerr := s.readAbsoluteSymlink(root, rel)
 		if rerr != nil {
-			if owned {
-				_ = root.Close()
-			}
 			return nil, rerr
 		}
 		if !ok {
-			return &resolved{root: root, rel: rel, owned: owned}, nil
+			return &resolved{root: root, rel: rel}, nil
 		}
 		newRoot, newRel, allowed := s.matchAllowedRoot(target)
-		if owned {
-			_ = root.Close()
-		}
 		if !allowed {
 			return nil, os.ErrPermission
 		}
-		root, owned, rel = newRoot, false, newRel
-	}
-	if owned {
-		_ = root.Close()
+		root, rel = newRoot, newRel
 	}
 	return nil, fmt.Errorf("sftpserver: too many nested symlinks resolving %q", p)
 }
 
-// withTwoPaths resolves from and to -- whose directories may share a redirected prefix --
-// to one root plus their remaining root-relative paths, walking only that shared prefix so a
-// rename or link stays a single os.Root operation. It then calls op on that root and closes
-// whatever the walk opened once op returns.
+// withTwoPaths resolves from and to independently, exactly as a single-path operation
+// would (following redirects, not the leaf). If both land under the same root it calls op
+// once on that root with their root-relative paths, keeping the rename or link a single
+// os.Root operation; if they land under different roots it returns syscall.EXDEV, the error
+// a cross-device rename or link reports, without calling op.
 func (s *Server) withTwoPaths(from, to string, op func(root *os.Root, fromRel, toRel string) error) error {
-	fromDirs, fromLeaf, ok1 := splitRel(rootRelative(from))
-	toDirs, toLeaf, ok2 := splitRel(rootRelative(to))
-	if !ok1 || !ok2 {
-		return os.ErrInvalid
-	}
-	common := commonPrefixLen(fromDirs, toDirs)
-
-	base, prefix, baseOwned, n, err := s.walkDirs(s.exports, fromDirs[:common])
+	fromRes, err := s.resolve(from, false)
 	if err != nil {
 		return err
 	}
-	if baseOwned {
-		defer base.Close()
+
+	toRes, err := s.resolve(to, false)
+	if err != nil {
+		return err
 	}
-	if n != common {
-		return os.ErrNotExist
+
+	same, err := sameRoot(fromRes.root, toRes.root)
+	if err != nil {
+		return err
 	}
-	fromRel := path.Join(prefix, path.Join(append(append([]string{}, fromDirs[common:]...), fromLeaf)...))
-	toRel := path.Join(prefix, path.Join(append(append([]string{}, toDirs[common:]...), toLeaf)...))
-	return op(base, fromRel, toRel)
+	if !same {
+		return syscall.EXDEV
+	}
+	return op(fromRes.root, fromRes.rel, toRes.rel)
 }
 
-// walkedFile wraps the *os.File a resolve call opened, so that a root opened solely to
-// reach it (owned) is closed together with it rather than immediately after opening.
-type walkedFile struct {
-	*os.File
-	res *resolved
-}
-
-func (f *walkedFile) Close() error {
-	err := f.File.Close()
-	f.res.close()
-	return err
+// sameRoot reports whether a and b are open on the same directory. Identity is compared by
+// device and inode, not by pointer, because resolving from and to independently can open two
+// distinct *os.Root values on the same directory.
+func sameRoot(a, b *os.Root) (bool, error) {
+	if a == b {
+		return true, nil
+	}
+	ai, err := a.Stat(".")
+	if err != nil {
+		return false, err
+	}
+	bi, err := b.Stat(".")
+	if err != nil {
+		return false, err
+	}
+	return os.SameFile(ai, bi), nil
 }
 
 // Fileread implements sftp.FileReader.
@@ -324,12 +273,7 @@ func (s *Server) Fileread(r *sftp.Request) (io.ReaderAt, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := res.root.OpenFile(res.rel, os.O_RDONLY, 0)
-	if err != nil {
-		res.close()
-		return nil, err
-	}
-	return &walkedFile{File: f, res: res}, nil
+	return res.root.OpenFile(res.rel, os.O_RDONLY, 0)
 }
 
 // Filewrite implements sftp.FileWriter.
@@ -344,12 +288,7 @@ func (s *Server) OpenFile(r *sftp.Request) (sftp.WriterAtReaderAt, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := res.root.OpenFile(res.rel, openFlags(r.Pflags()), 0o644)
-	if err != nil {
-		res.close()
-		return nil, err
-	}
-	return &walkedFile{File: f, res: res}, nil
+	return res.root.OpenFile(res.rel, openFlags(r.Pflags()), 0o644)
 }
 
 // openFlags converts the SFTP open flags carried by a Request into the os.OpenFile flags
@@ -385,7 +324,6 @@ func (s *Server) Filecmd(r *sftp.Request) error {
 		if err != nil {
 			return err
 		}
-		defer res.close()
 		return s.setstat(res.root, res.rel, r)
 
 	case "Rename":
@@ -405,7 +343,6 @@ func (s *Server) Filecmd(r *sftp.Request) error {
 		if err != nil {
 			return err
 		}
-		defer res.close()
 		return res.root.Remove(res.rel)
 
 	case "Mkdir":
@@ -413,7 +350,6 @@ func (s *Server) Filecmd(r *sftp.Request) error {
 		if err != nil {
 			return err
 		}
-		defer res.close()
 		return res.root.Mkdir(res.rel, 0o755)
 
 	case "Link":
@@ -429,7 +365,6 @@ func (s *Server) Filecmd(r *sftp.Request) error {
 		if err != nil {
 			return err
 		}
-		defer res.close()
 		return res.root.Symlink(r.Filepath, res.rel)
 
 	default:
@@ -518,7 +453,6 @@ func (s *Server) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer res.close()
 		f, err := res.root.Open(res.rel)
 		if err != nil {
 			return nil, err
@@ -543,7 +477,6 @@ func (s *Server) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer res.close()
 		info, err := res.root.Stat(res.rel)
 		if err != nil {
 			return nil, err
@@ -555,7 +488,6 @@ func (s *Server) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer res.close()
 		target, err := res.root.Readlink(res.rel)
 		if err != nil {
 			return nil, err
@@ -574,7 +506,6 @@ func (s *Server) Lstat(r *sftp.Request) (sftp.ListerAt, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer res.close()
 	info, err := res.root.Lstat(res.rel)
 	if err != nil {
 		return nil, err

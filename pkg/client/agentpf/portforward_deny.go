@@ -11,23 +11,33 @@ import (
 	"github.com/telepresenceio/clog"
 )
 
-// errNoDirectAccess is ensureConnectLocked's connectErr when a dial fails in a namespace
+// errNoDirectAccess is ensureConnectLocked's connectErr when a dial fails for a pod
 // already known to refuse pods/portforward: a retry would only repeat the same refusal.
 var errNoDirectAccess = errors.New("direct agent access refused (pods/portforward)")
 
-// wrapPortForwardDialer wraps dial so a refused port-forward (no pods/portforward RBAC in
-// ns) is recorded on owner before the error is returned unchanged, and so a namespace
-// already known to refuse fails at once without another API request.
+// podKey identifies the pod a port-forward dial targets. RBAC can grant pods/portforward
+// per pod via resourceNames, so the denial cache is keyed by pod rather than namespace: a
+// refusal for one pod must not deny another pod in the same namespace. uid distinguishes a
+// recreated pod that reuses the same name from the one that was actually denied.
+type podKey struct {
+	namespace string
+	name      string
+	uid       string
+}
+
+// wrapPortForwardDialer wraps dial so a refused port-forward (no pods/portforward RBAC for
+// pod) is recorded on owner before the error is returned unchanged, and so a pod already
+// known to refuse fails at once without another API request.
 func wrapPortForwardDialer(
-	owner *clients, ns string, dial func(ctx context.Context, address string) (net.Conn, error),
+	owner *clients, pod podKey, dial func(ctx context.Context, address string) (net.Conn, error),
 ) func(ctx context.Context, address string) (net.Conn, error) {
 	return func(ctx context.Context, address string) (net.Conn, error) {
-		if owner.isPortForwardDenied(ns) {
+		if owner.isPortForwardDenied(pod) {
 			return nil, errNoDirectAccess
 		}
 		conn, err := dial(ctx, address)
 		if err != nil && isPortForwardForbidden(err) {
-			owner.markPortForwardDenied(ns)
+			owner.markPortForwardDenied(pod)
 		}
 		return conn, err
 	}
@@ -49,28 +59,29 @@ func isPortForwardForbidden(err error) bool {
 	return strings.Contains(err.Error(), "forbidden:")
 }
 
-// markPortForwardDenied records that a port-forward dial in namespace was refused, logging
-// the first refusal for that namespace.
-func (s *clients) markPortForwardDenied(namespace string) {
+// markPortForwardDenied records that a port-forward dial to pod was refused, logging the
+// first refusal for that pod.
+func (s *clients) markPortForwardDenied(pod podKey) {
 	s.portForwardDeniedMu.Lock()
 	if s.portForwardDenied == nil {
-		s.portForwardDenied = make(map[string]struct{})
+		s.portForwardDenied = make(map[podKey]struct{})
 	}
-	_, seen := s.portForwardDenied[namespace]
+	_, seen := s.portForwardDenied[pod]
 	if !seen {
-		s.portForwardDenied[namespace] = struct{}{}
+		s.portForwardDenied[pod] = struct{}{}
 	}
 	s.portForwardDeniedMu.Unlock()
 	if !seen {
-		clog.Infof(s, "direct agent access in namespace %s refused (pods/portforward); agent traffic goes through the traffic-manager", namespace)
+		clog.Infof(s, "direct agent access to pod %s.%s refused (pods/portforward); agent traffic goes through the traffic-manager",
+			pod.name, pod.namespace)
 	}
 }
 
-// isPortForwardDenied reports whether a port-forward dial in namespace has already been
-// refused this session.
-func (s *clients) isPortForwardDenied(namespace string) bool {
+// isPortForwardDenied reports whether a port-forward dial to pod has already been refused
+// this session.
+func (s *clients) isPortForwardDenied(pod podKey) bool {
 	s.portForwardDeniedMu.Lock()
-	_, denied := s.portForwardDenied[namespace]
+	_, denied := s.portForwardDenied[pod]
 	s.portForwardDeniedMu.Unlock()
 	return denied
 }

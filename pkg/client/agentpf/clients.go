@@ -138,8 +138,8 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		}
 		conn, cli, err := ac.dialAgent(dialCtx, ns, ai)
 		if err != nil {
-			if ac.owner.isPortForwardDenied(ns) {
-				// A retry can't succeed: the namespace has already refused
+			if ac.owner.isPortForwardDenied(ac.podKey()) {
+				// A retry can't succeed: this pod has already refused
 				// pods/portforward, so this dial failure is that refusal.
 				err = errNoDirectAccess
 			}
@@ -189,7 +189,7 @@ func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.Agen
 	pap := portforward.PodAddress{Name: ai.PodName, Namespace: ns, PodID: types.UID(ai.PodId)}
 	grpcAddr := pap.AddrFor(uint16(ai.ApiPort))
 
-	pfDialer := wrapPortForwardDialer(ac.owner, ns, ac.owner.pfDialerFactory(ac.Cluster))
+	pfDialer := wrapPortForwardDialer(ac.owner, ac.podKey(), ac.owner.pfDialerFactory(ac.Cluster))
 	dialer := agentDialer(ai.QuicSni, &ac.quicDead, &ac.transport,
 		ac.owner.quicEndpointFor, ac.dialAgentQUIC, pfDialer,
 		func(err error) { clog.Infof(ac, "%s: QUIC dial failed, falling back to port-forward: %v", ac, err) })
@@ -241,6 +241,19 @@ func (ac *client) intercepted() bool {
 	ret := ac.info.Intercepted
 	ac.RUnlock()
 	return ret
+}
+
+// podKey returns the identity used to key the port-forward denial cache for this agent's
+// pod. A node-hosted agent's pod runs in the manager's namespace rather than ac.info's own
+// Namespace (the target workload's namespace), so that case is resolved the same way
+// dialAgent resolves the namespace it actually dials.
+func (ac *client) podKey() podKey {
+	ai := ac.info
+	ns := ai.Namespace
+	if ai.NodeAgent {
+		ns = k8s.GetManagerNamespace(ac)
+	}
+	return podKey{namespace: ns, name: ai.PodName, uid: ai.PodId}
 }
 
 func (ac *client) cancel() bool {
@@ -469,11 +482,12 @@ type clients struct {
 
 	// portForwardDeniedMu guards portForwardDenied.
 	portForwardDeniedMu sync.Mutex
-	// portForwardDenied is the set of namespaces where a port-forward dial has been
-	// refused for lack of pods/portforward RBAC. WaitForIP and GetClient treat a
-	// namespace in this set as permanently unavailable for direct agent access, for
-	// the rest of this session.
-	portForwardDenied map[string]struct{}
+	// portForwardDenied is the set of pods for which a port-forward dial has been refused
+	// for lack of pods/portforward RBAC. WaitForIP and GetClient treat a pod in this set as
+	// permanently unavailable for direct agent access, for the rest of this session. Keyed
+	// by pod rather than namespace because RBAC can grant pods/portforward per pod via
+	// resourceNames.
+	portForwardDenied map[podKey]struct{}
 
 	// pfDialerFactory returns the net.Conn dialer used for an agent's port-forward
 	// fallback; production uses portforward.Dialer, tests substitute a fake to avoid
@@ -567,7 +581,7 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 	}
 	var primary, secondary, ternary tunnel.Provider
 	s.clients.Range(func(_ string, c *client) bool {
-		if !c.connected() && s.isPortForwardDenied(c.info.Namespace) {
+		if !c.connected() && s.isPortForwardDenied(c.podKey()) {
 			return true
 		}
 		podIP, ok := netip.AddrFromSlice(c.info.PodIp)
@@ -936,7 +950,7 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, namespac
 			}
 			if errors.Is(err, errNoDirectAccess) {
 				return status.Errorf(codes.Unavailable,
-					"direct agent access in namespace %s refused (pods/portforward) and the QUIC tunnel is not available", namespace)
+					"direct agent access to pod %s.%s refused (pods/portforward) and the QUIC tunnel is not available", ai.PodName, namespace)
 			}
 			select {
 			case <-ctx.Done():
