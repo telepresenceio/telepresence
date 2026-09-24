@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.32.0
-    date: (TBD)
+    date: 2026-09-24
     notes:
       - type: feature
         title: Guided traffic-manager setup with telepresence setup
