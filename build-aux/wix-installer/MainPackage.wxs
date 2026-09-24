@@ -98,9 +98,6 @@
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLDIR" Name="Telepresence"/>
-      <Directory Id="SSHFSFOLDER" Name="SSHFS-Win">
-        <Directory Id="SSHFSBIN" Name="bin"/>
-      </Directory>
     </StandardDirectory>
 
     <StandardDirectory Id="CommonAppDataFolder">
@@ -113,10 +110,6 @@
     </StandardDirectory>
 
     <ComponentGroup Id="TelepresenceFiles">
-      <Component Id="Cmp_RemoveSSH" Guid="3b05194e-3065-4f65-b184-5319eaeed41e" Directory="SSHFSBIN">
-        <!-- Remove the ssh.exe installed by the SSHFS-Win package. It conflicts with a more recent OpenSSH that Windows bundles by default -->
-        <RemoveFile Id="RemoveSSH" Name="ssh.exe" On="install"/>
-      </Component>
       <Component Id="Cmp_WintunDll" Directory="INSTALLDIR" Guid="*">
         <File Id="WintunDll" Source="wintun.dll" KeyPath="yes"/>
       </Component>
