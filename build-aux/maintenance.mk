@@ -8,5 +8,6 @@ update-dependencies: $(dir $(shell find . -name go.mod))
  		 ) || \
  		 go get -u .);\
  	done
+	curl -sfL https://api.github.com/repos/docker/compose/releases/latest | jq -r .tag_name > build-aux/docker-compose.version
 	$(MAKE) clobber generate check-unit
 

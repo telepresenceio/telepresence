@@ -1,0 +1,114 @@
+# Signs the Windows release artifacts with a SignPath Foundation
+# certificate and republishes them to an existing GitHub release.
+#
+# One signing round covers everything: the two standalone telepresence.exe
+# binaries and both MSIs (amd64, arm64), which deep-signs the exes each
+# MSI embeds.
+#
+# The job is skipped until vars.SIGNPATH_ORGANIZATION_ID is set, so it is
+# a no-op before the SignPath portal is configured. workflow_dispatch lets
+# a maintainer run it directly against a pre-release tag with
+# signing-policy=test-signing, which has no approvers, to exercise the
+# pipeline end to end.
+name: Sign Windows release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag to sign (e.g. v2.32.0-rc.2)
+        required: true
+        type: string
+      signing-policy:
+        description: SignPath signing policy slug
+        required: false
+        type: string
+        default: release-signing
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to sign (e.g. v2.32.0-rc.2)
+        required: true
+        type: string
+      signing-policy:
+        description: SignPath signing policy slug
+        required: false
+        type: string
+        default: release-signing
+
+jobs:
+  sign:
+    if: vars.SIGNPATH_ORGANIZATION_ID != ''
+    runs-on: windows-latest
+    environment: windows-signing
+    permissions:
+      contents: write
+      actions: read
+    env:
+      TELEPRESENCE_VERSION: ${{ inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - uses: ./.github/actions/install-dependencies
+        name: install dependencies
+      - name: Compute version
+        shell: bash
+        run: echo "VERSION_NO_V=${TAG#v}" >> "$GITHUB_ENV"
+        env:
+          TAG: ${{ inputs.tag }}
+
+      - name: Download release artifacts
+        shell: bash
+        run: |
+          gh release download ${{ inputs.tag }} \
+            -p telepresence-windows-amd64.zip \
+            -p telepresence-windows-arm64.zip \
+            -p telepresence-windows-amd64.msi \
+            -p telepresence-windows-arm64.msi \
+            -D build-output/unsigned
+
+      # The two standalone exes and both MSIs (which deep-sign the exes
+      # each one embeds).
+      - name: Stage core artifact
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path build-output/signing/core/telepresence-windows-amd64 | Out-Null
+          New-Item -ItemType Directory -Force -Path build-output/signing/core/telepresence-windows-arm64 | Out-Null
+          Expand-Archive -Path build-output/unsigned/telepresence-windows-amd64.zip -DestinationPath build-output/unsigned/amd64 -Force
+          Expand-Archive -Path build-output/unsigned/telepresence-windows-arm64.zip -DestinationPath build-output/unsigned/arm64 -Force
+          Copy-Item build-output/unsigned/amd64/telepresence.exe build-output/signing/core/telepresence-windows-amd64/telepresence.exe
+          Copy-Item build-output/unsigned/arm64/telepresence.exe build-output/signing/core/telepresence-windows-arm64/telepresence.exe
+          Copy-Item build-output/unsigned/telepresence-windows-amd64.msi build-output/signing/core/telepresence-windows-amd64.msi
+          Copy-Item build-output/unsigned/telepresence-windows-arm64.msi build-output/signing/core/telepresence-windows-arm64.msi
+      - name: Upload core artifact
+        id: core
+        uses: actions/upload-artifact@v7
+        with:
+          name: core
+          path: build-output/signing/core
+          retention-days: 1
+      - name: Sign core artifact
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ inputs.signing-policy }}
+          artifact-configuration-slug: core
+          github-artifact-id: ${{ steps.core.outputs.artifact-id }}
+          output-artifact-directory: build-output/signing/core-signed
+          parameters: |
+            version: ${{ env.VERSION_NO_V }}
+
+      - name: Assemble signed release artifacts
+        shell: pwsh
+        run: build-aux/signpath/assemble-release.ps1
+      - name: Verify signatures
+        shell: bash
+        run: make verify-signatures
+      - name: Upload signed artifacts to the release
+        shell: bash
+        run: gh release upload ${{ inputs.tag }} build-output/release/* --clobber

@@ -39,6 +39,11 @@ one pod. Namespace discovery and `telepresence gather-logs` keep working —
 the manager serves both, and controls log access per namespace with the
 `logs.telepresence.io` grant described below.
 
+Against a traffic-manager at v2.32 or later, an explicit
+`--mapped-namespaces` list needs no `pods` grant either: the client trusts
+the manager's own attachment review instead of probing `get pods` in each
+listed namespace.
+
 This requires clients at the release that introduced known-name connection
 or later, and the default `apiPort`; older clients must resolve the
 `traffic-manager` Service to a pod themselves, which is exactly what the
@@ -93,12 +98,58 @@ renders matching client Roles for whichever grant is required
 
 With `telepresence` as the required grant, the per-namespace
 `pods/portforward` grant disappears from the client Roles. Its mechanical
-use goes with it: the client can no longer open direct port-forwards to
-traffic-agents, so attachment traffic routes through the manager — with a
-modest throughput cost — unless the [QUIC
-transport](../reference/quic-transport.md) provides the direct path
-instead. The intermediate `any` setting (the default) accepts either grant
-during a migration.
+use goes with it: the client's first direct port-forward dial to a
+traffic-agent in that namespace is refused, and there is no manager relay
+to fall back on. An attachment in that namespace then needs the [QUIC
+transport](../reference/quic-transport.md), decided independently of this
+grant when an agent is first dialed; without it, the intercept, replace, or
+ingest fails immediately with a clear error. The intermediate `any` setting
+(the default) accepts either grant during a migration.
+
+This is what the client's permissions look like at this step, for a
+developer who connects and attaches to two named workloads in the `shop`
+namespace. One Kubernetes grant remains: the port-forward to the
+traffic-manager's pod, which is how the client still reaches the manager.
+Everything else is policy in the `telepresence.io` group:
+
+```yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: traffic-manager-connect
+  namespace: ambassador
+rules:
+  # The one remaining Kubernetes grant: reaching the manager's pod.
+  - apiGroups: [""]
+    resources: ["pods/portforward"]
+    resourceNames: ["traffic-manager-0"]
+    verbs: ["create"]
+  # Policy: may this identity establish a session?
+  - apiGroups: ["telepresence.io"]
+    resources: ["connections"]
+    verbs: ["create"]
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: telepresence-shop
+  namespace: shop
+rules:
+  # Policy: may this identity attach to these workloads? "create" covers
+  # intercept, replace, and wiretap; "get" covers ingest.
+  - apiGroups: ["telepresence.io"]
+    resources: ["attachments"]
+    resourceNames: ["cart", "checkout"]
+    verbs: ["create", "get"]
+  # Policy: may this identity gather the namespace's pod logs?
+  - apiGroups: ["telepresence.io"]
+    resources: ["logs", "logs/yaml"]
+    verbs: ["get"]
+```
+
+Bind both Roles to the developer with ordinary RoleBindings. Nothing here
+lets the identity read or change pods, services, or namespaces through the
+Kubernetes API.
 
 ## Step 4: Direct Connect, no Kubernetes API access at all
 
@@ -129,13 +180,51 @@ the `telepresence.io` policy grants, unless the required grant is
 `portforward`. See
 [External control endpoint](../reference/external-endpoint.md).
 
+The same developer as in step 3, connecting through Direct Connect, needs
+no Kubernetes grant at all. The connect Role loses its `pods/portforward`
+rule, and what is left in both Roles is policy that the traffic-manager
+evaluates and the Kubernetes API server never sees:
+
+```yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: traffic-manager-connect
+  namespace: ambassador
+rules:
+  - apiGroups: ["telepresence.io"]
+    resources: ["connections"]
+    verbs: ["create"]
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: telepresence-shop
+  namespace: shop
+rules:
+  - apiGroups: ["telepresence.io"]
+    resources: ["attachments"]
+    resourceNames: ["cart", "checkout"]
+    verbs: ["create", "get"]
+  - apiGroups: ["telepresence.io"]
+    resources: ["logs", "logs/yaml"]
+    verbs: ["get"]
+```
+
+The Kubernetes API server would grant this identity nothing: the
+`telepresence.io` resources do not exist there. Whether the developer may
+connect, attach, or read logs is decided entirely by the traffic-manager,
+against the identity it verified when the client authenticated. That is
+what Direct Connect brings: the client's cluster footprint is the policy
+you wrote, and nothing else.
+
 ## The ladder
 
 | Client's Kubernetes permissions | Helm values | Requires |
 |---------------------------------|-------------|----------|
 | Discovery, diagnostics, and port-forward grants | defaults | — |
 | One named `pods/portforward` in the manager namespace, `pods/portforward` per attached namespace | `clientRbac.legacyAccess: false` | current clients, default `apiPort` |
-| Policy-only `telepresence.io` grants | + `security.authorization.requiredGrant: telepresence` | `security.authentication.mode: enforcing`; QUIC for direct agent traffic |
+| Policy-only `telepresence.io` grants | + `security.authorization.requiredGrant: telepresence` | `security.authentication.mode: enforcing`; QUIC tunnel for attachments |
 | None | + `externalEndpoint`, `clientRbac.create: false` | enforcing mode, a persisted TLS certificate, QUIC for Direct Connect attachments |
 
 `telepresence setup` asks about each step above — whether to enforce

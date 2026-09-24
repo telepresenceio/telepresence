@@ -164,6 +164,17 @@ func QuicRelay() Spec {
 	return QuicNodePort()
 }
 
+// QuicNodePortAuthEnforcing returns a manager spec combining QuicNodePort's
+// QUIC tunnel with AuthEnforcing's security.authentication.mode=enforcing,
+// so a suite can prove a QUIC tunnel is still accepted once every RPC call
+// requires a verified identity.
+func QuicNodePortAuthEnforcing() Spec {
+	return Spec{
+		Key:    "quic-nodeport-auth-enforcing",
+		Values: Merge(QuicNodePort().Values, AuthEnforcing().Values),
+	}
+}
+
 // AuthPermissive returns a manager spec that explicitly sets
 // security.authentication.mode to "permissive" -- the chart's own default,
 // set here so the auth area's permissive scenario has a spec named for what
@@ -187,6 +198,22 @@ func AuthEnforcing() Spec {
 	return Spec{
 		Key:    "auth-enforcing",
 		Values: Values{Security: Security{Authentication: Authentication{Mode: "enforcing"}}},
+	}
+}
+
+// NodeAgentAuthEnforcing returns a manager spec combining NodeAgent's
+// node-hosted traffic-agent mode with security.authentication.mode=
+// enforcing: a node-agent attach must authenticate to the manager the same
+// way a sidecar traffic-agent does.
+func NodeAgentAuthEnforcing() Spec {
+	disableH2c := false
+	return Spec{
+		Key: "node-agent-auth-enforcing",
+		Values: Values{
+			NodeAgent: NodeAgentValues{Enabled: true},
+			Agent:     AgentValues{EnableH2cProbing: &disableH2c},
+			Security:  Security{Authentication: Authentication{Mode: "enforcing"}},
+		},
 	}
 }
 

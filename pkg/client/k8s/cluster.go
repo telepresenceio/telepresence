@@ -48,8 +48,8 @@ type Cluster struct {
 	*Kubeconfig
 	MappedNamespaces []string
 
-	// nsLock protects namespaceWatcherSnapshot, namespacesFromManager, currentMappedNamespaces
-	// and namespaceEventHandlers
+	// nsLock protects namespaceWatcherSnapshot, namespacesFromManager,
+	// managerReviewsAccess, currentMappedNamespaces and namespaceEventHandlers
 	nsLock sync.Mutex
 
 	// snapshot maintained by the namespaces watcher or the WatchNamespaces RPC.
@@ -59,6 +59,11 @@ type Cluster struct {
 	// WatchNamespaces RPC instead of the client-side watch; refreshNamespaces then
 	// skips the canAccessNS probe since the manager already scoped the stream.
 	namespacesFromManager bool
+
+	// managerReviewsAccess is true when the connected traffic-manager reviews
+	// attachment permissions itself; refreshNamespaces then skips the
+	// canAccessNS probe for an explicit --mapped-namespaces list too.
+	managerReviewsAccess bool
 
 	// Current Namespace snapshot, filtered by MappedNamespaces
 	currentMappedNamespaces map[string]bool
@@ -529,6 +534,20 @@ func (kc *Cluster) applyNamespaceList(nsl *manager.NamespaceList) {
 	kc.refreshNamespaces()
 }
 
+// SetManagerReviewsAccess records whether the connected traffic-manager reviews
+// attachment permissions itself, so refreshNamespaces can skip the canAccessNS
+// probe for an explicit --mapped-namespaces list. A change re-evaluates the
+// current namespaces at once, replacing any probe result taken before it.
+func (kc *Cluster) SetManagerReviewsAccess(reviews bool) {
+	kc.nsLock.Lock()
+	changed := reviews != kc.managerReviewsAccess
+	kc.managerReviewsAccess = reviews
+	kc.nsLock.Unlock()
+	if changed {
+		kc.refreshNamespaces()
+	}
+}
+
 func (kc *Cluster) SetMappedNamespaces(namespaces []string) bool {
 	sort.Strings(namespaces)
 	if !slices.Equal(namespaces, kc.MappedNamespaces) {
@@ -577,7 +596,7 @@ func (kc *Cluster) refreshNamespaces() {
 	for _, ns := range nss {
 		if kc.shouldBeWatched(ns) {
 			accessOk := true
-			if !(kc.namespacesFromManager || external) {
+			if !(kc.namespacesFromManager || external || kc.managerReviewsAccess) {
 				var ok bool
 				accessOk, ok = kc.currentMappedNamespaces[ns]
 				if !ok {

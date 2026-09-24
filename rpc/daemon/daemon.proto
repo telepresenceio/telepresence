@@ -87,6 +87,11 @@ message DaemonStatus {
   // agent connection is up; an old root daemon that predates this field is
   // indistinguishable from that case, so callers must treat both as "omit".
   repeated AgentTransport agent_transports = 7;
+
+  // vif_interface_name is the name of the local network interface that
+  // carries the session's virtual network (e.g. "tel0" or, on macOS, a
+  // "utunN" name). Empty when there is no active session.
+  string vif_interface_name = 8;
   reserved 3;
 }
 

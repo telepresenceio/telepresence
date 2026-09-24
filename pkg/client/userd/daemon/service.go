@@ -8,7 +8,10 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -75,6 +78,38 @@ type service struct {
 	teleroutePort uint16
 }
 
+// sweepMountPoints removes abandoned "telfs-*" directories under the mounts root. Only
+// empty ones older than a minute go, so a directory another daemon just created for a
+// mount that hasn't started yet is never touched.
+func sweepMountPoints(ctx context.Context, cfg client.Config) {
+	root := cfg.Intercept().MountsRoot
+	if root == "" {
+		root = os.TempDir()
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		clog.Debugf(ctx, "unable to sweep mount point directories under %s: %v", root, err)
+		return
+	}
+	cutoff := time.Now().Add(-time.Minute)
+	removed := 0
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "telfs-") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(root, entry.Name())); err == nil {
+			removed++
+		}
+	}
+	if removed > 0 {
+		clog.Debugf(ctx, "swept %d abandoned mount point directories under %s", removed, root)
+	}
+}
+
 func (s *service) ClientConfig() (clientcmd.ClientConfig, error) {
 	s.clientConfigLock.Lock()
 	cc := s.clientConfig
@@ -98,6 +133,9 @@ func newService(ctx context.Context, cancel context.CancelFunc, cfg client.Confi
 		sessionRunning: make(chan struct{}),
 	}
 	s.initFTPServer(ctx, cfg)
+	if runtime.GOOS != "windows" {
+		sweepMountPoints(ctx, cfg)
+	}
 	close(s.sessionRunning)
 	s.quit = func(sessionIsLocked bool) {
 		cancel()

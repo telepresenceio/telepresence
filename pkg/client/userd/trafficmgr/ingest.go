@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -39,6 +40,10 @@ type ingest struct {
 	handlerContainer string
 	pid              int
 	mounter          remotefs.Mounter
+
+	// ownsMountPoint is true when this daemon created localMountPoint (the CLI asked for
+	// a generated mount point) and is therefore responsible for removing it.
+	ownsMountPoint atomic.Bool
 }
 
 func (ig *ingest) podAccess(rd daemon.DaemonClient) *podAccess {
@@ -59,8 +64,9 @@ func (ig *ingest) podAccess(rd daemon.DaemonClient) *podAccess {
 		readOnly:         true,
 		wg:               &ig.wg,
 	}
+	// An ingest needs no direct agent path: its mounts reach the pod over the tunnel.
 	if err := pa.ensureAccess(ig.ctx, rd); err != nil {
-		clog.Error(ig.ctx, err)
+		clog.Infof(ig.ctx, "ingest %s continues without direct agent access: %v", ig.container, err)
 	}
 	return pa
 }
@@ -193,6 +199,22 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 	// node-agent.
 	nodeAgent := rq.NodeAgent || (ap != nil && ap.nodeAgent)
 
+	mp, ownsMountPoint, err := resolveMountPoint(ctx, rq.MountPoint)
+	if err != nil {
+		return nil, err
+	}
+	rq.MountPoint = mp
+	// Cleared once the directory is attached to an ingest struct, handing ownership of
+	// it to that struct's own removal.
+	mountPointConsumed := false
+	if ownsMountPoint {
+		defer func() {
+			if !mountPointConsumed {
+				removeMountPointDir(ctx, rq.MountPoint)
+			}
+		}()
+	}
+
 	err = s.ensureNoMountConflict(rq.MountPoint, rq.LocalMountPort)
 	if err != nil {
 		return nil, err
@@ -247,7 +269,8 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 			cancel()
 			s.ingestTracker.cancelContainer(ik.workload, ik.container)
 		}
-		return &ingest{
+		mountPointConsumed = true
+		ig := &ingest{
 			ingestKey:       ik,
 			AgentInfo:       ai,
 			ctx:             ctx,
@@ -255,7 +278,9 @@ func (s *session) Ingest(ctx context.Context, rq *rpc.IngestRequest) (ir *rpc.In
 			localMountPoint: rq.MountPoint,
 			localMountPort:  rq.LocalMountPort,
 			localPorts:      rq.LocalPorts,
-		}, false
+		}
+		ig.ownsMountPoint.Store(ownsMountPoint)
+		return ig, false
 	})
 	if !loaded {
 		s.startIngestPodAccess(ctx, ig, true)
@@ -365,10 +390,17 @@ func (s *session) LeaveIngest(rq *rpc.IngestIdentifier) (ii *rpc.IngestInfo, err
 		return nil, err
 	}
 	s.stopHandler(fmt.Sprintf("%s/%s/%s", ig.workload, ig.container, ig.namespace), ig.handlerContainer, ig.pid)
-	ig.cancel()
-	ig.wg.Wait()
+	s.removeIngestMount(ig)
 	s.releaseNodeAgentIfLast(ig)
 	return ig.response(), nil
+}
+
+// removeIngestMount cancels ig's mount/port-forward goroutines, waits for them to finish,
+// and removes a mount point directory this daemon created for it.
+func (s *session) removeIngestMount(ig *ingest) {
+	ig.cancel()
+	ig.wg.Wait()
+	removeOwnedMountPoint(s, &ig.ownsMountPoint, ig.localMountPoint)
 }
 
 // releaseNodeAgentIfLast tells the traffic-manager to drop this session's claim on ig's

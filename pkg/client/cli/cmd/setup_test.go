@@ -3,6 +3,7 @@ package cmd
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -44,4 +45,13 @@ func TestSetupCmdFlags(t *testing.T) {
 	} {
 		assert.Nilf(t, flags.Lookup(name), "expected flag %q to be absent", name)
 	}
+}
+
+// TestSetupCmdRequiresOutputOrApply verifies that run rejects a call with
+// neither --output nor --apply before it touches the cluster.
+func TestSetupCmdRequiresOutputOrApply(t *testing.T) {
+	sc := &setupCommand{}
+	err := sc.run(&cobra.Command{}, nil)
+	assert.ErrorContains(t, err,
+		"specify --output <file> (or --output -) to write the values, --apply to install them, or both")
 }

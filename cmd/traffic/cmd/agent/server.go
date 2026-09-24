@@ -170,6 +170,17 @@ func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID 
 	var drCh chan<- *rpc.DialRequest
 	var stCh <-chan tunnel.Stream
 
+	noWatcherErr := fmt.Errorf("unable to create tunnel to client %s for id %s: no dial watcher", sessionID, id)
+
+	// The wait is bounded: a client that never registers a dial watcher for this session
+	// (e.g. it lost direct agent access) must not hang this call forever.
+	waitTimeout := dialTimeout
+	if waitTimeout < 5*time.Second {
+		waitTimeout = 5 * time.Second
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, waitTimeout)
+	defer cancel()
+
 	// A retry is needed here because what actually happens is that the dial watcher channel drCh is inserted when the
 	// client calls WatchDial. That call arrives only after the client received confirmation that it is intercepting
 	// this agent, and some latency is to be expected.
@@ -189,9 +200,12 @@ func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID 
 			stCh = aw.streamCh
 			return nil
 		}
-		return fmt.Errorf("unable to create tunnel to client %s for id %s: no dial watcher", sessionID, id)
-	}, backoff.WithContext(backoff.NewConstantBackOff(20*time.Millisecond), ctx))
+		return noWatcherErr
+	}, backoff.WithContext(backoff.NewConstantBackOff(20*time.Millisecond), waitCtx))
 	if err != nil {
+		if waitCtx.Err() == context.DeadlineExceeded {
+			return nil, noWatcherErr
+		}
 		return nil, err
 	}
 

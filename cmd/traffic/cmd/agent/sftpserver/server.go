@@ -1,17 +1,7 @@
-// Package sftpserver implements an SFTP server confined to two directory trees: the exports
-// tree (the traffic-agent's own view of what it serves) and the mounts tree that the
-// exported tree's top-level entries symlink into. It is built on sftp.NewRequestServer with
-// Handlers backed by two *os.Root, one per tree, so every request -- however it names its
-// path -- is resolved under one of them and can never escape either, even through ".."
-// segments or a symlink that points elsewhere.
-//
-// Clients request paths under agentconfig.ExportsMountPoint (the traffic-agent's own view
-// of the tree) as well as bare relative paths and "/"; rootRelative maps all of them onto
-// the exports root before any os.Root call is made. cmd/traffic/cmd/agent/config.go's
-// addAppMounts populates each container's exports directory with one absolute symlink per
-// exported top-level mount, pointing into the mounts tree; os.Root refuses to traverse an
-// absolute symlink under any circumstance, so resolve reads such a link itself and switches
-// to the mounts root to serve whatever is past it.
+// Package sftpserver implements an SFTP server confined to the exports tree plus the allowed
+// roots its exported symlinks may lead into. Client paths are walked one component at a time
+// under os.Root; an absolute symlink is redirected onto the allowed root that claims its target,
+// and everything past that redirect is resolved with a single os.Root call.
 package sftpserver
 
 import (
@@ -23,6 +13,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"syscall" //nolint:depguard // "unix" don't work on windows
 	"time"
 
 	"github.com/pkg/sftp"
@@ -30,30 +21,47 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 )
 
-// Server serves SFTP connections confined to the exports and mounts directory trees passed
-// to New. All connections a single Server hands to Serve share its os.Root values and can
-// therefore be served concurrently.
-type Server struct {
-	exports   *os.Root
-	mounts    *os.Root
-	mountsDir string
+// maxRedirectHops bounds the number of allowed-root redirects a single leaf resolution will
+// chase before giving up, matching the symlink-loop limit os/root.go applies internally.
+const maxRedirectHops = 8
+
+// allowedRoot pairs an open *os.Root with the cleaned form of the directory it was opened
+// on, so a symlink's literal target text can be matched against it without ever walking the
+// filesystem to do so.
+type allowedRoot struct {
+	dir  string
+	root *os.Root
 }
 
-// New opens exportsDir and mountsDir as os.Root values and returns a Server that confines
-// every request to one or the other. exportsDir is the tree clients see directly; mountsDir
-// is where an absolute symlink under exportsDir may point (agentconfig.MountPrefixApp in
-// production).
-func New(exportsDir, mountsDir string) (*Server, error) {
+// Server serves SFTP connections confined to the exports directory tree passed to New plus
+// whatever allowed roots its exported symlinks may lead into. All connections a single
+// Server hands to Serve share its os.Root values and can therefore be served concurrently.
+type Server struct {
+	exports *os.Root
+	allowed []allowedRoot
+}
+
+// New opens exportsDir and every entry of linkRoots as an os.Root and returns a Server that
+// confines every request to the exports tree, redirecting through linkRoots wherever an
+// exported symlink's absolute target names one of them. On error, any roots already opened
+// are closed.
+func New(exportsDir string, linkRoots ...string) (*Server, error) {
 	exports, err := os.OpenRoot(exportsDir)
 	if err != nil {
 		return nil, err
 	}
-	mounts, err := os.OpenRoot(mountsDir)
-	if err != nil {
-		_ = exports.Close()
-		return nil, err
+	s := &Server{exports: exports, allowed: []allowedRoot{{dir: path.Clean(exportsDir), root: exports}}}
+	for _, dir := range linkRoots {
+		root, err := os.OpenRoot(dir)
+		if err != nil {
+			for _, a := range s.allowed {
+				_ = a.root.Close()
+			}
+			return nil, err
+		}
+		s.allowed = append(s.allowed, allowedRoot{dir: path.Clean(dir), root: root})
 	}
-	return &Server{exports: exports, mounts: mounts, mountsDir: path.Clean(mountsDir)}, nil
+	return s, nil
 }
 
 // Serve runs an sftp.RequestServer over conn until the client disconnects, ctx is done,
@@ -102,78 +110,170 @@ func rootRelative(p string) string {
 	return rel
 }
 
-// resolve maps a client path to the os.Root that should serve it and the path relative to
-// that root that names it there. A path of one component or less ("." or a bare container
-// directory) is always exports-relative. Otherwise the path splits into <container>/<top>/
-// <rest...>; <container>/<top> is Lstat'd in the exports root. If that Lstat fails because
-// the entry doesn't exist yet (e.g. a file about to be created there) or finds an entry that
-// isn't a symlink, rel stays exports-relative -- the layout addAppMounts never touches, and
-// the one the sftpserver unit tests use. If it is a symlink, its target must be underMounts
-// -- the agent only ever writes links pointing into mountsDir -- and rest, if any, is
-// resolved underneath it in the mounts root.
-func (s *Server) resolve(p string) (*os.Root, string, error) {
-	rel := rootRelative(p)
-	parts := strings.SplitN(rel, "/", 3)
-	if len(parts) < 2 {
-		return s.exports, rel, nil
+// splitRel splits a clean, root-relative path (as rootRelative or a redirect target
+// produces it) into its directory components and final component. The root itself (".")
+// has no final component.
+func splitRel(rel string) (dirs []string, leaf string, ok bool) {
+	if rel == "." {
+		return nil, "", false
 	}
-	linkRel := parts[0] + "/" + parts[1]
-	info, err := s.exports.Lstat(linkRel)
-	switch {
-	case err != nil && !errors.Is(err, os.ErrNotExist):
-		return nil, "", err
-	case err != nil || info.Mode()&os.ModeSymlink == 0:
-		return s.exports, rel, nil
+	parts := strings.Split(rel, "/")
+	return parts[:len(parts)-1], parts[len(parts)-1], true
+}
+
+// readAbsoluteSymlink Lstats rel within root and, if it names a symlink whose literal
+// target text is an absolute path, returns that text and true. Anything else -- rel doesn't
+// exist, rel isn't a symlink, or rel is a symlink with a relative target -- reports
+// ok=false with a nil error: a relative target is left for a native call on root to
+// resolve, and a missing entry is left for the caller's real operation to report as such.
+func (s *Server) readAbsoluteSymlink(root *os.Root, rel string) (target string, ok bool, err error) {
+	info, err := root.Lstat(rel)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return "", false, nil
 	}
-	target, err := s.exports.Readlink(linkRel)
+	target, err = root.Readlink(rel)
 	if err != nil {
-		return nil, "", err
+		return "", false, err
 	}
-	mountsRel, ok := s.underMounts(target)
+	if !path.IsAbs(target) {
+		return "", false, nil
+	}
+	return target, true, nil
+}
+
+// matchAllowedRoot reports whether target -- the literal text of a symlink -- names one of
+// s.allowed's directories, or a path under one of them, and if so returns that root and the
+// part of target relative to it ("." if target names the root's directory itself).
+func (s *Server) matchAllowedRoot(target string) (*os.Root, string, bool) {
+	clean := path.Clean(target)
+	for _, a := range s.allowed {
+		if clean == a.dir {
+			return a.root, ".", true
+		}
+		if rel, ok := strings.CutPrefix(clean, a.dir+"/"); ok {
+			return a.root, rel, true
+		}
+	}
+	return nil, "", false
+}
+
+// walkDirs checks each component of dirs, relative to start, for an absolute symlink.
+// The first one found is redirected through matchAllowedRoot (os.ErrPermission if
+// unclaimed) and the walk stops, returning that root and the redirect's target joined
+// with the unwalked dirs. Relative symlinks and missing components stay in the prefix.
+func (s *Server) walkDirs(start *os.Root, dirs []string) (root *os.Root, prefix string, err error) {
+	for i, comp := range dirs {
+		p := path.Join(prefix, comp)
+		target, ok, rerr := s.readAbsoluteSymlink(start, p)
+		if rerr != nil {
+			return nil, "", rerr
+		}
+		if ok {
+			newRoot, newRel, allowed := s.matchAllowedRoot(target)
+			if !allowed {
+				return nil, "", os.ErrPermission
+			}
+			rest := append([]string{newRel}, dirs[i+1:]...)
+			return newRoot, path.Join(rest...), nil
+		}
+		prefix = p
+	}
+	return start, prefix, nil
+}
+
+// resolved is the result of resolving a client-facing path: rel names the resolved entry
+// within root, one of the Server's long-lived, shared roots.
+type resolved struct {
+	root *os.Root
+	rel  string
+}
+
+// resolve maps a client path to the root and root-relative name that serve it. Every
+// directory component is always redirect-checked. followLeaf additionally controls the
+// final component: true dereferences it exactly like the directory components (Stat, Open
+// and friends must see through a symlink leaf); false leaves it alone, symlink or not, for
+// operations that act on the entry itself (Remove, Mkdir, Lstat, Readlink).
+func (s *Server) resolve(p string, followLeaf bool) (*resolved, error) {
+	dirs, leaf, ok := splitRel(rootRelative(p))
 	if !ok {
-		return nil, "", os.ErrPermission
+		return &resolved{root: s.exports, rel: "."}, nil
 	}
-	if len(parts) == 3 {
-		mountsRel = path.Join(mountsRel, parts[2])
+	root, prefix, err := s.walkDirs(s.exports, dirs)
+	if err != nil {
+		return nil, err
 	}
-	return s.mounts, mountsRel, nil
+	rel := path.Join(prefix, leaf)
+	if !followLeaf {
+		return &resolved{root: root, rel: rel}, nil
+	}
+	for hops := 0; hops < maxRedirectHops; hops++ {
+		target, ok, rerr := s.readAbsoluteSymlink(root, rel)
+		if rerr != nil {
+			return nil, rerr
+		}
+		if !ok {
+			return &resolved{root: root, rel: rel}, nil
+		}
+		newRoot, newRel, allowed := s.matchAllowedRoot(target)
+		if !allowed {
+			return nil, os.ErrPermission
+		}
+		root, rel = newRoot, newRel
+	}
+	return nil, fmt.Errorf("sftpserver: too many nested symlinks resolving %q", p)
 }
 
-// resolveLink is resolve's counterpart for the Lstat and Readlink methods: a path of two
-// components or less names an entry directly in the exports root (the container directory
-// or one of its immediate children), and those methods must see such an entry as itself --
-// symlink or not -- rather than follow it. Anything deeper only exists past such a symlink,
-// so it falls back to resolve, which crosses into the mounts root to reach it.
-func (s *Server) resolveLink(p string) (*os.Root, string, error) {
-	rel := rootRelative(p)
-	if len(strings.SplitN(rel, "/", 3)) < 3 {
-		return s.exports, rel, nil
+// withTwoPaths resolves from and to independently, exactly as a single-path operation
+// would (following redirects, not the leaf). If both land under the same root it calls op
+// once on that root with their root-relative paths, keeping the rename or link a single
+// os.Root operation; if they land under different roots it returns syscall.EXDEV, the error
+// a cross-device rename or link reports, without calling op.
+func (s *Server) withTwoPaths(from, to string, op func(root *os.Root, fromRel, toRel string) error) error {
+	fromRes, err := s.resolve(from, false)
+	if err != nil {
+		return err
 	}
-	return s.resolve(p)
+
+	toRes, err := s.resolve(to, false)
+	if err != nil {
+		return err
+	}
+
+	same, err := sameRoot(fromRes.root, toRes.root)
+	if err != nil {
+		return err
+	}
+	if !same {
+		return syscall.EXDEV
+	}
+	return op(fromRes.root, fromRes.rel, toRes.rel)
 }
 
-// underMounts reports whether target -- the text of a symlink found directly under the
-// exports root -- names s.mountsDir or a path under it, and if so returns the part relative
-// to s.mountsDir. Any other target is refused: addAppMounts never writes a link pointing
-// anywhere else, so one that does is either stale or hostile.
-func (s *Server) underMounts(target string) (string, bool) {
-	target = path.Clean(target)
-	if target == s.mountsDir {
-		return ".", true
+// sameRoot reports whether a and b are open on the same directory. Identity is compared by
+// device and inode, not by pointer, because resolving from and to independently can open two
+// distinct *os.Root values on the same directory.
+func sameRoot(a, b *os.Root) (bool, error) {
+	if a == b {
+		return true, nil
 	}
-	if rel, ok := strings.CutPrefix(target, s.mountsDir+"/"); ok {
-		return rel, true
+	ai, err := a.Stat(".")
+	if err != nil {
+		return false, err
 	}
-	return "", false
+	bi, err := b.Stat(".")
+	if err != nil {
+		return false, err
+	}
+	return os.SameFile(ai, bi), nil
 }
 
 // Fileread implements sftp.FileReader.
 func (s *Server) Fileread(r *sftp.Request) (io.ReaderAt, error) {
-	root, rel, err := s.resolve(r.Filepath)
+	res, err := s.resolve(r.Filepath, true)
 	if err != nil {
 		return nil, err
 	}
-	return root.OpenFile(rel, os.O_RDONLY, 0)
+	return res.root.OpenFile(res.rel, os.O_RDONLY, 0)
 }
 
 // Filewrite implements sftp.FileWriter.
@@ -184,11 +284,11 @@ func (s *Server) Filewrite(r *sftp.Request) (io.WriterAt, error) {
 // OpenFile implements sftp.OpenFileWriter, needed because some clients (e.g. sshfs) open
 // files O_RDWR and read and write through the same handle.
 func (s *Server) OpenFile(r *sftp.Request) (sftp.WriterAtReaderAt, error) {
-	root, rel, err := s.resolve(r.Filepath)
+	res, err := s.resolve(r.Filepath, true)
 	if err != nil {
 		return nil, err
 	}
-	return root.OpenFile(rel, openFlags(r.Pflags()), 0o644)
+	return res.root.OpenFile(res.rel, openFlags(r.Pflags()), 0o644)
 }
 
 // openFlags converts the SFTP open flags carried by a Request into the os.OpenFile flags
@@ -220,78 +320,56 @@ func openFlags(f sftp.FileOpenFlags) int {
 func (s *Server) Filecmd(r *sftp.Request) error {
 	switch r.Method {
 	case "Setstat":
-		root, rel, err := s.resolve(r.Filepath)
+		res, err := s.resolve(r.Filepath, true)
 		if err != nil {
 			return err
 		}
-		return s.setstat(root, rel, r)
+		return s.setstat(res.root, res.rel, r)
 
 	case "Rename":
-		root, rel, target, err := s.resolveTwo(r.Filepath, r.Target)
-		if err != nil {
-			return err
-		}
-		// SFTP-v2 rename fails if the target already exists; PosixRename is the
-		// method that overwrites (see request-example.go's Filecmd).
-		if _, err := root.Lstat(target); err == nil {
-			return os.ErrExist
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		return root.Rename(rel, target)
+		return s.withTwoPaths(r.Filepath, r.Target, func(root *os.Root, from, to string) error {
+			// SFTP-v2 rename fails if the target already exists; PosixRename is
+			// the method that overwrites (see request-example.go's Filecmd).
+			if _, err := root.Lstat(to); err == nil {
+				return os.ErrExist
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			return root.Rename(from, to)
+		})
 
 	case "Rmdir", "Remove":
-		root, rel, err := s.resolve(r.Filepath)
+		res, err := s.resolve(r.Filepath, false)
 		if err != nil {
 			return err
 		}
-		return root.Remove(rel)
+		return res.root.Remove(res.rel)
 
 	case "Mkdir":
-		root, rel, err := s.resolve(r.Filepath)
+		res, err := s.resolve(r.Filepath, false)
 		if err != nil {
 			return err
 		}
-		return root.Mkdir(rel, 0o755)
+		return res.root.Mkdir(res.rel, 0o755)
 
 	case "Link":
-		root, rel, target, err := s.resolveTwo(r.Filepath, r.Target)
-		if err != nil {
-			return err
-		}
-		return root.Link(rel, target)
+		return s.withTwoPaths(r.Filepath, r.Target, func(root *os.Root, from, to string) error {
+			return root.Link(from, to)
+		})
 
 	case "Symlink":
 		// r.Filepath carries the symlink's target text and r.Target its link path
 		// (see request-example.go's Filecmd); the target text is stored verbatim,
-		// not resolved against either root.
-		root, rel, err := s.resolve(r.Target)
+		// not resolved against any root.
+		res, err := s.resolve(r.Target, false)
 		if err != nil {
 			return err
 		}
-		return root.Symlink(r.Filepath, rel)
+		return res.root.Symlink(r.Filepath, res.rel)
 
 	default:
 		return fmt.Errorf("sftpserver: unsupported Filecmd method %q", r.Method)
 	}
-}
-
-// resolveTwo resolves the two paths of a Rename or Link request and requires them to land in
-// the same root: a rename or hard link across the exports/mounts boundary would fail with
-// EXDEV on a real filesystem too.
-func (s *Server) resolveTwo(from, to string) (root *os.Root, fromRel, toRel string, err error) {
-	root, fromRel, err = s.resolve(from)
-	if err != nil {
-		return nil, "", "", err
-	}
-	toRoot, toRel, err := s.resolve(to)
-	if err != nil {
-		return nil, "", "", err
-	}
-	if root != toRoot {
-		return nil, "", "", fmt.Errorf("sftpserver: %q and %q are not on the same device", from, to)
-	}
-	return root, fromRel, toRel, nil
 }
 
 // setstat applies the attributes carried by a Setstat request to rel under root, in the same
@@ -335,11 +413,9 @@ func (s *Server) setstat(root *os.Root, rel string, r *sftp.Request) error {
 // PosixRename implements sftp.PosixRenameFileCmder: unlike Rename it overwrites an
 // existing target, matching POSIX rename(2) semantics.
 func (s *Server) PosixRename(r *sftp.Request) error {
-	root, rel, target, err := s.resolveTwo(r.Filepath, r.Target)
-	if err != nil {
-		return err
-	}
-	return root.Rename(rel, target)
+	return s.withTwoPaths(r.Filepath, r.Target, func(root *os.Root, from, to string) error {
+		return root.Rename(from, to)
+	})
 }
 
 // listerat implements sftp.ListerAt over a fixed slice of os.FileInfo, the pattern used by
@@ -373,11 +449,11 @@ func (n symlinkInfo) Sys() any           { return nil }
 func (s *Server) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 	switch r.Method {
 	case "List":
-		root, rel, err := s.resolve(r.Filepath)
+		res, err := s.resolve(r.Filepath, true)
 		if err != nil {
 			return nil, err
 		}
-		f, err := root.Open(rel)
+		f, err := res.root.Open(res.rel)
 		if err != nil {
 			return nil, err
 		}
@@ -397,22 +473,22 @@ func (s *Server) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 		return listerat(infos), nil
 
 	case "Stat":
-		root, rel, err := s.resolve(r.Filepath)
+		res, err := s.resolve(r.Filepath, true)
 		if err != nil {
 			return nil, err
 		}
-		info, err := root.Stat(rel)
+		info, err := res.root.Stat(res.rel)
 		if err != nil {
 			return nil, err
 		}
 		return listerat{info}, nil
 
 	case "Readlink":
-		root, rel, err := s.resolveLink(r.Filepath)
+		res, err := s.resolve(r.Filepath, false)
 		if err != nil {
 			return nil, err
 		}
-		target, err := root.Readlink(rel)
+		target, err := res.root.Readlink(res.rel)
 		if err != nil {
 			return nil, err
 		}
@@ -426,11 +502,11 @@ func (s *Server) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
 // Lstat implements sftp.LstatFileLister, so Lstat requests see symlinks themselves
 // instead of what they point to.
 func (s *Server) Lstat(r *sftp.Request) (sftp.ListerAt, error) {
-	root, rel, err := s.resolveLink(r.Filepath)
+	res, err := s.resolve(r.Filepath, false)
 	if err != nil {
 		return nil, err
 	}
-	info, err := root.Lstat(rel)
+	info, err := res.root.Lstat(res.rel)
 	if err != nil {
 		return nil, err
 	}

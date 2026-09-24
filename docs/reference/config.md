@@ -61,6 +61,14 @@ Values for `client.cluster` controls aspects on how client's connection to the t
 > services) keeps working, which makes `false` meaningful only when Telepresence is used purely as
 > a VPN.
 
+With `agentPortForward` left at its default `true`, whether a given namespace actually gets a
+direct channel to its agents is decided per namespace, the first time an agent there is dialed,
+not up front when connecting. There is no manager relay for agent traffic: a client without
+`pods/portforward` in that namespace has its first direct dial refused, and needs the
+[QUIC transport](quic-transport.md) instead, which doesn't depend on that permission. Without
+either, an attachment (intercept, replace, or ingest) in that namespace fails immediately with a
+clear error.
+
 ### Docker
 Values for the `client.docker` provides docker specific options.
 
@@ -192,6 +200,7 @@ The `intercept` controls applies to how Telepresence will intercept the communic
 | `localShortcut` | Connect local traffic to destinations covered by the client's own intercepts directly to the local intercept handler instead of tunneling to the cluster | [boolean][yaml-bool] | true       |
 | `localShortcutIsGlobal` | Apply the local shortcut to all intercepts, including those with header or path filters                      | [boolean][yaml-bool] | true       |
 | `mountsRoot`  | Directory that will be used as the root for all automatically generated mount directories (not applicable on windows) | [string][yaml-str]   | env:TMPDIR |
+| `sshfsPath`   | Path of the sshfs executable (the `sshfs-win` launcher on Windows). When unset, `sshfs` is found on `PATH`; on Windows, `sshfs-win` is found on `PATH` or in SSHFS-Win's installation directory under Program Files | [string][yaml-str]   |            |
 
 #### Local shortcut
 

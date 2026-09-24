@@ -6,13 +6,13 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-
-	"github.com/telepresenceio/telepresence/v2/pkg/client"
 )
 
-func prepare(ctx context.Context, cwd string, mountPoint string) (string, error) {
+func prepare(_ context.Context, cwd string, mountPoint string) (string, error) {
 	if mountPoint == "" {
-		return os.MkdirTemp(client.GetConfig(ctx).Intercept().MountsRoot, "telfs-")
+		// The user daemon creates the directory and reports it back as
+		// ClientMountPoint.
+		return "true", nil
 	}
 
 	// filepath.Abs uses os.Getwd but we need the working dir of the cli

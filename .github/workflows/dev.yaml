@@ -90,6 +90,8 @@ jobs:
               [ -n "$f" ] || continue
               case "$f" in
                 docs/* | *.md | CHANGELOG.yml) ;;
+                build-aux/wix-installer/* | build-aux/signpath/* | build-aux/winversion.sh | */winres.json) ;;
+                build-aux/pkg-installer/* | build-aux/systemd-installer/* | packaging/homebrew-*) ;;
                 *)
                   echo "not a docs-only change: $f"
                   return 1

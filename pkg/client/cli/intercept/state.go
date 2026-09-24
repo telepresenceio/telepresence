@@ -3,8 +3,6 @@ package intercept
 import (
 	"context"
 	"fmt"
-	"os"
-	"runtime"
 	"slices"
 	"strings"
 
@@ -279,15 +277,6 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 
 func (s *state) leave(ctx context.Context) error {
 	progress.Start(ctx, "Leaving")
-	m := s.info.Mount
-	if m != nil && m.LocalDir != "" {
-		defer func() {
-			if runtime.GOOS != "windows" {
-				// remove if empty
-				_ = os.Remove(m.LocalDir)
-			}
-		}()
-	}
 	n := strings.TrimSpace(s.Name())
 	ud := daemon.MustGetUserClient(ctx)
 	progress.Workingf(ctx, "Ending %s", s.what())

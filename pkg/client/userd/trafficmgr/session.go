@@ -87,6 +87,11 @@ type session struct {
 	service            userd.Service
 	subnetViaWorkloads []*rootdRpc.SubnetViaWorkload
 
+	// closing is set when the session is being cancelled, before the root daemon
+	// is told to disconnect, so the activity watcher does not treat the resulting
+	// EOF as a lost connection and reconnect.
+	closing atomic.Bool
+
 	rootDaemonLock          sync.RWMutex
 	rootDaemon              rootdRpc.DaemonClient
 	rootDaemonConn          *grpc.ClientConn
@@ -163,6 +168,10 @@ type session struct {
 	// are deleted as soon as the intercept arrives and gets stored in currentIntercepts
 	interceptWaiters map[string]*awaitIntercept
 
+	// agentless holds the ids of established intercepts whose traffic-agent is gone, so the
+	// loss and the later re-attach are each logged once. Only the session-events loop touches it.
+	agentless map[string]struct{}
+
 	isPodDaemon bool
 
 	// Synthetic IPs are generated when the targetIP is a hostname, so that we can defer the
@@ -200,31 +209,15 @@ type session struct {
 	namespaceWatchOnce sync.Once
 }
 
-// agentPodWatchNamespaces returns the namespaces in which this client watches
-// agent pods: nil when cluster.agentPortForward is disabled (there's no
-// channel to traffic-agents at all), otherwise the mapped namespaces this
-// client can port-forward to. This is the same computation the root daemon's
-// Start used to perform on its own (rootd/session.go); the user daemon now
-// performs it once and passes the result to the traffic-manager
-// (SessionEventsRequest.Namespaces) and to the root daemon
-// (NetworkConfig.AgentPodNamespaces) so both sides agree without computing it
-// independently.
+// agentPodWatchNamespaces returns the namespaces in which this client watches agent pods:
+// nil when cluster.agentPortForward is off, otherwise every mapped namespace. Whether a
+// namespace yields a direct connection is decided per agent when it is dialed. The result
+// goes to both the traffic-manager (SessionEventsRequest) and the root daemon (NetworkConfig).
 func (s *session) agentPodWatchNamespaces() []string {
 	s.agentPodWatchNamespacesOnce.Do(func() {
-		cc := client.GetConfig(s).Cluster()
-		if !cc.AgentPortForward {
-			return
-		}
-		if cc.UsesExternalManager() {
-			// External manager transport: no Kubernetes API access, so
-			// CanPortForward can't run. Keep every mapped namespace; the
-			// manager reviews attach permissions itself.
+		if client.GetConfig(s).Cluster().AgentPortForward {
 			s.agentPodWatchNamespacesValue = s.GetCurrentNamespaces(true)
-			return
 		}
-		s.agentPodWatchNamespacesValue = slices.DeleteFunc(s.GetCurrentNamespaces(true), func(ns string) bool {
-			return !k8s.CanPortForward(s, ns)
-		})
 	})
 	return s.agentPodWatchNamespacesValue
 }
@@ -1236,6 +1229,7 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 		// We do not want to override the local config with the traffic-manager's config even if the local config is empty.
 		cfg.Cluster().MappedNamespaces = clientMappedNamespaces
 		namespaces = effectiveMappedNamespaces(namespaces, clientMappedNamespaces, tmMappedNamespaces)
+		s.SetManagerReviewsAccess(s.managerSupportsWatchNamespaces())
 		changed := s.SetMappedNamespaces(namespaces)
 		switch {
 		case len(namespaces) == 0:
@@ -1440,7 +1434,7 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 	if !svc.RootSessionInProcess() {
 		s.startRootDaemonActivityWatcher(rd, generation)
 	}
-	clog.Debug(s, "Connected to root daemon")
+	clog.Info(s, "Connected to root daemon")
 	return nil
 }
 
@@ -1448,8 +1442,7 @@ func (s *session) startRootDaemonActivityWatcher(rd rootdRpc.DaemonClient, gener
 	go func() {
 		aw, err := rd.ActivityWatcher(s, &empty.Empty{})
 		if err != nil {
-			if !errors.Is(err, context.Canceled) && s.Err() == nil {
-				clog.Errorf(s, "activity watcher failed: %v", err)
+			if s.rootDaemonLost(err) {
 				s.reconnectRootDaemon(generation, err)
 			}
 			return
@@ -1457,8 +1450,7 @@ func (s *session) startRootDaemonActivityWatcher(rd rootdRpc.DaemonClient, gener
 		for {
 			at, err := aw.Recv()
 			if err != nil {
-				if !errors.Is(err, context.Canceled) && s.Err() == nil {
-					clog.Errorf(s, "activity watcher failed: %v", err)
+				if s.rootDaemonLost(err) {
 					s.reconnectRootDaemon(generation, err)
 				}
 				return
@@ -1492,6 +1484,22 @@ func (s *session) RootSessionEndMetrics() *rootdRpc.Activity {
 	return a
 }
 
+// rootDaemonLost reports whether an activity watcher error means the root daemon
+// connection was lost while the session is still live, which is when a reconnect
+// is wanted. An error caused by the session ending is not.
+func (s *session) rootDaemonLost(err error) bool {
+	if errors.Is(err, context.Canceled) || s.Err() != nil || s.closing.Load() {
+		return false
+	}
+	clog.Errorf(s, "activity watcher failed: %v", err)
+	return true
+}
+
+// MarkClosing records that the session is being cancelled.
+func (s *session) MarkClosing() {
+	s.closing.Store(true)
+}
+
 func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 	s.rootDaemonReconnectLock.Lock()
 	defer s.rootDaemonReconnectLock.Unlock()
@@ -1506,7 +1514,7 @@ func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 	clog.Warnf(s, "root daemon connection lost: %v; reconnecting", cause)
 
 	backoff := 200 * time.Millisecond
-	for attempt := 1; s.Err() == nil; attempt++ {
+	for attempt := 1; s.Err() == nil && !s.closing.Load(); attempt++ {
 		nc, isPodDaemon := s.rootDaemonReconnectConfig()
 		if nc == nil {
 			clog.Error(s, "unable to reconnect root daemon: missing network configuration")

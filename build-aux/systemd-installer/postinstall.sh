@@ -26,9 +26,13 @@ esac
 # Reload systemd to pick up the new service file (may fail in containers)
 systemctl daemon-reload 2>/dev/null || true
 
-# Enable and start the service
+# Enable the service; restart it when an upgrade replaced a running daemon
 systemctl enable telepresence-rootd.service 2>/dev/null || true
-systemctl start telepresence-rootd.service 2>/dev/null || true
+if systemctl is-active --quiet telepresence-rootd.service 2>/dev/null; then
+    systemctl restart telepresence-rootd.service 2>/dev/null || true
+else
+    systemctl start telepresence-rootd.service 2>/dev/null || true
+fi
 
 echo ""
 echo "Telepresence has been installed successfully!"

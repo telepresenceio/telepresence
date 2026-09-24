@@ -1,0 +1,18 @@
+{
+  "RT_VERSION": {
+    "#1": {
+      "0000": {
+        "info": {
+          "0409": {
+            "CompanyName": "The Telepresence Authors",
+            "FileDescription": "Telepresence CLI and daemons",
+            "InternalName": "telepresence",
+            "LegalCopyright": "Copyright The Telepresence Authors. Licensed under the Apache License 2.0.",
+            "OriginalFilename": "telepresence.exe",
+            "ProductName": "Telepresence"
+          }
+        }
+      }
+    }
+  }
+}

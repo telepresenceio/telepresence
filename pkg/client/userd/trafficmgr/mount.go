@@ -3,7 +3,10 @@ package trafficmgr
 import (
 	"context"
 	"net/netip"
+	"os"
+	"runtime"
 	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -85,6 +88,42 @@ func (pa *podAccess) startMount(ctx context.Context, iceptWG, podWG *sync.WaitGr
 	if err != nil && ctx.Err() == nil {
 		clog.Error(ctx, err)
 	}
+}
+
+// resolveMountPoint turns the "true" sentinel used by the CLI to request a
+// generated mount point into a freshly created temporary directory under the
+// configured mounts root. Any other value, including "", is returned as-is.
+func resolveMountPoint(ctx context.Context, mountPoint string) (resolved string, owns bool, err error) {
+	if mountPoint != "true" {
+		return mountPoint, false, nil
+	}
+	dir, err := os.MkdirTemp(client.GetConfig(ctx).Intercept().MountsRoot, "telfs-")
+	if err != nil {
+		return "", false, err
+	}
+	return dir, true, nil
+}
+
+// removeMountPointDir removes an empty mount point directory created by
+// resolveMountPoint. Windows mount points are drive letters, never a
+// directory this daemon created, so this is a no-op there.
+func removeMountPointDir(ctx context.Context, dir string) {
+	if dir == "" || runtime.GOOS == "windows" {
+		return
+	}
+	if err := os.Remove(dir); err != nil {
+		clog.Debugf(ctx, "failed to remove mount point directory %s: %v", dir, err)
+	}
+}
+
+// removeOwnedMountPoint removes dir if owns is currently true, and clears it
+// so a second call (a manager-initiated removal racing an explicit leave) is
+// a no-op.
+func removeOwnedMountPoint(ctx context.Context, owns *atomic.Bool, dir string) {
+	if !owns.CompareAndSwap(true, false) {
+		return
+	}
+	removeMountPointDir(ctx, dir)
 }
 
 func (s *session) ensureNoMountConflict(localMountPoint string, localMountPort int32) (err error) {

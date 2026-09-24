@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/netip"
-	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
@@ -28,6 +27,7 @@ import (
 	cliDaemon "github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/remotefs"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/userd/trafficmgr"
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
@@ -137,6 +137,7 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 			cause = context.Canceled
 		}
 		clog.Infof(session, "canceling user daemon session: %v", cause)
+		session.MarkClosing()
 		if err := session.ClearIngestsAndIntercepts(); err != nil {
 			clog.Errorf(ctx, "failed to clear intercepts: %v", err)
 		}
@@ -415,18 +416,16 @@ func (s *service) RemoteMountAvailability(ctx context.Context, ex *empty.Empty) 
 
 	// Use CombinedOutput to include stderr which has information about whether they
 	// need to upgrade to a newer version of macFUSE or not
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = proc.CommandContext(ctx, "sshfs-win", "cmd", "-V")
-	} else {
-		cmd = proc.CommandContext(ctx, "sshfs", "-V")
-	}
+	cmd := proc.CommandContext(ctx, remotefs.SshfsExecutable(ctx), remotefs.SshfsVersionArgs()...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		clog.Errorf(ctx, "sshfs not installed: %v", err)
 		msg := "sshfs is not installed on your local machine"
-		if runtime.GOOS == "darwin" {
+		switch runtime.GOOS {
+		case "darwin":
 			msg += `. Install it with "brew install fuse-t fuse-t-sshfs"`
+		case "windows":
+			msg += ". Install WinFsp (https://winfsp.dev/rel/) and SSHFS-Win (https://github.com/winfsp/sshfs-win/releases)"
 		}
 		return ex, errcat.User.New(msg)
 	}

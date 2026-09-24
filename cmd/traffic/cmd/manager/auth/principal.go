@@ -55,3 +55,20 @@ func AuthUnavailable(ctx context.Context) bool {
 	v, _ := ctx.Value(authUnavailableKey{}).(bool)
 	return v
 }
+
+type sessionCredentialKey struct{}
+
+// WithSessionCredential returns a context recording that the caller has
+// proved possession of the credential minted for sessionID (e.g. a QUIC
+// stream authenticated by the client certificate whose CommonName is
+// sessionID).
+func WithSessionCredential(ctx context.Context, sessionID string) context.Context {
+	return context.WithValue(ctx, sessionCredentialKey{}, sessionID)
+}
+
+// SessionCredentialFrom returns the session ID recorded by
+// WithSessionCredential, and whether one was present.
+func SessionCredentialFrom(ctx context.Context) (sessionID string, ok bool) {
+	sessionID, ok = ctx.Value(sessionCredentialKey{}).(string)
+	return sessionID, ok
+}

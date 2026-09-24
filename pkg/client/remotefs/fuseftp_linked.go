@@ -95,12 +95,14 @@ func (m *ftpMounter) Start(ctx context.Context, workload, container, clientMount
 		}
 
 		m.ftpClient = ftpClient
-		// Ensure unmount when intercept context is cancelled
+		// Hold the wait group until the FUSE host has actually unmounted, so the
+		// mount point directory can be removed once the group releases.
 		m.iceptWG.Add(1)
 		go func() {
 			defer m.iceptWG.Done()
 			<-ctx.Done()
 			clog.Debugf(ctx, "Unmounting FTP file system for container %s[%s] (address %s) at %q", workload, container, podAddrPort, clientMountPoint)
+			host.Stop()
 		}()
 		clog.Infof(ctx, "File system for container %s[%s] (address %s) successfully mounted%s at %q", workload, container, podAddrPort, roTxt, clientMountPoint)
 		return nil

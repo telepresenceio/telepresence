@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,6 +35,17 @@ func classifyProvider(nodes []core.Node) string {
 		}
 	}
 	return "unknown"
+}
+
+// providerDisplay renders a provider identifier for people: the managed
+// Kubernetes offerings are acronyms, anything else is shown as-is.
+func providerDisplay(provider string) string {
+	switch provider {
+	case "gke", "eks", "aks":
+		return strings.ToUpper(provider)
+	default:
+		return provider
+	}
 }
 
 func isCloudProvider(provider string) bool {
@@ -67,12 +79,12 @@ func (p *Prober) probeQuic(nodes []core.Node, nodesErr error, provider string, s
 	case isCloudProvider(provider):
 		facts.LoadBalancer = Finding{
 			Verdict:  VerdictProbable,
-			Evidence: append([]string{fmt.Sprintf("no LoadBalancer service observed yet, but provider %s typically supports them", provider)}, listEvidence...),
+			Evidence: append([]string{fmt.Sprintf("no LoadBalancer service observed yet, but provider %s typically supports them", providerDisplay(provider))}, listEvidence...),
 		}
 	default:
 		facts.LoadBalancer = Finding{
 			Verdict:  VerdictNo,
-			Evidence: append([]string{fmt.Sprintf("no LoadBalancer capability observed (provider: %s)", provider)}, listEvidence...),
+			Evidence: append([]string{fmt.Sprintf("no LoadBalancer capability observed (provider: %s)", providerDisplay(provider))}, listEvidence...),
 		}
 	}
 

@@ -5,7 +5,70 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/telepresenceio/telepresence/rpc/v2/daemon"
+	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 )
+
+// fakeWaitForAgentIPClient is a daemon.DaemonClient that only implements WaitForAgentIP;
+// ensureAccess doesn't call anything else on the daemon client.
+type fakeWaitForAgentIPClient struct {
+	daemon.DaemonClient
+	rsp *daemon.WaitForAgentIPResponse
+	err error
+}
+
+func (f *fakeWaitForAgentIPClient) WaitForAgentIP(
+	context.Context, *daemon.WaitForAgentIPRequest, ...grpc.CallOption,
+) (*daemon.WaitForAgentIPResponse, error) {
+	return f.rsp, f.err
+}
+
+// TestEnsureAccess_UnavailableBecomesUserError proves that ensureAccess turns a daemon
+// response of codes.Unavailable -- the daemon found no direct path to the agent -- into a
+// user-facing error that fails the attachment immediately, carrying the daemon's message
+// plus the remedy, instead of silently proceeding as if the manager would forward traffic.
+func TestEnsureAccess_UnavailableBecomesUserError(t *testing.T) {
+	ctx := client.WithConfig(context.Background(), client.GetDefaultConfig())
+	pa := &podAccess{
+		ctx:       ctx,
+		namespace: "alpha",
+		podIP:     "10.244.0.7",
+	}
+	rd := &fakeWaitForAgentIPClient{
+		err: status.Error(codes.Unavailable,
+			"direct agent access in namespace alpha refused (pods/portforward) and the QUIC tunnel is not available"),
+	}
+
+	err := pa.ensureAccess(ctx, rd)
+	require.Error(t, err)
+	assert.Equal(t, errcat.User, errcat.GetCategory(err))
+	assert.Contains(t, err.Error(), "direct agent access in namespace alpha refused (pods/portforward) and the QUIC tunnel is not available")
+	assert.Contains(t, err.Error(), "grant pods/portforward in that namespace or enable the QUIC tunnel (quicTunnel.enabled)")
+}
+
+// TestEnsureAccess_OKUpdatesPodIP proves the success path is unaffected: a codes.OK
+// response still rewrites pa.podIP to the local IP the daemon forwarded to.
+func TestEnsureAccess_OKUpdatesPodIP(t *testing.T) {
+	ctx := client.WithConfig(context.Background(), client.GetDefaultConfig())
+	pa := &podAccess{
+		ctx:       ctx,
+		namespace: "alpha",
+		podIP:     "10.244.0.7",
+	}
+	rd := &fakeWaitForAgentIPClient{
+		rsp: &daemon.WaitForAgentIPResponse{LocalIp: []byte{127, 0, 0, 1}},
+	}
+
+	err := pa.ensureAccess(ctx, rd)
+	require.NoError(t, err)
+	assert.Equal(t, "127.0.0.1", pa.podIP)
+}
 
 // alivePodKey seeds lpf.alivePods directly with a no-op podAccessSync so
 // cancelUnwanted's scoping can be exercised without going through start's

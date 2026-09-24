@@ -6,6 +6,7 @@ package setup
 import (
 	"context"
 	"net/http"
+	"net/netip"
 	"time"
 
 	core "k8s.io/api/core/v1"
@@ -217,13 +218,16 @@ func DefaultCandidateValues() *helm.Values {
 type Prober struct {
 	KubeClient       kubernetes.Interface
 	ManagerNamespace string
-	Context          string          // kubeconfig context name, recorded in the facts
-	Server           string          // API server URL, recorded in the facts
-	CandidateValues  *helm.Values    // values for the P1 chart render; nil means DefaultCandidateValues()
-	UpdateCheckHost  string          // default "app.getambassador.io"
-	HTTPClient       *http.Client    // default a client with a short timeout
-	Progress         func(string)    // called with a phase description as each probe starts; nil is silent
-	ClientAuth       ClientAuthFacts // the client's own credential kinds, recorded verbatim into the facts
+	Context          string       // kubeconfig context name, recorded in the facts
+	Server           string       // API server URL, recorded in the facts
+	CandidateValues  *helm.Values // values for the P1 chart render; nil means DefaultCandidateValues()
+	UpdateCheckHost  string       // default "app.getambassador.io"
+	HTTPClient       *http.Client // default a client with a short timeout
+	Progress         func(string) // called with a phase description as each probe starts; nil is silent
+	// Outcome is called with a phase's one-line result as each probe finishes;
+	// nil is silent.
+	Outcome    func(phase string, verdict Verdict, summary string)
+	ClientAuth ClientAuthFacts // the client's own credential kinds, recorded verbatim into the facts
 
 	// ReleaseLookup finds an existing traffic-manager Helm release; nil disables
 	// P6 and ReleaseFacts stays zero.
@@ -232,6 +236,13 @@ type Prober struct {
 	// RouteSource reads the workstation's routing table; nil means
 	// routing.GetRoutingTable.
 	RouteSource func(ctx context.Context) ([]*routing.Route, error)
+
+	// ActiveRoutes reports the subnets an already-connected Telepresence
+	// session routes and the name of the local interface that carries them,
+	// so the routing probe can exclude only that session's own routes from
+	// conflict detection. nil means defaultActiveRoutes, which asks the root
+	// daemon; ok is false whenever there is no session to ask.
+	ActiveRoutes func(ctx context.Context) (subnets []netip.Prefix, interfaceName string, ok bool)
 }
 
 func (p *Prober) candidateValues() *helm.Values {
@@ -281,28 +292,57 @@ func (p *Prober) GatherFacts(ctx context.Context) (*ClusterFacts, error) {
 	}
 	p.progress("Probing install privileges")
 	facts.Privileges = p.probeRBAC(ctx, nsExists)
+	pv, ps, pe := privilegesSummary(&facts.Privileges)
+	p.outcome("Probing install privileges", pv, ps, pe)
+
 	p.progress("Probing QUIC viability")
 	facts.Quic = p.probeQuic(nodes, nodesErr, provider, services, listEvidence)
+	qv, qs, qe := quicSummary(&facts.Quic)
+	p.outcome("Probing QUIC viability", qv, qs, qe)
+
 	p.progress("Probing node-agent viability")
 	facts.NodeAgent = p.probeNodeAgent(ctx, nodes, nodesErr, provider, nsExists)
+	nav, nas, nae := nodeAgentSummary(&facts.NodeAgent)
+	p.outcome("Probing node-agent viability", nav, nas, nae)
+
 	p.progress("Probing webhook access")
 	facts.Webhook = p.probeWebhook(ctx, provider)
+	whv, whs, whe := webhookSummary(&facts.Webhook)
+	p.outcome("Probing webhook access", whv, whs, whe)
+
 	p.progress("Counting namespaces")
 	facts.Namespaces = p.probeNamespaceScale(ctx)
+	nsv, nss, nse := namespacesSummary(&facts.Namespaces)
+	p.outcome("Counting namespaces", nsv, nss, nse)
+
 	p.progress("Looking for an existing installation")
 	facts.Release = p.probeRelease(ctx)
+	rv, rs, re := releaseSummary(&facts.Release)
+	p.outcome("Looking for an existing installation", rv, rs, re)
+
 	p.progress("Checking installation health")
 	if facts.Release.Installed {
 		mw := p.managerWorkload(ctx)
 		facts.Release.Workload = mw.Kind
 		facts.Health = p.probeHealth(ctx, &facts.Release, p.ClientAuth, mw)
 	}
+	hv, hs, he := healthSummary(&facts.Release, facts.Health)
+	p.outcome("Checking installation health", hv, hs, he)
+
 	p.progress("Checking for a client update")
 	facts.ClientUpdate = <-updateCh
+	cuv, cus, cue := clientUpdateSummary(&facts.ClientUpdate)
+	p.outcome("Checking for a client update", cuv, cus, cue)
+
 	p.progress("Checking for subnet conflicts")
 	facts.Routing = p.probeRouting(ctx, nodes, services)
+	rtv, rts, rte := routingSummary(&facts.Routing)
+	p.outcome("Checking for subnet conflicts", rtv, rts, rte)
+
 	p.progress("Probing external endpoint prerequisites")
 	facts.External = p.probeExternal(ctx)
+	ev, es, ee := externalSummary(&facts.External)
+	p.outcome("Probing external endpoint prerequisites", ev, es, ee)
 
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -314,6 +354,19 @@ func (p *Prober) progress(phase string) {
 	if p.Progress != nil {
 		p.Progress(phase)
 	}
+}
+
+// outcome reports a finished phase's verdict and summary. A "no" verdict
+// gets its first evidence line appended, so the reason is visible without
+// reading the findings section.
+func (p *Prober) outcome(phase string, verdict Verdict, summary string, evidence []string) {
+	if p.Outcome == nil {
+		return
+	}
+	if verdict == VerdictNo && len(evidence) > 0 {
+		summary += ": " + evidence[0]
+	}
+	p.Outcome(phase, verdict, summary)
 }
 
 // namespaceExists reports whether the manager namespace exists. An RBAC

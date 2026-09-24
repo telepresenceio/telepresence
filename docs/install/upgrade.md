@@ -17,8 +17,8 @@ Before upgrading, stop any live Telepresence processes with
 A few notes:
 
 - The package installers (the macOS `.pkg`, the Linux `.deb`/`.rpm` packages,
-  and the Windows setup installer) replace the previous version and restart
-  the root daemon service.
+  and the Windows MSI) replace the previous version and restart the root
+  daemon service.
 - Homebrew users upgrade with
   `brew upgrade telepresenceio/telepresence/telepresence-oss`.
 - When replacing a manually downloaded binary on an Apple silicon Mac, remove

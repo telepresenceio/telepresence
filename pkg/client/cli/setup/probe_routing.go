@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"strings"
 
 	core "k8s.io/api/core/v1"
 
@@ -30,6 +31,10 @@ type RoutingConflict struct {
 type RoutingFacts struct {
 	Summary   Finding           `json:"summary"`
 	Conflicts []RoutingConflict `json:"conflicts,omitempty"`
+	// ActiveSessionSubnets are the local routes that were excluded from
+	// conflict detection because they belong to an already-connected
+	// Telepresence session rather than to a foreign route.
+	ActiveSessionSubnets []string `json:"activeSessionSubnets,omitempty"`
 }
 
 // clusterSubnet is a subnet the cluster claims, with the source it was
@@ -60,12 +65,23 @@ func (p *Prober) probeRouting(ctx context.Context, nodes []core.Node, services [
 			Evidence: []string{fmt.Sprintf("the workstation's routing table could not be read: %v", err)},
 		}}
 	}
+	activeSubnets, activeInterface, activeOK := p.activeRoutes(ctx)
 
 	var conflicts []RoutingConflict
 	var evidence []string
+	var excluded []string
+	excludedSeen := map[string]bool{}
 	for _, sn := range subnets {
 		for _, rt := range routes {
 			if !relevantRoute(rt) || !prefixesOverlap(sn.prefix, rt.RoutedNet) {
+				continue
+			}
+			if isActiveSessionRoute(rt, activeSubnets, activeInterface, activeOK) {
+				key := rt.RoutedNet.String()
+				if !excludedSeen[key] {
+					excludedSeen[key] = true
+					excluded = append(excluded, key)
+				}
 				continue
 			}
 			conflicts = append(conflicts, RoutingConflict{
@@ -78,12 +94,16 @@ func (p *Prober) probeRouting(ctx context.Context, nodes []core.Node, services [
 				sn.prefix, sn.source, rt.RoutedNet, rt.InterfaceName))
 		}
 	}
+	if len(excluded) > 0 {
+		evidence = append(evidence, exclusionEvidence(excluded))
+	}
 	if len(conflicts) == 0 {
-		return RoutingFacts{Summary: Finding{Verdict: VerdictYes}}
+		return RoutingFacts{Summary: Finding{Verdict: VerdictYes, Evidence: evidence}, ActiveSessionSubnets: excluded}
 	}
 	return RoutingFacts{
-		Summary:   Finding{Verdict: VerdictNo, Evidence: evidence},
-		Conflicts: conflicts,
+		Summary:              Finding{Verdict: VerdictNo, Evidence: evidence},
+		Conflicts:            conflicts,
+		ActiveSessionSubnets: excluded,
 	}
 }
 
@@ -92,6 +112,53 @@ func (p *Prober) localRoutes(ctx context.Context) ([]*routing.Route, error) {
 		return p.RouteSource(ctx)
 	}
 	return routing.GetRoutingTable(ctx)
+}
+
+// activeRoutes reports the subnets an already-connected Telepresence session
+// routes and the local interface that carries them, using Prober.ActiveRoutes
+// when set and defaultActiveRoutes otherwise.
+func (p *Prober) activeRoutes(ctx context.Context) (subnets []netip.Prefix, interfaceName string, ok bool) {
+	if p.ActiveRoutes != nil {
+		return p.ActiveRoutes(ctx)
+	}
+	return defaultActiveRoutes(ctx)
+}
+
+// isActiveSessionRoute reports whether rt is a route the local Telepresence
+// tunnel device owns: either it runs on a "tel"-prefixed device (checked
+// regardless of activeOK, since the device name alone identifies it on
+// platforms that use it), or it runs on the active session's own interface
+// (its name reported by an active session, needed on platforms such as
+// macOS where the device is a utunN) and its routed net is one the session
+// reports as its own. A subnet match on any other interface is a real
+// conflict, not the session's route.
+func isActiveSessionRoute(rt *routing.Route, activeSubnets []netip.Prefix, activeInterface string, activeOK bool) bool {
+	if isTelepresenceDevice(rt.InterfaceName) {
+		return true
+	}
+	if !activeOK || activeInterface == "" || rt.InterfaceName != activeInterface {
+		return false
+	}
+	for _, sn := range activeSubnets {
+		if sn == rt.RoutedNet {
+			return true
+		}
+	}
+	return false
+}
+
+// isTelepresenceDevice reports whether name is an incarnation of the "tel"
+// tunnel device Telepresence creates on Linux and Windows, ignoring its
+// trailing instance number (e.g. "tel0", "tel1").
+func isTelepresenceDevice(name string) bool {
+	return strings.TrimRightFunc(name, func(r rune) bool { return r >= '0' && r <= '9' }) == "tel"
+}
+
+// exclusionEvidence describes the local routes that were excluded from
+// conflict detection because they belong to an active Telepresence session.
+func exclusionEvidence(excluded []string) string {
+	return fmt.Sprintf("a Telepresence session is connected; its own routes to %s were not treated as conflicts",
+		strings.Join(excluded, ", "))
 }
 
 // relevantRoute filters out the routes that overlap everything or nothing by

@@ -149,19 +149,26 @@ sudo chmod a+x /usr/local/bin/telepresence
 </Platform.GNULinuxTab>
 <Platform.WindowsTab>
 
-## Install using the setup installer (Recommended)
+## Install using the MSI (Recommended)
 
-The setup installer sets up the root daemon as a Windows service, eliminating the need for elevated privileges
-when using Telepresence. It also bundles WinFSP and SSHFS-Win for volume mount support.
+The MSI installs `telepresence.exe`, sets up the root daemon as a Windows service (eliminating the need for
+elevated privileges when using Telepresence), adds Telepresence to the system PATH, and installs
+[wintun](https://www.wintun.net/) for the VIF. You can deselect the "Telepresence Network Service" feature
+during installation if you prefer to run the daemon manually.
 
-Download and run the installer:
-- [telepresence-windows-amd64-setup.exe](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-windows-amd64-setup.exe)
+Download and run the installer for your architecture:
+- [telepresence-windows-amd64.msi](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-windows-amd64.msi)
+- [telepresence-windows-arm64.msi](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-windows-arm64.msi)
 
 During installation, you can optionally configure the daemon port and log level. The defaults work for most users.
-You can also deselect the "Telepresence Network Service" feature if you prefer to run the daemon manually.
 
-> [!NOTE]
-> The Windows installer is currently only available for AMD64. For ARM64, use the manual installation method below.
+The MSI does not install [WinFsp](https://winfsp.dev/rel/) or
+[SSHFS-Win](https://github.com/winfsp/sshfs-win/releases); install both separately if you need volume mounts.
+WinFsp publishes an arm64 build; SSHFS-Win offers only an x64 build, which runs under emulation on Windows on
+ARM but is untested there. The installer warns about missing prerequisites unless it is run silently.
+
+For Intune or Group Policy deployment, push all three packages and run the MSI with
+`msiexec /i telepresence-windows-amd64.msi /qn` (or the arm64 MSI on ARM devices).
 
 ## OR install manually using PowerShell
 
@@ -222,6 +229,31 @@ Remove-Item telepresenceInstaller -Recurse -Confirm:$false -Force
 > Telepresence will request elevated privileges when connecting, and volume mounts will not work without
 > WinFSP and SSHFS-Win installed separately.
 
+## Verifying the download
+
+`telepresence.exe` and both MSIs are Authenticode-signed. Check a file's signature with PowerShell:
+
+```powershell
+Get-AuthenticodeSignature .\telepresence.exe | Format-List Status, SignerCertificate, TimeStamperCertificate
+Get-AuthenticodeSignature .\telepresence-windows-amd64.msi | Format-List Status, SignerCertificate, TimeStamperCertificate
+Get-AuthenticodeSignature .\telepresence-windows-arm64.msi | Format-List Status, SignerCertificate, TimeStamperCertificate
+```
+
+`Status` must read `Valid`. The signer certificate is issued through the SignPath Foundation; admins can
+write an allow rule (for example in AppLocker or WDAC) against the signer certificate's subject shown by
+`SignerCertificate`. The same information is available without PowerShell: right-click the file, choose
+**Properties**, and open the **Digital Signatures** tab.
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
+[SignPath Foundation](https://signpath.org/). The Windows release binaries and installers are
+Authenticode-signed with it.
+
+- Committers and reviewers: [telepresence-maintainers](https://github.com/orgs/telepresenceio/teams/telepresence-maintainers) ([@thallgren](https://github.com/thallgren), [@bgruszka](https://github.com/bgruszka), [@njayp](https://github.com/njayp), [@breland-openai](https://github.com/breland-openai))
+- Approvers: [administrators](https://github.com/orgs/telepresenceio/teams/administrators) ([@khussey](https://github.com/khussey), [@thallgren](https://github.com/thallgren))
+- Privacy policy: [PRIVACY.md](https://github.com/telepresenceio/telepresence/blob/release/v2/PRIVACY.md)
+
 </Platform.WindowsTab>
 </Platform.TabGroup>
 
@@ -268,8 +300,8 @@ This stops and removes the root daemon systemd service and the Telepresence bina
 
 Open **Settings > Apps > Installed apps**, find Telepresence, and select **Uninstall**.
 
-This removes the Telepresence binaries, the root daemon Windows service, and the bundled WinFSP and SSHFS-Win
-components.
+This removes the Telepresence binaries and the root daemon Windows service. WinFsp and SSHFS-Win, if
+installed, must be uninstalled separately.
 
 </Platform.WindowsTab>
 </Platform.TabGroup>
@@ -313,11 +345,16 @@ https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepres
 
 ```
 # Windows AMD64
-https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-windows-amd64-setup.exe
 https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-windows-amd64.zip
+https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-windows-amd64.msi
+# MSI installer, available from v2.32.0
+https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-windows-amd64-setup.exe
+# setup installer, available from v2.27.0 through v2.31.x
 
 # Windows ARM64
 https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-windows-arm64.zip
+https://github.com/telepresenceio/telepresence/releases/download/vX.Y.Z/telepresence-windows-arm64.msi
+# MSI installer, available from v2.32.0
 ```
 
 </Platform.WindowsTab>

@@ -3,8 +3,6 @@ package ingest
 import (
 	"context"
 	"fmt"
-	"os"
-	"runtime"
 
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
@@ -113,15 +111,6 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 	ir, err := s.self.CreateRequest()
 	if err != nil {
 		return false, errcat.NoDaemonLogs.New(err)
-	}
-
-	if ir.MountPoint != "" {
-		defer func() {
-			if !acquired && runtime.GOOS != "windows" {
-				// remove if empty
-				_ = os.Remove(ir.MountPoint)
-			}
-		}()
 	}
 
 	progress.Start(ctx, "Creating")

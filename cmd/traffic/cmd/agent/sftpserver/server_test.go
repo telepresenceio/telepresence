@@ -3,6 +3,7 @@ package sftpserver_test
 import (
 	"context"
 	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
@@ -194,6 +195,32 @@ func TestWritePath(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestRenameAcrossDirectoriesWorks(t *testing.T) {
+	client, _ := newTestServer(t)
+	base := "/tel_app_exports/app"
+	require.NoError(t, client.Mkdir(base+"/a"))
+	require.NoError(t, client.Mkdir(base+"/b"))
+	f, err := client.Create(base + "/a/x")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("moved"))
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	require.NoError(t, client.Rename(base+"/a/x", base+"/b/y"))
+	require.Equal(t, "moved", readAll(t, client, base+"/b/y"))
+	_, err = client.Stat(base + "/a/x")
+	require.Error(t, err)
+
+	require.NoError(t, client.PosixRename(base+"/b/y", base+"/a/z"))
+	require.Equal(t, "moved", readAll(t, client, base+"/a/z"))
+	_, err = client.Stat(base + "/b/y")
+	require.Error(t, err)
+
+	require.NoError(t, client.Link(base+"/a/z", base+"/b/w"))
+	require.Equal(t, "moved", readAll(t, client, base+"/b/w"))
+	require.Equal(t, "moved", readAll(t, client, base+"/a/z"))
+}
+
 func TestStatOutsideTreeFails(t *testing.T) {
 	client, tree := newTestServer(t)
 
@@ -354,6 +381,164 @@ func TestUnexportedTopIsInvisible(t *testing.T) {
 	}
 }
 
+// nodeAgentTree is the fixture a newNodeAgentTestServer builds: an exports root with a
+// nested absolute symlink app/var/run/secrets/kubernetes.io -> <procRoot's same path>,
+// mirroring exportProcMounts' layout (a link at arbitrary depth reached through several
+// plain directory components, not just the top-level <container>/<top> the sidecar uses).
+// Inside procRoot, the serviceaccount directory mirrors a projected volume: a versioned
+// data directory, a "..data" symlink to it, and a "token" symlink reached through "..data".
+type nodeAgentTree struct {
+	exportsRoot  string
+	procRoot     string
+	container    string
+	tokenContent string
+}
+
+// newNodeAgentTestServer builds a nodeAgentTree under two t.TempDir() trees and starts a
+// Server over exportsRoot; procRoot is passed as an allowed root only when allowProcRoot is
+// true, so a caller can also exercise the case where the node-agent's own procfs root isn't
+// one of the roots the server was configured with.
+func newNodeAgentTestServer(t *testing.T, allowProcRoot bool) (*sftp.Client, nodeAgentTree) {
+	t.Helper()
+
+	const c = "node-agent-content"
+	const content = "sa-token"
+	procRoot := t.TempDir()
+	exportsRoot := t.TempDir()
+
+	saDir := filepath.Join(procRoot, "var", "run", "secrets", "kubernetes.io", "serviceaccount")
+	dataDir := filepath.Join(saDir, "..2026_data")
+	require.NoError(t, os.MkdirAll(dataDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "token"), []byte(content), 0o644))
+	require.NoError(t, os.Symlink("..2026_data", filepath.Join(saDir, "..data")))
+	require.NoError(t, os.Symlink("..data/token", filepath.Join(saDir, "token")))
+
+	linkParent := filepath.Join(exportsRoot, c, "var", "run", "secrets")
+	require.NoError(t, os.MkdirAll(linkParent, 0o755))
+	require.NoError(t, os.Symlink(
+		filepath.Join(procRoot, "var", "run", "secrets", "kubernetes.io"),
+		filepath.Join(linkParent, "kubernetes.io")))
+
+	var opts []string
+	if allowProcRoot {
+		opts = append(opts, procRoot)
+	}
+	srv, err := sftpserver.New(exportsRoot, opts...)
+	require.NoError(t, err)
+
+	client := startServer(t, srv)
+
+	return client, nodeAgentTree{exportsRoot: exportsRoot, procRoot: procRoot, container: c, tokenContent: content}
+}
+
+func TestNodeAgentLinkWorks(t *testing.T) {
+	client, tree := newNodeAgentTestServer(t, true)
+	secretsDir := "/tel_app_exports/" + tree.container + "/var/run/secrets"
+	linkPath := secretsDir + "/kubernetes.io"
+
+	entries, err := client.ReadDir(secretsDir)
+	require.NoError(t, err)
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
+	}
+	require.Contains(t, names, "kubernetes.io")
+
+	lf, err := client.Lstat(linkPath)
+	require.NoError(t, err)
+	require.NotEqual(t, os.FileMode(0), lf.Mode()&os.ModeSymlink)
+
+	sf, err := client.Stat(linkPath)
+	require.NoError(t, err)
+	require.True(t, sf.IsDir())
+
+	// The token is reached through both the node-agent's absolute redirect into procRoot
+	// and a relative "..data/token" symlink inside it, mirroring a projected volume.
+	require.Equal(t, tree.tokenContent, readAll(t, client, linkPath+"/serviceaccount/token"))
+}
+
+func TestNodeAgentLinkRefusedWithoutProcRoot(t *testing.T) {
+	client, tree := newNodeAgentTestServer(t, false)
+	linkPath := "/tel_app_exports/" + tree.container + "/var/run/secrets/kubernetes.io"
+
+	_, err := client.Stat(linkPath)
+	require.Error(t, err)
+
+	_, err = client.Open(linkPath + "/serviceaccount/token")
+	require.Error(t, err)
+}
+
+// newProcRootLinkTestServer builds an exports root with a single uncanonicalized redirect,
+// app/var/run/secrets/kubernetes.io -> <procRoot>/var/run/secrets/kubernetes.io -- the exact
+// link an unpatched node-agent would have written -- and a procRoot where "var/run" is
+// itself a symlink to "run", either relative ("../run") or absolute ("/run") depending on
+// absoluteLink. The real content, run/secrets/kubernetes.io/serviceaccount/token, sits
+// beside the "var" directory, one level below procRoot.
+func newProcRootLinkTestServer(t *testing.T, absoluteLink bool) (*sftp.Client, string) {
+	t.Helper()
+
+	const content = "sa-token"
+	procRoot := t.TempDir()
+	exportsRoot := t.TempDir()
+
+	saDir := filepath.Join(procRoot, "run", "secrets", "kubernetes.io", "serviceaccount")
+	require.NoError(t, os.MkdirAll(saDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(saDir, "token"), []byte(content), 0o644))
+
+	require.NoError(t, os.Mkdir(filepath.Join(procRoot, "var"), 0o755))
+	target := "../run"
+	if absoluteLink {
+		target = "/run"
+	}
+	require.NoError(t, os.Symlink(target, filepath.Join(procRoot, "var", "run")))
+
+	linkParent := filepath.Join(exportsRoot, "app", "var", "run", "secrets")
+	require.NoError(t, os.MkdirAll(linkParent, 0o755))
+	require.NoError(t, os.Symlink(
+		filepath.Join(procRoot, "var", "run", "secrets", "kubernetes.io"),
+		filepath.Join(linkParent, "kubernetes.io")))
+
+	srv, err := sftpserver.New(exportsRoot, procRoot)
+	require.NoError(t, err)
+
+	client := startServer(t, srv)
+
+	return client, content
+}
+
+func TestNodeAgentRelativeVarRunLinkWorks(t *testing.T) {
+	client, content := newProcRootLinkTestServer(t, false)
+	linkPath := "/tel_app_exports/app/var/run/secrets/kubernetes.io"
+
+	sf, err := client.Stat(linkPath)
+	require.NoError(t, err)
+	require.True(t, sf.IsDir())
+
+	entries, err := client.ReadDir(linkPath)
+	require.NoError(t, err)
+	names := make([]string, len(entries))
+	for i, e := range entries {
+		names[i] = e.Name()
+	}
+	require.Contains(t, names, "serviceaccount")
+
+	require.Equal(t, content, readAll(t, client, linkPath+"/serviceaccount/token"))
+}
+
+// TestNodeAgentAbsoluteVarRunLinkRefused documents that os.Root never follows an absolute
+// symlink even inside an allowed root: a Debian-style "var/run" -> "/run" is refused rather
+// than rebased, unlike the relative case TestNodeAgentRelativeVarRunLinkWorks covers.
+func TestNodeAgentAbsoluteVarRunLinkRefused(t *testing.T) {
+	client, _ := newProcRootLinkTestServer(t, true)
+	linkPath := "/tel_app_exports/app/var/run/secrets/kubernetes.io"
+
+	_, err := client.Stat(linkPath)
+	require.Error(t, err)
+
+	_, err = client.Open(linkPath + "/serviceaccount/token")
+	require.Error(t, err)
+}
+
 func TestHostileSymlinksAreBlocked(t *testing.T) {
 	client, tree := newMountsTestServer(t)
 
@@ -368,4 +553,160 @@ func TestHostileSymlinksAreBlocked(t *testing.T) {
 	require.Error(t, err)
 	_, err = client.Open("/tel_app_exports/" + tree.container + "/etc/escape")
 	require.Error(t, err)
+}
+
+func TestMountsLinkRenameAcrossDirectories(t *testing.T) {
+	client, tree := newMountsTestServer(t)
+	base := "/tel_app_exports/" + tree.container + "/etc"
+	require.NoError(t, client.Mkdir(base+"/d1"))
+	require.NoError(t, client.Mkdir(base+"/d2"))
+	f, err := client.Create(base + "/d1/x")
+	require.NoError(t, err)
+	_, err = f.Write([]byte("moved"))
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	require.NoError(t, client.Rename(base+"/d1/x", base+"/d2/y"))
+	data, err := os.ReadFile(filepath.Join(tree.mountsRoot, tree.container, "etc", "d2", "y"))
+	require.NoError(t, err)
+	require.Equal(t, "moved", string(data))
+
+	require.NoError(t, client.PosixRename(base+"/d2/y", base+"/d1/z"))
+	_, err = os.Stat(filepath.Join(tree.mountsRoot, tree.container, "etc", "d1", "z"))
+	require.NoError(t, err)
+	require.NoError(t, client.Link(base+"/d1/z", base+"/d2/w"))
+	_, err = os.Stat(filepath.Join(tree.mountsRoot, tree.container, "etc", "d2", "w"))
+	require.NoError(t, err)
+}
+
+// twoRootsTree is the fixture a newTwoRootsTestServer builds: an exports root holding one
+// symlinked "container" per allowed root, mirroring nodeConfig.SymlinkRoots' layout of one
+// procfs root per resolved container pid. containerA and containerC both export into rootA
+// -- containerA directly, containerC through rootAAlias, a symlink registered as a separate
+// allowed root that resolves to the same directory -- so a rename between them must be
+// recognized as staying within one root even though the two resolutions open it through
+// distinct *os.Root values. containerB exports into rootB, an unrelated directory.
+type twoRootsTree struct {
+	exportsRoot string
+	rootA       string
+	rootB       string
+}
+
+// newTwoRootsTestServer builds a twoRootsTree under several t.TempDir() trees and starts a
+// sftpserver.Server over it, registering rootA, rootB, and rootAAlias (a symlink to rootA)
+// all as allowed roots.
+func newTwoRootsTestServer(t *testing.T) (*sftp.Client, twoRootsTree) {
+	t.Helper()
+
+	rootA := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(rootA, "x.txt"), []byte("in-a"), 0o644))
+
+	rootB := t.TempDir()
+
+	aliasParent := t.TempDir()
+	rootAAlias := filepath.Join(aliasParent, "alias")
+	require.NoError(t, os.Symlink(rootA, rootAAlias))
+
+	exportsRoot := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(exportsRoot, "containerA"), 0o755))
+	require.NoError(t, os.Symlink(rootA, filepath.Join(exportsRoot, "containerA", "mount")))
+	require.NoError(t, os.Mkdir(filepath.Join(exportsRoot, "containerB"), 0o755))
+	require.NoError(t, os.Symlink(rootB, filepath.Join(exportsRoot, "containerB", "mount")))
+	require.NoError(t, os.Mkdir(filepath.Join(exportsRoot, "containerC"), 0o755))
+	require.NoError(t, os.Symlink(rootAAlias, filepath.Join(exportsRoot, "containerC", "mount")))
+
+	srv, err := sftpserver.New(exportsRoot, rootA, rootB, rootAAlias)
+	require.NoError(t, err)
+
+	client := startServer(t, srv)
+
+	return client, twoRootsTree{exportsRoot: exportsRoot, rootA: rootA, rootB: rootB}
+}
+
+func TestRenameWithinOneExportWorks(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	require.NoError(t, client.Rename(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerA/mount/y.txt"))
+	data, err := os.ReadFile(filepath.Join(tree.rootA, "y.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "in-a", string(data))
+}
+
+func TestRenameAcrossDifferentRootsReturnsEXDEV(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	err := client.Rename(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerB/mount/x.txt")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "escape")
+	require.Contains(t, err.Error(), "cross-device")
+
+	// The failed rename must not have moved or removed anything.
+	_, err = os.Stat(filepath.Join(tree.rootA, "x.txt"))
+	require.NoError(t, err)
+	_, err = os.Stat(filepath.Join(tree.rootB, "x.txt"))
+	require.ErrorIs(t, err, fs.ErrNotExist)
+}
+
+func TestPosixRenameAcrossDifferentRootsReturnsEXDEV(t *testing.T) {
+	client, _ := newTwoRootsTestServer(t)
+
+	err := client.PosixRename(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerB/mount/x.txt")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "escape")
+	require.Contains(t, err.Error(), "cross-device")
+}
+
+func TestLinkAcrossDifferentRootsReturnsEXDEV(t *testing.T) {
+	client, _ := newTwoRootsTestServer(t)
+
+	err := client.Link(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerB/mount/x.txt")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "escape")
+	require.Contains(t, err.Error(), "cross-device")
+}
+
+func TestRenameAcrossExportsOfSameRootWorks(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	// containerA and containerC export the same directory (rootA, reached directly and
+	// through rootAAlias); a rename between them must succeed rather than return EXDEV.
+	require.NoError(t, client.Rename(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerC/mount/y.txt"))
+	data, err := os.ReadFile(filepath.Join(tree.rootA, "y.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "in-a", string(data))
+}
+
+func TestLinkAcrossExportsOfSameRootWorks(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	require.NoError(t, client.Link(
+		"/tel_app_exports/containerA/mount/x.txt",
+		"/tel_app_exports/containerC/mount/link.txt"))
+	data, err := os.ReadFile(filepath.Join(tree.rootA, "link.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "in-a", string(data))
+}
+
+func TestPosixRenameAcrossExportsOfSameRootWorks(t *testing.T) {
+	client, tree := newTwoRootsTestServer(t)
+
+	existing := "/tel_app_exports/containerC/mount/y.txt"
+	w, err := client.Create(existing)
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+
+	require.NoError(t, client.PosixRename("/tel_app_exports/containerA/mount/x.txt", existing))
+	data, err := os.ReadFile(filepath.Join(tree.rootA, "y.txt"))
+	require.NoError(t, err)
+	require.Equal(t, "in-a", string(data))
 }

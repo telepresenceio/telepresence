@@ -178,6 +178,18 @@ PKG_VERSION = $(shell go list ./pkg/version)
 
 ifeq ($(GOOS),windows)
 TELEPRESENCE_INSTALLER=$(BINDIR)/telepresence$(BZIP)
+
+# TELEPRESENCE_SEMVER is defined further down in this file; it is a
+# recursively expanded variable, so referencing it here is fine.
+include build-aux/winversion.mk
+%/rsrc_windows_$(GOARCH).syso: %/winres.json $(tools/go-winres)
+	$(tools/go-winres) make --in $< --out $(dir $@)rsrc --arch $(GOARCH) --product-version $(TELEPRESENCE_SEMVER) --file-version $(TELEPRESENCE_WINVERSION)
+
+build-deps: cmd/telepresence/rsrc_windows_$(GOARCH).syso
+
+.PHONY: verify-signatures
+verify-signatures: ## (Release) Verify Authenticode signatures on every artifact in build-output/release
+	pwsh -File build-aux/signpath/verify-signatures.ps1 -Dir $(RELEASEDIR)
 endif
 
 .PHONY: build
@@ -207,9 +219,9 @@ ifneq ($(TELEPRESENCE_COVER),)
 COVER_FLAG=-cover
 endif
 
-pkg/client/cli/docker/compose/dc-cli.json: go.mod go.mod cmd/cobraparser/main.go
+pkg/client/cli/docker/compose/dc-cli.json: $(tools/docker-compose) build-aux/docker-compose.version go.mod cmd/cobraparser/main.go
 	go mod tidy
-	(cd cmd/cobraparser && go mod tidy) && GOOS= GOARCH= go run cmd/cobraparser/main.go docker compose > $@
+	(cd cmd/cobraparser && go mod tidy) && GOOS= GOARCH= go run cmd/cobraparser/main.go --name compose $(tools/docker-compose) > $@
 
 build-deps: pkg/client/cli/docker/compose/dc-cli.json
 
@@ -467,6 +479,11 @@ build-tests: build-deps ## (Test) Build (but don't run) the test suite.  Useful 
 
 shellscripts += ./packaging/homebrew-package.sh
 shellscripts += ./packaging/windows-package.sh
+shellscripts += ./build-aux/systemd-installer/build-packages.sh
+shellscripts += ./build-aux/systemd-installer/postinstall.sh
+shellscripts += ./build-aux/systemd-installer/posttrans.sh
+shellscripts += ./build-aux/systemd-installer/preremove.sh
+shellscripts += ./build-aux/systemd-installer/postremove.sh
 shellscripts += ./build-aux/vagrant-rtest/preflight.sh
 shellscripts += ./build-aux/vagrant-rtest/provision.sh
 shellscripts += ./build-aux/vagrant-rtest/run-shard.sh

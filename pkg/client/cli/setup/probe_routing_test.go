@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"net/netip"
 	"testing"
@@ -39,6 +40,10 @@ func routeProber(routes []*routing.Route, err error) *Prober {
 		ManagerNamespace: "ambassador",
 		RouteSource: func(context.Context) ([]*routing.Route, error) {
 			return routes, err
+		},
+		// Deterministic: no active session, ever, unless a test overrides it.
+		ActiveRoutes: func(context.Context) ([]netip.Prefix, string, bool) {
+			return nil, "", false
 		},
 	}
 }
@@ -146,6 +151,9 @@ func TestProbeRouting_EstimatedServiceCIDR(t *testing.T) {
 		RouteSource: func(context.Context) ([]*routing.Route, error) {
 			return []*routing.Route{localRoute("10.96.0.0/12", "tun0")}, nil
 		},
+		ActiveRoutes: func(context.Context) ([]netip.Prefix, string, bool) {
+			return nil, "", false
+		},
 	}
 	services, _ := p.listServices(context.Background())
 	facts := p.probeRouting(context.Background(), nil, services)
@@ -154,6 +162,77 @@ func TestProbeRouting_EstimatedServiceCIDR(t *testing.T) {
 	assert.Equal(t, "10.96.0.0/16", facts.Conflicts[0].ClusterSubnet)
 	assert.Equal(t, sourceServiceCIDR, facts.Conflicts[0].Source)
 	assert.Contains(t, facts.Summary.Evidence[0], "service CIDR (estimated)")
+}
+
+func TestProbeRouting_ActiveSessionRoutesIgnored(t *testing.T) {
+	nodes := []core.Node{podCIDRNode("10.244.0.0/24")}
+
+	t.Run("route on the tel device is ignored", func(t *testing.T) {
+		p := routeProber([]*routing.Route{localRoute("10.244.0.0/24", "tel0")}, nil)
+		facts := p.probeRouting(context.Background(), nodes, nil)
+		assert.Equal(t, VerdictYes, facts.Summary.Verdict)
+		assert.Empty(t, facts.Conflicts)
+		assert.Equal(t, []string{"10.244.0.0/24"}, facts.ActiveSessionSubnets)
+		assert.Contains(t, facts.Summary.Evidence, exclusionEvidence([]string{"10.244.0.0/24"}))
+	})
+
+	t.Run("route on the session's own interface is ignored when ActiveRoutes reports it", func(t *testing.T) {
+		// macOS: the session device is a utunN, not a "tel"-prefixed name.
+		p := routeProber([]*routing.Route{localRoute("10.244.0.0/24", "utun4")}, nil)
+		p.ActiveRoutes = func(context.Context) ([]netip.Prefix, string, bool) {
+			return []netip.Prefix{netip.MustParsePrefix("10.244.0.0/24")}, "utun4", true
+		}
+		facts := p.probeRouting(context.Background(), nodes, nil)
+		assert.Equal(t, VerdictYes, facts.Summary.Verdict)
+		assert.Empty(t, facts.Conflicts)
+		assert.Equal(t, []string{"10.244.0.0/24"}, facts.ActiveSessionSubnets)
+	})
+
+	t.Run("the same route is reported when ActiveRoutes has no session", func(t *testing.T) {
+		p := routeProber([]*routing.Route{localRoute("10.244.0.0/24", "eth0")}, nil)
+		p.ActiveRoutes = func(context.Context) ([]netip.Prefix, string, bool) {
+			return []netip.Prefix{netip.MustParsePrefix("10.244.0.0/24")}, "eth0", false
+		}
+		facts := p.probeRouting(context.Background(), nodes, nil)
+		assert.Equal(t, VerdictNo, facts.Summary.Verdict)
+		assert.Len(t, facts.Conflicts, 1)
+		assert.Empty(t, facts.ActiveSessionSubnets)
+	})
+
+	t.Run("a subnet match on a different interface than the session's is a conflict", func(t *testing.T) {
+		// Same subnet routed on both the Telepresence device and a VPN
+		// interface: only the "tel"-named device is excluded, the VPN
+		// route is a real conflict.
+		p := routeProber([]*routing.Route{
+			localRoute("10.244.0.0/24", "tel0"),
+			localRoute("10.244.0.0/24", "tun0"),
+		}, nil)
+		facts := p.probeRouting(context.Background(), nodes, nil)
+		assert.Equal(t, VerdictNo, facts.Summary.Verdict)
+		require.Len(t, facts.Conflicts, 1)
+		assert.Equal(t, "tun0", facts.Conflicts[0].Interface)
+		assert.Equal(t, []string{"10.244.0.0/24"}, facts.ActiveSessionSubnets)
+	})
+
+	t.Run("a subnet match on an interface other than the session's utunN is a conflict", func(t *testing.T) {
+		p := routeProber([]*routing.Route{localRoute("10.244.0.0/24", "utun7")}, nil)
+		p.ActiveRoutes = func(context.Context) ([]netip.Prefix, string, bool) {
+			return []netip.Prefix{netip.MustParsePrefix("10.244.0.0/24")}, "utun4", true
+		}
+		facts := p.probeRouting(context.Background(), nodes, nil)
+		assert.Equal(t, VerdictNo, facts.Summary.Verdict)
+		require.Len(t, facts.Conflicts, 1)
+		assert.Equal(t, "utun7", facts.Conflicts[0].Interface)
+		assert.Empty(t, facts.ActiveSessionSubnets)
+	})
+
+	t.Run("activeSessionSubnets is carried in the JSON facts", func(t *testing.T) {
+		p := routeProber([]*routing.Route{localRoute("10.244.0.0/24", "tel0")}, nil)
+		facts := p.probeRouting(context.Background(), nodes, nil)
+		data, err := json.Marshal(facts)
+		require.NoError(t, err)
+		assert.Contains(t, string(data), `"activeSessionSubnets":["10.244.0.0/24"]`)
+	})
 }
 
 func TestRoutingFacts_ConflictingSubnets(t *testing.T) {

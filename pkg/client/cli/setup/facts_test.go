@@ -55,6 +55,7 @@ func TestGatherFacts_Smoke(t *testing.T) {
 
 	srv := newUpdateServer(t, version.Structured.String()+"\n", http.StatusOK)
 	var phases []string
+	var outcomePhases []string
 	p := &Prober{
 		KubeClient:       client,
 		ManagerNamespace: "ambassador",
@@ -66,12 +67,18 @@ func TestGatherFacts_Smoke(t *testing.T) {
 			return []*routing.Route{localRoute("192.168.1.0/24", "eth0")}, nil
 		},
 		Progress: func(phase string) { phases = append(phases, phase) },
+		Outcome: func(phase string, verdict Verdict, summary string) {
+			outcomePhases = append(outcomePhases, phase)
+			assert.NotEmpty(t, verdict, "phase %q must report a verdict", phase)
+			assert.NotEmpty(t, summary, "phase %q must report a summary", phase)
+		},
 	}
 
 	facts, err := p.GatherFacts(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, facts)
 	assert.Equal(t, ProbePhases, phases, "phase sequence must not depend on whether a release is installed")
+	assert.Equal(t, ProbePhases, outcomePhases, "every phase must report exactly one outcome, in order")
 
 	assert.Equal(t, "ambassador", facts.ManagerNamespace)
 	assert.True(t, facts.NamespaceExists)

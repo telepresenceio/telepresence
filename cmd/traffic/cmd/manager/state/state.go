@@ -562,18 +562,19 @@ func (s *State) GetClient(id tunnel.SessionID) *ClientSession {
 	return ret
 }
 
-// ClientOwnershipError returns an error when client is bound to a verified
-// principal and the caller's principal (carried by ctx) doesn't match it (see
-// auth.Principal.SameAs). Returns nil when the session is unowned (an older
-// client) or the caller is the bound identity. A caller whose token couldn't
-// be verified for infrastructure reasons gets Unavailable instead of
-// PermissionDenied, since ownership could not be established either way.
+// ClientOwnershipError returns an error unless client is unowned, ctx
+// carries a principal identical to the bound one (auth.Principal.SameAs),
+// or ctx carries the session credential for sessionID. An unverifiable
+// token yields Unavailable instead of PermissionDenied.
 func ClientOwnershipError(ctx context.Context, sessionID tunnel.SessionID, client *ClientSession) error {
 	bound := client.Principal()
 	if bound == nil {
 		return nil
 	}
 	if p := auth.PrincipalFrom(ctx); p != nil && bound.SameAs(p) {
+		return nil
+	}
+	if sid, ok := auth.SessionCredentialFrom(ctx); ok && sid == string(sessionID) {
 		return nil
 	}
 	if auth.AuthUnavailable(ctx) {

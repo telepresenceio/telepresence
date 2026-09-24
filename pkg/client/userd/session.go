@@ -45,6 +45,7 @@ type Session interface {
 	AddInterceptor(string, *rpc.Interceptor) error
 	CanIntercept(context.Context, *rpc.CreateInterceptRequest) (InterceptInfo, error)
 	ClearIngestsAndIntercepts() error
+	MarkClosing()
 	GatherLogs(context.Context, *rpc.LogsRequest) (*rpc.LogsResponse, error)
 	GetConfig() (*client.SessionConfig, error)
 	GetCurrentNamespaces(forClientAccess bool) []string

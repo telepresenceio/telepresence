@@ -3,6 +3,7 @@ package agentpf
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -79,6 +80,10 @@ const dormantLingerTime = 5 * time.Second
 // watch reports as present but that isn't dialable yet.
 const connectRetryInterval = 200 * time.Millisecond
 
+// dialTimeout bounds a single agent dial attempt (see ensureConnectLocked). A var, rather
+// than a const, so tests can shrink it and avoid a real multi-second wait.
+var dialTimeout = 5 * time.Second //nolint:gochecknoglobals // test-only override point
+
 func (ac *client) String() string {
 	if ac == nil {
 		return "<nil>"
@@ -123,7 +128,7 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 	}
 
 	if ac.cli == nil {
-		dialCtx, dialCancel := context.WithTimeout(ctx, 5*time.Second)
+		dialCtx, dialCancel := context.WithTimeout(ctx, dialTimeout)
 		defer dialCancel()
 
 		ai := ac.info
@@ -133,6 +138,11 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		}
 		conn, cli, err := ac.dialAgent(dialCtx, ns, ai)
 		if err != nil {
+			if ac.owner.isPortForwardDenied(ac.podKey()) {
+				// A retry can't succeed: this pod has already refused
+				// pods/portforward, so this dial failure is that refusal.
+				err = errNoDirectAccess
+			}
 			ac.connectErr = err
 
 			// There's a risk for deadlock here, because of the Range iteration of the map that performs cancel. This cancel will block
@@ -179,7 +189,7 @@ func (ac *client) dialAgent(dialCtx context.Context, ns string, ai *manager.Agen
 	pap := portforward.PodAddress{Name: ai.PodName, Namespace: ns, PodID: types.UID(ai.PodId)}
 	grpcAddr := pap.AddrFor(uint16(ai.ApiPort))
 
-	pfDialer := portforward.Dialer(ac.Cluster)
+	pfDialer := wrapPortForwardDialer(ac.owner, ac.podKey(), ac.owner.pfDialerFactory(ac.Cluster))
 	dialer := agentDialer(ai.QuicSni, &ac.quicDead, &ac.transport,
 		ac.owner.quicEndpointFor, ac.dialAgentQUIC, pfDialer,
 		func(err error) { clog.Infof(ac, "%s: QUIC dial failed, falling back to port-forward: %v", ac, err) })
@@ -231,6 +241,19 @@ func (ac *client) intercepted() bool {
 	ret := ac.info.Intercepted
 	ac.RUnlock()
 	return ret
+}
+
+// podKey returns the identity used to key the port-forward denial cache for this agent's
+// pod. A node-hosted agent's pod runs in the manager's namespace rather than ac.info's own
+// Namespace (the target workload's namespace), so that case is resolved the same way
+// dialAgent resolves the namespace it actually dials.
+func (ac *client) podKey() podKey {
+	ai := ac.info
+	ns := ai.Namespace
+	if ai.NodeAgent {
+		ns = k8s.GetManagerNamespace(ac)
+	}
+	return podKey{namespace: ns, name: ai.PodName, uid: ai.PodId}
 }
 
 func (ac *client) cancel() bool {
@@ -456,6 +479,20 @@ type clients struct {
 	// per-RPC credentials (see tokenCredentials); nil, or a provider returning "",
 	// means no token is attached, exactly as before this credential existed.
 	tokenProvider func(ctx context.Context) string
+
+	// portForwardDeniedMu guards portForwardDenied.
+	portForwardDeniedMu sync.Mutex
+	// portForwardDenied is the set of pods for which a port-forward dial has been refused
+	// for lack of pods/portforward RBAC. WaitForIP and GetClient treat a pod in this set as
+	// permanently unavailable for direct agent access, for the rest of this session. Keyed
+	// by pod rather than namespace because RBAC can grant pods/portforward per pod via
+	// resourceNames.
+	portForwardDenied map[podKey]struct{}
+
+	// pfDialerFactory returns the net.Conn dialer used for an agent's port-forward
+	// fallback; production uses portforward.Dialer, tests substitute a fake to avoid
+	// a real Kubernetes port-forward.
+	pfDialerFactory func(ctx context.Context) func(ctx context.Context, address string) (net.Conn, error)
 }
 
 // NewClients returns the Clients implementation that manages direct gRPC connections to
@@ -469,13 +506,14 @@ func NewClients(
 		namespaces = []string{cl.Namespace}
 	}
 	cs := &clients{
-		Cluster:       cl,
-		session:       session,
-		clients:       xsync.NewMap[string, *client](),
-		ipWaiters:     xsync.NewMap[ipWaitKey, chan struct{}](),
-		wlWaiters:     xsync.NewMap[string, chan struct{}](),
-		proxyVias:     xsync.NewMap[string, struct{}](),
-		tokenProvider: tokenProvider,
+		Cluster:         cl,
+		session:         session,
+		clients:         xsync.NewMap[string, *client](),
+		ipWaiters:       xsync.NewMap[ipWaitKey, chan struct{}](),
+		wlWaiters:       xsync.NewMap[string, chan struct{}](),
+		proxyVias:       xsync.NewMap[string, struct{}](),
+		tokenProvider:   tokenProvider,
+		pfDialerFactory: portforward.Dialer,
 	}
 	// One TLS session cache for every agent QUIC dial this connector session ever makes:
 	// tls.ClientSessionCache is keyed by ServerName, so a single LRU instance shared
@@ -543,6 +581,9 @@ func (s *clients) GetClient(ip netip.Addr) (pvd tunnel.Provider) {
 	}
 	var primary, secondary, ternary tunnel.Provider
 	s.clients.Range(func(_ string, c *client) bool {
+		if !c.connected() && s.isPortForwardDenied(c.podKey()) {
+			return true
+		}
 		podIP, ok := netip.AddrFromSlice(c.info.PodIp)
 		switch {
 		case ok && ip == podIP:
@@ -876,13 +917,13 @@ func (s *clients) loadOrAddClient(ai *manager.AgentPodInfo) *client {
 
 func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, namespace string, ip netip.Addr) error {
 	if s.disabled.Load() {
-		return status.Error(codes.Unavailable, "")
+		return status.Error(codes.Unavailable, "direct agent access is disabled")
 	}
 	if namespace == "" {
 		namespace = s.Namespace
 	}
 	if !s.watchesNamespace(namespace) {
-		return status.Error(codes.Unavailable, "")
+		return status.Errorf(codes.Unavailable, "namespace %s is not watched for traffic-agents", namespace)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, timeout)
@@ -903,8 +944,13 @@ func (s *clients) WaitForIP(ctx context.Context, timeout time.Duration, namespac
 	// mutate - re-adding the live client ourselves as needed.
 	for {
 		if ai := s.snapshotInfoForIP(namespace, ip); ai != nil {
-			if _, err := s.loadOrAddClient(ai).ensureConnect(ctx); err == nil {
+			_, err := s.loadOrAddClient(ai).ensureConnect(ctx)
+			if err == nil {
 				return nil
+			}
+			if errors.Is(err, errNoDirectAccess) {
+				return status.Errorf(codes.Unavailable,
+					"direct agent access to pod %s.%s refused (pods/portforward) and the QUIC tunnel is not available", ai.PodName, namespace)
 			}
 			select {
 			case <-ctx.Done():

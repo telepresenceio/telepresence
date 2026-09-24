@@ -30,7 +30,7 @@ clobber: clobber-tools
 
 .PHONY: clobber-tools
 clobber-tools:
-	rm -rf $(TOOLSBINDIR) $(TOOLSDIR)/include $(TOOLSDIR)/*.*
+	rm -rf $(TOOLSBINDIR) $(TOOLSDIR)/include $(TOOLSDIR)/*.* $(TOOLSDIR)/docker-compose-*
 
 
 # Protobuf compiler
@@ -145,6 +145,30 @@ $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 	mkdir -p $(@D)
 	tar -C $(@D) -zxmf $< --strip-components=1 $(GOHOSTOS)-$(GOHOSTARCH)/helm$(EXE)
 
+# Docker Compose
+# ==============
+#
+# Install docker-compose under $TOOLSDIR. The dc-cli.json table and the
+# compose reference docs render from its --help output, so every machine
+# must use the same release; update-dependencies bumps the pin.
+tools/docker-compose = $(TOOLSBINDIR)/docker-compose$(EXE)
+DOCKER_COMPOSE_VERSION=$(shell cat build-aux/docker-compose.version)
+ifeq ($(GOHOSTARCH),arm64)
+  DC_ARCH=aarch64
+else ifeq ($(GOHOSTARCH),amd64)
+  DC_ARCH=x86_64
+else
+  DC_ARCH=$(GOHOSTARCH)
+endif
+DOCKER_COMPOSE_ASSET=docker-compose-$(GOHOSTOS)-$(DC_ARCH)$(EXE)
+$(TOOLSDIR)/docker-compose-$(DOCKER_COMPOSE_VERSION)$(EXE): build-aux/docker-compose.version
+	mkdir -p $(@D)
+	curl -sfL https://github.com/docker/compose/releases/download/$(DOCKER_COMPOSE_VERSION)/$(DOCKER_COMPOSE_ASSET) -o $@
+	chmod +x $@
+$(TOOLSBINDIR)/docker-compose$(EXE): $(TOOLSDIR)/docker-compose-$(DOCKER_COMPOSE_VERSION)$(EXE)
+	mkdir -p $(@D)
+	cp $< $@
+
 # `go get`-able things
 # ====================
 #
@@ -159,6 +183,7 @@ $(TOOLSDIR)/$(notdir $(HELM_TGZ)):
 tools/protoc-gen-go      = $(TOOLSBINDIR)/protoc-gen-go$(EXE)
 tools/protoc-gen-go-grpc = $(TOOLSBINDIR)/protoc-gen-go-grpc$(EXE)
 tools/go-mkopensource    = $(TOOLSBINDIR)/go-mkopensource$(EXE)
+tools/go-winres          = $(TOOLSBINDIR)/go-winres$(EXE)
 tools/test-report        = $(TOOLSBINDIR)/test-report$(EXE)
 tools/y2j                = $(TOOLSBINDIR)/y2j$(EXE)
 $(TOOLSBINDIR)/%$(EXE): $(TOOLSSRCDIR)/%/pin.go | $(TOOLSSRCDIR)/%/go.sum

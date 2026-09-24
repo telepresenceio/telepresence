@@ -1,9 +1,7 @@
 package intercept
 
 import (
-	"context"
 	"crypto/rand"
-	"crypto/tls"
 	"encoding/hex"
 	"io"
 	"net"
@@ -11,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"golang.org/x/net/http2"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/check"
@@ -148,13 +144,9 @@ const (
 // h2cRouteTimeout bounds Test_H2C's request poll.
 const h2cRouteTimeout = 30 * time.Second
 
-// h2cServer is a suite-local, h2c-only (prior-knowledge, cleartext HTTP/2)
-// server: golang.org/x/net/http2.Server.ServeConn speaks HTTP/2 directly on
-// every accepted connection, with no HTTP/1.1 fallback, so a response only
-// arrives if whatever proxied the connection preserved HTTP/2 framing
-// end-to-end rather than reinterpreting the bytes as HTTP/1.1. It is kept
-// local to this suite rather than added to rt.LocalService, which is a
-// plain HTTP/1.1 server.
+// h2cServer is a suite-local server that speaks only prior-knowledge,
+// cleartext HTTP/2 with no HTTP/1.1 fallback, so a response arrives only
+// when the proxied connection kept its HTTP/2 framing end to end.
 type h2cServer struct {
 	listener net.Listener
 	marker   string
@@ -169,20 +161,16 @@ func newH2CServer(t testing.TB) *h2cServer {
 		t.Fatalf("h2cServer: listen: %v", err)
 	}
 	srv := &h2cServer{listener: l, marker: h2cMarkerPrefix + randomH2CID()}
-	h2s := &http2.Server{}
-	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(srv.marker))
-	})
-	go func() {
-		for {
-			conn, err := l.Accept()
-			if err != nil {
-				return // listener closed (t.Cleanup below)
-			}
-			go h2s.ServeConn(conn, &http2.ServeConnOpts{Handler: handler})
-		}
-	}()
-	t.Cleanup(func() { _ = l.Close() })
+	pr := new(http.Protocols)
+	pr.SetUnencryptedHTTP2(true)
+	hs := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(srv.marker))
+		}),
+		Protocols: pr,
+	}
+	go func() { _ = hs.Serve(l) }()
+	t.Cleanup(func() { _ = hs.Close() })
 	return srv
 }
 
@@ -197,22 +185,15 @@ func randomH2CID() string {
 	return hex.EncodeToString(b)
 }
 
-// newH2CClient returns an http.Client that issues prior-knowledge,
-// cleartext HTTP/2 requests: no TLS, no HTTP/1.1 upgrade. AllowHTTP plus a
-// DialTLSContext that dials a plain (non-TLS) connection is the documented
-// way to get this from golang.org/x/net/http2.Transport; net/http's own
-// client transport only ever speaks h2c when negotiated over TLS ALPN,
-// which prior-knowledge h2c (kubernetes.io/h2c) does not use.
+// newH2CClient returns an http.Client whose transport allows only
+// unencrypted HTTP/2, so every request is sent with prior knowledge over a
+// plain TCP connection: no TLS and no HTTP/1.1 upgrade.
 func newH2CClient() *http.Client {
+	pr := new(http.Protocols)
+	pr.SetUnencryptedHTTP2(true)
 	return &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http2.Transport{
-			AllowHTTP: true,
-			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-				var d net.Dialer
-				return d.DialContext(ctx, network, addr)
-			},
-		},
+		Timeout:   5 * time.Second,
+		Transport: &http.Transport{Protocols: pr},
 	}
 }
 
