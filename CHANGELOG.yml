@@ -24,6 +24,20 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.32.1
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Chart hook Jobs accept chart versions with build metadata
+        body: >-
+          The <code>traffic-manager-migrate-statefulset</code> pre-upgrade hook
+          and the <code>uninstall-agents</code> pre-delete hook built their
+          <code>helm.sh/chart</code> pod label from the raw chart version. A
+          version carrying SemVer build metadata, such as the digest suffix
+          that Flux appends for OCI chart sources, produced a label with a
+          <code>+</code>, and the Job was rejected, failing the upgrade or
+          uninstall. Both hooks now use the same sanitized label as the rest
+          of the chart.
   - version: 2.32.0
     date: 2026-09-24
     notes:

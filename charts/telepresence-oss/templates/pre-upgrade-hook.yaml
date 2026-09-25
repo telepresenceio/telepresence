@@ -76,7 +76,7 @@ spec:
       labels:
         app.kubernetes.io/managed-by: {{ .Release.Service | quote }}
         app.kubernetes.io/instance: {{ .Release.Name | quote }}
-        helm.sh/chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
+        helm.sh/chart: {{ include "telepresence.chart" $ | quote }}
     spec:
       {{- include "telepresence.hookPodSpecHead" (dict "root" $ "serviceAccountName" "traffic-manager-migrate-hook" "restartPolicy" "Never") | nindent 6 }}
       containers:
