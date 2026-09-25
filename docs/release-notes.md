@@ -5,7 +5,7 @@
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Chart hook Jobs accept chart versions with build metadata</div></div>
 <div style="margin-left: 15px">
 
-The <code>traffic-manager-migrate-statefulset</code> pre-upgrade hook and the <code>uninstall-agents</code> pre-delete hook built their <code>helm.sh/chart</code> pod label from the raw chart version. A version carrying SemVer build metadata, such as the digest suffix that Flux appends for OCI chart sources, produced a label with a <code>+</code>, and the Job was rejected, failing the upgrade or uninstall. Both hooks now use the same sanitized label as the rest of the chart.
+The <code>traffic-manager-migrate-statefulset</code> pre-upgrade hook and the <code>uninstall-agents</code> pre-delete hook built their <code>helm.sh/chart</code> pod label from the raw chart version. A version carrying SemVer build metadata produced a label with a <code>+</code>, and the API server rejected the Job, failing the upgrade or uninstall. This affects installations whose tooling appends build metadata to the chart version, most commonly Flux with an OCI chart source, where helm-controller adds the artifact digest. Plain <code>helm install</code> and <code>helm upgrade</code>, Flux with a HelmRepository source, and Argo CD in its default setup are not affected, and an installed traffic-manager keeps working. The pre-delete hook already had this flaw in 2.31.x; the pre-upgrade hook is new in 2.32.0. Both hooks now use the same sanitized label as the rest of the chart.
 </div>
 
 ## Version 2.32.0 <span style="font-size: 16px;">(September 24)</span>
