@@ -12,6 +12,8 @@
 {{- $podNamespaceExpressions := default (list) $podNamespaceSelector.matchExpressions }}
 {{- $_ := set $podNamespaceSelector "matchExpressions" (append $podNamespaceExpressions (dict
       "key" "kubernetes.io/metadata.name" "operator" "NotIn" "values" (list $namespace))) }}
+{{- $_ := set $podNamespaceSelector "matchLabels" (merge (dict) (default (dict) $podNamespaceSelector.matchLabels) (dict
+      "kafka.telepresence.io/splits" "true")) }}
 {{- $kafkaLabels := merge (deepCopy (.Values.labels | default dict)) (dict
       "app.kubernetes.io/name" $name
       "app.kubernetes.io/instance" .Release.Name
@@ -45,6 +47,9 @@ rules:
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "patch"]
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get"]

@@ -14,14 +14,17 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept"
@@ -33,9 +36,11 @@ import (
 func TestSplitReconcilerSnapshotsWorkload(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, appsv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
 	require.NoError(t, argorollouts.AddToScheme(scheme))
 	require.NoError(t, api.AddToScheme(scheme))
 	split := validControllerSplit()
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: split.Namespace}}
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "checkout", Namespace: "shop", UID: types.UID("deployment-uid"), Labels: map[string]string{"app": "checkout"},
@@ -50,7 +55,8 @@ func TestSplitReconcilerSnapshotsWorkload(t *testing.T) {
 			}},
 		}}},
 	}
-	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(split).WithObjects(split, deployment).Build()
+	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(split).
+		WithObjects(split, deployment, namespace).Build()
 	reconciler := &SplitReconciler{base: base{Client: client}}
 	_, err := reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "checkout", Namespace: "shop"}})
 	require.NoError(t, err)
@@ -63,6 +69,70 @@ func TestSplitReconcilerSnapshotsWorkload(t *testing.T) {
 	require.Equal(t, []api.WorkloadReference{{
 		APIVersion: "apps/v1", Kind: "Deployment", Name: "checkout", UID: types.UID("deployment-uid"),
 	}}, got.Status.Workloads)
+}
+
+func TestReconcileLabelsSplitNamespace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, api.AddToScheme(scheme))
+	split := validControllerSplit()
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: split.Namespace}}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(split).WithObjects(split, namespace).Build()
+	reconciler := &SplitReconciler{base: base{Client: client}}
+
+	_, err := reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: split.Name, Namespace: split.Namespace}})
+	require.NoError(t, err)
+
+	got := new(corev1.Namespace)
+	require.NoError(t, client.Get(t.Context(), types.NamespacedName{Name: split.Namespace}, got))
+	require.Equal(t, "true", got.Labels[runtimeconfig.NamespaceLabel])
+}
+
+func TestSplitDeletionReleasesNamespaceLabelWhenLastSplit(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, api.AddToScheme(scheme))
+	split := validControllerSplit()
+	split.Finalizers = []string{splitFinalizer}
+	split.DeletionTimestamp = ptr.To(metav1.Now())
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+		Name: split.Namespace, Labels: map[string]string{runtimeconfig.NamespaceLabel: "true"},
+	}}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(split).WithObjects(split, namespace).Build()
+	reconciler := &SplitReconciler{base: base{Client: client}}
+
+	_, err := reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: split.Name, Namespace: split.Namespace}})
+	require.NoError(t, err)
+
+	got := new(corev1.Namespace)
+	require.NoError(t, client.Get(t.Context(), types.NamespacedName{Name: split.Namespace}, got))
+	require.NotContains(t, got.Labels, runtimeconfig.NamespaceLabel)
+}
+
+func TestSplitDeletionKeepsNamespaceLabelWhenSplitRemains(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, api.AddToScheme(scheme))
+	deleted := validControllerSplit()
+	deleted.Name = "checkout"
+	deleted.Finalizers = []string{splitFinalizer}
+	deleted.DeletionTimestamp = ptr.To(metav1.Now())
+	remaining := validControllerSplit()
+	remaining.Name = "billing"
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+		Name: deleted.Namespace, Labels: map[string]string{runtimeconfig.NamespaceLabel: "true"},
+	}}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(deleted).
+		WithObjects(deleted, remaining, namespace).Build()
+	reconciler := &SplitReconciler{base: base{Client: client}}
+
+	_, err := reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: deleted.Name, Namespace: deleted.Namespace}})
+	require.NoError(t, err)
+
+	got := new(corev1.Namespace)
+	require.NoError(t, client.Get(t.Context(), types.NamespacedName{Name: deleted.Namespace}, got))
+	require.Equal(t, "true", got.Labels[runtimeconfig.NamespaceLabel])
 }
 
 func TestWorkloadTemplateAdapters(t *testing.T) {
@@ -169,6 +239,23 @@ func TestPodMutatorComposesActiveSplits(t *testing.T) {
 	require.NotEmpty(t, response.Patches)
 }
 
+func TestPodMutatorExcludesProviderNamespace(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, api.AddToScheme(scheme))
+	reader := fake.NewClientBuilder().WithScheme(scheme).Build()
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "tp-kafka-0", Namespace: "ambassador"}}
+	raw, err := json.Marshal(pod)
+	require.NoError(t, err)
+	response := (podMutator{reader: reader, providerNamespace: "ambassador"}).Handle(
+		t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+			Namespace: "ambassador", Object: runtime.RawExtension{Raw: raw},
+		}},
+	)
+	require.True(t, response.Allowed, response.Result)
+	require.Empty(t, response.Patches)
+}
+
 func TestGenerationZeroAcceptsOtherActiveSplits(t *testing.T) {
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
 		runtimeconfig.ActiveAnnotation: `{"other":"3"}`,
@@ -190,8 +277,9 @@ func TestInvalidReplacementSpecStillDeactivatesSnapshot(t *testing.T) {
 	split.Status.Phase = api.SplitPhaseCleaningApplication
 	split.Spec.DesiredState = api.DesiredStateDisabled
 	split.Spec.Container = ""
+	namespace := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: split.Namespace}}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(split).
-		WithIndex(&api.KafkaRoute{}, routeSplitRefIndexField, routeSplitRefIndexer).WithObjects(split).Build()
+		WithIndex(&api.KafkaRoute{}, routeSplitRefIndexField, routeSplitRefIndexer).WithObjects(split, namespace).Build()
 	reconciler := &SplitReconciler{
 		base: base{
 			Client: client,
@@ -304,6 +392,52 @@ func TestRoutingUpdatesDoNotRollSplitter(t *testing.T) {
 	require.Equal(t, uint64(2), generation)
 	require.NoError(t, client.Get(t.Context(), key, configMap))
 	require.Equal(t, config, configMap.Data[runtimeconfig.ConfigDataKey])
+}
+
+func TestReplacePodsReportsBlockedEviction(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(scheme))
+	require.NoError(t, corev1.AddToScheme(scheme))
+	require.NoError(t, policyv1.AddToScheme(scheme))
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: "shop", UID: types.UID("deployment-uid")},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: ptr.To(int32(1)),
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "checkout"}},
+			Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}}},
+		},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "checkout-abc", Namespace: "shop", Labels: map[string]string{"app": "checkout"},
+			OwnerReferences: []metav1.OwnerReference{{
+				APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID, Controller: ptr.To(true),
+			}},
+		},
+	}
+	blocked := apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, pod.Name, fmt.Errorf("disruption budget"))
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, pod).
+		WithInterceptorFuncs(interceptor.Funcs{
+			SubResourceCreate: func(
+				context.Context, ctrlclient.Client, string, ctrlclient.Object, ctrlclient.Object, ...ctrlclient.SubResourceCreateOption,
+			) error {
+				return blocked
+			},
+		}).Build()
+	reconciler := &SplitReconciler{base: base{Client: client}}
+	split := validControllerSplit()
+	split.Status.Workloads = []api.WorkloadReference{{
+		APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID,
+	}}
+
+	restored, message, err := reconciler.replacePods(t.Context(), split, 1, 1)
+	require.NoError(t, err)
+	require.False(t, restored)
+	require.Contains(t, message, "blocked")
+
+	got := new(corev1.Pod)
+	require.NoError(t, client.Get(t.Context(), types.NamespacedName{Name: pod.Name, Namespace: pod.Namespace}, got))
+	require.Nil(t, got.DeletionTimestamp)
 }
 
 func TestMembersAcknowledgedPublishesPersistedStatus(t *testing.T) {

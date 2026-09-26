@@ -11,6 +11,7 @@ func TestFixedNamesStayConcise(t *testing.T) {
 		"provider":              ProviderName,
 		"splitter":              SplitterName,
 		"split label":           SplitLabel,
+		"namespace label":       NamespaceLabel,
 		"active annotation":     ActiveAnnotation,
 		"config annotation":     ConfigAnnotation,
 		"generation annotation": GenerationAnnotation,

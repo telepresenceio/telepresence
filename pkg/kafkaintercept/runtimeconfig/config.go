@@ -22,6 +22,8 @@ const (
 	RoutingDataKey = "routing.json"
 	// SplitLabel associates provider resources with a KafkaSplit.
 	SplitLabel = "kafka.telepresence.io/split"
+	// NamespaceLabel marks namespaces whose Pods the provider's admission webhook mutates.
+	NamespaceLabel = "kafka.telepresence.io/splits"
 	// ActiveAnnotation records active split generations on application Pods.
 	ActiveAnnotation = "kafka.telepresence.io/active"
 	// ConfigAnnotation restarts splitter Pods when immutable config changes.

@@ -23,10 +23,10 @@ import (
 const podUIDEnvName = "TELEPRESENCE_KAFKA_POD_UID"
 
 // RegisterWebhooks installs validation handlers on server.
-func RegisterWebhooks(server interface{ Register(string, http.Handler) }, reader client.Reader) {
+func RegisterWebhooks(server interface{ Register(string, http.Handler) }, reader client.Reader, providerNamespace string) {
 	server.Register("/split", &admission.Webhook{Handler: splitValidator{}})
 	server.Register("/route", &admission.Webhook{Handler: routeValidator{}})
-	server.Register("/pod", &admission.Webhook{Handler: podMutator{reader: reader}})
+	server.Register("/pod", &admission.Webhook{Handler: podMutator{reader: reader, providerNamespace: providerNamespace}})
 }
 
 type splitValidator struct{}
@@ -59,10 +59,14 @@ func (routeValidator) Handle(_ context.Context, request admission.Request) admis
 }
 
 type podMutator struct {
-	reader client.Reader
+	reader            client.Reader
+	providerNamespace string
 }
 
 func (m podMutator) Handle(ctx context.Context, request admission.Request) admission.Response {
+	if request.Namespace == m.providerNamespace {
+		return admission.Allowed("Kafka provider namespace is excluded")
+	}
 	pod := new(corev1.Pod)
 	if err := json.Unmarshal(request.Object.Raw, pod); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
@@ -70,9 +74,6 @@ func (m podMutator) Handle(ctx context.Context, request admission.Request) admis
 	originalNamespace := pod.Namespace
 	if originalNamespace == "" {
 		pod.Namespace = request.Namespace
-	}
-	if pod.Labels["app.kubernetes.io/name"] == runtimeconfig.ProviderName {
-		return admission.Allowed("Kafka provider Pod is excluded")
 	}
 
 	splits := new(api.KafkaSplitList)
