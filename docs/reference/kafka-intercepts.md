@@ -41,6 +41,15 @@ The CRDs carry a `helm.sh/resource-policy: keep` annotation, so setting
 `kafka.enabled=false` or uninstalling the chart leaves the CRDs, and any
 `KafkaSplit`/`KafkaRoute` custom resources, in place.
 
+The Pod-mutating webhook only receives Pods in namespaces labelled
+`kafka.telepresence.io/splits: "true"`. The provider sets that label on a
+namespace when a `KafkaSplit` exists there and removes it once the last one
+is deleted. The webhook's failure policy is `Fail` by default (Helm value
+`kafka.webhook.failurePolicy`): while the provider is unavailable, Pod
+creation in those namespaces is refused, because a Pod admitted without its
+shadow configuration would consume the original group alongside the
+splitter. Namespaces without a `KafkaSplit` are unaffected.
+
 The provider uses the separate `telepresence-kafka` image and binary. No Kafka
 library is linked into the `tel2` image used by the traffic-manager and
 traffic-agents.
@@ -140,6 +149,11 @@ credentials access to the source topics and original group, this is the
 broker-enforced isolation mode; without it, exclusive source ownership is
 continuously monitored and enforced by lifecycle gates.
 
+For a personal intercept, the route's environment (personal topics, group,
+isolation level, and the transactional ID when bound) replaces the
+same-named variables from the application container in the environment that
+`telepresence intercept` provides to the local process.
+
 ### Connection and authentication
 
 `spec.connection.bootstrapServers` contains `host:port` seed addresses.
@@ -175,6 +189,10 @@ provider initializes exact offsets before source ownership is transferred.
 `spec.splitter.replicas` controls the splitter StatefulSet size and defaults to
 one. Stable ordinal-based group-instance and transactional IDs fence stale
 processes. `batchSize` bounds each Kafka transaction and defaults to 100.
+
+`spec.splitter.replicas` may be raised or lowered while the split is enabled.
+The provider removes the member Leases of retired ordinals so acknowledgement
+gates use the current replica count instead of a stale one.
 
 The split becomes `Enabled` only when all expected splitter members are healthy
 and have acknowledged the current route generation. Route changes are adopted
@@ -319,8 +337,9 @@ appropriate to their role.
 
 The provider's Kubernetes ServiceAccount can read referenced Secrets in
 managed namespaces, evict selected Pods, read supported workload controllers,
-and manage its own ConfigMaps, headless Services, StatefulSets, and Leases.
-The Helm chart installs these permissions only when the provider is enabled.
+label namespaces, and manage its own ConfigMaps, headless Services,
+StatefulSets, and Leases. The Helm chart installs these permissions only
+when the provider is enabled.
 
 ## Recovery and troubleshooting
 
@@ -340,14 +359,22 @@ Common conditions are:
 
 - `SourceGroupNotEmpty`: another member still consumes the original group.
   Stop it or correct the workload selector before retrying.
-- `ReplacingPods` or `RestoringApplication`: inspect workload availability and
-  PDBs. The provider waits rather than bypassing disruption policy.
+- `ReplacingPods` or `RestoringApplication`: the provider waits rather than
+  bypassing disruption policy. The condition message names the Pod whose
+  eviction was refused. Check `kubectl get pdb` in the namespace, then either
+  wait for enough replicas to become available, temporarily raise the
+  budget's allowed disruptions, or scale the workload up. The provider
+  retries every few seconds and continues as soon as an eviction is allowed.
 - `BrokerPreflightFailed`: correct permissions, transaction support, topic
   configuration, source incarnation, or shadow durability.
 - `NeedsProvisioning`: add or expand a preprovisioned personal slot.
-- `SessionGroupNotEmpty`: stop the local consumer so route residue can return.
-- `DrainPending` or `DrainingApplication`: consumers are quiesced correctly but
-  committed records remain. The status lag records the latest count.
+- `SessionGroupNotEmpty`: the local consumer group still has a member, or a
+  member joined while residue was being returned. Stop the local consumer so
+  route residue can return.
+- `DrainFailed`: returning route residue to the application shadow failed.
+  Correct the reported broker error and let reconciliation retry.
+- `DrainingApplication`: the splitter has stopped but application shadow
+  records remain. `status.applicationLag` holds the count.
 - `Degraded`: a splitter is unhealthy or an unexpected original-group member
   appeared. No unsafe lifecycle step proceeds until ownership is proved again.
 

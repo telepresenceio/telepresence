@@ -28,7 +28,7 @@ file is removed in the last commit once every item is done.
 - [x] Forget closed routes in the expiry refresh cache.
 - [x] Restore intercepts one at a time on reconnect so one failing Kafka
       route does not drop a client's other intercepts.
-- [ ] Document that route environment overrides the application's own
+- [x] Document that route environment overrides the application's own
       variables by design: that is how the local consumer receives its
       personal topics, group, and isolation level.
 
@@ -37,12 +37,12 @@ file is removed in the last commit once every item is done.
 - [x] Install the CRDs on upgrade, not only on first install: render them as
       templates gated on `kafka.enabled` with a keep policy, or apply them
       from the Helm code.
-- [ ] Scope the Pod-mutating webhook to namespaces that hold a KafkaSplit,
+- [x] Scope the Pod-mutating webhook to namespaces that hold a KafkaSplit,
       via a namespace label the controller maintains; keep `failurePolicy:
       Fail` inside that scope only.
 - [x] Drop unused grants: PodDisruptionBudget reads, event writes, the
       finalizer subresources.
-- [ ] Exclude the provider's own Pods by namespace rather than by a label.
+- [x] Exclude the provider's own Pods by namespace rather than by a label.
 
 ## 4. Controller and broker
 
@@ -71,9 +71,9 @@ file is removed in the last commit once every item is done.
 
 ## 6. Documentation
 
-- [ ] Replace `DrainPending` with the real condition names.
-- [ ] Document the webhook's failure policy and its scope.
-- [ ] State that splitter replicas cannot be reduced while enabled, or
+- [x] Replace `DrainPending` with the real condition names.
+- [x] Document the webhook's failure policy and its scope.
+- [x] State that splitter replicas cannot be reduced while enabled, or
       document the recovery once item 4 lands.
-- [ ] Give concrete guidance for a PodDisruptionBudget that stalls a
+- [x] Give concrete guidance for a PodDisruptionBudget that stalls a
       transition.
