@@ -5,7 +5,7 @@
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Improve selected-intercept tunnel stability</div></div>
 <div style="margin-left: 15px">
 
-Selected-intercept tunnels now reconnect agent dial watchers with backoff, clean up abandoned forwards more carefully, use separate timeouts for agent connections and intercepted endpoints, and reject dial requests when responder capacity is full instead of letting work accumulate.
+Selected-intercept tunnels now reconnect agent dial watchers with backoff, clean up abandoned forwards more carefully, use separate timeouts for agent connections and intercepted endpoints, and reject dial requests when responder capacity is full instead of letting work accumulate. The default for the <code>endpointDial</code> timeout is raised from 3 to 15 seconds, so a connection to a cluster address that is not yet accepting connections is retried for longer before it fails.
 </div>
 
 ## Version 2.32.1 <span style="font-size: 16px;">(September 25)</span>
