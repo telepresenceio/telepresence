@@ -1,7 +1,4 @@
 {{- if .Values.kafka.enabled }}
-{{- if not (semverCompare ">=1.27-0" .Capabilities.KubeVersion.Version) }}
-{{- fail "kafka.enabled requires Kubernetes 1.27 or newer for Pod scheduling gates" }}
-{{- end }}
 {{- $namespace := include "traffic-manager.namespace" $ }}
 {{- $name := "tp-kafka" }}
 {{- $roleName := printf "%s-%s" $name $namespace }}

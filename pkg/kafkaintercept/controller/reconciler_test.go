@@ -163,60 +163,12 @@ func TestPodMutatorComposesActiveSplits(t *testing.T) {
 	require.NotEmpty(t, response.Patches)
 }
 
-func TestPodMutatorGatesBlockedSplit(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, appsv1.AddToScheme(scheme))
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, api.AddToScheme(scheme))
-	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
-		Name: "checkout", Namespace: "shop", UID: types.UID("deployment-uid"),
-	}}
-	replicaSet := &appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{
-		Name: "checkout-123", Namespace: "shop", UID: types.UID("replicaset-uid"),
-		OwnerReferences: []metav1.OwnerReference{{
-			APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID,
-			Controller: ptr.To(true),
-		}},
-	}}
-	split := validControllerSplit()
-	split.Status = api.KafkaSplitStatus{
-		ActiveGeneration: 2,
-		AdmissionMode:    api.KafkaAdmissionBlocked,
-		Workloads: []api.WorkloadReference{{
-			APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID,
-		}},
-	}
-	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, replicaSet, split).Build()
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "checkout-123-abc", Namespace: "shop",
-			OwnerReferences: []metav1.OwnerReference{{
-				APIVersion: "apps/v1", Kind: "ReplicaSet", Name: replicaSet.Name, UID: replicaSet.UID,
-				Controller: ptr.To(true),
-			}},
-		},
-		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
-	}
-	raw, err := json.Marshal(pod)
-	require.NoError(t, err)
-	response := (podMutator{reader: reader}).Handle(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
-		Namespace: "shop", Object: runtime.RawExtension{Raw: raw},
-	}})
-	require.True(t, response.Allowed, response.Result)
-	patch, err := json.Marshal(response.Patches)
-	require.NoError(t, err)
-	require.Contains(t, string(patch), runtimeconfig.HandoffGate)
-	require.Contains(t, string(patch), runtimeconfig.ActiveAnnotation)
-}
-
 func TestGenerationZeroAcceptsOtherActiveSplits(t *testing.T) {
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Annotations: map[string]string{
 		runtimeconfig.ActiveAnnotation: `{"other":"3"}`,
-	}}, Spec: corev1.PodSpec{SchedulingGates: []corev1.PodSchedulingGate{{Name: runtimeconfig.HandoffGate}}}}
+	}}}
 	require.True(t, podHasGeneration(pod, "ours", 0))
 	require.False(t, podHasGeneration(pod, "other", 0))
-	require.False(t, podBlockedForSplit(pod, "ours"))
-	require.True(t, podBlockedForSplit(pod, "other"))
 }
 
 func TestInvalidReplacementSpecStillDeactivatesSnapshot(t *testing.T) {

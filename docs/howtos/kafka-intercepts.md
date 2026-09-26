@@ -13,7 +13,6 @@ default.
 
 You need:
 
-- Kubernetes 1.27 or newer with `PodSchedulingReadiness` enabled;
 - a Kafka cluster with transactions enabled;
 - a consumer configured through explicit topic, group, and isolation-level
   environment variables in its Pod template;

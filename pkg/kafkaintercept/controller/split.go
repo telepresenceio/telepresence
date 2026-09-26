@@ -211,27 +211,6 @@ func (r *SplitReconciler) reconcileDeactivation(
 			fmt.Sprintf("waiting for application to consume %d shadow records", remaining), true,
 		)
 	}
-	if split.Status.AdmissionMode != api.KafkaAdmissionBlocked {
-		split.Status.AdmissionMode = api.KafkaAdmissionBlocked
-		return r.transitionSplit(
-			ctx, split, before, api.SplitPhaseQuiescingApplication, "QuiescingApplication",
-			"blocking replacements before source handback", true,
-		)
-	}
-	removed, message, err := r.removePods(ctx, active)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-	if !removed {
-		return r.pendingSplit(ctx, split, before, "QuiescingApplication", message)
-	}
-	memberless, err := kafka.GroupMemberless(ctx, split.Status.ApplicationGroup)
-	if err != nil {
-		return r.pendingSplit(ctx, split, before, "ApplicationOwnershipUnknown", err.Error())
-	}
-	if !memberless {
-		return r.pendingSplit(ctx, split, before, "ApplicationGroupNotEmpty", "application shadow group still has consumers")
-	}
 	deleted, err := r.deleteProviderResources(ctx, split)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -245,24 +224,22 @@ func (r *SplitReconciler) reconcileDeactivation(
 	split.Status.SplitterName = ""
 	split.Status.Members = nil
 	split.Status.RouteGeneration = 0
-	memberless, err = kafka.GroupMemberless(ctx, active.Spec.Source.Group)
+	memberless, err := kafka.GroupMemberless(ctx, active.Spec.Source.Group)
 	if err != nil {
 		return r.pendingSplit(ctx, split, before, "SourceOwnershipUnknown", err.Error())
 	}
 	if !memberless {
 		return r.pendingSplit(ctx, split, before, "StoppingSplitter", "splitters have not left the original group")
 	}
-	if split.Status.AdmissionMode != api.KafkaAdmissionNormal {
-		split.Status.AdmissionMode = api.KafkaAdmissionNormal
-		return r.transitionSplit(
-			ctx, split, before, api.SplitPhaseRestoringApplication, "RestoringApplication", "normally configured Pods may resume", true,
-		)
-	}
+	split.Status.AdmissionMode = api.KafkaAdmissionNormal
 	return r.transitionSplit(
-		ctx, split, before, api.SplitPhaseCleaningApplication, "CleaningApplication", "deleting managed application shadows", true,
+		ctx, split, before, api.SplitPhaseRestoringApplication, "RestoringApplication", "normally configured Pods may resume", true,
 	)
 }
 
+// reconcileRestoringApplication replaces the shadow-consuming Pods once the
+// splitter has left the original group, then waits for the application
+// shadow group to empty before managed shadows are deleted.
 func (r *SplitReconciler) reconcileRestoringApplication(
 	ctx context.Context,
 	split *api.KafkaSplit,
@@ -279,6 +256,20 @@ func (r *SplitReconciler) reconcileRestoringApplication(
 	}
 	if !restored {
 		return r.transitionSplit(ctx, split, before, split.Status.Phase, "RestoringApplication", message, true)
+	}
+	kafka, err := r.openBroker(ctx, active)
+	if err != nil {
+		return r.pendingSplit(ctx, split, before, "BrokerUnavailable", err.Error())
+	}
+	defer kafka.Close()
+	memberless, err := kafka.GroupMemberless(ctx, split.Status.ApplicationGroup)
+	if err != nil {
+		return r.transitionSplit(ctx, split, before, split.Status.Phase, "ApplicationOwnershipUnknown", err.Error(), true)
+	}
+	if !memberless {
+		return r.transitionSplit(
+			ctx, split, before, split.Status.Phase, "ApplicationGroupNotEmpty", "application shadow group still has consumers", true,
+		)
 	}
 	return r.transitionSplit(
 		ctx, split, before, api.SplitPhaseCleaningApplication, "CleaningApplication", "deleting managed application shadows", true,

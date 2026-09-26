@@ -34,13 +34,12 @@ const (
 )
 
 // KafkaAdmissionMode controls how replacement Pods are admitted.
-// +kubebuilder:validation:Enum=Normal;Shadow;Blocked
+// +kubebuilder:validation:Enum=Normal;Shadow
 type KafkaAdmissionMode string
 
 const (
-	KafkaAdmissionNormal  KafkaAdmissionMode = "Normal"
-	KafkaAdmissionShadow  KafkaAdmissionMode = "Shadow"
-	KafkaAdmissionBlocked KafkaAdmissionMode = "Blocked"
+	KafkaAdmissionNormal KafkaAdmissionMode = "Normal"
+	KafkaAdmissionShadow KafkaAdmissionMode = "Shadow"
 )
 
 // ValueSource is a literal or one key in a Secret.
@@ -249,7 +248,6 @@ const (
 	SplitPhasePausing              SplitPhase = "Pausing"
 	SplitPhaseClosingRoutes        SplitPhase = "ClosingRoutes"
 	SplitPhaseDrainingApplication  SplitPhase = "DrainingApplication"
-	SplitPhaseQuiescingApplication SplitPhase = "QuiescingApplication"
 	SplitPhaseStoppingSplitter     SplitPhase = "StoppingSplitter"
 	SplitPhaseRestoringApplication SplitPhase = "RestoringApplication"
 	SplitPhaseCleaningApplication  SplitPhase = "CleaningApplication"
