@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
@@ -168,7 +169,10 @@ func (r *RouteReconciler) SetupWithManager(manager ctrl.Manager) error {
 	); err != nil {
 		return err
 	}
-	return ctrl.NewControllerManagedBy(manager).For(&api.KafkaRoute{}).Complete(r)
+	// routeForSessionSlot allocates preprovisioned slots by read-then-write,
+	// which is only safe with a single worker.
+	return ctrl.NewControllerManagedBy(manager).For(&api.KafkaRoute{}).
+		WithOptions(controller.Options{MaxConcurrentReconciles: 1}).Complete(r)
 }
 
 // Reconcile advances one personal route.

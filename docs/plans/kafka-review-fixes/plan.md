@@ -46,16 +46,16 @@ file is removed in the last commit once every item is done.
 
 ## 4. Controller and broker
 
-- [ ] Prune member Leases for retired ordinals when the splitter StatefulSet
+- [x] Prune member Leases for retired ordinals when the splitter StatefulSet
       shrinks, and count only ordinals below the replica count.
-- [ ] Fence the route drain: re-verify the personal group is memberless
+- [x] Fence the route drain: re-verify the personal group is memberless
       before every drain transaction and abort when a member appears.
-- [ ] Pin the route reconciler to one worker with a comment, or make
+- [x] Pin the route reconciler to one worker with a comment, or make
       preprovisioned slot allocation a compare-and-swap.
-- [ ] Check split composition against freshly resolved workloads, not only
+- [x] Check split composition against freshly resolved workloads, not only
       the other split's recorded snapshot.
-- [ ] List Pods per selected workload instead of the whole namespace.
-- [ ] Splitter: log and continue on retriable fetch errors instead of
+- [x] List Pods per selected workload instead of the whole namespace.
+- [x] Splitter: log and continue on retriable fetch errors instead of
       exiting.
 
 ## 5. Tests and CI

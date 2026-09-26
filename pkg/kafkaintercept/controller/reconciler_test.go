@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -72,7 +73,8 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "deployment", Namespace: "shop"},
 			Spec: appsv1.DeploymentSpec{
-				Replicas: ptr.To(int32(2)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Replicas: ptr.To(int32(2)), Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "deployment"}},
+				Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "deployment"}},
 				}},
 			},
@@ -80,7 +82,8 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 		&appsv1.StatefulSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "statefulset", Namespace: "shop"},
 			Spec: appsv1.StatefulSetSpec{
-				Replicas: ptr.To(int32(3)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Replicas: ptr.To(int32(3)), Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "statefulset"}},
+				Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "statefulset"}},
 				}},
 			},
@@ -88,7 +91,8 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 		&appsv1.ReplicaSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "replicaset", Namespace: "shop"},
 			Spec: appsv1.ReplicaSetSpec{
-				Replicas: ptr.To(int32(4)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Replicas: ptr.To(int32(4)), Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "replicaset"}},
+				Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "replicaset"}},
 				}},
 			},
@@ -96,7 +100,8 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 		&argorollouts.Rollout{
 			ObjectMeta: metav1.ObjectMeta{Name: "rollout", Namespace: "shop"},
 			Spec: argorollouts.RolloutSpec{
-				Replicas: ptr.To(int32(5)), Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
+				Replicas: ptr.To(int32(5)), Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rollout"}},
+				Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{Name: "rollout"}},
 				}},
 			},
@@ -107,12 +112,13 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 	for i, kind := range []string{"Deployment", "StatefulSet", "ReplicaSet", "Rollout"} {
 		t.Run(kind, func(t *testing.T) {
 			name := strings.ToLower(kind)
-			template, replicas, err := reconciler.workloadTemplate(t.Context(), "shop", api.WorkloadReference{
+			template, selector, replicas, err := reconciler.workloadTemplate(t.Context(), "shop", api.WorkloadReference{
 				Kind: kind, Name: name,
 			})
 			require.NoError(t, err)
 			require.Equal(t, int32(i+2), replicas)
 			require.Equal(t, name, template.Spec.Containers[0].Name)
+			require.Equal(t, map[string]string{"app": name}, selector.MatchLabels)
 		})
 	}
 }
@@ -235,6 +241,35 @@ func TestSplitBindingCollisionHasDeterministicWinner(t *testing.T) {
 	require.ErrorContains(t, reconciler.validateSplitComposition(t.Context(), second, second.Status.Workloads), "KafkaSplit a")
 }
 
+func TestSplitCompositionResolvesFreshWorkloadsWhenStatusEmpty(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(scheme))
+	require.NoError(t, argorollouts.AddToScheme(scheme))
+	require.NoError(t, api.AddToScheme(scheme))
+	deployment := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{
+		Name: "checkout", Namespace: "shop", UID: types.UID("deployment-uid"), Labels: map[string]string{"app": "checkout"},
+	}}
+	created := metav1.NewTime(time.Now())
+	first := validControllerSplit()
+	first.Name = "a"
+	first.UID = types.UID("a")
+	first.CreationTimestamp = created
+	second := first.DeepCopy()
+	second.Name = "b"
+	second.UID = types.UID("b")
+	second.CreationTimestamp = metav1.NewTime(created.Add(time.Second))
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, first, second).Build()
+	reconciler := &SplitReconciler{base: base{Client: client}}
+
+	firstWorkloads, err := reconciler.resolveWorkloads(t.Context(), first)
+	require.NoError(t, err)
+	require.NoError(t, reconciler.validateSplitComposition(t.Context(), first, firstWorkloads))
+
+	secondWorkloads, err := reconciler.resolveWorkloads(t.Context(), second)
+	require.NoError(t, err)
+	require.ErrorContains(t, reconciler.validateSplitComposition(t.Context(), second, secondWorkloads), "KafkaSplit a")
+}
+
 func TestRoutingUpdatesDoNotRollSplitter(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, appsv1.AddToScheme(scheme))
@@ -277,7 +312,7 @@ func TestMembersAcknowledgedPublishesPersistedStatus(t *testing.T) {
 	now := metav1.NewMicroTime(time.Now())
 	lease := &coordinationv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "provider-member-0", Namespace: "ambassador",
+			Name: "provider-0", Namespace: "ambassador",
 			Labels:      map[string]string{runtimeconfig.SplitLabel: "provider"},
 			Annotations: map[string]string{runtimeconfig.GenerationAnnotation: "3", runtimeconfig.HealthyAnnotation: "true"},
 		},
@@ -290,10 +325,41 @@ func TestMembersAcknowledgedPublishesPersistedStatus(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, acknowledged)
 	require.Len(t, split.Status.Members, 1)
-	require.Equal(t, "provider-member-0", split.Status.Members[0].Name)
+	require.Equal(t, "provider-0", split.Status.Members[0].Name)
 	require.Equal(t, int64(3), split.Status.Members[0].Generation)
 	require.True(t, split.Status.Members[0].Healthy)
 	require.WithinDuration(t, now.Time, split.Status.Members[0].LastSeen.Time, time.Millisecond)
+}
+
+func TestMembersAcknowledgedDeletesLeasesRetiredByReplicaReduction(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, coordinationv1.AddToScheme(scheme))
+	now := metav1.NewMicroTime(time.Now())
+	var leases []ctrlclient.Object
+	for ordinal := range 3 {
+		leases = append(leases, &coordinationv1.Lease{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: fmt.Sprintf("provider-%d", ordinal), Namespace: "ambassador",
+				Labels:      map[string]string{runtimeconfig.SplitLabel: "provider"},
+				Annotations: map[string]string{runtimeconfig.GenerationAnnotation: "3", runtimeconfig.HealthyAnnotation: "true"},
+			},
+			Spec: coordinationv1.LeaseSpec{RenewTime: &now},
+		})
+	}
+	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(leases...).Build()
+	reconciler := &SplitReconciler{base: base{Client: client}}
+	split := validControllerSplit()
+
+	acknowledged, err := reconciler.membersAcknowledged(t.Context(), split, "provider", 3, 2)
+	require.NoError(t, err)
+	require.True(t, acknowledged)
+	require.Len(t, split.Status.Members, 2)
+	require.Equal(t, "provider-0", split.Status.Members[0].Name)
+	require.Equal(t, "provider-1", split.Status.Members[1].Name)
+
+	retired := new(coordinationv1.Lease)
+	err = client.Get(t.Context(), types.NamespacedName{Name: "provider-2", Namespace: "ambassador"}, retired)
+	require.True(t, apierrors.IsNotFound(err))
 }
 
 func TestRouteProvisioningContinuesDuringAcknowledgement(t *testing.T) {
@@ -323,7 +389,7 @@ func TestFinishClosingRouteRequiresFreshMemberAcknowledgement(t *testing.T) {
 	}
 	lease := &coordinationv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "provider-member-0", Namespace: "ambassador",
+			Name: "provider-0", Namespace: "ambassador",
 			Labels:      map[string]string{runtimeconfig.SplitLabel: "provider"},
 			Annotations: map[string]string{runtimeconfig.GenerationAnnotation: "1", runtimeconfig.HealthyAnnotation: "true"},
 		},
@@ -370,7 +436,7 @@ func TestFinishClosingRouteDrainsResidueAfterAcknowledgement(t *testing.T) {
 	}
 	lease := &coordinationv1.Lease{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "provider-member-0", Namespace: "ambassador",
+			Name: "provider-0", Namespace: "ambassador",
 			Labels:      map[string]string{runtimeconfig.SplitLabel: "provider"},
 			Annotations: map[string]string{runtimeconfig.GenerationAnnotation: "2", runtimeconfig.HealthyAnnotation: "true"},
 		},

@@ -15,6 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apiMeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
@@ -85,7 +86,7 @@ func (r *SplitReconciler) validateWorkloadEnvironment(
 ) (int32, error) {
 	var desired int32
 	for _, workload := range workloads {
-		template, replicas, err := r.workloadTemplate(ctx, split.Namespace, workload)
+		template, _, replicas, err := r.workloadTemplate(ctx, split.Namespace, workload)
 		if err != nil {
 			return 0, err
 		}
@@ -105,35 +106,35 @@ func (r *SplitReconciler) workloadTemplate(
 	ctx context.Context,
 	namespace string,
 	ref api.WorkloadReference,
-) (*corev1.PodTemplateSpec, int32, error) {
+) (*corev1.PodTemplateSpec, *metav1.LabelSelector, int32, error) {
 	key := client.ObjectKey{Namespace: namespace, Name: ref.Name}
 	switch ref.Kind {
 	case "Deployment":
 		object := new(appsv1.Deployment)
 		if err := r.Get(ctx, key, object); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
-		return &object.Spec.Template, replicas(object.Spec.Replicas), nil
+		return &object.Spec.Template, object.Spec.Selector, replicas(object.Spec.Replicas), nil
 	case "StatefulSet":
 		object := new(appsv1.StatefulSet)
 		if err := r.Get(ctx, key, object); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
-		return &object.Spec.Template, replicas(object.Spec.Replicas), nil
+		return &object.Spec.Template, object.Spec.Selector, replicas(object.Spec.Replicas), nil
 	case "ReplicaSet":
 		object := new(appsv1.ReplicaSet)
 		if err := r.Get(ctx, key, object); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
-		return &object.Spec.Template, replicas(object.Spec.Replicas), nil
+		return &object.Spec.Template, object.Spec.Selector, replicas(object.Spec.Replicas), nil
 	case "Rollout":
 		object := new(argorollouts.Rollout)
 		if err := r.Get(ctx, key, object); err != nil {
-			return nil, 0, err
+			return nil, nil, 0, err
 		}
-		return &object.Spec.Template, replicas(object.Spec.Replicas), nil
+		return &object.Spec.Template, object.Spec.Selector, replicas(object.Spec.Replicas), nil
 	default:
-		return nil, 0, fmt.Errorf("unsupported workload kind %s", ref.Kind)
+		return nil, nil, 0, fmt.Errorf("unsupported workload kind %s", ref.Kind)
 	}
 }
 
@@ -200,7 +201,15 @@ func (r *SplitReconciler) validateSplitComposition(
 		if other.Name == split.Name || other.Spec.DesiredState != api.DesiredStateEnabled || other.Spec.Container != split.Spec.Container {
 			continue
 		}
-		if !workloadsOverlap(workloads, other.Status.Workloads) {
+		otherWorkloads := other.Status.Workloads
+		if len(otherWorkloads) == 0 {
+			resolved, err := r.resolveWorkloads(ctx, other)
+			if err != nil {
+				continue
+			}
+			otherWorkloads = resolved
+		}
+		if !workloadsOverlap(workloads, otherWorkloads) {
 			continue
 		}
 		for name := range bindingNames(other) {
@@ -253,34 +262,51 @@ func (r *SplitReconciler) replacePods(
 	desired int32,
 	generation int64,
 ) (bool, string, error) {
-	pods := new(corev1.PodList)
-	if err := r.List(ctx, pods, client.InNamespace(split.Namespace)); err != nil {
-		return false, "", err
-	}
 	resolver := &replicaSetResolver{reader: r.Client}
+	seen := make(map[types.UID]struct{})
 	ready := int32(0)
 	stale := 0
-	for i := range pods.Items {
-		pod := &pods.Items[i]
-		matches, err := podMatchesSnapshot(ctx, resolver, pod, split.Status.Workloads)
+	for _, workload := range split.Status.Workloads {
+		_, selector, _, err := r.workloadTemplate(ctx, split.Namespace, workload)
 		if err != nil {
 			return false, "", err
 		}
-		if !matches {
-			continue
+		labelSelector, err := metav1.LabelSelectorAsSelector(selector)
+		if err != nil {
+			return false, "", err
 		}
-		if !podHasGeneration(pod, split.Name, generation) {
-			stale++
-			if pod.DeletionTimestamp == nil {
-				eviction := &policyv1.Eviction{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: pod.Namespace}}
-				if err := r.SubResource("eviction").Create(ctx, pod, eviction); err != nil && !apierrors.IsNotFound(err) {
-					return false, fmt.Sprintf("eviction of Pod %s is blocked: %v", pod.Name, err), nil
-				}
+		pods := new(corev1.PodList)
+		if err := r.List(
+			ctx, pods, client.InNamespace(split.Namespace), client.MatchingLabelsSelector{Selector: labelSelector},
+		); err != nil {
+			return false, "", err
+		}
+		for i := range pods.Items {
+			pod := &pods.Items[i]
+			if _, ok := seen[pod.UID]; ok {
+				continue
 			}
-			continue
-		}
-		if podReady(pod) {
-			ready++
+			matches, err := podMatchesSnapshot(ctx, resolver, pod, split.Status.Workloads)
+			if err != nil {
+				return false, "", err
+			}
+			if !matches {
+				continue
+			}
+			seen[pod.UID] = struct{}{}
+			if !podHasGeneration(pod, split.Name, generation) {
+				stale++
+				if pod.DeletionTimestamp == nil {
+					eviction := &policyv1.Eviction{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: pod.Namespace}}
+					if err := r.SubResource("eviction").Create(ctx, pod, eviction); err != nil && !apierrors.IsNotFound(err) {
+						return false, fmt.Sprintf("eviction of Pod %s is blocked: %v", pod.Name, err), nil
+					}
+				}
+				continue
+			}
+			if podReady(pod) {
+				ready++
+			}
 		}
 	}
 	if stale > 0 {

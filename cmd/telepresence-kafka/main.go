@@ -178,6 +178,7 @@ func runSplitter(args []string) error {
 			return fmt.Errorf("read initial Kafka routing table: %w", err)
 		}
 	}
+	log := ctrl.LoggerFrom(ctx)
 	splitter, err := kafkaintercept.NewSplitter(kafkaintercept.SplitterConfig{
 		Brokers:         config.Connection.BootstrapServers,
 		Group:           config.Group,
@@ -189,6 +190,7 @@ func runSplitter(args []string) error {
 		ClientOptions:   clientOptions,
 		InitialRoutes:   config.Routes,
 		OnGeneration:    acknowledged.Store,
+		Logf:            func(format string, args ...any) { log.Info(fmt.Sprintf(format, args...)) },
 	})
 	if err != nil {
 		return err

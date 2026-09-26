@@ -323,7 +323,7 @@ func (r *SplitReconciler) membersAcknowledged(
 	generation uint64,
 	replicas int32,
 ) (bool, error) {
-	members, err := splitterMemberStatus(ctx, r.Client, r.providerNamespace(), name)
+	members, err := splitterMemberStatus(ctx, r.Client, r.providerNamespace(), name, replicas)
 	if err != nil {
 		return false, err
 	}
@@ -331,22 +331,38 @@ func (r *SplitReconciler) membersAcknowledged(
 	return membersReady(members, replicas, generation), nil
 }
 
+// splitterMemberStatus lists the member Leases for a splitter, deleting the
+// ones left behind by ordinals a replica reduction retired.
 func splitterMemberStatus(
 	ctx context.Context,
-	reader client.Reader,
+	c client.Client,
 	namespace string,
 	name string,
+	replicas int32,
 ) ([]api.KafkaSplitterMemberStatus, error) {
 	leases := new(coordinationv1.LeaseList)
-	if err := reader.List(
+	if err := c.List(
 		ctx, leases, client.InNamespace(namespace), client.MatchingLabels{runtimeconfig.SplitLabel: name},
 	); err != nil {
 		return nil, err
 	}
+	prefix := name + "-"
 	now := time.Now()
 	members := make([]api.KafkaSplitterMemberStatus, 0, len(leases.Items))
 	for i := range leases.Items {
 		lease := &leases.Items[i]
+		ordinal, ok := strings.CutPrefix(lease.Name, prefix)
+		if !ok {
+			continue
+		}
+		if n, err := strconv.Atoi(ordinal); err != nil || n >= int(replicas) {
+			if err == nil {
+				if delErr := client.IgnoreNotFound(c.Delete(ctx, lease)); delErr != nil {
+					return nil, delErr
+				}
+			}
+			continue
+		}
 		ack, _ := strconv.ParseUint(lease.Annotations[runtimeconfig.GenerationAnnotation], 10, 64)
 		healthy, _ := strconv.ParseBool(lease.Annotations[runtimeconfig.HealthyAnnotation])
 		lastSeen := metav1.Time{}
