@@ -101,6 +101,7 @@ func runController(args []string) error {
 		}},
 		Client: client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{
 			&corev1.Secret{},
+			&corev1.Namespace{},
 		}}},
 		Metrics:                       metricsserver.Options{BindAddress: *metricsAddress},
 		HealthProbeBindAddress:        *probeAddress,

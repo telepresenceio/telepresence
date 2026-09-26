@@ -310,7 +310,7 @@ func ensureArgoRollouts(t testing.TB, ctx context.Context, r *rt.Runtime) {
 		defer cancel()
 		_, _ = r.Kubectl(cleanupCtx, "", "delete", "namespace", argoNamespace, "--ignore-not-found", "--wait=false")
 	})
-	if _, err := r.Kubectl(ctx, argoNamespace, "apply", "-f", argoInstallURL); err != nil {
+	if _, err := r.Kubectl(ctx, argoNamespace, "apply", "--server-side", "--force-conflicts", "-f", argoInstallURL); err != nil {
 		t.Fatalf("install Argo Rollouts: %v", err)
 	}
 	patch := fmt.Sprintf(`[{"op":"replace","path":"/subjects/0/namespace","value":%q}]`, argoNamespace)
