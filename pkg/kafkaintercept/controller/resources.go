@@ -165,7 +165,11 @@ func (r *SplitReconciler) ensureProviderResources(
 		table.Generation = 1
 		configMap = &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 			Namespace: key.Namespace, Name: key.Name,
-			Labels: map[string]string{runtimeconfig.SplitLabel: name},
+			Labels: map[string]string{
+				runtimeconfig.SplitLabel:          name,
+				runtimeconfig.SplitNamespaceLabel: split.Namespace,
+				runtimeconfig.SplitNameLabel:      split.Name,
+			},
 		}}
 	} else {
 		current, parseErr := runtimeconfig.RoutingFromConfigMap(configMap)
@@ -189,6 +193,7 @@ func (r *SplitReconciler) ensureProviderResources(
 			BatchSize: int(split.Spec.Splitter.EffectiveBatchSize()), Routes: table,
 			Control: &runtimeconfig.Control{
 				Namespace: key.Namespace, ConfigMap: key.Name, MemberLeasePrefix: name + "-", Split: name,
+				SplitName: split.Name,
 			},
 		}
 		configBytes, err = json.Marshal(runtime)
@@ -214,7 +219,7 @@ func (r *SplitReconciler) ensureProviderResources(
 			return 0, err
 		}
 	}
-	if err := r.ensureSplitterService(ctx, key); err != nil {
+	if err := r.ensureSplitterService(ctx, split, key); err != nil {
 		return 0, err
 	}
 	if err := r.ensureSplitterStatefulSet(ctx, split, key, configBytes); err != nil {
@@ -223,15 +228,18 @@ func (r *SplitReconciler) ensureProviderResources(
 	return table.Generation, nil
 }
 
-func (r *SplitReconciler) ensureSplitterService(ctx context.Context, key client.ObjectKey) error {
-	labels := map[string]string{
+func (r *SplitReconciler) ensureSplitterService(ctx context.Context, split *api.KafkaSplit, key client.ObjectKey) error {
+	selector := map[string]string{
 		"app.kubernetes.io/name": runtimeconfig.SplitterName, runtimeconfig.SplitLabel: key.Name,
 	}
+	labels := maps.Clone(selector)
+	labels[runtimeconfig.SplitNamespaceLabel] = split.Namespace
+	labels[runtimeconfig.SplitNameLabel] = split.Name
 	expected := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name, Labels: maps.Clone(labels)},
+		ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name, Labels: labels},
 		Spec: corev1.ServiceSpec{
 			ClusterIP: corev1.ClusterIPNone,
-			Selector:  maps.Clone(labels),
+			Selector:  selector,
 		},
 	}
 	current := new(corev1.Service)
@@ -263,19 +271,22 @@ func (r *SplitReconciler) ensureSplitterStatefulSet(
 	if serviceAccount == "" {
 		serviceAccount = runtimeconfig.ProviderName
 	}
-	labels := map[string]string{
+	selector := map[string]string{
 		"app.kubernetes.io/name": runtimeconfig.SplitterName, runtimeconfig.SplitLabel: key.Name,
 	}
+	labels := maps.Clone(selector)
+	labels[runtimeconfig.SplitNamespaceLabel] = split.Namespace
+	labels[runtimeconfig.SplitNameLabel] = split.Name
 	replicas := split.Spec.Splitter.EffectiveReplicas()
 	checksum := sha256.Sum256(config)
 	expected := &appsv1.StatefulSet{
-		ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name, Labels: maps.Clone(labels)},
+		ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name, Labels: labels},
 		Spec: appsv1.StatefulSetSpec{
 			ServiceName: key.Name, Replicas: &replicas,
-			Selector: &metav1.LabelSelector{MatchLabels: maps.Clone(labels)},
+			Selector: &metav1.LabelSelector{MatchLabels: maps.Clone(selector)},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: maps.Clone(labels), Annotations: map[string]string{runtimeconfig.ConfigAnnotation: hex.EncodeToString(checksum[:])},
+					Labels: maps.Clone(selector), Annotations: map[string]string{runtimeconfig.ConfigAnnotation: hex.EncodeToString(checksum[:])},
 				},
 				Spec: corev1.PodSpec{
 					ServiceAccountName: serviceAccount,

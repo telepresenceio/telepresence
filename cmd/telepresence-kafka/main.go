@@ -101,7 +101,6 @@ func runController(args []string) error {
 		}},
 		Client: client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{
 			&corev1.Secret{},
-			&corev1.Namespace{},
 		}}},
 		Metrics:                       metricsserver.Options{BindAddress: *metricsAddress},
 		HealthProbeBindAddress:        *probeAddress,
@@ -114,15 +113,18 @@ func runController(args []string) error {
 	if err != nil {
 		return fmt.Errorf("create Kafka controller manager: %w", err)
 	}
+	brokers := controller.NewBrokerCache()
 	splitReconciler := &controller.SplitReconciler{ProviderImage: *providerImage, ServiceAccount: *serviceAccount}
 	splitReconciler.Client = manager.GetClient()
 	splitReconciler.ProviderNamespace = *providerNamespace
+	splitReconciler.Brokers = brokers
 	if err := splitReconciler.SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register KafkaSplit controller: %w", err)
 	}
 	routeReconciler := &controller.RouteReconciler{}
 	routeReconciler.Client = manager.GetClient()
 	routeReconciler.ProviderNamespace = *providerNamespace
+	routeReconciler.Brokers = brokers
 	if err := routeReconciler.SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register KafkaRoute controller: %w", err)
 	}

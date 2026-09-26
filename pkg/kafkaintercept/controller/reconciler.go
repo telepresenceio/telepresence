@@ -3,16 +3,26 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"reflect"
+	"sync"
+	"sync/atomic"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiMeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/broker"
@@ -20,9 +30,11 @@ import (
 )
 
 const (
-	reconcileInterval = 2 * time.Second
-	splitFinalizer    = runtimeconfig.SplitFinalizer
-	routeFinalizer    = runtimeconfig.RouteFinalizer
+	transitionInterval = 2 * time.Second
+	healthInterval     = 30 * time.Second
+	brokerMaxAge       = 10 * time.Minute
+	splitFinalizer     = runtimeconfig.SplitFinalizer
+	routeFinalizer     = runtimeconfig.RouteFinalizer
 )
 
 type kafkaBroker interface {
@@ -47,19 +59,150 @@ func defaultBrokerOpener(
 	return broker.Open(ctx, reader, namespace, connection)
 }
 
+// cachedBroker holds one open broker client shared across reconciles.
+type cachedBroker struct {
+	broker   kafkaBroker
+	specHash string
+	openedAt time.Time
+	stale    atomic.Bool
+}
+
+// BrokerCache shares open broker clients between the split and route reconcilers.
+type BrokerCache struct {
+	mu      sync.Mutex
+	entries map[types.NamespacedName]*cachedBroker
+}
+
+// NewBrokerCache returns an empty broker cache.
+func NewBrokerCache() *BrokerCache {
+	return &BrokerCache{entries: make(map[types.NamespacedName]*cachedBroker)}
+}
+
+// cachedBrokerHandle wraps a cached broker so Close is a no-op and a failed
+// operation marks the entry stale, forcing the next open to rebuild it.
+type cachedBrokerHandle struct {
+	entry *cachedBroker
+}
+
+func (h *cachedBrokerHandle) fail(err error) error {
+	if err != nil {
+		h.entry.stale.Store(true)
+	}
+	return err
+}
+
+func (h *cachedBrokerHandle) Prepare(ctx context.Context, split *api.KafkaSplit) (broker.Prepared, error) {
+	prepared, err := h.entry.broker.Prepare(ctx, split)
+	return prepared, h.fail(err)
+}
+
+func (h *cachedBrokerHandle) EnsureSession(
+	ctx context.Context, split *api.KafkaSplit, route *api.KafkaRoute,
+) (broker.Session, error) {
+	session, err := h.entry.broker.EnsureSession(ctx, split, route)
+	return session, h.fail(err)
+}
+
+func (h *cachedBrokerHandle) GroupMemberless(ctx context.Context, group string) (bool, error) {
+	memberless, err := h.entry.broker.GroupMemberless(ctx, group)
+	return memberless, h.fail(err)
+}
+
+func (h *cachedBrokerHandle) GroupMembers(ctx context.Context, group string) ([]string, error) {
+	members, err := h.entry.broker.GroupMembers(ctx, group)
+	return members, h.fail(err)
+}
+
+func (h *cachedBrokerHandle) Remaining(ctx context.Context, group string, topics map[string]string) (int64, error) {
+	remaining, err := h.entry.broker.Remaining(ctx, group, topics)
+	return remaining, h.fail(err)
+}
+
+func (h *cachedBrokerHandle) DrainSession(
+	ctx context.Context, split *api.KafkaSplit, route, group string, topics, appTopics map[string]string,
+) error {
+	return h.fail(h.entry.broker.DrainSession(ctx, split, route, group, topics, appTopics))
+}
+
+func (h *cachedBrokerHandle) DeleteManaged(ctx context.Context, resources []api.KafkaResourceStatus) error {
+	return h.fail(h.entry.broker.DeleteManaged(ctx, resources))
+}
+
+func (h *cachedBrokerHandle) Close() {}
+
 // base holds the broker-opening behavior shared by both reconcilers.
 type base struct {
 	client.Client
 	ProviderNamespace string
 	OpenBroker        brokerOpener
+	Brokers           *BrokerCache
 }
 
+func (b *base) brokers() *BrokerCache {
+	if b.Brokers == nil {
+		b.Brokers = NewBrokerCache()
+	}
+	return b.Brokers
+}
+
+// connectionSpecHash hashes the fields a broker client is built from, so a
+// spec change is detected without comparing structs field by field.
+func connectionSpecHash(connection api.KafkaConnectionSpec) (string, error) {
+	data, err := json.Marshal(connection)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+// openBroker returns a cached broker client for split, opening and caching a
+// new one when none is cached, the connection spec changed, the cached
+// client was marked stale by a failed operation, or it has aged past
+// brokerMaxAge.
 func (b *base) openBroker(ctx context.Context, split *api.KafkaSplit) (kafkaBroker, error) {
+	key := types.NamespacedName{Namespace: split.Namespace, Name: split.Name}
+	hash, err := connectionSpecHash(split.Spec.Connection)
+	if err != nil {
+		return nil, err
+	}
+	cache := b.brokers()
+	cache.mu.Lock()
+	entry, ok := cache.entries[key]
+	cache.mu.Unlock()
+	if ok && entry.specHash == hash && !entry.stale.Load() && time.Since(entry.openedAt) < brokerMaxAge {
+		return &cachedBrokerHandle{entry: entry}, nil
+	}
+
 	opener := b.OpenBroker
 	if opener == nil {
 		opener = defaultBrokerOpener
 	}
-	return opener(ctx, b.Client, split.Namespace, split.Spec.Connection)
+	opened, err := opener(ctx, b.Client, split.Namespace, split.Spec.Connection)
+	if err != nil {
+		return nil, err
+	}
+	entry = &cachedBroker{broker: opened, specHash: hash, openedAt: time.Now()}
+
+	cache.mu.Lock()
+	if old, ok := cache.entries[key]; ok {
+		old.broker.Close()
+	}
+	cache.entries[key] = entry
+	cache.mu.Unlock()
+	return &cachedBrokerHandle{entry: entry}, nil
+}
+
+// closeBroker closes and drops the cached broker client for key, if any.
+func (b *base) closeBroker(key types.NamespacedName) {
+	cache := b.brokers()
+	cache.mu.Lock()
+	entry, ok := cache.entries[key]
+	delete(cache.entries, key)
+	cache.mu.Unlock()
+	if ok {
+		entry.broker.Close()
+	}
 }
 
 func (b *base) providerNamespace() string {
@@ -78,7 +221,14 @@ type SplitReconciler struct {
 
 // SetupWithManager registers the KafkaSplit controller.
 func (r *SplitReconciler) SetupWithManager(manager ctrl.Manager) error {
-	return ctrl.NewControllerManagedBy(manager).For(&api.KafkaSplit{}).Complete(r)
+	return ctrl.NewControllerManagedBy(manager).
+		For(&api.KafkaSplit{}).
+		Watches(&api.KafkaRoute{}, handler.EnqueueRequestsFromMapFunc(routeToSplit)).
+		Watches(&coordinationv1.Lease{}, handler.EnqueueRequestsFromMapFunc(labelsToSplit), builder.WithPredicates(memberLeaseChanged())).
+		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(labelsToSplit)).
+		Watches(&appsv1.StatefulSet{}, handler.EnqueueRequestsFromMapFunc(labelsToSplit)).
+		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(r.podToSplits), builder.WithPredicates(podChanged())).
+		Complete(r)
 }
 
 // Reconcile advances one split through its requested lifecycle.
@@ -127,9 +277,21 @@ func (r *SplitReconciler) updateSplitStatus(
 		}
 	}
 	if requeueAfter {
-		return requeue(), nil
+		return requeueFor(split.Status.Phase), nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// requeueFor returns the requeue delay for a split that just entered phase.
+func requeueFor(phase api.SplitPhase) ctrl.Result {
+	switch phase {
+	case api.SplitPhaseEnabled:
+		return ctrl.Result{RequeueAfter: healthInterval}
+	case api.SplitPhaseDisabled, api.SplitPhaseInvalid:
+		return ctrl.Result{}
+	default:
+		return ctrl.Result{RequeueAfter: transitionInterval}
+	}
 }
 
 // transitionSplit sets the split's phase and Ready condition, then persists the status.
@@ -268,9 +430,21 @@ func (r *RouteReconciler) updateRouteStatus(
 		}
 	}
 	if requeueAfter {
-		return requeue(), nil
+		return requeueForRoute(route.Status.Phase), nil
 	}
 	return ctrl.Result{}, nil
+}
+
+// requeueForRoute returns the requeue delay for a route that just entered phase.
+func requeueForRoute(phase api.RoutePhase) ctrl.Result {
+	switch phase {
+	case api.RoutePhaseReady:
+		return ctrl.Result{RequeueAfter: healthInterval}
+	case api.RoutePhaseClosed, api.RoutePhaseInvalid:
+		return ctrl.Result{}
+	default:
+		return ctrl.Result{RequeueAfter: transitionInterval}
+	}
 }
 
 // transitionRoute sets the route's phase and Ready condition, then persists the status.
@@ -303,5 +477,5 @@ func setReadyCondition(
 }
 
 func requeue() ctrl.Result {
-	return ctrl.Result{RequeueAfter: reconcileInterval}
+	return ctrl.Result{RequeueAfter: transitionInterval}
 }

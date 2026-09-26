@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -136,6 +137,7 @@ func (r *SplitReconciler) reconcileSplitDeletion(
 	before *api.KafkaSplitStatus,
 ) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(split, splitFinalizer) {
+		r.closeBroker(types.NamespacedName{Namespace: split.Namespace, Name: split.Name})
 		return ctrl.Result{}, nil
 	}
 	return r.reconcileDeactivation(ctx, split, before, true)
@@ -290,6 +292,7 @@ func (r *SplitReconciler) finishDeactivation(
 	if err := kafka.DeleteManaged(ctx, applicationResources(split.Status.Resources)); err != nil {
 		return r.transitionSplit(ctx, split, before, split.Status.Phase, "CleanupPending", err.Error(), true)
 	}
+	r.closeBroker(types.NamespacedName{Namespace: active.Namespace, Name: active.Name})
 	if err := r.releaseOwnership(ctx, active); err != nil {
 		return ctrl.Result{}, err
 	}
