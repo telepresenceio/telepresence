@@ -83,6 +83,7 @@ roleRef:
 // spec. All manager specs share ONE release; switching specs is an in-place
 // helm upgrade, so consecutive suites declaring the same spec are free.
 func ManagerFixture(spec managers.Spec) *Fixture[*ManagerHandle] {
+	spec = R().applyManagerKafka(spec)
 	return &Fixture[*ManagerHandle]{
 		Name:        "manager/" + spec.Key,
 		Hash:        spec.Hash(),
@@ -90,6 +91,16 @@ func ManagerFixture(spec managers.Spec) *Fixture[*ManagerHandle] {
 		AdoptFn:     func(e Env) (*ManagerHandle, bool) { return adoptManager(e, spec) },
 		DestroyFn:   destroyManager,
 	}
+}
+
+// applyManagerKafka overlays the Kafka provider onto spec when
+// RTEST_MANAGER_KAFKA is set: every suite's manager installs with
+// kafka.enabled=true regardless of the spec it declared.
+func (r *Runtime) applyManagerKafka(spec managers.Spec) managers.Spec {
+	if r.managerKafka {
+		return spec.WithKafka()
+	}
+	return spec
 }
 
 // mergedManagerValues layers spec's overlay on top of the runtime's
@@ -316,7 +327,8 @@ func waitOldManagerGone(e Env, ns string) error {
 // spec when the state file says something else is installed. Called at the
 // end of a keep-resources run.
 func (r *Runtime) parkManagerOnDefault() {
-	values := mergedManagerValues(r, managers.Default)
+	spec := r.applyManagerKafka(managers.Default)
+	values := mergedManagerValues(r, spec)
 	data, err := marshalManagerValues(r, values)
 	if err != nil {
 		return
@@ -329,7 +341,7 @@ func (r *Runtime) parkManagerOnDefault() {
 		return
 	}
 	tb := &runTB{r: r}
-	if _, err := provisionManager(Env{Ctx: r.ctx, T: tb, R: r}, managers.Default); err != nil {
+	if _, err := provisionManager(Env{Ctx: r.ctx, T: tb, R: r}, spec); err != nil {
 		r.Infof("[rtest] parking manager on the default spec: %v", err)
 		return
 	}
