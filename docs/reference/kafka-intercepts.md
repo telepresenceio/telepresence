@@ -31,15 +31,21 @@ timestamp. Headers and payloads are not decoded by the provider.
 
 Set `kafka.enabled=true` in the Telepresence Helm chart. The chart installs:
 
-- the `KafkaSplit` and `KafkaRoute` CRDs, on both install and upgrade;
+- the `KafkaSplit` and `KafkaRoute` CRDs;
 - a two-replica `tp-kafka` controller Deployment by default;
 - validating webhooks for splits and routes and a Pod mutation webhook;
 - a ServiceAccount, RBAC, certificates, and leader-election Leases; and
 - a Service exposing the webhook on port 443 and metrics on port 8080.
 
-The CRDs carry a `helm.sh/resource-policy: keep` annotation, so setting
-`kafka.enabled=false` or uninstalling the chart leaves the CRDs, and any
-`KafkaSplit`/`KafkaRoute` custom resources, in place.
+The CRDs live in the chart's `crds` directory. `telepresence helm install`
+and `telepresence helm upgrade` apply them directly whenever
+`kafka.enabled` is true, so enabling the provider on an existing
+installation installs or updates them. Helm itself installs `crds`
+directory resources only on first install, so a plain `helm upgrade` that
+enables the provider must apply them separately, for example
+`kubectl apply -f` the two CRD files from the chart. Uninstalling the
+chart leaves the CRDs, and any `KafkaSplit`/`KafkaRoute` custom resources,
+in place.
 
 The Pod-mutating webhook only receives Pods in namespaces labelled
 `kafka.telepresence.io/splits: "true"`. The provider sets that label on a
