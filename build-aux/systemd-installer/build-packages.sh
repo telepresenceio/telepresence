@@ -84,21 +84,14 @@ echo "Building .deb package..."
 nfpm package \
     --config nfpm.yaml \
     --packager deb \
-    --target "${build_output}/release/telepresence-${VERSION}-linux-${ARCH}.deb"
+    --target "${build_output}/release/telepresence-linux-${ARCH}.deb"
 
 # Build .rpm package
 echo "Building .rpm package..."
 nfpm package \
     --config nfpm.yaml \
     --packager rpm \
-    --target "${build_output}/release/telepresence-${VERSION}-linux-${ARCH}.rpm"
-
-# Create versionless copies so that GitHub's /latest/download/ URLs work
-# (e.g., /releases/latest/download/telepresence-linux-amd64.deb)
-cp "${build_output}/release/telepresence-${VERSION}-linux-${ARCH}.deb" \
-   "${build_output}/release/telepresence-linux-${ARCH}.deb"
-cp "${build_output}/release/telepresence-${VERSION}-linux-${ARCH}.rpm" \
-   "${build_output}/release/telepresence-linux-${ARCH}.rpm"
+    --target "${build_output}/release/telepresence-linux-${ARCH}.rpm"
 
 echo ""
 echo "Packages built successfully:"
