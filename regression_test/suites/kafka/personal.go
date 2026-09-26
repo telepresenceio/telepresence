@@ -52,7 +52,7 @@ const (
 	providerPassword   = "provider-secret"
 
 	argoNamespace          = "rtest-kafka-argo"
-	argoInstallURL         = "https://github.com/argoproj/argo-rollouts/releases/latest/download/install.yaml"
+	argoInstallURL         = "https://github.com/argoproj/argo-rollouts/releases/download/v1.10.0/install.yaml"
 	argoController         = "argo-rollouts"
 	argoClusterRoleBinding = "argo-rollouts"
 )
