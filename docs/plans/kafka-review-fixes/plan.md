@@ -34,13 +34,13 @@ file is removed in the last commit once every item is done.
 
 ## 3. Chart and RBAC
 
-- [ ] Install the CRDs on upgrade, not only on first install: render them as
+- [x] Install the CRDs on upgrade, not only on first install: render them as
       templates gated on `kafka.enabled` with a keep policy, or apply them
       from the Helm code.
 - [ ] Scope the Pod-mutating webhook to namespaces that hold a KafkaSplit,
       via a namespace label the controller maintains; keep `failurePolicy:
       Fail` inside that scope only.
-- [ ] Drop unused grants: PodDisruptionBudget reads, event writes, the
+- [x] Drop unused grants: PodDisruptionBudget reads, event writes, the
       finalizer subresources.
 - [ ] Exclude the provider's own Pods by namespace rather than by a label.
 
@@ -67,7 +67,7 @@ file is removed in the last commit once every item is done.
 - [x] Add a `kafka.enabled` axis to the clusterless chart matrix.
 - [x] Gate the Kafka conformance job on Kafka paths.
 - [x] Pin the Argo Rollouts version the regression suite installs.
-- [ ] Add a make target that runs controller-gen for the CRDs and deepcopy.
+- [x] Add a make target that runs controller-gen for the CRDs and deepcopy.
 
 ## 6. Documentation
 
