@@ -87,6 +87,14 @@ protoc: protoc-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-g
 	  --proto_path=. \
 	  $$(find ./rpc/ -name '*.proto')
 
+.PHONY: generate-kafka
+generate-kafka: $(tools/controller-gen) ## (Generate) Update the Kafka CRDs and deepcopy code
+	$(tools/controller-gen) object paths=./pkg/kafkaintercept/api/...
+	$(tools/controller-gen) crd paths=./pkg/kafkaintercept/api/... output:crd:dir=charts/telepresence-oss/kafka-crds
+	for f in charts/telepresence-oss/kafka-crds/*.yaml; do \
+		sed -i '/^    controller-gen.kubebuilder.io\/version:/a\    helm.sh/resource-policy: keep' $$f; \
+	done
+
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean

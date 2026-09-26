@@ -31,11 +31,15 @@ timestamp. Headers and payloads are not decoded by the provider.
 
 Set `kafka.enabled=true` in the Telepresence Helm chart. The chart installs:
 
-- the `KafkaSplit` and `KafkaRoute` CRDs;
+- the `KafkaSplit` and `KafkaRoute` CRDs, on both install and upgrade;
 - a two-replica `tp-kafka` controller Deployment by default;
 - validating webhooks for splits and routes and a Pod mutation webhook;
 - a ServiceAccount, RBAC, certificates, and leader-election Leases; and
 - a Service exposing the webhook on port 443 and metrics on port 8080.
+
+The CRDs carry a `helm.sh/resource-policy: keep` annotation, so setting
+`kafka.enabled=false` or uninstalling the chart leaves the CRDs, and any
+`KafkaSplit`/`KafkaRoute` custom resources, in place.
 
 The provider uses the separate `telepresence-kafka` image and binary. No Kafka
 library is linked into the `tel2` image used by the traffic-manager and
@@ -314,10 +318,9 @@ resources still require metadata, read, write, group, and transaction access
 appropriate to their role.
 
 The provider's Kubernetes ServiceAccount can read referenced Secrets in
-managed namespaces, evict selected Pods, read supported workload controllers
-and PDBs, and manage its own ConfigMaps, headless Services, StatefulSets, and
-Leases. The Helm chart installs these permissions only when the provider is
-enabled.
+managed namespaces, evict selected Pods, read supported workload controllers,
+and manage its own ConfigMaps, headless Services, StatefulSets, and Leases.
+The Helm chart installs these permissions only when the provider is enabled.
 
 ## Recovery and troubleshooting
 

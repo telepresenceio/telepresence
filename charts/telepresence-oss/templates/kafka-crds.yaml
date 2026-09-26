@@ -1,0 +1,6 @@
+{{- if .Values.kafka.enabled }}
+{{- range $path, $_ := .Files.Glob "kafka-crds/*.yaml" }}
+---
+{{ $.Files.Get $path }}
+{{- end }}
+{{- end }}
