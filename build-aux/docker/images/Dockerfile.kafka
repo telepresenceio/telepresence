@@ -22,6 +22,7 @@ WORKDIR telepresence
 COPY go.mod go.sum ./
 COPY cmd/telepresence-kafka/ cmd/telepresence-kafka/
 COPY pkg/ pkg/
+COPY rpc/ rpc/
 
 ARG TARGETOS
 ARG TARGETARCH

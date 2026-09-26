@@ -56,6 +56,10 @@ creation in those namespaces is refused, because a Pod admitted without its
 shadow configuration would consume the original group alongside the
 splitter. Namespaces without a `KafkaSplit` are unaffected.
 
+The same label confines the provider's Deployment, StatefulSet, ReplicaSet,
+Argo Rollout, and Pod watches to namespaces that hold a `KafkaSplit`, on both
+provider replicas, instead of watching those kinds cluster-wide.
+
 The provider uses the separate `telepresence-kafka` image and binary. No Kafka
 library is linked into the `tel2` image used by the traffic-manager and
 traffic-agents.
@@ -306,7 +310,9 @@ desired replicas.
 Changes to routes, splitter members, provider resources, and selected Pods are
 reconciled as they happen. An enabled split additionally re-verifies broker
 ownership and member health every 30 seconds, and transitions poll every 2
-seconds.
+seconds. Splitter members receive routing changes through a watch on their
+configuration ConfigMap and renew their member Lease every 15 seconds; a
+member whose Lease is older than 45 seconds is reported unhealthy.
 
 Important status fields include:
 

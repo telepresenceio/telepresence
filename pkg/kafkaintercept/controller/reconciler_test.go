@@ -57,7 +57,7 @@ func TestSplitReconcilerSnapshotsWorkload(t *testing.T) {
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(split).
 		WithObjects(split, deployment, namespace).Build()
-	reconciler := &SplitReconciler{base: base{Client: client}}
+	reconciler := &SplitReconciler{base: base{Client: client}, Workloads: client}
 	_, err := reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "checkout", Namespace: "shop"}})
 	require.NoError(t, err)
 	_, err = reconciler.Reconcile(t.Context(), ctrl.Request{NamespacedName: types.NamespacedName{Name: "checkout", Namespace: "shop"}})
@@ -178,7 +178,7 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 		},
 	}
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objects...).Build()
-	reconciler := &SplitReconciler{base: base{Client: client}}
+	reconciler := &SplitReconciler{base: base{Client: client}, Workloads: client}
 	for i, kind := range []string{"Deployment", "StatefulSet", "ReplicaSet", "Rollout"} {
 		t.Run(kind, func(t *testing.T) {
 			name := strings.ToLower(kind)
@@ -232,7 +232,7 @@ func TestPodMutatorComposesActiveSplits(t *testing.T) {
 	}
 	raw, err := json.Marshal(pod)
 	require.NoError(t, err)
-	response := (podMutator{reader: reader}).Handle(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
+	response := (podMutator{reader: reader, workloads: reader}).Handle(t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
 		Namespace: "shop", Object: runtime.RawExtension{Raw: raw},
 	}})
 	require.True(t, response.Allowed, response.Result)
@@ -347,7 +347,7 @@ func TestSplitCompositionResolvesFreshWorkloadsWhenStatusEmpty(t *testing.T) {
 	second.UID = types.UID("b")
 	second.CreationTimestamp = metav1.NewTime(created.Add(time.Second))
 	client := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment, first, second).Build()
-	reconciler := &SplitReconciler{base: base{Client: client}}
+	reconciler := &SplitReconciler{base: base{Client: client}, Workloads: client}
 
 	firstWorkloads, err := reconciler.resolveWorkloads(t.Context(), first)
 	require.NoError(t, err)
@@ -424,7 +424,7 @@ func TestReplacePodsReportsBlockedEviction(t *testing.T) {
 				return blocked
 			},
 		}).Build()
-	reconciler := &SplitReconciler{base: base{Client: client}}
+	reconciler := &SplitReconciler{base: base{Client: client}, Workloads: client}
 	split := validControllerSplit()
 	split.Status.Workloads = []api.WorkloadReference{{
 		APIVersion: "apps/v1", Kind: "Deployment", Name: deployment.Name, UID: deployment.UID,

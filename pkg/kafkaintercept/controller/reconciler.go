@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
 	"github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/broker"
@@ -217,6 +218,12 @@ type SplitReconciler struct {
 	base
 	ProviderImage  string
 	ServiceAccount string
+	// Workloads reads Deployments, ReplicaSets, StatefulSets, Rollouts, and
+	// Pods in a split's own namespace. It is backed by NamespaceInformers.
+	Workloads client.Reader
+	// Pods is the Pod-event sink SetupWithManager registers with, in place
+	// of a cluster-wide Pod watch.
+	Pods PodSource
 }
 
 // SetupWithManager registers the KafkaSplit controller.
@@ -227,7 +234,7 @@ func (r *SplitReconciler) SetupWithManager(manager ctrl.Manager) error {
 		Watches(&coordinationv1.Lease{}, handler.EnqueueRequestsFromMapFunc(labelsToSplit), builder.WithPredicates(memberLeaseChanged())).
 		Watches(&corev1.ConfigMap{}, handler.EnqueueRequestsFromMapFunc(labelsToSplit)).
 		Watches(&appsv1.StatefulSet{}, handler.EnqueueRequestsFromMapFunc(labelsToSplit)).
-		Watches(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(r.podToSplits), builder.WithPredicates(podChanged())).
+		WatchesRawSource(source.Func(r.watchPods)).
 		Complete(r)
 }
 
