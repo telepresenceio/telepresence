@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -42,6 +43,7 @@ type SplitterConfig struct {
 	ClientOptions      []kgo.Opt
 	InitialRoutes      RoutingTable
 	OnGeneration       func(uint64)
+	Logf               func(format string, args ...any)
 }
 
 // Splitter transactionally moves original-group records to personal or
@@ -234,8 +236,8 @@ func (s *Splitter) Run(ctx context.Context) error {
 		if pollErr != nil && len(fetches.Records()) == 0 {
 			continue
 		}
-		if err := fetches.Err(); err != nil {
-			return fmt.Errorf("poll Kafka source records: %w", err)
+		if err := classifyFetchErrors(fetches.Errors(), s.cfg.Logf); err != nil {
+			return err
 		}
 		records := fetches.Records()
 		if len(records) == 0 {
@@ -245,6 +247,21 @@ func (s *Splitter) Run(ctx context.Context) error {
 			return err
 		}
 	}
+}
+
+// classifyFetchErrors logs retriable fetch errors through logf and returns
+// the first non-retriable one, wrapped as a poll failure.
+func classifyFetchErrors(errs []kgo.FetchError, logf func(format string, args ...any)) error {
+	for _, fetchErr := range errs {
+		if kerr.IsRetriable(fetchErr.Err) || errors.Is(fetchErr.Err, context.DeadlineExceeded) {
+			if logf != nil {
+				logf("retriable Kafka fetch error on %s[%d]: %v", fetchErr.Topic, fetchErr.Partition, fetchErr.Err)
+			}
+			continue
+		}
+		return fmt.Errorf("poll Kafka source records: %w", fetchErr.Err)
+	}
+	return nil
 }
 
 func (s *Splitter) transact(ctx context.Context, table RoutingTable, records []*kgo.Record) error {

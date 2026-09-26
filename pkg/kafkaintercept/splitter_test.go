@@ -1,10 +1,13 @@
 package kafkaintercept
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/twmb/franz-go/pkg/kerr"
+	"github.com/twmb/franz-go/pkg/kgo"
 )
 
 func validSplitterConfig() SplitterConfig {
@@ -40,6 +43,25 @@ func TestSplitterConfigValidation(t *testing.T) {
 	require.NoError(t, validateSplitterConfig(cfg))
 	cfg.TransactionalID = ""
 	require.Error(t, validateSplitterConfig(cfg))
+}
+
+func TestClassifyFetchErrors(t *testing.T) {
+	var logged int
+	logf := func(string, ...any) { logged++ }
+
+	require.NoError(t, classifyFetchErrors(nil, logf))
+
+	require.NoError(t, classifyFetchErrors([]kgo.FetchError{
+		{Topic: "orders", Partition: 0, Err: kerr.NotLeaderForPartition},
+		{Topic: "orders", Partition: 1, Err: context.DeadlineExceeded},
+	}, logf))
+	require.Equal(t, 2, logged)
+
+	err := classifyFetchErrors([]kgo.FetchError{
+		{Topic: "orders", Partition: 0, Err: kerr.NotLeaderForPartition},
+		{Topic: "orders", Partition: 2, Err: kerr.InvalidTopicException},
+	}, logf)
+	require.ErrorIs(t, err, kerr.InvalidTopicException)
 }
 
 func TestCloneRoutingTableCopiesMutableData(t *testing.T) {
