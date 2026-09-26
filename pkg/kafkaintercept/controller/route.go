@@ -144,11 +144,12 @@ func (r *RouteReconciler) finishClosingRoute(
 	if err != nil {
 		return r.pendingRoute(ctx, route, before, "RoutingUnknown", err.Error())
 	}
-	members, err := splitterMemberStatus(ctx, r.Client, r.providerNamespace(), split.Status.SplitterName)
+	replicas := active.Spec.Splitter.EffectiveReplicas()
+	members, err := splitterMemberStatus(ctx, r.Client, r.providerNamespace(), split.Status.SplitterName, replicas)
 	if err != nil {
 		return r.pendingRoute(ctx, route, before, "AcknowledgementUnknown", err.Error())
 	}
-	if included || !membersReady(members, active.Spec.Splitter.EffectiveReplicas(), generation) {
+	if included || !membersReady(members, replicas, generation) {
 		return r.pendingRoute(ctx, route, before, "AwaitingAcknowledgement", "waiting for every splitter to confirm the closing route generation")
 	}
 	kafka, err := r.openBroker(ctx, active)
@@ -186,6 +187,9 @@ func drainClosingRoute(
 		return "SessionGroupNotEmpty", errors.New("local Kafka consumer group still has members")
 	}
 	if err := kafka.DrainSession(ctx, split, route.Name, route.Status.Group, route.Status.Topics, applicationTopics); err != nil {
+		if errors.Is(err, broker.ErrSessionGroupNotEmpty) {
+			return "SessionGroupNotEmpty", err
+		}
 		return "DrainFailed", err
 	}
 	// DrainSession only returns nil after its own residue check found zero records remaining.

@@ -147,6 +147,12 @@ func (n Names) DrainTransactional(route string) string {
 	return n.SourceGroup + ".tp-drain." + route
 }
 
+// DrainInstance returns the stable group-member instance ID used while
+// draining a route's session.
+func (n Names) DrainInstance(route string) string {
+	return "tp-drain-" + route
+}
+
 func shortHash(value string) string {
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:6])
