@@ -1,8 +1,10 @@
 package fwd
 
 import (
+	"bufio"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -139,6 +141,39 @@ func TestObservedResponseWriterTracksStatusAndBytes(t *testing.T) {
 	require.Equal(t, http.StatusCreated, writer.statusCode)
 	require.EqualValues(t, 5, writer.bytes)
 	require.Same(t, rec, writer.Unwrap())
+}
+
+func TestObservedResponseWriterIgnoresInformationalStatus(t *testing.T) {
+	rec := httptest.NewRecorder()
+	writer := &observedResponseWriter{ResponseWriter: rec}
+
+	writer.WriteHeader(http.StatusContinue)
+	require.Equal(t, 0, writer.statusCode)
+	writer.WriteHeader(http.StatusInternalServerError)
+	require.Equal(t, http.StatusInternalServerError, writer.statusCode)
+}
+
+// hijackableRecorder is a ResponseRecorder that also implements http.Hijacker.
+type hijackableRecorder struct {
+	*httptest.ResponseRecorder
+	conn net.Conn
+}
+
+func (h *hijackableRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return h.conn, bufio.NewReadWriter(bufio.NewReader(h.conn), bufio.NewWriter(h.conn)), nil
+}
+
+func TestObservedResponseWriterRecordsHijack(t *testing.T) {
+	c1, c2 := net.Pipe()
+	t.Cleanup(func() { _ = c1.Close(); _ = c2.Close() })
+	rec := &hijackableRecorder{ResponseRecorder: httptest.NewRecorder(), conn: c1}
+	writer := &observedResponseWriter{ResponseWriter: rec}
+
+	conn, _, err := writer.Hijack()
+	require.NoError(t, err)
+	require.Same(t, c1, conn)
+	require.True(t, writer.hijacked)
+	require.Equal(t, 0, writer.statusCode)
 }
 
 // fakeTapStream is a minimal tunnel.Stream that records everything sent to it.
