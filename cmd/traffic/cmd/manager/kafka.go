@@ -13,12 +13,16 @@ import (
 	"sync"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	validation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/rest"
 
+	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	api "github.com/telepresenceio/telepresence/v2/pkg/kafkaintercept/api/v1alpha1"
 )
 
 const kafkaAPIPath = "/apis/kafka.telepresence.io/v1alpha1"
@@ -28,67 +32,6 @@ type kafkaAPI struct {
 	refreshMu  sync.Mutex
 	refreshed  map[string]time.Time
 	expiration time.Duration
-}
-
-type kafkaObjectMeta struct {
-	Name              string     `json:"name,omitempty"`
-	Namespace         string     `json:"namespace,omitempty"`
-	Generation        int64      `json:"generation,omitempty"`
-	DeletionTimestamp *time.Time `json:"deletionTimestamp,omitempty"`
-}
-
-type kafkaWorkload struct {
-	Kind string `json:"kind"`
-	Name string `json:"name"`
-}
-
-type kafkaSplitResource struct {
-	Metadata kafkaObjectMeta `json:"metadata"`
-	Status   struct {
-		ActiveGeneration int64           `json:"activeGeneration"`
-		Phase            string          `json:"phase"`
-		Workloads        []kafkaWorkload `json:"workloads"`
-	} `json:"status"`
-}
-
-type kafkaSplitList struct {
-	Items []kafkaSplitResource `json:"items"`
-}
-
-type kafkaRoutePredicate struct {
-	Headers   []kafkaHeader `json:"headers,omitempty"`
-	Key       []byte        `json:"key,omitempty"`
-	KeyPrefix []byte        `json:"keyPrefix,omitempty"`
-}
-
-type kafkaHeader struct {
-	Name  string `json:"name"`
-	Value []byte `json:"value"`
-}
-
-type kafkaRouteSpec struct {
-	SplitRef struct {
-		Name string `json:"name"`
-	} `json:"splitRef"`
-	AttachmentID string              `json:"attachmentID"`
-	SessionID    string              `json:"sessionID"`
-	ExpiresAt    time.Time           `json:"expiresAt"`
-	DesiredState string              `json:"desiredState"`
-	Predicate    kafkaRoutePredicate `json:"predicate,omitempty"`
-}
-
-type kafkaRouteResource struct {
-	APIVersion string          `json:"apiVersion,omitempty"`
-	Kind       string          `json:"kind,omitempty"`
-	Metadata   kafkaObjectMeta `json:"metadata"`
-	Spec       kafkaRouteSpec  `json:"spec"`
-	Status     struct {
-		Phase       string            `json:"phase"`
-		Environment map[string]string `json:"environment,omitempty"`
-		Conditions  []struct {
-			Message string `json:"message"`
-		} `json:"conditions,omitempty"`
-	} `json:"status,omitempty"`
 }
 
 func newKafkaAPI(client rest.Interface, clientTTL time.Duration) *kafkaAPI {
@@ -105,6 +48,13 @@ func (k *kafkaAPI) attach(
 ) ([]*rpc.KafkaRoute, map[string]string, error) {
 	splits, err := k.matchingSplits(ctx, namespace, workload, workloadKind)
 	if err != nil {
+		if apierrors.IsNotFound(err) || apierrors.IsForbidden(err) {
+			if !request.GetOnly() && !hasKafkaPredicate(request) {
+				clog.Debugf(ctx, "KafkaSplit resources are unavailable for %s.%s; treating intercept as having no Kafka routes: %v", workload, namespace, err)
+				return nil, nil, nil
+			}
+			return nil, nil, fmt.Errorf("KafkaSplit resources are unavailable: %w", err)
+		}
 		return nil, nil, err
 	}
 	if len(splits) == 0 {
@@ -114,13 +64,13 @@ func (k *kafkaAPI) attach(
 		return nil, nil, nil
 	}
 
-	created := make([]kafkaRouteResource, 0, len(splits))
+	created := make([]api.KafkaRoute, 0, len(splits))
 	rollback := func() error {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
 		var errs []error
 		for i := range created {
-			if err := k.delete(cleanupCtx, namespace, created[i].Metadata.Name); err != nil {
+			if err := k.delete(cleanupCtx, namespace, created[i].Name); err != nil {
 				errs = append(errs, err)
 			}
 		}
@@ -128,7 +78,7 @@ func (k *kafkaAPI) attach(
 	}
 	for i := range splits {
 		desired, err := desiredKafkaRoute(
-			namespace, splits[i].Metadata.Name, clientName, interceptName,
+			namespace, splits[i].Name, clientName, interceptName,
 			attachmentID, sessionID, request, k.expiresAt(),
 		)
 		if err != nil {
@@ -144,7 +94,7 @@ func (k *kafkaAPI) attach(
 	summaries := make([]*rpc.KafkaRoute, 0, len(created))
 	environment := make(map[string]string)
 	for i := range created {
-		route, err := k.waitReady(ctx, namespace, created[i].Metadata.Name)
+		route, err := k.waitReady(ctx, namespace, created[i].Name)
 		if err != nil {
 			return nil, nil, errors.Join(err, rollback())
 		}
@@ -158,7 +108,7 @@ func (k *kafkaAPI) attach(
 			environment[name] = value
 		}
 		summaries = append(summaries, &rpc.KafkaRoute{
-			Name: route.Metadata.Name, Split: route.Spec.SplitRef.Name,
+			Name: route.Name, Split: route.Spec.SplitRef.Name,
 			Environment: maps.Clone(route.Status.Environment),
 		})
 	}
@@ -166,29 +116,33 @@ func (k *kafkaAPI) attach(
 	return summaries, environment, nil
 }
 
+func hasKafkaPredicate(request *rpc.KafkaIntercept) bool {
+	return len(request.GetHeaders()) > 0 || len(request.GetKey()) > 0 || len(request.GetKeyPrefix()) > 0
+}
+
 func (k *kafkaAPI) matchingSplits(
 	ctx context.Context,
 	namespace, workload, workloadKind string,
-) ([]kafkaSplitResource, error) {
+) ([]api.KafkaSplit, error) {
 	bytes, err := k.rest.Get().AbsPath(kafkaCollection(namespace, "splits")).Do(ctx).Raw()
 	if err != nil {
 		return nil, fmt.Errorf("list KafkaSplits: %w", err)
 	}
-	var list kafkaSplitList
+	var list api.KafkaSplitList
 	if err := json.Unmarshal(bytes, &list); err != nil {
 		return nil, fmt.Errorf("decode KafkaSplits: %w", err)
 	}
-	list.Items = slices.DeleteFunc(list.Items, func(split kafkaSplitResource) bool {
-		if split.Metadata.DeletionTimestamp != nil ||
-			(split.Status.Phase != "Enabled" && split.Status.Phase != "Starting") ||
-			split.Status.ActiveGeneration == 0 || split.Status.ActiveGeneration != split.Metadata.Generation {
+	list.Items = slices.DeleteFunc(list.Items, func(split api.KafkaSplit) bool {
+		if split.DeletionTimestamp != nil ||
+			!split.Status.Phase.AcceptsRoutes() ||
+			split.Status.ActiveGeneration == 0 || split.Status.ActiveGeneration != split.Generation {
 			return true
 		}
-		return !slices.ContainsFunc(split.Status.Workloads, func(candidate kafkaWorkload) bool {
+		return !slices.ContainsFunc(split.Status.Workloads, func(candidate api.WorkloadReference) bool {
 			return candidate.Name == workload && (workloadKind == "" || candidate.Kind == workloadKind)
 		})
 	})
-	slices.SortFunc(list.Items, func(a, b kafkaSplitResource) int { return strings.Compare(a.Metadata.Name, b.Metadata.Name) })
+	slices.SortFunc(list.Items, func(a, b api.KafkaSplit) int { return strings.Compare(a.Name, b.Name) })
 	return list.Items, nil
 }
 
@@ -196,99 +150,105 @@ func desiredKafkaRoute(
 	namespace, split, clientName, interceptName, attachmentID, sessionID string,
 	request *rpc.KafkaIntercept,
 	expiresAt time.Time,
-) (kafkaRouteResource, error) {
+) (api.KafkaRoute, error) {
 	name, err := kafkaRouteName(clientName, interceptName, split)
 	if err != nil {
-		return kafkaRouteResource{}, err
+		return api.KafkaRoute{}, err
 	}
-	route := kafkaRouteResource{
-		APIVersion: "kafka.telepresence.io/v1alpha1", Kind: "KafkaRoute",
-		Metadata: kafkaObjectMeta{Namespace: namespace, Name: name},
-		Spec: kafkaRouteSpec{
-			AttachmentID: attachmentID, SessionID: sessionID, ExpiresAt: expiresAt, DesiredState: "Active",
-			Predicate: kafkaRoutePredicate{Key: slices.Clone(request.GetKey()), KeyPrefix: slices.Clone(request.GetKeyPrefix())},
+	route := api.KafkaRoute{
+		TypeMeta:   metav1.TypeMeta{APIVersion: api.GroupVersion.String(), Kind: "KafkaRoute"},
+		ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
+		Spec: api.KafkaRouteSpec{
+			SplitRef:     corev1.LocalObjectReference{Name: split},
+			AttachmentID: attachmentID,
+			SessionID:    sessionID,
+			ExpiresAt:    metav1.NewTime(expiresAt),
+			DesiredState: api.RouteStateActive,
+			Predicate: api.KafkaRoutePredicate{
+				Key:       slices.Clone(request.GetKey()),
+				KeyPrefix: slices.Clone(request.GetKeyPrefix()),
+			},
 		},
 	}
-	route.Spec.SplitRef.Name = split
 	for _, header := range request.GetHeaders() {
-		route.Spec.Predicate.Headers = append(route.Spec.Predicate.Headers, kafkaHeader{
+		route.Spec.Predicate.Headers = append(route.Spec.Predicate.Headers, api.KafkaHeaderMatch{
 			Name: header.GetName(), Value: slices.Clone(header.GetValue()),
 		})
 	}
 	return route, nil
 }
 
-func (k *kafkaAPI) create(ctx context.Context, desired kafkaRouteResource) (kafkaRouteResource, error) {
+func (k *kafkaAPI) create(ctx context.Context, desired api.KafkaRoute) (api.KafkaRoute, error) {
 	bytes, err := json.Marshal(desired)
 	if err != nil {
-		return kafkaRouteResource{}, err
+		return api.KafkaRoute{}, err
 	}
-	result, err := k.rest.Post().AbsPath(kafkaCollection(desired.Metadata.Namespace, "routes")).
+	result, err := k.rest.Post().AbsPath(kafkaCollection(desired.Namespace, "routes")).
 		SetHeader("Content-Type", "application/json").Body(bytes).Do(ctx).Raw()
 	if err == nil {
-		var created kafkaRouteResource
+		var created api.KafkaRoute
 		if err := json.Unmarshal(result, &created); err != nil {
-			return kafkaRouteResource{}, fmt.Errorf("decode created KafkaRoute: %w", err)
+			return api.KafkaRoute{}, fmt.Errorf("decode created KafkaRoute: %w", err)
 		}
 		return created, nil
 	}
 	if !apierrors.IsAlreadyExists(err) {
-		return kafkaRouteResource{}, fmt.Errorf("create KafkaRoute %s: %w", desired.Metadata.Name, err)
+		return api.KafkaRoute{}, fmt.Errorf("create KafkaRoute %s: %w", desired.Name, err)
 	}
-	existing, err := k.get(ctx, desired.Metadata.Namespace, desired.Metadata.Name)
+	existing, err := k.get(ctx, desired.Namespace, desired.Name)
 	if err != nil {
-		return kafkaRouteResource{}, err
+		return api.KafkaRoute{}, err
 	}
-	if existing.Metadata.DeletionTimestamp != nil || existing.Spec.DesiredState != "Active" ||
+	if existing.DeletionTimestamp != nil || existing.Spec.DesiredState != api.RouteStateActive ||
 		existing.Spec.SplitRef.Name != desired.Spec.SplitRef.Name ||
 		existing.Spec.AttachmentID != desired.Spec.AttachmentID || existing.Spec.SessionID != desired.Spec.SessionID ||
 		!reflect.DeepEqual(existing.Spec.Predicate, desired.Spec.Predicate) {
-		return kafkaRouteResource{}, fmt.Errorf(
+		return api.KafkaRoute{}, fmt.Errorf(
 			"KafkaRoute %s already exists with a different owner or predicate; "+
 				"choose client, intercept, or KafkaSplit names that normalize differently",
-			desired.Metadata.Name,
+			desired.Name,
 		)
 	}
-	if err := k.patchExpiry(ctx, desired.Metadata.Namespace, desired.Metadata.Name, desired.Spec.ExpiresAt); err != nil {
-		return kafkaRouteResource{}, err
+	if err := k.patchExpiry(ctx, desired.Namespace, desired.Name, desired.Spec.ExpiresAt.Time); err != nil {
+		return api.KafkaRoute{}, err
 	}
 	return existing, nil
 }
 
-func (k *kafkaAPI) waitReady(ctx context.Context, namespace, name string) (kafkaRouteResource, error) {
+func (k *kafkaAPI) waitReady(ctx context.Context, namespace, name string) (api.KafkaRoute, error) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		route, err := k.get(ctx, namespace, name)
 		if err != nil {
-			return kafkaRouteResource{}, err
+			return api.KafkaRoute{}, err
 		}
 		switch route.Status.Phase {
-		case "Ready":
+		case api.RoutePhaseReady:
 			return route, nil
-		case "Invalid", "Closed":
-			message := route.Status.Phase
+		case api.RoutePhaseInvalid, api.RoutePhaseClosed:
+			message := string(route.Status.Phase)
 			if n := len(route.Status.Conditions); n > 0 && route.Status.Conditions[n-1].Message != "" {
 				message = route.Status.Conditions[n-1].Message
 			}
-			return kafkaRouteResource{}, fmt.Errorf("KafkaRoute %s is %s: %s", name, route.Status.Phase, message)
+			return api.KafkaRoute{}, fmt.Errorf("KafkaRoute %s is %s: %s", name, route.Status.Phase, message)
 		}
 		select {
 		case <-ctx.Done():
-			return kafkaRouteResource{}, ctx.Err()
+			return api.KafkaRoute{}, ctx.Err()
 		case <-ticker.C:
 		}
 	}
 }
 
-func (k *kafkaAPI) get(ctx context.Context, namespace, name string) (kafkaRouteResource, error) {
+func (k *kafkaAPI) get(ctx context.Context, namespace, name string) (api.KafkaRoute, error) {
 	bytes, err := k.rest.Get().AbsPath(kafkaResource(namespace, "routes", name)).Do(ctx).Raw()
 	if err != nil {
-		return kafkaRouteResource{}, fmt.Errorf("get KafkaRoute %s: %w", name, err)
+		return api.KafkaRoute{}, fmt.Errorf("get KafkaRoute %s: %w", name, err)
 	}
-	var route kafkaRouteResource
+	var route api.KafkaRoute
 	if err := json.Unmarshal(bytes, &route); err != nil {
-		return kafkaRouteResource{}, fmt.Errorf("decode KafkaRoute %s: %w", name, err)
+		return api.KafkaRoute{}, fmt.Errorf("decode KafkaRoute %s: %w", name, err)
 	}
 	return route, nil
 }
@@ -298,7 +258,11 @@ func (k *kafkaAPI) close(ctx context.Context, namespace string, routes []*rpc.Ka
 	for _, route := range routes {
 		if err := k.delete(ctx, namespace, route.GetName()); err != nil {
 			errs = append(errs, err)
+			continue
 		}
+		k.refreshMu.Lock()
+		delete(k.refreshed, namespace+"/"+route.GetName())
+		k.refreshMu.Unlock()
 	}
 	return errors.Join(errs...)
 }

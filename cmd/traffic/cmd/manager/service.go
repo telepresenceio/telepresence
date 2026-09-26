@@ -364,8 +364,9 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 
 // reviewRestoredIntercepts rebuilds each accepted intercept from the
 // client-supplied Spec alone, ignoring any Id, disposition, or other runtime
-// state in the payload. An Unavailable review fails the whole reconnect
-// rather than silently dropping the intercept.
+// state in the payload. An Unavailable authorization result fails the whole
+// reconnect rather than silently dropping the intercept; a failed Kafka
+// route attach only drops the one intercept it belongs to.
 func (s *service) reviewRestoredIntercepts(
 	ctx context.Context, info *rpc.ReconnectClientRequest, now time.Time,
 ) ([]*rpc.InterceptInfo, error) {
@@ -414,7 +415,8 @@ func (s *service) reviewRestoredIntercepts(
 				var attachErr error
 				kafkaRoutes, kafkaEnvironment, attachErr = s.attachKafkaRoutes(ctx, spec, interceptID, info.GetSession().GetSessionId())
 				if attachErr != nil {
-					return nil, status.Errorf(codes.Unavailable, "restore Kafka routes for %s: %v", spec.Name, attachErr)
+					clog.Warnf(ctx, "Not restoring intercept %s: attach Kafka routes: %v", spec.Name, attachErr)
+					continue
 				}
 			}
 		}
