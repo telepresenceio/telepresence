@@ -22,11 +22,18 @@ import (
 // podUIDEnvName names the environment variable that carries a Pod's UID.
 const podUIDEnvName = "TELEPRESENCE_KAFKA_POD_UID"
 
-// RegisterWebhooks installs validation handlers on server.
-func RegisterWebhooks(server interface{ Register(string, http.Handler) }, reader client.Reader, providerNamespace string) {
+// RegisterWebhooks installs validation handlers on server. reader lists
+// KafkaSplits; workloads resolves a Pod's ReplicaSet owner and is backed by
+// NamespaceInformers.
+func RegisterWebhooks(
+	server interface{ Register(string, http.Handler) },
+	reader client.Reader,
+	workloads client.Reader,
+	providerNamespace string,
+) {
 	server.Register("/split", &admission.Webhook{Handler: splitValidator{}})
 	server.Register("/route", &admission.Webhook{Handler: routeValidator{}})
-	server.Register("/pod", &admission.Webhook{Handler: podMutator{reader: reader, providerNamespace: providerNamespace}})
+	server.Register("/pod", &admission.Webhook{Handler: podMutator{reader: reader, workloads: workloads, providerNamespace: providerNamespace}})
 }
 
 type splitValidator struct{}
@@ -60,6 +67,7 @@ func (routeValidator) Handle(_ context.Context, request admission.Request) admis
 
 type podMutator struct {
 	reader            client.Reader
+	workloads         client.Reader
 	providerNamespace string
 }
 
@@ -85,7 +93,7 @@ func (m podMutator) Handle(ctx context.Context, request admission.Request) admis
 	original := pod.DeepCopy()
 	generations := make(map[string]string)
 	envOwners := make(map[string]string)
-	resolver := &replicaSetResolver{reader: m.reader}
+	resolver := &replicaSetResolver{reader: m.workloads}
 	for i := range splits.Items {
 		split := &splits.Items[i]
 		if split.Status.ActiveGeneration == 0 || split.Status.AdmissionMode == api.KafkaAdmissionNormal {

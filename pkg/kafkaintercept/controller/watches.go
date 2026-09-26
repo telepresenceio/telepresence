@@ -6,6 +6,7 @@ import (
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/workqueue"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -36,13 +37,24 @@ func labelsToSplit(_ context.Context, obj client.Object) []reconcile.Request {
 	return []reconcile.Request{{NamespacedName: types.NamespacedName{Namespace: namespace, Name: name}}}
 }
 
+// watchPods registers the split reconciler as the Pod-event sink on Pods,
+// translating each event into split reconcile requests, until ctx is done.
+func (r *SplitReconciler) watchPods(ctx context.Context, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) error {
+	r.Pods.SetPodSink(func(pod *corev1.Pod) {
+		for _, request := range r.podToSplits(ctx, pod) {
+			queue.Add(request)
+		}
+	})
+	go func() {
+		<-ctx.Done()
+		r.Pods.SetPodSink(nil)
+	}()
+	return nil
+}
+
 // podToSplits maps a Pod to every KafkaSplit in its namespace that has an
 // active workload snapshot.
-func (r *SplitReconciler) podToSplits(ctx context.Context, obj client.Object) []reconcile.Request {
-	pod, ok := obj.(*corev1.Pod)
-	if !ok {
-		return nil
-	}
+func (r *SplitReconciler) podToSplits(ctx context.Context, pod *corev1.Pod) []reconcile.Request {
 	splits := new(api.KafkaSplitList)
 	if err := r.List(ctx, splits, client.InNamespace(pod.Namespace)); err != nil {
 		return nil
@@ -90,29 +102,14 @@ func memberLeaseChanged() predicate.Funcs {
 	}
 }
 
-// podChanged ignores a Pod update unless readiness, deletion, or the active
-// generation annotation changed.
-func podChanged() predicate.Funcs {
-	return predicate.Funcs{
-		CreateFunc: func(event.CreateEvent) bool { return true },
-		DeleteFunc: func(event.DeleteEvent) bool { return true },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			oldPod, ok := e.ObjectOld.(*corev1.Pod)
-			if !ok {
-				return false
-			}
-			newPod, ok := e.ObjectNew.(*corev1.Pod)
-			if !ok {
-				return false
-			}
-			if podReady(oldPod) != podReady(newPod) {
-				return true
-			}
-			if (oldPod.DeletionTimestamp != nil) != (newPod.DeletionTimestamp != nil) {
-				return true
-			}
-			return oldPod.Annotations[runtimeconfig.ActiveAnnotation] != newPod.Annotations[runtimeconfig.ActiveAnnotation]
-		},
-		GenericFunc: func(event.GenericEvent) bool { return false },
+// podActivityChanged reports whether a Pod update changed readiness,
+// deletion, or the active generation annotation.
+func podActivityChanged(old, cur *corev1.Pod) bool {
+	if podReady(old) != podReady(cur) {
+		return true
 	}
+	if (old.DeletionTimestamp != nil) != (cur.DeletionTimestamp != nil) {
+		return true
+	}
+	return old.Annotations[runtimeconfig.ActiveAnnotation] != cur.Annotations[runtimeconfig.ActiveAnnotation]
 }

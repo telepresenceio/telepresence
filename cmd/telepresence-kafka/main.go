@@ -14,9 +14,12 @@ import (
 	"time"
 
 	argorollouts "github.com/datawire/argo-rollouts-go-client/pkg/apis/rollouts/v1alpha1"
+	argorolloutsclientset "github.com/datawire/argo-rollouts-go-client/pkg/client/clientset/versioned"
+	appsv1 "k8s.io/api/apps/v1"
 	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -98,9 +101,14 @@ func runController(args []string) error {
 			&corev1.ConfigMap{}:     {Namespaces: map[string]ctrlcache.Config{*providerNamespace: {}}},
 			&corev1.Service{}:       {Namespaces: map[string]ctrlcache.Config{*providerNamespace: {}}},
 			&coordinationv1.Lease{}: {Namespaces: map[string]ctrlcache.Config{*providerNamespace: {}}},
+			&appsv1.StatefulSet{}:   {Namespaces: map[string]ctrlcache.Config{*providerNamespace: {}}},
 		}},
 		Client: client.Options{Cache: &client.CacheOptions{DisableFor: []client.Object{
 			&corev1.Secret{},
+			&corev1.Pod{},
+			&appsv1.Deployment{},
+			&appsv1.ReplicaSet{},
+			&argorollouts.Rollout{},
 		}}},
 		Metrics:                       metricsserver.Options{BindAddress: *metricsAddress},
 		HealthProbeBindAddress:        *probeAddress,
@@ -113,11 +121,28 @@ func runController(args []string) error {
 	if err != nil {
 		return fmt.Errorf("create Kafka controller manager: %w", err)
 	}
+
+	restConfig := manager.GetConfig()
+	kubeClient, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("create Kafka controller Kubernetes clientset: %w", err)
+	}
+	argoClient, err := argorolloutsclientset.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("create Kafka controller Argo Rollouts clientset: %w", err)
+	}
+	nsInformers := controller.NewNamespaceInformers(manager.GetCache(), manager.GetAPIReader(), kubeClient, argoClient)
+	if err := manager.Add(nsInformers); err != nil {
+		return fmt.Errorf("register namespace informers: %w", err)
+	}
+
 	brokers := controller.NewBrokerCache()
 	splitReconciler := &controller.SplitReconciler{ProviderImage: *providerImage, ServiceAccount: *serviceAccount}
 	splitReconciler.Client = manager.GetClient()
 	splitReconciler.ProviderNamespace = *providerNamespace
 	splitReconciler.Brokers = brokers
+	splitReconciler.Workloads = nsInformers
+	splitReconciler.Pods = nsInformers
 	if err := splitReconciler.SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register KafkaSplit controller: %w", err)
 	}
@@ -128,7 +153,7 @@ func runController(args []string) error {
 	if err := routeReconciler.SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register KafkaRoute controller: %w", err)
 	}
-	controller.RegisterWebhooks(manager.GetWebhookServer(), manager.GetClient(), *providerNamespace)
+	controller.RegisterWebhooks(manager.GetWebhookServer(), manager.GetClient(), nsInformers, *providerNamespace)
 	if err := manager.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		return err
 	}
@@ -161,7 +186,12 @@ func runSplitter(args []string) error {
 	if err != nil {
 		return fmt.Errorf("create splitter Kubernetes client: %w", err)
 	}
-	ctx := ctrl.SetupSignalHandler()
+	clientset, err := kubernetes.NewForConfig(restConfig)
+	if err != nil {
+		return fmt.Errorf("create splitter Kubernetes clientset: %w", err)
+	}
+	ctx, cancel := context.WithCancel(ctrl.SetupSignalHandler())
+	defer cancel()
 	clientOptions, err := kafkaconfig.Options(ctx, kubeClient, config.Namespace, config.Connection)
 	if err != nil {
 		return err
@@ -172,7 +202,7 @@ func runSplitter(args []string) error {
 	}
 	var acknowledged atomic.Uint64
 	control := splitterControl{
-		client: kubeClient, podName: os.Getenv("POD_NAME"), acknowledged: &acknowledged,
+		client: kubeClient, clientset: clientset, podName: os.Getenv("POD_NAME"), acknowledged: &acknowledged,
 	}
 	if config.Control != nil {
 		control.config = *config.Control
@@ -182,6 +212,8 @@ func runSplitter(args []string) error {
 		}
 	}
 	log := ctrl.LoggerFrom(ctx)
+	controlCtx, cancelControl := context.WithCancel(ctx)
+	defer cancelControl()
 	splitter, err := kafkaintercept.NewSplitter(kafkaintercept.SplitterConfig{
 		Brokers:         config.Connection.BootstrapServers,
 		Group:           config.Group,
@@ -192,8 +224,11 @@ func runSplitter(args []string) error {
 		BatchSize:       config.BatchSize,
 		ClientOptions:   clientOptions,
 		InitialRoutes:   config.Routes,
-		OnGeneration:    acknowledged.Store,
-		Logf:            func(format string, args ...any) { log.Info(fmt.Sprintf(format, args...)) },
+		OnGeneration: func(generation uint64) {
+			acknowledged.Store(generation)
+			control.publish(controlCtx, true)
+		},
+		Logf: func(format string, args ...any) { log.Info(fmt.Sprintf(format, args...)) },
 	})
 	if err != nil {
 		return err
@@ -201,9 +236,12 @@ func runSplitter(args []string) error {
 	if config.Control == nil {
 		return splitter.Run(ctx)
 	}
-	controlCtx, cancelControl := context.WithCancel(ctx)
-	defer cancelControl()
-	go control.run(controlCtx, splitter)
+	go func() {
+		if err := control.run(controlCtx, splitter); err != nil {
+			log.Error(err, "Kafka splitter control loop")
+			cancel()
+		}
+	}()
 	err = splitter.Run(ctx)
 	cancelControl()
 	publishCtx, cancelPublish := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)

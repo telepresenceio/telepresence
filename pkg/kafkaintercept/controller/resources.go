@@ -342,6 +342,11 @@ func (r *SplitReconciler) membersAcknowledged(
 	return membersReady(members, replicas, generation), nil
 }
 
+// memberStaleAfter is how old a member Lease's RenewTime can be before it is
+// reported unhealthy. Must agree with heartbeatInterval and
+// memberLeaseDurationSeconds in cmd/telepresence-kafka/control.go.
+const memberStaleAfter = 45 * time.Second
+
 // splitterMemberStatus lists the member Leases for a splitter, deleting the
 // ones left behind by ordinals a replica reduction retired.
 func splitterMemberStatus(
@@ -377,7 +382,7 @@ func splitterMemberStatus(
 		ack, _ := strconv.ParseUint(lease.Annotations[runtimeconfig.GenerationAnnotation], 10, 64)
 		healthy, _ := strconv.ParseBool(lease.Annotations[runtimeconfig.HealthyAnnotation])
 		lastSeen := metav1.Time{}
-		if lease.Spec.RenewTime == nil || now.Sub(lease.Spec.RenewTime.Time) > 15*time.Second {
+		if lease.Spec.RenewTime == nil || now.Sub(lease.Spec.RenewTime.Time) > memberStaleAfter {
 			healthy = false
 		} else {
 			lastSeen = metav1.NewTime(lease.Spec.RenewTime.Time)
