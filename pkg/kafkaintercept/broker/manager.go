@@ -83,7 +83,7 @@ func (m *Manager) DrainSession(
 		return err
 	}
 	if !memberless {
-		return fmt.Errorf("kafka session group %s still has members", group)
+		return fmt.Errorf("kafka session group %s still has members: %w", group, ErrSessionGroupNotEmpty)
 	}
 	inverse := make(map[string]string, len(sessionTopics))
 	for source, sessionTopic := range sessionTopics {
@@ -97,11 +97,9 @@ func (m *Manager) DrainSession(
 	if err := names.ValidateSession(routeName, slices.Sorted(maps.Keys(sessionTopics)), split.Spec.Shadows.Mode == api.ShadowModeManaged, false); err != nil {
 		return err
 	}
-	instanceID := names.DrainInstance(routeName)
 	opts := slices.Clone(m.opts)
 	opts = append(opts,
 		kgo.ConsumerGroup(group),
-		kgo.InstanceID(instanceID),
 		kgo.ConsumeTopics(slices.Sorted(maps.Values(sessionTopics))...),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		kgo.DisableAutoCommit(),
@@ -115,7 +113,7 @@ func (m *Manager) DrainSession(
 		return fmt.Errorf("create Kafka session drain: %w", err)
 	}
 	defer session.Close()
-	if err := m.fenceForeignMembers(ctx, group, instanceID); err != nil {
+	if err := m.fenceForeignMembers(ctx, group, session.Client()); err != nil {
 		return err
 	}
 	for {
@@ -140,7 +138,7 @@ func (m *Manager) DrainSession(
 			}
 			continue
 		}
-		if err := m.fenceForeignMembers(ctx, group, instanceID); err != nil {
+		if err := m.fenceForeignMembers(ctx, group, session.Client()); err != nil {
 			return err
 		}
 		if err := session.Begin(); err != nil {
@@ -598,13 +596,15 @@ func (m *Manager) GroupMembers(ctx context.Context, group string) ([]string, err
 	return members, nil
 }
 
-// fenceForeignMembers fails if group has a member other than instanceID.
-func (m *Manager) fenceForeignMembers(ctx context.Context, group, instanceID string) error {
+// fenceForeignMembers fails if group has a member other than the client's own.
+// Before the client has joined, every member is foreign.
+func (m *Manager) fenceForeignMembers(ctx context.Context, group string, cl *kgo.Client) error {
 	members, err := m.GroupMembers(ctx, group)
 	if err != nil {
 		return err
 	}
-	if member, ok := foreignMember(members, instanceID); ok {
+	self, _ := cl.GroupMetadata()
+	if member, ok := foreignMember(members, self); ok {
 		return fmt.Errorf("kafka session group %s has a foreign member %s: %w", group, member, ErrSessionGroupNotEmpty)
 	}
 	return nil
