@@ -21,6 +21,7 @@ const (
 	axisAuthGrant       = "security.authorization.requiredGrant"
 	axisAPIPort         = "telepresenceAPI.port"
 	axisUsageEnabled    = "usage.enabled"
+	axisKafkaEnabled    = "kafka.enabled"
 )
 
 // matrixAxes are the manager-value dimensions this tier renders, drawn from
@@ -36,6 +37,7 @@ func matrixAxes() []rt.Axis {
 		{Name: axisAuthGrant, Values: []string{"portforward", "telepresence", "any"}},
 		{Name: axisAPIPort, Values: []string{"0", "9980"}},
 		{Name: axisUsageEnabled, Values: []string{"false", "true"}},
+		{Name: axisKafkaEnabled, Values: []string{"false", "true"}},
 	}
 }
 
@@ -61,6 +63,7 @@ func valuesFromCombo(c map[string]string) map[string]any {
 		},
 		"telepresenceAPI": map[string]any{"port": port},
 		"usage":           map[string]any{"enabled": c[axisUsageEnabled] == "true"},
+		"kafka":           map[string]any{"enabled": c[axisKafkaEnabled] == "true"},
 		// clientRbac isn't itself an axis (its shape doesn't vary with the
 		// combo), but it must be enabled for the assertions below to see the
 		// client Role content the required-grant axis controls.
@@ -81,6 +84,10 @@ func valuesFromCombo(c map[string]string) map[string]any {
 // match: the line after `- name:` isn't `value:`, so they're silently
 // skipped rather than mismatched.
 var envLineRE = regexp.MustCompile(`(?m)^\s*- name:\s*(\S+)\n\s*value:\s*"?([^"\n]*?)"?\s*$`)
+
+// kafkaTpl is the Kafka provider template's path within the rendered map, as
+// engine.Render keys it.
+const kafkaTpl = "telepresence-oss/templates/kafka.yaml"
 
 // parseEnv extracts the container env vars set via plain `value:` (not
 // `valueFrom:`) from a rendered statefulset.yaml, keyed by name.
@@ -112,6 +119,7 @@ func TestChartMatrix(t *testing.T) {
 			quicEnabled := c[axisQuicTunnel] == "true"
 			authMode := c[axisAuthMode]
 			usageEnabled := c[axisUsageEnabled] == "true"
+			kafkaEnabled := c[axisKafkaEnabled] == "true"
 
 			out := renderChart(t, valuesFromCombo(c))
 
@@ -142,6 +150,11 @@ func TestChartMatrix(t *testing.T) {
 			// renders iff nodeAgent is enabled.
 			if got := rendered(out, nodeAgentTpl); got != nodeAgentEnabled {
 				t.Errorf("%s rendered=%v, want nodeAgent.enabled=%v", nodeAgentTpl, got, nodeAgentEnabled)
+			}
+
+			// The Kafka provider resources render iff kafka is enabled.
+			if got := rendered(out, kafkaTpl); got != kafkaEnabled {
+				t.Errorf("%s rendered=%v, want kafka.enabled=%v", kafkaTpl, got, kafkaEnabled)
 			}
 
 			// The x509 auth kube-system RoleBinding renders iff auth mode
