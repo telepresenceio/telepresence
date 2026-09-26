@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apiMeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -91,6 +92,9 @@ func (r *SplitReconciler) Reconcile(ctx context.Context, request ctrl.Request) (
 	if split.DeletionTimestamp != nil {
 		return r.reconcileSplitDeletion(ctx, split, before)
 	}
+	if err := r.ensureNamespaceLabel(ctx, split.Namespace); err != nil {
+		return ctrl.Result{}, err
+	}
 	if split.Status.ActiveSpec != nil &&
 		(split.Spec.DesiredState == api.DesiredStateDisabled || split.Status.ActiveGeneration != split.Generation) {
 		return r.reconcileDeactivation(ctx, split, before, false)
@@ -144,6 +148,61 @@ func (r *SplitReconciler) transitionSplit(
 	}
 	setReadyCondition(&split.Status.Conditions, status, reason, message, split.Generation)
 	return r.updateSplitStatus(ctx, split, before, requeueAfter)
+}
+
+// ensureNamespaceLabel marks the namespace as holding a KafkaSplit, so the
+// provider's Pod-mutating webhook is scoped to it.
+func (r *SplitReconciler) ensureNamespaceLabel(ctx context.Context, name string) error {
+	ns := new(corev1.Namespace)
+	if err := r.Get(ctx, client.ObjectKey{Name: name}, ns); err != nil {
+		return err
+	}
+	if ns.Labels[runtimeconfig.NamespaceLabel] == "true" {
+		return nil
+	}
+	patch := client.MergeFrom(ns.DeepCopy())
+	if ns.Labels == nil {
+		ns.Labels = make(map[string]string)
+	}
+	ns.Labels[runtimeconfig.NamespaceLabel] = "true"
+	return r.Patch(ctx, ns, patch)
+}
+
+// releaseNamespaceLabel removes the namespace label once excludeSplit is the
+// last KafkaSplit in the namespace.
+func (r *SplitReconciler) releaseNamespaceLabel(ctx context.Context, namespace, excludeSplit string) error {
+	splits := new(api.KafkaSplitList)
+	if err := r.List(ctx, splits, client.InNamespace(namespace)); err != nil {
+		return err
+	}
+	for i := range splits.Items {
+		if splits.Items[i].Name != excludeSplit {
+			return nil
+		}
+	}
+	ns := new(corev1.Namespace)
+	if err := r.Get(ctx, client.ObjectKey{Name: namespace}, ns); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if ns.Labels[runtimeconfig.NamespaceLabel] == "" {
+		return nil
+	}
+	patch := client.MergeFrom(ns.DeepCopy())
+	delete(ns.Labels, runtimeconfig.NamespaceLabel)
+	return r.Patch(ctx, ns, patch)
+}
+
+// removeSplitFinalizer persists finalizer removal and releases the
+// namespace label when no other KafkaSplit remains.
+func (r *SplitReconciler) removeSplitFinalizer(ctx context.Context, split *api.KafkaSplit) (ctrl.Result, error) {
+	controllerutil.RemoveFinalizer(split, splitFinalizer)
+	if err := r.Update(ctx, split); err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := r.releaseNamespaceLabel(ctx, split.Namespace, split.Name); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
 }
 
 // RouteReconciler owns one personal shadow and its transactional drain.
