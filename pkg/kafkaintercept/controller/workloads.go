@@ -31,7 +31,7 @@ func (r *SplitReconciler) resolveWorkloads(ctx context.Context, split *api.Kafka
 	var refs []api.WorkloadReference
 
 	deployments := new(appsv1.DeploymentList)
-	if err := r.List(ctx, deployments, options...); err != nil {
+	if err := r.Workloads.List(ctx, deployments, options...); err != nil {
 		return nil, fmt.Errorf("list Deployments: %w", err)
 	}
 	for i := range deployments.Items {
@@ -39,7 +39,7 @@ func (r *SplitReconciler) resolveWorkloads(ctx context.Context, split *api.Kafka
 	}
 
 	statefulSets := new(appsv1.StatefulSetList)
-	if err := r.List(ctx, statefulSets, options...); err != nil {
+	if err := r.Workloads.List(ctx, statefulSets, options...); err != nil {
 		return nil, fmt.Errorf("list StatefulSets: %w", err)
 	}
 	for i := range statefulSets.Items {
@@ -47,7 +47,7 @@ func (r *SplitReconciler) resolveWorkloads(ctx context.Context, split *api.Kafka
 	}
 
 	replicaSets := new(appsv1.ReplicaSetList)
-	if err := r.List(ctx, replicaSets, options...); err != nil {
+	if err := r.Workloads.List(ctx, replicaSets, options...); err != nil {
 		return nil, fmt.Errorf("list ReplicaSets: %w", err)
 	}
 	for i := range replicaSets.Items {
@@ -57,7 +57,7 @@ func (r *SplitReconciler) resolveWorkloads(ctx context.Context, split *api.Kafka
 	}
 
 	rollouts := new(argorollouts.RolloutList)
-	if err := r.List(ctx, rollouts, options...); err != nil && !apiMeta.IsNoMatchError(err) && !apierrors.IsNotFound(err) {
+	if err := r.Workloads.List(ctx, rollouts, options...); err != nil && !apiMeta.IsNoMatchError(err) && !apierrors.IsNotFound(err) {
 		return nil, fmt.Errorf("list Argo Rollouts: %w", err)
 	}
 	for i := range rollouts.Items {
@@ -111,25 +111,25 @@ func (r *SplitReconciler) workloadTemplate(
 	switch ref.Kind {
 	case "Deployment":
 		object := new(appsv1.Deployment)
-		if err := r.Get(ctx, key, object); err != nil {
+		if err := r.Workloads.Get(ctx, key, object); err != nil {
 			return nil, nil, 0, err
 		}
 		return &object.Spec.Template, object.Spec.Selector, replicas(object.Spec.Replicas), nil
 	case "StatefulSet":
 		object := new(appsv1.StatefulSet)
-		if err := r.Get(ctx, key, object); err != nil {
+		if err := r.Workloads.Get(ctx, key, object); err != nil {
 			return nil, nil, 0, err
 		}
 		return &object.Spec.Template, object.Spec.Selector, replicas(object.Spec.Replicas), nil
 	case "ReplicaSet":
 		object := new(appsv1.ReplicaSet)
-		if err := r.Get(ctx, key, object); err != nil {
+		if err := r.Workloads.Get(ctx, key, object); err != nil {
 			return nil, nil, 0, err
 		}
 		return &object.Spec.Template, object.Spec.Selector, replicas(object.Spec.Replicas), nil
 	case "Rollout":
 		object := new(argorollouts.Rollout)
-		if err := r.Get(ctx, key, object); err != nil {
+		if err := r.Workloads.Get(ctx, key, object); err != nil {
 			return nil, nil, 0, err
 		}
 		return &object.Spec.Template, object.Spec.Selector, replicas(object.Spec.Replicas), nil
@@ -262,7 +262,7 @@ func (r *SplitReconciler) replacePods(
 	desired int32,
 	generation int64,
 ) (bool, string, error) {
-	resolver := &replicaSetResolver{reader: r.Client}
+	resolver := &replicaSetResolver{reader: r.Workloads}
 	seen := make(map[types.UID]struct{})
 	ready := int32(0)
 	stale := 0
@@ -276,7 +276,7 @@ func (r *SplitReconciler) replacePods(
 			return false, "", err
 		}
 		pods := new(corev1.PodList)
-		if err := r.List(
+		if err := r.Workloads.List(
 			ctx, pods, client.InNamespace(split.Namespace), client.MatchingLabelsSelector{Selector: labelSelector},
 		); err != nil {
 			return false, "", err
