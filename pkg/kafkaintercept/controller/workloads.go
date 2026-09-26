@@ -292,39 +292,6 @@ func (r *SplitReconciler) replacePods(
 	return true, "", nil
 }
 
-func (r *SplitReconciler) removePods(ctx context.Context, split *api.KafkaSplit) (bool, string, error) {
-	pods := new(corev1.PodList)
-	if err := r.List(ctx, pods, client.InNamespace(split.Namespace)); err != nil {
-		return false, "", err
-	}
-	resolver := &replicaSetResolver{reader: r.Client}
-	remaining := 0
-	for i := range pods.Items {
-		pod := &pods.Items[i]
-		matches, err := podMatchesSnapshot(ctx, resolver, pod, split.Status.Workloads)
-		if err != nil {
-			return false, "", err
-		}
-		if !matches {
-			continue
-		}
-		if podBlockedForSplit(pod, split.Name) {
-			continue
-		}
-		remaining++
-		if pod.DeletionTimestamp == nil {
-			eviction := &policyv1.Eviction{ObjectMeta: metav1.ObjectMeta{Name: pod.Name, Namespace: pod.Namespace}}
-			if err := r.SubResource("eviction").Create(ctx, pod, eviction); err != nil && !apierrors.IsNotFound(err) {
-				return false, fmt.Sprintf("eviction of Pod %s is blocked: %v", pod.Name, err), nil
-			}
-		}
-	}
-	if remaining > 0 {
-		return false, fmt.Sprintf("waiting for %d redirected Pods to terminate", remaining), nil
-	}
-	return true, "", nil
-}
-
 func podHasGeneration(pod *corev1.Pod, split string, generation int64) bool {
 	encoded := pod.Annotations[runtimeconfig.ActiveAnnotation]
 	if encoded == "" {
@@ -339,17 +306,6 @@ func podHasGeneration(pod *corev1.Pod, split string, generation int64) bool {
 		return !ok
 	}
 	return ok && value == fmt.Sprint(generation)
-}
-
-func podBlockedForSplit(pod *corev1.Pod, split string) bool {
-	if !slices.ContainsFunc(pod.Spec.SchedulingGates, func(gate corev1.PodSchedulingGate) bool {
-		return gate.Name == runtimeconfig.HandoffGate
-	}) {
-		return false
-	}
-	encoded := pod.Annotations[runtimeconfig.ActiveAnnotation]
-	values := make(map[string]string)
-	return json.Unmarshal([]byte(encoded), &values) == nil && values[split] != ""
 }
 
 func podReady(pod *corev1.Pod) bool {

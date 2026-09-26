@@ -243,7 +243,7 @@ func (s *Personal) Test_TransactionalPersonalRoutes() {
 		_, err := s.R().Kubectl(ctx, ns, "patch", "ksplit/"+name, "--type=merge", "-p", `{"spec":{"desiredState":"Disabled"}}`)
 		s.Require().NoError(err)
 	}
-	waitSplitReason(t, ctx, s.R(), ns, splitName, "QuiescingApplication")
+	waitSplitReason(t, ctx, s.R(), ns, splitName, "RestoringApplication")
 	_, err = s.R().Kubectl(ctx, ns, "delete", "pdb/"+appName, "--wait")
 	s.Require().NoError(err)
 	waitSplitPhase(t, ctx, s.R(), ns, splitName, "Disabled")

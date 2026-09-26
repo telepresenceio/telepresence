@@ -7,17 +7,17 @@ file is removed in the last commit once every item is done.
 
 ## 1. Lifecycle: drop the handoff scheduling gate
 
-- [ ] Reorder disable: pause splitters, wait for application shadow lag
+- [x] Reorder disable: pause splitters, wait for application shadow lag
       zero, stop splitters and confirm they left the original group, restore
       normal admission, then replace the shadow-consuming Pods through the
       Eviction API. Nothing consumes the source in the gap, so the gate that
       held replacement Pods is unnecessary.
-- [ ] Remove `KafkaAdmissionBlocked`, `SplitPhaseQuiescingApplication`,
+- [x] Remove `KafkaAdmissionBlocked`, `SplitPhaseQuiescingApplication`,
       `removePods`, `podBlockedForSplit`, `HandoffGate`, the webhook gate
       branch, and the `Blocked` enum value in the CRD.
-- [ ] Remove the Kubernetes 1.27 / `PodSchedulingReadiness` requirement from
+- [x] Remove the Kubernetes 1.27 / `PodSchedulingReadiness` requirement from
       the chart guard and both docs pages; update the lifecycle text.
-- [ ] Update unit and regression tests that waited on the gate.
+- [x] Update unit and regression tests that waited on the gate.
 
 ## 2. Traffic-manager integration
 
@@ -28,8 +28,9 @@ file is removed in the last commit once every item is done.
 - [ ] Forget closed routes in the expiry refresh cache.
 - [ ] Restore intercepts one at a time on reconnect so one failing Kafka
       route does not drop a client's other intercepts.
-- [ ] Detect collisions between route environment and the application
-      environment, as is already done between routes.
+- [ ] Document that route environment overrides the application's own
+      variables by design: that is how the local consumer receives its
+      personal topics, group, and isolation level.
 
 ## 3. Chart and RBAC
 

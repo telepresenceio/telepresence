@@ -41,10 +41,6 @@ The provider uses the separate `telepresence-kafka` image and binary. No Kafka
 library is linked into the `tel2` image used by the traffic-manager and
 traffic-agents.
 
-The provider requires Kubernetes 1.27 or newer with the
-`PodSchedulingReadiness` feature enabled. The feature is enabled by default
-starting in Kubernetes 1.27 and stable starting in Kubernetes 1.30.
-
 All fixed names installed by the provider are 30 characters or shorter.
 Generated names can exceed 30 only when they retain a user or cluster
 identifier that is useful to operators:
@@ -273,12 +269,11 @@ first disables the old snapshot before enabling the replacement.
 
 Setting `desiredState: Disabled` rejects new routes, closes existing routes,
 pauses splitters between transactions, waits for the application shadow lag to
-reach zero, quiesces shadow consumers, stops splitters, restores normal Pod
-admission, and removes managed resources. During source handoff, replacement
-Pods are admitted with a scheduling gate so they cannot start consuming; the
-controller evicts those gated Pods after normal admission resumes. This
-transition intentionally causes consumer downtime. It does not change the
-workload's desired replicas.
+reach zero, stops splitters and confirms they have left the original group,
+restores normal Pod admission, and then replaces the shadow-consuming Pods
+through the Eviction API before removing managed resources. This transition
+intentionally causes consumer downtime. It does not change the workload's
+desired replicas.
 
 Important status fields include:
 
@@ -342,7 +337,7 @@ Common conditions are:
 
 - `SourceGroupNotEmpty`: another member still consumes the original group.
   Stop it or correct the workload selector before retrying.
-- `ReplacingPods` or `QuiescingApplication`: inspect workload availability and
+- `ReplacingPods` or `RestoringApplication`: inspect workload availability and
   PDBs. The provider waits rather than bypassing disruption policy.
 - `BrokerPreflightFailed`: correct permissions, transaction support, topic
   configuration, source incarnation, or shadow durability.
@@ -379,7 +374,6 @@ the operator according to the organization's own policy.
 
 ## Limitations
 
-- Kubernetes 1.27 or newer with Pod scheduling readiness is required.
 - Kafka transactions and `read_committed` are mandatory.
 - Sources and shadows must be in one Kafka cluster.
 - Source topics are explicit; regex subscription and manual assignment are

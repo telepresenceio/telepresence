@@ -1230,7 +1230,6 @@ spec:
                 enum:
                 - Normal
                 - Shadow
-                - Blocked
                 type: string
               applicationEnv:
                 additionalProperties:
