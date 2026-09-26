@@ -21,12 +21,12 @@ file is removed in the last commit once every item is done.
 
 ## 2. Traffic-manager integration
 
-- [ ] Use the typed `pkg/kafkaintercept/api/v1alpha1` package instead of raw
+- [x] Use the typed `pkg/kafkaintercept/api/v1alpha1` package instead of raw
       REST and copied phase strings.
-- [ ] Automatic discovery treats a missing CRD or a forbidden list as "no
+- [x] Automatic discovery treats a missing CRD or a forbidden list as "no
       splits"; only an explicit Kafka request fails.
-- [ ] Forget closed routes in the expiry refresh cache.
-- [ ] Restore intercepts one at a time on reconnect so one failing Kafka
+- [x] Forget closed routes in the expiry refresh cache.
+- [x] Restore intercepts one at a time on reconnect so one failing Kafka
       route does not drop a client's other intercepts.
 - [ ] Document that route environment overrides the application's own
       variables by design: that is how the local consumer receives its
