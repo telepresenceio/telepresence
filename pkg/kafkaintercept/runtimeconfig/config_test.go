@@ -15,7 +15,6 @@ func TestFixedNamesStayConcise(t *testing.T) {
 		"config annotation":     ConfigAnnotation,
 		"generation annotation": GenerationAnnotation,
 		"healthy annotation":    HealthyAnnotation,
-		"handoff gate":          HandoffGate,
 		"split finalizer":       SplitFinalizer,
 		"route finalizer":       RouteFinalizer,
 	}

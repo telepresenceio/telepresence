@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"slices"
 	"sort"
 	"strconv"
 
@@ -98,11 +97,6 @@ func (m podMutator) Handle(ctx context.Context, request admission.Request) admis
 		if !matches {
 			continue
 		}
-		if split.Status.AdmissionMode == api.KafkaAdmissionBlocked {
-			ensureSchedulingGate(pod, runtimeconfig.HandoffGate)
-			generations[split.Name] = strconv.FormatInt(split.Status.ActiveGeneration, 10)
-			continue
-		}
 		containerName := split.Spec.Container
 		application := split.Spec.Application
 		if split.Status.ActiveSpec != nil {
@@ -154,15 +148,6 @@ func (m podMutator) Handle(ctx context.Context, request admission.Request) admis
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	return admission.PatchResponseFromRaw(request.Object.Raw, mutated)
-}
-
-func ensureSchedulingGate(pod *corev1.Pod, name string) {
-	if slices.ContainsFunc(pod.Spec.SchedulingGates, func(gate corev1.PodSchedulingGate) bool {
-		return gate.Name == name
-	}) {
-		return
-	}
-	pod.Spec.SchedulingGates = append(pod.Spec.SchedulingGates, corev1.PodSchedulingGate{Name: name})
 }
 
 func claimEnv(owners map[string]string, split, name string) *admission.Response {

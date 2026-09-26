@@ -30,8 +30,6 @@ const (
 	GenerationAnnotation = "kafka.telepresence.io/gen"
 	// HealthyAnnotation records splitter health on its member Lease.
 	HealthyAnnotation = "kafka.telepresence.io/ok"
-	// HandoffGate blocks replacement Pods during source handoff.
-	HandoffGate = "kafka.telepresence.io/handoff"
 	// SplitFinalizer protects split-owned Kafka resources during deletion.
 	SplitFinalizer = "kafka.telepresence.io/split"
 	// RouteFinalizer protects route-owned Kafka resources during deletion.
