@@ -118,7 +118,10 @@ $ telepresence intercept checkout-alice \
 Start the local consumer with the generated environment. Its topics and group
 identify personal shadow resources and its isolation level is
 `read_committed`. If the application declares a transactional-ID binding, the
-environment also contains a route-unique transactional ID.
+environment also contains a route-unique transactional ID. The generated
+environment overrides these variables even when the application container
+sets them, so the local consumer must read them from the environment rather
+than assume its own defaults.
 
 Kafka filters are independent of HTTP filters. Available Kafka predicates are:
 
