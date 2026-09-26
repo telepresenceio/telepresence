@@ -64,9 +64,9 @@ file is removed in the last commit once every item is done.
       with one failing route, environment collision, replica scale-down,
       reconnecting consumer during drain, concurrent slot allocation,
       PDB-blocked eviction leaving the split pending.
-- [ ] Add a `kafka.enabled` axis to the clusterless chart matrix.
-- [ ] Gate the Kafka conformance job on Kafka paths.
-- [ ] Pin the Argo Rollouts version the regression suite installs.
+- [x] Add a `kafka.enabled` axis to the clusterless chart matrix.
+- [x] Gate the Kafka conformance job on Kafka paths.
+- [x] Pin the Argo Rollouts version the regression suite installs.
 - [ ] Add a make target that runs controller-gen for the CRDs and deepcopy.
 
 ## 6. Documentation
