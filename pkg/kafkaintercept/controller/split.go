@@ -149,8 +149,7 @@ func (r *SplitReconciler) reconcileDeactivation(
 ) (ctrl.Result, error) {
 	if split.Status.ActiveSpec == nil {
 		if deleting {
-			controllerutil.RemoveFinalizer(split, splitFinalizer)
-			return ctrl.Result{}, r.Update(ctx, split)
+			return r.removeSplitFinalizer(ctx, split)
 		}
 		split.Status.AdmissionMode = api.KafkaAdmissionNormal
 		return r.transitionSplit(ctx, split, before, api.SplitPhaseDisabled, "Disabled", "Kafka split is disabled", false)
@@ -296,8 +295,7 @@ func (r *SplitReconciler) finishDeactivation(
 	}
 	clearActiveStatus(&split.Status)
 	if deleting {
-		controllerutil.RemoveFinalizer(split, splitFinalizer)
-		return ctrl.Result{}, r.Update(ctx, split)
+		return r.removeSplitFinalizer(ctx, split)
 	}
 	if split.Spec.DesiredState == api.DesiredStateEnabled {
 		return r.transitionSplit(
