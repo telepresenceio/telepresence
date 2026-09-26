@@ -303,6 +303,11 @@ through the Eviction API before removing managed resources. This transition
 intentionally causes consumer downtime. It does not change the workload's
 desired replicas.
 
+Changes to routes, splitter members, provider resources, and selected Pods are
+reconciled as they happen. An enabled split additionally re-verifies broker
+ownership and member health every 30 seconds, and transitions poll every 2
+seconds.
+
 Important status fields include:
 
 - `phase` and `conditions`, including a machine-readable reason and message;

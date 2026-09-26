@@ -22,6 +22,10 @@ const (
 	RoutingDataKey = "routing.json"
 	// SplitLabel associates provider resources with a KafkaSplit.
 	SplitLabel = "kafka.telepresence.io/split"
+	// SplitNamespaceLabel records the owning KafkaSplit's namespace.
+	SplitNamespaceLabel = "kafka.telepresence.io/ns"
+	// SplitNameLabel records the owning KafkaSplit's name.
+	SplitNameLabel = "kafka.telepresence.io/name"
 	// NamespaceLabel marks namespaces whose Pods the provider's admission webhook mutates.
 	NamespaceLabel = "kafka.telepresence.io/splits"
 	// ActiveAnnotation records active split generations on application Pods.
@@ -44,6 +48,7 @@ type Control struct {
 	ConfigMap         string `json:"configMap"`
 	MemberLeasePrefix string `json:"memberLeasePrefix"`
 	Split             string `json:"split"`
+	SplitName         string `json:"splitName"`
 }
 
 // Config is the complete startup configuration for one splitter StatefulSet.
