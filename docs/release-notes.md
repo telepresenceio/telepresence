@@ -8,6 +8,12 @@
 Selected-intercept tunnels now reconnect agent dial watchers with backoff, clean up abandoned forwards more carefully, use separate timeouts for agent connections and intercepted endpoints, and reject dial requests when responder capacity is full instead of letting work accumulate. The default for the <code>endpointDial</code> timeout is raised from 3 to 15 seconds, so a connection to a cluster address that is not yet accepting connections is retried for longer before it fails.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Clearer diagnostics for slow or stalled selected intercepts</div></div>
+<div style="margin-left: 15px">
+
+The traffic-agent and the client now log a summary line, with the elapsed time and the identifiers needed to match both ends, when a selected HTTP intercept request, a client stream, or a dial response was slow or failed. The traffic-agent also stops waiting for a client that never answers a dial request once the client's own dial deadline plus a grace period has passed, instead of holding the request open.
+</div>
+
 ## Version 2.32.1 <span style="font-size: 16px;">(September 25)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Chart hook Jobs accept chart versions with build metadata</div></div>
 <div style="margin-left: 15px">

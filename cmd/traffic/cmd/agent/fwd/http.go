@@ -1,6 +1,7 @@
 package fwd
 
 import (
+	"bufio"
 	"context"
 	"crypto/tls"
 	"encoding/json/v2"
@@ -13,6 +14,7 @@ import (
 	"net/netip"
 	"net/url"
 	"sync"
+	"time"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -48,6 +50,53 @@ func (c *metricsReportingConn) Close() error {
 	err := c.Conn.Close()
 	c.once.Do(c.report)
 	return err
+}
+
+const (
+	httpInterceptSlowAfter = 2 * time.Second
+	httpInterceptVerySlow  = 10 * time.Second
+)
+
+type observedResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+	bytes      int64
+	hijacked   bool
+}
+
+func (w *observedResponseWriter) Header() http.Header {
+	return w.ResponseWriter.Header()
+}
+
+func (w *observedResponseWriter) WriteHeader(statusCode int) {
+	// Informational responses precede the final status and are not recorded.
+	if w.statusCode == 0 && statusCode >= http.StatusOK {
+		w.statusCode = statusCode
+	}
+	w.ResponseWriter.WriteHeader(statusCode)
+}
+
+func (w *observedResponseWriter) Write(p []byte) (int, error) {
+	if w.statusCode == 0 {
+		w.statusCode = http.StatusOK
+	}
+	n, err := w.ResponseWriter.Write(p)
+	w.bytes += int64(n)
+	return n, err
+}
+
+func (w *observedResponseWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// Hijack records a protocol upgrade. The reverse proxy writes the 101 response to the
+// hijacked connection itself, so neither WriteHeader nor Write sees it.
+func (w *observedResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	conn, brw, err := http.NewResponseController(w.ResponseWriter).Hijack()
+	if err == nil {
+		w.hijacked = true
+	}
+	return conn, brw, err
 }
 
 func (f *tcp) protocols(ctx context.Context, plainText bool) *http.Protocols {
@@ -393,6 +442,11 @@ func (f *tcp) serveHTTPIntercept(
 	defaultHandler http.Handler,
 ) {
 	hit := f.getHTTPInterceptTransport(ctx, ii, request.ProtoMajor)
+	requestID := f.httpRequestID.Add(1)
+	requestStart := time.Now()
+	method := request.Method
+	path := request.URL.Path
+	host := request.Host
 
 	if tlsConfig := hit.transport.TLSClientConfig; tlsConfig != nil {
 		if len(tlsConfig.Certificates) > 0 {
@@ -409,10 +463,11 @@ func (f *tcp) serveHTTPIntercept(
 	targetProxy := httputil.NewSingleHostReverseProxy(hit.targetURL)
 	targetProxy.ErrorHandler = func(rw http.ResponseWriter, req *http.Request, err error) {
 		if errors.Is(err, errClientStream) {
-			clog.Warnf(ctx, "Intercept tunnel unavailable for %s %s; failing open to app container: %v", req.Method, req.URL.Path, err)
+			clog.Warnf(ctx, "HTTP selected intercept tunnel unavailable for request=%d %s %s; failing open to app container: %v", requestID, req.Method, req.URL.Path, err)
 			defaultHandler.ServeHTTP(rw, req)
 			return
 		}
+		clog.Warnf(ctx, "HTTP selected intercept proxy error for request=%d %s %s: %v", requestID, req.Method, req.URL.Path, err)
 		proxyErrorHandler(rw, req, err)
 	}
 	targetProxy.Transport = hit.transport
@@ -420,9 +475,42 @@ func (f *tcp) serveHTTPIntercept(
 		src: src,
 		ii:  ii,
 	}))
-	targetProxy.ServeHTTP(writer, request)
-
-	clog.Debugf(ctx, "Request to %s ended", hit.targetURL)
+	observedWriter := &observedResponseWriter{ResponseWriter: writer}
+	// Deferred so that the summary is also written when the proxy aborts the handler
+	// while copying the response body.
+	defer func() {
+		duration := time.Since(requestStart)
+		statusCode := observedWriter.statusCode
+		switch {
+		case observedWriter.hijacked:
+			statusCode = http.StatusSwitchingProtocols
+		case statusCode == 0:
+			statusCode = -1
+		}
+		if duration > httpInterceptSlowAfter || statusCode == -1 {
+			logFn := clog.Infof
+			if duration > httpInterceptVerySlow || statusCode == -1 {
+				logFn = clog.Warnf
+			}
+			logFn(
+				ctx,
+				"HTTP selected intercept request finished after %s: request=%d intercept=%s clientSession=%s method=%s host=%q path=%q src=%s target=%s status=%d responseBytes=%d",
+				duration.Round(time.Millisecond),
+				requestID,
+				ii.Id,
+				ii.ClientSession.SessionId,
+				method,
+				host,
+				path,
+				src,
+				hit.targetURL,
+				statusCode,
+				observedWriter.bytes,
+			)
+		}
+		clog.Debugf(ctx, "Request to %s ended", hit.targetURL)
+	}()
+	targetProxy.ServeHTTP(observedWriter, request)
 }
 
 func proxyErrorHandler(rw http.ResponseWriter, _ *http.Request, err error) {
