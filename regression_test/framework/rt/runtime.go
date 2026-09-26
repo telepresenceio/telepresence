@@ -80,6 +80,9 @@ type Runtime struct {
 	tailLogs      bool
 	cover         bool
 	coverDirReady bool
+	// managerKafka is RTEST_MANAGER_KAFKA: every manager spec's effective
+	// values get the Kafka provider forced on (see applyManagerKafka).
+	managerKafka bool
 
 	labels     map[Label]bool
 	skipLabels map[Label]bool
@@ -158,6 +161,7 @@ func newRuntime(ctx context.Context) (*Runtime, error) {
 		teardown:               env.teardown,
 		tailLogs:               env.tailLogs,
 		cover:                  env.cover,
+		managerKafka:           env.managerKafka,
 		labels:                 env.labels,
 		skipLabels:             env.skipLabels,
 		root:                   root,

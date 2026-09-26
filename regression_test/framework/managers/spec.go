@@ -24,6 +24,24 @@ type specHash struct {
 	Values Values `json:"values"`
 }
 
+// kafkaKeySuffix marks a spec whose Kafka provider was forced on by
+// WithKafka, so its Key (and Hash) never collides with the same spec
+// without the provider.
+const kafkaKeySuffix = "+kafka"
+
+// WithKafka returns a copy of s with the Kafka provider forced on
+// (kafka.enabled=true) and its Key suffixed, so a manager release installed
+// with the provider is never adopted for, or by, a run without it. A no-op
+// if s already enables Kafka (e.g. the Kafka() catalog entry itself).
+func (s Spec) WithKafka() Spec {
+	if s.Values.Kafka.Enabled {
+		return s
+	}
+	values := s.Values
+	values.Kafka = KafkaValues{Enabled: true}
+	return Spec{Key: s.Key + kafkaKeySuffix, Values: values}
+}
+
 // Hash returns the sha256, hex-encoded identity of the spec: a canonical JSON
 // encoding of the Key and Values. Two specs with the same Hash produce the
 // same helm release and can share it.
