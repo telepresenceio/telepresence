@@ -52,6 +52,7 @@ func DestroySecondaryManagers(e Env) {
 // Kept simple: always provisioned fresh, never adopted across runs, and
 // destroyed at run end unconditionally (AlwaysDestroy), like PrivateNamespace.
 func SecondaryManager(spec managers.Spec, ns string) *Fixture[*ManagerHandle] {
+	spec = R().applyManagerKafka(spec)
 	h := sha256.Sum256([]byte("secondary-manager|" + ns + "|" + spec.Hash()))
 	hash := hex.EncodeToString(h[:])
 	return &Fixture[*ManagerHandle]{

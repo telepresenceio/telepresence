@@ -109,6 +109,10 @@ jobs:
         run: |
           docker buildx build --platform=linux/amd64,linux/arm64 \
           --push --tag ${{env.TELEPRESENCE_REGISTRY}}/route-controller:${{env.TELEPRESENCE_SEMVER}} -f build-aux/docker/images/Dockerfile.routecontroller .
+      - name: Push Kafka provider image
+        run: |
+          docker buildx build --platform=linux/amd64,linux/arm64 \
+          --push --tag ${{env.TELEPRESENCE_REGISTRY}}/telepresence-kafka:${{env.TELEPRESENCE_SEMVER}} -f build-aux/docker/images/Dockerfile.kafka .
       - name: Push Helm Chart
         run: helm push build-output/telepresence-oss-chart.tgz oci://${{env.TELEPRESENCE_REGISTRY}}
       - name: Log out from registry

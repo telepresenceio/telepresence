@@ -75,6 +75,28 @@ rules:
     - subjectaccessreviews
   verbs:
     - create
+{{- if .kafka.enabled }}
+- apiGroups:
+    - "kafka.telepresence.io"
+  resources:
+    - splits
+  verbs:
+    - get
+    - list
+    - watch
+- apiGroups:
+    - "kafka.telepresence.io"
+  resources:
+    - routes
+  verbs:
+    - get
+    - list
+    - watch
+    - create
+    - update
+    - patch
+    - delete
+{{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

@@ -2,6 +2,7 @@ package intercept
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"slices"
 	"strings"
@@ -91,6 +92,24 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		NodeAgent:     s.NodeAgent,
 		PathFilters:   BuildPathFilters(s.HTTPPathEqualFilters, s.HTTPPathPrefixFilters, s.HTTPPathRegexFilters),
 	}
+	if s.kafkaEnabled && !s.NoKafka {
+		spec.Kafka = &manager.KafkaIntercept{Only: s.KafkaOnly}
+		for _, value := range s.KafkaHeaders {
+			name, encoded, _ := parseKafkaHeader(value)
+			decoded, err := kafkaBytes(encoded)
+			if err != nil {
+				return nil, fmt.Errorf("invalid Kafka header %s: %w", name, err)
+			}
+			spec.Kafka.Headers = append(spec.Kafka.Headers, &manager.KafkaHeader{Name: name, Value: decoded})
+		}
+		var err error
+		if spec.Kafka.Key, err = kafkaBytes(s.KafkaKey); err != nil {
+			return nil, fmt.Errorf("invalid Kafka key: %w", err)
+		}
+		if spec.Kafka.KeyPrefix, err = kafkaBytes(s.KafkaKeyPrefix); err != nil {
+			return nil, fmt.Errorf("invalid Kafka key prefix: %w", err)
+		}
+	}
 	ir := &connector.CreateInterceptRequest{
 		Spec:           spec,
 		ExtendedInfo:   s.ExtendedInfo,
@@ -149,6 +168,19 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		spec.TargetHost = "127.0.0.1"
 	}
 	return ir, nil
+}
+
+func kafkaBytes(value string) ([]byte, error) {
+	if value == "" {
+		return nil, nil
+	}
+	if literal, ok := strings.CutPrefix(value, "text:"); ok {
+		return []byte(literal), nil
+	}
+	if encoded, ok := strings.CutPrefix(value, "base64:"); ok {
+		return base64.StdEncoding.DecodeString(encoded)
+	}
+	return []byte(value), nil
 }
 
 func (s *state) Name() string {

@@ -79,6 +79,30 @@ func validateIntercept(spec *rpc.InterceptSpec) string {
 	case spec.Mechanism == "":
 		return "mechanism must not be empty"
 	}
+	if kafka := spec.GetKafka(); kafka != nil {
+		if spec.Replace {
+			return "replace cannot request Kafka routes"
+		}
+		if spec.Wiretap {
+			return "wiretap cannot request Kafka routes"
+		}
+		if len(kafka.Key) > 0 && len(kafka.KeyPrefix) > 0 {
+			return "Kafka intercept cannot contain both key and key prefix"
+		}
+		headers := make(map[string]struct{}, len(kafka.Headers))
+		for _, header := range kafka.Headers {
+			if header.GetName() == "" {
+				return "Kafka header name must not be empty"
+			}
+			if _, ok := headers[header.Name]; ok {
+				return fmt.Sprintf("duplicate Kafka header %q", header.Name)
+			}
+			headers[header.Name] = struct{}{}
+		}
+		if kafka.GetOnly() && (spec.NodeAgent || spec.NoDefaultPort || spec.PortIdentifier != "" || len(spec.PodPorts) > 0) {
+			return "Kafka-only intercept cannot request network interception"
+		}
+	}
 
 	return ""
 }

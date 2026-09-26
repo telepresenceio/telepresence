@@ -514,6 +514,30 @@ usage:
   insecure: false
 
 ################################################################################
+## Kafka Personal Intercepts
+################################################################################
+# kafka installs the optional Kafka provider. Kafka support is kept in its own
+# image and is not linked into the traffic-manager or traffic-agent.
+kafka:
+  enabled: false
+  replicas: 2
+  image:
+    # registry and pullPolicy default to the traffic-manager image settings
+    registry: ""
+    name: telepresence-kafka
+    pullPolicy: ""
+  webhook:
+    port: 9443
+    failurePolicy: Fail
+    timeoutSeconds: 5
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+################################################################################
 ## Route Controller Configuration
 ################################################################################
 # routeController installs a DaemonSet that watches for Service deletions and

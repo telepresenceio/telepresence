@@ -456,6 +456,49 @@ func TestActiveNodeAgentIntercept(t *testing.T) {
 	assert.Equal(t, "c4:ic4", found.Id)
 }
 
+func TestKafkaOnlyInterceptStartsActive(t *testing.T) {
+	state := &State{intercepts: cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond)}
+	intercept, err := state.addIntercept("session:orders", &rpc.CreateInterceptRequest{
+		Session: &rpc.SessionInfo{SessionId: "session"},
+		InterceptSpec: &rpc.InterceptSpec{
+			Name: "orders", Agent: "checkout", Namespace: "shop", Mechanism: "tcp",
+			Kafka: &rpc.KafkaIntercept{Only: true},
+		},
+	}, nil)
+	require.NoError(t, err)
+	require.Equal(t, rpc.InterceptDispositionType_ACTIVE, intercept.Disposition)
+	require.Equal(t, "Kafka routes are ready", intercept.Message)
+}
+
+func TestKafkaAttachmentIsPublishedWithIntercept(t *testing.T) {
+	state := &State{intercepts: cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond)}
+	route := &rpc.KafkaRoute{Split: "orders", Environment: map[string]string{"ORDERS_TOPIC": "orders-alice"}}
+	finalized := false
+	intercept, err := state.addIntercept("session:orders", &rpc.CreateInterceptRequest{
+		Session: &rpc.SessionInfo{SessionId: "session"},
+		InterceptSpec: &rpc.InterceptSpec{
+			Name: "orders", Agent: "checkout", Namespace: "shop", Mechanism: "tcp",
+			Kafka: &rpc.KafkaIntercept{Only: true},
+		},
+	}, func(intercept *Intercept) {
+		intercept.KafkaRoutes = []*rpc.KafkaRoute{route}
+		intercept.Environment = map[string]string{"ORDERS_TOPIC": "orders-alice"}
+		intercept.AddFinalizer(func(context.Context, *rpc.InterceptInfo) error {
+			finalized = true
+			return nil
+		})
+	})
+	require.NoError(t, err)
+	require.Equal(t, []*rpc.KafkaRoute{route}, intercept.KafkaRoutes)
+	require.Equal(t, "orders-alice", intercept.Environment["ORDERS_TOPIC"])
+
+	stored, ok := state.intercepts.Load("session:orders")
+	require.True(t, ok)
+	require.Equal(t, intercept.KafkaRoutes, stored.KafkaRoutes)
+	state.RemoveIntercept("session:orders")
+	require.True(t, finalized)
+}
+
 // TestRestoreIntercepts_RegeneratesChildrenFromPodPorts: a child spec in the
 // input is never stored directly; the restored parent's own PodPorts
 // regenerates its child instead.
@@ -494,7 +537,7 @@ func TestRestoreIntercepts_RegeneratesChildrenFromPodPorts(t *testing.T) {
 		ClientSession: &rpc.SessionInfo{SessionId: "c1"},
 	}
 
-	s.RestoreIntercepts(ctx, []*rpc.InterceptInfo{parent, forgedChild}, time.Now())
+	s.RestoreIntercepts(ctx, []*rpc.InterceptInfo{parent, forgedChild}, time.Now(), nil)
 
 	_, ok := s.intercepts.Load("c1:forged-child")
 	assert.False(t, ok, "a child spec present in the input must never be stored directly")
@@ -951,7 +994,7 @@ func TestAddIntercept_NodeAgent_ReportsAttach(t *testing.T) {
 			WorkloadKind: string(k8sapi.DeploymentKind), NodeAgent: true, Wiretap: true, Mechanism: "tcp",
 		},
 	}
-	_, ii, err := s.AddIntercept(ctx, cir)
+	_, ii, err := s.AddIntercept(ctx, cir, nil)
 	require.NoError(t, err)
 	require.NotNil(t, ii)
 

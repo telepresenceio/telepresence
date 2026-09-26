@@ -121,7 +121,7 @@ func (s *State) PrepareIntercept(
 			// running and the replace would be silently ignored.
 			return interceptError(errcat.User.New("node-agent mode does not support replacing containers"))
 		}
-	} else {
+	} else if !spec.GetKafka().GetOnly() {
 		// Provisioning a sidecar intercept injects a traffic-agent into the
 		// workload's pod template and restarts its pods. A live node-agent
 		// intercept depends on the specific pod (and its CRI container IDs)
@@ -138,6 +138,11 @@ func (s *State) PrepareIntercept(
 					"this intercept with --node-agent instead",
 				spec.Agent, spec.Namespace, existing.Spec.Name, existing.Spec.Client))
 		}
+	}
+	if spec.GetKafka().GetOnly() {
+		return &rpc.PreparedIntercept{
+			Namespace: spec.Namespace, WorkloadKind: string(wl.GetKind()), ContainerName: spec.ContainerName,
+		}, nil
 	}
 
 	var rp agentconfig.ReplacePolicy
@@ -426,7 +431,11 @@ func (s *State) checkInterceptConflicts(ac *agentconfig.Sidecar, client *ClientS
 	return nil
 }
 
-func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptRequest) (*ClientSession, *rpc.InterceptInfo, error) {
+func (s *State) AddIntercept(
+	ctx context.Context,
+	cir *rpc.CreateInterceptRequest,
+	initialize func(*Intercept),
+) (*ClientSession, *rpc.InterceptInfo, error) {
 	clientSession := cir.Session
 	sessionID := tunnel.SessionID(clientSession.SessionId)
 	client := s.GetClient(sessionID)
@@ -461,14 +470,14 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		if _, err = s.waitForNodeAgent(ctx, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, nil, err
 		}
-	} else {
+	} else if !spec.GetKafka().GetOnly() {
 		_, _, err = s.ensureAgent(ctx, wl, s.isExtended(spec), false, spec, rp)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
-	is, err := s.addIntercept(interceptID, cir)
+	is, err := s.addIntercept(interceptID, cir, initialize)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -484,7 +493,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		pmCir.InterceptSpec = pmSpec
 
 		pmInterceptID := fmt.Sprintf("%s:%s", sessionID, pmSpec.Name)
-		_, err = s.addIntercept(pmInterceptID, pmCir)
+		_, err = s.addIntercept(pmInterceptID, pmCir, nil)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -495,7 +504,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 			return nil
 		})
 	}
-	if !spec.NodeAgent {
+	if !spec.NodeAgent && !spec.GetKafka().GetOnly() {
 		// A node-agent intercept never injects a sidecar or modifies the
 		// workload's pod template, so there is nothing for this finalizer
 		// to restore.
@@ -518,7 +527,9 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 	}
 
 	agentType := "sidecar"
-	if spec.NodeAgent {
+	if spec.GetKafka().GetOnly() {
+		agentType = "none"
+	} else if spec.NodeAgent {
 		agentType = "node"
 	}
 	usg.Quick(ctx, "manager.attach", "agent.type", agentType, "mechanism", spec.Mechanism)
@@ -564,8 +575,12 @@ func childInterceptSpecs(spec *rpc.InterceptSpec) ([]*rpc.InterceptSpec, error) 
 	return specs, nil
 }
 
-func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest) (*Intercept, error) {
+func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest, initialize func(*Intercept)) (*Intercept, error) {
 	is := s.NewInterceptInfo(id, cir)
+	if initialize != nil {
+		initialize(is)
+	}
+	is.ActivateKafkaOnly()
 
 	// Wrap each potential-state-change in an
 	//
@@ -586,6 +601,21 @@ func (s *State) addIntercept(id string, cir *rpc.CreateInterceptRequest) (*Inter
 		s.intercepts.Store(id, is)
 	}
 	return is, nil
+}
+
+// AddFinalizer adds cleanup that must be installed before an intercept is
+// visible to state subscribers.
+func (is *Intercept) AddFinalizer(finalizer InterceptFinalizer) {
+	is.addFinalizer(finalizer)
+}
+
+// ActivateKafkaOnly marks a Kafka-only intercept ACTIVE, since there is no
+// agent to wait for. Intercepts of any other kind are left untouched.
+func (is *Intercept) ActivateKafkaOnly() {
+	if is.Spec.GetKafka().GetOnly() {
+		is.Disposition = rpc.InterceptDispositionType_ACTIVE
+		is.Message = "Kafka routes are ready"
+	}
 }
 
 func (s *State) NewInterceptInfo(interceptID string, ciReq *rpc.CreateInterceptRequest) *Intercept {

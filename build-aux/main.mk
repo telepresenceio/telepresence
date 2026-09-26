@@ -87,6 +87,11 @@ protoc: protoc-clean $(tools/protoc) $(tools/protoc-gen-go) $(tools/protoc-gen-g
 	  --proto_path=. \
 	  $$(find ./rpc/ -name '*.proto')
 
+.PHONY: generate-kafka
+generate-kafka: $(tools/controller-gen) ## (Generate) Update the Kafka CRDs and deepcopy code
+	$(tools/controller-gen) object paths=./pkg/kafkaintercept/api/...
+	$(tools/controller-gen) crd paths=./pkg/kafkaintercept/api/... output:crd:dir=charts/telepresence-oss/crds
+
 .PHONY: generate
 generate: ## (Generate) Update generated files that get checked in to Git
 generate: generate-clean
@@ -349,6 +354,7 @@ save-client-image: client-image
 	docker save $(CLIENT_IMAGE_FQN) > $(BUILDDIR)/client-image.tar
 
 ROUTECONTROLLER_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/route-controller:$(TELEPRESENCE_SEMVER)
+KAFKA_IMAGE_FQN=$(TELEPRESENCE_REGISTRY)/telepresence-kafka:$(TELEPRESENCE_SEMVER)
 
 .PHONY: routecontroller-image
 routecontroller-image: images-deps  ## (Build) Build the route-controller DaemonSet image
@@ -368,11 +374,29 @@ load-routecontroller-image: routecontroller-image ## (Build) Load the route-cont
 save-routecontroller-image: routecontroller-image
 	docker save $(ROUTECONTROLLER_IMAGE_FQN) > $(BUILDDIR)/routecontroller-image.tar
 
+.PHONY: kafka-image
+kafka-image: images-deps ## (Build) Build the optional Kafka intercept provider image
+	$(eval PLATFORM_ARG := $(if $(TELEPRESENCE_KAFKA_IMAGE_PLATFORM), --platform=$(TELEPRESENCE_KAFKA_IMAGE_PLATFORM),))
+	docker build $(PLATFORM_ARG) --target kafka --tag telepresence-kafka --tag $(KAFKA_IMAGE_FQN) \
+	    -f build-aux/docker/images/Dockerfile.kafka .
+
+.PHONY: push-kafka-image
+push-kafka-image: kafka-image ## (Build) Push the Kafka intercept provider image to $(TELEPRESENCE_REGISTRY)
+	docker push $(KAFKA_IMAGE_FQN)
+
+.PHONY: load-kafka-image
+load-kafka-image: kafka-image ## (Build) Load the Kafka intercept provider image into the local cluster
+	$(call load-image,$(KAFKA_IMAGE_FQN))
+
+.PHONY: save-kafka-image
+save-kafka-image: kafka-image
+	docker save $(KAFKA_IMAGE_FQN) > $(BUILDDIR)/kafka-image.tar
+
 .PHONY: push-images
-push-images: push-tel2-image push-client-image push-routecontroller-image
+push-images: push-tel2-image push-client-image push-routecontroller-image push-kafka-image
 
 .PHONY: load-images
-load-images: load-tel2-image load-client-image load-routecontroller-image ## (Build) Load all images into the local cluster (kind/minikube)
+load-images: load-tel2-image load-client-image load-routecontroller-image load-kafka-image ## (Build) Load all images into the local cluster (kind/minikube)
 
 .PHONY: helm-chart
 helm-chart: $(BUILDDIR)/telepresence-oss-chart.tgz
@@ -539,6 +563,10 @@ ifeq ($(GOOS),linux)
 else
 	CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./pkg/... | $(tools/test-report)
 endif
+
+.PHONY: check-kafka-conformance
+check-kafka-conformance: ## (QA) Run Kafka provider conformance against pinned 3.8 and current brokers
+	build-aux/kafka-conformance.sh
 
 # Shards for check-regression: three area groups balanced by measured
 # duration (~17 min each), grouping the areas that share node-agent/quic

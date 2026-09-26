@@ -74,6 +74,7 @@ The shell environment always wins; there is no config file.
 | `RTEST_FRESH=1` | ignore adoptable resources | off |
 | `RTEST_TEARDOWN=1` | destroy resources at run end even in dev mode | off |
 | `RTEST_COVER=1` | coverage mode (see Coverage) | off |
+| `RTEST_MANAGER_KAFKA` | install the Kafka provider on every suite's manager | off |
 
 CI (`GITHUB_ACTIONS=true`) implies fresh + teardown. The version under test
 is read from the binary itself; `TELEPRESENCE_VERSION` overrides.
