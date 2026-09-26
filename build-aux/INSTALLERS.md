@@ -90,8 +90,8 @@ SSHFS-Win; volume mounts need both installed separately.
 **Location:** `build-aux/systemd-installer/`
 
 **Output:**
-- `telepresence-{version}-linux-{amd64,arm64}.deb` (Debian/Ubuntu)
-- `telepresence-{version}-linux-{amd64,arm64}.rpm` (Fedora/RHEL)
+- `telepresence-linux-{amd64,arm64}.deb` (Debian/Ubuntu)
+- `telepresence-linux-{amd64,arm64}.rpm` (Fedora/RHEL)
 
 **Architecture:** amd64 and arm64
 
