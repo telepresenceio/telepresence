@@ -13,7 +13,6 @@ import (
 	"net/netip"
 	"net/url"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/telepresenceio/clog"
@@ -430,7 +429,6 @@ func (f *tcp) serveHTTPIntercept(
 	defaultHandler http.Handler,
 ) {
 	hit := f.getHTTPInterceptTransport(ctx, ii, request.ProtoMajor)
-	spec := ii.Spec
 	requestID := f.httpRequestID.Add(1)
 	requestStart := time.Now()
 	method := request.Method
@@ -439,25 +437,6 @@ func (f *tcp) serveHTTPIntercept(
 		path = request.URL.Path
 	}
 	host := request.Host
-	var slowLogged atomic.Bool
-	slowTimer := time.AfterFunc(httpInterceptSlowAfter, func() {
-		slowLogged.Store(true)
-		clog.Warnf(
-			ctx,
-			"HTTP selected intercept request still active after %s: request=%d intercept=%s clientSession=%s method=%s host=%q path=%q src=%s target=%s:%d",
-			time.Since(requestStart).Round(time.Millisecond),
-			requestID,
-			ii.Id,
-			ii.ClientSession.SessionId,
-			method,
-			host,
-			path,
-			src,
-			spec.TargetHost,
-			spec.TargetPort,
-		)
-	})
-	defer slowTimer.Stop()
 
 	if tlsConfig := hit.transport.TLSClientConfig; tlsConfig != nil {
 		if len(tlsConfig.Certificates) > 0 {
@@ -494,7 +473,7 @@ func (f *tcp) serveHTTPIntercept(
 	if statusCode == 0 {
 		statusCode = -1
 	}
-	if slowLogged.Load() || duration > httpInterceptSlowAfter || statusCode == -1 {
+	if duration > httpInterceptSlowAfter || statusCode == -1 {
 		logFn := clog.Infof
 		if duration > httpInterceptVerySlow || statusCode == -1 {
 			logFn = clog.Warnf

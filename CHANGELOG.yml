@@ -38,6 +38,15 @@ items:
           timeout is raised from 3 to 15 seconds, so a connection to a cluster
           address that is not yet accepting connections is retried for longer
           before it fails.
+      - type: change
+        title: Clearer diagnostics for slow or stalled selected intercepts
+        body: >-
+          The traffic-agent and the client now log a summary line, with the
+          elapsed time and the identifiers needed to match both ends, when a
+          selected HTTP intercept request, a client stream, or a dial response
+          was slow or failed. The traffic-agent also stops waiting for a client
+          that never answers a dial request once the client's own dial deadline
+          plus a grace period has passed, instead of holding the request open.
   - version: 2.32.1
     date: 2026-09-25
     notes:

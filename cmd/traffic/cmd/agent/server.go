@@ -28,8 +28,11 @@ type awaitingForward struct {
 }
 
 const (
-	clientTunnelSlowAfter       = time.Second
-	clientTunnelStillWaitingLog = 5 * time.Second
+	clientTunnelSlowAfter = time.Second
+
+	// clientTunnelWaitGrace is added to the client's own dial deadline when the
+	// agent waits for the client's answer to a dial request.
+	clientTunnelWaitGrace = 5 * time.Second
 )
 
 func (s *state) Version(context.Context, *emptypb.Empty) (*rpc.VersionInfo2, error) {
@@ -239,32 +242,28 @@ func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID 
 	case drCh <- &rpc.DialRequest{ConnId: []byte(id), DialTimeout: int64(dialTimeout), RoundtripLatency: int64(roundTripLatency)}:
 	}
 
-	waitLog := time.NewTimer(clientTunnelSlowAfter)
-	defer waitLog.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			clog.Errorf(ctx, "unable to create tunnel to client %s for id %s after %s: %v", sessionID, id, time.Since(requestStart).Round(time.Millisecond), ctx.Err())
+	// The client answers with a stream or a reject within its own dial deadline, so a
+	// wait beyond that plus a grace period means the client is gone.
+	answerTimeout := dialTimeout + roundTripLatency + clientTunnelWaitGrace
+	answerCtx, answerCancel := context.WithTimeout(ctx, answerTimeout)
+	defer answerCancel()
+	select {
+	case <-answerCtx.Done():
+		elapsed := time.Since(requestStart).Round(time.Millisecond)
+		if ctx.Err() != nil {
+			clog.Errorf(ctx, "unable to create tunnel to client %s for id %s after %s: %v", sessionID, id, elapsed, ctx.Err())
 			return nil, ctx.Err()
-		case stream := <-stCh:
-			if elapsed := time.Since(requestStart); elapsed > clientTunnelSlowAfter {
-				clog.Warnf(ctx, "created tunnel to client %s for id %s slowly in %s", sessionID, id, elapsed.Round(time.Millisecond))
-			} else {
-				clog.Debugf(ctx, "Created tunnel to client %s for id %s in %s", sessionID, id, elapsed)
-			}
-			return stream, nil
-		case <-waitLog.C:
-			clog.Warnf(
-				ctx,
-				"still waiting for client tunnel after %s: clientSession=%s conn=%s dialTimeout=%s roundtripLatency=%s",
-				time.Since(requestStart).Round(time.Millisecond),
-				sessionID,
-				id,
-				dialTimeout,
-				roundTripLatency,
-			)
-			waitLog.Reset(clientTunnelStillWaitingLog)
 		}
+		err = fmt.Errorf("client %s did not answer the dial request for id %s within %s", sessionID, id, answerTimeout)
+		clog.Error(ctx, err)
+		return nil, err
+	case stream := <-stCh:
+		if elapsed := time.Since(requestStart); elapsed > clientTunnelSlowAfter {
+			clog.Warnf(ctx, "created tunnel to client %s for id %s slowly in %s", sessionID, id, elapsed.Round(time.Millisecond))
+		} else {
+			clog.Debugf(ctx, "Created tunnel to client %s for id %s in %s", sessionID, id, elapsed)
+		}
+		return stream, nil
 	}
 }
 

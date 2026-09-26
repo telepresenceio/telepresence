@@ -571,12 +571,6 @@ func dialRespond(ctx context.Context, tag Tag, tunnelProvider Provider, dr *rpc.
 	id := ConnID(dr.ConnId)
 	ctx, cancel := context.WithCancel(ctx)
 	respondStart := time.Now()
-	var slowLogged atomic.Bool
-	slowTimer := time.AfterFunc(slowDialResponse, func() {
-		slowLogged.Store(true)
-		clog.Warnf(ctx, "!! %s %s, dial response still active after %s for session %s", tag, id, time.Since(respondStart).Round(time.Millisecond), sessionID)
-	})
-	defer slowTimer.Stop()
 
 	tunnelStart := time.Now()
 	mt, err := tunnelProvider.Tunnel(ctx)
@@ -615,18 +609,21 @@ func dialRespond(ctx context.Context, tag Tag, tunnelProvider Provider, dr *rpc.
 	d := NewDialer(s, cancel, ingressBytes, egressBytes)
 	d.Start(ctx)
 	<-d.Done()
-	if elapsed := time.Since(respondStart); slowLogged.Load() || elapsed > slowDialResponse {
-		clog.Warnf(
-			ctx,
-			"!! %s %s, dial response ended after %s for session %s: ingressBytes=%d egressBytes=%d context=%v cause=%v",
-			tag,
-			id,
-			elapsed.Round(time.Millisecond),
-			sessionID,
-			ingressBytes.GetValue(),
-			egressBytes.GetValue(),
-			ctx.Err(),
-			context.Cause(ctx),
-		)
+	elapsed := time.Since(respondStart)
+	logFn := clog.Debugf
+	if elapsed > slowDialResponse {
+		logFn = clog.Infof
 	}
+	logFn(
+		ctx,
+		"   %s %s, dial response ended after %s for session %s: ingressBytes=%d egressBytes=%d context=%v cause=%v",
+		tag,
+		id,
+		elapsed.Round(time.Millisecond),
+		sessionID,
+		ingressBytes.GetValue(),
+		egressBytes.GetValue(),
+		ctx.Err(),
+		context.Cause(ctx),
+	)
 }
