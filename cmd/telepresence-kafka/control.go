@@ -73,17 +73,19 @@ func (c *splitterControl) publish(ctx context.Context, healthy bool) {
 	lease := new(coordinationv1.Lease)
 	err = c.client.Get(ctx, key, lease)
 	if apierrors.IsNotFound(err) {
-		lease = &coordinationv1.Lease{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: key.Namespace, Name: key.Name, Labels: map[string]string{runtimeconfig.SplitLabel: c.config.Split},
-			},
-		}
+		lease = &coordinationv1.Lease{ObjectMeta: metav1.ObjectMeta{Namespace: key.Namespace, Name: key.Name}}
 	} else if err != nil {
 		return
 	}
 	lease.Spec.HolderIdentity = &c.podName
 	lease.Spec.LeaseDurationSeconds = &duration
 	lease.Spec.RenewTime = &now
+	if lease.Labels == nil {
+		lease.Labels = make(map[string]string)
+	}
+	lease.Labels[runtimeconfig.SplitLabel] = c.config.Split
+	lease.Labels[runtimeconfig.SplitNamespaceLabel] = c.config.Namespace
+	lease.Labels[runtimeconfig.SplitNameLabel] = c.config.SplitName
 	if lease.Annotations == nil {
 		lease.Annotations = make(map[string]string)
 	}

@@ -617,6 +617,33 @@ func TestExpiredClosedRouteIsDeleted(t *testing.T) {
 	require.True(t, apierrors.IsNotFound(err))
 }
 
+func TestOpenBrokerCachesByConnectionSpec(t *testing.T) {
+	var opens int
+	opener := func(context.Context, ctrlclient.Reader, string, api.KafkaConnectionSpec) (kafkaBroker, error) {
+		opens++
+		return fakeKafkaBroker{}, nil
+	}
+	b := &base{OpenBroker: opener}
+	split := validControllerSplit()
+
+	_, err := b.openBroker(t.Context(), split)
+	require.NoError(t, err)
+	_, err = b.openBroker(t.Context(), split)
+	require.NoError(t, err)
+	require.Equal(t, 1, opens, "same connection spec should reuse the cached broker")
+
+	split.Spec.Connection.BootstrapServers = []string{"kafka2:9092"}
+	_, err = b.openBroker(t.Context(), split)
+	require.NoError(t, err)
+	require.Equal(t, 2, opens, "a connection spec change should rebuild the broker")
+
+	key := types.NamespacedName{Namespace: split.Namespace, Name: split.Name}
+	b.Brokers.entries[key].stale.Store(true)
+	_, err = b.openBroker(t.Context(), split)
+	require.NoError(t, err)
+	require.Equal(t, 3, opens, "a stale mark should rebuild the broker")
+}
+
 func validControllerRoute(name string, created metav1.Time) *api.KafkaRoute {
 	return &api.KafkaRoute{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "shop", CreationTimestamp: created},

@@ -49,7 +49,7 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: [""]
     resources: ["namespaces"]
-    verbs: ["get", "patch"]
+    verbs: ["get", "list", "watch", "patch"]
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get"]
