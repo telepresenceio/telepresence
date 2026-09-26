@@ -168,6 +168,8 @@ func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID 
 ) (tunnel.Stream, error) {
 	clog.Debugf(ctx, "Creating tunnel to client %s for id %s", sessionID, id)
 	var drCh chan<- *rpc.DialRequest
+	var awc *xsync.Map[tunnel.ConnID, *awaitingForward]
+	var aw *awaitingForward
 	var stCh <-chan tunnel.Stream
 
 	noWatcherErr := fmt.Errorf("unable to create tunnel to client %s for id %s: no dial watcher", sessionID, id)
@@ -188,10 +190,10 @@ func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID 
 		var ok bool
 		drCh, ok = s.dialWatchers.Load(sessionID)
 		if ok {
-			awc, _ := s.awaitingForwards.LoadOrCompute(sessionID, func() (*xsync.Map[tunnel.ConnID, *awaitingForward], bool) {
+			awc, _ = s.awaitingForwards.LoadOrCompute(sessionID, func() (*xsync.Map[tunnel.ConnID, *awaitingForward], bool) {
 				return xsync.NewMap[tunnel.ConnID, *awaitingForward](), false
 			})
-			aw, _ := awc.LoadOrCompute(id, func() (*awaitingForward, bool) {
+			aw, _ = awc.LoadOrCompute(id, func() (*awaitingForward, bool) {
 				return &awaitingForward{
 					streamCh: make(chan tunnel.Stream),
 					doneCh:   ctx.Done(),
@@ -208,12 +210,27 @@ func (s *state) CreateClientStream(ctx context.Context, _ tunnel.Tag, sessionID 
 		}
 		return nil, err
 	}
-
-	drCh <- &rpc.DialRequest{ConnId: []byte(id), DialTimeout: int64(dialTimeout), RoundtripLatency: int64(roundTripLatency)}
+	defer func() {
+		if awc != nil && aw != nil {
+			awc.Compute(id, func(current *awaitingForward, loaded bool) (*awaitingForward, xsync.ComputeOp) {
+				if loaded && current == aw {
+					return nil, xsync.DeleteOp
+				}
+				return current, xsync.CancelOp
+			})
+		}
+	}()
 
 	select {
 	case <-ctx.Done():
-		clog.Errorf(ctx, "unable to create tunnel to client %s for id %s: %v", sessionID, id, ctx.Done())
+		clog.Errorf(ctx, "unable to send DialRequest to client %s for id %s: %v", sessionID, id, ctx.Err())
+		return nil, ctx.Err()
+	case drCh <- &rpc.DialRequest{ConnId: []byte(id), DialTimeout: int64(dialTimeout), RoundtripLatency: int64(roundTripLatency)}:
+	}
+
+	select {
+	case <-ctx.Done():
+		clog.Errorf(ctx, "unable to create tunnel to client %s for id %s: %v", sessionID, id, ctx.Err())
 		return nil, ctx.Err()
 	case stream := <-stCh:
 		clog.Debugf(ctx, "Created tunnel to client %s for id %s", sessionID, id)

@@ -319,8 +319,10 @@ type ClientTimeouts struct {
 	EndpointDial          *string `json:"endpointDial,omitzero"`
 	Helm                  *string `json:"helm,omitzero"`
 	Intercept             *string `json:"intercept,omitzero"`
+	InterceptEndpointDial *string `json:"interceptEndpointDial,omitzero"`
 	RoundtripLatency      *string `json:"roundtripLatency,omitzero"`
 	ProxyDial             *string `json:"proxyDial,omitzero"`
+	TrafficAgentConnect   *string `json:"trafficAgentConnect,omitzero"`
 	TrafficManagerAPI     *string `json:"trafficManagerAPI,omitzero"`
 	TrafficManagerConnect *string `json:"trafficManagerConnect,omitzero"`
 	TrafficAgentArrival   *string `json:"trafficAgentArrival,omitzero"` // deprecated, use the chart's timeouts.agentArrival

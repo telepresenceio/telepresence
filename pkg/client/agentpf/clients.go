@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/quic-go/quic-go"
 	"google.golang.org/grpc"
@@ -49,6 +50,7 @@ type client struct {
 	cancelClient    context.CancelFunc
 	cancelDialWatch context.CancelFunc
 	connectErr      error
+	dialWatchID     uint64
 	tunnelCount     int32
 	lastActive      int64
 
@@ -74,14 +76,19 @@ type client struct {
 	transport atomic.Value
 }
 
-const dormantLingerTime = 5 * time.Second
+const (
+	dormantLingerTime             = 5 * time.Second
+	dialWatcherReconnectInitial   = 250 * time.Millisecond
+	dialWatcherReconnectMax       = 5 * time.Second
+	dialWatcherReconnectResetTime = 30 * time.Second
+)
 
 // connectRetryInterval is how long WaitForIP waits between attempts to reach an agent that the
 // watch reports as present but that isn't dialable yet.
 const connectRetryInterval = 200 * time.Millisecond
 
-// dialTimeout bounds a single agent dial attempt (see ensureConnectLocked). A var, rather
-// than a const, so tests can shrink it and avoid a real multi-second wait.
+// dialTimeout bounds a single agent dial attempt when the context carries no client
+// config. A var, rather than a const, so tests can shrink it and avoid a real wait.
 var dialTimeout = 5 * time.Second //nolint:gochecknoglobals // test-only override point
 
 func (ac *client) String() string {
@@ -126,9 +133,12 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 	if ac.connectErr != nil {
 		return nil, ac.connectErr
 	}
+	if ac.info.Intercepted {
+		ac.startDialWatcherLocked()
+	}
 
 	if ac.cli == nil {
-		dialCtx, dialCancel := context.WithTimeout(ctx, dialTimeout)
+		dialCtx, dialCancel := ac.dialTimeoutContext(ctx)
 		defer dialCancel()
 
 		ai := ac.info
@@ -142,6 +152,10 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 				// A retry can't succeed: this pod has already refused
 				// pods/portforward, so this dial failure is that refusal.
 				err = errNoDirectAccess
+			}
+			if ac.info.Intercepted && !errors.Is(err, errNoDirectAccess) {
+				// The dial watcher retries with backoff; keep the client.
+				return nil, err
 			}
 			ac.connectErr = err
 
@@ -170,14 +184,17 @@ func (ac *client) ensureConnectLocked(ctx context.Context) (agent.AgentClient, e
 		}
 	}
 
-	if ac.info.Intercepted {
-		err := ac.startDialWatcherLocked()
-		if err != nil {
-			return nil, err
-		}
-	}
 	atomic.StoreInt64(&ac.lastActive, time.Now().UnixNano())
 	return ac.cli, nil
+}
+
+// dialTimeoutContext bounds one agent dial by the trafficAgentConnect timeout, or by
+// dialTimeout when ctx carries no client config.
+func (ac *client) dialTimeoutContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	if cfg := tpClient.GetConfigNoDefault(ctx); cfg != nil {
+		return cfg.Timeouts().TimeoutContext(ctx, tpClient.TimeoutTrafficAgentConnect)
+	}
+	return context.WithTimeout(ctx, dialTimeout)
 }
 
 // dialAgent establishes the gRPC connection to this agent's API port. When the agent
@@ -310,49 +327,97 @@ func (ac *client) refresh(ai *manager.AgentPodInfo) {
 	}
 }
 
-func (ac *client) startDialWatcherLocked() error {
+func (ac *client) startDialWatcherLocked() {
 	if ac.cancelDialWatch != nil {
 		// Already started
-		return nil
+		return
 	}
 	ctx, cancel := context.WithCancel(ac)
-
-	// Create the dial watcher
-	clog.Debugf(ctx, "watching dials from agent pod %s", ac)
-	dialStream, err := ac.cli.WatchDial(ctx, ac.session)
-	if err != nil {
-		cancel()
-		return err
-	}
-
+	ac.dialWatchID++
+	watchID := ac.dialWatchID
 	ac.cancelDialWatch = func() {
 		ac.Lock()
-		ac.info.Intercepted = false
-		ac.cancelDialWatch = nil
+		if ac.dialWatchID == watchID {
+			ac.cancelDialWatch = nil
+		}
 		ac.Unlock()
 		cancel()
 	}
 
-	go func() {
-		var metrics tunnel.DialMetrics
-		if ac.owner != nil {
-			metrics = ac.owner.loadDialMetrics()
+	go ac.runDialWatcher(ctx, watchID)
+}
+
+func (ac *client) resetAgentClient() {
+	ac.Lock()
+	cancelClient := ac.cancelClient
+	ac.cancelClient = nil
+	ac.cli = nil
+	atomic.StoreInt32(&ac.tunnelCount, 0)
+	ac.Unlock()
+	if cancelClient != nil {
+		cancelClient()
+	}
+}
+
+func (ac *client) runDialWatcher(ctx context.Context, watchID uint64) {
+	defer func() {
+		ac.Lock()
+		if ac.dialWatchID == watchID {
+			ac.cancelDialWatch = nil
 		}
-		err := tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(ac.cli), dialStream, tunnel.SessionID(ac.session.SessionId), metrics)
-		if err != nil {
-			// The traffic-agent closed the dial wait loop, which means that it's terminating.
-			clog.Error(ctx, err)
-		}
-		ai := ac.info
-		clog.Debugf(ctx, "DialWaitLoop ended for %s.%s", ai.PodName, ai.Namespace)
-		ac.RLock()
-		dwCancel := ac.cancelDialWatch
-		ac.RUnlock()
-		if dwCancel != nil {
-			dwCancel()
-		}
+		ac.Unlock()
 	}()
-	return nil
+
+	bo := backoff.NewExponentialBackOff()
+	bo.InitialInterval = dialWatcherReconnectInitial
+	bo.MaxInterval = dialWatcherReconnectMax
+	bo.MaxElapsedTime = 0
+	bo.Reset()
+	lastConnected := time.Now()
+
+	for ctx.Err() == nil {
+		cli, err := ac.ensureConnect(ctx)
+		if err == nil {
+			ac.RLock()
+			session := ac.session
+			ai := ac.info
+			ac.RUnlock()
+
+			clog.Debugf(ctx, "watching dials from agent pod %s(%s)", ai.PodName, net.IP(ai.PodIp))
+			dialStream, watchErr := cli.WatchDial(ctx, session)
+			if watchErr == nil {
+				var metrics tunnel.DialMetrics
+				if ac.owner != nil {
+					metrics = ac.owner.loadDialMetrics()
+				}
+				if time.Since(lastConnected) > dialWatcherReconnectResetTime {
+					bo.Reset()
+				}
+				lastConnected = time.Now()
+				watchErr = tunnel.DialWaitLoop(ctx, tunnel.AgentToClient, tunnel.AgentProvider(cli), dialStream, tunnel.SessionID(session.SessionId), metrics)
+			}
+			err = watchErr
+		}
+		if ctx.Err() != nil {
+			return
+		}
+
+		if err != nil {
+			clog.Warnf(ctx, "dial watcher for %s ended; reconnecting: %v", ac, err)
+			ac.resetAgentClient()
+		} else {
+			clog.Warnf(ctx, "dial watcher for %s ended unexpectedly; reconnecting", ac)
+		}
+
+		delay := bo.NextBackOff()
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
 }
 
 type Clients interface {
