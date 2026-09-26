@@ -64,6 +64,7 @@ require (
 	gvisor.dev/gvisor v0.0.0-20260919055340-501da953ee38
 	helm.sh/helm/v3 v3.22.0
 	k8s.io/api v0.37.0
+	k8s.io/apiextensions-apiserver v0.37.0
 	k8s.io/apimachinery v0.37.0
 	k8s.io/apiserver v0.37.0
 	k8s.io/cli-runtime v0.37.0
@@ -222,7 +223,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.37.0 // indirect
 	k8s.io/component-base v0.37.0 // indirect
 	k8s.io/component-helpers v0.37.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect

@@ -4,7 +4,6 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.20.0
-    helm.sh/resource-policy: keep
   name: routes.kafka.telepresence.io
 spec:
   group: kafka.telepresence.io

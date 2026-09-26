@@ -20,6 +20,7 @@ import (
 	events "k8s.io/api/events/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
@@ -214,6 +215,7 @@ func timedRun(ctx context.Context, run func(time.Duration) error) error {
 func installNew(
 	ctx context.Context,
 	ki kubernetes.Interface,
+	restCfg *rest.Config,
 	chrt *chart.Chart,
 	helmConfig *action.Configuration,
 	releaseName, namespace string,
@@ -234,6 +236,15 @@ func installNew(
 	install.DisableHooks = req.NoHooks
 	install.KubeVersion = req.KubeVersion
 	install.Version = chrt.Metadata.Version
+	if vals.Kafka.Enabled != nil && *vals.Kafka.Enabled {
+		if restCfg == nil {
+			return errors.New("unable to apply Kafka CRDs: no usable cluster client")
+		}
+		if err := applyCRDs(ctx, restCfg, chrt); err != nil {
+			return fmt.Errorf("failed to apply Kafka CRDs: %w", err)
+		}
+		install.SkipCRDs = true
+	}
 	return runManagerHelm(ctx, ki, namespace, releaseName, func(c context.Context, timeout time.Duration) error {
 		install.Timeout = timeout
 		_, err := install.RunWithContext(c, chrt, m)
@@ -244,6 +255,7 @@ func installNew(
 func upgradeExisting(
 	ctx context.Context,
 	ki kubernetes.Interface,
+	restCfg *rest.Config,
 	existingVer string,
 	chrt *chart.Chart,
 	helmConfig *action.Configuration,
@@ -264,6 +276,15 @@ func upgradeExisting(
 	upgrade.ReuseValues = req.ReuseValues
 	upgrade.DisableHooks = req.NoHooks
 	upgrade.Version = chrt.Metadata.Version
+	if vals.Kafka.Enabled != nil && *vals.Kafka.Enabled {
+		if restCfg == nil {
+			return errors.New("unable to apply Kafka CRDs: no usable cluster client")
+		}
+		if err := applyCRDs(ctx, restCfg, chrt); err != nil {
+			return fmt.Errorf("failed to apply Kafka CRDs: %w", err)
+		}
+		upgrade.SkipCRDs = true
+	}
 	return runManagerHelm(ctx, ki, ns, releaseName, func(c context.Context, timeout time.Duration) error {
 		upgrade.Timeout = timeout
 		_, err := upgrade.RunWithContext(c, releaseName, chrt, m)
@@ -462,7 +483,9 @@ func ensureIsInstalled(
 	// the Kubernetes reason (ImagePullBackOff, FailedScheduling, ...) instead of an opaque Helm timeout.
 	// Best-effort: a failure here just disables that diagnostic.
 	var ki kubernetes.Interface
+	var restCfg *rest.Config
 	if cfg, cErr := clientGetter.ToRESTConfig(); cErr == nil {
+		restCfg = cfg
 		if ki, cErr = kubernetes.NewForConfig(cfg); cErr != nil {
 			clog.Debugf(ctx, "traffic-manager event diagnostics disabled: %v", cErr)
 			ki = nil
@@ -476,11 +499,11 @@ func ensureIsInstalled(
 		err = fmt.Errorf("%s is not installed, use 'telepresence setup' to configure and install it, or 'telepresence helm install' for a plain install", releaseName)
 	case existing == nil:
 		clog.Infof(ctx, "ensureIsInstalled(namespace=%q): performing fresh install...", namespace)
-		err = installNew(ctx, ki, chrt, helmConfig, releaseName, namespace, req, vals)
+		err = installNew(ctx, ki, restCfg, chrt, helmConfig, releaseName, namespace, req, vals)
 	case req.Type == Upgrade: // replace existing install
 		clog.Infof(ctx, "ensureIsInstalled(namespace=%q): replacing %s from %q to %q...",
 			namespace, releaseName, releaseVer(existing), chrt.Metadata.AppVersion)
-		err = upgradeExisting(ctx, ki, releaseVer(existing), chrt, helmConfig, releaseName, namespace, req, vals)
+		err = upgradeExisting(ctx, ki, restCfg, releaseVer(existing), chrt, helmConfig, releaseName, namespace, req, vals)
 	default:
 		err = fmt.Errorf(
 			"%s version %q is already installed, use 'telepresence helm upgrade' instead to replace it",
