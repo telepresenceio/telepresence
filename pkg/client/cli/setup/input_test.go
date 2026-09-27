@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	core "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
@@ -293,6 +295,49 @@ func TestPinAnswers(t *testing.T) {
 				assert.True(t, pre.LegacyAccess)
 			},
 		},
+		{
+			name: "kafka enabled pins the kafka answer",
+			in:   &helm.Values{Kafka: helm.Kafka{Enabled: new(true)}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.True(t, a.Kafka)
+				assert.True(t, pre.Kafka)
+			},
+		},
+		{
+			name: "kafka disabled pins the kafka answer false",
+			in:   &helm.Values{Kafka: helm.Kafka{Enabled: new(false)}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.False(t, a.Kafka)
+				assert.True(t, pre.Kafka)
+			},
+		},
+		{
+			name: "kafka webhook failurePolicy and replicas pin their answers",
+			in: &helm.Values{Kafka: helm.Kafka{
+				Webhook:  helm.KafkaWebhook{FailurePolicy: new(KafkaFailurePolicyIgnore)},
+				Replicas: new(int32(3)),
+			}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.Equal(t, KafkaFailurePolicyIgnore, a.KafkaFailurePolicy)
+				assert.True(t, pre.KafkaFailurePolicy)
+				assert.Equal(t, int32(3), a.KafkaReplicas)
+				assert.True(t, pre.KafkaReplicas)
+			},
+		},
+		{
+			name: "an invalid kafka failurePolicy pins nothing",
+			in:   &helm.Values{Kafka: helm.Kafka{Webhook: helm.KafkaWebhook{FailurePolicy: new("bogus")}}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.False(t, pre.KafkaFailurePolicy)
+			},
+		},
+		{
+			name: "a kafka replicas of 0 pins nothing",
+			in:   &helm.Values{Kafka: helm.Kafka{Replicas: new(int32(0))}},
+			check: func(t *testing.T, a *Answers, pre *Preset) {
+				assert.False(t, pre.KafkaReplicas)
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -445,6 +490,60 @@ func TestValidateValues(t *testing.T) {
 			},
 		}, true))
 	})
+	t.Run("kafka enabled with the webhook denied is refused", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) { f.Webhook.CanCreate = Finding{Verdict: VerdictNo} })
+		err := facts.ValidateValues(&helm.Values{Kafka: helm.Kafka{Enabled: new(true)}}, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "mutatingwebhookconfigurations")
+	})
+	t.Run("kafka enabled with an invalid failure policy is refused", func(t *testing.T) {
+		err := recFacts().ValidateValues(&helm.Values{
+			Kafka: helm.Kafka{Enabled: new(true), Webhook: helm.KafkaWebhook{FailurePolicy: new("bogus")}},
+		}, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "kafka.webhook.failurePolicy")
+	})
+	t.Run("kafka enabled with replicas 0 is refused", func(t *testing.T) {
+		err := recFacts().ValidateValues(&helm.Values{
+			Kafka: helm.Kafka{Enabled: new(true), Replicas: new(int32(0))},
+		}, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "kafka.replicas")
+	})
+	t.Run("kafka install privileges denied fail only when applying", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Privileges.Kafka = Finding{Verdict: VerdictNo}
+			f.Privileges.MissingKafka = []string{"create customresourcedefinitions.apiextensions.k8s.io"}
+		})
+		vals := &helm.Values{Kafka: helm.Kafka{Enabled: new(true)}}
+		err := facts.ValidateValues(vals, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "insufficient privileges to install the Kafka provider")
+
+		assert.NoError(t, facts.ValidateValues(vals, false))
+	})
+	t.Run("disabling kafka while active splits exist is refused", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{Installed: true, Values: &helm.Values{Kafka: helm.Kafka{Enabled: new(true)}}}
+			f.Kafka.ActiveSplits = 2
+		})
+		err := facts.ValidateValues(&helm.Values{Kafka: helm.Kafka{Enabled: new(false)}}, true)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "2 active KafkaSplit resources exist")
+	})
+	t.Run("disabling kafka with no active splits passes", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{Installed: true, Values: &helm.Values{Kafka: helm.Kafka{Enabled: new(true)}}}
+		})
+		assert.NoError(t, facts.ValidateValues(&helm.Values{Kafka: helm.Kafka{Enabled: new(false)}}, true))
+	})
+	t.Run("disabling kafka when the split count is unknown passes", func(t *testing.T) {
+		facts := recFacts(func(f *ClusterFacts) {
+			f.Release = ReleaseFacts{Installed: true, Values: &helm.Values{Kafka: helm.Kafka{Enabled: new(true)}}}
+			f.Kafka.SplitsListDenied = true
+		})
+		assert.NoError(t, facts.ValidateValues(&helm.Values{Kafka: helm.Kafka{Enabled: new(false)}}, true))
+	})
 }
 
 // TestRecommendWithInput_RoundTrip covers the losslessness contract: an input
@@ -456,6 +555,10 @@ func TestRecommendWithInput_RoundTrip(t *testing.T) {
 		AgentInjector: helm.AgentInjector{Enabled: new(false)},
 		NodeAgent:     helm.NodeAgent{Enabled: new(true)},
 		QuicTunnel:    helm.QuicTunnel{Enabled: new(true)},
+		Kafka: helm.Kafka{
+			Image:     helm.KafkaImage{Registry: new("ghcr.io/other-kafka")},
+			Resources: core.ResourceRequirements{Limits: core.ResourceList{core.ResourceMemory: resource.MustParse("512Mi")}},
+		},
 	}
 	answers := recAnswers()
 	pre := Preset{}
@@ -468,6 +571,9 @@ func TestRecommendWithInput_RoundTrip(t *testing.T) {
 	assert.Equal(t, "debug", *p.Values.LogLevel)
 	assert.True(t, *p.Values.NodeAgent.Enabled)
 	assert.False(t, *p.Values.AgentInjector.Enabled)
+	assert.Equal(t, "ghcr.io/other-kafka", *p.Values.Kafka.Image.Registry)
+	mem := p.Values.Kafka.Resources.Limits[core.ResourceMemory]
+	assert.True(t, mem.Equal(resource.MustParse("512Mi")))
 	for _, n := range p.Notes {
 		assert.NotEqual(t, NoteWarning, n.Level, "unexpected warning: %s", n.Text)
 	}
