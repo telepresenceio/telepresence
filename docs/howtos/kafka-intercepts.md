@@ -28,13 +28,22 @@ group through the declared environment variables.
 
 ## Install the provider
 
-Enable the provider when installing or upgrading the traffic-manager:
+The recommended way to enable the provider is `telepresence setup --apply`,
+answering yes to "Enable Kafka personal intercepts?" and accepting the
+defaults for the webhook failure policy and the replica count:
+
+```console
+$ telepresence setup --apply
+```
+
+For a scripted install, enable the provider directly when upgrading the
+traffic-manager instead:
 
 ```console
 $ telepresence helm upgrade --set kafka.enabled=true
 ```
 
-This installs the `KafkaSplit` and `KafkaRoute` CRDs and the separate
+Either way installs the `KafkaSplit` and `KafkaRoute` CRDs and the separate
 `tp-kafka` controller Deployment. Its separate image and binary remain named
 `telepresence-kafka`. Kafka client libraries are not added to the
 traffic-manager or traffic-agent image.
