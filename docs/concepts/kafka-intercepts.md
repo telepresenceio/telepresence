@@ -16,7 +16,7 @@ setting, and limit.
 ## The big picture
 
 ```mermaid
-flowchart LR
+flowchart TB
   op([Operator]) -- "writes" --> split[/"KafkaSplit<br/>which workload, group<br/>and topics may be split"/]
   dev([Developer]) -- "telepresence intercept" --> tm["traffic-manager"]
   tm -- "writes" --> route[/"KafkaRoute<br/>one developer's filter"/]
@@ -54,19 +54,17 @@ reads their personal shadow.
 ## Resources and controllers
 
 ```mermaid
-flowchart LR
+flowchart TB
   op([Operator]) -- "kubectl apply" --> split
   tm["traffic-manager"] -- "one per intercept" --> route
 
   subgraph appns["Application namespace"]
-    direction TB
-    app["Application Pods"]
     split[/"KafkaSplit<br/>source group and topics,<br/>workload selector, env bindings"/]
     route[/"KafkaRoute<br/>predicate, expiry, status"/]
+    app["Application Pods"]
   end
 
   subgraph provns["Provider namespace"]
-    direction TB
     prov["Kafka provider<br/>split and route controllers,<br/>validating and Pod-mutating webhooks"]
     cm[/"Routing ConfigMap"/]
     sts["Splitter Pods"]
@@ -80,7 +78,7 @@ flowchart LR
   prov -- "creates" --> sts
   sts -- "acknowledges" --> leases
   leases --> prov
-  prov -. "evicts and re-admits" .-> app
+  app -. "evicted and re-admitted by" .-> prov
   classDef resource fill:#fff4c2,stroke:#a08000,color:#000
   class split,route,cm,leases resource
   style appns fill:#f4f4f4,stroke:#999
