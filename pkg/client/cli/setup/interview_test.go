@@ -81,7 +81,7 @@ func TestInterview_UpgradeGating(t *testing.T) {
 }
 
 func TestInterview_ManagedScopeNamespaces(t *testing.T) {
-	a, out, err := runInterview(t, recFacts(), "\n\n2\nfoo,bar\n", Answers{}, Preset{}, false)
+	a, out, err := runInterview(t, recFacts(), "\n\n\n2\nfoo,bar\n", Answers{}, Preset{}, false)
 	require.NoError(t, err)
 	assert.Equal(t, ManagedScopeNamespaces, a.ManagedScope)
 	assert.Equal(t, []string{"foo", "bar", "ambassador"}, a.ManagedNamespaces)
@@ -205,7 +205,7 @@ func TestInterview_ConflictStrategy(t *testing.T) {
 		assert.Equal(t, ConflictsVirtual, a.Conflicts)
 	})
 	t.Run("choice 2 sends the conflicts to the cluster", func(t *testing.T) {
-		a, _, err := runInterview(t, conflictFacts, "\n\n\n\n\n2\n", Answers{}, Preset{}, false)
+		a, _, err := runInterview(t, conflictFacts, "\n\n\n\n\n\n2\n", Answers{}, Preset{}, false)
 		require.NoError(t, err)
 		assert.Equal(t, ConflictsAllow, a.Conflicts)
 	})
@@ -633,7 +633,7 @@ func TestInterview_SecurityQuestionOrder(t *testing.T) {
 		f.ClientAuth = ClientAuthFacts{Bearer: true}
 		f.External.CertManager = Finding{Verdict: VerdictYes}
 	})
-	_, out, err := runInterview(t, facts, "\n\n\n\nn\n\n\n", Answers{}, Preset{}, false)
+	_, out, err := runInterview(t, facts, "\n\n\n\n\nn\n\n\n", Answers{}, Preset{}, false)
 	require.NoError(t, err)
 
 	iEnforce := strings.Index(out, "Enforce caller authentication?")
@@ -816,10 +816,194 @@ func TestInterview_ManagedScopeRecommendation(t *testing.T) {
 	facts := recFacts(func(f *ClusterFacts) {
 		f.Privileges.ClusterWide = Finding{Verdict: VerdictNo}
 	})
-	a, out, err := runInterview(t, facts, "\n\n\nfoo\n", Answers{}, Preset{}, false)
+	a, out, err := runInterview(t, facts, "\n\n\n\nfoo\n", Answers{}, Preset{}, false)
 	require.NoError(t, err)
 	assert.Contains(t, out, "cluster-wide install looks impossible")
 	assert.Contains(t, out, "Choose 1-3 [2]")
 	assert.Equal(t, ManagedScopeNamespaces, a.ManagedScope)
 	assert.Equal(t, []string{"foo", "ambassador"}, a.ManagedNamespaces)
+}
+
+// kafkaFacts is recFacts with a multi-node cluster, so the replica-count
+// default is 2 rather than the single-node 1.
+func kafkaFacts(mods ...func(*ClusterFacts)) *ClusterFacts {
+	return recFacts(append([]func(*ClusterFacts){func(f *ClusterFacts) { f.NodeAgent.TotalNodes = 3 }}, mods...)...)
+}
+
+// kafkaHarness freezes every question except Kafka (and, when it is
+// enabled, its own follow-ups), so the input stream only needs to answer
+// those.
+func kafkaHarness() (Answers, Preset) {
+	return Answers{Attach: true, ManagedScope: ManagedScopeAll, EnforceAuth: false, LegacyAccess: false},
+		Preset{Attach: true, Replace: true, ManagedScope: true, EnforceAuth: true, LegacyAccess: true}
+}
+
+func kafkaReleaseEnabled(replicas int32) *ClusterFacts {
+	return kafkaFacts(func(f *ClusterFacts) {
+		f.Release = ReleaseFacts{
+			Installed: true, Version: version.Structured.String(), Namespace: "ambassador",
+			Values: &helm.Values{Kafka: helm.Kafka{Enabled: new(true), Replicas: new(replicas)}},
+		}
+	})
+}
+
+func TestInterview_Kafka(t *testing.T) {
+	t.Run("fresh install defaults to no", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		got, out, err := runInterview(t, kafkaFacts(), "\n", a, pre, false)
+		require.NoError(t, err)
+		assert.False(t, got.Kafka)
+		assert.Contains(t, out, "Enable Kafka personal intercepts? [y/N] ")
+	})
+	t.Run("skipped when attach is answered no", func(t *testing.T) {
+		got, out, err := runInterview(t, kafkaFacts(), "n\n", Answers{}, Preset{}, false)
+		require.NoError(t, err)
+		assert.False(t, got.Attach)
+		assert.False(t, got.Kafka)
+		assert.NotContains(t, out, "Enable Kafka personal intercepts?")
+	})
+	t.Run("enabling asks the failure policy then replicas, defaulting Fail and 2", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		got, out, err := runInterview(t, kafkaFacts(), "y\n\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.True(t, got.Kafka)
+		assert.Contains(t, out, "Choose 1-2 [1]")
+		assert.Contains(t, out, "Kafka provider replicas [2]")
+		assert.Equal(t, KafkaFailurePolicyFail, got.KafkaFailurePolicy)
+		assert.Equal(t, int32(2), got.KafkaReplicas)
+	})
+	t.Run("choosing Ignore is honored", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		got, _, err := runInterview(t, kafkaFacts(), "y\n2\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.Equal(t, KafkaFailurePolicyIgnore, got.KafkaFailurePolicy)
+	})
+	t.Run("single-node cluster defaults replicas to 1", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		got, out, err := runInterview(t, recFacts(), "y\n\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.Contains(t, out, "Kafka provider replicas [1]")
+		assert.Equal(t, int32(1), got.KafkaReplicas)
+	})
+	t.Run("installed release enabling Kafka defaults yes with its own replica count", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		got, out, err := runInterview(t, kafkaReleaseEnabled(3), "\n\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.Contains(t, out, "Enable Kafka personal intercepts? [Y/n] ")
+		assert.True(t, got.Kafka)
+		assert.Contains(t, out, "Kafka provider replicas [3]")
+		assert.Equal(t, int32(3), got.KafkaReplicas)
+	})
+	t.Run("active KafkaSplits skip the question and stay enabled", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		facts := kafkaReleaseEnabled(2)
+		facts.Kafka.ActiveSplits = 3
+		got, out, err := runInterview(t, facts, "\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.True(t, got.Kafka)
+		assert.NotContains(t, out, "Enable Kafka personal intercepts?")
+		assert.Contains(t, out, "3 active KafkaSplit resources exist; the Kafka provider stays enabled while they do.")
+	})
+	t.Run("a single active KafkaSplit uses the singular wording", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		facts := kafkaReleaseEnabled(2)
+		facts.Kafka.ActiveSplits = 1
+		_, out, err := runInterview(t, facts, "\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.Contains(t, out, "1 active KafkaSplit resource exists; the Kafka provider stays enabled while they do.")
+	})
+	t.Run("preset skips the question and its follow-ups", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		a.Kafka, a.KafkaFailurePolicy, a.KafkaReplicas = true, KafkaFailurePolicyIgnore, 5
+		pre.Kafka, pre.KafkaFailurePolicy, pre.KafkaReplicas = true, true, true
+		got, out, err := runInterview(t, kafkaFacts(), "", a, pre, false)
+		require.NoError(t, err)
+		assert.True(t, got.Kafka)
+		assert.Equal(t, KafkaFailurePolicyIgnore, got.KafkaFailurePolicy)
+		assert.Equal(t, int32(5), got.KafkaReplicas)
+		assert.NotContains(t, out, "Enable Kafka personal intercepts?")
+		assert.NotContains(t, out, "Choose 1-2")
+		assert.NotContains(t, out, "Kafka provider replicas")
+	})
+	t.Run("non-interactive stays off on a fresh install", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		got, out, err := runInterview(t, kafkaFacts(), "", a, pre, true)
+		require.NoError(t, err)
+		assert.False(t, got.Kafka)
+		assert.Empty(t, out)
+	})
+	t.Run("non-interactive stays on when the release enables it", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		got, _, err := runInterview(t, kafkaReleaseEnabled(2), "", a, pre, true)
+		require.NoError(t, err)
+		assert.True(t, got.Kafka)
+		assert.Equal(t, KafkaFailurePolicyFail, got.KafkaFailurePolicy)
+		assert.Equal(t, int32(2), got.KafkaReplicas)
+	})
+	t.Run("an invalid replicas answer reprompts then accepts", func(t *testing.T) {
+		a, pre := kafkaHarness()
+		got, out, err := runInterview(t, kafkaFacts(), "y\n\nabc\n3\n", a, pre, false)
+		require.NoError(t, err)
+		assert.Equal(t, int32(3), got.KafkaReplicas)
+		assert.Contains(t, out, "Please answer a whole number of at least 1.")
+	})
+}
+
+// TestInterview_KafkaQuestionOrder confirms the Kafka prompt is asked after
+// the replace prompt and before the managed-scope prompt.
+func TestInterview_KafkaQuestionOrder(t *testing.T) {
+	_, out, err := runInterview(t, kafkaFacts(), "\n\n\n\n\n\n\n\n", Answers{}, Preset{}, false)
+	require.NoError(t, err)
+	iReplace := strings.Index(out, "replace command")
+	iKafka := strings.Index(out, "Enable Kafka personal intercepts?")
+	iScope := strings.Index(out, "Which namespaces should the traffic-manager manage?")
+	require.True(t, iReplace >= 0 && iKafka >= 0 && iScope >= 0, out)
+	assert.True(t, iReplace < iKafka)
+	assert.True(t, iKafka < iScope)
+}
+
+// TestInterview_ExplainKafka covers the CRD/release/privilege lines printed
+// ahead of the Kafka prompt.
+func TestInterview_ExplainKafka(t *testing.T) {
+	introLine := "Kafka personal intercepts let a developer's local consumer take a filtered"
+
+	t.Run("privilege denied line names the first missing privilege", func(t *testing.T) {
+		facts := kafkaFacts(func(f *ClusterFacts) {
+			f.Privileges.Kafka = Finding{Verdict: VerdictNo}
+			f.Privileges.MissingKafka = []string{"create customresourcedefinitions.apiextensions.k8s.io"}
+		})
+		a, pre := kafkaHarness()
+		_, out, err := runInterview(t, facts, "\n\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.Contains(t, out, introLine)
+		assert.Contains(t, out,
+			"Installing the provider needs privileges you lack (create customresourcedefinitions.apiextensions.k8s.io); "+
+				"a yes still writes the values for an admin to apply.")
+	})
+	t.Run("CRDs already present line", func(t *testing.T) {
+		facts := kafkaFacts(func(f *ClusterFacts) { f.Kafka.CRDs = Finding{Verdict: VerdictYes} })
+		a, pre := kafkaHarness()
+		_, out, err := runInterview(t, facts, "\n\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.Contains(t, out, "The Kafka CRDs are already present in the cluster.")
+	})
+	t.Run("an installed release that already enables it suppresses the CRDs-present line", func(t *testing.T) {
+		facts := kafkaReleaseEnabled(2)
+		facts.Kafka.CRDs = Finding{Verdict: VerdictYes}
+		a, pre := kafkaHarness()
+		_, out, err := runInterview(t, facts, "\n\n\n", a, pre, false)
+		require.NoError(t, err)
+		assert.Contains(t, out, "The installed traffic-manager already enables the Kafka provider.")
+		assert.NotContains(t, out, "The Kafka CRDs are already present in the cluster.")
+	})
+	t.Run("non-interactive prints none of it", func(t *testing.T) {
+		facts := kafkaFacts(func(f *ClusterFacts) {
+			f.Privileges.Kafka = Finding{Verdict: VerdictNo}
+			f.Privileges.MissingKafka = []string{"x"}
+		})
+		a, pre := kafkaHarness()
+		_, out, err := runInterview(t, facts, "", a, pre, true)
+		require.NoError(t, err)
+		assert.Empty(t, out)
+	})
 }
