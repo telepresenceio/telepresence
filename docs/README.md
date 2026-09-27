@@ -13,6 +13,7 @@ raw markdown version, more bells and whistles at [telepresence.io](https://telep
 - Core concepts
   - [Architecture](concepts/architecture.md)
   - [Attachments](concepts/attachments.md)
+  - [How Kafka personal intercepts work](concepts/kafka-intercepts.md)
   - [Glossary](concepts/glossary.md)
 - How do I...
   - [Code and debug an application locally](howtos/attach.md)
