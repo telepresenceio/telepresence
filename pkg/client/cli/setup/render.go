@@ -69,6 +69,9 @@ func PrintReport(cmd *cobra.Command, s *Summary) error {
 		}
 		ioutil.Println(w, "The release's resources are removed by 'telepresence helm uninstall'.")
 		ioutil.Println(w, "If setup created the manager namespace, that namespace is left behind.")
+		if s.Proposal.Values != nil && s.Proposal.Values.KafkaEnabled() {
+			ioutil.Println(w, "The Kafka CRDs and any KafkaSplit/KafkaRoute resources are left in place by 'telepresence helm uninstall'.")
+		}
 	}
 	PrintNotes(w, "Notes:", s.Proposal.Notes)
 	ioutil.Printf(w, "Action: %s\n", s.Action)
