@@ -7,7 +7,8 @@ title: Intercept Kafka consumers
 Kafka personal intercepts let a developer run a consumer locally while the
 in-cluster application continues to receive messages that do not match the
 developer's filter. Kafka support is an optional provider and is disabled by
-default.
+default. [How Kafka personal intercepts work](../concepts/kafka-intercepts.md)
+explains the parts involved.
 
 ## Prerequisites
 

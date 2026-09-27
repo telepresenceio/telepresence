@@ -16,6 +16,8 @@
       link: concepts/architecture
     - title: Attachments
       link: concepts/attachments
+    - title: How Kafka personal intercepts work
+      link: concepts/kafka-intercepts
     - title: Glossary
       link: concepts/glossary
 - title: How do I...
