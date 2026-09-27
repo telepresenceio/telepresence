@@ -13,6 +13,89 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 )
 
+// TestProbeRBAC_KafkaOnlyDenial denies exactly the two privileges enabling
+// the Kafka provider adds on top of the base candidate render: creating its
+// ValidatingWebhookConfiguration, and creating its two CRDs. Neither object
+// exists in the base render, so ClusterWide stays fully permitted while
+// Kafka is denied.
+func TestProbeRBAC_KafkaOnlyDenial(t *testing.T) {
+	client := fake.NewClientset()
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(ra *auth.ResourceAttributes) bool {
+		if ra.Verb == "create" && (ra.Resource == "validatingwebhookconfigurations" || ra.Resource == "customresourcedefinitions") {
+			return false
+		}
+		return true
+	})
+
+	p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+	facts := p.probeRBAC(context.Background(), true)
+
+	require.Equal(t, VerdictYes, facts.ClusterWide.Verdict)
+	assert.Empty(t, facts.Missing)
+
+	require.Equal(t, VerdictNo, facts.Kafka.Verdict)
+	assert.ElementsMatch(t, []string{
+		"create validatingwebhookconfigurations.admissionregistration.k8s.io",
+		"create customresourcedefinitions.apiextensions.k8s.io",
+		"create customresourcedefinitions.apiextensions.k8s.io",
+	}, facts.MissingKafka)
+	require.Len(t, facts.MissingKafkaAttributes, len(facts.MissingKafka))
+}
+
+func TestProbeRBAC_KafkaAllowed(t *testing.T) {
+	client := fake.NewClientset()
+	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*auth.ResourceAttributes) bool { return true })
+
+	p := &Prober{KubeClient: client, ManagerNamespace: "ambassador"}
+	facts := p.probeRBAC(context.Background(), true)
+
+	assert.Equal(t, VerdictYes, facts.Kafka.Verdict)
+	assert.Empty(t, facts.MissingKafka)
+	assert.Empty(t, facts.MissingKafkaAttributes)
+}
+
+func TestSubtractAttributes(t *testing.T) {
+	base := []*auth.ResourceAttributes{
+		{Verb: "create", Resource: "secrets", Namespace: "ambassador"},
+		{Verb: "create", Resource: "deployments", Group: "apps", Namespace: "ambassador", Name: "traffic-manager"},
+	}
+	all := []*auth.ResourceAttributes{
+		{Verb: "create", Resource: "secrets", Namespace: "ambassador"},
+		{Verb: "create", Resource: "deployments", Group: "apps", Namespace: "ambassador", Name: "traffic-manager"},
+		{Verb: "create", Resource: "deployments", Group: "apps", Namespace: "ambassador", Name: "tp-kafka"},
+		{Verb: "create", Resource: "validatingwebhookconfigurations", Group: "admissionregistration.k8s.io", Name: "tp-kafka-ambassador"},
+	}
+	diff := subtractAttributes(all, base)
+	require.Len(t, diff, 2)
+	assert.ElementsMatch(t, []string{"deployments", "validatingwebhookconfigurations"}, []string{diff[0].Resource, diff[1].Resource})
+}
+
+// TestChartAttributes_KafkaCandidate proves the Kafka-enabled render adds the
+// tp-kafka Deployment that the base render never includes.
+func TestChartAttributes_KafkaCandidate(t *testing.T) {
+	p := &Prober{ManagerNamespace: "ambassador"}
+	base := DefaultCandidateValues()
+
+	baseAttrs, err := p.chartAttributes(context.Background(), true, base)
+	require.NoError(t, err)
+	assert.False(t, hasResourceNamed(baseAttrs, "deployments", "tp-kafka"), "base render should not include the tp-kafka Deployment")
+
+	kafkaValues := base.DeepCopy()
+	kafkaValues.Kafka.Enabled = new(true)
+	kafkaAttrs, err := p.chartAttributes(context.Background(), true, kafkaValues)
+	require.NoError(t, err)
+	assert.True(t, hasResourceNamed(kafkaAttrs, "deployments", "tp-kafka"), "Kafka-enabled render should include the tp-kafka Deployment")
+}
+
+func hasResourceNamed(ras []*auth.ResourceAttributes, resource, name string) bool {
+	for _, ra := range ras {
+		if ra.Resource == resource && ra.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func TestProbeRBAC_AllowAll(t *testing.T) {
 	client := fake.NewClientset()
 	k8sapi.InstallFakeSelfSubjectAccessReviews(client, func(*auth.ResourceAttributes) bool { return true })

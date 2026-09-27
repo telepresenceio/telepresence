@@ -206,6 +206,43 @@ func TestExternalSummary(t *testing.T) {
 	assert.Equal(t, "cert-manager no, TLS secrets: listing denied", s3)
 }
 
+func TestKafkaSummary(t *testing.T) {
+	v, s, e := kafkaSummary(&KafkaFacts{
+		CRDs:         Finding{Verdict: VerdictYes},
+		ArgoRollouts: Finding{Verdict: VerdictNo},
+		ActiveSplits: 2,
+	}, &PrivilegeFacts{})
+	assert.Equal(t, VerdictYes, v)
+	assert.Equal(t, "CRDs present, 2 active KafkaSplits, Argo Rollouts absent", s)
+	assert.Empty(t, e)
+
+	v2, s2, _ := kafkaSummary(&KafkaFacts{
+		CRDs:         Finding{Verdict: VerdictNo},
+		ArgoRollouts: Finding{Verdict: VerdictNo},
+	}, &PrivilegeFacts{})
+	assert.Equal(t, VerdictYes, v2)
+	assert.Equal(t, "CRDs absent, 0 active KafkaSplits, Argo Rollouts absent", s2)
+
+	v3, s3, _ := kafkaSummary(&KafkaFacts{
+		CRDs:             Finding{Verdict: VerdictYes},
+		ArgoRollouts:     Finding{Verdict: VerdictYes},
+		SplitsListDenied: true,
+	}, &PrivilegeFacts{})
+	assert.Equal(t, VerdictYes, v3)
+	assert.Equal(t, "CRDs present, KafkaSplits: listing denied, Argo Rollouts present", s3)
+
+	v4, s4, e4 := kafkaSummary(&KafkaFacts{
+		CRDs:            Finding{Verdict: VerdictUnknown, Evidence: []string{"discovery failed"}},
+		ArgoRollouts:    Finding{Verdict: VerdictNo},
+		SplitsListError: "boom",
+	}, &PrivilegeFacts{MissingKafka: []string{"create validatingwebhookconfigurations.admissionregistration.k8s.io"}})
+	assert.Equal(t, VerdictUnknown, v4)
+	assert.Equal(t, "CRDs unknown, KafkaSplits: unknown, Argo Rollouts absent", s4)
+	assert.Contains(t, e4, "discovery failed")
+	assert.Contains(t, e4, "boom")
+	assert.Contains(t, e4, "missing: create validatingwebhookconfigurations.admissionregistration.k8s.io")
+}
+
 func TestHealthSummary(t *testing.T) {
 	v, s, _ := healthSummary(&ReleaseFacts{Installed: false}, nil)
 	assert.Equal(t, VerdictYes, v)

@@ -253,6 +253,20 @@ func TestPrintReport_ExternalEndpointArea(t *testing.T) {
 	})
 }
 
+func TestPrintReport_KafkaArea(t *testing.T) {
+	s := renderSummary()
+	s.Facts.Kafka = KafkaFacts{
+		CRDs:         Finding{Verdict: VerdictYes},
+		ArgoRollouts: Finding{Verdict: VerdictNo},
+		ActiveSplits: 2,
+	}
+	out := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(out)
+	require.NoError(t, PrintReport(cmd, s))
+	assert.Contains(t, out.String(), "  kafka: CRDs present, 2 active KafkaSplits, Argo Rollouts absent")
+}
+
 func TestPrintReport_ReleaseWorkloadLine(t *testing.T) {
 	t.Run("deployment appends the migration note", func(t *testing.T) {
 		s := renderSummary()
