@@ -17,42 +17,60 @@ setting, and limit.
 
 ```mermaid
 flowchart LR
-  op["Operator"] -- "declares a KafkaSplit<br/>per consumer workload" --> prov
-  dev["Developer"] -- "telepresence intercept<br/>creates a KafkaRoute" --> prov
-  prov["Kafka provider"] -- "runs the splitter and<br/>owns the shadow topics" --> kafka["Kafka cluster"]
-  prov -- "moves the application<br/>onto its shadow topics" --> app["Application"]
-  kafka -. "application shadow" .-> app
-  kafka -. "personal shadow" .-> local["Developer's local consumer"]
+  op([Operator]) -- "writes" --> split[/"KafkaSplit<br/>which workload, group<br/>and topics may be split"/]
+  dev([Developer]) -- "telepresence intercept" --> tm["traffic-manager"]
+  tm -- "writes" --> route[/"KafkaRoute<br/>one developer's filter"/]
+  split --> prov["Kafka provider"]
+  route --> prov
+  prov -- "runs" --> splitter["Splitter"]
+  splitter -- "copies records into" --> shadows[("Shadow topics")]
+  shadows -. "application shadow" .-> app["Application"]
+  shadows -. "personal shadow" .-> local["Developer's local consumer"]
+  classDef resource fill:#fff4c2,stroke:#a08000,color:#000
+  class split,route resource
 ```
 
-An operator declares, once per consumer workload, which consumer group and
-topics may be split. Each developer's intercept adds a route with a filter.
-The provider runs a splitter that reads the source topics on behalf of the
-original consumer group and copies every record to exactly one place: the
-personal shadow of the route whose filter matches, or the application shadow
-when none does. The application consumes its shadow, and each developer's
-local consumer reads their personal shadow.
+The diagrams on this page use one convention. Slanted yellow boxes are
+Kubernetes resources: objects stored in the cluster, like a Deployment or a
+ConfigMap, that run nothing themselves. Rectangles are running programs.
+Cylinders are Kafka topics. Rounded boxes are people.
+
+`KafkaSplit` and `KafkaRoute` are custom resources of that first kind. An
+operator writes one `KafkaSplit` per consumer workload to declare which
+consumer group and topics may be split. A `KafkaRoute` holds one developer's
+filter; nobody writes it by hand, because the traffic-manager creates it when
+an intercept starts and removes it when the intercept ends. The only program
+that acts on either object is the Kafka provider, a Deployment installed by
+the Helm chart. It reads both, does the work, and writes status back into
+them.
+
+The work is done by the splitter, a program the provider runs for each
+enabled split. It reads the source topics on behalf of the original consumer
+group and copies every record to exactly one place: the personal shadow of
+the route whose filter matches, or the application shadow when none does.
+The application consumes its shadow, and each developer's local consumer
+reads their personal shadow.
 
 ## Resources and controllers
 
 ```mermaid
 flowchart LR
-  op["Operator"] -- "kubectl apply" --> split
+  op([Operator]) -- "kubectl apply" --> split
   tm["traffic-manager"] -- "one per intercept" --> route
 
   subgraph appns["Application namespace"]
     direction TB
     app["Application Pods"]
-    split["KafkaSplit<br/>source group and topics,<br/>workload selector, env bindings"]
-    route["KafkaRoute<br/>predicate, expiry, status"]
+    split[/"KafkaSplit<br/>source group and topics,<br/>workload selector, env bindings"/]
+    route[/"KafkaRoute<br/>predicate, expiry, status"/]
   end
 
   subgraph provns["Provider namespace"]
     direction TB
     prov["Kafka provider<br/>split and route controllers,<br/>validating and Pod-mutating webhooks"]
-    cm["Routing ConfigMap"]
-    sts["Splitter StatefulSet"]
-    leases["Member Leases"]
+    cm[/"Routing ConfigMap"/]
+    sts["Splitter Pods"]
+    leases[/"Member Leases"/]
   end
 
   split --> prov
@@ -63,18 +81,26 @@ flowchart LR
   sts -- "acknowledges" --> leases
   leases --> prov
   prov -. "evicts and re-admits" .-> app
+  classDef resource fill:#fff4c2,stroke:#a08000,color:#000
+  class split,route,cm,leases resource
+  style appns fill:#f4f4f4,stroke:#999
+  style provns fill:#f4f4f4,stroke:#999
 ```
 
-**KafkaSplit.** One split per consumer workload. It names the source consumer
-group and topics, selects the workload, and maps the Kafka settings to the
-environment variables the container reads them from. The split is the unit
-of ownership: while it is enabled, the splitter is the only consumer of the
-source group.
+**KafkaSplit.** A resource, one per consumer workload, that lives in the
+workload's namespace. It names the source consumer group and topics, selects
+the workload, and maps the Kafka settings to the environment variables the
+container reads them from. Its `desiredState` field is the switch that
+enables or disables the split, and its status reports what the provider has
+done. The split is the unit of ownership: while it is enabled, the splitter
+is the only consumer of the source group.
 
-**KafkaRoute.** One route per intercept, created and expired by the
-traffic-manager, so users rarely handle routes directly. A route carries a
-predicate, such as a header value or a key prefix. The provider rejects a
-route whose predicate could match the same record as an existing one.
+**KafkaRoute.** A resource, one per intercept, in the same namespace as its
+split. The traffic-manager creates it when an intercept starts and removes it
+when the intercept ends, so users rarely handle routes directly. A route
+carries a predicate, such as a header value or a key prefix. The provider
+rejects a route whose predicate could match the same record as an existing
+one.
 
 **Kafka provider.** The `tp-kafka` Deployment reconciles splits and routes,
 validates them on admission, and mutates application Pods. It creates the
@@ -82,10 +108,12 @@ shadow topics and groups on the broker, runs the splitter, and reports
 status on both resources. It watches Pods and workloads only in namespaces
 that hold a split.
 
-**Splitter.** A StatefulSet whose members join the source group with static
-membership. The provider publishes the active routes as a numbered generation
-in a ConfigMap that every member watches, and each member records the
-generation it runs in a Lease that the provider reads back.
+**Splitter.** The Pods of a StatefulSet that the provider creates for each
+enabled split. They join the source group with static membership, so a
+restarted member takes back its own partitions. The provider publishes the
+active routes as a numbered generation in a ConfigMap that every member
+watches, and each member records the generation it runs in a Lease that the
+provider reads back.
 
 ## Where a record goes
 
