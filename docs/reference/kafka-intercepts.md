@@ -9,6 +9,8 @@ provider owns Kafka-specific Kubernetes
 resources, admission, broker operations, and the transactional splitter. The
 traffic-manager only discovers enabled splits and attaches their routes to
 ordinary Telepresence intercepts.
+[How Kafka personal intercepts work](../concepts/kafka-intercepts.md) gives an
+overview of the parts before the detail below.
 
 ## Delivery guarantee
 
