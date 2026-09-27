@@ -30,6 +30,24 @@ func crdName(data []byte) (string, error) {
 	return obj.Metadata.Name, nil
 }
 
+// CRDNames returns the metadata.name of every CRD object chrt carries.
+func CRDNames(chrt *chart.Chart) ([]string, error) {
+	crds := chrt.CRDObjects()
+	names := make([]string, 0, len(crds))
+	for _, crd := range crds {
+		js, err := yaml.YAMLToJSON(crd.File.Data)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse CRD %s: %w", crd.Name, err)
+		}
+		name, err := crdName(js)
+		if err != nil {
+			return nil, fmt.Errorf("unable to parse CRD %s: %w", crd.Name, err)
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
 // applyCRDs server-side applies every CRD object of chrt using restConfig,
 // so that a CustomResourceDefinition already owned by another release is
 // updated in place rather than rejected by Helm's release-ownership check.

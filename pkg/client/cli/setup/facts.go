@@ -12,6 +12,7 @@ import (
 	core "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/client-go/kubernetes"
 
 	"helm.sh/helm/v3/pkg/release"
@@ -62,6 +63,7 @@ type ClusterFacts struct {
 	ClientUpdate     UpdateFacts     `json:"clientUpdate"`
 	Routing          RoutingFacts    `json:"routing"`
 	External         ExternalFacts   `json:"external"`
+	Kafka            KafkaFacts      `json:"kafka"`
 }
 
 type PrivilegeFacts struct {
@@ -79,6 +81,12 @@ type PrivilegeFacts struct {
 	// Certificate in the manager namespace; consulted only when the decision
 	// chooses the cert-manager path for the external endpoint.
 	CertManagerCertificate Finding `json:"certManagerCertificate"`
+	// Kafka is whether the caller can create the objects that enabling the
+	// Kafka provider adds on top of the base chart render, swept separately
+	// from ClusterWide/Namespaced.
+	Kafka                  Finding           `json:"kafka"`
+	MissingKafka           []string          `json:"missingKafka,omitempty"`
+	MissingKafkaAttributes []DeniedAttribute `json:"missingKafkaAttributes,omitempty"`
 }
 
 // ClientAuthFacts records which credential kinds the connecting client's own
@@ -182,6 +190,7 @@ var ProbePhases = []string{ //nolint:gochecknoglobals // immutable
 	"Checking for a client update",
 	"Checking for subnet conflicts",
 	"Probing external endpoint prerequisites",
+	"Probing Kafka provider prerequisites",
 }
 
 // defaultUpdateCheckHost is the host queried for the client's own stable-release
@@ -195,7 +204,9 @@ var defaultHTTPClient = &http.Client{Timeout: 5 * time.Second} //nolint:gocheckn
 // DefaultCandidateValues returns the maximal feature set so the P1 RBAC sweep
 // covers everything the tool might install. The external endpoint is enabled
 // with a placeholder Secret name so its Service enters the sweep, without
-// enabling x509 auth's kube-system RoleBinding.
+// enabling x509 auth's kube-system RoleBinding. Kafka is set explicitly to
+// false: its provider is swept separately (evaluateKafkaAccess), so a plain
+// install is not charged with its privileges.
 func DefaultCandidateValues() *helm.Values {
 	return &helm.Values{
 		AgentInjector: helm.AgentInjector{Enabled: new(true)},
@@ -211,6 +222,7 @@ func DefaultCandidateValues() *helm.Values {
 			Enabled: new(true),
 			TLS:     helm.ExternalTLS{SecretName: new("setup-candidate")},
 		},
+		Kafka: helm.Kafka{Enabled: new(false)},
 	}
 }
 
@@ -243,6 +255,11 @@ type Prober struct {
 	// conflict detection. nil means defaultActiveRoutes, which asks the root
 	// daemon; ok is false whenever there is no session to ask.
 	ActiveRoutes func(ctx context.Context) (subnets []netip.Prefix, interfaceName string, ok bool)
+
+	// KafkaSplits lists every KafkaSplit resource; nil means
+	// defaultKafkaSplits, which lists them through the discovery client's
+	// REST client (nil on a fake clientset, hence this override).
+	KafkaSplits func(ctx context.Context) ([]unstructured.Unstructured, error)
 }
 
 func (p *Prober) candidateValues() *helm.Values {
@@ -343,6 +360,11 @@ func (p *Prober) GatherFacts(ctx context.Context) (*ClusterFacts, error) {
 	facts.External = p.probeExternal(ctx)
 	ev, es, ee := externalSummary(&facts.External)
 	p.outcome("Probing external endpoint prerequisites", ev, es, ee)
+
+	p.progress("Probing Kafka provider prerequisites")
+	facts.Kafka = p.probeKafka(ctx)
+	kv, ks, ke := kafkaSummary(&facts.Kafka, &facts.Privileges)
+	p.outcome("Probing Kafka provider prerequisites", kv, ks, ke)
 
 	if err := ctx.Err(); err != nil {
 		return nil, err

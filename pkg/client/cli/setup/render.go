@@ -131,6 +131,9 @@ func printFindings(w io.Writer, facts *ClusterFacts) {
 
 	externalArea(w, &facts.External)
 
+	_, kafkaLine, kafkaEvidence := kafkaSummary(&facts.Kafka, &facts.Privileges)
+	area(w, "kafka", kafkaLine, kafkaEvidence)
+
 	if h := facts.Health; h != nil {
 		for _, lf := range healthLabeledFindings(h) {
 			healthArea(w, lf.label, lf.finding)
@@ -162,6 +165,48 @@ func credentialDescription(auth ClientAuthFacts) string {
 func externalArea(w io.Writer, ext *ExternalFacts) {
 	_, line, evidence := externalSummary(ext)
 	area(w, "external endpoint", line, evidence)
+}
+
+// kafkaSummary reports the Kafka provider's cluster prerequisites: whether
+// its CRDs and Argo Rollouts are served, and how many KafkaSplit resources
+// are active. Its verdict is unknown when a discovery or list error is
+// present, else yes: neither CRDs nor Argo Rollouts being served is a
+// neutral fact, not a failure, since the provider may simply not be wanted.
+func kafkaSummary(k *KafkaFacts, pf *PrivilegeFacts) (Verdict, string, []string) {
+	verdict := VerdictYes
+	if k.CRDs.Verdict == VerdictUnknown || k.ArgoRollouts.Verdict == VerdictUnknown || k.SplitsListError != "" {
+		verdict = VerdictUnknown
+	}
+
+	splitsPart := fmt.Sprintf("%d active KafkaSplits", k.ActiveSplits)
+	switch {
+	case k.SplitsListDenied:
+		splitsPart = "KafkaSplits: listing denied"
+	case k.SplitsListError != "":
+		splitsPart = "KafkaSplits: unknown"
+	}
+	summary := fmt.Sprintf("CRDs %s, %s, %s",
+		kafkaFindingWord(k.CRDs.Verdict), splitsPart, "Argo Rollouts "+kafkaFindingWord(k.ArgoRollouts.Verdict))
+
+	evidence := concat(k.CRDs.Evidence, k.ArgoRollouts.Evidence)
+	if k.SplitsListError != "" {
+		evidence = concat(evidence, []string{k.SplitsListError})
+	}
+	evidence = concat(evidence, prefixed("missing: ", pf.MissingKafka))
+	return verdict, summary, evidence
+}
+
+// kafkaFindingWord renders a CRDs/Argo Rollouts verdict as "present",
+// "absent", or the verdict itself when inconclusive.
+func kafkaFindingWord(v Verdict) string {
+	switch v {
+	case VerdictYes:
+		return "present"
+	case VerdictNo:
+		return "absent"
+	default:
+		return string(v)
+	}
 }
 
 // externalSummary reports cert-manager's availability and the TLS Secrets
@@ -316,6 +361,7 @@ func healthLabeledFindings(h *HealthFacts) []struct {
 		{"quic endpoint", h.Quic},
 		{"x509 client auth", h.X509ClientAuth},
 		{"external endpoint", h.ExternalEndpoint},
+		{"kafka provider", h.Kafka},
 		{"version skew", &h.VersionSkew},
 	}
 }
