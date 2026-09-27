@@ -236,7 +236,7 @@ func installNew(
 	install.DisableHooks = req.NoHooks
 	install.KubeVersion = req.KubeVersion
 	install.Version = chrt.Metadata.Version
-	if vals.Kafka.Enabled != nil && *vals.Kafka.Enabled {
+	if vals.KafkaEnabled() {
 		if restCfg == nil {
 			return errors.New("unable to apply Kafka CRDs: no usable cluster client")
 		}
@@ -276,7 +276,7 @@ func upgradeExisting(
 	upgrade.ReuseValues = req.ReuseValues
 	upgrade.DisableHooks = req.NoHooks
 	upgrade.Version = chrt.Metadata.Version
-	if vals.Kafka.Enabled != nil && *vals.Kafka.Enabled {
+	if vals.KafkaEnabled() {
 		if restCfg == nil {
 			return errors.New("unable to apply Kafka CRDs: no usable cluster client")
 		}
