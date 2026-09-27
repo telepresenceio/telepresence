@@ -23,6 +23,16 @@ func TestCRDName(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestCRDNames asserts the embedded chart's CRD names.
+func TestCRDNames(t *testing.T) {
+	chrt, err := LoadCoreChart(semver.MustParse("2.31.0"))
+	require.NoError(t, err)
+
+	names, err := CRDNames(chrt)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"splits.kafka.telepresence.io", "routes.kafka.telepresence.io"}, names)
+}
+
 // TestApplyCRDObjects applies the embedded chart's CRD objects (the Kafka
 // CRDs) against a fake apiextensions clientset and asserts that both land,
 // exercising the YAML-to-JSON decode and name-extraction path without a real
