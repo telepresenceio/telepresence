@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	rbac "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/yaml"
@@ -728,4 +729,129 @@ func (s *Setup) Test_ExternalEndpointValidation() {
 	exists, err := releaseExists(ctx, r, ns)
 	s.Require().NoError(err)
 	s.False(exists, "neither validation failure may create a release")
+}
+
+// kafkaCRDNames are the CustomResourceDefinitions the kafka.telepresence.io
+// group ships (charts/telepresence-oss/crds/); they are only among the
+// setup report's planned objects when kafka.enabled is true.
+func kafkaCRDNames() []string {
+	return []string{"splits.kafka.telepresence.io", "routes.kafka.telepresence.io"}
+}
+
+const (
+	kafkaDeploymentPollTimeout  = 60 * time.Second
+	kafkaDeploymentPollInterval = 2 * time.Second
+)
+
+// Test_KafkaInput drives `telepresence setup` with the Kafka
+// personal-intercept provider enabled: the two kafka.telepresence.io CRDs
+// and the tp-kafka Deployment are planned, applied and verified, the
+// release's stored values carry the provider's settings, an identical
+// rerun is a no-op, and disabling the provider on an upgrade removes the
+// Deployment while leaving the CRDs and any KafkaSplit/KafkaRoute resources
+// in place -- 'telepresence helm uninstall' never touches CRDs, which this
+// test's own cleanup (uninstallIfPresent) relies on too.
+//
+// The cluster must have the telepresence-kafka image loadable
+// (`make load-kafka-image`; CI's `make load-images` already includes it),
+// or the tp-kafka Deployment never reaches ready and the test times out.
+func (s *Setup) Test_KafkaInput() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	env := rt.Env{Ctx: ctx, T: t, R: r}
+	ns := rt.PrivateUnmanagedNamespace(env, "kafka")
+	t.Cleanup(func() { uninstallIfPresent(t, ctx, r, ns) })
+
+	dir := r.ArtifactDir("setup")
+
+	// Agent-injector and node-agent stay off: this test only exercises the
+	// Kafka provider's own install/upgrade/verify path, not intercepts.
+	enableInput := filepath.Join(dir, "kafka-"+ns+"-enable-input.yaml")
+	enableOutput := filepath.Join(dir, "kafka-"+ns+"-enable-output.yaml")
+	writeValuesFile(t, enableInput, map[string]any{
+		"kafka":         map[string]any{"enabled": true},
+		"agentInjector": map[string]any{"enabled": false},
+		"nodeAgent":     map[string]any{"enabled": false},
+	})
+
+	applyArgs := []string{
+		"setup", "--manager-namespace", ns, "--non-interactive",
+		"--input", enableInput, "--output", enableOutput, "--apply",
+	}
+	stdout, stderr, err := s.CLI().Run(ctx, applyArgs...)
+	s.Require().NoError(err, "setup --apply (kafka install): %s", stderr)
+
+	s.Contains(stdout, "Action: install")
+	for _, crd := range kafkaCRDNames() {
+		s.Contains(stdout, "  - CustomResourceDefinition "+crd)
+	}
+	s.Contains(stdout, "  - Deployment tp-kafka."+ns)
+
+	verification := stdout
+	if i := strings.Index(stdout, "Verification:"); i >= 0 {
+		verification = stdout[i:]
+	}
+	s.Contains(strings.ToLower(verification), "kafka",
+		"the verification section should mention the tp-kafka provider:\n%s", verification)
+
+	for _, crd := range kafkaCRDNames() {
+		_, err := r.Kubectl(ctx, "", "get", "crd", crd)
+		s.NoError(err, "CRD %s should exist", crd)
+	}
+	_, err = r.Kubectl(ctx, ns, "rollout", "status", "deployment/tp-kafka", "--timeout=120s")
+	s.Require().NoError(err, "tp-kafka deployment should become ready")
+
+	outputValues := loadValuesFile(t, enableOutput)
+	enabled, ok := valueAtPath(outputValues, "kafka", "enabled")
+	s.Require().True(ok, "kafka.enabled should be set in the output file")
+	s.Equal(true, enabled)
+	replicas, ok := valueAtPath(outputValues, "kafka", "replicas")
+	s.Require().True(ok, "kafka.replicas should be set in the output file")
+	s.EqualValues(2, replicas)
+	policy, ok := valueAtPath(outputValues, "kafka", "webhook", "failurePolicy")
+	s.Require().True(ok, "kafka.webhook.failurePolicy should be set in the output file")
+	s.Equal("Fail", policy)
+
+	helmValues, err := helmGetValues(ctx, r, ns)
+	s.Require().NoError(err)
+	enabled, ok = valueAtPath(helmValues, "kafka", "enabled")
+	s.Require().True(ok, "kafka.enabled should be set in the stored release values")
+	s.Equal(true, enabled)
+	replicas, ok = valueAtPath(helmValues, "kafka", "replicas")
+	s.Require().True(ok, "kafka.replicas should be set in the stored release values")
+	s.EqualValues(2, replicas)
+	policy, ok = valueAtPath(helmValues, "kafka", "webhook", "failurePolicy")
+	s.Require().True(ok, "kafka.webhook.failurePolicy should be set in the stored release values")
+	s.Equal("Fail", policy)
+
+	// An identical apply is a no-op.
+	stdout, stderr, err = s.CLI().Run(ctx, applyArgs...)
+	s.Require().NoError(err, "setup --apply (kafka rerun): %s", stderr)
+	s.Contains(stdout, "Action: none")
+
+	// Disabling on an upgrade removes the provider's Deployment; the CRDs
+	// and any KafkaSplit/KafkaRoute resources are left behind, as
+	// 'telepresence helm uninstall' would also leave them.
+	disableInput := filepath.Join(dir, "kafka-"+ns+"-disable-input.yaml")
+	disableOutput := filepath.Join(dir, "kafka-"+ns+"-disable-output.yaml")
+	writeValuesFile(t, disableInput, map[string]any{
+		"kafka":         map[string]any{"enabled": false},
+		"agentInjector": map[string]any{"enabled": false},
+		"nodeAgent":     map[string]any{"enabled": false},
+	})
+
+	stdout, stderr, err = s.CLI().Run(ctx,
+		"setup", "--manager-namespace", ns, "--non-interactive",
+		"--input", disableInput, "--output", disableOutput, "--apply")
+	s.Require().NoError(err, "setup --apply (kafka disable): %s", stderr)
+	s.Contains(stdout, "Action: upgrade")
+	s.Contains(stdout, "Changed from current installation:")
+	s.Contains(stdout, "  - kafka.enabled")
+
+	s.Eventually(func() bool {
+		_, err := r.Kubectl(ctx, ns, "get", "deployment/tp-kafka")
+		return err != nil
+	}, kafkaDeploymentPollTimeout, kafkaDeploymentPollInterval,
+		"the tp-kafka deployment should be removed once kafka.enabled is false")
 }
