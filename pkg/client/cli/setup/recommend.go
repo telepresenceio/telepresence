@@ -217,6 +217,10 @@ func RecommendWithInput(facts *ClusterFacts, answers *Answers, input *helm.Value
 		return nil, err
 	}
 
+	if err := e.kafkaValues(rec); err != nil {
+		return nil, err
+	}
+
 	final := helm.MergeValues(rec, input)
 
 	e.decideAction(final, p)
@@ -435,6 +439,67 @@ func (e *engine) externalEndpointValues(vals *helm.Values) error {
 	return nil
 }
 
+// kafkaValues emits kafka.enabled and, when enabled, the webhook failure
+// policy and replica count, with the notes explaining the provider and the
+// hazards of enabling or disabling it. rec.Kafka.Enabled is always set, an
+// explicit false being what turns a release's true off through
+// helm.MergeValues.
+func (e *engine) kafkaValues(rec *helm.Values) error {
+	enabled, err := decide(e, "kafka.enabled", e.input.Kafka.Enabled, e.answers.Kafka)
+	if err != nil {
+		return err
+	}
+	rec.Kafka.Enabled = new(enabled)
+
+	if !enabled {
+		if e.facts.Release.Installed && e.facts.Release.Values.KafkaEnabled() {
+			e.notes.warn("kafka.enabled false removes the tp-kafka provider and its webhooks; the Kafka CRDs and any KafkaSplit/KafkaRoute resources are left in place")
+			if e.facts.Kafka.SplitsListDenied || e.facts.Kafka.SplitsListError != "" {
+				e.notes.warn("setup could not list KafkaSplit resources; disabling the provider while any are active leaves their Pods without shadow configuration")
+			}
+		}
+		return nil
+	}
+
+	fp := e.answers.KafkaFailurePolicy
+	if fp == "" {
+		fp = KafkaFailurePolicyFail
+	}
+	fp, err = decide(e, "kafka.webhook.failurePolicy", e.input.Kafka.Webhook.FailurePolicy, fp)
+	if err != nil {
+		return err
+	}
+	replicas := e.answers.KafkaReplicas
+	if replicas == 0 {
+		replicas = 2
+	}
+	replicas, err = decide(e, "kafka.replicas", e.input.Kafka.Replicas, replicas)
+	if err != nil {
+		return err
+	}
+	rec.Kafka.Webhook.FailurePolicy = new(fp)
+	rec.Kafka.Replicas = new(replicas)
+
+	if err := e.checkKafkaPrivileges(); err != nil {
+		return err
+	}
+
+	e.notes.info(fmt.Sprintf(
+		"Kafka personal intercepts enabled: the KafkaSplit and KafkaRoute CRDs are applied before the chart and the tp-kafka provider runs %d replica(s); "+
+			"declare a KafkaSplit per consumer workload (see the Kafka intercepts how-to)", replicas))
+	if fp == KafkaFailurePolicyIgnore {
+		e.notes.warn("kafka.webhook.failurePolicy Ignore: while the provider is down, a Pod created in a namespace " +
+			"that holds a KafkaSplit is admitted unchanged and may consume the source group beside the splitter")
+	}
+	if e.facts.Kafka.CRDs.Verdict == VerdictYes && !e.facts.Release.Values.KafkaEnabled() {
+		e.notes.info("the Kafka CRDs are already present; the apply updates them in place")
+	}
+	if !deref(rec.AgentInjector.Enabled) && !deref(rec.NodeAgent.Enabled) {
+		e.notes.warn("kafka.enabled without agent machinery: Kafka routes are created by intercepts, which need the agent-injector or the node-agent")
+	}
+	return nil
+}
+
 // apiPortOverridden reports whether the input or the installed release's
 // values set apiPort to anything other than the chart's default (8081).
 func (e *engine) apiPortOverridden() bool {
@@ -612,6 +677,20 @@ func (e *engine) checkCertManagerPrivileges(values *helm.Values) error {
 	finding := e.facts.Privileges.CertManagerCertificate
 	return e.privilegeDenial(finding, func() error { return certManagerPrivilegeDeniedError(finding) }, false,
 		"the cert-manager certificate privilege for the external endpoint could not be verified: %s")
+}
+
+// checkKafkaPrivileges is a no-op unless values enable the Kafka provider, in
+// which case a denial becomes an error when applying, a warning plus handoff
+// notes otherwise, and an unverifiable result becomes a warning note.
+func (e *engine) checkKafkaPrivileges() error {
+	return e.privilegeDenial(e.facts.Privileges.Kafka, func() error { return kafkaPrivilegeDeniedError(e.facts) }, true,
+		"the Kafka provider's install privileges could not be verified: %s")
+}
+
+// kafkaPrivilegeDeniedError names the missing privileges the Kafka
+// provider's install needs.
+func kafkaPrivilegeDeniedError(f *ClusterFacts) error {
+	return errcat.User.New("insufficient privileges to install the Kafka provider; missing:\n  " + strings.Join(f.Privileges.MissingKafka, "\n  "))
 }
 
 // x509PrivilegeDeniedError names the missing kube-system RoleBinding

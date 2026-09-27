@@ -36,6 +36,7 @@ func PinAnswers(in *helm.Values, a *Answers, pre *Preset) {
 	pinSecurity(in, a, pre)
 	pinExternalEndpoint(in, a, pre)
 	pinLegacyAccess(in, a, pre)
+	pinKafka(in, a, pre)
 }
 
 // pinAttachReplace derives the attach/replace pins from agentInjector.enabled
@@ -184,6 +185,26 @@ func pinLegacyAccess(in *helm.Values, a *Answers, pre *Preset) {
 	}
 }
 
+// pinKafka pins whether the Kafka provider is enabled from kafka.enabled,
+// and, when it parses, its webhook failure policy and replica count from
+// kafka.webhook.failurePolicy and kafka.replicas.
+func pinKafka(in *helm.Values, a *Answers, pre *Preset) {
+	if enabled := in.Kafka.Enabled; enabled != nil && !pre.Kafka {
+		a.Kafka = *enabled
+		pre.Kafka = true
+	}
+	if fp := in.Kafka.Webhook.FailurePolicy; fp != nil && !pre.KafkaFailurePolicy {
+		if _, err := ParseKafkaFailurePolicy(*fp); err == nil {
+			a.KafkaFailurePolicy = *fp
+			pre.KafkaFailurePolicy = true
+		}
+	}
+	if r := in.Kafka.Replicas; r != nil && *r >= 1 && !pre.KafkaReplicas {
+		a.KafkaReplicas = *r
+		pre.KafkaReplicas = true
+	}
+}
+
 // ConsultFunc resolves a conflict between an input-pinned value and the
 // engine's recommendation; returning true keeps the input value.
 type ConsultFunc func(path, inputVal, recVal string) (bool, error)
@@ -227,5 +248,32 @@ func (f *ClusterFacts) ValidateValues(vals *helm.Values, applying bool) error {
 			return errcat.User.New("externalEndpoint.tls: set exactly one of tls.secretName or tls.certManager.enabled")
 		}
 	}
+	if vals.KafkaEnabled() {
+		if f.Webhook.CanCreate.Verdict == VerdictNo {
+			return kafkaWebhookDeniedError()
+		}
+		if fp := vals.Kafka.Webhook.FailurePolicy; fp != nil {
+			if _, err := ParseKafkaFailurePolicy(*fp); err != nil {
+				return errcat.User.Newf("kafka.webhook.failurePolicy: %v", err)
+			}
+		}
+		if r := vals.Kafka.Replicas; r != nil && *r < 1 {
+			return errcat.User.Newf("kafka.replicas must be at least 1, but the values set %d", *r)
+		}
+		if applying && f.Privileges.Kafka.Verdict == VerdictNo {
+			return kafkaPrivilegeDeniedError(f)
+		}
+	} else if f.Release.Installed && f.Release.Values != nil && f.Release.Values.KafkaEnabled() && f.Kafka.ActiveSplits > 0 {
+		return errcat.User.Newf(
+			"kafka.enabled: false would remove the Kafka provider while %d active KafkaSplit resources exist; disable or delete them first, or keep the provider enabled",
+			f.Kafka.ActiveSplits)
+	}
 	return nil
+}
+
+// kafkaWebhookDeniedError names the hard incompatibility between wanting the
+// Kafka provider and lacking the privilege to create its admission webhook.
+func kafkaWebhookDeniedError() error {
+	return errcat.User.New(
+		"the Kafka provider needs its Pod-mutating webhook, but creating mutatingwebhookconfigurations.admissionregistration.k8s.io is not permitted")
 }
