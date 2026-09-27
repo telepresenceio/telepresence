@@ -36,6 +36,8 @@ items:
           <code>KafkaSplit</code> controls workload cutover, and mandatory
           Kafka transactions atomically publish each record to one shadow
           topic while advancing the original consumer-group offset.
+          <code>telepresence setup</code> installs the provider and verifies
+          it.
         docs: reference/kafka-intercepts
   - version: 2.32.2
     date: 2026-10-08

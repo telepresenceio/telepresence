@@ -11,7 +11,7 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 <Note>
 	<Title type="feature" docs="reference/kafka-intercepts">Personal Kafka consumer intercepts</Title>
 	<Body>
-The optional Kafka provider lets multiple developers consume disjoint personal message routes while the in-cluster application continues to receive unmatched records. A namespaced <code>KafkaSplit</code> controls workload cutover, and mandatory Kafka transactions atomically publish each record to one shadow topic while advancing the original consumer-group offset.
+The optional Kafka provider lets multiple developers consume disjoint personal message routes while the in-cluster application continues to receive unmatched records. A namespaced <code>KafkaSplit</code> controls workload cutover, and mandatory Kafka transactions atomically publish each record to one shadow topic while advancing the original consumer-group offset. <code>telepresence setup</code> installs the provider and verifies it.
   </Body>
 </Note>
 ## Version 2.32.2 <span style={{fontSize:'16px'}}>(October  8)</span>

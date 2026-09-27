@@ -5,7 +5,7 @@
 ## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Personal Kafka consumer intercepts](reference/kafka-intercepts)</div></div>
 <div style="margin-left: 15px">
 
-The optional Kafka provider lets multiple developers consume disjoint personal message routes while the in-cluster application continues to receive unmatched records. A namespaced <code>KafkaSplit</code> controls workload cutover, and mandatory Kafka transactions atomically publish each record to one shadow topic while advancing the original consumer-group offset.
+The optional Kafka provider lets multiple developers consume disjoint personal message routes while the in-cluster application continues to receive unmatched records. A namespaced <code>KafkaSplit</code> controls workload cutover, and mandatory Kafka transactions atomically publish each record to one shadow topic while advancing the original consumer-group offset. <code>telepresence setup</code> installs the provider and verifies it.
 </div>
 
 ## Version 2.32.2 <span style="font-size: 16px;">(October  8)</span>
