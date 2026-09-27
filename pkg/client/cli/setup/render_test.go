@@ -126,6 +126,23 @@ func TestPrintReport_PlannedObjectsSection(t *testing.T) {
 	assert.NotContains(t, out.String(), "This install will create:")
 }
 
+func TestPrintReport_KafkaUninstallNote(t *testing.T) {
+	s := renderSummary()
+	s.PlannedObjects = []string{"Deployment tp-kafka.ambassador"}
+	s.Proposal.Values.Kafka = helm.Kafka{Enabled: new(true)}
+
+	out := &bytes.Buffer{}
+	cmd := &cobra.Command{}
+	cmd.SetOut(out)
+	require.NoError(t, PrintReport(cmd, s))
+	assert.Contains(t, out.String(), "The Kafka CRDs and any KafkaSplit/KafkaRoute resources are left in place by 'telepresence helm uninstall'.")
+
+	s.Proposal.Values.Kafka = helm.Kafka{Enabled: new(false)}
+	out.Reset()
+	require.NoError(t, PrintReport(cmd, s))
+	assert.NotContains(t, out.String(), "left in place by 'telepresence helm uninstall'")
+}
+
 func TestPrintReport_ClusterLine(t *testing.T) {
 	s := renderSummary()
 	s.Facts.Context = "kind-dev"
