@@ -31,6 +31,14 @@ timestamp. Headers and payloads are not decoded by the provider.
 
 ## Installation and components
 
+[`telepresence setup`](setup.md) is the recommended way to install the
+provider. It asks "Enable Kafka personal intercepts?" plus the webhook
+failure policy and the replica count, checks that the caller may create the
+provider's objects and its two CRDs, applies the CRDs, and verifies the
+provider afterward. Setting `kafka.enabled=true` with `telepresence helm
+install` or `telepresence helm upgrade` is equivalent. Setup refuses to
+disable the provider while active `KafkaSplit` resources exist.
+
 Set `kafka.enabled=true` in the Telepresence Helm chart. The chart installs:
 
 - the `KafkaSplit` and `KafkaRoute` CRDs;
