@@ -216,6 +216,7 @@ func TestVerifyInstall_NothingEnabled(t *testing.T) {
 	notes := VerifyInstall(context.Background(), client, "ambassador", &helm.Values{
 		QuicTunnel:    helm.QuicTunnel{Enabled: new(false)},
 		AgentInjector: helm.AgentInjector{Enabled: new(false)},
+		Kafka:         helm.Kafka{Enabled: new(false)},
 	}, ClientAuthFacts{})
 	assert.Empty(t, notes)
 }
