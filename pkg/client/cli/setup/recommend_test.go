@@ -1,12 +1,13 @@
 package setup
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
+	"helm.sh/helm/v3/pkg/chartutil"
 	rbac "k8s.io/api/rbac/v1"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/helm"
@@ -963,4 +964,25 @@ func TestRecommend_KafkaCRDsPresentNote(t *testing.T) {
 	p, err := Recommend(facts, recAnswers(func(a *Answers) { a.Kafka = true }))
 	require.NoError(t, err)
 	assert.Contains(t, p.notesText(), "the Kafka CRDs are already present; the apply updates them in place")
+}
+
+// TestRecommend_KafkaValuesMeetChartSchema pins the setup proposals for the
+// Kafka provider, including the single replica setup offers on a single-node
+// cluster, against the chart's own values schema.
+func TestRecommend_KafkaValuesMeetChartSchema(t *testing.T) {
+	chrt, err := loadEmbeddedChart()
+	require.NoError(t, err)
+	for _, replicas := range []int32{1, 2} {
+		p, err := Recommend(recFacts(), recAnswers(func(a *Answers) {
+			a.Kafka = true
+			a.KafkaFailurePolicy = KafkaFailurePolicyFail
+			a.KafkaReplicas = replicas
+		}))
+		require.NoError(t, err)
+		raw, err := json.Marshal(p.Values)
+		require.NoError(t, err)
+		var vals map[string]any
+		require.NoError(t, json.Unmarshal(raw, &vals))
+		assert.NoError(t, chartutil.ValidateAgainstSchema(chrt, vals), "kafka.replicas %d", replicas)
+	}
 }
