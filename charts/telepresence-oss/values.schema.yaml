@@ -588,7 +588,7 @@ properties:
       replicas:
         description: Number of controller replicas serving admission. One replica leads reconciliation.
         type: integer
-        minimum: 2
+        minimum: 1
       image:
         type: object
         additionalProperties: false
