@@ -100,6 +100,7 @@ type session struct {
 	rootDaemonGeneration    uint64
 	rootDaemonReconnectLock sync.Mutex
 	dialRootDaemon          func(context.Context, bool) (*grpc.ClientConn, error)
+	rootDaemonRunning       func(context.Context) bool
 
 	// local information
 	installID string // telepresence's install ID
@@ -1500,6 +1501,20 @@ func (s *session) MarkClosing() {
 	s.closing.Store(true)
 }
 
+// isRootDaemonRunning reports whether an out-of-process root daemon is still running,
+// either as a managed service or with a live info file. An error other than the info
+// file not existing is treated as the daemon still being there.
+func isRootDaemonRunning(ctx context.Context) bool {
+	if _, err := daemon.LoadRootServiceInfo(ctx); err == nil {
+		return true
+	}
+	exists, err := daemon.NewRootInfoLoader(ctx, false).InfoExists(daemon.InfoFileName)
+	if err != nil {
+		return true
+	}
+	return exists
+}
+
 func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 	s.rootDaemonReconnectLock.Lock()
 	defer s.rootDaemonReconnectLock.Unlock()
@@ -1530,6 +1545,20 @@ func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 			return
 		}
 		clog.Errorf(s, "failed to reconnect to root daemon (attempt %d): %v", attempt, err)
+
+		if !s.GetService().RootSessionInProcess() {
+			running := s.rootDaemonRunning
+			if running == nil {
+				running = isRootDaemonRunning
+			}
+			if !running(s) {
+				clog.Error(s, "the root daemon has exited; quitting the user daemon. Run 'telepresence connect' to start both again")
+				go func() {
+					_, _ = s.service.ConnectorServer().Quit(context.WithoutCancel(s), &empty.Empty{})
+				}()
+				return
+			}
+		}
 
 		select {
 		case <-s.Done():
