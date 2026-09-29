@@ -93,6 +93,28 @@ but cannot be tightened further by name.
   - create
 {{- end }}
 {{ include "telepresence.managerWorkloadRules" $ }}
+{{- if $.Values.kafka.enabled }}
+- apiGroups:
+  - "kafka.telepresence.io"
+  resources:
+  - splits
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - "kafka.telepresence.io"
+  resources:
+  - routes
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+{{- end }}
 - apiGroups:
     - "events.k8s.io"
   resources:

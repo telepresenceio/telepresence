@@ -488,7 +488,12 @@ func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
 // for which IsChildIntercept is true is skipped -- since WatchIntercepts
 // never sends a child to a client; every non-child entry has its children
 // re-derived instead from its own Spec.PodPorts.
-func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) {
+func (s *State) RestoreIntercepts(
+	ctx context.Context,
+	intercepts []*rpc.InterceptInfo,
+	now time.Time,
+	initialize func(*Intercept),
+) {
 	nodeAgentWatches := make(map[nodeAgentWatchKey]struct{})
 	for _, intercept := range intercepts {
 		spec := intercept.Spec
@@ -497,11 +502,16 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 		}
 		is, _ := s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
 			is := &Intercept{InterceptInfo: intercept}
-			wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
-			if err == nil {
-				is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
-					return s.restoreAppContainer(ctx, interceptInfo, wl)
-				})
+			if initialize != nil {
+				initialize(is)
+			}
+			if !spec.GetKafka().GetOnly() {
+				wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
+				if err == nil {
+					is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
+						return s.restoreAppContainer(ctx, interceptInfo, wl)
+					})
+				}
 			}
 			if spec.NodeAgent {
 				is.addFinalizer(s.nodeAgentReapFinalizer())
@@ -810,6 +820,29 @@ func (s *State) UninstallAgents(ctx context.Context, ur *rpc.UninstallAgentsRequ
 
 func (s *State) GetIntercept(interceptID string) (*Intercept, bool) {
 	return s.intercepts.Load(interceptID)
+}
+
+// ClientKafkaRoute pairs an intercept's namespace with its attached Kafka
+// routes, as returned by ClientKafkaRoutes.
+type ClientKafkaRoute struct {
+	Namespace string
+	Routes    []*rpc.KafkaRoute
+}
+
+// ClientKafkaRoutes returns the namespace and Kafka routes of each of
+// sessionID's intercepts that has Kafka routes attached. It reads the
+// stored Intercept fields directly instead of cloning: an update always
+// replaces the whole stored Intercept rather than mutating one in place.
+func (s *State) ClientKafkaRoutes(sessionID string) []ClientKafkaRoute {
+	var result []ClientKafkaRoute
+	s.intercepts.Range(func(_ string, intercept *Intercept) bool {
+		if intercept.GetClientSession().GetSessionId() == sessionID &&
+			!IsChildIntercept(intercept.Spec) && len(intercept.KafkaRoutes) > 0 {
+			result = append(result, ClientKafkaRoute{Namespace: intercept.Spec.Namespace, Routes: intercept.KafkaRoutes})
+		}
+		return true
+	})
+	return result
 }
 
 func (s *State) WatchIntercepts(

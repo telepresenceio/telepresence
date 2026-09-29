@@ -31,6 +31,7 @@ type Values struct {
 	Usage                        Usage                     `json:"usage,omitzero"`
 	Intercept                    Intercept                 `json:"intercept,omitzero"`
 	IsCI                         *bool                     `json:"isCI,omitzero"`
+	Kafka                        Kafka                     `json:"kafka,omitzero"`
 	Labels                       map[string]string         `json:"labels,omitzero"`
 	LivenessProbe                core.Probe                `json:"livenessProbe,omitzero"`
 	LogLevel                     *string                   `json:"logLevel,omitzero"`
@@ -430,6 +431,29 @@ type Intercept struct {
 // InterceptEnvironment configures which environment variables are withheld from clients.
 type InterceptEnvironment struct {
 	Excluded []string `json:"excluded,omitzero"`
+}
+
+// Kafka configures the optional Kafka personal-intercept provider.
+type Kafka struct {
+	Enabled   *bool                     `json:"enabled,omitzero"`
+	Replicas  *int32                    `json:"replicas,omitzero"`
+	Image     KafkaImage                `json:"image,omitzero"`
+	Webhook   KafkaWebhook              `json:"webhook,omitzero"`
+	Resources core.ResourceRequirements `json:"resources,omitzero"`
+}
+
+// KafkaImage names the Kafka provider image; empty registry and pull policy inherit image.*.
+type KafkaImage struct {
+	Name       *string `json:"name,omitzero"`
+	PullPolicy *string `json:"pullPolicy,omitzero"`
+	Registry   *string `json:"registry,omitzero"`
+}
+
+// KafkaWebhook configures the Kafka admission webhook.
+type KafkaWebhook struct {
+	FailurePolicy  *string `json:"failurePolicy,omitzero"`
+	Port           *int32  `json:"port,omitzero"`
+	TimeoutSeconds *int32  `json:"timeoutSeconds,omitzero"`
 }
 
 // LogStreaming bounds the traffic-manager's StreamLogs RPC.

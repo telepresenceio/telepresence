@@ -41,3 +41,26 @@ func TestPlannedObjects_InjectorEnabled(t *testing.T) {
 	assert.Contains(t, objects, "MutatingWebhookConfiguration agent-injector-webhook-ambassador")
 	assert.NotContains(t, objects, "Deployment quic-forwarder.ambassador")
 }
+
+func TestPlannedObjects_KafkaEnabled(t *testing.T) {
+	values := &helm.Values{
+		AgentInjector: helm.AgentInjector{Enabled: new(false)},
+		NodeAgent:     helm.NodeAgent{Enabled: new(false)},
+		QuicTunnel:    helm.QuicTunnel{Enabled: new(false)},
+		Kafka:         helm.Kafka{Enabled: new(true)},
+	}
+	objects, err := PlannedObjects(context.Background(), "ambassador", values)
+	require.NoError(t, err)
+	assert.Contains(t, objects, "CustomResourceDefinition splits.kafka.telepresence.io")
+	assert.Contains(t, objects, "CustomResourceDefinition routes.kafka.telepresence.io")
+	assert.Contains(t, objects, "Deployment tp-kafka.ambassador")
+	assert.Contains(t, objects, "ValidatingWebhookConfiguration tp-kafka-ambassador")
+
+	values.Kafka.Enabled = new(false)
+	objects, err = PlannedObjects(context.Background(), "ambassador", values)
+	require.NoError(t, err)
+	assert.NotContains(t, objects, "CustomResourceDefinition splits.kafka.telepresence.io")
+	assert.NotContains(t, objects, "CustomResourceDefinition routes.kafka.telepresence.io")
+	assert.NotContains(t, objects, "Deployment tp-kafka.ambassador")
+	assert.NotContains(t, objects, "ValidatingWebhookConfiguration tp-kafka-ambassador")
+}

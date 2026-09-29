@@ -235,8 +235,8 @@ func TestWatchSessionEvents_OwnInterceptOnly(t *testing.T) {
 	// for her own intercept, restored second. RestoreIntercepts is given the
 	// server's own context (not the test's) because it looks up the target
 	// workload via the k8s client installed on that context.
-	mgr.State().RestoreIntercepts(svcCtx, []*rpc.InterceptInfo{bobIntercept}, time.Now())
-	mgr.State().RestoreIntercepts(svcCtx, []*rpc.InterceptInfo{aliceIntercept}, time.Now())
+	mgr.State().RestoreIntercepts(svcCtx, []*rpc.InterceptInfo{bobIntercept}, time.Now(), nil)
+	mgr.State().RestoreIntercepts(svcCtx, []*rpc.InterceptInfo{aliceIntercept}, time.Now(), nil)
 
 	intercepts := recvInterceptsDelta(t, wse)
 	req.Len(intercepts.Upserts, 1)
@@ -291,7 +291,7 @@ func TestWatchSessionEvents_InterceptedFlipsOnActiveIntercept(t *testing.T) {
 		Disposition:   rpc.InterceptDispositionType_ACTIVE,
 		ClientSession: aliceSess,
 	}
-	mgr.State().RestoreIntercepts(svcCtx, []*rpc.InterceptInfo{aliceIntercept}, time.Now())
+	mgr.State().RestoreIntercepts(svcCtx, []*rpc.InterceptInfo{aliceIntercept}, time.Now(), nil)
 
 	// The restore drives both the intercepts field (own intercept, ACTIVE)
 	// and, via the refresh-intercepted channel, a re-sent agent-pod upsert.

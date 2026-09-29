@@ -11,7 +11,7 @@ cd "$REPO_ROOT"
 "$SCRIPT_DIR/preflight.sh"
 
 export TELEPRESENCE_REGISTRY=local
-make build save-tel2-image save-client-image save-routecontroller-image
+make build save-tel2-image save-client-image save-routecontroller-image save-kafka-image
 
 export VAGRANT_CWD="$SCRIPT_DIR"
 vagrant up --parallel --provision

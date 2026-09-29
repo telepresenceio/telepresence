@@ -75,6 +75,24 @@ func ParseConflictStrategy(s string) (ConflictStrategy, error) {
 	}
 }
 
+// KafkaFailurePolicyFail and KafkaFailurePolicyIgnore are the Kafka
+// provider's admission-webhook failure policies.
+const (
+	KafkaFailurePolicyFail   = "Fail"
+	KafkaFailurePolicyIgnore = "Ignore"
+)
+
+// ParseKafkaFailurePolicy validates a Kafka webhook failure policy value
+// ("Fail" or "Ignore").
+func ParseKafkaFailurePolicy(s string) (string, error) {
+	switch s {
+	case KafkaFailurePolicyFail, KafkaFailurePolicyIgnore:
+		return s, nil
+	default:
+		return "", errcat.User.Newf("invalid Kafka webhook failure policy %q: must be Fail or Ignore", s)
+	}
+}
+
 // Answers holds the interview's conclusions, whether they came from an
 // --input pin, a prompt, or a default.
 type Answers struct {
@@ -94,6 +112,9 @@ type Answers struct {
 	ExternalTLSSecret   string             `json:"externalTlsSecret,omitempty"`
 	ExternalCertManager *CertManagerAnswer `json:"externalCertManager,omitempty"`
 	LegacyAccess        bool               `json:"legacyAccess"`
+	Kafka               bool               `json:"kafka"`
+	KafkaFailurePolicy  string             `json:"kafkaFailurePolicy,omitempty"`
+	KafkaReplicas       int32              `json:"kafkaReplicas,omitempty"`
 }
 
 // CertManagerAnswer names the cert-manager issuer and DNS names chosen for
@@ -107,16 +128,19 @@ type CertManagerAnswer struct {
 // Preset records which Answers fields were already decided by an --input
 // pin; a preset answer is never asked.
 type Preset struct {
-	Attach            bool
-	Replace           bool
-	ManagedScope      bool
-	ManagedNamespaces bool
-	MappedNamespaces  bool
-	Conflicts         bool
-	EnforceAuth       bool
-	RequiredGrant     bool
-	ExternalEndpoint  bool
-	LegacyAccess      bool
+	Attach             bool
+	Replace            bool
+	ManagedScope       bool
+	ManagedNamespaces  bool
+	MappedNamespaces   bool
+	Conflicts          bool
+	EnforceAuth        bool
+	RequiredGrant      bool
+	ExternalEndpoint   bool
+	LegacyAccess       bool
+	Kafka              bool
+	KafkaFailurePolicy bool
+	KafkaReplicas      bool
 }
 
 // RequiredGrant values name which grant the traffic-manager requires for
@@ -194,6 +218,12 @@ func (iv *Interviewer) Interview(ctx context.Context) (*Answers, error) {
 			return nil, err
 		}
 		a.Replace = v
+	}
+
+	if a.Attach {
+		if err := iv.askKafka(&a); err != nil {
+			return nil, err
+		}
 	}
 
 	if iv.Facts.ClientUpdate.UpdateAvailable {
@@ -629,6 +659,165 @@ func (iv *Interviewer) askConflictStrategy(conflicts []string) (ConflictStrategy
 	return conflictStrategyChoice(choice), nil
 }
 
+// askKafka asks whether to enable the Kafka personal-intercept provider, and,
+// when enabled, its webhook failure policy and replica count.
+func (iv *Interviewer) askKafka(a *Answers) error {
+	if !iv.Preset.Kafka {
+		activeSplits := iv.Facts.Release.Installed && iv.effective.KafkaEnabled() && iv.Facts.Kafka.ActiveSplits > 0
+		if !iv.NonInteractive {
+			iv.explainKafka()
+			if activeSplits {
+				ioutil.Println(iv.Out, activeKafkaSplitsLine(iv.Facts.Kafka.ActiveSplits))
+			}
+		}
+		if activeSplits {
+			a.Kafka = true
+		} else {
+			v, err := iv.askYesNo("Enable Kafka personal intercepts? ", iv.kafkaDefault())
+			if err != nil {
+				return err
+			}
+			a.Kafka = v
+		}
+	}
+	if a.Kafka && !iv.Preset.KafkaFailurePolicy {
+		v, err := iv.askKafkaFailurePolicy()
+		if err != nil {
+			return err
+		}
+		a.KafkaFailurePolicy = v
+	}
+	if a.Kafka && !iv.Preset.KafkaReplicas {
+		v, err := iv.askKafkaReplicas()
+		if err != nil {
+			return err
+		}
+		a.KafkaReplicas = v
+	}
+	return nil
+}
+
+// activeKafkaSplitsLine reports why the Kafka provider stays enabled without
+// asking, singular or plural depending on n.
+func activeKafkaSplitsLine(n int) string {
+	noun := "resources exist"
+	if n == 1 {
+		noun = "resource exists"
+	}
+	return fmt.Sprintf("%d active KafkaSplit %s; the Kafka provider stays enabled while they do.", n, noun)
+}
+
+// kafkaDefault is the "Enable Kafka personal intercepts?" default: false on a
+// fresh install, else the installed release's own setting.
+func (iv *Interviewer) kafkaDefault() bool {
+	if !iv.Facts.Release.Installed {
+		return false
+	}
+	return iv.effective.KafkaEnabled()
+}
+
+// explainKafka prints what enabling the Kafka provider installs, plus
+// whatever of the release's current state and the caller's privileges bear
+// on the question that follows.
+func (iv *Interviewer) explainKafka() {
+	ioutil.Println(iv.Out, "Kafka personal intercepts let a developer's local consumer take a filtered")
+	ioutil.Println(iv.Out, "share of a consumer group's records while the in-cluster consumer keeps the")
+	ioutil.Println(iv.Out, "rest. Enabling installs the tp-kafka provider next to the traffic-manager: the")
+	ioutil.Println(iv.Out, "KafkaSplit and KafkaRoute CustomResourceDefinitions, a Deployment, and")
+	ioutil.Println(iv.Out, "admission webhooks. Nothing changes for a workload until a KafkaSplit is")
+	ioutil.Println(iv.Out, "declared for it.")
+
+	switch releaseEnables := iv.Facts.Release.Installed && iv.Facts.Release.Values.KafkaEnabled(); {
+	case releaseEnables:
+		ioutil.Println(iv.Out, "The installed traffic-manager already enables the Kafka provider.")
+	case iv.Facts.Kafka.CRDs.Verdict == VerdictYes:
+		ioutil.Println(iv.Out, "The Kafka CRDs are already present in the cluster.")
+	}
+	if iv.Facts.Privileges.Kafka.Verdict == VerdictNo {
+		var first string
+		if len(iv.Facts.Privileges.MissingKafka) > 0 {
+			first = iv.Facts.Privileges.MissingKafka[0]
+		}
+		ioutil.Println(iv.Out, fmt.Sprintf(
+			"Installing the provider needs privileges you lack (%s); a yes still writes the values for an admin to apply.", first))
+	}
+}
+
+// kafkaFailurePolicyDefault picks the failure-policy default from the
+// installed release's effective value when it parses, else Fail.
+func (iv *Interviewer) kafkaFailurePolicyDefault() string {
+	if fp, err := ParseKafkaFailurePolicy(deref(iv.effective.Kafka.Webhook.FailurePolicy)); err == nil {
+		return fp
+	}
+	return KafkaFailurePolicyFail
+}
+
+// kafkaFailurePolicyIndex maps a Kafka failure policy to its 1-based choice
+// index.
+func kafkaFailurePolicyIndex(s string) int {
+	if s == KafkaFailurePolicyIgnore {
+		return 2
+	}
+	return 1
+}
+
+// kafkaFailurePolicyChoice returns the Kafka failure policy at the given
+// 1-based choice index.
+func kafkaFailurePolicyChoice(idx int) string {
+	return [...]string{KafkaFailurePolicyFail, KafkaFailurePolicyIgnore}[idx-1]
+}
+
+// askKafkaFailurePolicy presents the Kafka webhook failure-policy two-way
+// choice, defaulting per kafkaFailurePolicyDefault.
+func (iv *Interviewer) askKafkaFailurePolicy() (string, error) {
+	def := kafkaFailurePolicyIndex(iv.kafkaFailurePolicyDefault())
+	if iv.NonInteractive {
+		return kafkaFailurePolicyChoice(def), nil
+	}
+
+	ioutil.Println(iv.Out, "While the Kafka provider is down, what should happen to Pods created in")
+	ioutil.Println(iv.Out, "namespaces that hold a KafkaSplit?")
+	ioutil.Println(iv.Out, "  1) Fail: refuse the Pod until the provider is back (a Pod admitted without")
+	ioutil.Println(iv.Out, "     its shadow configuration would consume the source group beside the splitter)")
+	ioutil.Println(iv.Out, "  2) Ignore: admit the Pod unchanged, so it may consume the source group")
+	ioutil.Println(iv.Out, "     beside the splitter")
+	choice, err := iv.askChoice(fmt.Sprintf("Choose 1-2 [%d]: ", def), 2, def)
+	if err != nil {
+		return "", err
+	}
+	return kafkaFailurePolicyChoice(choice), nil
+}
+
+// kafkaReplicasDefault picks the replica-count default: the installed
+// release's own effective replica count when it enables Kafka, else 1 on a
+// single-node cluster, else the chart's own default, else 2.
+func (iv *Interviewer) kafkaReplicasDefault() int {
+	switch {
+	case iv.Facts.Release.Installed && iv.effective.KafkaEnabled() && deref(iv.effective.Kafka.Replicas) >= 1:
+		return int(deref(iv.effective.Kafka.Replicas))
+	case iv.Facts.NodeAgent.TotalNodes == 1:
+		return 1
+	case deref(iv.effective.Kafka.Replicas) >= 1:
+		return int(deref(iv.effective.Kafka.Replicas))
+	default:
+		return 2
+	}
+}
+
+// askKafkaReplicas asks for the Kafka provider's replica count, defaulting
+// per kafkaReplicasDefault.
+func (iv *Interviewer) askKafkaReplicas() (int32, error) {
+	def := iv.kafkaReplicasDefault()
+	if !iv.NonInteractive {
+		ioutil.Println(iv.Out, "The provider runs two replicas for leader failover; one is enough on a single-node cluster.")
+	}
+	n, err := iv.askInt(fmt.Sprintf("Kafka provider replicas [%d]: ", def), 1, def)
+	if err != nil {
+		return 0, err
+	}
+	return int32(n), nil
+}
+
 // askManagedScope presents the numbered managed-scope choice, defaulting to a
 // namespace list when the probes concluded that a cluster-wide install is
 // impossible.
@@ -726,6 +915,25 @@ func (iv *Interviewer) askChoice(prompt string, limit, def int) (int, error) {
 			return n, true
 		}
 		return 0, false
+	}, retry)
+}
+
+// askInt asks for a whole number of at least minVal, taking def on an empty
+// line or when NonInteractive.
+func (iv *Interviewer) askInt(prompt string, minVal, def int) (int, error) {
+	if iv.NonInteractive {
+		return def, nil
+	}
+	retry := fmt.Sprintf("Please answer a whole number of at least %d.", minVal)
+	return askUntilValid(iv, prompt, func(line string) (int, bool) {
+		if line == "" {
+			return def, true
+		}
+		n, err := strconv.Atoi(line)
+		if err != nil || n < minVal {
+			return 0, false
+		}
+		return n, true
 	}, retry)
 }
 

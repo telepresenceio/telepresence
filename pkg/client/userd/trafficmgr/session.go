@@ -120,7 +120,8 @@ type session struct {
 	managerName string
 
 	// version reported by the manager
-	managerVersion semver.Version
+	managerVersion         semver.Version
+	managerKafkaIntercepts bool
 
 	// The identifier for this daemon
 	daemonID *daemon.Identifier
@@ -363,6 +364,12 @@ func (s *session) managerConnection() *grpc.ClientConn {
 	return s.managerConn
 }
 
+func (s *session) managerKafkaInterceptsSnapshot() bool {
+	s.managerLock.RLock()
+	defer s.managerLock.RUnlock()
+	return s.managerKafkaIntercepts
+}
+
 func (s *session) currentManagerGeneration() uint64 {
 	s.managerLock.RLock()
 	defer s.managerLock.RUnlock()
@@ -413,7 +420,7 @@ func connectMgr(
 ) (*session, error) {
 	cfg := client.GetConfig(cluster)
 	mgrNs := k8s.GetManagerNamespace(cluster)
-	conn, managerName, managerVersion, err := cluster.ConnectToManager(timeoutCtx, mgrNs)
+	conn, managerName, managerVersion, managerInfo, err := cluster.ConnectToManagerWithInfo(timeoutCtx, mgrNs)
 	if err != nil {
 		return nil, err
 	}
@@ -481,36 +488,37 @@ func connectMgr(
 	}
 
 	sess := &session{
-		Cluster:            cluster,
-		service:            service,
-		installID:          installID,
-		daemonID:           daemonID,
-		clientID:           clientID,
-		managerConn:        conn,
-		managerName:        managerName,
-		managerVersion:     managerVersion,
-		sessionInfo:        si,
-		currentIngests:     xsync.NewMap[ingestKey, *ingest](),
-		ingestTracker:      newPodAccessTracker(),
-		workloads:          make(map[string]map[workloadInfoKey]workloadInfo),
-		interceptWaiters:   make(map[string]*awaitIntercept),
-		isPodDaemon:        cr.IsPodDaemon,
-		subnetViaWorkloads: cr.SubnetViaWorkloads,
-		podRelay:           newPodRelay(),
+		Cluster:                cluster,
+		service:                service,
+		installID:              installID,
+		daemonID:               daemonID,
+		clientID:               clientID,
+		managerConn:            conn,
+		managerName:            managerName,
+		managerVersion:         managerVersion,
+		managerKafkaIntercepts: managerInfo.GetKafkaIntercepts(),
+		sessionInfo:            si,
+		currentIngests:         xsync.NewMap[ingestKey, *ingest](),
+		ingestTracker:          newPodAccessTracker(),
+		workloads:              make(map[string]map[workloadInfoKey]workloadInfo),
+		interceptWaiters:       make(map[string]*awaitIntercept),
+		isPodDaemon:            cr.IsPodDaemon,
+		subnetViaWorkloads:     cr.SubnetViaWorkloads,
+		podRelay:               newPodRelay(),
 	}
 	sess.Context = withSession(sess.Context, sess)
 	return sess, nil
 }
 
 func (s *session) reconnectManager(failedGeneration uint64) error {
-	return s.reconnectManagerWith(failedGeneration, func(ctx context.Context) (*grpc.ClientConn, string, semver.Version, error) {
-		return s.ConnectToManager(ctx, k8s.GetManagerNamespace(s))
+	return s.reconnectManagerWith(failedGeneration, func(ctx context.Context) (*grpc.ClientConn, string, semver.Version, *manager.VersionInfo2, error) {
+		return s.ConnectToManagerWithInfo(ctx, k8s.GetManagerNamespace(s))
 	})
 }
 
 func (s *session) reconnectManagerWith(
 	failedGeneration uint64,
-	connect func(context.Context) (*grpc.ClientConn, string, semver.Version, error),
+	connect func(context.Context) (*grpc.ClientConn, string, semver.Version, *manager.VersionInfo2, error),
 ) (returnedErr error) {
 	s.managerReconnectLock.Lock()
 	defer s.managerReconnectLock.Unlock()
@@ -525,7 +533,7 @@ func (s *session) reconnectManagerWith(
 	tc, cancel := tos.TimeoutContext(s, client.TimeoutTrafficManagerConnect)
 	defer cancel()
 
-	conn, managerName, managerVersion, err := connect(tc)
+	conn, managerName, managerVersion, managerInfo, err := connect(tc)
 	if err != nil {
 		return err
 	}
@@ -534,7 +542,6 @@ func (s *session) reconnectManagerWith(
 			conn.Close()
 		}
 	}()
-
 	// Agents is intentionally left empty: traffic-agents hold their own manager
 	// sessions and re-arrive on their own within seconds of a manager restart;
 	// intercepts are restored in full below.
@@ -566,6 +573,7 @@ func (s *session) reconnectManagerWith(
 	s.managerConn = conn
 	s.managerName = managerName
 	s.managerVersion = managerVersion
+	s.managerKafkaIntercepts = managerInfo.GetKafkaIntercepts()
 	s.managerGeneration++
 	s.managerLock.Unlock()
 	if old != nil {
@@ -1285,8 +1293,9 @@ func (s *session) status(ctx context.Context, initial bool) (*rpc.ConnectInfo, e
 		Ingests:          s.getCurrentIngests(),
 		Intercepts:       &manager.InterceptInfoSnapshot{Intercepts: s.getCurrentInterceptInfos()},
 		ManagerVersion: &manager.VersionInfo2{
-			Name:    managerName,
-			Version: "v" + managerVersion.String(),
+			Name:            managerName,
+			Version:         "v" + managerVersion.String(),
+			KafkaIntercepts: s.managerKafkaInterceptsSnapshot(),
 		},
 		ManagerNamespace:   k8s.GetManagerNamespace(s),
 		SubnetViaWorkloads: s.subnetViaWorkloads,

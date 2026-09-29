@@ -101,6 +101,27 @@ message PortMapping {
   int32 to = 2;
 }
 
+message KafkaHeader {
+  string name = 1;
+  bytes value = 2;
+}
+
+// KafkaIntercept requests personal routes for every enabled KafkaSplit that
+// contains the intercepted workload.
+message KafkaIntercept {
+  bool only = 1;
+  repeated KafkaHeader headers = 2;
+  bytes key = 3;
+  bytes key_prefix = 4;
+}
+
+// KafkaRoute identifies one durable provider route attached to an intercept.
+message KafkaRoute {
+  string name = 1;
+  string split = 2;
+  map<string, string> environment = 3;
+}
+
 // InterceptSpec contains static information about an intercept. It is shared by
 // all running agent instances.
 message InterceptSpec {
@@ -220,6 +241,9 @@ message InterceptSpec {
   // traffic-manager to have node-agent mode enabled.
   bool node_agent = 32;
 
+  // Non-nil asks the manager to attach every matching enabled KafkaSplit.
+  KafkaIntercept kafka = 33;
+
   reserved 9; // used to be former mechanism_args
 
   // Used to be mount_point and only utilized when passing the spec between
@@ -307,6 +331,9 @@ message InterceptInfo {
 
   // Map of mount path -> MountPolicy
   map<string, int32> mounts = 22;
+
+  // Durable Kafka routes attached to this intercept.
+  repeated KafkaRoute kafka_routes = 23;
 
   // Timestamp for last modification made by traffic-manager
   google.protobuf.Timestamp modified_at = 21;
@@ -577,6 +604,9 @@ message VersionInfo2 {
   // to use as per-RPC authorization metadata. Only the traffic-manager
   // populates this.
   uint32 auth_x509_port = 5;
+
+  // Whether this manager can attach Kafka routes to ordinary intercepts.
+  bool kafka_intercepts = 6;
 }
 
 // TunnelMessage is a message sent over a Tunnel. First byte indicates type of message

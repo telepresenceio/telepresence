@@ -159,12 +159,12 @@ func TestReconnectManagerCoalescesSameGeneration(t *testing.T) {
 	firstConnectStarted := make(chan struct{})
 	releaseFirstConnect := make(chan struct{})
 	var connects atomic.Int32
-	connect := func(context.Context) (*grpc.ClientConn, string, semver.Version, error) {
+	connect := func(context.Context) (*grpc.ClientConn, string, semver.Version, *manager.VersionInfo2, error) {
 		if connects.Add(1) == 1 {
 			close(firstConnectStarted)
 			<-releaseFirstConnect
 		}
-		return newConn, "manager", semver.Version{Major: 2, Minor: 32}, nil
+		return newConn, "manager", semver.Version{Major: 2, Minor: 32}, nil, nil
 	}
 
 	errs := make(chan error, 2)
@@ -194,11 +194,11 @@ func TestReconnectManagerRetriesAfterFailedRepair(t *testing.T) {
 
 	var connects atomic.Int32
 	expectedErr := errors.New("connect failed")
-	connect := func(context.Context) (*grpc.ClientConn, string, semver.Version, error) {
+	connect := func(context.Context) (*grpc.ClientConn, string, semver.Version, *manager.VersionInfo2, error) {
 		if connects.Add(1) == 1 {
-			return nil, "", semver.Version{}, expectedErr
+			return nil, "", semver.Version{}, nil, expectedErr
 		}
-		return newConn, "manager", semver.Version{Major: 2, Minor: 32}, nil
+		return newConn, "manager", semver.Version{Major: 2, Minor: 32}, nil, nil
 	}
 
 	require.ErrorIs(t, s.reconnectManagerWith(failedGeneration, connect), expectedErr)
