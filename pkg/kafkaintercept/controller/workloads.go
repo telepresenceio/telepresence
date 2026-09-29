@@ -90,6 +90,9 @@ func (r *SplitReconciler) validateWorkloadEnvironment(
 		if err != nil {
 			return 0, err
 		}
+		if template.Labels["app.kubernetes.io/name"] == runtimeconfig.ProviderName {
+			return 0, fmt.Errorf("%s %s has reserved Pod label app.kubernetes.io/name=%s", workload.Kind, workload.Name, runtimeconfig.ProviderName)
+		}
 		desired += replicas
 		container := findContainer(template.Spec.Containers, split.Spec.Container)
 		if container == nil {
