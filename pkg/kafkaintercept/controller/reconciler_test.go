@@ -71,6 +71,25 @@ func TestSplitReconcilerSnapshotsWorkload(t *testing.T) {
 	}}, got.Status.Workloads)
 }
 
+func TestSplitRejectsWorkloadWithProviderPodLabel(t *testing.T) {
+	scheme := runtime.NewScheme()
+	require.NoError(t, appsv1.AddToScheme(scheme))
+	require.NoError(t, api.AddToScheme(scheme))
+	split := validControllerSplit()
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout", Namespace: split.Namespace},
+		Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app.kubernetes.io/name": runtimeconfig.ProviderName}},
+		}},
+	}
+	reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(deployment).Build()
+	reconciler := &SplitReconciler{base: base{Client: reader}, Workloads: reader}
+	_, err := reconciler.validateWorkloadEnvironment(t.Context(), split, []api.WorkloadReference{{
+		Kind: "Deployment", Name: deployment.Name,
+	}})
+	require.ErrorContains(t, err, "reserved Pod label app.kubernetes.io/name=tp-kafka")
+}
+
 func TestReconcileLabelsSplitNamespace(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, appsv1.AddToScheme(scheme))

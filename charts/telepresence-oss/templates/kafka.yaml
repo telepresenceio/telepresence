@@ -9,9 +9,6 @@
 {{- $genCert := genSignedCert $name nil (list (printf "%s.%s" $name $namespace) $serviceDNS) 365 $genCA }}
 {{- $secretData := (lookup "v1" "Secret" $namespace $secretName).data }}
 {{- $podNamespaceSelector := include "traffic-manager.namespaceSelector" $ | fromJson }}
-{{- $podNamespaceExpressions := default (list) $podNamespaceSelector.matchExpressions }}
-{{- $_ := set $podNamespaceSelector "matchExpressions" (append $podNamespaceExpressions (dict
-      "key" "kubernetes.io/metadata.name" "operator" "NotIn" "values" (list $namespace))) }}
 {{- $_ := set $podNamespaceSelector "matchLabels" (merge (dict) (default (dict) $podNamespaceSelector.matchLabels) (dict
       "kafka.telepresence.io/splits" "true")) }}
 {{- $kafkaLabels := merge (deepCopy (.Values.labels | default dict)) (dict
@@ -285,6 +282,11 @@ webhooks:
     failurePolicy: {{ .Values.kafka.webhook.failurePolicy }}
     namespaceSelector:
       {{- toYaml $podNamespaceSelector | nindent 6 }}
+    objectSelector:
+      matchExpressions:
+        - key: app.kubernetes.io/name
+          operator: NotIn
+          values: [{{ $name }}]
     reinvocationPolicy: IfNeeded
     rules:
       - apiGroups: [""]
