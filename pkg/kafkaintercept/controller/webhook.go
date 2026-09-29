@@ -29,11 +29,10 @@ func RegisterWebhooks(
 	server interface{ Register(string, http.Handler) },
 	reader client.Reader,
 	workloads client.Reader,
-	providerNamespace string,
 ) {
 	server.Register("/split", &admission.Webhook{Handler: splitValidator{}})
 	server.Register("/route", &admission.Webhook{Handler: routeValidator{}})
-	server.Register("/pod", &admission.Webhook{Handler: podMutator{reader: reader, workloads: workloads, providerNamespace: providerNamespace}})
+	server.Register("/pod", &admission.Webhook{Handler: podMutator{reader: reader, workloads: workloads}})
 }
 
 type splitValidator struct{}
@@ -66,15 +65,11 @@ func (routeValidator) Handle(_ context.Context, request admission.Request) admis
 }
 
 type podMutator struct {
-	reader            client.Reader
-	workloads         client.Reader
-	providerNamespace string
+	reader    client.Reader
+	workloads client.Reader
 }
 
 func (m podMutator) Handle(ctx context.Context, request admission.Request) admission.Response {
-	if request.Namespace == m.providerNamespace {
-		return admission.Allowed("Kafka provider namespace is excluded")
-	}
 	pod := new(corev1.Pod)
 	if err := json.Unmarshal(request.Object.Raw, pod); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
