@@ -153,7 +153,7 @@ func runController(args []string) error {
 	if err := routeReconciler.SetupWithManager(manager); err != nil {
 		return fmt.Errorf("register KafkaRoute controller: %w", err)
 	}
-	controller.RegisterWebhooks(manager.GetWebhookServer(), manager.GetClient(), nsInformers, *providerNamespace)
+	controller.RegisterWebhooks(manager.GetWebhookServer(), manager.GetClient(), nsInformers)
 	if err := manager.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		return err
 	}

@@ -193,7 +193,7 @@ func TestWorkloadTemplateAdapters(t *testing.T) {
 	}
 }
 
-func TestPodMutatorComposesActiveSplits(t *testing.T) {
+func TestPodMutatorRedirectsWorkloadInProviderNamespace(t *testing.T) {
 	scheme := runtime.NewScheme()
 	require.NoError(t, appsv1.AddToScheme(scheme))
 	require.NoError(t, corev1.AddToScheme(scheme))
@@ -237,19 +237,19 @@ func TestPodMutatorComposesActiveSplits(t *testing.T) {
 	}})
 	require.True(t, response.Allowed, response.Result)
 	require.NotEmpty(t, response.Patches)
-}
 
-func TestPodMutatorExcludesProviderNamespace(t *testing.T) {
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	require.NoError(t, api.AddToScheme(scheme))
-	reader := fake.NewClientBuilder().WithScheme(scheme).Build()
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "tp-kafka-0", Namespace: "ambassador"}}
-	raw, err := json.Marshal(pod)
+	providerPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name: "tp-kafka-0", Namespace: "shop",
+		OwnerReferences: []metav1.OwnerReference{{
+			APIVersion: "apps/v1", Kind: "Deployment", Name: "tp-kafka", UID: types.UID("provider-uid"),
+			Controller: ptr.To(true),
+		}},
+	}}
+	raw, err = json.Marshal(providerPod)
 	require.NoError(t, err)
-	response := (podMutator{reader: reader, providerNamespace: "ambassador"}).Handle(
+	response = (podMutator{reader: reader, workloads: reader}).Handle(
 		t.Context(), admission.Request{AdmissionRequest: admissionv1.AdmissionRequest{
-			Namespace: "ambassador", Object: runtime.RawExtension{Raw: raw},
+			Namespace: "shop", Object: runtime.RawExtension{Raw: raw},
 		}},
 	)
 	require.True(t, response.Allowed, response.Result)
