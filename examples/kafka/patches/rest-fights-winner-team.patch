@@ -1,0 +1,42 @@
+diff --git a/rest-fights/src/main/java/io/quarkus/sample/superheroes/fight/service/FightService.java b/rest-fights/src/main/java/io/quarkus/sample/superheroes/fight/service/FightService.java
+--- a/rest-fights/src/main/java/io/quarkus/sample/superheroes/fight/service/FightService.java
++++ b/rest-fights/src/main/java/io/quarkus/sample/superheroes/fight/service/FightService.java
+@@ -1,5 +1,6 @@
+ package io.quarkus.sample.superheroes.fight.service;
+ 
++import java.nio.charset.StandardCharsets;
+ import java.time.Duration;
+ import java.time.Instant;
+ import java.time.temporal.ChronoUnit;
+@@ -16,6 +17,7 @@
+ import org.eclipse.microprofile.faulttolerance.Retry;
+ import org.eclipse.microprofile.faulttolerance.Timeout;
+ import org.eclipse.microprofile.reactive.messaging.Channel;
++import org.eclipse.microprofile.reactive.messaging.Message;
+ import org.eclipse.microprofile.rest.client.inject.RestClient;
+ 
+ import io.quarkus.logging.Log;
+@@ -44,6 +46,8 @@
+ import io.smallrye.faulttolerance.api.CircuitBreakerName;
+ import io.smallrye.mutiny.Uni;
+ import io.smallrye.reactive.messaging.MutinyEmitter;
++import io.smallrye.reactive.messaging.kafka.api.OutgoingKafkaRecordMetadata;
++import org.apache.kafka.common.header.internals.RecordHeader;
+ 
+ /**
+  * Business logic for the Fight service
+@@ -302,7 +306,13 @@
+ 		return Fight.persist(fight)
+       .replaceWith(fight)
+       .map(this.fightMapper::toSchema)
+-      .invoke(this.emitter::sendAndForget)
++      .invoke(event -> this.emitter.sendMessageAndForget(
++        Message.of(event).addMetadata(
++          OutgoingKafkaRecordMetadata.<String>builder()
++            .addHeaders(new RecordHeader("winner-team", fight.winnerTeam.getBytes(StandardCharsets.UTF_8)))
++            .build()
++        )
++      ))
+       .replaceWith(fight);
+ 	}
+ 
