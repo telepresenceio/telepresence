@@ -361,8 +361,8 @@ func (il *InfoLoader[T]) KeepInfoAlive(file string) error {
 	daemonFile := filepath.Join(filelocation.AppUserCacheDir(il.ctx), il.dirName, file)
 	ticker := time.NewTicker(keepAliveInterval)
 	defer ticker.Stop()
-	now := time.Now()
 	for {
+		now := time.Now()
 		if err := os.Chtimes(daemonFile, now, now); err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				// File is removed, so stop trying to update its timestamps
@@ -376,7 +376,7 @@ func (il *InfoLoader[T]) KeepInfoAlive(file string) error {
 			clog.Debugf(il.ctx, "Deleting daemon info %s because context was cancelled", file)
 			_ = il.DeleteInfo(file)
 			return nil
-		case now = <-ticker.C:
+		case <-ticker.C:
 		}
 	}
 }
