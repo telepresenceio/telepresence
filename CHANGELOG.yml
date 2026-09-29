@@ -24,6 +24,20 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.32.2
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Root daemon no longer shuts down after a brief stall
+        body: >-
+          After a stall of more than six seconds, the root daemon could
+          mistake its own heartbeat for a stale one and shut down. This was
+          seen mainly on Windows. The user daemon then retried the lost
+          connection forever while the session still looked connected. The
+          heartbeat is now reliable, and if the root daemon exits, the user
+          daemon quits as it does on <code>telepresence quit -s</code>. Run
+          <code>telepresence connect</code> to start both daemons again.
+        docs: https://github.com/telepresenceio/telepresence/issues/4332
   - version: 2.32.1
     date: 2026-09-25
     notes:
