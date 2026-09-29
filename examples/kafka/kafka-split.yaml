@@ -1,0 +1,29 @@
+apiVersion: kafka.telepresence.io/v1alpha1
+kind: KafkaSplit
+metadata:
+  name: hero-stats
+  namespace: superheroes
+spec:
+  desiredState: Enabled
+  workloadSelector:
+    matchLabels:
+      app: event-statistics
+  container: event-statistics
+  connection:
+    bootstrapServers:
+      - fights-kafka:9092
+  source:
+    group: REPLACE_WITH_VERIFIED_GROUP
+    topics:
+      - fights
+    offsetReset: earliest
+  application:
+    topicEnv: MP_MESSAGING_INCOMING_FIGHTS_TOPIC
+    topicSeparator: ","
+    groupEnv: MP_MESSAGING_INCOMING_FIGHTS_GROUP_ID
+    isolationLevelEnv: MP_MESSAGING_INCOMING_FIGHTS_ISOLATION_LEVEL
+  splitter:
+    replicas: 1
+  shadows:
+    mode: Managed
+    managed: {}
