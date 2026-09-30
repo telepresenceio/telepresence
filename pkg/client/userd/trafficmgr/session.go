@@ -1501,9 +1501,9 @@ func (s *session) MarkClosing() {
 	s.closing.Store(true)
 }
 
-// isRootDaemonRunning reports whether an out-of-process root daemon is still running,
-// either as a managed service or with a live info file. An error other than the info
-// file not existing is treated as the daemon still being there.
+// isRootDaemonRunning reports whether daemon.DialRootDaemon can still find a root daemon:
+// a loadable managed service info file, or else a live per-user info file. An error
+// other than the per-user file not existing counts as running.
 func isRootDaemonRunning(ctx context.Context) bool {
 	if _, err := daemon.LoadRootServiceInfo(ctx); err == nil {
 		return true
