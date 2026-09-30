@@ -29,6 +29,11 @@ type TP struct {
 // failure instead of stalling the run until go test's timeout.
 const defaultInvocationTimeout = 2 * time.Minute
 
+// pipeWaitDelay bounds how long Wait keeps reading stdout and stderr after
+// the process has exited or been killed. A child that inherited the pipes,
+// such as a docker client, would otherwise keep Wait from returning.
+const pipeWaitDelay = 10 * time.Second
+
 // Run executes the binary with args and returns its captured stdout and
 // stderr.
 func (tp *TP) Run(ctx context.Context, args ...string) (stdout, stderr string, err error) {
@@ -40,6 +45,7 @@ func (tp *TP) Run(ctx context.Context, args ...string) (stdout, stderr string, e
 	cmd := exec.CommandContext(ctx, tp.Exe, args...)
 	cmd.Env = tp.Env
 	cmd.Dir = tp.Dir
+	cmd.WaitDelay = pipeWaitDelay
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -80,6 +86,7 @@ func (tp *TP) Start(ctx context.Context, args ...string) (*Proc, error) {
 	cmd := exec.CommandContext(ctx, tp.Exe, args...)
 	cmd.Env = tp.Env
 	cmd.Dir = tp.Dir
+	cmd.WaitDelay = pipeWaitDelay
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
