@@ -51,11 +51,16 @@ for the full picture.
 
 ## Sponsors
 
-Thank you to the sponsors who support the development of Telepresence:
+Telepresence is free and open source, and is kept that way by its sponsors.
+Sponsorship pays for fast issue responses, prompt security fixes, and new
+features. If your team relies on Telepresence, please consider
+[sponsoring the project](https://github.com/sponsors/telepresenceio), or
+[get in touch](https://github.com/telepresenceio/telepresence/discussions/4334)
+about a corporate sponsorship.
+
+Thank you to our past sponsors:
 
 - [OpenAI](https://openai.com)
-
-You can support the project too, via [GitHub Sponsors](https://github.com/sponsors/telepresenceio).
 
 ## Contributing
 
