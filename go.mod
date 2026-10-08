@@ -41,7 +41,7 @@ require (
 	github.com/telepresenceio/go-fuseftp v1.1.0
 	github.com/telepresenceio/go-fuseftp/rpc v1.0.1
 	github.com/telepresenceio/telepresence/cmd/cobraparser/v2 v2.0.0-20261007195240-b4391b29d1e1
-	github.com/telepresenceio/telepresence/rpc/v2 v2.32.1
+	github.com/telepresenceio/telepresence/rpc/v2 v2.32.2
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
 	golang.org/x/crypto v0.57.0
