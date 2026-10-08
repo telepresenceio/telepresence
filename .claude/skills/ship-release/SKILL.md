@@ -10,7 +10,7 @@ End-to-end driver for releasing Telepresence. Picks up where `prepare-release` l
 
 1. Telepresence release PR (CI green + `regression` green)
 2. Docs PR in `../telepresence.io`
-3. Tag push, Releases workflow, merge of both PRs.
+3. Tag push, Releases workflow, merge of both PRs, and (GA only) removal of the release candidates from the releases page and then from GHCR.
 
 This is **user-only** (`disable-model-invocation: true`). A release is publicly visible and partially irreversible (tags push to GitHub, Homebrew updates for GA). Claude must never invoke this on its own.
 
@@ -225,6 +225,61 @@ gh pr merge "$tp_branch" --merge
 
 Verify each merged: `gh pr view "$tp_branch" --json state` should report `MERGED`.
 
+### 3.4 Remove the release candidates from the releases page — **GA versions only**
+
+Delete the GitHub releases of the shipped version's pre-releases, so the
+releases page lists only GA versions:
+
+```
+gh release list --limit 300 --json tagName,isPrerelease \
+  --jq '.[] | select(.isPrerelease) | .tagName'
+```
+
+Show the user the `vX.Y.Z-rc.N` and `vX.Y.Z-test.N` releases found, then
+delete each with `gh release delete <tag> --yes`. Do not pass
+`--cleanup-tag`: the git tags, including the `rpc/` ones, stay.
+Do this before 3.5, so the releases page never lists a release whose
+images are gone.
+
+### 3.5 Remove the release candidates from GHCR — **GA versions only**
+
+Once the GA release workflow has completed, delete the pre-release
+versions of `$tp_version` from the `tel2`, `telepresence`,
+`telepresence-oss` and `route-controller` container packages in
+`ghcr.io/telepresenceio`. Skip this step for pre-release versions.
+
+The `gh` token needs the `read:packages` and `delete:packages` scopes.
+If `gh auth status` lacks them, ask the user to run
+`! gh auth refresh -h github.com -s read:packages,delete:packages`.
+
+1. List every version of each package:
+   ```
+   gh api --paginate "orgs/telepresenceio/packages/container/<pkg>/versions?per_page=100" \
+     --jq '.[] | {id, name, tags: .metadata.container.tags}'
+   ```
+2. **Delete set:** versions tagged `X.Y.Z-rc.N` or `X.Y.Z-test.N` for the
+   shipped `X.Y.Z`, plus the untagged manifests listed in those versions'
+   indexes (`skopeo inspect --raw docker://ghcr.io/telepresenceio/<pkg>@<digest>`,
+   then `.manifests[].digest`).
+3. **Keep set:** every version with any tag that is not an rc or test tag
+   of `X.Y.Z` (GA tags, `artifacthub.io`, other pre-releases such as
+   `breland` builds), plus every manifest listed in their indexes. Remove
+   any keep-set digest from the delete set. Untagged per-architecture and
+   attestation manifests of a multi-arch GA image are listed in its index;
+   deleting them breaks the GA image.
+4. Show the user the per-package counts and the tags to be deleted, and
+   wait for confirmation.
+5. Write the deletions as an explicit script, one line per version with
+   its package, version ID and tag, so the user can review it and run it
+   with `!`:
+   ```
+   gh api -X DELETE "orgs/telepresenceio/packages/container/<pkg>/versions/<id>"
+   ```
+   Delete tagged versions before their untagged children. Loop over IDs
+   with `while read`, not an unquoted variable: zsh does not word-split.
+6. Verify: no `X.Y.Z-rc.*` or `X.Y.Z-test.*` tags remain, and every
+   manifest of the `X.Y.Z` index in each image package still resolves.
+
 ## Long-wait strategy
 
 - Anything under 5 min → don't sleep; just poll once.
@@ -249,4 +304,5 @@ Each wake-up: re-fetch state, decide green/red/still-waiting, schedule the next 
 - Merge PRs as squash or rebase — both repos require merge commits.
 - Trigger `regression` by any means other than the push itself or a re-run of its workflow run.
 - Approve the `macos-signing` environment programmatically — that requires a human reviewer.
+- Delete a GHCR package version that carries a GA tag, or a manifest listed in a GA index.
 - Force-push or delete the release branch.
