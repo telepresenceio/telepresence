@@ -190,7 +190,7 @@ func (kc *Cluster) connectKnownNameWithBackoff(dialCtx context.Context, pap *por
 func knownNameExhaustedError(podName string) error {
 	return errcat.User.Newf(
 		"could not reach the traffic-manager pod %q directly, and the current kubeconfig lacks the RBAC to discover it via the %q service; "+
-			"if this is a pre-2.33 installation, an admin can enable the legacy discovery grants with the Helm value clientRbac.legacyAccess",
+			"if this is a pre-2.32 installation, an admin can enable the legacy discovery grants with the Helm value clientRbac.legacyAccess",
 		podName, trafficManagerServiceName)
 }
 

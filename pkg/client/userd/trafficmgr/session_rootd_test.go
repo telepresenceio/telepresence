@@ -104,7 +104,96 @@ func TestRootDaemonActivityWatcherReconnectsRootDaemon(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestReconnectRootDaemonStopsWhenRootDaemonIsGone(t *testing.T) {
+	quit, dialCount := startFailingRootDaemonReconnect(t, false)
+	select {
+	case <-quit:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for the user daemon to quit")
+	}
+	require.Equal(t, int32(2), dialCount.Load())
+}
+
+func TestReconnectRootDaemonKeepsRetryingWhileRootDaemonIsRunning(t *testing.T) {
+	quit, dialCount := startFailingRootDaemonReconnect(t, true)
+	select {
+	case <-quit:
+		t.Fatal("the user daemon quit while the root daemon was running")
+	case <-time.After(time.Second):
+	}
+	require.Greater(t, dialCount.Load(), int32(2))
+}
+
+// startFailingRootDaemonReconnect connects a session to a root daemon whose activity
+// watcher fails at once, and fails every later dial. The returned channel closes when
+// the session asks the user daemon to quit.
+func startFailingRootDaemonReconnect(t *testing.T, running bool) (<-chan struct{}, *atomic.Int32) {
+	const sessionID = "test-session"
+
+	ctx, cancel := context.WithCancel(client.WithConfig(context.Background(), client.GetDefaultConfig()))
+	t.Cleanup(cancel)
+
+	first := &rootDaemonReconnectTestServer{
+		name:        "first",
+		sessionID:   sessionID,
+		activityErr: status.Error(codes.Unavailable, "rootd exited"),
+	}
+	quitter := &quitTestConnector{quit: make(chan struct{})}
+	dialCount := &atomic.Int32{}
+	dialRootDaemon := func(_ context.Context, _ bool) (*grpc.ClientConn, error) {
+		if n := dialCount.Add(1); n > 1 {
+			return nil, fmt.Errorf("root daemon dial %d failed", n)
+		}
+		conn, cleanup, err := dialTestRootDaemon(first)
+		if err != nil {
+			return nil, err
+		}
+		t.Cleanup(cleanup)
+		return conn, nil
+	}
+
+	s := &session{
+		Cluster: &k8s.Cluster{
+			Kubeconfig: &k8s.Kubeconfig{
+				Context:     ctx,
+				Namespace:   "default",
+				KubeContext: "test",
+				Server:      "https://cluster.example",
+			},
+		},
+		service:           quitTestService{quitter: quitter},
+		sessionInfo:       &manager.SessionInfo{SessionId: sessionID},
+		dialRootDaemon:    dialRootDaemon,
+		rootDaemonRunning: func(context.Context) bool { return running },
+	}
+	nc := &rootdRpc.NetworkConfig{
+		Namespace: "default",
+		Session:   s.sessionInfo,
+	}
+	require.NoError(t, s.connectRootDaemon(ctx, nc, nil, false))
+	return quitter.quit, dialCount
+}
+
 type rootDaemonReconnectTestService struct{}
+
+type quitTestService struct {
+	rootDaemonReconnectTestService
+	quitter *quitTestConnector
+}
+
+func (s quitTestService) ConnectorServer() connectorRpc.ConnectorServer {
+	return s.quitter
+}
+
+type quitTestConnector struct {
+	connectorRpc.UnimplementedConnectorServer
+	quit chan struct{}
+}
+
+func (c *quitTestConnector) Quit(context.Context, *emptypb.Empty) (*rootdRpc.QuitResponse, error) {
+	close(c.quit)
+	return &rootdRpc.QuitResponse{}, nil
+}
 
 func (rootDaemonReconnectTestService) ListenerAddress() netip.AddrPort {
 	return netip.AddrPort{}

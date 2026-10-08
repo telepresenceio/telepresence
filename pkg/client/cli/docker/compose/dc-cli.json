@@ -806,8 +806,8 @@
     },
     {
       "name": "port",
-      "usage": "docker compose port [OPTIONS] SERVICE PRIVATE_PORT",
-      "description": "Print the public port for a port binding",
+      "usage": "docker compose port [OPTIONS] SERVICE [PRIVATE_PORT]",
+      "description": "List port mappings or print the public port for a specific mapping for the service",
       "flags": [
         {
           "name": "dry-run",

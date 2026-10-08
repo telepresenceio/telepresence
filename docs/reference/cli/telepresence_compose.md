@@ -30,7 +30,7 @@ Define and run multi-container applications with Telepresence and Docker
 | [logs](telepresence_compose_logs) | View output from containers |
 | [ls](telepresence_compose_ls) | List running compose projects |
 | [pause](telepresence_compose_pause) | Pause services |
-| [port](telepresence_compose_port) | Print the public port for a port binding |
+| [port](telepresence_compose_port) | List port mappings or print the public port for a specific mapping for the service |
 | [ps](telepresence_compose_ps) | List containers |
 | [publish](telepresence_compose_publish) | Publish compose application |
 | [pull](telepresence_compose_pull) | Pull service images |

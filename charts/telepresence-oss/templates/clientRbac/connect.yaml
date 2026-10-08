@@ -20,7 +20,7 @@ clientRbac.legacyAccess (default true) picks the port-forward path's form:
          manager Service to a pod before connecting.
   false  a single pods/portforward create scoped to pod
          traffic-manager-0 -- the StatefulSet's known pod name -- and
-         nothing else. Only pre-2.33 clients, or an apiPort override that
+         nothing else. Only pre-2.32 clients, or an apiPort override that
          breaks the known-name contract, need the discovery rules.
 */}}
 {{- $requiredGrant := include "telepresence.requiredGrant" $ }}
