@@ -334,7 +334,7 @@ properties:
         description: >-
           Render the legacy discovery and diagnostic grants (services get, pods get/list,
           pods/log get, namespaces get/list/watch) alongside the minimal, name-scoped
-          pods/portforward connect rule. Only pre-2.33 clients, or an install that overrides
+          pods/portforward connect rule. Only pre-2.32 clients, or an install that overrides
           apiPort, need them.
         type: boolean
       namespaces:
