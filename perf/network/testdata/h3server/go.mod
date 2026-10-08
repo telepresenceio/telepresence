@@ -2,7 +2,7 @@ module local
 
 go 1.26.0
 
-require github.com/quic-go/quic-go v0.62.0
+require github.com/quic-go/quic-go v0.63.0
 
 require (
 	github.com/quic-go/qpack v0.6.0 // indirect

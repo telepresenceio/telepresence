@@ -1,10 +1,10 @@
 ---
 title: telepresence compose port
-description: Print the public port for a port binding
+description: List port mappings or print the public port for a specific mapping for the service
 hide_table_of_contents: true
 ---
 
-Print the public port for a port binding
+List port mappings or print the public port for a specific mapping for the service
 
 ### Usage:
 ```
