@@ -61,6 +61,9 @@ func verifyInstall(
 	if values.AuthEnforced() {
 		notes = append(notes, authEnforcedNote(values, auth))
 	}
+	if values.KafkaEnabled() {
+		notes = append(notes, verifyKafka(ctx, ki, managerNamespace)...)
+	}
 	return notes
 }
 

@@ -38,6 +38,15 @@ func PlannedObjects(ctx context.Context, managerNamespace string, values *helm.V
 		}
 		lines = append(lines, fmt.Sprintf("%s %s.%s", kind, obj.GetName(), ns))
 	}
+	if values.KafkaEnabled() {
+		names, err := helm.CRDNames(chrt)
+		if err != nil {
+			return nil, err
+		}
+		for _, name := range names {
+			lines = append(lines, "CustomResourceDefinition "+name)
+		}
+	}
 	sort.Strings(lines)
 	return lines, nil
 }

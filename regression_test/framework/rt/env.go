@@ -34,6 +34,10 @@ type envConfig struct {
 	teardown bool
 	tailLogs bool
 	cover    bool
+
+	// managerKafka is RTEST_MANAGER_KAFKA: force the Kafka provider on for
+	// every suite's manager, regardless of the spec it declared.
+	managerKafka bool
 }
 
 // loadEnv resolves envConfig from the process environment. The shell
@@ -83,7 +87,14 @@ func loadEnv(root string) envConfig {
 		teardown:               ci || os.Getenv("RTEST_TEARDOWN") == "1",
 		tailLogs:               os.Getenv("RTEST_TAIL_LOGS") == "1",
 		cover:                  os.Getenv("RTEST_COVER") == "1",
+		managerKafka:           parseBoolEnv(os.Getenv("RTEST_MANAGER_KAFKA")),
 	}
+}
+
+// parseBoolEnv reports whether v is a truthy RTEST_* flag value: "1" or
+// "true" (case-insensitive).
+func parseBoolEnv(v string) bool {
+	return v == "1" || strings.EqualFold(v, "true")
 }
 
 func parseLabelSet(v string) map[Label]bool {

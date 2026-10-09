@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/netip"
 	"os"
@@ -108,6 +109,9 @@ type service struct {
 	// listener is enabled; an always-empty store is harmless.
 	mintedTokens *auth.MintedTokens
 
+	// kafka is non-nil when the optional Kafka provider is installed.
+	kafka *kafkaAPI
+
 	// x509ClientCA is non-nil only when AUTH_X509_PORT != 0 and authMode is
 	// enforcing, so that a manually set port can't add attack surface in a
 	// permissive cluster.
@@ -154,6 +158,9 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 	ret.dotClusterDomain = "." + ret.clusterInfo.ClusterDomain()
 	ret.serviceNameNs = fmt.Sprintf("%s.%s.", agentconfig.ManagerAppName, ns)
 	ret.serviceNameFQN = fmt.Sprintf("%s.%s.svc%s", agentconfig.ManagerAppName, ns, ret.dotClusterDomain)
+	if env.KafkaInterceptsEnabled {
+		ret.kafka = newKafkaAPI(k8sapi.GetK8sInterface(ctx).Discovery().RESTClient(), env.ClientConnectionTTL)
+	}
 
 	ret.quicCA, err = quictunnel.NewCA()
 	if err != nil {
@@ -206,10 +213,11 @@ func (s *service) InstallID() string {
 // Version returns the version information of the Manager.
 func (s *service) Version(ctx context.Context, _ *empty.Empty) (*rpc.VersionInfo2, error) {
 	vi := &rpc.VersionInfo2{
-		Name:          DisplayName,
-		Version:       version.Version,
-		AuthSupported: s.authMode != auth.ModeDisabled,
-		AuthRequired:  s.authMode == auth.ModeEnforcing,
+		Name:            DisplayName,
+		Version:         version.Version,
+		AuthSupported:   s.authMode != auth.ModeDisabled,
+		AuthRequired:    s.authMode == auth.ModeEnforcing,
+		KafkaIntercepts: s.kafka != nil,
 	}
 	// The port is advertised only when the listener is up and accepting
 	// connections, which NewService guarantees by binding it before any server
@@ -346,14 +354,19 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	if err != nil {
 		return nil, err
 	}
-	st.RestoreIntercepts(ctx, intercepts, now)
+	st.RestoreIntercepts(ctx, intercepts, now, func(intercept *state.Intercept) {
+		if len(intercept.KafkaRoutes) > 0 {
+			s.initializeKafkaAttachment(intercept, intercept.Spec.Namespace, intercept.KafkaRoutes, nil)
+		}
+	})
 	return &empty.Empty{}, nil
 }
 
 // reviewRestoredIntercepts rebuilds each accepted intercept from the
 // client-supplied Spec alone, ignoring any Id, disposition, or other runtime
-// state in the payload. An Unavailable review fails the whole reconnect
-// rather than silently dropping the intercept.
+// state in the payload. An Unavailable authorization result fails the whole
+// reconnect rather than silently dropping the intercept; a failed Kafka
+// route attach only drops the one intercept it belongs to.
 func (s *service) reviewRestoredIntercepts(
 	ctx context.Context, info *rpc.ReconnectClientRequest, now time.Time,
 ) ([]*rpc.InterceptInfo, error) {
@@ -389,13 +402,35 @@ func (s *service) reviewRestoredIntercepts(
 			clog.Infof(ctx, "Not restoring intercept %s: %v", spec.Name, err)
 			continue
 		}
-		accepted = append(accepted, &rpc.InterceptInfo{
-			Id:            fmt.Sprintf("%s:%s", sessionID, spec.Name),
+		interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
+		var kafkaRoutes []*rpc.KafkaRoute
+		var kafkaEnvironment map[string]string
+		if kafkaRequest := spec.GetKafka(); kafkaRequest != nil {
+			if s.kafka == nil {
+				if kafkaRequest.GetOnly() {
+					clog.Infof(ctx, "Not restoring Kafka-only intercept %s: Kafka provider is not installed", spec.Name)
+					continue
+				}
+			} else {
+				var attachErr error
+				kafkaRoutes, kafkaEnvironment, attachErr = s.attachKafkaRoutes(ctx, spec, interceptID, info.GetSession().GetSessionId())
+				if attachErr != nil {
+					clog.Warnf(ctx, "Not restoring intercept %s: attach Kafka routes: %v", spec.Name, attachErr)
+					continue
+				}
+			}
+		}
+		ii := &rpc.InterceptInfo{
+			Id:            interceptID,
 			Spec:          spec,
 			Disposition:   rpc.InterceptDispositionType_WAITING,
 			ClientSession: info.Session,
 			ModifiedAt:    timestamppb.New(now),
-		})
+			KafkaRoutes:   kafkaRoutes,
+			Environment:   kafkaEnvironment,
+		}
+		(&state.Intercept{InterceptInfo: ii}).ActivateKafkaOnly()
+		accepted = append(accepted, ii)
 	}
 	return accepted, nil
 }
@@ -539,6 +574,13 @@ func (s *service) Remain(ctx context.Context, req *rpc.RemainRequest) (*empty.Em
 	}
 	if client.Mark(lastActivity) {
 		clog.Tracef(ctx, "Last activity: %s", lastActivity)
+	}
+	if s.kafka != nil {
+		for _, ck := range s.state.ClientKafkaRoutes(string(sessionID)) {
+			if err := s.kafka.refresh(ctx, ck.Namespace, ck.Routes); err != nil {
+				clog.Errorf(ctx, "refresh Kafka routes for session %s: %v", sessionID, err)
+			}
+		}
 	}
 	client.ConsumptionMetrics().AddTimeSpent()
 	return &empty.Empty{}, nil
@@ -1386,8 +1428,32 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 		return nil, err
 	}
 
-	client, interceptInfo, err := s.state.AddIntercept(ctx, ciReq)
+	interceptID := fmt.Sprintf("%s:%s", managerutil.GetSessionID(ctx), spec.Name)
+	var kafkaRoutes []*rpc.KafkaRoute
+	var kafkaEnvironment map[string]string
+	if kafkaRequest := spec.GetKafka(); kafkaRequest != nil {
+		if s.kafka == nil {
+			if kafkaRequest.GetOnly() || len(kafkaRequest.GetHeaders()) > 0 ||
+				len(kafkaRequest.GetKey()) > 0 || len(kafkaRequest.GetKeyPrefix()) > 0 {
+				return nil, status.Error(codes.FailedPrecondition, "Kafka personal intercepts are not installed")
+			}
+		} else {
+			kafkaRoutes, kafkaEnvironment, err = s.attachKafkaRoutes(ctx, spec, interceptID, ciReq.GetSession().GetSessionId())
+			if err != nil {
+				return nil, status.Errorf(codes.FailedPrecondition, "attach Kafka routes: %v", err)
+			}
+		}
+	}
+
+	var initialize func(*state.Intercept)
+	if len(kafkaRoutes) > 0 {
+		initialize = func(intercept *state.Intercept) {
+			s.initializeKafkaAttachment(intercept, namespace, kafkaRoutes, kafkaEnvironment)
+		}
+	}
+	client, interceptInfo, err := s.state.AddIntercept(ctx, ciReq, initialize)
 	if err != nil {
+		s.rollbackKafkaRoutes(ctx, namespace, kafkaRoutes)
 		return nil, err
 	}
 
@@ -1400,6 +1466,48 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	}
 
 	return interceptInfo, nil
+}
+
+// attachKafkaRoutes marshals spec's Kafka-relevant fields and attaches
+// routes for it via s.kafka. Callers must check that s.kafka is non-nil and
+// apply their own not-installed policy before calling.
+func (s *service) attachKafkaRoutes(
+	ctx context.Context, spec *rpc.InterceptSpec, interceptID, sessionID string,
+) ([]*rpc.KafkaRoute, map[string]string, error) {
+	return s.kafka.attach(
+		ctx, spec.Namespace, spec.Agent, spec.WorkloadKind, spec.Client, spec.Name, interceptID,
+		sessionID, spec.GetKafka(),
+	)
+}
+
+func (s *service) initializeKafkaAttachment(
+	intercept *state.Intercept,
+	namespace string,
+	routes []*rpc.KafkaRoute,
+	environment map[string]string,
+) {
+	routes = slices.Clone(routes)
+	intercept.KafkaRoutes = routes
+	if len(environment) > 0 {
+		if intercept.Environment == nil {
+			intercept.Environment = make(map[string]string)
+		}
+		maps.Copy(intercept.Environment, environment)
+	}
+	intercept.AddFinalizer(func(ctx context.Context, _ *rpc.InterceptInfo) error {
+		return s.kafka.close(ctx, namespace, routes)
+	})
+}
+
+func (s *service) rollbackKafkaRoutes(ctx context.Context, namespace string, routes []*rpc.KafkaRoute) {
+	if s.kafka == nil || len(routes) == 0 {
+		return
+	}
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.kafka.close(cleanupCtx, namespace, routes); err != nil {
+		clog.Errorf(ctx, "roll back Kafka routes: %v", err)
+	}
 }
 
 // managerPodName returns this process's own pod name, mapping a hostname
@@ -1613,7 +1721,13 @@ func (s *service) ReviewIntercept(ctx context.Context, rIReq *rpc.ReviewIntercep
 			intercept.SftpPort = rIReq.SftpPort
 			intercept.MountPoint = rIReq.MountPoint
 			intercept.MechanismArgsDesc = rIReq.MechanismArgsDesc
-			intercept.Environment = rIReq.Environment
+			intercept.Environment = maps.Clone(rIReq.Environment)
+			if intercept.Environment == nil && len(intercept.KafkaRoutes) > 0 {
+				intercept.Environment = make(map[string]string)
+			}
+			for _, route := range intercept.KafkaRoutes {
+				maps.Copy(intercept.Environment, route.Environment)
+			}
 			intercept.Mounts = rIReq.Mounts
 		}
 	})
