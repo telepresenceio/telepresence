@@ -101,7 +101,7 @@ jobs:
           github-artifact-id: ${{ steps.core.outputs.artifact-id }}
           output-artifact-directory: build-output/signing/core-signed
           parameters: |
-            version: ${{ env.VERSION_NO_V }}
+            version: ${{ toJSON(env.VERSION_NO_V) }}
 
       - name: Assemble signed release artifacts
         shell: pwsh
