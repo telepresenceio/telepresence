@@ -133,7 +133,7 @@
             DisplayName="Telepresence Daemon"
             Interactive="no"
             Description="Provides cluster connectivity"
-            Arguments='--executable "[#TelepresenceExe]" --config "[CONFIGDIR]config.yml" --loglevel [LOGLEVEL] --logfile "[LOGDIR]rootd.log" --address ":[PORT]" --pprof [PPROFPORT]'/>
+            Arguments='--executable "[#TelepresenceExe]" --config "[CONFIGDIR]config.yml" --loglevel [LOGLEVEL] --logfile "[LOGDIR]rootd.log" --address "127.0.0.1:[PORT]" --pprof [PPROFPORT]'/>
         <ServiceControl Id="svc.Control"
             Name="TelepresenceDaemon"
             Start="install"

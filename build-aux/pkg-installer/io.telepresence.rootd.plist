@@ -11,7 +11,7 @@
     <string>rootd</string>
     <string>--logfile</string>  <string>std</string>
     <string>--config</string>   <string>/Library/Application Support/telepresence/config.yml</string>
-    <string>--address</string>  <string>:4037</string>
+    <string>--address</string>  <string>127.0.0.1:4037</string>
     <string>--managed</string>
   </array>
 

@@ -52,7 +52,7 @@ func launchDaemon(ctx context.Context, cr *daemon.Request) (info *daemon.RootInf
 		return nil, errcat.NoDaemonLogs.New(err)
 	}
 
-	addr := fmt.Sprintf(":%d", info.DaemonPort)
+	addr := fmt.Sprintf("127.0.0.1:%d", info.DaemonPort)
 	args := []string{client.GetExe(ctx), client.RootDaemonName, "--cache", cacheDir, "--config", client.GetConfigFile(ctx), "--logfile", logFile, "--address", addr}
 	if cr != nil && cr.RootDaemonProfilingPort > 0 {
 		args = append(args, "--pprof", strconv.Itoa(int(cr.RootDaemonProfilingPort)))

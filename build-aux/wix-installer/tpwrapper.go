@@ -101,7 +101,7 @@ func main() {
 	flag.StringVar(&logLevel, "loglevel", "info", `one of error, warning, info, debug, or trace`)
 	flag.StringVar(&w.cacheDir, "cache", "", `Path to the Telepresence cache directory`)
 	flag.StringVar(&w.logPath, "logfile", "", "path to the log file")
-	flag.StringVar(&w.address, "address", ":4037", "TCP address to listen to")
+	flag.StringVar(&w.address, "address", "127.0.0.1:4037", "TCP address to listen to")
 	flag.UintVar(&w.pprofPort, "pprof", uint(0), "start pprof server on the given port")
 	flag.Parse()
 	if w.configPath == "" {
