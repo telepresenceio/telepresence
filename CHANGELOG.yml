@@ -24,6 +24,24 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.33.0
+    date: (TBD)
+    notes:
+      - type: security
+        title: Daemons listen on the loopback interface only
+        body: >-
+          The root daemon and the user daemon accepted connections on every
+          network interface, so any host on the same network could reach
+          their gRPC APIs. Both daemons now listen on 127.0.0.1 only. The
+          managed root daemon installed by the macOS, Linux and Windows
+          installers is bound the same way.
+      - type: security
+        title: The kubeauth daemon requires a token
+        body: >-
+          The kubeauth daemon served exec-plugin cluster credentials to any
+          caller on the network. It now requires a random per-run token
+          that only the daemon container receives, and its port file is
+          readable only by the user.
   - version: 2.32.2
     date: 2026-10-08
     notes:

@@ -7,9 +7,11 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
 )
 
 func kubeauthCmd() *cobra.Command {
@@ -21,6 +23,7 @@ func kubeauthCmd() *cobra.Command {
 		Hidden:            true,
 		ValidArgsFunction: cobra.NoFileCompletions,
 	}
+	cmd.Flags().String("token", "", "Token that the kubeauth daemon requires")
 	return cmd
 }
 
@@ -28,6 +31,7 @@ func authenticateContext(cmd *cobra.Command, args []string) (err error) {
 	ctx := cmd.Context()
 	contextName := args[0]
 	serverAddr := args[1]
+	token, _ := cmd.Flags().GetString("token")
 	defer func() {
 		if err != nil {
 			clog.Error(ctx, err)
@@ -39,6 +43,9 @@ func authenticateContext(cmd *cobra.Command, args []string) (err error) {
 	}
 	defer conn.Close()
 
+	if token != "" {
+		ctx = metadata.AppendToOutgoingContext(ctx, kubeauth.TokenMetadataKey, token)
+	}
 	ac := rpc.NewAuthenticatorClient(conn)
 	var res *rpc.GetContextExecCredentialsResponse
 	if res, err = ac.GetContextExecCredentials(ctx, &rpc.GetContextExecCredentialsRequest{ContextName: contextName}); err != nil {

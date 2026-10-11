@@ -456,7 +456,7 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 		ExposedPorts: cr.ExposedPorts,
 		Hostname:     cr.Hostname,
 	}
-	args = append(args, "--address", fmt.Sprintf(":%d", info.DaemonPort))
+	args = append(args, "--address", fmt.Sprintf("127.0.0.1:%d", info.DaemonPort))
 	fn := daemonID.InfoFileName()
 	il := daemon.NewUserInfoLoader(ctx)
 	err = il.SaveInfo(info, fn)

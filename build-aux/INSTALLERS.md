@@ -73,7 +73,7 @@ SSHFS-Win; volume mounts need both installed separately.
   <string>rootd</string>
   <string>--logfile</string>  <string>std</string>
   <string>--config</string>   <string>/Library/Application Support/telepresence/config.yml</string>
-  <string>--address</string>  <string>:4037</string>
+  <string>--address</string>  <string>127.0.0.1:4037</string>
   <string>--managed</string>
 </array>
 <key>RunAtLoad</key><true/>
@@ -153,7 +153,7 @@ Type=simple
 ExecStart=/usr/local/bin/telepresence rootd \
     --logfile managed \
     --config /etc/telepresence/config.yml \
-    --address :4037 \
+    --address 127.0.0.1:4037 \
     --managed
 
 User=root
@@ -194,8 +194,8 @@ PrivateTmp=yes
 ## Root Daemon Communication
 
 All platforms use TCP for client-daemon communication:
-- **Address:** `:4037` (localhost port 4037)
-- **Flag:** `--address :4037`
+- **Address:** `127.0.0.1:4037` (loopback only)
+- **Flag:** `--address 127.0.0.1:4037`
 
 The `--managed` flag indicates the daemon is running as a system service.
 

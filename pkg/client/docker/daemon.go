@@ -256,26 +256,26 @@ func UseIPv6(ctx context.Context) (bool, error) {
 	return ni.Network.EnableIPv6, nil
 }
 
-func readPortFile(ctx context.Context, portFile string, configFiles []string) (uint16, error) {
+func readPortFile(ctx context.Context, portFile string, configFiles []string) (port uint16, token string, err error) {
 	pb, err := os.ReadFile(portFile)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	var p kubeauth.PortFile
 	err = json.Unmarshal(pb, &p)
 	if err == nil {
-		if p.Kubeconfig == strings.Join(configFiles, string(filepath.ListSeparator)) {
-			return uint16(p.Port), nil
+		if p.Kubeconfig == strings.Join(configFiles, string(filepath.ListSeparator)) && p.Token != "" {
+			return uint16(p.Port), p.Token, nil
 		}
 		clog.Debug(ctx, "kubeconfig used by kubeauth is no longer valid")
 	}
 	if err := os.Remove(portFile); err != nil {
-		return 0, err
+		return 0, "", err
 	}
-	return 0, fmt.Errorf("%s: %w", portFile, os.ErrNotExist)
+	return 0, "", fmt.Errorf("%s: %w", portFile, os.ErrNotExist)
 }
 
-func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string) (uint16, error) {
+func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags map[string]string, configFiles []string) (uint16, string, error) {
 	clog.Debugf(ctx, "Starting authenticator service using portFile %s", portFile)
 	// remove any stale port file
 	_ = os.Remove(portFile)
@@ -284,10 +284,10 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	args = append(args, client.GetExe(ctx), client.KubeAuthDaemonName, "--"+global.FlagConfig, client.GetConfigFile(ctx), "--portfile", portFile)
 	var err error
 	if args, err = k8s.AppendKubeFlags(kubeFlags, args); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if err := proc.StartInBackground(true, args...); err != nil {
-		return 0, err
+		return 0, "", err
 	}
 
 	// Wait for the new port file to emerge
@@ -295,34 +295,34 @@ func startAuthenticatorService(ctx context.Context, portFile string, kubeFlags m
 	defer cancel()
 	for ctx.Err() == nil {
 		time.Sleep(10 * time.Millisecond)
-		port, err := readPortFile(ctx, portFile, configFiles)
+		port, token, err := readPortFile(ctx, portFile, configFiles)
 		if err != nil {
 			if !errors.Is(err, fs.ErrNotExist) {
-				return 0, err
+				return 0, "", err
 			}
 			continue
 		}
 		clog.Debugf(ctx, "Authenticator service started on port %d", port)
-		return port, nil
+		return port, token, nil
 	}
-	return 0, fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), client.KubeAuthDaemonName)
+	return 0, "", fmt.Errorf(`timeout while waiting for "%s %s" to create a port file`, client.GetExe(ctx), client.KubeAuthDaemonName)
 }
 
-func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string) (uint16, error) {
+func ensureAuthenticatorService(ctx context.Context, kubeFlags map[string]string, configFiles []string) (uint16, string, error) {
 	portFile := filepath.Join(filelocation.AppUserCacheDir(ctx), kubeAuthPortFile)
 	st, err := os.Stat(portFile)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) {
-			return 0, err
+			return 0, "", err
 		}
 	} else if st.ModTime().Add(kubeauth.PortFileStaleTime).After(time.Now()) {
-		port, err := readPortFile(ctx, portFile, configFiles)
+		port, token, err := readPortFile(ctx, portFile, configFiles)
 		if err == nil {
 			clog.Debug(ctx, "kubeauth service found alive and valid")
-			return port, nil
+			return port, token, nil
 		}
 		if !errors.Is(err, fs.ErrNotExist) {
-			return 0, err
+			return 0, "", err
 		}
 	}
 	return startAuthenticatorService(ctx, portFile, kubeFlags, configFiles)
@@ -342,11 +342,11 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 		return err
 	}
 	content, err := patcher.CreateExternalKubeConfig(ctx, loader, cr.KubeFlags["context"],
-		func(configFiles []string) (string, string, string, error) {
-			port, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
+		func(configFiles []string) (string, string, string, string, error) {
+			port, token, err := ensureAuthenticatorService(ctx, cr.KubeFlags, configFiles)
 			if err != nil {
 				clog.Errorf(ctx, "failed to start k8s authenticator service: %v", err)
-				return "", "", "", err
+				return "", "", "", "", err
 			}
 
 			// The telepresence command that will run in order to retrieve the credentials from the authenticator service
@@ -358,11 +358,11 @@ func enableK8SAuthenticator(ctx context.Context, daemonID *daemon.Identifier) er
 			if kubeAuthHost == "" {
 				r, err := routing.DefaultRoute(ctx)
 				if err != nil {
-					return "", "", "", err
+					return "", "", "", "", err
 				}
 				kubeAuthHost = r.LocalIP.String()
 			}
-			return "telepresence", iputil.JoinHostPort(kubeAuthHost, port), filepath.Join(DockerTpConfig, filepath.Base(client.GetConfigFile(ctx))), nil
+			return "telepresence", iputil.JoinHostPort(kubeAuthHost, port), filepath.Join(DockerTpConfig, filepath.Base(client.GetConfigFile(ctx))), token, nil
 		},
 		func(config *api.Config) error {
 			return handleLocalK8s(ctx, daemonID, config)

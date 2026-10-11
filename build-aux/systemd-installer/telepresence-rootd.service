@@ -8,7 +8,7 @@ Type=simple
 ExecStart=/usr/local/bin/telepresence rootd \
     --logfile managed \
     --config /etc/telepresence/config.yml \
-    --address :4037 \
+    --address 127.0.0.1:4037 \
     --managed
 
 # Runs as root (LaunchDaemon equivalent)

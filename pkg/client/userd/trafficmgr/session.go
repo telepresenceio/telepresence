@@ -278,7 +278,7 @@ func NewSession(
 	if !service.RootSessionInProcess() {
 		// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
 		// must be executed by the user, not by root.
-		oi.KubeconfigData, err = patcher.CreateExternalKubeConfig(tmgr.Context, config.ClientConfig, tmgr.KubeContext, func([]string) (string, string, string, error) {
+		oi.KubeconfigData, err = patcher.CreateExternalKubeConfig(tmgr.Context, config.ClientConfig, tmgr.KubeContext, func([]string) (string, string, string, string, error) {
 			addr := service.ListenerAddress()
 			if addr.Addr().IsUnspecified() {
 				loopback := netip.AddrFrom4([4]byte{127, 0, 0, 1})
@@ -287,7 +287,7 @@ func NewSession(
 				}
 				addr = netip.AddrPortFrom(loopback, addr.Port())
 			}
-			return client.GetExe(tmgr), addr.String(), client.GetConfigFile(tmgr), nil
+			return client.GetExe(tmgr), addr.String(), client.GetConfigFile(tmgr), "", nil
 		}, nil)
 		if err != nil {
 			return nil, nil, err
