@@ -15,15 +15,15 @@ const (
 	kubeConfigStubSubCommands = "kubeauth"
 )
 
-// AddressProvider is a function that returns the path to the telepresence executable and an address to a service that
-// implements the Authenticator gRPC.
+// AddressProvider is a function that returns the path to the telepresence executable, an address to a service that
+// implements the Authenticator gRPC, and the token that the service requires (empty when it requires none).
 //
 // The function will typically start the gRPC service, and the service is therefore given
 // a list of files that it must listen to in order to reliably resolve requests. It is
 // also passed a pointer to the minified config that will be stored in a file so that it
 // has a chance to modify it.
 type (
-	AddressProvider func(configFiles []string) (executable, addr, configFile string, err error)
+	AddressProvider func(configFiles []string) (executable, addr, configFile, token string, err error)
 	Patcher         func(*clientcmdapi.Config) error
 )
 
@@ -68,11 +68,11 @@ func CreateExternalKubeConfig(
 	}
 
 	if needsStubbedExec(&config) {
-		executable, addr, configFile, err := authAddressFunc(configFiles)
+		executable, addr, configFile, token, err := authAddressFunc(configFiles)
 		if err != nil {
 			return nil, err
 		}
-		if err = replaceAuthExecWithStub(&config, executable, addr, configFile); err != nil {
+		if err = replaceAuthExecWithStub(&config, executable, addr, configFile, token); err != nil {
 			return nil, err
 		}
 	}
@@ -92,7 +92,7 @@ func CreateExternalKubeConfig(
 
 // replaceAuthExecWithStub goes through the kubeconfig and replaces all uses of the Exec auth method by
 // an invocation of the stub binary.
-func replaceAuthExecWithStub(rawConfig *clientcmdapi.Config, executable, address, configFile string) error {
+func replaceAuthExecWithStub(rawConfig *clientcmdapi.Config, executable, address, configFile, token string) error {
 	for contextName, kubeContext := range rawConfig.Contexts {
 		// Find related Auth.
 		authInfo, ok := rawConfig.AuthInfos[kubeContext.AuthInfo]
@@ -106,11 +106,15 @@ func replaceAuthExecWithStub(rawConfig *clientcmdapi.Config, executable, address
 		}
 
 		// Patch exec.
+		args := []string{kubeConfigStubSubCommands, "--" + global.FlagConfig, configFile}
+		if token != "" {
+			args = append(args, "--token", token)
+		}
 		authInfo.Exec = &clientcmdapi.ExecConfig{
 			InteractiveMode: clientcmdapi.NeverExecInteractiveMode,
 			APIVersion:      authInfo.Exec.APIVersion,
 			Command:         executable,
-			Args:            []string{kubeConfigStubSubCommands, "--" + global.FlagConfig, configFile, contextName, address},
+			Args:            append(args, contextName, address),
 		}
 	}
 	return nil

@@ -8,6 +8,12 @@
 The root daemon and the user daemon accepted connections on every network interface, so any host on the same network could reach their gRPC APIs. Both daemons now listen on 127.0.0.1 only. The managed root daemon installed by the macOS, Linux and Windows installers is bound the same way.
 </div>
 
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The kubeauth daemon requires a token</div></div>
+<div style="margin-left: 15px">
+
+The kubeauth daemon served exec-plugin cluster credentials to any caller on the network. It now requires a random per-run token that only the daemon container receives, and its port file is readable only by the user.
+</div>
+
 ## Version 2.32.2 <span style="font-size: 16px;">(October  8)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Root daemon no longer shuts down after a brief stall](https://github.com/telepresenceio/telepresence/issues/4332)</div></div>
 <div style="margin-left: 15px">
