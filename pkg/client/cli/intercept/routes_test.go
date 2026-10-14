@@ -1,9 +1,12 @@
 package intercept
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
@@ -111,6 +114,32 @@ func TestRouteURLs(t *testing.T) {
 	// No hosts and no addresses yields nothing.
 	assert.Nil(t, routeURLs([]*manager.RouteAssociation{{Paths: []string{"/api"}}}))
 	assert.Nil(t, routeURLs(nil))
+}
+
+func TestDiscoverRouteURLs(t *testing.T) {
+	spec := &manager.InterceptSpec{Agent: "echo", Namespace: "default", ServiceName: "echo", ServicePort: 80}
+
+	t.Run("returns discovered routes", func(t *testing.T) {
+		urls := discoverRouteURLs(context.Background(), spec, time.Second, func(ctx context.Context, req *connector.ListRequest) (*connector.WorkloadInfoSnapshot, error) {
+			require.Equal(t, "default", req.Namespace)
+			return &connector.WorkloadInfoSnapshot{Workloads: []*connector.WorkloadInfo{{
+				Name: "echo", Namespace: "default", Services: testServices(),
+			}}}, nil
+		})
+
+		assert.Equal(t, []string{"https://api.example.com/api"}, urls)
+	})
+
+	t.Run("returns when workload listing does not respond", func(t *testing.T) {
+		started := time.Now()
+		urls := discoverRouteURLs(context.Background(), spec, 20*time.Millisecond, func(ctx context.Context, _ *connector.ListRequest) (*connector.WorkloadInfoSnapshot, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		})
+
+		assert.Nil(t, urls)
+		assert.Less(t, time.Since(started), time.Second)
+	})
 }
 
 func TestCurlExample(t *testing.T) {

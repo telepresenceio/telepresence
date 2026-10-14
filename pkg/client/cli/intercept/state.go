@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
@@ -31,6 +32,8 @@ type State interface {
 	Run(context.Context) (*Info, error)
 	RunAndLeave() bool
 }
+
+const routeDiscoveryTimeout = 5 * time.Second
 
 type state struct {
 	*Command
@@ -260,11 +263,9 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 
 	s.info = NewInfo(ctx, intercept, s.MountFlags.ReadOnly, s.mountError)
 	if spec := intercept.Spec; spec.ServiceName != "" {
-		if r, err := ud.List(ctx, &connector.ListRequest{Namespace: spec.Namespace}); err != nil {
-			clog.Debugf(ctx, "failed to list workloads for route discovery: %v", err)
-		} else {
-			s.info.AccessURLs = routeURLs(routesForSpec(spec, r.Workloads))
-		}
+		s.info.AccessURLs = discoverRouteURLs(ctx, spec, routeDiscoveryTimeout, func(ctx context.Context, req *connector.ListRequest) (*connector.WorkloadInfoSnapshot, error) {
+			return ud.List(ctx, req)
+		})
 	}
 	detailedOutput := s.DetailedOutput && s.FormattedOutput
 	if detailedOutput {
@@ -273,6 +274,23 @@ func (s *state) create(ctx context.Context) (acquired bool, err error) {
 		progress.Info(ctx, s.info)
 	}
 	return true, nil
+}
+
+func discoverRouteURLs(
+	ctx context.Context,
+	spec *manager.InterceptSpec,
+	timeout time.Duration,
+	list func(context.Context, *connector.ListRequest) (*connector.WorkloadInfoSnapshot, error),
+) []string {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	r, err := list(ctx, &connector.ListRequest{Namespace: spec.Namespace})
+	if err != nil {
+		clog.Debugf(ctx, "failed to list workloads for route discovery: %v", err)
+		return nil
+	}
+	return routeURLs(routesForSpec(spec, r.Workloads))
 }
 
 func (s *state) leave(ctx context.Context) error {
