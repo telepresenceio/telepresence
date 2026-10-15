@@ -68,6 +68,7 @@ func TestInterceptOnlySnapshotDoesNotRequireWorkloadInfo(t *testing.T) {
 	})
 
 	snapshot, err := s.WorkloadInfoSnapshot(
+		t.Context(),
 		[]string{"app-space"},
 		rpc.ListRequest_INTERCEPTS,
 	)
@@ -103,6 +104,7 @@ func TestInterceptOnlySnapshotEnrichesFromCachedWorkload(t *testing.T) {
 	}}
 
 	snapshot, err := s.WorkloadInfoSnapshot(
+		t.Context(),
 		[]string{"app-space"},
 		rpc.ListRequest_INTERCEPTS,
 	)
@@ -144,6 +146,7 @@ func TestInterceptOnlySnapshotGroupsAndFiltersIntercepts(t *testing.T) {
 	})
 
 	snapshot, err := s.WorkloadInfoSnapshot(
+		t.Context(),
 		[]string{"app-space"},
 		rpc.ListRequest_INTERCEPTS,
 	)
@@ -173,6 +176,7 @@ func TestMixedInterceptFilterKeepsWorkloadSnapshotPath(t *testing.T) {
 	}] = workloadInfo{}
 
 	snapshot, err := s.WorkloadInfoSnapshot(
+		t.Context(),
 		[]string{"app-space"},
 		rpc.ListRequest_INTERCEPTS|rpc.ListRequest_REPLACEMENTS,
 	)

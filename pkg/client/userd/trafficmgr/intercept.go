@@ -715,7 +715,7 @@ func (s *session) AddIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 
 	// Start the workload info watcher early so that the workload snapshot is up to
 	// date with this intercept's workload by the time this call returns.
-	go s.ensureWatchers([]string{spec.Namespace})
+	go func() { _ = s.ensureWatchers(s, []string{spec.Namespace}) }()
 
 	mgrClient := s.ManagerClient()
 
