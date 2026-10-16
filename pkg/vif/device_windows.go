@@ -133,18 +133,17 @@ func (d *device) Close() {
 	// until Read() actually receives something. To resolve that "deadlock",
 	// we call Close() in one goroutine to wait for the lock and write a bogus
 	// message in another that will be returned by Read().
-	closeCh := make(chan error)
+	started := make(chan struct{})
+	closeCh := make(chan error, 1)
 	go func() {
-		// first message is just to indicate that this goroutine has started
-		closeCh <- nil
+		close(started)
 		closeCh <- d.dev.Close()
-		close(closeCh)
 	}()
 
 	// Not 100%, but we can be fairly sure that Close() is
 	// hanging on the lock, or at least will be by the time
 	// the Read() returns
-	<-closeCh
+	<-started
 
 	// Send something to the TUN device so that the Read
 	// unlocks the NativeTun.closing mutex and let the actual
@@ -153,7 +152,9 @@ func (d *device) Close() {
 	if err == nil {
 		_, _ = conn.Write([]byte("bogus"))
 	}
-	<-closeCh
+	if err = <-closeCh; err != nil {
+		clog.Warnf(d.ctx, "closing %s: %v", d.name, err)
+	}
 }
 
 func (d *device) getLUID() winipcfg.LUID {

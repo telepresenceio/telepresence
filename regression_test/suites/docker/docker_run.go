@@ -114,7 +114,10 @@ func (s *DockerRun) Test_HandlerServesIntercept() {
 		}
 		_, _, _ = s.CLI().Run(ctx, "detach", wl.Name, "-n", wl.Namespace)
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Logf("docker-run handler process exited: %v", err)
+			}
 		case <-time.After(dockerRunExitTimeout):
 			t.Log("docker-run handler process did not exit during cleanup")
 		}
