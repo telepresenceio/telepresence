@@ -500,7 +500,7 @@ lint-go: lint-deps ## (QA) Run the golangci-lint
 ifeq ($(GOOS),windows)
 	@ver=$$(curl -fsSL 'https://api.github.com/repos/golangci/golangci-lint/releases/latest' | grep -o '"tag_name": *"[^"]*"' | head -1 | cut -d'"' -f4) && \
 	docker run -e GOOS=$(GOOS) --rm -v $$(pwd):/app -v ~/.cache/golangci-lint/$$ver:/root/.cache -w /app golangci/golangci-lint:$$ver golangci-lint \
-	run --timeout 8m ./cmd/cobraparser/... ./cmd/telepresence/... ./pkg/...
+	run --timeout 8m ./cmd/telepresence/... ./pkg/...
 else
 	# libfuse-dev provides fuse.h, which cgofuse needs to typecheck the linked
 	# fuseftp file system on Linux.
