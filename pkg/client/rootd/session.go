@@ -871,7 +871,10 @@ func (s *session) watchClusterInfo(teleroutePort uint16) error {
 				return err
 			}
 			select {
-			case <-s.vifReady:
+			case err := <-s.vifReady:
+				if err != nil {
+					return err
+				}
 				if err := s.onClusterInfo(mgrInfo); err != nil {
 					if !errors.Is(err, context.Canceled) {
 						clog.Error(s, err)

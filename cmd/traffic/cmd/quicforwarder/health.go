@@ -55,7 +55,9 @@ func ServeHealth(ctx context.Context, port uint16, allowlist *Allowlist) error {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), healthShutdownTimeout)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
-		<-errCh
+		if err := <-errCh; !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
 		return nil
 	case err := <-errCh:
 		if errors.Is(err, http.ErrServerClosed) {
