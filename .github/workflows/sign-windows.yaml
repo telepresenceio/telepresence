@@ -99,6 +99,9 @@ jobs:
           signing-policy-slug: ${{ inputs.signing-policy }}
           artifact-configuration-slug: core
           github-artifact-id: ${{ steps.core.outputs.artifact-id }}
+          # release-signing requests need manual approval in the SignPath
+          # portal; wait for it, up to just under the 6 hour job limit.
+          wait-for-completion-timeout-in-seconds: "21000"
           output-artifact-directory: build-output/signing/core-signed
           parameters: |
             version: ${{ toJSON(env.VERSION_NO_V) }}
