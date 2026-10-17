@@ -157,6 +157,21 @@ func (s *suiteState) TestAddClient() {
 	assert.Equal(s.T(), 1, s.state.clients.Size())
 }
 
+func (s *suiteState) TestRestoreAgentIsIdempotent() {
+	s.state.backgroundCtx = mutator.WithMap(s.ctx, mutator.NewWatcher())
+	agent := testdata.GetTestAgents(s.T())["hello"]
+	id := tunnel.SessionID(AgentSessionIDPrefix + agent.PodUid)
+
+	firstID, err := s.state.RestoreAgent(s.ctx, id, agent, nil, time.Now())
+	require.NoError(s.T(), err)
+	secondID, err := s.state.RestoreAgent(s.ctx, id, agent, nil, time.Now())
+	require.NoError(s.T(), err)
+
+	assert.Equal(s.T(), id, firstID)
+	assert.Equal(s.T(), id, secondID)
+	assert.Equal(s.T(), 1, s.state.CountAgents())
+}
+
 func (s *suiteState) TestRemoveSession() {
 	// given
 	now := time.Now()

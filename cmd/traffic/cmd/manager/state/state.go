@@ -652,6 +652,8 @@ func (s *State) RestoreAgent(ctx context.Context, id tunnel.SessionID, agent *rp
 		as.SetPrincipal(principal)
 	}
 	if _, exists := s.agents.LoadOrStore(id, as); exists {
+		// A retried arrival keeps the stored session; drop the unused one.
+		as.cancel()
 		return id, nil
 	}
 
