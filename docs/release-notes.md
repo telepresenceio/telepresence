@@ -14,6 +14,12 @@ The root daemon and the user daemon accepted connections on every network interf
 The kubeauth daemon served exec-plugin cluster credentials to any caller on the network. It now requires a random per-run token that only the daemon container receives, and its port file is readable only by the user.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
+<div style="margin-left: 15px">
+
+A client whose attachment grant covers a single workload can create its intercept, but the traffic-manager denies the namespace-wide workload watch that the user daemon starts for it. The user daemon retried that denial forever, so the CLI hung after the intercept was already active. A denied or unmanaged namespace now ends the watch at once and the error reaches the caller, so the intercept command finishes and <code>telepresence list</code> reports the denial instead of an empty result.
+</div>
+
 ## Version 2.32.2 <span style="font-size: 16px;">(October  8)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Root daemon no longer shuts down after a brief stall](https://github.com/telepresenceio/telepresence/issues/4332)</div></div>
 <div style="margin-left: 15px">
