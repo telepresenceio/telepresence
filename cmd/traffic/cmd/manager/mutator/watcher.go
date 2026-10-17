@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -52,13 +53,57 @@ type Map interface {
 }
 
 type configWatcher struct {
-	cancel       context.CancelFunc
-	agentConfigs *xsync.Map[string, *xsync.Map[string, *agentconfig.Sidecar]]
-	informers    *xsync.Map[string, *informersWithCancel]
-	inactivePods *xsync.Map[types.UID, inactivation]
-	startedAt    time.Time
-	configured   atomic.Bool
-	running      atomic.Bool
+	cancel         context.CancelFunc
+	agentConfigs   *xsync.Map[string, *xsync.Map[string, *agentconfig.Sidecar]]
+	informers      *xsync.Map[string, *informersWithCancel]
+	inactivePods   *xsync.Map[types.UID, inactivation]
+	evictionStates *xsync.Map[WorkloadKey, *workloadEvictionState]
+	startedAt      time.Time
+	configured     atomic.Bool
+	running        atomic.Bool
+}
+
+type workloadEvictionState struct {
+	sync.Mutex
+	replacementPending bool
+}
+
+func (c *configWatcher) lockEvictionState(key WorkloadKey) *workloadEvictionState {
+	for {
+		state, _ := c.evictionStates.LoadOrCompute(key, func() (*workloadEvictionState, bool) {
+			return &workloadEvictionState{}, false
+		})
+		state.Lock()
+		if current, ok := c.evictionStates.Load(key); ok && current == state {
+			return state
+		}
+		state.Unlock()
+	}
+}
+
+func (c *configWatcher) deleteEvictionState(key WorkloadKey) {
+	for {
+		state, ok := c.evictionStates.Load(key)
+		if !ok {
+			return
+		}
+		state.Lock()
+		if current, ok := c.evictionStates.Load(key); ok && current == state {
+			c.evictionStates.Delete(key)
+			state.Unlock()
+			return
+		}
+		state.Unlock()
+	}
+}
+
+func (c *configWatcher) deleteNamespaceEvictionStates(namespace string) {
+	c.evictionStates.Range(func(key WorkloadKey, _ *workloadEvictionState) bool {
+		if key.Namespace == namespace {
+			c.deleteEvictionState(key)
+		}
+		return true
+	})
 }
 
 type mapKey struct{}
@@ -231,10 +276,11 @@ func (c *configWatcher) Store(sc *agentconfig.Sidecar) {
 
 func NewWatcher() Map {
 	w := &configWatcher{
-		cancel:       func() {},
-		informers:    xsync.NewMap[string, *informersWithCancel](),
-		inactivePods: xsync.NewMap[types.UID, inactivation](),
-		agentConfigs: xsync.NewMap[string, *xsync.Map[string, *agentconfig.Sidecar]](),
+		cancel:         func() {},
+		informers:      xsync.NewMap[string, *informersWithCancel](),
+		inactivePods:   xsync.NewMap[types.UID, inactivation](),
+		evictionStates: xsync.NewMap[WorkloadKey, *workloadEvictionState](),
+		agentConfigs:   xsync.NewMap[string, *xsync.Map[string, *agentconfig.Sidecar]](),
 	}
 	return w
 }
@@ -506,19 +552,22 @@ func (c *configWatcher) DeleteMapsAndRolloutAll(ctx context.Context) {
 
 func (c *configWatcher) deleteMapsAndRolloutNS(ctx context.Context, ns string, iwc *informersWithCancel) {
 	defer func() {
+		iwc.cancel()
 		c.informers.Delete(ns)
+		c.deleteNamespaceEvictionStates(ns)
 		informer.DropFactory(ctx, ns)
 	}()
 
-	clog.Debugf(ctx, "Cancelling watchers for namespace %s", ns)
+	clog.Debugf(ctx, "Removing workload handlers for namespace %s", ns)
 	for i := 0; i < watcherMax; i++ {
 		if reg := iwc.eventRegs[i]; reg != nil {
 			_ = iwc.informers[i].RemoveEventHandler(reg)
 		}
 	}
-	iwc.cancel()
 
-	err := c.EvictAllPodsWithAgentConfig(ctx, ns)
+	// Keep the informer caches live until every replacement is ready. The normal event-driven
+	// reconciliation path is unavailable after the handlers above are removed.
+	err := c.evictAllPodsWithAgentConfigAndWait(ctx, ns)
 	if err != nil {
 		clog.Errorf(ctx, "unable to delete agents in namespace %s: %v", ns, err)
 	}
