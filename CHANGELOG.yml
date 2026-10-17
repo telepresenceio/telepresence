@@ -42,6 +42,18 @@ items:
           caller on the network. It now requires a random per-run token
           that only the daemon container receives, and its port file is
           readable only by the user.
+      - type: bugfix
+        title: Intercept creation no longer hangs on a denied workload watch
+        body: >-
+          A client whose attachment grant covers a single workload can create
+          its intercept, but the traffic-manager denies the namespace-wide
+          workload watch that the user daemon starts for it. The user daemon
+          retried that denial forever, so the CLI hung after the intercept
+          was already active. A denied or unmanaged namespace now ends the
+          watch at once and the error reaches the caller, so the intercept
+          command finishes and <code>telepresence list</code> reports the
+          denial instead of an empty result.
+        docs: https://github.com/telepresenceio/telepresence/pull/4341
   - version: 2.32.2
     date: 2026-10-08
     notes:
