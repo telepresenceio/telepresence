@@ -488,9 +488,11 @@ portal edit back into that file).
 When a release tag is pushed:
 1. All platform binaries and both unsigned MSIs are built and published
    immediately.
-2. `sign-windows` waits for approval from a required reviewer, then signs
+2. `sign-windows` waits for approval from a required reviewer, then submits
    the `core` artifact: the two standalone exes and both MSIs, which
-   deep-signs the two exes each MSI embeds.
+   deep-signs the two exes each MSI embeds. The `release-signing` policy
+   requires a second approval in the SignPath portal; the job waits for
+   it for up to about six hours.
 3. The signed `.zip`s and `.msi`s replace the unsigned ones on the
    release (`gh release upload --clobber`), and `make verify-signatures`
    gates the upload.
