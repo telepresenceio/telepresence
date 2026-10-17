@@ -60,6 +60,14 @@ items:
           The traffic-manager compares the result of an intercept update with the
           stored intercept and keeps the stored one when nothing changed, so
           no-op updates no longer bump the modification time or notify watchers.
+      - type: bugfix
+        title: Each connect phase gets its own timeout
+        body: >-
+          Connecting to the traffic-manager, fetching the remote client
+          configuration, and starting the root daemon session shared one
+          <code>trafficManagerConnect</code> timeout, so a slow but successful
+          early phase could leave too little time for the next one and fail the
+          connect. Each phase now starts with the full timeout.
   - version: 2.32.2
     date: 2026-10-08
     notes:

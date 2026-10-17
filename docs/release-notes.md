@@ -26,6 +26,12 @@ A client whose attachment grant covers a single workload can create its intercep
 The traffic-manager compares the result of an intercept update with the stored intercept and keeps the stored one when nothing changed, so no-op updates no longer bump the modification time or notify watchers.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Each connect phase gets its own timeout</div></div>
+<div style="margin-left: 15px">
+
+Connecting to the traffic-manager, fetching the remote client configuration, and starting the root daemon session shared one <code>trafficManagerConnect</code> timeout, so a slow but successful early phase could leave too little time for the next one and fail the connect. Each phase now starts with the full timeout.
+</div>
+
 ## Version 2.32.2 <span style="font-size: 16px;">(October  8)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Root daemon no longer shuts down after a brief stall](https://github.com/telepresenceio/telepresence/issues/4332)</div></div>
 <div style="margin-left: 15px">
