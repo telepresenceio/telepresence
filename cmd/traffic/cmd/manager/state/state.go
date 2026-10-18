@@ -1177,14 +1177,19 @@ func (s *State) allClientSessionsFinalizerCall(client *ClientSession) {
 }
 
 // SetParticipantAuthorizer sets the check that a client may attach to a
-// secondary workload of a shared Service intercept.
+// secondary workload of a shared Service intercept. Until one is set, the
+// state denies every secondary workload.
 func (s *State) SetParticipantAuthorizer(a participantAuthorizer) {
 	s.participantAuthorizer = a
 }
 
+// ParticipantAuthorizerInstalled reports whether a participant authorizer is set.
+func (s *State) ParticipantAuthorizerInstalled() bool { return s.participantAuthorizer != nil }
+
+// authorizeParticipant fails closed when no authorizer is installed.
 func (s *State) authorizeParticipant(ctx context.Context, client *ClientSession, wl k8sapi.Workload) error {
 	if s.participantAuthorizer == nil {
-		return nil
+		return status.Error(codes.PermissionDenied, "no participant authorizer is installed")
 	}
 	if client == nil {
 		return status.Error(codes.PermissionDenied, "the client session no longer exists")

@@ -184,6 +184,7 @@ func NewService(ctx context.Context, g log.Group, configWatcher config.Watcher) 
 	}
 
 	ret.state = state.NewState(ctx, g, configWatcher.AdminCommandChannel())
+	ret.state.SetParticipantAuthorizer(ret.authorizeParticipant)
 	return ret, nil
 }
 

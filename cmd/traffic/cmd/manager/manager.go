@@ -363,8 +363,6 @@ func (s *service) servePrometheus(ctx context.Context) error {
 		SetGauge(ctx, s.state.GetConnectActiveStatus(), client.Name, client.InstallId, nil, 0)
 	})
 
-	s.state.SetParticipantAuthorizer(s.authorizeParticipant)
-
 	s.state.SetAllInterceptsFinalizer(func(client *state.ClientSession, workload *string) {
 		SetGauge(ctx, s.state.GetInterceptActiveStatus(), client.Name, client.InstallId, workload, 0)
 	})
