@@ -27,6 +27,13 @@ func TestContainerForInterceptUsesMatchedServiceTarget(t *testing.T) {
 		ServicePort:   80,
 		Protocol:      "TCP",
 		ContainerName: "primary-app",
+		SharedService: true,
+	}))
+	require.Equal(t, "primary-app", fs.containerForIntercept(&rpc.InterceptSpec{
+		ServiceUid:    "service-uid",
+		ServicePort:   80,
+		Protocol:      "TCP",
+		ContainerName: "primary-app",
 	}))
 	require.Equal(t, "primary-app", fs.containerForIntercept(&rpc.InterceptSpec{
 		ContainerName: "primary-app",

@@ -40,7 +40,7 @@ func NewInterceptTarget(ics []*Intercept) InterceptTarget {
 
 func (cp InterceptTarget) MatchForSpec(spec *manager.InterceptSpec) bool {
 	proto := types.FromK8sProtocol(core.Protocol(spec.Protocol))
-	if spec.ServiceUid != "" {
+	if spec.SharedService {
 		for _, ic := range cp {
 			if string(ic.ServiceUID) != spec.ServiceUid || ic.Protocol != proto {
 				continue

@@ -20,21 +20,37 @@ func TestInterceptTargetMatchForServiceSpec(t *testing.T) {
 	}})
 
 	require.True(t, target.MatchForSpec(&manager.InterceptSpec{
-		ServiceUid:  "service-uid",
-		ServicePort: 80,
-		Protocol:    "TCP",
+		ServiceUid:    "service-uid",
+		ServicePort:   80,
+		Protocol:      "TCP",
+		SharedService: true,
 		// The primary workload can resolve a different container port.
 		ContainerPort: 8080,
 	}))
 	require.False(t, target.MatchForSpec(&manager.InterceptSpec{
-		ServiceUid:  "other-service",
-		ServicePort: 80,
-		Protocol:    "TCP",
+		ServiceUid:    "other-service",
+		ServicePort:   80,
+		Protocol:      "TCP",
+		SharedService: true,
 	}))
 	require.False(t, target.MatchForSpec(&manager.InterceptSpec{
-		ServiceUid:  "service-uid",
-		ServicePort: 81,
-		Protocol:    "TCP",
+		ServiceUid:    "service-uid",
+		ServicePort:   81,
+		Protocol:      "TCP",
+		SharedService: true,
+	}))
+	// Without the shared flag, a Service-backed spec matches by container port.
+	require.True(t, target.MatchForSpec(&manager.InterceptSpec{
+		ServiceUid:    "service-uid",
+		ServicePort:   80,
+		Protocol:      "TCP",
+		ContainerPort: 8081,
+	}))
+	require.False(t, target.MatchForSpec(&manager.InterceptSpec{
+		ServiceUid:    "service-uid",
+		ServicePort:   80,
+		Protocol:      "TCP",
+		ContainerPort: 8080,
 	}))
 }
 

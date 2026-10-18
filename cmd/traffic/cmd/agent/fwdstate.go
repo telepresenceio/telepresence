@@ -87,11 +87,11 @@ func (pm *ProviderMux) CreateClientStream(ctx context.Context, tag tunnel.Tag, s
 }
 
 // containerForIntercept returns the local container that should review and
-// serve an intercept. A service-scoped intercept can be shared by workloads
-// whose matching containers have different names, so the matched forwarder
-// target wins over the primary workload's container name in that case.
+// serve an intercept. A shared Service intercept spans workloads whose
+// matching containers have different names, so the matched forwarder
+// target wins over the requested container name in that case.
 func (fs *fwdState) containerForIntercept(spec *manager.InterceptSpec) string {
-	if spec.ServiceUid != "" && fs.intercept.MatchForSpec(spec) {
+	if spec.SharedService && fs.intercept.MatchForSpec(spec) {
 		return fs.container
 	}
 	if spec.ContainerName != "" {
