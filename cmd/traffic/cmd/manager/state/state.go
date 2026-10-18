@@ -465,74 +465,14 @@ func (s *State) transferServiceParticipantReview(interceptID, key string, remove
 			participant.podName != removed.PodName || participant.review == nil {
 			return
 		}
-
-		var replacement *AgentSession
-		s.EachAgent(func(_ tunnel.SessionID, agent *AgentSession) bool {
-			if agent.PodName == removed.PodName || agent.PodIp == "" || agent.ContainerEnvironmentOmitted ||
-				agentParticipantKey(agent.AgentInfo) != key ||
-				!AgentMatchesInterceptInfo(agent.AgentInfo, intercept) {
-				return true
-			}
-			containerName := intercept.Spec.ContainerName
-			for _, target := range agent.InterceptTargets {
-				if servicePortMatches(target, intercept.Spec) && target.ContainerName != "" {
-					containerName = target.ContainerName
-					break
-				}
-			}
-			if len(agent.Containers) > 0 && agent.Containers[containerName] == nil &&
-				(containerName != "" || len(agent.Containers) != 1) {
-				return true
-			}
-			if replacement == nil || agent.PodName < replacement.PodName {
-				replacement = agent
-			}
-			return true
-		})
+		replacement := s.replacementParticipantAgent(intercept, key, removed)
 		if replacement == nil {
 			return
 		}
-
-		review := proto.Clone(participant.review).(*rpc.ReviewInterceptRequest)
-		review.PodIp = replacement.PodIp
-		review.FtpPort = replacement.FtpPort
-		review.SftpPort = replacement.SftpPort
-		if review.Session != nil && replacement.sessionID() != "" {
-			review.Session = &rpc.SessionInfo{SessionId: string(replacement.sessionID())}
-		}
-
-		containerName := intercept.Spec.ContainerName
-		for _, target := range replacement.InterceptTargets {
-			if servicePortMatches(target, intercept.Spec) && target.ContainerName != "" {
-				containerName = target.ContainerName
-				break
-			}
-		}
-		container := replacement.Containers[containerName]
-		if container == nil && containerName == "" && len(replacement.Containers) == 1 {
-			for _, candidate := range replacement.Containers {
-				container = candidate
-			}
-		}
-		if container != nil {
-			container = proto.Clone(container).(*rpc.AgentInfo_ContainerInfo)
-			// Preserve the keys authorized by the original agent review. This
-			// also keeps excluded environment variables excluded if a restored
-			// agent snapshot or exclusion settings changed in the meantime.
-			for name := range review.Environment {
-				if value, ok := container.Environment[name]; ok {
-					review.Environment[name] = value
-				} else {
-					delete(review.Environment, name)
-				}
-			}
-			review.MountPoint = container.MountPoint
-			review.Mounts = container.Mounts
-		} else if len(replacement.Containers) > 0 || len(review.Environment) > 0 ||
-			review.MountPoint != "" || len(review.Mounts) > 0 {
+		review := reviewForReplacementAgent(participant.review, replacement, intercept.Spec)
+		if review == nil {
 			return
 		}
-
 		published := intercept.publishedServiceParticipant() == participant
 		participant.review = review
 		participant.podName = replacement.PodName
@@ -548,6 +488,85 @@ func (s *State) transferServiceParticipantReview(interceptID, key string, remove
 		return true
 	}
 	return false
+}
+
+// participantContainerName returns the container that agent serves spec's
+// Service target with, or spec's own container name when it claims none.
+func participantContainerName(agent *AgentSession, spec *rpc.InterceptSpec) string {
+	for _, target := range agent.InterceptTargets {
+		if servicePortMatches(target, spec) && target.ContainerName != "" {
+			return target.ContainerName
+		}
+	}
+	return spec.ContainerName
+}
+
+// participantContainer returns agent's container named containerName, or its
+// only container when no name was resolved.
+func participantContainer(agent *AgentSession, containerName string) *rpc.AgentInfo_ContainerInfo {
+	if container := agent.Containers[containerName]; container != nil {
+		return container
+	}
+	if containerName == "" && len(agent.Containers) == 1 {
+		for _, container := range agent.Containers {
+			return container
+		}
+	}
+	return nil
+}
+
+// replacementParticipantAgent picks the lowest-named live replica of the
+// participant keyed by key, other than removed, that serves intercept.
+func (s *State) replacementParticipantAgent(intercept *Intercept, key string, removed *AgentSession) *AgentSession {
+	var replacement *AgentSession
+	s.EachAgent(func(_ tunnel.SessionID, agent *AgentSession) bool {
+		if agent.PodName == removed.PodName || agent.PodIp == "" || agent.ContainerEnvironmentOmitted ||
+			agentParticipantKey(agent.AgentInfo) != key ||
+			!AgentMatchesInterceptInfo(agent.AgentInfo, intercept) {
+			return true
+		}
+		if len(agent.Containers) > 0 && participantContainer(agent, participantContainerName(agent, intercept.Spec)) == nil {
+			return true
+		}
+		if replacement == nil || agent.PodName < replacement.PodName {
+			replacement = agent
+		}
+		return true
+	})
+	return replacement
+}
+
+// reviewForReplacementAgent rebases review onto replacement's pod and
+// container, keeping only the environment keys the original review
+// authorized. It returns nil when replacement cannot supply what the
+// review carries.
+func reviewForReplacementAgent(orig *rpc.ReviewInterceptRequest, replacement *AgentSession, spec *rpc.InterceptSpec) *rpc.ReviewInterceptRequest {
+	review := proto.Clone(orig).(*rpc.ReviewInterceptRequest)
+	review.PodIp = replacement.PodIp
+	review.FtpPort = replacement.FtpPort
+	review.SftpPort = replacement.SftpPort
+	if review.Session != nil && replacement.sessionID() != "" {
+		review.Session = &rpc.SessionInfo{SessionId: string(replacement.sessionID())}
+	}
+	container := participantContainer(replacement, participantContainerName(replacement, spec))
+	if container == nil {
+		if len(replacement.Containers) > 0 || len(review.Environment) > 0 ||
+			review.MountPoint != "" || len(review.Mounts) > 0 {
+			return nil
+		}
+		return review
+	}
+	container = proto.Clone(container).(*rpc.AgentInfo_ContainerInfo)
+	for name := range review.Environment {
+		if value, ok := container.Environment[name]; ok {
+			review.Environment[name] = value
+		} else {
+			delete(review.Environment, name)
+		}
+	}
+	review.MountPoint = container.MountPoint
+	review.Mounts = container.Mounts
+	return review
 }
 
 func (s *State) gcClientSessionIntercepts(client *ClientSession) {
