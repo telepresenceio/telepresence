@@ -524,6 +524,11 @@ func (s *State) secondaryExcluded(ctx context.Context, client *ClientSession, wo
 	if s.nodeAgentWanted(workload.GetName(), workload.GetNamespace()) {
 		return fmt.Sprintf("workload %s has a live node-agent intercept or ingest claim", workload)
 	}
+	if enabled, err := checkInterceptAnnotations(ctx, workload); err != nil {
+		return fmt.Sprintf("workload %s cannot be injected: %v", workload, err)
+	} else if !enabled {
+		return fmt.Sprintf("workload %s is not interceptable", workload)
+	}
 	return ""
 }
 

@@ -28,6 +28,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
+	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
@@ -1563,10 +1564,13 @@ func TestUnsupportedSharedServiceModeFallsBackToRequestedWorkload(t *testing.T) 
 	require.Equal(t, "example-service", spec.ServiceName)
 }
 
-func newSharedServiceFixture(t *testing.T) (context.Context, *State, *apps.Deployment, *apps.Deployment) {
+func newSharedServiceFixture(t *testing.T, mutate ...func(stable, canary *apps.Deployment)) (context.Context, *State, *apps.Deployment, *apps.Deployment) {
 	t.Helper()
 	stable := serviceDeployment("example-service", map[string]string{"app": "example-service", "track": "stable"})
 	canary := serviceDeployment("example-service-canary", map[string]string{"app": "example-service", "track": "canary"})
+	for _, m := range mutate {
+		m(stable, canary)
+	}
 	svc := &core.Service{
 		ObjectMeta: meta.ObjectMeta{
 			Name:      "example-service",
@@ -1643,6 +1647,34 @@ func TestServiceInterceptFallsBackWhenSecondaryHasNodeAgentClaim(t *testing.T) {
 
 	require.Nil(t, workloads)
 	requireSingleWorkloadFallback(t, ctx, spec, canary)
+}
+
+func TestServiceInterceptWatcherFallsBackWhenLateWorkloadForbidsInjection(t *testing.T) {
+	ctx, st, stable, canary := newSharedServiceFixture(t, func(_, canary *apps.Deployment) {
+		canary.Spec.Template.Annotations = map[string]string{annotation.InjectTrafficAgent: "disabled"}
+	})
+	st.agents.Store("stable", serviceAgent("example-service", "stable-pod", "10.0.0.1"))
+	st.clients.Store("client", newClientSessionState(ctx, "client", &rpc.ClientInfo{Name: "alice"}, time.Now()))
+
+	intercept := &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:            "client:example-service",
+		Spec:          sharedServiceSpec(),
+		Disposition:   rpc.InterceptDispositionType_ACTIVE,
+		ClientSession: &rpc.SessionInfo{SessionId: "client"},
+	}}
+	intercept.participants = map[string]*interceptParticipant{
+		participantKey("default", "Deployment", stable.Name): {namespace: "default", kind: "Deployment", name: stable.Name},
+	}
+	intercept.syncServiceWorkloads()
+	st.intercepts.Store(intercept.Id, intercept)
+
+	st.reconcileServiceInterceptWorkloads(ctx, intercept.Id)
+
+	updated, ok := st.intercepts.Load(intercept.Id)
+	require.True(t, ok)
+	require.NotContains(t, updated.participants, participantKey("default", "Deployment", canary.Name))
+	require.Equal(t, rpc.InterceptDispositionType_ACTIVE, updated.Disposition)
+	requireSingleWorkloadFallback(t, ctx, updated.Spec, canary)
 }
 
 func TestServiceInterceptWatcherFallsBackWhenLateWorkloadIsNotAuthorized(t *testing.T) {
