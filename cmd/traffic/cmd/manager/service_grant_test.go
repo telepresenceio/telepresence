@@ -414,3 +414,23 @@ func TestGrant_Any_AcceptsEither(t *testing.T) {
 		req.NotContains(buf.String(), "legacy pods/portforward grant")
 	})
 }
+
+func TestAuthorizeParticipantWithoutPrincipal(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+
+	enforcing := &service{authMode: auth.ModeEnforcing}
+	err := enforcing.authorizeParticipant(ctx, nil, grantTestNamespace, "canary")
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	permissive := &service{authMode: auth.ModePermissive}
+	require.NoError(t, permissive.authorizeParticipant(ctx, nil, grantTestNamespace, "canary"))
+}
+
+func TestServiceInstallsParticipantAuthorizerWithoutMetrics(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, false)
+	_, mgr, _ := getTestClientConnAndService(ctx, t, nil, func(e *managerutil.Env) {
+		e.PrometheusPort = 0
+	})
+	require.True(t, mgr.State().ParticipantAuthorizerInstalled())
+}

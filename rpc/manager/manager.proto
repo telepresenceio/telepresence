@@ -86,6 +86,30 @@ message AgentInfo {
   // over QUIC"). 0 means this agent has no QUIC listener.
   int32 quic_port = 16;
 
+  // InterceptTarget describes one service-backed target that this agent can
+  // handle. The traffic-manager uses these claims when a single Service
+  // selects pods owned by more than one workload.
+  message InterceptTarget {
+    // .metadata.uid of the Service associated with the target.
+    string service_uid = 1;
+
+    // Name of the Service, retained for diagnostics.
+    string service_name = 2;
+
+    // Name and number of the selected Service port.
+    string service_port_name = 3;
+    int32 service_port = 4;
+
+    // Protocol and local container target used by this agent.
+    string protocol = 5;
+    string container_name = 6;
+    int32 container_port = 7;
+  }
+
+  // Service-backed targets advertised by this agent. Older agents leave this
+  // empty and continue to use workload-scoped intercept matching.
+  repeated InterceptTarget intercept_targets = 18;
+
   // True when this AgentInfo came from a lightweight watch snapshot and its
   // container environment maps were intentionally omitted. Callers that need
   // those maps must fetch a full AgentInfo through EnsureAgent.
@@ -220,6 +244,10 @@ message InterceptSpec {
   // traffic-manager to have node-agent mode enabled.
   bool node_agent = 32;
 
+  // Set by the traffic-manager when the intercept is expanded to every
+  // workload selected by its Service. Clients leave it unset.
+  bool shared_service = 33;
+
   reserved 9; // used to be former mechanism_args
 
   // Used to be mount_point and only utilized when passing the spec between
@@ -268,6 +296,14 @@ enum InterceptDispositionType {
   BAD_ARGS = 8;
 }
 
+// InterceptWorkload identifies one workload whose pods participate in a
+// Service-scoped intercept.
+message InterceptWorkload {
+  string namespace = 1;
+  string workload_kind = 2;
+  string workload_name = 3;
+}
+
 // InterceptInfo contains information about a live intercept in an agent
 message InterceptInfo {
   InterceptSpec spec = 1;
@@ -310,6 +346,11 @@ message InterceptInfo {
 
   // Timestamp for last modification made by traffic-manager
   google.protobuf.Timestamp modified_at = 21;
+
+  // Workloads whose ready Service-selected pods participate in this intercept.
+  // This is populated by the manager for Service-scoped intercepts so
+  // server-side integrations can configure every participating workload.
+  repeated InterceptWorkload service_workloads = 23;
 
   reserved 7; // was preview_domain
 

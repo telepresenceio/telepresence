@@ -289,6 +289,7 @@ func TestWatchSessionEvents_InterceptedFlipsOnActiveIntercept(t *testing.T) {
 			Mechanism: "tcp",
 		},
 		Disposition:   rpc.InterceptDispositionType_ACTIVE,
+		PodIp:         helloAgent.PodIp,
 		ClientSession: aliceSess,
 	}
 	mgr.State().RestoreIntercepts(svcCtx, []*rpc.InterceptInfo{aliceIntercept}, time.Now())
