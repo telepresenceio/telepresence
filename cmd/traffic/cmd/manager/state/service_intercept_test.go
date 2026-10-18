@@ -8,6 +8,8 @@ import (
 
 	"github.com/puzpuzpuz/xsync/v4"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	apps "k8s.io/api/apps/v1"
 	core "k8s.io/api/core/v1"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,6 +24,7 @@ import (
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/clog/testutil"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/auth"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -42,6 +45,7 @@ func newServiceInterceptState(t *testing.T) (context.Context, *State) {
 		intercepts:               cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
 		agents:                   cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
 		clients:                  xsync.NewMap[tunnel.SessionID, *ClientSession](),
+		leases:                   xsync.NewMap[leaseKey, struct{}](),
 		workloadWatchers:         xsync.NewMap[string, Watcher](),
 		serviceInterceptWatchers: xsync.NewMap[string, struct{}](),
 		timedLogLevel:            log.NewTimedLevel(slog.LevelDebug, clog.SetTreeLevel),
@@ -73,16 +77,17 @@ func serviceAgent(name, podName, podIP string) *AgentSession {
 
 func sharedServiceSpec() *rpc.InterceptSpec {
 	return &rpc.InterceptSpec{
-		Name:         "example-service",
-		Client:       "alice",
-		Agent:        "example-service",
-		WorkloadKind: "Deployment",
-		Namespace:    "default",
-		Mechanism:    "http",
-		ServiceUid:   "shared-service-uid",
-		ServiceName:  "example-service",
-		ServicePort:  80,
-		Protocol:     "TCP",
+		Name:          "example-service",
+		Client:        "alice",
+		Agent:         "example-service",
+		WorkloadKind:  "Deployment",
+		Namespace:     "default",
+		Mechanism:     "http",
+		ServiceUid:    "shared-service-uid",
+		ServiceName:   "example-service",
+		ServicePort:   80,
+		Protocol:      "TCP",
+		SharedService: true,
 	}
 }
 
@@ -323,7 +328,7 @@ func TestServiceInterceptFallsBackWhenServiceIdentityChanges(t *testing.T) {
 			updated, ok := st.intercepts.Load(intercept.Id)
 			require.True(t, ok)
 			require.False(t, serviceScopedIntercept(updated.Spec))
-			require.Empty(t, updated.Spec.ServiceUid)
+			require.Equal(t, "shared-service-uid", updated.Spec.ServiceUid)
 			require.Empty(t, updated.participants)
 			require.Empty(t, updated.ServiceWorkloads)
 			require.False(t, st.IsInterceptedBy(canary, "client"))
@@ -360,7 +365,7 @@ func TestServiceInterceptFallsBackWhenServiceBecomesSelectorless(t *testing.T) {
 	updated, ok := st.intercepts.Load(intercept.Id)
 	require.True(t, ok)
 	require.False(t, serviceScopedIntercept(updated.Spec))
-	require.Empty(t, updated.Spec.ServiceUid)
+	require.Equal(t, "shared-service-uid", updated.Spec.ServiceUid)
 	require.Empty(t, updated.participants)
 	require.Empty(t, updated.ServiceWorkloads)
 	require.True(t, st.IsInterceptedBy(stable, "client"))
@@ -935,6 +940,7 @@ func TestServiceInterceptParticipantBlocksLaterContainerConflict(t *testing.T) {
 			ServicePort:   80,
 			ContainerPort: 8080,
 			Protocol:      "TCP",
+			SharedService: true,
 		},
 		Disposition:      rpc.InterceptDispositionType_ACTIVE,
 		ClientSession:    &rpc.SessionInfo{SessionId: "bob"},
@@ -1552,8 +1558,115 @@ func TestUnsupportedSharedServiceModeFallsBackToRequestedWorkload(t *testing.T) 
 	st.ensureServiceWorkloads(ctx, spec, nil, nil, nil, agentconfig.ReplacePolicyIntercept, nil)
 
 	require.False(t, serviceScopedIntercept(spec))
-	require.Empty(t, spec.ServiceUid)
-	require.Zero(t, spec.ServicePort)
-	require.Empty(t, spec.ServicePortName)
+	require.Equal(t, "shared-service-uid", spec.ServiceUid)
+	require.Equal(t, int32(80), spec.ServicePort)
 	require.Equal(t, "example-service", spec.ServiceName)
+}
+
+func newSharedServiceFixture(t *testing.T) (context.Context, *State, *apps.Deployment, *apps.Deployment) {
+	t.Helper()
+	stable := serviceDeployment("example-service", map[string]string{"app": "example-service", "track": "stable"})
+	canary := serviceDeployment("example-service-canary", map[string]string{"app": "example-service", "track": "canary"})
+	svc := &core.Service{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "example-service",
+			Namespace: "default",
+			UID:       k8sTypes.UID("shared-service-uid"),
+		},
+		Spec: core.ServiceSpec{
+			Selector: map[string]string{"app": "example-service"},
+			Ports: []core.ServicePort{{
+				Name:       "http",
+				Port:       80,
+				TargetPort: intstr.FromInt(8080),
+			}},
+		},
+	}
+	ctx := serviceDiscoveryContext(t, svc, stable, canary)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{
+		ManagerNamespace:              "ambassador",
+		EnabledWorkloadKinds:          k8sapi.Kinds{k8sapi.DeploymentKind},
+		InterceptInactiveBlockTimeout: time.Hour,
+	})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
+	ctx = mutator.WithMap(ctx, mutator.NewWatcher())
+	_, st := newServiceInterceptState(t)
+	st.backgroundCtx = ctx
+	return ctx, st, stable, canary
+}
+
+func denyWorkload(name string) participantAuthorizer {
+	return func(_ context.Context, _ *auth.Principal, _, workloadName string) error {
+		if workloadName == name {
+			return status.Error(codes.PermissionDenied, "denied")
+		}
+		return nil
+	}
+}
+
+func requireSingleWorkloadFallback(t *testing.T, ctx context.Context, spec *rpc.InterceptSpec, canary *apps.Deployment) {
+	t.Helper()
+	require.False(t, serviceScopedIntercept(spec))
+	require.Equal(t, "shared-service-uid", spec.ServiceUid)
+	require.Equal(t, int32(80), spec.ServicePort)
+	require.Nil(t, mutator.GetMap(ctx).Get(canary.Name, canary.Namespace))
+}
+
+func ensureSharedServiceForAlice(ctx context.Context, t *testing.T, st *State, spec *rpc.InterceptSpec, stable *apps.Deployment) []*rpc.InterceptWorkload {
+	t.Helper()
+	primaryConfig, err := st.getOrCreateAgentConfig(ctx, k8sapi.Deployment(stable), false, true, spec, agentconfig.ReplacePolicyIntercept)
+	require.NoError(t, err)
+	client := newClientSessionState(ctx, "client", &rpc.ClientInfo{Name: "alice"}, time.Now())
+	st.clients.Store("client", client)
+	return st.ensureServiceWorkloads(ctx, spec, k8sapi.Deployment(stable), primaryConfig, nil, agentconfig.ReplacePolicyIntercept, client)
+}
+
+func TestServiceInterceptFallsBackWhenSecondaryIsNotAuthorized(t *testing.T) {
+	ctx, st, stable, canary := newSharedServiceFixture(t)
+	st.SetParticipantAuthorizer(denyWorkload(canary.Name))
+	spec := sharedServiceSpec()
+
+	workloads := ensureSharedServiceForAlice(ctx, t, st, spec, stable)
+
+	require.Nil(t, workloads)
+	requireSingleWorkloadFallback(t, ctx, spec, canary)
+}
+
+func TestServiceInterceptFallsBackWhenSecondaryHasNodeAgentClaim(t *testing.T) {
+	ctx, st, stable, canary := newSharedServiceFixture(t)
+	st.leases = xsync.NewMap[leaseKey, struct{}]()
+	st.clients.Store("client", newClientSessionState(ctx, "client", &rpc.ClientInfo{Name: "alice"}, time.Now()))
+	st.addLease("client", canary.Name, "default")
+	spec := sharedServiceSpec()
+
+	workloads := ensureSharedServiceForAlice(ctx, t, st, spec, stable)
+
+	require.Nil(t, workloads)
+	requireSingleWorkloadFallback(t, ctx, spec, canary)
+}
+
+func TestServiceInterceptWatcherFallsBackWhenLateWorkloadIsNotAuthorized(t *testing.T) {
+	ctx, st, stable, canary := newSharedServiceFixture(t)
+	st.SetParticipantAuthorizer(denyWorkload(canary.Name))
+	st.agents.Store("stable", serviceAgent("example-service", "stable-pod", "10.0.0.1"))
+	st.clients.Store("client", newClientSessionState(ctx, "client", &rpc.ClientInfo{Name: "alice"}, time.Now()))
+
+	intercept := &Intercept{InterceptInfo: &rpc.InterceptInfo{
+		Id:            "client:example-service",
+		Spec:          sharedServiceSpec(),
+		Disposition:   rpc.InterceptDispositionType_ACTIVE,
+		ClientSession: &rpc.SessionInfo{SessionId: "client"},
+	}}
+	intercept.participants = map[string]*interceptParticipant{
+		participantKey("default", "Deployment", stable.Name): {namespace: "default", kind: "Deployment", name: stable.Name},
+	}
+	intercept.syncServiceWorkloads()
+	st.intercepts.Store(intercept.Id, intercept)
+
+	st.reconcileServiceInterceptWorkloads(ctx, intercept.Id)
+
+	updated, ok := st.intercepts.Load(intercept.Id)
+	require.True(t, ok)
+	require.NotContains(t, updated.participants, participantKey("default", "Deployment", canary.Name))
+	requireSingleWorkloadFallback(t, ctx, updated.Spec, canary)
 }

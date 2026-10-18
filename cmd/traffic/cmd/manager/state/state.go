@@ -66,6 +66,7 @@ func (is *Intercept) terminate(ctx context.Context) {
 }
 
 type (
+	participantAuthorizer      func(ctx context.Context, p *auth.Principal, namespace, workloadName string) error
 	allClientSessionsFinalizer func(client *ClientSession)
 	allInterceptsFinalizer     func(client *ClientSession, workload *string)
 )
@@ -78,6 +79,7 @@ type State struct {
 
 	allClientSessionsFinalizer allClientSessionsFinalizer
 	allInterceptsFinalizer     allInterceptsFinalizer
+	participantAuthorizer      participantAuthorizer
 	intercepts                 *cache.Map[string, *Intercept]               // info for intercepts, keyed by intercept id
 	agents                     *cache.Map[tunnel.SessionID, *AgentSession]  // info for agent sessions, keyed by session id
 	clients                    *xsync.Map[tunnel.SessionID, *ClientSession] // info for client sessions, keyed by session id
@@ -1050,6 +1052,22 @@ func (s *State) allClientSessionsFinalizerCall(client *ClientSession) {
 	if s.allClientSessionsFinalizer != nil {
 		s.allClientSessionsFinalizer(client)
 	}
+}
+
+// SetParticipantAuthorizer sets the check that a client may attach to a
+// secondary workload of a shared Service intercept.
+func (s *State) SetParticipantAuthorizer(a participantAuthorizer) {
+	s.participantAuthorizer = a
+}
+
+func (s *State) authorizeParticipant(ctx context.Context, client *ClientSession, wl k8sapi.Workload) error {
+	if s.participantAuthorizer == nil {
+		return nil
+	}
+	if client == nil {
+		return status.Error(codes.PermissionDenied, "the client session no longer exists")
+	}
+	return s.participantAuthorizer(ctx, client.Principal(), wl.GetNamespace(), wl.GetName())
 }
 
 func (s *State) SetAllInterceptsFinalizer(finalizer allInterceptsFinalizer) {

@@ -46,8 +46,15 @@ func agentParticipantKey(agent *rpc.AgentInfo) string {
 	return participantKey(agent.Namespace, agent.Kind, agent.Name)
 }
 
-func serviceScopedIntercept(spec *rpc.InterceptSpec) bool {
+// namesService reports whether spec identifies a Service port.
+func namesService(spec *rpc.InterceptSpec) bool {
 	return spec != nil && spec.ServiceUid != "" && (spec.ServicePort > 0 || spec.ServicePortName != "")
+}
+
+// serviceScopedIntercept reports whether spec is expanded to every workload
+// selected by its Service.
+func serviceScopedIntercept(spec *rpc.InterceptSpec) bool {
+	return namesService(spec) && spec.SharedService
 }
 
 func servicePortMatches(target *rpc.AgentInfo_InterceptTarget, spec *rpc.InterceptSpec) bool {

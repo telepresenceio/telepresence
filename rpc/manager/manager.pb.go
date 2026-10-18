@@ -806,7 +806,10 @@ type InterceptSpec struct {
 	// (a manager-created Job that enters the target pod's namespaces) rather
 	// than by a sidecar injected into the workload. Requires the
 	// traffic-manager to have node-agent mode enabled.
-	NodeAgent     bool `protobuf:"varint,32,opt,name=node_agent,json=nodeAgent,proto3" json:"node_agent,omitempty"`
+	NodeAgent bool `protobuf:"varint,32,opt,name=node_agent,json=nodeAgent,proto3" json:"node_agent,omitempty"`
+	// Set by the traffic-manager when the intercept is expanded to every
+	// workload selected by its Service. Clients leave it unset.
+	SharedService bool `protobuf:"varint,33,opt,name=shared_service,json=sharedService,proto3" json:"shared_service,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1047,6 +1050,13 @@ func (x *InterceptSpec) GetServiceIps() [][]byte {
 func (x *InterceptSpec) GetNodeAgent() bool {
 	if x != nil {
 		return x.NodeAgent
+	}
+	return false
+}
+
+func (x *InterceptSpec) GetSharedService() bool {
+	if x != nil {
+		return x.SharedService
 	}
 	return false
 }
@@ -5683,7 +5693,8 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\x0econtainer_port\x18\a \x01(\x05R\rcontainerPortJ\x04\b\x06\x10\a\"1\n" +
 	"\vPortMapping\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\x05R\x04from\x12\x0e\n" +
-	"\x02to\x18\x02 \x01(\x05R\x02to\"\xdf\t\n" +
+	"\x02to\x18\x02 \x01(\x05R\x02to\"\x86\n" +
+	"\n" +
 	"\rInterceptSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06client\x18\x02 \x01(\tR\x06client\x12\x14\n" +
@@ -5722,7 +5733,8 @@ const file_manager_manager_proto_rawDesc = "" +
 	"\vservice_ips\x18\x1f \x03(\fR\n" +
 	"serviceIps\x12\x1d\n" +
 	"\n" +
-	"node_agent\x18  \x01(\bR\tnodeAgent\x1a@\n" +
+	"node_agent\x18  \x01(\bR\tnodeAgent\x12%\n" +
+	"\x0eshared_service\x18! \x01(\bR\rsharedService\x1a@\n" +
 	"\x12HeaderFiltersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a;\n" +

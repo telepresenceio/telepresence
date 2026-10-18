@@ -515,12 +515,22 @@ func serviceWorkloadInfos(workloads []k8sapi.Workload) []*rpc.InterceptWorkload 
 	return infos
 }
 
+// secondaryExcluded returns why workload may not join a shared Service
+// intercept for client, or "" when it may.
+func (s *State) secondaryExcluded(ctx context.Context, client *ClientSession, workload k8sapi.Workload) string {
+	if err := s.authorizeParticipant(ctx, client, workload); err != nil {
+		return fmt.Sprintf("workload %s is not authorized for this client: %v", workload, err)
+	}
+	if s.nodeAgentWanted(workload.GetName(), workload.GetNamespace()) {
+		return fmt.Sprintf("workload %s has a live node-agent intercept or ingest claim", workload)
+	}
+	return ""
+}
+
 func fallbackToSingleWorkload(ctx context.Context, spec *rpc.InterceptSpec, reason string) {
 	clog.Warnf(ctx, "Shared-Service expansion for %q is unavailable: %s; using only requested workload %q",
 		spec.ServiceName, reason, spec.Agent)
-	spec.ServiceUid = ""
-	spec.ServicePortName = ""
-	spec.ServicePort = 0
+	spec.SharedService = false
 }
 
 func (s *State) ensureServiceWorkloads(
@@ -532,13 +542,14 @@ func (s *State) ensureServiceWorkloads(
 	rp agentconfig.ReplacePolicy,
 	client *ClientSession,
 ) []*rpc.InterceptWorkload {
-	if !serviceScopedIntercept(spec) {
+	if !namesService(spec) {
 		return nil
 	}
 	if spec.Replace || spec.Mechanism != "http" {
 		fallbackToSingleWorkload(ctx, spec, "shared interception requires the http mechanism without --replace")
 		return nil
 	}
+	spec.SharedService = true
 
 	workloads, err := serviceWorkloads(ctx, spec, primary)
 	if err != nil {
@@ -553,6 +564,10 @@ func (s *State) ensureServiceWorkloads(
 	for _, workload := range workloads {
 		if workload.GetName() == primary.GetName() && workload.GetKind() == primary.GetKind() {
 			continue
+		}
+		if reason := s.secondaryExcluded(ctx, client, workload); reason != "" {
+			fallbackToSingleWorkload(ctx, spec, reason)
+			return nil
 		}
 		if err = s.checkServiceWorkloadConflicts(ctx, spec, workload, client); err != nil {
 			fallbackToSingleWorkload(ctx, spec,
@@ -912,6 +927,8 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 
 	spec := cir.InterceptSpec
 	normalizeReplaceSpec(spec)
+	// Owned by the manager: only a completed expansion sets it.
+	spec.SharedService = false
 	interceptID := fmt.Sprintf("%s:%s", sessionID, spec.Name)
 
 	wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
@@ -940,7 +957,7 @@ func (s *State) AddIntercept(ctx context.Context, cir *rpc.CreateInterceptReques
 		if _, err = s.waitForNodeAgent(ctx, wl.GetName(), wl.GetNamespace()); err != nil {
 			return nil, nil, err
 		}
-		if serviceScopedIntercept(spec) {
+		if namesService(spec) {
 			// Node-agent intercepts target the pod selected during
 			// PrepareIntercept. They cannot provision the other workloads
 			// behind a shared Service, so don't let existing sidecars make
@@ -1444,7 +1461,7 @@ func (s *State) getOrCreateAgentConfig(
 			if sc.AgentImage != agentImage {
 				sc.AgentImage = agentImage
 			}
-			if serviceScopedIntercept(spec) && !sidecarClaimsService(sc, spec) {
+			if namesService(spec) && !sidecarClaimsService(sc, spec) {
 				sc, err = s.generateAgentConfig(ctx, wl, agentImage, sc)
 				if err != nil {
 					return nil, err

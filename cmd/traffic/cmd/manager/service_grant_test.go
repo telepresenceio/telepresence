@@ -414,3 +414,14 @@ func TestGrant_Any_AcceptsEither(t *testing.T) {
 		req.NotContains(buf.String(), "legacy pods/portforward grant")
 	})
 }
+
+func TestAuthorizeParticipantWithoutPrincipal(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+
+	enforcing := &service{authMode: auth.ModeEnforcing}
+	err := enforcing.authorizeParticipant(ctx, nil, grantTestNamespace, "canary")
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+
+	permissive := &service{authMode: auth.ModePermissive}
+	require.NoError(t, permissive.authorizeParticipant(ctx, nil, grantTestNamespace, "canary"))
+}

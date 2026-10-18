@@ -1488,8 +1488,13 @@ func managerPodName(_ context.Context) (string, error) {
 // principal and a non-nil verdict fail only in enforcing mode -- otherwise
 // they are logged and the operation proceeds.
 func (s *service) authorized(ctx context.Context, operation string, review func(p *auth.Principal) error) error {
+	return s.authorizedAs(ctx, auth.PrincipalFrom(ctx), operation, review)
+}
+
+// authorizedAs is authorized for an explicit principal.
+func (s *service) authorizedAs(ctx context.Context, p *auth.Principal, operation string, review func(p *auth.Principal) error) error {
 	var err error
-	if p := auth.PrincipalFrom(ctx); p == nil {
+	if p == nil {
 		if s.authMode != auth.ModeEnforcing {
 			clog.Debugf(ctx, "caller is unauthenticated; skipping authorization of %s", operation)
 			return nil
@@ -1540,6 +1545,14 @@ func groundOnWorkloadPods(r *auth.Review, namespace, workloadName string) *auth.
 func (s *service) authorizeIntercept(ctx context.Context, namespace string, spec *rpc.InterceptSpec) error {
 	return s.authorized(ctx, fmt.Sprintf("intercept %q in namespace %s", spec.Name, namespace), func(p *auth.Principal) error {
 		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(auth.AttachmentReview(namespace, spec.Agent, "create"), namespace, spec.Agent))
+	})
+}
+
+// authorizeParticipant runs the intercept "create" review for a secondary
+// workload on behalf of p.
+func (s *service) authorizeParticipant(ctx context.Context, p *auth.Principal, namespace, workloadName string) error {
+	return s.authorizedAs(ctx, p, fmt.Sprintf("shared intercept participant %s in namespace %s", workloadName, namespace), func(p *auth.Principal) error {
+		return s.authorizer.Authorize(ctx, s.authGrant, p, groundOnWorkloadPods(auth.AttachmentReview(namespace, workloadName, "create"), namespace, workloadName))
 	})
 }
 
