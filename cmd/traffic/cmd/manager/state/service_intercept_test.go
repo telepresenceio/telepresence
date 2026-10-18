@@ -42,6 +42,7 @@ func newServiceInterceptState(t *testing.T) (context.Context, *State) {
 	ctx := testutil.NewContext(t, false)
 	ctx = mutator.WithMap(ctx, mutator.NewWatcher())
 	return ctx, &State{
+		participantAuthorizer:    allowAllParticipants,
 		backgroundCtx:            ctx,
 		intercepts:               cache.NewMap[string, *Intercept](interceptEqual, time.Millisecond),
 		agents:                   cache.NewMap[tunnel.SessionID, *AgentSession](agentsEqual, time.Millisecond),
@@ -53,6 +54,8 @@ func newServiceInterceptState(t *testing.T) (context.Context, *State) {
 		llSubs:                   newLoglevelSubscribers(),
 	}
 }
+
+func allowAllParticipants(context.Context, *auth.Principal, string, string) error { return nil }
 
 func serviceAgent(name, podName, podIP string) *AgentSession {
 	return &AgentSession{AgentInfo: &rpc.AgentInfo{
@@ -1934,4 +1937,69 @@ func TestServiceInterceptWatcherFallsBackWhenLateWorkloadIsNotAuthorized(t *test
 	require.True(t, ok)
 	require.NotContains(t, updated.participants, participantKey("default", "Deployment", canary.Name))
 	requireSingleWorkloadFallback(t, ctx, updated.Spec, canary)
+}
+
+func TestServiceInterceptSecondaryIgnoresPrimaryContainerName(t *testing.T) {
+	stable := serviceDeployment("example-service", map[string]string{"app": "example-service", "track": "stable"})
+	canary := serviceDeployment("example-service-canary", map[string]string{"app": "example-service", "track": "canary"})
+	canary.Spec.Template.Spec.Containers = []core.Container{
+		{Name: "app", Ports: []core.ContainerPort{{ContainerPort: 9090}}},
+		{Name: "backend", Ports: []core.ContainerPort{{ContainerPort: 8080}}},
+	}
+	svc := &core.Service{
+		ObjectMeta: meta.ObjectMeta{
+			Name:      "example-service",
+			Namespace: "default",
+			UID:       k8sTypes.UID("shared-service-uid"),
+		},
+		Spec: core.ServiceSpec{
+			Selector: map[string]string{"app": "example-service"},
+			Ports: []core.ServicePort{{
+				Name:       "http",
+				Port:       80,
+				TargetPort: intstr.FromInt(8080),
+			}},
+		},
+	}
+	ctx := serviceDiscoveryContext(t, svc, stable, canary)
+	ctx = managerutil.WithEnv(ctx, &managerutil.Env{
+		ManagerNamespace:              "ambassador",
+		EnabledWorkloadKinds:          k8sapi.Kinds{k8sapi.DeploymentKind},
+		InterceptInactiveBlockTimeout: time.Hour,
+	})
+	ctx = managerutil.WithResolvedAgentImageRetriever(ctx, managerutil.ImageFromEnv("ghcr.io/telepresenceio/tel2:2.99.0"))
+	ctx = mutator.WithMap(ctx, mutator.NewWatcher())
+	_, st := newServiceInterceptState(t)
+	st.backgroundCtx = ctx
+
+	spec := sharedServiceSpec()
+	spec.ContainerName = "app"
+	primaryConfig, err := st.getOrCreateAgentConfig(ctx, k8sapi.Deployment(stable), false, true, spec, agentconfig.ReplacePolicyIntercept)
+	require.NoError(t, err)
+	canaryConfig, err := st.getOrCreateAgentConfig(ctx, k8sapi.Deployment(canary), false, false, nil, agentconfig.ReplacePolicyInactive)
+	require.NoError(t, err)
+	require.Len(t, canaryConfig.Containers, 2)
+	for _, c := range canaryConfig.Containers {
+		switch c.Name {
+		case "app":
+			c.Replace = agentconfig.ReplacePolicyContainer
+		case "backend":
+			c.Replace = agentconfig.ReplacePolicyInactive
+		}
+	}
+
+	client := newClientSessionState(ctx, "alice", &rpc.ClientInfo{Name: "alice"}, time.Now())
+	// The canary has no ready replicas, so this covers the getOrCreateAgentConfig branch.
+	workloads := st.ensureServiceWorkloads(ctx, spec, k8sapi.Deployment(stable), primaryConfig, nil, agentconfig.ReplacePolicyIntercept, client)
+
+	require.Len(t, workloads, 2)
+	require.True(t, serviceScopedIntercept(spec))
+	config := mutator.GetMap(ctx).Get(canary.Name, canary.Namespace)
+	require.NotNil(t, config)
+	replace := map[string]agentconfig.ReplacePolicy{}
+	for _, c := range config.Containers {
+		replace[c.Name] = c.Replace
+	}
+	require.Equal(t, agentconfig.ReplacePolicyContainer, replace["app"])
+	require.Equal(t, agentconfig.ReplacePolicyIntercept, replace["backend"])
 }

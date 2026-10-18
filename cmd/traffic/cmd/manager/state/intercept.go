@@ -478,10 +478,7 @@ func (s *State) checkServiceWorkloadConflictsIgnoring(
 			return err
 		}
 	}
-	secondarySpec := proto.Clone(spec).(*rpc.InterceptSpec)
-	// Different selected workloads can use different container names for the
-	// same Service target. Resolve the secondary workload's own container.
-	secondarySpec.ContainerName = ""
+	secondarySpec := secondaryWorkloadSpec(spec)
 	_, ic, err := config.FindIntercept(
 		secondarySpec.ServiceName,
 		secondarySpec.ContainerName,
@@ -501,6 +498,14 @@ func (s *State) checkServiceWorkloadConflictsIgnoring(
 	conflictSpec.Protocol = ic.Protocol.String()
 	conflictSpec.ContainerPort = int32(ic.ContainerPort)
 	return s.checkInterceptConflictsIgnoring(config, client, containerPorts, conflictSpec, ignoredInterceptID)
+}
+
+// secondaryWorkloadSpec returns spec without a container name; the Service
+// target resolves the container on each selected workload.
+func secondaryWorkloadSpec(spec *rpc.InterceptSpec) *rpc.InterceptSpec {
+	secondary := proto.Clone(spec).(*rpc.InterceptSpec)
+	secondary.ContainerName = ""
+	return secondary
 }
 
 func serviceWorkloadInfos(workloads []k8sapi.Workload) []*rpc.InterceptWorkload {
@@ -588,13 +593,13 @@ func (s *State) ensureServiceWorkloads(
 		if workload.GetName() != primary.GetName() || workload.GetKind() != primary.GetKind() {
 			configWorkload := configWorkloads[participantKey(workload.GetNamespace(), string(workload.GetKind()), workload.GetName())]
 			if k8sapi.ReadyReplicas(workload) == 0 {
-				config, err = s.getOrCreateAgentConfig(ctx, configWorkload, s.isExtended(spec), false, spec, rp)
+				config, err = s.getOrCreateAgentConfig(ctx, configWorkload, s.isExtended(spec), false, secondaryWorkloadSpec(spec), rp)
 				if err == nil {
 					err = mutator.GetMap(ctx).EvictPodsWithAgentConfigMismatch(ctx, workload, config)
 				}
 				agents = nil
 			} else {
-				config, agents, err = s.ensureAgent(ctx, configWorkload, s.isExtended(spec), false, spec, rp)
+				config, agents, err = s.ensureAgent(ctx, configWorkload, s.isExtended(spec), false, secondaryWorkloadSpec(spec), rp)
 			}
 			if err != nil {
 				fallbackToSingleWorkload(ctx, spec,

@@ -238,7 +238,7 @@ func (s *State) reconcileServiceInterceptWorkloads(ctx context.Context, intercep
 			continue
 		}
 		config, err = s.getOrCreateAgentConfig(ctx, workload, s.isExtended(intercept.Spec), false,
-			intercept.Spec, agentconfig.ReplacePolicyIntercept)
+			secondaryWorkloadSpec(intercept.Spec), agentconfig.ReplacePolicyIntercept)
 		if err != nil {
 			clog.Errorf(ctx, "Unable to provision workload %s for intercept %q: %v", workload, interceptID, err)
 			continue
