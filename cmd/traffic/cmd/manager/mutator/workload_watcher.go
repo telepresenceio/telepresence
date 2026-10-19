@@ -95,7 +95,7 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		cmpopts.IgnoreMapEntries(func(k, _ string) bool {
 			return k == annotation.RestartedAt
 		})) {
-		if !workloadUpdateInProgress(oldWl) || workloadUpdateInProgress(wl) {
+		if !workloadRolloutInProgress(oldWl) || workloadRolloutInProgress(wl) {
 			return
 		}
 		clog.Debugf(ctx, "Reconciling agent config after %s finished updating", wl)
@@ -137,16 +137,9 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		}
 
 		c.Store(sc)
-		clog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
-		err = c.EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
-		if err != nil {
-			clog.Error(ctx, err)
-		}
+		c.requestEviction(ctx, wl, sc)
 	case "false", "disabled":
 		c.Delete(wl.GetName(), wl.GetNamespace())
-		err := c.EvictPodsWithAgentConfig(ctx, wl)
-		if err != nil {
-			clog.Error(ctx, err)
-		}
+		c.requestEviction(ctx, wl, nil)
 	}
 }
