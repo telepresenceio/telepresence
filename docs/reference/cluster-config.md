@@ -90,6 +90,34 @@ annotation to your workload template's annotations:
        containers:
 ```
 
+### Agent Rollout Pacing
+
+When the agent configuration of a workload that already carries traffic-agents changes, for example because a
+Service that selects it changed or the traffic-manager was upgraded, the traffic-manager replaces the workload's
+pods so that the webhook injects the new agent. It replaces them in batches sized by the workload's own rolling
+update settings:
+
+| Workload kind | Pods replaced at once                                                                             |
+|---------------|---------------------------------------------------------------------------------------------------|
+| Deployment    | `strategy.rollingUpdate.maxUnavailable` (default 25%), or every pod with the `Recreate` strategy  |
+| Argo Rollout  | `strategy.canary.maxUnavailable` (default 25%), or one pod with the blue-green strategy           |
+| StatefulSet   | `updateStrategy.rollingUpdate.maxUnavailable` when set, otherwise one pod                         |
+| ReplicaSet    | One pod                                                                                           |
+
+Percentages round down, but at least one pod is replaced per batch. Pods that are already unavailable count
+against the batch, and the next batch starts when the replacements are ready. An eviction that a
+PodDisruptionBudget refuses is retried, since the budget's status trails pod readiness. A budget that keeps
+refusing for thirty seconds restarts the workload through its controller instead: a `restartedAt` annotation on
+the pod template for Deployments and Argo Rollouts, a temporary scale-up for StatefulSets and ReplicaSets. The
+controller then applies its own surge and unavailability settings.
+
+The replacement is deferred while the workload is already rolling out, or while its unavailable pods leave no
+room in the batch. A deferral that lasts longer than a minute is logged at info level. After five minutes the
+traffic-manager stops waiting and restarts the workload through its controller.
+
+Removing the agents when the traffic-manager is uninstalled is not paced: every agent pod in the namespace is
+evicted at once.
+
 ### Service Name and Port Annotations
 
 Telepresence will automatically find all services and all ports that will connect to a workload and make them available

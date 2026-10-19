@@ -44,6 +44,12 @@ Connecting to the traffic-manager, fetching the remote client configuration, and
 On local clusters, in-cluster traffic to the IP of a deleted pod, typically a restarted traffic-manager, left the node through its default route, reached the workstation's TUN device, and was dialed again from the cluster, flooding the connection with tunnels until the client ran out of ports. The route-controller now also drops forwarded traffic to the node's own pod CIDRs when it is about to leave through the node's default route.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Agent updates roll out within the workload's allowed unavailability](reference/cluster-config#agent-rollout-pacing)</div></div>
+<div style="margin-left: 15px">
+
+When a workload's agent configuration changes, the traffic-manager now replaces its pods in batches sized by the workload's <code>maxUnavailable</code>, waits for the replacements to become ready between batches, and defers while the workload is already rolling out. An eviction refused by a PodDisruptionBudget is retried for thirty seconds before the workload is restarted through its controller. A deferral is logged after a minute and, after five minutes, gives way to such a restart as well. Uninstalling the traffic-manager still removes every agent at once.
+</div>
+
 ## Version 2.32.2 <span style="font-size: 16px;">(October  8)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Root daemon no longer shuts down after a brief stall](https://github.com/telepresenceio/telepresence/issues/4332)</div></div>
 <div style="margin-left: 15px">
