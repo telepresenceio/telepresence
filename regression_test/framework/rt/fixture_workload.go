@@ -25,6 +25,9 @@ type Workload struct {
 	// ExtraPorts are the workload's named ports beyond Port ("http"), set
 	// for EchoMultiPort templates; nil otherwise.
 	ExtraPorts []workloads.NamedPort
+	// MinAvailable is non-zero when a PodDisruptionBudget named after the
+	// workload was rendered with it.
+	MinAvailable int
 }
 
 // ServiceURL is the cluster-DNS URL of the workload's service, reachable
@@ -113,13 +116,15 @@ func workloadKey(ns string, tpl workloads.Template) string {
 			c.ConfigVolume.Name, c.ConfigVolume.Key, c.ConfigVolume.Content, c.ConfigVolume.MountPath)
 	}
 	return fmt.Sprintf("workload|%s|%s|%s|%d|%s|%s|headless=%t|noservice=%t|udp=%t|extra=%s|annotations=%s|"+
-		"resources=%s,%s,%s,%s|appprotocol=%s|configvolume=%s,%s,%s,%s|env=%s|extracontainers=%s",
+		"resources=%s,%s,%s,%s|appprotocol=%s|configvolume=%s,%s,%s,%s|env=%s|extracontainers=%s|"+
+		"maxunavailable=%d|minavailable=%d",
 		ns, tpl.Name, tpl.Kind, tpl.Replicas, tpl.Image, tpl.SvcName,
 		tpl.Headless, tpl.NoService, tpl.UDP, strings.Join(extra, ","), strings.Join(annos, ","),
 		tpl.Resources.Requests.CPU, tpl.Resources.Requests.Memory,
 		tpl.Resources.Limits.CPU, tpl.Resources.Limits.Memory, tpl.AppProtocol,
 		tpl.ConfigVolume.Name, tpl.ConfigVolume.Key, tpl.ConfigVolume.Content, tpl.ConfigVolume.MountPath,
-		strings.Join(env, ","), strings.Join(extraContainers, ";"))
+		strings.Join(env, ","), strings.Join(extraContainers, ";"),
+		tpl.MaxUnavailable, tpl.MinAvailable)
 }
 
 func provisionWorkload(e Env, ns string, tpl workloads.Template) (*Workload, error) {
@@ -155,12 +160,13 @@ func provisionWorkload(e Env, ns string, tpl workloads.Template) (*Workload, err
 		return nil, fmt.Errorf("workload %s: %w", tpl.Name, err)
 	}
 	return &Workload{
-		Name:       tpl.Name,
-		Namespace:  ns,
-		Kind:       tpl.Kind,
-		Port:       int(tpl.Port),
-		SvcName:    tpl.SvcName,
-		ExtraPorts: tpl.ExtraPorts,
+		Name:         tpl.Name,
+		Namespace:    ns,
+		Kind:         tpl.Kind,
+		Port:         int(tpl.Port),
+		SvcName:      tpl.SvcName,
+		ExtraPorts:   tpl.ExtraPorts,
+		MinAvailable: tpl.MinAvailable,
 	}, nil
 }
 
@@ -199,6 +205,11 @@ func destroyWorkload(e Env, w *Workload) error {
 	kindPath := strings.ToLower(w.Kind) + "/" + w.Name
 	if _, err := e.R.Kubectl(e.Ctx, w.Namespace, "delete", kindPath, "--ignore-not-found"); err != nil {
 		return err
+	}
+	if w.MinAvailable != 0 {
+		if _, err := e.R.Kubectl(e.Ctx, w.Namespace, "delete", "pdb", w.Name, "--ignore-not-found"); err != nil {
+			return err
+		}
 	}
 	if w.SvcName == "" {
 		return nil

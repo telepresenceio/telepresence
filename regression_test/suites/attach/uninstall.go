@@ -1,6 +1,9 @@
 package attach
 
 import (
+	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/cli"
@@ -59,6 +62,69 @@ func (s *Uninstall) Test_UninstallRemovesAgent() {
 		return !hasInstalledAgent(&s.Suite, wl)
 	}, uninstallTimeout, uninstallPollInterval,
 		"list --agents should no longer show %s.%s after uninstall", wl.Name, wl.Namespace)
+}
+
+// Test_UninstallAllAgentsRemovesSeveralWorkloads gives three two-replica
+// workloads an agent each, then runs `telepresence uninstall --all-agents`.
+// That RPC path removes every agent in the connected namespace in one
+// unpaced pass, the same function the Helm pre-delete hook calls, and all
+// six pods must lose their traffic-agent container. The namespace is
+// private so that the namespace-wide uninstall touches no other suite's
+// workloads; the manager has to restart to manage it, which also kills the
+// default connection's port-forward, so that connection is freed first.
+func (s *Uninstall) Test_UninstallAllAgentsRemovesSeveralWorkloads() {
+	t := s.T()
+	ctx := s.Ctx()
+	r := s.R()
+	s.Manager()
+	env := rt.Env{Ctx: ctx, T: t, R: r}
+	ns := rt.PrivateNamespace(env, "uninstall-all")
+	rt.Mutate(t, rt.ConnectionFixture(s.AppNamespace())).Disconnect(t)
+	s.Require().NoError(rt.RestartManager(env))
+	conn := rt.Mutate(t, rt.ConnectionFixture(ns))
+	ls := s.LocalEcho()
+
+	wls := make([]*rt.Workload, 3)
+	for i := range wls {
+		wl := rt.Get(t, rt.WorkloadFixture(ns, workloads.EchoReplicas(fmt.Sprintf("uninstall-all-%d", i), 2)))
+		a := conn.Intercept(t, wl, rt.ToLocal(ls, "http"), cli.MountFalse())
+		a.Detach(t)
+		wls[i] = wl
+	}
+	for _, wl := range wls {
+		s.Require().Eventually(func() bool {
+			return agentContainers(ctx, r, ns, wl.Name) == 2
+		}, uninstallTimeout, uninstallPollInterval, "both pods of %s should carry a traffic-agent", wl.Name)
+	}
+
+	_, stderr, err := s.CLI().Run(ctx, "uninstall", "--all-agents")
+	s.Require().NoError(err, "uninstall --all-agents should succeed: %s", stderr)
+
+	s.Require().Eventually(func() bool {
+		for _, wl := range wls {
+			if agentContainers(ctx, r, ns, wl.Name) != 0 || hasInstalledAgent(&s.Suite, wl) {
+				return false
+			}
+		}
+		return true
+	}, uninstallTimeout, uninstallPollInterval, "no pod in %s should carry a traffic-agent after uninstall --all-agents", ns)
+}
+
+// agentContainers counts the traffic-agent containers across the pods
+// matching the app=name selector in ns.
+func agentContainers(ctx context.Context, r *rt.Runtime, ns, name string) int {
+	out, err := r.Kubectl(ctx, ns, "get", "pod", "-l", "app="+name, "-o",
+		"jsonpath={.items[*].spec.containers[*].name}")
+	if err != nil {
+		return -1
+	}
+	count := 0
+	for _, f := range strings.Fields(out) {
+		if f == "traffic-agent" {
+			count++
+		}
+	}
+	return count
 }
 
 // hasInstalledAgent reports whether `list --agents` includes wl: that

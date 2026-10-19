@@ -80,6 +80,12 @@ type Template struct {
 	// no equivalent block, since no suite needs a multi-container workload
 	// of those kinds yet.
 	ExtraContainers []ExtraContainer
+	// MaxUnavailable, when non-zero, sets the Deployment's rolling-update
+	// maxUnavailable. Rendered for the Deployment kind only.
+	MaxUnavailable int
+	// MinAvailable, when non-zero, adds a PodDisruptionBudget selecting the
+	// workload's pods with that minAvailable.
+	MinAvailable int
 }
 
 // PortName is the primary port's name: "udp" when UDP is set (naming it

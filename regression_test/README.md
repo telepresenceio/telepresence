@@ -182,7 +182,8 @@ for now.
   the init-container interception path pod-IP traffic needs),
   `EchoNoService` (carries the inject-container-ports annotation),
   `EchoMultiPort`, `EchoReplicas`, `EchoWithConfigVolume`; templates take
-  `Annotations`, `Resources`, `AppProtocol`.
+  `Annotations`, `Resources`, `AppProtocol`, `MaxUnavailable` (Deployment
+  rolling-update setting) and `MinAvailable` (adds a PodDisruptionBudget).
 - **No hard-coded ports.** Local listeners bind `:0` (`s.LocalEcho()`);
   the only fixed numbers are external facts (the echo image's 8080, a
   NodePort under test) and must say so.

@@ -20,6 +20,19 @@ data:
 ---
 {{- end }}
 {{- end }}
+{{- if .MinAvailable }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ .Name }}
+  namespace: {{ .Namespace }}
+spec:
+  minAvailable: {{ .MinAvailable }}
+  selector:
+    matchLabels:
+      app: {{ .Name }}
+---
+{{- end }}
 {{- if not .NoService }}
 apiVersion: v1
 kind: Service
@@ -60,6 +73,12 @@ metadata:
     app: {{ .Name }}
 spec:
   replicas: {{ .Replicas }}
+{{- if and (eq .Kind "Deployment") .MaxUnavailable }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: {{ .MaxUnavailable }}
+{{- end }}
   selector:
     matchLabels:
       app: {{ .Name }}

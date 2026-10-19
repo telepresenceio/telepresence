@@ -98,6 +98,44 @@ func TestRender_Rollout(t *testing.T) {
 	}
 }
 
+// TestRender_RollingUpdateBudget checks that MaxUnavailable renders the
+// Deployment's rolling-update strategy and MinAvailable a
+// PodDisruptionBudget, and that a ReplicaSet renders neither.
+func TestRender_RollingUpdateBudget(t *testing.T) {
+	tpl := EchoReplicas("paced-echo", 4)
+	tpl.MaxUnavailable = 2
+	tpl.MinAvailable = 3
+	docs := renderDocs(t, tpl, "rtest-ns")
+	dep := workloadDoc(t, docs, "Deployment")
+	strategy, _ := dep["spec"].(map[string]any)["strategy"].(map[string]any)
+	rollingUpdate, _ := strategy["rollingUpdate"].(map[string]any)
+	if got := rollingUpdate["maxUnavailable"]; got != float64(2) {
+		t.Fatalf("spec.strategy.rollingUpdate.maxUnavailable = %v, want 2", got)
+	}
+	pdb := workloadDoc(t, docs, "PodDisruptionBudget")
+	spec, _ := pdb["spec"].(map[string]any)
+	if got := spec["minAvailable"]; got != float64(3) {
+		t.Fatalf("PodDisruptionBudget spec.minAvailable = %v, want 3", got)
+	}
+	selector, _ := spec["selector"].(map[string]any)
+	matchLabels, _ := selector["matchLabels"].(map[string]any)
+	if matchLabels["app"] != "paced-echo" {
+		t.Fatalf("PodDisruptionBudget selects %v, want app=paced-echo", matchLabels)
+	}
+
+	rs := EchoReplicaSet("paced-rs")
+	rs.MaxUnavailable = 2
+	docs = renderDocs(t, rs, "rtest-ns")
+	if _, ok := workloadDoc(t, docs, "ReplicaSet")["spec"].(map[string]any)["strategy"]; ok {
+		t.Fatalf("ReplicaSet document unexpectedly has a strategy field")
+	}
+	for _, d := range docs {
+		if d["kind"] == "PodDisruptionBudget" {
+			t.Fatalf("PodDisruptionBudget rendered without MinAvailable")
+		}
+	}
+}
+
 // TestRender_Env checks that Template.Env renders as container env vars, and
 // that rendering the same template twice is byte-identical: text/template
 // sorts map ranges by key, so the manifest must not vary run to run.
