@@ -27,6 +27,10 @@ spec:
           env:
             - name: LOG_LEVEL
               value: {{ coalesce .Values.routeController.logLevel .Values.logLevel }}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
             {{- with .Values.routeController.serviceCIDRs }}
             - name: SERVICE_CIDRS
               value: {{ join "," . }}

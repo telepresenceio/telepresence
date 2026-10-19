@@ -516,10 +516,10 @@ usage:
 ################################################################################
 ## Route Controller Configuration
 ################################################################################
-# routeController installs a DaemonSet that watches for Service deletions and
-# adds temporary blackhole routes on each node for deleted ClusterIPs, preventing
-# routing loops on local clusters (Kind, minikube, k3d, Docker Desktop) where
-# deleted service IPs fall through to the node's default route.
+# routeController installs a DaemonSet that drops forwarded traffic to the
+# service CIDRs and to deleted pod IPs on each node, preventing routing loops
+# on local clusters (Kind, minikube, k3d, Docker Desktop) where such addresses
+# fall through to the node's default route.
 routeController:
   # enabled controls the route-controller DaemonSet:
   #   null (default) - auto-enable when image.registry is "local" or starts with "localhost:"

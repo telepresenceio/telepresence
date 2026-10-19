@@ -22,16 +22,21 @@ import (
 type Ruleset struct {
 	nftutil.Ruleset
 
-	// Forward is the forward-hook filter chain that carries the single drop
-	// rule. It runs at the standard filter priority: ordering against other
+	// Forward is the forward-hook filter chain that carries the drop rules.
+	// It runs at the standard filter priority: ordering against other
 	// tools' FORWARD-hook chains does not matter here, because kube-proxy's
 	// DNAT for active services happens earlier, in the prerouting nat hook,
 	// so by the time any forward-hook chain sees the packet its destination
 	// has already been rewritten for active services.
 	Forward *nftables.Chain
 
-	// ServiceCIDRs is the interval set of blackholed service CIDRs.
+	// ServiceCIDRs is the interval set of blackholed service CIDRs. It is
+	// nil when the Config has none.
 	ServiceCIDRs *nftutil.SetData
+
+	// PodCIDRs is the interval set of the node's pod CIDRs. It is nil when
+	// the Config has none.
+	PodCIDRs *nftutil.SetData
 }
 
 // Build constructs the ruleset described by cfg. It does not touch netlink.
@@ -52,17 +57,28 @@ func Build(cfg Config) (*Ruleset, error) {
 		},
 	}
 	rs.Chains = append(rs.Chains, rs.Forward)
+	off, ln := nftutil.AddrLayout(cfg.Family)
 
 	var err error
-	rs.ServiceCIDRs, err = nftutil.IntervalSet(table, setServiceCIDRs, cfg.CIDRs)
-	if err != nil {
-		return nil, fmt.Errorf("routenft: %w", err)
+	if len(cfg.ServiceCIDRs) > 0 {
+		rs.ServiceCIDRs, err = nftutil.IntervalSet(table, setServiceCIDRs, cfg.ServiceCIDRs)
+		if err != nil {
+			return nil, fmt.Errorf("routenft: %w", err)
+		}
+		rs.Sets = append(rs.Sets, rs.ServiceCIDRs)
+		rs.AddRule(rs.Forward, matchDaddrInSetDrop(off, ln, rs.ServiceCIDRs.Set))
 	}
-	rs.Sets = append(rs.Sets, rs.ServiceCIDRs)
 
-	off, ln := nftutil.AddrLayout(cfg.Family)
-	rs.AddRule(rs.Forward, matchDaddrInSetDrop(off, ln, rs.ServiceCIDRs.Set))
-
+	if len(cfg.PodCIDRs) > 0 {
+		rs.PodCIDRs, err = nftutil.IntervalSet(table, setPodCIDRs, cfg.PodCIDRs)
+		if err != nil {
+			return nil, fmt.Errorf("routenft: %w", err)
+		}
+		rs.Sets = append(rs.Sets, rs.PodCIDRs)
+		for _, uplink := range cfg.Uplinks {
+			rs.AddRule(rs.Forward, append(nftutil.MatchOif(uplink), matchDaddrInSetDrop(off, ln, rs.PodCIDRs.Set)...))
+		}
+	}
 	return rs, nil
 }
 
@@ -77,8 +93,11 @@ func validate(cfg Config) error {
 	if cfg.Family != nftables.TableFamilyIPv4 && cfg.Family != nftables.TableFamilyIPv6 {
 		return fmt.Errorf("routenft: unsupported table family %v", cfg.Family)
 	}
-	if len(cfg.CIDRs) == 0 {
+	if len(cfg.ServiceCIDRs) == 0 && len(cfg.PodCIDRs) == 0 {
 		return errors.New("routenft: at least one CIDR is required")
+	}
+	if len(cfg.PodCIDRs) > 0 && len(cfg.Uplinks) == 0 {
+		return errors.New("routenft: pod CIDRs require at least one uplink")
 	}
 	return nil
 }

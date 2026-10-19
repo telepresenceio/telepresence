@@ -801,8 +801,8 @@ properties:
 
   routeController:
     description: >-
-      Configuration for the route-controller DaemonSet that installs blackhole routes for deleted service ClusterIPs
-      to prevent routing loops on local clusters.
+      Configuration for the route-controller DaemonSet that drops forwarded traffic to deleted service ClusterIPs
+      and deleted pod IPs to prevent routing loops on local clusters.
     type: object
     additionalProperties: false
     properties:

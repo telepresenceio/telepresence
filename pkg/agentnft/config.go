@@ -118,10 +118,6 @@ const (
 
 	dnsPort = 53
 
-	// ifNameSize is IFNAMSIZ: nft pads interface names to this length when
-	// comparing them as raw register data.
-	ifNameSize = 16
-
 	// priorityDeltaFromMeshDstnat is the distance from
 	// nftables.ChainPriorityNATDest (-100, the conventional priority service
 	// meshes use for their own dstnat nat chains, e.g. Istio's) at which our
