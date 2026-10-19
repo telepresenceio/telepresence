@@ -43,7 +43,7 @@ func TestUninstallHandler_RunsInjectorAndReap(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodDelete, "/uninstall", nil)
-	uninstallHandler(ai, reap)(w, r)
+	uninstallHandler(context.Background(), ai, reap)(w, r)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, ai.uninstalled, "injector Uninstall must run")
@@ -65,7 +65,7 @@ func TestUninstallHandler_ReapErrorStillSucceeds(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodDelete, "/uninstall", nil)
-	uninstallHandler(ai, reap)(w, r)
+	uninstallHandler(context.Background(), ai, reap)(w, r)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, ai.uninstalled)
@@ -85,7 +85,7 @@ func TestUninstallHandler_NilInjector(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodDelete, "/uninstall", nil)
-	uninstallHandler(nil, reap)(w, r)
+	uninstallHandler(context.Background(), nil, reap)(w, r)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, reapCalled)
@@ -101,7 +101,7 @@ func TestUninstallHandler_NilReap(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodDelete, "/uninstall", nil)
-	uninstallHandler(ai, nil)(w, r)
+	uninstallHandler(context.Background(), ai, nil)(w, r)
 
 	assert.Equal(t, http.StatusOK, w.Code)
 	assert.True(t, ai.uninstalled)
@@ -121,7 +121,7 @@ func TestUninstallHandler_WrongMethod(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/uninstall", nil)
-	uninstallHandler(ai, reap)(w, r)
+	uninstallHandler(context.Background(), ai, reap)(w, r)
 
 	assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 	assert.False(t, ai.uninstalled)
