@@ -38,6 +38,12 @@ The traffic-manager compares the result of an intercept update with the stored i
 Connecting to the traffic-manager, fetching the remote client configuration, and starting the root daemon session shared one <code>trafficManagerConnect</code> timeout, so a slow but successful early phase could leave too little time for the next one and fail the connect. Each phase now starts with the full timeout.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[The route-controller stops routing loops through deleted pod IPs](reference/route-controller)</div></div>
+<div style="margin-left: 15px">
+
+On local clusters, in-cluster traffic to the IP of a deleted pod, typically a restarted traffic-manager, left the node through its default route, reached the workstation's TUN device, and was dialed again from the cluster, flooding the connection with tunnels until the client ran out of ports. The route-controller now also drops forwarded traffic to the node's own pod CIDRs when it is about to leave through the node's default route.
+</div>
+
 ## Version 2.32.2 <span style="font-size: 16px;">(October  8)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Root daemon no longer shuts down after a brief stall](https://github.com/telepresenceio/telepresence/issues/4332)</div></div>
 <div style="margin-left: 15px">

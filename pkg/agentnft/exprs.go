@@ -31,15 +31,6 @@ func matchL4Proto(p types.Proto) []expr.Any {
 	}
 }
 
-// matchOif returns expressions that match the outbound interface name
-// (`oifname "name"`).
-func matchOif(name string) []expr.Any {
-	return []expr.Any{
-		&expr.Meta{Key: expr.MetaKeyOIFNAME, Register: 1},
-		&expr.Cmp{Op: expr.CmpOpEq, Register: 1, Data: ifnameBytes(name)},
-	}
-}
-
 // matchOwner returns expressions that match (or, when neq is true, exclude)
 // the traffic-agent's own sockets. Normally this is a socket-ownership match,
 // via `meta skgid`/`meta skuid`, keyed on the agent's distinct group or user
@@ -145,12 +136,4 @@ func identityDNAT(family nftables.TableFamily, off, ln uint32) []expr.Any {
 		&expr.Payload{DestRegister: 1, Base: expr.PayloadBaseNetworkHeader, Offset: off, Len: ln},
 		&expr.NAT{Type: expr.NATTypeDestNAT, Family: uint32(family), RegAddrMin: 1},
 	}
-}
-
-// ifnameBytes pads name to IFNAMSIZ bytes the way nft encodes interface-name
-// comparisons.
-func ifnameBytes(name string) []byte {
-	b := make([]byte, ifNameSize)
-	copy(b, name)
-	return b
 }

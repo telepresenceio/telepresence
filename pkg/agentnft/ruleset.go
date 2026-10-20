@@ -126,7 +126,7 @@ func Build(cfg Config) (*Ruleset, error) {
 
 		// Gate 1: non-agent traffic leaving via loopback (a mesh proxy dialing
 		// the app on loopback).
-		gate := matchOif(cfg.Loopback)
+		gate := nftutil.MatchOif(cfg.Loopback)
 		gate = append(gate, matchOwner(cfg.Owner, true)...)
 		gate = append(gate, redirectViaProtoPortMap(m)...)
 		rs.AddRule(rs.Output, gate)
@@ -145,7 +145,7 @@ func Build(cfg Config) (*Ruleset, error) {
 
 		// Gate 3: the agent dialing its own app port over loopback, but not
 		// localhost (so intercept-by-IP and headless-service interception work).
-		gate = matchOif(cfg.Loopback)
+		gate = nftutil.MatchOif(cfg.Loopback)
 		gate = append(gate, matchDaddr(addrOff, addrLen, localhost, true)...)
 		gate = append(gate, matchOwner(cfg.Owner, false)...)
 		gate = append(gate, redirectViaProtoPortMap(m)...)

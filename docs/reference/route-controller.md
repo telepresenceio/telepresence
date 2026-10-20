@@ -1,6 +1,6 @@
 ---
 title: Routing Loop Prevention on Local Clusters
-description: How the route-controller DaemonSet prevents routing loops on local clusters by blackholing the service CIDR in an nftables FORWARD chain.
+description: How the route-controller DaemonSet prevents routing loops on local clusters by blackholing the service CIDR and deleted pod IPs in an nftables FORWARD chain.
 ---
 
 # Routing Loop Prevention on Local Clusters
@@ -20,14 +20,23 @@ The root cause is that local-cluster nodes have no blackhole or reject route for
 Deleted (or never-assigned) service IPs fall through to the node's default route and escape to the
 external network.
 
+The IP of a deleted pod loops the same way. A node reaches each of its pods through a route to the
+pod's own network interface, and that route disappears with the pod, so in-cluster traffic to the
+old IP also follows the default route out of the node. A restarted traffic-manager is the common
+trigger: its old pod IP lingers in connection tracking and in clients that have not yet reconnected,
+and every connection toward it that returns through the TUN device is dialed again from the cluster.
+
 The **route-controller** is a DaemonSet that prevents these loops. It runs on every node
 with host networking and `NET_ADMIN` privileges. At startup it discovers the cluster's service
-CIDRs and programs a dedicated `telepresence` nftables table (one per address family in use) with
-a `forward`-hook chain whose single rule drops any forwarded packet destined for an address in a
-named set of the service CIDRs. The rule is applied natively over netlink
-(`github.com/google/nftables`); no `iptables` or `nft` binary is involved. Any forwarded packet
-(i.e. pod traffic flowing through the host's network stack) destined for an IP that has no active
-kube-proxy DNAT rule is dropped rather than escaping via the default route.
+CIDRs and the node's own pod CIDRs, and programs a dedicated `telepresence` nftables table (one per
+address family in use) with a `forward`-hook chain. One rule drops any forwarded packet destined for
+an address in a named set of the service CIDRs. Another drops any forwarded packet destined for an
+address in the node's pod CIDRs that is about to leave through the interface of the node's default
+route, which only a packet addressed to a pod that is gone does. The rules are applied natively
+over netlink (`github.com/google/nftables`); no `iptables` or `nft` binary is involved. Any
+forwarded packet (i.e. pod traffic flowing through the host's network stack) destined for an IP that
+has no active kube-proxy DNAT rule or pod route is dropped rather than escaping via the default
+route.
 
 ### Why an nftables FORWARD drop and not a kernel blackhole route?
 
@@ -42,17 +51,27 @@ forwarding path. kube-proxy's `prerouting` DNAT rewrites the destination to a po
 
 ### Ruleset
 
-For each address family with at least one discovered service CIDR, the route-controller programs:
+For each address family with at least one discovered CIDR, the route-controller programs:
 
 - A table named `telepresence` (`ip telepresence` for IPv4, `ip6 telepresence` for IPv6).
 - A `forward` chain in that table: type `filter`, hook `forward`, at the standard filter priority.
-- A named interval set, `service_cidrs`, holding the discovered CIDRs for that family.
-- A single rule in the `forward` chain: `ip daddr @service_cidrs drop` (or the `ip6` equivalent).
+- A named interval set, `service_cidrs`, holding the discovered service CIDRs for that family, and
+  a rule in the `forward` chain: `ip daddr @service_cidrs drop` (or the `ip6` equivalent).
+- A named interval set, `pod_cidrs`, holding the node's pod CIDRs for that family, and one rule per
+  interface that carries a default route for that family:
+  `oifname "eth0" ip daddr @pod_cidrs drop` (or the `ip6` equivalent).
 
-Because the CIDRs live in a set rather than as one rule per CIDR, adding or removing a service CIDR
-is a set-element change, not a rule change. On each start (or restart) the route-controller applies
-the whole table as a single atomic, idempotent replacement, so it always converges to exactly the
+Because the CIDRs live in sets rather than as one rule per CIDR, adding or removing a CIDR is a
+set-element change, not a rule change. On each start (or restart) the route-controller applies the
+whole table as a single atomic, idempotent replacement, so it always converges to exactly the
 currently discovered CIDRs regardless of what a previous run programmed.
+
+## Pod CIDR discovery
+
+The route-controller reads the pod CIDRs from the `spec.podCIDRs` field of the Node it runs on,
+named by the `NODE_NAME` environment variable that the DaemonSet sets from the pod's `spec.nodeName`.
+A node without an assigned pod CIDR, or without a default route for an address family, gets no
+`pod_cidrs` rule for that family; a warning in the log says so.
 
 ## Enabling the route controller
 
@@ -119,7 +138,7 @@ kubectl -n ambassador get daemonset route-controller
 # View logs from one node
 kubectl -n ambassador logs -l app=route-controller --tail=50
 
-# On a Kind node: inspect the telepresence table's forward chain and service_cidrs set
+# On a Kind node: inspect the telepresence table's forward chain and its sets
 docker exec kind-control-plane nft list table ip telepresence
 ```
 
@@ -128,5 +147,6 @@ docker exec kind-control-plane nft list table ip telepresence
 The route-controller uses a dedicated `ServiceAccount` with a `ClusterRole` that grants:
 
 - `get`, `list` on `networking.k8s.io/servicecidrs` (to auto-discover CIDRs on Kubernetes 1.33+)
+- `get` on `nodes` (to read the pod CIDRs of the node it runs on)
 
 Both resources are created automatically when the route-controller is enabled.
