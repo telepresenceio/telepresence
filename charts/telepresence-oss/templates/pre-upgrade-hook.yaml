@@ -6,12 +6,13 @@ pods against the same selector. This hook deletes the old
 traffic-manager Deployment, if one exists, and waits for its pods to be
 gone before Helm applies the StatefulSet.
 
-"helm.sh/hook": pre-upgrade already means Helm only ever runs this Job
-during `helm upgrade`, never `helm install` -- a fresh install has no
-Deployment to migrate, so no additional IsInstall guard is needed. The
-ServiceAccount/Role/RoleBinding below aren't hook resources themselves;
-they render on every install/upgrade like any other RBAC object,
-harmlessly unused outside a Deployment-to-StatefulSet upgrade.
+"helm.sh/hook": pre-upgrade means Helm only runs these resources during
+`helm upgrade`, never `helm install` -- a fresh install has no Deployment
+to migrate. Argo CD runs pre-upgrade hooks in its PreSync phase on every
+sync, including the first, before any release resource exists. The
+ServiceAccount/Role/RoleBinding are therefore hooks as well, at a lower
+weight than the Job so that they exist when its pod is created. They share
+the Job's delete policy, so nothing of the hook lingers after the upgrade.
 
 Uses the same curl image as pre-delete-hook.yaml rather than adding an
 external kubectl image: the Kubernetes API server is a plain HTTPS REST
@@ -26,6 +27,10 @@ metadata:
   namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -34,6 +39,10 @@ metadata:
   namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
@@ -47,6 +56,10 @@ metadata:
   namespace: {{ include "traffic-manager.namespace" $ }}
   labels:
     {{- include "telepresence.labels" $ | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
