@@ -93,6 +93,19 @@ items:
           forwarded traffic to the node's own pod CIDRs when it is about to
           leave through the node's default route.
         docs: reference/route-controller
+      - type: change
+        title: Agent updates roll out within the workload's allowed unavailability
+        body: >-
+          When a workload's agent configuration changes, the traffic-manager
+          now replaces its pods in batches sized by the workload's
+          <code>maxUnavailable</code>, waits for the replacements to become
+          ready between batches, and defers while the workload is already
+          rolling out. An eviction refused by a PodDisruptionBudget is retried
+          for thirty seconds before the workload is restarted through its
+          controller. A deferral is logged after a minute and, after five
+          minutes, gives way to such a restart as well. Uninstalling the
+          traffic-manager still removes every agent at once.
+        docs: reference/cluster-config#agent-rollout-pacing
   - version: 2.32.2
     date: 2026-10-08
     notes:

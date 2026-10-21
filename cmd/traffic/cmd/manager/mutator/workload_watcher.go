@@ -45,6 +45,14 @@ func shouldWatchWorkload(wl k8sapi.Workload, enabledKinds k8sapi.Kinds) bool {
 
 func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndexInformer) (cache.ResourceEventHandlerRegistration, error) {
 	enabledKinds := managerutil.GetEnv(ctx).EnabledWorkloadKinds
+	deleteWorkload := func(wl k8sapi.Workload) {
+		c.Delete(wl.GetName(), wl.GetNamespace())
+		c.deleteEvictionState(WorkloadKey{
+			Name:      wl.GetName(),
+			Namespace: wl.GetNamespace(),
+			Kind:      wl.GetKind(),
+		})
+	}
 	return ix.AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj any) {
@@ -55,11 +63,11 @@ func (c *configWatcher) watchWorkloads(ctx context.Context, ix cache.SharedIndex
 			DeleteFunc: func(obj any) {
 				if wl, ok := workload.FromAny(obj); ok {
 					if shouldWatchWorkload(wl, enabledKinds) {
-						c.Delete(wl.GetName(), wl.GetNamespace())
+						deleteWorkload(wl)
 					}
 				} else if dfsu, ok := obj.(*cache.DeletedFinalStateUnknown); ok {
 					if wl, ok = workload.FromAny(dfsu.Obj); ok && shouldWatchWorkload(wl, enabledKinds) {
-						c.Delete(wl.GetName(), wl.GetNamespace())
+						deleteWorkload(wl)
 					}
 				}
 			},
@@ -87,7 +95,10 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		cmpopts.IgnoreMapEntries(func(k, _ string) bool {
 			return k == annotation.RestartedAt
 		})) {
-		return
+		if !workloadRolloutInProgress(oldWl) || workloadRolloutInProgress(wl) {
+			return
+		}
+		clog.Debugf(ctx, "Reconciling agent config after %s finished updating", wl)
 	}
 
 	switch ia {
@@ -126,16 +137,9 @@ func (c *configWatcher) updateWorkload(ctx context.Context, wl, oldWl k8sapi.Wor
 		}
 
 		c.Store(sc)
-		clog.Debugf(ctx, "deleting pods with config mismatch for %s", wl)
-		err = c.EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
-		if err != nil {
-			clog.Error(ctx, err)
-		}
+		c.requestEviction(ctx, wl, sc)
 	case "false", "disabled":
 		c.Delete(wl.GetName(), wl.GetNamespace())
-		err := c.EvictPodsWithAgentConfig(ctx, wl)
-		if err != nil {
-			clog.Error(ctx, err)
-		}
+		c.requestEviction(ctx, wl, nil)
 	}
 }
