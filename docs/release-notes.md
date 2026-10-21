@@ -20,16 +20,23 @@ The root daemon and the user daemon accepted connections on every network interf
 The kubeauth daemon served exec-plugin cluster credentials to any caller on the network. It now requires a random per-run token that only the daemon container receives, and its port file is readable only by the user.
 </div>
 
-## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
-<div style="margin-left: 15px">
-
-A client whose attachment grant covers a single workload can create its intercept, but the traffic-manager denies the namespace-wide workload watch that the user daemon starts for it. The user daemon retried that denial forever, so the CLI hung after the intercept was already active. A denied or unmanaged namespace now ends the watch at once and the error reaches the caller, so the intercept command finishes and <code>telepresence list</code> reports the denial instead of an empty result.
-</div>
-
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Unchanged intercept updates no longer rewrite the stored intercept</div></div>
 <div style="margin-left: 15px">
 
 The traffic-manager compares the result of an intercept update with the stored intercept and keeps the stored one when nothing changed, so no-op updates no longer bump the modification time or notify watchers.
+</div>
+
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Agent updates roll out within the workload's allowed unavailability](reference/cluster-config#agent-rollout-pacing)</div></div>
+<div style="margin-left: 15px">
+
+When a workload's agent configuration changes, the traffic-manager now replaces its pods in batches sized by the workload's <code>maxUnavailable</code>, waits for the replacements to become ready between batches, and defers while the workload is already rolling out. An eviction refused by a PodDisruptionBudget is retried for thirty seconds before the workload is restarted through its controller. A deferral is logged after a minute and, after five minutes, gives way to such a restart as well. Uninstalling the traffic-manager still removes every agent at once.
+</div>
+
+## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
+<div style="margin-left: 15px">
+
+A client whose attachment grant covers a single workload can create its intercept, but the traffic-manager denies the namespace-wide workload watch that the user daemon starts for it. The user daemon retried that denial forever, so the CLI hung after the intercept was already active. A denied or unmanaged namespace now ends the watch at once and the error reaches the caller, so the intercept command finishes and <code>telepresence list</code> reports the denial instead of an empty result.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Each connect phase gets its own timeout</div></div>
@@ -42,12 +49,6 @@ Connecting to the traffic-manager, fetching the remote client configuration, and
 <div style="margin-left: 15px">
 
 On local clusters, in-cluster traffic to the IP of a deleted pod, typically a restarted traffic-manager, left the node through its default route, reached the workstation's TUN device, and was dialed again from the cluster, flooding the connection with tunnels until the client ran out of ports. The route-controller now also drops forwarded traffic to the node's own pod CIDRs when it is about to leave through the node's default route.
-</div>
-
-## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Agent updates roll out within the workload's allowed unavailability](reference/cluster-config#agent-rollout-pacing)</div></div>
-<div style="margin-left: 15px">
-
-When a workload's agent configuration changes, the traffic-manager now replaces its pods in batches sized by the workload's <code>maxUnavailable</code>, waits for the replacements to become ready between batches, and defers while the workload is already rolling out. An eviction refused by a PodDisruptionBudget is retried for thirty seconds before the workload is restarted through its controller. A deferral is logged after a minute and, after five minutes, gives way to such a restart as well. Uninstalling the traffic-manager still removes every agent at once.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Argo CD syncs no longer hang on the pre-upgrade migration hook</div></div>

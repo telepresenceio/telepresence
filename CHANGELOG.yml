@@ -56,6 +56,28 @@ items:
           caller on the network. It now requires a random per-run token
           that only the daemon container receives, and its port file is
           readable only by the user.
+      - type: change
+        title: Unchanged intercept updates no longer rewrite the stored intercept
+        body: >-
+          The traffic-manager compares the result of an intercept update with the
+          stored intercept and keeps the stored one when nothing changed, so
+          no-op updates no longer bump the modification time or notify watchers.
+      - type: change
+        title: Agent updates roll out within the workload's allowed unavailability
+        body: >-
+          When a workload's agent configuration changes, the traffic-manager
+          now replaces its pods in batches sized by the workload's
+          <code>maxUnavailable</code>, waits for the replacements to become
+          ready between batches, and defers while the workload is already
+          rolling out. An eviction refused by a PodDisruptionBudget is retried
+          for thirty seconds before the workload is restarted through its
+          controller. A deferral is logged after a minute and, after five
+          minutes, gives way to such a restart as well. Uninstalling the
+          traffic-manager still removes every agent at once.
+        docs: reference/cluster-config#agent-rollout-pacing
+  - version: 2.32.3
+    date: 2026-10-21
+    notes:
       - type: bugfix
         title: Intercept creation no longer hangs on a denied workload watch
         body: >-
@@ -68,12 +90,6 @@ items:
           command finishes and <code>telepresence list</code> reports the
           denial instead of an empty result.
         docs: https://github.com/telepresenceio/telepresence/pull/4341
-      - type: change
-        title: Unchanged intercept updates no longer rewrite the stored intercept
-        body: >-
-          The traffic-manager compares the result of an intercept update with the
-          stored intercept and keeps the stored one when nothing changed, so
-          no-op updates no longer bump the modification time or notify watchers.
       - type: bugfix
         title: Each connect phase gets its own timeout
         body: >-
@@ -93,19 +109,6 @@ items:
           forwarded traffic to the node's own pod CIDRs when it is about to
           leave through the node's default route.
         docs: reference/route-controller
-      - type: change
-        title: Agent updates roll out within the workload's allowed unavailability
-        body: >-
-          When a workload's agent configuration changes, the traffic-manager
-          now replaces its pods in batches sized by the workload's
-          <code>maxUnavailable</code>, waits for the replacements to become
-          ready between batches, and defers while the workload is already
-          rolling out. An eviction refused by a PodDisruptionBudget is retried
-          for thirty seconds before the workload is restarted through its
-          controller. A deferral is logged after a minute and, after five
-          minutes, gives way to such a restart as well. Uninstalling the
-          traffic-manager still removes every agent at once.
-        docs: reference/cluster-config#agent-rollout-pacing
       - type: bugfix
         title: Argo CD syncs no longer hang on the pre-upgrade migration hook
         body: >-
