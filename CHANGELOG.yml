@@ -106,6 +106,20 @@ items:
           minutes, gives way to such a restart as well. Uninstalling the
           traffic-manager still removes every agent at once.
         docs: reference/cluster-config#agent-rollout-pacing
+      - type: bugfix
+        title: Argo CD syncs no longer hang on the pre-upgrade migration hook
+        body: >-
+          The <code>traffic-manager-migrate-statefulset</code> pre-upgrade hook
+          Job runs with a dedicated ServiceAccount, Role and RoleBinding that
+          the chart rendered as ordinary release resources. Helm creates
+          release resources before it runs pre-upgrade hooks, so plain
+          <code>helm upgrade</code> worked, but Argo CD runs pre-upgrade hooks
+          in its PreSync phase on every sync, including the first, before any
+          release resource exists. The hook pod could not be created and the
+          sync hung. The three RBAC objects are now pre-upgrade hooks that
+          sort before the Job, so they exist when it starts under both Helm
+          and Argo CD, and they are removed together with the Job once it has
+          succeeded.
   - version: 2.32.2
     date: 2026-10-08
     notes:

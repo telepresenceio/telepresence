@@ -56,6 +56,12 @@ On local clusters, in-cluster traffic to the IP of a deleted pod, typically a re
 When a workload's agent configuration changes, the traffic-manager now replaces its pods in batches sized by the workload's <code>maxUnavailable</code>, waits for the replacements to become ready between batches, and defers while the workload is already rolling out. An eviction refused by a PodDisruptionBudget is retried for thirty seconds before the workload is restarted through its controller. A deferral is logged after a minute and, after five minutes, gives way to such a restart as well. Uninstalling the traffic-manager still removes every agent at once.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix">Argo CD syncs no longer hang on the pre-upgrade migration hook</Title>
+	<Body>
+The <code>traffic-manager-migrate-statefulset</code> pre-upgrade hook Job runs with a dedicated ServiceAccount, Role and RoleBinding that the chart rendered as ordinary release resources. Helm creates release resources before it runs pre-upgrade hooks, so plain <code>helm upgrade</code> worked, but Argo CD runs pre-upgrade hooks in its PreSync phase on every sync, including the first, before any release resource exists. The hook pod could not be created and the sync hung. The three RBAC objects are now pre-upgrade hooks that sort before the Job, so they exist when it starts under both Helm and Argo CD, and they are removed together with the Job once it has succeeded.
+  </Body>
+</Note>
 ## Version 2.32.2 <span style={{fontSize:'16px'}}>(October  8)</span>
 <Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/issues/4332">Root daemon no longer shuts down after a brief stall</Title>
