@@ -87,7 +87,8 @@ func TestReplicaCountRejected(t *testing.T) {
 }
 
 // TestPreUpgradeMigrationHook asserts the migration hook Job and its scoped
-// ServiceAccount/Role/RoleBinding render, annotated "helm.sh/hook": pre-upgrade.
+// ServiceAccount/Role/RoleBinding all render as pre-upgrade hooks, with the
+// RBAC objects ordered before the Job.
 func TestPreUpgradeMigrationHook(t *testing.T) {
 	out := renderChart(t, map[string]any{})
 	if !rendered(out, preUpgradeHookTpl) {
@@ -111,6 +112,48 @@ func TestPreUpgradeMigrationHook(t *testing.T) {
 	} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("%s: %q not rendered", preUpgradeHookTpl, want)
+		}
+	}
+
+	// Argo CD runs pre-upgrade hooks on its first sync, before any release
+	// resource exists, so the RBAC objects must be hooks that sort before the Job.
+	kinds := map[string]string{}
+	for _, d := range strings.Split(doc, "\n---") {
+		if strings.TrimSpace(d) == "" {
+			continue
+		}
+		for _, line := range strings.Split(d, "\n") {
+			if k, ok := strings.CutPrefix(line, "kind: "); ok {
+				kinds[k] = d
+				break
+			}
+		}
+	}
+	if len(kinds) != 4 {
+		t.Fatalf("%s: expected ServiceAccount, Role, RoleBinding and Job, got %d kinds", preUpgradeHookTpl, len(kinds))
+	}
+	for _, c := range []struct {
+		kind    string
+		weight  string
+		deletes string
+	}{
+		{"ServiceAccount", "-10", "before-hook-creation,hook-succeeded"},
+		{"Role", "-10", "before-hook-creation,hook-succeeded"},
+		{"RoleBinding", "-10", "before-hook-creation,hook-succeeded"},
+		{"Job", "-5", ""},
+	} {
+		d, ok := kinds[c.kind]
+		if !ok {
+			t.Fatalf("%s: no %s document", preUpgradeHookTpl, c.kind)
+		}
+		wants := []string{`"helm.sh/hook": pre-upgrade`, `"helm.sh/hook-weight": "` + c.weight + `"`}
+		if c.deletes != "" {
+			wants = append(wants, `"helm.sh/hook-delete-policy": `+c.deletes)
+		}
+		for _, want := range wants {
+			if !strings.Contains(d, want) {
+				t.Errorf("%s: %s lacks %q", preUpgradeHookTpl, c.kind, want)
+			}
 		}
 	}
 }

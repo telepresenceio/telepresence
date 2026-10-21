@@ -12,8 +12,8 @@ import (
 
 func basicConfig() Config {
 	return Config{
-		Family: nftables.TableFamilyIPv4,
-		CIDRs:  []netip.Prefix{netip.MustParsePrefix("10.96.0.0/12")},
+		Family:       nftables.TableFamilyIPv4,
+		ServiceCIDRs: []netip.Prefix{netip.MustParsePrefix("10.96.0.0/12")},
 	}
 }
 
@@ -25,8 +25,8 @@ func TestBuildValidatesConfig(t *testing.T) {
 	}{
 		{"valid", func(*Config) {}, false},
 		{"unsupported family", func(c *Config) { c.Family = nftables.TableFamilyARP }, true},
-		{"no CIDRs", func(c *Config) { c.CIDRs = nil }, true},
-		{"invalid CIDR", func(c *Config) { c.CIDRs = []netip.Prefix{{}} }, true},
+		{"no CIDRs", func(c *Config) { c.ServiceCIDRs = nil }, true},
+		{"invalid CIDR", func(c *Config) { c.ServiceCIDRs = []netip.Prefix{{}} }, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -52,7 +52,7 @@ func TestBuildTableFamily(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{Family: tt.family, CIDRs: []netip.Prefix{netip.MustParsePrefix(tt.cidr)}}
+			cfg := Config{Family: tt.family, ServiceCIDRs: []netip.Prefix{netip.MustParsePrefix(tt.cidr)}}
 			rs, err := Build(cfg)
 			if err != nil {
 				t.Fatalf("Build() error = %v", err)
@@ -91,7 +91,7 @@ func TestBuildForwardChainHookAndPriority(t *testing.T) {
 func TestBuildServiceCIDRSet(t *testing.T) {
 	cfg := Config{
 		Family: nftables.TableFamilyIPv4,
-		CIDRs: []netip.Prefix{
+		ServiceCIDRs: []netip.Prefix{
 			netip.MustParsePrefix("10.96.0.0/12"),
 			netip.MustParsePrefix("172.20.0.0/16"),
 		},
@@ -175,7 +175,7 @@ func TestBuildPayloadOffsetsPerFamily(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{Family: tt.family, CIDRs: []netip.Prefix{netip.MustParsePrefix(tt.cidr)}}
+			cfg := Config{Family: tt.family, ServiceCIDRs: []netip.Prefix{netip.MustParsePrefix(tt.cidr)}}
 			rs, err := Build(cfg)
 			if err != nil {
 				t.Fatalf("Build() error = %v", err)

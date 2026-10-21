@@ -82,6 +82,12 @@ type workloadInfo struct {
 	services         []*manager.ServiceAssociation
 }
 
+type workloadWatch struct {
+	ready chan struct{}
+	// Closing ready publishes err to all waiting snapshot callers.
+	err error
+}
+
 type session struct {
 	*k8s.Cluster
 	service            userd.Service
@@ -136,6 +142,8 @@ type session struct {
 
 	// Map of manager.WorkloadInfo split into namespace, key of kind and name, and workloadInfo
 	workloads map[string]map[workloadInfoKey]workloadInfo
+
+	workloadWatchers map[string]*workloadWatch
 
 	workloadSubscribers map[uuid.UUID]chan struct{}
 
@@ -260,10 +268,10 @@ func NewSession(
 	}
 	cfg := client.GetConfig(cluster)
 	tos := cfg.Timeouts()
-	ctx, cancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
-	defer cancel()
+	managerCtx, managerCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
 
-	tmgr, err := connectMgr(ctx, service, cluster, installID, cr)
+	tmgr, err := connectMgr(managerCtx, service, cluster, installID, cr)
+	managerCancel()
 	if err != nil {
 		clog.Errorf(config, "Unable to connect to session: %s", err)
 		return nil, nil, err
@@ -272,7 +280,9 @@ func NewSession(
 		return nil, nil,
 			fmt.Errorf("traffic manager version %s is too old. Minimum supported version is 2.21.0, please upgrade", tmgr.ManagerVersion())
 	}
-	tmgr.updateClientConfig(ctx, cr.MappedNamespaces)
+	configCtx, configCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	tmgr.updateClientConfig(configCtx, cr.MappedNamespaces)
+	configCancel()
 
 	oi := tmgr.getNetworkInfo(cr)
 	if !service.RootSessionInProcess() {
@@ -296,7 +306,11 @@ func NewSession(
 
 	tmgr.Context = tunnel.WithSyntheticIPResolver(tmgr.Context, tmgr)
 
-	if err = tmgr.connectRootDaemon(ctx, oi, wg, cr.IsPodDaemon); err != nil {
+	// The root daemon establishes its own manager connection, so give that phase
+	// a fresh timeout instead of reusing the budget spent by the user daemon.
+	rootCtx, rootCancel := tos.TimeoutContext(ctx, client.TimeoutTrafficManagerConnect)
+	defer rootCancel()
+	if err = tmgr.connectRootDaemon(rootCtx, oi, wg, cr.IsPodDaemon); err != nil {
 		_ = tmgr.managerConnection().Close()
 		return nil, nil, err
 	}
@@ -305,7 +319,7 @@ func NewSession(
 	clog.Debug(tmgr, "Finished connecting to traffic manager")
 
 	tmgr.AddNamespaceEventHandler(tmgr.updateDaemonNamespaces)
-	ci, err := tmgr.status(ctx, true)
+	ci, err := tmgr.status(rootCtx, true)
 	return tmgr, ci, err
 }
 
@@ -899,11 +913,12 @@ func (s *session) waitForWorkloadUpdate(ctx context.Context, namespace, name str
 }
 
 func (s *session) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream userd.WatchWorkloadsStream) error {
+	ctx := stream.Context()
 	ch, unsubscribe := s.subscribeWorkloadsChange()
 	defer unsubscribe()
 
 	send := func() error {
-		ws, err := s.WorkloadInfoSnapshot(wr.Namespaces, rpc.ListRequest_UNSPECIFIED)
+		ws, err := s.WorkloadInfoSnapshot(ctx, wr.Namespaces, rpc.ListRequest_UNSPECIFIED)
 		if err != nil {
 			return err
 		}
@@ -916,6 +931,8 @@ func (s *session) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream userd.Wat
 	}
 	for {
 		select {
+		case <-ctx.Done():
+			return nil
 		case <-s.Done():
 			return nil
 		case <-ch:
@@ -926,30 +943,66 @@ func (s *session) WatchWorkloads(wr *rpc.WatchWorkloadsRequest, stream userd.Wat
 	}
 }
 
-func (s *session) ensureWatchers(namespaces []string) {
-	wg := sync.WaitGroup{}
-	wg.Add(len(namespaces))
+func (s *session) ensureWatchers(ctx context.Context, namespaces []string) error {
+	watches := make([]*workloadWatch, 0, len(namespaces))
+	s.workloadsLock.Lock()
 	for _, ns := range namespaces {
-		s.workloadsLock.Lock()
-		_, ok := s.workloads[ns]
-		s.workloadsLock.Unlock()
-		if ok {
-			wg.Done()
-		} else {
-			go func() {
-				err := s.workloadsWatcher(ns, &wg)
-				if err != nil {
-					clog.Errorf(s, "error ensuring watcher for namespace %s: %v", ns, err)
-					return
-				}
-			}()
+		if _, ok := s.workloads[ns]; ok {
+			continue
+		}
+		watch := s.workloadWatchers[ns]
+		if watch == nil {
+			watch = &workloadWatch{ready: make(chan struct{})}
+			if s.workloadWatchers == nil {
+				s.workloadWatchers = make(map[string]*workloadWatch)
+			}
+			s.workloadWatchers[ns] = watch
+			go s.runWorkloadsWatcher(ns, watch)
 			clog.Debugf(s, "watcher for namespace %s started", ns)
 		}
+		watches = append(watches, watch)
 	}
-	wg.Wait()
+	s.workloadsLock.Unlock()
+	ctxDone := ctx.Done()
+	for _, watch := range watches {
+		select {
+		case <-ctxDone:
+			return status.FromContextError(ctx.Err()).Err()
+		case <-s.Done():
+			return status.FromContextError(s.Err()).Err()
+		case <-watch.ready:
+			if watch.err != nil {
+				return watch.err
+			}
+		}
+	}
+	return nil
+}
+
+func (s *session) runWorkloadsWatcher(namespace string, watch *workloadWatch) {
+	initialized := false
+	complete := func(err error) {
+		if !initialized {
+			watch.err = err
+			close(watch.ready)
+			initialized = true
+		}
+	}
+	err := s.workloadsWatcher(namespace, func() { complete(nil) })
+	if err == nil && s.Err() != nil {
+		err = status.FromContextError(s.Err()).Err()
+	}
+	s.workloadsLock.Lock()
+	delete(s.workloadWatchers, namespace)
+	complete(err)
+	s.workloadsLock.Unlock()
+	if err != nil && s.Err() == nil {
+		clog.Errorf(s, "error ensuring watcher for namespace %s: %v", namespace, err)
+	}
 }
 
 func (s *session) WorkloadInfoSnapshot(
+	ctx context.Context,
 	namespaces []string,
 	filter rpc.ListRequest_Filter,
 ) (*rpc.WorkloadInfoSnapshot, error) {
@@ -981,7 +1034,9 @@ func (s *session) WorkloadInfoSnapshot(
 			}
 		}
 	}
-	s.ensureWatchers(nss)
+	if err := s.ensureWatchers(ctx, nss); err != nil {
+		return nil, err
+	}
 	iMap := make(map[string][]*manager.InterceptInfo, len(is))
 nextIs:
 	for _, i := range is {
@@ -1601,12 +1656,7 @@ func (s *session) RerouteLocalPort(ap types.AddrPortProto, srcPort uint16) {
 	}()
 }
 
-func (s *session) workloadsWatcher(namespace string, synced *sync.WaitGroup) error {
-	defer func() {
-		if synced != nil {
-			synced.Done()
-		}
-	}()
+func (s *session) workloadsWatcher(namespace string, synced func()) error {
 	return watcher.WatchWithRetry(s, "WatchWorkloads", client.GetConfig(s).Grpc().WatchRetryInterval,
 		func(ctx context.Context) (grpc.ServerStreamingClient[manager.WorkloadEventsDelta], error) {
 			return s.ManagerClient().WatchWorkloads(ctx, &manager.WorkloadEventsRequest{SessionInfo: s.sessionInfo, Namespace: namespace})
@@ -1654,12 +1704,10 @@ func (s *session) workloadsWatcher(namespace string, synced *sync.WaitGroup) err
 			}
 			s.workloadsLock.Unlock()
 			if synced != nil {
-				synced.Done()
+				synced()
 				synced = nil
 			}
 			return nil
-			// A namespace that the traffic-manager does not manage yields FailedPrecondition;
-			// retrying cannot change that, so treat it as permanent and surface the error instead
-			// of spinning (which manifests as a hang when listing an unmanaged namespace).
-		}, nil, codes.FailedPrecondition)
+			// Unmanaged and unauthorized namespaces cannot be repaired by retrying.
+		}, nil, codes.FailedPrecondition, codes.PermissionDenied)
 }

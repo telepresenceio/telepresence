@@ -307,7 +307,8 @@ func TestE2E_ForwarderRestartSurvival(t *testing.T) {
 	// rebinding the same port.
 	cancel1()
 	select {
-	case <-serve1Err:
+	case err := <-serve1Err:
+		assert.NoError(t, err)
 	case <-time.After(2 * time.Second):
 		t.Fatal("first forwarder's Serve did not return")
 	}

@@ -77,7 +77,7 @@ type Session interface {
 	CheckStatus(request *rpc.ConnectRequest) error
 	UpdateStatus(context.Context, *rpc.ConnectRequest) (*rpc.ConnectInfo, error)
 	WatchWorkloads(*rpc.WatchWorkloadsRequest, WatchWorkloadsStream) error
-	WorkloadInfoSnapshot([]string, rpc.ListRequest_Filter) (*rpc.WorkloadInfoSnapshot, error)
+	WorkloadInfoSnapshot(context.Context, []string, rpc.ListRequest_Filter) (*rpc.WorkloadInfoSnapshot, error)
 	RevokeIntercept(ctx context.Context, interceptID string) error
 
 	// RootSessionEndMetrics returns and clears the latest terminal Activity

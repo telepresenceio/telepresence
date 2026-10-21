@@ -21,6 +21,9 @@ rules:
   - apiGroups: ["networking.k8s.io"]
     resources: ["servicecidrs"]
     verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
