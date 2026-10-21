@@ -3,7 +3,10 @@ package mutator
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
+
+	"github.com/puzpuzpuz/xsync/v4"
 
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -43,6 +46,7 @@ func newEvictionQueue(base, maxDelay time.Duration) evictionQueue {
 }
 
 // requestEviction records the agent config the pods of wl must carry and schedules a reconcile pass.
+// It also hides the agents of the pods that must be replaced.
 func (c *configWatcher) requestEviction(ctx context.Context, wl k8sapi.Workload, wanted *agentconfig.Sidecar) {
 	key := workloadKeyOf(wl)
 	clog.Debugf(ctx, "Requesting replacement of pods with agent config mismatch for %s", wl)
@@ -52,8 +56,33 @@ func (c *configWatcher) requestEviction(ctx context.Context, wl k8sapi.Workload,
 		c.pendingRequests.Add(1)
 	}
 	state.wanted = wanted
+	if pods, err := workloadPods(ctx, wl); err == nil {
+		c.markPendingEviction(pods, podsWithAgentConfigMismatch(ctx, pods, wanted))
+	} else {
+		clog.Debugf(ctx, "Unable to list pods of %s: %v", wl, err)
+	}
 	state.Unlock()
 	c.evictionQueue.Add(key)
+}
+
+// markPendingEviction hides the agents of the mismatched pods until a pass evicts them, and shows
+// the agents of the other pods again if an earlier pass hid them.
+func (c *configWatcher) markPendingEviction(pods, mismatched []*core.Pod) {
+	for _, pod := range pods {
+		pending := slices.Contains(mismatched, pod)
+		c.inactivePods.Compute(pod.UID, func(v inactivation, loaded bool) (inactivation, xsync.ComputeOp) {
+			switch {
+			case loaded && v.deleted:
+				return v, xsync.CancelOp
+			case pending:
+				return inactivation{Time: time.Now(), pending: true}, xsync.UpdateOp
+			case loaded && v.pending:
+				return v, xsync.DeleteOp
+			default:
+				return v, xsync.CancelOp
+			}
+		})
+	}
 }
 
 // finishRequest clears the request. The caller holds the state's lock.
@@ -140,6 +169,7 @@ func (c *configWatcher) reconcileLocked(ctx context.Context, key WorkloadKey, st
 		return true, err
 	}
 	mismatched := podsWithAgentConfigMismatch(ctx, pods, state.wanted)
+	c.markPendingEviction(pods, mismatched)
 	if len(mismatched) == 0 {
 		clog.Debugf(ctx, "All pods of %s carry the wanted agent config", wl)
 		return false, nil

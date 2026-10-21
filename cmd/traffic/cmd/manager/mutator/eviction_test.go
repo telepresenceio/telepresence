@@ -688,9 +688,10 @@ func TestTeardownContinuesAfterWorkloadFailure(t *testing.T) {
 }
 
 func TestEvictionStateIsReclaimed(t *testing.T) {
-	ctx := testutil.NewContext(t, false)
-	cw := NewWatcher().(*configWatcher)
-	wl := k8sapi.Deployment(stableDeployment("default", "echo", 1, nil))
+	deployment := stableDeployment("default", "echo", 1, nil)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment)
+	cw, ctx := f.cw, f.ctx
+	wl := k8sapi.Deployment(deployment)
 	cw.requestEviction(ctx, wl, nil)
 	require.Equal(t, 1, cw.evictionStates.Size())
 	require.Equal(t, int32(1), cw.pendingRequests.Load())

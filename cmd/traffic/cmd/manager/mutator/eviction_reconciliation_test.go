@@ -328,3 +328,68 @@ func TestRequestEvictionDoesNotTouchTheAPI(t *testing.T) {
 	assert.Same(t, wanted, state.wanted)
 	state.Unlock()
 }
+
+func TestRequestEvictionHidesMismatchedAgents(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, wantedJSON, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	deployment := stableDeployment(ns, name, 2, nil)
+	stale := agentPod(ns, "echo-stale", name, k8sapi.DeploymentKind, staleJSON, true)
+	current := agentPod(ns, "echo-current", name, k8sapi.DeploymentKind, wantedJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, stale, current)
+
+	f.cw.requestEviction(f.ctx, k8sapi.Deployment(deployment), wanted)
+	assert.True(t, f.cw.IsInactive(stale.UID))
+	assert.False(t, f.cw.IsInactive(current.UID))
+	assert.False(t, f.cw.isEvicted(stale.UID))
+	assert.Empty(t, f.client.Actions())
+}
+
+func TestReconcileShowsAgentsThatMatchAgain(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, _, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	older := wanted.Clone()
+	older.ManagerHost = "traffic-manager.old"
+	deployment := stableDeployment(ns, name, 1, nil)
+	pod := agentPod(ns, "echo-0", name, k8sapi.DeploymentKind, staleJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, pod)
+	f.evictionsSucceed()
+
+	wl := k8sapi.Deployment(deployment)
+	f.cw.requestEviction(f.ctx, wl, wanted)
+	require.True(t, f.cw.IsInactive(pod.UID))
+
+	f.cw.requestEviction(f.ctx, wl, older)
+	assert.False(t, f.cw.IsInactive(pod.UID))
+	pending, err := f.cw.reconcile(f.ctx, workloadKeyOf(wl))
+	require.NoError(t, err)
+	assert.False(t, pending)
+	assert.Zero(t, f.evictions.Load())
+	assert.False(t, f.cw.IsInactive(pod.UID))
+}
+
+func TestEvictedPodStaysInactive(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, wantedJSON, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	deployment := stableDeployment(ns, name, 1, nil)
+	old := agentPod(ns, "echo-0", name, k8sapi.DeploymentKind, staleJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, old)
+	f.evictionsSucceed()
+
+	wl := k8sapi.Deployment(deployment)
+	key := workloadKeyOf(wl)
+	f.cw.requestEviction(f.ctx, wl, wanted)
+	_, err := f.cw.reconcile(f.ctx, key)
+	require.NoError(t, err)
+	assert.True(t, f.cw.isEvicted(old.UID))
+	assert.True(t, f.cw.IsInactive(old.UID))
+
+	replacement := agentPod(ns, "echo-1", name, k8sapi.DeploymentKind, wantedJSON, true)
+	f.addToStore(replacement)
+	f.removeFromStore(old)
+	pending, err := f.cw.reconcile(f.ctx, key)
+	require.NoError(t, err)
+	assert.False(t, pending)
+	assert.True(t, f.cw.isEvicted(old.UID))
+	assert.True(t, f.cw.IsInactive(old.UID))
+	assert.False(t, f.cw.IsInactive(replacement.UID))
+}

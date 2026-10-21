@@ -219,6 +219,8 @@ type informersWithCancel struct {
 type inactivation struct {
 	time.Time
 	deleted bool
+	// pending is set while a reconcile pass is still to evict the pod.
+	pending bool
 }
 
 func (c *configWatcher) namespaceAgentConfigs(namespace string) *xsync.Map[string, *agentconfig.Sidecar] {
