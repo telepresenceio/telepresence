@@ -120,7 +120,7 @@ func TalkToManager(ctx context.Context, address string, info *rpc.AgentInfo, sta
 	// rest of the session.
 	refreshQuicCert := make(chan struct{}, 1)
 	refreshQuicCert <- struct{}{}
-	go quicAgentCertRefresher(processCtx, ctx, state, refreshQuicCert, 10*time.Second, quicAgentCertFetchBackoff)
+	go quicAgentCertRefresher(processCtx, ctx, state, refreshQuicCert, 10*time.Second, time.Second)
 
 	// Create the /tmp/agent directory if it doesn't exist
 	// We use this to place a file which conveys 'readiness'

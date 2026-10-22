@@ -9,12 +9,6 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.33.0
 <Note>
-	<Title type="bugfix">Traffic-agent recovers file-sharing credentials after a traffic-manager restart</Title>
-	<Body>
-After a traffic-manager restart, an agent that re-registered with the new manager kept the previous manager's session-token verification key, because it fetched the QUIC CA only when its manager session started. In enforcing mode, clients were rejected with <code>fileshareauth: this agent requires a session credential</code> until the agent pod was replaced. The agent now fetches the CA again each time it re-registers, and retries a failed fetch until it succeeds or the manager session ends.
-  </Body>
-</Note>
-<Note>
 	<Title type="feature" docs="reference/attachments/cli">HTTP intercepts can follow every workload selected by one Service</Title>
 	<Body>
 A Kubernetes Service can route requests to more than one workload, such as stable and canary Deployments, while an intercept previously followed only the workload named by the user. HTTP intercepts without <code>--replace</code> now let each selected workload participate in one logical intercept, so filtered traffic reaches the same local handler regardless of which selected workload receives it. If the selected workloads or their traffic-agents cannot support shared interception, Telepresence warns and keeps the historical single-workload behavior instead of failing the intercept.
@@ -42,6 +36,12 @@ The traffic-manager compares the result of an intercept update with the stored i
 	<Title type="change" docs="reference/cluster-config#agent-rollout-pacing">Agent updates roll out within the workload's allowed unavailability</Title>
 	<Body>
 When a workload's agent configuration changes, the traffic-manager now replaces its pods in batches sized by the workload's <code>maxUnavailable</code>, waits for the replacements to become ready between batches, and defers while the workload is already rolling out. An eviction refused by a PodDisruptionBudget is retried for thirty seconds before the workload is restarted through its controller. A deferral is logged after a minute and, after five minutes, gives way to such a restart as well. Uninstalling the traffic-manager still removes every agent at once.
+  </Body>
+</Note>
+<Note>
+	<Title type="bugfix">Traffic-agent recovers file-sharing credentials after a traffic-manager restart</Title>
+	<Body>
+After a traffic-manager restart, an agent that re-registered with the new manager kept the previous manager's session-token verification key, because it fetched the QUIC CA only when its manager session started. In enforcing mode, clients were rejected with <code>fileshareauth: this agent requires a session credential</code> until the agent pod was replaced. The agent now fetches the CA again each time it re-registers, and retries a failed fetch until it succeeds or the manager session ends.
   </Body>
 </Note>
 ## Version 2.32.3 <span style={{fontSize:'16px'}}>(October 21)</span>

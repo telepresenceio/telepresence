@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
+
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/quicserver"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
@@ -98,76 +100,61 @@ func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) e
 	return nil
 }
 
+// refreshQuicAgentListenerWithRetry fetches the certificate until a fetch succeeds
+// or retryCtx ends.
 func refreshQuicAgentListenerWithRetry(
-	processCtx, sessionCtx context.Context,
+	processCtx, retryCtx context.Context,
 	s interface {
 		RefreshQuicAgentListener(context.Context, context.Context) error
 	},
-	trigger <-chan struct{},
-	attemptTimeout time.Duration,
-	backoff func(attempt int) time.Duration,
+	attemptTimeout, retryInterval time.Duration,
 ) {
-	for attempt := 1; sessionCtx.Err() == nil; attempt++ {
-		fetchCtx, cancel := context.WithTimeout(sessionCtx, attemptTimeout)
-		err := s.RefreshQuicAgentListener(processCtx, fetchCtx)
-		cancel()
-		if err == nil || sessionCtx.Err() != nil {
-			return
-		}
-
-		timer := time.NewTimer(backoff(attempt))
-		select {
-		case <-sessionCtx.Done():
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-			return
-		case <-trigger:
-			if !timer.Stop() {
-				select {
-				case <-timer.C:
-				default:
-				}
-			}
-			attempt = 0
-		case <-timer.C:
-		}
-	}
+	_ = backoff.Retry(func() error {
+		fetchCtx, cancel := context.WithTimeout(retryCtx, attemptTimeout)
+		defer cancel()
+		return s.RefreshQuicAgentListener(processCtx, fetchCtx)
+	}, backoff.WithContext(quicAgentCertBackOff(retryInterval), retryCtx))
 }
 
-// quicAgentCertRefresher runs a certificate refresh for every value received on
-// trigger, until sessionCtx ends.
+// quicAgentCertRefresher starts a retried fetch for every value received on
+// trigger, cancelling the one in progress, until sessionCtx ends.
 func quicAgentCertRefresher(
 	processCtx, sessionCtx context.Context,
 	s interface {
 		RefreshQuicAgentListener(context.Context, context.Context) error
 	},
 	trigger <-chan struct{},
-	attemptTimeout time.Duration,
-	backoff func(attempt int) time.Duration,
+	attemptTimeout, retryInterval time.Duration,
 ) {
+	cancel := context.CancelFunc(func() {})
+	done := make(chan struct{})
+	close(done)
 	for {
 		select {
 		case <-sessionCtx.Done():
+			cancel()
+			<-done
 			return
 		case <-trigger:
 		}
-		refreshQuicAgentListenerWithRetry(processCtx, sessionCtx, s, trigger, attemptTimeout, backoff)
+		cancel()
+		<-done
+		retryCtx, retryCancel := context.WithCancel(sessionCtx)
+		cancel = retryCancel
+		done = make(chan struct{})
+		go func() {
+			defer close(done)
+			refreshQuicAgentListenerWithRetry(processCtx, retryCtx, s, attemptTimeout, retryInterval)
+		}()
 	}
 }
 
-func quicAgentCertFetchBackoff(attempt int) time.Duration {
-	delay := time.Second
-	for i := 1; i < attempt && delay < 30*time.Second; i++ {
-		delay *= 2
-	}
-	if delay > 30*time.Second {
-		return 30 * time.Second
-	}
-	return delay
+func quicAgentCertBackOff(initialInterval time.Duration) backoff.BackOff {
+	return backoff.NewExponentialBackOff(
+		backoff.WithInitialInterval(initialInterval),
+		backoff.WithMaxInterval(30*time.Second),
+		backoff.WithMaxElapsedTime(0),
+	)
 }
 
 // quicPortFromEnv reads AGENT_QUIC_PORT, returning ok == false when it is unset,

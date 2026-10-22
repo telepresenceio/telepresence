@@ -232,7 +232,8 @@ func TestTalkToManager_RefreshesQuicCertAfterManagerRestart(t *testing.T) {
 	t.Cleanup(func() {
 		cancel()
 		select {
-		case <-done:
+		case err := <-done:
+			require.NoError(t, err)
 		case <-time.After(5 * time.Second):
 			t.Error("TalkToManager did not return after cancel")
 		}

@@ -563,9 +563,7 @@ func TestRefreshQuicAgentListenerWithRetry_RecoversFileShareAuth(t *testing.T) {
 	mgrClient := startFakeQuicAgentCertManager(t, fm)
 	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-a"}, mgrClient, semver.Version{})
 
-	refreshQuicAgentListenerWithRetry(ctx, ctx, st, nil, time.Second, func(int) time.Duration {
-		return time.Millisecond
-	})
+	refreshQuicAgentListenerWithRetry(ctx, ctx, st, time.Second, time.Millisecond)
 
 	require.Equal(t, 3, fm.callCount())
 	snap := st.fileShareAuth.v.Load()
@@ -588,9 +586,7 @@ func TestRefreshQuicAgentListenerWithRetry_Unimplemented(t *testing.T) {
 	mgrClient := startFakeQuicAgentCertManager(t, fm)
 	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-a"}, mgrClient, semver.Version{})
 
-	refreshQuicAgentListenerWithRetry(ctx, ctx, st, nil, time.Second, func(int) time.Duration {
-		return time.Millisecond
-	})
+	refreshQuicAgentListenerWithRetry(ctx, ctx, st, time.Second, time.Millisecond)
 
 	require.Equal(t, 1, fm.callCount())
 	require.Nil(t, st.fileShareAuth.v.Load())
@@ -610,9 +606,7 @@ func TestRefreshQuicAgentListenerWithRetry_CancelledSession(t *testing.T) {
 	})
 	done := make(chan struct{})
 	go func() {
-		refreshQuicAgentListenerWithRetry(processCtx, sessionCtx, refresher, nil, time.Second, func(int) time.Duration {
-			return 200 * time.Millisecond
-		})
+		refreshQuicAgentListenerWithRetry(processCtx, sessionCtx, refresher, time.Second, 200*time.Millisecond)
 		close(done)
 	}()
 
@@ -669,9 +663,7 @@ func TestRefreshQuicAgentListenerWithRetry_ReplacesStaleKeyAfterManagerRestart(t
 	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-b"}, startFakeQuicAgentCertManager(t, fm), semver.Version{})
 	requireRejected(t, ctx, st, newCA, "client-b")
 
-	refreshQuicAgentListenerWithRetry(ctx, ctx, st, nil, time.Second, func(int) time.Duration {
-		return time.Millisecond
-	})
+	refreshQuicAgentListenerWithRetry(ctx, ctx, st, time.Second, time.Millisecond)
 
 	require.Equal(t, 2, fm.callCount())
 	requireVerifies(t, ctx, st, newCA, "client-b")
@@ -687,25 +679,10 @@ func TestRefreshQuicAgentListenerWithRetry_RetriesAfterAttemptTimeout(t *testing
 	fm := &fakeQuicAgentCertManager{ca: ca, mode: "enforcing", podUID: "test-pod-uid", hangsRemaining: 1}
 	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-a"}, startFakeQuicAgentCertManager(t, fm), semver.Version{})
 
-	refreshQuicAgentListenerWithRetry(ctx, ctx, st, nil, 100*time.Millisecond, func(int) time.Duration {
-		return time.Millisecond
-	})
+	refreshQuicAgentListenerWithRetry(ctx, ctx, st, 100*time.Millisecond, time.Millisecond)
 
 	require.Equal(t, 2, fm.callCount())
 	requireVerifies(t, ctx, st, ca, "session-a")
-}
-
-func TestQuicAgentCertFetchBackoff(t *testing.T) {
-	for attempt, want := range map[int]time.Duration{
-		1:   time.Second,
-		2:   2 * time.Second,
-		3:   4 * time.Second,
-		5:   16 * time.Second,
-		6:   30 * time.Second,
-		100: 30 * time.Second,
-	} {
-		require.Equal(t, want, quicAgentCertFetchBackoff(attempt), "attempt %d", attempt)
-	}
 }
 
 func TestQuicAgentCertRefresher_TriggerCutsBackoff(t *testing.T) {
@@ -733,7 +710,7 @@ func TestQuicAgentCertRefresher_TriggerCutsBackoff(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		quicAgentCertRefresher(ctx, ctx, refresher, trigger, time.Second, func(int) time.Duration { return time.Hour })
+		quicAgentCertRefresher(ctx, ctx, refresher, trigger, time.Second, time.Hour)
 	}()
 
 	require.Equal(t, 1, receiveWithin(t, called))
@@ -765,7 +742,7 @@ func TestQuicAgentCertRefresher_RefetchesOnEachTrigger(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		quicAgentCertRefresher(ctx, ctx, refresher, trigger, time.Second, func(int) time.Duration { return time.Hour })
+		quicAgentCertRefresher(ctx, ctx, refresher, trigger, time.Second, time.Hour)
 	}()
 
 	trigger <- struct{}{}
