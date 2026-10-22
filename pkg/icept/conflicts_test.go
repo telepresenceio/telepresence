@@ -166,6 +166,70 @@ func TestInterceptSpecsConflict(t *testing.T) {
 			conflicts: true,
 		},
 		{
+			name: "Different baggage member values - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"baggage[session]": "alice-1",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"baggage[session]": "bob-2",
+				},
+			},
+			conflicts: false,
+		},
+		{
+			name: "Same baggage member value - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"baggage[session]": "alice-1",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"Baggage[session]": "alice-1",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Whole baggage header and a baggage member - should conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"baggage": "session=alice-1",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"baggage[session]": "alice-1",
+				},
+			},
+			conflicts: true,
+		},
+		{
+			name: "Different baggage member keys - should not conflict",
+			spec1: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"baggage[session]": "alice-1",
+				},
+			},
+			spec2: &manager.InterceptSpec{
+				Mechanism: "http",
+				HeaderFilters: map[string]string{
+					"baggage[tenant]": "acme",
+				},
+			},
+			conflicts: false,
+		},
+		{
 			name: "Different header keys - should not conflict",
 			spec1: &manager.InterceptSpec{
 				Mechanism: "http",

@@ -2,7 +2,6 @@ package matcher
 
 import (
 	"net/http"
-	"net/textproto"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
@@ -32,7 +31,7 @@ type Headers interface {
 func NewHeaders(hs map[string]string) Headers {
 	hm := make(HeaderMap, len(hs))
 	for k, v := range hs {
-		hm[textproto.CanonicalMIMEHeaderKey(k)] = NewValue(v)
+		hm[canonicalHeaderKey(k)] = NewValue(v)
 	}
 	return hm
 }
@@ -57,7 +56,7 @@ func (m HeaderMap) HeaderMap() HeaderMap {
 // Header name comparison is made using the textproto.CanonicalMIMEHeaderKey form of the keys.
 func (m HeaderMap) Matches(h http.Header) bool {
 	for name, vm := range m {
-		if v := h.Get(name); !vm.Matches(v) {
+		if v, ok := headerValue(h, name); !ok || !vm.Matches(v) {
 			return false
 		}
 	}

@@ -194,15 +194,39 @@ func ExplainConflict(spec1, spec2 *manager.InterceptSpec) string {
 }
 
 // isHeaderSubset checks if all headers in a subset exist in superset with matching values.
-// Uses wildcard matching for header values.
+// Uses wildcard matching for header values. A filter on a whole header and a filter on a
+// member of that header are assumed to match.
 func isHeaderSubset(subset, superset matcher.Headers) bool {
 	supersetMap := superset.HeaderMap()
 	for key, value := range subset.HeaderMap() {
-		if superValue, exists := supersetMap[key]; !exists || !valuesCanMatch(value, superValue) {
+		superValue, exists := supersetMap[key]
+		if !exists {
+			if !hasWholeOrMemberFilter(key, supersetMap) {
+				return false
+			}
+			continue
+		}
+		if !valuesCanMatch(value, superValue) {
 			return false
 		}
 	}
 	return true
+}
+
+// hasWholeOrMemberFilter returns true if hm filters on the whole header that key is a member
+// filter of, or on a member of the header that key filters on.
+func hasWholeOrMemberFilter(key string, hm matcher.HeaderMap) bool {
+	name, _, isMember := matcher.HeaderMember(key)
+	for k := range hm {
+		if isMember {
+			if k == name {
+				return true
+			}
+		} else if n, _, ok := matcher.HeaderMember(k); ok && n == key {
+			return true
+		}
+	}
+	return false
 }
 
 // IsInConflict determines if two intercept specs would conflict with each other. It's assumed

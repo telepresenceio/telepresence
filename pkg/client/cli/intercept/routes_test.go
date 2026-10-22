@@ -119,6 +119,28 @@ func TestCurlExample(t *testing.T) {
 		curlExample("https://api.example.com/api", map[string]string{"x": "y", "a": "b"}))
 	assert.Equal(t, "curl http://api.example.com", curlExample("http://api.example.com", nil))
 
+	// Member filters on the same header become one header.
+	assert.Equal(t,
+		"curl -H 'Baggage: session=alice-1,tenant=acme' -H 'x: y' https://api.example.com",
+		curlExample("https://api.example.com", map[string]string{"Baggage[tenant]": "acme", "Baggage[session]": "alice-1", "x": "y"}))
+	assert.Equal(t,
+		"curl -H 'Cookie: sid=alice-1; theme=dark' https://api.example.com",
+		curlExample("https://api.example.com", map[string]string{"Cookie[theme]": "dark", "Cookie[sid]": "alice-1"}))
+
+	// A whole-header filter fixes the value; no example when it can't satisfy a member filter.
+	assert.Equal(t,
+		"curl -H 'baggage: region=eu,session=alice-1' https://api.example.com",
+		curlExample("https://api.example.com", map[string]string{"baggage": "region=eu,session=alice-1", "Baggage[session]": "alice-1"}))
+	assert.Equal(t, "",
+		curlExample("https://api.example.com", map[string]string{"baggage": "region=eu", "Baggage[session]": "alice-1"}))
+
+	// Exact member values are percent-encoded. A regexp member value yields no example.
+	assert.Equal(t,
+		"curl -H 'baggage: session=alice%3B1%2C2' https://api.example.com",
+		curlExample("https://api.example.com", map[string]string{"baggage[session]": "alice;1,2"}))
+	assert.Equal(t, "",
+		curlExample("https://api.example.com", map[string]string{"baggage[session]": "^alice-[0-9]+$"}))
+
 	// Wildcard hosts are not pasteable.
 	assert.Equal(t, "", curlExample("https://*.example.com", map[string]string{"x": "y"}))
 	assert.Equal(t, "", curlExample("", map[string]string{"x": "y"}))

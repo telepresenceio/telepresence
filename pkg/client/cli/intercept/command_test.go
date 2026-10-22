@@ -264,6 +264,27 @@ func TestParseHTTPHeader(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:        "header member",
+			input:       "baggage[session]=alice-1",
+			expectedKey: "baggage[session]",
+			expectedVal: "alice-1",
+			expectError: false,
+		},
+		{
+			name:        "header member with colon in value",
+			input:       "baggage[url]=http://example.com:8080",
+			expectedKey: "baggage[url]",
+			expectedVal: "http://example.com:8080",
+			expectError: false,
+		},
+		{
+			name:        "header member colon separator",
+			input:       "baggage[session]: alice-1",
+			expectedKey: "baggage[session]",
+			expectedVal: "alice-1",
+			expectError: false,
+		},
+		{
 			name:        "invalid format no separator",
 			input:       "InvalidHeader",
 			expectError: true,
@@ -299,7 +320,7 @@ func TestParseHTTPHeader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			key, value, err := parseKeyValue(tt.input)
+			key, value, err := parseHeaderFilter(tt.input)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -430,4 +451,11 @@ func TestCommand_UDPHTTPValidation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseKeyValue_memberPrecedenceIsHeaderOnly(t *testing.T) {
+	key, value, err := parseKeyValue("trace[id]=http://collector")
+	require.NoError(t, err)
+	assert.Equal(t, "trace[id]=http", key)
+	assert.Equal(t, "//collector", value)
 }

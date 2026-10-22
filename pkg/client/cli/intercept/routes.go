@@ -3,11 +3,15 @@ package intercept
 import (
 	"fmt"
 	"maps"
+	"net/http"
+	"net/textproto"
+	"net/url"
 	"slices"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
+	"github.com/telepresenceio/telepresence/v2/pkg/matcher"
 )
 
 // routesForSpec returns the route associations for the service port that the
@@ -76,17 +80,63 @@ func routeURLs(routes []*manager.RouteAssociation) []string {
 
 // curlExample returns a curl command that reaches the given URL with one -H flag
 // for each of the given headers, or an empty string when the URL contains a
-// wildcard host.
-func curlExample(url string, headers map[string]string) string {
-	if url == "" || strings.Contains(url, "*") {
+// wildcard host. Member filters on the same header are combined into one header,
+// unless a whole-header filter fixes its value. The result is empty when the headers
+// don't satisfy the member filters, as with a regexp member value.
+func curlExample(accessURL string, headers map[string]string) string {
+	if accessURL == "" || strings.Contains(accessURL, "*") {
 		return ""
+	}
+	hs := make(map[string]string, len(headers))
+	names := make(map[string]string, len(headers)) // canonical name -> name used in hs
+	var memberKeys []string
+	for _, k := range slices.Sorted(maps.Keys(headers)) {
+		if _, _, ok := matcher.HeaderMember(k); ok {
+			memberKeys = append(memberKeys, k)
+		} else {
+			hs[k] = headers[k]
+			names[textproto.CanonicalMIMEHeaderKey(k)] = k
+		}
+	}
+	for _, k := range memberKeys {
+		name, key, _ := matcher.HeaderMember(k)
+		cn := textproto.CanonicalMIMEHeaderKey(name)
+		v := headers[k]
+		if matcher.NewValue(v).Op() == matcher.ValueOpEqual {
+			v = url.PathEscape(v)
+		}
+		member := key + "=" + v
+		n, ok := names[cn]
+		_, whole := headers[n]
+		switch {
+		case !ok:
+			hs[name] = member
+			names[cn] = name
+		case !whole:
+			sep := ","
+			if cn == "Cookie" {
+				sep = "; "
+			}
+			hs[n] += sep + member
+		}
+	}
+	if len(memberKeys) > 0 {
+		h := make(http.Header, len(hs))
+		for k, v := range hs {
+			h.Add(k, v)
+		}
+		for _, k := range memberKeys {
+			if !matcher.NewHeaders(map[string]string{k: headers[k]}).Matches(h) {
+				return ""
+			}
+		}
 	}
 	sb := strings.Builder{}
 	sb.WriteString("curl")
-	for _, k := range slices.Sorted(maps.Keys(headers)) {
-		fmt.Fprintf(&sb, " -H '%s: %s'", k, headers[k])
+	for _, k := range slices.Sorted(maps.Keys(hs)) {
+		fmt.Fprintf(&sb, " -H '%s: %s'", k, hs[k])
 	}
 	sb.WriteByte(' ')
-	sb.WriteString(url)
+	sb.WriteString(accessURL)
 	return sb.String()
 }
