@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.33.0
 <Note>
+	<Title type="bugfix">Traffic-agent recovers file-sharing credentials after a traffic-manager restart</Title>
+	<Body>
+After a traffic-manager restart, an agent that re-registered with the new manager kept the previous manager's session-token verification key, because it fetched the QUIC CA only when its manager session started. In enforcing mode, clients were rejected with <code>fileshareauth: this agent requires a session credential</code> until the agent pod was replaced. The agent now fetches the CA again each time it re-registers, and retries a failed fetch until it succeeds or the manager session ends.
+  </Body>
+</Note>
+<Note>
 	<Title type="feature" docs="reference/attachments/cli">HTTP intercepts can follow every workload selected by one Service</Title>
 	<Body>
 A Kubernetes Service can route requests to more than one workload, such as stable and canary Deployments, while an intercept previously followed only the workload named by the user. HTTP intercepts without <code>--replace</code> now let each selected workload participate in one logical intercept, so filtered traffic reaches the same local handler regardless of which selected workload receives it. If the selected workloads or their traffic-agents cannot support shared interception, Telepresence warns and keeps the historical single-workload behavior instead of failing the intercept.

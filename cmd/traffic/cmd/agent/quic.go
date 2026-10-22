@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/agent/quicserver"
@@ -30,7 +31,7 @@ type quicAgentState struct {
 // docs/reference/authentication.md), and, only when AGENT_QUIC_PORT is set, it also
 // starts or refreshes the QUIC listener itself. See "Agent connections over QUIC" in
 // docs/reference/quic-transport-architecture.md.
-func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) {
+func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) error {
 	resp, err := s.manager.GetQuicAgentCert(fetchCtx, s.sessionInfo)
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
@@ -39,10 +40,10 @@ func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) {
 			// unpopulated, so file-sharing connections keep being accepted
 			// unauthenticated.
 			clog.Debugf(fetchCtx, "quicserver: traffic-manager predates QUIC agent certificates")
-			return
+			return nil
 		}
 		clog.Errorf(fetchCtx, "quicserver: failed to fetch QUIC agent certificate: %v", err)
-		return
+		return err
 	}
 	if !resp.GetEnabled() {
 		// The manager we're now talking to has no QUIC CA configured, so it has no
@@ -53,24 +54,24 @@ func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) {
 		// fallback (the client falls back to its port-forward path). Nothing to do
 		// here but say so.
 		clog.Debugf(fetchCtx, "quicserver: traffic-manager has no QUIC CA configured; not starting a QUIC listener")
-		return
+		return nil
 	}
 
 	material, err := quicserver.ParseMaterial(resp.GetCertPem(), resp.GetKeyPem(), resp.GetCaPem())
 	if err != nil {
 		clog.Errorf(fetchCtx, "quicserver: failed to parse QUIC agent certificate: %v", err)
-		return
+		return nil
 	}
 	pub, err := sessiontoken.PublicKeyFromCertPEM(resp.GetCaPem())
 	if err != nil {
 		clog.Errorf(fetchCtx, "quicserver: failed to parse session-token public key: %v", err)
-		return
+		return nil
 	}
 	s.fileShareAuth.set(pub, resp.GetAuthenticationMode())
 
 	quicPort, ok := quicPortFromEnv(fetchCtx)
 	if !ok {
-		return
+		return nil
 	}
 
 	qa := s.quicAgent
@@ -79,13 +80,13 @@ func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) {
 	if qa.listener != nil {
 		qa.listener.SetMaterial(material)
 		clog.Debugf(fetchCtx, "quicserver: refreshed QUIC listener TLS material for %s", resp.GetSni())
-		return
+		return nil
 	}
 
 	ln, err := quicserver.New(s.PodIP(), quicPort, s.grpcServer, material)
 	if err != nil {
 		clog.Errorf(fetchCtx, "quicserver: failed to start QUIC listener on port %d: %v", quicPort, err)
-		return
+		return nil
 	}
 	qa.listener = ln
 	clog.Infof(fetchCtx, "quicserver: QUIC listener started on %s for %s", ln.Addr(), resp.GetSni())
@@ -94,6 +95,79 @@ func (s *state) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) {
 			clog.Errorf(processCtx, "quicserver: QUIC listener ended with error: %v", err)
 		}
 	}()
+	return nil
+}
+
+func refreshQuicAgentListenerWithRetry(
+	processCtx, sessionCtx context.Context,
+	s interface {
+		RefreshQuicAgentListener(context.Context, context.Context) error
+	},
+	trigger <-chan struct{},
+	attemptTimeout time.Duration,
+	backoff func(attempt int) time.Duration,
+) {
+	for attempt := 1; sessionCtx.Err() == nil; attempt++ {
+		fetchCtx, cancel := context.WithTimeout(sessionCtx, attemptTimeout)
+		err := s.RefreshQuicAgentListener(processCtx, fetchCtx)
+		cancel()
+		if err == nil || sessionCtx.Err() != nil {
+			return
+		}
+
+		timer := time.NewTimer(backoff(attempt))
+		select {
+		case <-sessionCtx.Done():
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return
+		case <-trigger:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			attempt = 0
+		case <-timer.C:
+		}
+	}
+}
+
+// quicAgentCertRefresher runs a certificate refresh for every value received on
+// trigger, until sessionCtx ends.
+func quicAgentCertRefresher(
+	processCtx, sessionCtx context.Context,
+	s interface {
+		RefreshQuicAgentListener(context.Context, context.Context) error
+	},
+	trigger <-chan struct{},
+	attemptTimeout time.Duration,
+	backoff func(attempt int) time.Duration,
+) {
+	for {
+		select {
+		case <-sessionCtx.Done():
+			return
+		case <-trigger:
+		}
+		refreshQuicAgentListenerWithRetry(processCtx, sessionCtx, s, trigger, attemptTimeout, backoff)
+	}
+}
+
+func quicAgentCertFetchBackoff(attempt int) time.Duration {
+	delay := time.Second
+	for i := 1; i < attempt && delay < 30*time.Second; i++ {
+		delay *= 2
+	}
+	if delay > 30*time.Second {
+		return 30 * time.Second
+	}
+	return delay
 }
 
 // quicPortFromEnv reads AGENT_QUIC_PORT, returning ok == false when it is unset,

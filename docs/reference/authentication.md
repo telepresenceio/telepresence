@@ -175,6 +175,12 @@ same 24-hour expiry:
 The manager mints both forms only for the calling session's own owner, the
 same ownership check its other session-scoped calls use.
 
+Because a restart replaces the CA, an agent fetches the CA certificate when
+its manager session starts and again each time it re-registers with a
+restarted manager, retrying a failed fetch with backoff until it succeeds or
+that manager session ends. Until then, the agent keeps verifying tokens
+against the previous manager's key.
+
 ### Enforcement mirrors the authentication mode
 
 An agent has no way to tell an old client from an attacker, so it can't

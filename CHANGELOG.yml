@@ -27,6 +27,17 @@ items:
   - version: 2.33.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Traffic-agent recovers file-sharing credentials after a traffic-manager restart
+        body: >-
+          After a traffic-manager restart, an agent that re-registered with
+          the new manager kept the previous manager's session-token
+          verification key, because it fetched the QUIC CA only when its
+          manager session started. In enforcing mode, clients were rejected
+          with <code>fileshareauth: this agent requires a session
+          credential</code> until the agent pod was replaced. The agent now
+          fetches the CA again each time it re-registers, and retries a failed
+          fetch until it succeeds or the manager session ends.
       - type: feature
         title: HTTP intercepts can follow every workload selected by one Service
         body: >-

@@ -14,6 +14,8 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -426,14 +428,39 @@ func TestServeSftpConn_OwnSourceEnforcingServes(t *testing.T) {
 // it always reports enabled.
 type fakeQuicAgentCertManager struct {
 	mgrrpc.UnimplementedManagerServer
-	ca     *quictunnel.CA
-	mode   string
-	podUID string
+	ca                *quictunnel.CA
+	mode              string
+	podUID            string
+	failuresRemaining int
+	hangsRemaining    int
+	rpcError          error
+	mu                sync.Mutex
+	calls             int
 }
 
 func (f *fakeQuicAgentCertManager) GetQuicAgentCert(
-	context.Context, *mgrrpc.SessionInfo,
+	ctx context.Context, _ *mgrrpc.SessionInfo,
 ) (*mgrrpc.QuicAgentCert, error) {
+	f.mu.Lock()
+	f.calls++
+	if f.rpcError != nil {
+		err := f.rpcError
+		f.mu.Unlock()
+		return nil, err
+	}
+	if f.failuresRemaining > 0 {
+		f.failuresRemaining--
+		f.mu.Unlock()
+		return nil, status.Error(codes.Unavailable, "manager is warming up")
+	}
+	if f.hangsRemaining > 0 {
+		f.hangsRemaining--
+		f.mu.Unlock()
+		<-ctx.Done()
+		return nil, status.FromContextError(ctx.Err()).Err()
+	}
+	f.mu.Unlock()
+
 	sni := quicfwd.AgentSNI(f.podUID)
 	cert, err := f.ca.MintServerCert(sni)
 	if err != nil {
@@ -453,6 +480,12 @@ func (f *fakeQuicAgentCertManager) GetQuicAgentCert(
 	}, nil
 }
 
+func (f *fakeQuicAgentCertManager) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
+}
+
 // startFakeQuicAgentCertManager serves fm as a real gRPC server on a loopback TCP port
 // and returns a client connected to it, mirroring quic_test.go's startFakeManager.
 func startFakeQuicAgentCertManager(t *testing.T, fm *fakeQuicAgentCertManager) mgrrpc.ManagerClient {
@@ -470,15 +503,8 @@ func startFakeQuicAgentCertManager(t *testing.T, fm *fakeQuicAgentCertManager) m
 	return mgrrpc.NewManagerClient(conn)
 }
 
-// TestRefreshQuicAgentListener_PopulatesFileShareAuthWithoutQuicPort extends the
-// RefreshQuicAgentListener coverage in quic_test.go (package agent_test) with the one
-// assertion that requires reading fileShareAuth's unexported snapshot and so can't be
-// made from outside this package: with AGENT_QUIC_PORT unset, a manager response still
-// populates fileShareAuth with the reported authentication mode, while no QUIC listener
-// starts.
-func TestRefreshQuicAgentListener_PopulatesFileShareAuthWithoutQuicPort(t *testing.T) {
-	ctx := dos.WithEnv(testutil.NewContext(t, false), dos.MapEnv{})
-
+func newFileShareAuthTestState(t *testing.T, ctx context.Context) *state {
+	t.Helper()
 	cfg := &fakeConfig{sidecar: &agentconfig.Sidecar{}, podIP: netip.MustParseAddr("127.0.0.1")}
 	st, err := NewState(ctx, cfg)
 	require.NoError(t, err)
@@ -487,6 +513,24 @@ func TestRefreshQuicAgentListener_PopulatesFileShareAuthWithoutQuicPort(t *testi
 	agentrpc.RegisterAgentServer(svc, st)
 	st.SetGRPCServer(svc)
 	t.Cleanup(svc.Stop)
+	return st.(*state)
+}
+
+type refreshQuicAgentListenerFunc func(context.Context, context.Context) error
+
+func (f refreshQuicAgentListenerFunc) RefreshQuicAgentListener(processCtx, fetchCtx context.Context) error {
+	return f(processCtx, fetchCtx)
+}
+
+// TestRefreshQuicAgentListener_PopulatesFileShareAuthWithoutQuicPort extends the
+// RefreshQuicAgentListener coverage in quic_test.go (package agent_test) with the one
+// assertion that requires reading fileShareAuth's unexported snapshot and so can't be
+// made from outside this package: with AGENT_QUIC_PORT unset, a manager response still
+// populates fileShareAuth with the reported authentication mode, while no QUIC listener
+// starts.
+func TestRefreshQuicAgentListener_PopulatesFileShareAuthWithoutQuicPort(t *testing.T) {
+	ctx := dos.WithEnv(testutil.NewContext(t, false), dos.MapEnv{})
+	st := newFileShareAuthTestState(t, ctx)
 
 	ca, err := quictunnel.NewCA()
 	require.NoError(t, err)
@@ -494,13 +538,257 @@ func TestRefreshQuicAgentListener_PopulatesFileShareAuthWithoutQuicPort(t *testi
 	mgrClient := startFakeQuicAgentCertManager(t, fm)
 	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-a"}, mgrClient, semver.Version{})
 
-	st.RefreshQuicAgentListener(ctx, ctx)
+	require.NoError(t, st.RefreshQuicAgentListener(ctx, ctx))
 
-	s := st.(*state)
-	require.Nil(t, s.quicAgent.listener, "no QUIC listener should start when AGENT_QUIC_PORT is unset")
+	require.Nil(t, st.quicAgent.listener, "no QUIC listener should start when AGENT_QUIC_PORT is unset")
 
-	snap := s.fileShareAuth.v.Load()
+	snap := st.fileShareAuth.v.Load()
 	require.NotNil(t, snap, "fileShareAuth must be populated even though no QUIC listener starts")
 	require.Equal(t, "enforcing", snap.mode)
-	require.True(t, s.fileShareAuth.enforcing())
+	require.True(t, st.fileShareAuth.enforcing())
+}
+
+func TestRefreshQuicAgentListenerWithRetry_RecoversFileShareAuth(t *testing.T) {
+	ctx := dos.WithEnv(testutil.NewContext(t, false), dos.MapEnv{})
+	st := newFileShareAuthTestState(t, ctx)
+
+	ca, err := quictunnel.NewCA()
+	require.NoError(t, err)
+	fm := &fakeQuicAgentCertManager{
+		ca:                ca,
+		mode:              "enforcing",
+		podUID:            "test-pod-uid",
+		failuresRemaining: 2,
+	}
+	mgrClient := startFakeQuicAgentCertManager(t, fm)
+	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-a"}, mgrClient, semver.Version{})
+
+	refreshQuicAgentListenerWithRetry(ctx, ctx, st, nil, time.Second, func(int) time.Duration {
+		return time.Millisecond
+	})
+
+	require.Equal(t, 3, fm.callCount())
+	snap := st.fileShareAuth.v.Load()
+	require.NotNil(t, snap)
+	require.Equal(t, "enforcing", snap.mode)
+
+	token, _, err := ca.MintSessionToken("session-a")
+	require.NoError(t, err)
+	tokenCtx := metadata.NewIncomingContext(ctx, metadata.Pairs(sessiontoken.MetadataKey, token))
+	verified, err := st.fileShareAuth.verifySession(tokenCtx, tunnel.SessionID("session-a"))
+	require.NoError(t, err)
+	require.True(t, verified)
+}
+
+func TestRefreshQuicAgentListenerWithRetry_Unimplemented(t *testing.T) {
+	ctx := dos.WithEnv(testutil.NewContext(t, false), dos.MapEnv{})
+	st := newFileShareAuthTestState(t, ctx)
+
+	fm := &fakeQuicAgentCertManager{rpcError: status.Error(codes.Unimplemented, "not implemented")}
+	mgrClient := startFakeQuicAgentCertManager(t, fm)
+	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-a"}, mgrClient, semver.Version{})
+
+	refreshQuicAgentListenerWithRetry(ctx, ctx, st, nil, time.Second, func(int) time.Duration {
+		return time.Millisecond
+	})
+
+	require.Equal(t, 1, fm.callCount())
+	require.Nil(t, st.fileShareAuth.v.Load())
+}
+
+func TestRefreshQuicAgentListenerWithRetry_CancelledSession(t *testing.T) {
+	processCtx := context.Background()
+	sessionCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	attempted := make(chan struct{}, 1)
+	calls := 0
+	refresher := refreshQuicAgentListenerFunc(func(context.Context, context.Context) error {
+		calls++
+		attempted <- struct{}{}
+		return status.Error(codes.Unavailable, "manager is warming up")
+	})
+	done := make(chan struct{})
+	go func() {
+		refreshQuicAgentListenerWithRetry(processCtx, sessionCtx, refresher, nil, time.Second, func(int) time.Duration {
+			return 200 * time.Millisecond
+		})
+		close(done)
+	}()
+
+	select {
+	case <-attempted:
+	case <-time.After(time.Second):
+		t.Fatal("retry did not make an initial attempt")
+	}
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("retry did not stop after the session ended")
+	}
+	require.Equal(t, 1, calls)
+}
+
+func requireVerifies(t *testing.T, ctx context.Context, st *state, ca *quictunnel.CA, sessionID string) {
+	t.Helper()
+	token, _, err := ca.MintSessionToken(sessionID)
+	require.NoError(t, err)
+	tokenCtx := metadata.NewIncomingContext(ctx, metadata.Pairs(sessiontoken.MetadataKey, token))
+	verified, err := st.fileShareAuth.verifySession(tokenCtx, tunnel.SessionID(sessionID))
+	require.NoError(t, err)
+	require.True(t, verified)
+}
+
+func requireRejected(t *testing.T, ctx context.Context, st *state, ca *quictunnel.CA, sessionID string) {
+	t.Helper()
+	token, _, err := ca.MintSessionToken(sessionID)
+	require.NoError(t, err)
+	tokenCtx := metadata.NewIncomingContext(ctx, metadata.Pairs(sessiontoken.MetadataKey, token))
+	_, err = st.fileShareAuth.verifySession(tokenCtx, tunnel.SessionID(sessionID))
+	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+// A traffic-manager restart replaces the CA. An agent whose first fetch from the new
+// manager fails must keep retrying and then accept the new manager's tokens.
+func TestRefreshQuicAgentListenerWithRetry_ReplacesStaleKeyAfterManagerRestart(t *testing.T) {
+	ctx := dos.WithEnv(testutil.NewContext(t, false), dos.MapEnv{})
+	st := newFileShareAuthTestState(t, ctx)
+
+	oldCA, err := quictunnel.NewCA()
+	require.NoError(t, err)
+	oldMgr := startFakeQuicAgentCertManager(t, &fakeQuicAgentCertManager{ca: oldCA, mode: "enforcing", podUID: "test-pod-uid"})
+	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-a"}, oldMgr, semver.Version{})
+	require.NoError(t, st.RefreshQuicAgentListener(ctx, ctx))
+	requireVerifies(t, ctx, st, oldCA, "client-a")
+
+	newCA, err := quictunnel.NewCA()
+	require.NoError(t, err)
+	fm := &fakeQuicAgentCertManager{ca: newCA, mode: "enforcing", podUID: "test-pod-uid", failuresRemaining: 1}
+	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-b"}, startFakeQuicAgentCertManager(t, fm), semver.Version{})
+	requireRejected(t, ctx, st, newCA, "client-b")
+
+	refreshQuicAgentListenerWithRetry(ctx, ctx, st, nil, time.Second, func(int) time.Duration {
+		return time.Millisecond
+	})
+
+	require.Equal(t, 2, fm.callCount())
+	requireVerifies(t, ctx, st, newCA, "client-b")
+	requireRejected(t, ctx, st, oldCA, "client-a")
+}
+
+func TestRefreshQuicAgentListenerWithRetry_RetriesAfterAttemptTimeout(t *testing.T) {
+	ctx := dos.WithEnv(testutil.NewContext(t, false), dos.MapEnv{})
+	st := newFileShareAuthTestState(t, ctx)
+
+	ca, err := quictunnel.NewCA()
+	require.NoError(t, err)
+	fm := &fakeQuicAgentCertManager{ca: ca, mode: "enforcing", podUID: "test-pod-uid", hangsRemaining: 1}
+	st.SetManager(&mgrrpc.SessionInfo{SessionId: "session-a"}, startFakeQuicAgentCertManager(t, fm), semver.Version{})
+
+	refreshQuicAgentListenerWithRetry(ctx, ctx, st, nil, 100*time.Millisecond, func(int) time.Duration {
+		return time.Millisecond
+	})
+
+	require.Equal(t, 2, fm.callCount())
+	requireVerifies(t, ctx, st, ca, "session-a")
+}
+
+func TestQuicAgentCertFetchBackoff(t *testing.T) {
+	for attempt, want := range map[int]time.Duration{
+		1:   time.Second,
+		2:   2 * time.Second,
+		3:   4 * time.Second,
+		5:   16 * time.Second,
+		6:   30 * time.Second,
+		100: 30 * time.Second,
+	} {
+		require.Equal(t, want, quicAgentCertFetchBackoff(attempt), "attempt %d", attempt)
+	}
+}
+
+func TestQuicAgentCertRefresher_TriggerCutsBackoff(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var mu sync.Mutex
+	calls := 0
+	called := make(chan int, 10)
+	refresher := refreshQuicAgentListenerFunc(func(context.Context, context.Context) error {
+		mu.Lock()
+		calls++
+		n := calls
+		mu.Unlock()
+		called <- n
+		if n == 1 {
+			return status.Error(codes.Unavailable, "manager is warming up")
+		}
+		return nil
+	})
+
+	trigger := make(chan struct{}, 1)
+	trigger <- struct{}{}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		quicAgentCertRefresher(ctx, ctx, refresher, trigger, time.Second, func(int) time.Duration { return time.Hour })
+	}()
+
+	require.Equal(t, 1, receiveWithin(t, called))
+	// The failed first attempt is now in its 1h backoff; a trigger must cut it short.
+	trigger <- struct{}{}
+	require.Equal(t, 2, receiveWithin(t, called))
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("refresher did not return after cancel")
+	}
+}
+
+func TestQuicAgentCertRefresher_RefetchesOnEachTrigger(t *testing.T) {
+	ctx := testutil.NewContext(t, false)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	called := make(chan int, 10)
+	var n atomic.Int32
+	refresher := refreshQuicAgentListenerFunc(func(context.Context, context.Context) error {
+		called <- int(n.Add(1))
+		return nil
+	})
+
+	trigger := make(chan struct{}, 1)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		quicAgentCertRefresher(ctx, ctx, refresher, trigger, time.Second, func(int) time.Duration { return time.Hour })
+	}()
+
+	trigger <- struct{}{}
+	require.Equal(t, 1, receiveWithin(t, called))
+	trigger <- struct{}{}
+	require.Equal(t, 2, receiveWithin(t, called))
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("refresher did not return after cancel")
+	}
+	require.Equal(t, int32(2), n.Load())
+}
+
+func receiveWithin(t *testing.T, ch <-chan int) int {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for a refresh call")
+		return 0
+	}
 }
