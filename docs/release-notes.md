@@ -35,7 +35,7 @@ When a workload's agent configuration changes, the traffic-manager now replaces 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Traffic-agent recovers file-sharing credentials after a traffic-manager restart</div></div>
 <div style="margin-left: 15px">
 
-After a traffic-manager restart, an agent that re-registered with the new manager kept the previous manager's session-token verification key, because it fetched the QUIC CA only when its manager session started. In enforcing mode, clients were rejected with <code>fileshareauth: this agent requires a session credential</code> until the agent pod was replaced. The agent now fetches the CA again each time it re-registers, and retries a failed fetch until it succeeds or the manager session ends.
+After a traffic-manager restart, an agent that re-registered with the new manager kept the previous manager's session-token verification key, because it fetched the QUIC CA only when its manager session started. In enforcing mode, clients were rejected with <code>fileshareauth: this agent requires a session credential</code> until the agent pod was replaced. The agent now fetches the CA again each time it re-registers, and retries a failed fetch until it succeeds or the manager session ends. The client likewise refetches the agent QUIC credentials after it reconnects to a restarted manager, so agent connections return to QUIC instead of staying on the port-forward fallback.
 </div>
 
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>

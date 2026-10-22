@@ -494,7 +494,7 @@ func (s *session) managerClient() manager.ManagerClient {
 
 // reconnectManager replaces the session's manager connection with one pinned to a
 // freshly resolved manager pod. The old connection is closed unless it was borrowed
-// from the user daemon.
+// from the user daemon. It also drops the cached agent QUIC endpoint descriptor.
 func (s *session) reconnectManager() error {
 	tc, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerConnect)
 	defer cancel()
@@ -510,6 +510,11 @@ func (s *session) reconnectManager() error {
 	s.managerConnMu.Unlock()
 	if old != nil && owned {
 		_ = old.Close()
+	}
+	// A replaced manager process has a new QUIC CA, so the cached agent endpoint
+	// descriptor must be fetched again before the next agent dial.
+	if s.agentClients != nil {
+		s.agentClients.ResetQuicEndpoint()
 	}
 	clog.Infof(s, "Reconnected to traffic-manager %s", ver)
 	return nil

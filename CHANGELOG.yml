@@ -86,6 +86,9 @@ items:
           credential</code> until the agent pod was replaced. The agent now
           fetches the CA again each time it re-registers, and retries a failed
           fetch until it succeeds or the manager session ends.
+          The client likewise refetches the agent QUIC credentials after it
+          reconnects to a restarted manager, so agent connections return to QUIC
+          instead of staying on the port-forward fallback.
   - version: 2.32.3
     date: 2026-10-21
     notes:
