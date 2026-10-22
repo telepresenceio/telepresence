@@ -190,7 +190,7 @@ func TestQuicAgentListener_RoundTrip(t *testing.T) {
 	mgrClient := startFakeManager(t, &fakeQuicManager{ca: ca, enabled: true, podUID: podUID})
 	state.SetManager(&mgrrpc.SessionInfo{SessionId: "quic-test-session"}, mgrClient, semver.Version{})
 
-	state.RefreshQuicAgentListener(ctx, ctx)
+	require.NoError(t, state.RefreshQuicAgentListener(ctx, ctx))
 
 	dialAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(int(quicPort)))
 	conn, err := dialWithCA(t, ctx, ca, podUID, dialAddr)
@@ -233,7 +233,7 @@ func TestQuicAgentListener_CertSwapWithoutRestart(t *testing.T) {
 	require.NoError(t, err)
 	mgr1 := startFakeManager(t, &fakeQuicManager{ca: ca1, enabled: true, podUID: podUID})
 	state.SetManager(&mgrrpc.SessionInfo{SessionId: "session-1"}, mgr1, semver.Version{})
-	state.RefreshQuicAgentListener(ctx, ctx)
+	require.NoError(t, state.RefreshQuicAgentListener(ctx, ctx))
 
 	requireDialSucceeds(t, ctx, ca1, podUID, dialAddr)
 
@@ -246,7 +246,7 @@ func TestQuicAgentListener_CertSwapWithoutRestart(t *testing.T) {
 	// RefreshQuicAgentListener must pick this up via GetConfigForClient, in place.
 	mgr2 := startFakeManager(t, &fakeQuicManager{ca: ca2, enabled: true, podUID: podUID})
 	state.SetManager(&mgrrpc.SessionInfo{SessionId: "session-2"}, mgr2, semver.Version{})
-	state.RefreshQuicAgentListener(ctx, ctx)
+	require.NoError(t, state.RefreshQuicAgentListener(ctx, ctx))
 
 	requireDialSucceeds(t, ctx, ca2, podUID, dialAddr)
 	requireDialFails(t, ctx, ca1, podUID, dialAddr)
@@ -261,7 +261,7 @@ func TestQuicAgentListener_Disabled(t *testing.T) {
 
 	mgrClient := startFakeManager(t, &fakeQuicManager{enabled: false, podUID: podUID})
 	state.SetManager(&mgrrpc.SessionInfo{SessionId: "session-disabled"}, mgrClient, semver.Version{})
-	state.RefreshQuicAgentListener(ctx, ctx)
+	require.NoError(t, state.RefreshQuicAgentListener(ctx, ctx))
 
 	dialAddr := net.JoinHostPort("127.0.0.1", strconv.Itoa(int(quicPort)))
 	ca, err := quictunnel.NewCA()

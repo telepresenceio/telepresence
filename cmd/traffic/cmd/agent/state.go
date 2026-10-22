@@ -40,20 +40,22 @@ type State interface {
 	// can serve it over the QUIC listener as well as the plain TCP one.
 	SetGRPCServer(svc *grpc.Server)
 
-	// RefreshQuicAgentListener is called after every (re-)established manager
-	// session. It always fetches this agent's QUIC agent certificate over the
-	// just-(re)established session (fetchCtx bounds that RPC), which -- when the
-	// manager has QUIC enabled -- also carries the session-credential material
-	// FileShareAuth uses to authenticate FTP and SFTP connections, and the manager's
-	// current authentication mode. Only when AGENT_QUIC_PORT is set does it go on to
-	// either start the QUIC listener -- the first time this is called with a manager
-	// that has QUIC enabled -- or, if the listener is already running, atomically
-	// swap in the freshly fetched TLS material. processCtx bounds the listener's own
-	// lifetime, which spans manager reconnects; it is not the same context as
-	// fetchCtx. See "Agent connections over QUIC" in
-	// docs/reference/quic-transport-architecture.md and "Traffic-agent ports" in
-	// docs/reference/authentication.md.
-	RefreshQuicAgentListener(processCtx, fetchCtx context.Context)
+	// RefreshQuicAgentListener is called at the start of each manager session and
+	// after every ReconnectAgent. It always fetches this agent's QUIC agent
+	// certificate over the just-(re)established session (fetchCtx bounds that RPC),
+	// which -- when the manager has QUIC enabled -- also carries the
+	// session-credential material FileShareAuth uses to authenticate FTP and SFTP
+	// connections, and the manager's current authentication mode. Only when
+	// AGENT_QUIC_PORT is set does it go on to either start the QUIC listener -- the
+	// first time this is called with a manager that has QUIC enabled -- or, if the
+	// listener is already running, atomically swap in the freshly fetched TLS
+	// material. processCtx bounds the listener's own lifetime, which spans manager
+	// reconnects; it is not the same context as fetchCtx. See "Agent connections
+	// over QUIC" in docs/reference/quic-transport-architecture.md and "Traffic-agent
+	// ports" in docs/reference/authentication.md. It returns the error of a failed
+	// RPC (other than codes.Unimplemented) so the caller can retry; every other
+	// outcome returns nil.
+	RefreshQuicAgentListener(processCtx, fetchCtx context.Context) error
 
 	FtpPort() uint16
 	SftpPort() uint16

@@ -32,6 +32,12 @@ The traffic-manager compares the result of an intercept update with the stored i
 When a workload's agent configuration changes, the traffic-manager now replaces its pods in batches sized by the workload's <code>maxUnavailable</code>, waits for the replacements to become ready between batches, and defers while the workload is already rolling out. An eviction refused by a PodDisruptionBudget is retried for thirty seconds before the workload is restarted through its controller. A deferral is logged after a minute and, after five minutes, gives way to such a restart as well. Uninstalling the traffic-manager still removes every agent at once.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Traffic-agent recovers file-sharing credentials after a traffic-manager restart</div></div>
+<div style="margin-left: 15px">
+
+After a traffic-manager restart, an agent that re-registered with the new manager kept the previous manager's session-token verification key, because it fetched the QUIC CA only when its manager session started. In enforcing mode, clients were rejected with <code>fileshareauth: this agent requires a session credential</code> until the agent pod was replaced. The agent now fetches the CA again each time it re-registers, and retries a failed fetch until it succeeds or the manager session ends. The client likewise refetches the agent QUIC credentials after it reconnects to a restarted manager, so agent connections return to QUIC instead of staying on the port-forward fallback.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">
