@@ -604,6 +604,10 @@ func (s *session) CanIntercept(ctx context.Context, ir *rpc.CreateInterceptReque
 		return nil, errcat.User.Newf("traffic-manager version %s has no support for node-agents", s.ManagerVersion())
 	}
 
+	if matcher.HasHeaderMember(spec.HeaderFilters) && s.compareFinalizedManagerVersion(2, 33, 0) < 0 {
+		return nil, errcat.User.Newf("traffic-manager version %s has no support for header filters of the form name[key]", s.ManagerVersion())
+	}
+
 	_, err := netip.ParseAddr(spec.TargetHost)
 	if err != nil {
 		// The targetHost is not a valid IP. Treat it as a name and create a synthetic IP for it.

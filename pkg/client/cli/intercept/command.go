@@ -102,6 +102,31 @@ func parseKeyValue(kv string) (string, string, error) {
 	return "", "", fmt.Errorf("invalid format '%s': must be key=value or key: value", kv)
 }
 
+// parseHeaderFilter parses an --http-header value like parseKeyValue, except that "=" takes
+// precedence when the name before it is a header member filter of the form "name[key]", so that
+// "baggage[url]=http://example.com" keeps the colon in its value.
+func parseHeaderFilter(kv string) (string, string, error) {
+	if key, value, ok := tryParseHeaderWithSeparator(kv, "="); ok {
+		if _, _, isMember := matcher.HeaderMember(key); isMember {
+			return key, value, nil
+		}
+	}
+	return parseKeyValue(kv)
+}
+
+// validateHeaderFilter returns an error if the given --http-header value can't be parsed, or if
+// its name contains '[' or ']' without being a member filter of the form "name[key]".
+func validateHeaderFilter(header string) error {
+	name, _, err := parseHeaderFilter(header)
+	if err != nil {
+		return err
+	}
+	if _, _, ok := matcher.HeaderMember(name); !ok && strings.ContainsAny(name, "[]") {
+		return errcat.User.Newf("invalid header name %q: a member filter must have the form name[key]", name)
+	}
+	return nil
+}
+
 // ValidateKeyValues validates that each string is a valid "key=value" or "key: value" pair.
 func ValidateKeyValues(kvs []string) error {
 	for _, kv := range kvs {
@@ -179,6 +204,8 @@ func (c *Command) AddInterceptFlags(cmd *cobra.Command) {
 	flagSet.StringSliceVar(&c.HTTPHeaderFilters, "http-header", nil,
 		fmt.Sprintf(`HTTP header filters. Only requests with matching headers will be %s. `+
 			`Supports both formats: --http-header "X-User-ID=dev123" or --http-header "X-User-ID: dev123" (curl -H compatible). `+
+			`A name of the form "name[key]" matches the value of the member with that key in a header that holds a list `+
+			`of key=value members, such as --http-header "baggage[session]=dev123". `+
 			`Multiple headers use AND logic.`, how))
 
 	flagSet.StringSliceVar(&c.HTTPPathEqualFilters, "http-path-equal", nil,
@@ -263,7 +290,7 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	// HTTP Intercepts: validate header format
 	if c.UsesHTTPMechanism() {
 		for _, header := range c.HTTPHeaderFilters {
-			if _, _, err := parseKeyValue(header); err != nil {
+			if err := validateHeaderFilter(header); err != nil {
 				return err
 			}
 		}

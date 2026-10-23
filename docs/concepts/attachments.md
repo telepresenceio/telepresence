@@ -143,6 +143,21 @@ Filtering can also target specific endpoints of a service:
 | `--http-path-prefix <prefix>` | Only requests with a matching path prefix                        |
 | `--http-path-regex <regex>`   | Only requests whose path matches the regular expression          |
 
+A header whose value is a list of `key=value` members, such as `baggage`,
+`tracestate`, `forwarded`, or `cookie`, can be filtered on one member with a
+name of the form `name[key]`. For example, `--http-header 'baggage[session]=alice-1'`
+matches a request carrying `baggage: tenant=acme,session=alice-1`, wherever the
+member sits in the list. Two developers filtering on different values of the
+same member, such as `session=alice-1` and `session=bob-2`, do not conflict.
+This filter requires traffic-manager 2.33.0 or later.
+
+The header value is read as a comma-separated list. In each list element, the
+`key=value` pair before the first `;` is the member, and anything after that
+`;` (such as baggage properties) is ignored. Separators inside double quotes
+don't split, and the value is unquoted and then percent-decoded before it is
+compared. Member keys are case-sensitive, and the first member with the key is
+used. The `cookie` header is parsed as cookies, separated by `;`.
+
 Multiple `--http-header` flags combine with AND logic; only one `--http-path-`
 flag can be used per attachment. Filtering encrypted traffic is possible too;
 see [Intercepting TLS/mTLS Applications](../howtos/mtls.md).

@@ -62,11 +62,19 @@ func (s *state) SetSelf(self State) {
 	s.self = self
 }
 
-func keyValueMap(keyValueStrings []string) (m map[string]string) {
-	if l := len(keyValueStrings); l > 0 {
+func keyValueMap(keyValueStrings []string) map[string]string {
+	return parsedMap(keyValueStrings, parseKeyValue)
+}
+
+func headerFilterMap(headerFilters []string) map[string]string {
+	return parsedMap(headerFilters, parseHeaderFilter)
+}
+
+func parsedMap(kvs []string, parse func(string) (string, string, error)) (m map[string]string) {
+	if l := len(kvs); l > 0 {
 		m = make(map[string]string, l)
-		for _, kv := range keyValueStrings {
-			if key, value, err := parseKeyValue(kv); err == nil {
+		for _, kv := range kvs {
+			if key, value, err := parse(kv); err == nil {
 				m[key] = value
 			}
 		}
@@ -82,7 +90,7 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 		ContainerName: s.ContainerName,
 		Mechanism:     s.Mechanism,
 		Metadata:      keyValueMap(s.Metadata),
-		HeaderFilters: keyValueMap(s.HTTPHeaderFilters),
+		HeaderFilters: headerFilterMap(s.HTTPHeaderFilters),
 		Plaintext:     s.Plaintext,
 		Wiretap:       s.Wiretap,
 		Agent:         s.AgentName,

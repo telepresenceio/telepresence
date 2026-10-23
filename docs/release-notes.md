@@ -38,6 +38,12 @@ When a workload's agent configuration changes, the traffic-manager now replaces 
 After a traffic-manager restart, an agent that re-registered with the new manager kept the previous manager's session-token verification key, because it fetched the QUIC CA only when its manager session started. In enforcing mode, clients were rejected with <code>fileshareauth: this agent requires a session credential</code> until the agent pod was replaced. The agent now fetches the CA again each time it re-registers, and retries a failed fetch until it succeeds or the manager session ends. The client likewise refetches the agent QUIC credentials after it reconnects to a restarted manager, so agent connections return to QUIC instead of staying on the port-forward fallback.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[HTTP header filters can match one member of a list-valued header](concepts/attachments)</div></div>
+<div style="margin-left: 15px">
+
+A header filter named <code>name[key]</code> matches the value of the member with that key in a header that holds a list of <code>key=value</code> members, such as <code>baggage</code>, <code>tracestate</code>, <code>cookie</code>, or <code>forwarded</code>. Developers who each select on their own member, for example <code>--http-header 'baggage[session]=alice-1'</code> and <code>--http-header 'baggage[session]=bob-2'</code>, can now intercept the same workload at the same time.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">

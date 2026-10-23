@@ -3,7 +3,6 @@ package matcher
 import (
 	"fmt"
 	"net/http"
-	"net/textproto"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/pkg/maps"
@@ -60,7 +59,7 @@ func NewRequestFromMap(m map[string]string) Request {
 			if hm == nil {
 				hm = make(HeaderMap)
 			}
-			hm[textproto.CanonicalMIMEHeaderKey(k)] = vm
+			hm[canonicalHeaderKey(k)] = vm
 		}
 	}
 	return &request{paths: ps, headers: hm}

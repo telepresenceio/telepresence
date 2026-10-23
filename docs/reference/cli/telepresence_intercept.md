@@ -25,7 +25,7 @@ Intercept a service
   -j, --env-json string                Also emit the remote environment to a file as a JSON blob.
       --env-syntax string              Syntax used for env-file. One of &quot;docker&quot;, &quot;compose&quot;, &quot;sh&quot;, &quot;csh&quot;, &quot;cmd&quot;, &quot;json&quot;, and &quot;ps&quot;; where &quot;sh&quot;, &quot;csh&quot;, and &quot;ps&quot; can be suffixed with &quot;:export&quot; (default &quot;docker&quot;)
   -h, --help                           help for intercept
-      --http-header strings            HTTP header filters. Only requests with matching headers will be intercepted. Supports both formats: --http-header &quot;X-User-ID=dev123&quot; or --http-header &quot;X-User-ID: dev123&quot; (curl -H compatible). Multiple headers use AND logic.
+      --http-header strings            HTTP header filters. Only requests with matching headers will be intercepted. Supports both formats: --http-header &quot;X-User-ID=dev123&quot; or --http-header &quot;X-User-ID: dev123&quot; (curl -H compatible). A name of the form &quot;name[key]&quot; matches the value of the member with that key in a header that holds a list of key=value members, such as --http-header &quot;baggage[session]=dev123&quot;. Multiple headers use AND logic.
       --http-path-equal strings        HTTP path filters. Only requests with matching paths will be intercepted. Exact path matching.
       --http-path-prefix strings       HTTP path prefix filters. Only requests with matching path prefixes will be intercepted.
       --http-path-regex strings        HTTP path regex filters. Only requests with paths matching the regex will be intercepted.

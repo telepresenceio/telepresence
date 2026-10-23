@@ -89,6 +89,18 @@ items:
           The client likewise refetches the agent QUIC credentials after it
           reconnects to a restarted manager, so agent connections return to QUIC
           instead of staying on the port-forward fallback.
+      - type: feature
+        title: HTTP header filters can match one member of a list-valued header
+        body: >-
+          A header filter named <code>name[key]</code> matches the value of the
+          member with that key in a header that holds a list of
+          <code>key=value</code> members, such as <code>baggage</code>,
+          <code>tracestate</code>, <code>cookie</code>, or
+          <code>forwarded</code>. Developers who each select on their own
+          member, for example <code>--http-header 'baggage[session]=alice-1'</code>
+          and <code>--http-header 'baggage[session]=bob-2'</code>, can now
+          intercept the same workload at the same time.
+        docs: concepts/attachments
   - version: 2.32.3
     date: 2026-10-21
     notes:
