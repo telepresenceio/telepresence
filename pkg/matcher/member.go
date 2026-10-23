@@ -5,6 +5,8 @@ import (
 	"net/textproto"
 	"net/url"
 	"strings"
+
+	"golang.org/x/net/http/httpguts"
 )
 
 // HeaderMember splits a header filter name of the form "name[key]" into the header name and the key of
@@ -19,7 +21,7 @@ func HeaderMember(filterName string) (name, key string, ok bool) {
 		return "", "", false
 	}
 	name, key, ok = strings.Cut(filterName[:len(filterName)-1], "[")
-	if !ok || name == "" || key == "" || strings.ContainsAny(name, "]") || strings.ContainsAny(key, "[]") {
+	if !ok || !httpguts.ValidHeaderFieldName(name) || key == "" || strings.ContainsAny(key, "[]") {
 		return "", "", false
 	}
 	return name, key, true

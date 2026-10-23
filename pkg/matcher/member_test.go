@@ -23,6 +23,7 @@ func TestHeaderMember(t *testing.T) {
 		{"baggage[a][b]", "", "", false},
 		{"baggage[a]b]", "", "", false},
 		{"bag]gage[a]", "", "", false},
+		{"X-Filter: items[id]", "", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.filterName, func(t *testing.T) {

@@ -278,6 +278,13 @@ func TestParseHTTPHeader(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:        "colon separator with member syntax in value",
+			input:       "X-Filter: items[id]=42",
+			expectedKey: "X-Filter",
+			expectedVal: "items[id]=42",
+			expectError: false,
+		},
+		{
 			name:        "header member colon separator",
 			input:       "baggage[session]: alice-1",
 			expectedKey: "baggage[session]",
