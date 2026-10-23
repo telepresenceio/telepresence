@@ -24,6 +24,13 @@ func TestHeaderMember(t *testing.T) {
 		{"baggage[a]b]", "", "", false},
 		{"bag]gage[a]", "", "", false},
 		{"X-Filter: items[id]", "", "", false},
+		{"baggage[ session]", "", "", false},
+		{"baggage[session ]", "", "", false},
+		{"baggage[a=b]", "", "", false},
+		{"baggage[a,b]", "", "", false},
+		{"baggage[a;b]", "", "", false},
+		{`baggage["a"]`, "", "", false},
+		{"tracestate[tenant@system]", "tracestate", "tenant@system", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.filterName, func(t *testing.T) {

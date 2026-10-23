@@ -21,10 +21,15 @@ func HeaderMember(filterName string) (name, key string, ok bool) {
 		return "", "", false
 	}
 	name, key, ok = strings.Cut(filterName[:len(filterName)-1], "[")
-	if !ok || !httpguts.ValidHeaderFieldName(name) || key == "" || strings.ContainsAny(key, "[]") {
+	if !ok || !httpguts.ValidHeaderFieldName(name) || !validMemberKey(key) {
 		return "", "", false
 	}
 	return name, key, true
+}
+
+// validMemberKey returns false for a key that no member parsed from a header can have.
+func validMemberKey(key string) bool {
+	return key != "" && key == strings.TrimSpace(key) && !strings.ContainsAny(key, "[]=,;\"")
 }
 
 // HasHeaderMember returns true if any of the given header filter names has the form "name[key]".
