@@ -7,6 +7,7 @@ import (
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/check"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/cli"
+	"github.com/telepresenceio/telepresence/v2/regression_test/framework/compat"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
@@ -27,6 +28,14 @@ const filterPathPrefix = "/api"
 const (
 	coexistHeaderA = "coexist-a"
 	coexistHeaderB = "coexist-b"
+)
+
+// memberFilterName is the "name[key]" filter Test_MemberCoexistence's two
+// intercepts select on, with memberValueA/B as their member values.
+const (
+	memberFilterName = "baggage[session]"
+	memberValueA     = "alice-1"
+	memberValueB     = "bob-2"
 )
 
 // HeaderFilter proves that an --http-header intercept filter routes real
@@ -138,6 +147,36 @@ func (s *HeaderFilter) Test_Coexistence() {
 	url := wl.ServiceURL()
 	rt.RoutedToLocal(t, url, lsA, check.WithHeader(headerKey, coexistHeaderA))
 	rt.RoutedToLocal(t, url, lsB, check.WithHeader(headerKey, coexistHeaderB))
+	rt.RoutedToCluster(t, url)
+}
+
+// Test_MemberCoexistence attaches two intercepts to the same workload+port,
+// each filtered on a different value of the same baggage member, and proves
+// that each receives requests whose baggage header carries its member among
+// other members and properties, while a request without the member still
+// reaches the cluster.
+func (s *HeaderFilter) Test_MemberCoexistence() {
+	t := s.T()
+	compat.MinClient(t, ">=2.33.0")
+	compat.MinManager(t, ">=2.33.0")
+	conn := s.Connect()
+	wl := s.Workload(workloads.Echo("member-coexist"))
+	lsA := s.LocalEcho()
+	lsB := s.LocalEcho()
+
+	nameA, nameB := wl.Name+"-a", wl.Name+"-b"
+	a := conn.InterceptNamed(t, nameA, wl,
+		rt.ToLocal(lsA, "http"), cli.MountFalse(), cli.HTTPHeader(memberFilterName, memberValueA))
+	defer a.Detach(t)
+
+	b := conn.InterceptNamed(t, nameB, wl,
+		rt.ToLocal(lsB, "http"), cli.MountFalse(), cli.HTTPHeader(memberFilterName, memberValueB))
+	defer b.Detach(t)
+
+	url := wl.ServiceURL()
+	rt.RoutedToLocal(t, url, lsA, check.WithHeader("baggage", "tenant=acme,session="+memberValueA+";ttl=60,region=eu"))
+	rt.RoutedToLocal(t, url, lsB, check.WithHeader("baggage", "tenant=acme, session="+memberValueB))
+	rt.RoutedToCluster(t, url, check.WithHeader("baggage", "tenant=acme,region=eu"))
 	rt.RoutedToCluster(t, url)
 }
 

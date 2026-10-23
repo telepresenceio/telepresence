@@ -19,7 +19,7 @@ func HeaderMember(filterName string) (name, key string, ok bool) {
 		return "", "", false
 	}
 	name, key, ok = strings.Cut(filterName[:len(filterName)-1], "[")
-	if !ok || name == "" || key == "" {
+	if !ok || name == "" || key == "" || strings.ContainsAny(name, "]") || strings.ContainsAny(key, "[]") {
 		return "", "", false
 	}
 	return name, key, true

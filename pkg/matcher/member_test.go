@@ -20,6 +20,9 @@ func TestHeaderMember(t *testing.T) {
 		{"baggage[]", "", "", false},
 		{"[session]", "", "", false},
 		{"baggage[session", "", "", false},
+		{"baggage[a][b]", "", "", false},
+		{"baggage[a]b]", "", "", false},
+		{"bag]gage[a]", "", "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.filterName, func(t *testing.T) {

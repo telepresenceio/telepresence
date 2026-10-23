@@ -114,6 +114,19 @@ func parseHeaderFilter(kv string) (string, string, error) {
 	return parseKeyValue(kv)
 }
 
+// validateHeaderFilter returns an error if the given --http-header value can't be parsed, or if
+// its name contains '[' or ']' without being a member filter of the form "name[key]".
+func validateHeaderFilter(header string) error {
+	name, _, err := parseHeaderFilter(header)
+	if err != nil {
+		return err
+	}
+	if _, _, ok := matcher.HeaderMember(name); !ok && strings.ContainsAny(name, "[]") {
+		return errcat.User.Newf("invalid header name %q: a member filter must have the form name[key]", name)
+	}
+	return nil
+}
+
 // ValidateKeyValues validates that each string is a valid "key=value" or "key: value" pair.
 func ValidateKeyValues(kvs []string) error {
 	for _, kv := range kvs {
@@ -277,7 +290,7 @@ func (c *Command) Validate(cmd *cobra.Command, positional []string) error {
 	// HTTP Intercepts: validate header format
 	if c.UsesHTTPMechanism() {
 		for _, header := range c.HTTPHeaderFilters {
-			if _, _, err := parseHeaderFilter(header); err != nil {
+			if err := validateHeaderFilter(header); err != nil {
 				return err
 			}
 		}

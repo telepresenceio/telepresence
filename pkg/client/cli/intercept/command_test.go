@@ -459,3 +459,12 @@ func TestParseKeyValue_memberPrecedenceIsHeaderOnly(t *testing.T) {
 	assert.Equal(t, "trace[id]=http", key)
 	assert.Equal(t, "//collector", value)
 }
+
+func TestValidateHeaderFilter(t *testing.T) {
+	for _, header := range []string{"X-User=dev123", "baggage[session]=alice-1", "baggage[session]: alice-1", "baggage: tenant=acme"} {
+		assert.NoError(t, validateHeaderFilter(header), header)
+	}
+	for _, header := range []string{"baggage[]=alice-1", "baggage[session=alice-1", "baggage]=alice-1", "baggage[a][b]=alice-1", "InvalidHeader"} {
+		assert.Error(t, validateHeaderFilter(header), header)
+	}
+}
