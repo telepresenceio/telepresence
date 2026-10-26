@@ -145,6 +145,13 @@ maxNamespaceSpecificWatchers: 10
 managerRbac:
   # Default: true
   create: true
+  # Grant the traffic-manager permission to patch workloads. The traffic-manager patches a workload to restart it
+  # through its controller when its pods can't be evicted during agent injection or removal, e.g. because a
+  # PodDisruptionBudget keeps refusing. When using a dynamic namespaceSelector, this permission is granted
+  # cluster-wide. Set to false to omit it and grant it yourself using a Role/RoleBinding in the namespaces where
+  # it's needed.
+  # Default: true
+  patchWorkloads: true
 
 clientRbac:
   # legacyAccess controls the mechanical (non-policy) rules the chart

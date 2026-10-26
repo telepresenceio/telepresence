@@ -616,6 +616,11 @@ properties:
       create:
         description: Create RBAC resources for traffic-manager with this release
         type: boolean
+      patchWorkloads:
+        description: >-
+          Grant the traffic-manager permission to patch workloads, which is needed to restart a workload through its
+          controller when its pods can't be evicted
+        type: boolean
       namespaces:
         description: Declares a fixed set of managed namespaces
         deprecated: true

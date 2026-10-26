@@ -92,6 +92,12 @@ For a kubeconfig that uses an exec plugin, the root daemon gets its credentials 
 When the root daemon asked the user daemon for credentials from a kubeconfig exec plugin, the user daemon dropped the plugin's <code>apiVersion</code> and ran it without the <code>KUBERNETES_EXEC_INFO</code> environment variable. A plugin that picks its output version from that variable could then return a different version than the kubeconfig asks for, and the credentials were rejected. The plugin now gets <code>KUBERNETES_EXEC_INFO</code> with the configured API version, as it does when kubectl runs it.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[The traffic-manager's permission to patch workloads can be omitted](reference/rbac)</div></div>
+<div style="margin-left: 15px">
+
+The traffic-manager patches a workload to restart it through its controller when its pods can't be evicted, for example because a PodDisruptionBudget keeps refusing. With a dynamic <code>namespaceSelector</code>, that permission is granted cluster-wide. The new Helm value <code>managerRbac.patchWorkloads</code> (default <code>true</code>) can be set to <code>false</code> to omit it, so that it can be granted with a Role and RoleBinding in only the namespaces that need it.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">
