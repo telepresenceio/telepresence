@@ -101,6 +101,17 @@ items:
           and <code>--http-header 'baggage[session]=bob-2'</code>, can now
           intercept the same workload at the same time.
         docs: concepts/attachments
+      - type: bugfix
+        title: NetworkManager no longer probes connectivity through the VIF
+        body: >-
+          On Linux, NetworkManager adopted the VIF as soon as it appeared and
+          sent its connectivity check through it, so every
+          <code>telepresence connect</code> made the traffic-manager dial an
+          internet host from inside the cluster. The root daemon now tells
+          NetworkManager not to manage the VIF before bringing it up, so
+          NetworkManager no longer runs its connectivity check, dispatcher
+          scripts, or other activation steps on it.
+        docs: reference/routing#the-virtual-network-interface
   - version: 2.32.3
     date: 2026-10-21
     notes:
