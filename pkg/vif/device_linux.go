@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"time"
 	"unsafe"
 
 	"github.com/vishvananda/netlink"
@@ -18,10 +19,16 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dbus"
 	"github.com/telepresenceio/telepresence/v2/pkg/subnet"
 )
 
-const devicePath = "/dev/net/tun"
+const (
+	devicePath = "/dev/net/tun"
+
+	// networkManagerTimeout limits the wait for NetworkManager to discover a new device.
+	networkManagerTimeout = time.Second
+)
 
 type device struct {
 	fd             int
@@ -70,6 +77,12 @@ func openTun(ctx context.Context) (*device, error) {
 
 	// Retrieve the name that was generated based on the "tel%d" template.
 	name := ifr.Name()
+
+	// NetworkManager must leave the device unmanaged before it is brought up. Otherwise, it adopts
+	// the device and sends its connectivity check through it into the cluster.
+	if nmErr := dbus.UnmanageNetworkManagerDevice(ctx, name, networkManagerTimeout); nmErr != nil {
+		clog.Warnf(ctx, "failed to make NetworkManager leave device %s unmanaged: %v", name, nmErr)
+	}
 
 	// Set non-blocking so that ReadPacket() doesn't hang for several seconds when the
 	// fd is Closed. ReadPacket() will still wait for data to arrive.

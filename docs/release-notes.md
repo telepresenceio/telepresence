@@ -44,6 +44,12 @@ After a traffic-manager restart, an agent that re-registered with the new manage
 A header filter named <code>name[key]</code> matches the value of the member with that key in a header that holds a list of <code>key=value</code> members, such as <code>baggage</code>, <code>tracestate</code>, <code>cookie</code>, or <code>forwarded</code>. Developers who each select on their own member, for example <code>--http-header 'baggage[session]=alice-1'</code> and <code>--http-header 'baggage[session]=bob-2'</code>, can now intercept the same workload at the same time.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[NetworkManager no longer probes connectivity through the VIF](reference/routing#the-virtual-network-interface)</div></div>
+<div style="margin-left: 15px">
+
+On Linux, NetworkManager adopted the VIF as soon as it appeared and sent its connectivity check through it, so every <code>telepresence connect</code> made the traffic-manager dial an internet host from inside the cluster. The root daemon now tells NetworkManager not to manage the VIF before bringing it up, so NetworkManager no longer runs its connectivity check, dispatcher scripts, or other activation steps on it.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">

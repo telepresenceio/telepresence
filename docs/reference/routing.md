@@ -14,6 +14,16 @@ The VIF is a TUN-device, which means that it communicates with the workstation i
 
 There is no need to tamper with firewalls in order to establish IP routes. The VIF makes the cluster subnets available during connect, and the kernel performs the routing automatically. When the session ends, the kernel is also responsible for cleaning up.
 
+On Linux, the daemon tells NetworkManager not to manage the VIF, so that NetworkManager doesn't run its connectivity check, dispatcher scripts, or other activation steps on it. The setting is made over D-Bus and lasts for the lifetime of the VIF. If the daemon logs a warning that it failed to make NetworkManager leave the device unmanaged, the same effect can be achieved with a NetworkManager configuration file, for example `/etc/NetworkManager/conf.d/telepresence.conf`:
+
+```ini
+[device-telepresence]
+match-device=interface-name:tel*
+managed=0
+```
+
+followed by `systemctl reload NetworkManager`.
+
 ## DNS resolution
 
 The Telepresence DNS resolver is dynamically configured to resolve names using the namespaces currently managed by the Traffic Manager. Processes running locally on the workstation have network access to all services in the currently connected namespace by service-name only, and to services in the other managed namespaces using `<service-name>.<namespace>`.
