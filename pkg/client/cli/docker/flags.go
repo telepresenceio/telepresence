@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/pflag"
 
@@ -71,11 +70,11 @@ func (f *Flags) Validate(args []string) error {
 		return nil
 	}
 
-	if flags.HasOption("detach", 'd', args) {
+	f.Image, f.imageIndex = docker.ImageArg(args)
+	f.args = args
+	if flags.HasOption("detach", 'd', f.runOptions()) {
 		return errcat.User.New("running docker container in background using -d or --detach is not supported")
 	}
-	f.Image, f.imageIndex = firstArg(args)
-	f.args = args
 
 	// Ensure that the image is ready to run before we create the intercept.
 	if f.Context == "" {
@@ -121,7 +120,7 @@ func (f *Flags) PullOrBuildImage(ctx context.Context) error {
 }
 
 func (f *Flags) GetContainerNameAndArgs(defaultContainerName string) (string, []string, error) {
-	name, found, err := flags.GetUnparsedValue("name", 0, false, f.args)
+	name, found, err := flags.GetUnparsedValue("name", 0, false, f.runOptions())
 	if err != nil {
 		return "", nil, err
 	}
@@ -139,42 +138,10 @@ func (f *Flags) AdjustImageIndex(adjust int) {
 	}
 }
 
-var boolFlags = map[string]bool{ //nolint:gochecknoglobals // this is a constant
-	"--detach":           true,
-	"--init":             true,
-	"--interactive":      true,
-	"--no-healthcheck":   true,
-	"--oom-kill-disable": true,
-	"--privileged":       true,
-	"--publish-all":      true,
-	"--quiet":            true,
-	"--read-only":        true,
-	"--rm":               true,
-	"--sig-proxy":        true,
-	"--tty":              true,
-}
-
-// firstArg returns the first argument that isn't an option. This requires knowledge
-// about boolean docker flags, and if new such flags arrive and are used, this
-// function might return an incorrect image.
-func firstArg(args []string) (string, int) {
-	t := len(args)
-	for i := 0; i < t; i++ {
-		arg := args[i]
-		if !strings.HasPrefix(arg, "-") {
-			return arg, i
-		}
-		if strings.IndexByte(arg, '=') > 0 {
-			continue
-		}
-		if strings.HasPrefix(arg, "--") {
-			if !boolFlags[arg] {
-				i++
-			}
-		} else if strings.ContainsAny(arg, "ehlmpuvw") {
-			// Shorthand flag that require an argument. Might be prefixed by shorthand booleans, e.g. -itl <label>
-			i++
-		}
+// runOptions returns the arguments that precede the image.
+func (f *Flags) runOptions() []string {
+	if f.imageIndex >= 0 {
+		return f.args[:f.imageIndex]
 	}
-	return "", -1
+	return f.args
 }

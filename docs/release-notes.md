@@ -50,6 +50,12 @@ A header filter named <code>name[key]</code> matches the value of the member wit
 On Linux, NetworkManager adopted the VIF as soon as it appeared and sent its connectivity check through it, so every <code>telepresence connect</code> made the traffic-manager dial an internet host from inside the cluster. The root daemon now tells NetworkManager not to manage the VIF before bringing it up, so NetworkManager no longer runs its connectivity check, dispatcher scripts, or other activation steps on it.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Container arguments no longer count as docker run flags](howtos/docker)</div></div>
+<div style="margin-left: 15px">
+
+With <code>--docker-run</code>, <code>--docker-build</code>, or <code>telepresence docker-run</code>, the arguments passed to the container after the image were searched for docker run flags. A container argument such as <code>-addr</code> was rejected as a detach flag, and <code>--name</code> or <code>--rm</code> in the container arguments was taken as the container's name or removal flag. Only the arguments that precede the image are now treated as docker run flags. The image is also found correctly after a shorthand flag with an attached value, such as <code>-p8080:8080</code>, and after <code>-a</code>, <code>-c</code>, <code>--disable-content-trust</code>, and <code>--use-api-socket</code>.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">

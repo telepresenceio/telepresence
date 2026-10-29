@@ -163,7 +163,7 @@ func (s *Runner) start(ctx context.Context, envFile string, runFlags *RunFlags, 
 
 	// "--rm" is mandatory when using --docker-run, because without it, the name cannot be reused and
 	// the volumes cannot be removed.
-	_, set, err := flags.GetUnparsedBoolean(args, "rm")
+	_, set, err := flags.GetUnparsedBoolean(docker.RunOptions(args), "rm")
 	if err != nil {
 		w.err = err
 		return w
