@@ -77,7 +77,8 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	if slices.Contains(args, "--help") {
+	runOpts := docker.RunOptions(args)
+	if slices.Contains(runOpts, "--help") {
 		return proc.StdCommand(cmd.Context(), docker.Exe, slices.Insert(args, 0, "run")...).Run()
 	}
 
@@ -95,7 +96,7 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 	if !ud.Containerized() {
 		return fmt.Errorf("%s requires that --docker was used when the connection was established", cmd.UseLine())
 	}
-	if name, ok, err := flags.GetUnparsedValue("name", 0, false, args); err == nil && ok {
+	if name, ok, err := flags.GetUnparsedValue("name", 0, false, runOpts); err == nil && ok {
 		ip, err := ud.Lookup(ctx, name)
 		if err == nil {
 			// We're about to start a container with a name that is already present in the cluster. That's
@@ -115,7 +116,7 @@ func runDockerRun(cmd *cobra.Command, args []string) error {
 
 	var exited, signalled atomic.Bool
 	done := make(chan error, 1)
-	if flags.HasOption("tty", 't', args) {
+	if flags.HasOption("tty", 't', runOpts) {
 		close(done)
 	} else {
 		go cliDocker.EnsureStopContainer(ctx, cni.Name, cni.ID, nil, &exited, &signalled, done)
