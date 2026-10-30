@@ -64,7 +64,7 @@ for this_os in "${OS[@]}"; do
             echo "Telepresence binary hash: ${tmp_var} == ${!tmp_var}"
         else
             echo "Telepresence binary could not be hashed: ${tmp_var}"
-            HASH_ERRORS=$((HASH_ERRORS++))
+            HASH_ERRORS=$((HASH_ERRORS + 1))
         fi
     done
 done
