@@ -128,6 +128,16 @@ journalctl -u telepresence-rootd
 > ```
 > Log out and back in for the change to take effect.
 
+## OR install with Homebrew
+
+```shell
+brew install telepresenceio/telepresence/telepresence-oss
+```
+
+> [!NOTE]
+> Homebrew installs the standalone binary only. The root daemon is not installed as a system service, so
+> Telepresence will request elevated privileges when connecting.
+
 ## OR download the binary manually
 
 ```shell
@@ -294,6 +304,12 @@ sudo dnf remove telepresence
 ```
 
 This stops and removes the root daemon systemd service and the Telepresence binaries.
+
+If you installed with Homebrew:
+
+```shell
+brew uninstall telepresenceio/telepresence/telepresence-oss
+```
 
 </Platform.GNULinuxTab>
 <Platform.WindowsTab>

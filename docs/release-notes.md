@@ -50,6 +50,12 @@ A header filter named <code>name[key]</code> matches the value of the member wit
 On Linux, NetworkManager adopted the VIF as soon as it appeared and sent its connectivity check through it, so every <code>telepresence connect</code> made the traffic-manager dial an internet host from inside the cluster. The root daemon now tells NetworkManager not to manage the VIF before bringing it up, so NetworkManager no longer runs its connectivity check, dispatcher scripts, or other activation steps on it.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Homebrew installs on Linux ARM64 are checksum verified](install/client)</div></div>
+<div style="margin-left: 15px">
+
+The Homebrew formula now carries the checksum of the <code>telepresence-linux-arm64</code> binary, so Homebrew verifies the download on Linux ARM64 as it does on the other platforms. The Linux install instructions now include Homebrew.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">
