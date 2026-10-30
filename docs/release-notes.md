@@ -80,6 +80,12 @@ The <code>--env-file -</code> flag of the intercept, ingest, replace, and wireta
 Every command that reported the session status, such as <code>status</code>, <code>list</code> and <code>intercept</code>, read the traffic-manager namespace from the Kubernetes API to obtain the manager's install ID. With an external manager address the API server may be unreachable, and each command then blocked until the connection attempt timed out. The client now uses the install ID that the traffic-manager reports when the session is established.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Credential callbacks no longer stop the daemons</div></div>
+<div style="margin-left: 15px">
+
+For a kubeconfig that uses an exec plugin, the root daemon gets its credentials by running <code>telepresence kubeauth</code>, which asks the user daemon to run the plugin. Like every command, <code>kubeauth</code> first checked the version file in its user cache. It runs as root, and when root's cache had no version file for the current release, the command stopped all daemons and cleared that cache. The daemons waiting for the credentials were gone, and the connection timed out. The <code>kubeauth</code> command now skips this check.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">
