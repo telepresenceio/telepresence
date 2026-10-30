@@ -178,6 +178,18 @@ items:
           cleared that cache. The daemons waiting for the credentials were
           gone, and the connection timed out. The <code>kubeauth</code>
           command now skips this check.
+      - type: bugfix
+        title: Exec credential plugins get the API version they are configured with
+        body: >-
+          When the root daemon asked the user daemon for credentials from a
+          kubeconfig exec plugin, the user daemon dropped the plugin's
+          <code>apiVersion</code> and ran it without the
+          <code>KUBERNETES_EXEC_INFO</code> environment variable. A plugin
+          that picks its output version from that variable could then return
+          a different version than the kubeconfig asks for, and the
+          credentials were rejected. The plugin now gets
+          <code>KUBERNETES_EXEC_INFO</code> with the configured API version,
+          as it does when kubectl runs it.
   - version: 2.32.3
     date: 2026-10-21
     notes:
