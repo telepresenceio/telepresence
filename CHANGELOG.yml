@@ -112,6 +112,14 @@ items:
           NetworkManager no longer runs its connectivity check, dispatcher
           scripts, or other activation steps on it.
         docs: reference/routing#the-virtual-network-interface
+      - type: feature
+        title: Homebrew installs on Linux ARM64 are checksum verified
+        body: >-
+          The Homebrew formula now carries the checksum of the
+          <code>telepresence-linux-arm64</code> binary, so Homebrew verifies the
+          download on Linux ARM64 as it does on the other platforms. The Linux
+          install instructions now include Homebrew.
+        docs: install/client
   - version: 2.32.3
     date: 2026-10-21
     notes:
