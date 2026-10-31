@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"regexp"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	"github.com/telepresenceio/clog/testutil"
+	"github.com/telepresenceio/telepresence/rpc/v2/connector"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/global"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 )
@@ -380,6 +382,67 @@ func Test_gatherLogsAnonymizeLogs(t *testing.T) {
 		// Both logs make reference to "echo-auto-inject" so we
 		// validate that "pod-1" appears in both logs
 		require.Contains(t, string(anonFile), "pod-1")
+	}
+}
+
+func Test_gatherLogsAnonymizeFileNames(t *testing.T) {
+	exportDir := t.TempDir()
+	content := map[string]string{
+		"echo-easy-867b648b88-zjsp2.default.log":          "pod echo-easy-867b648b88-zjsp2 in namespace default",
+		"echo-easy-867b648b88-zjsp2.default.yaml":         "name: echo-easy-867b648b88-zjsp2\nnamespace: default\n",
+		"traffic-manager-5c69859f94-g4ntj.ambassador.log": "manager in namespace ambassador",
+	}
+	for name, c := range content {
+		require.NoError(t, os.WriteFile(filepath.Join(exportDir, name), []byte(c), 0o666))
+	}
+	lr := &connector.LogsResponse{PodInfo: map[string]string{
+		"echo-easy-867b648b88-zjsp2.default.log":          "ok",
+		"echo-easy-867b648b88-zjsp2.default.yaml":         "ok",
+		"traffic-manager-5c69859f94-g4ntj.ambassador.log": "ok",
+		"echo-easy-867b648b88-xk4wq.default.log":          "failed to get log",
+	}}
+
+	az := &anonymizer{
+		namespaces: make(map[string]string),
+		podNames:   make(map[string]string),
+	}
+	require.NoError(t, az.anonymizeFileNames(lr, exportDir))
+	assert.Len(t, az.namespaces, 2)
+	assert.Contains(t, az.namespaces, "default")
+	assert.Contains(t, az.namespaces, "ambassador")
+
+	echoName := az.podNames["echo-easy-867b648b88-zjsp2.default"]
+	require.Regexp(t, `^pod-\d\.namespace-\d$`, echoName)
+	failedName := az.podNames["echo-easy-867b648b88-xk4wq.default"]
+	require.Regexp(t, `^pod-\d\.namespace-\d$`, failedName)
+	assert.NotEqual(t, echoName, failedName)
+	managerName := az.podNames["traffic-manager-5c69859f94-g4ntj.ambassador"]
+	require.Regexp(t, `^traffic-manager\.namespace-\d$`, managerName)
+
+	files, err := getLogFiles(exportDir)
+	require.NoError(t, err)
+	var names []string
+	for _, f := range files {
+		names = append(names, filepath.Base(f))
+	}
+	assert.ElementsMatch(t, []string{
+		echoName + ".log",
+		echoName + ".yaml",
+		failedName + ".log",
+		managerName + ".log",
+	}, names)
+
+	failedLog, err := os.ReadFile(filepath.Join(exportDir, failedName+".log"))
+	require.NoError(t, err)
+	assert.Equal(t, "failed to get log", string(failedLog))
+
+	anonymizeLogs(testutil.NewContext(t, false), files, az)
+	for _, f := range files {
+		c, err := os.ReadFile(f)
+		require.NoError(t, err)
+		assert.NotContains(t, string(c), "echo-easy")
+		assert.NotContains(t, string(c), "default")
+		assert.NotContains(t, string(c), "ambassador")
 	}
 }
 

@@ -50,6 +50,12 @@ A header filter named <code>name[key]</code> matches the value of the member wit
 On Linux, NetworkManager adopted the VIF as soon as it appeared and sent its connectivity check through it, so every <code>telepresence connect</code> made the traffic-manager dial an internet host from inside the cluster. The root daemon now tells NetworkManager not to manage the VIF before bringing it up, so NetworkManager no longer runs its connectivity check, dispatcher scripts, or other activation steps on it.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Anonymized gather-logs output no longer reveals namespaces</div></div>
+<div style="margin-left: 15px">
+
+The <code>--anonymize</code> flag of <code>telepresence gather-logs</code> took the extension of each pod's log and manifest file to be part of the pod's namespace, so the real namespace names were left in every collected file. The anonymized pod files also lost their <code>.log</code> and <code>.yaml</code> extensions, and a pod's log and manifest were given different anonymized names. Namespaces are now replaced in all collected files, and a pod's files keep their extensions and share one anonymized name.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">

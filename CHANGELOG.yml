@@ -112,6 +112,17 @@ items:
           NetworkManager no longer runs its connectivity check, dispatcher
           scripts, or other activation steps on it.
         docs: reference/routing#the-virtual-network-interface
+      - type: bugfix
+        title: Anonymized gather-logs output no longer reveals namespaces
+        body: >-
+          The <code>--anonymize</code> flag of <code>telepresence gather-logs</code>
+          took the extension of each pod's log and manifest file to be part of
+          the pod's namespace, so the real namespace names were left in every
+          collected file. The anonymized pod files also lost their
+          <code>.log</code> and <code>.yaml</code> extensions, and a pod's log
+          and manifest were given different anonymized names. Namespaces are now
+          replaced in all collected files, and a pod's files keep their
+          extensions and share one anonymized name.
   - version: 2.32.3
     date: 2026-10-21
     notes:
