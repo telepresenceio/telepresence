@@ -103,7 +103,7 @@ $(TOOLSBINDIR)/docslint$(EXE): $(TOOLSSRCDIR)/docslint/*.go
 #
 tools/relnotesgen = $(TOOLSBINDIR)/relnotesgen$(EXE)
 $(TOOLSBINDIR)/relnotesgen$(EXE): $(TOOLSSRCDIR)/relnotesgen/**/*.go $(TOOLSSRCDIR)/relnotesgen/relnotes/relnotes.* $(TOOLSSRCDIR)/relnotesgen/go.sum
-	(cd $(TOOLSSRCDIR)/relnotesgen && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/relnotesgen/relnotesgen $(TOOLSBINDIR)
+	mkdir -p $(@D) && (cd $(TOOLSSRCDIR)/relnotesgen && GOOS= GOARCH= go build) && mv $(TOOLSSRCDIR)/relnotesgen/relnotesgen $(TOOLSBINDIR)
 
 # YAML to JSON
 # ==========
