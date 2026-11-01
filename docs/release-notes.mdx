@@ -74,6 +74,12 @@ The <code>--anonymize</code> flag of <code>telepresence gather-logs</code> took 
 The Homebrew formula now carries the checksum of the <code>telepresence-linux-arm64</code> binary, so Homebrew verifies the download on Linux ARM64 as it does on the other platforms. The Linux install instructions now include Homebrew.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix" docs="reference/environment">Writing the environment to stdout no longer closes it</Title>
+	<Body>
+The <code>--env-file -</code> flag of the intercept, ingest, replace, and wiretap commands closed the standard output after writing the environment to it. A command given after <code>--</code> then started without a usable standard output, and adding <code>--env-json -</code> made the command fail. The standard output now stays open, and the JSON output ends with a newline.
+  </Body>
+</Note>
 ## Version 2.32.3 <span style={{fontSize:'16px'}}>(October 21)</span>
 <Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/pull/4341">Intercept creation no longer hangs on a denied workload watch</Title>

@@ -147,6 +147,16 @@ items:
           download on Linux ARM64 as it does on the other platforms. The Linux
           install instructions now include Homebrew.
         docs: install/client
+      - type: bugfix
+        title: Writing the environment to stdout no longer closes it
+        body: >-
+          The <code>--env-file -</code> flag of the intercept, ingest, replace,
+          and wiretap commands closed the standard output after writing the
+          environment to it. A command given after <code>--</code> then
+          started without a usable standard output, and adding
+          <code>--env-json -</code> made the command fail. The standard
+          output now stays open, and the JSON output ends with a newline.
+        docs: reference/environment
   - version: 2.32.3
     date: 2026-10-21
     notes:

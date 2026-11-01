@@ -6,6 +6,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
 	"sort"
@@ -75,33 +76,38 @@ func (e Syntax) Type() string {
 
 //goland:noinspection GoMixedReceiverTypes
 func (e Syntax) writeFile(fileName string, env map[string]string) error {
-	var file *os.File
 	if fileName == "-" {
-		file = os.Stdout
-	} else {
-		var err error
-		file, err = os.Create(fileName)
-		if err != nil {
-			return errcat.NoDaemonLogs.Errorf(err, "failed to create environment file %q", fileName)
-		}
+		return e.write(os.Stdout, env)
+	}
+	file, err := os.Create(fileName)
+	if err != nil {
+		return errcat.NoDaemonLogs.Errorf(err, "failed to create environment file %q", fileName)
 	}
 	return e.WriteToFileAndClose(file, env)
 }
 
 //goland:noinspection GoMixedReceiverTypes
-func (e Syntax) WriteToFileAndClose(file *os.File, env map[string]string) (err error) {
+func (e Syntax) WriteToFileAndClose(file *os.File, env map[string]string) error {
+	err := e.write(file, env)
+	if closeErr := file.Close(); err == nil {
+		err = closeErr
+	}
+	return err
+}
+
+//goland:noinspection GoMixedReceiverTypes
+func (e Syntax) write(out io.Writer, env map[string]string) error {
 	if e == SyntaxJSON {
 		data, err := json.Marshal(env, jsontext.WithIndent("  "))
 		if err != nil {
 			// Creating JSON from a map[string]string should never fail
 			panic(err)
 		}
-		_, err = file.Write(data)
+		_, err = out.Write(append(data, '\n'))
 		return err
 	}
 
-	defer file.Close()
-	w := bufio.NewWriter(file)
+	w := bufio.NewWriter(out)
 
 	keys := make([]string, len(env))
 	i := 0
