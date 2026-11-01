@@ -157,6 +157,15 @@ items:
           <code>--env-json -</code> made the command fail. The standard
           output now stays open, and the JSON output ends with a newline.
         docs: reference/environment
+      - type: bugfix
+        title: Direct Connect clients no longer query the Kubernetes API for the manager install ID
+        body: >-
+          Every command that reported the session status, such as <code>status</code>,
+          <code>list</code> and <code>intercept</code>, read the traffic-manager namespace
+          from the Kubernetes API to obtain the manager's install ID. With an external
+          manager address the API server may be unreachable, and each command then
+          blocked until the connection attempt timed out. The client now uses the
+          install ID that the traffic-manager reports when the session is established.
   - version: 2.32.3
     date: 2026-10-21
     notes:

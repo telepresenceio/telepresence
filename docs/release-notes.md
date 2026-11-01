@@ -74,6 +74,12 @@ The Homebrew formula now carries the checksum of the <code>telepresence-linux-ar
 The <code>--env-file -</code> flag of the intercept, ingest, replace, and wiretap commands closed the standard output after writing the environment to it. A command given after <code>--</code> then started without a usable standard output, and adding <code>--env-json -</code> made the command fail. The standard output now stays open, and the JSON output ends with a newline.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Direct Connect clients no longer query the Kubernetes API for the manager install ID</div></div>
+<div style="margin-left: 15px">
+
+Every command that reported the session status, such as <code>status</code>, <code>list</code> and <code>intercept</code>, read the traffic-manager namespace from the Kubernetes API to obtain the manager's install ID. With an external manager address the API server may be unreachable, and each command then blocked until the connection attempt timed out. The client now uses the install ID that the traffic-manager reports when the session is established.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">
