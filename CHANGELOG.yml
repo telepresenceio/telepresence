@@ -166,6 +166,18 @@ items:
           manager address the API server may be unreachable, and each command then
           blocked until the connection attempt timed out. The client now uses the
           install ID that the traffic-manager reports when the session is established.
+      - type: bugfix
+        title: Credential callbacks no longer stop the daemons
+        body: >-
+          For a kubeconfig that uses an exec plugin, the root daemon gets its
+          credentials by running <code>telepresence kubeauth</code>, which
+          asks the user daemon to run the plugin. Like every command,
+          <code>kubeauth</code> first checked the version file in its user
+          cache. It runs as root, and when root's cache had no version file
+          for the current release, the command stopped all daemons and
+          cleared that cache. The daemons waiting for the credentials were
+          gone, and the connection timed out. The <code>kubeauth</code>
+          command now skips this check.
   - version: 2.32.3
     date: 2026-10-21
     notes:

@@ -272,6 +272,11 @@ type versionFile struct {
 }
 
 func ensureCacheVersion(cmd *cobra.Command, _ []string) error {
+	// Credential callbacks must not stop the daemons waiting for them.
+	if cmd.Name() == "kubeauth" {
+		return nil
+	}
+
 	ctx := cmd.Context()
 	var vf versionFile
 	majorMinorMatch := false
