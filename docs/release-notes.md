@@ -86,6 +86,12 @@ Every command that reported the session status, such as <code>status</code>, <co
 For a kubeconfig that uses an exec plugin, the root daemon gets its credentials by running <code>telepresence kubeauth</code>, which asks the user daemon to run the plugin. Like every command, <code>kubeauth</code> first checked the version file in its user cache. It runs as root, and when root's cache had no version file for the current release, the command stopped all daemons and cleared that cache. The daemons waiting for the credentials were gone, and the connection timed out. The <code>kubeauth</code> command now skips this check.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Exec credential plugins get the API version they are configured with</div></div>
+<div style="margin-left: 15px">
+
+When the root daemon asked the user daemon for credentials from a kubeconfig exec plugin, the user daemon dropped the plugin's <code>apiVersion</code> and ran it without the <code>KUBERNETES_EXEC_INFO</code> environment variable. A plugin that picks its output version from that variable could then return a different version than the kubeconfig asks for, and the credentials were rejected. The plugin now gets <code>KUBERNETES_EXEC_INFO</code> with the configured API version, as it does when kubectl runs it.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">
