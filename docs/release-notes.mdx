@@ -98,6 +98,12 @@ For a kubeconfig that uses an exec plugin, the root daemon gets its credentials 
 When the root daemon asked the user daemon for credentials from a kubeconfig exec plugin, the user daemon dropped the plugin's <code>apiVersion</code> and ran it without the <code>KUBERNETES_EXEC_INFO</code> environment variable. A plugin that picks its output version from that variable could then return a different version than the kubeconfig asks for, and the credentials were rejected. The plugin now gets <code>KUBERNETES_EXEC_INFO</code> with the configured API version, as it does when kubectl runs it.
   </Body>
 </Note>
+<Note>
+	<Title type="change" docs="reference/external-endpoint#proxies-in-front-of-the-listener">Ended watch streams are logged</Title>
+	<Body>
+The client and the traffic-agent retry a watch stream to the traffic-manager when it ends, which happened without a trace in the logs. A stream that ends now leaves a warning that names the stream, how long it ran, and the error. This makes it visible when a proxy in front of a Direct Connect listener ends idle streams, which makes the client reconnect and interrupts intercepted traffic.
+  </Body>
+</Note>
 ## Version 2.32.3 <span style={{fontSize:'16px'}}>(October 21)</span>
 <Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/pull/4341">Intercept creation no longer hangs on a denied workload watch</Title>
