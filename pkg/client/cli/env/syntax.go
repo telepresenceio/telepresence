@@ -181,41 +181,42 @@ func quotePS(s string) string {
 	return sb.String()
 }
 
-// quoteCompose checks if the give string contains characters that have special meaning for
-// docker compose. If it does, it will be quoted using either double or single quotes depending
-// on whether the string contains newlines, carriage returns, or tabs. Quotes within the value itself will
-// be escaped using backslash.
+// quoteCompose returns s in a form that docker compose reads verbatim from an env_file. Double quotes
+// are used when s contains a newline, carriage return, or tab, which are then written as escapes, or a
+// backslash that precedes a single quote or ends s, which a single-quoted value can't represent.
 func quoteCompose(s string) string {
 	if s == "" {
 		return ``
 	}
-	q := byte('\'')
-	if strings.ContainsAny(s, "\n\t\r") {
-		q = '"'
-	} else if !shellquote.UnixEscape.MatchString(s) {
+	if strings.ContainsAny(s, "\n\t\r") || strings.HasSuffix(s, `\`) || strings.Contains(s, `\'`) {
+		return quoteComposeDouble(s)
+	}
+	if !shellquote.UnixEscape.MatchString(s) {
 		return s
 	}
+	return "'" + strings.ReplaceAll(s, "'", `\'`) + "'"
+}
 
+// quoteComposeDouble escapes '$' to prevent the variable interpolation that docker compose applies
+// to double-quoted values.
+func quoteComposeDouble(s string) string {
 	sb := strings.Builder{}
-	sb.WriteByte(q)
+	sb.WriteByte('"')
 	for _, c := range s {
 		switch c {
-		case rune(q):
+		case '"', '\\', '$':
 			sb.WriteByte('\\')
 			sb.WriteRune(c)
 		case '\n':
-			sb.WriteByte('\\')
-			sb.WriteByte('n')
+			sb.WriteString(`\n`)
 		case '\t':
-			sb.WriteByte('\\')
-			sb.WriteByte('t')
+			sb.WriteString(`\t`)
 		case '\r':
-			sb.WriteByte('\\')
-			sb.WriteByte('r')
+			sb.WriteString(`\r`)
 		default:
 			sb.WriteRune(c)
 		}
 	}
-	sb.WriteByte(q)
+	sb.WriteByte('"')
 	return sb.String()
 }

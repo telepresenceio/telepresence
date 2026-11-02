@@ -98,6 +98,12 @@ For a kubeconfig that uses an exec plugin, the root daemon gets its credentials 
 When the root daemon asked the user daemon for credentials from a kubeconfig exec plugin, the user daemon dropped the plugin's <code>apiVersion</code> and ran it without the <code>KUBERNETES_EXEC_INFO</code> environment variable. A plugin that picks its output version from that variable could then return a different version than the kubeconfig asks for, and the credentials were rejected. The plugin now gets <code>KUBERNETES_EXEC_INFO</code> with the configured API version, as it does when kubectl runs it.
   </Body>
 </Note>
+<Note>
+	<Title type="bugfix" docs="reference/environment">Environment files in compose syntax keep backslashes and dollar signs</Title>
+	<Body>
+With <code>--env-syntax compose</code>, a value that ended with a backslash, or had one before a single quote, was written so that docker compose failed to read the file. A value with a newline or tab was written in double quotes without escaping its backslashes and dollar signs, so docker compose read <code>\n</code> as a newline and replaced <code>$HOME</code> with its own value. Such values are now written so that docker compose reads them verbatim.
+  </Body>
+</Note>
 ## Version 2.32.3 <span style={{fontSize:'16px'}}>(October 21)</span>
 <Note>
 	<Title type="bugfix" docs="https://github.com/telepresenceio/telepresence/pull/4341">Intercept creation no longer hangs on a denied workload watch</Title>

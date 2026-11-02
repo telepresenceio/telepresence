@@ -190,6 +190,17 @@ items:
           credentials were rejected. The plugin now gets
           <code>KUBERNETES_EXEC_INFO</code> with the configured API version,
           as it does when kubectl runs it.
+      - type: bugfix
+        title: Environment files in compose syntax keep backslashes and dollar signs
+        body: >-
+          With <code>--env-syntax compose</code>, a value that ended with a
+          backslash, or had one before a single quote, was written so that
+          docker compose failed to read the file. A value with a newline or
+          tab was written in double quotes without escaping its backslashes
+          and dollar signs, so docker compose read <code>\n</code> as a
+          newline and replaced <code>$HOME</code> with its own value. Such
+          values are now written so that docker compose reads them verbatim.
+        docs: reference/environment
   - version: 2.32.3
     date: 2026-10-21
     notes:
