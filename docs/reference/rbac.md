@@ -80,8 +80,9 @@ rules:
 
   # The workload kinds enabled in the "workloads" Helm value; deployments,
   # replicasets, and statefulsets by default, rollouts when
-  # workloads.argoRollouts.enabled is set. "patch" (agent annotation) is
-  # omitted when agentInjector.enabled is false.
+  # workloads.argoRollouts.enabled is set. "patch" (restart through the
+  # workload's controller) is omitted when agentInjector.enabled or
+  # managerRbac.patchWorkloads is false.
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets"]
     verbs: ["get", "list", "watch", "patch"]
@@ -118,6 +119,17 @@ A Role in the manager's own namespace supplements it: `create` on
 `services`, and `get`/`list`/`watch`/`patch`/`update` on the
 `traffic-manager` and `traffic-manager-install` ConfigMaps (plus
 namespace-scoped `create`, which Kubernetes cannot restrict by name).
+
+The manager patches a workload only when it can't replace the workload's
+pods by evicting them, for example because a PodDisruptionBudget keeps
+refusing. It then restarts the workload through its controller: a pod
+template annotation for Deployments and Argo Rollouts, a temporary scale-up
+for StatefulSets and ReplicaSets. Kubernetes RBAC can't limit a permission
+to namespaces matching a label selector, so with a dynamic selector this
+`patch` applies to every workload in the cluster. To avoid that, set
+`managerRbac.patchWorkloads` to `false` and grant `patch` with a Role and
+RoleBinding in the namespaces that need it. Without it, agent updates for
+workloads whose pods can't be evicted don't complete.
 
 ### Namespaced installation
 
