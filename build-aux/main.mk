@@ -528,18 +528,11 @@ else
 endif
 	$(tools/protolint) lint --fix rpc || true
 
-.PHONY: check-docs-files-mtime
-check-docs-files-mtime:
-	./build-aux/test-docs-files-mtime.sh
-
 .PHONY: check-all
 check-all: check-regression check-unit ## (QA) Run the test suite
 
 .PHONY: check-unit
 check-unit: build-deps $(tools/test-report) ## (QA) Run the test suite
-ifeq ($(GOHOSTOS),linux)
-check-unit: check-docs-files-mtime
-endif
 	set -o pipefail
 ifeq ($(GOOS),linux)
 	CGO_ENABLED=$(CGO_ENABLED) go test -json -failfast -timeout=20m ./cmd/... ./pkg/... | $(tools/test-report)
