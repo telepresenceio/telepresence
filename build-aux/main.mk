@@ -148,28 +148,28 @@ docs/reference/cli/telepresence.md: $(TELEPRESENCE)
 	$(TELEPRESENCE) man-pages --dir $(@D)
 	git add $(@D)
 
-docs/README.md: docs/doc-links.yml $(tools/tocgen)
+docs/README.md: docs/doc-links.yml $(tools/tocgen) FORCE
 	$(tools/tocgen) --input $< > $@
 	git add $@
 
-docs/release-notes.md: CHANGELOG.yml $(tools/relnotesgen)
+docs/release-notes.md: CHANGELOG.yml $(tools/relnotesgen) FORCE
 	$(tools/relnotesgen) --input $< > $@
 	git add $@
 
-docs/release-notes.mdx: CHANGELOG.yml $(tools/relnotesgen)
+docs/release-notes.mdx: CHANGELOG.yml $(tools/relnotesgen) FORCE
 	$(tools/relnotesgen) --mdx --input $< > $@
 	git add $@
 
-docs/variables.yml: CHANGELOG.yml $(tools/relnotesgen)
+docs/variables.yml: CHANGELOG.yml $(tools/relnotesgen) FORCE
 	$(tools/relnotesgen) --variables --input $< > $@
 	git add $@
 
-docs/helm/values.schema.json: charts/telepresence-oss/values.schema.yaml $(tools/y2j)
+docs/helm/values.schema.json: charts/telepresence-oss/values.schema.yaml $(tools/y2j) FORCE
 	mkdir -p $(@D)
 	$(tools/y2j) < $< > $@
 	git add $@
 
-docs/schemas/workstation-state.v1alpha1.json: pkg/client/cli/manifest/state.schema.yaml $(tools/y2j)
+docs/schemas/workstation-state.v1alpha1.json: pkg/client/cli/manifest/state.schema.yaml $(tools/y2j) FORCE
 	mkdir -p $(@D)
 	$(tools/y2j) < $< > $@
 	git add $@
