@@ -4,9 +4,12 @@
 # Signing happens before packaging: the two exes are signed, the MSI is
 # built from them, then the MSI is signed.
 #
-# The job is skipped until vars.WINDOWS_SIGNING_ENDPOINT is set.
-# workflow_dispatch with upload=false performs a dry run that verifies and
+# The workflow runs from its own ref and downloads the tag's binaries, so
+# a workflow_dispatch from a branch signs an existing release with that
+# branch's scripts. With upload=false it is a dry run that verifies and
 # keeps the signed set as a workflow artifact.
+#
+# The job is skipped until vars.WINDOWS_SIGNING_ENDPOINT is set.
 name: Sign Windows release
 
 on:
@@ -53,7 +56,6 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.tag }}
           fetch-depth: 0
       - uses: ./.github/actions/install-dependencies
         name: install dependencies

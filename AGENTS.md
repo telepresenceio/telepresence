@@ -485,7 +485,7 @@ On the Azure side:
   credential whose subject is
   `repo:telepresenceio/telepresence:environment:windows-signing`.
 - The "Artifact Signing Certificate Profile Signer" role, assigned to that
-  app registration and scoped to the certificate profile `TadaPublic` on
+  app registration and scoped to the certificate profile `AquiPublic` on
   account `aqui` (North Europe, endpoint https://neu.codesigning.azure.net/).
 
 #### Release Workflow
@@ -504,12 +504,13 @@ If the environment is not configured or never approved, the release
 stands with the unsigned Windows artifacts, as macOS does when its
 signing job is skipped.
 
-To exercise the pipeline against a pre-release tag without touching the
-release, run a dry run. It verifies the signatures and keeps the signed set
-as a workflow artifact:
+To exercise the pipeline against an existing release without touching it,
+run a dry run. The workflow runs from the given ref and downloads the
+tag's binaries, verifies the signatures and keeps the signed set as a
+workflow artifact:
 
 ```bash
-gh workflow run sign-windows.yaml -f tag=v2.33.0-rc.0 -f upload=false
+gh workflow run sign-windows.yaml --ref <branch> -f tag=v2.33.0-rc.0 -f upload=false
 ```
 
 Verify a signed artifact with `make verify-signatures` (Windows only), or
