@@ -97,3 +97,12 @@ func TestAmendInterceptSpec_NoPorts_ReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires at least one port")
 }
+
+func TestAddPortsSpec(t *testing.T) {
+	spec := &manager.InterceptSpec{}
+	err := addPortsSpec(spec, []types.PortMapping{"8080:http", "9090:grpc", "5353:53/UDP", "7070/UDP"})
+	require.NoError(t, err)
+	assert.Equal(t, "http", spec.PortIdentifier)
+	assert.Equal(t, int32(8080), spec.TargetPort)
+	assert.Equal(t, []string{"grpc:9090", "53:5353/UDP", "7070/UDP"}, spec.PodPorts)
+}

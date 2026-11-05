@@ -201,6 +201,19 @@ items:
           which makes the client reconnect and interrupts intercepted
           traffic.
         docs: reference/external-endpoint#proxies-in-front-of-the-listener
+      - type: bugfix
+        title: Additional intercepted ports keep their protocol
+        body: >-
+          When the intercept, replace, or wiretap command was given more than
+          one <code>--port</code>, the CLI dropped the protocol suffix of the
+          additional ports, so <code>--port 5353:53/UDP</code> was sent as a
+          TCP port. The command then failed when the service declared port 53
+          for both TCP and UDP, and otherwise intercepted the port as TCP, so
+          its UDP traffic never reached the workstation. The
+          <code>ports</code> of an intercept, replace, or wiretap in a
+          Docker Compose <code>x-tele</code> extension had the same problem.
+          The protocol is now kept.
+        docs: reference/attachments/cli
   - version: 2.32.3
     date: 2026-10-21
     notes:

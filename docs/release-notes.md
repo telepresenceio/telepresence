@@ -98,6 +98,12 @@ When the root daemon asked the user daemon for credentials from a kubeconfig exe
 The client and the traffic-agent retry a watch stream to the traffic-manager when it ends, which happened without a trace in the logs. A stream that ends now leaves a warning that names the stream, how long it ran, and the error. This makes it visible when a proxy in front of a Direct Connect listener ends idle streams, which makes the client reconnect and interrupts intercepted traffic.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Additional intercepted ports keep their protocol](reference/attachments/cli)</div></div>
+<div style="margin-left: 15px">
+
+When the intercept, replace, or wiretap command was given more than one <code>--port</code>, the CLI dropped the protocol suffix of the additional ports, so <code>--port 5353:53/UDP</code> was sent as a TCP port. The command then failed when the service declared port 53 for both TCP and UDP, and otherwise intercepted the port as TCP, so its UDP traffic never reached the workstation. The <code>ports</code> of an intercept, replace, or wiretap in a Docker Compose <code>x-tele</code> extension had the same problem. The protocol is now kept.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">
