@@ -99,6 +99,12 @@ When the root daemon asked the user daemon for credentials from a kubeconfig exe
   </Body>
 </Note>
 <Note>
+	<Title type="bugfix" docs="reference/environment">Environment files in compose syntax keep backslashes and dollar signs</Title>
+	<Body>
+With <code>--env-syntax compose</code>, a value that ended with a backslash, or had one before a single quote, was written so that docker compose failed to read the file. A value with a newline or tab was written in double quotes without escaping its backslashes and dollar signs, so docker compose read <code>\n</code> as a newline and replaced <code>$HOME</code> with its own value. Such values are now written so that docker compose reads them verbatim.
+  </Body>
+</Note>
+<Note>
 	<Title type="change" docs="reference/external-endpoint#proxies-in-front-of-the-listener">Ended watch streams are logged</Title>
 	<Body>
 The client and the traffic-agent retry a watch stream to the traffic-manager when it ends, which happened without a trace in the logs. A stream that ends now leaves a warning that names the stream, how long it ran, and the error. This makes it visible when a proxy in front of a Direct Connect listener ends idle streams, which makes the client reconnect and interrupts intercepted traffic.

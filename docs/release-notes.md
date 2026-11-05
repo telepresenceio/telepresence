@@ -92,6 +92,12 @@ For a kubeconfig that uses an exec plugin, the root daemon gets its credentials 
 When the root daemon asked the user daemon for credentials from a kubeconfig exec plugin, the user daemon dropped the plugin's <code>apiVersion</code> and ran it without the <code>KUBERNETES_EXEC_INFO</code> environment variable. A plugin that picks its output version from that variable could then return a different version than the kubeconfig asks for, and the credentials were rejected. The plugin now gets <code>KUBERNETES_EXEC_INFO</code> with the configured API version, as it does when kubectl runs it.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Environment files in compose syntax keep backslashes and dollar signs](reference/environment)</div></div>
+<div style="margin-left: 15px">
+
+With <code>--env-syntax compose</code>, a value that ended with a backslash, or had one before a single quote, was written so that docker compose failed to read the file. A value with a newline or tab was written in double quotes without escaping its backslashes and dollar signs, so docker compose read <code>\n</code> as a newline and replaced <code>$HOME</code> with its own value. Such values are now written so that docker compose reads them verbatim.
+</div>
+
 ## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Ended watch streams are logged](reference/external-endpoint#proxies-in-front-of-the-listener)</div></div>
 <div style="margin-left: 15px">
 

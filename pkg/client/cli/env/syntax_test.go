@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/compose-spec/compose-go/v2/dotenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -113,6 +114,39 @@ func TestSyntax_WriteEntry(t *testing.T) {
 			r, err := tt.e.WriteEntry(tt.key, tt.value)
 			require.NoError(t, err)
 			require.Equal(t, tt.want, r)
+		})
+	}
+}
+
+func TestSyntax_WriteEntry_composeRoundTrip(t *testing.T) {
+	values := []string{
+		``,
+		`plain`,
+		`B C`,
+		`B 'C X'`,
+		`it's`,
+		`C:\dir\`,
+		`C:\dir\ x`,
+		`a\'b`,
+		`a\\'b`,
+		`\`,
+		`\n is not a newline`,
+		`$HOME and ${PATH}`,
+		`$$`,
+		`"double"`,
+		"B\nC\t\"D\"",
+		"multi\nline $HOME\nC:\\dir\\",
+		"line\\nbreak\r\n",
+		`# not a comment`,
+		`value #comment`,
+	}
+	for _, v := range values {
+		t.Run(v, func(t *testing.T) {
+			r, err := SyntaxCompose.WriteEntry("A", v)
+			require.NoError(t, err)
+			env, err := dotenv.UnmarshalWithLookup(r, func(string) (string, bool) { return "x", true })
+			require.NoError(t, err, r)
+			require.Equal(t, v, env["A"], r)
 		})
 	}
 }
