@@ -39,16 +39,11 @@ jobs:
         run: make release-binary
       - name: Install WiX Toolset
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          dotnet tool install --global wix --version 6.0.2
-          wix extension add -g WixToolset.UI.wixext/6.0.2
-          wix extension add -g WixToolset.Util.wixext/6.0.2
+        uses: ./.github/actions/install-wix
       - name: Build WiX Installer
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          export PATH="$USERPROFILE/.dotnet/tools:$PATH"
           cd build-aux/wix-installer
           make msi ARCH=${{ matrix.arch }}
           cp ../../build-output/msi/MainPackage.msi ../../build-output/release/telepresence-windows-${{ matrix.arch }}.msi
@@ -203,7 +198,7 @@ jobs:
                - 📦 [Telepresence Helm Chart](https://artifacthub.io/packages/helm/telepresence-oss/telepresence-oss/${{ steps.semver_check.outputs.semver }})
 
             ### Code signing
-            Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/). See the [code signing policy](https://github.com/telepresenceio/telepresence#code-signing-policy).
+            Windows binaries and installers are Authenticode-signed by Tada AB through Azure Artifact Signing. See the [code signing policy](https://github.com/telepresenceio/telepresence#code-signing-policy).
 
             For more information, visit our [installation docs](https://www.telepresence.io/docs/quick-start).
       - uses: actions/checkout@v6
@@ -318,10 +313,12 @@ jobs:
     needs:
       - publish-release
     if: needs.publish-release.outputs.draft == 'false'
+    permissions:
+      contents: write
+      id-token: write
     uses: ./.github/workflows/sign-windows.yaml
     with:
       tag: ${{ github.ref_name }}
-      signing-policy: release-signing
     secrets: inherit
 
   test-release:

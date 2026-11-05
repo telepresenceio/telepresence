@@ -1,0 +1,12 @@
+name: "Install WiX Toolset"
+description: "Install the WiX Toolset and its extensions on a Windows runner"
+runs:
+  using: composite
+  steps:
+    - name: install WiX Toolset
+      shell: pwsh
+      run: |
+        dotnet tool install --global wix --version 6.0.2
+        wix extension add -g WixToolset.UI.wixext/6.0.2
+        wix extension add -g WixToolset.Util.wixext/6.0.2
+        Add-Content -Path $env:GITHUB_PATH -Value "$env:USERPROFILE\.dotnet\tools"

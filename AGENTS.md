@@ -455,44 +455,47 @@ stays the full semver.
 
 ### Windows Installer Signing
 
-Windows `telepresence.exe` and both `MainPackage.msi` builds (amd64, arm64,
-published as `telepresence-windows-amd64.msi` and
-`telepresence-windows-arm64.msi`) are Authenticode-signed through the
-[SignPath Foundation](https://signpath.org/) free code-signing program for
-open-source projects. Signing runs in `.github/workflows/sign-windows.yaml`,
-called from `release.yaml` after `publish-release`, behind a protected
-GitHub Environment.
+The Windows `telepresence.exe` and `TelepresenceDaemon.exe` binaries and
+both `MainPackage.msi` builds (amd64, arm64, published as
+`telepresence-windows-amd64.msi` and `telepresence-windows-arm64.msi`) are
+Authenticode-signed by Tada AB through Azure Artifact Signing. Signing runs
+in `.github/workflows/sign-windows.yaml`, called from `release.yaml` after
+`publish-release`, behind a protected GitHub Environment.
+
+Signing happens before packaging. The workflow signs `telepresence.exe`
+and `TelepresenceDaemon.exe`, builds the MSI from the signed files, and then
+signs the MSI. `wintun.dll` is left alone because it carries WireGuard's
+signature.
 
 #### Environment Setup
 
 1. Go to https://github.com/telepresenceio/telepresence/settings/environments
 2. Create an environment named `windows-signing`
 3. Enable "Required reviewers" and add authorized personnel
-4. Add the environment secret `SIGNPATH_API_TOKEN` (the CI submitter
-   user's API token, from the SignPath portal)
-5. Add the repository variables `SIGNPATH_ORGANIZATION_ID` and
-   `SIGNPATH_PROJECT_SLUG` (Settings → Secrets and variables → Actions →
-   Variables). The signing job is skipped entirely while
-   `SIGNPATH_ORGANIZATION_ID` is unset, so the workflow is a no-op before
-   the portal is configured.
+4. Add these environment secrets: `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+   `AZURE_SUBSCRIPTION_ID`, `WINDOWS_SIGNING_ACCOUNT_NAME` and
+   `WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME`. The account and profile
+   names are secrets so that the public log masks them.
+5. Add the repository variable `WINDOWS_SIGNING_ENDPOINT` (Settings →
+   Secrets and variables → Actions → Variables). The signing job is skipped
+   entirely while it is unset.
 
-In the SignPath portal: create the project, link the predefined
-"GitHub.com" trusted build system to the organization and the project,
-add a `release-signing` policy with manual approval and a `test-signing`
-policy without, create a CI user with submitter rights, and add the
-`core` artifact configuration from `build-aux/signpath/` (mirror any
-portal edit back into that file).
+On the Azure side:
+- App registration "Telepresence GitHub Signing" with a federated
+  credential whose subject is
+  `repo:telepresenceio/telepresence:environment:windows-signing`.
+- The "Artifact Signing Certificate Profile Signer" role, assigned to that
+  app registration and scoped to the certificate profile `TadaPublic` on
+  account `aqui` (North Europe, endpoint https://neu.codesigning.azure.net/).
 
 #### Release Workflow
 
 When a release tag is pushed:
 1. All platform binaries and both unsigned MSIs are built and published
    immediately.
-2. `sign-windows` waits for approval from a required reviewer, then submits
-   the `core` artifact: the two standalone exes and both MSIs, which
-   deep-signs the two exes each MSI embeds. The `release-signing` policy
-   requires a second approval in the SignPath portal; the job waits for
-   it for up to about six hours.
+2. `sign-windows` waits for approval from a required reviewer, then, for
+   each architecture, signs the executables, builds the MSI from them,
+   and signs the MSI.
 3. The signed `.zip`s and `.msi`s replace the unsigned ones on the
    release (`gh release upload --clobber`), and `make verify-signatures`
    gates the upload.
@@ -501,11 +504,12 @@ If the environment is not configured or never approved, the release
 stands with the unsigned Windows artifacts, as macOS does when its
 signing job is skipped.
 
-To exercise the pipeline against a pre-release tag without waiting for an
-approver, dispatch it against the `test-signing` policy:
+To exercise the pipeline against a pre-release tag without touching the
+release, run a dry run. It verifies the signatures and keeps the signed set
+as a workflow artifact:
 
 ```bash
-gh workflow run sign-windows.yaml -f tag=v2.32.0-rc.2 -f signing-policy=test-signing
+gh workflow run sign-windows.yaml -f tag=v2.33.0-rc.0 -f upload=false
 ```
 
 Verify a signed artifact with `make verify-signatures` (Windows only), or

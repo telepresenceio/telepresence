@@ -1,49 +1,52 @@
-# Signs the Windows release artifacts with a SignPath Foundation
-# certificate and republishes them to an existing GitHub release.
+# Signs the Windows release artifacts with Azure Artifact Signing under the
+# Tada AB certificate profile and republishes them to an existing release.
 #
-# One signing round covers everything: the two standalone telepresence.exe
-# binaries and both MSIs (amd64, arm64), which deep-signs the exes each
-# MSI embeds.
+# Signing happens before packaging: the two exes are signed, the MSI is
+# built from them, then the MSI is signed.
 #
-# The job is skipped until vars.SIGNPATH_ORGANIZATION_ID is set, so it is
-# a no-op before the SignPath portal is configured. workflow_dispatch lets
-# a maintainer run it directly against a pre-release tag with
-# signing-policy=test-signing, which has no approvers, to exercise the
-# pipeline end to end.
+# The job is skipped until vars.WINDOWS_SIGNING_ENDPOINT is set.
+# workflow_dispatch with upload=false performs a dry run that verifies and
+# keeps the signed set as a workflow artifact.
 name: Sign Windows release
 
 on:
   workflow_call:
     inputs:
       tag:
-        description: Release tag to sign (e.g. v2.32.0-rc.2)
+        description: Release tag to sign (e.g. v2.33.0-rc.0)
         required: true
         type: string
-      signing-policy:
-        description: SignPath signing policy slug
+      upload:
+        description: Replace the release artifacts with the signed ones; false keeps them as a workflow artifact
         required: false
-        type: string
-        default: release-signing
+        type: boolean
+        default: true
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to sign (e.g. v2.32.0-rc.2)
+        description: Release tag to sign (e.g. v2.33.0-rc.0)
         required: true
         type: string
-      signing-policy:
-        description: SignPath signing policy slug
+      upload:
+        description: Replace the release artifacts with the signed ones; false keeps them as a workflow artifact
         required: false
-        type: string
-        default: release-signing
+        type: boolean
+        default: true
 
 jobs:
   sign:
-    if: vars.SIGNPATH_ORGANIZATION_ID != ''
+    if: vars.WINDOWS_SIGNING_ENDPOINT != ''
     runs-on: windows-latest
     environment: windows-signing
     permissions:
       contents: write
-      actions: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
     env:
       TELEPRESENCE_VERSION: ${{ inputs.tag }}
       GH_TOKEN: ${{ github.token }}
@@ -54,64 +57,76 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/install-dependencies
         name: install dependencies
-      - name: Compute version
-        shell: bash
-        run: echo "VERSION_NO_V=${TAG#v}" >> "$GITHUB_ENV"
-        env:
-          TAG: ${{ inputs.tag }}
+      - uses: ./.github/actions/install-wix
 
-      - name: Download release artifacts
+      - name: Download release artifact
         shell: bash
         run: |
           gh release download ${{ inputs.tag }} \
-            -p telepresence-windows-amd64.zip \
-            -p telepresence-windows-arm64.zip \
-            -p telepresence-windows-amd64.msi \
-            -p telepresence-windows-arm64.msi \
+            -p telepresence-windows-${{ matrix.arch }}.zip \
             -D build-output/unsigned
-
-      # The two standalone exes and both MSIs (which deep-sign the exes
-      # each one embeds).
-      - name: Stage core artifact
+      - name: Stage unsigned binary
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path build-output/signing/core/telepresence-windows-amd64 | Out-Null
-          New-Item -ItemType Directory -Force -Path build-output/signing/core/telepresence-windows-arm64 | Out-Null
-          Expand-Archive -Path build-output/unsigned/telepresence-windows-amd64.zip -DestinationPath build-output/unsigned/amd64 -Force
-          Expand-Archive -Path build-output/unsigned/telepresence-windows-arm64.zip -DestinationPath build-output/unsigned/arm64 -Force
-          Copy-Item build-output/unsigned/amd64/telepresence.exe build-output/signing/core/telepresence-windows-amd64/telepresence.exe
-          Copy-Item build-output/unsigned/arm64/telepresence.exe build-output/signing/core/telepresence-windows-arm64/telepresence.exe
-          Copy-Item build-output/unsigned/telepresence-windows-amd64.msi build-output/signing/core/telepresence-windows-amd64.msi
-          Copy-Item build-output/unsigned/telepresence-windows-arm64.msi build-output/signing/core/telepresence-windows-arm64.msi
-      - name: Upload core artifact
-        id: core
-        uses: actions/upload-artifact@v7
-        with:
-          name: core
-          path: build-output/signing/core
-          retention-days: 1
-      - name: Sign core artifact
-        uses: signpath/github-action-submit-signing-request@v3
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ inputs.signing-policy }}
-          artifact-configuration-slug: core
-          github-artifact-id: ${{ steps.core.outputs.artifact-id }}
-          # release-signing requests need manual approval in the SignPath
-          # portal; wait for it, up to just under the 6 hour job limit.
-          wait-for-completion-timeout-in-seconds: "21000"
-          output-artifact-directory: build-output/signing/core-signed
-          parameters: |
-            version: ${{ toJSON(env.VERSION_NO_V) }}
+          Expand-Archive -Path build-output/unsigned/telepresence-windows-${{ matrix.arch }}.zip -DestinationPath build-output/unsigned/${{ matrix.arch }} -Force
+          New-Item -ItemType Directory -Force -Path build-output/bin | Out-Null
+          Copy-Item build-output/unsigned/${{ matrix.arch }}/telepresence.exe build-output/bin/telepresence.exe
+      - name: Build installer inputs
+        shell: bash
+        run: make -C build-aux/wix-installer deps ARCH=${{ matrix.arch }}
 
-      - name: Assemble signed release artifacts
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # The account and profile names are secrets so the log masks them.
+      # wintun.dll is left alone; it carries WireGuard's signature.
+      - name: Sign executables
+        uses: azure/artifact-signing-action@v1.2.0
+        with:
+          endpoint: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.WINDOWS_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          files-folder: ${{ github.workspace }}\build-output\bin
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Build installer
+        shell: bash
+        run: |
+          make -C build-aux/wix-installer msi ARCH=${{ matrix.arch }}
+          mkdir -p build-output/release
+          cp build-output/msi/MainPackage.msi build-output/release/telepresence-windows-${{ matrix.arch }}.msi
+      - name: Sign installer
+        uses: azure/artifact-signing-action@v1.2.0
+        with:
+          endpoint: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+          signing-account-name: ${{ secrets.WINDOWS_SIGNING_ACCOUNT_NAME }}
+          certificate-profile-name: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME }}
+          files-folder: ${{ github.workspace }}\build-output\release
+          files-folder-filter: msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+
+      - name: Assemble release artifacts
         shell: pwsh
-        run: build-aux/signpath/assemble-release.ps1
+        run: build-aux/winsign/assemble-release.ps1 -Arch ${{ matrix.arch }}
       - name: Verify signatures
         shell: bash
         run: make verify-signatures
       - name: Upload signed artifacts to the release
+        if: ${{ inputs.upload }}
         shell: bash
         run: gh release upload ${{ inputs.tag }} build-output/release/* --clobber
+      - name: Keep signed artifacts
+        if: ${{ !inputs.upload }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: signed-windows-${{ matrix.arch }}
+          path: build-output/release/
+          retention-days: 7

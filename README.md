@@ -68,9 +68,9 @@ See [AGENTS.md](AGENTS.md) for build instructions, architecture overview, and de
 
 ## Code signing policy
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/),
-certificate by [SignPath Foundation](https://signpath.org/). The Windows
-release binaries and installers are Authenticode-signed with it.
+The Windows binaries and installers are Authenticode-signed and
+distributed by Tada AB, a Swedish company founded by the lead maintainer
+of the Telepresence open source project, using Azure Artifact Signing.
 
 - Committers and reviewers: [telepresence-maintainers](https://github.com/orgs/telepresenceio/teams/telepresence-maintainers) ([@thallgren](https://github.com/thallgren), [@bgruszka](https://github.com/bgruszka), [@njayp](https://github.com/njayp), [@breland-openai](https://github.com/breland-openai))
 - Approvers: [administrators](https://github.com/orgs/telepresenceio/teams/administrators) ([@khussey](https://github.com/khussey), [@thallgren](https://github.com/thallgren))
