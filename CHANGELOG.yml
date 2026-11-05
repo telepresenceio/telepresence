@@ -190,6 +190,17 @@ items:
           credentials were rejected. The plugin now gets
           <code>KUBERNETES_EXEC_INFO</code> with the configured API version,
           as it does when kubectl runs it.
+      - type: change
+        title: Ended watch streams are logged
+        body: >-
+          The client and the traffic-agent retry a watch stream to the
+          traffic-manager when it ends, which happened without a trace in
+          the logs. A stream that ends now leaves a warning that names the
+          stream, how long it ran, and the error. This makes it visible when
+          a proxy in front of a Direct Connect listener ends idle streams,
+          which makes the client reconnect and interrupts intercepted
+          traffic.
+        docs: reference/external-endpoint#proxies-in-front-of-the-listener
       - type: bugfix
         title: Additional intercepted ports keep their protocol
         body: >-

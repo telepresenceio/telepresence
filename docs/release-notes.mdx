@@ -99,6 +99,12 @@ When the root daemon asked the user daemon for credentials from a kubeconfig exe
   </Body>
 </Note>
 <Note>
+	<Title type="change" docs="reference/external-endpoint#proxies-in-front-of-the-listener">Ended watch streams are logged</Title>
+	<Body>
+The client and the traffic-agent retry a watch stream to the traffic-manager when it ends, which happened without a trace in the logs. A stream that ends now leaves a warning that names the stream, how long it ran, and the error. This makes it visible when a proxy in front of a Direct Connect listener ends idle streams, which makes the client reconnect and interrupts intercepted traffic.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix" docs="reference/attachments/cli">Additional intercepted ports keep their protocol</Title>
 	<Body>
 When the intercept, replace, or wiretap command was given more than one <code>--port</code>, the CLI dropped the protocol suffix of the additional ports, so <code>--port 5353:53/UDP</code> was sent as a TCP port. The command then failed when the service declared port 53 for both TCP and UDP, and otherwise intercepted the port as TCP, so its UDP traffic never reached the workstation. The <code>ports</code> of an intercept, replace, or wiretap in a Docker Compose <code>x-tele</code> extension had the same problem. The protocol is now kept.

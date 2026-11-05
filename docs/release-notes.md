@@ -92,6 +92,12 @@ For a kubeconfig that uses an exec plugin, the root daemon gets its credentials 
 When the root daemon asked the user daemon for credentials from a kubeconfig exec plugin, the user daemon dropped the plugin's <code>apiVersion</code> and ran it without the <code>KUBERNETES_EXEC_INFO</code> environment variable. A plugin that picks its output version from that variable could then return a different version than the kubeconfig asks for, and the credentials were rejected. The plugin now gets <code>KUBERNETES_EXEC_INFO</code> with the configured API version, as it does when kubectl runs it.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Ended watch streams are logged](reference/external-endpoint#proxies-in-front-of-the-listener)</div></div>
+<div style="margin-left: 15px">
+
+The client and the traffic-agent retry a watch stream to the traffic-manager when it ends, which happened without a trace in the logs. A stream that ends now leaves a warning that names the stream, how long it ran, and the error. This makes it visible when a proxy in front of a Direct Connect listener ends idle streams, which makes the client reconnect and interrupts intercepted traffic.
+</div>
+
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Additional intercepted ports keep their protocol](reference/attachments/cli)</div></div>
 <div style="margin-left: 15px">
 
