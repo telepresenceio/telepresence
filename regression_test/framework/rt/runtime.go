@@ -221,7 +221,23 @@ func newRuntime(ctx context.Context) (*Runtime, error) {
 	}
 	r.state = st
 
+	r.logHostResolver(ctx)
 	return r, nil
+}
+
+// logHostResolver writes the Linux host's resolver layout to run.log.
+func (r *Runtime) logHostResolver(ctx context.Context) {
+	if runtime.GOOS != "linux" {
+		return
+	}
+	for _, f := range []string{"/etc/resolv.conf", "/etc/nsswitch.conf"} {
+		if b, err := os.ReadFile(f); err == nil {
+			r.Infof("[rtest] %s:\n%s", f, strings.TrimSpace(string(b)))
+		}
+	}
+	if out, err := exec.CommandContext(ctx, "resolvectl", "status").CombinedOutput(); err == nil {
+		r.Infof("[rtest] resolvectl status:\n%s", strings.TrimSpace(string(out)))
+	}
 }
 
 // repoRoot walks up from the current working directory to find the module

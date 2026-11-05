@@ -2,7 +2,10 @@ package dns
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,4 +47,18 @@ func freeDefaultConnection(t *testing.T, ns string) {
 	t.Helper()
 	conn := rt.Mutate(t, rt.ConnectionFixture(ns))
 	conn.Disconnect(t)
+}
+
+// getentHosts resolves name via the libc/nsswitch path (`getent hosts`),
+// returning the addresses on the first matching line.
+func getentHosts(ctx context.Context, name string) ([]string, error) {
+	out, err := exec.CommandContext(ctx, "getent", "hosts", name).Output()
+	if err != nil {
+		return nil, err
+	}
+	fields := strings.Fields(strings.SplitN(string(out), "\n", 2)[0])
+	if len(fields) == 0 {
+		return nil, fmt.Errorf("getent hosts %s: empty answer", name)
+	}
+	return fields[:1], nil
 }
