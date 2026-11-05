@@ -50,6 +50,22 @@ func TestStateCreateRequestNamespace(t *testing.T) {
 	})
 }
 
+func TestStateCreateRequestPodPorts(t *testing.T) {
+	ctx := daemon.WithUserClient(context.Background(), createRequestUserClient{})
+
+	st := NewState(&Command{
+		Name:      "local",
+		AgentName: "echo",
+		Mechanism: "tcp",
+		Ports:     []string{"8080:http", "9090:grpc", "5353:53/UDP", "7070/UDP", "6060"},
+	}, nil)
+
+	req, err := st.CreateRequest(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "http", req.Spec.PortIdentifier)
+	assert.Equal(t, []string{"grpc:9090", "53:5353/UDP", "7070/UDP", "6060"}, req.Spec.PodPorts)
+}
+
 func TestCommand_Validate_HTTPIntercepts(t *testing.T) {
 	t.Skip("Skipping tests that require full telepresence config setup")
 	tests := []struct {
