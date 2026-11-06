@@ -27,6 +27,15 @@ items:
   - version: 2.33.0
     date: (TBD)
     notes:
+      - type: bugfix
+        title: Filtered intercepts apply to existing ingress connections
+        body: >-
+          Starting a filtered intercept now closes existing TCP pass-through
+          connections on the intercepted port so ingress controllers can
+          reconnect and route subsequent requests through the HTTP filter.
+          Normal traffic keeps using raw TCP forwarding until a filtered
+          intercept starts, regardless of the Service's declared protocol.
+          Requests in flight on those connections at activation may fail.
       - type: feature
         title: HTTP intercepts can follow every workload selected by one Service
         body: >-
