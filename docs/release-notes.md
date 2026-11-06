@@ -116,6 +116,12 @@ The client and the traffic-agent retry a watch stream to the traffic-manager whe
 When the intercept, replace, or wiretap command was given more than one <code>--port</code>, the CLI dropped the protocol suffix of the additional ports, so <code>--port 5353:53/UDP</code> was sent as a TCP port. The command then failed when the service declared port 53 for both TCP and UDP, and otherwise intercepted the port as TCP, so its UDP traffic never reached the workstation. The <code>ports</code> of an intercept, replace, or wiretap in a Docker Compose <code>x-tele</code> extension had the same problem. The protocol is now kept.
 </div>
 
+## <div style="display:flex;"><img src="images/change.png" alt="change" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Windows binaries and installers are signed by Tada AB](install/client)</div></div>
+<div style="margin-left: 15px">
+
+The Windows <code>telepresence.exe</code> binaries and MSI installers are now Authenticode-signed with a Tada AB certificate issued through Azure Artifact Signing, the same publisher that signs the macOS installers.
+</div>
+
 ## Version 2.32.3 <span style="font-size: 16px;">(October 21)</span>
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Intercept creation no longer hangs on a denied workload watch](https://github.com/telepresenceio/telepresence/pull/4341)</div></div>
 <div style="margin-left: 15px">

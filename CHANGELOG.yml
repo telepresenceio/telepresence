@@ -234,6 +234,14 @@ items:
           Docker Compose <code>x-tele</code> extension had the same problem.
           The protocol is now kept.
         docs: reference/attachments/cli
+      - type: change
+        title: Windows binaries and installers are signed by Tada AB
+        body: >-
+          The Windows <code>telepresence.exe</code> binaries and MSI
+          installers are now Authenticode-signed with a Tada AB certificate
+          issued through Azure Artifact Signing, the same publisher that
+          signs the macOS installers.
+        docs: install/client
   - version: 2.32.3
     date: 2026-10-21
     notes:
