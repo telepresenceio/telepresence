@@ -27,29 +27,6 @@ items:
   - version: 2.33.0
     date: (TBD)
     notes:
-      - type: bugfix
-        title: Filtered intercepts apply to existing ingress connections
-        body: >-
-          Starting a filtered intercept now closes existing TCP pass-through
-          connections on the intercepted port so ingress controllers can
-          reconnect and route subsequent requests through the HTTP filter.
-          Normal traffic keeps using raw TCP forwarding until a filtered
-          intercept starts, regardless of the Service's declared protocol.
-          Requests in flight on those connections at activation may fail.
-      - type: feature
-        title: HTTP intercepts can follow every workload selected by one Service
-        body: >-
-          A Kubernetes Service can route requests to more than one workload,
-          such as stable and canary Deployments, while an intercept previously
-          followed only the workload named by the user. HTTP intercepts
-          without <code>--replace</code> now let each selected workload
-          participate in one logical intercept, so filtered traffic reaches
-          the same local handler regardless of which selected workload
-          receives it. If the selected workloads or their traffic-agents
-          cannot support shared interception, Telepresence warns and keeps
-          the historical single-workload behavior instead of failing the
-          intercept.
-        docs: reference/attachments/cli
       - type: security
         title: Daemons listen on the loopback interface only
         body: >-
@@ -65,6 +42,40 @@ items:
           caller on the network. It now requires a random per-run token
           that only the daemon container receives, and its port file is
           readable only by the user.
+      - type: feature
+        title: HTTP intercepts can follow every workload selected by one Service
+        body: >-
+          A Kubernetes Service can route requests to more than one workload,
+          such as stable and canary Deployments, while an intercept previously
+          followed only the workload named by the user. HTTP intercepts
+          without <code>--replace</code> now let each selected workload
+          participate in one logical intercept, so filtered traffic reaches
+          the same local handler regardless of which selected workload
+          receives it. If the selected workloads or their traffic-agents
+          cannot support shared interception, Telepresence warns and keeps
+          the historical single-workload behavior instead of failing the
+          intercept.
+        docs: reference/attachments/cli
+      - type: feature
+        title: HTTP header filters can match one member of a list-valued header
+        body: >-
+          A header filter named <code>name[key]</code> matches the value of the
+          member with that key in a header that holds a list of
+          <code>key=value</code> members, such as <code>baggage</code>,
+          <code>tracestate</code>, <code>cookie</code>, or
+          <code>forwarded</code>. Developers who each select on their own
+          member, for example <code>--http-header 'baggage[session]=alice-1'</code>
+          and <code>--http-header 'baggage[session]=bob-2'</code>, can now
+          intercept the same workload at the same time.
+        docs: concepts/attachments
+      - type: feature
+        title: Homebrew installs on Linux ARM64 are checksum verified
+        body: >-
+          The Homebrew formula now carries the checksum of the
+          <code>telepresence-linux-arm64</code> binary, so Homebrew verifies the
+          download on Linux ARM64 as it does on the other platforms. The Linux
+          install instructions now include Homebrew.
+        docs: install/client
       - type: change
         title: Unchanged intercept updates no longer rewrite the stored intercept
         body: >-
@@ -84,6 +95,34 @@ items:
           minutes, gives way to such a restart as well. Uninstalling the
           traffic-manager still removes every agent at once.
         docs: reference/cluster-config#agent-rollout-pacing
+      - type: change
+        title: Ended watch streams are logged
+        body: >-
+          The client and the traffic-agent retry a watch stream to the
+          traffic-manager when it ends, which happened without a trace in
+          the logs. A stream that ends now leaves a warning that names the
+          stream, how long it ran, and the error. This makes it visible when
+          a proxy in front of a Direct Connect listener ends idle streams,
+          which makes the client reconnect and interrupts intercepted
+          traffic.
+        docs: reference/external-endpoint#proxies-in-front-of-the-listener
+      - type: change
+        title: Windows binaries and installers are signed by Tada AB
+        body: >-
+          The Windows <code>telepresence.exe</code> binaries and MSI
+          installers are now Authenticode-signed with a Tada AB certificate
+          issued through Azure Artifact Signing, the same publisher that
+          signs the macOS installers.
+        docs: install/client
+      - type: bugfix
+        title: Filtered intercepts apply to existing ingress connections
+        body: >-
+          Starting a filtered intercept now closes existing TCP pass-through
+          connections on the intercepted port so ingress controllers can
+          reconnect and route subsequent requests through the HTTP filter.
+          Normal traffic keeps using raw TCP forwarding until a filtered
+          intercept starts, regardless of the Service's declared protocol.
+          Requests in flight on those connections at activation may fail.
       - type: bugfix
         title: Traffic-agent recovers file-sharing credentials after a traffic-manager restart
         body: >-
@@ -98,18 +137,6 @@ items:
           The client likewise refetches the agent QUIC credentials after it
           reconnects to a restarted manager, so agent connections return to QUIC
           instead of staying on the port-forward fallback.
-      - type: feature
-        title: HTTP header filters can match one member of a list-valued header
-        body: >-
-          A header filter named <code>name[key]</code> matches the value of the
-          member with that key in a header that holds a list of
-          <code>key=value</code> members, such as <code>baggage</code>,
-          <code>tracestate</code>, <code>cookie</code>, or
-          <code>forwarded</code>. Developers who each select on their own
-          member, for example <code>--http-header 'baggage[session]=alice-1'</code>
-          and <code>--http-header 'baggage[session]=bob-2'</code>, can now
-          intercept the same workload at the same time.
-        docs: concepts/attachments
       - type: bugfix
         title: NetworkManager no longer probes connectivity through the VIF
         body: >-
@@ -148,14 +175,6 @@ items:
           and manifest were given different anonymized names. Namespaces are now
           replaced in all collected files, and a pod's files keep their
           extensions and share one anonymized name.
-      - type: feature
-        title: Homebrew installs on Linux ARM64 are checksum verified
-        body: >-
-          The Homebrew formula now carries the checksum of the
-          <code>telepresence-linux-arm64</code> binary, so Homebrew verifies the
-          download on Linux ARM64 as it does on the other platforms. The Linux
-          install instructions now include Homebrew.
-        docs: install/client
       - type: bugfix
         title: Writing the environment to stdout no longer closes it
         body: >-
@@ -210,17 +229,6 @@ items:
           newline and replaced <code>$HOME</code> with its own value. Such
           values are now written so that docker compose reads them verbatim.
         docs: reference/environment
-      - type: change
-        title: Ended watch streams are logged
-        body: >-
-          The client and the traffic-agent retry a watch stream to the
-          traffic-manager when it ends, which happened without a trace in
-          the logs. A stream that ends now leaves a warning that names the
-          stream, how long it ran, and the error. This makes it visible when
-          a proxy in front of a Direct Connect listener ends idle streams,
-          which makes the client reconnect and interrupts intercepted
-          traffic.
-        docs: reference/external-endpoint#proxies-in-front-of-the-listener
       - type: bugfix
         title: Additional intercepted ports keep their protocol
         body: >-
@@ -234,14 +242,6 @@ items:
           Docker Compose <code>x-tele</code> extension had the same problem.
           The protocol is now kept.
         docs: reference/attachments/cli
-      - type: change
-        title: Windows binaries and installers are signed by Tada AB
-        body: >-
-          The Windows <code>telepresence.exe</code> binaries and MSI
-          installers are now Authenticode-signed with a Tada AB certificate
-          issued through Azure Artifact Signing, the same publisher that
-          signs the macOS installers.
-        docs: install/client
   - version: 2.32.3
     date: 2026-10-21
     notes:
