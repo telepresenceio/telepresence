@@ -5,7 +5,7 @@
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemons listen on the loopback interface only</div></div>
 <div style="margin-left: 15px">
 
-The root daemon and the user daemon accepted connections on every network interface, so any host on the same network could reach their gRPC APIs. Both daemons now listen on 127.0.0.1 only. The managed root daemon installed by the macOS, Linux and Windows installers is bound the same way.
+The root daemon and the user daemon accepted connections on every network interface, so any host on the same network could reach their gRPC APIs. Both daemons now listen on 127.0.0.1 only. The managed root daemon installed by the macOS, Linux and Windows installers is bound the same way. Reported independently by Clovis Pireyre and Jun Wei.
 </div>
 
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The kubeauth daemon requires a token</div></div>

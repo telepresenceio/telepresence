@@ -34,7 +34,8 @@ items:
           network interface, so any host on the same network could reach
           their gRPC APIs. Both daemons now listen on 127.0.0.1 only. The
           managed root daemon installed by the macOS, Linux and Windows
-          installers is bound the same way.
+          installers is bound the same way. Reported independently by
+          Clovis Pireyre and Jun Wei.
       - type: security
         title: The kubeauth daemon requires a token
         body: >-
