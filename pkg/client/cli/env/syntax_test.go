@@ -2,6 +2,7 @@ package env
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -72,6 +73,34 @@ func TestSyntax_WriteEntry(t *testing.T) {
 			`A`,
 			`\"B\" \"C\"`,
 			`A='\"B\" \"C\"'`,
+		},
+		{
+			`csh A=B C`,
+			SyntaxCsh,
+			`A`,
+			`B C`,
+			`set A='B C'`,
+		},
+		{
+			`csh A=B!C`,
+			SyntaxCsh,
+			`A`,
+			`B!C`,
+			`set A=B\!C`,
+		},
+		{
+			`csh:export A=B\nC!`,
+			SyntaxCshExport,
+			`A`,
+			"B\nC!",
+			"setenv A 'B\\\nC\\!'",
+		},
+		{
+			`csh:export A=B 'C X'`,
+			SyntaxCshExport,
+			`A`,
+			`B 'C X'`,
+			`setenv A 'B '\''C X'\'`,
 		},
 		{
 			`ps A=B C`,
@@ -148,6 +177,61 @@ func TestSyntax_WriteEntry_composeRoundTrip(t *testing.T) {
 			require.NoError(t, err, r)
 			require.Equal(t, v, env["A"], r)
 		})
+	}
+}
+
+func TestSyntax_WriteEntry_cshRoundTrip(t *testing.T) {
+	values := []string{
+		``,
+		`plain`,
+		`B C`,
+		`it's`,
+		`!`,
+		`B!C`,
+		`!!`,
+		`a\!b`,
+		`$HOME and ${PATH}`,
+		"`date`",
+		`*?[a]~{b}`,
+		`\`,
+		`C:\dir\`,
+		"multi\nline",
+		"two\n\nnewlines\n",
+		"backslash\\\nnewline",
+		"tab\tcr\r",
+		"^x^y",
+	}
+	shells := 0
+	for _, sh := range []string{"tcsh", "csh"} {
+		shPath, err := exec.LookPath(sh)
+		if err != nil {
+			continue
+		}
+		shells++
+		for _, e := range []Syntax{SyntaxCsh, SyntaxCshExport} {
+			for _, v := range values {
+				t.Run(sh+"/"+syntaxNames[e]+"/"+v, func(t *testing.T) {
+					r, err := e.WriteEntry("A", v)
+					require.NoError(t, err)
+					dir := t.TempDir()
+					require.NoError(t, os.WriteFile(filepath.Join(dir, "env.csh"), []byte(r+"\n"), 0o600))
+					script := "source env.csh\n"
+					if e == SyntaxCsh {
+						script += "setenv A $A:q\n"
+					}
+					script += "printenv A\n"
+					require.NoError(t, os.WriteFile(filepath.Join(dir, "run.csh"), []byte(script), 0o600))
+					cmd := exec.Command(shPath, "-f", "run.csh")
+					cmd.Dir = dir
+					out, err := cmd.CombinedOutput()
+					require.NoError(t, err, "%s: %s", r, out)
+					require.Equal(t, v+"\n", string(out), r)
+				})
+			}
+		}
+	}
+	if shells == 0 {
+		t.Skip("neither tcsh nor csh is installed")
 	}
 }
 

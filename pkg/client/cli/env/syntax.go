@@ -147,9 +147,9 @@ func (e Syntax) WriteEntry(k, v string) (r string, err error) {
 	case SyntaxShExport:
 		r = fmt.Sprintf("export %s=%s", k, shellquote.Unix(v))
 	case SyntaxCsh:
-		r = fmt.Sprintf("set %s=%s", k, shellquote.Unix(v))
+		r = fmt.Sprintf("set %s=%s", k, quoteCsh(v))
 	case SyntaxCshExport:
-		r = fmt.Sprintf("setenv %s %s", k, shellquote.Unix(v))
+		r = fmt.Sprintf("setenv %s %s", k, quoteCsh(v))
 	case SyntaxPS:
 		r = fmt.Sprintf("$Env:%s=%s", k, quotePS(v))
 	case SyntaxPSExport:
@@ -179,6 +179,14 @@ func quotePS(s string) string {
 	}
 	sb.WriteByte('\'')
 	return sb.String()
+}
+
+var cshEscaper = strings.NewReplacer("!", `\!`, "\n", "\\\n") //nolint:gochecknoglobals // constant
+
+// quoteCsh quotes s like a POSIX shell would and then escapes what csh treats as special even
+// within single quotes: '!' triggers history substitution and a newline ends the command.
+func quoteCsh(s string) string {
+	return cshEscaper.Replace(shellquote.Unix(s))
 }
 
 // quoteCompose returns s in a form that docker compose reads verbatim from an env_file. Double quotes
