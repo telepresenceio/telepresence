@@ -20,6 +20,12 @@ With <code>--env-syntax csh</code> or <code>csh:export</code>, values were quote
 Setting <code>agent.enableConsumptionMetrics</code> to <code>false</code> had no effect, because the chart treated a <code>false</code> value as unset and rendered its default of <code>true</code>. Traffic-agents kept sending consumption metrics to the traffic-manager whenever <code>prometheus.port</code> was set. The chart now passes <code>false</code> through.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Intercept no longer times out after a quick reconnect</div></div>
+<div style="margin-left: 15px">
+
+Ending a <code>replace</code> or a <code>compose</code> session, reconnecting, and starting it again before the workload's new pod was ready could fail with "the intercept timed out". The traffic-manager reused the pod but never told the reconnected client about it. It now announces the pod again.
+</div>
+
 ## Version 2.33.0 <span style="font-size: 16px;">(November  9)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemons listen on the loopback interface only</div></div>
 <div style="margin-left: 15px">
