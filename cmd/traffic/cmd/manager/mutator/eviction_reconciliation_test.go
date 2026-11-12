@@ -14,6 +14,7 @@ import (
 	core "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/telepresenceio/clog"
@@ -392,4 +393,71 @@ func TestEvictedPodStaysInactive(t *testing.T) {
 	assert.True(t, f.cw.isEvicted(old.UID))
 	assert.True(t, f.cw.IsInactive(old.UID))
 	assert.False(t, f.cw.IsInactive(replacement.UID))
+}
+
+func revealRecorder(f *evictionFixture) *[]types.UID {
+	var got []types.UID
+	f.cw.SetRevealHandler(func(id types.UID) { got = append(got, id) })
+	return &got
+}
+
+func TestRevealHandlerFiresWhenPendingPodMatchesAgain(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, _, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	older := wanted.Clone()
+	older.ManagerHost = "traffic-manager.old"
+	deployment := stableDeployment(ns, name, 1, nil)
+	pod := agentPod(ns, "echo-0", name, k8sapi.DeploymentKind, staleJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, pod)
+	got := revealRecorder(f)
+
+	wl := k8sapi.Deployment(deployment)
+	f.cw.requestEviction(f.ctx, wl, wanted)
+	require.True(t, f.cw.IsInactive(pod.UID))
+	assert.Empty(t, *got)
+
+	f.cw.requestEviction(f.ctx, wl, older)
+	assert.False(t, f.cw.IsInactive(pod.UID))
+	assert.Equal(t, []types.UID{pod.UID}, *got)
+
+	f.cw.requestEviction(f.ctx, wl, older)
+	assert.Len(t, *got, 1, "a pod that is already visible is not revealed again")
+}
+
+func TestRevealHandlerSilentForEvictedPod(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, _, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	deployment := stableDeployment(ns, name, 1, nil)
+	old := agentPod(ns, "echo-0", name, k8sapi.DeploymentKind, staleJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, old)
+	f.evictionsSucceed()
+	got := revealRecorder(f)
+
+	wl := k8sapi.Deployment(deployment)
+	f.cw.requestEviction(f.ctx, wl, wanted)
+	_, err := f.cw.reconcile(f.ctx, workloadKeyOf(wl))
+	require.NoError(t, err)
+	require.True(t, f.cw.isEvicted(old.UID))
+
+	f.cw.requestEviction(f.ctx, wl, wanted)
+	f.cw.expireInactivePods(-time.Second)
+	assert.Empty(t, *got)
+	assert.False(t, f.cw.IsInactive(old.UID))
+}
+
+func TestRevealHandlerFiresWhenPendingEntryExpires(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, _, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	deployment := stableDeployment(ns, name, 1, nil)
+	pod := agentPod(ns, "echo-0", name, k8sapi.DeploymentKind, staleJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, pod)
+	got := revealRecorder(f)
+
+	f.cw.requestEviction(f.ctx, k8sapi.Deployment(deployment), wanted)
+	require.True(t, f.cw.IsInactive(pod.UID))
+	f.cw.expireInactivePods(time.Hour)
+	assert.Empty(t, *got)
+	f.cw.expireInactivePods(-time.Second)
+	assert.Equal(t, []types.UID{pod.UID}, *got)
+	assert.False(t, f.cw.IsInactive(pod.UID))
 }

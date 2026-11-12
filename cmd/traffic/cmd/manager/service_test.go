@@ -1229,6 +1229,14 @@ func getTestClientConn(ctx context.Context, t *testing.T, extraObjects []runtime
 func getTestClientConnAndService(
 	ctx context.Context, t *testing.T, extraObjects []runtime.Object, envMods ...func(*managerutil.Env),
 ) (*grpc.ClientConn, Service, context.Context) {
+	return getTestClientConnAndServiceWithMap(ctx, t, extraObjects, nil, envMods...)
+}
+
+// getTestClientConnAndServiceWithMap is like getTestClientConnAndService but passes the mutator.Map through
+// wrapMap, when it is non-nil, before the service uses it.
+func getTestClientConnAndServiceWithMap(
+	ctx context.Context, t *testing.T, extraObjects []runtime.Object, wrapMap func(mutator.Map) mutator.Map, envMods ...func(*managerutil.Env),
+) (*grpc.ClientConn, Service, context.Context) {
 	const bufsize = 64 * 1024
 	var cancel func()
 	ctx, cancel = context.WithCancel(ctx)
@@ -1332,7 +1340,11 @@ matchExpressions:
 		mod(&env)
 	}
 	ctx = managerutil.WithEnv(ctx, &env)
-	ctx = mutator.WithMap(ctx, mutator.Load(ctx))
+	mm := mutator.Load(ctx)
+	if wrapMap != nil {
+		mm = wrapMap(mm)
+	}
+	ctx = mutator.WithMap(ctx, mm)
 
 	conn, err := grpc.NewClient("passthrough:///bufnet", grpc.WithContextDialer(bufDialer), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {

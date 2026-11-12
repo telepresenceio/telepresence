@@ -93,7 +93,20 @@ spec:
 {{- end }}
 {{- end }}
     spec:
+{{- if .ReadyDelaySeconds }}
+      terminationGracePeriodSeconds: 1
+{{- end }}
       containers:
+{{- if .ReadyDelaySeconds }}
+        - name: slow-ready
+          image: {{ .SlowReadyImage }}
+          imagePullPolicy: IfNotPresent
+          command: [sh, -c, 'sleep {{ .ReadyDelaySeconds }}; touch /tmp/ready; sleep 3600']
+          readinessProbe:
+            exec:
+              command: [cat, /tmp/ready]
+            periodSeconds: 1
+{{- end }}
         - name: {{ .Name }}
           image: {{ .Image }}
           imagePullPolicy: IfNotPresent

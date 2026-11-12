@@ -25,7 +25,6 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
-	"github.com/telepresenceio/telepresence/v2/pkg/maps"
 	"github.com/telepresenceio/telepresence/v2/pkg/workload"
 )
 
@@ -48,6 +47,9 @@ type Map interface {
 	Delete(name, namespace string)
 	Update(name, namespace string, updater func(cm *agentconfig.Sidecar) (*agentconfig.Sidecar, error)) (*agentconfig.Sidecar, error)
 	SetConfigured()
+	// SetRevealHandler sets the function that is called when a pod that was hidden pending its
+	// eviction becomes visible again.
+	SetRevealHandler(func(podID types.UID))
 }
 
 type configWatcher struct {
@@ -64,6 +66,7 @@ type configWatcher struct {
 	startedAt       time.Time
 	configured      atomic.Bool
 	running         atomic.Bool
+	revealHandler   atomic.Pointer[func(types.UID)]
 }
 
 // workloadEvictionState serializes the eviction passes for one workload and carries what they must
@@ -483,9 +486,7 @@ func (c *configWatcher) startIngresses(ctx context.Context, ns string) {
 }
 
 func (c *configWatcher) Start(ctx context.Context) {
-	go maps.GC(c.inactivePods, 10*time.Second, ctx.Done(), func(_ types.UID, value inactivation) bool {
-		return time.Since(value.Time) > time.Minute
-	})
+	go c.runInactivePodsGC(ctx)
 
 	for _, ns := range namespaces.GetOrGlobal(ctx) {
 		clog.Debugf(ctx, "Adding watchers for namespace %s", ns)
@@ -567,6 +568,49 @@ func (c *configWatcher) deleteMapsAndRolloutNS(ctx context.Context, ns string, i
 	if err := c.EvictAllPodsWithAgentConfig(ctx, ns); err != nil {
 		clog.Errorf(ctx, "unable to delete agents in namespace %s: %v", ns, err)
 	}
+}
+
+func (c *configWatcher) SetRevealHandler(h func(types.UID)) {
+	c.revealHandler.Store(&h)
+}
+
+// revealed calls the reveal handler, if any. It must not be called while holding a lock that the
+// handler's subscribers may need.
+func (c *configWatcher) revealed(podIDs []types.UID) {
+	if h := c.revealHandler.Load(); h != nil {
+		for _, id := range podIDs {
+			(*h)(id)
+		}
+	}
+}
+
+func (c *configWatcher) runInactivePodsGC(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			c.expireInactivePods(time.Minute)
+		}
+	}
+}
+
+// expireInactivePods drops the entries older than maxAge. The reveal handler is called for the dropped
+// entries that were pending, after the drop.
+func (c *configWatcher) expireInactivePods(maxAge time.Duration) {
+	var revealed []types.UID
+	c.inactivePods.Range(func(id types.UID, v inactivation) bool {
+		if time.Since(v.Time) > maxAge {
+			c.inactivePods.Delete(id)
+			if v.pending && !v.deleted {
+				revealed = append(revealed, id)
+			}
+		}
+		return true
+	})
+	c.revealed(revealed)
 }
 
 func (c *configWatcher) Inactivate(podID types.UID) {
