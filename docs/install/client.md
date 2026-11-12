@@ -128,6 +128,16 @@ journalctl -u telepresence-rootd
 > ```
 > Log out and back in for the change to take effect.
 
+## OR install with Homebrew
+
+```shell
+brew install telepresenceio/telepresence/telepresence-oss
+```
+
+> [!NOTE]
+> Homebrew installs the standalone binary only. The root daemon is not installed as a system service, so
+> Telepresence will request elevated privileges when connecting.
+
 ## OR download the binary manually
 
 ```shell
@@ -239,16 +249,15 @@ Get-AuthenticodeSignature .\telepresence-windows-amd64.msi | Format-List Status,
 Get-AuthenticodeSignature .\telepresence-windows-arm64.msi | Format-List Status, SignerCertificate, TimeStamperCertificate
 ```
 
-`Status` must read `Valid`. The signer certificate is issued through the SignPath Foundation; admins can
-write an allow rule (for example in AppLocker or WDAC) against the signer certificate's subject shown by
-`SignerCertificate`. The same information is available without PowerShell: right-click the file, choose
+`Status` must read `Valid` and `SignerCertificate` must show the subject
+`CN=Tada AB, O=Tada AB, L=Täby, C=SE`; admins can write an allow rule (for example in AppLocker or WDAC)
+against that subject. The same information is available without PowerShell: right-click the file, choose
 **Properties**, and open the **Digital Signatures** tab.
 
 ## Code signing policy
 
-Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by
-[SignPath Foundation](https://signpath.org/). The Windows release binaries and installers are
-Authenticode-signed with it.
+The Windows binaries and installers are Authenticode-signed and distributed by Tada AB, a Swedish company
+founded by the lead maintainer of the Telepresence open source project, using Azure Artifact Signing.
 
 - Committers and reviewers: [telepresence-maintainers](https://github.com/orgs/telepresenceio/teams/telepresence-maintainers) ([@thallgren](https://github.com/thallgren), [@bgruszka](https://github.com/bgruszka), [@njayp](https://github.com/njayp), [@breland-openai](https://github.com/breland-openai))
 - Approvers: [administrators](https://github.com/orgs/telepresenceio/teams/administrators) ([@khussey](https://github.com/khussey), [@thallgren](https://github.com/thallgren))
@@ -294,6 +303,12 @@ sudo dnf remove telepresence
 ```
 
 This stops and removes the root daemon systemd service and the Telepresence binaries.
+
+If you installed with Homebrew:
+
+```shell
+brew uninstall telepresenceio/telepresence/telepresence-oss
+```
 
 </Platform.GNULinuxTab>
 <Platform.WindowsTab>

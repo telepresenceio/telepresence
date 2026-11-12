@@ -25,6 +25,7 @@ type tcp struct {
 	*interceptor
 	tlsManager         tls.Manager
 	listenerSwitch     ListenerSwitch
+	passThrough        map[net.Conn]context.CancelFunc
 	httpTransportCache sync.Map
 	httpRequestID      atomic.Uint64
 }
@@ -33,6 +34,7 @@ func NewTCPInterceptor(ctx context.Context, listenPort types.PortAndProto, tag t
 	return &tcp{
 		interceptor: newInterceptor(ctx, listenPort, tag, target, opts...),
 		tlsManager:  tlsManager,
+		passThrough: make(map[net.Conn]context.CancelFunc),
 	}
 }
 
@@ -58,7 +60,13 @@ func (f *tcp) SetWiretapping(intercepts []*manager.InterceptInfo) {
 func (f *tcp) setListenerSwitch() {
 	f.mu.Lock()
 	if f.listenerSwitch != nil {
-		f.listenerSwitch.Switch(f.IsHTTP())
+		isHTTP := f.IsHTTP()
+		f.listenerSwitch.Switch(isHTTP)
+		if isHTTP {
+			for _, cancel := range f.passThrough {
+				cancel()
+			}
+		}
 	}
 	f.mu.Unlock()
 }
@@ -87,9 +95,11 @@ func (f *tcp) Serve(_ context.Context, initCh chan<- netip.AddrPort) error {
 	// The listener switch is used to switch between the primary listener (for TCP) and the secondary listener (for HTTP).
 	// The switch is initially on the primary listener and will be switched to the secondary listener when there is at least
 	// one intercept with a header or path filter.
+	f.mu.Lock()
 	f.listenerSwitch = NewListenerSwitch(listener, func(l net.Listener) {
 		f.acceptHTTPLoop(ctx, l)
 	})
+	f.mu.Unlock()
 	f.setListenerSwitch()
 
 	// Dispatch to the primary and secondary listeners in separate go routines.
@@ -103,8 +113,24 @@ const wiretapCacheSize = 0x100
 
 func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 	f.mu.Lock()
+	// A connection accepted before the listener switched may reach Forward afterwards.
+	if f.IsHTTP() {
+		f.mu.Unlock()
+		return clientConn.Close()
+	}
 	intercept, err := f.intercepts.global()
 	wtIntercepts := f.wiretaps.sorted()
+	if err == nil && intercept == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithCancel(ctx)
+		f.passThrough[clientConn] = cancel
+		defer func(conn net.Conn) {
+			cancel()
+			f.mu.Lock()
+			delete(f.passThrough, conn)
+			f.mu.Unlock()
+		}(clientConn)
+	}
 	f.mu.Unlock()
 	if err != nil {
 		return err

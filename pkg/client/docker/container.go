@@ -59,7 +59,7 @@ func Start(ctx context.Context, daemonInContainer bool, args ...string) (cni *Co
 	}
 
 	startArgs := []string{"start", "--attach"}
-	if flags.HasOption("interactive", 'i', args) {
+	if flags.HasOption("interactive", 'i', RunOptions(args)) {
 		startArgs = append(startArgs, "--interactive")
 	}
 	startArgs = append(startArgs, containerID)

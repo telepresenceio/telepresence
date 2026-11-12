@@ -56,7 +56,7 @@ func (f *tcp) Forward(ctx context.Context, clientConn net.Conn) error {
 	}
 	defer targetConn.Close()
 
-	done := make(chan struct{})
+	done := make(chan struct{}, 2)
 
 	go func() {
 		if _, err := io.Copy(targetConn, clientConn); err != nil && ctx.Err() == nil {

@@ -1326,6 +1326,22 @@ func (s *session) updateClientConfig(ctx context.Context, namespaces []string) {
 	}
 }
 
+// managerInstallID returns the install ID of the connected traffic-manager. The manager
+// reports it in the SessionInfo when the client arrives, so no Kubernetes API call is
+// needed. Querying the API here would run on every status request, and with an external
+// manager address the API server may not be reachable at all, in which case each call
+// blocks until the connect timeout.
+func (s *session) managerInstallID() string {
+	if id := s.sessionInfo.GetManagerInstallId(); id != "" {
+		return id
+	}
+	if client.GetConfig(s).Cluster().UsesExternalManager() {
+		return k8sapi.ZeroNamespaceID
+	}
+	// Managers that don't report the install ID.
+	return s.GetManagerInstallId()
+}
+
 func (s *session) status(ctx context.Context, initial bool) (*rpc.ConnectInfo, error) {
 	cfg := s.Kubeconfig
 	_, managerName, managerVersion, _ := s.managerSnapshot()
@@ -1333,7 +1349,7 @@ func (s *session) status(ctx context.Context, initial bool) (*rpc.ConnectInfo, e
 		Initial:          initial,
 		ClusterContext:   cfg.KubeContext,
 		ClusterServer:    cfg.Server,
-		ManagerInstallId: s.GetManagerInstallId(),
+		ManagerInstallId: s.managerInstallID(),
 		SessionInfo:      s.SessionInfo(),
 		ConnectionName:   s.daemonID.Name,
 		KubeFlags:        s.OriginalFlagMap,

@@ -66,9 +66,5 @@ func (a Service) getExecConfigFromContext(contextName string) (*clientcmd_api.Ex
 		return nil, fmt.Errorf("auth info %s isn't of type exec", kubeContext.AuthInfo)
 	}
 
-	return &clientcmd_api.ExecConfig{
-		Command: authInfo.Exec.Command,
-		Args:    authInfo.Exec.Args,
-		Env:     authInfo.Exec.Env,
-	}, nil
+	return authInfo.Exec.DeepCopy(), nil
 }

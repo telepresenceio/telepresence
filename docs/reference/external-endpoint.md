@@ -48,6 +48,22 @@ but creating an intercept or ingest fails early with an error naming the
 missing channel — the client never creates an attachment whose traffic
 has no way to reach the local workstation.
 
+## Proxies in front of the listener
+
+The client keeps several gRPC streams to the traffic-manager open for the
+whole session, and some of them carry no message for a long time. When a
+proxy or gateway in front of the listener ends such a stream, the client
+reconnects to the traffic-manager and rebuilds its connections to the
+traffic-agents, which interrupts intercepted traffic. The client logs each
+ended stream in `connector.log` as a warning that names the stream and
+states how long it ran.
+
+Envoy-based gateways end a stream that has been idle for 5 minutes by
+default. Raise the gateway's stream idle timeout well above the expected
+session length. With Cilium's Gateway API implementation, set
+`proxy-stream-idle-timeout-seconds` in the `cilium-config` ConfigMap, for
+example through the Helm value `extraConfig`.
+
 ## What the client loses without cluster access
 
 Under Direct Connect, features that inherently require client-side

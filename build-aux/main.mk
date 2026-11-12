@@ -189,7 +189,7 @@ build-deps: cmd/telepresence/rsrc_windows_$(GOARCH).syso
 
 .PHONY: verify-signatures
 verify-signatures: ## (Release) Verify Authenticode signatures on every artifact in build-output/release
-	pwsh -File build-aux/signpath/verify-signatures.ps1 -Dir $(RELEASEDIR)
+	pwsh -File build-aux/winsign/verify-signatures.ps1 -Dir $(RELEASEDIR)
 endif
 
 .PHONY: build

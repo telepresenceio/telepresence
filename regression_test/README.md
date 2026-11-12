@@ -231,8 +231,10 @@ combinations are additionally covered clusterless by
 Artifacts land in `build-output/rtest/logs/<runid>/`: `run.log`,
 `manifest.json` (per-test outcome/duration/labels), the manager values
 files, applied manifests, and on failure the abnormal events + daemon log
-tails per test. Daemon state lives under `build-output/rtest/home/`; to
-poke at a kept session manually:
+tails per test. On Linux, `run.log` starts with the host resolver layout
+(`/etc/resolv.conf`, `/etc/nsswitch.conf`, `resolvectl status`). Daemon
+state lives under `build-output/rtest/home/`; to poke at a kept session
+manually:
 
 ```bash
 export DEV_TELEPRESENCE_CONFIG_DIR=$PWD/build-output/rtest/home/config \

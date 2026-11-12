@@ -30,11 +30,6 @@ FORMULA="Formula/telepresence-oss.rb"
 for this_os in "${OS[@]}"; do
     for this_arch in "${ARCH[@]}"; do
 
-        if [ "${this_arch}" == "arm64" ] && [ "${this_os}" == "linux" ]; then
-            # TODO support linux arm64
-            continue
-        fi
-
         # We should only be updating homebrew with a version of telepresence that
         # already exists, so let's download it
         DOWNLOAD_PATH="/download/v${VERSION}/telepresence-${this_os}-${this_arch}"
@@ -52,11 +47,6 @@ export HASH_ERRORS=0
 for this_os in "${OS[@]}"; do
     for this_arch in "${ARCH[@]}"; do
 
-        if [ "${this_arch}" == "arm64" ] && [ "${this_os}" == "linux" ]; then
-            # TODO support linux arm64
-            continue
-        fi
-
         # We don't want to update our homebrew formula if there
         # isn't a hash, so exit early if that's the case.
         tmp_var="TARBALL_HASH_${this_os}_${this_arch}"
@@ -64,7 +54,7 @@ for this_os in "${OS[@]}"; do
             echo "Telepresence binary hash: ${tmp_var} == ${!tmp_var}"
         else
             echo "Telepresence binary could not be hashed: ${tmp_var}"
-            HASH_ERRORS=$((HASH_ERRORS++))
+            HASH_ERRORS=$((HASH_ERRORS + 1))
         fi
     done
 done
@@ -96,11 +86,6 @@ sed -i'' -e "s/__NEW_VERSION__/${VERSION}/g" "${FORMULA}"
 
 for this_os in "${OS[@]}"; do
     for this_arch in "${ARCH[@]}"; do
-
-        if [ "${this_arch}" == "arm64" ] && [ "${this_os}" == "linux" ]; then
-            # TODO support linux arm64
-            continue
-        fi
         tmp_var="TARBALL_HASH_${this_os}_${this_arch}"
         sed -i'' -e "s/__TARBALL_HASH_${this_os^^}_${this_arch^^}__/${!tmp_var}/g" "${FORMULA}"
     done

@@ -11,6 +11,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/telepresenceio/clog"
 )
 
 // WatchWithRetry establishes a server-streaming RPC connection and handles streamed data using the provided handler, with support for automatic retries on failure.
@@ -54,6 +56,7 @@ func WatchWithRetry[T any](
 		defer func() {
 			_ = stream.CloseSend()
 		}()
+		started := time.Now()
 		for {
 			select {
 			case <-ctx.Done():
@@ -71,6 +74,10 @@ func WatchWithRetry[T any](
 				default:
 					if slices.Contains(permanentCodes, c) {
 						return backoff.Permanent(err)
+					}
+					if ctx.Err() == nil {
+						clog.Warnf(ctx, "%s stream ended after %s, retrying in %s: %v",
+							name, time.Since(started).Round(time.Millisecond), retryInterval, err)
 					}
 					return fmt.Errorf("error when calling Recv for %s: %w", name, err)
 				}

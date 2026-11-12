@@ -4,15 +4,23 @@ import (
 	"fmt"
 	"net"
 	"strconv"
+	"time"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/managers"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/rt"
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/workloads"
 )
 
-// dnsMappingAlias is the alias name Test_Mappings adds via a dns.mappings
-// kubeconfig extension entry.
-const dnsMappingAlias = "dns-mappings-alias"
+// dnsMappingAlias is the single-label alias, and dnsMappingFQAlias the dotted
+// alias under the includeSuffixes entry dnsMappingSuffix, that Test_Mappings
+// adds via dns.mappings kubeconfig extension entries. The suffix becomes a
+// routing domain for the daemon, so the dotted alias always reaches it; the
+// single-label alias depends on the host resolver applying search domains.
+const (
+	dnsMappingAlias   = "dns-mappings-alias"
+	dnsMappingSuffix  = ".tele.test"
+	dnsMappingFQAlias = dnsMappingAlias + dnsMappingSuffix
+)
 
 // ExcludesMappings proves the kubeconfig telepresence.io extension's
 // dns.excludes and dns.mappings reach a live session: an excluded name never
@@ -30,14 +38,15 @@ func init() {
 	rt.Register(&ExcludesMappings{}, rt.InArea("dns"), rt.NeedsManager(managers.Default))
 }
 
-// Test_Excludes connects with dns.excludes hiding the echo service's
-// single-label name -- the same form Resolution.Test_ServiceNameForms proves
-// resolves when unexcluded -- and checks the name never resolves.
+// Test_Excludes connects with dns.excludes hiding one echo service and
+// checks that its svc.ns name stops resolving while another service's still
+// does, and that its single-label name does not resolve either.
 func (s *ExcludesMappings) Test_Excludes() {
 	t := s.T()
 	ctx := s.Ctx()
 	ns := s.AppNamespace()
 	wl := s.Workload(workloads.Echo("dns-excludes-echo"))
+	other := s.Workload(workloads.Echo("dns-excludes-other"))
 
 	env := rt.Env{Ctx: ctx, T: t, R: s.R()}
 	path, err := rt.WithKubeConfigExtension(env, map[string]any{
@@ -49,25 +58,41 @@ func (s *ExcludesMappings) Test_Excludes() {
 	conn := rt.Mutate(t, rt.ConnectionFixture(ns, rt.ConnWithKubeconfig(path)))
 	t.Cleanup(func() { conn.Disconnect(t) })
 
+	otherName := other.SvcName + "." + other.Namespace
+	s.Eventually(func() bool {
+		return lookupSucceeds(ctx, otherName)
+	}, lookupPollTimeout, lookupPollInterval, "%s did not resolve", otherName)
+
+	qualified := wl.SvcName + "." + wl.Namespace
+	s.Eventually(func() bool {
+		return !lookupSucceeds(ctx, qualified)
+	}, lookupPollTimeout, lookupPollInterval, "%s unexpectedly resolved while excluded", qualified)
+
 	s.Eventually(func() bool {
 		return !lookupSucceeds(ctx, wl.SvcName)
 	}, lookupPollTimeout, lookupPollInterval, "%s unexpectedly resolved while excluded", wl.SvcName)
 }
 
-// Test_Mappings connects with dns.mappings adding an alias name that
-// resolves to the echo service, and checks the alias resolves and serves
-// the echo response.
+// Test_Mappings connects with dns.mappings adding a dotted alias and a
+// single-label alias for the echo service, and checks the dotted alias
+// resolves and serves the echo response. The single-label alias is checked in
+// a sub-test that skips when the host resolver never expands single labels.
 func (s *ExcludesMappings) Test_Mappings() {
 	t := s.T()
 	ctx := s.Ctx()
 	ns := s.AppNamespace()
 	wl := s.Workload(workloads.Echo("dns-mappings-echo"))
+	target := fmt.Sprintf("%s.%s", wl.SvcName, wl.Namespace)
 
 	env := rt.Env{Ctx: ctx, T: t, R: s.R()}
 	path, err := rt.WithKubeConfigExtension(env, map[string]any{
-		"dns": map[string]any{"mappings": []map[string]string{
-			{"name": dnsMappingAlias, "aliasFor": fmt.Sprintf("%s.%s", wl.SvcName, wl.Namespace)},
-		}},
+		"dns": map[string]any{
+			"includeSuffixes": []string{dnsMappingSuffix},
+			"mappings": []map[string]string{
+				{"name": dnsMappingFQAlias, "aliasFor": target},
+				{"name": dnsMappingAlias, "aliasFor": target},
+			},
+		},
 	})
 	s.Require().NoError(err)
 
@@ -75,5 +100,38 @@ func (s *ExcludesMappings) Test_Mappings() {
 	conn := rt.Mutate(t, rt.ConnectionFixture(ns, rt.ConnWithKubeconfig(path)))
 	t.Cleanup(func() { conn.Disconnect(t) })
 
-	rt.RoutedToCluster(t, "http://"+net.JoinHostPort(dnsMappingAlias, strconv.Itoa(wl.Port)))
+	rt.RoutedToCluster(t, "http://"+net.JoinHostPort(dnsMappingFQAlias, strconv.Itoa(wl.Port)))
+
+	s.Run("single-label", func() {
+		want, err := net.DefaultResolver.LookupHost(ctx, target)
+		s.Require().NoError(err, "qualified form should resolve")
+		wantSet := make(map[string]bool, len(want))
+		for _, a := range want {
+			wantSet[a] = true
+		}
+		probe := func() bool {
+			got, err := getentHosts(ctx, dnsMappingAlias)
+			if err != nil {
+				return false
+			}
+			for _, a := range got {
+				if wantSet[a] {
+					return true
+				}
+			}
+			return false
+		}
+		deadline := time.Now().Add(30 * time.Second)
+		for !probe() {
+			if time.Now().After(deadline) {
+				// Go's pure resolver only reads /etc/resolv.conf, and some
+				// host resolver setups never expose the search domains the
+				// daemon registers. Skip rather than fail on such hosts.
+				s.T().Skipf("single-label %s did not resolve via the host resolver path "+
+					"(dotted alias verified); host resolver setup likely bypasses "+
+					"daemon-registered search domains", dnsMappingAlias)
+			}
+			time.Sleep(time.Second)
+		}
+	})
 }

@@ -377,6 +377,7 @@ func zipFiles(files []string, zipFileName string) error {
 }
 
 // anonymizeFileNames will anonymize the file names of all pods in the connector.LogResponse.
+// The file names have the form <pod name>.<namespace>.<extension>.
 func (a *anonymizer) anonymizeFileNames(lr *connector.LogsResponse, exportDir string) error {
 	for n, v := range lr.PodInfo {
 		qn := filepath.Join(exportDir, n)
@@ -384,7 +385,8 @@ func (a *anonymizer) anonymizeFileNames(lr *connector.LogsResponse, exportDir st
 			// Write the error to retrieve the log as the log content. It's better than nothing
 			_ = os.WriteFile(qn, []byte(v), 0o666)
 		}
-		anonQn := filepath.Join(exportDir, a.getPodName(n))
+		ext := filepath.Ext(n)
+		anonQn := filepath.Join(exportDir, a.getPodName(strings.TrimSuffix(n, ext))+ext)
 		if err := os.Rename(qn, anonQn); err != nil {
 			return fmt.Errorf("failed to anonymize by renaming file name %s to %s", qn, anonQn)
 		}

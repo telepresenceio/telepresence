@@ -132,8 +132,8 @@ func (s *state) CreateRequest(ctx context.Context) (*connector.CreateInterceptRe
 				to := pm[:colIdx]
 				from := pm[colIdx+1:]
 				if slashIdx := strings.IndexByte(from, '/'); slashIdx > 0 {
-					from = from[:slashIdx]
 					to += from[slashIdx:]
+					from = from[:slashIdx]
 				}
 				pm = from + ":" + to
 			}

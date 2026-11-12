@@ -15,8 +15,7 @@ class __FORMULA_NAME__ < Formula
   sha256 "__TARBALL_HASH_DARWIN_AMD64__" if OS.mac? && Hardware::CPU.intel?
   sha256 "__TARBALL_HASH_DARWIN_ARM64__" if OS.mac? && Hardware::CPU.arm?
   sha256 "__TARBALL_HASH_LINUX_AMD64__" if OS.linux? && Hardware::CPU.intel?
-  # TODO support linux arm64
-  #sha256 "__TARBALL_HASH_LINUX_ARM64__" if OS.linux? && Hardware::CPU.arm?
+  sha256 "__TARBALL_HASH_LINUX_ARM64__" if OS.linux? && Hardware::CPU.arm?
 
   conflicts_with "telepresence"
 
