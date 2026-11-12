@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	core "k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	meta "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -30,6 +32,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/annotation"
 	"github.com/telepresenceio/telepresence/v2/pkg/informer"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
+	tpTypes "github.com/telepresenceio/telepresence/v2/pkg/types"
 )
 
 // evictionFixture backs the eviction code with a fake clientset and informer stores that hold
@@ -560,6 +563,79 @@ func TestPodsWithAgentConfigMismatch(t *testing.T) {
 	}
 	assert.Equal(t, []string{"stale", "bare"}, names(podsWithAgentConfigMismatch(ctx, pods, wanted)), "agent wanted")
 	assert.Equal(t, []string{"stale", "current"}, names(podsWithAgentConfigMismatch(ctx, pods, nil)), "no agent wanted")
+}
+
+func TestPodHasAgentConfigFullConfig(t *testing.T) {
+	const ns, name = "default", "echo"
+	resources := func() *core.ResourceRequirements {
+		return &core.ResourceRequirements{
+			Requests: core.ResourceList{
+				core.ResourceCPU:    resource.MustParse("100m"),
+				core.ResourceMemory: resource.MustParse("64Mi"),
+			},
+			Limits: core.ResourceList{core.ResourceMemory: resource.MustParse("128Mi")},
+		}
+	}
+	securityContext := func() *core.SecurityContext {
+		return &core.SecurityContext{
+			RunAsNonRoot: new(true),
+			RunAsUser:    new(int64(1000)),
+			Capabilities: &core.Capabilities{Drop: []core.Capability{"ALL"}},
+		}
+	}
+	full := func(subnets ...string) *agentconfig.Sidecar {
+		sc := &agentconfig.Sidecar{
+			AgentName:     name,
+			Namespace:     ns,
+			WorkloadName:  name,
+			WorkloadKind:  k8sapi.DeploymentKind,
+			AgentImage:    "tel2:new",
+			PullPolicy:    string(core.PullAlways),
+			PullSecrets:   []core.LocalObjectReference{{Name: "registry"}},
+			ManagerHost:   "traffic-manager.ambassador",
+			ManagerPort:   8081,
+			Resources:     resources(),
+			InitResources: resources(),
+			MountPolicies: map[string]tpTypes.MountPolicy{
+				"/var/log": tpTypes.MountPolicyLocal,
+				"/data":    tpTypes.MountPolicyRemoteReadOnly,
+			},
+			SecurityContext:     securityContext(),
+			InitSecurityContext: securityContext(),
+			ClientConnectionTTL: 90 * time.Second,
+			WatchRetryInterval:  5 * time.Second,
+			Containers: []*agentconfig.Container{{
+				Name: name,
+				Intercepts: []*agentconfig.Intercept{{
+					ContainerPortName: "http",
+					ServiceName:       name,
+					ServicePortName:   "http",
+					Protocol:          tpTypes.ProtoTCP,
+					ContainerPort:     8080,
+					ServicePort:       80,
+					AgentPort:         9900,
+				}},
+				MountPoint: "/tel_app_mounts/echo",
+			}},
+		}
+		for _, subnet := range subnets {
+			sc.MeshDialSubnets = append(sc.MeshDialSubnets, netip.MustParsePrefix(subnet))
+		}
+		return sc
+	}
+	podFor := func(t *testing.T, sc *agentconfig.Sidecar) *core.Pod {
+		cfgJSON, err := agentconfig.MarshalTight(sc)
+		require.NoError(t, err)
+		return agentPod(ns, "echo-0", name, k8sapi.DeploymentKind, cfgJSON, true)
+	}
+	ctx := context.Background()
+	subnets := []string{"10.1.0.0/16", "fd00::/64"}
+	wantedTight, err := tightAgentConfig(full(subnets...))
+	require.NoError(t, err)
+
+	assert.True(t, podHasAgentConfig(ctx, podFor(t, full(subnets...)), wantedTight), "equal config")
+	assert.False(t, podHasAgentConfig(ctx, podFor(t, full("10.1.0.0/16", "fd00::/48")), wantedTight), "different subnet")
+	assert.False(t, podHasAgentConfig(ctx, podFor(t, full("10.1.0.0/16")), wantedTight), "fewer subnets")
 }
 
 func TestEvictBatchStopsAtBudget(t *testing.T) {

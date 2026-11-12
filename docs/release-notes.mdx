@@ -9,6 +9,12 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.33.1
 <Note>
+	<Title type="bugfix">Traffic-manager no longer panics when agent.serviceMesh.dialSubnets is set</Title>
+	<Body>
+With <code>agent.serviceMesh.dialSubnets</code> set, the traffic-manager panicked and crash-looped as soon as an intercept was created on a workload whose pods already had a traffic-agent. The check that decides whether a pod's agent configuration is current now handles the subnet list.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Environment files for csh accept newlines and exclamation marks</Title>
 	<Body>
 With <code>--env-syntax csh</code> or <code>csh:export</code>, values were quoted for a POSIX shell. A csh or tcsh sourcing the file failed with <code>Unmatched '.</code> when a value contained a newline, and with <code>Event not found</code> when it contained an exclamation mark, because csh ends a command at a newline and applies history substitution even within single quotes. Both characters are now escaped with a backslash, so the shell reads every value verbatim.
