@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 	"slices"
 	"strconv"
 	"strings"
@@ -145,7 +146,7 @@ func podHasAgentConfig(ctx context.Context, pod *core.Pod, wantedTight *agentcon
 		clog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
 		return false
 	}
-	return cmp.Equal(sc, wantedTight, cmpopts.EquateEmpty(), cmp.Comparer(func(x, y *durationpb.Duration) bool {
+	return cmp.Equal(sc, wantedTight, cmpopts.EquateEmpty(), cmpopts.EquateComparable(netip.Prefix{}), cmp.Comparer(func(x, y *durationpb.Duration) bool {
 		return x.AsDuration() == y.AsDuration()
 	}))
 }
