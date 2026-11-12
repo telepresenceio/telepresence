@@ -494,7 +494,7 @@ func TestRestoreIntercepts_RegeneratesChildrenFromPodPorts(t *testing.T) {
 		ClientSession: &rpc.SessionInfo{SessionId: "c1"},
 	}
 
-	s.RestoreIntercepts(ctx, []*rpc.InterceptInfo{parent, forgedChild}, time.Now())
+	require.NoError(t, s.RestoreIntercepts(ctx, []*rpc.InterceptInfo{parent, forgedChild}, time.Now()))
 
 	_, ok := s.intercepts.Load("c1:forged-child")
 	assert.False(t, ok, "a child spec present in the input must never be stored directly")

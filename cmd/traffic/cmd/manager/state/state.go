@@ -27,6 +27,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/managerutil"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/mutator"
 	"github.com/telepresenceio/telepresence/v2/cmd/traffic/cmd/manager/namespaces"
+	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
 	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
@@ -678,8 +679,10 @@ func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
 // pod-port intercept's children are never taken from intercepts -- a spec
 // for which IsChildIntercept is true is skipped -- since WatchIntercepts
 // never sends a child to a client; every non-child entry has its children
-// re-derived instead from its own Spec.PodPorts.
-func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) {
+// re-derived instead from its own Spec.PodPorts. Container replacements also
+// restore their agent configuration before agents can review them. On error,
+// the caller must remove the client session to clean up partial restoration.
+func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) error {
 	nodeAgentWatches := make(map[nodeAgentWatchKey]struct{})
 	serviceInterceptWatches := make(map[string]struct{})
 	for _, intercept := range intercepts {
@@ -687,11 +690,28 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 		if IsChildIntercept(spec) {
 			continue
 		}
-		is, _ := s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
-			is := &Intercept{InterceptInfo: intercept}
+		var restoreErr error
+		is, _ := s.intercepts.Compute(intercept.Id, func(is *Intercept, loaded bool) (*Intercept, xsync.ComputeOp) {
+			if loaded {
+				return is, xsync.CancelOp
+			}
+			is = &Intercept{InterceptInfo: intercept}
 			s.initializeParticipants(is)
 			wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
-			if err == nil {
+			if spec.Replace && !spec.NodeAgent && managerutil.AgentInjectorEnabled(ctx) {
+				if err == nil {
+					var sc *agentconfig.Sidecar
+					sc, err = s.getOrCreateAgentConfig(ctx, wl, s.isExtended(spec), false, spec, agentconfig.ReplacePolicyContainer)
+					if err == nil {
+						err = mutator.GetMap(ctx).EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
+					}
+				}
+				if err != nil {
+					restoreErr = fmt.Errorf("unable to restore replacement %q: %w", intercept.Id, err)
+					return nil, xsync.CancelOp
+				}
+			}
+			if err == nil && !spec.NodeAgent {
 				is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
 					return s.restoreAppContainer(ctx, interceptInfo, wl)
 				})
@@ -703,8 +723,11 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 			if serviceScopedIntercept(spec) {
 				serviceInterceptWatches[intercept.Id] = struct{}{}
 			}
-			return is
+			return is, xsync.UpdateOp
 		})
+		if restoreErr != nil {
+			return restoreErr
+		}
 		s.restoreChildIntercepts(is, now)
 	}
 	// The watches are started only after the intercepts are stored: a watcher
@@ -716,6 +739,7 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 	for interceptID := range serviceInterceptWatches {
 		s.startServiceInterceptWatch(interceptID)
 	}
+	return nil
 }
 
 // restoreChildIntercepts regenerates parent's pod-port children and wires a

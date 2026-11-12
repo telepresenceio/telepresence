@@ -344,10 +344,14 @@ func (s *service) ReconnectClient(ctx context.Context, info *rpc.ReconnectClient
 	st.RestoreAgents(agents, now)
 
 	intercepts, err := s.reviewRestoredIntercepts(ctx, info, now)
+	if err == nil {
+		err = st.RestoreIntercepts(ctx, intercepts, now)
+	}
 	if err != nil {
+		// A retry must restore the intercepts, not return early for a known client.
+		st.RemoveSession(ctx, sessionID)
 		return nil, err
 	}
-	st.RestoreIntercepts(ctx, intercepts, now)
 	return &empty.Empty{}, nil
 }
 
