@@ -24,6 +24,17 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.33.1
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Traffic-manager no longer panics when agent.serviceMesh.dialSubnets is set
+        body: >-
+          With <code>agent.serviceMesh.dialSubnets</code> set, the
+          traffic-manager panicked and crash-looped as soon as an intercept
+          was created on a workload whose pods already had a traffic-agent.
+          The check that decides whether a pod's agent configuration is
+          current now handles the subnet list.
   - version: 2.33.0
     date: 2026-11-09
     notes:
