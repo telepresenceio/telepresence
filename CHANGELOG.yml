@@ -55,6 +55,14 @@ items:
           <code>true</code>. Traffic-agents kept sending consumption metrics
           to the traffic-manager whenever <code>prometheus.port</code> was
           set. The chart now passes <code>false</code> through.
+      - type: bugfix
+        title: Intercept no longer times out after a quick reconnect
+        body: >-
+          Ending a <code>replace</code> or a <code>compose</code> session,
+          reconnecting, and starting it again before the workload's new pod
+          was ready could fail with "the intercept timed out". The
+          traffic-manager reused the pod but never told the reconnected
+          client about it. It now announces the pod again.
   - version: 2.33.0
     date: 2026-11-09
     notes:

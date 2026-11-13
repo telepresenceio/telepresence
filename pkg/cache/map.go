@@ -259,6 +259,28 @@ func (m *Map[K, V]) Store(key K, value V) {
 	m.Compute(key, func(oldValue V, wasLoaded bool) (V, xsync.ComputeOp) { return value, xsync.UpdateOp })
 }
 
+// Renotify sends the current value of key to the subscribers again, as an upsert, even though the
+// value is unchanged. It does nothing if the key is absent.
+func (m *Map[K, V]) Renotify(key K) {
+	value, ok := m.Load(key)
+	if !ok {
+		return
+	}
+	m.snapLock.Lock()
+	// The previous snapshot may be held by subscribers, so it is replaced, never edited.
+	snapshot := make(map[K]V, len(m.snapshot))
+	for k, v := range m.snapshot {
+		if k != key {
+			snapshot[k] = v
+		}
+	}
+	m.snapshot = snapshot
+	// Marking under the lock ensures that the delta that reports the upsert is built after the marks are set.
+	m.markSubscribers(key, value)
+	m.snapLock.Unlock()
+	m.notifier.Reset(m.notifyDelay)
+}
+
 // markSubscribers marks all subscribers interested in the given key and value binding.
 func (m *Map[K, V]) markSubscribers(key K, value V) {
 	m.subscribers.Range(func(_ uuid.UUID, sb *subscription[K, V]) bool {

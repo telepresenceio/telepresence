@@ -3,6 +3,7 @@ package manager
 import (
 	"io"
 	"net/netip"
+	"sync"
 	"testing"
 	"time"
 
@@ -397,5 +398,106 @@ func TestWatchSessionEvents_InactiveAgentFiltered(t *testing.T) {
 	req.Len(agentPods.Upserts, 1)
 	for _, a := range agentPods.Upserts {
 		req.Equal(sentinel.PodUid, a.PodId, "the inactive agent must not be delivered")
+	}
+}
+
+// revealingMap hides the pods it is told to hide and reports a reveal through the handler that
+// the state registered.
+type revealingMap struct {
+	mutator.Map
+	mu      sync.Mutex
+	hidden  map[types.UID]struct{}
+	handler func(types.UID)
+}
+
+func (m *revealingMap) IsInactive(podID types.UID) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.hidden[podID]
+	return ok || m.Map.IsInactive(podID)
+}
+
+func (m *revealingMap) SetRevealHandler(h func(types.UID)) {
+	m.mu.Lock()
+	m.handler = h
+	m.mu.Unlock()
+}
+
+func (m *revealingMap) hide(podID types.UID) {
+	m.mu.Lock()
+	m.hidden[podID] = struct{}{}
+	m.mu.Unlock()
+}
+
+func (m *revealingMap) reveal(podID types.UID) {
+	m.mu.Lock()
+	delete(m.hidden, podID)
+	h := m.handler
+	m.mu.Unlock()
+	h(podID)
+}
+
+// TestWatchAgentPods_RevealedAgentDelivered proves that the agent-pod projections deliver an agent
+// whose upsert they skipped while its pod was hidden once the pod is revealed.
+func TestWatchAgentPods_RevealedAgentDelivered(t *testing.T) {
+	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
+	ctx := testutil.NewContext(t, true)
+	req := require.New(t)
+
+	testClients := testdata.GetTestClients(t)
+	testAgents := testdata.GetTestAgents(t)
+
+	var rm *revealingMap
+	conn, mgr, _ := getTestClientConnAndServiceWithMap(ctx, t, nil, func(inner mutator.Map) mutator.Map {
+		rm = &revealingMap{Map: inner, hidden: make(map[types.UID]struct{})}
+		return rm
+	})
+	defer conn.Close()
+	client := rpc.NewManagerClient(conn)
+
+	aliceSess, err := client.ArriveAsClient(ctx, testClients["alice"])
+	req.NoError(err)
+
+	wse, err := client.WatchSessionEvents(ctx, &rpc.SessionEventsRequest{Session: aliceSess})
+	req.NoError(err)
+	wpd, err := client.WatchAgentPodsDelta(ctx, aliceSess)
+	req.NoError(err)
+
+	hiddenAgent := proto.Clone(testAgents["hello"]).(*rpc.AgentInfo)
+	hiddenAgent.PodUid = "hidden-pod-uid"
+	hiddenAgent.PodIp = "10.1.2.7"
+	rm.hide(types.UID(hiddenAgent.PodUid))
+	mgr.State().RestoreAgents([]*rpc.AgentInfo{hiddenAgent}, time.Now())
+
+	sentinel := proto.Clone(testAgents["demo1"]).(*rpc.AgentInfo)
+	sentinel.PodIp = "10.1.2.6"
+	_, err = client.ArriveAsAgent(ctx, sentinel)
+	req.NoError(err)
+
+	req.Equal(map[string]struct{}{sentinel.PodUid: {}}, upsertPodIDs(recvAgentPodsDelta(t, wse)))
+	req.Equal(map[string]struct{}{sentinel.PodUid: {}}, upsertPodIDs(recvPodsDeltaStream(t, wpd)))
+
+	rm.reveal(types.UID(hiddenAgent.PodUid))
+	req.Equal(map[string]struct{}{hiddenAgent.PodUid: {}}, upsertPodIDs(recvAgentPodsDelta(t, wse)))
+	d := recvPodsDeltaStream(t, wpd)
+	req.Equal(map[string]struct{}{hiddenAgent.PodUid: {}}, upsertPodIDs(d))
+}
+
+func upsertPodIDs(d *rpc.AgentPodInfoDelta) map[string]struct{} {
+	ids := make(map[string]struct{}, len(d.Upserts))
+	for _, a := range d.Upserts {
+		ids[a.PodId] = struct{}{}
+	}
+	return ids
+}
+
+func recvPodsDeltaStream(t *testing.T, s rpc.Manager_WatchAgentPodsDeltaClient) *rpc.AgentPodInfoDelta {
+	t.Helper()
+	for {
+		d, err := s.Recv()
+		require.NoError(t, err)
+		if len(d.Upserts) > 0 || len(d.Removals) > 0 {
+			return d
+		}
 	}
 }

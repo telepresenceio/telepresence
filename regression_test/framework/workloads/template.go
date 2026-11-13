@@ -86,7 +86,20 @@ type Template struct {
 	// MinAvailable, when non-zero, adds a PodDisruptionBudget selecting the
 	// workload's pods with that minAvailable.
 	MinAvailable int
+	// ReadyDelaySeconds, when non-zero, adds a "slow-ready" sidecar that
+	// turns Ready after that many seconds, so the pod stays not Ready for
+	// that long even when the app container is replaced by a traffic-agent.
+	// Rendered for the Deployment kind only. The pod's termination grace
+	// period is 1 second.
+	ReadyDelaySeconds int
 }
+
+// SlowReadyImage is the image of the sidecar rendered by ReadyDelaySeconds;
+// it needs `sh`, which the echo image lacks.
+const SlowReadyImage = "docker.io/curlimages/curl:8.1.1"
+
+// SlowReadyImage returns the sidecar image, for use by templates.
+func (t Template) SlowReadyImage() string { return SlowReadyImage }
 
 // PortName is the primary port's name: "udp" when UDP is set (naming it
 // "http" would misdescribe the protocol), "http" otherwise.

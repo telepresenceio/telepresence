@@ -183,7 +183,9 @@ for now.
   `EchoNoService` (carries the inject-container-ports annotation),
   `EchoMultiPort`, `EchoReplicas`, `EchoWithConfigVolume`; templates take
   `Annotations`, `Resources`, `AppProtocol`, `MaxUnavailable` (Deployment
-  rolling-update setting) and `MinAvailable` (adds a PodDisruptionBudget).
+  rolling-update setting), `MinAvailable` (adds a PodDisruptionBudget) and
+  `ReadyDelaySeconds` (Deployment only: adds a sidecar that keeps the pod
+  not Ready for that long).
 - **No hard-coded ports.** Local listeners bind `:0` (`s.LocalEcho()`);
   the only fixed numbers are external facts (the echo image's 8080, a
   NodePort under test) and must say so.

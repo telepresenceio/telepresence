@@ -140,6 +140,11 @@ func NewState(ctx context.Context, g log.Group, adminCommandCh <-chan tmconfig.A
 		llSubs:                   newLoglevelSubscribers(),
 		serviceInterceptWatchers: xsync.NewMap[string, struct{}](),
 	}
+	if mm := mutator.GetMap(ctx); mm != nil {
+		mm.SetRevealHandler(func(podID types.UID) {
+			s.agents.Renotify(tunnel.SessionID(AgentSessionIDPrefix + string(podID)))
+		})
+	}
 	g.Go("namespace-GC", s.pruneSessionGCLoop)
 	g.Go("expired-GC", s.runSessionGCLoop)
 	g.Go("node-agent-GC", s.reconcileNodeAgentJobsLoop)

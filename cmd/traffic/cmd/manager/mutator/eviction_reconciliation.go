@@ -10,6 +10,7 @@ import (
 
 	core "k8s.io/api/core/v1"
 	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
@@ -68,6 +69,7 @@ func (c *configWatcher) requestEviction(ctx context.Context, wl k8sapi.Workload,
 // markPendingEviction hides the agents of the mismatched pods until a pass evicts them, and shows
 // the agents of the other pods again if an earlier pass hid them.
 func (c *configWatcher) markPendingEviction(pods, mismatched []*core.Pod) {
+	var revealed []types.UID
 	for _, pod := range pods {
 		pending := slices.Contains(mismatched, pod)
 		c.inactivePods.Compute(pod.UID, func(v inactivation, loaded bool) (inactivation, xsync.ComputeOp) {
@@ -77,12 +79,14 @@ func (c *configWatcher) markPendingEviction(pods, mismatched []*core.Pod) {
 			case pending:
 				return inactivation{Time: time.Now(), pending: true}, xsync.UpdateOp
 			case loaded && v.pending:
+				revealed = append(revealed, pod.UID)
 				return v, xsync.DeleteOp
 			default:
 				return v, xsync.CancelOp
 			}
 		})
 	}
+	c.revealed(revealed)
 }
 
 // finishRequest clears the request. The caller holds the state's lock.
