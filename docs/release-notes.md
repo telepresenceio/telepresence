@@ -14,6 +14,12 @@ With <code>agent.serviceMesh.dialSubnets</code> set, the traffic-manager panicke
 With <code>--env-syntax csh</code> or <code>csh:export</code>, values were quoted for a POSIX shell. A csh or tcsh sourcing the file failed with <code>Unmatched '.</code> when a value contained a newline, and with <code>Event not found</code> when it contained an exclamation mark, because csh ends a command at a newline and applies history substitution even within single quotes. Both characters are now escaped with a backslash, so the shell reads every value verbatim.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The Helm value agent.enableConsumptionMetrics can disable agent metrics</div></div>
+<div style="margin-left: 15px">
+
+Setting <code>agent.enableConsumptionMetrics</code> to <code>false</code> had no effect, because the chart treated a <code>false</code> value as unset and rendered its default of <code>true</code>. Traffic-agents kept sending consumption metrics to the traffic-manager whenever <code>prometheus.port</code> was set. The chart now passes <code>false</code> through.
+</div>
+
 ## Version 2.33.0 <span style="font-size: 16px;">(November  9)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemons listen on the loopback interface only</div></div>
 <div style="margin-left: 15px">
