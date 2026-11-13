@@ -241,8 +241,9 @@ spec:
           {{- end }}
           - name: AGENT_ENABLE_H2C_PROBING
             value: {{ (default false .enableH2cProbing) | quote }}
+          {{- /* `default` would turn an explicit false into true */}}
           - name: AGENT_CONSUMPTION_METRICS
-            value: {{ (default true .enableConsumptionMetrics) | quote }}
+            value: {{ ternary true .enableConsumptionMetrics (kindIs "invalid" .enableConsumptionMetrics) | quote }}
           {{- if .mountPolicies }}
           - name: AGENT_MOUNT_POLICIES
             value: '{{ toJson .mountPolicies }}'

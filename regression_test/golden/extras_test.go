@@ -74,3 +74,27 @@ func TestLogStreamingEnv(t *testing.T) {
 		}
 	})
 }
+
+// TestAgentConsumptionMetricsEnv asserts that agent.enableConsumptionMetrics
+// reaches AGENT_CONSUMPTION_METRICS as configured, including an explicit
+// false, and defaults to true when unset.
+func TestAgentConsumptionMetricsEnv(t *testing.T) {
+	cases := []struct {
+		name  string
+		agent map[string]any
+		want  string
+	}{
+		{"absent", map[string]any{}, "true"},
+		{"null", map[string]any{"enableConsumptionMetrics": nil}, "true"},
+		{"true", map[string]any{"enableConsumptionMetrics": true}, "true"},
+		{"false", map[string]any{"enableConsumptionMetrics": false}, "false"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			out := renderChart(t, map[string]any{"agent": c.agent})
+			if v := parseEnv(out[statefulsetTpl])["AGENT_CONSUMPTION_METRICS"]; v != c.want {
+				t.Errorf("AGENT_CONSUMPTION_METRICS = %q, want %q", v, c.want)
+			}
+		})
+	}
+}
