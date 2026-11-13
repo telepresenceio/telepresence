@@ -5,7 +5,7 @@
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Container replacements recover after client session cleanup</div></div>
 <div style="margin-left: 15px">
 
-When a client reconnects after session cleanup, the traffic-manager now restores the container replacement configuration and replaces pods with the old configuration. Failed restoration removes the incomplete session so a later reconnect can retry.
+When a client reconnects after session cleanup, the traffic-manager restores the container replacement and replaces pods with outdated configuration. Permanent replacement failures no longer block other intercepts, and temporary failures remain retryable. After a manager restart, recovery preserves configuration from surviving pods.
 </div>
 
 ## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Traffic-manager no longer panics when agent.serviceMesh.dialSubnets is set</div></div>

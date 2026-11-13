@@ -2,6 +2,7 @@ package state
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -19,6 +20,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	core "k8s.io/api/core/v1"
+	k8sErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/telepresenceio/clog"
@@ -30,6 +33,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/agentconfig"
 	"github.com/telepresenceio/telepresence/v2/pkg/agentmap"
 	"github.com/telepresenceio/telepresence/v2/pkg/cache"
+	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	grpcErrors "github.com/telepresenceio/telepresence/v2/pkg/grpc/errors"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/log"
@@ -680,7 +684,8 @@ func (s *State) RestoreAgents(agents []*rpc.AgentInfo, now time.Time) {
 // for which IsChildIntercept is true is skipped -- since WatchIntercepts
 // never sends a child to a client; every non-child entry has its children
 // re-derived instead from its own Spec.PodPorts. Container replacements also
-// restore their agent configuration before agents can review them. On error,
+// restore their agent configuration before agents can review them. Permanent
+// replacement failures are logged and skipped. On a retryable error,
 // the caller must remove the client session to clean up partial restoration.
 func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.InterceptInfo, now time.Time) error {
 	nodeAgentWatches := make(map[nodeAgentWatchKey]struct{})
@@ -690,27 +695,41 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 		if IsChildIntercept(spec) {
 			continue
 		}
-		var restoreErr error
-		is, _ := s.intercepts.Compute(intercept.Id, func(is *Intercept, loaded bool) (*Intercept, xsync.ComputeOp) {
-			if loaded {
-				return is, xsync.CancelOp
+		if is, loaded := s.intercepts.Load(intercept.Id); loaded {
+			s.restoreChildIntercepts(is, now)
+			continue
+		}
+		wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
+		if spec.Replace && !spec.NodeAgent && managerutil.AgentInjectorEnabled(ctx) {
+			if err == nil && spec.ContainerName != "" && !slices.ContainsFunc(wl.GetPodTemplate().Spec.Containers, func(cn core.Container) bool {
+				return cn.Name == spec.ContainerName
+			}) {
+				err = errcat.User.Newf("container %q no longer exists in %s", spec.ContainerName, wl)
 			}
-			is = &Intercept{InterceptInfo: intercept}
-			s.initializeParticipants(is)
-			wl, err := agentmap.GetWorkload(ctx, spec.Agent, spec.Namespace, k8sapi.Kind(spec.WorkloadKind))
-			if spec.Replace && !spec.NodeAgent && managerutil.AgentInjectorEnabled(ctx) {
+			if err == nil {
+				err = mutator.RestoreAgentConfig(ctx, wl)
+			}
+			if err == nil {
+				var sc *agentconfig.Sidecar
+				sc, err = s.getOrCreateAgentConfig(ctx, wl, s.isExtended(spec), false, spec, agentconfig.ReplacePolicyContainer)
 				if err == nil {
-					var sc *agentconfig.Sidecar
-					sc, err = s.getOrCreateAgentConfig(ctx, wl, s.isExtended(spec), false, spec, agentconfig.ReplacePolicyContainer)
-					if err == nil {
-						err = mutator.GetMap(ctx).EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
-					}
-				}
-				if err != nil {
-					restoreErr = fmt.Errorf("unable to restore replacement %q: %w", intercept.Id, err)
-					return nil, xsync.CancelOp
+					err = mutator.GetMap(ctx).EvictPodsWithAgentConfigMismatch(ctx, wl, sc)
 				}
 			}
+			if err != nil {
+				var unsupportedKind k8sapi.UnsupportedWorkloadKindError
+				if errcat.GetCategory(err) == errcat.User || errors.As(err, &unsupportedKind) ||
+					k8sErrors.IsNotFound(err) || k8sErrors.IsForbidden(err) || k8sErrors.IsUnauthorized(err) ||
+					k8sErrors.IsInvalid(err) || k8sErrors.IsBadRequest(err) {
+					clog.Warnf(ctx, "skipping restored replacement %q: %v", intercept.Id, err)
+					continue
+				}
+				return status.Errorf(codes.Unavailable, "unable to restore replacement %q: %v", intercept.Id, err)
+			}
+		}
+		is, _ := s.intercepts.LoadOrCompute(intercept.Id, func() *Intercept {
+			is := &Intercept{InterceptInfo: intercept}
+			s.initializeParticipants(is)
 			if err == nil && !spec.NodeAgent {
 				is.addFinalizer(func(ctx context.Context, interceptInfo *rpc.InterceptInfo) error {
 					return s.restoreAppContainer(ctx, interceptInfo, wl)
@@ -723,11 +742,8 @@ func (s *State) RestoreIntercepts(ctx context.Context, intercepts []*rpc.Interce
 			if serviceScopedIntercept(spec) {
 				serviceInterceptWatches[intercept.Id] = struct{}{}
 			}
-			return is, xsync.UpdateOp
+			return is
 		})
-		if restoreErr != nil {
-			return restoreErr
-		}
 		s.restoreChildIntercepts(is, now)
 	}
 	// The watches are started only after the intercepts are stored: a watcher
