@@ -86,9 +86,7 @@ func GetWorkload(ctx context.Context, name, namespace string, workloadKind k8sap
 		// creations. A NotFound from the cache is therefore not authoritative; the agent-injector
 		// webhook may be resolving the owner of a pod whose workload the cache hasn't observed yet.
 		// Confirm with a direct API call before concluding that the workload doesn't exist.
-		if wl, apiErr := k8sapi.GetWorkload(ctx, name, namespace, workloadKind); apiErr == nil {
-			return wl, nil
-		}
+		return k8sapi.GetWorkload(ctx, name, namespace, workloadKind)
 	}
 	return obj, err
 }

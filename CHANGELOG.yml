@@ -28,6 +28,13 @@ items:
     date: (TBD)
     notes:
       - type: bugfix
+        title: Container replacements recover after client session cleanup
+        body: >-
+          When a client reconnects after session cleanup, the traffic-manager restores
+          the container replacement and replaces pods with outdated configuration.
+          Permanent replacement failures no longer block other intercepts, and temporary failures remain retryable.
+          After a manager restart, recovery preserves configuration from surviving pods.
+      - type: bugfix
         title: Traffic-manager no longer panics when agent.serviceMesh.dialSubnets is set
         body: >-
           With <code>agent.serviceMesh.dialSubnets</code> set, the

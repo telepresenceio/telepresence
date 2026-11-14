@@ -133,6 +133,38 @@ func (c *configWatcher) SetConfigured() {
 	c.configured.Store(true)
 }
 
+// RestoreAgentConfig recovers a missing configuration from a surviving pod without
+// overwriting a configuration that another request has already restored.
+func RestoreAgentConfig(ctx context.Context, wl k8sapi.Workload) error {
+	mm := GetMap(ctx)
+	if mm.Get(wl.GetName(), wl.GetNamespace()) != nil {
+		return nil
+	}
+	pods, err := workloadPods(ctx, wl)
+	if err != nil {
+		return err
+	}
+	for _, pod := range pods {
+		cfgJSON := pod.Annotations[annotation.Config]
+		if pod.DeletionTimestamp != nil || cfgJSON == "" {
+			continue
+		}
+		sc, err := agentconfig.UnmarshalJSON(cfgJSON)
+		if err != nil {
+			clog.Errorf(ctx, "unable to unmarshal agent config from annotation in pod %s.%s: %v", pod.Name, pod.Namespace, err)
+			continue
+		}
+		_, err = mm.Update(wl.GetName(), wl.GetNamespace(), func(existing *agentconfig.Sidecar) (*agentconfig.Sidecar, error) {
+			if existing != nil {
+				return existing, nil
+			}
+			return sc, nil
+		})
+		return err
+	}
+	return nil
+}
+
 // RegenerateAgentMaps regenerates all agent configurations and requests the replacement of every pod
 // whose agent config annotation differs from the generated one.
 func (c *configWatcher) RegenerateAgentMaps(ctx context.Context, agentImage string) error {
