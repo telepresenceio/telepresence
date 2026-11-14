@@ -1363,7 +1363,11 @@ func (s *State) dropAgentConfig(
 	ctx context.Context,
 	wl k8sapi.Workload,
 ) {
-	mutator.GetMap(ctx).Delete(wl.GetName(), wl.GetNamespace())
+	mm := mutator.GetMap(ctx)
+	mm.Delete(wl.GetName(), wl.GetNamespace())
+	if err := mm.EvictPodsWithAgentConfig(ctx, wl); err != nil {
+		clog.Errorf(ctx, "failed to request removal of agents from %s: %v", wl, err)
+	}
 }
 
 func (s *State) restoreAppContainer(ctx context.Context, ii *rpc.InterceptInfo, wl k8sapi.Workload) error {
