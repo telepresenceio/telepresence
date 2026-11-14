@@ -1297,8 +1297,10 @@ matchExpressions:
 	ctx = informer.WithFactory(ctx, "")
 
 	configWatcher := config.NewWatcher(mgrNs)
+	watcherDone := make(chan struct{})
 	go func() {
-		if err := configWatcher.Run(ctx); err != nil {
+		defer close(watcherDone)
+		if err := configWatcher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			t.Error(err)
 		}
 	}()
@@ -1374,6 +1376,8 @@ matchExpressions:
 		if err := g.Wait(); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 			t.Error(err)
 		}
+		cancel()
+		<-watcherDone
 	})
 	return conn, mgr, ctx
 }

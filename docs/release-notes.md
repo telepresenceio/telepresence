@@ -44,6 +44,12 @@ The traffic-manager patches a workload to restart it through its controller when
 When a traffic-agent did not arrive within <code>timeouts.agentArrival</code> (for example because of a slow image pull or a slow init container), the traffic-manager kept evicting the workload's pods until <code>telepresence uninstall</code> was run. It now stops once the pods are back without an agent. A pod whose agent the traffic-manager turned away is also replaced at once instead of staying unready for several minutes.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Clients no longer miss a traffic-agent that arrives while they connect</div></div>
+<div style="margin-left: 15px">
+
+A traffic-agent that registered with the traffic-manager at the moment a client started watching for agents could be left out of what the client was told. The client then did not know about that pod until something else about it changed, which could make an intercept time out.
+</div>
+
 ## Version 2.33.0 <span style="font-size: 16px;">(November  9)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemons listen on the loopback interface only</div></div>
 <div style="margin-left: 15px">

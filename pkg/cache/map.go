@@ -3,7 +3,6 @@ package cache
 import (
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,7 +42,6 @@ type subscription[K comparable, V any] struct {
 	channel     chan Delta[K, V]
 	include     func(K, V) bool
 	initialized bool
-	mark        atomic.Bool
 	doneCh      <-chan struct{}
 	closed      bool
 }
@@ -60,6 +58,7 @@ func (sb *subscription[K, V]) close() {
 type Map[K comparable, V any] struct {
 	*xsync.Map[K, V]
 	snapLock    sync.Mutex
+	notifyLock  sync.Mutex
 	snapshot    map[K]V
 	equal       func(V, V) bool
 	subscribers *xsync.Map[uuid.UUID, *subscription[K, V]]
@@ -101,7 +100,6 @@ func (m *Map[K, V]) Subscribe(done <-chan struct{}, includeFilter func(K, V) boo
 
 		id := uuid.New()
 		sb := &subscription[K, V]{include: includeFilter, channel: ch, doneCh: done}
-		sb.mark.Store(true)
 		m.subscribers.Store(id, sb)
 
 		// Fire notifier immediately to send the snapshot.
@@ -136,11 +134,9 @@ func (m *Map[K, V]) Compute(key K, f func(V, bool) (V, xsync.ComputeOp)) (V, boo
 				op = xsync.CancelOp
 			} else {
 				modified = true
-				m.markSubscribers(key, fv)
 			}
 		case xsync.DeleteOp:
 			modified = true
-			m.markSubscribers(key, v)
 		}
 		return fv, op
 	})
@@ -262,7 +258,7 @@ func (m *Map[K, V]) Store(key K, value V) {
 // Renotify sends the current value of key to the subscribers again, as an upsert, even though the
 // value is unchanged. It does nothing if the key is absent.
 func (m *Map[K, V]) Renotify(key K) {
-	value, ok := m.Load(key)
+	_, ok := m.Load(key)
 	if !ok {
 		return
 	}
@@ -275,37 +271,20 @@ func (m *Map[K, V]) Renotify(key K) {
 		}
 	}
 	m.snapshot = snapshot
-	// Marking under the lock ensures that the delta that reports the upsert is built after the marks are set.
-	m.markSubscribers(key, value)
 	m.snapLock.Unlock()
 	m.notifier.Reset(m.notifyDelay)
 }
 
-// markSubscribers marks all subscribers interested in the given key and value binding.
-func (m *Map[K, V]) markSubscribers(key K, value V) {
+// notify sends the changes since the previous notify to all subscribers. Calls are serialized so that
+// each subscriber receives the deltas in order.
+func (m *Map[K, V]) notify() {
+	m.notifyLock.Lock()
+	defer m.notifyLock.Unlock()
+	delta := m.makeDelta()
 	m.subscribers.Range(func(_ uuid.UUID, sb *subscription[K, V]) bool {
-		// Don't run the filter if the subscriber is marked already.
-		if !sb.mark.Load() && (sb.include == nil || sb.include(key, value)) {
-			sb.mark.Store(true)
-		}
+		delta.send(sb)
 		return true
 	})
-}
-
-// notify will send a snapshot to all subscribers that have been marked.
-func (m *Map[K, V]) notify() {
-	// We need to loop until all marked snapshots have been sent, because new marks may be added during sending.
-	delta := m.makeDelta()
-	for didSend := true; didSend; {
-		didSend = false
-		m.subscribers.Range(func(_ uuid.UUID, sb *subscription[K, V]) bool {
-			if sb.mark.CompareAndSwap(true, false) {
-				delta.send(sb)
-				didSend = true
-			}
-			return true
-		})
-	}
 }
 
 type allDelta[K comparable, V any] struct {
