@@ -117,14 +117,14 @@ func workloadKey(ns string, tpl workloads.Template) string {
 	}
 	return fmt.Sprintf("workload|%s|%s|%s|%d|%s|%s|headless=%t|noservice=%t|udp=%t|extra=%s|annotations=%s|"+
 		"resources=%s,%s,%s,%s|appprotocol=%s|configvolume=%s,%s,%s,%s|env=%s|extracontainers=%s|"+
-		"maxunavailable=%d|minavailable=%d|readydelay=%d",
+		"maxunavailable=%d|minavailable=%d|readydelay=%d|initdelay=%d",
 		ns, tpl.Name, tpl.Kind, tpl.Replicas, tpl.Image, tpl.SvcName,
 		tpl.Headless, tpl.NoService, tpl.UDP, strings.Join(extra, ","), strings.Join(annos, ","),
 		tpl.Resources.Requests.CPU, tpl.Resources.Requests.Memory,
 		tpl.Resources.Limits.CPU, tpl.Resources.Limits.Memory, tpl.AppProtocol,
 		tpl.ConfigVolume.Name, tpl.ConfigVolume.Key, tpl.ConfigVolume.Content, tpl.ConfigVolume.MountPath,
 		strings.Join(env, ","), strings.Join(extraContainers, ";"),
-		tpl.MaxUnavailable, tpl.MinAvailable, tpl.ReadyDelaySeconds)
+		tpl.MaxUnavailable, tpl.MinAvailable, tpl.ReadyDelaySeconds, tpl.InitDelaySeconds)
 }
 
 func provisionWorkload(e Env, ns string, tpl workloads.Template) (*Workload, error) {

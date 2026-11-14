@@ -92,6 +92,10 @@ type Template struct {
 	// Rendered for the Deployment kind only. The pod's termination grace
 	// period is 1 second.
 	ReadyDelaySeconds int
+	// InitDelaySeconds, when non-zero, adds a "slow-init" init container
+	// that sleeps that many seconds, so every new pod takes at least that
+	// long to start. Rendered for the Deployment kind only.
+	InitDelaySeconds int
 }
 
 // SlowReadyImage is the image of the sidecar rendered by ReadyDelaySeconds;
