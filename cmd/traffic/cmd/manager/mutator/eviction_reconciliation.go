@@ -58,7 +58,7 @@ func (c *configWatcher) requestEviction(ctx context.Context, wl k8sapi.Workload,
 	}
 	state.wanted = wanted
 	if pods, err := workloadPods(ctx, wl); err == nil {
-		c.markPendingEviction(pods, podsWithAgentConfigMismatch(ctx, pods, wanted))
+		c.markPendingEviction(key, pods, podsWithAgentConfigMismatch(ctx, pods, wanted))
 	} else {
 		clog.Debugf(ctx, "Unable to list pods of %s: %v", wl, err)
 	}
@@ -68,7 +68,7 @@ func (c *configWatcher) requestEviction(ctx context.Context, wl k8sapi.Workload,
 
 // markPendingEviction hides the agents of the mismatched pods until a pass evicts them, and shows
 // the agents of the other pods again if an earlier pass hid them.
-func (c *configWatcher) markPendingEviction(pods, mismatched []*core.Pod) {
+func (c *configWatcher) markPendingEviction(key WorkloadKey, pods, mismatched []*core.Pod) {
 	var revealed []types.UID
 	for _, pod := range pods {
 		pending := slices.Contains(mismatched, pod)
@@ -77,7 +77,9 @@ func (c *configWatcher) markPendingEviction(pods, mismatched []*core.Pod) {
 			case loaded && v.deleted:
 				return v, xsync.CancelOp
 			case pending:
-				return inactivation{Time: time.Now(), pending: true}, xsync.UpdateOp
+				return inactivation{Time: time.Now(), pending: true, refused: v.refused && v.pending, key: key}, xsync.UpdateOp
+			case loaded && v.pending && v.refused:
+				return v, xsync.CancelOp
 			case loaded && v.pending:
 				revealed = append(revealed, pod.UID)
 				return v, xsync.DeleteOp
@@ -173,8 +175,15 @@ func (c *configWatcher) reconcileLocked(ctx context.Context, key WorkloadKey, st
 		return true, err
 	}
 	mismatched := podsWithAgentConfigMismatch(ctx, pods, state.wanted)
-	c.markPendingEviction(pods, mismatched)
+	c.markPendingEviction(key, pods, mismatched)
+	var handled bool
+	if mismatched, handled, err = c.evictRefused(ctx, wl, pods, mismatched); err != nil {
+		return true, err
+	}
 	if len(mismatched) == 0 {
+		if handled {
+			return true, nil
+		}
 		clog.Debugf(ctx, "All pods of %s carry the wanted agent config", wl)
 		return false, nil
 	}
@@ -210,6 +219,35 @@ func (c *configWatcher) reconcileLocked(ctx context.Context, key WorkloadKey, st
 	state.rolloutGeneration = wl.GetGeneration()
 	state.resetDeferral()
 	return true, nil
+}
+
+// evictRefused evicts the pending pods whose agent was refused, outside the availability budget, and
+// returns mismatched without the evicted pods. handled is true if any such pod was attempted.
+func (c *configWatcher) evictRefused(ctx context.Context, wl k8sapi.Workload, pods, mismatched []*core.Pod) (rest []*core.Pod, handled bool, err error) {
+	var refusedPods []*core.Pod
+	for _, pod := range pods {
+		if pod.DeletionTimestamp.IsZero() && c.isRefused(pod.UID) {
+			refusedPods = append(refusedPods, pod)
+		}
+	}
+	if len(refusedPods) == 0 {
+		return mismatched, false, nil
+	}
+	evicted, _, err := c.evictBatch(ctx, refusedPods, len(refusedPods))
+	if err != nil {
+		return mismatched, true, err
+	}
+	if evicted > 0 {
+		clog.Debugf(ctx, "Evicted %d pods of %s whose agent was refused", evicted, wl)
+	}
+	return slices.DeleteFunc(slices.Clone(mismatched), func(pod *core.Pod) bool {
+		return slices.ContainsFunc(refusedPods, func(r *core.Pod) bool { return r.UID == pod.UID }) && c.isEvicted(pod.UID)
+	}), true, nil
+}
+
+func (c *configWatcher) isRefused(podID types.UID) bool {
+	v, ok := c.inactivePods.Load(podID)
+	return ok && v.pending && v.refused && !v.deleted
 }
 
 // budgetRefused records that the disruption budget refused to evict pod and reports whether it has

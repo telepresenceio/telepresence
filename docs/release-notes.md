@@ -32,6 +32,12 @@ Setting <code>agent.enableConsumptionMetrics</code> to <code>false</code> had no
 Ending a <code>replace</code> or a <code>compose</code> session, reconnecting, and starting it again before the workload's new pod was ready could fail with "the intercept timed out". The traffic-manager reused the pod but never told the reconnected client about it. It now announces the pod again.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Pods no longer restart endlessly after an agent arrival timeout</div></div>
+<div style="margin-left: 15px">
+
+When a traffic-agent did not arrive within <code>timeouts.agentArrival</code> (for example because of a slow image pull or a slow init container), the traffic-manager kept evicting the workload's pods until <code>telepresence uninstall</code> was run. It now stops once the pods are back without an agent. A pod whose agent the traffic-manager turned away is also replaced at once instead of staying unready for several minutes.
+</div>
+
 ## Version 2.33.0 <span style="font-size: 16px;">(November  9)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemons listen on the loopback interface only</div></div>
 <div style="margin-left: 15px">

@@ -880,7 +880,7 @@ func (s *State) IsInterceptedBy(agent *AgentSession, client tunnel.SessionID) (f
 // Sessions: Agents ////////////////////////////////////////////////////////////////////////////////
 
 func (s *State) AddAgent(ctx context.Context, agent *rpc.AgentInfo, principal *auth.Principal, now time.Time) (tunnel.SessionID, error) {
-	if mutator.GetMap(ctx).IsInactive(types.UID(agent.PodUid)) {
+	if mutator.GetMap(ctx).RefuseAgent(types.UID(agent.PodUid)) {
 		return "", status.Error(codes.Aborted, "inactivated pod")
 	}
 	return s.RestoreAgent(ctx, tunnel.SessionID(AgentSessionIDPrefix+agent.PodUid), agent, principal, now)
