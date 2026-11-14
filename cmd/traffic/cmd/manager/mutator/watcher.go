@@ -37,6 +37,9 @@ type Map interface {
 	Wait(context.Context) error
 	DeleteMapsAndRolloutAll(context.Context)
 	IsInactive(podID types.UID) bool
+	// RefuseAgent reports whether the pod is inactive. When the pod is pending eviction, its refused
+	// agent will not return, so the pod is queued for immediate eviction.
+	RefuseAgent(podID types.UID) bool
 	Inactivate(podID types.UID)
 	EvictPodsWithAgentConfig(ctx context.Context, wl k8sapi.Workload) error
 	EvictPodsWithAgentConfigMismatch(ctx context.Context, wl k8sapi.Workload, sc *agentconfig.Sidecar) error
@@ -256,6 +259,10 @@ type inactivation struct {
 	deleted bool
 	// pending is set while a reconcile pass is still to evict the pod.
 	pending bool
+	// refused is set when the agent of a pending pod was refused.
+	refused bool
+	// key is the workload of a pending pod.
+	key WorkloadKey
 }
 
 func (c *configWatcher) namespaceAgentConfigs(namespace string) *xsync.Map[string, *agentconfig.Sidecar] {
@@ -654,6 +661,27 @@ func (c *configWatcher) Inactivate(podID types.UID) {
 func (c *configWatcher) IsInactive(podID types.UID) bool {
 	_, ok := c.inactivePods.Load(podID)
 	return ok
+}
+
+func (c *configWatcher) RefuseAgent(podID types.UID) bool {
+	var (
+		inactive bool
+		queue    bool
+		key      WorkloadKey
+	)
+	c.inactivePods.Compute(podID, func(v inactivation, loaded bool) (inactivation, xsync.ComputeOp) {
+		inactive = loaded
+		if !loaded || !v.pending || v.deleted {
+			return v, xsync.CancelOp
+		}
+		v.refused = true
+		queue, key = true, v.key
+		return v, xsync.UpdateOp
+	})
+	if queue {
+		c.evictionQueue.Add(key)
+	}
+	return inactive
 }
 
 func (c *configWatcher) isEvicted(podID types.UID) bool {

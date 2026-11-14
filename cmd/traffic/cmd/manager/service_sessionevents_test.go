@@ -417,6 +417,13 @@ func (m *revealingMap) IsInactive(podID types.UID) bool {
 	return ok || m.Map.IsInactive(podID)
 }
 
+func (m *revealingMap) RefuseAgent(podID types.UID) bool {
+	m.mu.Lock()
+	_, ok := m.hidden[podID]
+	m.mu.Unlock()
+	return ok || m.Map.RefuseAgent(podID)
+}
+
 func (m *revealingMap) SetRevealHandler(h func(types.UID)) {
 	m.mu.Lock()
 	m.handler = h
