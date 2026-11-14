@@ -70,6 +70,14 @@ items:
           was ready could fail with "the intercept timed out". The
           traffic-manager reused the pod but never told the reconnected
           client about it. It now announces the pod again.
+      - type: bugfix
+        title: Clients no longer miss a traffic-agent that arrives while they connect
+        body: >-
+          A traffic-agent that registered with the traffic-manager at the
+          moment a client started watching for agents could be left out of
+          what the client was told. The client then did not know about that
+          pod until something else about it changed, which could make an
+          intercept time out.
   - version: 2.33.0
     date: 2026-11-09
     notes:
