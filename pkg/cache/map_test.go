@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -104,4 +105,69 @@ func TestRenotifyDoesNotMutateSubscriberSnapshot(t *testing.T) {
 	m.Renotify("a")
 	receive(t, first)
 	require.Equal(t, map[string]string{"a": "1"}, initial)
+}
+
+func hasUpsert(d Delta[string, string], k string) bool {
+	_, ok := d.Upserts[k]
+	return ok
+}
+
+func awaitUpsert(ch <-chan Delta[string, string], k string) bool {
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case d, ok := <-ch:
+			if !ok {
+				return false
+			}
+			if hasUpsert(d, k) {
+				return true
+			}
+		case <-timeout:
+			return false
+		}
+	}
+}
+
+func TestStoreRacingSubscribeIsDelivered(t *testing.T) {
+	for i := 0; i < 300; i++ {
+		m := newStringMap()
+		done := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(1)
+		start := make(chan struct{})
+		go func() {
+			defer wg.Done()
+			<-start
+			m.Store("k", "v")
+		}()
+		close(start)
+		ch := m.Subscribe(done, nil)
+		require.Truef(t, awaitUpsert(ch, "k"), "iteration %d: upsert lost", i)
+		wg.Wait()
+		close(done)
+	}
+}
+
+func TestStoreRacingSubscribeReachesExistingSubscriber(t *testing.T) {
+	for i := 0; i < 300; i++ {
+		m := newStringMap()
+		done := make(chan struct{})
+		first := m.Subscribe(done, nil)
+		receive(t, first)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		start := make(chan struct{})
+		go func() {
+			defer wg.Done()
+			<-start
+			m.Store("k", "v")
+		}()
+		close(start)
+		second := m.Subscribe(done, nil)
+		require.Truef(t, awaitUpsert(first, "k"), "iteration %d: existing subscriber lost upsert", i)
+		require.Truef(t, awaitUpsert(second, "k"), "iteration %d: new subscriber lost upsert", i)
+		wg.Wait()
+		close(done)
+	}
 }

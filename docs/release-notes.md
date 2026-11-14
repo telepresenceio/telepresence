@@ -32,6 +32,12 @@ Setting <code>agent.enableConsumptionMetrics</code> to <code>false</code> had no
 Ending a <code>replace</code> or a <code>compose</code> session, reconnecting, and starting it again before the workload's new pod was ready could fail with "the intercept timed out". The traffic-manager reused the pod but never told the reconnected client about it. It now announces the pod again.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Clients no longer miss a traffic-agent that arrives while they connect</div></div>
+<div style="margin-left: 15px">
+
+A traffic-agent that registered with the traffic-manager at the moment a client started watching for agents could be left out of what the client was told. The client then did not know about that pod until something else about it changed, which could make an intercept time out.
+</div>
+
 ## Version 2.33.0 <span style="font-size: 16px;">(November  9)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemons listen on the loopback interface only</div></div>
 <div style="margin-left: 15px">
