@@ -173,7 +173,8 @@ for now.
 - `managers.Default` plus parameterized specs (`NodeAgent()`,
   `InjectorDisabled()`, `InjectPolicy(p)`, `CertRegen(m)`,
   `StaticNamespaces(ns...)`, `QuicNodePort()`, `AuthEnforcing()`,
-  `UsageTo(addr)`, `ClientConfig(key, values)`, `Compat(version)`).
+  `UsageTo(addr)`, `AgentArrivalTimeout(d)`, `ClientConfig(key, values)`,
+  `Compat(version)`).
   Every spec is Baseline + overlay; Baseline pins debug logging, the image
   coordinates, test RBAC, and `usage.enabled=false`. Usage statistics are
   off by default on both sides; the only test that enables them points the
@@ -183,9 +184,10 @@ for now.
   `EchoNoService` (carries the inject-container-ports annotation),
   `EchoMultiPort`, `EchoReplicas`, `EchoWithConfigVolume`; templates take
   `Annotations`, `Resources`, `AppProtocol`, `MaxUnavailable` (Deployment
-  rolling-update setting), `MinAvailable` (adds a PodDisruptionBudget) and
+  rolling-update setting), `MinAvailable` (adds a PodDisruptionBudget),
   `ReadyDelaySeconds` (Deployment only: adds a sidecar that keeps the pod
-  not Ready for that long).
+  not Ready for that long) and `InitDelaySeconds` (Deployment only: adds an
+  init container that sleeps that long).
 - **No hard-coded ports.** Local listeners bind `:0` (`s.LocalEcho()`);
   the only fixed numbers are external facts (the echo image's 8080, a
   NodePort under test) and must say so.
