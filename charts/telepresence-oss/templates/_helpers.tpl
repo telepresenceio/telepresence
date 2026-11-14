@@ -264,7 +264,7 @@ RBAC rules for workload kinds enabled via values.workloads.*.enabled
   - get
   - list
   - watch
-{{- if $.Values.agentInjector.enabled }}
+{{- if and $.Values.agentInjector.enabled (dig "patchWorkloads" true $.Values.managerRbac) }}
   - patch
 {{- end }}
 {{- end }}

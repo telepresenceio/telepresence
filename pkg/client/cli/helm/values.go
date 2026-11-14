@@ -442,8 +442,9 @@ type LogStreaming struct {
 
 // ManagerRbac configures the RBAC resources rendered for the traffic-manager itself.
 type ManagerRbac struct {
-	Create     *bool    `json:"create,omitzero"`
-	Namespaces []string `json:"namespaces,omitzero"`
+	Create         *bool    `json:"create,omitzero"`
+	PatchWorkloads *bool    `json:"patchWorkloads,omitzero"`
+	Namespaces     []string `json:"namespaces,omitzero"`
 }
 
 // NodeAgent configures node-hosted traffic-agent mode.

@@ -32,6 +32,12 @@ Setting <code>agent.enableConsumptionMetrics</code> to <code>false</code> had no
 Ending a <code>replace</code> or a <code>compose</code> session, reconnecting, and starting it again before the workload's new pod was ready could fail with "the intercept timed out". The traffic-manager reused the pod but never told the reconnected client about it. It now announces the pod again.
 </div>
 
+## <div style="display:flex;"><img src="images/feature.png" alt="feature" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[The traffic-manager's permission to patch workloads can be omitted](reference/rbac)</div></div>
+<div style="margin-left: 15px">
+
+The traffic-manager patches a workload to restart it through its controller when its pods can't be evicted, for example because a PodDisruptionBudget keeps refusing. With a dynamic <code>namespaceSelector</code>, that permission is granted cluster-wide. The new Helm value <code>managerRbac.patchWorkloads</code> (default <code>true</code>) can be set to <code>false</code> to omit it, so that it can be granted with a Role and RoleBinding in only the namespaces that need it.
+</div>
+
 ## Version 2.33.0 <span style="font-size: 16px;">(November  9)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemons listen on the loopback interface only</div></div>
 <div style="margin-left: 15px">
