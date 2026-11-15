@@ -21,16 +21,15 @@ Here is an example configuration to show you the conventions of how Telepresence
 ```yaml
 client:
   timeouts:
-    agentInstall: 1m
+    helm: 1m
     intercept: 10s
   logLevels:
     userDaemon: debug
   images:
-    registry: privateRepo # This overrides the default docker.io/datawire repo
+    registry: privateRepo # This overrides the default ghcr.io/telepresenceio registry
     agentImage: tel2:$version$ # This overrides the agent image to inject when attaching to a workload
   grpc:
     maxReceiveSize: 10Mi
-    connectionTTL: 48h
   dns:
     includeSuffixes: [.private]
     excludeSuffixes: [.se, .com, .io, .net, .org, .ru]
@@ -49,8 +48,10 @@ Values for `client.cluster` controls aspects on how client's connection to the t
 |---------------------------|---------------------------------------------------------------------------------------|---------------------------------------------|-----------------|
 | `defaultManagerNamespace` | The default namespace where the Traffic Manager will be installed.                    | [string][yaml-str]                          | ambassador      |
 | `mappedNamespaces`        | Namespaces that will be mapped by default.                                            | [sequence][yaml-seq] of [strings][yaml-str] | `[]`            |
-| `connectFromRootDaeamon`  | Make connections to the cluster directly from the root daemon.                        | [boolean][yaml-bool]                        | `true`          |
 | `agentPortForward`        | Let telepresence-client use port-forwards directly to agents                          | [boolean][yaml-bool]                        | `true`          |
+| `forceSPDY`               | Use SPDY instead of WebSockets for port-forwards to the cluster                       | [boolean][yaml-bool]                        | `false`         |
+| `managerAddress`          | Address of an [external endpoint](external-endpoint.md) to dial the Traffic Manager on, instead of using a port-forward, e.g. `tls://tm.example.com:443` | [string][yaml-str] | (unset) |
+| `managerServerCA`         | CA that the `managerAddress` server certificate must be signed by: a PEM block, a base64-encoded PEM block, or the path of a file containing one. When unset, the system trust roots are used | [string][yaml-str] | (unset) |
 
 > [!CAUTION]
 > Setting `agentPortForward` to `false` disables all direct communication between the client and
@@ -74,7 +75,8 @@ Values for the `client.docker` provides docker specific options.
 
 | Field            | Description                                                                           | Type                  | Default         |
 |------------------|---------------------------------------------------------------------------------------|-----------------------|-----------------|
-| `addHostGateway` | Add `--add-host host.docker.internal:host-gateway` when starting the daemon in docker | [boolean][yaml-bool]  | `true` on linux |
+| `addHostGateway` | Add `--add-host <hostGateway>:host-gateway` when starting the daemon in docker        | [boolean][yaml-bool]  | `true` on linux |
+| `hostGateway`    | Host name that the daemon container uses to reach the host. A value other than the default is always added with `--add-host` | [string][yaml-str] | `host.docker.internal` |
 | `telemount`      | Configuration of the image containing the telemount Docker volume plugin              | Image                 |                 |
 | `teleroute`      | Configuration of the image containing the teleroute Docker network plugin             | Image                 |                 |
 | `enableIPv4`     | Enable support for IPv4 networking                                                    | [boolean][yaml-bool]  | `true`          |
@@ -94,7 +96,7 @@ does not support this for anonymous users, hence the default tags.
 | `registry`    | The name of the registry                         | [string][yaml-str] | `ghcr.io`             |
 | `namespace`   | The namespace of the component                   | [string][yaml-str] | `telepresenceio`      |
 | `repository`  | The name of the component registry               | [string][yaml-str] | `telemount/teleroute` |
-| `tag`         | The component tag                                | [string][yaml-str] | `0.1.6/0.3.0`         |
+| `tag`         | The component tag                                | [string][yaml-str] | `0.3.2/0.5.0`         |
 
 ### DNS
 
@@ -105,7 +107,7 @@ The fields for `client.dns` are: `localAddresses`, `excludeSuffixes`, `includeSu
 | Field              | Description                                                                                                                                                         | Type                                        | Default                                            |
 |--------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------|----------------------------------------------------|
 | `localAddresses`   | Addresses of local DNS servers. This entry is only used on Linux systems that are not configured to use systemd-resolved.                                          | [sequence][yaml-seq] of address:port values | first `nameserver` mentioned in `/etc/resolv.conf` |
-| `excludeSuffixes`  | Suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver). Can be globally configured in the Helm chart.                | [sequence][yaml-seq] of [strings][yaml-str] | `[".arpa", ".com", ".io", ".net", ".org", ".ru"]`  |
+| `excludeSuffixes`  | Suffixes for which the DNS resolver will always fail (or fallback in case of the overriding resolver). Can be globally configured in the Helm chart.                | [sequence][yaml-seq] of [strings][yaml-str] | `[".com", ".io", ".net", ".org", ".ru"]`          |
 | `includeSuffixes`  | Suffixes for which the DNS resolver will always attempt to do a lookup.  Includes have higher priority than excludes. Can be globally configured in the Helm chart. | [sequence][yaml-seq] of [strings][yaml-str] | `[]`                                               |
 | `excludes`         | Names to be excluded by the DNS resolver                                                                                                                            | `[]`                                        |                                                    |
 | `mappings`         | Names to be resolved to other names (CNAME records) or to explicit IP addresses                                                                                     | `[]`                                        |                                                    |
@@ -172,10 +174,16 @@ The `client.helm` object contains options for the `telepresence helm` commands
 
 All traffic to and from the cluster is tunneled via gRPC over a kubernetes port-forward connection.
 
-| Field             | Description                                                                                  | Type                                      | Default  |
-|-------------------|----------------------------------------------------------------------------------------------|-------------------------------------------|----------|
-| `connectionTTL`   | Max time that the traffic-manager or traffic-agent will keep an idle client connection alive | [duration][go-duration]                   | `24h`    |
-| `maxReceiveSize`  | Max size of a gRPC message.                                                                  | Docker registry name [quantity][quantity] | `4Mi`    |
+| Field                | Description                                                                                         | Type                    | Default  |
+|----------------------|-----------------------------------------------------------------------------------------------------|-------------------------|----------|
+| `maxReceiveSize`     | Max size of a gRPC message.                                                                         | [quantity][quantity]    | `4Mi`    |
+| `pingInterval`       | Interval between the pings that keep the client's session with the Traffic Manager alive           | [duration][go-duration] | `1m`     |
+| `watchRetryInterval` | Time to wait before retrying a watch stream from the Traffic Manager that ended with an error       | [duration][go-duration] | `10s`    |
+| `daemonPort`         | Port of the user daemon inside the container when connecting with `--docker`                        | [int][yaml-int]         | `4038`   |
+| `teleroutePort`      | Port that the teleroute Docker network plugin connects to inside the daemon container               | [int][yaml-int]         | `4039`   |
+
+The time that the Traffic Manager and the Traffic Agents keep an idle client connection alive is not a client setting.
+Set it with the Helm chart value `grpc.connectionTTL`.
 
 ### Images
 Values for `client.images` are strings. These values affect the objects that are deployed in the cluster,
@@ -185,9 +193,10 @@ These are the valid fields for the `client.images` key:
 
 | Field         | Description                                                                              | Type                                           | Default                             |
 |---------------|------------------------------------------------------------------------------------------|------------------------------------------------|-------------------------------------|
-| `registry`    | Docker registry to be used for installing the Traffic Manager and default Traffic Agent. | Docker registry name [string][yaml-str]        | `docker.io/datawire`                |
+| `registry`    | Docker registry to be used for installing the Traffic Manager and default Traffic Agent. | Docker registry name [string][yaml-str]        | `ghcr.io/telepresenceio`            |
 | `agentImage`  | `$registry/$imageName:$imageTag` to use when installing the Traffic Agent.               | qualified Docker image name [string][yaml-str] | (unset)                             |
-| `clientImage` | `$registry/$imageName:$imageTag` to use locally when connecting with `--docker`.         | qualified Docker image name [string][yaml-str] | `$registry/ambassador-telepresence` |
+| `webhookRegistry` | Docker registry of the Traffic Agent image when installing the Traffic Manager. Defaults to the registry of `agentImage` | Docker registry name [string][yaml-str] | (unset) |
+| `clientImage` | `$registry/$imageName:$imageTag` to use locally when connecting with `--docker`.         | qualified Docker image name [string][yaml-str] | `$registry/telepresence:$version`   |
 
 ### Intercept
 
@@ -195,11 +204,12 @@ The `intercept` controls applies to how Telepresence will intercept the communic
 
 | Field         | Description                                                                                                           | Type                 | Default    |
 |---------------|-----------------------------------------------------------------------------------------------------------------------|----------------------|------------|
-| `defaultPort` | controls which port is selected when no `--port` flag is given to the `telepresence intercept` command                | [int][yaml-int]      | 8080       |
+| `defaultPort` | controls which port is selected when no `--port` flag is given to the `telepresence intercept` command. When unset, the port of the targeted container is used | [int][yaml-int]      | (unset)    |
 | `useFtp`      | Use fuseftp instead of sshfs when mounting remote file systems                                                        | [boolean][yaml-bool] | false      |
 | `localShortcut` | Connect local traffic to destinations covered by the client's own intercepts directly to the local intercept handler instead of tunneling to the cluster | [boolean][yaml-bool] | true       |
 | `localShortcutIsGlobal` | Apply the local shortcut to all intercepts, including those with header or path filters                      | [boolean][yaml-bool] | true       |
 | `mountsRoot`  | Directory that will be used as the root for all automatically generated mount directories (not applicable on windows) | [string][yaml-str]   | env:TMPDIR |
+| `mountCompletionDelay` | Time to wait for remote mounts to complete before starting a container that uses them, e.g. with `telepresence intercept --docker-run` | [duration][go-duration] | `300ms` |
 | `sshfsPath`   | Path of the sshfs executable (the `sshfs-win` launcher on Windows). When unset, `sshfs` is found on `PATH`; on Windows, `sshfs-win` is found on `PATH` or in SSHFS-Win's installation directory under Program Files | [string][yaml-str]   |            |
 
 #### Local shortcut
@@ -316,7 +326,6 @@ These are the valid fields for the `client.routing` key:
 | `alsoProxySubnets`        | Proxy these subnets in addition to the service and pod subnets                         | [CIDR][cidr]            |                    |
 | `neverProxySubnets`       | Do not proxy these subnets                                                             | [CIDR][cidr]            |                    |
 | `allowConflictingSubnets` | Give Telepresence precedence when these subnets conflict with other network interfaces | [CIDR][cidr]            |                    |
-| `recursionBlockDuration`  | Prevent recursion in VIF for this duration after a connect                             | [duration][go-duration] |                    |
 | `virtualSubnet`           | The CIDR to use when generating virtual IPs                                            | [CIDR][cidr]            | platform dependent |
 | `autoResolveConflicts`    | Auto resolve conflicts using a virtual subnet                                          | [bool][yaml-bool]       | true               |
 
@@ -331,11 +340,11 @@ These are the valid fields for the `timeouts` key:
 
 | Field                   | Description                                                                        | Type                                                                                                    | Default         |
 |-------------------------|------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------|-----------------|
-| `agentInstall`          | Waiting for Traffic Agent to be installed                                          | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 2 minutes       |
-| `apply`                 | Waiting for a Kubernetes manifest to be applied                                    | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 1 minute        |
 | `clusterConnect`        | Waiting for cluster to be connected                                                | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 20 seconds      |
 | `connectivityCheck`     | Timeout used when checking if cluster is already proxied on the workstation        | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 500 ms (max 5s) |
+| `containerShutdown`     | Grace period for a container that Telepresence stops, such as a `--docker-run` handler, before it is killed. Zero uses Docker's default | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 0 |
 | `endpointDial`          | Waiting for a Dial to a service for which the IP is known                          | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 15 seconds      |
+| `ftpReadWrite`          | Read and write timeout of the FTP client used for remote mounts when `intercept.useFtp` is `true` | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 1 minute |
 | `roundtripLatency`      | How much to add  to the endpointDial timeout when establishing a remote connection | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 2 seconds       |
 | `interceptEndpointDial` | Waiting for a Dial to the local endpoint of an intercept                           | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 15 seconds      |
 | `intercept`             | Waiting for an intercept to become active                                          | [int][yaml-int] or [float][yaml-float] number of seconds, or [duration][go-duration] [string][yaml-str] | 30 seconds      |
@@ -445,12 +454,12 @@ Here is an example configuration to show you the conventions of how Telepresence
 
 ```yaml
 timeouts:
-  agentInstall: 1m
+  helm: 1m
   intercept: 10s
 logLevels:
   userDaemon: debug
 images:
-  registry: privateRepo # This overrides the default docker.io/datawire repo
+  registry: privateRepo # This overrides the default ghcr.io/telepresenceio registry
   agentImage: tel2:$version$ # This overrides the agent image to inject when attaching to a workload
 grpc:
   maxReceiveSize: 10Mi
@@ -484,8 +493,8 @@ clusters:
           includeSuffixes: [.private]
           excludeSuffixes: [.se, .com, .io, .net, .org, .ru]
         routing:
-          neverProxy: [10.0.0.0/16]
-          alsoProxy: [10.0.5.0/24]
+          neverProxySubnets: [10.0.0.0/16]
+          alsoProxySubnets: [10.0.5.0/24]
   name: example-cluster
 ```
 
