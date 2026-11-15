@@ -260,6 +260,12 @@ against the caller's verified identity — so granting them confers nothing
 outside Telepresence. `clientRbac.ruleExtras` appends additional rules to
 these Roles.
 
+Under `enforcing` mode, the `attachments` grant also decides what a client
+sees. A client with the grant for a whole namespace sees every workload in
+it. A client whose grant is scoped with `resourceNames` sees only the
+workloads it names, and a client without a grant sees none. See
+[Authorization of namespace content](authentication.md#authorization-of-namespace-content).
+
 There is no manager relay for agent traffic. Without direct
 `pods/portforward` in the namespace, an attachment there needs the
 [QUIC transport](quic-transport.md); without either, the intercept, replace,

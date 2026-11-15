@@ -167,6 +167,18 @@ func NamespaceReview(namespace string) *Review {
 	}
 }
 
+// NamespaceReadReview is the Review authorizing reads of everything in
+// namespace: an unnamed attachments review for either create or get, which a
+// grant scoped with resourceNames never matches.
+func NamespaceReadReview(namespace string) *Review {
+	r := NamespaceReview(namespace)
+	r.Subject = "create or get attachments"
+	get := *r.Attributes[0]
+	get.Verb = "get"
+	r.Attributes = append(r.Attributes, &get)
+	return r
+}
+
 // Authorize reviews r for p under required: GrantPortForward consults only
 // the legacy pods/portforward grant, GrantTelepresence only r.Attributes,
 // and GrantAny accepts either, logging r.Migration when only the legacy

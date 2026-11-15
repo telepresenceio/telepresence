@@ -101,6 +101,20 @@ items:
           what the client was told. The client then did not know about that
           pod until something else about it changed, which could make an
           intercept time out.
+      - type: security
+        title: Namespace content is only shown to authorized clients in enforcing mode
+        body: >-
+          With <code>security.authentication.mode</code> set to
+          <code>enforcing</code>, a client that was allowed to connect could
+          still read workload and traffic-agent details, generated agent
+          configuration, and service addresses in namespaces where its
+          Kubernetes identity held no Telepresence grant. This included the
+          namespace given to <code>telepresence connect</code>. The
+          traffic-manager now reviews the caller's access before it returns
+          such data, and shows a client with grants on individual workloads
+          only those workloads. This closes
+          <a href="https://github.com/telepresenceio/telepresence/security/advisories/GHSA-xq23-3fhh-qcrx">GHSA-xq23-3fhh-qcrx</a>.
+        docs: reference/authentication
   - version: 2.33.0
     date: 2026-11-09
     notes:

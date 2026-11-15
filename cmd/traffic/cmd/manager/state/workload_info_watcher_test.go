@@ -111,7 +111,7 @@ func TestWorkloadInfoWatcherDoesNotDetachBlockedSend(t *testing.T) {
 	}
 	result := make(chan error, 1)
 	go func() {
-		result <- s.NewWorkloadInfoWatcher(sessionID, "default").Watch(ctx, stream)
+		result <- s.NewWorkloadInfoWatcher(sessionID, "default", nil).Watch(ctx, stream)
 	}()
 
 	select {
@@ -161,7 +161,7 @@ func TestWorkloadInfoWatcherReturnsStreamSendError(t *testing.T) {
 	result := make(chan error, 1)
 	go func() {
 		stream := errorWorkloadStream{noopWorkloadStream: noopWorkloadStream{ctx: ctx}, err: wantErr}
-		result <- s.NewWorkloadInfoWatcher(sessionID, "default").Watch(ctx, stream)
+		result <- s.NewWorkloadInfoWatcher(sessionID, "default", nil).Watch(ctx, stream)
 	}()
 
 	select {
@@ -196,7 +196,7 @@ func TestWorkloadInfoWatcherBlockedSendChurnCleansUp(t *testing.T) {
 		}
 		result := make(chan error, 1)
 		go func() {
-			result <- s.NewWorkloadInfoWatcher(sessionID, "default").Watch(watchCtx, stream)
+			result <- s.NewWorkloadInfoWatcher(sessionID, "default", nil).Watch(watchCtx, stream)
 		}()
 		select {
 		case <-stream.started:

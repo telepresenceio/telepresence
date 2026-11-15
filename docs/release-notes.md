@@ -50,6 +50,12 @@ When a traffic-agent did not arrive within <code>timeouts.agentArrival</code> (f
 A traffic-agent that registered with the traffic-manager at the moment a client started watching for agents could be left out of what the client was told. The client then did not know about that pod until something else about it changed, which could make an intercept time out.
 </div>
 
+## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Namespace content is only shown to authorized clients in enforcing mode](reference/authentication)</div></div>
+<div style="margin-left: 15px">
+
+With <code>security.authentication.mode</code> set to <code>enforcing</code>, a client that was allowed to connect could still read workload and traffic-agent details, generated agent configuration, and service addresses in namespaces where its Kubernetes identity held no Telepresence grant. This included the namespace given to <code>telepresence connect</code>. The traffic-manager now reviews the caller's access before it returns such data, and shows a client with grants on individual workloads only those workloads. This closes <a href="https://github.com/telepresenceio/telepresence/security/advisories/GHSA-xq23-3fhh-qcrx">GHSA-xq23-3fhh-qcrx</a>.
+</div>
+
 ## Version 2.33.0 <span style="font-size: 16px;">(November  9)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemons listen on the loopback interface only</div></div>
 <div style="margin-left: 15px">

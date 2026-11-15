@@ -23,6 +23,10 @@ RBAC.
 - **Intercept creation is authorized.** Creating an intercept requires the
   caller's Kubernetes identity to actually have RBAC access to the target
   namespace.
+- **Namespace content is authorized.** In `enforcing` mode, the
+  traffic-manager shows a caller the workloads, traffic-agents, and agent
+  configuration of a namespace only where the caller's Kubernetes identity
+  holds a Telepresence grant.
 
 The net effect: a workload with mere network reachability to the
 traffic-manager can no longer intercept arbitrary namespaces or act on other
@@ -89,6 +93,38 @@ only matches RBAC grants that are themselves unscoped; a grant restricted with
 `resourceNames` never matches an unnamed review. Checking each pod by name
 means `resourceNames`-scoped grants work too, as long as the workload's pods
 already exist when the intercept is created.
+
+## Authorization of namespace content
+
+A connected client asks the traffic-manager for data about namespaces: the
+workload list behind `telepresence list`, the traffic-agent pods it can
+attach through, the agent configuration of a workload, and the address of
+a service port. In `enforcing` mode the traffic-manager reviews the
+caller's access before it answers. The namespace given to
+`telepresence connect` is reviewed like any other.
+
+The review has two levels:
+
+1. **The whole namespace.** The caller may `create` or `get`
+   `attachments.telepresence.io` in the namespace, or holds the legacy
+   `pods/portforward` grant there. Everything in the namespace is shown.
+2. **Individual workloads.** If the first review is denied, a workload and
+   its traffic-agent pods are shown only when the caller holds the grant
+   for that workload by name. This is what a Role scoped with
+   `resourceNames` gives.
+
+A caller without any grant in a namespace gets an empty list from it, not
+an error. Two calls are refused with `PermissionDenied` instead: reading
+the agent configuration of a workload the caller holds no grant for, and
+resolving a named service port without a grant for the whole namespace.
+With grants on individual workloads only, give service ports as numbers.
+
+A verdict is kept for the lifetime of the session. A changed grant takes
+effect when the client reconnects.
+
+Connecting gives network access to what the traffic-manager can reach, and
+name resolution for it, in every namespace. Use NetworkPolicy to restrict
+that; see [This does not replace network controls](#this-does-not-replace-network-controls).
 
 ## Modes
 
