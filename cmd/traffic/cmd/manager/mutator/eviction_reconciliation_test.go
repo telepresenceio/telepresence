@@ -461,3 +461,103 @@ func TestRevealHandlerFiresWhenPendingEntryExpires(t *testing.T) {
 	assert.Equal(t, []types.UID{pod.UID}, *got)
 	assert.False(t, f.cw.IsInactive(pod.UID))
 }
+
+func TestDroppedAgentConfigStopsEvictions(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, wantedJSON, _ := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	deployment := stableDeployment(ns, name, 3, nil)
+	bare := []*core.Pod{
+		agentPod(ns, "echo-bare-0", name, k8sapi.DeploymentKind, "", true),
+		agentPod(ns, "echo-bare-1", name, k8sapi.DeploymentKind, "", true),
+	}
+	withAgent := agentPod(ns, "echo-agent", name, k8sapi.DeploymentKind, wantedJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind},
+		deployment, bare[0], bare[1], withAgent)
+	f.evictionsSucceed()
+
+	wl := k8sapi.Deployment(deployment)
+	key := workloadKeyOf(wl)
+	require.NoError(t, f.cw.EvictPodsWithAgentConfigMismatch(f.ctx, wl, wanted))
+
+	// What the manager does when no agent arrives in time.
+	f.cw.Delete(name, ns)
+	require.NoError(t, f.cw.EvictPodsWithAgentConfig(f.ctx, wl))
+
+	pending, err := f.cw.reconcile(f.ctx, key)
+	require.NoError(t, err)
+	assert.True(t, pending)
+	assert.Equal(t, int32(1), f.evictions.Load(), "only the pod with an agent is evicted")
+	assert.True(t, f.cw.isEvicted(withAgent.UID))
+	for _, pod := range bare {
+		assert.False(t, f.cw.isEvicted(pod.UID))
+	}
+
+	f.removeFromStore(withAgent)
+	pending, err = f.cw.reconcile(f.ctx, key)
+	require.NoError(t, err)
+	assert.False(t, pending)
+	assert.Equal(t, int32(1), f.evictions.Load())
+	state := f.cw.lockEvictionState(key)
+	assert.False(t, state.requested)
+	assert.Nil(t, state.wanted)
+	state.Unlock()
+}
+
+func TestRefusedAgentPodIsEvictedOutsideBudget(t *testing.T) {
+	f, wl := degradedDeployment(t, testutil.NewContext(t, false))
+	key := workloadKeyOf(wl)
+	notReady := types.UID("echo-0")
+
+	pending, err := f.cw.reconcile(f.ctx, key)
+	require.NoError(t, err)
+	require.True(t, pending)
+	assert.Zero(t, f.evictions.Load(), "pacing defers while a replica is unavailable")
+
+	require.True(t, f.cw.RefuseAgent(notReady))
+	pending, err = f.cw.reconcile(f.ctx, key)
+	require.NoError(t, err)
+	assert.True(t, pending)
+	assert.Equal(t, int32(1), f.evictions.Load())
+	assert.True(t, f.cw.isEvicted(notReady))
+	for _, id := range []types.UID{"echo-1", "echo-2", "echo-3"} {
+		assert.False(t, f.cw.isEvicted(id))
+	}
+}
+
+func TestRefuseAgentOnUnknownAndPlainlyInactivePods(t *testing.T) {
+	f, _ := degradedDeployment(t, testutil.NewContext(t, false))
+	assert.False(t, f.cw.RefuseAgent("nobody"))
+
+	f.cw.Inactivate("plain")
+	assert.True(t, f.cw.RefuseAgent("plain"))
+	assert.Equal(t, 1, f.cw.evictionQueue.Len(), "only the request itself is queued")
+	v, _ := f.cw.inactivePods.Load("plain")
+	assert.False(t, v.refused)
+}
+
+func TestRefusedPodStaysHiddenUntilEvicted(t *testing.T) {
+	const ns, name = "default", "echo"
+	wanted, _, staleJSON := agentConfigs(t, ns, name, k8sapi.DeploymentKind)
+	older := wanted.Clone()
+	older.ManagerHost = "traffic-manager.old"
+	deployment := stableDeployment(ns, name, 1, nil)
+	pod := agentPod(ns, "echo-0", name, k8sapi.DeploymentKind, staleJSON, true)
+	f := newEvictionFixture(t, testutil.NewContext(t, false), k8sapi.Kinds{k8sapi.DeploymentKind}, deployment, pod)
+	f.evictionsSucceed()
+
+	wl := k8sapi.Deployment(deployment)
+	key := workloadKeyOf(wl)
+	f.cw.requestEviction(f.ctx, wl, wanted)
+	require.True(t, f.cw.RefuseAgent(pod.UID))
+
+	// The pod matches the wanted config again, but its agent is gone for good.
+	f.cw.requestEviction(f.ctx, wl, older)
+	assert.True(t, f.cw.IsInactive(pod.UID))
+	assert.False(t, f.cw.isEvicted(pod.UID))
+
+	pending, err := f.cw.reconcile(f.ctx, key)
+	require.NoError(t, err)
+	assert.True(t, pending, "a later pass confirms the end state")
+	assert.True(t, f.cw.isEvicted(pod.UID))
+	assert.Equal(t, int32(1), f.evictions.Load())
+}

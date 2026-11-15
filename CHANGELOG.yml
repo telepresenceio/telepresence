@@ -25,7 +25,7 @@
 # For older changes, see CHANGELOG.OLD.md
 items:
   - version: 2.33.1
-    date: (TBD)
+    date: 2026-11-14
     notes:
       - type: bugfix
         title: Container replacements recover after client session cleanup
@@ -82,6 +82,17 @@ items:
           it can be granted with a Role and RoleBinding in only the namespaces
           that need it.
         docs: reference/rbac
+      - type: bugfix
+        title: Pods no longer restart endlessly after an agent arrival timeout
+        body: >-
+          When a traffic-agent did not arrive within
+          <code>timeouts.agentArrival</code> (for example because of a slow
+          image pull or a slow init container), the traffic-manager kept
+          evicting the workload's pods until <code>telepresence
+          uninstall</code> was run. It now stops once the pods are back
+          without an agent. A pod whose agent the traffic-manager turned
+          away is also replaced at once instead of staying unready for
+          several minutes.
   - version: 2.33.0
     date: 2026-11-09
     notes:

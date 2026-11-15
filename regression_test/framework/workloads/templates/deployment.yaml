@@ -96,6 +96,13 @@ spec:
 {{- if .ReadyDelaySeconds }}
       terminationGracePeriodSeconds: 1
 {{- end }}
+{{- if .InitDelaySeconds }}
+      initContainers:
+        - name: slow-init
+          image: {{ .SlowReadyImage }}
+          imagePullPolicy: IfNotPresent
+          command: [sh, -c, 'sleep {{ .InitDelaySeconds }}']
+{{- end }}
       containers:
 {{- if .ReadyDelaySeconds }}
         - name: slow-ready

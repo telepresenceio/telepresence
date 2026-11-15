@@ -43,6 +43,16 @@ func CertRegen(accessMethod string) Spec {
 	}
 }
 
+// AgentArrivalTimeout returns a manager spec that sets timeouts.agentArrival
+// to d (a Go duration string such as "5s"). The Key is parameterized so
+// specs with different timeouts hash differently.
+func AgentArrivalTimeout(d string) Spec {
+	return Spec{
+		Key:    "agent-arrival-timeout/" + d,
+		Values: Values{Timeouts: Timeouts{AgentArrival: d}},
+	}
+}
+
 // StaticNamespaces returns a manager spec that manages exactly ns via a
 // static namespaces list instead of the default namespaceSelector; Merge
 // nulls NamespaceSelector when Namespaces is set (see values.go), so this
