@@ -71,9 +71,11 @@ type ClientSession struct {
 	sessionState
 	consumptionMetrics *SessionConsumptionMetrics
 
-	// authorizedNamespaces caches this session's authorized-namespace probe
-	// outcomes, keyed by namespace name. See AuthorizedNamespace.
-	authorizedNamespaces *xsync.Map[string, bool]
+	// readableNamespaces and readableWorkloads cache this session's read
+	// access probe outcomes, keyed by namespace and by namespace/workload.
+	// See ReadAccess.
+	readableNamespaces *xsync.Map[string, bool]
+	readableWorkloads  *xsync.Map[string, bool]
 
 	// logStreamActive is set while this session has a StreamLogs call open.
 	// It lives exactly as long as this ClientSession, so a lost session
@@ -87,10 +89,11 @@ func (cs *ClientSession) ConsumptionMetrics() *SessionConsumptionMetrics {
 
 func newClientSessionState(ctx context.Context, id tunnel.SessionID, ci *rpc.ClientInfo, ts time.Time) *ClientSession {
 	return &ClientSession{
-		ClientInfo:           ci,
-		sessionState:         newSessionState(ctx, id, ts),
-		consumptionMetrics:   NewSessionConsumptionMetrics(),
-		authorizedNamespaces: xsync.NewMap[string, bool](),
+		ClientInfo:         ci,
+		sessionState:       newSessionState(ctx, id, ts),
+		consumptionMetrics: NewSessionConsumptionMetrics(),
+		readableNamespaces: xsync.NewMap[string, bool](),
+		readableWorkloads:  xsync.NewMap[string, bool](),
 	}
 }
 

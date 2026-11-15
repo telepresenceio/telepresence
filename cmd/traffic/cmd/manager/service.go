@@ -239,6 +239,9 @@ func (s *service) GetAgentConfig(ctx context.Context, request *rpc.AgentConfigRe
 	if err != nil {
 		return nil, err
 	}
+	if err := s.authorizeEnsureAgent(ctx, namespace, request.Name); err != nil {
+		return nil, err
+	}
 	scs, err := s.State().GetOrGenerateAgentConfig(ctx, request.Name, namespace)
 	if err != nil {
 		return nil, err
@@ -741,6 +744,35 @@ func (s *service) createAgentPodWatchers(ctx context.Context, namespaces []strin
 	return agentsCh, interceptsCh, sessionDone
 }
 
+// mayReadAgent reports whether the session may see the agent pod. The error
+// is non-nil only when a review could not be performed (Unavailable).
+func (s *service) mayReadAgent(ctx context.Context, clientInfo *state.ClientSession, a *state.AgentSession) (bool, error) {
+	access, err := s.readAccess(ctx, clientInfo, a.Namespace)
+	if err != nil {
+		return false, err
+	}
+	return access.Allows(a.Name)
+}
+
+// checkReadAccess performs the namespace review of each namespace, so that an
+// Unavailable review fails the watch before it starts.
+func (s *service) checkReadAccess(ctx context.Context, clientInfo *state.ClientSession, namespaces []string) error {
+	for _, ns := range namespaces {
+		if _, err := s.readAccess(ctx, clientInfo, ns); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// unavailableCause returns the Unavailable error that canceled ctx, or nil.
+func unavailableCause(ctx context.Context) error {
+	if c := context.Cause(ctx); status.Code(c) == codes.Unavailable {
+		return c
+	}
+	return nil
+}
+
 // WatchAgentPods notifies a client of the set of known Agents.
 func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentPodInfoSnapshot]) error {
 	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), session)
@@ -751,12 +783,25 @@ func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream grpc.ServerStr
 	if err != nil {
 		return err
 	}
-	return s.watchAgentPods(ctx, namespaces, stream)
+	return s.watchAgentPods(ctx, clientInfo, namespaces, stream)
 }
 
-func (s *service) watchAgentPods(ctx context.Context, namespaces []string, stream grpc.ServerStreamingServer[rpc.AgentPodInfoSnapshot]) error {
+func (s *service) watchAgentPods(ctx context.Context, clientInfo *state.ClientSession, namespaces []string, stream grpc.ServerStreamingServer[rpc.AgentPodInfoSnapshot]) error {
+	if err := s.checkReadAccess(ctx, clientInfo, namespaces); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	clientSessionID := managerutil.GetSessionID(ctx)
 	agentsCh, interceptsCh, sessionDone := s.createAgentPodWatchers(ctx, namespaces)
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-sessionDone:
+		case <-ctx.Done():
+		}
+		close(done)
+	}()
 	agentSessions := cache.NewClientMap[tunnel.SessionID, *state.AgentSession]()
 
 	interceptInfos := cache.NewClientMap[string, *state.Intercept]()
@@ -768,8 +813,15 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 		defer lock.Unlock()
 		m := mutator.GetMap(ctx)
 		agents := make([]*rpc.AgentPodInfo, 0, agentSessions.Size())
+		var readErr error
 		agentSessions.Range(func(id tunnel.SessionID, a *state.AgentSession) bool {
 			if m.IsInactive(types.UID(a.PodUid)) {
+				return true
+			}
+			if ok, err := s.mayReadAgent(ctx, clientInfo, a); err != nil {
+				readErr = err
+				return false
+			} else if !ok {
 				return true
 			}
 			aip, parseErr := netip.ParseAddr(a.PodIp)
@@ -790,6 +842,9 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 			agents = append(agents, ap)
 			return true
 		})
+		if readErr != nil {
+			return readErr
+		}
 		if !slices.Equal(lastAgents, agents) {
 			lastAgents = agents
 			err = stream.Send(&rpc.AgentPodInfoSnapshot{Agents: agents})
@@ -798,9 +853,15 @@ func (s *service) watchAgentPods(ctx context.Context, namespaces []string, strea
 	}
 
 	go func() {
-		_ = interceptInfos.Watch(sessionDone, interceptsCh, onChanged)
+		if err := interceptInfos.Watch(done, interceptsCh, onChanged); err != nil {
+			cancel(err)
+		}
 	}()
-	return agentSessions.Watch(sessionDone, agentsCh, onChanged)
+	err := agentSessions.Watch(done, agentsCh, onChanged)
+	if err == nil {
+		err = unavailableCause(ctx)
+	}
+	return err
 }
 
 func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
@@ -816,7 +877,7 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 	if err != nil {
 		return err
 	}
-	return s.watchAgentPodsDelta(ctx, namespaces, stream)
+	return s.watchAgentPodsDelta(ctx, clientInfo, namespaces, stream)
 }
 
 func (s *service) WatchAgentPodsInNamespacesDelta(request *rpc.AgentsRequest, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
@@ -832,7 +893,7 @@ func (s *service) WatchAgentPodsInNamespacesDelta(request *rpc.AgentsRequest, st
 	if err != nil {
 		return err
 	}
-	return s.watchAgentPodsDelta(ctx, namespaces, stream)
+	return s.watchAgentPodsDelta(ctx, clientInfo, namespaces, stream)
 }
 
 // agentPodProjection folds AgentSession deltas into a debounced, deduped map
@@ -841,14 +902,23 @@ func (s *service) WatchAgentPodsInNamespacesDelta(request *rpc.AgentsRequest, st
 // Intercepted flag (state.IsInterceptedBy) and QuicSni (quicSNIForAgent).
 type agentPodProjection struct {
 	s               *service
+	clientInfo      *state.ClientSession
+	cancel          context.CancelCauseFunc
 	clientSessionID tunnel.SessionID
 	m               mutator.Map
 	agentPodInfos   *cache.Map[string, *rpc.AgentPodInfo]
 }
 
-func (s *service) newAgentPodProjection(ctx context.Context, clientSessionID tunnel.SessionID) *agentPodProjection {
+func (s *service) newAgentPodProjection(
+	ctx context.Context,
+	cancel context.CancelCauseFunc,
+	clientInfo *state.ClientSession,
+	clientSessionID tunnel.SessionID,
+) *agentPodProjection {
 	return &agentPodProjection{
 		s:               s,
+		clientInfo:      clientInfo,
+		cancel:          cancel,
 		clientSessionID: clientSessionID,
 		m:               mutator.GetMap(ctx),
 		agentPodInfos: cache.NewMap[string, *rpc.AgentPodInfo](func(a *rpc.AgentPodInfo, b *rpc.AgentPodInfo) bool {
@@ -858,7 +928,8 @@ func (s *service) newAgentPodProjection(ctx context.Context, clientSessionID tun
 }
 
 // run starts the goroutine that folds agentsCh deltas into the projection.
-// It exits when ctx is done or sessionDone is closed.
+// It exits when ctx is done or sessionDone is closed. A review that cannot be
+// performed cancels ctx with the Unavailable error as the cause.
 func (p *agentPodProjection) run(ctx context.Context, sessionDone <-chan struct{}, agentsCh <-chan cache.Delta[tunnel.SessionID, *state.AgentSession]) {
 	go func() {
 		for {
@@ -870,6 +941,12 @@ func (p *agentPodProjection) run(ctx context.Context, sessionDone <-chan struct{
 			case delta := <-agentsCh:
 				for k, a := range delta.Upserts {
 					if p.m.IsInactive(types.UID(a.PodUid)) {
+						continue
+					}
+					if ok, err := p.s.mayReadAgent(ctx, p.clientInfo, a); err != nil {
+						p.cancel(err)
+						return
+					} else if !ok {
 						continue
 					}
 					aip, parseErr := netip.ParseAddr(a.PodIp)
@@ -926,17 +1003,22 @@ func (p *agentPodProjection) subscribe(done <-chan struct{}) <-chan cache.Delta[
 	return p.agentPodInfos.Subscribe(done, nil)
 }
 
-func (s *service) watchAgentPodsDelta(ctx context.Context, namespaces []string, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
+func (s *service) watchAgentPodsDelta(ctx context.Context, clientInfo *state.ClientSession, namespaces []string, stream grpc.ServerStreamingServer[rpc.AgentPodInfoDelta]) error {
+	if err := s.checkReadAccess(ctx, clientInfo, namespaces); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	clientSessionID := managerutil.GetSessionID(ctx)
 	agentsCh, interceptsCh, sessionDone := s.createAgentPodWatchers(ctx, namespaces)
-	proj := s.newAgentPodProjection(ctx, clientSessionID)
+	proj := s.newAgentPodProjection(ctx, cancel, clientInfo, clientSessionID)
 	proj.run(ctx, sessionDone, agentsCh)
 
 	agentPodInfosCh := proj.subscribe(ctx.Done())
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return unavailableCause(ctx)
 		case <-sessionDone:
 			return nil
 		case <-interceptsCh:
@@ -1310,9 +1392,14 @@ func (s *service) WatchSessionEvents(request *rpc.SessionEventsRequest, stream g
 		sort.Strings(namespaces)
 	}
 
+	if err := s.checkReadAccess(ctx, clientInfo, namespaces); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	clientSessionID := managerutil.GetSessionID(ctx)
 	agentsCh, refreshCh, sessionDone := s.createAgentPodWatchers(ctx, namespaces)
-	proj := s.newAgentPodProjection(ctx, clientSessionID)
+	proj := s.newAgentPodProjection(ctx, cancel, clientInfo, clientSessionID)
 	proj.run(ctx, sessionDone, agentsCh)
 	agentPodInfosCh := proj.subscribe(ctx.Done())
 
@@ -1324,7 +1411,7 @@ func (s *service) WatchSessionEvents(request *rpc.SessionEventsRequest, stream g
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return unavailableCause(ctx)
 		case <-sessionDone:
 			return nil
 		case <-refreshCh:
@@ -1569,12 +1656,19 @@ func (s *service) authorizeEnsureAgent(ctx context.Context, namespace, workloadN
 	})
 }
 
-// authorizeNamespace reports whether the caller may attach to anything in
-// namespace, not any specific workload.
-func (s *service) authorizeNamespace(ctx context.Context, namespace string) error {
-	return s.authorized(ctx, fmt.Sprintf("watch workloads in namespace %s", namespace), func(p *auth.Principal) error {
-		return s.authorizer.Authorize(ctx, s.authGrant, p, auth.NamespaceReview(namespace))
-	})
+// readAccess returns the caller's read access to namespace. Outside enforcing
+// mode authorized never fails, so everything is readable. The error is
+// non-nil only when a review cannot be performed (Unavailable).
+func (s *service) readAccess(ctx context.Context, clientInfo *state.ClientSession, namespace string) (state.ReadAccess, error) {
+	return clientInfo.ReadAccess(namespace,
+		func() error {
+			return s.authorized(ctx, fmt.Sprintf("read namespace %s", namespace), func(p *auth.Principal) error {
+				return s.authorizer.Authorize(ctx, s.authGrant, p, auth.NamespaceReadReview(namespace))
+			})
+		},
+		func(workloadName string) error {
+			return s.authorizeEnsureAgent(ctx, namespace, workloadName)
+		})
 }
 
 // workloadPodNames returns the names of the current pods of the workload
@@ -2167,6 +2261,13 @@ func (s *service) ResolveServicePort(ctx context.Context, request *rpc.ResolveSe
 	if err != nil {
 		return nil, err
 	}
+	access, err := s.readAccess(ctx, client, ns)
+	if err != nil {
+		return nil, err
+	}
+	if !access.All() {
+		return nil, status.Errorf(codes.PermissionDenied, "namespace-wide read access to namespace %s is required to resolve service ports", ns)
+	}
 	ip, sp, err := k8sapi.ResolveServicePort(ctx, request.Service, ns, request.Port, core.Protocol(request.Protocol))
 	if err != nil {
 		return nil, errors.FromError(err, codes.FailedPrecondition, err.Error())
@@ -2331,19 +2432,14 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream grpc
 	namespace := request.Namespace
 	if namespace == "" {
 		namespace = clientInfo.Namespace
-	} else {
-		if !s.State().ManagesNamespace(ctx, namespace) {
-			return status.Error(codes.FailedPrecondition, fmt.Sprintf("namespace %s is not managed", namespace))
-		}
-		// A namespace named explicitly (unlike the connected one) must pass
-		// the authorized-namespace probe, cached per session.
-		if err := clientInfo.AuthorizedNamespace(namespace, func() error {
-			return s.authorizeNamespace(ctx, namespace)
-		}); err != nil {
-			return err
-		}
+	} else if !s.State().ManagesNamespace(ctx, namespace) {
+		return status.Error(codes.FailedPrecondition, fmt.Sprintf("namespace %s is not managed", namespace))
 	}
-	ww := s.state.NewWorkloadInfoWatcher(clientSession, namespace)
+	access, err := s.readAccess(ctx, clientInfo, namespace)
+	if err != nil {
+		return err
+	}
+	ww := s.state.NewWorkloadInfoWatcher(clientSession, namespace, access.Allows)
 	return ww.Watch(ctx, stream)
 }
 

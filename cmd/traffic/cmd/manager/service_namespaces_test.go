@@ -60,8 +60,8 @@ func loggingContextSync(ctx context.Context, buf *syncBuffer) context.Context {
 }
 
 // This file covers WatchNamespaces' session validation and streamed set,
-// and the authorized-namespace probe WatchWorkloads applies to an
-// explicitly named namespace, including its per-session cache.
+// and the read-access probe WatchWorkloads applies to a namespace, including
+// its per-session cache.
 
 // fakeServerStream is a minimal grpc.ServerStreamingServer[T], giving a
 // test full control over the request context rather than whatever a real
@@ -165,8 +165,9 @@ func TestWatchNamespaces_StreamsManagedSet(t *testing.T) {
 }
 
 // TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing: a denied namespace
-// probe fails the watch with PermissionDenied and is then cached, so a
-// repeat request produces no additional SubjectAccessReview.
+// probe filters the workload list down to nothing instead of failing the
+// watch, and is then cached, so a repeat request produces no additional
+// SubjectAccessReview.
 func TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -204,15 +205,27 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_Enforcing(t *testing.T) {
 
 	request := &rpc.WorkloadEventsRequest{SessionInfo: sess, Namespace: "default"}
 
-	err = mgr.WatchWorkloads(request, newFakeServerStream[rpc.WorkloadEventsDelta](pctx))
-	req.Error(err)
-	req.Equal(codes.PermissionDenied, status.Code(err))
-	req.Equal(1, countAttachReviews(), "one review per enabled workload kind for the first probe")
+	runWatch := func() {
+		wctx, cancel := context.WithCancel(pctx)
+		defer cancel()
+		stream := newFakeServerStream[rpc.WorkloadEventsDelta](wctx)
+		errCh := make(chan error, 1)
+		go func() { errCh <- mgr.WatchWorkloads(request, stream) }()
+		select {
+		case d := <-stream.ch:
+			req.Empty(d.Events)
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for the initial workload delta")
+		}
+		cancel()
+		req.NoError(<-errCh, "a denied caller must get an empty list, not an error")
+	}
 
-	err = mgr.WatchWorkloads(request, newFakeServerStream[rpc.WorkloadEventsDelta](pctx))
-	req.Error(err)
-	req.Equal(codes.PermissionDenied, status.Code(err))
-	req.Equal(1, countAttachReviews(), "a cached denial must not trigger another review")
+	runWatch()
+	req.Equal(2, countAttachReviews(), "one create and one get review for the first probe")
+
+	runWatch()
+	req.Equal(2, countAttachReviews(), "a cached denial must not trigger another review")
 }
 
 // TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing: outside
@@ -272,11 +285,11 @@ func TestWatchWorkloads_ExplicitNamespace_Denied_NotEnforcing(t *testing.T) {
 
 	req.NoError(runWatch(), "a denied probe outside ModeEnforcing must not fail the watch")
 	req.True(buf.Contains("not enforced"), "a denied namespace probe must warn rather than block the watch")
-	req.Equal(1, countAttachReviews(), "one review per enabled workload kind for the first probe")
+	req.Equal(2, countAttachReviews(), "one create and one get review for the first probe")
 
 	buf.Reset()
 	req.NoError(runWatch())
-	req.Equal(1, countAttachReviews(), "a cached verdict must not trigger another review")
+	req.Equal(2, countAttachReviews(), "a cached verdict must not trigger another review")
 	req.False(buf.Contains("not enforced"), "the cached verdict already warned; a repeat watch must not warn again")
 }
 

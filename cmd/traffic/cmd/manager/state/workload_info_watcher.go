@@ -29,6 +29,8 @@ type workloadInfoWatcher struct {
 	*State
 	clientSession  tunnel.SessionID
 	namespace      string
+	allow          func(workloadName string) (bool, error)
+	sentOnce       bool
 	stream         grpc.ServerStreamingServer[rpc.WorkloadEventsDelta]
 	workloadEvents *xsync.Map[string, *rpc.WorkloadEvent]
 	lastEvents     map[string]*rpc.WorkloadEvent
@@ -36,11 +38,14 @@ type workloadInfoWatcher struct {
 	sendTimer      *time.Timer
 }
 
-func (s *State) NewWorkloadInfoWatcher(clientSession tunnel.SessionID, namespace string) WorkloadInfoWatcher {
+// NewWorkloadInfoWatcher creates a watcher of the workloads in namespace.
+// When allow is non-nil, only events for workloads that it accepts are sent.
+func (s *State) NewWorkloadInfoWatcher(clientSession tunnel.SessionID, namespace string, allow func(workloadName string) (bool, error)) WorkloadInfoWatcher {
 	return &workloadInfoWatcher{
 		State:         s,
 		clientSession: clientSession,
 		namespace:     namespace,
+		allow:         allow,
 	}
 }
 
@@ -138,7 +143,20 @@ func (wf *workloadInfoWatcher) sendEvents(ctx context.Context, sendEmpty bool) e
 	evz := wf.workloadEvents.Size()
 	evs := make([]*rpc.WorkloadEvent, 0, evz)
 	evm := make(map[string]*rpc.WorkloadEvent, evz)
+	filtered := false
+	var allowErr error
 	wf.workloadEvents.Range(func(k string, rew *rpc.WorkloadEvent) bool {
+		if wf.allow != nil {
+			ok, err := wf.allow(k)
+			if err != nil {
+				allowErr = err
+				return false
+			}
+			if !ok {
+				filtered = true
+				return true
+			}
+		}
 		evm[k] = rew
 		if lew, ok := wf.lastEvents[k]; ok {
 			if proto.Equal(lew, rew) {
@@ -148,10 +166,14 @@ func (wf *workloadInfoWatcher) sendEvents(ctx context.Context, sendEmpty bool) e
 		evs = append(evs, rew)
 		return true
 	})
+	if allowErr != nil {
+		return allowErr
+	}
 	wf.workloadEvents.Clear()
 	wf.lastEvents = evm
 
-	if !sendEmpty && len(evs) == 0 {
+	// A caller that is denied every workload still gets its initial snapshot.
+	if !sendEmpty && len(evs) == 0 && (wf.sentOnce || !filtered) {
 		return nil
 	}
 	clog.Debugf(ctx, "Sending %d WorkloadEvents", len(evs))
@@ -164,6 +186,7 @@ func (wf *workloadInfoWatcher) sendEvents(ctx context.Context, sendEmpty bool) e
 		return err
 	}
 	wf.start = time.Now()
+	wf.sentOnce = true
 	return nil
 }
 
