@@ -12,7 +12,7 @@ cluster admin can review and apply. Nothing is ever applied by the command itsel
 telepresence rbac generate install [--input values.yaml] [--subject KIND:NAME]... [--verbs install|lifecycle] [--all]
 telepresence rbac generate client  --subject KIND:NAME... [--namespace NS]... [--input values.yaml] [--format rbac|values]
 telepresence rbac verify   install [--input values.yaml] [--verbs install|lifecycle]
-telepresence rbac verify   client  [--namespace NS]... [--input values.yaml]
+telepresence rbac verify   client  [--namespace NS]... [--workload NAME]... [--input values.yaml]
 ```
 
 `generate` and `verify` say what the command does, so `rbac generate install` doesn't
@@ -37,6 +37,23 @@ because the admin can already do everything.
 refused, the command asks for `--subject` instead of failing, and says in the output
 header that it couldn't confirm the subject matches the checked identity.
 
+Two cases need a definition:
+
+* A `Group` subject matches when the checked identity is a member of that group. The
+  sweep then reflects the rights of that one member, not of the group, and the header
+  says so.
+* More than one `--subject` is only accepted together with `--all`. Without it there is
+  one checked identity, so there is nothing to compare the extra subjects with.
+
+With `--as`, the check only knows the groups given with `--as-group`, so a user who also
+gets rights through other groups is told more is missing than the cluster would deny. The
+output can grant more than the user needs, and the header says that too.
+
+`--all` has no identity to read, so it requires `--subject`. Since it can't look at the
+cluster, it assumes nothing exists yet: the manager namespace is created, so the output
+always includes `create` on `namespaces`, and every rendered object is treated as
+missing.
+
 ---
 
 ## 1. Share the chart render and access sweep with `setup`
@@ -58,15 +75,28 @@ set, or its output drifts from what `setup` reports.
 * `DeniedAttribute` gets a `Subresource` field (`json:"subresource,omitempty"`), for
   `pods/portforward`, `pods/eviction` and `logs/yaml`. It's empty for everything
   `setup` reports today, so its output doesn't change.
+* `create` attributes are sent without a name. The API server authorizes a create before
+  it knows the object's name, so a review that carries the name can be allowed by a rule
+  that would refuse the real create. `attributesForObjects` sets `Name` today, so the
+  change is made here, in the shared sweep, and `setup` gets it too. Two code paths would
+  bring back the drift this item removes. The name stays on the attribute for reporting
+  only, and the comment on `attributesForObjects` that explains why the name is sent is
+  updated with the code.
+* The hook manifests that the render appends are marked as such and kept out of the
+  install set. A first install never touches them, because the chart only has
+  pre-upgrade and pre-delete hooks. They belong to the lifecycle set in item 3.
 * `setup` calls the new package. `probeRBAC`, `evaluateChartAccess` and
-  `PlannedObjects` keep their behavior and their tests. This item changes no output.
+  `PlannedObjects` keep their behavior and their tests.
 
 **Tests**
 
-* The existing `probe_rbac_test.go` and `planned_test.go` pass unchanged.
+* The existing `probe_rbac_test.go` and `planned_test.go` pass unchanged, apart from the
+  `create` name case above.
 * Move the helper-level tests that exercise the moved functions next to them.
 
-**Done when**: `telepresence setup` output is byte-identical before and after.
+**Done when**: `telepresence setup` output is byte-identical before and after, except
+where a `create` review answers differently because the name is no longer sent. That
+difference is a fix, and it gets its own test.
 
 ---
 
@@ -74,8 +104,10 @@ set, or its output drifts from what `setup` reports.
 
 `verify client` has to ask the same questions the manager asks, or the two drift. The
 review definitions live in `cmd/traffic/cmd/manager/auth/authorizer.go` (`Review`,
-`ConnectReview`, `AttachmentReview`, `EnsureAgentReview`, `NamespaceReview`, the
-`logs` attributes in `CanGetLogs`) and the grant modes in `grant.go`. Nothing under
+`ConnectReview`, `AttachmentReview`, `EnsureAgentReview`, the `logs` attributes in
+`CanGetLogs`) and the grant modes in `grant.go`. Namespace reads use
+`NamespaceReadReview` (`readAccess` in `cmd/traffic/cmd/manager/service.go`), which
+accepts `create` or `get` on `attachments`, so that one moves too. Nothing under
 `pkg/client` imports `cmd/traffic` today.
 
 **Change**
@@ -119,6 +151,15 @@ chart renders. On top of the rendered objects from item 1:
 * `Wait` and `Atomic` (`pkg/client/cli/helm/install.go`): read access to the objects
   the install waits for, and `delete` on the rendered objects for the rollback of a
   failed install.
+
+* Every rule of the chart's own Roles and ClusterRoles, expanded to attributes at the
+  scope of the role, plus the `bind` attribute for the x509 role (see "Escalation
+  prevention"). Creating a Role requires holding what it grants, so an identity that may
+  create Roles but doesn't hold their rules fails at the first Role with "attempting to
+  grant RBAC permissions not currently held". With these in the set, `generate` emits
+  only the rules the identity lacks, and `verify` fails when they are missing. An
+  identity that holds `escalate` on the roles, or `bind` for a binding, passes without
+  them.
 
 The regression test in this item settles the exact set. Anything it shows is missing
 goes into the attribute set, not into a special case in the output.
@@ -173,8 +214,10 @@ so the admin knows what's being granted.
 
 The default (`--verbs install`) is the set a first install needs, described above.
 `--verbs lifecycle` adds what `helm upgrade` and `telepresence helm uninstall` need on
-the same objects (`update`, `patch`, `delete`, and the release secrets). The sweep
-always checks the same verb set it emits.
+the same objects (`update`, `patch`, `delete`, and the release secrets), and the hook
+objects from item 1. The pre-upgrade hook creates its own ServiceAccount, Role,
+RoleBinding and Job, so escalation prevention applies there too, and an uninstall runs
+the pre-delete Job. The sweep always checks the same verb set it emits.
 
 **Tests**
 
@@ -190,7 +233,15 @@ Unit tests in `pkg/client/cli/rbacgen`, with a fake clientset whose
 * x509 auth enabled: the binding and the single named `bind` rule appear.
 * `--subject` that doesn't match the checked identity: refused with the `--as` hint.
 * `SelfSubjectReview` unavailable: asks for `--subject`.
-* `--verbs lifecycle`: the lifecycle verbs appear and the sweep checked them.
+* `--verbs lifecycle`: the lifecycle verbs and the hook objects appear and the sweep
+  checked them, and neither is in the default install set.
+* An identity that may create the Role but doesn't hold its rules: the missing rules
+  are emitted, and `verify install` fails. With `escalate` on roles, or `bind` on the
+  binding, it passes without them.
+* `--all` without `--subject`: refused. `--all` always includes `create` on
+  `namespaces`.
+* A `Group` subject and several `--subject` values: the header notes, and the several
+  subjects are refused without `--all`.
 * Golden-file test of the full output for the default values, so changes to the
   chart show up as a reviewable diff.
 
@@ -203,6 +254,20 @@ what the regression test is for:
   `rbac generate install --as` that identity, applies the output as admin, then runs
   `telepresence helm install` as the identity and expects it to succeed, followed by a
   passing `rbac verify install`. A second case does the same with x509 auth enabled.
+
+How it fits the fixture engine (`regression_test/README.md`): the engine keeps one
+shared release, which it installs and upgrades as admin, plus secondary releases. The
+install by the restricted identity is a secondary release, in its own namespace and
+under its own release name, so it never touches the shared one and needs no `Mutate`.
+The cases run for both shapes, because the generated rules differ a lot between them:
+a namespaced install (the manager limited to its own namespace) and a cluster-wide
+install.
+
+The lifecycle flag gets its own case. It generates with `--verbs lifecycle`, applies
+the output, then upgrades and uninstalls that release as the restricted identity and
+expects both to succeed. That covers the pre-upgrade hook's ServiceAccount, Role,
+RoleBinding and Job, and the pre-delete Job. If that case turns out too costly to
+land, `--verbs` is left out of the first version instead of shipping untested.
 
 ---
 
@@ -221,7 +286,8 @@ copying their rules, so it can't fall out of step with the chart.
   `probe_release.go`) to learn the manager namespace, scope, required grant,
   external endpoint and legacy access. `--input` overrides them for an install that
   doesn't exist yet.
-* Reading the release needs read access to the Helm secrets in the manager
+* The release is read with the caller's own credentials, not the impersonated ones.
+  Reading it needs read access to the Helm secrets in the manager
   namespace, which the people this command is for often don't have. When that read is
   refused, the command stops with a message saying so and asking for `--input` with
   the values the manager was installed with.
@@ -258,11 +324,32 @@ tell a user who holds only the `telepresence.io` grants that `pods/portforward` 
 missing, although attaching works without it.
 
 Instead it runs the shared reviews from item 2 (`ConnectReview`, `AttachmentReview`,
-`EnsureAgentReview`, `NamespaceReview` and the `logs` review) under the installed
+`EnsureAgentReview`, `NamespaceReadReview` and the `logs` review) under the installed
 required grant, and reports a miss only when no alternative passes. The transport
 need is reported separately: `pods/portforward` on the manager pod is what a client
 needs to reach the manager when no external endpoint is published, whatever the
 required grant.
+
+`AttachmentReview` and `EnsureAgentReview` are per workload, and `rbac.md` suggests
+scoping the `attachments` grant to single workloads with `resourceNames`. So `verify
+client` takes `--workload NAME` (repeatable) and runs the named reviews for those
+workloads. Without it only the unnamed reviews run, and the output says that grants
+scoped to a workload can't be seen. The `pods/portforward` alternative has the same
+problem one level down: the manager grounds it on the pods of the workload
+(`groundOnWorkloadPods`), which it lists with its own rights. A minimal client can't
+list pods, so in that case the command reports "could not determine", not "missing".
+
+**Where the installed grant comes from.** `verify client` needs the installed required
+grant and whether an external endpoint is published. Both come from the Helm release,
+as for `generate client`, and both main uses of the command make that read fail: an
+ordinary developer can't read the release secrets, and with `--as` an impersonated
+read fails for the admin as well. So:
+
+* The release is read with the caller's own credentials. Only the reviews are
+  impersonated.
+* When the release can't be read at all, the command doesn't stop. It runs the reviews
+  under all three grant modes (`portforward`, `telepresence`, `any`) and reports the
+  result for each, and `--input` (or the installed values) narrows that to one.
 
 * `--format json|yaml` reuses `DeniedAttribute`, now with `Subresource`.
 * Admins check someone else with `--as` / `--as-group`, as for `generate`.
@@ -276,6 +363,12 @@ required grant.
   doesn't need.
 * No external endpoint and no `pods/portforward` on the manager pod: reported as a
   transport miss, separate from the review results.
+* A user who holds `get` on `attachments` for one workload: passes the named reviews
+  with `--workload` and is told the grant can't be seen without it.
+* A client that can't list pods: the `pods/portforward` alternative is "could not
+  determine", not "missing".
+* Release secrets not readable: the reviews run under all three grant modes and the
+  output has one result per mode. With `--as`, the release is read as the caller.
 * JSON output matches `DeniedAttribute`, including subresources.
 
 ---
