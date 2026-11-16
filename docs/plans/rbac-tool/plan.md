@@ -1,7 +1,7 @@
 # Plan: an RBAC assistant (`telepresence rbac`)
 
 Implements #4215. Five work items, in order. Items 1 and 2 are refactors that the
-rest build on. Items 3, 4 and 5 can land as separate PRs.
+rest build on. All five items go into this PR, as separate commits.
 
 The command answers two questions against a cluster the caller may not own: "what
 does this identity need to install Telepresence" and "what does this identity need to
@@ -14,6 +14,9 @@ telepresence rbac generate client  --subject KIND:NAME... [--namespace NS]... [-
 telepresence rbac verify   install [--input values.yaml] [--verbs install|lifecycle]
 telepresence rbac verify   client  [--namespace NS]... [--workload NAME]... [--input values.yaml]
 ```
+
+Without `--namespace`, `verify client` checks the namespace of the kubeconfig context,
+which is the namespace `telepresence connect` uses.
 
 `generate` and `verify` say what the command does, so `rbac generate install` doesn't
 read as if it installs something next to `telepresence helm install`.
@@ -83,10 +86,13 @@ set, or its output drifts from what `setup` reports.
   only, and the comment on `attributesForObjects` that explains why the name is sent is
   updated with the code.
 * The hook manifests that the render appends are marked as such and kept out of the
-  install set. A first install never touches them, because the chart only has
-  pre-upgrade and pre-delete hooks. They belong to the lifecycle set in item 3.
-* `setup` calls the new package. `probeRBAC`, `evaluateChartAccess` and
-  `PlannedObjects` keep their behavior and their tests.
+  first-install set that `rbac generate install` and `rbac verify install` use by
+  default. A first install never touches them, because the chart only has pre-upgrade
+  and pre-delete hooks. They belong to the lifecycle set in item 3.
+* `setup` calls the new package. It upgrades as well as installs, so it keeps asking for
+  both sets, the install objects and the hook objects, and its answers don't change.
+  `probeRBAC`, `evaluateChartAccess` and `PlannedObjects` keep their behavior and their
+  tests.
 
 **Tests**
 
@@ -257,11 +263,23 @@ what the regression test is for:
 
 How it fits the fixture engine (`regression_test/README.md`): the engine keeps one
 shared release, which it installs and upgrades as admin, plus secondary releases. The
-install by the restricted identity is a secondary release, in its own namespace and
-under its own release name, so it never touches the shared one and needs no `Mutate`.
-The cases run for both shapes, because the generated rules differ a lot between them:
-a namespaced install (the manager limited to its own namespace) and a cluster-wide
-install.
+install by the restricted identity gets its own install step, because
+`rt.SecondaryManager` installs as admin, and it runs in its own namespace. The release
+is always called `traffic-manager`, since `telepresence helm install` has no option for
+the name, so releases are kept apart by namespace and the shared one is never touched,
+which means no `Mutate` is needed. The namespace comes from
+`rt.PrivateUnmanagedNamespace`, so the shared manager's selector doesn't pick it up. The
+teardown runs as admin and also removes the cluster-scoped objects, the way the
+secondary manager teardown does.
+
+The cases run for both shapes, because the generated rules differ a lot between them. The
+namespaced install limits the manager to its own namespace. A cluster-wide install
+without a namespace selector can't run beside the shared release, because it selects
+every namespace and the overlap check in `templates/agentInjectorWebhook.yaml` fails the
+render. So the cluster-wide case gives its namespace a label of its own and installs with
+a `namespaceSelector` on that label. The chart treats every selector except a single
+`kubernetes.io/metadata.name In [...]` expression as dynamic and renders the cluster-wide
+rules for it, so those rules are still exercised.
 
 The lifecycle flag gets its own case. It generates with `--verbs lifecycle`, applies
 the output, then upgrades and uninstalls that release as the restricted identity and
@@ -382,7 +400,7 @@ read fails for the admin as well. So:
 * Regenerate the CLI reference under `docs/reference/cli`.
 * `CHANGELOG.yml`: one feature entry.
 
-This plan is removed in the last commit of the PR that completes item 5.
+This plan is removed in the last commit of this PR, after item 5.
 
 ## Decisions from review
 
