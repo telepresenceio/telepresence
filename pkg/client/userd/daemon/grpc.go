@@ -176,11 +176,11 @@ func (s *service) CheckConnect(ctx context.Context, cr *rpc.ConnectRequest) (*em
 }
 
 func (s *service) Disconnect(ctx context.Context, ex *empty.Empty) (*empty.Empty, error) {
-	s.cancelSession(ctx, true)
+	s.cancelSession(ctx)
 	return &empty.Empty{}, nil
 }
 
-func (s *service) cancelSession(ctx context.Context, disconnectRoot bool) {
+func (s *service) cancelSession(ctx context.Context) {
 	var oldSession userd.Session
 	err := s.withSession(ctx, func(_ context.Context, session userd.Session) error {
 		oldSession = session
@@ -188,12 +188,6 @@ func (s *service) cancelSession(ctx context.Context, disconnectRoot bool) {
 		return nil
 	})
 	if err == nil && s.clearSession(oldSession) {
-		if disconnectRoot {
-			_ = s.withRootDaemon(ctx, func(ctx context.Context, rd daemon.DaemonClient) error {
-				_, _ = rd.Disconnect(ctx, &empty.Empty{})
-				return nil
-			})
-		}
 		// Use s (which embeds the daemon's main context) rather than the
 		// gRPC handler ctx: only the daemon context carries the usage
 		// producer installed by internalRun. Without this, usg.New would
@@ -391,11 +385,11 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 }
 
 func (s *service) Quit(ctx context.Context, ex *empty.Empty) (qr *daemon.QuitResponse, err error) {
-	s.cancelSession(ctx, false)
+	s.cancelSession(ctx)
 	s.quit(false)
 	err = s.withRootDaemon(context.WithoutCancel(ctx), func(ctx context.Context, rd daemon.DaemonClient) (err error) {
 		clog.Debug(ctx, "Telling root daemon to Quit")
-		qr, err = rd.Quit(ctx, ex)
+		qr, err = cliDaemon.QuitRootDaemon(ctx, rd)
 		return err
 	})
 	if err != nil {

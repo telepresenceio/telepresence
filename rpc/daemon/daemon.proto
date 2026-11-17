@@ -92,6 +92,11 @@ message DaemonStatus {
   // carries the session's virtual network (e.g. "tel0" or, on macOS, a
   // "utunN" name). Empty when there is no active session.
   string vif_interface_name = 8;
+
+  // in_use is true when the status was requested by a connection other than
+  // the one that owns the active session. Such a status carries no session
+  // details.
+  bool in_use = 9;
   reserved 3;
 }
 

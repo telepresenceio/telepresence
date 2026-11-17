@@ -16,6 +16,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
@@ -34,6 +35,10 @@ func (s *service) Status(ctx context.Context, _ *emptypb.Empty) (*rpc.DaemonStat
 		Version: client.VersionInfo(ctx),
 	}
 	if s.session != nil {
+		if !s.isOwnerLocked(ctx) {
+			r.InUse = true
+			return r, nil
+		}
 		r.OutboundConfig = s.session.getNetworkConfig()
 		r.TunnelTransport = s.session.tunnelTransportRPC()
 		r.AgentTransports = s.session.agentTransportsRPC()
@@ -75,6 +80,9 @@ func (s *service) SetDNSMappings(ctx context.Context, req *rpc.SetDNSMappingsReq
 func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *rpc.DaemonStatus, err error) {
 	reply = &rpc.DaemonStatus{Version: client.VersionInfo(ctx)}
 	err = s.withSession(ctx, func(_ context.Context, session *session) error {
+		if !s.isOwnerLocked(ctx) {
+			return daemon.ErrRootDaemonInUse()
+		}
 		reply.OutboundConfig = s.session.getNetworkConfig()
 		reply.TunnelTransport = s.session.tunnelTransportRPC()
 		reply.AgentTransports = s.session.agentTransportsRPC()
@@ -88,7 +96,10 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 	s.sessionLock.Lock()
 	defer s.sessionLock.Unlock()
 	if s.session != nil {
-		// Someone took the lock before we did and created a session.k
+		if !s.isOwnerLocked(ctx) {
+			return nil, daemon.ErrRootDaemonInUse()
+		}
+		// Someone took the lock before we did and created a session.
 		reply.OutboundConfig = s.session.getNetworkConfig()
 		reply.TunnelTransport = s.session.tunnelTransportRPC()
 		reply.AgentTransports = s.session.agentTransportsRPC()
@@ -103,7 +114,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 
 	sessionCtx, sessionCancel := context.WithCancelCause(s)
 	var sn *session
-	sn, err = createSession(client.WithConfig(sessionCtx, cfg), ctx, info, s.activity, dns.CleanupRouting)
+	sn, err = s.newSession(client.WithConfig(sessionCtx, cfg), ctx, info, s.activity, dns.CleanupRouting)
 	if err != nil {
 		sessionCancel(fmt.Errorf("failed to create root daemon session: %w", err))
 		return nil, err
@@ -133,7 +144,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 			}
 			close(sessionRunning)
 		}()
-		sn.run(initErrCh)
+		s.runSession(sn, initErrCh)
 		s.clearSession(sn)
 	}()
 	select {
@@ -152,7 +163,12 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		}
 		// Session initialized successfully.
 	}
+	if ctx.Err() != nil {
+		sessionCancel(errors.New("root daemon Connect call canceled"))
+		return nil, status.Error(codes.Canceled, "connect call canceled")
+	}
 	s.session = sn
+	s.ownerConn, _ = server.ConnID(ctx)
 	s.sessionCancel = func(cause error) {
 		if cause == nil {
 			cause = context.Canceled
@@ -286,11 +302,16 @@ func (s *service) WatchAgentPods(stream rpc.Daemon_WatchAgentPodsServer) error {
 	}
 }
 
+// withSession runs f with the session. A call that arrived on a connection other than the owner's is
+// refused; a context without a connection number belongs to an internal caller and is served.
 func (s *service) withSession(ctx context.Context, f func(context.Context, *session) error) (err error) {
 	s.sessionLock.RLock()
 	defer s.sessionLock.RUnlock()
 	if s.session == nil {
 		return status.Error(codes.Unavailable, "no active session")
+	}
+	if id, ok := server.ConnID(ctx); ok && id != s.ownerConn {
+		return daemon.ErrRootDaemonInUse()
 	}
 	select {
 	case <-s.session.Done():

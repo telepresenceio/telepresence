@@ -1467,30 +1467,23 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 		}()
 		rd = rootdRpc.NewDaemonClient(conn)
 
-		for attempt := 1; ; attempt++ {
-			var rootStatus *rootdRpc.DaemonStatus
-			rootStatus, err = rd.Connect(timeoutCtx, nc)
-			if err != nil {
-				return fmt.Errorf("failed to connect to root daemon: %w", err)
+		var rootStatus *rootdRpc.DaemonStatus
+		rootStatus, err = rd.Connect(timeoutCtx, nc)
+		if err != nil {
+			if daemon.IsRootDaemonInUse(err) {
+				return errors.New("the root daemon is serving another session on this machine")
 			}
-			oc := rootStatus.OutboundConfig
-			if oc == nil || oc.Session == nil {
-				// This is an internal error. Something is wrong with the root daemon.
-				return errors.New("root daemon's OutboundConfig has no session")
-			}
-			if oc.Session.SessionId == nc.Session.SessionId {
-				break
-			}
-
-			// Root daemon was running an old session. This indicates that this daemon somehow
-			// crashed without disconnecting. So let's do that now, and then reconnect...
-			if attempt == 2 {
-				// ...or not, since we've already done it.
-				return errors.New("unable to reconnect to root daemon")
-			}
-			if _, err = rd.Disconnect(s, &empty.Empty{}); err != nil {
-				return fmt.Errorf("failed to disconnect from the root daemon: %w", err)
-			}
+			return fmt.Errorf("failed to connect to root daemon: %w", err)
+		}
+		oc := rootStatus.OutboundConfig
+		if oc == nil || oc.Session == nil {
+			// This is an internal error. Something is wrong with the root daemon.
+			err = errors.New("root daemon's OutboundConfig has no session")
+			return err
+		}
+		if oc.Session.SessionId != nc.Session.SessionId {
+			err = errors.New("the root daemon is serving another session on this machine")
+			return err
 		}
 	}
 

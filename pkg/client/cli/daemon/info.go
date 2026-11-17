@@ -222,9 +222,15 @@ func (il *InfoLoader[T]) DialDaemon(ctx context.Context, waitForConnect bool) (c
 }
 
 func dialDaemon(ctx context.Context, name string, port uint16) (conn *grpc.ClientConn, err error) {
-	conn, err = grpcClient.DialGRPC(ctx, fmt.Sprintf("127.0.0.1:%d", port),
+	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithNoProxy())
+		grpc.WithNoProxy(),
+	}
+	if name == "root" {
+		// The root daemon ends its session when the owner's connection closes, so the connection must never idle out.
+		opts = append(opts, grpc.WithIdleTimeout(0))
+	}
+	conn, err = grpcClient.DialGRPC(ctx, fmt.Sprintf("127.0.0.1:%d", port), opts...)
 	if err != nil {
 		err = fmt.Errorf("unable to dial %s daemon port %d: %w", name, port, err)
 	}
