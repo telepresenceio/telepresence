@@ -1428,6 +1428,13 @@ func (s *session) getNetworkInfo(cr *rpc.ConnectRequest, rootd bool) (*rootdRpc.
 	}, nil
 }
 
+// errRootDaemonBusy is the user-level error for a root daemon that serves another session.
+func errRootDaemonBusy() error {
+	return errcat.User.New("the root daemon is serving another Telepresence session on this machine. " +
+		"If the session is yours, end it with 'telepresence quit' (add '--use <name>' for a named connection), " +
+		"or stop all your daemons with 'telepresence quit -s'")
+}
+
 func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.NetworkConfig, wg *sync.WaitGroup, isPodDaemon bool) (err error) {
 	// establish a connection to the root daemon gRPC grpcService
 	clog.Info(s, "Connecting to root daemon...")
@@ -1494,7 +1501,7 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 		rootStatus, err = rd.Connect(timeoutCtx, nc)
 		if err != nil {
 			if daemon.IsRootDaemonInUse(err) {
-				return errors.New("the root daemon is serving another session on this machine")
+				return errRootDaemonBusy()
 			}
 			return fmt.Errorf("failed to connect to root daemon: %w", err)
 		}
@@ -1505,7 +1512,7 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 			return err
 		}
 		if oc.Session.SessionId != nc.Session.SessionId {
-			err = errors.New("the root daemon is serving another session on this machine")
+			err = errRootDaemonBusy()
 			return err
 		}
 		if s.rootCreds != nil && len(nc.ExecCredential) > 0 {
