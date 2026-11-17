@@ -19,6 +19,9 @@ Install the Telepresence client on your workstation by running the commands belo
 The package installer sets up the root daemon as a system service via launchd, eliminating the need for elevated
 privileges when using Telepresence.
 
+Any local user can use the service. It serves one session at a time, and it never runs credential plugins or reads
+files that a caller names.
+
 Download the appropriate installer for your architecture:
 - [telepresence-darwin-amd64.pkg](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-amd64.pkg) (Intel Macs)
 - [telepresence-darwin-arm64.pkg](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-darwin-arm64.pkg) (Apple Silicon Macs)
@@ -85,6 +88,9 @@ sudo chmod a+x /usr/local/bin/telepresence
 
 The package installers set up the root daemon as a systemd service, eliminating the need for elevated privileges
 when using Telepresence.
+
+Any local user can use the service. It serves one session at a time, and it never runs credential plugins or reads
+files that a caller names.
 
 ### Debian/Ubuntu (.deb)
 
@@ -165,6 +171,9 @@ The MSI installs `telepresence.exe`, sets up the root daemon as a Windows servic
 elevated privileges when using Telepresence), adds Telepresence to the system PATH, and installs
 [wintun](https://www.wintun.net/) for the VIF. You can deselect the "Telepresence Network Service" feature
 during installation if you prefer to run the daemon manually.
+
+Any local user can use the service. It serves one session at a time, and it never runs credential plugins or reads
+files that a caller names.
 
 Download and run the installer for your architecture:
 - [telepresence-windows-amd64.msi](https://github.com/telepresenceio/telepresence/releases/latest/download/telepresence-windows-amd64.msi)

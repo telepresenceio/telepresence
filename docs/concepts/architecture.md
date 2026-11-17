@@ -25,6 +25,16 @@ All requests from and to the cluster go through this Daemon.
 The Root-Daemon manages the networking necessary to handle traffic between the local workstation and the cluster by setting up a
 [Virtual Network Device](../reference/routing.md#the-virtual-network-interface) (VIF).
 
+### Who may call the daemons
+The CLI talks to the User-Daemon over gRPC on a local port. Every call except `Version` must carry a secret that the CLI
+creates when it starts the daemon. The secret is stored in the daemon's info file, which only the user can read.
+
+The User-Daemon talks to the Root-Daemon, which any local user may reach. The Root-Daemon serves one session at a time,
+and the session belongs to the connection that created it. Other connections can't read, change or end it, and it ends
+when that connection closes. The Root-Daemon acts only on inert input: a complete kubeconfig with inline credentials. It
+never starts a credential plugin or reads a file that a caller names. The User-Daemon runs any plugin as the user and
+passes the credentials to the Root-Daemon over the session's connection.
+
 ## Traffic Manager
 
 The Traffic Manager is the central point of communication between Traffic Agents in the cluster and Telepresence Daemons
