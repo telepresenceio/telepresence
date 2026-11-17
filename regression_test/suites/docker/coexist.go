@@ -94,9 +94,9 @@ func (s *Coexist) Test_HostThenDocker() {
 
 // Test_DockerThenHost is Test_HostThenDocker with establishment order
 // reversed: the named docker connection first, then the named host
-// connection second. A named host connect only quits a same-named stale
-// session (fixture_connection.go's ensureHostDaemon), never the broad
-// `quit -s`, so it never disturbs the docker connection just established.
+// connection second. A named host connect quits any running host connection
+// (fixture_connection.go's ensureHostDaemon), but never the broad
+// `quit -s`, so it leaves the docker connection just established alone.
 func (s *Coexist) Test_DockerThenHost() {
 	t := s.T()
 	ctx := s.Ctx()

@@ -179,6 +179,18 @@ func (e *engine) invalidateSiblings(prefix, keepHash string) {
 	}
 }
 
+// invalidateWhere is invalidate for every entry whose name starts with prefix
+// and for which drop returns true.
+func (e *engine) invalidateWhere(prefix string, drop func(*memoEntry) bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for h, en := range e.entries {
+		if strings.HasPrefix(en.name, prefix) && drop(en) {
+			delete(e.entries, h)
+		}
+	}
+}
+
 func (e *engine) snapshot() []*memoEntry {
 	e.mu.Lock()
 	defer e.mu.Unlock()
