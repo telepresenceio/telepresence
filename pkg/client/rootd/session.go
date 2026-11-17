@@ -367,6 +367,9 @@ func createSession(
 ) (s *session, err error) {
 	clog.Info(sessionCtx, "-- Starting new session")
 	cleanupDNSRouting(sessionCtx)
+	if err = k8s.CheckRootRequest(mi.KubeFlags, mi.KubeconfigData); err != nil {
+		return nil, err
+	}
 	var credentials *credentialBroker
 	var fetch k8s.CredentialFetcher
 	if len(mi.ExecCredential) > 0 {

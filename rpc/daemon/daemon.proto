@@ -193,9 +193,6 @@ message NetworkConfig {
   // Port mappings enforced by the TUN-device.
   repeated string port_mappings = 8;
 
-  // Users home directory
-  string home_dir = 3;
-
   // Connection namespace
   string namespace = 4;
 
@@ -223,6 +220,8 @@ message NetworkConfig {
   // user printed. Empty when the user has no credential plugin. Further
   // credentials are requested using ProvideCredentials.
   bytes exec_credential = 12;
+
+  reserved 3;
 }
 
 // CredentialRequest asks the user daemon to run the credential plugin again.

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -13,6 +15,9 @@ import (
 	"github.com/telepresenceio/clog"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/authenticator"
+	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
+	"github.com/telepresenceio/telepresence/v2/pkg/json"
 )
 
 // rootCredentials runs the credential plugin of the kubeconfig's user on behalf of the root daemon.
@@ -25,6 +30,50 @@ type rootCredentials struct {
 
 func newRootCredentials(ec *clientcmdapi.ExecConfig) *rootCredentials {
 	return &rootCredentials{execConfig: ec, run: authenticator.ResolveExecConfig}
+}
+
+// newTokenFileCredentials returns credentials that read the bearer token from a file each time they are asked.
+func newTokenFileCredentials(path string) *rootCredentials {
+	return &rootCredentials{run: func(context.Context, *clientcmdapi.ExecConfig) ([]byte, error) {
+		return tokenFileCredential(path)
+	}}
+}
+
+// tokenFileCredential returns the content of the token file as an ExecCredential without expiry time.
+func tokenFileCredential(path string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read the token file: %w", err)
+	}
+	token := strings.TrimSpace(string(data))
+	if token == "" {
+		return nil, errors.New("the token file is empty")
+	}
+	return json.Marshal(map[string]any{
+		"apiVersion": "client.authentication.k8s.io/v1",
+		"kind":       "ExecCredential",
+		"status":     map[string]string{"token": token},
+	})
+}
+
+// rootKubeconfig returns the kubeconfig for the root daemon, and the credentials of the user of the context
+// when they come from a credential plugin or a token file. The credentials are nil otherwise.
+func rootKubeconfig(ctx context.Context, config *k8s.Kubeconfig, kubeContext string) ([]byte, *rootCredentials, error) {
+	loader, err := config.OverridingConfig()
+	if err != nil {
+		return nil, nil, err
+	}
+	rk, err := patcher.CreateRootKubeConfig(ctx, loader, kubeContext)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch {
+	case rk.Exec != nil:
+		return rk.Data, newRootCredentials(rk.Exec), nil
+	case rk.TokenFile != "":
+		return rk.Data, newTokenFileCredentials(rk.TokenFile), nil
+	}
+	return rk.Data, nil, nil
 }
 
 // credential runs the plugin and returns the ExecCredential JSON that it printed.

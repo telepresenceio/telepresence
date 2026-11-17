@@ -27,15 +27,12 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/yaml"
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
 	rootdRpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
-	"github.com/telepresenceio/telepresence/v2/pkg/authenticator/patcher"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/k8s"
@@ -286,19 +283,21 @@ func NewSession(
 	tmgr.updateClientConfig(configCtx, cr.MappedNamespaces)
 	configCancel()
 
-	oi := tmgr.getNetworkInfo(cr)
-	if !service.RootSessionInProcess() {
-		// The root daemon must not run credential plugins. The user runs the plugin, and the root daemon
-		// gets the first credential here and asks for more using the credential stream.
-		var execConfig *clientcmdapi.ExecConfig
-		oi.KubeconfigData, execConfig, err = patcher.CreateKubeConfigWithoutExec(tmgr.Context, config.ClientConfig, tmgr.KubeContext)
-		if err != nil {
+	rootInProc := service.RootSessionInProcess()
+	oi, err := tmgr.getNetworkInfo(cr, !rootInProc)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !rootInProc {
+		// The root daemon neither reads files nor runs programs. It gets a final kubeconfig, and the user
+		// runs the credential plugin. The root daemon gets the first credential here and asks for more using
+		// the credential stream.
+		if oi.KubeconfigData, tmgr.rootCreds, err = rootKubeconfig(tmgr.Context, config, tmgr.KubeContext); err != nil {
 			return nil, nil, err
 		}
-		if execConfig != nil {
-			tmgr.rootCreds = newRootCredentials(execConfig)
+		if tmgr.rootCreds != nil {
 			if oi.ExecCredential, err = tmgr.rootCreds.credential(ctx); err != nil {
-				return nil, nil, fmt.Errorf("unable to run the credential plugin: %w", err)
+				return nil, nil, fmt.Errorf("unable to get the cluster credentials: %w", err)
 			}
 		}
 	}
@@ -747,7 +746,9 @@ func (s *session) rootDaemonReconnectConfig() (*rootdRpc.NetworkConfig, bool) {
 	nc.MappedNamespaces = s.GetCurrentNamespaces(true)
 	nc.Session = s.sessionInfo
 	nc.SubnetViaWorkloads = s.subnetViaWorkloads
-	nc.ClientConfig, _ = json.Marshal(client.GetConfig(s))
+	if jsonCfg, err := s.rootClientConfig(!s.GetService().RootSessionInProcess()); err == nil {
+		nc.ClientConfig = jsonCfg
+	}
 	nc.AgentPodNamespaces = s.agentPodWatchNamespaces()
 	return nc, isPodDaemon
 }
@@ -1387,21 +1388,44 @@ func (s *session) Uninstall(ctx context.Context, ur *rpc.UninstallRequest) error
 	return err
 }
 
-func (s *session) getNetworkInfo(cr *rpc.ConnectRequest) *rootdRpc.NetworkConfig {
+// rootClientConfig returns the client configuration as JSON. When forRootd is true, a cluster.managerServerCA
+// setting is replaced by the PEM text it refers to, because the root daemon reads no files.
+func (s *session) rootClientConfig(forRootd bool) ([]byte, error) {
 	cfg := client.GetConfig(s)
-	jsonCfg, _ := json.Marshal(cfg)
+	if forRootd && cfg.Cluster().ManagerServerCA != "" {
+		ca, err := k8s.ManagerServerCAPEM(cfg.Cluster().ManagerServerCA)
+		if err != nil {
+			return nil, err
+		}
+		// The configuration is shared, so change a copy.
+		cfg = cfg.Merge(client.GetDefaultConfig())
+		cfg.Cluster().ManagerServerCA = ca
+	}
+	return json.Marshal(cfg)
+}
+
+// getNetworkInfo returns the NetworkConfig for the root daemon. A root daemon that is a separate process (rootd)
+// gets only the kubectl flags on its allow-list and a client configuration without file references.
+func (s *session) getNetworkInfo(cr *rpc.ConnectRequest, rootd bool) (*rootdRpc.NetworkConfig, error) {
+	kubeFlags := cr.KubeFlags
+	if rootd {
+		kubeFlags = k8s.RootKubeFlags(kubeFlags)
+	}
+	jsonCfg, err := s.rootClientConfig(rootd)
+	if err != nil {
+		return nil, err
+	}
 	return &rootdRpc.NetworkConfig{
-		KubeFlags:          cr.KubeFlags,
+		KubeFlags:          kubeFlags,
 		KubeconfigData:     cr.KubeconfigData,
 		Namespace:          s.Namespace,
 		ManagerNamespace:   k8s.GetManagerNamespace(s),
 		MappedNamespaces:   s.GetCurrentNamespaces(true),
 		Session:            s.sessionInfo,
 		SubnetViaWorkloads: s.subnetViaWorkloads,
-		HomeDir:            homedir.HomeDir(),
 		ClientConfig:       jsonCfg,
 		AgentPodNamespaces: s.agentPodWatchNamespaces(),
-	}
+	}, nil
 }
 
 func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.NetworkConfig, wg *sync.WaitGroup, isPodDaemon bool) (err error) {

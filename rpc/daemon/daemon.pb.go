@@ -534,8 +534,6 @@ type NetworkConfig struct {
 	SubnetViaWorkloads []*SubnetViaWorkload `protobuf:"bytes,2,rep,name=subnet_via_workloads,json=subnetViaWorkloads,proto3" json:"subnet_via_workloads,omitempty"`
 	// Port mappings enforced by the TUN-device.
 	PortMappings []string `protobuf:"bytes,8,rep,name=port_mappings,json=portMappings,proto3" json:"port_mappings,omitempty"`
-	// Users home directory
-	HomeDir string `protobuf:"bytes,3,opt,name=home_dir,json=homeDir,proto3" json:"home_dir,omitempty"`
 	// Connection namespace
 	Namespace string `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// Namespace where the connected traffic-manager is installed.
@@ -609,13 +607,6 @@ func (x *NetworkConfig) GetPortMappings() []string {
 		return x.PortMappings
 	}
 	return nil
-}
-
-func (x *NetworkConfig) GetHomeDir() string {
-	if x != nil {
-		return x.HomeDir
-	}
-	return ""
 }
 
 func (x *NetworkConfig) GetNamespace() string {
@@ -1658,12 +1649,11 @@ const file_daemon_daemon_proto_rawDesc = "" +
 	"\x05error\x18\a \x01(\tR\x05error\"G\n" +
 	"\x11SubnetViaWorkload\x12\x16\n" +
 	"\x06subnet\x18\x01 \x01(\tR\x06subnet\x12\x1a\n" +
-	"\bworkload\x18\x02 \x01(\tR\bworkload\"\xc7\x05\n" +
+	"\bworkload\x18\x02 \x01(\tR\bworkload\"\xb2\x05\n" +
 	"\rNetworkConfig\x12;\n" +
 	"\asession\x18\x01 \x01(\v2!.telepresence.manager.SessionInfoR\asession\x12X\n" +
 	"\x14subnet_via_workloads\x18\x02 \x03(\v2&.telepresence.daemon.SubnetViaWorkloadR\x12subnetViaWorkloads\x12#\n" +
-	"\rport_mappings\x18\b \x03(\tR\fportMappings\x12\x19\n" +
-	"\bhome_dir\x18\x03 \x01(\tR\ahomeDir\x12\x1c\n" +
+	"\rport_mappings\x18\b \x03(\tR\fportMappings\x12\x1c\n" +
 	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12+\n" +
 	"\x11manager_namespace\x18\t \x01(\tR\x10managerNamespace\x12+\n" +
 	"\x11mapped_namespaces\x18\n" +
@@ -1678,7 +1668,7 @@ const file_daemon_daemon_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x12\n" +
 	"\x10_kubeconfig_dataB\x10\n" +
-	"\x0e_client_config\"#\n" +
+	"\x0e_client_configJ\x04\b\x03\x10\x04\"#\n" +
 	"\x11CredentialRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\"`\n" +
 	"\x0fCredentialReply\x12\x0e\n" +

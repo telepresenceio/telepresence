@@ -107,7 +107,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		return reply, nil
 	}
 
-	cfg, err := client.UnmarshalJSONConfig(info.ClientConfig, false)
+	cfg, err := sessionConfig(client.GetConfig(s), info.ClientConfig, s.managed)
 	if err != nil {
 		return nil, err
 	}

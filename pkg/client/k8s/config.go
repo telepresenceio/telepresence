@@ -174,6 +174,24 @@ func (kf *Kubeconfig) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	return kf.ClientConfig
 }
 
+// OverridingConfig returns the kubeconfig with the kubectl flag overrides in effect for this instance, as an
+// OverridingClientConfig, so that MergedRawConfig yields the kubeconfig that the flags result in.
+func (kf *Kubeconfig) OverridingConfig() (clientcmd.OverridingClientConfig, error) {
+	if oc, ok := kf.ClientConfig.(clientcmd.OverridingClientConfig); ok {
+		return oc, nil
+	}
+	raw, err := kf.ClientConfig.RawConfig()
+	if err != nil {
+		return nil, err
+	}
+	configFlags, err := ConfigFlags(kf.EffectiveFlagMap)
+	if err != nil {
+		return nil, err
+	}
+	overrides := flagOverrides(configFlags)
+	return clientcmd.NewNonInteractiveClientConfig(raw, overrides.CurrentContext, overrides, kf.ClientConfig.ConfigAccess()), nil
+}
+
 const configExtension = "telepresence.io"
 
 func ConfigFlags(flagMap map[string]string) (*genericclioptions.ConfigFlags, error) {
@@ -218,8 +236,9 @@ func NewKubeconfig(c context.Context, tpClientConfigIsFinal bool, flagMap map[st
 	return newKubeconfig(c, tpClientConfigIsFinal, flagMap, flagMap, managerNamespaceOverride, configFlags, kubeconfigData, nil)
 }
 
-// NewRootKubeconfig returns the Kubeconfig for a root daemon session. The kubeconfig data must not contain a
-// credential plugin or an auth provider. A non-nil fetch provides the credentials of a user that has a plugin.
+// NewRootKubeconfig returns the Kubeconfig for a root daemon session. The kubeconfig data is required, and must
+// not contain a credential plugin or an auth provider. A non-nil fetch provides the credentials of a user that
+// has a plugin.
 func NewRootKubeconfig(
 	c context.Context,
 	flagMap map[string]string,
@@ -227,6 +246,9 @@ func NewRootKubeconfig(
 	kubeconfigData []byte,
 	fetch CredentialFetcher,
 ) (*Kubeconfig, error) {
+	if len(kubeconfigData) == 0 {
+		return nil, errcat.Config.New("the root daemon requires a kubeconfig")
+	}
 	configFlags, err := ConfigFlags(flagMap)
 	if err != nil {
 		return nil, err
@@ -488,6 +510,9 @@ func newKubeconfig(
 		credentialExpiry time.Time
 	)
 	if tpClientConfigIsFinal {
+		if cluster.Server == "" {
+			return nil, errcat.Config.New("the kubeconfig cluster has no server")
+		}
 		if restConfig.ExecProvider != nil || restConfig.AuthProvider != nil {
 			return nil, errcat.Config.New("the kubeconfig must not contain a credential plugin or an auth provider")
 		}
