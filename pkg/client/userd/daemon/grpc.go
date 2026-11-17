@@ -104,20 +104,6 @@ func (s *service) Connect(ctx context.Context, cr *rpc.ConnectRequest) (result *
 		return result, err
 	}
 
-	// The service must know about the clientConfig when the session is created because the session creation
-	// will connect to the root daemon, which in turn might call back to the Authenticator service provided by
-	// this service.
-	s.clientConfigLock.Lock()
-	s.clientConfig = kubeConfig.ClientConfig
-	s.clientConfigLock.Unlock()
-	defer func() {
-		if err != nil {
-			s.clientConfigLock.Lock()
-			s.clientConfig = nil
-			s.clientConfigLock.Unlock()
-		}
-	}()
-
 	daemonID := cliDaemon.NewIdentifier(cr.Name, kubeConfig.KubeContext, kubeConfig.Namespace, proc.RunningInContainer())
 	wg := &sync.WaitGroup{}
 
@@ -202,9 +188,6 @@ func (s *service) clearSession(oldSession userd.Session) bool {
 	if sameSession {
 		s.session = nil
 		s.sessionCancel = nil
-		s.clientConfigLock.Lock()
-		s.clientConfig = nil
-		s.clientConfigLock.Unlock()
 	}
 	s.sessionLock.Unlock()
 	client.ReloadLogLevel(s)

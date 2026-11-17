@@ -118,6 +118,11 @@ func TestCallerChecks_Session(t *testing.T) {
 		require.NoError(t, err)
 		_, err = aw.Recv()
 		assert.True(t, daemon.IsRootDaemonInUse(err), "%v", err)
+
+		cs, err := f.b.ProvideCredentials(ctx)
+		require.NoError(t, err)
+		_, err = cs.Recv()
+		assert.True(t, daemon.IsRootDaemonInUse(err), "%v", err)
 	})
 
 	t.Run("Version is open to all", func(t *testing.T) {

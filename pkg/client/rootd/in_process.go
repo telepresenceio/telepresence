@@ -128,6 +128,14 @@ func (rd *InProcSession) WatchAgentPods(
 	return nil, status.Error(codes.Unimplemented, "WatchAgentPods not implemented")
 }
 
+func (rd *InProcSession) ProvideCredentials(
+	ctx context.Context,
+	opts ...grpc.CallOption,
+) (grpc.BidiStreamingClient[rpc.CredentialReply, rpc.CredentialRequest], error) {
+	// The in-process session uses the user daemon's cluster connection and needs no credential stream.
+	return nil, status.Error(codes.Unimplemented, "ProvideCredentials not implemented")
+}
+
 // ApplyAgentPodsDelta lets the user daemon apply a relayed agent-pod delta directly when
 // the root session runs in-process, bypassing gRPC.
 func (rd *InProcSession) ApplyAgentPodsDelta(_ context.Context, delta *rpc.AgentPodsDelta) error {

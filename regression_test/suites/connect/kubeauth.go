@@ -30,13 +30,12 @@ const execCredentialContext = "abc:def/xyz$32-#1?efd"
 const kubeAuthCredsPkg = "github.com/telepresenceio/telepresence/v2/regression_test/framework/kubeauthcreds"
 
 // KubeAuth proves that a kubeconfig user carrying an `exec` block is
-// resolved through pkg/authenticator: pkg/authenticator/grpc/
-// authenticator.go's AuthenticatorServer.GetContextExecCredentials logs
-// "GetContextExecCredentials(<context>)" once it resolves the wrapped
-// context's credentials, and that line must reach the log file of whichever
-// process served it -- the connector for a host connection, or the
-// kubeauth daemon (pkg/client/docker/kubeauth) for a docker one, since the
-// containerized daemon cannot itself exec a host-side credential plugin.
+// resolved on the host. For a host connection the user daemon runs the
+// plugin for the root daemon and logs hostCredentialRequestLine to
+// connector.log. For a docker connection, the kubeauth daemon
+// (pkg/client/docker/kubeauth) serves GetContextExecCredentials, since the
+// containerized daemon cannot itself exec a host-side credential plugin,
+// and logs it to kubeauth.log.
 type KubeAuth struct {
 	rt.Suite
 }
@@ -116,11 +115,17 @@ func logFileSize(t *testing.T, path string) int64 {
 	return st.Size()
 }
 
-// logContainsExecCredentials scans path from offset for a line containing
-// "GetContextExecCredentials(<context>)", the message AuthenticatorServer.
-// GetContextExecCredentials (pkg/authenticator/grpc/authenticator.go) logs
-// once it resolves context's credentials.
-func logContainsExecCredentials(t *testing.T, path string, offset int64, context string) bool {
+// hostCredentialRequestLine is what the user daemon logs each time it runs the
+// credential plugin for the root daemon (pkg/client/userd/trafficmgr/root_credentials.go).
+const hostCredentialRequestLine = "root daemon credential request"
+
+// dockerCredentialLine is what AuthenticatorServer.GetContextExecCredentials
+// (pkg/authenticator/grpc/authenticator.go) logs for execCredentialContext
+// once it resolves that context's credentials.
+const dockerCredentialLine = "GetContextExecCredentials(" + execCredentialContext + ")"
+
+// logContainsExecCredentials scans path from offset for a line containing needle.
+func logContainsExecCredentials(t *testing.T, path string, offset int64, needle string) bool {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
@@ -132,7 +137,6 @@ func logContainsExecCredentials(t *testing.T, path string, offset int64, context
 			t.Fatalf("seek %s: %v", path, err)
 		}
 	}
-	needle := "GetContextExecCredentials(" + context + ")"
 	scn := bufio.NewScanner(f)
 	for scn.Scan() {
 		if strings.Contains(scn.Text(), needle) {
@@ -145,12 +149,11 @@ func logContainsExecCredentials(t *testing.T, path string, offset int64, context
 // connectAndScanForExecCredentials builds the kubeauthcreds binary and a
 // derived kubeconfig (buildExecKubeconfig), raw-connects with extraArgs
 // appended (e.g. "--docker") under a KUBECONFIG pointing at it, and asserts
-// logName (under r.LogDir()) recorded GetContextExecCredentials resolving
-// execCredentialContext's credentials. Mirrors errors.go's
+// logName (under r.LogDir()) recorded needle. Mirrors errors.go's
 // Test_UnmanagedNamespace: a raw connect under a foreign KUBECONFIG starts
 // from a clean daemon slot, and its cleanup quits every daemon and forgets
 // memoized connections so later suites never adopt this session.
-func (s *KubeAuth) connectAndScanForExecCredentials(logName string, extraArgs ...string) {
+func (s *KubeAuth) connectAndScanForExecCredentials(logName, needle string, extraArgs ...string) {
 	t := s.T()
 	ctx := s.Ctx()
 	r := s.R()
@@ -178,8 +181,8 @@ func (s *KubeAuth) connectAndScanForExecCredentials(logName string, extraArgs ..
 	_, stderr, err := r.CLIWithEnv(map[string]string{"KUBECONFIG": path}).Run(ctx, args...)
 	s.Require().NoError(err, "connect: %s", stderr)
 
-	s.True(logContainsExecCredentials(t, logPath, logSize, execCredentialContext),
-		"expected GetContextExecCredentials(%s) in %s", execCredentialContext, logName)
+	s.True(logContainsExecCredentials(t, logPath, logSize, needle),
+		"expected %q in %s", needle, logName)
 }
 
 // Test_ExecCredentialHostConnect connects (host daemon) through a derived
@@ -187,7 +190,7 @@ func (s *KubeAuth) connectAndScanForExecCredentials(logName string, extraArgs ..
 // plugin, and asserts connector.log recorded the connector resolving
 // execCredentialContext's credentials.
 func (s *KubeAuth) Test_ExecCredentialHostConnect() {
-	s.connectAndScanForExecCredentials("connector.log")
+	s.connectAndScanForExecCredentials("connector.log", hostCredentialRequestLine)
 }
 
 // Test_ExecCredentialDockerConnect is Test_ExecCredentialHostConnect's
@@ -204,5 +207,5 @@ func (s *KubeAuth) Test_ExecCredentialDockerConnect() {
 	if exec.Command("docker", "info").Run() != nil {
 		t.Skip("skipping: requires capability \"docker\"")
 	}
-	s.connectAndScanForExecCredentials("kubeauth.log", "--docker")
+	s.connectAndScanForExecCredentials("kubeauth.log", dockerCredentialLine, "--docker")
 }

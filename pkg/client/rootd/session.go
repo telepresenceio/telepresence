@@ -90,6 +90,9 @@ type session struct {
 
 	tunVif *vif.TunnelingDevice
 
+	// credentials supplies the cluster credentials when the user has a credential plugin. It is nil otherwise.
+	credentials *credentialBroker
+
 	teleroute teleroute.Server
 
 	// managerConnMu guards managerConn, ownsManagerConn, and managerVersion.
@@ -364,7 +367,13 @@ func createSession(
 ) (s *session, err error) {
 	clog.Info(sessionCtx, "-- Starting new session")
 	cleanupDNSRouting(sessionCtx)
-	kc, err := k8s.NewKubeconfig(sessionCtx, true, mi.KubeFlags, mi.ManagerNamespace, mi.KubeconfigData)
+	var credentials *credentialBroker
+	var fetch k8s.CredentialFetcher
+	if len(mi.ExecCredential) > 0 {
+		credentials = newCredentialBroker(mi.ExecCredential)
+		fetch = credentials.fetch
+	}
+	kc, err := k8s.NewRootKubeconfig(sessionCtx, mi.KubeFlags, mi.ManagerNamespace, mi.KubeconfigData, fetch)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +385,12 @@ func createSession(
 	if err != nil {
 		return nil, err
 	}
-	return newSession(cl, mi, conn, true, ver, activity, false)
+	sn, err := newSession(cl, mi, conn, true, ver, activity, false)
+	if err != nil {
+		return nil, err
+	}
+	sn.credentials = credentials
+	return sn, nil
 }
 
 func nope() bool { return false }
@@ -1446,6 +1460,11 @@ func (s *session) run(initErrs chan<- error) {
 }
 
 func (s *session) Start(g log.Group, teleroutePort uint16) error {
+	if expiry := s.CredentialExpiry(); !expiry.IsZero() {
+		g.Go("credential-expiry", func(ctx context.Context) error {
+			return waitCredentialExpiry(ctx, expiry)
+		})
+	}
 	clusterCfg := client.GetConfig(s).Cluster()
 	if clusterCfg.AgentPortForward {
 		// Relay mode: the user daemon has already computed the namespace set (the

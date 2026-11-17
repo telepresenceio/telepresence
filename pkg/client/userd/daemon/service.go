@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -16,11 +15,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -57,9 +54,6 @@ type service struct {
 
 	// The quit function that quits the server.
 	quit func(sessionIsLocked bool)
-
-	clientConfigLock sync.Mutex
-	clientConfig     clientcmd.ClientConfig
 
 	sessionLock    sync.RWMutex
 	session        userd.Session
@@ -110,16 +104,6 @@ func sweepMountPoints(ctx context.Context, cfg client.Config) {
 	}
 }
 
-func (s *service) ClientConfig() (clientcmd.ClientConfig, error) {
-	s.clientConfigLock.Lock()
-	cc := s.clientConfig
-	s.clientConfigLock.Unlock()
-	if cc == nil {
-		return nil, errors.New("user daemon has no client config")
-	}
-	return cc, nil
-}
-
 func NewService(ctx context.Context, cancel context.CancelFunc, cfg client.Config, srv *grpc.Server) userd.Service {
 	return newService(ctx, cancel, cfg, srv)
 }
@@ -152,7 +136,6 @@ func newService(ctx context.Context, cancel context.CancelFunc, cfg client.Confi
 	if srv != nil {
 		// The podd daemon never registers the gRPC servers
 		rpc.RegisterConnectorServer(srv, s)
-		authGrpc.RegisterAuthenticatorServer(srv, s)
 	} else {
 		s.rootSessionInProc = true
 	}

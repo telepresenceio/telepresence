@@ -27,6 +27,7 @@ import (
 	empty "google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	k8sTypes "k8s.io/apimachinery/pkg/types"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/util/homedir"
 	"sigs.k8s.io/yaml"
 
@@ -102,6 +103,7 @@ type session struct {
 	rootDaemon              rootdRpc.DaemonClient
 	rootDaemonConn          *grpc.ClientConn
 	rootDaemonConfig        *rootdRpc.NetworkConfig
+	rootCreds               *rootCredentials
 	rootDaemonIsPodDaemon   bool
 	rootDaemonGeneration    uint64
 	rootDaemonReconnectLock sync.Mutex
@@ -286,21 +288,18 @@ func NewSession(
 
 	oi := tmgr.getNetworkInfo(cr)
 	if !service.RootSessionInProcess() {
-		// Root daemon needs this to authenticate with the cluster. Potential exec configurations in the kubeconfig
-		// must be executed by the user, not by root.
-		oi.KubeconfigData, err = patcher.CreateExternalKubeConfig(tmgr.Context, config.ClientConfig, tmgr.KubeContext, func([]string) (string, string, string, string, error) {
-			addr := service.ListenerAddress()
-			if addr.Addr().IsUnspecified() {
-				loopback := netip.AddrFrom4([4]byte{127, 0, 0, 1})
-				if addr.Addr().Is6() {
-					loopback = netip.IPv6Loopback()
-				}
-				addr = netip.AddrPortFrom(loopback, addr.Port())
-			}
-			return client.GetExe(tmgr), addr.String(), client.GetConfigFile(tmgr), "", nil
-		}, nil)
+		// The root daemon must not run credential plugins. The user runs the plugin, and the root daemon
+		// gets the first credential here and asks for more using the credential stream.
+		var execConfig *clientcmdapi.ExecConfig
+		oi.KubeconfigData, execConfig, err = patcher.CreateKubeConfigWithoutExec(tmgr.Context, config.ClientConfig, tmgr.KubeContext)
 		if err != nil {
 			return nil, nil, err
+		}
+		if execConfig != nil {
+			tmgr.rootCreds = newRootCredentials(execConfig)
+			if oi.ExecCredential, err = tmgr.rootCreds.credential(ctx); err != nil {
+				return nil, nil, fmt.Errorf("unable to run the credential plugin: %w", err)
+			}
 		}
 	}
 
@@ -1485,6 +1484,11 @@ func (s *session) connectRootDaemon(timeoutCtx context.Context, nc *rootdRpc.Net
 			err = errors.New("the root daemon is serving another session on this machine")
 			return err
 		}
+		if s.rootCreds != nil && len(nc.ExecCredential) > 0 {
+			if err = s.startRootCredentials(rd); err != nil {
+				return err
+			}
+		}
 	}
 
 	// The root daemon needs time to set up the TUN-device and DNS, which involves interacting
@@ -1600,9 +1604,17 @@ func (s *session) reconnectRootDaemon(failedGeneration uint64, cause error) {
 			return
 		}
 
-		timeoutCtx, cancel := client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerConnect)
-		err := s.connectRootDaemon(timeoutCtx, nc, nil, isPodDaemon)
-		cancel()
+		var err error
+		if s.rootCreds != nil {
+			nc.ExecCredential, err = s.rootCreds.credential(s)
+		}
+		if err == nil {
+			var timeoutCtx context.Context
+			var cancel context.CancelFunc
+			timeoutCtx, cancel = client.GetConfig(s).Timeouts().TimeoutContext(s, client.TimeoutTrafficManagerConnect)
+			err = s.connectRootDaemon(timeoutCtx, nc, nil, isPodDaemon)
+			cancel()
+		}
 		if err == nil {
 			clog.Info(s, "Reconnected to root daemon")
 			s.updateDaemonNamespaces()

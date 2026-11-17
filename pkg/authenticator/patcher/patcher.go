@@ -38,34 +38,12 @@ func CreateExternalKubeConfig(
 	authAddressFunc AddressProvider,
 	patcher Patcher,
 ) ([]byte, error) {
-	ns, _, err := loader.Namespace()
+	config, err := minifiedConfig(ctx, loader, kubeContext)
 	if err != nil {
 		return nil, err
 	}
 
 	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
-	clog.Debugf(ctx, "host kubeconfig = %v", configFiles)
-	origConfig, err := loader.RawConfig()
-	if err != nil {
-		return nil, err
-	}
-	var config clientcmdapi.Config
-	origConfig.DeepCopyInto(&config)
-
-	// Minify the config so that we only deal with the current context.
-	if kubeContext != "" {
-		config.CurrentContext = kubeContext
-	}
-	if err = clientcmdapi.MinifyConfig(&config); err != nil {
-		return nil, err
-	}
-	clog.Debugf(ctx, "context = %q, namespace %q", config.CurrentContext, ns)
-
-	// Minify guarantees that the CurrentContext is set, but not that it has a cluster
-	cc := config.Contexts[config.CurrentContext]
-	if cc.Cluster == "" {
-		return nil, fmt.Errorf("current context %q has no cluster", config.CurrentContext)
-	}
 
 	if needsStubbedExec(&config) {
 		executable, addr, configFile, token, err := authAddressFunc(configFiles)
@@ -128,4 +106,60 @@ func needsStubbedExec(rawConfig *clientcmdapi.Config) bool {
 		}
 	}
 	return false
+}
+
+// CreateKubeConfigWithoutExec will load the current kubeconfig, minimize it so that it just contains the current
+// context, and flatten it. The Exec config of the context's user is removed from the result and returned
+// separately. It is nil when the user has none.
+func CreateKubeConfigWithoutExec(ctx context.Context, loader clientcmd.ClientConfig, kubeContext string) ([]byte, *clientcmdapi.ExecConfig, error) {
+	config, err := minifiedConfig(ctx, loader, kubeContext)
+	if err != nil {
+		return nil, nil, err
+	}
+	var execConfig *clientcmdapi.ExecConfig
+	if authInfo, ok := config.AuthInfos[config.Contexts[config.CurrentContext].AuthInfo]; ok && authInfo.Exec != nil {
+		execConfig = authInfo.Exec.DeepCopy()
+		authInfo.Exec = nil
+	}
+	if err = clientcmdapi.FlattenConfig(&config); err != nil {
+		return nil, nil, err
+	}
+	data, err := clientcmd.Write(config)
+	if err != nil {
+		return nil, nil, err
+	}
+	return data, execConfig, nil
+}
+
+// minifiedConfig returns a copy of the loader's config that just contains the current (or given) context.
+func minifiedConfig(ctx context.Context, loader clientcmd.ClientConfig, kubeContext string) (clientcmdapi.Config, error) {
+	var config clientcmdapi.Config
+	ns, _, err := loader.Namespace()
+	if err != nil {
+		return config, err
+	}
+
+	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
+	clog.Debugf(ctx, "host kubeconfig = %v", configFiles)
+	origConfig, err := loader.RawConfig()
+	if err != nil {
+		return config, err
+	}
+	origConfig.DeepCopyInto(&config)
+
+	// Minify the config so that we only deal with the current context.
+	if kubeContext != "" {
+		config.CurrentContext = kubeContext
+	}
+	if err = clientcmdapi.MinifyConfig(&config); err != nil {
+		return config, err
+	}
+	clog.Debugf(ctx, "context = %q, namespace %q", config.CurrentContext, ns)
+
+	// Minify guarantees that the CurrentContext is set, but not that it has a cluster
+	cc := config.Contexts[config.CurrentContext]
+	if cc.Cluster == "" {
+		return config, fmt.Errorf("current context %q has no cluster", config.CurrentContext)
+	}
+	return config, nil
 }

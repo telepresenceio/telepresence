@@ -302,6 +302,23 @@ func (s *service) WatchAgentPods(stream rpc.Daemon_WatchAgentPodsServer) error {
 	}
 }
 
+// ProvideCredentials receives the user daemon's answers to the session's credential requests. It runs
+// until the stream or the session ends.
+func (s *service) ProvideCredentials(stream rpc.Daemon_ProvideCredentialsServer) error {
+	var sn *session
+	err := s.withSession(stream.Context(), func(_ context.Context, session *session) error {
+		sn = session
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if sn.credentials == nil {
+		return status.Error(codes.FailedPrecondition, "the session has no credential plugin")
+	}
+	return sn.credentials.serve(sn, stream)
+}
+
 // withSession runs f with the session. A call that arrived on a connection other than the owner's is
 // refused; a context without a connection number belongs to an internal caller and is served.
 func (s *service) withSession(ctx context.Context, f func(context.Context, *session) error) (err error) {
