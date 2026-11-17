@@ -26,6 +26,9 @@ import (
 	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
 )
 
+// TokenEnvName is the name of the environment variable that gives a containerized user daemon its secret.
+const TokenEnvName = "TELEPRESENCE_USERD_TOKEN"
+
 type RootInfo struct {
 	DaemonPort uint16 `json:"daemon_port,omitempty"`
 }
@@ -44,6 +47,8 @@ type Info struct {
 	// ComposeVolumes are the telemount-managed volumes created for remote mounts. They are removed
 	// when the connection closes; user-defined named volumes are left untouched.
 	ComposeVolumes []string `json:"compose_volumes,omitempty"`
+	// Token is the secret that callers of the user daemon must present. It lives as long as the daemon process.
+	Token string `json:"token,omitempty"`
 }
 
 type TCPInfo interface {
@@ -117,8 +122,25 @@ func (il *InfoLoader[T]) LoadInfo(file string) (*T, error) {
 	return &di, nil
 }
 
+// SaveInfo saves the info. The user daemon's info holds a secret, so it is readable by its owner only.
 func (il *InfoLoader[T]) SaveInfo(object *T, file string) error {
-	return cache.SaveToUserCache(il.ctx, object, filepath.Join(il.dirName, file), cache.Public)
+	perm := cache.Public
+	if _, ok := any(object).(*Info); ok {
+		perm = cache.Private
+	}
+	return cache.SaveToUserCache(il.ctx, object, filepath.Join(il.dirName, file), perm)
+}
+
+// LoadUserDaemonToken returns the secret stored in the user daemon info file with the given name.
+func LoadUserDaemonToken(ctx context.Context, file string) (string, error) {
+	var info Info
+	if err := cache.LoadFromUserCache(ctx, &info, filepath.Join(daemonsDirName, file)); err != nil {
+		return "", err
+	}
+	if info.Token == "" {
+		return "", fmt.Errorf("daemon info %s has no token", file)
+	}
+	return info.Token, nil
 }
 
 func (il *InfoLoader[T]) DeleteInfo(file string) error {
@@ -202,14 +224,18 @@ func (il *InfoLoader[T]) DialDaemon(ctx context.Context, waitForConnect bool) (c
 
 	var daemonName string
 	var daemonPort uint16
+	var opts []grpc.DialOption
 	if ii, ok := any(info).(*Info); ok {
 		daemonName = "user"
 		daemonPort = ii.DaemonPort
+		if ii.Token != "" {
+			opts = append(opts, grpcClient.WithToken(ii.Token))
+		}
 	} else {
 		daemonName = "root"
 		daemonPort = any(info).(*RootInfo).DaemonPort
 	}
-	conn, err = dialDaemon(ctx, daemonName, daemonPort)
+	conn, err = dialDaemon(ctx, daemonName, daemonPort, opts...)
 	if errors.Is(err, context.DeadlineExceeded) && !waitForConnect {
 		// A race may occur where the daemon is shutting down. We found the info file, but the daemon has since stopped responding.
 		if daemonName == "user" {
@@ -221,11 +247,11 @@ func (il *InfoLoader[T]) DialDaemon(ctx context.Context, waitForConnect bool) (c
 	return conn, err
 }
 
-func dialDaemon(ctx context.Context, name string, port uint16) (conn *grpc.ClientConn, err error) {
-	opts := []grpc.DialOption{
+func dialDaemon(ctx context.Context, name string, port uint16, extra ...grpc.DialOption) (conn *grpc.ClientConn, err error) {
+	opts := append([]grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithNoProxy(),
-	}
+	}, extra...)
 	if name == "root" {
 		// The root daemon ends its session when the owner's connection closes, so the connection must never idle out.
 		opts = append(opts, grpc.WithIdleTimeout(0))

@@ -35,7 +35,30 @@ func SaveToUserCache(ctx context.Context, object any, file string, perm Permissi
 	if err := dos.MkdirAll(ctx, dir, 0o755); err != nil {
 		return err
 	}
+	if perm == Private {
+		return writePrivate(ctx, fullFilePath, jsonContent, fs.FileMode(perm))
+	}
 	return dos.WriteFile(ctx, fullFilePath, jsonContent, fs.FileMode(perm))
+}
+
+// writePrivate writes data to a file that is readable only by its owner, also when the file already exists with
+// wider permissions. The file is truncated and its mode is set before the new content is written.
+func writePrivate(ctx context.Context, path string, data []byte, perm fs.FileMode) error {
+	f, err := dos.OpenFile(ctx, path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
+	if err != nil {
+		return err
+	}
+	if c, ok := f.(interface{ Chmod(fs.FileMode) error }); ok {
+		if err = c.Chmod(perm); err != nil {
+			_ = f.Close()
+			return err
+		}
+	}
+	if _, err = f.Write(data); err != nil {
+		_ = f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func LoadFromUserCache(ctx context.Context, dest any, file string) error {

@@ -38,6 +38,8 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
+	grpcClient "github.com/telepresenceio/telepresence/v2/pkg/grpc/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/iputil"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -81,6 +83,8 @@ func DaemonOptions(ctx context.Context, daemonID *daemon.Identifier, daemonPortO
 		"--pid", "host",
 		"-e", fmt.Sprintf("TELEPRESENCE_UID=%d", os.Getuid()),
 		"-e", fmt.Sprintf("TELEPRESENCE_GID=%d", os.Getgid()),
+		// No value: docker takes it from its own environment, so it never appears on a command line.
+		"-e", daemon.TokenEnvName,
 		"-p", fmt.Sprintf("%s:%d/tcp", netip.AddrPortFrom(ap, daemonPortOnHost), client.GetConfig(ctx).Grpc().DaemonPort),
 		"-v", fmt.Sprintf("%s:%s:ro", filepath.Dir(client.GetConfigFile(ctx)), DockerTpConfig),
 		"-v", fmt.Sprintf("%s:%s", filelocation.AppUserCacheDir(ctx), TpCache),
@@ -129,9 +133,11 @@ func ConnectDaemon(ctx context.Context, info *daemon.Info) (conn *grpc.ClientCon
 	if err != nil {
 		return nil, err
 	}
-	return grpc.NewClient(
-		netip.AddrPortFrom(daemonAddr(ipv6), info.DaemonPort).String(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithNoProxy())
+	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithNoProxy()}
+	if info.Token != "" {
+		opts = append(opts, grpcClient.WithToken(info.Token))
+	}
+	return grpc.NewClient(netip.AddrPortFrom(daemonAddr(ipv6), info.DaemonPort).String(), opts...)
 }
 
 func daemonAddr(ipv6 bool) netip.Addr {
@@ -449,6 +455,10 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 	if err != nil {
 		return nil, nil, errcat.NoDaemonLogs.New(err)
 	}
+	token, err := server.NewToken()
+	if err != nil {
+		return nil, nil, errcat.NoDaemonLogs.New(err)
+	}
 	daemonAddr := fp[0]
 	opts, err := DaemonOptions(ctx, daemonID, daemonAddr.Port())
 	if err != nil {
@@ -467,7 +477,7 @@ func LaunchDaemon(ctx context.Context, daemonID *daemon.Identifier) (info *daemo
 	allArgs = append(allArgs, args...)
 	stopAttempted := false
 	for i := 1; ; i++ {
-		info, err = tryLaunch(ctx, daemonID, daemonAddr.Port(), allArgs)
+		info, err = tryLaunch(ctx, daemonID, daemonAddr.Port(), token, allArgs)
 		if err != nil {
 			if !strings.Contains(err.Error(), "already in use by container") {
 				return nil, nil, errcat.NoDaemonLogs.New(err)
@@ -687,13 +697,14 @@ func detectControlPlane(ctx context.Context, cli dockerClient.APIClient, cns []*
 	return ap, nn
 }
 
-func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, args []string) (*daemon.Info, error) {
+func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, token string, args []string) (*daemon.Info, error) {
 	stdErr := bytes.Buffer{}
 	stdOut := bytes.Buffer{}
 	clog.Debug(ctx, shellquote.ShellString(Exe, args))
 	cmd := proc.CommandContext(ctx, Exe, args...)
 	cmd.Stderr = &stdErr
 	cmd.Stdout = &stdOut
+	cmd.Env = append(os.Environ(), daemon.TokenEnvName+"="+token)
 	err := cmd.Run()
 	cid := strings.TrimSpace(stdOut.String())
 	errStr := strings.TrimSpace(stdErr.String())
@@ -727,6 +738,7 @@ func tryLaunch(ctx context.Context, daemonID *daemon.Identifier, port uint16, ar
 		Namespace:    daemonID.Namespace,
 		ExposedPorts: cr.ExposedPorts,
 		Hostname:     cr.Hostname,
+		Token:        token,
 	}
 	return info, daemon.NewUserInfoLoader(ctx).SaveInfo(info, daemonID.InfoFileName())
 }
