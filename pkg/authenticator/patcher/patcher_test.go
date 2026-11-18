@@ -269,3 +269,59 @@ clusters:
 	require.NoError(t, err)
 	assert.Equal(t, "flag-token", rest.BearerToken)
 }
+
+func TestCreateRootKubeConfig_precedenceOverPlugin(t *testing.T) {
+	plugin := &clientcmdapi.ExecConfig{Command: "gke-auth", APIVersion: "client.authentication.k8s.io/v1", InteractiveMode: clientcmdapi.NeverExecInteractiveMode}
+	tests := []struct {
+		name      string
+		user      clientcmdapi.AuthInfo
+		wantExec  bool
+		wantToken string
+		wantFile  bool
+		wantCert  bool
+	}{
+		{name: "plugin only", user: clientcmdapi.AuthInfo{}, wantExec: true},
+		{name: "token and plugin", user: clientcmdapi.AuthInfo{Token: "tok"}, wantToken: "tok"},
+		{name: "token file and plugin", user: clientcmdapi.AuthInfo{TokenFile: "token"}, wantFile: true},
+		{name: "token, token file and plugin", user: clientcmdapi.AuthInfo{Token: "tok", TokenFile: "token"}, wantFile: true},
+		{
+			name:     "client certificate and plugin",
+			user:     clientcmdapi.AuthInfo{ClientCertificateData: []byte("CERT"), ClientKeyData: []byte("KEY")},
+			wantCert: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			tokenFile := filepath.Join(dir, "token")
+			require.NoError(t, os.WriteFile(tokenFile, []byte("file-token\n"), 0o600))
+			user := tt.user.DeepCopy()
+			if user.TokenFile != "" {
+				user.TokenFile = tokenFile
+			}
+			user.Exec = plugin.DeepCopy()
+			raw := clientcmdapi.NewConfig()
+			raw.CurrentContext = "c"
+			raw.Contexts["c"] = &clientcmdapi.Context{Cluster: "cl", AuthInfo: "u"}
+			raw.Clusters["cl"] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:6443"}
+			raw.AuthInfos["u"] = user
+			loader := clientcmd.NewNonInteractiveClientConfig(*raw, "", &clientcmd.ConfigOverrides{}, nil)
+
+			rc, err := CreateRootKubeConfig(t.Context(), loader, "")
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantExec, rc.Exec != nil)
+			if tt.wantFile {
+				assert.Equal(t, tokenFile, rc.TokenFile)
+			} else {
+				assert.Empty(t, rc.TokenFile)
+			}
+			cfg, err := clientcmd.Load(rc.Data)
+			require.NoError(t, err)
+			ai := cfg.AuthInfos["u"]
+			require.NotNil(t, ai)
+			assert.Nil(t, ai.Exec)
+			assert.Equal(t, tt.wantToken, ai.Token)
+			assert.Equal(t, tt.wantCert, len(ai.ClientCertificateData) > 0)
+		})
+	}
+}

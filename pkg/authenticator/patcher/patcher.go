@@ -130,7 +130,8 @@ type RootKubeConfig struct {
 // loader results in once all overrides are applied, minimized so that it just contains the current (or
 // given) context, and flattened so that all certificates and keys are inline. The credential plugin and the
 // token file of the context's user are removed from the result and returned separately, because the
-// root daemon doesn't run programs and doesn't read files.
+// root daemon doesn't run programs and doesn't read files. A user with a token, token file or client
+// certificate has no plugin result, because client-go doesn't run the plugin for such a user.
 func CreateRootKubeConfig(ctx context.Context, loader clientcmd.OverridingClientConfig, kubeContext string) (*RootKubeConfig, error) {
 	merged, err := loader.MergedRawConfig()
 	if err != nil {
@@ -143,6 +144,9 @@ func CreateRootKubeConfig(ctx context.Context, loader clientcmd.OverridingClient
 	}
 	rc := &RootKubeConfig{}
 	if authInfo, ok := config.AuthInfos[config.Contexts[config.CurrentContext].AuthInfo]; ok {
+		if hasStaticCredential(authInfo) {
+			authInfo.Exec = nil
+		}
 		if authInfo.Exec != nil {
 			rc.Exec = authInfo.Exec.DeepCopy()
 			authInfo.Exec = nil
@@ -167,6 +171,14 @@ func CreateRootKubeConfig(ctx context.Context, loader clientcmd.OverridingClient
 		return nil, err
 	}
 	return rc, nil
+}
+
+// hasStaticCredential reports whether client-go uses a token, a token file or a client certificate of the user
+// instead of its credential plugin.
+func hasStaticCredential(ai *clientcmdapi.AuthInfo) bool {
+	hasCert := ai.ClientCertificate != "" || len(ai.ClientCertificateData) > 0
+	hasKey := ai.ClientKey != "" || len(ai.ClientKeyData) > 0
+	return ai.Token != "" || ai.TokenFile != "" || (hasCert && hasKey)
 }
 
 // anonymousUser is the name given to the user of a context that has none, when overrides gave that user credentials.
