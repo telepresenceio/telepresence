@@ -174,6 +174,8 @@ func (d *device) createLinkEndpoint() (stack.LinkEndpoint, error) {
 
 func (d *device) Close() {
 	if d.endPoint != nil {
+		// Detach first: Close discards the dispatchers' stop signal, so a later detach cannot wake them.
+		d.endPoint.Attach(nil)
 		d.endPoint.Close()
 	}
 	if d.fd >= 0 {

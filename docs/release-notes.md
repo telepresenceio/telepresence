@@ -14,6 +14,12 @@ The root daemon accepted calls from every local process and built its cluster cl
 The user daemon served its gRPC API to every local process. It now requires a secret that the CLI creates when it starts the daemon and stores in the daemon's info file, which only the user can read. Only the version call is open. A program that calls the user daemon's gRPC API directly must read the <code>token</code> field from <code>daemon.json</code> in the <code>userd</code> directory of the Telepresence cache and send it as the <code>x-telepresence-token</code> metadata value.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">Daemon exits reliably when its session ends on Linux</div></div>
+<div style="margin-left: 15px">
+
+On Linux, a daemon could fail to exit after its session ended. This showed as the daemon container of a <code>--docker</code> connection staying up after <code>telepresence quit</code>. The network device is now shut down in an order that cannot hang.
+</div>
+
 ## Version 2.33.1 <span style="font-size: 16px;">(November 15)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Namespace content is only shown to authorized clients in enforcing mode](reference/authentication)</div></div>
 <div style="margin-left: 15px">
