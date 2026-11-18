@@ -37,37 +37,35 @@ func newCredentialFixture(t *testing.T, first []byte) (*guardFixture, *credentia
 	return f, broker
 }
 
-func TestCredentials_FirstOnceThenStream(t *testing.T) {
+func TestCredentials_FirstServedUntilStreamAttaches(t *testing.T) {
 	f, broker := newCredentialFixture(t, []byte("first"))
 	ctx := t.Context()
 	_, err := f.connect(t, f.a)
 	require.NoError(t, err)
 
-	got, err := broker.fetch(ctx)
-	require.NoError(t, err)
-	require.Equal(t, []byte("first"), got)
-
-	// The first credential is used once, and nothing is open yet.
-	_, err = broker.fetch(ctx)
-	require.ErrorIs(t, err, errNoCredentialStream)
+	// The first credential is served again and again while no stream is attached.
+	for range 3 {
+		got, err := broker.fetch(ctx)
+		require.NoError(t, err)
+		require.Equal(t, []byte("first"), got)
+	}
 
 	stream, err := f.a.ProvideCredentials(ctx)
 	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		broker.mu.Lock()
+		defer broker.mu.Unlock()
+		return broker.stream != nil
+	}, 5*time.Second, 5*time.Millisecond)
+
 	type result struct {
 		cred []byte
 		err  error
 	}
 	res := make(chan result, 1)
 	go func() {
-		// The stream may not be attached yet; retry until it is.
-		for {
-			cred, err := broker.fetch(ctx)
-			if err != errNoCredentialStream {
-				res <- result{cred, err}
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+		cred, err := broker.fetch(ctx)
+		res <- result{cred, err}
 	}()
 	req, err := stream.Recv()
 	require.NoError(t, err)
@@ -223,8 +221,10 @@ func TestCredentials_FetchWaitsForStream(t *testing.T) {
 	f, broker := newCredentialFixture(t, []byte("first"))
 	_, err := f.connect(t, f.a)
 	require.NoError(t, err)
-	_, err = broker.fetch(t.Context())
-	require.NoError(t, err)
+	// Without a first credential, fetch waits for the stream.
+	broker.mu.Lock()
+	broker.first = nil
+	broker.mu.Unlock()
 
 	type result struct {
 		cred []byte

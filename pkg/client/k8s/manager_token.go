@@ -161,14 +161,23 @@ func (e *execTokenSource) credential(ctx context.Context) (execCredentialStatus,
 	}
 
 	e.fetched = time.Now()
-	if cred.Status.ExpirationTimestamp != nil {
-		e.expiry = cred.Status.ExpirationTimestamp.Add(-execTokenSafetyMargin)
-	} else {
-		e.expiry = e.fetched.Add(execTokenDefaultTTL)
-	}
+	e.expiry = cacheExpiry(e.fetched, cred.Status.ExpirationTimestamp)
 	e.cached = true
 	e.status = cred.Status
 	return e.status, nil
+}
+
+// cacheExpiry returns the time at which a credential fetched at the given time is refreshed. That is one safety
+// margin before its expiration, or halfway to its expiration when less than a margin remains. A credential
+// that is expired when fetched is not cached, so the next request runs the plugin again.
+func cacheExpiry(fetched time.Time, expiration *metav1.Time) time.Time {
+	if expiration == nil {
+		return fetched.Add(execTokenDefaultTTL)
+	}
+	if expiry := expiration.Add(-execTokenSafetyMargin); expiry.After(fetched) {
+		return expiry
+	}
+	return fetched.Add(expiration.Sub(fetched) / 2)
 }
 
 // ResetTokenOlderThan drops the cached credential if it was fetched before t,

@@ -58,20 +58,21 @@ func TestFetchTokenSource_CachesUntilExpiryMargin(t *testing.T) {
 	require.Equal(t, int32(1), calls.Load())
 }
 
-func TestFetchTokenSource_RefreshesBeforeExpiry(t *testing.T) {
+func TestFetchTokenSource_ShortLivedCredentialIsServedUntilHalfLife(t *testing.T) {
 	ctx := testutil.NewContext(t, false)
 	// The token expires in 30 seconds, which is inside the one minute safety margin.
 	fetch, calls := countingFetcher(func(n int) ([]byte, error) {
 		return tokenCredential(fmt.Sprintf("tok%d", n), time.Now().Add(30*time.Second)), nil
 	})
 	src := newFetchTokenSource(fetch)
-	tok, err := src.Token(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "tok1", tok)
-	tok, err = src.Token(ctx)
-	require.NoError(t, err)
-	require.Equal(t, "tok2", tok)
-	require.Equal(t, int32(2), calls.Load())
+	for range 3 {
+		tok, err := src.Token(ctx)
+		require.NoError(t, err)
+		require.Equal(t, "tok1", tok)
+	}
+	require.Equal(t, int32(1), calls.Load())
+	exp := src.status.ExpirationTimestamp.Time
+	require.True(t, src.expiry.Equal(src.fetched.Add(exp.Sub(src.fetched)/2)))
 }
 
 func TestFetchTokenSource_NoExpiryUsesDefaultTTL(t *testing.T) {

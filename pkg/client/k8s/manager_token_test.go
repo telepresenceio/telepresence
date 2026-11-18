@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
@@ -165,4 +166,29 @@ func TestManagerTokenCredentials_RequireTransportSecurity(t *testing.T) {
 	// true: the external cluster.managerAddress TLS dial.
 	creds = newManagerTokenCredentials(staticTokenSource("x"), true)
 	require.True(t, creds.RequireTransportSecurity())
+}
+
+func TestCacheExpiry(t *testing.T) {
+	fetched := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	at := func(d time.Duration) *metav1.Time {
+		mt := metav1.NewTime(fetched.Add(d))
+		return &mt
+	}
+	tests := []struct {
+		name       string
+		expiration *metav1.Time
+		want       time.Time
+	}{
+		{"no expiration", nil, fetched.Add(execTokenDefaultTTL)},
+		{"normal credential refreshes one margin early", at(time.Hour), fetched.Add(time.Hour - execTokenSafetyMargin)},
+		{"exactly one margin left is cached to its half-life", at(execTokenSafetyMargin), fetched.Add(execTokenSafetyMargin / 2)},
+		{"short-lived credential is cached to its half-life", at(30 * time.Second), fetched.Add(15 * time.Second)},
+		{"expired credential is not cached", at(-time.Hour), fetched.Add(-30 * time.Minute)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.True(t, tt.want.Equal(cacheExpiry(fetched, tt.expiration)))
+		})
+	}
+	require.False(t, cacheExpiry(fetched, at(-time.Hour)).After(fetched))
 }

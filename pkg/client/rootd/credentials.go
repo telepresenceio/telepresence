@@ -20,7 +20,8 @@ var (
 const credentialStreamWait = 10 * time.Second
 
 // credentialBroker supplies cluster credentials without running anything. The first credential comes
-// with the Connect request. Later ones are requested from the user daemon over the stream that it opens.
+// with the Connect request and is served until a stream is attached. After that, credentials are
+// requested from the user daemon over the stream.
 type credentialBroker struct {
 	mu     sync.Mutex
 	first  []byte
@@ -44,11 +45,10 @@ func newCredentialBroker(first []byte) *credentialBroker {
 	return &credentialBroker{first: first, streamUp: make(chan struct{}), streamWait: credentialStreamWait}
 }
 
-// fetch returns the first credential once. After that it asks the user daemon.
+// fetch returns the first credential until a stream is attached. After that it asks the user daemon.
 func (b *credentialBroker) fetch(ctx context.Context) ([]byte, error) {
 	b.mu.Lock()
 	if first := b.first; first != nil {
-		b.first = nil
 		b.mu.Unlock()
 		return first, nil
 	}
@@ -120,6 +120,7 @@ func (b *credentialBroker) serve(ctx context.Context, srv rpc.Daemon_ProvideCred
 	b.mu.Lock()
 	old := b.stream
 	b.stream = cs
+	b.first = nil
 	close(b.streamUp)
 	b.streamUp = make(chan struct{})
 	b.mu.Unlock()
