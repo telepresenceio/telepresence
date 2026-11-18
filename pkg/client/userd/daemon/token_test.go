@@ -72,7 +72,7 @@ func TestInternalRun_RefusesToServeWithoutSecret(t *testing.T) {
 
 	flags := Command(ctx).Flags()
 	require.NoError(t, flags.Set(addressFlag, addr))
-	require.NoError(t, flags.Set(logfileFlag, filepath.Join(dir, "logs", "connector.log")))
+	require.NoError(t, flags.Set(logfileFlag, "-"))
 
 	err = internalRun(ctx, flags)
 	require.Error(t, err)

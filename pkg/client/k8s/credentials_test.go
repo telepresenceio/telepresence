@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -197,6 +198,11 @@ func TestApplyCredentials_TokenIsSentAndRefreshedAfter401(t *testing.T) {
 	src, _, err := applyCredentials(ctx, rc, fetch)
 	require.NoError(t, err)
 	require.NotNil(t, src)
+
+	// The first request must start on a later clock reading than the fetch.
+	for t0 := time.Now(); !time.Now().After(t0); {
+		runtime.Gosched()
+	}
 
 	hc, err := rest.HTTPClientFor(rc)
 	require.NoError(t, err)
