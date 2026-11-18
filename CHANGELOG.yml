@@ -24,6 +24,16 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.33.2
+    date: (TBD)
+    notes:
+      - type: bugfix
+        title: Daemon exits reliably when its session ends on Linux
+        body: >-
+          On Linux, a daemon could fail to exit after its session ended. This
+          showed as the daemon container of a <code>--docker</code> connection
+          staying up after <code>telepresence quit</code>. The network device
+          is now shut down in an order that cannot hang.
   - version: 2.33.1
     date: 2026-11-15
     notes:
