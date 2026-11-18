@@ -50,13 +50,16 @@ type service struct {
 	quit          context.CancelFunc
 	timedLogLevel log.TimedLevel
 
-	// sessionLock protects the session, sessionCancel, ownerConn, and sessionRunning fields.
+	// sessionLock protects the session, sessionCancel, ownerConn, quitting, and sessionRunning fields.
 	sessionLock   sync.RWMutex
 	session       *session
 	sessionCancel func(error)
 
 	// ownerConn is the number of the connection that created the session. Only valid while session != nil.
 	ownerConn uint64
+
+	// quitting is set when an accepted Quit will stop the daemon. Connect refuses to create a session after that.
+	quitting bool
 
 	// newSession and runSession create and run the session. They are replaced by tests.
 	newSession func(sessionCtx, dialCtx context.Context, mi *rpc.NetworkConfig, activity chan<- time.Time, cleanupDNSRouting func(context.Context)) (*session, error)

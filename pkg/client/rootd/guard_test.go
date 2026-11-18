@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
@@ -33,12 +35,17 @@ type guardFixture struct {
 
 func newGuardFixture(t *testing.T) *guardFixture {
 	t.Helper()
+	return newGuardFixtureManaged(t, false)
+}
+
+func newGuardFixtureManaged(t *testing.T, managed bool) *guardFixture {
+	t.Helper()
 	cfg := client.GetDefaultConfig()
 	ctx := filelocation.WithAppUserCacheDir(client.WithConfig(t.Context(), cfg), t.TempDir())
 	ctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
 
-	s := newService(cfg, false)
+	s := newService(cfg, managed)
 	s.newSession = func(sessionCtx, _ context.Context, _ *rpc.NetworkConfig, _ chan<- time.Time, _ func(context.Context)) (*session, error) {
 		return &session{
 			Cluster:   &k8s.Cluster{Kubeconfig: &k8s.Kubeconfig{Context: sessionCtx}},
@@ -214,4 +221,90 @@ func TestCallerChecks_StreamOpenedWhileIdle(t *testing.T) {
 	_, err = stream.CloseAndRecv()
 	assert.True(t, daemon.IsRootDaemonInUse(err), "%v", err)
 	assert.True(t, f.hasSession())
+}
+
+func TestCallerChecks_QuitRacesConnect(t *testing.T) {
+	// holdNewSession makes the next Connect stop inside newSession, where it holds the session lock.
+	holdNewSession := func(f *guardFixture) (entered <-chan struct{}, release func()) {
+		in := make(chan struct{})
+		rel := make(chan struct{})
+		orig := f.svc.newSession
+		f.svc.newSession = func(sctx, dctx context.Context, nc *rpc.NetworkConfig, ac chan<- time.Time, c func(context.Context)) (*session, error) {
+			close(in)
+			<-rel
+			return orig(sctx, dctx, nc, ac, c)
+		}
+		return in, func() { close(rel) }
+	}
+
+	t.Run("Quit that arrives during Connect is refused", func(t *testing.T) {
+		f := newGuardFixture(t)
+		entered, release := holdNewSession(f)
+
+		connectErr := make(chan error, 1)
+		go func() {
+			_, err := f.connect(t, f.a)
+			connectErr <- err
+		}()
+		<-entered
+
+		quitErr := make(chan error, 1)
+		go func() {
+			_, err := f.b.Quit(t.Context(), &emptypb.Empty{})
+			quitErr <- err
+		}()
+		// The Quit handler needs the lock that Connect holds, so it cannot answer yet.
+		select {
+		case err := <-quitErr:
+			t.Fatalf("Quit was answered while Connect held the lock: %v", err)
+		case <-time.After(200 * time.Millisecond):
+		}
+
+		release()
+		require.NoError(t, <-connectErr)
+		assert.True(t, daemon.IsRootDaemonInUse(<-quitErr))
+		assert.True(t, f.hasSession())
+		st, err := f.a.Status(t.Context(), &emptypb.Empty{})
+		require.NoError(t, err)
+		assert.NotNil(t, st.OutboundConfig)
+	})
+
+	t.Run("Connect that arrives after an accepted Quit fails", func(t *testing.T) {
+		f := newGuardFixture(t)
+		_, err := f.b.Quit(t.Context(), &emptypb.Empty{})
+		require.NoError(t, err)
+
+		_, err = f.connect(t, f.a)
+		require.Error(t, err)
+		assert.Equal(t, codes.Unavailable, status.Code(err), "%v", err)
+		assert.False(t, f.hasSession())
+	})
+
+	t.Run("Connect blocked behind a Quit fails", func(t *testing.T) {
+		f := newGuardFixture(t)
+		f.svc.sessionLock.Lock() // stands in for a Quit that is deciding
+		connectErr := make(chan error, 1)
+		go func() {
+			_, err := f.connect(t, f.a)
+			connectErr <- err
+		}()
+		time.Sleep(100 * time.Millisecond)
+		f.svc.quitting = true
+		f.svc.sessionLock.Unlock()
+
+		err := <-connectErr
+		assert.Equal(t, codes.Unavailable, status.Code(err), "%v", err)
+		assert.False(t, f.hasSession())
+	})
+
+	t.Run("managed daemon accepts Connect after Quit", func(t *testing.T) {
+		f := newGuardFixtureManaged(t, true)
+		qr, err := f.b.Quit(t.Context(), &emptypb.Empty{})
+		require.NoError(t, err)
+		assert.True(t, qr.RootDaemonWillContinue)
+
+		_, err = f.connect(t, f.a)
+		require.NoError(t, err)
+		assert.True(t, f.hasSession())
+	})
 }

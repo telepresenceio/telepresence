@@ -26,12 +26,14 @@ const (
 )
 
 // callerRules lists the methods that differ from the default, which is ownerOnly. Connect and Status
-// answer differently depending on the caller, so their handlers decide. Quit and SetLogLevel are allowed
-// for every connection while no session exists, and ownerOnly while one does.
+// answer differently depending on the caller, so their handlers decide. Quit also decides in its handler,
+// under the lock that Connect holds while it creates a session. SetLogLevel is allowed for every
+// connection while no session exists, and ownerOnly while one does.
 var callerRules = map[string]callerRule{ //nolint:gochecknoglobals // constant lookup table
 	"Version": anyCaller,
 	"Connect": selfChecked,
 	"Status":  selfChecked,
+	"Quit":    selfChecked,
 }
 
 func (s *service) unaryGuard(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {

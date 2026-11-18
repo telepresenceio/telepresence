@@ -48,6 +48,16 @@ func (s *service) Status(ctx context.Context, _ *emptypb.Empty) (*rpc.DaemonStat
 }
 
 func (s *service) Quit(ctx context.Context, _ *emptypb.Empty) (*rpc.QuitResponse, error) {
+	s.sessionLock.Lock()
+	if s.session != nil && !s.isOwnerLocked(ctx) {
+		s.sessionLock.Unlock()
+		return nil, daemon.ErrRootDaemonInUse()
+	}
+	if !s.managed {
+		s.quitting = true
+	}
+	s.sessionLock.Unlock()
+
 	s.cancelSession(ctx)
 	s.quit()
 	return &rpc.QuitResponse{RootDaemonWillContinue: s.managed}, nil
@@ -105,6 +115,9 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		reply.AgentTransports = s.session.agentTransportsRPC()
 		reply.VifInterfaceName = s.session.vifInterfaceNameRPC()
 		return reply, nil
+	}
+	if s.quitting {
+		return nil, status.Error(codes.Unavailable, "the root daemon is shutting down")
 	}
 
 	cfg, err := sessionConfig(client.GetConfig(s), info.ClientConfig, s.managed)
