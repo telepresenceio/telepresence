@@ -70,6 +70,13 @@ service Daemon {
   // agent_pod_namespaces, which tells this daemon not to watch agent pods
   // itself.
   rpc WatchAgentPods(stream AgentPodsDelta) returns (google.protobuf.Empty);
+
+  // ProvideCredentials is opened by the user daemon, on the connection that
+  // created the session, right after Connect. The root daemon sends a
+  // CredentialRequest whenever it needs a fresh cluster credential, and the
+  // user daemon answers each one with a CredentialReply. The stream lasts
+  // as long as the session.
+  rpc ProvideCredentials(stream CredentialReply) returns (stream CredentialRequest);
 }
 
 message DaemonStatus {
@@ -92,6 +99,11 @@ message DaemonStatus {
   // carries the session's virtual network (e.g. "tel0" or, on macOS, a
   // "utunN" name). Empty when there is no active session.
   string vif_interface_name = 8;
+
+  // in_use is true when the status was requested by a connection other than
+  // the one that owns the active session. Such a status carries no session
+  // details.
+  bool in_use = 9;
   reserved 3;
 }
 
@@ -181,9 +193,6 @@ message NetworkConfig {
   // Port mappings enforced by the TUN-device.
   repeated string port_mappings = 8;
 
-  // Users home directory
-  string home_dir = 3;
-
   // Connection namespace
   string namespace = 4;
 
@@ -206,6 +215,31 @@ message NetworkConfig {
   // WatchAgentPods. When non-empty, this daemon must not watch agent pods
   // itself.
   repeated string agent_pod_namespaces = 11;
+
+  // The ExecCredential JSON that the credential plugin of the kubeconfig's
+  // user printed. Empty when the user has no credential plugin. Further
+  // credentials are requested using ProvideCredentials.
+  bytes exec_credential = 12;
+
+  reserved 3;
+}
+
+// CredentialRequest asks the user daemon to run the credential plugin again.
+message CredentialRequest {
+  // id is echoed in the reply.
+  uint64 id = 1;
+}
+
+// CredentialReply answers a CredentialRequest.
+message CredentialReply {
+  // id is the id of the request that this reply answers.
+  uint64 id = 1;
+
+  // The ExecCredential JSON that the credential plugin printed.
+  bytes exec_credential = 2;
+
+  // Set when the plugin failed. exec_credential is then empty.
+  string error = 3;
 }
 
 // AgentPodsDelta is pushed by the user daemon, carrying the agent-pod

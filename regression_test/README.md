@@ -109,13 +109,19 @@ Rules that hold the whole thing together:
   provision also waits until the old manager pod is fully gone: webhook
   admissions and fresh service-to-pod resolutions can otherwise land on
   the terminating pod with its pre-rollout state.
-- **Connections.** The host daemon is a process singleton: provisioning a
-  host connection always quits whatever ran before it; named connections
-  (`rt.ConnNamed`, with or without `rt.ConnDocker`) quit only their own
-  session (`quit -s` stops ALL daemons and ignores `--use` — never use it
-  for one connection). Adoption of a running daemon happens only for the
-  plain default connection, and never after the release has rolled within
-  the run.
+- **Connections.** The root daemon serves one host user daemon at a time.
+  Provisioning a named host connection quits the host connection that is
+  running (`quit --use <its name>`, found through the host daemon's info
+  file) and forgets the memoized host connections. Provisioning the
+  unnamed default host connection runs `quit -s` and forgets all memoized
+  connections, Docker ones included. Docker connections (`rt.ConnDocker`)
+  keep their root session inside their container: a named host
+  connection neither quits nor forgets them, and a named docker
+  connection quits only its own
+  stale session. `quit -s` stops ALL daemons and ignores `--use`; never
+  use it for one named connection. Adoption of a running daemon happens only for
+  the plain default connection, and never after the release has rolled
+  within the run.
 - **Workloads are always destroyed at run end**, even in dev mode: they
   are cheap to recreate, and keeping dozens of them walks the node into
   kubelet's pod limit. A workload whose manifest changed is deleted and

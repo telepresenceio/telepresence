@@ -2,9 +2,6 @@ package kubeauth
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
-	"encoding/hex"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -18,10 +15,6 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/client-go/tools/clientcmd"
 
@@ -37,8 +30,6 @@ import (
 )
 
 const (
-	// TokenMetadataKey is the gRPC metadata key that carries the daemon's token.
-	TokenMetadataKey  = "x-telepresence-kubeauth-token"
 	PortFileStaleTime = 3 * time.Second
 	logfileFlag       = "logfile"
 )
@@ -54,34 +45,6 @@ type PortFile struct {
 	Port       int    `json:"port"`
 	Kubeconfig string `json:"kubeconfig"`
 	Token      string `json:"token"`
-}
-
-// tokenInterceptors returns interceptors that reject calls that don't carry the given token.
-func tokenInterceptors(token string) *server.Interceptors {
-	check := func(ctx context.Context) error {
-		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			for _, v := range md.Get(TokenMetadataKey) {
-				if subtle.ConstantTimeCompare([]byte(v), []byte(token)) == 1 {
-					return nil
-				}
-			}
-		}
-		return status.Error(codes.Unauthenticated, "missing or invalid kubeauth token")
-	}
-	return &server.Interceptors{
-		Unary: func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-			if err := check(ctx); err != nil {
-				return nil, err
-			}
-			return handler(ctx, req)
-		},
-		Stream: func(srv any, ss grpc.ServerStream, _ *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-			if err := check(ss.Context()); err != nil {
-				return err
-			}
-			return handler(srv, ss)
-		},
-	}
 }
 
 func Command(ctx context.Context) *cobra.Command {
@@ -138,11 +101,10 @@ func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) er
 
 	as.clientConfig = as.kubeFlags.ToRawKubeConfigLoader()
 	as.configFiles = as.clientConfig.ConfigAccess().GetLoadingPrecedence()
-	tokenBytes := make([]byte, 32)
-	if _, err = rand.Read(tokenBytes); err != nil {
+	token, err := server.NewToken()
+	if err != nil {
 		return err
 	}
-	token := hex.EncodeToString(tokenBytes)
 	p := PortFile{
 		Port:       addr.Port,
 		Token:      token,
@@ -163,7 +125,7 @@ func (as *authService) internalRun(ctx context.Context, flags *pflag.FlagSet) er
 	g.Go("portfile-alive", as.keepPortFileAlive)
 	g.Go("portfile-watcher", as.watchFiles)
 	g.Go("grpc-server", func(ctx context.Context) error {
-		svc := server.NewWithAuth(ctx, tokenInterceptors(token))
+		svc := server.NewWithAuth(ctx, server.TokenInterceptors(token))
 		authGrpc.RegisterAuthenticatorServer(svc, as)
 		return server.Serve(ctx, svc, grpcListener)
 	})

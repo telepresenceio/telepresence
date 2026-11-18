@@ -7,6 +7,8 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -164,49 +166,73 @@ func ConnWithConfig(delta func(client.Config)) ConnOpt {
 	}
 }
 
-// activeHostConfigDir is the config dir the currently running host
-// (non-docker) daemon was started with; seeded to the baseline config dir
-// once newRuntime's writeBaselineConfig/quitOnConfigChange has reconciled
-// any stale daemon at startup. Guarded by the engine's serial execution
-// (M1): suites run one at a time, so no lock is needed.
+// ensureHostDaemon ends what could make a connection reuse a stale session
+// when it is provisioned: provisioning means "make it fresh", but `connect`
+// against a running daemon would silently reuse its configuration (config
+// dir, KUBECONFIG, namespace) and any degraded session. The healthy-daemon
+// fast path is adoption, which never reaches this.
 //
-// ensureHostDaemon quits any conflicting daemon before a connection is
-// provisioned. Provisioning means "make it fresh": a running daemon may
-// hold a different configuration (config dir, KUBECONFIG, namespace) or a
-// degraded session — `connect` against it would silently reuse both. The
-// healthy-daemon fast path is adoption, which never reaches this. A named
-// connection (host or docker) only quits a same-named stale session, so
-// establishing it never disturbs another connection (host or docker) that
-// happens to already be live; the plain, unnamed host default has no name
-// to scope by, so it quits every local daemon instead.
+// The root daemon serves one host user daemon at a time. A named host
+// connection ends the host connection that is running, whatever its name,
+// and forgets the memoized host connections. The unnamed default host
+// connection quits every daemon, Docker ones included, and forgets all
+// memoized connections. A Docker connection keeps its root session inside
+// its container; a named one only quits a same-named stale session.
 //
 //nolint:gochecknoglobals // single, serial test run; see M1 contract
 func ensureHostDaemon(e Env, cs *connSpec) {
-	if cs.name != "" {
-		// A daemon left over from an earlier run would be silently reused by
-		// name; quit its session so the connect starts fresh. No -s: that
-		// flag stops ALL daemons, host and docker alike, and ignores --use,
-		// which would also stop any other named connection already live.
-		if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "--use", cs.name); err != nil {
-			e.R.Infof("[rtest] quit before connect %s: %v: %s", cs.name, err, stderr)
+	if cs.docker {
+		if cs.name != "" {
+			if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "--use", cs.name); err != nil {
+				e.R.Infof("[rtest] quit before connect %s: %v: %s", cs.name, err, stderr)
+			}
 		}
 		return
 	}
-	if cs.docker {
-		// An anonymous docker connection has no stale session to target by
-		// name, so there is nothing to quit up front.
+	if cs.name == "" {
+		if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "-s"); err != nil {
+			e.R.Infof("[rtest] quit before host connect: %v: %s", err, stderr)
+		}
+		e.R.ForgetConnections()
 		return
 	}
-	if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "-s"); err != nil {
-		e.R.Infof("[rtest] quit before host connect: %v: %s", err, stderr)
+	// No -s: that flag stops ALL daemons and ignores --use.
+	name, ok := e.R.hostDaemonName()
+	if !ok {
+		name = cs.name
 	}
-	// That -s took every other live connection with it, host and docker
-	// alike, so any memoized elsewhere now names a session that is gone.
-	// Forgetting them costs a reconnect on next use; keeping them hands out
-	// a dead handle. The connection being provisioned here is not memoized
-	// yet -- the engine stores it only once ProvisionFn returns -- so it is
-	// not among the entries dropped.
-	e.R.ForgetConnections()
+	if _, stderr, err := e.R.CLI().Run(e.Ctx, "quit", "--use", name); err != nil {
+		e.R.Infof("[rtest] quit before host connect %s: %v: %s", cs.name, err, stderr)
+	}
+	e.R.forgetHostConnections()
+}
+
+// hostDaemonName returns the name of the host (non-docker) user daemon
+// recorded in the user cache, if there is one. The host daemon owns the info
+// file daemon.json in the userd directory; docker daemons write <name>.json.
+func (r *Runtime) hostDaemonName() (string, bool) {
+	data, err := os.ReadFile(filepath.Join(r.UserCacheDir(), "userd", "daemon.json"))
+	if err != nil {
+		return "", false
+	}
+	var info struct {
+		Name         string `json:"name"`
+		ContainerPID int    `json:"container_pid"`
+	}
+	if json.Unmarshal(data, &info) != nil || info.ContainerPID != 0 || info.Name == "" {
+		return "", false
+	}
+	return info.Name, true
+}
+
+// forgetHostConnections drops the memoized connection fixtures that run
+// through the host daemon, so the next Get or Mutate connects afresh. Docker
+// connections stay memoized.
+func (r *Runtime) forgetHostConnections() {
+	r.engine.invalidateWhere("connection/", func(en *memoEntry) bool {
+		c, ok := en.value.(*Conn)
+		return ok && !c.docker
+	})
 }
 
 func connectArgs(ns string, cs *connSpec) []string {

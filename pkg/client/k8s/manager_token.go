@@ -40,6 +40,8 @@ func newManagerTokenSource(kc *Kubeconfig) managerTokenSource {
 		return staticTokenSource(rc.BearerToken)
 	case rc.BearerTokenFile != "":
 		return &oauth2TokenSource{ts: transport.NewCachedFileTokenSource(rc.BearerTokenFile)}
+	case kc.bearerSource != nil:
+		return kc.bearerSource
 	case rc.ExecProvider != nil:
 		return newExecTokenSource(rc.ExecProvider)
 	case rc.AuthProvider != nil:
@@ -82,16 +84,21 @@ const (
 	execTokenDefaultTTL = 10 * time.Minute
 )
 
-// execTokenSource runs a kubeconfig exec credential plugin and caches the
-// resulting bearer token until it is about to expire.
-type execTokenSource struct {
-	execConfig *clientcmdapi.ExecConfig
+// CredentialFetcher returns the raw ExecCredential JSON that a credential
+// plugin printed.
+type CredentialFetcher func(ctx context.Context) ([]byte, error)
 
-	mu     sync.Mutex
-	cached bool
-	expiry time.Time
-	token  string
-	tokErr error
+// execTokenSource gets credentials from a CredentialFetcher and caches them
+// until they are about to expire.
+type execTokenSource struct {
+	fetch CredentialFetcher
+
+	mu      sync.Mutex
+	cached  bool
+	fetched time.Time
+	expiry  time.Time
+	status  execCredentialStatus
+	err     error
 }
 
 // newExecTokenSource returns a source that runs ec to obtain a bearer token.
@@ -101,50 +108,105 @@ func newExecTokenSource(ec *clientcmdapi.ExecConfig) *execTokenSource {
 	cp := *ec
 	cp.Args = append([]string(nil), ec.Args...)
 	cp.Env = append([]clientcmdapi.ExecEnvVar(nil), ec.Env...)
-	return &execTokenSource{execConfig: &cp}
+	return newFetchTokenSource(func(ctx context.Context) ([]byte, error) {
+		return authenticator.ResolveExecConfig(ctx, &cp)
+	})
+}
+
+// newFetchTokenSource returns a source that calls fetch to obtain credentials.
+func newFetchTokenSource(fetch CredentialFetcher) *execTokenSource {
+	return &execTokenSource{fetch: fetch}
 }
 
 // execCredentialStatus mirrors the status field shared by the
 // client.authentication.k8s.io v1 and v1beta1 ExecCredential types.
 type execCredentialStatus struct {
-	Token               string       `json:"token"`
-	ExpirationTimestamp *metav1.Time `json:"expirationTimestamp"`
+	Token                 string       `json:"token"`
+	ClientCertificateData string       `json:"clientCertificateData"`
+	ClientKeyData         string       `json:"clientKeyData"`
+	ExpirationTimestamp   *metav1.Time `json:"expirationTimestamp"`
 }
 
 func (e *execTokenSource) Token(ctx context.Context) (string, error) {
+	st, err := e.credential(ctx)
+	if err != nil {
+		return "", err
+	}
+	if st.Token == "" {
+		return "", errNoBearerToken
+	}
+	return st.Token, nil
+}
+
+// credential returns the cached credential, or fetches a new one when the
+// cache is empty or the credential is about to expire.
+func (e *execTokenSource) credential(ctx context.Context) (execCredentialStatus, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.cached && time.Now().Before(e.expiry) {
-		return e.token, e.tokErr
+		return e.status, e.err
 	}
 
-	out, err := authenticator.ResolveExecConfig(ctx, e.execConfig)
+	out, err := e.fetch(ctx)
 	if err != nil {
 		e.cached = false
-		return "", err
+		return execCredentialStatus{}, err
 	}
 	var cred struct {
 		Status execCredentialStatus `json:"status"`
 	}
 	if err := json.Unmarshal(out, &cred); err != nil {
 		e.cached = false
-		return "", fmt.Errorf("unable to parse exec credential: %w", err)
+		return execCredentialStatus{}, fmt.Errorf("unable to parse exec credential: %w", err)
 	}
 
-	if cred.Status.ExpirationTimestamp != nil {
-		e.expiry = cred.Status.ExpirationTimestamp.Add(-execTokenSafetyMargin)
-	} else {
-		e.expiry = time.Now().Add(execTokenDefaultTTL)
-	}
+	e.fetched = time.Now()
+	e.expiry = cacheExpiry(e.fetched, cred.Status.ExpirationTimestamp)
 	e.cached = true
-	if cred.Status.Token == "" {
-		e.token = ""
-		e.tokErr = errNoBearerToken
-	} else {
-		e.token = cred.Status.Token
-		e.tokErr = nil
+	e.status = cred.Status
+	return e.status, nil
+}
+
+// cacheExpiry returns the time at which a credential fetched at the given time is refreshed. That is one safety
+// margin before its expiration, or halfway to its expiration when less than a margin remains. A credential
+// that is expired when fetched is not cached, so the next request runs the plugin again.
+func cacheExpiry(fetched time.Time, expiration *metav1.Time) time.Time {
+	if expiration == nil {
+		return fetched.Add(execTokenDefaultTTL)
 	}
-	return e.token, e.tokErr
+	if expiry := expiration.Add(-execTokenSafetyMargin); expiry.After(fetched) {
+		return expiry
+	}
+	return fetched.Add(expiration.Sub(fetched) / 2)
+}
+
+// ResetTokenOlderThan drops the cached credential if it was fetched before t,
+// so that the next request fetches a fresh one.
+func (e *execTokenSource) ResetTokenOlderThan(t time.Time) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.cached && e.fetched.Before(t) {
+		e.cached = false
+	}
+}
+
+// restTokenSource adapts an execTokenSource to the token source interface of
+// client-go's transport wrappers.
+type restTokenSource struct {
+	ctx context.Context
+	src *execTokenSource
+}
+
+func (r restTokenSource) Token() (*oauth2.Token, error) {
+	tok, err := r.src.Token(r.ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &oauth2.Token{AccessToken: tok, TokenType: "Bearer"}, nil
+}
+
+func (r restTokenSource) ResetTokenOlderThan(t time.Time) {
+	r.src.ResetTokenOlderThan(t)
 }
 
 // managerAuthTokenSource composes a bearer-token source with an x509

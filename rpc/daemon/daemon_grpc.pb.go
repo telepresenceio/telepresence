@@ -40,6 +40,7 @@ const (
 	Daemon_SetInterceptShortcuts_FullMethodName = "/telepresence.daemon.Daemon/SetInterceptShortcuts"
 	Daemon_ActivityWatcher_FullMethodName       = "/telepresence.daemon.Daemon/ActivityWatcher"
 	Daemon_WatchAgentPods_FullMethodName        = "/telepresence.daemon.Daemon/WatchAgentPods"
+	Daemon_ProvideCredentials_FullMethodName    = "/telepresence.daemon.Daemon/ProvideCredentials"
 )
 
 // DaemonClient is the client API for Daemon service.
@@ -90,6 +91,12 @@ type DaemonClient interface {
 	// agent_pod_namespaces, which tells this daemon not to watch agent pods
 	// itself.
 	WatchAgentPods(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[AgentPodsDelta, emptypb.Empty], error)
+	// ProvideCredentials is opened by the user daemon, on the connection that
+	// created the session, right after Connect. The root daemon sends a
+	// CredentialRequest whenever it needs a fresh cluster credential, and the
+	// user daemon answers each one with a CredentialReply. The stream lasts
+	// as long as the session.
+	ProvideCredentials(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CredentialReply, CredentialRequest], error)
 }
 
 type daemonClient struct {
@@ -292,6 +299,19 @@ func (c *daemonClient) WatchAgentPods(ctx context.Context, opts ...grpc.CallOpti
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Daemon_WatchAgentPodsClient = grpc.ClientStreamingClient[AgentPodsDelta, emptypb.Empty]
 
+func (c *daemonClient) ProvideCredentials(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CredentialReply, CredentialRequest], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Daemon_ServiceDesc.Streams[2], Daemon_ProvideCredentials_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CredentialReply, CredentialRequest]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Daemon_ProvideCredentialsClient = grpc.BidiStreamingClient[CredentialReply, CredentialRequest]
+
 // DaemonServer is the server API for Daemon service.
 // All implementations must embed UnimplementedDaemonServer
 // for forward compatibility.
@@ -340,6 +360,12 @@ type DaemonServer interface {
 	// agent_pod_namespaces, which tells this daemon not to watch agent pods
 	// itself.
 	WatchAgentPods(grpc.ClientStreamingServer[AgentPodsDelta, emptypb.Empty]) error
+	// ProvideCredentials is opened by the user daemon, on the connection that
+	// created the session, right after Connect. The root daemon sends a
+	// CredentialRequest whenever it needs a fresh cluster credential, and the
+	// user daemon answers each one with a CredentialReply. The stream lasts
+	// as long as the session.
+	ProvideCredentials(grpc.BidiStreamingServer[CredentialReply, CredentialRequest]) error
 	mustEmbedUnimplementedDaemonServer()
 }
 
@@ -403,6 +429,9 @@ func (UnimplementedDaemonServer) ActivityWatcher(*emptypb.Empty, grpc.ServerStre
 }
 func (UnimplementedDaemonServer) WatchAgentPods(grpc.ClientStreamingServer[AgentPodsDelta, emptypb.Empty]) error {
 	return status.Error(codes.Unimplemented, "method WatchAgentPods not implemented")
+}
+func (UnimplementedDaemonServer) ProvideCredentials(grpc.BidiStreamingServer[CredentialReply, CredentialRequest]) error {
+	return status.Error(codes.Unimplemented, "method ProvideCredentials not implemented")
 }
 func (UnimplementedDaemonServer) mustEmbedUnimplementedDaemonServer() {}
 func (UnimplementedDaemonServer) testEmbeddedByValue()                {}
@@ -731,6 +760,13 @@ func _Daemon_WatchAgentPods_Handler(srv interface{}, stream grpc.ServerStream) e
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type Daemon_WatchAgentPodsServer = grpc.ClientStreamingServer[AgentPodsDelta, emptypb.Empty]
 
+func _Daemon_ProvideCredentials_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaemonServer).ProvideCredentials(&grpc.GenericServerStream[CredentialReply, CredentialRequest]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Daemon_ProvideCredentialsServer = grpc.BidiStreamingServer[CredentialReply, CredentialRequest]
+
 // Daemon_ServiceDesc is the grpc.ServiceDesc for Daemon service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -812,6 +848,12 @@ var Daemon_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "WatchAgentPods",
 			Handler:       _Daemon_WatchAgentPods_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "ProvideCredentials",
+			Handler:       _Daemon_ProvideCredentials_Handler,
+			ServerStreams: true,
 			ClientStreams: true,
 		},
 	},

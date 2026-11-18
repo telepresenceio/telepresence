@@ -262,8 +262,8 @@ Logs rotate daily. Use `tail -F <filename>` to watch rotating logs seamlessly.
 If daemons fail during early initialization before logfiles are set up, run them directly to see stderr output. The `--address` flag is mandatory:
 
 ```bash
-# Run user daemon directly
-telepresence userd --logfile - --address :8083
+# Run user daemon directly (it refuses to run without a secret)
+TELEPRESENCE_USERD_TOKEN=secret telepresence userd --logfile - --address :8083
 
 # Run root daemon directly (requires sudo)
 sudo telepresence rootd --logfile - --address :8084

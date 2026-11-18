@@ -30,7 +30,7 @@ func TestTokenInterceptors(t *testing.T) {
 	const token = "right-token"
 	ctx := t.Context()
 	lis := bufconn.Listen(1 << 16)
-	svc := server.NewWithAuth(ctx, tokenInterceptors(token))
+	svc := server.NewWithAuth(ctx, server.TokenInterceptors(token))
 	rpc.RegisterAuthenticatorServer(svc, fakeAuthenticator{})
 	go func() { _ = svc.Serve(lis) }()
 	t.Cleanup(svc.Stop)
@@ -49,10 +49,10 @@ func TestTokenInterceptors(t *testing.T) {
 	_, err = call(ctx)
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
 
-	_, err = call(metadata.AppendToOutgoingContext(ctx, TokenMetadataKey, "wrong-token"))
+	_, err = call(metadata.AppendToOutgoingContext(ctx, server.TokenMetadataKey, "wrong-token"))
 	assert.Equal(t, codes.Unauthenticated, status.Code(err))
 
-	res, err := call(metadata.AppendToOutgoingContext(ctx, TokenMetadataKey, token))
+	res, err := call(metadata.AppendToOutgoingContext(ctx, server.TokenMetadataKey, token))
 	require.NoError(t, err)
 	assert.Equal(t, "creds", string(res.RawCredentials))
 }

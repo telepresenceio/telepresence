@@ -3,6 +3,7 @@ package patcher
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -38,33 +39,15 @@ func CreateExternalKubeConfig(
 	authAddressFunc AddressProvider,
 	patcher Patcher,
 ) ([]byte, error) {
-	ns, _, err := loader.Namespace()
-	if err != nil {
-		return nil, err
-	}
-
-	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
-	clog.Debugf(ctx, "host kubeconfig = %v", configFiles)
 	origConfig, err := loader.RawConfig()
 	if err != nil {
 		return nil, err
 	}
-	var config clientcmdapi.Config
-	origConfig.DeepCopyInto(&config)
-
-	// Minify the config so that we only deal with the current context.
-	if kubeContext != "" {
-		config.CurrentContext = kubeContext
-	}
-	if err = clientcmdapi.MinifyConfig(&config); err != nil {
+	configFiles := loader.ConfigAccess().GetLoadingPrecedence()
+	clog.Debugf(ctx, "host kubeconfig = %v", configFiles)
+	config, err := minifiedConfig(ctx, origConfig, kubeContext)
+	if err != nil {
 		return nil, err
-	}
-	clog.Debugf(ctx, "context = %q, namespace %q", config.CurrentContext, ns)
-
-	// Minify guarantees that the CurrentContext is set, but not that it has a cluster
-	cc := config.Contexts[config.CurrentContext]
-	if cc.Cluster == "" {
-		return nil, fmt.Errorf("current context %q has no cluster", config.CurrentContext)
 	}
 
 	if needsStubbedExec(&config) {
@@ -128,4 +111,112 @@ func needsStubbedExec(rawConfig *clientcmdapi.Config) bool {
 		}
 	}
 	return false
+}
+
+// RootKubeConfig is a kubeconfig for the root daemon.
+type RootKubeConfig struct {
+	// Data is the kubeconfig. It names no file and no credential plugin.
+	Data []byte
+
+	// Exec is the credential plugin that the user of the context has, or nil.
+	Exec *clientcmdapi.ExecConfig
+
+	// TokenFile is the token file that the user of the context has. It is empty when the user has a
+	// credential plugin or no token file.
+	TokenFile string
+}
+
+// CreateRootKubeConfig returns a kubeconfig that the root daemon can use as is. It is the kubeconfig that the
+// loader results in once all overrides are applied, minimized so that it just contains the current (or
+// given) context, and flattened so that all certificates and keys are inline. The credential plugin and the
+// token file of the context's user are removed from the result and returned separately, because the
+// root daemon doesn't run programs and doesn't read files. A user with a token, token file or client
+// certificate has no plugin result, because client-go doesn't run the plugin for such a user.
+func CreateRootKubeConfig(ctx context.Context, loader clientcmd.OverridingClientConfig, kubeContext string) (*RootKubeConfig, error) {
+	merged, err := loader.MergedRawConfig()
+	if err != nil {
+		return nil, err
+	}
+	nameAnonymousUser(&merged, kubeContext)
+	config, err := minifiedConfig(ctx, merged, kubeContext)
+	if err != nil {
+		return nil, err
+	}
+	rc := &RootKubeConfig{}
+	if authInfo, ok := config.AuthInfos[config.Contexts[config.CurrentContext].AuthInfo]; ok {
+		if hasStaticCredential(authInfo) {
+			authInfo.Exec = nil
+		}
+		if authInfo.Exec != nil {
+			rc.Exec = authInfo.Exec.DeepCopy()
+			authInfo.Exec = nil
+		} else if authInfo.TokenFile != "" {
+			baseDir := ""
+			if authInfo.LocationOfOrigin != "" {
+				baseDir = filepath.Dir(authInfo.LocationOfOrigin)
+			}
+			if rc.TokenFile, err = clientcmdapi.MakeAbs(authInfo.TokenFile, baseDir); err != nil {
+				return nil, err
+			}
+		}
+		authInfo.TokenFile = ""
+		if rc.TokenFile != "" || rc.Exec != nil {
+			authInfo.Token = ""
+		}
+	}
+	if err = clientcmdapi.FlattenConfig(&config); err != nil {
+		return nil, err
+	}
+	if rc.Data, err = clientcmd.Write(config); err != nil {
+		return nil, err
+	}
+	return rc, nil
+}
+
+// hasStaticCredential reports whether client-go uses a token, a token file or a client certificate of the user
+// instead of its credential plugin.
+func hasStaticCredential(ai *clientcmdapi.AuthInfo) bool {
+	hasCert := ai.ClientCertificate != "" || len(ai.ClientCertificateData) > 0
+	hasKey := ai.ClientKey != "" || len(ai.ClientKeyData) > 0
+	return ai.Token != "" || ai.TokenFile != "" || (hasCert && hasKey)
+}
+
+// anonymousUser is the name given to the user of a context that has none, when overrides gave that user credentials.
+const anonymousUser = "anonymous"
+
+// nameAnonymousUser gives the credentials that overrides set for a context without a user the name of
+// a user of that context, because a minified config doesn't keep the unnamed user.
+func nameAnonymousUser(config *clientcmdapi.Config, kubeContext string) {
+	if kubeContext == "" {
+		kubeContext = config.CurrentContext
+	}
+	if kc, ok := config.Contexts[kubeContext]; ok && kc.AuthInfo == "" {
+		if ai, ok := config.AuthInfos[""]; ok {
+			delete(config.AuthInfos, "")
+			config.AuthInfos[anonymousUser] = ai
+			kc.AuthInfo = anonymousUser
+		}
+	}
+}
+
+// minifiedConfig returns a copy of the given config that just contains the current (or given) context.
+func minifiedConfig(ctx context.Context, origConfig clientcmdapi.Config, kubeContext string) (clientcmdapi.Config, error) {
+	var config clientcmdapi.Config
+	origConfig.DeepCopyInto(&config)
+
+	// Minify the config so that we only deal with the current context.
+	if kubeContext != "" {
+		config.CurrentContext = kubeContext
+	}
+	if err := clientcmdapi.MinifyConfig(&config); err != nil {
+		return config, err
+	}
+	clog.Debugf(ctx, "context = %q", config.CurrentContext)
+
+	// Minify guarantees that the CurrentContext is set, but not that it has a cluster
+	cc := config.Contexts[config.CurrentContext]
+	if cc.Cluster == "" {
+		return config, fmt.Errorf("current context %q has no cluster", config.CurrentContext)
+	}
+	return config, nil
 }

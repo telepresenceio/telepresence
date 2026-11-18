@@ -38,6 +38,7 @@ import (
 	"github.com/telepresenceio/telepresence/v2/pkg/errcat"
 	"github.com/telepresenceio/telepresence/v2/pkg/filelocation"
 	tpGrpc "github.com/telepresenceio/telepresence/v2/pkg/grpc"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 	"github.com/telepresenceio/telepresence/v2/pkg/ioutil"
 	"github.com/telepresenceio/telepresence/v2/pkg/k8sapi"
 	"github.com/telepresenceio/telepresence/v2/pkg/proc"
@@ -116,7 +117,7 @@ func quitHostConnector(ctx context.Context) {
 		// User daemon is responsible for killing the root daemon, but we kill it here too to cater for
 		// the fact that the user daemon might have been killed ungracefully.
 		if conn, err := daemon.DialRootDaemon(ctx, false); err == nil {
-			if _, err = daemonRpc.NewDaemonClient(conn).Quit(ctx, &emptypb.Empty{}); err != nil {
+			if _, err = daemon.QuitRootDaemon(ctx, daemonRpc.NewDaemonClient(conn)); err != nil {
 				errs = errors.Join(errs, err)
 			}
 			_ = conn.Close()
@@ -448,6 +449,10 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 	if err != nil {
 		return ctx, errcat.NoDaemonLogs.New(err)
 	}
+	token, err := server.NewToken()
+	if err != nil {
+		return ctx, errcat.NoDaemonLogs.New(err)
+	}
 	info := &daemon.Info{
 		DaemonPort:   fp[0].Port(),
 		Name:         daemonID.Name,
@@ -455,9 +460,10 @@ func launchHostDaemon(ctx context.Context, daemonID *daemon.Identifier, connecto
 		Namespace:    daemonID.Namespace,
 		ExposedPorts: cr.ExposedPorts,
 		Hostname:     cr.Hostname,
+		Token:        token,
 	}
-	args = append(args, "--address", fmt.Sprintf("127.0.0.1:%d", info.DaemonPort))
 	fn := daemonID.InfoFileName()
+	args = append(args, "--address", fmt.Sprintf("127.0.0.1:%d", info.DaemonPort), "--info-file", fn)
 	il := daemon.NewUserInfoLoader(ctx)
 	err = il.SaveInfo(info, fn)
 	if err != nil {

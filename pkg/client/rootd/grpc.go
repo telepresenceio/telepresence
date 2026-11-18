@@ -16,6 +16,7 @@ import (
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/daemon"
 	"github.com/telepresenceio/telepresence/rpc/v2/manager"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
+	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/logging"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/rootd/dns"
 	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
@@ -34,6 +35,10 @@ func (s *service) Status(ctx context.Context, _ *emptypb.Empty) (*rpc.DaemonStat
 		Version: client.VersionInfo(ctx),
 	}
 	if s.session != nil {
+		if !s.isOwnerLocked(ctx) {
+			r.InUse = true
+			return r, nil
+		}
 		r.OutboundConfig = s.session.getNetworkConfig()
 		r.TunnelTransport = s.session.tunnelTransportRPC()
 		r.AgentTransports = s.session.agentTransportsRPC()
@@ -43,6 +48,16 @@ func (s *service) Status(ctx context.Context, _ *emptypb.Empty) (*rpc.DaemonStat
 }
 
 func (s *service) Quit(ctx context.Context, _ *emptypb.Empty) (*rpc.QuitResponse, error) {
+	s.sessionLock.Lock()
+	if s.session != nil && !s.isOwnerLocked(ctx) {
+		s.sessionLock.Unlock()
+		return nil, daemon.ErrRootDaemonInUse()
+	}
+	if !s.managed {
+		s.quitting = true
+	}
+	s.sessionLock.Unlock()
+
 	s.cancelSession(ctx)
 	s.quit()
 	return &rpc.QuitResponse{RootDaemonWillContinue: s.managed}, nil
@@ -75,6 +90,9 @@ func (s *service) SetDNSMappings(ctx context.Context, req *rpc.SetDNSMappingsReq
 func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *rpc.DaemonStatus, err error) {
 	reply = &rpc.DaemonStatus{Version: client.VersionInfo(ctx)}
 	err = s.withSession(ctx, func(_ context.Context, session *session) error {
+		if !s.isOwnerLocked(ctx) {
+			return daemon.ErrRootDaemonInUse()
+		}
 		reply.OutboundConfig = s.session.getNetworkConfig()
 		reply.TunnelTransport = s.session.tunnelTransportRPC()
 		reply.AgentTransports = s.session.agentTransportsRPC()
@@ -88,22 +106,28 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 	s.sessionLock.Lock()
 	defer s.sessionLock.Unlock()
 	if s.session != nil {
-		// Someone took the lock before we did and created a session.k
+		if !s.isOwnerLocked(ctx) {
+			return nil, daemon.ErrRootDaemonInUse()
+		}
+		// Someone took the lock before we did and created a session.
 		reply.OutboundConfig = s.session.getNetworkConfig()
 		reply.TunnelTransport = s.session.tunnelTransportRPC()
 		reply.AgentTransports = s.session.agentTransportsRPC()
 		reply.VifInterfaceName = s.session.vifInterfaceNameRPC()
 		return reply, nil
 	}
+	if s.quitting {
+		return nil, status.Error(codes.Unavailable, "the root daemon is shutting down")
+	}
 
-	cfg, err := client.UnmarshalJSONConfig(info.ClientConfig, false)
+	cfg, err := sessionConfig(client.GetConfig(s), info.ClientConfig, s.managed)
 	if err != nil {
 		return nil, err
 	}
 
 	sessionCtx, sessionCancel := context.WithCancelCause(s)
 	var sn *session
-	sn, err = createSession(client.WithConfig(sessionCtx, cfg), ctx, info, s.activity, dns.CleanupRouting)
+	sn, err = s.newSession(client.WithConfig(sessionCtx, cfg), ctx, info, s.activity, dns.CleanupRouting)
 	if err != nil {
 		sessionCancel(fmt.Errorf("failed to create root daemon session: %w", err))
 		return nil, err
@@ -133,7 +157,7 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 			}
 			close(sessionRunning)
 		}()
-		sn.run(initErrCh)
+		s.runSession(sn, initErrCh)
 		s.clearSession(sn)
 	}()
 	select {
@@ -152,7 +176,12 @@ func (s *service) Connect(ctx context.Context, info *rpc.NetworkConfig) (reply *
 		}
 		// Session initialized successfully.
 	}
+	if ctx.Err() != nil {
+		sessionCancel(errors.New("root daemon Connect call canceled"))
+		return nil, status.Error(codes.Canceled, "connect call canceled")
+	}
 	s.session = sn
+	s.ownerConn, _ = server.ConnID(ctx)
 	s.sessionCancel = func(cause error) {
 		if cause == nil {
 			cause = context.Canceled
@@ -286,11 +315,33 @@ func (s *service) WatchAgentPods(stream rpc.Daemon_WatchAgentPodsServer) error {
 	}
 }
 
+// ProvideCredentials receives the user daemon's answers to the session's credential requests. It runs
+// until the stream or the session ends.
+func (s *service) ProvideCredentials(stream rpc.Daemon_ProvideCredentialsServer) error {
+	var sn *session
+	err := s.withSession(stream.Context(), func(_ context.Context, session *session) error {
+		sn = session
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if sn.credentials == nil {
+		return status.Error(codes.FailedPrecondition, "the session has no credential plugin")
+	}
+	return sn.credentials.serve(sn, stream)
+}
+
+// withSession runs f with the session. A call that arrived on a connection other than the owner's is
+// refused; a context without a connection number belongs to an internal caller and is served.
 func (s *service) withSession(ctx context.Context, f func(context.Context, *session) error) (err error) {
 	s.sessionLock.RLock()
 	defer s.sessionLock.RUnlock()
 	if s.session == nil {
 		return status.Error(codes.Unavailable, "no active session")
+	}
+	if id, ok := server.ConnID(ctx); ok && id != s.ownerConn {
+		return daemon.ErrRootDaemonInUse()
 	}
 	select {
 	case <-s.session.Done():

@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -16,11 +15,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
-	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/connector"
-	authGrpc "github.com/telepresenceio/telepresence/v2/pkg/authenticator/grpc"
 	"github.com/telepresenceio/telepresence/v2/pkg/client"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/cli/daemon"
 	"github.com/telepresenceio/telepresence/v2/pkg/client/docker"
@@ -57,9 +54,6 @@ type service struct {
 
 	// The quit function that quits the server.
 	quit func(sessionIsLocked bool)
-
-	clientConfigLock sync.Mutex
-	clientConfig     clientcmd.ClientConfig
 
 	sessionLock    sync.RWMutex
 	session        userd.Session
@@ -110,16 +104,6 @@ func sweepMountPoints(ctx context.Context, cfg client.Config) {
 	}
 }
 
-func (s *service) ClientConfig() (clientcmd.ClientConfig, error) {
-	s.clientConfigLock.Lock()
-	cc := s.clientConfig
-	s.clientConfigLock.Unlock()
-	if cc == nil {
-		return nil, errors.New("user daemon has no client config")
-	}
-	return cc, nil
-}
-
 func NewService(ctx context.Context, cancel context.CancelFunc, cfg client.Config, srv *grpc.Server) userd.Service {
 	return newService(ctx, cancel, cfg, srv)
 }
@@ -152,7 +136,6 @@ func newService(ctx context.Context, cancel context.CancelFunc, cfg client.Confi
 	if srv != nil {
 		// The podd daemon never registers the gRPC servers
 		rpc.RegisterConnectorServer(srv, s)
-		authGrpc.RegisterAuthenticatorServer(srv, s)
 	} else {
 		s.rootSessionInProc = true
 	}
@@ -194,6 +177,7 @@ const (
 	pprofFlag         = "pprof"
 	teleroutePortFlag = "teleroute-port"
 	logfileFlag       = "logfile"
+	infoFileFlag      = "info-file"
 )
 
 // Command returns the CLI sub-command for "userd".
@@ -211,6 +195,8 @@ func Command(ctx context.Context) *cobra.Command {
 	flags.String(logfileFlag, filepath.Join(filelocation.AppUserLogDir(ctx), "connector.log"),
 		`Log file to write to { <path to a file> | "stdout" | "stderr" | "-" (same as "stderr") }`)
 	flags.String(addressFlag, "", "TCP Address to listen to")
+	flags.String(infoFileFlag, "", "Name of the daemon info file that holds the secret that callers must present. "+
+		"Without it, the secret is read from the "+daemon.TokenEnvName+" environment variable.")
 	flags.Bool(embedNetworkFlag, false, "Embed network functionality in the user daemon. Requires capability NET_ADMIN")
 	flags.Uint16(pprofFlag, 0, "start pprof server on the given port")
 	flags.Uint16(teleroutePortFlag, 0, "start teleroute server on the given port")
@@ -312,6 +298,11 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 	}
 	c = clog.WithGroup(c, name)
 
+	token, err := daemonToken(c, flags)
+	if err != nil {
+		return err
+	}
+
 	c = docker.EnableClient(c)
 
 	rootSessionInProc, _ := flags.GetBool(embedNetworkFlag)
@@ -342,7 +333,7 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 		if mz := cfg.Grpc().MaxReceiveSize(); mz > 0 {
 			opts = append(opts, grpc.MaxRecvMsgSize(int(mz)))
 		}
-		svc := server.New(c, opts...)
+		svc := server.NewWithAuth(c, server.TokenInterceptors(token, rpc.Connector_Version_FullMethodName), opts...)
 		siCh <- newService(c, svcCancel, cfg, svc)
 		close(siCh)
 		return server.Serve(c, svc, grpcListener)
@@ -380,6 +371,25 @@ func internalRun(c context.Context, flags *pflag.FlagSet) error {
 		clog.Error(c, err)
 	}
 	return err
+}
+
+// daemonToken returns the secret that callers must present. It is read from the daemon info file named by the
+// info-file flag or, when that flag is absent, from the environment. The daemon refuses to run without one.
+func daemonToken(ctx context.Context, flags *pflag.FlagSet) (string, error) {
+	var token string
+	if file, _ := flags.GetString(infoFileFlag); file != "" {
+		var err error
+		if token, err = daemon.LoadUserDaemonToken(ctx, file); err != nil {
+			return "", fmt.Errorf("unable to read the daemon secret: %w", err)
+		}
+	} else {
+		token = os.Getenv(daemon.TokenEnvName)
+		_ = os.Unsetenv(daemon.TokenEnvName)
+	}
+	if token == "" {
+		return "", fmt.Errorf("the daemon has no secret: use the --%s flag or set %s", infoFileFlag, daemon.TokenEnvName)
+	}
+	return token, nil
 }
 
 func (s *service) LinkedFTP() bool {

@@ -9,6 +9,18 @@ import { Note, Title, Body } from '@site/src/components/ReleaseNotes'
 # Telepresence Release Notes
 ## Version 2.33.2
 <Note>
+	<Title type="security">The root daemon serves one caller and trusts no input</Title>
+	<Body>
+The root daemon accepted calls from every local process and built its cluster client from the kubeconfig, kubectl flags and client configuration in the request. A local process other than the user daemon could make it read files or run a credential command with the root daemon's privileges, and could change or end another caller's session. The root daemon now accepts only a complete kubeconfig with inline credentials, never starts a credential plugin, and gets plugin credentials from the user daemon over the session's connection. A session belongs to the connection that created it. Other connections can't read, change or end it, and it ends when that connection closes. Reported independently by <code>fizzbeom</code> and <code>orshih6</code> (Batorshikh Gombojav).
+  </Body>
+</Note>
+<Note>
+	<Title type="security">The user daemon requires a secret</Title>
+	<Body>
+The user daemon served its gRPC API to every local process. It now requires a secret that the CLI creates when it starts the daemon and stores in the daemon's info file, which only the user can read. Only the version call is open. A program that calls the user daemon's gRPC API directly must read the <code>token</code> field from <code>daemon.json</code> in the <code>userd</code> directory of the Telepresence cache and send it as the <code>x-telepresence-token</code> metadata value.
+  </Body>
+</Note>
+<Note>
 	<Title type="bugfix">Daemon exits reliably when its session ends on Linux</Title>
 	<Body>
 On Linux, a daemon could fail to exit after its session ended. This showed as the daemon container of a <code>--docker</code> connection staying up after <code>telepresence quit</code>. The network device is now shut down in an order that cannot hang.

@@ -11,7 +11,7 @@ import (
 
 	"github.com/telepresenceio/clog"
 	rpc "github.com/telepresenceio/telepresence/rpc/v2/authenticator"
-	"github.com/telepresenceio/telepresence/v2/pkg/client/docker/kubeauth"
+	"github.com/telepresenceio/telepresence/v2/pkg/grpc/server"
 )
 
 func kubeauthCmd() *cobra.Command {
@@ -44,7 +44,7 @@ func authenticateContext(cmd *cobra.Command, args []string) (err error) {
 	defer conn.Close()
 
 	if token != "" {
-		ctx = metadata.AppendToOutgoingContext(ctx, kubeauth.TokenMetadataKey, token)
+		ctx = metadata.AppendToOutgoingContext(ctx, server.TokenMetadataKey, token)
 	}
 	ac := rpc.NewAuthenticatorClient(conn)
 	var res *rpc.GetContextExecCredentialsResponse

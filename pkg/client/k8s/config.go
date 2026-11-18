@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -141,6 +142,10 @@ type Kubeconfig struct {
 	EffectiveFlagMap map[string]string
 	ClientConfig     clientcmd.ClientConfig
 	RestConfig       *rest.Config
+
+	// bearerSource and credentialExpiry are set when the credentials come from a CredentialFetcher.
+	bearerSource     *execTokenSource
+	credentialExpiry time.Time
 }
 
 func (kf *Kubeconfig) ToRESTConfig() (*rest.Config, error) {
@@ -167,6 +172,24 @@ func (kf *Kubeconfig) ToRESTMapper() (meta.RESTMapper, error) {
 
 func (kf *Kubeconfig) ToRawKubeConfigLoader() clientcmd.ClientConfig {
 	return kf.ClientConfig
+}
+
+// OverridingConfig returns the kubeconfig with the kubectl flag overrides in effect for this instance, as an
+// OverridingClientConfig, so that MergedRawConfig yields the kubeconfig that the flags result in.
+func (kf *Kubeconfig) OverridingConfig() (clientcmd.OverridingClientConfig, error) {
+	if oc, ok := kf.ClientConfig.(clientcmd.OverridingClientConfig); ok {
+		return oc, nil
+	}
+	raw, err := kf.ClientConfig.RawConfig()
+	if err != nil {
+		return nil, err
+	}
+	configFlags, err := ConfigFlags(kf.EffectiveFlagMap)
+	if err != nil {
+		return nil, err
+	}
+	overrides := flagOverrides(configFlags)
+	return clientcmd.NewNonInteractiveClientConfig(raw, overrides.CurrentContext, overrides, kf.ClientConfig.ConfigAccess()), nil
 }
 
 const configExtension = "telepresence.io"
@@ -210,7 +233,27 @@ func NewKubeconfig(c context.Context, tpClientConfigIsFinal bool, flagMap map[st
 	if err != nil {
 		return nil, err
 	}
-	return newKubeconfig(c, tpClientConfigIsFinal, flagMap, flagMap, managerNamespaceOverride, configFlags, kubeconfigData)
+	return newKubeconfig(c, tpClientConfigIsFinal, flagMap, flagMap, managerNamespaceOverride, configFlags, kubeconfigData, nil)
+}
+
+// NewRootKubeconfig returns the Kubeconfig for a root daemon session. The kubeconfig data is required, and must
+// not contain a credential plugin or an auth provider. A non-nil fetch provides the credentials of a user that
+// has a plugin.
+func NewRootKubeconfig(
+	c context.Context,
+	flagMap map[string]string,
+	managerNamespaceOverride string,
+	kubeconfigData []byte,
+	fetch CredentialFetcher,
+) (*Kubeconfig, error) {
+	if len(kubeconfigData) == 0 {
+		return nil, errcat.Config.New("the root daemon requires a kubeconfig")
+	}
+	configFlags, err := ConfigFlags(flagMap)
+	if err != nil {
+		return nil, err
+	}
+	return newKubeconfig(c, true, flagMap, flagMap, managerNamespaceOverride, configFlags, kubeconfigData, fetch)
 }
 
 func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubeconfig, error) {
@@ -234,7 +277,7 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 	if err != nil {
 		return nil, err
 	}
-	return newKubeconfig(c, false, cr.KubeFlags, flagMap, cr.ManagerNamespace, configFlags, cr.KubeconfigData)
+	return newKubeconfig(c, false, cr.KubeFlags, flagMap, cr.ManagerNamespace, configFlags, cr.KubeconfigData, nil)
 }
 
 // AppendKubeFlags appends the flags in the given map to the given slice in the form of
@@ -435,6 +478,7 @@ func newKubeconfig(
 	managerNamespaceOverride string,
 	configFlags *genericclioptions.ConfigFlags,
 	configData []byte,
+	fetch CredentialFetcher,
 ) (*Kubeconfig, error) {
 	clientConfig, err := NewClientConfig(ctx, configFlags, configData)
 	if err != nil {
@@ -459,6 +503,24 @@ func newKubeconfig(
 	restConfig, err := clientConfig.ClientConfig()
 	if err != nil {
 		return nil, err
+	}
+
+	var (
+		bearerSource     *execTokenSource
+		credentialExpiry time.Time
+	)
+	if tpClientConfigIsFinal {
+		if cluster.Server == "" {
+			return nil, errcat.Config.New("the kubeconfig cluster has no server")
+		}
+		if restConfig.ExecProvider != nil || restConfig.AuthProvider != nil {
+			return nil, errcat.Config.New("the kubeconfig must not contain a credential plugin or an auth provider")
+		}
+		if fetch != nil {
+			if bearerSource, credentialExpiry, err = applyCredentials(ctx, restConfig, fetch); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	namespace, _, err := clientConfig.Namespace()
@@ -491,6 +553,8 @@ func newKubeconfig(
 		OriginalFlagMap:  originalFlags,
 		ClientConfig:     clientConfig,
 		RestConfig:       restConfig,
+		bearerSource:     bearerSource,
+		credentialExpiry: credentialExpiry,
 	}, nil
 }
 

@@ -50,10 +50,20 @@ type service struct {
 	quit          context.CancelFunc
 	timedLogLevel log.TimedLevel
 
-	// sessionLock protects the session, sessionCancel, and sessionRunning fields.
+	// sessionLock protects the session, sessionCancel, ownerConn, quitting, and sessionRunning fields.
 	sessionLock   sync.RWMutex
 	session       *session
 	sessionCancel func(error)
+
+	// ownerConn is the number of the connection that created the session. Only valid while session != nil.
+	ownerConn uint64
+
+	// quitting is set when an accepted Quit will stop the daemon. Connect refuses to create a session after that.
+	quitting bool
+
+	// newSession and runSession create and run the session. They are replaced by tests.
+	newSession func(sessionCtx, dialCtx context.Context, mi *rpc.NetworkConfig, activity chan<- time.Time, cleanupDNSRouting func(context.Context)) (*session, error)
+	runSession func(sn *session, initErrs chan<- error)
 
 	// sessionRunning is closed when the session is done running.
 	sessionRunning chan struct{}
@@ -67,6 +77,8 @@ func newService(cfg client.Config, managed bool) *service {
 		sessionRunning: make(chan struct{}),
 		activity:       make(chan time.Time, 10),
 		managed:        managed,
+		newSession:     createSession,
+		runSession:     (*session).run,
 	}
 	close(s.sessionRunning)
 	return s
@@ -120,7 +132,8 @@ func (s *service) serveGrpc(c context.Context, groupCancel context.CancelFunc, l
 		s.sessionLock.RUnlock()
 		<-sessionRunning
 	}
-	svc := server.New(s, opts...)
+	opts = append(opts, server.TrackConns(s.connClosed))
+	svc := server.NewWithAuth(s, &server.Interceptors{Unary: s.unaryGuard, Stream: s.streamGuard}, opts...)
 	rpc.RegisterDaemonServer(svc, s)
 	return server.Serve(s, svc, l)
 }
