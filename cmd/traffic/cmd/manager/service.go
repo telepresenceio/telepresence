@@ -1033,12 +1033,12 @@ func (s *service) watchAgentPodsDelta(ctx context.Context, clientInfo *state.Cli
 
 // WatchAgents notifies a client of the set of known Agents in the connected namespace.
 func (s *service) WatchAgents(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentInfoSnapshot]) error {
-	ctx, clientInfo, err := s.ownedClientSession(stream.Context(), session)
+	ctx, clientInfo, access, err := s.clientSessionWithAccess(stream.Context(), session)
 	if err != nil {
 		return err
 	}
 	ns := clientInfo.Namespace
-	return s.watchAgents(ctx, clientInfo.SupportsCompactAgentInfo,
+	return s.watchAgents(ctx, clientInfo.SupportsCompactAgentInfo, access,
 		func(_ tunnel.SessionID, a *state.AgentSession) bool { return a.Namespace == ns }, stream)
 }
 
@@ -1087,6 +1087,7 @@ func agentInfoForWatch(ai *rpc.AgentInfo, compact bool) *rpc.AgentInfo {
 func (s *service) watchAgents(
 	ctx context.Context,
 	compact bool,
+	access state.ReadAccess,
 	includeAgent func(tunnel.SessionID, *state.AgentSession) bool,
 	stream grpc.ServerStreamingServer[rpc.AgentInfoSnapshot],
 ) error {
@@ -1114,7 +1115,12 @@ func (s *service) watchAgents(
 		agents := make([]*rpc.AgentInfo, 0, len(agentSessionIDs))
 		for _, agentSessionID := range agentSessionIDs {
 			ag, ok := snapshot.Load(agentSessionID)
-			if ok && !m.IsInactive(types.UID(ag.PodUid)) {
+			if !ok || m.IsInactive(types.UID(ag.PodUid)) {
+				continue
+			}
+			if allowed, err := access.Allows(ag.Name); err != nil {
+				return err
+			} else if allowed {
 				agents = append(agents, agentInfoForWatch(ag.AgentInfo, compact))
 			}
 		}
@@ -1145,7 +1151,7 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 	if err := checkCompat(ctx, "WatchAgentsDelta", "2.26.0"); err != nil {
 		return err
 	}
-	ctx, clientInfo, err := s.ownedClientSession(ctx, session)
+	ctx, clientInfo, access, err := s.clientSessionWithAccess(ctx, session)
 	if err != nil {
 		return err
 	}
@@ -1156,6 +1162,9 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 	if err != nil {
 		return err
 	}
+	// sent holds the agents that the client has been sent, so that a
+	// removal is sent only for those.
+	sent := make(map[string]struct{})
 	for {
 		select {
 		case <-ctx.Done():
@@ -1164,18 +1173,28 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 			return nil
 		case delta := <-deltaCh:
 			aid := rpc.AgentInfoDelta{}
-			if rl := len(delta.Upserts); rl > 0 {
-				aid.Upserts = make(map[string]*rpc.AgentInfo, rl)
-				for k, v := range delta.Upserts {
-					aid.Upserts[string(k)] = agentInfoForWatch(v.AgentInfo, compact)
+			for k, v := range delta.Upserts {
+				allowed, err := access.Allows(v.Name)
+				if err != nil {
+					return err
+				}
+				if !allowed {
+					continue
+				}
+				if aid.Upserts == nil {
+					aid.Upserts = make(map[string]*rpc.AgentInfo, len(delta.Upserts))
+				}
+				aid.Upserts[string(k)] = agentInfoForWatch(v.AgentInfo, compact)
+				sent[string(k)] = struct{}{}
+			}
+			for k := range delta.Removals {
+				if _, ok := sent[string(k)]; ok {
+					delete(sent, string(k))
+					aid.Removals = append(aid.Removals, string(k))
 				}
 			}
-			if rl := len(delta.Removals); rl > 0 {
-				aid.Removals = make([]string, rl)
-				for k := range delta.Removals {
-					rl--
-					aid.Removals[rl] = string(k)
-				}
+			if len(aid.Upserts) == 0 && len(aid.Removals) == 0 && (len(delta.Upserts) > 0 || len(delta.Removals) > 0) {
+				continue
 			}
 			clog.Debugf(ctx, "Sending %d upserts and %d removals", len(aid.Upserts), len(aid.Removals))
 			err = stream.Send(&aid)
