@@ -93,7 +93,7 @@ func (f *fakeServerStream[T]) RecvMsg(any) error            { return nil }
 
 // TestWatchNamespaces_UnknownSession covers that a session id the manager has
 // never seen is rejected with NotFound, the same as any other streaming
-// handler built on ensureClientSession.
+// handler built on ownedClientSession.
 func TestWatchNamespaces_UnknownSession(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)
@@ -109,7 +109,7 @@ func TestWatchNamespaces_UnknownSession(t *testing.T) {
 
 // TestWatchNamespaces_WrongOwner covers that a session bound to one
 // principal is refused to a caller presenting a different one, mirroring
-// ensureClientSession's ClientOwnershipError check.
+// ownedClientSession's ClientOwnershipError check.
 func TestWatchNamespaces_WrongOwner(t *testing.T) {
 	clientfeaturestesting.SetFeatureDuringTest(t, clientfeatures.WatchListClient, false)
 	ctx := testutil.NewContext(t, true)

@@ -231,7 +231,7 @@ func (s *service) GetAgentImageFQN(ctx context.Context, _ *empty.Empty) (*rpc.Ag
 }
 
 func (s *service) GetAgentConfig(ctx context.Context, request *rpc.AgentConfigRequest) (*rpc.AgentConfigResponse, error) {
-	ctx, clientInfo, err := s.ensureClientSession(ctx, request.Session)
+	ctx, clientInfo, err := s.ownedClientSession(ctx, request.Session)
 	if err != nil {
 		return nil, err
 	}
@@ -775,7 +775,7 @@ func unavailableCause(ctx context.Context) error {
 
 // WatchAgentPods notifies a client of the set of known Agents.
 func (s *service) WatchAgentPods(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentPodInfoSnapshot]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), session)
+	ctx, clientInfo, err := s.ownedClientSession(stream.Context(), session)
 	if err != nil {
 		return err
 	}
@@ -869,7 +869,7 @@ func (s *service) WatchAgentPodsDelta(session *rpc.SessionInfo, stream grpc.Serv
 	if err := checkCompat(ctx, "WatchAgentPodsDelta", "2.26.0"); err != nil {
 		return err
 	}
-	ctx, clientInfo, err := s.ensureClientSession(ctx, session)
+	ctx, clientInfo, err := s.ownedClientSession(ctx, session)
 	if err != nil {
 		return err
 	}
@@ -885,7 +885,7 @@ func (s *service) WatchAgentPodsInNamespacesDelta(request *rpc.AgentsRequest, st
 	if err := checkCompat(ctx, "WatchAgentPodsInNamespacesDelta", "2.28.0"); err != nil {
 		return err
 	}
-	ctx, clientInfo, err := s.ensureClientSession(ctx, request.Session)
+	ctx, clientInfo, err := s.ownedClientSession(ctx, request.Session)
 	if err != nil {
 		return err
 	}
@@ -1033,12 +1033,12 @@ func (s *service) watchAgentPodsDelta(ctx context.Context, clientInfo *state.Cli
 
 // WatchAgents notifies a client of the set of known Agents in the connected namespace.
 func (s *service) WatchAgents(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.AgentInfoSnapshot]) error {
-	ctx, clientInfo, err := s.ensureClientSession(stream.Context(), session)
+	ctx, clientInfo, access, err := s.clientSessionWithAccess(stream.Context(), session)
 	if err != nil {
 		return err
 	}
 	ns := clientInfo.Namespace
-	return s.watchAgents(ctx, clientInfo.SupportsCompactAgentInfo,
+	return s.watchAgents(ctx, clientInfo.SupportsCompactAgentInfo, access,
 		func(_ tunnel.SessionID, a *state.AgentSession) bool { return a.Namespace == ns }, stream)
 }
 
@@ -1087,6 +1087,7 @@ func agentInfoForWatch(ai *rpc.AgentInfo, compact bool) *rpc.AgentInfo {
 func (s *service) watchAgents(
 	ctx context.Context,
 	compact bool,
+	access state.ReadAccess,
 	includeAgent func(tunnel.SessionID, *state.AgentSession) bool,
 	stream grpc.ServerStreamingServer[rpc.AgentInfoSnapshot],
 ) error {
@@ -1114,7 +1115,12 @@ func (s *service) watchAgents(
 		agents := make([]*rpc.AgentInfo, 0, len(agentSessionIDs))
 		for _, agentSessionID := range agentSessionIDs {
 			ag, ok := snapshot.Load(agentSessionID)
-			if ok && !m.IsInactive(types.UID(ag.PodUid)) {
+			if !ok || m.IsInactive(types.UID(ag.PodUid)) {
+				continue
+			}
+			if allowed, err := access.Allows(ag.Name); err != nil {
+				return err
+			} else if allowed {
 				agents = append(agents, agentInfoForWatch(ag.AgentInfo, compact))
 			}
 		}
@@ -1145,7 +1151,7 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 	if err := checkCompat(ctx, "WatchAgentsDelta", "2.26.0"); err != nil {
 		return err
 	}
-	ctx, clientInfo, err := s.ensureClientSession(ctx, session)
+	ctx, clientInfo, access, err := s.clientSessionWithAccess(ctx, session)
 	if err != nil {
 		return err
 	}
@@ -1156,6 +1162,10 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 	if err != nil {
 		return err
 	}
+	// sent holds the agents that the client has been sent, so that a
+	// removal is sent only for those.
+	sent := make(map[string]struct{})
+	first := true
 	for {
 		select {
 		case <-ctx.Done():
@@ -1164,19 +1174,31 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 			return nil
 		case delta := <-deltaCh:
 			aid := rpc.AgentInfoDelta{}
-			if rl := len(delta.Upserts); rl > 0 {
-				aid.Upserts = make(map[string]*rpc.AgentInfo, rl)
-				for k, v := range delta.Upserts {
-					aid.Upserts[string(k)] = agentInfoForWatch(v.AgentInfo, compact)
+			for k, v := range delta.Upserts {
+				allowed, err := access.Allows(v.Name)
+				if err != nil {
+					return err
+				}
+				if !allowed {
+					continue
+				}
+				if aid.Upserts == nil {
+					aid.Upserts = make(map[string]*rpc.AgentInfo, len(delta.Upserts))
+				}
+				aid.Upserts[string(k)] = agentInfoForWatch(v.AgentInfo, compact)
+				sent[string(k)] = struct{}{}
+			}
+			for k := range delta.Removals {
+				if _, ok := sent[string(k)]; ok {
+					delete(sent, string(k))
+					aid.Removals = append(aid.Removals, string(k))
 				}
 			}
-			if rl := len(delta.Removals); rl > 0 {
-				aid.Removals = make([]string, rl)
-				for k := range delta.Removals {
-					rl--
-					aid.Removals[rl] = string(k)
-				}
+			// The first message is sent even when it is empty.
+			if !first && len(aid.Upserts) == 0 && len(aid.Removals) == 0 && (len(delta.Upserts) > 0 || len(delta.Removals) > 0) {
+				continue
 			}
+			first = false
 			clog.Debugf(ctx, "Sending %d upserts and %d removals", len(aid.Upserts), len(aid.Removals))
 			err = stream.Send(&aid)
 			if err != nil {
@@ -1379,7 +1401,7 @@ func (s *service) WatchSessionEvents(request *rpc.SessionEventsRequest, stream g
 	if err := checkCompat(ctx, "WatchSessionEvents", "2.31.0"); err != nil {
 		return err
 	}
-	ctx, clientInfo, err := s.ensureClientSession(ctx, request.Session)
+	ctx, clientInfo, err := s.ownedClientSession(ctx, request.Session)
 	if err != nil {
 		return err
 	}
@@ -1440,7 +1462,7 @@ func (s *service) WatchSessionEvents(request *rpc.SessionEventsRequest, stream g
 
 func (s *service) PrepareIntercept(ctx context.Context, request *rpc.CreateInterceptRequest) (*rpc.PreparedIntercept, error) {
 	clog.Debugf(ctx, "Intercept name %s", request.InterceptSpec.Name)
-	ctx, client, err := s.ensureClientSession(ctx, request.Session)
+	ctx, client, err := s.ownedClientSession(ctx, request.Session)
 	if err != nil {
 		return nil, err
 	}
@@ -1461,7 +1483,7 @@ func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.Sessio
 	if err := checkCompat(ctx, "GetKnownWorkloadKinds", "2.20.0"); err != nil {
 		return nil, err
 	}
-	ctx, _, err := s.ensureClientSession(ctx, request)
+	ctx, _, err := s.ownedClientSession(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -1476,7 +1498,7 @@ func (s *service) GetKnownWorkloadKinds(ctx context.Context, request *rpc.Sessio
 // EnsureAgent authorizes the caller against the attachment named
 // request.Name and ensures a traffic-agent for that workload.
 func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentRequest) (*rpc.AgentInfoSnapshot, error) {
-	ctx, client, err := s.ensureClientSession(ctx, request.Session)
+	ctx, client, err := s.ownedClientSession(ctx, request.Session)
 	if err != nil {
 		return nil, err
 	}
@@ -1511,7 +1533,7 @@ func (s *service) EnsureAgent(ctx context.Context, request *rpc.EnsureAgentReque
 // ensured with node_agent=true in EnsureAgent. It is a no-op for a sidecar
 // agent or an unknown claim.
 func (s *service) ReleaseAgent(ctx context.Context, request *rpc.ReleaseAgentRequest) (*empty.Empty, error) {
-	ctx, client, err := s.ensureClientSession(ctx, request.Session)
+	ctx, client, err := s.ownedClientSession(ctx, request.Session)
 	if err != nil {
 		return nil, err
 	}
@@ -1531,7 +1553,7 @@ func (s *service) CreateIntercept(ctx context.Context, ciReq *rpc.CreateIntercep
 	spec := ciReq.InterceptSpec
 	clog.Debugf(ctx, "Intercept name %s", ciReq.InterceptSpec.Name)
 
-	ctx, client, err := s.ensureClientSession(ctx, ciReq.GetSession())
+	ctx, client, err := s.ownedClientSession(ctx, ciReq.GetSession())
 	if err != nil {
 		return nil, err
 	}
@@ -1733,7 +1755,7 @@ func (s *service) RemoveIntercept(ctx context.Context, riReq *rpc.RemoveIntercep
 	name := riReq.Name
 	clog.Debugf(ctx, "Intercept name %s", name)
 
-	ctx, client, err := s.ensureClientSession(ctx, riReq.Session)
+	ctx, client, err := s.ownedClientSession(ctx, riReq.Session)
 	if err != nil {
 		return nil, err
 	}
@@ -2162,7 +2184,7 @@ func (s *service) Lookup(ctx context.Context, request *rpc.LookupRequest) (respo
 			clog.Debugf(ctx, "lookup %q => %v", request.Name, ips)
 		}
 	}()
-	ctx, client, err := s.ensureClientSession(ctx, request.Session)
+	ctx, client, err := s.ownedClientSession(ctx, request.Session)
 	if err != nil {
 		return nil, err
 	}
@@ -2240,7 +2262,7 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (respo
 		}
 	}
 
-	ctx, _, err = s.ensureClientSession(ctx, request.GetSession())
+	ctx, _, err = s.ownedClientSession(ctx, request.GetSession())
 	if err != nil {
 		return nil, err
 	}
@@ -2253,7 +2275,7 @@ func (s *service) LookupDNS(ctx context.Context, request *rpc.DNSRequest) (respo
 // ResolveServicePort resolves request.Port (a name or a number) against the
 // named service and returns its ClusterIP and numeric port.
 func (s *service) ResolveServicePort(ctx context.Context, request *rpc.ResolveServicePortRequest) (*rpc.ResolveServicePortResponse, error) {
-	ctx, client, err := s.ensureClientSession(ctx, request.Session)
+	ctx, client, err := s.ownedClientSession(ctx, request.Session)
 	if err != nil {
 		return nil, err
 	}
@@ -2331,7 +2353,7 @@ func (s *service) lookupFromManager(ctx context.Context, sessionID tunnel.Sessio
 func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest) (*empty.Empty, error) {
 	if session := request.GetSession(); session != nil {
 		var err error
-		ctx, _, err = s.ensureClientSession(ctx, session)
+		ctx, _, err = s.ownedClientSession(ctx, session)
 		if err != nil {
 			return nil, err
 		}
@@ -2361,7 +2383,7 @@ func (s *service) SetLogLevel(ctx context.Context, request *rpc.LogLevelRequest)
 // no per-namespace review here; WatchWorkloads is where namespace-level
 // authorization is enforced.
 func (s *service) WatchNamespaces(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.NamespaceList]) error {
-	ctx, _, err := s.ensureClientSession(stream.Context(), session)
+	ctx, _, err := s.ownedClientSession(stream.Context(), session)
 	if err != nil {
 		return err
 	}
@@ -2389,12 +2411,37 @@ func (s *service) WatchNamespaces(session *rpc.SessionInfo, stream grpc.ServerSt
 }
 
 func (s *service) UninstallAgents(ctx context.Context, request *rpc.UninstallAgentsRequest) (*empty.Empty, error) {
-	ctx, _, err := s.ensureClientSession(ctx, request.GetSessionInfo())
+	ctx, clientInfo, access, err := s.clientSessionWithAccess(ctx, request.GetSessionInfo())
 	if err != nil {
+		return nil, err
+	}
+	if err = authorizeUninstall(access, clientInfo.Namespace, request.Agents); err != nil {
 		return nil, err
 	}
 	clog.Debugf(ctx, "%s", request.Agents)
 	return &empty.Empty{}, s.state.UninstallAgents(ctx, request)
+}
+
+// authorizeUninstall checks every requested agent before any is removed.
+// No names means all agents, which needs access to the whole namespace.
+func authorizeUninstall(access state.ReadAccess, namespace string, agents []string) error {
+	if len(agents) == 0 {
+		if !access.All() {
+			return errors.Errorf(codes.PermissionDenied,
+				"uninstalling all agents needs access to the whole namespace %s; name the workloads instead", namespace)
+		}
+		return nil
+	}
+	for _, name := range agents {
+		allowed, err := access.Allows(name)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return errors.Errorf(codes.PermissionDenied, "access to workload %s in namespace %s is required", name, namespace)
+		}
+	}
+	return nil
 }
 
 func (s *service) WatchLogLevel(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.LogLevelRequest]) error {
@@ -2402,7 +2449,7 @@ func (s *service) WatchLogLevel(_ *empty.Empty, stream grpc.ServerStreamingServe
 }
 
 func (s *service) WatchClusterInfo(session *rpc.SessionInfo, stream grpc.ServerStreamingServer[rpc.ClusterInfo]) error {
-	ctx, _, err := s.ensureClientSession(stream.Context(), session)
+	ctx, _, err := s.ownedClientSession(stream.Context(), session)
 	if err != nil {
 		return err
 	}
@@ -2422,7 +2469,7 @@ func (s *service) WatchWorkloads(request *rpc.WorkloadEventsRequest, stream grpc
 	if request.SessionInfo == nil {
 		return status.Error(codes.InvalidArgument, "SessionInfo is required")
 	}
-	ctx, clientInfo, err := s.ensureClientSession(ctx, request.SessionInfo)
+	ctx, clientInfo, err := s.ownedClientSession(ctx, request.SessionInfo)
 	if err != nil {
 		return err
 	}
@@ -2467,7 +2514,9 @@ func (s *service) updateTrafficManagerConfigMap(ctx context.Context) error {
 	return err
 }
 
-func (s *service) ensureClientSession(ctx context.Context, sessionInfo *rpc.SessionInfo) (context.Context, *state.ClientSession, error) {
+// ownedClientSession returns the client session identified by sessionInfo,
+// provided that the caller owns it.
+func (s *service) ownedClientSession(ctx context.Context, sessionInfo *rpc.SessionInfo) (context.Context, *state.ClientSession, error) {
 	ctx = managerutil.WithSessionInfo(ctx, sessionInfo)
 	sessionID := tunnel.SessionID(sessionInfo.SessionId)
 	session := s.state.GetClient(sessionID)
@@ -2476,6 +2525,34 @@ func (s *service) ensureClientSession(ctx context.Context, sessionInfo *rpc.Sess
 	}
 	if err := state.ClientOwnershipError(ctx, sessionID, session); err != nil {
 		return ctx, nil, err
+	}
+	return ctx, session, nil
+}
+
+// clientSessionWithAccess is ownedClientSession plus the session's read access
+// to its own namespace, for calls that filter per workload. An Unavailable
+// review is returned as is.
+func (s *service) clientSessionWithAccess(ctx context.Context, sessionInfo *rpc.SessionInfo) (context.Context, *state.ClientSession, state.ReadAccess, error) {
+	ctx, session, err := s.ownedClientSession(ctx, sessionInfo)
+	if err != nil {
+		return ctx, nil, state.ReadAccess{}, err
+	}
+	access, err := s.readAccess(ctx, session, session.Namespace)
+	if err != nil {
+		return ctx, nil, state.ReadAccess{}, err
+	}
+	return ctx, session, access, nil
+}
+
+// ensureClientSession is the default session check: the caller owns the
+// session and may read the whole session namespace.
+func (s *service) ensureClientSession(ctx context.Context, sessionInfo *rpc.SessionInfo) (context.Context, *state.ClientSession, error) {
+	ctx, session, access, err := s.clientSessionWithAccess(ctx, sessionInfo)
+	if err != nil {
+		return ctx, nil, err
+	}
+	if !access.All() {
+		return ctx, nil, errors.Errorf(codes.PermissionDenied, "access to namespace %s is required", session.Namespace)
 	}
 	return ctx, session, nil
 }
