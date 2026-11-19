@@ -167,3 +167,27 @@ func TestReadAccess_AgentWatchDelta_Removals(t *testing.T) {
 	require.Equal(t, []string{string(sessionIDs[1])}, removals)
 	require.NoError(t, stop())
 }
+
+// TestReadAccess_AgentWatchDelta_FirstMessage: the first message is sent even
+// when filtering leaves it empty; later messages that filtering leaves empty
+// are not sent.
+func TestReadAccess_AgentWatchDelta_FirstMessage(t *testing.T) {
+	e := newReadEnv(t, auth.ModeEnforcing, readCallers[0].allow)
+	e.restoreAgents()
+	stream, stop := runWatch(e.pctx, func(s *fakeServerStream[rpc.AgentInfoDelta]) error {
+		return e.mgr.WatchAgentsDelta(e.sess, s)
+	})
+	first := collect(stream.ch)
+	require.Len(t, first, 1)
+	require.Empty(t, first[0].Upserts)
+	require.Empty(t, first[0].Removals)
+
+	st := e.mgr.State()
+	for id, a := range st.LoadMatchingAgents(func(tunnel.SessionID, *state.AgentSession) bool { return true }) {
+		if a.Namespace == "default" && a.Name == "demo" {
+			st.RemoveSession(e.sctx, id)
+		}
+	}
+	require.Empty(t, collect(stream.ch))
+	require.NoError(t, stop())
+}

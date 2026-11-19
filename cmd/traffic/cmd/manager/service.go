@@ -1165,6 +1165,7 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 	// sent holds the agents that the client has been sent, so that a
 	// removal is sent only for those.
 	sent := make(map[string]struct{})
+	first := true
 	for {
 		select {
 		case <-ctx.Done():
@@ -1193,9 +1194,11 @@ func (s *service) WatchAgentsDelta(session *rpc.SessionInfo, stream grpc.ServerS
 					aid.Removals = append(aid.Removals, string(k))
 				}
 			}
-			if len(aid.Upserts) == 0 && len(aid.Removals) == 0 && (len(delta.Upserts) > 0 || len(delta.Removals) > 0) {
+			// The first message is sent even when it is empty.
+			if !first && len(aid.Upserts) == 0 && len(aid.Removals) == 0 && (len(delta.Upserts) > 0 || len(delta.Removals) > 0) {
 				continue
 			}
+			first = false
 			clog.Debugf(ctx, "Sending %d upserts and %d removals", len(aid.Upserts), len(aid.Removals))
 			err = stream.Send(&aid)
 			if err != nil {
