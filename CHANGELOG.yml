@@ -24,6 +24,23 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.33.3
+    date: (TBD)
+    notes:
+      - type: security
+        title: Traffic-agents are only shown to and removed by authorized clients in enforcing mode
+        body: >-
+          With <code>security.authentication.mode</code> set to
+          <code>enforcing</code>, a client that was allowed to connect could
+          still receive the traffic-agents of the namespace it connected to,
+          including the environment of their containers, and could uninstall
+          those traffic-agents, without holding a Telepresence grant in that
+          namespace. The traffic-manager now sends a client only the
+          traffic-agents of workloads it holds a grant for.
+          <code>telepresence uninstall</code> needs the grant for every
+          workload it names, and <code>--all-agents</code> needs the grant
+          for the whole namespace. Reported by GGGCI.
+        docs: reference/authentication
   - version: 2.33.2
     date: 2026-11-18
     notes:

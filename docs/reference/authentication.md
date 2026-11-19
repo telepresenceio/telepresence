@@ -26,7 +26,8 @@ RBAC.
 - **Namespace content is authorized.** In `enforcing` mode, the
   traffic-manager shows a caller the workloads, traffic-agents, and agent
   configuration of a namespace only where the caller's Kubernetes identity
-  holds a Telepresence grant.
+  holds a Telepresence grant, and removes traffic-agents only for a caller
+  that holds one.
 
 The net effect: a workload with mere network reachability to the
 traffic-manager can no longer intercept arbitrary namespaces or act on other
@@ -97,8 +98,8 @@ already exist when the intercept is created.
 ## Authorization of namespace content
 
 A connected client asks the traffic-manager for data about namespaces: the
-workload list behind `telepresence list`, the traffic-agent pods it can
-attach through, the agent configuration of a workload, and the address of
+workload list behind `telepresence list`, the traffic-agents and their
+pods, the agent configuration of a workload, and the address of
 a service port. In `enforcing` mode the traffic-manager reviews the
 caller's access before it answers. The namespace given to
 `telepresence connect` is reviewed like any other.
@@ -119,12 +120,27 @@ the agent configuration of a workload the caller holds no grant for, and
 resolving a named service port without a grant for the whole namespace.
 With grants on individual workloads only, give service ports as numbers.
 
+Removing traffic-agents is reviewed in the same way.
+`telepresence uninstall <workload>` needs the grant for every workload it
+names, and removes nothing when one of them is refused.
+`telepresence uninstall --all-agents` needs the grant for the whole
+namespace. With grants on individual workloads only, name the workloads.
+
 A verdict is kept for the lifetime of the session. A changed grant takes
 effect when the client reconnects.
 
-Connecting gives network access to what the traffic-manager can reach, and
-name resolution for it, in every namespace. Use NetworkPolicy to restrict
-that; see [This does not replace network controls](#this-does-not-replace-network-controls).
+### What every connected client can do
+
+Some things come with the connect grant alone and need no grant in a
+namespace:
+
+- **Network access** to what the traffic-manager can reach, and name
+  resolution for it, in every namespace. Use NetworkPolicy to restrict
+  that; see [This does not replace network controls](#this-does-not-replace-network-controls).
+- **The names of the managed namespaces.** The client uses them for name
+  resolution. Nothing inside the namespaces is shown.
+- **The log level of the traffic-manager.** `telepresence loglevel` can
+  raise or lower it for a limited time.
 
 ## Modes
 
