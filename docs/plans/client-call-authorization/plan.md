@@ -87,9 +87,9 @@ listener and are left out.
 |------|-------------------------|------|
 | `WatchAgents`, `WatchAgentsDelta` | With access, filtered | Fixed here |
 | `UninstallAgents` | With access | Fixed here |
-| `WatchAgentPods`, `WatchAgentPodsDelta`, `WatchAgentPodsInNamespacesDelta` | With access, filtered | As in 2.33.1 |
-| `WatchWorkloads`, `WatchSessionEvents` | With access, filtered | As in 2.33.1 |
-| `GetAgentConfig`, `ResolveServicePort` | With access | As in 2.33.1 |
+| `WatchAgentPods`, `WatchAgentPodsDelta`, `WatchAgentPodsInNamespacesDelta` | Owned, plus the review of each namespace in the request, filtered | As in 2.33.1 |
+| `WatchWorkloads`, `WatchSessionEvents` | Owned, plus the review of the namespace in the request, filtered | As in 2.33.1 |
+| `GetAgentConfig`, `ResolveServicePort` | Owned, plus the review of the namespace in the request | As in 2.33.1 |
 | `EnsureAgent`, `PrepareIntercept`, `CreateIntercept` | Owned, plus their own workload review | Unchanged |
 | `StreamLogs` | Owned, plus its own namespace review | Unchanged |
 | `RemoveIntercept`, `ReleaseAgent` | Owned | Only act on what the caller's own session holds |
@@ -112,9 +112,8 @@ owned check, and anything that does not hold up comes back to this table.
 A unit test walks the gRPC service description of the traffic-manager and
 requires every call to appear in a table in the test, with its class and,
 for an open call, the reason. A call that is added later fails the test
-until it is classified. For every call in the "with access" class the test
-also runs the call as a caller without a grant and checks that it shows
-nothing or is refused.
+until it is classified. The test also reads the handler's source and
+checks that the session check it calls matches its class in the table.
 
 ## What users will notice
 
@@ -154,28 +153,26 @@ nothing or is refused.
   asks for.
 - The advisory gets the patched version when the release is out.
 
-## Open questions
+## Decisions
 
-1. **Is the strict default worth it?** After this change no existing call
-   uses the strict check, unless questions 3 or 4 put one there. It exists
-   for calls added later. The alternative is two checks and the table test
-   alone. Recommended: keep the strict default. It costs a few lines, and
-   it is the part that makes a forgotten call fail closed.
-2. **Uninstalling all agents with single-workload grants.** Refuse, as
-   described above, or remove only the agents the caller may remove?
-   Recommended: refuse. "All" then always means all, and the message says
-   what to do.
-3. **`WatchNamespaces`** sends the names of all managed namespaces to every
-   connected client. The client uses the list for name resolution.
-   Recommended: leave it open and document it. Only names are shown.
-4. **`SetLogLevel`** lets every connected client change the log level of
-   the traffic-manager for a limited time. There is no grant in the model
-   that stands for administration. Recommended: leave it as it is in this
-   fix, document it, and decide separately whether it should need a grant
-   of its own.
-5. **Should a full agent record ever include the environment in a watch?**
-   Old clients need it, so this fix keeps it for callers that may read the
-   workload. Recommended: no change now.
+Decided in the plan review on 2026-11-19:
+
+1. **The strict default stays**, although no existing call uses it yet. It
+   is the part that makes a forgotten call fail closed.
+2. **Uninstalling all agents with single-workload grants is refused.**
+   "All" always means all, and the message says to name the workloads.
+3. **`WatchNamespaces` stays open** and is documented. It shows only the
+   names of the managed namespaces, which the client needs for name
+   resolution.
+4. **`SetLogLevel` stays as it is in this fix** and is documented. Whether
+   it should need a grant of its own is decided separately.
+5. **The agent watches keep the container environment in the full form**,
+   for callers that may read the workload. A current client asks for the
+   compact form, which has no environment, and fetches the environment of
+   the one workload it attaches to with `EnsureAgent`, which reviews that
+   workload. Only clients from before the compact form read the
+   environment from the watch. After this fix the watch shows a caller
+   nothing that `EnsureAgent` would refuse.
 
 ## Order of work
 
