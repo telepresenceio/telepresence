@@ -98,14 +98,14 @@ listener and are left out.
 | `Tunnel`, `GetQuicTunnelEndpoint`, `GetSessionCredential` | Owned | Network access comes with the connect grant |
 | `Lookup`, `LookupDNS` | Owned | Network access comes with the connect grant |
 | `WatchClusterInfo` | Owned | Routing information that every client needs |
-| `GetKnownWorkloadKinds`, `GetAgentImageFQN`, `GetClientConfig` | Owned | Configuration, no namespace content |
+| `GetKnownWorkloadKinds` | Owned | Configuration, no namespace content |
+| `GetAgentImageFQN`, `GetClientConfig` | No session in the request | Configuration, no namespace content |
 | `WatchNamespaces` | Owned | Open question 3 |
 | `SetLogLevel` | Owned | Open question 4 |
 | `Version`, `ArriveAsClient` | No session yet | Unchanged |
 
-`ReleaseAgent`, `GetSessionCredential` and the tunnel calls are marked from
-a first read. The implementation confirms each one before it is given the
-owned check, and anything that does not hold up comes back to this table.
+`ReleaseAgent`, `GetSessionCredential` and the tunnel calls were confirmed
+against the code when the table test was written.
 
 ### 5. A test that keeps the table true
 
