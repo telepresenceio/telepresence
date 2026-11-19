@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/telepresenceio/telepresence/v2/regression_test/framework/cli"
@@ -36,6 +37,29 @@ func agentPodUIDs(ctx context.Context, r *rt.Runtime, ns, name string) []string 
 	return uids
 }
 
+// agentRemoved reports whether, in one successful listing of the pods of the
+// workload name in ns, there is a non-terminating Ready pod without a
+// traffic-agent container and no non-terminating pod with one.
+func agentRemoved(ctx context.Context, r *rt.Runtime, ns, name string) bool {
+	out, err := r.Kubectl(ctx, ns, "get", "pod", "-l", "app="+name, "-o",
+		`jsonpath={range .items[*]}{.metadata.deletionTimestamp}|{.status.conditions[?(@.type=="Ready")].status}|{.spec.containers[*].name}{"\n"}{end}`)
+	if err != nil {
+		return false
+	}
+	readyWithoutAgent := false
+	for _, line := range strings.Split(out, "\n") {
+		parts := strings.SplitN(strings.TrimSpace(line), "|", 3)
+		if len(parts) != 3 || parts[0] != "" {
+			continue
+		}
+		if slices.Contains(strings.Fields(parts[2]), agentContainer) {
+			return false
+		}
+		readyWithoutAgent = readyWithoutAgent || parts[1] == "True"
+	}
+	return readyWithoutAgent
+}
+
 // installAgents lets the default identity ingest each workload, which
 // installs a traffic-agent in it, and then frees the default connection.
 // The agents stay installed.
@@ -65,6 +89,7 @@ func (s *AuthEnforcing) Test_UninstallWithoutGrantRefused() {
 	wl := s.Workload(workloads.Echo("auth-uninstall-nogrant"))
 	installAgents(s, ns, wl)
 	before := agentPodUIDs(ctx, r, ns, wl.Name)
+	s.Require().NotEmpty(before, "%s should have a traffic-agent", wl.Name)
 
 	tp := connectOnlyIdentity(t, ctx, r, "rtest-auth-uninstall-nogrant")
 	quitDefensively(t, r, ctx, "AuthEnforcing:UninstallWithoutGrantRefused")
@@ -99,6 +124,7 @@ func (s *AuthEnforcing) Test_UninstallWorkloadScopedGrant() {
 	other := s.Workload(workloads.Echo("auth-uninstall-other"))
 	installAgents(s, ns, granted, other)
 	otherBefore := agentPodUIDs(ctx, r, ns, other.Name)
+	s.Require().NotEmpty(otherBefore, "%s should have a traffic-agent", other.Name)
 
 	const name = "rtest-auth-uninstall-scoped"
 	tp := connectOnlyIdentity(t, ctx, r, name)
@@ -123,7 +149,7 @@ func (s *AuthEnforcing) Test_UninstallWorkloadScopedGrant() {
 	_, stderr, err = tp.Run(ctx, "uninstall", granted.Name)
 	s.Require().NoError(err, "uninstalling %s should succeed: %s", granted.Name, stderr)
 	s.Require().Eventually(func() bool {
-		return len(agentPodUIDs(ctx, r, ns, granted.Name)) == 0
+		return agentRemoved(ctx, r, ns, granted.Name)
 	}, namespaceReadTimeout, namespaceReadPoll, "the agent of %s should be removed", granted.Name)
 	s.NotEmpty(agentPodUIDs(ctx, r, ns, other.Name), "the agent of %s should stay", other.Name)
 }
