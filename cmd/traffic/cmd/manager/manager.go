@@ -343,10 +343,6 @@ func (s *service) servePrometheus(ctx context.Context) error {
 		return int(atomic.LoadInt32(&s.activeHttpRequests))
 	})
 
-	newGaugeFunc("telepresence_active_grpc_request_count", "Number of currently served gRPC requests", func() int {
-		return int(atomic.LoadInt32(&s.activeGrpcRequests))
-	})
-
 	labels := []string{"install_id"}
 	if !managerutil.GetEnv(ctx).PrometheusDropClientLabel {
 		labels = append(labels, "client")
@@ -446,12 +442,12 @@ func (s *service) serveHTTP(ctx context.Context) error {
 		return err
 	}
 
-	opts := serverOptions(env,
+	opts := serverOptions(env, append(grpcMetricsOptions("internal"),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{MinTime: mainKeepaliveMinTime, PermitWithoutStream: true}),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
 			Time:    env.ClientConnectionTTL,
 			Timeout: 20 * time.Second,
-		}))
+		}))...)
 	ai := auth.NewInterceptor(auth.NewAuthenticator(k8sapi.GetK8sInterface(ctx), auth.WithMintedTokens(s.mintedTokens)), env.AuthenticationMode)
 	svc := server.NewWithAuth(ctx, &server.Interceptors{Unary: ai.Unary(), Stream: ai.Stream()}, opts...)
 	s.RegisterServers(svc)

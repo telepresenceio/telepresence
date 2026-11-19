@@ -75,13 +75,13 @@ func serveExternal(ctx context.Context, svc Service) error {
 
 	creds := auth.NewExternalTransportCredentials(env.ExternalTLSCertDir, caPool, tracker)
 
-	opts := serverOptions(env,
+	opts := serverOptions(env, append(grpcMetricsOptions("external"),
 		grpc.Creds(creds),
 		grpc.MaxConcurrentStreams(externalMaxConcurrentStreams),
 		grpc.MaxHeaderListSize(externalMaxHeaderListSize),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{MinTime: externalKeepaliveMinTime}),
 		grpc.KeepaliveParams(keepalive.ServerParameters{Time: externalKeepaliveTime, Timeout: externalKeepaliveTimeout}),
-	)
+	)...)
 
 	// Mirrors serveHTTP: the auth interceptor is the innermost one, running after the
 	// context/logging/error interceptors NewWithAuth always installs.
