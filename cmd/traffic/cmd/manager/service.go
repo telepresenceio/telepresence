@@ -2408,12 +2408,37 @@ func (s *service) WatchNamespaces(session *rpc.SessionInfo, stream grpc.ServerSt
 }
 
 func (s *service) UninstallAgents(ctx context.Context, request *rpc.UninstallAgentsRequest) (*empty.Empty, error) {
-	ctx, _, err := s.ownedClientSession(ctx, request.GetSessionInfo())
+	ctx, clientInfo, access, err := s.clientSessionWithAccess(ctx, request.GetSessionInfo())
 	if err != nil {
+		return nil, err
+	}
+	if err = authorizeUninstall(access, clientInfo.Namespace, request.Agents); err != nil {
 		return nil, err
 	}
 	clog.Debugf(ctx, "%s", request.Agents)
 	return &empty.Empty{}, s.state.UninstallAgents(ctx, request)
+}
+
+// authorizeUninstall checks every requested agent before any is removed.
+// No names means all agents, which needs access to the whole namespace.
+func authorizeUninstall(access state.ReadAccess, namespace string, agents []string) error {
+	if len(agents) == 0 {
+		if !access.All() {
+			return errors.Errorf(codes.PermissionDenied,
+				"uninstalling all agents needs access to the whole namespace %s; name the workloads instead", namespace)
+		}
+		return nil
+	}
+	for _, name := range agents {
+		allowed, err := access.Allows(name)
+		if err != nil {
+			return err
+		}
+		if !allowed {
+			return errors.Errorf(codes.PermissionDenied, "access to workload %s in namespace %s is required", name, namespace)
+		}
+	}
+	return nil
 }
 
 func (s *service) WatchLogLevel(_ *empty.Empty, stream grpc.ServerStreamingServer[rpc.LogLevelRequest]) error {
