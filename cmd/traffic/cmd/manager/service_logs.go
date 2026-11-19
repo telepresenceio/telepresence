@@ -138,7 +138,7 @@ func (c *logNamespaceAuth) can(ctx context.Context, namespace, subresource strin
 // unreviewable namespace does not abort the request: its pods still get
 // BEGIN/END, with an error frame naming the denial in between.
 func (s *service) StreamLogs(request *rpc.StreamLogsRequest, stream grpc.ServerStreamingServer[rpc.LogChunk]) error {
-	ctx, session, err := s.ensureClientSession(stream.Context(), request.GetSession())
+	ctx, session, err := s.ownedClientSession(stream.Context(), request.GetSession())
 	if err != nil {
 		return err
 	}
