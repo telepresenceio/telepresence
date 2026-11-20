@@ -1298,12 +1298,12 @@ matchExpressions:
 
 	configWatcher := config.NewWatcher(mgrNs)
 	watcherDone := make(chan struct{})
-	go func() {
+	go func(ctx context.Context) {
 		defer close(watcherDone)
 		if err := configWatcher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
 			t.Error(err)
 		}
-	}()
+	}(ctx)
 	if err = configWatcher.ForceEvent(ctx); err != nil {
 		t.Fatal(err)
 	}
