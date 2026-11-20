@@ -45,6 +45,15 @@ items:
           It now counts the gRPC requests that the traffic-manager is
           serving, including those on the external control endpoint.
         docs: howtos/monitoring
+      - type: bugfix
+        title: The --proxy-url and --as-user-extra flags are honored by both daemons
+        body: >-
+          The root daemon ignored the kubectl flags <code>--proxy-url</code>
+          and <code>--as-user-extra</code>. The user daemon ignored them too
+          when it ran in a container (<code>telepresence connect
+          --docker</code>) or read the kubeconfig from stdin
+          (<code>--kubeconfig -</code>). Both daemons now apply the two flags
+          the same way <code>kubectl</code> does.
   - version: 2.33.3
     date: 2026-11-19
     notes:

@@ -84,6 +84,8 @@ func TestRootKubeconfig_flagOverridesAreMerged(t *testing.T) {
 		"certificate-authority": overrideCA,
 		"tls-server-name":       "tls.example.com",
 		"namespace":             "flag-ns",
+		"proxy-url":             "http://proxy.example.com:3128",
+		"as-user-extra":         "scope=a,scope=b,team=x",
 	})
 	data, creds, err := rootKubeconfig(ctx, kc, "")
 	require.NoError(t, err)
@@ -96,11 +98,13 @@ func TestRootKubeconfig_flagOverridesAreMerged(t *testing.T) {
 	assert.Equal(t, "https://flag.example.com:6443", cl.Server)
 	assert.Equal(t, "tls.example.com", cl.TLSServerName)
 	assert.Equal(t, []byte("FLAG-CA"), cl.CertificateAuthorityData)
+	assert.Equal(t, "http://proxy.example.com:3128", cl.ProxyURL)
 	assert.Equal(t, "flag-ns", cfg.Contexts["plain"].Namespace)
 	ai := cfg.AuthInfos["cert-user"]
 	assert.Equal(t, "flag-token", ai.Token)
 	assert.Equal(t, "someone", ai.Impersonate)
 	assert.Equal(t, []string{"g1", "g2"}, ai.ImpersonateGroups)
+	assert.Equal(t, map[string][]string{"scope": {"a", "b"}, "team": {"x"}}, ai.ImpersonateUserExtra)
 }
 
 func TestRootKubeconfig_pluginComesFromTheMergedResult(t *testing.T) {
