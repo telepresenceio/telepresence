@@ -286,7 +286,7 @@ func DaemonKubeconfig(c context.Context, cr *connector.ConnectRequest) (*Kubecon
 func AppendKubeFlags(kubeFlags map[string]string, args []string) ([]string, error) {
 	for k, v := range kubeFlags {
 		switch k {
-		case "as-group":
+		case "as-group", "as-user-extra":
 			// Multivalued
 			r := csv.NewReader(strings.NewReader(v))
 			gs, err := r.Read()
@@ -335,6 +335,15 @@ func flagOverrides(f *genericclioptions.ConfigFlags) *clientcmd.ConfigOverrides 
 	if v, ok := stringVal(f.Impersonate); ok {
 		overrides.AuthInfo.Impersonate = v
 	}
+	if f.ImpersonateUserExtra != nil && len(*f.ImpersonateUserExtra) > 0 {
+		extra := make(map[string][]string)
+		for _, e := range *f.ImpersonateUserExtra {
+			if k, v, ok := strings.Cut(e, "="); ok {
+				extra[k] = append(extra[k], v)
+			}
+		}
+		overrides.AuthInfo.ImpersonateUserExtra = extra
+	}
 	if v, ok := stringVal(f.ImpersonateUID); ok {
 		overrides.AuthInfo.ImpersonateUID = v
 	}
@@ -363,6 +372,9 @@ func flagOverrides(f *genericclioptions.ConfigFlags) *clientcmd.ConfigOverrides 
 	}
 	if f.DisableCompression != nil && *f.DisableCompression {
 		overrides.ClusterInfo.DisableCompression = true
+	}
+	if v, ok := stringVal(f.ProxyURL); ok {
+		overrides.ClusterInfo.ProxyURL = v
 	}
 
 	// bind context flags

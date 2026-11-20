@@ -14,6 +14,12 @@ The traffic-manager publishes two new Prometheus metrics: <code>telepresence_grp
 The Prometheus gauge <code>telepresence_active_grpc_request_count</code> was always zero. It now counts the gRPC requests that the traffic-manager is serving, including those on the external control endpoint.
 </div>
 
+## <div style="display:flex;"><img src="images/bugfix.png" alt="bugfix" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">The --proxy-url and --as-user-extra flags are honored by both daemons</div></div>
+<div style="margin-left: 15px">
+
+The root daemon ignored the kubectl flags <code>--proxy-url</code> and <code>--as-user-extra</code>. The user daemon ignored them too when it ran in a container (<code>telepresence connect --docker</code>) or read the kubeconfig from stdin (<code>--kubeconfig -</code>). Both daemons now apply the two flags the same way <code>kubectl</code> does.
+</div>
+
 ## Version 2.33.3 <span style="font-size: 16px;">(November 19)</span>
 ## <div style="display:flex;"><img src="images/security.png" alt="security" style="width:30px;height:fit-content;"/><div style="display:flex;margin-left:7px;">[Traffic-agents are only shown to and removed by authorized clients in enforcing mode](reference/authentication)</div></div>
 <div style="margin-left: 15px">
