@@ -24,6 +24,27 @@
 #
 # For older changes, see CHANGELOG.OLD.md
 items:
+  - version: 2.34.0
+    date: (TBD)
+    notes:
+      - type: feature
+        title: Prometheus metrics for the traffic-manager's gRPC requests
+        body: >-
+          The traffic-manager publishes two new Prometheus metrics:
+          <code>telepresence_grpc_request_count</code> counts the completed
+          gRPC requests by listener, method and status code, and
+          <code>telepresence_grpc_request_duration_seconds</code> records the
+          duration of unary requests. They show which calls fail, how often,
+          and how long they take.
+        docs: howtos/monitoring
+      - type: bugfix
+        title: The active gRPC request gauge counts requests again
+        body: >-
+          The Prometheus gauge
+          <code>telepresence_active_grpc_request_count</code> was always zero.
+          It now counts the gRPC requests that the traffic-manager is
+          serving, including those on the external control endpoint.
+        docs: howtos/monitoring
   - version: 2.33.3
     date: 2026-11-19
     notes:

@@ -45,6 +45,8 @@ To enable Prometheus metrics for your traffic manager, follow these steps:
    | `telepresence_tunnel_egress_bytes`       | Counter  | Number of bytes tunnelled to clients.                                         |                                          |
    | `telepresence_active_http_request_count` | Gauge    | Number of currently served HTTP requests.                                     |                                          |
    | `telepresence_active_grpc_request_count` | Gauge    | Number of currently served gRPC requests.                                     |                                          |
+   | `telepresence_grpc_request_count`        | Counter  | Number of completed gRPC requests.                                            | `listener`, `method`, `code`             |
+   | `telepresence_grpc_request_duration_seconds` | Histogram | Duration of completed unary gRPC requests.                               | `listener`, `method`                     |
    | `telepresence_connect_count`             | Counter  | The total number of connects by user.                                         | `client`, `install_id`                   |
    | `telepresence_connect_active_status`     | Gauge    | Flag to indicate when a connect is active. 1 for active, 0 for not active.    | `client`, `install_id`                   |
    | `telepresence_intercept_count`           | Counter  | The total number of intercepts by user.                                       | `client`, `install_id`, `intercept_type` |
@@ -69,6 +71,34 @@ To enable Prometheus metrics for your traffic manager, follow these steps:
    ```
 
    These annotations instruct Prometheus to scrape metrics from the Traffic Manager pod, allowing you to track consumption metrics and other important data over time.
+
+## gRPC Request Metrics
+
+`telepresence_grpc_request_count` and
+`telepresence_grpc_request_duration_seconds` cover every gRPC request that
+the traffic-manager serves. The `listener` label is `internal` for the
+in-cluster API port and `external` for the
+[external control endpoint](../reference/external-endpoint.md), the
+`method` label is the full gRPC method name, such as
+`/telepresence.manager.Manager/ArriveAsClient`, and the `code` label is the
+gRPC status code sent to the caller, such as `OK`, `NotFound` or
+`Unavailable`.
+
+- The rate of requests with a `code` other than `OK` shows how often, and in
+  which calls, the traffic-manager fails.
+- The duration histogram shows the latency of unary calls. Streaming calls,
+  such as the watches that clients and traffic-agents keep open, are counted
+  when they end but have no duration.
+
+The `telepresence_active_grpc_request_count` gauge includes the streaming
+calls that are open on both listeners.
+
+## Resource Metrics
+
+The endpoint also serves the standard metrics of the Prometheus Go client
+for the traffic-manager process. `process_cpu_seconds_total` and
+`process_resident_memory_bytes` show its CPU and memory usage, and the
+`go_*` metrics, such as `go_goroutines`, show the state of the Go runtime.
 
 ## External Endpoint Authentication Metrics
 

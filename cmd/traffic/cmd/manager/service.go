@@ -82,7 +82,6 @@ type service struct {
 	authMode           auth.Mode
 	authGrant          auth.Grant
 	activeHttpRequests int32
-	activeGrpcRequests int32
 	serviceNameNs      string
 	serviceNameFQN     string
 	dotClusterDomain   string
