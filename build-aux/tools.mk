@@ -186,6 +186,7 @@ tools/go-mkopensource    = $(TOOLSBINDIR)/go-mkopensource$(EXE)
 tools/go-winres          = $(TOOLSBINDIR)/go-winres$(EXE)
 tools/test-report        = $(TOOLSBINDIR)/test-report$(EXE)
 tools/y2j                = $(TOOLSBINDIR)/y2j$(EXE)
+tools/controller-gen     = $(TOOLSBINDIR)/controller-gen$(EXE)
 $(TOOLSBINDIR)/%$(EXE): $(TOOLSSRCDIR)/%/pin.go | $(TOOLSSRCDIR)/%/go.sum
 	cd $(<D) && GOOS= GOARCH= go build -o $(abspath $@) $$(sed -En 's,^import "(.*)".*,\1,p' pin.go)
 

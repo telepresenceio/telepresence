@@ -80,6 +80,8 @@ func (p *Prober) probeRBAC(ctx context.Context, nsExists bool) PrivilegeFacts {
 	facts.Missing = missing
 	facts.MissingAttributes = attrs
 
+	facts.Kafka, facts.MissingKafka, facts.MissingKafkaAttributes = p.evaluateKafkaAccess(ctx, nsExists, p.candidateValues())
+
 	if clusterWide.Verdict == VerdictYes {
 		facts.Namespaced = Finding{Verdict: VerdictYes, Evidence: []string{"implied by cluster-wide result"}}
 		return facts
@@ -94,29 +96,32 @@ func (p *Prober) probeRBAC(ctx context.Context, nsExists bool) PrivilegeFacts {
 	return facts
 }
 
-// evaluateChartAccess renders the chart with values, builds the resulting
-// ResourceAttributes set plus the install-time extras, and issues a
-// SelfSubjectAccessReview for each. The formatted denial strings and the
-// structured DeniedAttribute list both derive from the same sorted sweep
-// result, so they never drift apart.
-func (p *Prober) evaluateChartAccess(ctx context.Context, nsExists bool, values *helm.Values) (Finding, []string, []DeniedAttribute) {
+// chartAttributes renders the chart with values and returns the deduplicated
+// ResourceAttributes set the render implies, plus the install-time extras.
+func (p *Prober) chartAttributes(ctx context.Context, nsExists bool, values *helm.Values) ([]*auth.ResourceAttributes, error) {
 	chrt, err := loadEmbeddedChart()
 	if err != nil {
-		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
+		return nil, err
 	}
 	manifest, err := renderChart(ctx, chrt, p.ManagerNamespace, values)
 	if err != nil {
-		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
+		return nil, err
 	}
 	objs, err := decodeManifests(manifest)
 	if err != nil {
-		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
+		return nil, err
 	}
 
 	ras := attributesForObjects(objs, p.ManagerNamespace)
 	ras = append(ras, extraChecks(nsExists, values, p.ManagerNamespace)...)
-	ras = dedupeAttributes(ras)
+	return dedupeAttributes(ras), nil
+}
 
+// sweepFinding issues a SelfSubjectAccessReview for each attribute and
+// reports the result. The formatted denial strings and the structured
+// DeniedAttribute list both derive from the same sorted sweep result, so
+// they never drift apart.
+func (p *Prober) sweepFinding(ctx context.Context, ras []*auth.ResourceAttributes) (Finding, []string, []DeniedAttribute) {
 	denied, sweepErr := p.sweepAccess(ctx, ras)
 	if sweepErr != nil {
 		return Finding{Verdict: VerdictUnknown, Evidence: []string{sweepErr.Error()}}, nil, nil
@@ -131,6 +136,79 @@ func (p *Prober) evaluateChartAccess(ctx context.Context, nsExists bool, values 
 		attrs[i] = toDeniedAttribute(ra)
 	}
 	return Finding{Verdict: VerdictNo}, missing, attrs
+}
+
+// evaluateChartAccess renders the chart with values and sweeps the resulting
+// ResourceAttributes set.
+func (p *Prober) evaluateChartAccess(ctx context.Context, nsExists bool, values *helm.Values) (Finding, []string, []DeniedAttribute) {
+	ras, err := p.chartAttributes(ctx, nsExists, values)
+	if err != nil {
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
+	}
+	return p.sweepFinding(ctx, ras)
+}
+
+// evaluateKafkaAccess isolates the privileges enabling the Kafka provider
+// adds on top of base: the attribute-set difference between a render with
+// Kafka on and base itself, plus create/patch on the chart's Kafka CRDs
+// (the dry-run render never includes crds/ objects). Kafka's objects do not
+// depend on the managed scope, so this sweep serves both the cluster-wide
+// and namespaced findings.
+func (p *Prober) evaluateKafkaAccess(ctx context.Context, nsExists bool, base *helm.Values) (Finding, []string, []DeniedAttribute) {
+	baseAttrs, err := p.chartAttributes(ctx, nsExists, base)
+	if err != nil {
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
+	}
+
+	kafkaValues := base.DeepCopy()
+	kafkaValues.Kafka.Enabled = new(true)
+	kafkaAttrs, err := p.chartAttributes(ctx, nsExists, kafkaValues)
+	if err != nil {
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
+	}
+
+	chrt, err := loadEmbeddedChart()
+	if err != nil {
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
+	}
+	crdNames, err := helm.CRDNames(chrt)
+	if err != nil {
+		return Finding{Verdict: VerdictUnknown, Evidence: []string{err.Error()}}, nil, nil
+	}
+
+	ras := subtractAttributes(kafkaAttrs, baseAttrs)
+	ras = append(ras, kafkaCRDAttributes(crdNames)...)
+	return p.sweepFinding(ctx, dedupeAttributes(ras))
+}
+
+// subtractAttributes returns the members of all whose attributeKey does not
+// appear in base.
+func subtractAttributes(all, base []*auth.ResourceAttributes) []*auth.ResourceAttributes {
+	baseKeys := make(map[string]bool, len(base))
+	for _, ra := range base {
+		baseKeys[attributeKey(ra)] = true
+	}
+	out := make([]*auth.ResourceAttributes, 0, len(all))
+	for _, ra := range all {
+		if !baseKeys[attributeKey(ra)] {
+			out = append(out, ra)
+		}
+	}
+	return out
+}
+
+// kafkaCRDAttributes returns create and patch ResourceAttributes for each
+// named CustomResourceDefinition, the privileges install.go's applyCRDs
+// needs that the dry-run chart render never exercises.
+func kafkaCRDAttributes(names []string) []*auth.ResourceAttributes {
+	ras := make([]*auth.ResourceAttributes, 0, len(names)*2)
+	for _, name := range names {
+		ras = append(ras,
+			&auth.ResourceAttributes{Verb: "create", Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Name: name},
+			&auth.ResourceAttributes{Verb: "patch", Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Name: name},
+		)
+	}
+	return ras
 }
 
 // toDeniedAttribute mirrors a denied ResourceAttributes into its JSON-clean

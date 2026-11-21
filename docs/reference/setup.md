@@ -32,7 +32,8 @@ runs a set of read-only probes before asking anything:
 
 | Probe | What it determines |
 |-------|---------------------|
-| Install privileges | Whether the current identity can create everything the chart needs, via `SelfSubjectAccessReview` against the rendered chart objects. When cluster-scoped objects (ClusterRole, MutatingWebhookConfiguration) are denied but namespaced ones are not, it re-checks a namespace-scoped install. |
+| Install privileges | Whether the current identity can create everything the chart needs, via `SelfSubjectAccessReview` against the rendered chart objects. When cluster-scoped objects (ClusterRole, MutatingWebhookConfiguration) are denied but namespaced ones are not, it re-checks a namespace-scoped install. The Kafka provider's own objects and its two CRDs are checked in a separate sweep, so a plain install is not charged with them. |
+| Kafka provider prerequisites | Whether the `KafkaSplit` and `KafkaRoute` CRDs are served, how many active `KafkaSplit` resources exist, whether Argo Rollouts is installed (informational), and, on an existing installation that enables the provider, whether the `tp-kafka` Deployment is ready. |
 | QUIC viability | Whether the cluster can expose a working QUIC endpoint, and which Service type to use: `LoadBalancer` when the cluster shows working LB provisioning, `NodePort` when a cluster-wide install has no LB signal, or "unavailable" for a namespaced install with neither. |
 | Node-agent viability | Whether nodes are Linux, whether the container runtime is one the agent supports, whether the cluster is GKE Autopilot (unsupported), and a server-side dry-run admission canary that exercises Pod Security admission and any policy engine (Kyverno, Gatekeeper, ...) directly. |
 | Webhook viability | Whether the mutating webhook can be created, and whether the cluster has the known API-server-cannot-reach-Services problem some CNIs exhibit. |
@@ -137,7 +138,9 @@ treats its settings as pinned: anything it already decided —
 `security.authentication.mode` (enforce authentication),
 `security.authorization.requiredGrant` (required grant),
 `externalEndpoint.enabled` (with its `tls` settings, Direct Connect),
-and `clientRbac.legacyAccess` (legacy client access) — is never asked about
+`kafka.enabled`, `kafka.webhook.failurePolicy`, `kafka.replicas` (Kafka
+personal intercepts), and `clientRbac.legacyAccess` (legacy client access)
+— is never asked about
 again and never silently changed. If a fresh probe recommends something
 different, the interactive session asks whether to keep the pinned value
 (default: keep); a non-interactive run keeps it and the report carries a
@@ -218,6 +221,9 @@ input-pinned value, then the default below.
 | Managed namespaces | with a managed scope of namespaces and no input-pinned list: the manager namespace. A managed scope of selector without an input-pinned label selector is an error — the label selector needs a prompt and none is possible non-interactively. |
 | Mapped namespaces | none unless an input file's `client.cluster.mappedNamespaces` sets them; not asked interactively. |
 | Enforce authentication | yes when this client's own credentials would be accepted under enforcing mode, otherwise no; on an upgrade, the installed release's current mode |
+| Kafka personal intercepts | no; on an upgrade, the release's current setting |
+| Kafka webhook failure policy | Fail; on an upgrade, the release's current value |
+| Kafka provider replicas | 2, or 1 on a single-node cluster; on an upgrade, the release's current value |
 | Required grant | `any`, or `telepresence` when Direct Connect ends up enabled; on an upgrade, the release's current value |
 | Direct Connect | never enabled unless an input file pins `externalEndpoint.enabled: true` or the installed release already enables it; a pinned enable with several TLS Secrets, or only an expired one, and no pinned `tls.secretName`, or a cert-manager choice with no pinned issuer and DNS names, is an error |
 | Legacy client access | no (`clientRbac.legacyAccess: false`); on an upgrade, the release's current value, which is yes when the release never set it; forced to yes when `apiPort` is overridden in the input or release values |
@@ -238,13 +244,35 @@ previous decisions"); "always" means "unless pinned by the input".
    machinery and is not supported in node-agent mode; a yes keeps the
    webhook enabled alongside the node-agent. Skipped when the node-agent is
    not viable, since the webhook is required regardless.
-3. **Client upgrade** (only if a newer client was found): advisory only —
+3. **Kafka personal intercepts** (only if attach = yes): "Enable Kafka
+   personal intercepts?" Setup first explains what enabling installs: the
+   tp-kafka provider, the `KafkaSplit` and `KafkaRoute`
+   CustomResourceDefinitions, a Deployment, and admission webhooks; nothing
+   changes for a workload until a `KafkaSplit` is declared for it. It notes
+   when the installed release already enables the provider, when the CRDs
+   are already present, or when installing needs privileges the caller
+   lacks (a yes still writes the values for an admin to apply). When active
+   `KafkaSplit` resources exist, the question is skipped and the provider
+   stays enabled. A yes asks two follow-ups:
+
+   - "While the Kafka provider is down, what should happen to Pods created
+     in namespaces that hold a KafkaSplit?"
+
+     1. Fail: refuse the Pod until the provider is back (the default).
+     2. Ignore: admit the Pod unchanged, so it may consume the source group
+        beside the splitter.
+   - "Kafka provider replicas [2]:" The provider runs two replicas for
+     leader failover by default; one is enough on a single-node cluster.
+
+   Answers -> `kafka.enabled`, `kafka.webhook.failurePolicy`,
+   `kafka.replicas`.
+4. **Client upgrade** (only if a newer client was found): advisory only —
    the tool prints the newer version and never attempts a self-update.
-4. **Manager upgrade** (only if an older release is installed): "traffic-
+5. **Manager upgrade** (only if an older release is installed): "traffic-
    manager X.Y.Z is installed, client is X.Y.Z+n — upgrade?" A newer
    manager than the client inverts the message: it recommends upgrading the
    client instead, and never proposes downgrading the manager.
-5. **Managed scope** (always, presenting the probed namespace count as
+6. **Managed scope** (always, presenting the probed namespace count as
    evidence): choose which namespaces the traffic-manager manages — no
    limit, a managed namespace list (`namespaces`), or a label selector
    (`namespaceSelector`). The default is "no limit" for small clusters,
@@ -256,14 +284,14 @@ previous decisions"); "always" means "unless pinned by the input".
    still override it) that is independent of the managed scope — a
    namespace-limited managed scope and a mapped-namespaces default can both
    be set at once.
-6. **Enforce authentication** (always): "Enforce caller authentication?"
+7. **Enforce authentication** (always): "Enforce caller authentication?"
    Setup first explains what the setting does: enforcing refuses telepresence
    clients older than 2.31, and it is also required for Direct Connect. One
    more line says whether this caller's own kubeconfig would pass. The
    fresh-install default is yes when this kubeconfig would pass (a bearer
    token or a client certificate), otherwise no. On an upgrade the default is
    the installed release's current mode. Answer -> `security.authentication.mode`.
-7. **Direct Connect** (only when enforcing, and a TLS Secret or cert-manager
+8. **Direct Connect** (only when enforcing, and a TLS Secret or cert-manager
    was found; asked before the required-grant question because it changes
    that question's default): "Enable Direct Connect, so clients reach the
    traffic-manager at a published address instead of through the Kubernetes
@@ -284,7 +312,7 @@ previous decisions"); "always" means "unless pinned by the input".
    cert-manager exists, the question is skipped and an info note names
    both prerequisites. Answer -> `externalEndpoint.enabled` and its `tls`
    settings.
-8. **Required grant** (only when enforcing): "Which grant should the
+9. **Required grant** (only when enforcing): "Which grant should the
    traffic-manager require for authorization?"
 
    1. `telepresence` — Telepresence's own policy grants; clients lose
@@ -295,14 +323,14 @@ previous decisions"); "always" means "unless pinned by the input".
    The default is `telepresence` when Direct Connect was chosen,
    otherwise `any`. On an upgrade the default is the release's current
    value. Answer -> `security.authorization.requiredGrant`.
-9. **Legacy client access** (always): "Do clients older than 2.32 need to
+10. **Legacy client access** (always): "Do clients older than 2.32 need to
    connect to this traffic-manager?" The fresh-install default is no,
    which renders `clientRbac.legacyAccess: false`. On an upgrade the
    default is the release's current value, and yes when the release never
    set it, since that is the chart default. Forced to yes, with a note,
    when `apiPort` is overridden in the input or the release values.
    Answer -> `clientRbac.legacyAccess`.
-10. **Routing conflicts** (only when the probe finds an overlap): "Local
+11. **Routing conflicts** (only when the probe finds an overlap): "Local
     routes overlap the cluster's subnets (`<list>`). How should clients
     handle those ranges?"
 
@@ -323,11 +351,12 @@ report. In text mode it has up to three sections:
 
 - **Findings**: one line per probed area (cluster, privileges, quic,
   node-agent, webhook, namespaces, routing, release, authentication, external
-  endpoint, and — when an existing release was found — a health subsection
-  covering the traffic-manager StatefulSet, the webhook and its certificate,
-  agent-injector endpoints, the QUIC endpoint, the external endpoint's health
-  when enabled, version skew and, under enforcing authentication, whether
-  this client's credentials will be accepted) plus supporting evidence.
+  endpoint, kafka, and — when an existing release was found — a health
+  subsection covering the traffic-manager StatefulSet, the webhook and its
+  certificate, agent-injector endpoints, the QUIC endpoint, the external
+  endpoint's health when enabled, version skew and, under enforcing
+  authentication, whether this client's credentials will be accepted) plus
+  supporting evidence.
 - **Proposed configuration**: the generated values document verbatim, plus,
   when upgrading an existing release, the list of keys that would change.
 - **Notes**: warnings and informational notes explaining any decision that
@@ -340,9 +369,20 @@ report. In text mode it has up to three sections:
 The final line is always `Action: <action>` — `install`, `upgrade`, or
 `none` when applying, prefixed with `would-` when not (`would-install`,
 `would-upgrade`). When the action is an install, the report also lists what
-apply will create, grouped by kind and name, and notes that
-`telepresence helm uninstall` removes the release's resources, but leaves
-the manager namespace behind if setup created it.
+apply will create, grouped by kind and name — "This install will create"
+lists the `KafkaSplit` and `KafkaRoute` CustomResourceDefinitions when the
+Kafka provider is enabled — and notes that `telepresence helm uninstall`
+removes the release's resources, but leaves the manager namespace behind if
+setup created it, and always leaves the Kafka CRDs and any
+`KafkaSplit`/`KafkaRoute` resources in place.
+
+Disabling the Kafka provider is refused while active `KafkaSplit` resources
+exist: removing it would leave the splitter and the namespace labels behind
+with nothing reconciling them, and a Pod created in such a namespace would
+consume the source group beside the splitter. Setup also validates: the
+provider needs the mutating webhook to be creatable, the failure policy must
+be `Fail` or `Ignore`, the replica count must be at least 1, and applying
+needs the provider's own install privileges.
 
 `telepresence setup --output values.yaml --format json` (or `--format yaml`)
 prints the same information as one structured object (`facts`, `answers`, `proposal`,
@@ -385,7 +425,11 @@ the result instead of assuming success:
   (`cluster.managerAddress` and `cluster.managerServerCA`) once the version
   handshake succeeds. When the certificate comes from cert-manager, setup
   first waits for the issued Secret to appear, within the same verification
-  window, before probing.
+  window, before probing;
+- when the Kafka provider is enabled, setup checks that the `KafkaSplit` and
+  `KafkaRoute` CRDs are served, that the `tp-kafka` Deployment has its
+  replicas ready, and that its mutating and validating webhook
+  configurations exist.
 
 ## See also
 
@@ -399,3 +443,5 @@ the result instead of assuming success:
   probe evaluates.
 - [Telepresence and VPNs](vpn.md) — background on the routing-conflict
   probe's subject matter.
+- [Kafka personal intercepts](kafka-intercepts.md) — the full reference for
+  the optional Kafka provider setup can install.

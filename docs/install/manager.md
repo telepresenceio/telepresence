@@ -40,6 +40,7 @@ telepresence setup --apply
 whether the QUIC endpoint and the node-agent are viable, whether the agent-injector webhook can reach the API server,
 how many namespaces there are, and what is already installed. It then asks only the questions the probes cannot answer,
 such as which namespaces the traffic-manager should manage, whether to enforce caller authentication, whether to enable
+Kafka personal intercepts, whether to enable
 [Direct Connect](../reference/external-endpoint.md), which RBAC grant clients must hold, and how clients should handle
 subnets that collide with your VPN. With `--apply` it installs (or upgrades) the traffic-manager from the answers and
 then verifies the result: the traffic-manager is ready, the QUIC endpoint answers, and the agent-injector has endpoints.

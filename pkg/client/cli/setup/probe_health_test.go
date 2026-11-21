@@ -410,3 +410,49 @@ func TestProbeHealth_VersionSkew(t *testing.T) {
 		assert.Equal(t, VerdictUnknown, h.VersionSkew.Verdict)
 	})
 }
+
+func kafkaDeployment(desired, ready int32) *apps.Deployment {
+	return &apps.Deployment{
+		ObjectMeta: meta.ObjectMeta{Name: kafkaDeploymentName, Namespace: "ambassador"},
+		Spec:       apps.DeploymentSpec{Replicas: &desired},
+		Status:     apps.DeploymentStatus{ReadyReplicas: ready},
+	}
+}
+
+func kafkaEnabledRelease() *ReleaseFacts {
+	return installedRelease(&helm.Values{Kafka: helm.Kafka{Enabled: new(true)}})
+}
+
+func TestProbeHealth_KafkaProvider(t *testing.T) {
+	t.Run("ready", func(t *testing.T) {
+		p := &Prober{
+			KubeClient:       fake.NewClientset(managerStatefulSet(1, 1), kafkaDeployment(1, 1)),
+			ManagerNamespace: "ambassador",
+		}
+		h := probeHealthAt(p, kafkaEnabledRelease(), ClientAuthFacts{})
+		require.NotNil(t, h.Kafka)
+		assert.Equal(t, VerdictYes, h.Kafka.Verdict)
+	})
+	t.Run("unready", func(t *testing.T) {
+		p := &Prober{
+			KubeClient:       fake.NewClientset(managerStatefulSet(1, 1), kafkaDeployment(1, 0)),
+			ManagerNamespace: "ambassador",
+		}
+		h := probeHealthAt(p, kafkaEnabledRelease(), ClientAuthFacts{})
+		require.NotNil(t, h.Kafka)
+		assert.Equal(t, VerdictNo, h.Kafka.Verdict)
+		assert.Contains(t, h.Kafka.Evidence[0], "0 of 1 replicas ready")
+	})
+	t.Run("not found", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, kafkaEnabledRelease(), ClientAuthFacts{})
+		require.NotNil(t, h.Kafka)
+		assert.Equal(t, VerdictNo, h.Kafka.Verdict)
+		assert.Contains(t, h.Kafka.Evidence[0], "was not found")
+	})
+	t.Run("release disables Kafka", func(t *testing.T) {
+		p := &Prober{KubeClient: fake.NewClientset(managerStatefulSet(1, 1)), ManagerNamespace: "ambassador"}
+		h := probeHealthAt(p, installedRelease(nil), ClientAuthFacts{})
+		assert.Nil(t, h.Kafka)
+	})
+}

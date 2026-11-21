@@ -1147,7 +1147,7 @@ func TestRestoreInterceptsRebuildsServiceParticipants(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now()))
+	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now(), nil))
 	intercept, ok := st.intercepts.Load(restored.Id)
 	require.True(t, ok)
 	require.Len(t, intercept.participants, 2)
@@ -1186,7 +1186,7 @@ func TestRestoreInterceptsWaitsForWatcherBeforeAddingNewSelectedParticipant(t *t
 		ClientSession:    &rpc.SessionInfo{SessionId: "client"},
 		ServiceWorkloads: sharedServiceWorkloads(stable.Name),
 	}
-	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now()))
+	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now(), nil))
 
 	intercept, ok := st.intercepts.Load(restored.Id)
 	require.True(t, ok)
@@ -1232,7 +1232,7 @@ func TestRestoreInterceptsRequeuesWhenSelectorDropsPublishedParticipant(t *testi
 		},
 	}
 
-	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now()))
+	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now(), nil))
 
 	intercept, ok := st.intercepts.Load(restored.Id)
 	require.True(t, ok)
@@ -1280,7 +1280,7 @@ func TestRestoreInterceptsRequeuesWhenSelectorDropsUnrestoredPublishedParticipan
 		},
 	}
 
-	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now()))
+	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now(), nil))
 
 	intercept, ok := st.intercepts.Load(restored.Id)
 	require.True(t, ok)
@@ -1382,7 +1382,7 @@ func TestRestoredServiceInterceptTransfersWhenRecordedPodLeaves(t *testing.T) {
 			{Namespace: "default", WorkloadKind: "Deployment", WorkloadName: "example-service-canary"},
 		},
 	}
-	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now()))
+	require.NoError(t, st.RestoreIntercepts(ctx, []*rpc.InterceptInfo{restored}, time.Now(), nil))
 	intercept, ok := st.intercepts.Load(restored.Id)
 	require.True(t, ok)
 	participant := intercept.participants[agentParticipantKey(stable.AgentInfo)]

@@ -28,6 +28,18 @@ items:
     date: (TBD)
     notes:
       - type: feature
+        title: Personal Kafka consumer intercepts
+        body: >-
+          The optional Kafka provider lets multiple developers consume
+          disjoint personal message routes while the in-cluster application
+          continues to receive unmatched records. A namespaced
+          <code>KafkaSplit</code> controls workload cutover, and mandatory
+          Kafka transactions atomically publish each record to one shadow
+          topic while advancing the original consumer-group offset.
+          <code>telepresence setup</code> installs the provider and verifies
+          it.
+        docs: reference/kafka-intercepts
+      - type: feature
         title: Prometheus metrics for the traffic-manager's gRPC requests
         body: >-
           The traffic-manager publishes two new Prometheus metrics:

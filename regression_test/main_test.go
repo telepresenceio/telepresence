@@ -16,6 +16,7 @@ import (
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/injector"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/install"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/intercept"
+	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/kafka"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/mounts"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/namespaces"
 	_ "github.com/telepresenceio/telepresence/v2/regression_test/suites/nodeagent"
@@ -51,6 +52,11 @@ func TestAttach(t *testing.T) {
 // TestIntercept runs the "intercept" area.
 func TestIntercept(t *testing.T) {
 	rt.RunArea(t, "intercept")
+}
+
+// TestKafka runs the optional Kafka provider area.
+func TestKafka(t *testing.T) {
+	rt.RunArea(t, "kafka")
 }
 
 // TestInstall runs the "install" area. It churns the shared release's spec
