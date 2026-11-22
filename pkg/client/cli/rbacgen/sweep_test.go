@@ -89,3 +89,44 @@ func TestAllowed_CreateSentWithoutName(t *testing.T) {
 	assert.Equal(t, []auth.ResourceAttributes{{Verb: "create", Resource: "rolebindings", Namespace: "kube-system"}}, sent())
 	assert.Equal(t, "x", ra.Name, "the attributes passed in are not changed")
 }
+
+func TestInstallSetSweep_NoDuplicates(t *testing.T) {
+	set, err := buildInstallSet(context.Background(), "ambassador", nil, VerbsInstall)
+	require.NoError(t, err)
+	client, sent := recordingClient(func(*auth.ResourceAttributes) bool { return false })
+	denied, err := set.Sweep(context.Background(), client)
+	require.NoError(t, err)
+	require.NotEmpty(t, denied)
+	keys := make(map[string]bool, len(denied))
+	for _, ra := range denied {
+		key := AttributeKey(ra)
+		assert.False(t, keys[key], "%s is reported twice", key)
+		keys[key] = true
+	}
+	reviewed := make(map[string]bool)
+	for _, ra := range sent() {
+		key := AttributeKey(&ra)
+		assert.False(t, reviewed[key], "%s is reviewed twice", key)
+		reviewed[key] = true
+	}
+}
+
+func TestInstallSetSweep_SharedRule(t *testing.T) {
+	rule := func() *auth.ResourceAttributes { return &auth.ResourceAttributes{Verb: "get", Resource: "pods"} }
+	waiver := func(name string) []*auth.ResourceAttributes {
+		return []*auth.ResourceAttributes{
+			{Verb: "escalate", Group: rbacGroup, Resource: "clusterroles", Name: name},
+			{Verb: "bind", Group: rbacGroup, Resource: "clusterroles", Name: name},
+		}
+	}
+	set := &InstallSet{Roles: []RoleNeed{
+		{Rules: []*auth.ResourceAttributes{rule()}, Waiver: waiver("waived")},
+		{Rules: []*auth.ResourceAttributes{rule()}, Waiver: waiver("held")},
+	}}
+	client, _ := recordingClient(func(ra *auth.ResourceAttributes) bool {
+		return ra.Name == "waived"
+	})
+	denied, err := set.Sweep(context.Background(), client)
+	require.NoError(t, err)
+	assert.Equal(t, []*auth.ResourceAttributes{rule()}, denied, "the second role still needs the rule the first one waives")
+}

@@ -103,39 +103,36 @@ func (s *InstallSet) All() []*auth.ResourceAttributes {
 }
 
 // Sweep reviews the set for the caller and returns what is denied, sorted
-// by AttributeKey. A role's rules are left out when its waiver passes, and
-// the waivers themselves are never reported.
+// by AttributeKey and without duplicates. A role's rules are left out when
+// its waiver passes, unless the set or another role needs them too, and the
+// waivers themselves are never reported.
 func (s *InstallSet) Sweep(ctx context.Context, client kubernetes.Interface) ([]*auth.ResourceAttributes, error) {
 	all := slices.Clone(s.Attributes)
 	for _, r := range s.Roles {
 		all = append(all, r.Rules...)
 		all = append(all, r.Waiver...)
 	}
-	denied, err := Sweep(ctx, client, all)
+	// The role rules repeat attributes of the set and of each other.
+	denied, err := Sweep(ctx, client, DedupeAttributes(all))
 	if err != nil {
 		return nil, err
 	}
-	isDenied := make(map[*auth.ResourceAttributes]bool, len(denied))
+	isDenied := make(map[string]bool, len(denied))
 	for _, ra := range denied {
-		isDenied[ra] = true
+		isDenied[AttributeKey(ra)] = true
 	}
-	drop := make(map[*auth.ResourceAttributes]bool)
+	needed := make(map[string]bool)
+	for _, ra := range s.Attributes {
+		needed[AttributeKey(ra)] = true
+	}
 	for _, r := range s.Roles {
-		waived := true
-		for _, w := range r.Waiver {
-			drop[w] = true
-			if isDenied[w] {
-				waived = false
-			}
-		}
-		if waived {
+		if slices.ContainsFunc(r.Waiver, func(w *auth.ResourceAttributes) bool { return isDenied[AttributeKey(w)] }) {
 			for _, ra := range r.Rules {
-				drop[ra] = true
+				needed[AttributeKey(ra)] = true
 			}
 		}
 	}
-	// The rules of the roles repeat attributes of the set and of each other.
-	return DedupeAttributes(slices.DeleteFunc(denied, func(ra *auth.ResourceAttributes) bool { return drop[ra] })), nil
+	return slices.DeleteFunc(denied, func(ra *auth.ResourceAttributes) bool { return !needed[AttributeKey(ra)] }), nil
 }
 
 // releaseSecretName is the name of the first revision of the release in
